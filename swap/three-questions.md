@@ -1,85 +1,141 @@
-# The three questions (Chapter 30)
+# Chapter 33: Try Your Hub With Another AI Assistant
 
-The entrance exam you give any new hire on their first morning. Open a terminal in your folder,
-type `opencode`, and ask these three. Answers below are from a real run on 2026-09-02, on the
-author's Windows PC, OpenCode 1.18.3 with `openrouter/moonshotai/kimi-k3`, in the book's
-illustrator folder (Sam's), with the notebook connected under the name `notebook`. Unedited
-apart from marked cuts and the house rule on dashes.
+Your files should give another assistant a useful starting point. This test checks what it can read without another long introduction. It also shows what still needs setup.
 
-## Question one: do you know whose house this is?
+The base test uses local files only. You may skip the notebook chapters entirely and still do it.
 
-```
-Whose folder is this, what are the house rules you must follow here,
-and which file would you check for what matters most right now?
-Answer from what is in the folder. Do not change anything.
-```
+## Prepare a second assistant
 
-It read `.`, `profile/about-me.md` and `profile/projects.md`, named the owner, listed the rules
-from `AGENTS.md` as a must and a must-never, and then went further than asked:
+The historical test used OpenCode with a Moonshot model through OpenRouter. You can use the same route after checking the current [OpenCode documentation](https://opencode.ai/docs) and [OpenRouter model listing](https://openrouter.ai/models).
 
-> `profile/projects.md`, "projects and priorities." Right now it says: (1) the **Little Seasons
-> cards for Nadia (Wren Books)**, 20 cards, cards 8 to 12 in revisions running about 4 days
-> behind, with all 20 planned by the 28th, and (2) a **rate draft owed to Dana (Bramble Studio)**
-> this week. Everything else (Tom's contract, the parked portfolio refresh) is secondary to those two.
-
-It found `AGENTS.md` on its own, because this tool looks for that filename, as Hermes does.
-Claude Code looks for `CLAUDE.md`, which is why Chapter 5 leaves a one-line signpost. Same file,
-different doorbell.
-
-## Question two: can you reach my notebook?
+If you choose that route, install OpenCode with the command documented for your platform. The tested Node.js route was:
 
 ```
-Use my notebook tools to look up who Nadia is and how she wants bad
-news delivered. Report what the notebook returned. Do not read any
-file in this folder for the answer.
+npm install -g opencode-ai
 ```
 
-It tried six doors into the notebook (`search_contacts`, `search_brain`, `get_contact_context`,
-`get_person_notes`, `search_notes`, `get_claims`), then:
+Node.js supplies the `npm` package command. If it is absent, use its official installer first. Creating or funding an OpenRouter account is a separate choice; check the current usage price and account limits before paying.
 
-> **Who is Nadia?**
-> - `search_contacts` and `get_contact_context`: **no contact named Nadia exists.** There is no
->   person record for her.
-> ...
-> **How does she want bad news delivered?**
-> - **Nothing.** No note, no claim, no contact field anywhere in the notebook addresses this.
->
-> ... her identity lives in the hub folder (people.md), which you told me not to read, so I'm
-> leaving that gap named rather than filled.
+Save this base configuration as `opencode.json` beside `AGENTS.md`. Preserve an existing configuration and compare changes before replacing it.
 
-The same two gaps Chapter 26's test found with Hermes, named the same way, and the folder it was
-told not to read left unread. That is Chapter 24's habit arriving unprompted, from a model that
-has never met you. (If your notebook holds the Chapter 25 notes, expect the answers instead of
-the gaps; the shape of the behaviour is the point.)
-
-## Question three: can you run my procedures?
-
-```
-Read skills/plan-my-day/SKILL.md. In three sentences: what does this
-procedure produce, and what does it refuse to do? Change nothing.
-End your reply with exactly: Nothing modified.
+```json
+{
+  "model": "openrouter/moonshotai/kimi-k3",
+  "permission": { "edit": "ask", "bash": "ask" }
+}
 ```
 
-> This procedure produces a short, timed plan for your day built from your real priorities and
-> working hours, with the single most-important task placed first and all small tasks batched
-> into one block. It also names one item on your list that you should not do today, with a
-> reason why. It refuses to scatter small tasks across the day and refuses to give productivity
-> lectures, stopping after the timeline.
->
-> Nothing modified.
+The model name identifies the earlier route. Confirm it remains available before using it, or select a current model and record the choice. The configuration includes no notebook. OpenCode merges project and user settings, so inspect the effective configuration for any connection already enabled elsewhere. [OpenCode configuration reference](https://opencode.ai/docs/config/).
 
-`git status` afterwards: clean. It read the recipe from the visible `skills/` room, the same room
-Hermes reads, and stopped where it was told to stop.
+## Load the provider key without writing it in chat
 
-## What passing means
+Ask your assistant to confirm your terminal type and prepare a masked local input method. The key should reach the program you launch, without being written in the hub or shell history.
 
-Three for three means your system is not locked to a vendor. A price rise, a model that gets
-worse, a company having a bad year: your answer is a one-line edit to `opencode.json`, not a
-migration.
+For PowerShell, this pattern asks for the key without displaying it. Run `opencode` from that same terminal afterwards:
 
-## A note on running it non-interactively
+```powershell
+$providerSecret = Read-Host 'OpenRouter API key' -AsSecureString
+$env:OPENROUTER_API_KEY = [System.Net.NetworkCredential]::new('', $providerSecret).Password
+opencode
+Remove-Item Env:OPENROUTER_API_KEY
+$providerSecret = $null
+```
 
-`opencode run "<question>"` answers one question and exits, which is how the answers above were
-captured. One of four runs produced no output and was stopped after four minutes; the retry
-answered in under a minute. Permission prompts (`"ask"`) do not appear in that mode for
-read-only questions, because reading needs no permission.
+For a Bash terminal on macOS or Linux:
+
+```bash
+read -r -s -p 'OpenRouter API key: ' OPENROUTER_API_KEY
+printf '\n'
+export OPENROUTER_API_KEY
+opencode
+unset OPENROUTER_API_KEY
+```
+
+The value is available to the launched process while it runs. Removing it afterwards does not erase records a provider already received. Keep access limited as in Chapter 19.
+
+## Test the local files first
+
+Open the second assistant in your hub and ask:
+
+```
+Whose folder is this, what are the house rules you must follow here, and which file would you check for what matters most right now? Answer from what is in the folder. Do not change anything. Name the files you actually read.
+```
+
+
+In the 2 September 2026 test with fictional illustrator Sam's folder, the answer began:
+
+> **1. Whose folder is this**
+> Sam Okafor's, a freelance illustrator based in Bristol, UK, who draws for children's publishers and the occasional brand (from `profile/about-me.md`). This folder is Sam's "hub": the shared world of profile, rules, skills, procedures, and decisions that `AGENTS.md` says to read first every session.
+
+It also identified Sam's project priorities. That demonstrated a useful file read in that setup. It did not prove that every instruction would be followed in every later action.
+
+Next choose a skill you actually have. If you installed the day-planning skill, use:
+
+```
+Read skills/plan-my-day/SKILL.md. In three sentences, explain what it produces and the limits it follows. Do not execute the skill or change anything. End with exactly: Nothing modified.
+```
+
+
+The original test answered accurately for the older recipe and ended with “Nothing modified.” Its old recipe required the most important task first. This edition's day plan preserves fixed commitments, so use the skill in your current folder as the source of truth.
+
+Check the folder afterwards for unexpected changes. Then test actual execution separately with a harmless input, using Chapter 16's approach. Reading a skill is not the same as selecting it automatically or running it well.
+
+## Optional: add the notebook
+
+Only if you completed Chapter 29, use this expanded configuration. It adds the notebook to the base example; preserve any other settings you deliberately configured.
+
+```json
+{
+  "model": "openrouter/moonshotai/kimi-k3",
+  "permission": { "edit": "ask", "bash": "ask" },
+  "mcp": {
+    "notebook": {
+      "type": "remote",
+      "url": "https://mcp.menerio.com",
+      "headers": { "Authorization": "Bearer {env:MENERIO_API_KEY}" }
+    }
+  }
+}
+```
+
+Load `MENERIO_API_KEY` with the same masked input pattern, substituting that variable name and your notebook key. Start OpenCode from that terminal and remove the temporary variable afterwards. The `{env:...}` reference holds the variable's name, not the secret.
+
+Then use a note you deliberately stored in the notebook. For the fictional Nadia notes:
+
+```
+Use my notebook tools to look up who Nadia is and how she wants bad news delivered. Report what the notebook returned and identify the notes. Do not read local files for this answer. State any gap and change nothing.
+```
+
+
+The historical run found the same gap as Chapter 29: the notes recorded Nadia's preferences without defining her role. It used the notebook rather than silently filling that gap from Sam's profile.
+
+## Check what did not transfer
+
+The files transfer. The assistant's permission settings, credentials, messenger connections and schedules may not. Hermes' saved jobs remain in Hermes until you explicitly move them.
+
+Keep the second assistant's edit and command permissions set to ask while testing. Check its documented skill discovery separately. The fact that two applications read `AGENTS.md` does not make all their behavior identical.
+
+The historical OpenRouter test cost a few cents for three questions. That is an observation about those runs, not a price forecast. Long agent sessions may read many more tokens, the small pieces of text used for billing. Check the selected model's current rates and your account's usage.
+
+## Try another model inside Hermes
+
+Changing a model within Hermes is a smaller change than changing the application. Its model picker is available through:
+
+```
+hermes model
+```
+
+Inspect the current provider options and costs before choosing. Retest a task whose behavior matters to you.
+
+Hermes also supports backup models tried in order when the first provider fails. Inspect the configured list with:
+
+```
+hermes fallback list
+```
+
+Use the current help for `hermes fallback add` when setting one up. The backup provider needs its own valid access and allowance. It can fail too, and it may charge for usage.
+
+An earlier isolated test used simulated providers: the first returned a rate-limit error and the backup returned a distinctive word. The word came back with the backup configured; the error came back without it. That proved takeover in those test conditions, not uninterrupted service from real providers.
+
+
+The practical result is modest and useful. You can change tools without rewriting your profile and skills from memory. The new tool still needs a fresh test of the work you expect it to do.

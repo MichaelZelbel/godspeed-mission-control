@@ -1,3 +1,7 @@
+# Implementation notes for the server scripts
+
+> Private reader revision note: these implementation and historical notes describe earlier inspected scripts. Use `server/setup.md` and `server/remote-desktop-setup.md` for the current Chapters 31 and 32 reader route. The historical 06:00 default is not the revised scheduling instruction: leave it off initially, verify the named time zone and inputs, then keep one active 07:00 job. Old chapter numbers inside dated history refer to those earlier editions. These notes do not claim a fresh run or overnight reliability.
+
 # What the one line does, step by step
 
 You are reading the checklist behind `server/install.sh`. Until 2026-09-02 this
@@ -18,7 +22,7 @@ for a human reading along, or for finding which step broke.
    itself: on a fresh Ubuntu server without this step it stopped and printed
    `sudo apt install build-essential` (found 2026-09-05).
 2. **The account.** `adduser ai`. Everything after root's phase runs as `ai`,
-   which can reach almost nothing. On a server the leash cannot be a question,
+   which still has access to its own files and any configured credentials. On a server the leash cannot be a question,
    so it has to be the walls.
 3. **Hermes, for that account.** Root runs Hermes' own installer as `ai`
    (`curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash`). It
@@ -103,7 +107,7 @@ for a human reading along, or for finding which step broke.
     failure stops before any scheduled work is added.
 14. **The morning brief, only if asked for.** `Put the morning brief on this
     server's clock (y/n) [n]`. Opt-in since 2026-09-05 (Michael's call): Chapter
-    21's job is a good first job for a reader who has been through Part V and
+    22's job is a good first job for a reader who has been through Part V and
     noise for one whose server is the first machine. No terminal means no.
     `KB_MORNING_BRIEF=yes` or `no` in the environment skips the question.
 15. **The Hermes half**, `server/install-hermes.sh`: the `AGENTS.md` ceiling
@@ -141,7 +145,7 @@ for a human reading along, or for finding which step broke.
     before that, the closing text sent them into `su - ai` and `hermes gateway
     setup`, which Michael read as the installer not finishing its job.
 
-## The second line, `open-the-server.sh`'s sibling: `open-the-door.sh` (Chapter 29)
+## The second line: `open-the-door.sh` (Chapter 32)
 
 Run as root after the install. It installs Tailscale if it is missing and runs
 `tailscale up` (prints a sign-in address and waits), reads the private address

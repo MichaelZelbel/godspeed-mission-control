@@ -1,236 +1,123 @@
-# What runs out, and when (Chapter 33)
+# Chapter 27: Track Deadlines Until the Work Is Done
 
-You already know the failure. A reminder goes off about something you did last
-week. You dismiss it. A month later one goes off about something you have not
-done, and you dismiss that one too, at the same speed, for the same reason.
+A reminder can arrive after you finished the work. It can also stop arriving while the work is still unfinished. A deadline list needs to record completion as well as dates.
 
-The reminder was not wrong. It just had no way of knowing.
+The kit's `hub-due` command stores that list in your hub's `due/` folder. It runs locally. No calendar or online notebook is required.
 
-**You do not need a Google account, a calendar, or any online service for
-anything on this card.** If you have a calendar you can wire two small extras in
-at the end. Skip them and you lose nothing.
+## Record the first and last day
 
-## The one idea: a window, not a due date
-
-Write down two dates for everything, not one. **The first day you can do it, and
-the last day you still can.**
-
-That second date is the one everybody writes. The first one is what makes the
-whole thing work, because now there is a *window*, and a window has a fraction
-left, and a fraction is something a computer can be quiet or loud about.
+A deadline has a window: the first day you can act and the last day you still can. It also needs a clear completion condition and the cost of delay.
 
 ```
-        window opens                                          last day
-             |------------------------------------------------|
-             |<---- quiet ---->|<-- soon -->|<-quicker->|loud--|
-                   first half     to a quarter   to a tenth
+Add a deadline to my hub. Read existing relevant records first, then ask only for missing facts: what counts as finished, the first and last day I can act, the consequence of delay, and whether any available evidence can reliably establish completion.
+
+Require both dates. Use manual completion, --self-check none, unless we have explicitly tested a better completion signal. Do not treat a recently edited draft or a new backup file as proof that the work succeeded.
+
+Check hub-due --help, then use hub-due add with a unique simple name and my confirmed answers. Show the saved dates and completion condition. Do not create a second reminder schedule.
 ```
 
-Your hub says nothing for the first half. A line now and then through the second
-half. Its own line in the last quarter. Every single morning in the last tenth,
-and always on the last day whatever the arithmetic says.
 
-**One rule, whether the window is a week or a year.** That is the point of it. A
-monthly timesheet you can file from the 1st to the 28th goes quiet, gentle,
-pushy, loud, all by itself. A tax return you have fourteen months for does the
-same thing at its own speed. Nothing is set per item. Nothing to tune, nothing
-to forget to tune.
-
-If something ever feels like it needs its own setting, **the window is wrong,
-not the rule.** Fix the window.
-
-## The four questions, and you answer them once
+For example, this is the command shape for an invented 14-day practice task. The dates are fixed so the later example is reproducible:
 
 ```
-hub-due add car-service --title "Car service before the warranty runs out" \
-  --from 2026-09-01 --to 2027-02-28 \
-  --done-when "The car has been serviced at a garage the warranty accepts." \
-  --cost "The warranty ends. A gearbox after that is mine to pay for." \
-  --repeats yearly
+hub-due --hub PATH-TO-PRACTICE-HUB add return-form --title "Return the practice form" --from 2026-09-01 --to 2026-09-14 --done-when "The completed form has been accepted" --cost "The practice application misses its deadline" --self-check none
 ```
 
-That is four answers in one line:
+Replace `PATH-TO-PRACTICE-HUB` with the full disposable folder path, quoted if it contains spaces. Do not paste this into your real deadline list. Dates use year-month-day, and this command calculates the current day in UTC.
 
-1. **What is true when this is finished?** (`--done-when`)
-2. **From when to when can you do it?** (`--from`, `--to`)
-3. **What does it cost you if it slips?** (`--cost`)
-4. **How could your hub tell you did it, without asking?** (below)
+## Run the completion check before selecting today's text
 
-You are never asked again. Everything the thing does for the rest of its life is
-judged against those answers.
-
-Or say it in words, in a session with your folder attached:
+These are two separate commands, in this order:
 
 ```
-Add something with a deadline to my hub. Ask me exactly four questions, once, and never ask them again: (1) what is true when this is finished, (2) from what day to what day can I do it, (3) what does it cost me if it slips, (4) how could you tell I had done it without asking me. If I cannot give you a last day, say so plainly and do not add it: something with no last day is a wish, and this list is not for wishes. Then run hub-due add with my answers, and show me the four answers as you recorded them so I can fix them now rather than in six months.
-```
-
-*Bookmark the prompt, if you like: [querino.ai/prompts/add-a-deadline-to-my-hub](https://querino.ai/prompts/add-a-deadline-to-my-hub)*
-
-## Question four is the whole card
-
-Some things can tell you they are done.
-
-- A key was replaced: the date in `secrets/expires.txt` moved.
-- A backup happened: the file is newer than the window.
-- The accountant replied: the email is in your inbox.
-
-Those close themselves. The moment you act, the nagging stops, without you
-telling anything anything. That is not a nice extra. **That is the failure that
-kills every reminder app**, fixed.
-
-Most things cannot. Nobody can tell your hub that you filed a timesheet into
-your employer's website. Those wait for your word:
-
-```
-hub-due done car-service
-```
-
-**Both answers are fine.** What is not fine is skipping the question, because
-the answer changes what you build. Ask it every time, even when you already know
-it is "it cannot", and write "it cannot" down.
-
-Today the program can check one thing by itself: whether a file changed inside
-the window. It also picks up your key dates on its own (below). Everything else
-waits for you, and says so on screen rather than pretending.
-
-## No date, not eligible
-
-`hub-due add` refuses anything without both dates, in exactly those words.
-
-That refusal is the only thing between this and a to-do app you abandon in three
-weeks. A shopping list of vague intentions gets ignored, and once you are
-ignoring the list you are ignoring the tax return in it too. **Things with a real
-last day and a real consequence, or nothing.**
-
-## Three states, and only three
-
-**Open. Done. Dropped.**
-
-Done can happen by itself, when there is a self check. Dropped only ever comes
-from you, and it deletes the file and its whole history, which is why the command
-makes you type it out:
-
-```
-hub-due drop car-service --yes
-```
-
-A window that closed without being done **stays open**. Nothing sweeps it away
-after a while, because for a deadline "nobody got round to it" is the failure and
-not a quiet success. It sits there, loud, until you close it or drop it. That is
-uncomfortable on purpose.
-
-## Three a day, and the honest week
-
-Your morning brief reads one command:
-
-```
+hub-due check
 hub-due today
 ```
 
-It gives back **at most three**, loudest first, and never the same thing twice in
-one day. Everything quiet is invisible.
+`check` updates recurring windows and runs configured completion checks. `today` chooses the deadline text for the brief. Running `today` alone does not perform those completion checks.
 
-That cap is the reason you can have a hundred of these. Researchers who studied
-reminders inside hospital software found that the chance of a reminder being
-acted on **dropped by about 30% for each extra one in the same batch**. Six good
-reminders are worse than three. Ten are worse than none, because by then you are
-not reading any of them.
+Run the pair once as part of the morning brief. Keep any check errors visible. If a completion check failed, do not describe its task as done.
 
-And when more than three run out in the same week, you do not get four lines. You
-get one:
-
-> 5 things run out of time this week, which is more than one morning can carry.
-> Pick the two you will really do, and drop or move the rest.
-
-That is not the program giving up. That week's real news is that you took on too
-much, and one sentence saying so is more useful than five lines you will scroll
-past.
-
-## Wiring it into the brief you already have
-
-Open `skills/morning-brief/SKILL.md`, the recipe you wrote in Chapter 21, and paste
-this into the session:
+To inspect the full list, use:
 
 ```
-Open skills/morning-brief/SKILL.md and add one part, near the top. Run the command hub-due today and put whatever it gives back into the brief, word for word, changing nothing and adding nothing. If it says nothing needs saying today, leave the part out entirely rather than writing that nothing is due. Do not work out for yourself which deadlines matter or how many to show: that command already decided, and its cap of three a day is the only reason this stays readable. Change nothing else in the file.
+hub-due
 ```
 
-*Bookmark the prompt, if you like: [querino.ai/prompts/put-my-deadlines-in-my-brief](https://querino.ai/prompts/put-my-deadlines-in-my-brief)*
+## Tell it when the work is finished
 
-Then check it now rather than in two months. Add something with a made-up last
-day a week away, run the brief once, see the line appear, and drop it again.
-
-## Your keys are already in this list
-
-If you did Chapter 27 you have `secrets/expires.txt`, with a line per key and the
-date it dies. **`hub-due` reads that same file.** Each key becomes one of these,
-with a window running from the day your hub first learned the date to the date
-itself.
-
-So you never write a date in two places, and you have one thing nagging you
-rather than two that disagree. Changing the date in `secrets/expires.txt` is
-still the off switch it was in Chapter 27, and it is now also the proof: moving
-it forward is what replacing a key looks like from the outside, so the reminder
-closes itself.
-
-If you took the key paragraph in Chapter 27's card and pasted it into your
-morning brief recipe, you can take it back out now. One thing, one place.
-
-## If you do have a calendar
-
-**One entry per thing, and one is the whole rule.**
-
-Not two. Two entries about one date is the same mistake as two reminder apps:
-the day they disagree with each other, you stop reading both.
-
-**Which day.** The day your hub starts being loud, not the day the thing dies.
-`hub-due` works that day out from the same rule as everything else, so there is
-nothing for you to pick. The death date goes in the **title**, so the single
-entry still tells you both things:
+Manual completion is the normal route. After the form has actually been accepted:
 
 ```
-Tue 23 July, 09:00
-Renew the shop key (it runs out 27 August)
+hub-due done return-form
+hub-due check
+hub-due today
 ```
 
-An entry on the day the thing dies sounds sensible and is a trap. If you renewed
-it three weeks ago, that entry is now a lie sitting in your calendar, and you
-have to remember to go and take it out. You will not.
+For practice, add `--hub` and the practice path to every command. Confirm that the current task is closed and no longer selected. A repeating task can later open a new window.
 
-**It takes itself out.** When you finish something, your hub deletes its entry,
-as long as the day has not arrived yet. A day that has already passed is left
-alone: that one is a record of what happened. This is the half that makes a
-single entry safe to have at all, because the same thing that stops the nagging
-removes the entry.
+The optional `file-newer` check reads a file's modification date. It does not read the file's contents or establish successful completion. In the inspected implementation, a date on or after the window's first day is enough to close it. Even an unfinished draft can satisfy that rule.
 
-**Give it a real start time**, never an all-day entry, or the rest of your hub
-reads it as background noise and skips it.
+Use it only when the file is a tested completion signal created after the real work succeeds. A newly created backup file, by itself, does not prove that the backup is complete or restorable. A received email does not necessarily mean the promised work was accepted.
 
-**And the other direction.** Write an event on your phone with a line in its
-notes like `hub: from 1 Feb`, and your assistant picks it up on the next morning
-run.
+If reliable completion evidence is unavailable, keep manual completion. The full list prints:
 
-That is all of it. **The calendar never decides when you get nagged, and never
-knows whether you acted.** Let it do either of those and you are back to a
-reminder that goes off about something you did last week.
+> only your word closes this one
+
+## How often a deadline appears
+
+The tool uses four bands. Earlier in the window, reminders can be less frequent. In the last three to fourteen days, depending on the window's length, a task can appear daily. Overdue work remains open.
 
 
-## Now put it in the register
+The exact dates come from the command, including both the first and last day. Short windows can skip a middle band.
 
-Open `procedures.md` and add one block: the daily check, what it can reach, and
-where the result lands. **One block, not one per deadline**, because there is one
-job here however long the list gets.
+For the 1 to 14 September example, with the check run every day from the first day and no competing deadlines, the selection days are **1, 8, 12, 13 and 14 September**. The last three dates are the urgent band. Day 8 is the first selection in the second half. The tool's saved record of earlier selections affects later output.
 
-## Prove it by breaking it (Chapter 24 again)
+Those are command selections, not phone notifications. This chapter implements a local list and a brief section. It does not implement a separate phone-alert service.
 
-Two minutes, today, while nothing is urgent.
+## Know what the daily limit means
 
-- Add something with a last day two days from now. Run `hub-due today` and watch
-  it come out loud. Drop it again.
-- Add one with a `file-newer` self check pointing at a file that does not exist.
-  Run `hub-due check`, see it stay open. Create the file. Run it again and watch
-  it close itself with nobody asked.
+Normally `hub-due today` selects up to three entries. If you call it again that day, it can return the same selected entries. That supports recreating a failed brief; it is not a promise that every call sends something new.
 
-Now you know what it looks like when it works, rather than only what it looks
-like when it has nothing to say.
+There is an exception. If more than three open tasks enter the urgent band within the next seven days, the command prints an overload message and **all affected titles and last dates**. Preserve that list. Hiding the fourth urgent task would make the short brief misleading.
+
+The current command records selection when it prints the text, not when somebody reads or receives the brief. Save that output as part of the one daily brief. If delivery fails, retry that saved brief rather than running another independent notification job. Check delivery separately if you later add a messenger.
+
+## Add the full cycle to the brief
+
+```
+Update skills/morning-brief/SKILL.md with a Deadlines section.
+
+First run hub-due check in the intended hub, then hub-due today. Preserve any errors or failed-check notices. Include the selected deadline output word for word, including the overload message and all titles. Omit the section only when the command explicitly says nothing needs saying or no deadlines exist, and there was no check error.
+
+Do not calculate urgency yourself. Keep the normal brief body under 200 words, but put required deadline text and check failures after that body without a word limit. Preserve the Research section and its unresolved urgent findings. The 200-word target must not delete important material.
+
+Preserve today's existing brief. For testing, use a disposable hub, its own --hub path on every deadline command and a new output at practice/brief-tests/deadline-test.md. Do not add fictional deadlines to my real list or overwrite my real brief.
+
+Run hub-check-brief on the full result. If raw deadline text contains a local path that the checker refuses, preserve the raw output and report the conflict; do not silently alter required text. Use clear human titles when creating deadlines so they do not need local paths.
+```
+
+
+Test an unfinished task, then a manually completed one. Also test more than three urgent tasks in the practice folder. The full urgent list must survive the brief's length target.
+
+## Drop a task deliberately
+
+Finishing and abandoning are different actions. `done` retains the task's history. `drop` removes the task file and its history:
+
+```
+hub-due drop return-form --yes
+```
+
+Use the practice path when cleaning up the example. For real work, drop only after deciding you no longer intend to do it. Passing the last day does not make that decision for you.
+
+For a changed deadline, ask the assistant to inspect and update the existing entry with a saved version first. Do not create a duplicate under a new name. The displayed list should show the new dates and retained history.
+
+## Keep one source for each deadline
+
+Chapter 30 introduces credential expiry dates in `secrets/expires.txt`. The deadline command can read dated entries from that file. Do not also add a manual duplicate or a second expiry countdown to the brief.
+
+Updating an expiry date is still not proof the service accepts the replacement key. Check the actual connection after renewal, then update the existing date and its tracked renewal.
+
+Record the daily deadline cycle within the morning brief's entry in `procedures.md`. It does not need another schedule. A calendar is optional display; if you add an entry, maintain it when the date changes or the task finishes.
+
+The useful result is a brief that keeps unfinished commitments visible and stops treating completed work as unfinished. That needs both a daily run and a trustworthy completion signal.

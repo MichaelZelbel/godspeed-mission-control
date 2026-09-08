@@ -66,4 +66,4 @@ floor, not a cage.
 ## The boundary
 
 It drafts, you send. The better it sounds, the more carefully you read it
-before it leaves the house (Chapter 24).
+before it leaves the house (Chapter 20).

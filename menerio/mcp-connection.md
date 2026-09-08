@@ -1,134 +1,112 @@
-# One memory, every tool (Chapter 26)
+# Chapter 29: Connect Your AI Tools to the Same Notebook
 
-MCP is a standard socket. Any AI tool that speaks it can read the same notebook. One key, and
-every tool you use answers from the same notes. No tool gets a copy; every tool reads the
-same shelf.
+An assistant can use a note from your online notebook only if it has a working connection and permission to read it. This chapter adds that connection.
 
-## Make the key
+The connection uses MCP, a standard way for an AI application to call another service's tools. Each application still needs its own setup. Data returned by those tools may enter its conversation records.
 
-Menerio, then **Settings**, then the **API Keys** tab. Press **Generate new API key**. Name it
-after the tool or machine that will use it, because in six months you will want to know which
-key belongs where.
+## Create a key with limited access
 
-The grid under **This key may touch** starts with every box ticked. For your own hub or
-assistant, leave it that way: full access is the right shape for the key you hold yourself.
-Untick boxes only for a key you hand to somebody else's app, and that key can never do more,
-whatever the app asks. (A refused tool call names the missing box, so a too-narrow key is a
-one-line fix, not a mystery.)
+In Menerio, open **Settings**, then **API Keys**. Name the key for the tool or computer that will use it. Review the available data categories and enable only what that job needs.
 
-The dialog then says, verbatim:
+Keep the generated value in your password manager. It is a credential, like a password, and does not belong in a chat, a screenshot or an ordinary hub file. A warning to copy it now means you may not be able to display it again later.
 
-> Copy this key now, you won't be able to see it again
+Separate keys make it easier to stop one application independently. A shared key is simpler to distribute, but canceling it stops every connection using it. Other valid keys are unaffected.
 
-Believe it. Copy it into your password manager immediately. Never into your folder.
+The connection address used by the companion setup is:
 
-**One key, not two.** Until 2026-08-16 Menerio handed out a separate `mnr_mcp_` token for the
-connector and an `mnr_` key for the API. Since 2026-08-18 any API key opens the connector, and
-the boxes on the key decide which tools answer, so there is one key and one off-switch. Old
-`mnr_mcp_` tokens still work, and the **MCP Server** tab still lists them so any of them can be
-revoked; it no longer makes new ones.
+```
+https://mcp.menerio.com
+```
 
-## The connection facts
+## Connect Hermes
 
-- Endpoint: `https://mcp.menerio.com`, exactly this. No `/mcp`, `/sse` or `/v1` on the end.
-- Transport: MCP Streamable HTTP.
-- Auth header: `Authorization: Bearer <key>`. Keys start `mnr_`.
-- Tools with nowhere to put a header: append `?key=<key>` to the URL instead.
-- If a tool call is refused with a message naming a box (for example "This key's boxes don't
-  include Notes"), the key is real and too narrow. Edit the key on the **API Keys** tab and
-  tick the named box.
-
-## Door one: Hermes, in one line (the header, properly)
-
-Hermes keeps its connections in its own settings, per profile, never in your folder. In
-a terminal:
+In a terminal, enter:
 
 ```
 hermes mcp add notebook --url https://mcp.menerio.com
 ```
 
-**Call it `notebook`, not `memory`.** Hermes has a built-in memory tool of its own, and a
-connection named `memory` gets confused with it: asked for "my memory tools", Hermes 0.20.6
-searched its own two memory files, found nothing, and said so (measured twice, 2026-09-02).
+Use `notebook` as the name. Hermes has its own local memory files, so calling both things “memory” makes requests less clear.
 
-It asks "Does this server require authentication?" (yes) and then "API key / Bearer
-token" (paste the key). The key is written to Hermes' own `.env` for secrets as
-`MCP_NOTEBOOK_API_KEY`, and the settings file only ever names it. The connection is tried
-on the spot. Then:
+When the command asks whether authentication is required, choose yes. Paste the credential into the dedicated token prompt, not into the command line. Hermes stores this connection in its own configuration; protect that location too.
+
+Then check it:
 
 ```
 hermes mcp list
 hermes mcp test notebook
 ```
 
-Verified 2026-09-02 on Hermes 0.20.6: `list` shows `notebook  https://mcp.menerio.com  all
-enabled`, and `test` reports `Connected` and `Tools discovered: 58`. `hermes mcp configure
-notebook` switches individual tools off; the writing tools are the ones to consider.
+The list should identify the notebook address and the test should discover tools. A historical run found 58 tools; your current count can differ. A successful connection test proves access, not that the assistant will choose the right tool.
 
-Hermes also has a catalogue of well-known servers (`hermes mcp catalog`, then `hermes mcp
-install <name>`). Menerio is not in it, which is why it is added by address.
+Inspect the reading and writing tools before relying on them. Use `hermes mcp configure notebook` to limit enabled tools when supported by your version. Start with reading if that is all the job needs.
 
-## Door two: Claude Code, the developer's tool (header, properly)
+## Optional: connect Claude Code
 
-```
-claude mcp add --transport http memory https://mcp.menerio.com --header "Authorization: Bearer PASTE-YOUR-KEY-HERE"
-```
+If you use the developer tool from Chapter 5, its project configuration can refer to an environment variable without containing the secret. An environment variable is a named value made available to a running program.
 
-Then `claude mcp list` and look for:
+Ask the assistant to prepare the configuration and input method first:
 
 ```
-memory: https://mcp.menerio.com (HTTP) - Connected
+Configure a notebook connection for Claude Code in this hub. Inspect the existing .mcp.json and current client help before editing. Keep unrelated connections. Use https://mcp.menerio.com and an Authorization header that refers to ${MENERIO_API_KEY}, never the literal credential.
+
+Show me a masked local input method for this operating system, so I can load the key without putting it in chat or shell history. Launch the client from the environment containing the key and test a read-only connection. Report success or the actual error without printing values. Do not broaden key permissions or enable writes to repair a read failure.
 ```
 
-## Door three: the folder file, for Claude Code
+Hermes does not read this project's `.mcp.json` in the setup inspected for this book. Its own connection remains separately configured. Copying a placeholder file to another computer does not load the actual secret there.
 
-The third door is a file in your folder, `.mcp.json`, naming your notebook's
-address. Claude Code finds it whenever it opens the folder and connects with
-nothing to click. It does not hold your key, it **names** it: the line reads
-`${MENERIO_API_KEY}` and the value is fetched from the folder's locked store
-when the tool starts, which is why the file can travel to your backup like
-every other file.
+Chapter 30 explains the optional encrypted credential store. A password manager and a separate connection on each machine are also valid.
 
-Verified 2026-08-30, in Claude Code, with no connector panel touched: a session
-opened on a folder whose `.mcp.json` names Menerio reached the notebook and
-answered `Total notes: 697. This week: 49.`
+## Prove which source answered
 
-**Hermes does not read this file.** Checked on Hermes 0.20.6 with a folder that
-had one (`hermes mcp list`: "No MCP servers configured"), and confirmed in the
-source, where the string `.mcp.json` does not appear. For Hermes the thing that
-travels is door one, run once per machine; the installer prints the line when
-it lays the folder down.
-
-## The test that proves it
-
-Make a completely empty folder. Open a session there and ask something only your notebook
-knows:
+In a fresh session, ask a question about the harmless notes you put in the notebook. If you used the fictional Nadia notes, use:
 
 ```
-Use my notebook's tools, and nothing on this computer. Who is <person>,
-what is the latest on <a thing you took notes about>, and how do they
-want bad news delivered? Answer only from what the notebook returns, and
-say plainly if you cannot find something.
+Use my notebook's tools, and nothing on this computer. Who is Nadia, what is the latest on next year's book, and how does she want bad news delivered? Answer only from what the notebook returns, identify the notes read, and say plainly if you cannot find something. Change nothing.
 ```
 
-Both phrases matter, measured on Hermes 0.20.6. "Notebook" because "my memory tools" sends
-Hermes to its own memory files. "Nothing on this computer" because "search my notes" made
-it search the disk: an empty folder is empty, but the tools reach the whole machine, and it
-answered fluently from a test folder two directories away. A plain "I cannot find anything
-about that" is a pass too, if you never took the note: the point is that it answers from
-the notebook or says so, and never invents.
 
-## Wire an agent tool automatically
+An earlier test returned:
 
-The MCP page also has an **Agent Setup Prompt** with a **Copy prompt** button. Paste it into an
-agent tool and it installs the server and writes the rules it should follow every session (read
-the profile at session start, search before answering from memory, capture new facts) into that
-tool's instructions file. It asks for your key as its first step.
+> - Who Nadia is: I cannot find a contact record or further identification for Nadia. The notebook only identifies her through notes about the book and communication preferences.
+> - Latest on next year's book: Nadia said today that its budget has doubled. She hinted that there could also be a second illustrated title for you.
+> - Bad-news delivery: Give her three options for a setback, not just one. Warn her early; she does not forgive late warnings quickly.
 
-## Housekeeping
+That gap was useful. The notebook notes did not establish Nadia's role. Sam's separate profile did, but this request deliberately excluded that source.
 
-- **One key per place.** Retire a machine, revoke that one key, everything else keeps working.
-- **The API Keys tab is the off-switch.** Revoking a key cuts that tool off at once. Know where
-  the page is before you need it.
-- **Reading before writing.** A tool that can save notes can save the wrong note forever.
-  `hermes mcp configure memory` switches a writing tool off until you want it.
+Earlier attempts had searched Hermes' local memory or other folders. Naming the notebook and inspecting the tool calls made the test more specific. An empty working folder alone does not prevent a tool from reading elsewhere.
+
+
+## Optional: copy selected records
+
+The companion installer can add notebook sync after you choose to connect it. Review the proposed upload scope and the credential storage before enabling it.
+
+| Direction | What the inspected setup copies |
+|---|---|
+| Hub to notebook | Observations, skills and individual decisions. |
+| Excluded from that upload | `profile/` and `AGENTS.md`. |
+| Notebook to hub | Supported people, events and claims into `world/`, marked with their source. |
+
+That is selected material, not a complete mirror of the hub or notebook. It does not make a profile-only fact available in the notebook's phone search.
+
+The inspected installer runs sync **after a Git commit**, when its post-commit hook is installed, and on an hourly check. A commit is the local version-history snapshot from Chapter 18. Pressing Save in a text editor does not trigger that hook. An existing custom hook may be preserved, so inspect which trigger was installed.
+
+Run a visible check after setup:
+
+```
+hub-notebook-sync --verbose
+```
+
+Inspect what it sent, what it retrieved and any failed operation. The runner's log is `~/.hub/notebook-sync.log`; `~` means your user folder. A second run with unchanged inputs should avoid uploading unchanged material. Verify that result rather than assuming it from silence.
+
+Notebook-derived files marked `origin: menerio` are copies and may be replaced by a later sync. Correct them in the notebook. The inspected copying code preserves locally owned records rather than treating every file in `world/` as its own.
+
+It also guards against a response that looks like an unexpected mass removal. That is one check, not a guarantee that every incomplete response will be caught.
+
+## Check access and recovery separately
+
+Cancel a key in the service's API Keys page when you no longer want the applications using it to connect. Pausing sync is a different step: disable its machine schedule and any installed commit hook, as described in Chapter 30. Canceling a key does not remove old copies.
+
+For recovery, inspect the local `world/` copy and make a separate export of original notebook notes if you need those too. A successful search is not proof that your notebook can be fully restored.
+
+You now have a second source the assistant can consult. Keep its source name visible in answers so you know where to correct a wrong fact.

@@ -93,7 +93,7 @@ with your turns is decided in your account with that company. Spend ten
 minutes there once and set the training and retention choices the way you
 want; the switch that matters is theirs, not Hermes'.
 
-**Connected tools.** Chapter 26 connects MCP servers. Each is a line in
+**Connected tools.** Chapter 29 connects MCP servers. Each is a line in
 Hermes' own settings:
 
 ```

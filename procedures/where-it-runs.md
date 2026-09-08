@@ -1,102 +1,33 @@
-# Where It Runs (Chapters 20 and 21)
+# Where scheduled work runs (Chapters 21 and 22)
 
-The one mechanical fact that decides what every procedure in this book
-can do. Read it once, and the rest of Part V stops being confusing.
+## Give the job four parts
 
-## The rule
+A scheduled job needs four things:
 
-**A job fires only while Hermes is running on that computer. Close it and
-nothing runs. Open it again and anything overdue runs once, late, and then
-goes back to its schedule.**
+1. **Instructions:** a skill file describing the work and its limits.
+2. **A start time:** once, or on a repeating schedule, in a named time zone.
+3. **An output:** a new file in a folder you check, or a tested delivery channel.
+4. **A running computer:** Hermes must be available there, with its files, model access and any required network connection.
 
-The clock lives inside Hermes itself. On your own computer that is the
-Hermes app: with the window open, your jobs fire; quit it, and nothing
-fires until you open it again. On a server it is the gateway, the part of
-Hermes that runs in the background as a service. There is no cloud kind
-and no "remote routine": your jobs run where Hermes runs, and read
-whatever folder that machine holds.
 
-## A missed slot runs once, late
+A promise in chat to check later is not proof of a schedule. Look for the saved job, its next run and the instruction it will receive.
 
-Measured on a laptop (2026-09-04, Hermes 0.20.6 on Windows 11): a
-two-minute job fired on time while the app was open, about ten seconds
-after each slot. With the app quit for ten minutes, five slots passed and
-nothing ran. On reopening it ran once, straight away, then went back to
-its two minutes. A daily job whose hour passed while the app was shut ran
-four minutes after the app came back, then set itself for the same time
-tomorrow. Once, not once per missed slot: skip a week and you come back
-to one brief, not seven.
+A laptop can run the first exercise. Keep it awake and keep Hermes running. If you need work while that laptop is off, Chapter 31 adds a server. You can defer that purchase.
 
-## One warning about `hermes cron status`
+## Test the work and the timer separately
 
-Hermes has a second part called the gateway, which connects it to
-Telegram and the other messengers (Chapter 29), and `hermes cron status`
-reports on the gateway. On a laptop it answers, in capitals, that cron
-jobs will NOT fire. It is telling the truth about the gateway and nothing
-about the app in front of you: it printed that sentence at the same
-minute the app fired two jobs on time. On a server where the gateway runs
-as a system service, it is the line to read. On a laptop, believe the job
-card.
+**Trigger now** starts work because you pressed a button. It can test the saved prompt, but it does not prove the timer fired.
 
-## Living with that
-
-- **A desk machine that stays on, with Hermes open.** Then every morning
-  is a morning.
-- **A laptop you close at night.** The promise is "written at seven on
-  the mornings Hermes is open at seven, and when I open the lid on the
-  others", not "it runs while I sleep".
-- **The grown-up answer.** A small server of your own that never sleeps,
-  with Hermes' gateway as a system service and its own copy of your
-  folder. That is Chapter 28, and every job you build on your laptop moves
-  there unchanged.
-
-## The desktop screen
-
-Hermes Desktop shows the clock as a screen called **Scheduled jobs**, with
-a **New cron** button and a form (Name, Prompt, Frequency, Deliver to,
-Model), a job card with **Trigger now**, **Pause** and **Resume**, and a
-**Manage** menu holding **Edit cron** and **Delete**. Chapter 21 walks
-that screen, driven for the book on 2026-09-04. A job made there runs in
-the folder Hermes was pointed at, but arrives with no house rules unless
-the prompt says so, so every prompt starts with "Read AGENTS.md at the
-top of this folder and follow it."
-
-## The four parts of a cron line (the typed twin, for a machine with no screen)
+Because you already made today's brief, use a separate one-time practice job to test the timer:
 
 ```
-hermes cron create "0 7 * * *" "Follow skills/morning-brief/SKILL.md and write today's brief as a dated file in brief/." --name morning-brief --workdir /path/to/your/hub
+Create one one-time test, due in 5 minutes, in this folder. Show its saved job record, actual time zone and next run. Its prompt must read AGENTS.md and skills/morning-brief/SKILL.md, then write to practice/brief-tests/timer-test.md as an explicit test output. Refuse to overwrite that file. Use no external delivery. Add the test and its stop control to procedures.md.
 ```
 
-- **Schedule.** Five fields, minute then hour: `0 7 * * *` is seven every
-  morning. Phrases work too; Hermes' own examples are `30m`, `every 2h`
-  and `0 9 * * *`. There is no once-an-hour floor: a two-minute job fired
-  every two minutes.
-- **Prompt.** One line that names the recipe. A scheduled run is a
-  stranger to your session; say the name and the recipe runs.
-- **Name.** What you will recognise in `hermes cron list`.
-- **Workdir.** Your hub, full path. It is the folder the job runs in AND
-  the thing that hands the job your `AGENTS.md`: Hermes' own help says it
-  "injects AGENTS.md" from there. Never leave it out.
+Do not press **Trigger now**. Leave the computer awake and Hermes running through the slot. Afterwards inspect the run history and open the new practice result. Confirm the one-time job has no future run.
 
-## A hand run proves the recipe, not the clock
+If the file is missing, read the error. A missing model connection, a refused tool or a sleeping computer needs a different repair from a bad instruction.
 
-**Trigger now** on the card, or `hermes cron run <name>` in a terminal,
-fires a job immediately. Its run record says `source=direct`; a run the
-clock fired says `source=builtin`. Testing with a hand run and closing
-the lid proves the recipe and nothing about the schedule.
+In my earlier desktop shutdown test, missed slots produced one late run after restart. That is historical behavior from the tested app, not a guarantee for every version. Opening a laptop lid alone does not restore model access or finish a job.
 
-## Jobs never ask
-
-Shipped defaults: a scheduled job that reaches for a command Hermes would
-normally ask about is refused, not paused (`approvals.cron_mode: deny`).
-A brief that only reads the folder and writes into `brief/` never reaches
-for one. If a job genuinely needs a dangerous command, grant it on
-purpose in Hermes' approvals; do not discover it at 07:00.
-
-## What does not count as a procedure
-
-Asking an open session to "check again in ten minutes" is not a
-procedure: nothing is written down, and it is gone when the conversation
-ends. It never gets a block in `procedures.md`, because a register entry
-for something that quietly died last Tuesday is worse than no entry at
-all.
+The test record included a run due at 19:27 and recorded at 19:27:14. That shows a small delay for one run. It does not promise exact timing or unlimited frequency.

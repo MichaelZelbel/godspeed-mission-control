@@ -1,88 +1,99 @@
-# Weekly Review Setup (Chapter 22)
+# Chapter 24: Set Up an Automatic Weekly Review
 
-The procedure that keeps the rest of the system true. It reads your
-profile files and your `inbox/`, does the filing itself, reports every
-move so you can undo one, and asks you a question only when it finds
-something it should not decide alone. Most weeks it asks nothing.
+A new deadline can sit in an inbox note while the project file still shows the old date. The weekly review finds changes like that, files clear updates and leaves uncertain ones for you.
 
-## Half one: the recipe
+It should also ask whether the work moved toward your priorities. A busy week and a useful week are not always the same.
 
-In a session in Hermes:
+## Build a review that preserves its evidence
 
 ```
-Build me a weekly review. Write it as a skill file in skills/weekly-review/SKILL.md. When it runs it should read my profile files and everything in inbox/, do the filing itself, and write the review as a new file in reviews/, named with the date, in six parts, the sixth only once a month:
-1) what changed in my projects and people since last week, taken only from the files, and where it knows nothing it says so plainly;
-2) file each clear capture in inbox/ into the right profile file, in my own words, delete the capture it filed, and report every move as one line naming the source, the destination and what it said, so I can undo a move I dislike;
-3) leave anything doubtful in inbox/ untouched and ask me about it, one plain question each; when nothing is doubtful, this part is one line saying so;
-4) name anything in my profile files that contradicts itself or has clearly gone stale, quoting both lines; when there is nothing, skip this part entirely;
-5) the one thing my priorities say I should protect this week;
-6) ONLY when this is the first review of a calendar month: one line reminding me that anything I have told an AI outside this folder can be brought home with the export prompt in prompts/library/bring-your-context-with-you.md. Nothing in the other weeks.
+Create skills/weekly-review/SKILL.md with these instructions.
 
-Under 250 words, no pep talk. Then run it once so I can see this week's review.
+Read AGENTS.md, profile/, decisions.md, inbox/ and the latest earlier review in reviews/. Use available dated work records or version history for comparisons. On the first run, say there is no earlier review; describe the current record without inventing last week's state.
+
+File only clear factual captures. Preserve writing samples, unresolved import questions and other noncapture material. For each filed capture, make the smallest supported update to its proper file, then move the original into archives/filed-captures/ with a unique name. Never overwrite an archive entry. Keep uncertain captures in inbox/. Report source, destination and exact change.
+
+Distinguish a factual update from a proposed behavior rule. Leave proposed rules in inbox/ until I confirm them and the rule workflow is available. A confirmed behavior rule belongs in rules/ and must be compiled with hub-compile-rules; do not hide it in a profile fact or observation. Report any compilation failure.
+
+Before filing, save a local version-history snapshot of the affected files under the hub's rules. If a recoverable snapshot cannot be made, prepare proposed changes without applying them and report why. Send or publish nothing.
+
+Write a new dated review in reviews/. Preserve existing reviews. Include progress toward recorded goals, clear updates filed, unresolved questions, contradictory source lines and one priority to protect. Prepare a useful draft where possible. Do not equate missing records with no work done.
+
+Keep the summary under 250 words. Put the full filing record below it when needed; never omit a move merely to shorten the summary. Skip empty sections.
+
+On the first review of each calendar month, include one optional reminder to use Chapter 1's current context-summary prompt in another AI tool if there is useful new context there. A summary is not a conversation export. Record that the monthly check ran so a same-month retry does not repeat it unnecessarily.
+
+For a test, accept a separate practice destination. Do not replace the real review or file real captures while testing fictional inputs.
 ```
 
-What each part carries:
 
-1. The clause "where it knows nothing it says so plainly" is the most
-   important line in the recipe. A review that quietly invents your week
-   is worse than no review.
-2. Chapter 9's filing prompt, running itself now. Every move is reported
-   as one line naming source, destination and words, so undoing one
-   costs a sentence.
-3. The safety on that trigger: doubt goes to you, always, one plain
-   question per capture. Nothing doubtful is ever filed for you.
-4. Chapter 10's mirror test, automated: two true files that disagree,
-   caught by the thing that reads them side by side every week, quoting
-   both lines.
-5. Your priorities from Chapter 7, cashed in as a decision about the
-   coming week rather than a list.
-6. The once-a-month line: a reminder, not a question, that your other
-   AIs have been listening too and the export prompt brings those
-   conversations home. See `outside-ai-check.md`.
+Read and test the skill before scheduling it. The original captures remain recoverable in `archives/filed-captures/`, and the earlier version records what changed in the profile.
 
-## Half two: the clock
+An earlier manual test used fictional illustrator Sam's notes. Nadia was the editor; Priya handled printing. Four notes could be filed. One could not:
 
-The same line as the brief, with a weekday in the fifth field. `0 7 * * 1`
-is Monday at seven:
+> `inbox/2026-08-15-thursday.md` ("Keep Thursday free"): which Thursday, and what for?
+
+That is a useful question. The assistant cannot establish the date from “Thursday” alone. The same run found these conflicting lines:
+
+> `people.md`: "A rate-increase draft is waiting; the new numbers are not decided yet."
+> `projects.md`: "new rates decided, 520 a day, 620 for rush."
+
+Those are exact excerpts from the earlier test, not a new run of the revised skill. Its older filing instructions removed processed captures. This edition preserves them.
+
+## Keep the monthly context reminder accurate
+
+Chapter 1 asked an AI to summarize the background it could reach. It did not export every conversation or produce a library of your old prompts.
+
+Save that current extraction prompt for later use:
 
 ```
-hermes cron create "0 7 * * 1" "Follow skills/weekly-review/SKILL.md and write this week's review into reviews/." --name weekly-review --workdir /path/to/your/hub
+Copy the current Chapter 1 prompt from the companion kit's profile/bring-your-context-with-you.md into prompts/library/bring-your-context-with-you.md. Add a purpose line: summarize accessible background for review and import; not a full conversation export. Preserve an existing saved version and show any difference before replacing it.
 ```
 
-Your hub as `--workdir`, because the review reads your files just as the
-brief does, and because that is what hands the job your `AGENTS.md`.
-Sunday evening works as well as Monday morning; pick the moment you
-already plan your week. On a laptop the job fires while Hermes is open; a
-Monday it was shut for is written once, late, when you next open it (see
-`where-it-runs.md`).
+When the reminder is useful, run the prompt in the other tool. Correct the answer and review what may travel before importing it. Leave guesses and unresolved questions visible, as in the first import.
 
-You do not need a disposable test copy, because you already ran the
-recipe by hand. `hermes cron run weekly-review` fires it once more if you
-want to see the job run from the clock's side; it proves the recipe, not
-the schedule. No approval pass is needed: a review that only reads and
-writes inside your folder reaches for nothing Hermes would ask about, and
-a scheduled job that did would be refused rather than left waiting.
+## Optional: review what you pay for AI
 
-## Your half, only when it asks
+The weekly review can carry a monthly cost check. Begin with the plans you actually pay for:
 
-The review lands with the maintenance in it already done: filed,
-reported, undoable. Your half is reading it, and answering what it
-actually asked.
+```
+Read any existing subscription records first. Create or update profile/subscriptions.md with one block per AI plan I confirm: plan name, price and currency, renewal date, source of usage evidence, and status. Keep unknown values marked unknown. Do not duplicate an existing plan or infer that a missing receipt means no usage.
+```
 
-1. If it held a capture, answer the question right there, in a plain
-   sentence, and it files the answer. Most weeks it holds nothing.
-2. If a line under its filed report looks wrong, say so and the move
-   comes back out. That is what the one-line reports are for.
-3. If it flagged two files disagreeing, one sentence from you settles
-   which line is true, so `profile/projects.md` changes while the
-   coffee is still warm.
 
-Your context feeds your procedures, and now a procedure feeds your
-context. That loop, running by itself, is the closest thing this book has
-to a perpetual motion machine.
+Hermes can report recorded usage with:
 
-## Then the register
+```
+hermes insights --days 30
+```
 
-One block in `procedures.md`. Nothing runs unlisted. Tell your assistant
-the job is live and let it write the block; your house rules say so, and
-it has often done so already.
+One historical run showed:
+
+> Estimated:   ~$0.50
+> Included:    17 session(s) (subscription, no provider invoice)
+> Unknown:     4 session(s) (no pricing data)
+
+That was an estimate for recorded sessions. It did not measure unused allowance or prove that an unmeasured service cost nothing.
+
+```
+Add an optional monthly subscription section to skills/weekly-review/SKILL.md. Run it only on the first review of the month when profile/subscriptions.md exists.
+
+Read that file and run hermes insights --days 30. Report what the available records cover, known charges and unknown usage. Treat activity in other tools as unmeasured unless their records are available. Distinguish subscription fees from extra usage charges. Recommend a change only with its evidence and tradeoff. Cancel, buy and change nothing. If the command fails, report that failure rather than zero usage.
+```
+
+
+## Schedule it and check the result
+
+Run the review once in a practice copy to inspect its filing behavior. Include one writing sample and one unresolved question; both must remain untouched. Check that an archived capture and its profile change can be recovered from the saved version.
+
+Then create the real weekly job through **Scheduled jobs**. Use a name such as `weekly review`, a custom schedule such as `every monday 7am`, and this prompt:
+
+```
+Read AGENTS.md and follow skills/weekly-review/SKILL.md. Write this week's new review into reviews/. Apply only the local filing allowed by that skill. Report failures and uncertainty; send nothing externally.
+```
+
+Confirm the computer, working folder, time zone, next run and output. Leave desktop delivery selected for the local route. Register the job in `procedures.md` and try its pause control.
+
+A manual run tests the skill. A separate one-time practice run tests scheduling without waiting a week. Use a new practice output for that run, as in Chapter 22.
+
+When the real review arrives, read the changes and answer only what the sources could not settle. If a filing decision is wrong, ask for that specific move to be restored from its saved version. The report should make that possible without guessing.

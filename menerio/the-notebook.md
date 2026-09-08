@@ -1,24 +1,25 @@
-# The notebook (Chapter 25)
+# Chapter 28: Add an Online Notebook for Notes on the Go
 
-The folder is what you teach: context, skills, rules, edited at your desk, one home on your
-disk. The notebook is what you live: notes born out in the world, written from whatever device
-is in your hand. Nothing is copied between the two, so nothing can go stale.
+An online notebook is optional. It gives you somewhere to save and search notes when your hub folder is out of reach.
 
-## The two rules
+I wanted one after a call on a train. A client asked about a spring quote. The number was in my project file, on a computer at home. Before hanging up, she mentioned a changed budget. I could neither retrieve the old number nor conveniently save the new one.
 
-1. **Secrets stay out.** Chapter 19's piles decide: only "may travel" facts go in. For personal
-   notes worth keeping anyway, every note has an **AI** switch; flipped to **Hidden**, the note
-   is excluded from People, from the pages, and from every connected AI tool.
-2. **Your folder stays out.** No import, no retyping, no "just the important parts". A fact born
-   at your desk lives in the folder; a fact born out in the world lives in the notebook. The
-   moment one fact has two homes, you are the person who keeps them matching, and that person
-   always quits.
+Those are two different problems. Remote access to the real hub can retrieve a project file; Chapters 31 and 32 cover that. A notebook can hold the new note immediately. Connecting it later does not upload every hub file.
 
-## First notes
+## Choose where to keep the original
 
-Sign up at menerio.com (free account, **500 AI credits**, refills monthly; a note costs about
-two). Press **New Note**: a title line, a page, saves itself while you type. Write what
-happened, one note per thing, plain sentences:
+Keep one place where you correct each item. Deliberately maintained background belongs in your hub's profile. A note you write directly in the notebook is corrected there.
+
+Copies can help with search or recovery. They should identify their original and the date of the copy. If a copy is stale, correct the original and repair the copying process.
+
+
+Chapter 29 adds two copying jobs: selected hub material goes up to the notebook, and supported notebook records come down to `world/`. Profile files are excluded from the upload. Your phone's notebook search will not therefore find the quote in `profile/projects.md` just because sync is enabled.
+
+## Try a few harmless notes
+
+I use [Menerio](https://menerio.com), which I built. That is a disclosure, not a reason you need it. Check its current plan, allowance and privacy terms before creating an account. This chapter does not depend on a particular free-credit amount.
+
+After signing in, create a note with a title and a short body. In the fictional illustrator example, Sam's editor is Nadia. One practice note was:
 
 ```
 Nadia budget news
@@ -27,26 +28,56 @@ Nadia said today the budget for next year's book has doubled. She
 hinted there could be a second illustrated title in it for me.
 ```
 
-On a phone, menerio.com is the same app in a narrower coat: search box on top, plus button for
-a new note.
+If you use practice notes, label them fictional and keep them apart from your real profile. Your own first note can be a harmless preference or a quotation you want to find later.
 
-## The machine files, you review
+Three other practice notes covered Nadia's preference for early warnings and three options, Priya's preferred contact method, and a printing quote. These were separate notebook inputs in the earlier demonstration. They were not automatically exported from Sam's hub.
 
-Within a minute, the **Review Queue** fills with cards: people it noticed, projects, facts.
-**Keep** what is right, **Roll Back** what is not, **Never Again** for things it should stop
-proposing. Keep a person card and the **People** page gets a page for them, with every note
-that mentions them attached. You review the filing; you never do the filing.
+## Review what the notebook derives
 
-## Search
+The notebook can propose people and facts from your notes. In my earlier test, its review queue included:
 
-The search box takes questions ("what did the reprint cost") and bare names ("Nadia"). It
-searches by meaning, not by magic: a query far from your own words can miss. Ask roughly the
-way you wrote it.
+> Add "Nadia" to your People
+>
+> Nadia was mentioned in "Nadia budget news" but isn't in your contacts yet.
 
-## What happened to the folder import
+Read those proposed changes. Keep what is supported, correct mistakes and reject guesses. A sentence about a possible second book should not become a confirmed contract.
 
-Older printings of Chapter 25 imported the profile folder into Menerio and asked you to
-re-import quarterly. That design made you the sync mechanism between two copies of one fact,
-and it is retired. The folder never needed a copy: your assistant reads the folder at your
-desk, the connector (Chapter 26) lets it read the notebook anywhere, and Chapters 28 and 29
-give your phone a way to ask the folder itself.
+The original note remains useful evidence. Derived summaries can be wrong even when the note is accurate.
+
+## Search for something you know is there
+
+In that notebook test, I searched:
+
+```
+what did the reprint cost
+```
+
+The printing quote appeared first. The displayed percentage was a relevance score, not the probability that the quote was true. Another search, `money`, found nothing despite two notes about money.
+
+Meaning-based search can help with different wording, but it can still miss. Try a person's name, a phrase from the note or the date before concluding the record is absent.
+
+My older notes mention an 84 percent retrieval score for my local folder. I cannot use that number to predict your results: the chapter does not have a reproducible query set and method behind it. No particular number of files creates an automatic need for a notebook.
+
+Use the practical signal instead: you often fail to retrieve notes you know exist, and searching differently takes more effort than the notes save.
+
+## Separate events from current claims
+
+A person or project is an **entity**, meaning the thing a note describes. An **event** records what happened on a date. A **claim** records what is believed to be true.
+
+“Nadia said the budget doubled on Tuesday” is an event. “The current budget is twice the old budget” is a claim that might need later correction.
+
+Keep the original dated event. When current information changes, close or replace the current claim with its new date. Do not erase the earlier event just because circumstances changed.
+
+## Hiding is different from deleting
+
+Leave passwords, payment details and access keys out of notes. Decide separately which personal material you want this service to hold at all.
+
+Menerio's AI visibility control can hide a note from later AI use. **Hiding does not automatically remove information already derived from that note.** Check the note's AI-footprint or derived-information view and inspect earlier people, claims and summaries separately. Read the current deletion controls before using them.
+
+Existing conversation records, exports and backups may still contain earlier text. Removing the online original does not erase those copies. Chapter 19's privacy review applies to each location.
+
+## Check the exit before depending on it
+
+Try the service's current export or download controls with your harmless notes and confirm you can read the result. The selected `world/` copy in the next chapter is not proof that every original note or attachment has been exported.
+
+A notebook can be useful before it connects to your assistant. Start with a few notes you can retrieve and correct. Add the connection only when that extra access serves a job you want done.

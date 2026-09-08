@@ -1,0 +1,16 @@
+{
+  "model": "openrouter/moonshotai/kimi-k3",
+  "permission": {
+    "edit": "ask",
+    "bash": "ask"
+  },
+  "mcp": {
+    "notebook": {
+      "type": "remote",
+      "url": "https://mcp.menerio.com",
+      "headers": {
+        "Authorization": "Bearer {env:MENERIO_API_KEY}"
+      }
+    }
+  }
+}

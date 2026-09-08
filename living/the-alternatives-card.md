@@ -1,35 +1,9 @@
-# The Alternatives Card (Chapter 24)
+# Compare alternatives (Chapters 14 and 20)
 
-There is a card next to this one with two questions that check whether
-an answer is true. This card checks something else: whether it was the
-best way to do the thing. Different failure, and it is a sneaky one. An
-answer can be completely correct and still be the third best idea you
-could have had.
-
-## Why this happens
-
-You asked once. It picked one way to do the thing and wrote it up well.
-There were probably five ways. Nothing in the reply tells you that a
-choice was even made.
-
-## The question
+A supported answer may still describe only one option. For a meaningful decision, ask for alternatives using the same evidence and your real limits.
 
 ```
-Brainstorm five other approaches to this. Try them out. Then debate
-which one is best and tell me which one you would pick if you were me.
+Compare the useful alternatives for this decision, including waiting or declining where appropriate. Read the relevant sources and my stated priorities. Explain the tradeoff and what evidence would change your recommendation. Separate tested results from assumptions. Prepare a small next step where useful, but do not send, buy, book or commit me to anything.
 ```
 
-## The part doing the work
-
-"If you were me" is the whole trick. It pulls the answer out of the
-abstract and into your actual situation. Leave those four words out and
-you get a textbook comparison of five options. Put them in and you get
-a recommendation.
-
-## When to use it
-
-Not on small things. The two questions next door fire before you act.
-This one fires before you commit to something you will live with:
-choosing between two tools, or wording something you cannot easily take
-back. The first answer always looks fine. That is the reason to ask,
-not a reason to skip it.
+Use `skills/prepare-a-decision/SKILL.md` for the complete installed recipe. A comparison does not establish that every option was tried. If a real-world test would cost money or act externally, propose that test for approval rather than claiming it happened.

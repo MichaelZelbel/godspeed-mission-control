@@ -1,60 +1,32 @@
-# Starter hub
+# Appendix D: The Hub Folder Layout
 
-This folder is your personal AI system. The book's installer (Chapter 3)
-lays everything inside `starter-hub` into your `hub` folder for you;
-Appendix D is the by-hand road, a copy into an empty `hub` folder.
-Point your assistant at the result. Chapter 4 of the book walks through
-the layout; Parts II and III fill it up.
+This is a reference for the files installed in Chapter 3. Copying these folders by hand does **not** install an equivalent working system.
 
-**The folder names answer one question: when does your assistant read this?**
-That is the only thing that separates them, and it is the thing that decides
-everything. Some of it has to be in front of your assistant every single time,
-because it cannot look up a rule it does not know exists. The rest can wait
-until its subject comes up, which is what keeps the first part small.
+The installer also supplies commands, application configuration, skill discovery links and optional machine jobs. A manual folder copy does not provide `hub-due`, `hub-check-brief` or the rule compiler by itself. Use Chapter 3's installation route for the build-along exercises.
 
-    profile/       what it knows because you told it ...... every session
-    rules/         how it should behave .................... compiled into AGENTS.md
-    observations/  what it worked out on its own ........... when the subject comes up
-    prompts/       what you typed to an AI ................. never, unless you ask
+Open `starter-hub/` in the companion kit to inspect the initial layout. Show hidden files if your file browser hides dot-prefixed names; how a copy handles those files depends on the method used.
 
-What is here. Ten names, and they are the whole system:
+| Location | Purpose |
+|---|---|
+| `AGENTS.md` | Short instructions and pointers read by the assistant. |
+| `profile/` | Background you confirmed, including people, projects and writing preferences. |
+| `rules/` | Behavior instructions, compiled into the short rule list. |
+| `observations/` | Useful findings and inferences, kept separate from confirmed profile facts. |
+| `inbox/` | New captures, writing samples and unresolved questions. |
+| `archives/filed-captures/` | Original captures after clear facts have been filed. |
+| `skills/` | Reusable job instructions, one `SKILL.md` per skill. |
+| `decisions.md` | Dated decisions and their reasons. |
+| `procedures.md` | What runs automatically and how to stop it. |
+| `prompts/library/` | Prompts deliberately saved for reuse. |
+| `prompts/archive/` | Optional collected conversation text; collection defaults off. |
+| `world/` | Dated records and supported notebook-derived copies, identified by source. |
+| `due/` | Deadline entries and their local history. |
+| `secrets/` | Instructions and protected credential material; never plaintext keys in ordinary tracked files. |
+| `dev/` | Optional separate coding projects. |
+| `.gitignore` | Files excluded from Git tracking. It does not remove already saved history. |
+| `CLAUDE.md` | Guidance for the developer tool to find the hub's shared instructions. |
+| `.mcp.json`, if used | Client connection configuration referring to credential names, not literal secrets. |
 
-- `AGENTS.md`: your AI's operating manual. How to work in this folder, and the
-  short list of your rules. Hermes reads it by name at the start of every
-  conversation, so nothing needs installing. Chapter 17 is where you write
-  your own rules into it. (The one-line `CLAUDE.md` beside it is a signpost
-  for a developer tool; Chapter 5 explains it, and Hermes never reads it.)
-- `profile/`: who you are, your people, your projects, your voice. The
-  Part II files. You write these.
-- `rules/`: one file per rule, holding the whole story of why you gave it.
-  Eight are pre-loaded, and they are your red lines. The one-line version of
-  each is written into `AGENTS.md` by `hub-compile-rules`, which is the
-  only rules text your assistant reads every session. You edit the files; you
-  never edit that block. Chapter 17.
-- `skills/`: one folder per recipe, each with a `SKILL.md` inside. It starts
-  empty on purpose; the installer has already told Hermes where this room is,
-  so a recipe you put here is found without you naming it. Chapters 12 to 14
-  fill it, and the five starter recipes are in the kit download beside this
-  folder, ready to copy in. The hidden `.claude/skills/` is a link the
-  installer points at this room, never a second home.
-- `procedures.md`: the register. Everything that runs without you.
-- `decisions.md`: append-only log of real decisions.
-- `inbox/`: where loose captures land between weekly reviews.
-- `observations/`: what your assistant works out about you and writes down
-  itself, one file per fact, with a page called `MEMORY.md` that it
-  reads at the start of a session and that tells it where everything goes.
-  You write `profile/`, it writes this. It starts empty and fills up on its
-  own. Chapter 9.
-- `prompts/`: what you typed to an AI. **Your assistant never reads this
-  folder on its own**, it only searches it when you ask, and that rule is
-  what makes it safe to keep. Two drawers, each with its own README:
-  `prompts/library/` holds the prompts you keep and paste into other
-  tools, and `prompts/archive/` is the log of everything you have typed.
-  Chapters 13 and 31.
-- `world/`: your life as data. The people, dated things and facts your
-  notebook knows, copied down as small files so they survive without it.
-  **It starts empty and stays empty until you connect a notebook**, and an
-  empty one costs you nothing. Chapters 25 and 26, and its own README.
+The exercises add output folders such as `brief/`, `reviews/`, `investigations/` and `watch/` when needed. Their absence in a fresh hub is normal.
 
-Nothing here needs a terminal. It is a folder of text files, and that is
-the point.
+If an installed folder looks wrong, compare the exact missing item with this map and the kit version. Ask the assistant to inspect and repair that item while preserving existing work. Do not replace your whole hub with a fresh template.

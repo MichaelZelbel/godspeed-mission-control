@@ -1,24 +1,9 @@
-# menerio
+# Optional notebook (Chapters 28 and 29)
 
-Optional. Chapters 25 and 26 only. Everything else in the book works without this folder.
+The local hub, brief, research watch and deadline cycle work without a notebook.
 
-Menerio is the notebook: the place where notes born out in the world (phone, hallway, shop)
-are already home, and which every AI tool you use can read through one connector. It is not a
-copy of your profile folder, and nothing is ever imported from the folder into it. One fact,
-one home.
+- `the-notebook.md`: current Chapter 28, including first notes, retrieval, AI visibility versus deletion and export limits.
+- `mcp-connection.md`: current Chapter 29, with dedicated credential input, limited access, separate client setup and selected sync scope.
+- `ai-memory-transport.md` and `interview-transfer.md`: optional background-import alternatives, not the core route.
 
-| File | What it is for |
-|---|---|
-| `the-notebook.md` | Chapter 25. What goes in the notebook, what stays out, the first notes, the Review Queue, search. |
-| `mcp-connection.md` | Chapter 26. Making the token, and plugging the same notebook into more than one tool. |
-| `ai-memory-transport.md` | Optional route: pulling out what an old chat product remembers about you and importing it as notes. |
-| `interview-transfer.md` | Optional route: filling the notebook by being interviewed, when you would rather talk than paste. |
-
-## The one number worth knowing before you start
-
-A new free account gets **500 AI credits**, refilled monthly. A note costs about two, so a
-month's allowance covers more notes than a diligent month produces. (Measured on a brand new
-free account, 2026-08-13: four notes plus all their machine filing cost 10 credits.)
-
-Accounts created before the free allowance existed (mid-2026) can still show `0 / 0`, because
-it was not applied backwards. If yours shows zero and nothing gets processed, that is why.
+Menerio is the author's product. Check its current plan and allowance before using it; this edition does not promise a particular free-credit allocation. Selected sync uploads observations, skills and decisions, not `profile/` or `AGENTS.md`. It runs after a Git commit when that hook is installed, and hourly, not on every editor save.

@@ -19,9 +19,10 @@ purpose. If it contradicts something you believe about me, the file wins.
 - **Skills are recipes.** Every folder in `skills/` holds one job I never want
   to explain again, written in its `SKILL.md`. That visible folder is the one
   real copy; anything at `.claude/skills/` is a link the installer points at
-  it, never a second home. You load them at the start of a session and reach
-  for one when its description matches what I asked, without me naming it.
-  When I do name a skill, run its file exactly. When I correct the same thing
+  it, never a second home. Read the relevant skill when its description matches
+  the request. Automatic discovery depends on the configured application;
+  verify it in a fresh session rather than assuming a file is enough.
+  When I name a skill, read and follow its file. When I correct the same thing
   twice, add the correction to the skill file.
 - **Procedures are listed, always.** Anything that runs on its own is a row
   in `procedures.md`. If you and I set up something new that runs without
@@ -29,8 +30,11 @@ purpose. If it contradicts something you believe about me, the file wins.
 - **Decisions get written down.** When I make a real decision, append one
   line to `decisions.md` with the date and the why. Never edit old lines.
 - **Loose captures land in `inbox/`.** One file per capture. The weekly review
-  files the clear ones into my profile files itself and asks me only about the
-  doubtful; between reviews, file them when I ask you to.
+  files only clear factual captures and preserves originals in
+  `archives/filed-captures/`. Keep writing samples, unresolved import questions
+  and doubtful notes untouched. Proposed behavior rules wait in inbox until
+  confirmed, then use rules/ and the compiler. Between reviews, file captures
+  when I ask you to.
 - **What you work out about me goes in `observations/`.** One file per fact,
   with a one-line description at the top so a session can tell whether to open
   it. Read `observations/MEMORY.md` at the
@@ -83,10 +87,10 @@ do the safe part (for example: prepare the draft) and ask.
 
 ## The ceiling
 
-An assistant reads only so much of this file. Hermes reads at least 20,000
-characters, more with a large-context model, and the exact number moves with
-the model. Past the limit it keeps the beginning and the end and drops the
-middle; older versions did that silently, newer ones leave a note in the gap
-and a warning, and either way the assistant runs with a hole in its own
-instructions that nobody chose. Keep this file short: reference material goes
-into its own file, with a one-line pointer here.
+The tested Hermes default begins at 20,000 characters, but a configured
+override can be lower and other assistants can differ. Keep this file below
+the book's conservative 19,000-character working budget and inspect the actual
+configuration. When context is truncated, the assistant may receive only the
+beginning and end; that does not delete text from the file on disk.
+
+Move reference material to its own file and leave a short pointer here.
