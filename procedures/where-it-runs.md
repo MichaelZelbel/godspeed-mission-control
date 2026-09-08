@@ -10,13 +10,13 @@ A scheduled job needs four things:
 4. **A running computer:** Hermes must be available there, with its files, model access and any required network connection.
 
 
-A promise in chat to check later is not proof of a schedule. Look for the saved job, its next run and the instruction it will receive.
+When the assistant says it will check later, look for the saved job and its next run. Read the instruction it will receive. A promise in the conversation can sound settled long before anything is scheduled.
 
-A laptop can run the first exercise. Keep it awake and keep Hermes running. If you need work while that laptop is off, Chapter 31 adds a server. You can defer that purchase.
+Your laptop is enough for this first exercise. Keep it awake with Hermes running. A server can do the work while the laptop is off, and Chapter 31 explains that option. There's no need to buy one before you've tried the job.
 
 ## Test the work and the timer separately
 
-**Trigger now** starts work because you pressed a button. It can test the saved prompt, but it does not prove the timer fired.
+**Trigger now** is useful for trying the saved prompt. But you started that run by pressing a button, so it can't tell you whether the timer works.
 
 Because you already made today's brief, use a separate one-time practice job to test the timer:
 
@@ -24,10 +24,10 @@ Because you already made today's brief, use a separate one-time practice job to 
 Create one one-time test, due in 5 minutes, in this folder. Show its saved job record, actual time zone and next run. Its prompt must read AGENTS.md and skills/morning-brief/SKILL.md, then write to practice/brief-tests/timer-test.md as an explicit test output. Refuse to overwrite that file. Use no external delivery. Add the test and its stop control to procedures.md.
 ```
 
-Do not press **Trigger now**. Leave the computer awake and Hermes running through the slot. Afterwards inspect the run history and open the new practice result. Confirm the one-time job has no future run.
+Leave **Trigger now** alone for this test. Keep the computer awake and Hermes running, then come back after the scheduled time. Look at the run history, open the new practice result and check that the one-time job has no future run. This is the moment to see whether the work begins without you.
 
-If the file is missing, read the error. A missing model connection, a refused tool or a sleeping computer needs a different repair from a bad instruction.
+If nothing appears, start with the recorded error. A sleeping computer, a missing model connection and a refused tool need different fixes. Rewriting the brief instructions won't wake the laptop.
 
-In my earlier desktop shutdown test, missed slots produced one late run after restart. That is historical behavior from the tested app, not a guarantee for every version. Opening a laptop lid alone does not restore model access or finish a job.
+When I tested shutting down the desktop app, missed slots led to one late run after restart. Your version may behave differently, so don't plan around that result without checking. Opening the lid alone won't repair a model connection or finish an interrupted job.
 
-The test record included a run due at 19:27 and recorded at 19:27:14. That shows a small delay for one run. It does not promise exact timing or unlimited frequency.
+One run in the test record was due at 19:27 and appeared at 19:27:14. Fourteen seconds wasn't a problem for that brief. It also wasn't a promise of exact timing for every future job, or permission to schedule runs as often as I liked.

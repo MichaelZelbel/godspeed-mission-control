@@ -1,23 +1,23 @@
 # Chapter 28: Add an Online Notebook for Notes on the Go
 
-An online notebook is optional. It gives you somewhere to save and search notes when your hub folder is out of reach.
+The hub folder is a useful place to keep notes until you need one while you're nowhere near the computer. An online notebook gives you somewhere to save and search on the go. You can add one if that is a problem you actually have.
 
 I wanted one after a call on a train. A client asked about a spring quote. The number was in my project file, on a computer at home. Before hanging up, she mentioned a changed budget. I could neither retrieve the old number nor conveniently save the new one.
 
-Those are two different problems. Remote access to the real hub can retrieve a project file; Chapters 31 and 32 cover that. A notebook can hold the new note immediately. Connecting it later does not upload every hub file.
+I needed two things that day: the old number from the hub and a place to put the new information. Remote access to the hub, covered in Chapters 31 and 32, can solve the first. A notebook can solve the second immediately. Connecting one later won't automatically put every hub file on your phone.
 
 ## Choose where to keep the original
 
-Keep one place where you correct each item. Deliberately maintained background belongs in your hub's profile. A note you write directly in the notebook is corrected there.
+Choose one place to correct each kind of information. Your deliberately maintained background stays in the hub's profile. If you write a note directly in the notebook, correct that note there. Otherwise a small change becomes a search for all the places you might have said it.
 
 Copies can help with search or recovery. They should identify their original and the date of the copy. If a copy is stale, correct the original and repair the copying process.
 
 
-Chapter 29 adds two copying jobs: selected hub material goes up to the notebook, and supported notebook records come down to `world/`. Profile files are excluded from the upload. Your phone's notebook search will not therefore find the quote in `profile/projects.md` just because sync is enabled.
+Chapter 29 adds copying in both directions: selected hub material goes into the notebook, and supported notebook records come down into `world/`. Profile files aren't part of the upload. So this connection alone still wouldn't put my quote from `profile/projects.md` into a phone notebook search.
 
 ## Try a few harmless notes
 
-I use [Menerio](https://menerio.com), which I built. That is a disclosure, not a reason you need it. Check its current plan, allowance and privacy terms before creating an account. This chapter does not depend on a particular free-credit amount.
+I use [Menerio](https://menerio.com), which I built. You don't need to use my service to have a notebook. If you want to try it, check the current plan, allowance and privacy terms before signing up. The exercise works without relying on a particular free-credit offer.
 
 After signing in, create a note with a title and a short body. In the fictional illustrator example, Sam's editor is Nadia. One practice note was:
 
@@ -28,9 +28,9 @@ Nadia said today the budget for next year's book has doubled. She
 hinted there could be a second illustrated title in it for me.
 ```
 
-If you use practice notes, label them fictional and keep them apart from your real profile. Your own first note can be a harmless preference or a quotation you want to find later.
+Keep practice notes labelled as fiction and away from your real profile. For your own first note, use something harmless that you would like to find again, perhaps a preference or a quotation.
 
-Three other practice notes covered Nadia's preference for early warnings and three options, Priya's preferred contact method, and a printing quote. These were separate notebook inputs in the earlier demonstration. They were not automatically exported from Sam's hub.
+I added three more practice notes: Nadia's preference for early warnings and three options, Priya's preferred contact method, and a printing quote. I entered them separately for this demonstration. They hadn't travelled there automatically from Sam's hub.
 
 ## Review what the notebook derives
 
@@ -40,9 +40,9 @@ The notebook can propose people and facts from your notes. In my earlier test, i
 >
 > Nadia was mentioned in "Nadia budget news" but isn't in your contacts yet.
 
-Read those proposed changes. Keep what is supported, correct mistakes and reject guesses. A sentence about a possible second book should not become a confirmed contract.
+Treat those proposed changes as a draft about your life. Keep what the notes support, fix mistakes and reject guesses. Mentioning a possible second book shouldn't leave you with a confirmed contract you never agreed to.
 
-The original note remains useful evidence. Derived summaries can be wrong even when the note is accurate.
+Keep the original note. It may be perfectly accurate while a summary derived from it has taken a wrong turn.
 
 ## Search for something you know is there
 
@@ -52,13 +52,13 @@ In that notebook test, I searched:
 what did the reprint cost
 ```
 
-The printing quote appeared first. The displayed percentage was a relevance score, not the probability that the quote was true. Another search, `money`, found nothing despite two notes about money.
+The printing quote came first. Its percentage described how relevant the search considered it, not how likely it was to be true. When I tried `money`, I got no result, despite having two notes about money. Search still needed a little help.
 
-Meaning-based search can help with different wording, but it can still miss. Try a person's name, a phrase from the note or the date before concluding the record is absent.
+Meaning-based search can find a note even when you use different words, but it can also miss one you know is there. Try the person's name, a remembered phrase or the date before deciding the record has gone.
 
-My older notes mention an 84 percent retrieval score for my local folder. I cannot use that number to predict your results: the chapter does not have a reproducible query set and method behind it. No particular number of files creates an automatic need for a notebook.
+My older notes cite an 84 percent retrieval score for the local folder. I don't have a reproducible set of queries and a method in this chapter to make that number useful to you. It isn't a threshold for when you need a notebook, and neither is a particular file count.
 
-Use the practical signal instead: you often fail to retrieve notes you know exist, and searching differently takes more effort than the notes save.
+Use your own experience: if you keep failing to find notes you know you saved, and searching is costing more effort than the notes save, try a different way to retrieve them.
 
 ## Separate events from current claims
 
@@ -66,18 +66,18 @@ A person or project is an **entity**, meaning the thing a note describes. An **e
 
 “Nadia said the budget doubled on Tuesday” is an event. “The current budget is twice the old budget” is a claim that might need later correction.
 
-Keep the original dated event. When current information changes, close or replace the current claim with its new date. Do not erase the earlier event just because circumstances changed.
+Keep the dated event when things change. Update or close the current claim with the new date. Nadia changing the budget again doesn't mean she never said what you recorded on Tuesday.
 
 ## Hiding is different from deleting
 
 Leave passwords, payment details and access keys out of notes. Decide separately which personal material you want this service to hold at all.
 
-Menerio's AI visibility control can hide a note from later AI use. **Hiding does not automatically remove information already derived from that note.** Check the note's AI-footprint or derived-information view and inspect earlier people, claims and summaries separately. Read the current deletion controls before using them.
+Menerio can hide a note from later AI use, but **hiding doesn't automatically remove information already derived from it**. Look at the note's AI-footprint or derived-information view, then check earlier people, claims and summaries separately. Read what the current deletion controls remove before using them. One hidden note may have already contributed to several other records.
 
 Existing conversation records, exports and backups may still contain earlier text. Removing the online original does not erase those copies. Chapter 19's privacy review applies to each location.
 
 ## Check the exit before depending on it
 
-Try the service's current export or download controls with your harmless notes and confirm you can read the result. The selected `world/` copy in the next chapter is not proof that every original note or attachment has been exported.
+Try exporting or downloading your harmless notes with the service's current controls, then open the result. That is a better time to find out what you can take with you than after you have filled the notebook. The selected `world/` copy in the next chapter won't prove that every note or attachment was exported.
 
-A notebook can be useful before it connects to your assistant. Start with a few notes you can retrieve and correct. Add the connection only when that extra access serves a job you want done.
+You can get value from a notebook before connecting it to the assistant. Save a few notes, find them again and correct one. Add the connection when you have a job for it, rather than making another setup task out of a useful place to jot something down.

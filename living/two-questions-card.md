@@ -1,8 +1,8 @@
 # Chapter 20: Check AI's Answers Before You Act
 
-A confident answer does not show whether the assistant checked a source. A source link does not show whether the page supports the conclusion. Before acting on an answer, inspect the claims that carry the decision.
+An answer arrives with a confident explanation and a source link. It looks ready to use. Before you act on it, take one more look: did the assistant check the source, and does that source say what the answer claims? Those are two separate questions, as I learned while checking a price.
 
-Start with a low-stakes question, such as the advertised price of a tool you are comparing. Ask for the source, the date checked and the conditions that affect the price. You are practising the check, not buying anything.
+Practise with something small, such as the advertised price of a tool you're comparing. Ask where the price comes from, when it was checked and what conditions affect it. You aren't buying anything. You're seeing how well the answer survives a closer look.
 
 ## Two useful questions
 
@@ -14,13 +14,13 @@ Did you check that, or do you remember it?
 What would make this wrong?
 ```
 
-The first asks where the answer came from. The second asks what assumptions could change it. They help expose uncertainty; they are not a substitute for inspecting evidence.
+The first question asks where the answer came from. The second asks what could change it. They give you something to investigate instead of leaving you with a vague feeling that the answer might be wrong.
 
-The kit keeps these on `living/two-questions-card.md`. You can ask them in ordinary words too. The useful habit is to separate a remembered answer from an inspected source and then check whether that source is enough.
+You'll find them on `living/two-questions-card.md` in the kit, but the wording needn't be ceremonial. Ask in your own words. You want to know if the assistant remembered an answer or read a source, then whether that source is enough for the decision.
 
 ## The price demonstration
 
-During preparation of the earlier manuscript, I asked Hermes about paid ChatGPT plans “just from memory, without searching the web.” The exact run date was not recorded in that passage. This excerpt is historical output, not current buying advice:
+While preparing the earlier manuscript, I asked Hermes about paid ChatGPT plans “just from memory, without searching the web.” I didn't record the exact date in that passage, so treat the prices below as part of the story, not a shopping guide:
 
 > From memory (USD, before tax):
 >
@@ -39,11 +39,11 @@ Asked what could make the answer wrong, it included:
 
 > - A newer paid tier exists that I omitted.
 
-I then asked it to check. The recorded response named additional plan choices and changed the account of some billing terms. That was useful, but “I checked the current pages” was still a claim about its own work.
+I asked it to check. The next answer added plan choices and changed some billing details. That sounded like progress. But I still had only its word that it had checked the current pages.
 
-When I requested the exact links, the assistant admitted that it had not established every statement from the pages it read. Some returned links were incomplete. The checked-looking answer still needed checking.
+When I asked for exact links, it admitted that the pages didn't establish every statement it had made. Some links were incomplete. I had asked for a checked answer and received another answer I needed to check.
 
-For a current comparison, open [OpenAI's pricing information](https://learn.chatgpt.com/docs/pricing) and inspect the relevant account and region. The 8 September 2026 audit confirmed multiple Pro price levels; that does not freeze future plans or allowance terms. Distinguish Codex usage limits from ordinary chatbot-message limits rather than assuming they are identical.
+For a comparison now, open [OpenAI's pricing information](https://learn.chatgpt.com/docs/pricing) and check the terms for your account and region. The audit on 8 September 2026 found multiple Pro price levels; plans and allowances may change again. Also keep Codex usage limits separate from ordinary chatbot-message limits. A shared plan name doesn't make those limits identical.
 
 ## Check the claim against the page
 
@@ -59,7 +59,7 @@ For each claim, explain what the source establishes and what it does not. Separa
 Do not make a purchase or commitment.
 ```
 
-A claim supported by a source is not automatically an established fact. Sources can be wrong, outdated, incomplete or misapplied. The strength of the conclusion should match the quality and relevance of its evidence.
+A link gives you a place to look. It doesn't settle the matter on its own: a source can be old, incomplete or wrong, or the assistant can apply it to the wrong situation. Let the confidence of the answer grow only as far as the evidence supports it.
 
 ## Keep four kinds of statement apart
 
@@ -72,24 +72,24 @@ A claim supported by a source is not automatically an established fact. Sources 
 
 A drafted message has not been sent. A file containing a backup plan is not a completed backup. A comparison built on an assumed budget does not establish what you can afford.
 
-The same applies to people. A scenario can help you prepare for a conversation. It cannot establish how another person will react.
+That distinction matters with people too. Exploring how a conversation might go can help you prepare. It can't tell you how the other person will actually respond.
 
 ## Try a check that should fail
 
-You already have enough material for this exercise. Use the disposable backup file from Chapter 18, or a new practice copy. Ask the assistant to compare its contents with a specific expected sentence.
+You can practise a different kind of check with a file you already have. Use the disposable backup file from Chapter 18, or make a new practice copy. Ask the assistant to compare its contents with one exact sentence you expect to find.
 
 Change one word in the practice copy and repeat the comparison. The result should name the difference. Then restore the saved version and check again. Leave the real profile and live credentials alone.
 
-This tests whether the check distinguishes the changed file from the restored one. It proves more than seeing a success message once. A weak check may look only for a file's existence when the claim concerns its contents.
+Now you've seen whether the check notices the change and then recognises the restoration. That's more revealing than one success message. A check that only asks whether the file exists could cheerfully pass all three versions.
 
-In a later credential-checking project, I found both kinds of fault. One check treated unrelated text as a valid answer and raised a false alarm. Another compared no items and reported agreement. Those are historical examples of why the expected result must be explicit. You do not need that later setup to run today's file comparison.
+I met both kinds of mistake in a later credential-checking project. One check accepted unrelated text as a valid answer and raised a false alarm. Another compared no items at all and reported agreement. Neither result was useful. Today's small file exercise lets you practise the same lesson without setting up that project: say exactly what a passing result must show.
 
 ## Match the check to the stakes
 
-Use these questions when an answer is about to affect a real decision: quoting a number, sending a message or choosing a purchase. You do not need to audit every casual sentence.
+Save this care for answers you're about to use: a number you'll quote, a message you'll send, a purchase you're considering. You don't have to cross-examine every casual sentence to get value from an assistant.
 
 Medical decisions require more than a verified page. An assistant can prepare questions and sources for a qualified clinician; it cannot establish that a treatment change suits a particular person. Keep professional judgment where the decision requires it.
 
-For ordinary work, ask the assistant to bring evidence with the result so checking does not become a second research job. Your part is to assess the important uncertainty, not repeat every search.
+For ordinary work, ask it to bring the evidence with the result. You shouldn't have to repeat its whole research job before using the answer. Focus your attention on the uncertainty that could change your decision.
 
-You now have a briefing, tested skills, permission limits and a recovery check. Chapter 21 adds the next piece: arranging for one useful job to start on a schedule.
+Once you can judge a result, you can begin to let a job start without you. We'll keep the first scheduled job small enough that you can still see what happened and decide whether it helped.

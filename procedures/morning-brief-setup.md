@@ -1,8 +1,8 @@
 # Chapter 22: The Morning Brief
 
-A morning brief should save you from opening every project to remember where you left it. It should also prepare something useful: a reply, questions for a meeting or options for a decision.
+The day shouldn't have to begin with a tour of every project you left open yesterday. A morning brief can remind you where things are and bring a little of the next step with it: a reply to review, questions for a meeting or options for a decision. That is a more useful welcome than another list of things you haven't done.
 
-Start with your own hub, or use the fictional practice folder below. Choose one for this exercise. Mixing fictional customers into your own profile would make later answers less useful.
+You can build the first brief from your own hub or try it in the fictional folder below. Choose one for now. Robin's bicycle customers don't need to take up residence in your personal profile.
 
 ## Optional practice: Robin's bicycle shop
 
@@ -20,9 +20,9 @@ Copy starter-hub/ into robin-practice, including its dot files. Copy practice/ma
 Copy the kit's skills/prepare-a-decision/SKILL.md into robin-practice/skills/prepare-a-decision/SKILL.md. Confirm that the copied skill, profile files and workshop note can be read. Report the full practice path and leave all schedules off.
 ```
 
-Open that folder in Hermes and confirm its working folder before continuing. This uses the Hermes installation you already have. It does not install a second copy of Hermes.
+Open the practice folder in Hermes and check that it is the working folder before going on. You'll use the Hermes installation you already have. Only the folder changes.
 
-The folder copy alone does not establish automatic skill discovery. These exercises name each skill by its exact path so the job can read it directly.
+Copying a folder doesn't automatically make its skills discoverable. To keep this exercise clear, we'll name each skill's exact path so the job can read the file directly.
 
 ## Build the brief before its schedule
 
@@ -44,20 +44,20 @@ Later additions may put full deadline output, unresolved urgent research and fai
 Run hub-check-brief on the completed file, fix delivery-format failures and preserve important content. A passed format check is not an evidence check. If checking fails, report the failure and keep the draft available for inspection.
 ```
 
-The skill is the instruction file. The dated file in `brief/` is its result. `hub-check-brief` checks for delivery problems such as asking a phone reader to open a local file. It does not judge the advice or enforce the word limit.
+The skill tells the assistant what to do; the dated file in `brief/` is what it produced. The command `hub-check-brief` catches delivery problems, such as telling a phone reader to open a local file. You'll still judge the advice and check the length yourself.
 
-Here is an exact excerpt from the 7 September 2026 run against Robin's fictional shop files:
+This is part of the brief produced on 7 September 2026 from Robin's fictional shop files:
 
 > Prepared draft : not sent
 > “Hi! We are exploring a small bicycle-maintenance class. Would puncture repair interest you? Would you also want brake checks? What days or times generally suit you? This is just an interest check, not a booking. Thanks, Robin.”
 
-The result also named the unanswered capacity and insurance questions. Those gaps matter. Customer interest does not prove that a class can safely be offered.
+It also raised the questions about capacity and insurance that the notes hadn't answered. I'm glad those stayed visible. Three interested customers are a reason to explore a class, not enough information to offer one safely.
 
-Read your first result. Correct one thing that would make it more useful before scheduling it.
+Read your first brief and choose one correction that would make tomorrow's more useful. You don't have to perfect it before you let it run again.
 
 ## Save the daily job
 
-In the tested desktop app, open **Scheduled jobs**, select **New cron** and enter these values. “Cron” is the app's word for a scheduled job. Labels may change; the saved job must still show these same facts.
+In the desktop app used for these tests, the controls were **Scheduled jobs**, then **New cron**. “Cron” means a scheduled job here. If your version has different labels, look for the same facts in the saved job. Use these values:
 
 | Field | Value |
 |---|---|
@@ -73,13 +73,13 @@ Use this job prompt:
 Read AGENTS.md in the working folder and follow it. Read skills/morning-brief/SKILL.md and write today's brief to brief/ using that skill. Preserve any existing daily brief. Report unavailable inputs or failed checks. Do not send anything externally.
 ```
 
-The desktop version tested used its configured folder rather than a folder field on each job. Ask Hermes to confirm that folder and the scheduler's time zone. Read **Next** after saving. It must show the day and time you intended. Edit the job if it does not.
+The tested app took its working folder from the app's configuration, rather than a field on each job. Ask Hermes to confirm that folder and the scheduler's time zone. After saving, read **Next** and check that it is the day and time you meant. It's much easier to correct a wrong time now than to wonder tomorrow where the brief went.
 
-Explicitly reading `AGENTS.md` matters. An earlier scheduled test answered “NO RULES WERE GIVEN” when asked what instructions it had received without opening files. Do not assume the folder's existence proves the job read its rules.
+The prompt explicitly asks the job to read `AGENTS.md` for a reason. In an earlier scheduled test, I asked what instructions it had received without opening files. It answered “NO RULES WERE GIVEN.” I don't want to rely on the folder merely being there; I want the job told to read its rules.
 
 ## Test the work and the timer separately
 
-**Trigger now** starts work because you pressed a button. It can test the saved prompt, but it does not prove the timer fired.
+**Trigger now** is useful for trying the saved prompt. But you started that run by pressing a button, so it can't tell you whether the timer works.
 
 Because you already made today's brief, use a separate one-time practice job to test the timer:
 
@@ -87,13 +87,13 @@ Because you already made today's brief, use a separate one-time practice job to 
 Create one one-time test, due in 5 minutes, in this folder. Show its saved job record, actual time zone and next run. Its prompt must read AGENTS.md and skills/morning-brief/SKILL.md, then write to practice/brief-tests/timer-test.md as an explicit test output. Refuse to overwrite that file. Use no external delivery. Add the test and its stop control to procedures.md.
 ```
 
-Do not press **Trigger now**. Leave the computer awake and Hermes running through the slot. Afterwards inspect the run history and open the new practice result. Confirm the one-time job has no future run.
+Leave **Trigger now** alone for this test. Keep the computer awake and Hermes running, then come back after the scheduled time. Look at the run history, open the new practice result and check that the one-time job has no future run. This is the moment to see whether the work begins without you.
 
-If the file is missing, read the error. A missing model connection, a refused tool or a sleeping computer needs a different repair from a bad instruction.
+If nothing appears, start with the recorded error. A sleeping computer, a missing model connection and a refused tool need different fixes. Rewriting the brief instructions won't wake the laptop.
 
-In my earlier desktop shutdown test, missed slots produced one late run after restart. That is historical behavior from the tested app, not a guarantee for every version. Opening a laptop lid alone does not restore model access or finish a job.
+When I tested shutting down the desktop app, missed slots led to one late run after restart. Your version may behave differently, so don't plan around that result without checking. Opening the lid alone won't repair a model connection or finish an interrupted job.
 
-The test record included a run due at 19:27 and recorded at 19:27:14. That shows a small delay for one run. It does not promise exact timing or unlimited frequency.
+One run in the test record was due at 19:27 and appeared at 19:27:14. Fourteen seconds wasn't a problem for that brief. It also wasn't a promise of exact timing for every future job, or permission to schedule runs as often as I liked.
 
 
 ## Use the stop control once
@@ -102,14 +102,14 @@ Pause the daily job and confirm its state is **Paused**. Resume it when you want
 
 In the tested app, pause stopped scheduled starts but still allowed a manual **Trigger now**. To retire the practice job, remove it through **Manage** after checking its result. Preserve the result file.
 
-Update `procedures.md` with the daily job's computer, folder, time zone, next run, output and stop control. Schedules live in Hermes, so copying the hub later does not move them automatically.
+Write the daily job's computer, folder, time zone, next run, output and stop control into `procedures.md`. That gives you a place to look later. The schedule itself lives in Hermes, so copying your hub to another computer won't bring the schedule with it.
 
 ## Improve it by using it
 
-My own daily summary improved through short corrections over several weeks: “too long,” or “say that in plain English.” A useful brief can start imperfectly.
+My own summary got better through small corrections over several weeks: “too long,” or “say that in plain English.” Those were enough to give it direction. The first brief didn't need to be the final version.
 
-Once a month, review sections you regularly skip. Remove unhelpful background. Keep unresolved urgent work and failed checks visible until they are resolved.
+Once a month, look at the sections you keep skipping. Remove the background you don't use. Keep urgent unresolved work and failed checks in view, even when you'd rather have a shorter list.
 
-Scheduled runs consume the model allowance or usage charges of the configured provider. Extra search tools can have their own charges. The timer itself does not make the work free.
+Each run uses the allowance or incurs the charges of your configured model provider. Search tools may charge separately. Choose a frequency that earns its cost; a timer can repeat an unnecessary job very faithfully.
 
-Next, give one question a one-time schedule and return to a prepared answer.
+Let the brief earn a place in your morning. Keep the parts that help you act, and use what irritates you as the next correction.

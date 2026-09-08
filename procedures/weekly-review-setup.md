@@ -1,8 +1,8 @@
 # Chapter 24: Set Up an Automatic Weekly Review
 
-A new deadline can sit in an inbox note while the project file still shows the old date. The weekly review finds changes like that, files clear updates and leaves uncertain ones for you.
+You wrote down the new deadline. Somewhere. Meanwhile, the project file still has the old one, and the assistant has no reason to know which you meant. A weekly review can catch that kind of loose end, file the clear updates and bring you the ones that need a decision.
 
-It should also ask whether the work moved toward your priorities. A busy week and a useful week are not always the same.
+It can also look past the activity and ask whether the week moved your priorities forward. A week can be exhausting without having done much of that.
 
 ## Build a review that preserves its evidence
 
@@ -27,22 +27,22 @@ For a test, accept a separate practice destination. Do not replace the real revi
 ```
 
 
-Read and test the skill before scheduling it. The original captures remain recoverable in `archives/filed-captures/`, and the earlier version records what changed in the profile.
+Read the skill and try it before scheduling. It keeps the original captures in `archives/filed-captures/`, and saves the earlier profile version before changing it. If you disagree with a filing decision, you should have something to go back to.
 
-An earlier manual test used fictional illustrator Sam's notes. Nadia was the editor; Priya handled printing. Four notes could be filed. One could not:
+I first tried this manually with notes for Sam, the fictional illustrator. Nadia was his editor and Priya handled printing. The assistant could file four notes. On the fifth, it stopped to ask:
 
 > `inbox/2026-08-15-thursday.md` ("Keep Thursday free"): which Thursday, and what for?
 
-That is a useful question. The assistant cannot establish the date from “Thursday” alone. The same run found these conflicting lines:
+That was worth asking. “Thursday” didn't give it enough information to choose a date. It also found two lines that disagreed:
 
 > `people.md`: "A rate-increase draft is waiting; the new numbers are not decided yet."
 > `projects.md`: "new rates decided, 520 a day, 620 for rush."
 
-Those are exact excerpts from the earlier test, not a new run of the revised skill. Its older filing instructions removed processed captures. This edition preserves them.
+Those excerpts come from the earlier test. Its filing instructions removed processed captures; the revised skill above keeps them in an archive. I want you to retain the original note as well as the assistant's interpretation of it.
 
 ## Keep the monthly context reminder accurate
 
-Chapter 1 asked an AI to summarize the background it could reach. It did not export every conversation or produce a library of your old prompts.
+There may also be useful background in another AI tool. The prompt in Chapter 1 asked it to summarise what it could reach about you. It didn't export every conversation or collect all your old prompts, so don't expect the weekly review to have those too.
 
 Save that current extraction prompt for later use:
 
@@ -50,7 +50,7 @@ Save that current extraction prompt for later use:
 Copy the current Chapter 1 prompt from the companion kit's profile/bring-your-context-with-you.md into prompts/library/bring-your-context-with-you.md. Add a purpose line: summarize accessible background for review and import; not a full conversation export. Preserve an existing saved version and show any difference before replacing it.
 ```
 
-When the reminder is useful, run the prompt in the other tool. Correct the answer and review what may travel before importing it. Leave guesses and unresolved questions visible, as in the first import.
+When the reminder comes at a useful time, run the prompt in the other tool. Read and correct its answer before importing, and decide which details you're willing to move. Keep guesses and unanswered questions visible. Familiar information can still arrive with unfamiliar mistakes attached.
 
 ## Optional: review what you pay for AI
 
@@ -73,7 +73,7 @@ One historical run showed:
 > Included:    17 session(s) (subscription, no provider invoice)
 > Unknown:     4 session(s) (no pricing data)
 
-That was an estimate for recorded sessions. It did not measure unused allowance or prove that an unmeasured service cost nothing.
+That number was an estimate for the sessions it had recorded. It couldn't tell me how much allowance I had left unused, or whether a service it hadn't measured cost nothing. A cost review is only as complete as the records behind it.
 
 ```
 Add an optional monthly subscription section to skills/weekly-review/SKILL.md. Run it only on the first review of the month when profile/subscriptions.md exists.
@@ -84,7 +84,7 @@ Read that file and run hermes insights --days 30. Report what the available reco
 
 ## Schedule it and check the result
 
-Run the review once in a practice copy to inspect its filing behavior. Include one writing sample and one unresolved question; both must remain untouched. Check that an archived capture and its profile change can be recovered from the saved version.
+Try one review in a practice copy first. Include a writing sample and an unresolved question, then check that both stayed untouched. Also check that you can recover an archived capture and undo its profile change from the saved version. That way, your first wrong filing decision needn't become a detective job.
 
 Then create the real weekly job through **Scheduled jobs**. Use a name such as `weekly review`, a custom schedule such as `every monday 7am`, and this prompt:
 
@@ -92,8 +92,8 @@ Then create the real weekly job through **Scheduled jobs**. Use a name such as `
 Read AGENTS.md and follow skills/weekly-review/SKILL.md. Write this week's new review into reviews/. Apply only the local filing allowed by that skill. Report failures and uncertainty; send nothing externally.
 ```
 
-Confirm the computer, working folder, time zone, next run and output. Leave desktop delivery selected for the local route. Register the job in `procedures.md` and try its pause control.
+Check the computer, working folder, time zone, next run and output before leaving the job active. For a local result, keep desktop delivery selected. Write the job into `procedures.md` and try pausing it so you know how to stop it.
 
-A manual run tests the skill. A separate one-time practice run tests scheduling without waiting a week. Use a new practice output for that run, as in Chapter 22.
+The manual run tells you how the skill behaves. You can test the timer with a separate one-time practice job, using a new output file as in Chapter 22. There is no need to wait until next Monday to discover that you chose the wrong folder.
 
-When the real review arrives, read the changes and answer only what the sources could not settle. If a filing decision is wrong, ask for that specific move to be restored from its saved version. The report should make that possible without guessing.
+When the real review arrives, read what changed and answer the questions the sources couldn't settle. If a move was wrong, ask to restore that particular change from the saved version. The report should tell you enough to do that without retracing the entire week.

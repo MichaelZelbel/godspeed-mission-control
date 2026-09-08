@@ -1,16 +1,16 @@
 # Chapter 29: Connect Your AI Tools to the Same Notebook
 
-An assistant can use a note from your online notebook only if it has a working connection and permission to read it. This chapter adds that connection.
+Once you've saved a useful note online, you'll probably want the assistant to use it too. Knowing the notebook exists isn't enough. Each AI tool needs a working connection and permission to read the note.
 
-The connection uses MCP, a standard way for an AI application to call another service's tools. Each application still needs its own setup. Data returned by those tools may enter its conversation records.
+We use MCP, a standard way for an AI application to call another service's tools. It lets the assistant ask the notebook for information. You still set it up in each application, and whatever comes back may become part of that application's conversation records.
 
 ## Create a key with limited access
 
 In Menerio, open **Settings**, then **API Keys**. Name the key for the tool or computer that will use it. Review the available data categories and enable only what that job needs.
 
-Keep the generated value in your password manager. It is a credential, like a password, and does not belong in a chat, a screenshot or an ordinary hub file. A warning to copy it now means you may not be able to display it again later.
+Put the generated key in your password manager. It works like a password, so keep it out of chats, screenshots and ordinary hub files. If the page says to copy it now, take that seriously: it may not show the value again.
 
-Separate keys make it easier to stop one application independently. A shared key is simpler to distribute, but canceling it stops every connection using it. Other valid keys are unaffected.
+A separate key for each application gives you a useful choice later: stop one connection without stopping the others. Sharing a key means less setup, but canceling it stops every connection using it. Other valid keys keep working.
 
 The connection address used by the companion setup is:
 
@@ -26,7 +26,7 @@ In a terminal, enter:
 hermes mcp add notebook --url https://mcp.menerio.com
 ```
 
-Use `notebook` as the name. Hermes has its own local memory files, so calling both things “memory” makes requests less clear.
+Call the connection `notebook`. Hermes already has local memory files, and calling everything “memory” makes it harder to say which one you want it to search.
 
 When the command asks whether authentication is required, choose yes. Paste the credential into the dedicated token prompt, not into the command line. Hermes stores this connection in its own configuration; protect that location too.
 
@@ -37,9 +37,9 @@ hermes mcp list
 hermes mcp test notebook
 ```
 
-The list should identify the notebook address and the test should discover tools. A historical run found 58 tools; your current count can differ. A successful connection test proves access, not that the assistant will choose the right tool.
+Look for the notebook address in the list and discovered tools in the test result. An earlier run found 58 tools; your version may find a different number. You have checked that the connection works. Next, we'll see whether the assistant uses it for the right question.
 
-Inspect the reading and writing tools before relying on them. Use `hermes mcp configure notebook` to limit enabled tools when supported by your version. Start with reading if that is all the job needs.
+Take a look at which tools can read and which can write. Where your version supports it, `hermes mcp configure notebook` lets you limit the enabled tools. Begin with reading if that is the job you have in mind.
 
 ## Optional: connect Claude Code
 
@@ -53,9 +53,9 @@ Configure a notebook connection for Claude Code in this hub. Inspect the existin
 Show me a masked local input method for this operating system, so I can load the key without putting it in chat or shell history. Launch the client from the environment containing the key and test a read-only connection. Report success or the actual error without printing values. Do not broaden key permissions or enable writes to repair a read failure.
 ```
 
-Hermes does not read this project's `.mcp.json` in the setup inspected for this book. Its own connection remains separately configured. Copying a placeholder file to another computer does not load the actual secret there.
+In the setup checked for this book, Hermes doesn't read the project's `.mcp.json`. Its own connection needs its own configuration. And a placeholder copied to another computer is still a placeholder: you must make the actual secret available there too.
 
-Chapter 30 explains the optional encrypted credential store. A password manager and a separate connection on each machine are also valid.
+You can do that with a password manager and a separate connection on each machine. Chapter 30 offers an encrypted credential store if you want another way to manage it.
 
 ## Prove which source answered
 
@@ -72,14 +72,14 @@ An earlier test returned:
 > - Latest on next year's book: Nadia said today that its budget has doubled. She hinted that there could also be a second illustrated title for you.
 > - Bad-news delivery: Give her three options for a setback, not just one. Warn her early; she does not forgive late warnings quickly.
 
-That gap was useful. The notebook notes did not establish Nadia's role. Sam's separate profile did, but this request deliberately excluded that source.
+That missing detail was a useful result. The notebook didn't establish Nadia's role, although Sam's separate profile did. I had deliberately asked it to use only the notebook, so I wanted it to stop at what those notes could support.
 
-Earlier attempts had searched Hermes' local memory or other folders. Naming the notebook and inspecting the tool calls made the test more specific. An empty working folder alone does not prevent a tool from reading elsewhere.
+Earlier attempts had looked in Hermes' local memory or other folders. Naming the notebook and reading the tool calls let me see what was being searched. An empty working folder hadn't made the rest of the machine disappear.
 
 
 ## Optional: copy selected records
 
-The companion installer can add notebook sync after you choose to connect it. Review the proposed upload scope and the credential storage before enabling it.
+If you want copies to move between the hub and notebook, the companion installer can add sync after you choose the connection. First read what it proposes to upload and where it will store the credential. You should know which material is about to travel.
 
 | Direction | What the inspected setup copies |
 |---|---|
@@ -87,9 +87,9 @@ The companion installer can add notebook sync after you choose to connect it. Re
 | Excluded from that upload | `profile/` and `AGENTS.md`. |
 | Notebook to hub | Supported people, events and claims into `world/`, marked with their source. |
 
-That is selected material, not a complete mirror of the hub or notebook. It does not make a profile-only fact available in the notebook's phone search.
+Only that selected material moves. You aren't creating a full mirror of either the hub or notebook, so a fact kept only in your profile still won't appear in the notebook's phone search.
 
-The inspected installer runs sync **after a Git commit**, when its post-commit hook is installed, and on an hourly check. A commit is the local version-history snapshot from Chapter 18. Pressing Save in a text editor does not trigger that hook. An existing custom hook may be preserved, so inspect which trigger was installed.
+The installer version inspected here runs sync **after a Git commit**, if it installed its post-commit hook, and during an hourly check. A commit is the saved local version from Chapter 18. Pressing Save in an editor doesn't start that hook. Check which trigger the installer actually added, because it may preserve an existing custom hook.
 
 Run a visible check after setup:
 
@@ -97,16 +97,16 @@ Run a visible check after setup:
 hub-notebook-sync --verbose
 ```
 
-Inspect what it sent, what it retrieved and any failed operation. The runner's log is `~/.hub/notebook-sync.log`; `~` means your user folder. A second run with unchanged inputs should avoid uploading unchanged material. Verify that result rather than assuming it from silence.
+Read what was sent, what came back and what failed. The log is `~/.hub/notebook-sync.log`, where `~` means your user folder. Try a second run without changes and check that it doesn't upload the same material again. Silence is easier to trust once you've seen what it means.
 
-Notebook-derived files marked `origin: menerio` are copies and may be replaced by a later sync. Correct them in the notebook. The inspected copying code preserves locally owned records rather than treating every file in `world/` as its own.
+Files marked `origin: menerio` came from the notebook and can be replaced by a later sync. Correct the original in the notebook, or your local correction may be lost. The copying code inspected for this book preserves locally owned records; it doesn't claim every file in `world/`.
 
-It also guards against a response that looks like an unexpected mass removal. That is one check, not a guarantee that every incomplete response will be caught.
+It also checks for a response that looks like an unexpected mass removal. That's a useful safeguard, though it can't catch every possible incomplete response. Keep the recovery copies you arranged earlier.
 
 ## Check access and recovery separately
 
 Cancel a key in the service's API Keys page when you no longer want the applications using it to connect. Pausing sync is a different step: disable its machine schedule and any installed commit hook, as described in Chapter 30. Canceling a key does not remove old copies.
 
-For recovery, inspect the local `world/` copy and make a separate export of original notebook notes if you need those too. A successful search is not proof that your notebook can be fully restored.
+For recovery, inspect the local `world/` copy and export original notebook notes separately if you need them. Finding a note in search tells you it can be found today; it doesn't tell you that the whole notebook can be restored.
 
-You now have a second source the assistant can consult. Keep its source name visible in answers so you know where to correct a wrong fact.
+Ask the assistant to name the source when it uses notebook information. If a detail is wrong, you want to know where to fix it without searching every place the assistant might have looked.

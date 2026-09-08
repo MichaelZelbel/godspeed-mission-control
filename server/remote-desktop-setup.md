@@ -1,12 +1,12 @@
 # Chapter 32: Use Your Server From the Desktop App
 
-Your server can already answer through Telegram if you connected it. This optional chapter adds a desktop window for reading results, browsing files and inspecting schedules.
+Telegram is handy for a quick question. For reading a longer result or finding a file, you may prefer a desktop window. This optional setup gives you one for the server you already built.
 
-Hermes and the hub remain on the server. The desktop application runs on your own computer and connects to that server. Those locations matter when you look for a file or stop a job.
+Hermes and the hub stay on the server; the desktop app on your computer connects to them. Keep those locations in mind. A file you are viewing on the desktop can still be a file that lives on the server.
 
 ## Add a private network connection
 
-The companion route uses Tailscale to connect your computer and server over a private network. Check [Tailscale's current setup guide and plan](https://tailscale.com/kb) before creating an account. Its access rules decide which connected devices can reach one another.
+The companion setup uses Tailscale, which connects your computer and server over a private network. Before signing up, read [Tailscale's current setup guide and plan](https://tailscale.com/kb). Its access rules determine which of your connected devices can reach each other.
 
 Install Tailscale on your desktop and sign in. Then open the server terminal as `root`. Use the same reviewed companion version as Chapter 31 for:
 
@@ -14,7 +14,7 @@ Install Tailscale on your desktop and sign in. Then open the server terminal as 
 curl -fsSL https://raw.githubusercontent.com/MichaelZelbel/teach-it-once-kit/main/server/open-the-door.sh | bash
 ```
 
-The script guides the server's Tailscale sign-in, creates a login for the web interface and starts that interface as a service. Follow its authentication link using your own account. Keep the printed password in your password manager.
+The script guides you through signing the server into Tailscale, creates a login for the web interface and starts that interface as a service. Use your own account when following its authentication link, and save the printed password in your password manager.
 
 The resulting private address has a form such as `100.x.y.z`. With your real address, the companion route uses:
 
@@ -22,13 +22,13 @@ The resulting private address has a form such as `100.x.y.z`. With your real add
 http://100.x.y.z:9119
 ```
 
-Open that address from the connected desktop. The page must require its configured sign-in. Do not expose port 9119 publicly to make a failed private connection work.
+From the connected desktop, open your real address and check that the page asks for the configured sign-in. If the private connection fails, work through that failure. Making port 9119 public would change who can reach it without fixing the private setup you intended.
 
-The earlier test of this script established that the service asked for its password. It did not establish the full first-time desktop route on a blank reader machine. Check each step on your own connection.
+In the earlier test, the service correctly asked for its password. That test didn't cover the entire first connection from a blank reader machine. I'll keep that limit clear: check each step on your own computer as you go.
 
 ## Connect the desktop app
 
-Install the desktop app from [the official Hermes site](https://hermes-agent.nousresearch.com). Choose its route to an existing Hermes server rather than installing a new local assistant if that is your intention.
+Get the desktop app from [the official Hermes site](https://hermes-agent.nousresearch.com). For this job, choose the connection to an existing server. Your assistant is already on the server; you are adding a way to reach it.
 
 The tested interface called this **Connect to existing Hermes**. Enter the private server URL, use its sign-in control, test the connection and reconnect. If you already use local Hermes, its gateway settings provide a remote connection alongside the local one.
 
@@ -38,30 +38,30 @@ Confirm which connection is selected. Ask:
 Without changing files, show this session's working folder and read the heading of /home/ai/hub/AGENTS.md. List the next scheduled job on this server with its time zone. If this is a local connection, say so instead of searching for a similarly named folder.
 ```
 
-Then open a known server result in the file browser. A successful sign-in alone does not prove the session uses the intended hub.
+Then open a server result you recognise in the file browser. Signing in successfully is reassuring, but seeing the expected file tells you that you're in the hub you meant to reach.
 
 ## Diagnose the failed step
 
-An authentication error means the login was rejected. Check the saved credentials and configured login method. A refused connection or timeout calls for checking the address, Tailscale access and whether the server service is listening.
+Use the error to decide where to look. An authentication error points to the login: check the saved credentials and login method. A refused connection or timeout points you toward the address, Tailscale access or whether the server service is listening.
 
-Read the actual error before rerunning an installer. Reinstallation is not a substitute for checking the wrong address or a stopped service. Do not paste the web password into a troubleshooting chat.
+Read that error before installing everything again. A wrong address can survive any number of successful reinstallations. Keep the web password out of the troubleshooting conversation.
 
 ## Keep access limited
 
-The Telegram user list controls who can speak to the bot. The private network rules and web login control desktop access. They are separate.
+Telegram's allowed-user list governs who can speak to the bot. Desktop access has its own controls: the private network rules and web login. Changing one doesn't change the other.
 
-If you want to add another person, inspect the current channel's allowed-user settings first. Confirm what that person would be able to ask the assistant to read or change. A second user is not automatically limited to harmless conversation.
+Before inviting another person, read the allowed-user settings for that channel and check what they could ask the assistant to read or change. An assistant with your files can do more than make small talk, so decide what access you mean to share.
 
-Other messenger connections are optional. Each needs its own permissions, credentials and delivery test; their appearance in a settings list is not evidence that they are connected.
+Other messenger connections can wait until you want one. Each needs its own credentials, permissions and delivery test. A name in the settings menu only tells you the option exists.
 
 ## Keep the server checks visible
 
 The gateway and web service run on the server. The desktop app runs locally. The server's scheduled checks can attempt local recovery while your desktop is closed.
 
-Chapter 31's distinction still applies: the model probe needs a model response, while its failure detector and alert sender do not. All still need the server and enough network access to work. They cannot report every failure of the computer they run on.
+As in Chapter 31, the model probe needs a response from the model to pass. Its failure detector and alert sender don't. But all of them still depend on the server and enough network access to work. They can't report every failure of the computer they're running on.
 
 Check that the expected watchdog jobs and web service appear in `procedures.md`, with their actual pause or stop controls. The desktop app itself is not an extra server service.
 
-The historical route used one model account for the assistant and its AI watchdog. Their work shared that account's allowance. A different provider or a separate watcher can add charges; changing the desktop connection does not remove server rent or model costs.
+The earlier setup used one model account for both the assistant and its AI watchdog, so both used that account's allowance. Another provider or separate watcher may add charges. Connecting from the desktop doesn't change the server rent or make its model work free.
 
-You now have two ways to reach the same server work: phone conversation and a desktop window. Test the next real scheduled result from the place you intend to read it.
+You can now reach the same server work from a phone conversation or a desktop window. When the next scheduled result is due, read it where you expect to use it. A connection is most useful when it brings the work comfortably within reach.

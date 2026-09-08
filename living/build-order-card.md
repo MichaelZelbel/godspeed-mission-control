@@ -1,6 +1,6 @@
 # Appendix C: Your Build Checklist
 
-Use this as a check of the result, not a list of features you must collect.
+Use this list to find your place and check what you've built. The optional additions can wait until you have a reason to want them.
 
 | Stage | Observable result |
 |---|---|

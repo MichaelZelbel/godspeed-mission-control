@@ -21,7 +21,7 @@ One historical run showed:
 > Included:    17 session(s) (subscription, no provider invoice)
 > Unknown:     4 session(s) (no pricing data)
 
-That was an estimate for recorded sessions. It did not measure unused allowance or prove that an unmeasured service cost nothing.
+That number was an estimate for the sessions it had recorded. It couldn't tell me how much allowance I had left unused, or whether a service it hadn't measured cost nothing. A cost review is only as complete as the records behind it.
 
 ```
 Add an optional monthly subscription section to skills/weekly-review/SKILL.md. Run it only on the first review of the month when profile/subscriptions.md exists.

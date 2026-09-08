@@ -2,11 +2,11 @@
 
 Some pages become a habit: the tracking page, a product price, release notes for a tool you use. Most visits find nothing. You keep checking because the occasional change matters.
 
-A scheduled watch can do those checks. It only sees what was available when it ran; it is not an instant alarm.
+A scheduled watch can take over those visits. It sees the page when it runs, so expect a periodic check rather than an instant alarm.
 
 ## Define a useful change
 
-Choose a narrow subject, the sources to check, how often to check and what result would matter. “Tell me about technology” will produce more reading. “Tell me when this product gets the feature I need” has a useful stopping point.
+Give it a subject small enough to be useful, the sources to read and a frequency. Then say what change would matter to you. “Tell me about technology” is a reliable way to acquire more reading. “Tell me when this product gets the feature I need” gives the job a reason to interrupt you.
 
 The watch needs three distinct outcomes:
 
@@ -16,11 +16,11 @@ The watch needs three distinct outcomes:
 | Checked and unchanged | The required sources were read; no relevant difference was found. |
 | Not checked | At least one required source could not be read. |
 
-An unavailable page must never become “nothing changed.”
+Keep the last outcome separate. If a page couldn't be read, you want to hear that, not be reassured that nothing changed.
 
 ## Build the first watch
 
-My own product watch checks whether changes to Hermes or its model access affect this book. Start a weekly job named `product watchdog` using the schedule controls from Chapter 22. Use this prompt:
+My product watch checks changes to Hermes and its model access that could affect this book. To try that kind of job, create a weekly schedule named `product watchdog` using the controls from Chapter 22, with this prompt:
 
 ```
 Read AGENTS.md in this working folder and follow it. Check the official Hermes Agent release notes and documentation for changes to the desktop app, scheduled jobs, skills and folder access. Check OpenAI's official ChatGPT pricing and release notes for changes to the subscription route used here. Inspect the named official pages, not just search snippets.
@@ -33,38 +33,38 @@ Append a new dated section at the END of watch/product-watchdog.md. Use Changed,
 ```
 
 
-Confirm the time zone, next run, working folder and stop control. The output is a local report. It is not a phone notification. A notification channel needs a separate connection and delivery test.
+Check the time zone, next run, working folder and how to stop the job. This version writes a local report. If you want it on your phone, you'll need to connect a delivery channel and test that a message really arrives.
 
-Start a manual test once, then inspect its source coverage. Leave the weekly timer to prove the next automatic run. Missing access may mean you need a different readable official source, rather than more confident instructions.
+Run it manually once and read which sources it reached. Then let the weekly timer start the next run. If a source can't be read, find a readable official alternative. Asking more emphatically won't give the assistant access to a page it couldn't open.
 
 ## What the early test taught me
 
-The original manually started watch returned several release-note claims and no dated subscription-price change. Those claims still needed checking against the original pages. A list of links did not establish that every summary was accurate.
+My first manually started watch returned several claims from release notes and found no dated subscription-price change. I still checked the summaries against the pages. The links made that easier, but they didn't do the checking for me.
 
-One kind of finding was particularly useful: a change to permission controls could alter a reader's experience of editing `AGENTS.md` or a skill. That is the reason for the watch. Features unrelated to this book could stay out of the report.
+A change to permission controls was the kind of finding I wanted, because it could change what happens when a reader edits `AGENTS.md` or a skill. Unrelated features could stay out. I wanted help maintaining the book, not a second technology newsletter.
 
-For a subject you want to compare over time, Chapter 26 adds a common skill and a folder per subject. Pause this older schedule before migrating it. One subject should not have two jobs reporting the same change.
+If you want a history for each subject, Chapter 26 adds a shared skill and one folder per watch. Pause this schedule before moving the subject over. One useful report is enough; two copies of the same finding soon become a reason to ignore both.
 
 ## Keep observation separate from action
 
-A connection to an account may provide reading tools and writing tools. Check the actual permissions. A page watch does not need a card on file or authority to send mail.
+Look carefully at what an account connection permits. Some connections can write as well as read. Checking a page doesn't require a card on file or permission to send mail.
 
 I tested an email request in another AI app connected to my mailbox. I asked it to send a meeting change to a colleague named Petra. It replied:
 
 > I haven't sent it because Gmail shows several different Petras and none is clearly your current colleague. What is Petra's email address?
 
-That test showed a search for the recipient. It did not prove what would have happened if only one Petra matched. It also did not show an approval request for the draft.
+It had searched for the recipient, which was sensible. But I hadn't learned what it would do if only one Petra matched, and it hadn't asked me to approve the draft. That left important parts of the sending behavior untested.
 
 I later tried an automatic purchase request in a hub with the Chapter 17 limits: watch a drawing tablet and buy below 500 euros. The response offered this instead:
 
 > **Daily price watch → ping you when it drops below €500 → you click buy.**
 
-That is the division I wanted. The assistant could prepare the decision; I would make the purchase. A written rule alone cannot guarantee that behavior, so keep the tool's access narrow and test harmless examples.
+That response left the purchase with me and offered to prepare what I needed to decide. It was what I wanted. I would still keep the tool's access narrow and use harmless tests, because the written rule alone can't guarantee the next response.
 
 ## Keep useful watches, retire the rest
 
 Add this job to `procedures.md`. Check in both directions: every saved schedule has a record, and every record names a job that still exists.
 
-A quiet watch can still be useful. A watch whose last three findings you ignored deserves review. Pause it, keep its history and see whether you miss it. Remove the schedule if the answer no longer matters.
+Silence can be a good result if the watch has checked successfully and nothing relevant has changed. But if you ignored its last three findings, pause it and see whether you miss it. Keep the history; remove the schedule if the answer no longer matters.
 
-A watch also shares the failures of the computer and service running it. If Hermes cannot run, a Hermes watch cannot report that by itself. The optional server chapters explain separate service checks and their limits.
+A watch depends on the computer and service that run it. If Hermes itself stops, it can't use a Hermes job to tell you so. The optional server chapters add separate service checks and explain what they can catch.

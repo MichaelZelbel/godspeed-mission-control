@@ -2,7 +2,7 @@
 
 ## Prepare a second assistant
 
-The historical test used OpenCode with a Moonshot model through OpenRouter. You can use the same route after checking the current [OpenCode documentation](https://opencode.ai/docs) and [OpenRouter model listing](https://openrouter.ai/models).
+I used OpenCode with a Moonshot model through OpenRouter for the earlier test. To try that route, first check the current [OpenCode documentation](https://opencode.ai/docs) and [OpenRouter model listing](https://openrouter.ai/models). The example gives you a starting point, not a reason to keep using a model that no longer suits the job.
 
 If you choose that route, install OpenCode with the command documented for your platform. The tested Node.js route was:
 
@@ -10,7 +10,7 @@ If you choose that route, install OpenCode with the command documented for your 
 npm install -g opencode-ai
 ```
 
-Node.js supplies the `npm` package command. If it is absent, use its official installer first. Creating or funding an OpenRouter account is a separate choice; check the current usage price and account limits before paying.
+The `npm` command comes with Node.js. If you don't have it, use the official Node.js installer first. An OpenRouter account, and any payment to fund it, is a separate choice. Check the current usage price and limits before paying.
 
 Save this base configuration as `opencode.json` beside `AGENTS.md`. Preserve an existing configuration and compare changes before replacing it.
 
@@ -21,7 +21,7 @@ Save this base configuration as `opencode.json` beside `AGENTS.md`. Preserve an 
 }
 ```
 
-The model name identifies the earlier route. Confirm it remains available before using it, or select a current model and record the choice. The configuration includes no notebook. OpenCode merges project and user settings, so inspect the effective configuration for any connection already enabled elsewhere. [OpenCode configuration reference](https://opencode.ai/docs/config/).
+That model name belongs to the earlier test. Check that it is still available, or choose a current model and record which one you used. This example doesn't add a notebook, but OpenCode combines project settings with user settings. Inspect the combined configuration for connections enabled elsewhere. The [configuration reference](https://opencode.ai/docs/config/) explains how they fit together.
 
 ## Load the provider key without writing it in chat
 
@@ -51,11 +51,11 @@ The value is available to the launched process while it runs. Removing it afterw
 
 ## Check what did not transfer
 
-The files transfer. The assistant's permission settings, credentials, messenger connections and schedules may not. Hermes' saved jobs remain in Hermes until you explicitly move them.
+Your files can travel without taking every application setting along. Check permissions, credentials, messenger connections and schedules in the new tool. Hermes' saved jobs are still in Hermes until you deliberately move them.
 
-Keep the second assistant's edit and command permissions set to ask while testing. Check its documented skill discovery separately. The fact that two applications read `AGENTS.md` does not make all their behavior identical.
+Keep the new assistant set to ask before edits and commands while you're testing. Check its own documentation for skill discovery. Two applications reading `AGENTS.md` can still behave differently with the same folder.
 
-The historical OpenRouter test cost a few cents for three questions. That is an observation about those runs, not a price forecast. Long agent sessions may read many more tokens, the small pieces of text used for billing. Check the selected model's current rates and your account's usage.
+My three-question OpenRouter test cost a few cents. Yours may cost something different, especially during a long session that reads much more text. Providers bill in tokens, small pieces of text, so look at the model's current rates and your account's actual usage.
 
 ## Try another model inside Hermes
 
@@ -65,7 +65,7 @@ Changing a model within Hermes is a smaller change than changing the application
 hermes model
 ```
 
-Inspect the current provider options and costs before choosing. Retest a task whose behavior matters to you.
+Read the current provider choices and costs, then try a task you care about with the new model. A familiar application can produce noticeably different work after that change.
 
 Hermes also supports backup models tried in order when the first provider fails. Inspect the configured list with:
 
@@ -73,9 +73,9 @@ Hermes also supports backup models tried in order when the first provider fails.
 hermes fallback list
 ```
 
-Use the current help for `hermes fallback add` when setting one up. The backup provider needs its own valid access and allowance. It can fail too, and it may charge for usage.
+Use the current help for `hermes fallback add` to set one up. Give the backup provider valid access and enough allowance too. It is another service that can fail or charge for use, even though you hope not to need it often.
 
-An earlier isolated test used simulated providers: the first returned a rate-limit error and the backup returned a distinctive word. The word came back with the backup configured; the error came back without it. That proved takeover in those test conditions, not uninterrupted service from real providers.
+I checked this in an isolated test with simulated providers. The first returned a rate-limit error; the backup returned a distinctive word. With the backup configured, I got the word. Without it, I got the error. That showed the switch working in the test. Real providers still need their own access and failure checks.
 
 
-The practical result is modest and useful. You can change tools without rewriting your profile and skills from memory. The new tool still needs a fresh test of the work you expect it to do.
+You don't have to choose a permanent winner among assistants. Keep the profile and skills you have worked on, and test a new tool against work you can judge. Changing applications should mean checking the new setup, not trying to remember everything you taught the old one.

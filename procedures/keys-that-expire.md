@@ -2,17 +2,17 @@
 
 ## Optional: carry encrypted credentials
 
-A credential can live in your password manager, entered separately into each application's settings. The kit also supports an encrypted store in `secrets/`, allowing protected values to travel with the private hub.
+For credentials, you can keep using a password manager and enter them separately in each application's settings. The kit also offers an encrypted store in `secrets/` if you want protected values to travel with the private hub.
 
-Encryption turns the stored values into unreadable data until the correct unlock phrase is supplied. Keep that phrase in your password manager, outside the hub. Anyone who obtains both the encrypted store and the phrase can obtain the credentials.
+Encryption makes those stored values unreadable without the correct phrase. Keep the phrase in your password manager, outside the hub. The separation matters: someone with both the store and the phrase can recover the credentials.
 
-On the first machine, follow the installer's dedicated credential prompt. On another machine, unlock through its local prompt. Do not paste keys or the phrase into an AI conversation.
+Use the installer's dedicated credential prompt on the first machine and its local phrase prompt on the other one. Keep the keys and phrase out of AI conversations.
 
-Then test the receiving application. A key being present in the encrypted file does not mean a newly started program received it.
+Then test the application that needs the key. Getting a value into the encrypted file is one step. Getting it into a newly started program is another, and I once managed to do only the first.
 
 ## Check that a program receives the current key
 
-This distinction once cost me a careful but useless setup. I stored a new key, saved the file and pushed it. In the next session, the service still had no usable key.
+I had stored a new key, saved the file and pushed it. Everything looked carefully arranged. In the next session, the service still had no usable key.
 
 The store was correct. The final step had failed: handing its contents to programs on that computer. The error even claimed the encryption program was missing when it was installed in a location the process could not see.
 
@@ -23,13 +23,13 @@ Run the kit's check:
 hub-check-keys
 ```
 
-It checks local storage, unlocking and whether a fresh program receives the current values. Its report uses names, counts and dates, not the credential values. Read failures rather than treating a named variable as proof of the right value.
+The check examines local storage, whether the store can be read with the phrase, and whether a fresh program receives the current values. It reports names, counts and dates rather than secrets. Read any failure carefully; seeing a variable's name doesn't tell you its value is correct.
 
-This local check is not a login attempt to every service. Follow it with a read-only connection test for the service you need. A revoked key can be correctly loaded and still be refused.
+That local check doesn't sign in to every service. Follow it with a read-only connection test for the service you need. A revoked key can travel perfectly between computers and still be refused at the other end.
 
 ## Record expiry accurately
 
-API keys and account sessions are different. Some keys can be used on several machines. Some account sessions refresh themselves and should be signed in separately. Follow the provider's actual instructions; there is no universal one-year lifetime.
+API keys aren't the same as account sessions. Some keys work on several machines; some sessions refresh themselves and need a separate sign-in. Follow the provider's instructions for the credential you have. Don't assign everything a one-year life because that sounds orderly.
 
 The kit reads known expiry dates from `secrets/expires.txt`. For a fictional service, a dated row has this shape:
 
@@ -37,7 +37,7 @@ The kit reads known expiry dates from `secrets/expires.txt`. For a fictional ser
 EXAMPLE_API_KEY  2027-03-14  https://example.com/account/keys  # example service access; fictional date
 ```
 
-Replace the name, date and renewal page with verified values. The line contains no secret value. `never` means you checked that the credential has no set expiry. It must not mean “I do not know.”
+Use a name, expiry date and renewal page you've verified. There is no secret value in this line. Write `never` only when you've checked that no expiry is set. An unknown date needs a different description.
 
 When expiry is unknown, retain that uncertainty as a comment, for example:
 
@@ -45,7 +45,7 @@ When expiry is unknown, retain that uncertainty as a comment, for example:
 # EXAMPLE_API_KEY: expiry unknown; check the service account page before assigning a renewal date.
 ```
 
-That comment does not create a deadline. Do not invent a date merely to make the tool quiet.
+The comment preserves what you don't know, without creating a deadline. Leave it uncertain until you can check; an invented date would only make the reminder confidently wrong.
 
 A credential kept only in another local file can be identified with `NAME@/path/to/file`. The `@` tells the check where it belongs; it does not copy or validate the account session itself. Record only a verified expiry date for it.
 
@@ -60,4 +60,4 @@ Help me load the replacement through a masked local input or the existing encryp
 ```
 
 
-Chapter 27's deadline cycle reads the dated source. Do not add another countdown to the brief. One changed credential should not produce two inconsistent reminders.
+The deadline check from Chapter 27 reads those dated entries. Let it provide the reminder instead of adding another countdown to the brief. When you renew the credential, you'll have one date to keep consistent.

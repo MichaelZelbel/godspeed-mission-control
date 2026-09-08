@@ -1,12 +1,12 @@
 # Chapter 33: Try Your Hub With Another AI Assistant
 
-Your files should give another assistant a useful starting point. This test checks what it can read without another long introduction. It also shows what still needs setup.
+Try opening your hub with another assistant. How much can it learn from the files without asking you to give the whole introduction again? This is a useful test of what you own: the background and methods you've saved, and the work still needed to make a new tool use them well.
 
-The base test uses local files only. You may skip the notebook chapters entirely and still do it.
+You can do the basic test with local files alone. If you skipped the online notebook, you haven't skipped a requirement for this chapter.
 
 ## Prepare a second assistant
 
-The historical test used OpenCode with a Moonshot model through OpenRouter. You can use the same route after checking the current [OpenCode documentation](https://opencode.ai/docs) and [OpenRouter model listing](https://openrouter.ai/models).
+I used OpenCode with a Moonshot model through OpenRouter for the earlier test. To try that route, first check the current [OpenCode documentation](https://opencode.ai/docs) and [OpenRouter model listing](https://openrouter.ai/models). The example gives you a starting point, not a reason to keep using a model that no longer suits the job.
 
 If you choose that route, install OpenCode with the command documented for your platform. The tested Node.js route was:
 
@@ -14,7 +14,7 @@ If you choose that route, install OpenCode with the command documented for your 
 npm install -g opencode-ai
 ```
 
-Node.js supplies the `npm` package command. If it is absent, use its official installer first. Creating or funding an OpenRouter account is a separate choice; check the current usage price and account limits before paying.
+The `npm` command comes with Node.js. If you don't have it, use the official Node.js installer first. An OpenRouter account, and any payment to fund it, is a separate choice. Check the current usage price and limits before paying.
 
 Save this base configuration as `opencode.json` beside `AGENTS.md`. Preserve an existing configuration and compare changes before replacing it.
 
@@ -25,7 +25,7 @@ Save this base configuration as `opencode.json` beside `AGENTS.md`. Preserve an 
 }
 ```
 
-The model name identifies the earlier route. Confirm it remains available before using it, or select a current model and record the choice. The configuration includes no notebook. OpenCode merges project and user settings, so inspect the effective configuration for any connection already enabled elsewhere. [OpenCode configuration reference](https://opencode.ai/docs/config/).
+That model name belongs to the earlier test. Check that it is still available, or choose a current model and record which one you used. This example doesn't add a notebook, but OpenCode combines project settings with user settings. Inspect the combined configuration for connections enabled elsewhere. The [configuration reference](https://opencode.ai/docs/config/) explains how they fit together.
 
 ## Load the provider key without writing it in chat
 
@@ -67,7 +67,7 @@ In the 2 September 2026 test with fictional illustrator Sam's folder, the answer
 > **1. Whose folder is this**
 > Sam Okafor's, a freelance illustrator based in Bristol, UK, who draws for children's publishers and the occasional brand (from `profile/about-me.md`). This folder is Sam's "hub": the shared world of profile, rules, skills, procedures, and decisions that `AGENTS.md` says to read first every session.
 
-It also identified Sam's project priorities. That demonstrated a useful file read in that setup. It did not prove that every instruction would be followed in every later action.
+It also found Sam's project priorities. That was what I wanted from the first check: it could read the files and use them to answer. I would still test its actions before trusting it to follow every instruction in later work.
 
 Next choose a skill you actually have. If you installed the day-planning skill, use:
 
@@ -76,13 +76,13 @@ Read skills/plan-my-day/SKILL.md. In three sentences, explain what it produces a
 ```
 
 
-The original test answered accurately for the older recipe and ended with “Nothing modified.” Its old recipe required the most important task first. This edition's day plan preserves fixed commitments, so use the skill in your current folder as the source of truth.
+In the original test it described the older recipe accurately and finished with “Nothing modified.” That recipe put the most important task first. The current one preserves fixed commitments, so compare your answer with the skill you actually have. You don't need to recreate an old planning rule to pass this test.
 
-Check the folder afterwards for unexpected changes. Then test actual execution separately with a harmless input, using Chapter 16's approach. Reading a skill is not the same as selecting it automatically or running it well.
+Look for unexpected folder changes afterwards. Then give the skill harmless input and try the work itself, as in Chapter 16. Describing a recipe and cooking from it are different tests; here we want to know both that it can find the skill and that it can use it.
 
 ## Optional: add the notebook
 
-Only if you completed Chapter 29, use this expanded configuration. It adds the notebook to the base example; preserve any other settings you deliberately configured.
+If you completed the notebook connection in Chapter 29, you can now try this expanded configuration. It adds the notebook to the basic example. Keep any other settings you deliberately chose when making the change.
 
 ```json
 {
@@ -107,15 +107,15 @@ Use my notebook tools to look up who Nadia is and how she wants bad news deliver
 ```
 
 
-The historical run found the same gap as Chapter 29: the notes recorded Nadia's preferences without defining her role. It used the notebook rather than silently filling that gap from Sam's profile.
+It found the same gap as the notebook test in Chapter 29: Nadia's preferences were there, but her role wasn't. The answer stayed with that source instead of borrowing the missing detail from Sam's profile. That made it much easier to see what the connection had actually contributed.
 
 ## Check what did not transfer
 
-The files transfer. The assistant's permission settings, credentials, messenger connections and schedules may not. Hermes' saved jobs remain in Hermes until you explicitly move them.
+Your files can travel without taking every application setting along. Check permissions, credentials, messenger connections and schedules in the new tool. Hermes' saved jobs are still in Hermes until you deliberately move them.
 
-Keep the second assistant's edit and command permissions set to ask while testing. Check its documented skill discovery separately. The fact that two applications read `AGENTS.md` does not make all their behavior identical.
+Keep the new assistant set to ask before edits and commands while you're testing. Check its own documentation for skill discovery. Two applications reading `AGENTS.md` can still behave differently with the same folder.
 
-The historical OpenRouter test cost a few cents for three questions. That is an observation about those runs, not a price forecast. Long agent sessions may read many more tokens, the small pieces of text used for billing. Check the selected model's current rates and your account's usage.
+My three-question OpenRouter test cost a few cents. Yours may cost something different, especially during a long session that reads much more text. Providers bill in tokens, small pieces of text, so look at the model's current rates and your account's actual usage.
 
 ## Try another model inside Hermes
 
@@ -125,7 +125,7 @@ Changing a model within Hermes is a smaller change than changing the application
 hermes model
 ```
 
-Inspect the current provider options and costs before choosing. Retest a task whose behavior matters to you.
+Read the current provider choices and costs, then try a task you care about with the new model. A familiar application can produce noticeably different work after that change.
 
 Hermes also supports backup models tried in order when the first provider fails. Inspect the configured list with:
 
@@ -133,9 +133,9 @@ Hermes also supports backup models tried in order when the first provider fails.
 hermes fallback list
 ```
 
-Use the current help for `hermes fallback add` when setting one up. The backup provider needs its own valid access and allowance. It can fail too, and it may charge for usage.
+Use the current help for `hermes fallback add` to set one up. Give the backup provider valid access and enough allowance too. It is another service that can fail or charge for use, even though you hope not to need it often.
 
-An earlier isolated test used simulated providers: the first returned a rate-limit error and the backup returned a distinctive word. The word came back with the backup configured; the error came back without it. That proved takeover in those test conditions, not uninterrupted service from real providers.
+I checked this in an isolated test with simulated providers. The first returned a rate-limit error; the backup returned a distinctive word. With the backup configured, I got the word. Without it, I got the error. That showed the switch working in the test. Real providers still need their own access and failure checks.
 
 
-The practical result is modest and useful. You can change tools without rewriting your profile and skills from memory. The new tool still needs a fresh test of the work you expect it to do.
+You don't have to choose a permanent winner among assistants. Keep the profile and skills you have worked on, and test a new tool against work you can judge. Changing applications should mean checking the new setup, not trying to remember everything you taught the old one.

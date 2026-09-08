@@ -2,7 +2,7 @@
 
 ## Record what runs and how to stop it
 
-The file `procedures.md` is your list of automatic jobs. It describes the jobs; it does not run them.
+Keep a list of these jobs in `procedures.md`. That file lets you see what you've arranged, but it doesn't start the jobs itself.
 
 ```
 Inspect the schedules you can actually reach. Update procedures.md with one block per automatic job. For each block record:
@@ -19,6 +19,6 @@ Mark planned jobs as not scheduled. Do not invent a job or a successful test fro
 ```
 
 
-The rule is simple: **do not rely on a job you cannot find and stop.** A register that says “not scheduled” is more useful than a confident description of a job that does not exist.
+You should be able to find a job and stop it before you rely on it. If it hasn't been scheduled yet, say so in the register. An accurate “not scheduled” leaves you with a clear next step.
 
-Put results somewhere you already check. For the next exercise, that is `brief/` in your hub and the job history in Hermes. Phone delivery comes later and needs its own test.
+For this exercise, the results go into the hub's `brief/` folder, with the run recorded in Hermes' job history. Check those places when you return. Phone delivery can wait until we've set it up and tested an actual arrival.

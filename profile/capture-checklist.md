@@ -1,8 +1,8 @@
 # Chapter 9: Save Useful Notes During Your Day
 
-A useful detail often arrives at the end of a call, when you are already thinking about the next one. A client changes a budget. A date moves. You notice what made a difficult exchange easier.
+The call ends with one useful detail, just as you are opening the notes for the next call. A budget changed. A date moved. The client finally explained what was bothering her. You mean to write it down properly later.
 
-Save one sentence while it is still clear. You do not need to decide its final file.
+Give yourself a smaller job: save one sentence now. Deciding where it belongs can wait. That is what the inbox is for.
 
 ## Name the destination
 
@@ -18,13 +18,13 @@ Nadia is the fictional publishing client from the earlier chapters. In the recor
 
 > Captured in: inbox/2026-09-02-nadia-book-budget.md
 
-Open the named file. Check that it contains the actual statement, its date and any uncertainty. “She hinted” should remain a hint, not turn into an agreed second project.
+Open the file named in the reply. It should contain what you actually said, with the date and any uncertainty intact. “She hinted” needs to stay a hint. A promising conversation should not become an agreed second project on the way into a text file.
 
-The file records what you reported. It is not independent verification of the budget. That distinction helps later if a formal offer says something different.
+The note is a record of what you reported. If a formal offer later gives a different budget, you will want that distinction. Saving the sentence did not independently verify the number.
 
 ## Capture the changes that affect work
 
-Good candidates include a decision, a commitment, a practical preference, a result that worked, or a number you will need again. Keep enough detail to make sense tomorrow.
+Keep decisions, commitments, useful preferences and results you want to remember. A number can be worth saving too. Give tomorrow's version of you enough detail to know why today's version thought it mattered.
 
 “Send three options” is incomplete. “Sending Nadia three options reduced revisions on this job” says who, what and how far the evidence reaches. It does not establish a universal rule about clients.
 
@@ -32,11 +32,11 @@ Do not put passwords or access keys into these notes. Review personal details wi
 
 ## Away from the computer
 
-Until you connect a phone-accessible route, use a note on your phone or another place you already trust. Later, paste the notes into Hermes with “Put these in my inbox.” Your phone is collecting the text; your computer still has to file it.
+Away from the computer, use a note on your phone or another place you already trust. Later, paste it into Hermes with “Put these in my inbox.” You can start that habit before connecting anything. The phone keeps the text until your computer can file it.
 
-Chapter 31 adds a server and Telegram connection. That is optional and is not configured by this chapter. A message cannot be processed by a laptop that is asleep and unavailable.
+Chapter 31 offers an optional server and Telegram route if you want the assistant to receive those notes while your laptop is asleep. For now, leave that setup for the day you need it.
 
-In a separate recorded server test, I sent the same practice capture through Telegram from my desktop. The reply named the inbox file, and I checked the file on the server. A second attempt through the server's web interface also wrote the note. Those were server tests, not evidence that your phone is connected now.
+I tested the connected route separately by sending this practice capture through Telegram from my desktop. The reply named a file, and I opened it on the server to check. A second attempt through the server's web interface saved the note too. Those tests showed the server route working; your own phone still needs its connection before it can do the same.
 
 ## File only the captures
 
@@ -54,23 +54,23 @@ File the clear notes in my words. After checking that the content reached its de
 Tell me which files changed and where the originals went.
 ```
 
-The earlier demonstration deleted filed captures under an explicit instruction. This revised prompt retains them in an archive so the original wording remains available. Check one destination and one archived original before trusting the filing result.
+This prompt keeps the filed originals in an archive. The earlier demonstration had deleted them after filing, under an explicit instruction. I prefer keeping the original wording available. Check one destination and its archived original to see that the information arrived without changing on the way.
 
 ## Why “remember” can produce a different result
 
 I first tried the shorter instruction “Remember: Nadia said today the budget for next year's book has doubled.” In the 2 September test, the assistant saved `observations/nadia-book-budget.md`, not an inbox note.
 
-The save was real. The destination was different. That is why this chapter names `inbox/` explicitly. The word “saved” is not enough; inspect the file it names.
+It really had saved the note, just in a different place. That small difference is why I now name `inbox/` in the request. When the assistant says “saved,” ask where, and open the file.
 
 `observations/` holds notes the assistant keeps for later retrieval. A note you dictated remains your reported statement even if it lands there. The folder name must not convert it into an independent discovery.
 
-In an earlier test with another assistant, I tried a request to save a note in four clean folders. All four replies said the note was saved. All four intended folders stayed untouched; the notes appeared in the assistant's own storage on that computer. That was the observed failure, not proof that every version of that assistant behaves the same way.
+With another assistant, I tried a save request in four clean folders. Four reassuring replies, and four untouched folders. The notes had gone into the assistant's own storage on that computer. That tells us what happened in those tests, not what every version will do. It also explains why I have become rather interested in opening the actual file.
 
-Hermes can also keep notes in its own application folder. Chapter 19 reviews those local records. Your hub rules request a shared destination; test the result after changing assistants rather than assuming every tool uses it.
+Hermes has its own application notes too; we will inspect them in Chapter 19. Your hub rules ask for a shared destination, but a new assistant still needs a save-and-check test. The familiar word “memory” does not tell you where the note went.
 
 ## Keep retrieval separate from keeping
 
-My first memory design put a summary of every note into a page loaded at the start of each session. When I measured it, the page had reached 108 lines. New notes kept adding to a briefing that every job received.
+My first memory design gave every note a summary on a page loaded at the beginning of every session. By the time I measured it, the page had reached 108 lines. Each new note added something that every later job had to receive, whether it was relevant or not.
 
 Lauren Contalonis's account of her own system helped me separate keeping information from putting it into today's work. Her “hot,” “warm” and “cold” labels describe how readily information should return, not how private it is. One sentence stayed with me:
 
@@ -78,10 +78,10 @@ Lauren Contalonis's account of her own system helped me separate keeping informa
 
 The source is her [13 August 2026 article on what an AI system should reach, remember and use](https://www.linkedin.com/pulse/3-expanding-stage-2-what-my-ai-harness-should-reach-use-contalonis-azwpc). In this chapter, that distinction becomes a small briefing and a larger record searched when needed.
 
-I changed the design to a short `observations/MEMORY.md` explaining where to search. Detailed notes wait until their subject comes up. This saves unnecessary material in the initial briefing, but it makes useful search essential. A large folder can still become difficult to retrieve from.
+I changed that to a short `observations/MEMORY.md` explaining where to search. The detailed notes wait until their subject comes up. That leaves less to read at the start, although the search now has to earn its keep. A large folder is not useful if you cannot find anything in it.
 
 Rules are different. A rule hidden in an old note may never be found when it matters. Chapter 17 keeps short behavior rules in the session briefing and their explanations in `rules/`.
 
-Until you reach that setup, keep proposed rules clearly marked in the inbox. Chapter 17 shows how to confirm them, file them and update the short list. A personal fact and an instruction about future behavior need different treatment.
+For now, leave proposed rules clearly marked in the inbox. Chapter 17 will help you confirm and file them. “I have a dentist appointment” and “Ask before sending anything in my name” may arrive in the same afternoon, but only one is an instruction for future behavior.
 
-Today's result is modest and useful: one fact captured accurately, one clear note filed, and an original you can find again. You keep the thought; the assistant handles the filing.
+Try it with one real note. Check what was saved, let the assistant file it, and make sure you can find the original. The thought is yours to keep. The filing does not have to become another evening job.

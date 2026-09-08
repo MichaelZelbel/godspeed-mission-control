@@ -1,10 +1,10 @@
 # Chapter 26: Keep Researching a Question Over Time
 
-A page watch asks whether something changed. An ongoing research question also needs your requirements and the alternatives you have already considered.
+Sometimes the question stays open after the first search. A tool nearly meets your needs, a missing feature might arrive, or a better alternative may appear. For that kind of research, the hub needs to remember what you're looking for and what you've already considered.
 
-For example: does the service I use for publishing posts still meet my needs? A new feature may matter, but so may a mistake in how I use an existing feature.
+One of my questions was whether the service I used for publishing posts still met my needs. I expected to learn about features. I also had to leave room for the possibility that the service was fine and I was using it badly.
 
-Begin with one question and a few named sources. Each check uses model time and possibly paid search. Twenty subjects do not become free because they share one schedule.
+Start with one question and a few named sources. Each check takes model time and may use paid search. You can add another subject once the first earns its place; there is no prize for having twenty questions checked before breakfast.
 
 ## Save the question and the rules
 
@@ -17,7 +17,7 @@ Create watch/<short-name>/requirements.md using the format below. Use a simple l
 ```
 
 
-Here is the complete requirements format. This is an invented example about a publishing tool, not a claim about any current product. Replace the example source before the first real run.
+Below is the full requirements format, using an invented publishing tool. It describes the file you need, not a current product. Replace the example source before a real run.
 
 ```yaml
 ---
@@ -49,11 +49,11 @@ Background: relevant information that changes no current decision.
 Read at most 5 source pages per run. No account edits or publishing.
 ```
 
-For an offline practice run, the source may be a full path to a fictional text file. Say explicitly that it is practice input. That lets you test changes and failures without depending on a live website.
+For practice without a website, use the full path to a fictional text file as the source and label it as practice input. Then you can change a line or remove the source yourself and see whether the watch notices.
 
 ## Install the complete starter skill
 
-Ask Hermes to save the following block exactly as `skills/research-watch/SKILL.md`. It is the whole starter recipe. You do not need an unprinted research program or a scoring service.
+Ask Hermes to save this block exactly as `skills/research-watch/SKILL.md`. It's the complete starter recipe. The length comes from spelling out what to do when something changes or fails; you don't need another research program hidden elsewhere.
 
 ```markdown
 ---
@@ -108,7 +108,7 @@ This skill writes files only. The morning brief reads findings; there is no sepa
 To pause one subject, change its requirements status to paused and preserve its files. The common daily schedule is paused separately in Hermes. Pausing stops future starts; check and stop any current run separately when necessary.
 ```
 
-That is deliberately a small system. It remembers when evidence was checked, retries failures and keeps findings available. It does not promise perfect research or decide which unread findings you no longer need.
+This keeps a modest amount of history: when sources were checked, what failed and which findings still need attention. It won't make the research perfect, and it won't quietly decide that you no longer need an unread finding.
 
 ## Run it once before scheduling
 
@@ -117,13 +117,13 @@ Read AGENTS.md and skills/research-watch/SKILL.md. Run the due research watches 
 ```
 
 
-An empty log must trigger that first run. Inspect its coverage. “Success” should mean every required source was read. An unavailable source should produce a failed-check finding and a retry date.
+The empty log should make the first check due immediately. Read its coverage before trusting the success label. Every required source must have been read. If one wasn't available, look for a failed-check finding and a retry date so the gap won't be forgotten.
 
-Use a disposable practice folder to test unchanged text, changed text and a missing source. Force those practice checks by saying so explicitly. An unchanged second run must not create another finding for the same claim. Restoring the missing source should resolve its failed-check finding after a successful read.
+In a disposable practice folder, try unchanged text, changed text and a missing source. Explicitly ask to force each practice check. Reading the same claim twice shouldn't create two findings. When you restore the source, a successful read should resolve the earlier failure. These small changes let you see whether the watch is keeping a useful history.
 
 ## Replace the older watch before adding the common schedule
 
-If you built Chapter 25's product watchdog, pause that saved job first. Keep `watch/product-watchdog.md` as history. Create requirements for that subject in its own folder and cite the older report as historical evidence. Do not treat it as a fresh successful check.
+If you made the product watchdog in Chapter 25, pause its schedule before moving it here. Keep `watch/product-watchdog.md` as history, and give the subject its own requirements folder. You can cite the old report, with its date, but it doesn't count as a source you checked again today.
 
 Then schedule the common job:
 
@@ -133,7 +133,7 @@ Create one daily job named research watches, at 06:30 in the same named time zon
 Show the actual saved job, working folder, named time zone, next run and pause control. The starter skill still records UTC dates; the timer's displayed zone is a separate setting. Check that an older schedule for the same subjects is paused. Update procedures.md. If the scheduler uses another time zone, resolve and show the equivalent next run before relying on it.
 ```
 
-A daily job checks which subjects are due. A weekly subject still gets checked weekly. A failed weekly check with `retry_days: 1` becomes eligible tomorrow, rather than disappearing for another week.
+The common job runs daily to see which subjects are due. A weekly subject still waits for its weekly check, unless a failure brings it back sooner. With `retry_days: 1`, a failed check is eligible tomorrow. You shouldn't have to wait another week to learn that a page is readable again.
 
 ## Put the findings in the morning brief
 
@@ -149,15 +149,15 @@ Keep the normal body under 200 words. Required urgent and failed-check text is a
 Test in a disposable hub with a separate output at practice/brief-tests/research-test.md. Include an urgent finding, an unchanged useful finding, a failed source and an overdue watch whose last recorded run succeeded. The overdue watch must remain visible even though it has no failed-source finding. Preserve today's real brief and do not change real research state during the test.
 ```
 
-Choose the daily research time with your brief time in mind. A run can take longer than expected; the brief must show the latest completed evidence and identify a failed or missing run. A half-hour gap is a planning choice, not a completion guarantee.
+Choose a research time before your brief, but allow for a slow run. Half an hour is a planning choice, not a promise that the work will finish. The brief should use completed evidence and tell you when a run failed or is missing.
 
 ## What my first watch found
 
 My first publishing-tool investigation found a mistake in my own setup. The service's reference listed a cover-picture field for YouTube. My app was sending the picture to a different destination and omitting it where the field existed.
 
-The finding was useful because it checked the service I already used against a real requirement. I did not need a grand comparison of vendors before reading my own integration.
+That was more useful than a grand comparison of vendors. Before replacing the service, I had needed to look at how my own app was using it.
 
-My original system put that finding into a scored delivery queue. The starter here uses the simpler visible findings file. The lesson remains: research can find your own mistake, and useful findings should arrive where you already read.
+My original system sent that finding through a scored delivery queue. This starter uses a visible findings file, which is easier to inspect. Either way, I wanted the finding somewhere I would read it, especially when it was telling me about my own mistake.
 
 ## Stop without losing the record
 
@@ -165,4 +165,4 @@ My original system put that finding into a scored delivery queue. The starter he
 Pause the subject I name by setting status: paused in its requirements.md. Preserve its candidates, findings, results and log. Confirm the next common run will skip it. If I name all research watches, also pause the research watches schedule and inspect whether a run is already active. Update procedures.md with what was stopped.
 ```
 
-Changed preferences belong in the same requirements file. You can revise them whenever your decision changes. Teaching it once means keeping a reusable starting point, not freezing your life.
+When your needs change, edit the same requirements file. You are allowed to change your mind. Teaching it once gives you a place to start next time; it doesn't commit you to wanting the same things forever.

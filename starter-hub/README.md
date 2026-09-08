@@ -1,8 +1,8 @@
 # Appendix D: The Hub Folder Layout
 
-This is a reference for the files installed in Chapter 3. Copying these folders by hand does **not** install an equivalent working system.
+Use this map when you want to know where something belongs. The installer in Chapter 3 creates the starting arrangement, along with the parts that make it work. Copying folders by hand won't give you that whole setup.
 
-The installer also supplies commands, application configuration, skill discovery links and optional machine jobs. A manual folder copy does not provide `hub-due`, `hub-check-brief` or the rule compiler by itself. Use Chapter 3's installation route for the build-along exercises.
+For example, the installer supplies commands such as `hub-due`, `hub-check-brief` and the rule compiler. It also configures the application, connects skill folders and can add optional machine jobs. Use the installation route for the exercises, then come back here when you need to look up a file.
 
 Open `starter-hub/` in the companion kit to inspect the initial layout. Show hidden files if your file browser hides dot-prefixed names; how a copy handles those files depends on the method used.
 
@@ -29,4 +29,4 @@ Open `starter-hub/` in the companion kit to inspect the initial layout. Show hid
 
 The exercises add output folders such as `brief/`, `reviews/`, `investigations/` and `watch/` when needed. Their absence in a fresh hub is normal.
 
-If an installed folder looks wrong, compare the exact missing item with this map and the kit version. Ask the assistant to inspect and repair that item while preserving existing work. Do not replace your whole hub with a fresh template.
+If something looks missing, compare that item with the map and your kit version. Ask the assistant to repair the specific problem while keeping your work. A fresh template would also give you a fresh job of putting your own material back.

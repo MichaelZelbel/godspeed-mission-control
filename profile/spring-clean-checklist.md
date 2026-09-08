@@ -1,8 +1,8 @@
 # Chapter 10: Keep Your AI's Information Up to Date
 
-A note can outlive the situation it describes. The project ends. A person changes jobs. A deadline moves. The file remains.
+The project is finished. You know that, the client knows that, and everyone has moved on except the file that still calls it your top priority. Old notes can be remarkably loyal to a life you no longer lead.
 
-Start a review when an answer relies on old information, or when you know the underlying situation changed. Ask the assistant to compare the profile files before editing them.
+You do not need to clean every file on a schedule just to keep it looking fresh. Start when an answer uses old information, or when you know something has changed. Ask the assistant to compare the profile files before it starts editing:
 
 ```
 Read the current files in profile/, excluding interview prompts, checklists and templates.
@@ -17,19 +17,19 @@ Do not search elsewhere or change anything yet. Unchanged information is not aut
 
 ## Read the conflicts, not just the portrait
 
-The first half tells you what the assistant can recover from your briefing. The second half compares entries you may have written weeks apart.
+The first half lets you see what the assistant can recover from your briefing. The second compares notes you may have written weeks apart. You get to notice the disagreements without rereading everything yourself.
 
 In the recorded July practice version, Sam's card-set deadline appeared in two forms:
 
 > **"End of the month" vs 2026-07-28.** `about-me.md` says the card set is due "end of the month". `projects.md` pins it to Tuesday 2026-07-28. Those are 3 days apart. Which one is right?
 
-That was a useful question, not proof that either date was wrong. “End of the month” may have been approximate. The explicit date still needed confirmation.
+That question was worth asking. It did not prove either date was wrong: “end of the month” might have been approximate. Confirming the explicit date was a better next step than quietly choosing whichever sounded more convincing.
 
 The same review found a person missing from a related file:
 
 > **Third regular client missing.** `about-me.md` lists three regulars: board-game studio, children's book publisher, and a coffee brand. `people.md` has no coffee brand entry. Either the coffee brand is inactive or the file is incomplete.
 
-Again, there were at least two possible explanations. A review should expose the gap before picking one.
+There was more than one explanation for the gap. A useful review brings it to you before turning one of those explanations into a fact.
 
 ## Make the smallest useful correction
 
@@ -40,22 +40,22 @@ Most findings need one of four moves:
 3. **Combine vague or repeated notes.** Keep the useful detail and its source. Remove repetition that adds no information.
 4. **Confirm slow changes.** Check your background and priorities when they no longer fit. They may remain accurate for months.
 
-Tell the assistant which corrections to make, then inspect the changed lines. For an important change of direction, keep the date and reason in `decisions.md`.
+Tell the assistant which corrections to make, then read the changed lines. If you have changed direction on something important, keep the date and reason in `decisions.md`. Your future self may be grateful for more than “seemed like a good idea.”
 
-The kit's `profile/spring-clean-checklist.md` is a reference for this work. The task is to improve the current briefing, not to make every file look recently edited.
+The kit includes `profile/spring-clean-checklist.md` for this work. Use it when you need a reminder. An accurate file is allowed to stay untouched; the aim is to keep the briefing useful, not to give every note a recent modification date.
 
 ## Check the cause of a poor answer
 
-Old information is only one possible cause. The assistant may have missed the right file, misunderstood your question or reasoned badly. If the source was already correct, changing it can make the problem worse.
+An answer can be wrong even when the file is right. The assistant may have missed it, misunderstood your request or reasoned badly. Editing correct information to satisfy a bad answer would give you two problems.
 
-Ask which file and line supported the answer. Compare them with what the assistant claimed. A budget copied correctly from an old note needs an update. A current budget misread by the assistant needs a different repair.
+Ask which file and line the answer came from, and compare the source with the claim. If the old budget was copied correctly, update the budget. If the assistant misread the current one, deal with the reading problem. Those repairs are different.
 
 The review also cannot see a private decision you never recorded. Give the short correction when needed and let the assistant file it.
 
 ## Check the next use
 
-After changing a priority, start a new session and ask for a recommendation affected by that priority. The answer should use the revised information and explain its source. That is a better check than merely seeing that the file was saved.
+After changing a priority, open a fresh session and ask for advice that should be affected by it. Does the answer use the new information, and can it show where that came from? That tells you more than another “Saved successfully.”
 
 Deleting a line removes it from the current briefing. It does not remove earlier Git versions, conversation records or provider copies. Chapter 19 deals with those separate locations.
 
-You now have a way to keep the briefing useful as your life changes. The next chapter is an optional experiment in giving corrections without spending the afternoon arguing with a text box. The build continues in Chapter 12.
+The briefing can change with you. Keep the corrections small and check that they affect the next answer. If making those corrections has led to an argument with a text box, the optional chapter that follows may feel familiar. Otherwise, you can continue the build in Chapter 12.

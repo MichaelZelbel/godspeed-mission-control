@@ -2,7 +2,7 @@
 
 ## Keep the monthly context reminder accurate
 
-Chapter 1 asked an AI to summarize the background it could reach. It did not export every conversation or produce a library of your old prompts.
+There may also be useful background in another AI tool. The prompt in Chapter 1 asked it to summarise what it could reach about you. It didn't export every conversation or collect all your old prompts, so don't expect the weekly review to have those too.
 
 Save that current extraction prompt for later use:
 
@@ -10,4 +10,4 @@ Save that current extraction prompt for later use:
 Copy the current Chapter 1 prompt from the companion kit's profile/bring-your-context-with-you.md into prompts/library/bring-your-context-with-you.md. Add a purpose line: summarize accessible background for review and import; not a full conversation export. Preserve an existing saved version and show any difference before replacing it.
 ```
 
-When the reminder is useful, run the prompt in the other tool. Correct the answer and review what may travel before importing it. Leave guesses and unresolved questions visible, as in the first import.
+When the reminder comes at a useful time, run the prompt in the other tool. Read and correct its answer before importing, and decide which details you're willing to move. Keep guesses and unanswered questions visible. Familiar information can still arrive with unfamiliar mistakes attached.

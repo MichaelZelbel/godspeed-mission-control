@@ -1,8 +1,8 @@
 # Chapter 23: Let AI Investigate a Question While You Are Away
 
-A brief brings you up to date. An investigation answers one question in more depth. It should leave a comparison, a draft or a set of questions ready for your decision.
+Some questions deserve more than a line in the morning brief. You need a comparison, perhaps a draft message, and a little time to think before committing. An investigation can prepare that material while you're away, so you return to a decision with some of the reading already done.
 
-Use Robin's separate practice hub from Chapter 22, or choose a real question with sources your hub can reach. Robin is the fictional bicycle-shop owner considering maintenance classes.
+We'll use Robin's separate practice hub again. He is the fictional bicycle-shop owner considering maintenance classes. You can choose a real question instead, provided the hub can reach the sources it needs.
 
 ## Check the starting material
 
@@ -12,7 +12,7 @@ In the practice hub, ask:
 Confirm that this is robin-practice. Read AGENTS.md, profile/, inbox/workshop-notes.md and skills/prepare-a-decision/SKILL.md. Confirm the profile says Robin runs a bicycle repair shop. List any missing file. Create no job until these inputs are available.
 ```
 
-If you skipped the practice setup in Chapter 22, do it now. These files are not facts about your life and should never enter your real notebook.
+If you skipped Robin's setup in Chapter 22, make that separate folder first. His files are practice material, so keep them out of your real notebook.
 
 The question is ordinary:
 
@@ -20,7 +20,7 @@ The question is ordinary:
 What should I do next about the maintenance classes?
 ```
 
-The saved job needs more detail than that sentence. It must know where to read, what to produce and when to stop. Those details belong in the setup once.
+That is a perfectly reasonable question to ask another person. For a job that starts later, we'll also save where to read, what to produce and when to stop. Once those details are in the setup, you won't have to hover nearby supplying them.
 
 ## Save one run
 
@@ -35,26 +35,26 @@ Read AGENTS.md and skills/prepare-a-decision/SKILL.md. Answer: What should Robin
 Show the saved job record with its one-time schedule, working folder, time zone, output path and stop control. Record it in procedures.md as a practice job.
 ```
 
-You should see a real record, not just “I'll do that.” For example, its fields should identify `robin-maintenance-once`, a single next run, your actual practice path and `investigations/robin-maintenance-once.md`. The time must be in the future in the zone shown.
+Look at the saved job before walking away. It should name `robin-maintenance-once`, one future run in the displayed time zone, your actual practice folder and the output `investigations/robin-maintenance-once.md`. “I'll do that” sounds agreeable, but it isn't the record you're looking for.
 
-Leave Hermes running through that time. Check the result afterwards without manually starting the job. If a job cannot be created in your version, ask for the actual scheduling error and use the app's one-time schedule control. Do not substitute a daily job.
+Keep Hermes running through the scheduled time, then check the result without starting it manually. If your version can't create the job from the request, read the scheduling error and use the app's one-time control. Don't replace it with a daily job; Robin doesn't need the same question investigated every morning.
 
 ## Read the prepared work
 
-An earlier short scheduled practice run produced this customer draft:
+In an earlier practice run with a short delay, the job prepared this customer draft:
 
 > "Hi! We are exploring a small bicycle-maintenance class at the shop. Would learning puncture repair interest you? We could also cover brake checks, let us know if you'd want that too. What days or times generally suit you? This is just an interest check, not a booking. Thanks, Robin."
 
-The full result separated recorded facts from assumptions and compared testing interest with waiting. It did not turn three enquiries into three bookings.
+The full result kept facts and assumptions apart and compared testing interest with waiting. Three enquiries remained three enquiries. They hadn't become bookings merely because bookings would make the recommendation easier.
 
-It also left capacity and insurance checks with Robin. The improved instructions above ask the assistant to prepare those questions. Where a relevant document is available, give the job access so it can do that reading itself.
+Robin still had to resolve the capacity and insurance questions. The instructions above ask the assistant to prepare those questions for him. If you have a relevant document, let the job read it too; there is no need to hand the reading back to you when the source is available.
 
-Inspect your result for four things: named sources, a supported recommendation, visible uncertainty and usable prepared text. Check the run history separately for a timer-started run and no future occurrence.
+Read the result as something you might actually use. Can you find its sources, follow its recommendation and see what remains uncertain? Is there prepared text worth keeping? Then check the run history: the timer should have started the job, and the job should have no further run.
 
-The historical run used a short delay. It was not an overnight test. Leaving a question until tomorrow adds a requirement: the computer, scheduler and model access must remain available through the slot.
+My recorded practice run used a short delay, so I can't call it an overnight test. To leave yours until tomorrow, make sure the computer, scheduler and model access will still be available at the scheduled time. The question can wait; the machine has to be there when it comes due.
 
 ## Try a missing source
 
-Make a second copy of the practice hub and omit its workshop note. Repeat with a new one-time job and a different output name. The answer must say the note was unavailable. It must not recover the missing customer counts from the earlier conversation and present them as a fresh file check.
+Now make a second copy of the practice hub without the workshop note. Use a new one-time job and another output name. The answer should tell you the note is missing. If it repeats the old customer counts from the conversation, it mustn't present them as facts it has just checked in a file.
 
-Stop or retire both practice jobs after inspection. Keep their results as examples of what a good answer and a limited answer look like.
+After reading both results, stop or retire the practice jobs and keep their output. The limited answer is useful too: it shows what the job does when it can't find something, which is usually when you most need it to be clear.
