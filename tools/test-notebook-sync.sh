@@ -132,6 +132,27 @@ else
   ok "profile/ and AGENTS.md are not sent"
 fi
 
+# ---- generated indexes stay home ------------------------------------------------------
+# observations/MEMORY.md is rewritten by a script on most commits. Sending it made the
+# notebook pay for a metadata pass and embeddings every time a counter moved.
+mkdir -p "$W/idx/observations" "$W/idx/skills"
+printf 'index
+' > "$W/idx/observations/MEMORY.md"
+printf 'index
+' > "$W/idx/observations/README.md"
+printf 'a fact
+' > "$W/idx/observations/one.md"
+printf 'index
+' > "$W/idx/skills/README.md"
+idx="$("$PY" - "$HERE/notebook-sync.py" "$W/idx" <<'IDXEOF'
+import importlib.util, pathlib, sys
+spec = importlib.util.spec_from_file_location("ns", sys.argv[1])
+ns = importlib.util.module_from_spec(spec); spec.loader.exec_module(ns)
+print(" ".join(sorted(d.doc_id for d in ns.collect_documents(pathlib.Path(sys.argv[2])))))
+IDXEOF
+)"
+[ "$idx" = "observations/one.md" ] && ok "generated index files (MEMORY.md, README.md) are not sent" || bad "an index file reached the plan" "$idx"
+
 # ---- the mass-trash guard -------------------------------------------------------------
 # A cache that remembers a hundred documents the folder no longer has is not a hundred
 # deletions, it is a rename, and throwing the notes away is the one mistake nobody sees
