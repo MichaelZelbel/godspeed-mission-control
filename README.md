@@ -1,8 +1,12 @@
 # Teach It Once: Companion Kit
 
-The reader kit for the book **Teach It Once: Set up a personal AI that knows you and works on its own** by Michael Zelbel.
+**Astronauts have mission control. This is how you build yours out of AI.**
 
-Everything the book asks you to copy, paste, fill in, or print lives here. You never have to type a template from a page.
+A personal support system that lives in a folder you own. It runs on a clock and keeps watch over the parts of your life and work you hand it. It solves what it can while you sleep and messages you only when something matters. You stay the captain. Mine once sent me a podcast episode and the minute to start at, for a health problem I had mentioned months earlier. [Two and a half minutes on YouTube](https://www.youtube.com/watch?v=KiyhltKi2H8).
+
+Not a dashboard. A dashboard shows screens and waits. This one acts, and it is the only AI you use that calls first.
+
+This kit is the hub itself, plus every template from the book **Teach It Once** by Michael Zelbel. The subtitle says what the hub is: *Set up a personal AI that knows you and works on its own*. It runs on your laptop with Hermes; developers can use Claude Code or OpenCode instead (`swap/`). An optional always-on server lives in `server/`. Everything the book asks you to copy, paste, fill in, or print is here, so you never have to type a template from a page.
 
 ## Let it set itself up
 
@@ -16,7 +20,7 @@ Whichever computer you use, one thing to run and no decisions to make. It works 
 curl -fsSL https://raw.githubusercontent.com/MichaelZelbel/teach-it-once-kit/main/install-hub.sh | bash
 ```
 
-Either one sets up your hub with the `starter-hub/` folder below already in place, installs the few things it needs underneath (Git, Node.js, and on Linux Hermes itself; on Windows it checks that Hermes Desktop is there), and makes one memory that every machine you own shares. If that computer already has a hub, it updates that one instead. Run it as often as you like; it never deletes anything you have written.
+Either one sets up your hub with the `starter-hub/` folder below already in place. It installs the few things it needs underneath: Git, Node.js, and on Linux Hermes itself (on Windows it checks that Hermes Desktop is there). It also makes one memory that every machine you own shares. If that computer already has a hub, it updates that one instead. Run it as often as you like; it never deletes anything you have written.
 
 **Windows will warn you the first time.** You will see a blue box saying "Windows protected your PC", and at first the only button is *Don't run*. Click **More info**, then **Run anyway**. Windows shows this for any program whose publisher it has not seen enough copies of yet. It is not a virus warning and says nothing about whether the program is safe.
 
@@ -42,6 +46,13 @@ git clone https://github.com/MichaelZelbel/teach-it-once-kit.git
 - `swap/`: Part VI. Config examples for running the same system on a different company's tool and model.
 
 The full chapter-by-chapter map is in `docs/CHAPTERS.md`.
+
+## What this is not
+
+- **Not a chatbot.** You talk to it, but its job is the work it does when you are not there.
+- **Not a cloud service.** A folder on your machine, and if you want one, a server you rent yourself.
+- **Not a memory database on its own.** Menerio is the optional notebook in Part VI; the hub works without it.
+- **Not finished.** See the status below.
 
 ## Status
 
