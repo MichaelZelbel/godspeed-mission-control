@@ -47,6 +47,17 @@ SYNC_SOURCES = [
 # still keeps its recipes under the hidden name only, and those must still be sent.
 SKILLS_ALIASES = (".claude/skills",)
 
+# Generated index files are not sent. They change on nearly every commit (the
+# memory index moved a counter 41 times in three weeks) and say nothing the files
+# they list do not already say; each resend made the notebook re-buy its metadata
+# pass and embeddings for a note nobody searches for.
+SYNC_SKIP_FILES = frozenset({
+    "observations/MEMORY.md",
+    "observations/README.md",
+    "skills/README.md",
+    ".claude/skills/README.md",
+})
+
 
 def source_folder(repo_root: pathlib.Path, source: dict) -> str:
     """The folder a source actually lives in on this hub: the named one, or an alias
@@ -168,6 +179,8 @@ def collect_documents(repo_root: pathlib.Path) -> list:
             continue
         for path in sorted(folder.rglob("*.md")):
             rel = path.relative_to(repo_root).as_posix()
+            if rel in SYNC_SKIP_FILES:
+                continue
             docs.append(
                 Document(
                     doc_id=rel,
