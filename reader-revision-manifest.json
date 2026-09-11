@@ -1,9 +1,9 @@
 {
   "edition": "private reader revision",
-  "date": "2026-09-08",
+  "date": "2026-09-11",
   "manuscript_title": "Teach It Once: Make AI your mission control for life and business",
-  "manuscript_sha256": "bc656e718ae652fb1fb2d77c33d7a1916f13670b2fc24a88eae583b140a1b1c1",
-  "source_scope": "Current full 35-chapter mission-control manuscript at reconciliation time",
+  "manuscript_sha256": "b5ffd3eb0a60ba9200a3176fa8e58b8ad6b2f3537bf752693ef6e0540bf8081d",
+  "source_scope": "Current full 35-chapter mission-control manuscript after the 11 September 2026 review corrections",
   "public_release": false,
   "program_behavior_changed": false,
   "reconciled_files": [
@@ -61,7 +61,8 @@
     "starter-hub/prompts/library/README.md",
     "profile/spring-clean-checklist.md",
     "profile/mirror-test.md",
-    "server/steps/build-the-server.md"
+    "server/steps/build-the-server.md",
+    "skills/summarize-for-me.md"
   ],
   "verification": "Exact printed skill/recipe extraction, JSON parsing and static guidance checks only; operational tests reported separately."
 }

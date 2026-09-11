@@ -13,14 +13,14 @@ Copying `starter-hub/` alone gives a folder layout, not all installed commands, 
 ## What is here
 
 - `profile/`: reviewed-context import, people, projects, writing style and capture guidance.
-- `skills/`: starter recipes, the decision-preparation skill and complete research-watch skill.
+- `skills/`: starter recipes as printed in the book, each with its name and description header, plus the decision-preparation skill and the complete research-watch skill.
 - `procedures/`: exact revised build instructions for schedules, brief, investigation, weekly review, watches, deadlines and credential expiry.
 - `practice/maintenance-classes/`: Robin's fictional inputs, installed only in a separate practice hub.
 - `living/`: privacy, evidence, saved prompts and the current build checklist.
 - `menerio/`, `server/` and `swap/`: optional notebook, server and alternate-assistant guidance.
 - `starter-hub/`: initial folder files. Conversation collection is optional and defaults off.
 - `tools/`: installed command sources; these scripts were not rewritten in this guidance reconciliation.
-- `tests/mission-control/`: earlier isolated approval fixtures, distinct from Robin's chapter exercise.
+- `tests/mission-control/` and `skills/work-through-a-decision/`: earlier isolated approval fixtures and their recipe, kept for the record. The book does not use them; its decision skill is `skills/prepare-a-decision/`.
 
 `docs/CHAPTERS.md` maps this edition's chapter numbers. `reader-revision-manifest.json` identifies the manuscript used. No paid plan, credit allowance, complete archive or automatic success is promised by the presence of a file.
 
