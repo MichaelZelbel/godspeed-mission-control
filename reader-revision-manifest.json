@@ -2,8 +2,8 @@
   "edition": "private reader revision",
   "date": "2026-09-11",
   "manuscript_title": "Teach It Once: Make AI your mission control for life and business",
-  "manuscript_sha256": "7231e53015c6f77df437693131f7ad16a5a9e0c476a3bf24bc4c8016e97605e0",
-  "source_scope": "Current full 35-chapter mission-control manuscript after the 11 September 2026 review corrections",
+  "manuscript_sha256": "824d7316fcf36bf0e8ae957a7f48189b5f782df726476d796e96a1d92645f1d2",
+  "source_scope": "Current full 35-chapter mission-control manuscript after the 11 September 2026 review corrections and the hedge-removal pass",
   "public_release": false,
   "program_behavior_changed": false,
   "reconciled_files": [
