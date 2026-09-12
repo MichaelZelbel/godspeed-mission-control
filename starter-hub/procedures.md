@@ -1,6 +1,6 @@
 # Procedures: automatic jobs
 
-No automatic jobs are recorded yet. Add only jobs actually inspected or explicitly mark a proposed job as not scheduled. Chapter 21 explains the register.
+No automatic jobs are recorded yet. Add only jobs actually inspected or explicitly mark a proposed job as not scheduled. Chapter 20 explains the register.
 
 <!-- Template only; this is not an installed schedule.
 ## Job name

@@ -1,57 +1,38 @@
-# Chapter 33: Try Your Hub With Another AI Assistant
+# Chapter 32: Try Your Hub With Another AI Assistant
 
-Try opening your hub with another assistant. How much can it learn from the files without asking you to give the whole introduction again? This is a useful test of what you own: the background and methods you've saved, and the work still needed to make a new tool use them well.
+After putting this much care into your files, it's worth finding out how well they work with another assistant. Choose a job you know and let a second tool try it. You'll see which background and methods it can use immediately, and which parts of the setup still need your attention.
 
-You can do the basic test with local files alone. If you skipped the online notebook, you haven't skipped a requirement for this chapter.
+There are two different experiments here. Changing the model inside Hermes compares the software producing the answers. Changing the whole app also tests file access, instructions and permissions. Begin with the smaller change when that answers your question.
+
+## Try another model inside Hermes
+
+To compare models, keep Hermes and your files in place. Give each model the same task, source material and instructions so you can judge the difference in its work. Ask Hermes to show the models available through your current access and help you select one. Its `hermes model` command opens the provider and model picker when needed. Check any new cost before choosing, then try a familiar task you care about. The app can look exactly the same while the model does noticeably different work. Knowing the task gives you something better than a first impression to judge it by.
+
+Hermes also supports fallback models, meaning alternatives it can try when the first provider fails. This is optional. Ask it to inspect the current fallback list and propose an addition only if you want one. The alternative needs valid access and enough allowance. It may not run often, but it is still a service that can charge for use or fail when called.
+
+I checked this in an isolated test with simulated providers. The first returned a rate-limit error; the backup returned a distinctive word. With the backup configured, I got the word. Without it, I got the error.
 
 ## Prepare a second assistant
 
-I used OpenCode with a Moonshot model through OpenRouter for the earlier test. To try that route, first check the current [OpenCode documentation](https://opencode.ai/docs) and [OpenRouter model listing](https://openrouter.ai/models). The example gives you a starting point, not a reason to keep using a model that no longer suits the job.
+I used OpenCode, another assistant that works with local files, with a Moonshot model supplied through OpenRouter. OpenRouter is a service that provides access to models from several makers. That was my earlier test, not a requirement to buy another account.
 
-If you choose that route, install OpenCode with the command documented for your platform. The tested Node.js route was:
+Ask your current assistant to prepare the second app:
 
 ```
-npm install -g opencode-ai
+Help me test this hub with OpenCode. Read the current official installation, configuration and provider documentation. Inspect what is already installed before adding anything.
+
+Use a provider account and model I choose after seeing the current access requirements and cost. Do not sign me up, fund an account or copy a credential into chat.
+
+Install the supported version for this computer if needed. Preserve existing configuration and AGENTS.md. Set permission to ask before file edits and shell commands. Inspect combined project and user settings for other active connections; do not silently enable them.
+
+Prepare a secure local sign-in or masked token-entry step and open the assistant in this hub. Confirm the folder and configured model. Keep schedules unchanged.
 ```
 
-The `npm` command comes with Node.js. If you don't have it, use the official Node.js installer first. An OpenRouter account, and any payment to fund it, is a separate choice. Check the current usage price and limits before paying.
+*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-32-text-1-20260913)*
 
-Save this base configuration as `opencode.json` beside `AGENTS.md`. Preserve an existing configuration and compare changes before replacing it.
+The [OpenCode installation guide](https://opencode.ai/docs/) lists the supported routes, and its [configuration guide](https://opencode.ai/docs/config/) explains how project and user settings combine. The assistant can handle the installation and settings. You choose any paid access and complete the secure sign-in.
 
-```json
-{
-  "model": "openrouter/moonshotai/kimi-k3",
-  "permission": { "edit": "ask", "bash": "ask" }
-}
-```
-
-That model name belongs to the earlier test. Check that it is still available, or choose a current model and record which one you used. This example doesn't add a notebook, but OpenCode combines project settings with user settings. Inspect the combined configuration for connections enabled elsewhere. The [configuration reference](https://opencode.ai/docs/config/) explains how they fit together.
-
-## Load the provider key without writing it in chat
-
-Ask your assistant to confirm your terminal type and prepare a masked local input method. The key should reach the program you launch, without being written in the hub or shell history.
-
-For PowerShell, this pattern asks for the key without displaying it. Run `opencode` from that same terminal afterwards:
-
-```powershell
-$providerSecret = Read-Host 'OpenRouter API key' -AsSecureString
-$env:OPENROUTER_API_KEY = [System.Net.NetworkCredential]::new('', $providerSecret).Password
-opencode
-Remove-Item Env:OPENROUTER_API_KEY
-$providerSecret = $null
-```
-
-For a Bash terminal on macOS or Linux:
-
-```bash
-read -r -s -p 'OpenRouter API key: ' OPENROUTER_API_KEY
-printf '\n'
-export OPENROUTER_API_KEY
-opencode
-unset OPENROUTER_API_KEY
-```
-
-The value is available to the launched process while it runs. Removing it afterwards does not erase records a provider already received. Keep access limited as in Chapter 19.
+A configuration can name a credential without containing it. The running app still needs the real value through its sign-in store or a locally supplied environment variable, a named value available to a program. Let the assistant prepare that input method for your computer. Do not paste the value into a normal conversation.
 
 ## Test the local files first
 
@@ -61,81 +42,49 @@ Open the second assistant in your hub and ask:
 Whose folder is this, what are the house rules you must follow here, and which file would you check for what matters most right now? Answer from what is in the folder. Do not change anything. Name the files you actually read.
 ```
 
+*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-33-box-5)*
 
 In the 2 September 2026 test with fictional illustrator Sam's folder, the answer began:
 
 > **1. Whose folder is this**
 > Sam Okafor's, a freelance illustrator based in Bristol, UK, who draws for children's publishers and the occasional brand (from `profile/about-me.md`). This folder is Sam's "hub": the shared world of profile, rules, skills, procedures, and decisions that `AGENTS.md` says to read first every session.
 
-It also found Sam's project priorities. That was what I wanted from the first check: it could read the files and use them to answer. I would still test its actions before trusting it to follow every instruction in later work.
+It also found Sam's priorities. That was a useful first result: the new assistant had read the files and used them in its answer. I still wanted to see it do a job. Describing the house rules correctly is promising, but it isn't much of a test of behaviour.
 
-Next choose a skill you actually have. If you installed the day-planning skill, use:
+For the next question, choose one of your saved skills. If you installed the day-planning skill, use:
 
 ```
 Read skills/plan-my-day/SKILL.md. In three sentences, explain what it produces and the limits it follows. Do not execute the skill or change anything. End with exactly: Nothing modified.
 ```
 
+*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-33-box-6)*
 
-In the original test it described the older recipe accurately and finished with “Nothing modified.” That recipe put the most important task first. The current one preserves fixed commitments, so compare your answer with the skill you actually have. You don't need to recreate an old planning rule to pass this test.
+The original test described the older recipe correctly and ended with “Nothing modified.” Compare your answer with the skill file you have now, since the recipe may have changed. You're checking how accurately this assistant read your method, not how closely it repeated my result.
 
-Look for unexpected folder changes afterwards. Then give the skill harmless input and try the work itself, as in Chapter 16. Describing a recipe and cooking from it are different tests; here we want to know both that it can find the skill and that it can use it.
+Ask for a check of unexpected file changes, then try the skill with harmless input you can judge. Compare its result with the actual source and the saved instructions. Now you can compare what the assistant says it will do with what it actually does. I put more weight on the second result.
 
 ## Optional: add the notebook
 
-If you completed the notebook connection in Chapter 29, you can now try this expanded configuration. It adds the notebook to the basic example. Keep any other settings you deliberately chose when making the change.
+If you use Menerio, the optional online memory service, give this new app its own read-only connection. Ask the assistant to configure its remote MCP tools at `https://mcp.menerio.com`, preserving other settings and referring to a credential name rather than writing the value into the configuration. Enter the key through the secure local method it prepares.
 
-```json
-{
-  "model": "openrouter/moonshotai/kimi-k3",
-  "permission": { "edit": "ask", "bash": "ask" },
-  "mcp": {
-    "notebook": {
-      "type": "remote",
-      "url": "https://mcp.menerio.com",
-      "headers": { "Authorization": "Bearer {env:MENERIO_API_KEY}" }
-    }
-  }
-}
-```
+Test that the connection returns tools before asking a question. If you do not use Menerio, skip this section; the local-file test is complete without it.
 
-Load `MENERIO_API_KEY` with the same masked input pattern, substituting that variable name and your notebook key. Start OpenCode from that terminal and remove the temporary variable afterwards. The `{env:...}` reference holds the variable's name, not the secret.
-
-Then use a note you deliberately stored in the notebook. For the fictional Nadia notes:
+Then use a note you stored in the notebook. For the fictional Nadia notes:
 
 ```
 Use my notebook tools to look up who Nadia is and how she wants bad news delivered. Report what the notebook returned and identify the notes. Do not read local files for this answer. State any gap and change nothing.
 ```
 
+*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-33-box-8)*
 
-It found the same gap as the notebook test in Chapter 29: Nadia's preferences were there, but her role wasn't. The answer stayed with that source instead of borrowing the missing detail from Sam's profile. That made it much easier to see what the connection had actually contributed.
+In the earlier test, the answer found Nadia's preferences in the online notes, but not her role. It didn't borrow that detail from Sam's profile. That let me see what the notebook connection had supplied, without a helpful guess covering the missing part.
 
 ## Check what did not transfer
 
-Your files can travel without taking every application setting along. Check permissions, credentials, messenger connections and schedules in the new tool. Hermes' saved jobs are still in Hermes until you deliberately move them.
+Your files can travel farther than your app settings. Check permissions, credentials, messenger connections and schedules in the new tool. A job saved in Hermes keeps running until you pause or stop it there; it has no way to know you've developed an interest in another assistant. Opening the same folder elsewhere won't move that schedule, and creating a new one won't stop the original.
 
 Keep the new assistant set to ask before edits and commands while you're testing. Check its own documentation for skill discovery. Two applications reading `AGENTS.md` can still behave differently with the same folder.
 
-My three-question OpenRouter test cost a few cents. Yours may cost something different, especially during a long session that reads much more text. Providers bill in tokens, small pieces of text, so look at the model's current rates and your account's actual usage.
+My three-question test through OpenRouter cost a few cents. A longer session reading many files will cost more. Providers charge in tokens, small pieces of text. Check the model's current rates and your usage after the first real job, before deciding how much work to give it.
 
-## Try another model inside Hermes
-
-Changing a model within Hermes is a smaller change than changing the application. Its model picker is available through:
-
-```
-hermes model
-```
-
-Read the current provider choices and costs, then try a task you care about with the new model. A familiar application can produce noticeably different work after that change.
-
-Hermes also supports backup models tried in order when the first provider fails. Inspect the configured list with:
-
-```
-hermes fallback list
-```
-
-Use the current help for `hermes fallback add` to set one up. Give the backup provider valid access and enough allowance too. It is another service that can fail or charge for use, even though you hope not to need it often.
-
-I checked this in an isolated test with simulated providers. The first returned a rate-limit error; the backup returned a distinctive word. With the backup configured, I got the word. Without it, I got the error. That showed the switch working in the test. Real providers still need their own access and failure checks.
-
-
-You don't have to choose a permanent winner among assistants. Keep the profile and skills you have worked on, and test a new tool against work you can judge. Changing applications should mean checking the new setup, not trying to remember everything you taught the old one.
+You don't need to choose an assistant for life. Keep the files you've worked on, and give each new tool a familiar job before trusting it with more. The useful lessons are already written down. Your next experiment can begin with those.

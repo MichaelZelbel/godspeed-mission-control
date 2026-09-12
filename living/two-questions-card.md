@@ -1,8 +1,8 @@
-# Chapter 20: Check AI's Answers Before You Act
+# Chapter 19: Check AI's Answers Before You Act
 
-An answer arrives with a confident explanation and a source link. It looks ready to use. Before you act on it, take one more look: did the assistant check the source, and does that source say what the answer claims? Those are two separate questions, as I learned while checking a price.
+A clear explanation with a source link looks like research. During a price check, I discovered how much work the word *looks* was doing. I needed answers to two separate questions: had the assistant read the source, and did the source support what it said?
 
-Practise with something small, such as the advertised price of a tool you're comparing. Ask where the price comes from, when it was checked and what conditions affect it. You aren't buying anything. You're seeing how well the answer survives a closer look.
+Try this on a small claim, such as the advertised price of a tool. Ask where the price came from, when it was checked and what conditions apply. It's a useful way to get acquainted with an answer before introducing it to your credit card.
 
 ## Two useful questions
 
@@ -10,13 +10,17 @@ Practise with something small, such as the advertised price of a tool you're com
 Did you check that, or do you remember it?
 ```
 
+*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-19-text-1-20260913)*
+
 ```
 What would make this wrong?
 ```
 
-The first question asks where the answer came from. The second asks what could change it. They give you something to investigate instead of leaving you with a vague feeling that the answer might be wrong.
+*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-19-text-2-20260913)*
 
-You'll find them on `living/two-questions-card.md` in the kit, but the wording needn't be ceremonial. Ask in your own words. You want to know if the assistant remembered an answer or read a source, then whether that source is enough for the decision.
+The first question asks where the answer came from. The second asks what could change it. Together, they give you something more useful to work on than a general feeling of distrust: a source to inspect and a condition to test.
+
+You'll find both questions on `living/two-questions-card.md` in the kit. Use your own words if you prefer. The distinction you want is whether the assistant remembered an answer or read a source, and whether that source is enough for your decision.
 
 ## The price demonstration
 
@@ -31,7 +35,7 @@ While preparing the earlier manuscript, I asked Hermes about paid ChatGPT plans 
 >
 > Regional taxes, currency conversion, and billing terms can change the final amount.
 
-It looked usable: named plans, amounts and a note about tax. When I asked whether it had checked, it answered:
+The comparison looked ready to use, down to the sensible note about tax. When I asked whether it had checked, the assistant replied:
 
 > I remembered it; I didn't check the web.
 
@@ -39,15 +43,15 @@ Asked what could make the answer wrong, it included:
 
 > - A newer paid tier exists that I omitted.
 
-I asked it to check. The next answer added plan choices and changed some billing details. That sounded like progress. But I still had only its word that it had checked the current pages.
+I asked it to check. The next answer added plan choices and changed some billing details, but I still hadn't seen what the pages actually said.
 
-When I asked for exact links, it admitted that the pages didn't establish every statement it had made. Some links were incomplete. I had asked for a checked answer and received another answer I needed to check.
+When I asked for exact links, it admitted that the pages didn't support everything in the answer. Some links were incomplete. The comparison had looked finished well before the research was.
 
-For a comparison now, open [OpenAI's pricing information](https://learn.chatgpt.com/docs/pricing) and check the terms for your account and region. The audit on 8 September 2026 found multiple Pro price levels; plans and allowances may change again. Also keep Codex usage limits separate from ordinary chatbot-message limits. A shared plan name doesn't make those limits identical.
+For a comparison now, open [OpenAI's pricing information](https://learn.chatgpt.com/docs/pricing) and check the terms for your account and region. When I opened that page on 8 September 2026, the Pro plan had more than one price level. Hermes uses your account's Codex access through its ChatGPT sign-in. Check that allowance rather than inferring it from what ordinary chat allows; OpenAI currently also shares it with ChatGPT Work.
 
 ## Check the claim against the page
 
-Ask the assistant to show the specific source for each important claim. Then open it. Does the page give the price for your billing period? Is tax included? Does the quoted feature apply to that plan? A page can be official and still not answer your particular question.
+Ask for the source of each claim that could change your choice, then open it. For a price, check the billing period, tax and which plan includes the feature you want. An official page can be perfectly accurate about something other than your question.
 
 Use a short prompt like this:
 
@@ -59,7 +63,9 @@ For each claim, explain what the source establishes and what it does not. Separa
 Do not make a purchase or commitment.
 ```
 
-A link gives you a place to look. It doesn't settle the matter on its own: a source can be old, incomplete or wrong, or the assistant can apply it to the wrong situation. Let the confidence of the answer grow only as far as the evidence supports it.
+*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-19-text-3-20260913)*
+
+A working link gives you access to the cited page. Read the part that is supposed to support the answer: the page could be old, incomplete or wrong, or the assistant could have applied it to a different case. This is how you find out which claims have evidence behind them and which still need work.
 
 ## Keep four kinds of statement apart
 
@@ -70,26 +76,26 @@ A link gives you a place to look. It doesn't settle the matter on its own: a sou
 | Recommendation | The assistant advises a choice using the evidence, assumptions and your goals |
 | Completed action | Something happened and left a result that can be checked |
 
-A drafted message has not been sent. A file containing a backup plan is not a completed backup. A comparison built on an assumed budget does not establish what you can afford.
+These distinctions change what you do next. A draft is ready to review before you decide to send it; a backup plan still needs carrying out. An assumed budget helps you explore a choice, but you'll need the real budget before deciding you can afford it.
 
-That distinction matters with people too. Exploring how a conversation might go can help you prepare. It can't tell you how the other person will actually respond.
+Leave the same room for uncertainty with people. Working through a possible conversation can help you prepare what to say. The other person still gets to surprise you.
 
 ## Try a check that should fail
 
-You can practise a different kind of check with a file you already have. Use the disposable backup file from Chapter 18, or make a new practice copy. Ask the assistant to compare its contents with one exact sentence you expect to find.
+Let's check a result whose correct answer you already know. Ask the assistant to create a new practice file containing “The meeting is on Tuesday.” Have it compare the file with that exact sentence. Then ask it to change Tuesday to Wednesday and repeat the comparison against the original sentence.
 
-Change one word in the practice copy and repeat the comparison. The result should name the difference. Then restore the saved version and check again. Leave the real profile and live credentials alone.
+The result should name the changed day. Ask it to restore Tuesday and check once more. The same check has now seen a correct result, an incorrect one and the repair, all in a practice file.
 
-Now you've seen whether the check notices the change and then recognises the restoration. That's more revealing than one success message. A check that only asks whether the file exists could cheerfully pass all three versions.
+The check should notice the changed word and then recognise the restored sentence. A test that only asked whether the file existed could pass all three times, without noticing anything you did. Deliberately giving it a wrong answer reveals what it is actually testing.
 
-I met both kinds of mistake in a later credential-checking project. One check accepted unrelated text as a valid answer and raised a false alarm. Another compared no items at all and reported agreement. Neither result was useful. Today's small file exercise lets you practise the same lesson without setting up that project: say exactly what a passing result must show.
+I have had checks fail both ways. One accepted unrelated text as a valid answer and raised a false alarm. Another compared nothing at all and reported agreement, which is certainly an efficient way to reach a conclusion. Both taught me to specify exactly what a passing result must show.
 
-## Match the check to the stakes
+## Check harder when more depends on it
 
-Save this care for answers you're about to use: a number you'll quote, a message you'll send, a purchase you're considering. You don't have to cross-examine every casual sentence to get value from an assistant.
+Spend this care on answers you're about to use: a number you'll quote, a message you'll send, a purchase you're weighing up. Casual conversation doesn't need to become a court hearing. Give your attention to the details that could change what you do.
 
-Medical decisions require more than a verified page. An assistant can prepare questions and sources for a qualified clinician; it cannot establish that a treatment change suits a particular person. Keep professional judgment where the decision requires it.
+Medical decisions require more than a verified page. An assistant can prepare questions and sources for a qualified clinician; it cannot tell you whether a change is right for you. Keep professional judgment where the decision requires it.
 
-For ordinary work, ask it to bring the evidence with the result. You shouldn't have to repeat its whole research job before using the answer. Focus your attention on the uncertainty that could change your decision.
+For ordinary work, ask the assistant to bring the evidence with the result. It should have done the reading already. Spend your attention on the few uncertain claims that could change your decision, and send it back to finish any missing research.
 
-Once you can judge a result, you can begin to let a job start without you. We'll keep the first scheduled job small enough that you can still see what happened and decide whether it helped.
+This is particularly useful when a job runs while you're away. The prepared result should let you see what was done, what supports the answer and what still needs a decision. Your return is the time to judge the work, not to reconstruct it.

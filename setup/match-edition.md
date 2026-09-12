@@ -1,0 +1,13 @@
+# Match an installed hub to this review edition
+
+These are instructions for the assistant carrying out the Chapter 2 request. The installers supply the programs and current public starter files. This guide aligns shared instructions with the matching review package; it is not a replacement installer.
+
+1. Confirm the intended hub path and read its AGENTS.md, relevant rules and the matching kit's starter-hub/AGENTS.md. Preserve the user's profile, decisions, records, custom rules and unrelated work. Make a local recovery copy of guidance before editing. Do not upload it.
+2. Merge the shared guidance for finding skills, preserving original captures, recording decisions, keeping the project list and saving local world records. Explain in the instructions that world/ works without Menerio. Keep the user's specific choices where they already answer a question; do not import the kit author's personal preferences as user facts.
+3. Copy the kit's starter-hub/world/README.md as the record-format guide, preserving existing records under world/. If an existing format guide has custom instructions, merge rather than discard them. Create missing record folders. Preserve origin markers and dated history.
+4. Compare the source rule files. Bring in the clarification that a clear request to edit a file authorises that edit while a general tidy-up does not permit deleting unrelated material. Preserve stronger user limits and exceptions. Keep approval of a first remote upload separate from permission for future uploads. Use the installed hub-compile-rules program and check the generated block. If it is missing, diagnose that installation step instead of hand-editing the generated block.
+5. Inspect the installed assistant's context-file allowance. Keep AGENTS.md below the smaller of that allowance and 19,000 characters, moving examples to reference files if necessary. Preserve behaviour rules and verify referenced files exist.
+6. Inspect optional conversation-collection and notebook-copying jobs, including a notebook post-commit hook if present. The first-install request leaves them off. Disable only these kit jobs, preserving other schedules and custom hooks. Report any service already connected, without printing credentials or silently expanding its access.
+7. Show which guidance changed, what remained personal, whether the compiled rules are current, and any unverified installation step. Do not create schedules, connect a service or upload files.
+
+For a fresh server hub using this kit, the same guidance applies after the server installer completes. Preserve the server's paths and working connections; do not copy desktop-specific settings into them.

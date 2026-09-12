@@ -1,5 +1,4 @@
 {
-  "model": "openrouter/moonshotai/kimi-k3",
   "permission": {
     "edit": "ask",
     "bash": "ask"

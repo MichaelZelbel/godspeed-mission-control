@@ -1,18 +1,9 @@
-# Starter skills for Chapters 12 to 14
+# Choose one starter skill
 
-Begin with the summary skill you built in Chapters 12 and 13. Chapter 14 adds email, planning, meeting and update recipes, plus a decision-preparation skill. Install only what you need.
+Build and adapt a summary skill in Chapters 11 and 12. Chapter 13 adds the email, day-plan, meeting, update and decision recipes. Ask the assistant to install only the one you need.
 
-The four loose files below include a name and description header. Copy a chosen file to your hub as `skills/<name>/SKILL.md`, using the name in its header. A loose file is teaching material, not proof that the assistant can discover it automatically. Confirm discovery in a fresh session using Chapter 12, then test its behavior using Chapter 16.
+Each loose recipe includes a name and description header. Have the assistant copy it to skills/<name>/SKILL.md in your hub, using the name in the header. Compare an existing adapted skill before changing it. Check discovery in a fresh session, then test the result on a real input.
 
-| Recipe | Kit source | Destination in your hub |
-|---|---|---|
-| Summary | Your own Chapter 12/13 skill; `summarize-for-me.md` is a basic alternative | `skills/summarize-for-me/SKILL.md` |
-| Email reply | `answer-email-my-way.md` | `skills/answer-email-my-way/SKILL.md` |
-| Day plan | `plan-my-day.md` | `skills/plan-my-day/SKILL.md` |
-| Meeting preparation | `prep-me-for-a-meeting.md` | `skills/prep-me-for-a-meeting/SKILL.md` |
-| Status update | `draft-my-update.md` | `skills/draft-my-update/SKILL.md` |
-| Decision preparation | `prepare-a-decision/SKILL.md` | `skills/prepare-a-decision/SKILL.md` |
+The files are answer-email-my-way.md, plan-my-day.md, prep-me-for-a-meeting.md and draft-my-update.md. The decision skill is already in prepare-a-decision/SKILL.md. summarize-for-me.md is a simple alternative to your own summary method.
 
-The four Chapter 14 bodies and decision skill match the printed revision. The day plan preserves fixed meetings; it does not force a task rejection. The meeting brief distinguishes documented purpose, inference and your recorded limits. Every external draft still needs review and permission before sending.
-
-Keep your adapted skill if it already serves you. Compare these instructions before replacing it. Copying a recipe does not create a schedule.
+Saving a recipe does not create a schedule or prove that the assistant can select it. Every external draft still needs your review before sending.

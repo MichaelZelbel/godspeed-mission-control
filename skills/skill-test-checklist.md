@@ -1,58 +1,89 @@
-# Testing a Skill (Chapter 16)
+# Chapter 15: Check That Your AI Skills Work
 
-Three tests. None of them takes more than a minute, and each one finds a
-different kind of broken.
+A skill can give you a good answer and still need your help every time. By then, the conversation may hold quite a history: background from twenty messages ago, a corrected date, a note about where to look. Some of that reached the saved instructions; some may still live only in the chat. We need to find out how much help the file can provide when that conversation is gone.
 
-## Test 1: the cold start
+## Test 1: start fresh
 
-Open a brand new session with your folder attached. No history, no
-warm-up, no explaining. Name the skill, give it the input, take your
-hands off the keyboard.
+Choose a skill and save a realistic test input. Open a new session in the hub, name the skill and provide only the input its instructions require. Wait for the result before adding hints.
 
-What you are looking for:
+Start with the details that matter most to the job: the source the skill must read, the date it must keep, the promise it must leave to you. Check these against the saved input and instructions.
 
-- The shape came out right without you steering it.
-- Where a fact was missing, it left a visible hole or asked, instead of
-  filling the gap with something plausible.
-- Every numbered rule was obeyed.
+I used a weekly client-update skill for Sam, the fictional illustrator whose client Nadia was waiting for his cards. This historical test used July practice files that requested two options in a bad-news message. Other examples use revised files with three. The different counts reflect different test inputs, not a rule about how many options you should offer.
 
-A rule that gets broken here is usually a rule that was wrong, not an
-assistant that misbehaved. Read it again and ask whether it can actually
-be followed in the situation the run was in.
+The fresh-session reply began:
 
-## Test 2: the stranger
+> **Gaps I need from you first**
+>
+> Cards 16 to 20, no status given. Where are they?
+>
+> The 28th is two days out. Do you still expect to hand her all 20 on the 28th, or is a partial delivery now the honest picture?
 
-Paste the recipe text into a plain chat with no folder attached, add a
-realistic input, and send. Do not help it.
+It also left a delivery date undecided:
 
-- **Good failure:** it names the files it cannot find and refuses to
-  invent. Your recipe is honest about what it depends on.
-- **Bad pass:** it produces a smooth, complete, confident answer built
-  out of guesses. A vague recipe does not fail, it improvises, and
-  improvisation looks exactly like competence.
+> Cards 13 to 15 are in second-pass colour and I'll have them in front of you [WHEN, needs your call].
 
-If you get the bad pass, the fix is always the same: replace every
-"you know my style" with a file path, and every adjective with a number.
+It hadn't invented a date, which was what I wanted. It had also asked questions outside the draft, despite my request for a draft only. Reading it again, I could see my contribution to the problem: I'd asked for a complete message without supplying the facts to complete it. The assistant had to put the missing information somewhere. Giving it a short line above the draft made the instruction possible to follow honestly.
 
-## Test 3: the rule check
-
-The cheapest of the three. Paste an answer the skill gave you, together
-with the recipe, and ask:
+The revised instruction became:
 
 ```
-Check the reply below against every numbered rule in
-skills/<your-skill>/SKILL.md. For each rule say kept or broken, and quote the
-part that broke it. Do not rewrite the reply.
+6. Give me the draft only. If something is missing, put it in a single line above the draft that starts with "Need:" and nothing else.
 ```
 
-This catches the silent misses: the rule that exists, reads well, and was
-simply not applied. Limit worth knowing: the check only sees what you
-paste, so paste the whole exchange if the rule depends on what you said
-earlier.
+*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-15-text-1-20260913)*
 
-## The habit that matters more than the tests
+## Test 2: remove a required source
 
-**The second time you make the same correction, it becomes a line in the
-file.** Once is a nudge. Twice is a rule announcing itself. Corrections
-made in chat evaporate with the conversation; corrections made in the
-file hold on the days you are too tired to notice.
+Ask the assistant to create a separate, empty practice folder, then open it in a new session. Provide the skill text and a realistic job, but leave out one source the instructions require. Tell the assistant to use only the supplied practice material. Leave your working hub where it is. We can test a missing file without removing files you use for real work.
+
+A skill that requires profile files should tell you when it can't find them. A limited result is useful if it makes the gaps clear. Filling those gaps with invented background would defeat the test.
+
+The reply was:
+
+> I can't run the recipe: `profile/projects.md` and `profile/voice.md` aren't in the working directory (it's empty). The recipe says to read Nadia's entry first and use nothing else. Without it I'd have to invent context, which the recipe forbids.
+
+That reply gave me a problem I could fix: supply the missing files. I prefer finding that out while the message is still a draft, with nobody waiting for a promise I didn't mean to make.
+
+Then I tried vague instructions about using what it knew, instead of naming the files. The update thanked the client for approving work she had never approved, and signed the message with my name rather than Sam's. Sam's files weren't in the practice folder. My name still found a way into the draft, a reminder that a fresh folder doesn't remove every piece of machine or account memory.
+
+The invented approval was easy to miss because the update looked useful. Name the files your skill needs and explain what to do when they are absent, then repeat the test. In this test, the named-file version gave me a clear report of what was missing instead of a message whose confidence I had to untangle.
+
+## Test 3: compare the reply with the rules
+
+Now ask the assistant to check the answer against the instructions. Give it the complete input, the resulting answer and any required profile files, so it has the material needed to judge. Replace `[path to your chosen SKILL.md]` below with the skill you tested; for the summary skill from Chapter 11, use `skills/summarize-for-me/SKILL.md`.
+
+```
+Check the reply below against every requirement in [path to your chosen SKILL.md] and the source material supplied with it.
+
+For each rule, say kept, broken or cannot check. Quote the relevant evidence. Do not treat the reply's own claim as proof. Name missing input needed for a judgment. Do not rewrite the reply yet.
+```
+
+*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-16-box-2)*
+
+The earlier email recipe asked for uncertainty marks, then insisted on a draft with no extra remarks. When I asked the assistant to check the result, those instructions collided:
+
+> 1. Kept. The reply marks its guesses with `[CHECK]`: "[CHECK: confirm delivery date]", "[CHECK: confirm interest]"
+>
+> 5. Broken. The reply contains commentary inside the draft, rather than giving the draft only: "[CHECK: confirm delivery date]", "[CHECK: confirm interest]"
+
+It counted the marks as extra remarks. Under that reading, I had managed to make the same marks both compulsory and forbidden. I could see why the instructions appeared to disagree. The current email recipe explicitly allows marks inside the draft and a short line above it for missing sources. The assistant no longer has to choose which part of the request to break.
+
+The same test found that one draft offered a single option where that practice voice file asked for two:
+
+> 2. Broken. The bad-news section gives only one option, not two: "I can have them with you by [CHECK: the 4th]"
+
+The two-option requirement belongs to Sam's practice file; your own voice file supplies the number for your test.
+
+## Test advice as well as formatting
+
+For a decision skill, remove one essential source from a copy of the input and see what happens. Then give it two competing goals without saying which should win. Look for the unresolved choice in the answer. Being told what you still need to settle is more help than a tidy recommendation that quietly settles it for you.
+
+The assistant can miss mistakes in its own answer, including mistakes it made confidently the first time. Check the few claims that drive your decision against the quoted evidence yourself. Bring in an independent source or qualified reviewer when a lot depends on the answer.
+
+## Keep the failure that taught you something
+
+Save the input and failed result beside your test notes. After changing the skill, run that input again in a fresh session. You already know where to look, so you can see whether the repair addressed the failure that prompted it.
+
+Sometimes the rule is already clear and the assistant missed it. Look at the record of what it read and where its answer went wrong before rewriting the instructions. A louder version of the same sentence doesn't explain why it was missed the first time.
+
+The awkward draft can also help you check later improvements. Keep it long enough to see whether the old problem returns.

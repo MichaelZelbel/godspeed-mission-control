@@ -1,8 +1,8 @@
-# Chapter 24: Set Up an Automatic Weekly Review
+# Chapter 23: Set Up an Automatic Weekly Review
 
-You wrote down the new deadline. Somewhere. Meanwhile, the project file still has the old one, and the assistant has no reason to know which you meant. A weekly review can catch that kind of loose end, file the clear updates and bring you the ones that need a decision.
+Saving a useful note and filing it are two different pleasures. I have been rather more reliable at the first. The new deadline gets captured, but the project file still shows the old one. When the assistant reads both, it has a question instead of an answer.
 
-It can also look past the activity and ask whether the week moved your priorities forward. A week can be exhausting without having done much of that.
+A weekly review can file the clear changes and bring you the questions the notes can't settle. It also uses dated work and earlier reviews to show what moved forward. You get the week's work in view, with some of the maintenance already done.
 
 ## Build a review that preserves its evidence
 
@@ -13,7 +13,7 @@ Read AGENTS.md, profile/, decisions.md, inbox/ and the latest earlier review in 
 
 File only clear factual captures. Preserve writing samples, unresolved import questions and other noncapture material. For each filed capture, make the smallest supported update to its proper file, then move the original into archives/filed-captures/ with a unique name. Never overwrite an archive entry. Keep uncertain captures in inbox/. Report source, destination and exact change.
 
-Distinguish a factual update from a proposed behavior rule. Leave proposed rules in inbox/ until I confirm them and the rule workflow is available. A confirmed behavior rule belongs in rules/ and must be compiled with hub-compile-rules; do not hide it in a profile fact or observation. Report any compilation failure.
+Distinguish a factual update from a proposed behavior rule. Leave proposed rules in inbox/ until I confirm them. A confirmed behavior rule belongs in rules/ and must be compiled with hub-compile-rules; do not hide it in a profile fact or observation. Report any compilation failure.
 
 Before filing, save a local version-history snapshot of the affected files under the hub's rules. If a recoverable snapshot cannot be made, prepare proposed changes without applying them and report why. Send or publish nothing.
 
@@ -21,59 +21,57 @@ Write a new dated review in reviews/. Preserve existing reviews. Include progres
 
 Keep the summary under 250 words. Put the full filing record below it when needed; never omit a move merely to shorten the summary. Skip empty sections.
 
-On the first review of each calendar month, include one optional reminder to use Chapter 1's current context-summary prompt in another AI tool if there is useful new context there. A summary is not a conversation export. Record that the monthly check ran so a same-month retry does not repeat it unnecessarily.
+Only if prompts/library/bring-your-context-with-you.md exists and I still use another AI tool, include one reminder on the first review of the month to bring over useful new background. Do not claim to know what the other tool contains. Record that the reminder was included so a same-month retry does not repeat it.
 
 For a test, accept a separate practice destination. Do not replace the real review or file real captures while testing fictional inputs.
 ```
 
+*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-24-box-1)*
 
-Read the skill and try it before scheduling. It keeps the original captures in `archives/filed-captures/`, and saves the earlier profile version before changing it. If you disagree with a filing decision, you should have something to go back to.
+Read the skill and try it before adding a schedule. It asks the assistant to save a version of the affected files and keep original captures in `archives/filed-captures/`. That matters because filing involves interpreting a note. If the assistant puts one in the wrong place, you want your original words and a way back.
 
-I first tried this manually with notes for Sam, the fictional illustrator. Nadia was his editor and Priya handled printing. The assistant could file four notes. On the fifth, it stopped to ask:
+My first manual test used notes for Sam, the fictional illustrator. Nadia was his editor; Priya handled printing. Four notes were clear enough to file. The fifth produced a question:
 
 > `inbox/2026-08-15-thursday.md` ("Keep Thursday free"): which Thursday, and what for?
 
-That was worth asking. “Thursday” didn't give it enough information to choose a date. It also found two lines that disagreed:
+“Thursday” left more than one date to choose from. Asking was better than reserving the wrong day on Sam's behalf. The review also found a disagreement between two files:
 
 > `people.md`: "A rate-increase draft is waiting; the new numbers are not decided yet."
 > `projects.md`: "new rates decided, 520 a day, 620 for rush."
 
-Those excerpts come from the earlier test. Its filing instructions removed processed captures; the revised skill above keeps them in an archive. I want you to retain the original note as well as the assistant's interpretation of it.
+Check that the original note reached the archive after its contents were filed. If a statement in the profile looks odd later, you can go back to your own words.
 
-## Keep the monthly context reminder accurate
+## Save the prompt the monthly reminder uses
 
-There may also be useful background in another AI tool. The prompt in Chapter 1 asked it to summarise what it could reach about you. It didn't export every conversation or collect all your old prompts, so don't expect the weekly review to have those too.
+If you still use another AI tool, useful background can accumulate there while your hub knows nothing about it. Ask that tool for a summary of who you are, people, priorities, preferences and limits from the material it can reach. Read and correct the result before importing it. This produces a briefing, not a full conversation export.
 
-Save that current extraction prompt for later use:
+Save the prompt in your library now so the monthly reminder can point straight to it:
 
 ```
-Copy the current Chapter 1 prompt from the companion kit's profile/bring-your-context-with-you.md into prompts/library/bring-your-context-with-you.md. Add a purpose line: summarize accessible background for review and import; not a full conversation export. Preserve an existing saved version and show any difference before replacing it.
+From the companion kit's profile/bring-your-context-with-you.md, copy only the first prompt, beginning 'Help me create a short briefing', into prompts/library/bring-your-context-with-you.md. Do not include the correction or download prompts. Add a purpose line: summarize accessible background for review and import; not a full conversation export. Preserve an existing saved version and show any difference before replacing it.
 ```
 
-When the reminder comes at a useful time, run the prompt in the other tool. Read and correct its answer before importing, and decide which details you're willing to move. Keep guesses and unanswered questions visible. Familiar information can still arrive with unfamiliar mistakes attached.
+*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-23-text-2-20260913)*
+
+Use the reminder when there's something worth bringing over. Run the prompt in the other tool, read its answer and correct it before importing. Choose which details may travel, leaving guesses and open questions visible. You know the subject of this summary unusually well, but it can still surprise you.
 
 ## Optional: review what you pay for AI
 
-The weekly review can carry a monthly cost check. Begin with the plans you actually pay for:
+If you pay for more than one AI tool, add a monthly cost check to the weekly review. Begin with the plans you actually pay for, so the assistant can compare usage with the bill:
 
 ```
 Read any existing subscription records first. Create or update profile/subscriptions.md with one block per AI plan I confirm: plan name, price and currency, renewal date, source of usage evidence, and status. Keep unknown values marked unknown. Do not duplicate an existing plan or infer that a missing receipt means no usage.
 ```
 
+*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-24-box-3)*
 
-Hermes can report recorded usage with:
-
-```
-hermes insights --days 30
-```
-
-One historical run showed:
+Ask Hermes to inspect its usage records for the last 30 days. The helper named `hermes insights --days 30` reads those records; the assistant can run it for you. One historical run showed:
 
 > Estimated:   ~$0.50
 > Included:    17 session(s) (subscription, no provider invoice)
 > Unknown:     4 session(s) (no pricing data)
 
-That number was an estimate for the sessions it had recorded. It couldn't tell me how much allowance I had left unused, or whether a service it hadn't measured cost nothing. A cost review is only as complete as the records behind it.
+That estimate covered sessions Hermes had recorded. It didn't measure unused allowance or work done in tools it couldn't see. The monthly section below keeps subscription fees, extra charges and unknown usage separate so a gap in the records doesn't become a reason to cancel something I use.
 
 ```
 Add an optional monthly subscription section to skills/weekly-review/SKILL.md. Run it only on the first review of the month when profile/subscriptions.md exists.
@@ -81,19 +79,22 @@ Add an optional monthly subscription section to skills/weekly-review/SKILL.md. R
 Read that file and run hermes insights --days 30. Report what the available records cover, known charges and unknown usage. Treat activity in other tools as unmeasured unless their records are available. Distinguish subscription fees from extra usage charges. Recommend a change only with its evidence and tradeoff. Cancel, buy and change nothing. If the command fails, report that failure rather than zero usage.
 ```
 
+*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-24-box-5)*
 
 ## Schedule it and check the result
 
-Try one review in a practice copy first. Include a writing sample and an unresolved question, then check that both stayed untouched. Also check that you can recover an archived capture and undo its profile change from the saved version. That way, your first wrong filing decision needn't become a detective job.
+Try the review in a practice copy before giving it real captures to file. Include a writing sample and an open question: both should stay put. Then recover an archived capture and undo its profile change. You'll have checked the ordinary filing and what happens when you disagree with it.
 
-Then create the real weekly job through **Scheduled jobs**. Use a name such as `weekly review`, a custom schedule such as `every monday 7am`, and this prompt:
+Choose a time when you normally consider the week ahead. Ask Hermes to schedule `weekly review` for that time in your time zone, using this hub's full path as the working folder. Have it inspect existing jobs first and update a matching job rather than creating a duplicate. Give it this prompt for each run:
 
 ```
 Read AGENTS.md and follow skills/weekly-review/SKILL.md. Write this week's new review into reviews/. Apply only the local filing allowed by that skill. Report failures and uncertainty; send nothing externally.
 ```
 
-Check the computer, working folder, time zone, next run and output before leaving the job active. For a local result, keep desktop delivery selected. Write the job into `procedures.md` and try pausing it so you know how to stop it.
+*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-23-text-5-20260913)*
 
-The manual run tells you how the skill behaves. You can test the timer with a separate one-time practice job, using a new output file as in Chapter 22. There is no need to wait until next Monday to discover that you chose the wrong folder.
+Read the saved job before leaving it active. Its computer, working folder, time zone, next run and output should match what you intended. Keep delivery local. Ask the assistant to record those details in `procedures.md` and pause the job once. This is easier to learn while you are still looking at its controls.
 
-When the real review arrives, read what changed and answer the questions the sources couldn't settle. If a move was wrong, ask to restore that particular change from the saved version. The report should tell you enough to do that without retracing the entire week.
+The manual run shows how the skill behaves. To test the timer too, ask for a separate one-time job due in five minutes, using only the practice copy and a new output filename. Keep the scheduler running and let the time pass without triggering it yourself. You can find a wrong folder today instead of waiting for Monday to reveal it.
+
+When the review arrives, read the changes and answer the questions the files couldn't settle. If a note was filed wrongly, restore that change from the saved version. The filing record should make the correction straightforward, leaving you to think about the week ahead instead of reconstructing the one you just lived.

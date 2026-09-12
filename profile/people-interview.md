@@ -1,62 +1,68 @@
-# People Interview (Chapter 6)
+# Chapter 5: The People Who Matter
 
-Fills `profile/people.md` by letting your assistant interview you, instead of
-you staring at a blank file.
+“Tell her I'll be late.” Five words, with a whole situation behind them. Who is she? Late for what? Have you already moved the date twice? Without that background, the assistant can write a polite sentence that makes the situation worse. Then you're back to writing it yourself.
 
-## Before you start
+A few notes in `profile/people.md` give it a better chance. Include a person when knowing about them would change a draft or decision. You don't have to build a second address book. Most people in your first one would be surprised to learn they needed a biography.
 
-Claude Desktop open on the **Code** side, a session with your hub folder
-selected (Chapter 3), and `profile/about-me.md` already in it (Chapters 1
-and 2).
+## Check the people already in your briefing
 
-## The prompt
+Start a fresh Hermes session in the hub and paste:
 
 ```
-Read profile/about-me.md, then help me fill in profile/people.md.
-Interview me about the people whose existence changes how I decide or
-how I word things. Start by telling me who you already suspect from my
-about-me file. Then ask me one question at a time, no more than eight
-in total. When we are done, write profile/people.md yourself: one short
-block per person, with their role, the one or two things that change
-how I deal with them, and anything live between us right now. Do not
-invent anyone.
+Read profile/about-me.md and the current profile/people.md. Help me improve the people file.
+
+First show the people and roles those files actually mention. Distinguish a recorded name from a guess. Then ask one question at a time, at most eight questions, about what would change a decision or a draft.
+
+Keep one short block per person:
+- their role in my life or work
+- one or two practical preferences or facts that change how I deal with them
+- any current agreement, problem or unfinished conversation
+
+Keep the source and date of current claims. Label my interpretations as interpretations. Do not invent anyone or collect private details the work does not need.
+
+When we finish, show the proposed changes and update profile/people.md with the corrections I confirm.
 ```
 
-Answer in plain speech. You are talking, not filing.
+*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-6-box-1)*
 
-## Who belongs in the file
+Begin with the people your briefing already mentions. Correcting “Alex works with me” is easier than writing Alex's entry from scratch, and the assistant can ask about a missing detail when it matters. The interview should save you the work of deciding what to explain.
 
-The handful who turn up in your decisions. Your manager. The two or three
-clients who eat your week. Your partner. The colleague who is a landmine.
+## An example: Sam's overdue illustrations
 
-The test: **if knowing this person would change how you word something or
-what you decide, they belong.** If not, leave them out. A short sharp cast
-beats a phone book, and you can add to it forever.
+Let's see what this interview can uncover. Sam Okafor is a fictional freelance illustrator. In his story, he owes a publishing client, Nadia, a 20-card illustration set. Cards 8 to 12 are four days late. That gives the interview a useful question: what does Nadia need to hear from him now?
 
-## The three things worth saying about anyone
+I wrote notes about Sam's work and the people in his life, then ran the interview with those notes. The people and the late project are fictional; the assistant's replies below are what it actually said. Read them as an example of how it turns a vague note about a client into useful questions. For your own interview, paste the prompt above into Hermes and answer about the people in your life.
 
-1. **Who they are to you.** Role and relationship.
-2. **What changes how you deal with them.** What they care about, what sets
-   them off, how they like to be handled.
-3. **What is live right now** (optional). The part that goes stale, and what
-   Chapter 10 keeps honest.
+In the people interview, the assistant first noticed that the background mostly contained roles:
 
-Specific beats complete. "Hates surprises and works months ahead" is worth
-more than three paragraphs of background.
+> Five figures, but each is more of a role than a person. Before I write anything, I need names and the small things that actually change how you deal with them.
 
-## The privacy line
+Then it asked a question that joined a person to current work:
 
-Give it your patterns, not your keys. For other people, use the
-over-the-shoulder test: **write only what you would be comfortable with them
-reading over your shoulder.** Their preferences, yes. Their private life, no.
-Chapter 17 turns this into a rule your assistant has to follow.
+> The 20-card illustration set due end of the month ... whose project is that, Tom's or Nadia's? And beyond just delivering it, is anything tense, uncertain, or unresolved with that person right now?
 
-## If you would rather write it by hand
+This question earns its interruption. The assistant has read the notes, connected a person to a deadline and found something it still needs to know. Sam can answer that one point without retelling the whole story of working with Nadia.
 
-Same three things per person, one block each:
+## Give practical detail
 
-```
-## [Name] [role and relationship]
-- [What changes how you deal with them.]
-- **Live:** [any open situation between you right now.]
-```
+“Nadia works months ahead and dislikes surprises” gives the assistant a reason to suggest early notice of a delay. What she said, what you agreed and what you've seen are more useful here than a long account of her personality. Leave room for her to be a person, rather than a label in a file.
+
+Two short entries from the result:
+
+> Slow on email, fast on the phone. Also dislikes being surprised by numbers.
+
+> WhatsApp only. Answers in minutes there; never answers email.
+
+These notes help the assistant suggest a way to reach someone. Add a dated update when a preference changes or there is an exception. A person who usually likes email can still want a phone call today; saving a preference should not turn it into a life sentence.
+
+The same interview spotted overlapping commitments involving Dana and Alex, two other people in the fictional notes:
+
+> The Friday rate draft for Dana and your delivery week with Nadia land in the same week as Alex's deadline ... worth flagging as one squeeze, not three separate ones.
+
+Each promise looked manageable on its own. Put them together and the week begins to look different, preferably before Sam promises anyone else a Friday delivery. The assistant has noticed the clash; Sam and the people involved still have to decide what can move.
+
+## Check what was saved
+
+Open `profile/people.md` with the real people in mind. Do you recognise them? Are the agreements right? Watch for a guess that has quietly become a fact about what somebody thinks. Correct it before it finds its way into a message they might read.
+
+Add new agreements and preferences as they come up in the work, when you know why they matter. Next time you ask for help with a message, the assistant has something better to work from than a name.

@@ -1,18 +1,22 @@
-# Chapter 23: Let AI Investigate a Question While You Are Away
+# Chapter 22: Let AI Investigate a Question While You Are Away
 
-Some questions deserve more than a line in the morning brief. You need a comparison, perhaps a draft message, and a little time to think before committing. An investigation can prepare that material while you're away, so you return to a decision with some of the reading already done.
+Some decisions occupy your mind long before they get a place in your calendar. You know the next step is to read the material, compare the choices or draft a question, but the preparation keeps waiting. Give that work to an investigation job, with a clear question and an end. When you return, you can start with something to consider.
 
-We'll use Robin's separate practice hub again. He is the fictional bicycle-shop owner considering maintenance classes. You can choose a real question instead, provided the hub can reach the sources it needs.
+We'll use Robin, the fictional bicycle-shop owner considering maintenance classes, so you can judge the result against a small set of known facts. His practice hub is separate from your own. Use a real question instead if your hub can already reach the sources needed to answer it.
 
 ## Check the starting material
 
-In the practice hub, ask:
+Check the starting material before setting a timer. In the practice hub, ask:
 
 ```
 Confirm that this is robin-practice. Read AGENTS.md, profile/, inbox/workshop-notes.md and skills/prepare-a-decision/SKILL.md. Confirm the profile says Robin runs a bicycle repair shop. List any missing file. Create no job until these inputs are available.
 ```
 
-If you skipped Robin's setup in Chapter 22, make that separate folder first. His files are practice material, so keep them out of your real notebook.
+*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-22-text-1-20260913)*
+
+If Robin's folder does not exist, unpack the matching companion kit and ask Hermes to create `robin-practice` beside your hub. Have it copy `starter-hub/` there, add the briefing and workshop note from `practice/maintenance-classes/`, and file that briefing into the practice profile. Also copy `skills/prepare-a-decision/SKILL.md` from the kit. Tell it to preserve existing folders and keep the fictional material out of your real hub. Open the new folder in Hermes and run the input check above.
+
+If you are using your own question instead, ask the assistant to adapt the job below to your question, sources and a new output filename. Keep the one-time schedule and preparation-only limits.
 
 The question is ordinary:
 
@@ -20,7 +24,9 @@ The question is ordinary:
 What should I do next about the maintenance classes?
 ```
 
-That is a perfectly reasonable question to ask another person. For a job that starts later, we'll also save where to read, what to produce and when to stop. Once those details are in the setup, you won't have to hover nearby supplying them.
+*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-22-text-2-20260913)*
+
+A job that starts later needs more than the question. We'll save where to look, what to produce and when to finish. The aim is to leave all the instructions with the job, including the ones that seem obvious while you're typing.
 
 ## Save one run
 
@@ -35,9 +41,11 @@ Read AGENTS.md and skills/prepare-a-decision/SKILL.md. Answer: What should Robin
 Show the saved job record with its one-time schedule, working folder, time zone, output path and stop control. Record it in procedures.md as a practice job.
 ```
 
-Look at the saved job before walking away. It should name `robin-maintenance-once`, one future run in the displayed time zone, your actual practice folder and the output `investigations/robin-maintenance-once.md`. “I'll do that” sounds agreeable, but it isn't the record you're looking for.
+*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-22-text-3-20260913)*
 
-Keep Hermes running through the scheduled time, then check the result without starting it manually. If your version can't create the job from the request, read the scheduling error and use the app's one-time control. Don't replace it with a daily job; Robin doesn't need the same question investigated every morning.
+Before walking away, read the saved record. Look for `robin-maintenance-once`, one future run in the displayed time zone, your practice folder and the result path `investigations/robin-maintenance-once.md`. Together, they tell you what will run, when to expect it and where you'll find the work.
+
+Keep the computer awake and its scheduler running through the scheduled time, then check the result without starting it manually. If the request fails to create the job, read the scheduling error and use the app's one-time control. Choose one future run. Robin needs help with a decision, not the same investigation delivered every morning.
 
 ## Read the prepared work
 
@@ -45,16 +53,16 @@ In an earlier practice run with a short delay, the job prepared this customer dr
 
 > "Hi! We are exploring a small bicycle-maintenance class at the shop. Would learning puncture repair interest you? We could also cover brake checks, let us know if you'd want that too. What days or times generally suit you? This is just an interest check, not a booking. Thanks, Robin."
 
-The full result kept facts and assumptions apart and compared testing interest with waiting. Three enquiries remained three enquiries. They hadn't become bookings merely because bookings would make the recommendation easier.
+The result compared testing interest with waiting, keeping the known facts apart from assumptions. Three enquiries stayed three enquiries. Nobody had booked a class, and the assistant hadn't made the choice easier by pretending otherwise.
 
-Robin still had to resolve the capacity and insurance questions. The instructions above ask the assistant to prepare those questions for him. If you have a relevant document, let the job read it too; there is no need to hand the reading back to you when the source is available.
+Capacity and insurance still needed answers, so the instructions asked for questions Robin could use to get them. If you already have a document that answers a question, give the job access to it. Preparation should include the reading it can do, leaving you the questions that really need you.
 
-Read the result as something you might actually use. Can you find its sources, follow its recommendation and see what remains uncertain? Is there prepared text worth keeping? Then check the run history: the timer should have started the job, and the job should have no further run.
+Read the result as work you're considering using. Follow its recommendation back to the sources, look at the open questions and decide whether the draft is worth keeping. Then check the run history: the timer should have started the job, and no further run should be due.
 
-My recorded practice run used a short delay, so I can't call it an overnight test. To leave yours until tomorrow, make sure the computer, scheduler and model access will still be available at the scheduled time. The question can wait; the machine has to be there when it comes due.
+If you leave the job until tomorrow, make sure the computer, scheduler and model access will be ready at the scheduled time. You're free to be elsewhere. The machine still has to turn up for work.
 
 ## Try a missing source
 
-Now make a second copy of the practice hub without the workshop note. Use a new one-time job and another output name. The answer should tell you the note is missing. If it repeats the old customer counts from the conversation, it mustn't present them as facts it has just checked in a file.
+Ask the assistant to prepare a second practice copy without the workshop note, preserving the first copy. Have it create a new one-time job with a different output name. The answer should name the missing note. It may remember the customer counts from the conversation, but it mustn't describe them as facts it has just checked in a file.
 
-After reading both results, stop or retire the practice jobs and keep their output. The limited answer is useful too: it shows what the job does when it can't find something, which is usually when you most need it to be clear.
+Compare the two results before stopping or removing the practice jobs, and keep the output. You want useful preparation when the sources are present and an honest account of the gap when they aren't. That gives you a better basis for choosing your first real investigation.

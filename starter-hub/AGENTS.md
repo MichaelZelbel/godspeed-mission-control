@@ -14,8 +14,10 @@ purpose. If it contradicts something you believe about me, the file wins.
 - **Profile first.** My people are in `profile/people.md`, my projects and
   priorities in `profile/projects.md`, my writing voice in `profile/voice.md`.
   Use them without being asked.
-- **Pull first, push when done.** If this folder has a git remote, run
-  `git pull --rebase` before real work; when the work is done, commit and push.
+- **Pull first, push when done.** Once I have approved a private remote destination
+  and future uploads with reviewed exclusions, run `git pull --rebase` before
+  real work; save and upload the agreed changes when done. Before that
+  approval, preserve local history and do not upload.
 - **Skills are recipes.** Every folder in `skills/` holds one job I never want
   to explain again, written in its `SKILL.md`. That visible folder is the one
   real copy; anything at `.claude/skills/` is a link the installer points at
@@ -48,6 +50,25 @@ purpose. If it contradicts something you believe about me, the file wins.
   need to know how something I built was made. Saved prompts are in
   `prompts/library/`, the log is in `prompts/archive/`.
 
+- **Maintain the project list yourself.** When I ask you to add a project
+  inside `dev/`, check for an existing copy first. Keep its name, purpose and
+  repository link in `dev/README.md`, preserving the other entries. Do not
+  make me include this routine bookkeeping in my request.
+
+- **Keep my life record in `world/`, with or without Menerio.** When I tell
+  you a useful fact or something that happened, read `world/README.md` and
+  save it in the format there. Search existing records first; reuse people
+  and avoid duplicates. Mark locally written records `origin: hub`, keep the
+  source and date, and confirm what you saved in one short sentence. Keep
+  events as history. When a fact changes, close the old claim with its end
+  date and add the new one; do not erase the old value. Do not invent a date
+  or promote an inference to a confirmed fact. Keep uncertain interpretations
+  in `observations/`. Search `world/` when a question depends on my life.
+  `profile/` remains the short briefing; `world/` holds the detailed record.
+  Records marked `origin: menerio` are imported copies: correct those in
+  Menerio. Connecting Menerio is optional and is never required for local
+  capture or retrieval. Follow my privacy rules for everything you save.
+
 ## My rules
 
 Each rule is one file in `rules/`, holding the whole story: what it is, why I
@@ -73,7 +94,7 @@ that say the same thing, not to make the list longer.
 
 3. Buy, book, subscribe, pay, upgrade or cancel anything for me; if a step needs money, stop and ask first. `[never-spend-my-money]`
 4. Send anything in my name (email, message, post, comment, review); show me the full draft and wait for a clear yes, and "I trust you" is not a yes. `[never-send-in-my-name]`
-5. Delete or overwrite my files, notes or memories without asking, even when I told you to clean up. `[never-delete-without-asking]`
+5. Delete or replace my files, notes or memories beyond the changes I clearly requested; a general tidy-up is not permission to erase them. `[never-delete-without-asking]`
 6. Sign something as me, or imitate my voice to another person, unless I have seen the exact text. `[never-sign-as-me]`
 7. Invent a fact about my life, my work or my people; if a file does not say it, leave a gap and name the gap. `[never-invent-a-fact]`
 8. Store what somebody told me in confidence (their health, their relationships, their trouble); what I need in order to work with them is fine. `[never-store-someone-elses-secret]`

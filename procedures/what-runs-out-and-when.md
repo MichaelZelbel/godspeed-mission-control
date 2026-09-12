@@ -1,12 +1,12 @@
-# Chapter 27: Track Deadlines Until the Work Is Done
+# Chapter 26: Track Deadlines Until the Work Is Done
 
-A reminder to do something you finished yesterday is irritating. A reminder that quietly disappears while the work is still waiting is worse. To be useful, a deadline list has to remember whether the job is done, as well as when it's due.
+You finished the job yesterday. This morning, your reminder helpfully asks you to do it again. Meanwhile, another task is still waiting, but its reminder has vanished. Between them, they have managed to ask for the wrong work and forget the right work. A useful deadline list needs to follow what happens after you set the date, so it knows when to persist and when to leave you alone.
 
-The kit keeps that list in your hub's `due/` folder, using the local command `hub-due`. You don't need to arrange a calendar connection or an online notebook to try it.
+The kit keeps that list in `due/` inside your hub. A helper called `hub-due` manages the dates and reminder selection. Ask the assistant to use it for you; you do not need to manage the commands. No calendar or online memory service is required.
 
 ## Record the first and last day
 
-Give each deadline a window: the first day you can act and the last day you still can. Say what counts as finished and what happens if you leave it too late. The date is easier to act on when the reminder also explains why it deserves your attention.
+Give each deadline two dates: the first day you can act and the last day you still can. Add what counts as finished and what you'll lose by waiting too long. That last detail earns its place on a busy morning. A reminder labelled 'return form' gives you a chore; knowing that a late form means a failed application gives you a reason to do it.
 
 ```
 Add a deadline to my hub. Read existing relevant records first, then ask only for missing facts: what counts as finished, the first and last day I can act, the consequence of delay, and whether any available evidence can reliably establish completion.
@@ -16,72 +16,53 @@ Require both dates. Use manual completion, --self-check none, unless we have exp
 Check hub-due --help, then use hub-due add with a unique simple name and my confirmed answers. Show the saved dates and completion condition. Do not create a second reminder schedule.
 ```
 
+*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-27-box-1)*
 
-For example, this is the command shape for an invented 14-day practice task. The dates are fixed so the later example is reproducible:
+For example, use an invented form that can be returned from 1 to 14 September. Completion means the form has been accepted, not merely drafted. Ask the assistant to create it in a separate practice hub and clearly label those fixed dates as a test. Your real deadline needs the actual first and last dates.
 
-```
-hub-due --hub PATH-TO-PRACTICE-HUB add return-form --title "Return the practice form" --from 2026-09-01 --to 2026-09-14 --done-when "The completed form has been accepted" --cost "The practice application misses its deadline" --self-check none
-```
+## Let the daily check follow the work
 
-Replace `PATH-TO-PRACTICE-HUB` with the full disposable folder path, quoted if it contains spaces. Do not paste this into your real deadline list. Dates use year-month-day, and this command calculates the current day in UTC.
+Before choosing today's reminders, the assistant must update the list. The helper's `check` operation updates repeating tasks and tests any completion signals you configured. Its `today` operation then selects the text to include in the brief.
 
-## Run the completion check before selecting today's text
+That order matters. Selecting reminders without checking completion can keep yesterday's finished work on today's list. A failed check should leave the task open and show the error.
 
-These are two separate commands, in this order:
-
-```
-hub-due check
-hub-due today
-```
-
-The order matters. `check` updates repeating windows and runs any completion checks you've configured. Then `today` chooses what belongs in the brief. If you run only `today`, it hasn't checked whether the work was completed.
-
-Run that pair as part of the morning brief and keep any errors in the result. If a completion check fails, the honest answer is that it couldn't check. Don't let the brief turn that into a completed task.
-
-To inspect the full list, use:
+You can ask “Show my deadlines” to inspect the full list. To close one, tell the assistant what actually happened:
 
 ```
-hub-due
+The return form has been accepted. Mark that deadline done in my hub, then run the deadline check and show whether it still appears in today's reminders. Keep its history. If you find more than one matching task, ask which one I mean.
 ```
 
-## Tell it when the work is finished
+*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-26-text-2-20260913)*
 
-Usually, you'll mark the work done yourself. Once the form has actually been accepted, use:
+In practice, tell it to use only the practice hub. Inspect the result: the task should be closed, with its history still available. A repeating task may open a new period later; completing this month's task does not complete next month's.
 
-```
-hub-due done return-form
-hub-due check
-hub-due today
-```
+## Use evidence that really means finished
 
-For practice, add `--hub` and the practice path to every command. Confirm that the current task is closed and no longer selected. A repeating task can later open a new window.
-
-There is an optional shortcut called `file-newer`, which looks at when a file was modified. It doesn't read the contents. In the version inspected for this book, a modification date on or after the first day of the window closes the task. That means an unfinished draft can look finished to this check.
-
-Use that shortcut only for a file you have tested as evidence of completed work, created after the work succeeds. A fresh backup file might still be incomplete or unusable. An email might acknowledge receipt without accepting what you sent. The signal needs to mean the same thing as “done.”
-
-If you don't have a dependable signal, keep marking completion manually. The full list prints:
+By default, your confirmation closes the task. The full list describes that arrangement as:
 
 > only your word closes this one
 
+Automatic completion is optional. One available check, called `file-newer`, looks only at when a file changed. It does not read the contents. Saving a better title in an unfinished draft can therefore look like completion.
+
+Use such a signal only after testing that it matches your definition of done. A newly written backup file may be incomplete. A reply acknowledging receipt may not accept the form. When no reliable signal exists, tell the assistant when you finish.
+
 ## How often a deadline appears
 
-The tool uses four bands. Earlier in the window, reminders can be less frequent. In the last three to fourteen days, depending on the window's length, a task can appear daily. Overdue work remains open.
+The tool divides the window into four stages. Early in the window, reminders are rare. In the last three to fourteen days, depending on the window's length, a task can appear every day. Overdue work stays open.
 
+[View the illustrated reading edition](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/Teach-It-Once.pdf)
 
-The exact dates come from the command, including both the first and last day. Short windows can skip a middle band.
+The helper calculates the selection dates from the first and last day; the assistant should use that result instead of inventing its own countdown. Starting late or having competing deadlines can change which reminders appear. The full deadline list remains available when you need to inspect everything.
 
-For the 1 to 14 September example, with the check run every day from the first day and no competing deadlines, the selection days are **1, 8, 12, 13 and 14 September**. The last three dates are the urgent band. Day 8 is the first selection in the second half. The tool's saved record of earlier selections affects later output.
-
-These are the days the command selects text for your brief. Nothing in this chapter sends a separate phone alert. You can use the local list and brief as they are, then test phone delivery if you add it later.
+These dates govern text selected for the brief. They do not prove that you received or read it.
 
 ## Know what the daily limit means
 
-Normally, `hub-due today` selects up to three entries. Call it again on the same day and it may return those entries again. That's useful if you need to rebuild a brief that failed; it isn't meant to invent a fresh reminder on every call.
+Normally, `hub-due today` chooses up to three entries. Call it again that day and you may see the same ones. That lets you rebuild a brief after a failure, without treating every retry as a reason to give you more reminders.
 
-If more than three open tasks reach the urgent band within the next seven days, the command makes an exception. It prints an overload message with **all affected titles and last dates**. Keep the whole list in the brief. The fourth urgent task doesn't become less urgent because the page was getting long.
+When more than three open tasks reach the urgent stage within seven days, the command prints an overload message with **all affected titles and last dates**. This is an exception to the usual limit of three, so the whole list belongs in the brief.
 
-The command records that it selected the text when it prints it. It can't tell whether you received or read the brief. Save that output with the day's brief and retry the saved brief if delivery fails, rather than starting another reminder job. If you add a messenger later, test receipt separately.
+The command records its selection when it prints the text. Printing a reminder is the extent of its knowledge: it can't tell whether you received or read the brief. Save that output with the day's brief so you can retry a failed delivery without starting another reminder job. If you add a messenger later, check that the message arrives there too.
 
 ## Add the full cycle to the brief
 
@@ -90,34 +71,25 @@ Update skills/morning-brief/SKILL.md with a Deadlines section.
 
 First run hub-due check in the intended hub, then hub-due today. Preserve any errors or failed-check notices. Include the selected deadline output word for word, including the overload message and all titles. Omit the section only when the command explicitly says nothing needs saying or no deadlines exist, and there was no check error.
 
-Do not calculate urgency yourself. Keep the normal brief body under 200 words, but put required deadline text and check failures after that body without a word limit. Preserve the Research section and its unresolved urgent findings. The 200-word target must not delete important material.
+Do not calculate urgency yourself. Keep the normal brief body under 200 words, but put required deadline text and check failures after that body without a word limit. Preserve any existing Research section and its unresolved urgent findings. The 200-word target must not delete important material.
 
 Preserve today's existing brief. For testing, use a disposable hub, its own --hub path on every deadline command and a new output at practice/brief-tests/deadline-test.md. Do not add fictional deadlines to my real list or overwrite my real brief.
 
 Run hub-check-brief on the full result. If raw deadline text contains a local path that the checker refuses, preserve the raw output and report the conflict; do not silently alter required text. Use clear human titles when creating deadlines so they do not need local paths.
 ```
 
+*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-27-box-6)*
 
-Test an unfinished task, then a manually completed one. Also test more than three urgent tasks in the practice folder. The full urgent list must survive the brief's length target.
+Try an unfinished task and then a manually completed one. Add more than three urgent tasks to the practice folder as well, and check that the full urgent list survives the brief's length target. A tidy brief that omits a deadline has saved space at your expense.
 
 ## Drop a task deliberately
 
-Finishing and abandoning are different actions. `done` retains the task's history. `drop` removes the task file and its history:
+Finishing and abandoning are different actions. Marking a task done keeps its history. The helper's removal operation, `drop`, removes the task file and its history. Ask the assistant to explain that effect before using it.
 
-```
-hub-due drop return-form --yes
-```
-
-Use the practice path to remove the example. For real work, choose `drop` only when you have decided not to do it. The deadline passing doesn't make that choice on your behalf.
-
-When a deadline moves, ask the assistant to save the existing version and update that entry. Check the new dates and the retained history. A second entry with a slightly different name would leave you with two versions of the same obligation.
+If you abandon a task but want the record, ask the assistant to preserve a dated copy first. If only the deadline moves, have it update the existing entry and retain the earlier date in the record. Check the new dates. You want one task with a changed date, without its earlier self continuing to remind you.
 
 ## Keep one source for each deadline
 
-Chapter 30 introduces credential expiry dates in `secrets/expires.txt`. The deadline command can read dated entries from that file. Do not also add a manual duplicate or a second expiry countdown to the brief.
+The daily deadline check runs within the morning brief, so its details belong in that job's entry in `procedures.md`, with no separate schedule. A calendar entry is optional. If you keep one, update it alongside the deadline when the date changes or the work is done.
 
-After renewing a key, test the actual connection before updating the expiry date and its tracked renewal. A future date in a text file is welcome, but the service still needs to accept the replacement.
-
-Record the daily deadline check inside the morning brief's entry in `procedures.md`; it doesn't need its own schedule. A calendar entry is optional. If you add one, remember to update it when the date changes or the work is done, so it doesn't become the reminder we were trying to avoid.
-
-A useful brief keeps unfinished commitments in view and lets finished work leave the list. Give it a daily run and an honest completion signal. You should be able to spend your attention on doing the work, not explaining repeatedly that you already did it.
+Give the list a daily check and a reliable way to know what's done. Then the morning after you finish a job, you get to enjoy having finished it, without a reminder asking you to start.

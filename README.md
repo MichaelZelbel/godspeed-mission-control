@@ -1,29 +1,27 @@
 # Teach It Once: Companion Kit
 
-> Private review edition, 8 September 2026. This package accompanies the revised **Teach It Once: Make AI your mission control for life and business** manuscript. It is not a public kit release. The revision manifest records the source manuscript fingerprint and reconciled files. Historical tests remain historical; revised guidance is not a claim of a fresh installation test.
+Private review edition, 13 September 2026. This package matches the 34-chapter first-read revision of **Teach It Once: Make AI your mission control for life and business**. It is not a public kit release.
 
-The public repository is [MichaelZelbel/teach-it-once-kit](https://github.com/MichaelZelbel/teach-it-once-kit). Its current installers and files may differ from this review package. Use the matching package supplied with the review manuscript for Robin's practice inputs and the new research-watch skill.
+Start with Chapter 1 in the book, then install Hermes and the hub in Chapter 2. The installers fetch current public files. Chapter 2 includes a request to merge this edition's shared starter guidance into the installed hub while preserving your own material. Copying starter-hub/ alone does not install the commands, permissions or skill discovery.
 
-## Start with the book
+The taught route leaves conversation collection and notebook copying off. The installer can enable them when selected; do not assume they are off without checking its report. No Menerio account is needed for local world records.
 
-Chapter 3 supplies the installation route. Review the source and platform warning before running an installer. A Windows reputation warning is not proof that a file is safe or unsafe. On a managed computer, follow its installation policy.
+## What to use
 
-Copying `starter-hub/` alone gives a folder layout, not all installed commands, permission configuration or skill discovery. Appendix D is a reference, not an equivalent manual installation. Existing files and private assistant notes deserve a saved version and inspection before migration.
+- profile/: context import, people, projects, writing and capture guides.
+- skills/: reusable recipes, the decision skill and the complete research-watch skill.
+- procedures/: setup requests with the explanations and checks they need.
+- practice/maintenance-classes/: fictional material for a separate practice hub.
+- living/: privacy, evidence, saved prompts and the build checklist.
+- menerio/, server/ and swap/: optional connections and additional computers or assistants.
+- starter-hub/: shared instructions, format guides and starting folders.
+- tools/: the command implementations used by the installed helpers.
+- book-prompts.json: every current manuscript text box, its chapter and content fingerprint.
 
-## What is here
+docs/CHAPTERS.md maps the companion guides. reader-revision-manifest.json identifies the exact manuscript. Historical replies in the guides remain records of earlier runs; revised instructions do not claim a fresh installation on every platform.
 
-- `profile/`: reviewed-context import, people, projects, writing style and capture guidance.
-- `skills/`: starter recipes as printed in the book, each with its name and description header, plus the decision-preparation skill and the complete research-watch skill.
-- `procedures/`: exact revised build instructions for schedules, brief, investigation, weekly review, watches, deadlines and credential expiry.
-- `practice/maintenance-classes/`: Robin's fictional inputs, installed only in a separate practice hub.
-- `living/`: privacy, evidence, saved prompts and the current build checklist.
-- `menerio/`, `server/` and `swap/`: optional notebook, server and alternate-assistant guidance.
-- `starter-hub/`: initial folder files. Conversation collection is optional and defaults off.
-- `tools/`: installed command sources; these scripts were not rewritten in this guidance reconciliation.
-- `tests/mission-control/` and `skills/work-through-a-decision/`: earlier isolated approval fixtures and their recipe, kept for the record. The book does not use them; its decision skill is `skills/prepare-a-decision/`.
-
-`docs/CHAPTERS.md` maps this edition's chapter numbers. `reader-revision-manifest.json` identifies the manuscript used. No paid plan, credit allowance, complete archive or automatic success is promised by the presence of a file.
+Earlier approval fixtures under tests/mission-control/ and skills/work-through-a-decision/ remain historical test material. The current book uses skills/prepare-a-decision/.
 
 ## License
 
-MIT. See `LICENSE`.
+MIT. See LICENSE.

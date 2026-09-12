@@ -1,16 +1,18 @@
-# Chapter 29: Connect Your AI Tools to the Same Notebook
+# Chapter 28: Connect Your AI Tools to Menerio
 
-Once you've saved a useful note online, you'll probably want the assistant to use it too. Knowing the notebook exists isn't enough. Each AI tool needs a working connection and permission to read the note.
+A useful note in Menerio, the optional online memory service, should be available when you ask your assistant about it, without employing you to copy it into the conversation. Each AI tool needs its own working connection and permission to read Menerio. Once those are in place, you can ask your question where you're already working.
 
-We use MCP, a standard way for an AI application to call another service's tools. It lets the assistant ask the notebook for information. You still set it up in each application, and whatever comes back may become part of that application's conversation records.
+For example, you might ask for the printing quote you saved in Menerio. The assistant needs permission to search that account and retrieve the note. The connection uses MCP, a standard for giving an AI app tools supplied by another service. You can ask the assistant to configure it. Each app needs its own connection, and retrieved text may enter that app's conversation records.
+
+This connection needs your own Menerio account and a note you can recognise. Before connecting, sign in and save one harmless note, then find it again in Menerio itself. You can use an account you already have; the local hub needs no notebook connection unless you choose this addition.
 
 ## Create a key with limited access
 
 In Menerio, open **Settings**, then **API Keys**. Name the key for the tool or computer that will use it. Review the available data categories and enable only what that job needs.
 
-Put the generated key in your password manager. It works like a password, so keep it out of chats, screenshots and ordinary hub files. If the page says to copy it now, take that seriously: it may not show the value again.
+Put the generated key in your password manager. It works like a password, so it belongs outside chats, screenshots and ordinary hub files. Some key pages show the value only once; if this page asks you to copy it now, save it before leaving.
 
-A separate key for each application gives you a useful choice later: stop one connection without stopping the others. Sharing a key means less setup, but canceling it stops every connection using it. Other valid keys keep working.
+I recommend a separate key for each app. It takes a little more setup, but you can stop one connection without disturbing the others. A shared key is quicker to arrange; cancelling it also stops every connection using it.
 
 The connection address used by the companion setup is:
 
@@ -18,32 +20,29 @@ The connection address used by the companion setup is:
 https://mcp.menerio.com
 ```
 
+*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-28-text-1-20260913)*
+
 ## Connect Hermes
 
-In a terminal, enter:
+Ask Hermes to prepare its Menerio connection:
 
 ```
-hermes mcp add notebook --url https://mcp.menerio.com
+Configure a Menerio connection named notebook using https://mcp.menerio.com. Inspect existing connections first and preserve unrelated settings. Use the installed Hermes connection tools and their current help.
+
+Prepare a secure local token-entry step for me. Do not ask me to paste the key into this conversation, put it in a command argument, or print it. Show where the application will store it without revealing its value.
+
+After I enter it, list and test the connection. Begin with tools that only read. Show whether the server returned tools and report any error. Do not expand permissions to repair a failed test.
 ```
 
-Call the connection `notebook`. Hermes already has local memory files, and calling everything “memory” makes it harder to say which one you want it to search.
+*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-28-text-2-20260913)*
 
-When the command asks whether authentication is required, choose yes. Paste the credential into the dedicated token prompt, not into the command line. Hermes stores this connection in its own configuration; protect that location too.
+`notebook` is the saved connection name; the service is Menerio. In the tested Hermes setup, the interactive `hermes mcp add` command offered a dedicated authentication prompt and saved the token outside the hub in Hermes' own `.env` file. That file also needs protection.
 
-Then check it:
-
-```
-hermes mcp list
-hermes mcp test notebook
-```
-
-Look for the notebook address in the list and discovered tools in the test result. An earlier run found 58 tools; your version may find a different number. You have checked that the connection works. Next, we'll see whether the assistant uses it for the right question.
-
-Take a look at which tools can read and which can write. Where your version supports it, `hermes mcp configure notebook` lets you limit the enabled tools. Begin with reading if that is the job you have in mind.
+A successful connection test tells you the server returned tools. My earlier run listed 58; your count can differ. It does not yet tell you that the assistant will choose those tools for your question. We will check that with a note you know is there.
 
 ## Optional: connect Claude Code
 
-If you use the developer tool from Chapter 5, its project configuration can refer to an environment variable without containing the secret. An environment variable is a named value made available to a running program.
+Claude Code is another AI assistant that can work with files on your computer. If you use it, its connection settings can refer to an environment variable without containing the secret. An environment variable is a named value made available to a running program.
 
 Ask the assistant to prepare the configuration and input method first:
 
@@ -53,18 +52,21 @@ Configure a notebook connection for Claude Code in this hub. Inspect the existin
 Show me a masked local input method for this operating system, so I can load the key without putting it in chat or shell history. Launch the client from the environment containing the key and test a read-only connection. Report success or the actual error without printing values. Do not broaden key permissions or enable writes to repair a read failure.
 ```
 
-In the setup checked for this book, Hermes doesn't read the project's `.mcp.json`. Its own connection needs its own configuration. And a placeholder copied to another computer is still a placeholder: you must make the actual secret available there too.
+*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-28-text-3-20260913)*
 
-You can do that with a password manager and a separate connection on each machine. Chapter 30 offers an encrypted credential store if you want another way to manage it.
+In the setup checked here, Hermes uses its own connection settings rather than the project's `.mcp.json`. Each computer also needs the real secret available locally; the placeholder in the configuration supplies its name.
+
+A password manager can supply the credential when you set up each machine. Copying configuration that names a key does not copy the key itself.
 
 ## Prove which source answered
 
-In a fresh session, ask a question about the harmless notes you put in the notebook. If you used the fictional Nadia notes, use:
+In a fresh session, ask a question about the harmless notes you put in Menerio. If you used the fictional Nadia notes, use:
 
 ```
 Use my notebook's tools, and nothing on this computer. Who is Nadia, what is the latest on next year's book, and how does she want bad news delivered? Answer only from what the notebook returns, identify the notes read, and say plainly if you cannot find something. Change nothing.
 ```
 
+*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-29-box-5)*
 
 An earlier test returned:
 
@@ -72,41 +74,34 @@ An earlier test returned:
 > - Latest on next year's book: Nadia said today that its budget has doubled. She hinted that there could also be a second illustrated title for you.
 > - Bad-news delivery: Give her three options for a setback, not just one. Warn her early; she does not forgive late warnings quickly.
 
-That missing detail was a useful result. The notebook didn't establish Nadia's role, although Sam's separate profile did. I had deliberately asked it to use only the notebook, so I wanted it to stop at what those notes could support.
+I was pleased by the missing detail. Nadia's role was in Sam's profile, but I had asked for Menerio alone. The assistant stopped at what those notes could tell it. A fuller answer would have been less helpful if it left me believing Menerio held information found somewhere else.
 
-Earlier attempts had looked in Hermes' local memory or other folders. Naming the notebook and reading the tool calls let me see what was being searched. An empty working folder hadn't made the rest of the machine disappear.
-
+Earlier attempts had searched Hermes' local memory or other folders. I had supplied an empty working folder; Hermes had declined to become forgetful on that account. Naming Menerio and reading the tool calls showed me where it was actually looking.
 
 ## Optional: copy selected records
 
-If you want copies to move between the hub and notebook, the companion installer can add sync after you choose the connection. First read what it proposes to upload and where it will store the credential. You should know which material is about to travel.
+The companion installer can set up copying between the hub and Menerio after you choose the connection. Before turning it on, look through what it proposes to copy and where it plans to keep the key.
 
 | Direction | What the inspected setup copies |
 |---|---|
-| Hub to notebook | Observations, skills and individual decisions. |
+| Hub to Menerio | Observations, skills and individual decisions. |
 | Excluded from that upload | `profile/` and `AGENTS.md`. |
-| Notebook to hub | Supported people, events and claims into `world/`, marked with their source. |
+| Menerio to hub | Supported people, events and claims into `world/`, marked with their source. |
 
-Only that selected material moves. You aren't creating a full mirror of either the hub or notebook, so a fact kept only in your profile still won't appear in the notebook's phone search.
 
-The installer version inspected here runs sync **after a Git commit**, if it installed its post-commit hook, and during an hourly check. A commit is the saved local version from Chapter 18. Pressing Save in an editor doesn't start that hook. Check which trigger the installer actually added, because it may preserve an existing custom hook.
 
-Run a visible check after setup:
+The installer version inspected here runs sync **after a Git commit**, if it installed its post-commit hook, and during an hourly check. A commit is a deliberately saved version in the hub's Git history. Saving that version in Git triggers the hook; saving a file in an editor does not. Read which trigger the installer added, since it may preserve an existing custom hook.
 
-```
-hub-notebook-sync --verbose
-```
+Ask the assistant to run the installed copying helper, `hub-notebook-sync --verbose`, and explain what went out, what came back and what failed. The log is at `~/.hub/notebook-sync.log`; `~` means your user folder. A second run with nothing changed lets you check that the same material isn't uploaded twice.
 
-Read what was sent, what came back and what failed. The log is `~/.hub/notebook-sync.log`, where `~` means your user folder. Try a second run without changes and check that it doesn't upload the same material again. Silence is easier to trust once you've seen what it means.
+A file marked `origin: menerio` came from Menerio. A later sync may replace it, so make corrections in Menerio itself. Files marked `origin: hub` were written locally by you or your assistant. The copying tool preserves those files. They work independently of the Menerio connection.
 
-Files marked `origin: menerio` came from the notebook and can be replaced by a later sync. Correct the original in the notebook, or your local correction may be lost. The copying code inspected for this book preserves locally owned records; it doesn't claim every file in `world/`.
-
-It also checks for a response that looks like an unexpected mass removal. That's a useful safeguard, though it can't catch every possible incomplete response. Keep the recovery copies you arranged earlier.
+It also checks for a response that looks like an unexpected mass removal. That's a useful safeguard, and a reason to keep the recovery copies you arranged earlier.
 
 ## Check access and recovery separately
 
-Cancel a key in the service's API Keys page when you no longer want the applications using it to connect. Pausing sync is a different step: disable its machine schedule and any installed commit hook, as described in Chapter 30. Canceling a key does not remove old copies.
+Cancel a key in the service's API Keys page when you no longer want the applications using it to connect. Pausing copying is a different step. Ask the assistant to find and disable its machine schedule and its Git post-commit hook, the action that runs after a saved version. Have it preserve unrelated scheduled work and then verify that neither copying trigger remains active. Canceling a key does not remove old copies.
 
-For recovery, inspect the local `world/` copy and export original notebook notes separately if you need them. Finding a note in search tells you it can be found today; it doesn't tell you that the whole notebook can be restored.
+Inspect the imported records in `world/` for recovery, and export original Menerio notes separately if you need them. A search result shows that you can find a note today. Opening an export lets you check what you'd have if the service were no longer there.
 
-Ask the assistant to name the source when it uses notebook information. If a detail is wrong, you want to know where to fix it without searching every place the assistant might have looked.
+Have the assistant name the source when it uses Menerio information. When a detail is wrong, that name should take you straight to the place to fix it. You shouldn't need a tour of your software to correct one date.

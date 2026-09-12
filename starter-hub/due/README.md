@@ -1,4 +1,4 @@
-# Deadlines (Chapter 27)
+# Deadlines (Chapter 26)
 
 This folder starts empty. `hub-due` stores each deadline's first day, last day, completion condition and consequence here. Run `hub-due --help` for the installed command syntax.
 

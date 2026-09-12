@@ -1,48 +1,45 @@
-# Chapter map: private reader revision
+# Chapter map: first-read revision
 
-This map follows the complete 35-chapter revised manuscript. It does not label revised assets as freshly tested. The source fingerprint is in `reader-revision-manifest.json`.
+This map follows the 34-chapter review manuscript dated 13 September 2026. The source fingerprint is in reader-revision-manifest.json.
 
-| Chapter | Primary kit guide |
+| Chapter | Companion guide |
 |---|---|
-| Chapter 1: Start Your AI Briefing With What It Already Knows | Use the named files and instructions in this chapter. |
-| Chapter 2: Choose What Belongs in Your AI Briefing | Use the named files and instructions in this chapter. |
-| Chapter 3: Install Hermes and Create Your Hub | Use the named files and instructions in this chapter. |
-| Chapter 4: Organize the Files Your AI Uses | Use the named files and instructions in this chapter. |
-| Chapter 5: Use Your Hub for Coding Projects (Optional) | Use the named files and instructions in this chapter. |
-| Chapter 6: The People Who Matter | Use the named files and instructions in this chapter. |
-| Chapter 7: Projects and Priorities | Use the named files and instructions in this chapter. |
-| Chapter 8: Teach AI Your Writing Style | Use the named files and instructions in this chapter. |
-| Chapter 9: Save Useful Notes During Your Day | `profile/capture-checklist.md` |
-| Chapter 10: Keep Your AI's Information Up to Date | Use the named files and instructions in this chapter. |
-| Chapter 11: Correct AI Without the Argument (Optional) | Use the named files and instructions in this chapter. |
-| Chapter 12: Save a Repeated Job as an AI Skill | Use the named files and instructions in this chapter. |
-| Chapter 13: Make an AI Skill Work Your Way | Use the named files and instructions in this chapter. |
-| Chapter 14: Skills for Email, Planning and Decisions | Use the named files and instructions in this chapter. |
-| Chapter 15: Create Skills for Your Own Work | Use the named files and instructions in this chapter. |
-| Chapter 16: Check That Your AI Skills Work | Use the named files and instructions in this chapter. |
-| Chapter 17: Set Limits on What AI May Do | Use the named files and instructions in this chapter. |
-| Chapter 18: Back Up Your Hub and Undo Mistakes | Use the named files and instructions in this chapter. |
-| Chapter 19: Check Where Your Private Information Goes | Use the named files and instructions in this chapter. |
-| Chapter 20: Check AI's Answers Before You Act | `living/two-questions-card.md` |
-| Chapter 21: Prepare a Job to Run on a Schedule | Use the named files and instructions in this chapter. |
-| Chapter 22: The Morning Brief | `procedures/morning-brief-setup.md` |
-| Chapter 23: Let AI Investigate a Question While You Are Away | `procedures/overnight-investigation.md` |
-| Chapter 24: Set Up an Automatic Weekly Review | `procedures/weekly-review-setup.md` |
-| Chapter 25: Get Alerts When a Page or Product Changes | `procedures/watchdog-setup.md` |
-| Chapter 26: Keep Researching a Question Over Time | `procedures/research-watch-setup.md` |
-| Chapter 27: Track Deadlines Until the Work Is Done | `procedures/what-runs-out-and-when.md` |
-| Chapter 28: Add an Online Notebook for Notes on the Go | `menerio/the-notebook.md` |
-| Chapter 29: Connect Your AI Tools to the Same Notebook | `menerio/mcp-connection.md` |
-| Chapter 30: Use the Same Hub on Another Computer | Use the named files and instructions in this chapter. |
-| Chapter 31: Install Your Hub on a Linux Server | `server/setup.md` |
-| Chapter 32: Use Your Server From the Desktop App | `server/remote-desktop-setup.md` |
-| Chapter 33: Try Your Hub With Another AI Assistant | `swap/three-questions.md` |
-| Chapter 34: Reach and Share Your Saved Prompts Online | `living/saved-prompt-card.md` |
-| Chapter 35: Keep the Jobs That Give You Time Back | Use the named files and instructions in this chapter. |
-| Appendix A: The Companion Kit | Use the named files and instructions in this chapter. |
-| Appendix B: Where to Go From Here | Use the named files and instructions in this chapter. |
+| Chapter 1: Start Your AI Briefing With What It Already Knows | `profile/bring-your-context-with-you.md` |
+| Chapter 2: Install Hermes and Create Your Hub | Use the named files in the chapter; every text box is also in book-prompts.json. |
+| Chapter 3: Organize the Files Your AI Uses | `profile/about-you-template.md` |
+| Chapter 4: Use Your Hub for Coding Projects (Optional) | `coding/project-setup.md` |
+| Chapter 5: The People Who Matter | `profile/people-interview.md` |
+| Chapter 6: Projects and Priorities | `profile/projects-interview.md` |
+| Chapter 7: Teach AI Your Writing Style | `profile/voice-extraction-prompt.md` |
+| Chapter 8: Save Useful Notes During Your Day | `profile/capture-checklist.md` |
+| Chapter 9: Keep Your AI's Information Up to Date | `profile/mirror-test.md`; `profile/spring-clean-checklist.md` |
+| Chapter 10: Correct AI Without the Argument (Optional) | Use the named files in the chapter; every text box is also in book-prompts.json. |
+| Chapter 11: Save a Repeated Job as an AI Skill | Use the named files in the chapter; every text box is also in book-prompts.json. |
+| Chapter 12: Make an AI Skill Work Your Way | `skills/skill-interview.md` |
+| Chapter 13: Skills for Email, Planning and Decisions | Use the named files in the chapter; every text box is also in book-prompts.json. |
+| Chapter 14: Create Skills for Your Own Work | `skills/craft-skill-interview.md` |
+| Chapter 15: Check That Your AI Skills Work | `skills/skill-test-checklist.md` |
+| Chapter 16: Set Limits on What AI May Do | `procedures/red-lines-interview.md`; `procedures/red-lines-template.md` |
+| Chapter 17: Back Up Your Hub and Undo Mistakes | `procedures/safety-net-setup.md` |
+| Chapter 18: Check Where Your Private Information Goes | `living/privacy-audit-checklist.md` |
+| Chapter 19: Check AI's Answers Before You Act | `living/two-questions-card.md` |
+| Chapter 20: Prepare a Job to Run on a Schedule | `procedures/procedure-register.md` |
+| Chapter 21: The Morning Brief | `procedures/where-it-runs.md`; `procedures/morning-brief-setup.md` |
+| Chapter 22: Let AI Investigate a Question While You Are Away | `procedures/overnight-investigation.md` |
+| Chapter 23: Set Up an Automatic Weekly Review | `procedures/weekly-review-setup.md`; `procedures/outside-ai-check.md`; `procedures/ai-subscription-review.md` |
+| Chapter 24: Get Alerts When a Page or Product Changes | `procedures/watchdog-setup.md` |
+| Chapter 25: Keep Researching a Question Over Time | `procedures/research-watch-setup.md` |
+| Chapter 26: Track Deadlines Until the Work Is Done | `procedures/what-runs-out-and-when.md` |
+| Chapter 27: Use Menerio for Notes on the Go | `menerio/the-notebook.md` |
+| Chapter 28: Connect Your AI Tools to Menerio | `menerio/mcp-connection.md` |
+| Chapter 29: Use the Same Hub on Another Computer | `procedures/keys-that-expire.md` |
+| Chapter 30: Install Your Hub on a Linux Server | `server/setup.md` |
+| Chapter 31: Use Your Server From the Desktop App | `server/remote-desktop-setup.md` |
+| Chapter 32: Try Your Hub With Another AI Assistant | `swap/three-questions.md`; `living/the-alternatives-card.md` |
+| Chapter 33: Reach and Share Your Saved Prompts Online | `living/saved-prompt-card.md` |
+| Chapter 34: Keep the Jobs That Give You Time Back | Use the named files in the chapter; every text box is also in book-prompts.json. |
+| Appendix A: The Companion Kit | Use the named files in the chapter; every text box is also in book-prompts.json. |
+| Appendix B: Where to Go From Here | Use the named files in the chapter; every text box is also in book-prompts.json. |
 | Appendix C: Your Build Checklist | `living/build-order-card.md` |
 | Appendix D: The Hub Folder Layout | `starter-hub/README.md` |
-| Appendix E: The AI World in Six Parts | Use the named files and instructions in this chapter. |
-
-Chapter 26 also installs `skills/research-watch/SKILL.md`. Chapter 14 supplies the four updated starter bodies plus `skills/prepare-a-decision/SKILL.md`. Appendix D is a folder-layout reference, not a full manual installation.
+| Appendix E: How an Assistant Produces an Answer | Use the named files in the chapter; every text box is also in book-prompts.json. |
