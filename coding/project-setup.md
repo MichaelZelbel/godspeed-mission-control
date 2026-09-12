@@ -7,7 +7,7 @@ Requests from Chapter 4 of Teach It Once. Use your assistant with access to your
 Paste the GitHub link after this request, or name a project your assistant already knows.
 
 ```
-Clone this repository into dev/ inside my hub. If it is already there, use the existing copy. Add its name, purpose and GitHub link to dev/README.md, keeping the entries already there.
+Clone this repository into dev/ inside my hub.
 ```
 
 ## Check the histories

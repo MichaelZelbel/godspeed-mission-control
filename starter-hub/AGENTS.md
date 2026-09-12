@@ -28,6 +28,10 @@ purpose. If it contradicts something you believe about me, the file wins.
   me, add the row in the same session. No unlisted procedures, ever.
 - **Decisions get written down.** When I make a real decision, append one
   line to `decisions.md` with the date and the why. Never edit old lines.
+- **Maintain the project list yourself.** When I ask you to add a project
+  inside `dev/`, check for an existing copy first. Keep its name, purpose and
+  repository link in `dev/README.md`, preserving the other entries. Do not
+  make me include this routine bookkeeping in my request.
 - **Loose captures land in `inbox/`.** One file per capture. The weekly review
   files the clear ones into my profile files itself and asks me only about the
   doubtful; between reviews, file them when I ask you to.
