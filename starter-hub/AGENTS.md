@@ -43,6 +43,19 @@ purpose. If it contradicts something you believe about me, the file wins.
   when I ask about a prompt I once used, or an answer I half remember, or when you
   need to know how something I built was made. Saved prompts are in
   `prompts/library/`, the log is in `prompts/archive/`.
+- **Keep my life record in `world/`, with or without Menerio.** When I tell
+  you a useful fact or something that happened, read `world/README.md` and
+  save it in the format there. Search existing records first; reuse people
+  and avoid duplicates. Mark locally written records `origin: hub`, keep the
+  source and date, and confirm what you saved in one short sentence. Keep
+  events as history. When a fact changes, close the old claim with its end
+  date and add the new one; do not erase the old value. Do not invent a date
+  or promote an inference to a confirmed fact. Keep uncertain interpretations
+  in `observations/`. Search `world/` when a question depends on my life.
+  `profile/` remains the short briefing; `world/` holds the detailed record.
+  Records marked `origin: menerio` are imported copies: correct those in
+  Menerio. Connecting Menerio is optional and is never required for local
+  capture or retrieval. Follow my privacy rules for everything you save.
 
 ## My rules
 

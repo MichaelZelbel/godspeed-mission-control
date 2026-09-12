@@ -51,10 +51,9 @@ What is here. Ten names, and they are the whole system:
   `prompts/library/` holds the prompts you keep and paste into other
   tools, and `prompts/archive/` is the log of everything you have typed.
   Chapters 13 and 31.
-- `world/`: your life as data. The people, dated things and facts your
-  notebook knows, copied down as small files so they survive without it.
-  **It starts empty and stays empty until you connect a notebook**, and an
-  empty one costs you nothing. Chapters 25 and 26, and its own README.
+- `world/`: your assistant's record of people, events and facts you tell it.
+  It saves and searches these files without Menerio. An optional Menerio
+  connection can add imported records. `world/README.md` explains the formats.
 
 Nothing here needs a terminal. It is a folder of text files, and that is
 the point.

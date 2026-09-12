@@ -1,8 +1,12 @@
 # world - your life as data
 
-**This room starts empty, and an empty one costs you nothing.** It fills the first time you
-connect a notebook and run the pull (Chapter 26). If you never connect one, you have an empty
-folder and you have lost nothing.
+Your assistant fills this folder as you tell it useful facts and things that happened.
+It works without a Menerio account. The instructions in `AGENTS.md` tell the assistant to
+save and search these records, using the formats below.
+
+Menerio is an optional online memory service. If you connect it and enable copying, its
+records can also arrive here. That connection is specifically for Menerio, not a general
+connection to Evernote, OneNote or Obsidian.
 
 Everything here is one small text file, so a script can answer questions like "what changed about
 Peter this year" without an AI model and without the internet. The AI only steps in when language
@@ -23,10 +27,10 @@ why a claim can carry a start date and an end date, and an event only carries it
 
 Every file carries an `origin:` line, and it decides who may write to it.
 
-- `origin: hub` means you wrote it. Edit it freely. The pull never touches it and never
+- `origin: hub` means you or your assistant wrote it locally. The pull never touches it and never
   deletes it.
-- `origin: menerio` means your notebook wrote it and this is a copy. It is rewritten on every
-  pull, so an edit made here is lost at the next one. **Fix the fact in the notebook instead.**
+- `origin: menerio` means Menerio wrote it and this is a copy. It is rewritten on every
+  pull, so an edit made here is lost at the next one. **Fix the fact in Menerio instead.**
 
 A file with no `origin:` line at all counts as `origin: hub`, so anything you write by hand is
 safe by default.
@@ -43,6 +47,7 @@ Every file starts with a small block between `---` lines, then free text.
 ```
 ---
 slug: peter-mueller
+origin: hub
 name: Peter Mueller
 type: person
 aliases: [Peter, Pete]
@@ -55,6 +60,7 @@ Free-text description.
 ```
 ---
 date: 2026-08-11
+origin: hub
 participants: [me, peter-mueller]
 source: where this came from
 ---
@@ -66,6 +72,7 @@ What happened, in free text.
 ```
 ---
 subject: peter-mueller
+origin: hub
 attribute: relationship-to-me
 value: friend
 valid_from: 2024-03-01
@@ -79,6 +86,17 @@ Optional detail.
 true today". A missing `valid_from` means "true since before you started recording".
 
 ## Filling it
+
+The assistant writes local records directly. Search first, reuse existing people, and keep
+the source of every event or fact. Do not invent dates. When a fact changes, add its replacement
+and close the old claim with `valid_to`; keep the old file. Tell the user what you saved.
+
+For example, a confirmed move becomes a dated event and a new current-city claim. The earlier
+city claim gets an end date. A guess about why the person moved belongs in `observations/`.
+
+### Optional: import from Menerio
+
+Only after configuring a Menerio account, use:
 
 ```
 python3 tools/world-pull.py                  # dry run, shows what it would write
