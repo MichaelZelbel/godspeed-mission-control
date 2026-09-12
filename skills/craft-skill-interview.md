@@ -20,7 +20,7 @@ Ask one question at a time, five questions maximum, about:
 Then propose up to three skills, each with a name and what it takes in and gives back. Do not invent a third candidate to fill the list.
 ```
 
-*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-15-box-1)*
+*[Copy prompt](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-15-box-1)*
 
 Two questions from the interview were especially useful:
 
@@ -63,8 +63,6 @@ I chose Sam's weekly update. The resulting file included these instructions:
 
 5. Never apologise twice in one message. Use no more than one apology, and do not open with it.
 ```
-
-*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-14-text-2-20260913)*
 
 The second sentence of rule 4 catches a distinction Sam cares about. The date in his private project file can be a target he is working towards, without being a promise he is ready to send Nadia. Recording that difference saves him from having to explain it with every draft.
 

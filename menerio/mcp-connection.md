@@ -20,8 +20,6 @@ The connection address used by the companion setup is:
 https://mcp.menerio.com
 ```
 
-*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-28-text-1-20260913)*
-
 ## Connect Hermes
 
 Ask Hermes to prepare its Menerio connection:
@@ -34,7 +32,7 @@ Prepare a secure local token-entry step for me. Do not ask me to paste the key i
 After I enter it, list and test the connection. Begin with tools that only read. Show whether the server returned tools and report any error. Do not expand permissions to repair a failed test.
 ```
 
-*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-28-text-2-20260913)*
+*[Copy prompt](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-28-text-2-20260913)*
 
 `notebook` is the saved connection name; the service is Menerio. In the tested Hermes setup, the interactive `hermes mcp add` command offered a dedicated authentication prompt and saved the token outside the hub in Hermes' own `.env` file. That file also needs protection.
 
@@ -52,7 +50,7 @@ Configure a notebook connection for Claude Code in this hub. Inspect the existin
 Show me a masked local input method for this operating system, so I can load the key without putting it in chat or shell history. Launch the client from the environment containing the key and test a read-only connection. Report success or the actual error without printing values. Do not broaden key permissions or enable writes to repair a read failure.
 ```
 
-*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-28-text-3-20260913)*
+*[Copy prompt](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-28-text-3-20260913)*
 
 In the setup checked here, Hermes uses its own connection settings rather than the project's `.mcp.json`. Each computer also needs the real secret available locally; the placeholder in the configuration supplies its name.
 
@@ -65,8 +63,6 @@ In a fresh session, ask a question about the harmless notes you put in Menerio. 
 ```
 Use my notebook's tools, and nothing on this computer. Who is Nadia, what is the latest on next year's book, and how does she want bad news delivered? Answer only from what the notebook returns, identify the notes read, and say plainly if you cannot find something. Change nothing.
 ```
-
-*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-29-box-5)*
 
 An earlier test returned:
 

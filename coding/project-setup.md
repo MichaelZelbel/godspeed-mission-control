@@ -18,8 +18,6 @@ Ask your assistant to do it. Paste the repository's GitHub link after this sente
 Clone this repository into dev/ inside my hub.
 ```
 
-*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-4-text-1-20260913)*
-
 If your assistant already knows the project, its name is enough. If the name could mean two repositories, it should ask which one. Here, `dev/` means the folder inside your hub. You do not need to assemble a Git command yourself.
 
 The assistant should tell you where it put the project. Open that folder and check that its files are there. If GitHub needs you to sign in, complete that step and let the assistant continue.
@@ -36,7 +34,7 @@ The starter kit's `.gitignore` file tells Git to leave the projects inside `dev/
 Check that the projects inside dev/ have their own Git histories and are excluded from the hub's history. Keep dev/README.md in the hub's history. Check a real project file and preview what the hub would save. Tell me which file you checked and what you found. Do not delete anything or change existing history.
 ```
 
-*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-4-text-2-20260913)*
+*[Copy prompt](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-4-text-2-20260913)*
 
 The result should name a project file that stays out of the hub's history and confirm that the project keeps its own history. If the check fails, ask the assistant to explain and fix the cause before saving more work.
 
@@ -63,7 +61,7 @@ To check your setup, ask:
 Check the instructions for this project and the AI tool I am using. Show me the instruction files this session received, including any account-wide instructions. If you can only show that a file exists, say so. Read the hub's AGENTS.md and this project's instruction files. Explain any conflicting instructions and propose a correction. Keep existing instructions until I approve a change.
 ```
 
-*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-4-text-3-20260913)*
+*[Copy prompt](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-4-text-3-20260913)*
 
 For example, your account-wide instructions might say “Write all documentation in English,” while a project's file says “Write this project's documentation in German.” Decide which you want for that project, then ask the assistant to make the exception explicit. It should not leave you guessing which language it will choose.
 
@@ -83,7 +81,7 @@ Then pick the one project that should get my next free hour, given my priorities
 Close with one insight that needed profile/ and the code together, and name the files it came from.
 ```
 
-*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-5-box-6)*
+*[Copy prompt](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-5-box-6)*
 
 My run found a difference between the product kits named in my priorities and the projects receiving the work. An excerpt from its actual conclusion:
 

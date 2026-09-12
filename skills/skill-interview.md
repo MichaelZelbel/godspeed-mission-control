@@ -14,7 +14,7 @@ Ask about choices the existing file leaves open, including what to do when there
 Show a revised version of this same skill. When I confirm it, update skills/summarize-for-me/SKILL.md. Keep one master skill rather than creating a competing summary skill under another name.
 ```
 
-*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-13-box-1)*
+*[Copy prompt](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-13-box-1)*
 
 When I tried the interview, its first question gave me something concrete to choose:
 

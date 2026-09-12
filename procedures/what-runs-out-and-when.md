@@ -16,7 +16,7 @@ Require both dates. Use manual completion, --self-check none, unless we have exp
 Check hub-due --help, then use hub-due add with a unique simple name and my confirmed answers. Show the saved dates and completion condition. Do not create a second reminder schedule.
 ```
 
-*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-27-box-1)*
+*[Copy prompt](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-27-box-1)*
 
 For example, use an invented form that can be returned from 1 to 14 September. Completion means the form has been accepted, not merely drafted. Ask the assistant to create it in a separate practice hub and clearly label those fixed dates as a test. Your real deadline needs the actual first and last dates.
 
@@ -31,8 +31,6 @@ You can ask “Show my deadlines” to inspect the full list. To close one, tell
 ```
 The return form has been accepted. Mark that deadline done in my hub, then run the deadline check and show whether it still appears in today's reminders. Keep its history. If you find more than one matching task, ask which one I mean.
 ```
-
-*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-26-text-2-20260913)*
 
 In practice, tell it to use only the practice hub. Inspect the result: the task should be closed, with its history still available. A repeating task may open a new period later; completing this month's task does not complete next month's.
 
@@ -78,7 +76,7 @@ Preserve today's existing brief. For testing, use a disposable hub, its own --hu
 Run hub-check-brief on the full result. If raw deadline text contains a local path that the checker refuses, preserve the raw output and report the conflict; do not silently alter required text. Use clear human titles when creating deadlines so they do not need local paths.
 ```
 
-*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-27-box-6)*
+*[Copy prompt](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-27-box-6)*
 
 Try an unfinished task and then a manually completed one. Add more than three urgent tasks to the practice folder as well, and check that the full urgent list survives the brief's length target. A tidy brief that omits a deadline has saved space at your expense.
 

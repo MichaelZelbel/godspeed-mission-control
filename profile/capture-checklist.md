@@ -12,8 +12,6 @@ With Hermes connected to your hub, use “Capture this in my inbox,” followed 
 Capture this in my inbox: Nadia said today the budget for next year's book has doubled. She hinted there could be a second illustrated title in it for me.
 ```
 
-*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-9-box-1)*
-
 Nadia is the fictional publishing client from the earlier chapters. In the run on 2 September 2026, the reply was:
 
 > Captured in: inbox/2026-09-02-nadia-book-budget.md
@@ -52,7 +50,7 @@ File the clear notes in my words. After checking that the content reached its de
 Tell me which files changed and where the originals went.
 ```
 
-*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-9-box-2)*
+*[Copy prompt](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-9-box-2)*
 
 This version keeps the filed originals in an archive. In an earlier demonstration, the assistant deleted them after filing because I'd explicitly asked it to. I now prefer being able to read the original words again. Compare one filed note with its archived source and check that it still means the same thing.
 

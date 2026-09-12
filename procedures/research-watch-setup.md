@@ -20,7 +20,7 @@ Read the complete research-watch skill in the companion kit at the location I gi
 Create watch/<short-name>/requirements.md using the format required by that skill. Fill it with our agreed question, specific source URLs, criteria and check interval. Use the skill's UTC dates for its internal records. Create its supporting folders and empty records. Do not research or schedule anything yet. Show the question and requirements in ordinary language so I can correct them.
 ```
 
-*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-26-box-1)*
+*[Copy prompt](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-26-box-1)*
 
 UTC is the common time reference used for the watch's dated records. Your morning schedule can still use your local time zone. The assistant handles that conversion; you choose how often the question deserves attention.
 
@@ -50,7 +50,7 @@ Ask Hermes to make a separate practice watch that reads a harmless local text fi
 Read AGENTS.md and skills/research-watch/SKILL.md. Run the due research watches in this hub now. Show the resulting attempt lines, source coverage, open findings and next check dates. Do not create a schedule or send a notification.
 ```
 
-*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-26-box-4)*
+*[Copy prompt](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-26-box-4)*
 
 With an empty log, the first check should begin straight away. Read its source list: a successful check must have read every required source. A failure should retain the last known evidence as old evidence, record what couldn't be read and set a retry date. That lets you use the work it completed without mistaking the gap for fresh information.
 
@@ -68,7 +68,7 @@ Inspect existing jobs and create or update one daily job named research watches,
 Show the actual saved job, working folder, named time zone, next run and pause control. The starter skill still records UTC dates; the timer's displayed zone is a separate setting. Check that an older schedule for the same subjects is paused. Update procedures.md. If the scheduler uses another time zone, resolve and show the equivalent next run before relying on it.
 ```
 
-*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-25-text-3-20260913)*
+*[Copy prompt](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-25-text-3-20260913)*
 
 The shared job wakes daily, but it researches only the questions due for a check. A weekly subject keeps its weekly pace unless a failure calls for an earlier try. With `retry_days: 1`, it can retry tomorrow, giving a temporarily unavailable page another chance without waiting a whole week.
 
@@ -86,7 +86,7 @@ Keep the normal body under 200 words. Required urgent and failed-check text is a
 Test in a disposable hub with a separate output at practice/brief-tests/research-test.md. Include an urgent finding, an unchanged useful finding, a failed source and an overdue watch whose last recorded run succeeded. The overdue watch must remain visible even though it has no failed-source finding. Preserve today's real brief and do not change real research state during the test.
 ```
 
-*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-25-text-4-20260913)*
+*[Copy prompt](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-25-text-4-20260913)*
 
 Leave time between the research and the brief for a slow run to finish. The 06:30 research start gives a 07:00 brief half an hour, but several due questions or a slow source can need longer. Check that your brief reads completed results and reports failed or missing runs. If research isn't ready, you should see that gap instead of yesterday's answer dressed as this morning's work.
 
@@ -104,6 +104,6 @@ The starter keeps findings in files you can open, and the morning brief brings t
 Pause the subject I name by setting status: paused in its requirements.md. Preserve its candidates, findings, results and log. Confirm the next common run will skip it. If I name all research watches, also pause the research watches schedule and inspect whether a run is already active. Update procedures.md with what was stopped.
 ```
 
-*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-25-text-5-20260913)*
+*[Copy prompt](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-25-text-5-20260913)*
 
 When your needs change, edit the same requirements file and keep the earlier research as a starting point. Teaching it once should spare you repeated explanations. It shouldn't oblige you to defend last month's preferences forever.

@@ -32,7 +32,7 @@ For each source record its URL, check time and whether it was read. Report chang
 Append a new dated section at the END of watch/product-watchdog.md. Use Changed, Checked and unchanged, or Not checked. If any required source failed, list the failed sources and preserve any partial results. Retry at the next scheduled run; do not create another job. Never replace a failure with a quiet-success line. Send nothing externally and change no account settings.
 ```
 
-*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-25-box-1)*
+*[Copy prompt](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-25-box-1)*
 
 Read the saved job's time zone, next run, working folder and stop control. Start with its local report, which gives you something to inspect without setting up delivery. To receive it on your phone, connect a delivery channel and test that a message actually arrives.
 

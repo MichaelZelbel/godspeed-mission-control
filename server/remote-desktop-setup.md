@@ -16,8 +16,6 @@ Install Tailscale on your desktop and sign in. Then open the server terminal as 
 curl -fsSL https://raw.githubusercontent.com/MichaelZelbel/teach-it-once-kit/main/server/open-the-door.sh | bash
 ```
 
-*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-31-text-1-20260913)*
-
 The script guides you through signing the server into Tailscale, creates a login for the web interface and starts that interface as a service. Use your own account when following its authentication link, and save the printed password in your password manager.
 
 The resulting private address has a form such as `100.x.y.z`. With your real address, the companion route uses:
@@ -25,8 +23,6 @@ The resulting private address has a form such as `100.x.y.z`. With your real add
 ```
 http://100.x.y.z:9119
 ```
-
-*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-31-text-2-20260913)*
 
 Open your real address from the connected desktop. It should ask for the sign-in you configured. If it won't connect, use the troubleshooting section below to trace the private connection. Keep port 9119 on the private network while you check; a connection problem is a reason to repair access, not to widen it.
 
@@ -44,7 +40,7 @@ Confirm which connection is selected. Ask:
 Without changing files, show this session's working folder and read the heading of /home/ai/hub/AGENTS.md. List the next scheduled job on this server with its time zone. If this is a local connection, say so instead of searching for a similarly named folder.
 ```
 
-*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-31-text-3-20260913)*
+*[Copy prompt](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-31-text-3-20260913)*
 
 Open a server result you recognise in the file browser. It is still on the server, but now you have the screen space to read it properly. This is the convenience we installed the connection for.
 

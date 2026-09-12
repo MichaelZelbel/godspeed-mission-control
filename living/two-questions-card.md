@@ -10,13 +10,9 @@ Try this on a small claim, such as the advertised price of a tool. Ask where the
 Did you check that, or do you remember it?
 ```
 
-*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-19-text-1-20260913)*
-
 ```
 What would make this wrong?
 ```
-
-*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-19-text-2-20260913)*
 
 The first question asks where the answer came from. The second asks what could change it. Together, they give you something more useful to work on than a general feeling of distrust: a source to inspect and a condition to test.
 
@@ -63,7 +59,7 @@ For each claim, explain what the source establishes and what it does not. Separa
 Do not make a purchase or commitment.
 ```
 
-*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-19-text-3-20260913)*
+*[Copy prompt](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-19-text-3-20260913)*
 
 A working link gives you access to the cited page. Read the part that is supposed to support the answer: the page could be old, incomplete or wrong, or the assistant could have applied it to a different case. This is how you find out which claims have evidence behind them and which still need work.
 

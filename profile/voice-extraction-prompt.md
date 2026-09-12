@@ -22,7 +22,7 @@ Keep explicit preferences I already confirmed separate from patterns you infer. 
 Show the proposed profile/voice.md, then save the version I confirm. Keep the writing samples.
 ```
 
-*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-8-box-1)*
+*[Copy prompt](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-8-box-1)*
 
 ## Keep what you recognise
 
@@ -49,8 +49,6 @@ The book's practice request was:
 ```
 Draft the message to Nadia about the four-day slip on cards 8 to 12.
 ```
-
-*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-7-text-2-20260913)*
 
 The assistant needed the people, project and writing files to prepare this reply.
 

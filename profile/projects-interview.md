@@ -21,7 +21,7 @@ Distinguish agreed dates from estimates and suggestions. Ask about conflicts the
 Show the proposed changes, then update profile/projects.md with the facts and choices I confirm. Keep dates and sources. Record important changes of direction and their reasons in decisions.md.
 ```
 
-*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-7-box-1)*
+*[Copy prompt](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-7-box-1)*
 
 Tell it which projects are finished and which ideas you're still thinking about. “Paid work before an unproven new idea” is useful direction. Tuesday afternoon can have a purpose even if you haven't settled the next five years.
 

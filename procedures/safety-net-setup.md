@@ -10,8 +10,6 @@ I had asked for a tidy-up. The detailed file that helped the assistant write lik
 Professional. Friendly. Concise.
 ```
 
-*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-17-text-1-20260913)*
-
 Three lines. Technically about voice. They could have described almost anyone's writing, which rather defeated the point of keeping a file about mine.
 
 The reason I can enjoy this story is that I had saved an earlier version. I got the guide back, and I want you to have that option before your own tidy-up becomes unexpectedly thorough. We'll keep old versions on your computer for undoing edits, then a separate copy in case the computer itself is lost.
@@ -30,7 +28,7 @@ Inspect the existing Git status and history too, if present. Check whether exclu
 Do not change files or history yet. Show what would be included, what would be excluded and what needs my decision. Explain that this inspection may miss sensitive information.
 ```
 
-*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-17-text-2-20260913)*
+*[Copy prompt](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-17-text-2-20260913)*
 
 Keep the inspection local where possible, and ask for categories of findings rather than the secret contents. There is a catch here: a cloud assistant may send what its file tools read to its model provider. Review especially sensitive files yourself if that exposure would defeat the purpose of checking them.
 
@@ -46,7 +44,7 @@ Set up local Git version history for this hub, using only the files I approved a
 Create one snapshot and show its identifier and the files included. Do not upload it or create an automatic job. Explain how I can ask to restore one file without losing unrelated work.
 ```
 
-*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-18-box-3)*
+*[Copy prompt](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-18-box-3)*
 
 The installer may already have set up Git, so the assistant should preserve any history it finds. Open the new snapshot and check that it contains the work you chose. These are the files you would get back after a mistake; this is a good moment to see whether anything is missing.
 
@@ -60,7 +58,7 @@ Save that file in a local Git snapshot without including unrelated changes. Then
 Restore backup-practice.txt from the saved snapshot. Compare the restored contents with the original sentence and show the result. Do not alter any other files or upload anything.
 ```
 
-*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-17-text-4-20260913)*
+*[Copy prompt](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-17-text-4-20260913)*
 
 Open the restored file and look for the original sentence. You have now watched a change being undone. The same principle applies to real work: a snapshot saved before an edit gives you a version to return to.
 
@@ -88,7 +86,7 @@ Before uploading, show the destination, confirm its private visibility, and show
 Wait for my approval of that exact upload. After approval, upload the reviewed snapshot, verify the remote snapshot identifier matches, and give me the repository link. Do not create an automatic sync job.
 ```
 
-*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-18-box-5)*
+*[Copy prompt](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-18-box-5)*
 
 Open the repository page while signed in and look for the **Private** label and your saved file. Then ask the assistant to compare the local and remote snapshot identifiers. Matching identifiers tell you that the copy elsewhere is the version you just reviewed, rather than an older save with a reassuring name.
 

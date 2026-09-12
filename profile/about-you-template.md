@@ -6,7 +6,7 @@ Installation has left you with several new folders and one reviewed briefing. Le
 Read what-my-ai-knew.md and file the useful parts into profile/about-me.md, profile/people.md, profile/projects.md and profile/voice.md. Use the meaning of the headings, not their exact spelling. Keep unanswered questions in inbox/. Keep the original file. Add the source and today’s date to what you import. Show me what you changed; do not fill gaps by guessing.
 ```
 
-*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-3-text-1-20260913)*
+*[Copy prompt](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-3-text-1-20260913)*
 
 Open the changed files to see where your information went. Your background belongs in `about-me.md`, relevant people in `people.md`, work in `projects.md`, and writing preferences in `voice.md`. The unanswered questions should still be in `inbox/`, with the original briefing kept as the source. You can follow each piece back to the document you reviewed.
 

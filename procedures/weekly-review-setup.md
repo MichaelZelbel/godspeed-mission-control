@@ -26,7 +26,7 @@ Only if prompts/library/bring-your-context-with-you.md exists and I still use an
 For a test, accept a separate practice destination. Do not replace the real review or file real captures while testing fictional inputs.
 ```
 
-*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-24-box-1)*
+*[Copy prompt](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-24-box-1)*
 
 Read the skill and try it before adding a schedule. It asks the assistant to save a version of the affected files and keep original captures in `archives/filed-captures/`. That matters because filing involves interpreting a note. If the assistant puts one in the wrong place, you want your original words and a way back.
 
@@ -51,7 +51,7 @@ Save the prompt in your library now so the monthly reminder can point straight t
 From the companion kit's profile/bring-your-context-with-you.md, copy only the first prompt, beginning 'Help me create a short briefing', into prompts/library/bring-your-context-with-you.md. Do not include the correction or download prompts. Add a purpose line: summarize accessible background for review and import; not a full conversation export. Preserve an existing saved version and show any difference before replacing it.
 ```
 
-*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-23-text-2-20260913)*
+*[Copy prompt](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-23-text-2-20260913)*
 
 Use the reminder when there's something worth bringing over. Run the prompt in the other tool, read its answer and correct it before importing. Choose which details may travel, leaving guesses and open questions visible. You know the subject of this summary unusually well, but it can still surprise you.
 
@@ -63,7 +63,7 @@ If you pay for more than one AI tool, add a monthly cost check to the weekly rev
 Read any existing subscription records first. Create or update profile/subscriptions.md with one block per AI plan I confirm: plan name, price and currency, renewal date, source of usage evidence, and status. Keep unknown values marked unknown. Do not duplicate an existing plan or infer that a missing receipt means no usage.
 ```
 
-*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-24-box-3)*
+*[Copy prompt](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-24-box-3)*
 
 Ask Hermes to inspect its usage records for the last 30 days. The helper named `hermes insights --days 30` reads those records; the assistant can run it for you. One historical run showed:
 
@@ -79,7 +79,7 @@ Add an optional monthly subscription section to skills/weekly-review/SKILL.md. R
 Read that file and run hermes insights --days 30. Report what the available records cover, known charges and unknown usage. Treat activity in other tools as unmeasured unless their records are available. Distinguish subscription fees from extra usage charges. Recommend a change only with its evidence and tradeoff. Cancel, buy and change nothing. If the command fails, report that failure rather than zero usage.
 ```
 
-*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-24-box-5)*
+*[Copy prompt](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-24-box-5)*
 
 ## Schedule it and check the result
 
@@ -91,7 +91,7 @@ Choose a time when you normally consider the week ahead. Ask Hermes to schedule 
 Read AGENTS.md and follow skills/weekly-review/SKILL.md. Write this week's new review into reviews/. Apply only the local filing allowed by that skill. Report failures and uncertainty; send nothing externally.
 ```
 
-*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-23-text-5-20260913)*
+*[Copy prompt](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-23-text-5-20260913)*
 
 Read the saved job before leaving it active. Its computer, working folder, time zone, next run and output should match what you intended. Keep delivery local. Ask the assistant to record those details in `procedures.md` and pause the job once. This is easier to learn while you are still looking at its controls.
 

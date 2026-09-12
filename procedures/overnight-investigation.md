@@ -12,8 +12,6 @@ Check the starting material before setting a timer. In the practice hub, ask:
 Confirm that this is robin-practice. Read AGENTS.md, profile/, inbox/workshop-notes.md and skills/prepare-a-decision/SKILL.md. Confirm the profile says Robin runs a bicycle repair shop. List any missing file. Create no job until these inputs are available.
 ```
 
-*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-22-text-1-20260913)*
-
 If Robin's folder does not exist, unpack the matching companion kit and ask Hermes to create `robin-practice` beside your hub. Have it copy `starter-hub/` there, add the briefing and workshop note from `practice/maintenance-classes/`, and file that briefing into the practice profile. Also copy `skills/prepare-a-decision/SKILL.md` from the kit. Tell it to preserve existing folders and keep the fictional material out of your real hub. Open the new folder in Hermes and run the input check above.
 
 If you are using your own question instead, ask the assistant to adapt the job below to your question, sources and a new output filename. Keep the one-time schedule and preparation-only limits.
@@ -23,8 +21,6 @@ The question is ordinary:
 ```
 What should I do next about the maintenance classes?
 ```
-
-*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-22-text-2-20260913)*
 
 A job that starts later needs more than the question. We'll save where to look, what to produce and when to finish. The aim is to leave all the instructions with the job, including the ones that seem obvious while you're typing.
 
@@ -40,8 +36,6 @@ Read AGENTS.md and skills/prepare-a-decision/SKILL.md. Answer: What should Robin
 
 Show the saved job record with its one-time schedule, working folder, time zone, output path and stop control. Record it in procedures.md as a practice job.
 ```
-
-*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-22-text-3-20260913)*
 
 Before walking away, read the saved record. Look for `robin-maintenance-once`, one future run in the displayed time zone, your practice folder and the result path `investigations/robin-maintenance-once.md`. Together, they tell you what will run, when to expect it and where you'll find the work.
 

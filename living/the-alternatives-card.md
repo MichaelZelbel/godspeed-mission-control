@@ -28,7 +28,7 @@ Install the supported version for this computer if needed. Preserve existing con
 Prepare a secure local sign-in or masked token-entry step and open the assistant in this hub. Confirm the folder and configured model. Keep schedules unchanged.
 ```
 
-*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-32-text-1-20260913)*
+*[Copy prompt](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-32-text-1-20260913)*
 
 The [OpenCode installation guide](https://opencode.ai/docs/) lists the supported routes, and its [configuration guide](https://opencode.ai/docs/config/) explains how project and user settings combine. The assistant can handle the installation and settings. You choose any paid access and complete the secure sign-in.
 
@@ -42,7 +42,7 @@ Open the second assistant in your hub and ask:
 Whose folder is this, what are the house rules you must follow here, and which file would you check for what matters most right now? Answer from what is in the folder. Do not change anything. Name the files you actually read.
 ```
 
-*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-33-box-5)*
+*[Copy prompt](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-33-box-5)*
 
 In the 2 September 2026 test with fictional illustrator Sam's folder, the answer began:
 
@@ -57,7 +57,7 @@ For the next question, choose one of your saved skills. If you installed the day
 Read skills/plan-my-day/SKILL.md. In three sentences, explain what it produces and the limits it follows. Do not execute the skill or change anything. End with exactly: Nothing modified.
 ```
 
-*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-33-box-6)*
+*[Copy prompt](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-33-box-6)*
 
 The original test described the older recipe correctly and ended with “Nothing modified.” Compare your answer with the skill file you have now, since the recipe may have changed. You're checking how accurately this assistant read your method, not how closely it repeated my result.
 
@@ -74,8 +74,6 @@ Then use a note you stored in the notebook. For the fictional Nadia notes:
 ```
 Use my notebook tools to look up who Nadia is and how she wants bad news delivered. Report what the notebook returned and identify the notes. Do not read local files for this answer. State any gap and change nothing.
 ```
-
-*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-33-box-8)*
 
 In the earlier test, the answer found Nadia's preferences in the online notes, but not her role. It didn't borrow that detail from Sam's profile. That let me see what the notebook connection had supplied, without a helpful guess covering the missing part.
 

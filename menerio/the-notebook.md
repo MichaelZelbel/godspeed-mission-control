@@ -29,8 +29,6 @@ Nadia said today the budget for next year's book has doubled. She
 hinted there could be a second illustrated title in it for me.
 ```
 
-*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-27-text-1-20260913)*
-
 Label the practice notes as fiction and keep them out of your real profile. For your first note, choose something harmless you'd like to find again, such as a preference or a quotation. Save the sort of thing you actually forget; Menerio doesn't require you to have a profound thought before opening it.
 
 I added three more practice notes: Nadia's preference for early warnings and three options, Priya's preferred contact method, and a printing quote. For this demonstration, I entered each one directly in Menerio.
@@ -54,8 +52,6 @@ In that Menerio test, I searched:
 ```
 what did the reprint cost
 ```
-
-*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-27-text-2-20260913)*
 
 The printing quote came first, with a relevance score beside it. That number says how closely the note matched my words, not whether the note is right. When I tried `money`, I got no result, despite having two notes about money.
 

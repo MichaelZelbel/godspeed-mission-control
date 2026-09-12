@@ -22,8 +22,6 @@ The setup starts as `root`, the administrator account. Review the script from yo
 curl -fsSL https://raw.githubusercontent.com/MichaelZelbel/teach-it-once-kit/main/server/install.sh | bash
 ```
 
-*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-30-text-1-20260913)*
-
 That address retrieves the current public installer. Save its completion report. The installer pins a version of its shared setup code, but also downloads other current components; this is not a promise that every future installation will be byte-for-byte identical.
 
 The installer creates a limited user called `ai`, installs Hermes and prepares `/home/ai/hub`. Follow its progress as it goes. If a step fails, pause there and keep the error message; it tells you what needs attention before the steps that depend on it can continue.
@@ -55,7 +53,7 @@ If this server joined your existing hub, ask through your connected Telegram bot
 Read /home/ai/hub/AGENTS.md. Confirm the working folder. Name the profile files you can read and quote one harmless fact from the file I specify. Do not change anything or use memory from an earlier conversation.
 ```
 
-*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-30-text-2-20260913)*
+*[Copy prompt](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-30-text-2-20260913)*
 
 For a fresh hub, first ask the server assistant to download the [matching companion kit](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/Teach-It-Once-Companion.zip) and follow its `setup/match-edition.md` guide for `/home/ai/hub`. Ask it to preserve the server's paths and working connections. This brings the installed instructions into line with this edition before you add personal material.
 
@@ -81,7 +79,7 @@ Ask me to choose server-local results or delivery to my own connected Telegram c
 Show the saved job record, next run, output path, delivery setting and pause control. Do not claim scheduled delivery works based on an ordinary bot conversation.
 ```
 
-*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-30-text-3-20260913)*
+*[Copy prompt](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-30-text-3-20260913)*
 
 Pause the laptop's copy of this job before switching on the server schedule, then record the active location in `procedures.md`. Keep the skill on both machines if you like. Two versions of tomorrow's brief are unlikely to make tomorrow twice as helpful.
 

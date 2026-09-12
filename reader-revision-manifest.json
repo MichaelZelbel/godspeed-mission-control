@@ -2,9 +2,10 @@
   "edition": "private first-read revision",
   "date": "2026-09-13",
   "manuscript_title": "Teach It Once: Make AI your mission control for life and business",
-  "manuscript_sha256": "ff0a82ff6cd04f55cb6c998df34adf98a73d60f7fabbf722da536e7e24d2831f",
+  "manuscript_sha256": "0554b8938f0e8b15dc71d54c9eaf387998d9bedf79928a2824c2d2978cf40b16",
   "chapters": 34,
   "copy_boxes": 86,
+  "copy_prompts": 50,
   "public_release": false,
   "reconciled_files": [
     "profile/bring-your-context-with-you.md",

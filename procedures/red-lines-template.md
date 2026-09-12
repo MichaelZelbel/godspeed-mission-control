@@ -27,7 +27,7 @@ Then rewrite the files in rules/ in my words, keeping the header at the top of e
 When I say yes, run hub-compile-rules so AGENTS.md catches up.
 ```
 
-*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-17-box-1)*
+*[Copy prompt](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-17-box-1)*
 
 The prompt asks the assistant to run `hub-compile-rules`, the program that refreshes the short list after you confirm the changes. Open `AGENTS.md` and read that list. If anything is wrong, tell the assistant to correct the source rule and refresh it again. An edit made only in the generated list would disappear at the next run.
 
@@ -51,15 +51,11 @@ We can check whether a new session responds to an instruction without involving 
 When you answer anything in this folder, start your reply with the single word PELICAN on its own line.
 ```
 
-*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-16-text-2-20260913)*
-
 Save it, start a fresh session in the hub, and ask:
 
 ```
 What is 2 plus 2? Answer in as few words as possible.
 ```
-
-*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-16-text-3-20260913)*
 
 In one practice folder, the file was named `house-rules.md`; the reply was “4.” In the other it was named `AGENTS.md`; the reply included PELICAN.
 
@@ -112,8 +108,6 @@ Hermes also lets you ask how its permission checks would treat a command, withou
 ```
 hermes approvals test "rm notes.md"
 ```
-
-*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-16-text-4-20260913)*
 
 > verdict : allow (exit 0)
 > detail  : no guard matched; would run without a prompt

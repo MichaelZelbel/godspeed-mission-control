@@ -18,8 +18,6 @@ On macOS or Linux, the installer accepts the existing repository address:
 curl -fsSL https://raw.githubusercontent.com/MichaelZelbel/teach-it-once-kit/main/install-hub.sh | bash -s -- --sources "" --repo YOUR-PRIVATE-REPOSITORY-URL
 ```
 
-*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-29-text-1-20260913)*
-
 Replace `YOUR-PRIVATE-REPOSITORY-URL` with your repository's web address, such as `https://github.com/your-name/your-hub.git`, using your own account and repository names. The installer copies the files and their history from that address onto this computer. Keep the installer's completion report so the assistant can inspect any failed step. The `--sources ""` option leaves local conversation collection off. The `main` URL retrieves the currently published installer.
 
 Open the installed hub in Hermes and ask for a harmless line you saved recently, with the source file. Then ask which skills are available. These are answers you can check. “Do you know me?” invites a charming reply that may tell you very little.
@@ -76,7 +74,7 @@ I have replaced the credential for the service I name. Inspect the existing reco
 Help me load the replacement through a masked local input or the existing encrypted store. Run hub-check-keys, then the service's read-only connection test without printing any credential. Update the existing tracked renewal after checking the evidence. Do not treat a newer file timestamp as successful renewal.
 ```
 
-*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-30-box-5)*
+*[Copy prompt](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-30-box-5)*
 
 If you use the kit's deadline helper in your morning brief, it reads those dated entries and supplies the reminder. Writing an expiry date alone does not create a schedule. The local credential check also does not prove the service accepted the replacement; that is why the prompt asks for a real connection test.
 

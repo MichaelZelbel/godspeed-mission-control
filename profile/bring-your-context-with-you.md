@@ -37,7 +37,7 @@ Mark uncertain claims with (?). Distinguish things I told you from your interpre
 Then list at most six short questions that would fill important gaps. List them without asking me to answer yet.
 ```
 
-*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-1-box-1)*
+*[Copy prompt](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-1-box-1)*
 
 The answer may be thinner than you expected. The chatbot can only work with the conversations and memory your product, account and settings let it reach. This request won't export your account or recover every old conversation. Work with what it returns: we're looking for a few accurate lines worth taking to the next assistant.
 
@@ -50,8 +50,6 @@ Correct whatever is wrong in plain language. Suppose you have moved from Company
 ```
 Correct my employer. I now work at Company B, not Company A.
 ```
-
-*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-1-text-2-20260913)*
 
 Give it the rest of your corrections in the same way, then ask it to show the complete revised briefing. If you cannot yet answer one of its questions, leave that gap visible.
 
@@ -75,7 +73,7 @@ Only when you are happy with the complete revised briefing, ask for the download
 Give me this briefing as a downloadable Markdown file named what-my-ai-knew.md. Keep the uncertainties visible. If you cannot create a download, give me the exact text to save in a plain text file with that name.
 ```
 
-*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-1-text-3-20260913)*
+*[Copy prompt](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-1-text-3-20260913)*
 
 Markdown is ordinary text with a few simple marks, such as `#` for a heading. Save the download on your computer as `what-my-ai-knew.md`.
 

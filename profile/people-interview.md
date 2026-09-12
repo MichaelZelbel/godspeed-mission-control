@@ -23,7 +23,7 @@ Keep the source and date of current claims. Label my interpretations as interpre
 When we finish, show the proposed changes and update profile/people.md with the corrections I confirm.
 ```
 
-*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-6-box-1)*
+*[Copy prompt](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-6-box-1)*
 
 Begin with the people your briefing already mentions. Correcting “Alex works with me” is easier than writing Alex's entry from scratch, and the assistant can ask about a missing detail when it matters. The interview should save you the work of deciding what to explain.
 

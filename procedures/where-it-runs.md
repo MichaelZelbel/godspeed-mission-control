@@ -20,8 +20,6 @@ Copy starter-hub/ into robin-practice, including its dot files. Copy practice/ma
 Copy the kit's skills/prepare-a-decision/SKILL.md into robin-practice/skills/prepare-a-decision/SKILL.md. Confirm that the copied skill, profile files and workshop note can be read. Report the full practice path and leave all schedules off.
 ```
 
-*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-21-text-1-20260913)*
-
 Open the practice folder in Hermes and check that it is the working folder. You'll use the installation you already have; changing the folder gives this exercise its own files.
 
 For this exercise, we'll give each skill's exact path to the job. It can then read the copied instructions directly, without depending on whether Hermes discovers them automatically in the practice folder.
@@ -46,7 +44,7 @@ Later additions may put full deadline output, unresolved urgent research and fai
 Run hub-check-brief on the completed file, fix delivery-format failures and preserve important content. A passed format check is not an evidence check. If checking fails, report the failure and keep the draft available for inspection.
 ```
 
-*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-21-text-2-20260913)*
+*[Copy prompt](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-21-text-2-20260913)*
 
 Open the dated file in `brief/` to see the result. The skill file contains the method that produced it. `hub-check-brief` looks for delivery problems, such as asking a phone reader to open a file on a computer. It can't decide whether the advice was worth reading; that's what you're checking now.
 
@@ -74,7 +72,7 @@ Keep delivery local. Confirm that the scheduler is running on this computer; a s
 Show the saved job's working folder, time zone, next run, result location and pause control. Record these in procedures.md. If any part cannot be checked, say which part and do not describe the schedule as ready.
 ```
 
-*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-21-text-3-20260913)*
+*[Copy prompt](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-21-text-3-20260913)*
 
 The working folder is the directory where that later job will read and write. Hermes now supports saving it with each job. Without it, a scheduled run may start outside your hub even though the conversation was inside it. This behaviour is described in the [official scheduling guide](https://hermes-agent.nousresearch.com/docs/user-guide/features/cron/).
 
@@ -94,7 +92,7 @@ To test the timer without touching today's brief, use a separate one-time practi
 Create one one-time test, due in 5 minutes, with this hub's full path saved as its working folder. Show its saved job record, actual time zone and next run. Its prompt must read AGENTS.md and skills/morning-brief/SKILL.md, then write to practice/brief-tests/timer-test.md as an explicit test output. Refuse to overwrite that file. Use no external delivery. Add the test and its stop control to procedures.md.
 ```
 
-*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-21-text-4-20260913)*
+*[Copy prompt](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-21-text-4-20260913)*
 
 Keep the computer awake and the scheduler running, and let the timer start this test without pressing **Trigger now**. Return after the scheduled time and inspect the run history and new practice result. The one-time job should have no future run. You'll have checked both that it started by itself and that it knows when to stop.
 

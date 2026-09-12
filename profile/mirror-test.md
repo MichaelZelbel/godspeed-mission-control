@@ -14,7 +14,7 @@ Then list possible conflicts, dates that may be stale, and claims too vague to u
 Do not search elsewhere or change anything yet. Unchanged information is not automatically outdated.
 ```
 
-*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-10-box-1)*
+*[Copy prompt](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-10-box-1)*
 
 ## Read the conflicts, not just the portrait
 

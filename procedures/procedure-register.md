@@ -31,7 +31,7 @@ Mark each ready or not ready. For each missing input, name exactly what is neede
 Do not change files or create schedules.
 ```
 
-*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-21-box-1)*
+*[Copy prompt](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-21-box-1)*
 
 The email skill may write beautifully while still depending on you to supply the email. A meeting skill may need a name and a date. Put those inputs where the job can find them. Otherwise you've arranged an early start for an assistant with nothing to do.
 
@@ -69,7 +69,7 @@ Inspect the schedules you can actually reach. Update procedures.md with one bloc
 Mark planned jobs as not scheduled. Do not invent a job or a successful test from a conversation about one. Report any schedule you could not inspect.
 ```
 
-*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-21-box-2)*
+*[Copy prompt](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-21-box-2)*
 
 If the inspection finds an existing job, try its stop control while stopping is an exercise rather than an urgent search. If you have no jobs yet, keep the empty list; the first morning brief will give you one to record. Leave unfinished plans marked "not scheduled" until the schedule is saved. A record with an honest gap is more useful than one that makes your plans look complete.
 

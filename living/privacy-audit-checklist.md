@@ -29,7 +29,7 @@ Identify credentials, unintended personal material and information about other p
 Separately list the assistant's local conversation and memory locations, plus configured providers and connected services you can actually inspect. Mark unknown destinations or retention settings as unknown. Distinguish what a local deletion would remove from copies elsewhere.
 ```
 
-*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-19-box-1)*
+*[Copy prompt](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-19-box-1)*
 
 Asking a cloud assistant to check private files has an awkward catch: what it reads may itself go to the provider. For the most sensitive material, make a local list and inspect it yourself. Look beyond passwords. A private story doesn't need a suspicious string of numbers to deserve care.
 

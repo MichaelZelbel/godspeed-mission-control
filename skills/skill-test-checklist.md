@@ -30,8 +30,6 @@ The revised instruction became:
 6. Give me the draft only. If something is missing, put it in a single line above the draft that starts with "Need:" and nothing else.
 ```
 
-*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-15-text-1-20260913)*
-
 ## Test 2: remove a required source
 
 Ask the assistant to create a separate, empty practice folder, then open it in a new session. Provide the skill text and a realistic job, but leave out one source the instructions require. Tell the assistant to use only the supplied practice material. Leave your working hub where it is. We can test a missing file without removing files you use for real work.
@@ -58,7 +56,7 @@ Check the reply below against every requirement in [path to your chosen SKILL.md
 For each rule, say kept, broken or cannot check. Quote the relevant evidence. Do not treat the reply's own claim as proof. Name missing input needed for a judgment. Do not rewrite the reply yet.
 ```
 
-*[Copy this text](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-16-box-2)*
+*[Copy prompt](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-16-box-2)*
 
 The earlier email recipe asked for uncertainty marks, then insisted on a draft with no extra remarks. When I asked the assistant to check the result, those instructions collided:
 
