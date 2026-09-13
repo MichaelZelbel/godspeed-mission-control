@@ -51,8 +51,8 @@
     "key": "chapter-2-text-4-20260913",
     "chapter": 2,
     "section": "Match the instructions to this edition",
-    "body": "Use the matching Teach It Once companion kit at the location I give you. Read its setup/match-edition.md and use that guide to bring this hub's shared instructions into agreement with the kit. Preserve my personal information, decisions, rules and existing work. Save a local recovery copy before changing guidance. Check that the resulting instructions are complete and fit this installation's size allowance.\n\nCheck whether conversation collection or notebook copying was enabled. Leave both off for this first setup, disabling only those kit jobs if necessary. Record what changed and any remaining failure. Do not connect a service, upload files or create a new schedule.",
-    "sha256": "df2017af4077612882b12a7c010376b63edd97566e53ae54f336304a91dcc2fb",
+    "body": "Find the matching Teach It Once companion kit I downloaded and unpacked. If you cannot identify it, ask me where I saved it. Read its setup/match-edition.md and use that guide to bring this hub's shared instructions into agreement with the kit. Preserve my personal information, decisions, rules and existing work. Save a local recovery copy before changing guidance. Check that the resulting instructions are complete and fit this installation's size allowance.\n\nCheck whether conversation collection or notebook copying was enabled. Leave both off for this first setup, disabling only those kit jobs if necessary. Record what changed and any remaining failure. Do not connect a service, upload files or create a new schedule.",
+    "sha256": "d9843ef88b3954749ca006e9bd21c1d7895fb72434cfdee8bdf4b3b704871cc8",
     "copyable": true
   },
   {
@@ -67,8 +67,8 @@
     "key": "chapter-4-text-1-20260913",
     "chapter": 4,
     "section": "Ask your assistant to add a project",
-    "body": "Clone this repository into dev/ inside my hub.",
-    "sha256": "c76615fc47c1eedd79108213c7e25591ee13c13e8f8f27e4eb6a8ea7c206c4e0",
+    "body": "Clone the Menerio repository into dev/ inside my hub.",
+    "sha256": "c39868733b227d7d77ba8a028f342727a627392c8ff29292a3921f11f94fd3fd",
     "copyable": false
   },
   {
@@ -235,8 +235,8 @@
     "key": "chapter-16-box-2",
     "chapter": 15,
     "section": "Test 3: compare the reply with the rules",
-    "body": "Check the reply below against every requirement in [path to your chosen SKILL.md] and the source material supplied with it.\n\nFor each rule, say kept, broken or cannot check. Quote the relevant evidence. Do not treat the reply's own claim as proof. Name missing input needed for a judgment. Do not rewrite the reply yet.",
-    "sha256": "0700fb12c847dc14f93f10889506464ed01d2161cef6f4666ad286ef11f3e8c6",
+    "body": "Find the instruction file for the skill I name. Check the reply below against every requirement in that file and the source material supplied with it.\n\nFor each rule, say kept, broken or cannot check. Quote the relevant evidence. Do not treat the reply's own claim as proof. Name missing input needed for a judgment. Do not rewrite the reply yet.",
+    "sha256": "8d3de314639265e98376869471e662889a6c5abc2c2c806e97d32d33205e7928",
     "copyable": true
   },
   {
@@ -347,8 +347,8 @@
     "key": "chapter-21-box-1",
     "chapter": 20,
     "section": "Check whether the skill can find its input",
-    "body": "Read each skill in skills/. Could it run without another message from me, using only the files and tools it can already reach?\n\nMark each ready or not ready. For each missing input, name exactly what is needed and where the skill currently expects to get it. Also check its output destination, limits and stopping condition.\n\nDo not change files or create schedules.",
-    "sha256": "26a37d866fa30467db89cc59cf4062c0440cb361bcba5ccc06ee8ca550940ea3",
+    "body": "Read the skill I want to schedule. Could it run without another message from me, using only the files and tools it can already reach?\n\nMark it ready or not ready. For each missing input, name exactly what is needed and where the skill currently expects to get it. Also check its output destination, limits and stopping condition.\n\nDo not change files or create schedules.",
+    "sha256": "ea7cd25ffc57a47d66ec253e349aeb8b7502c45c66e708ffd989acf1cd81094c",
     "copyable": true
   },
   {
@@ -363,16 +363,16 @@
     "key": "chapter-21-text-1-20260913",
     "chapter": 21,
     "section": "Optional practice: Robin's bicycle shop",
-    "body": "Use the unpacked companion kit at the location I give you. Create a new disposable hub named robin-practice beside my real hub. Stop if that folder already exists; do not merge or overwrite it.\n\nCopy starter-hub/ into robin-practice, including its dot files. Copy practice/maintenance-classes/what-my-ai-knew.md into its top level and its workshop-notes.md into inbox/. File the fictional summary under profile/about-me.md, profile/people.md, profile/projects.md and profile/voice.md according to each file's subject. Preserve the summary as the source, keep uncertain claims marked, and retain unresolved questions in inbox/. Proposed behavior rules need confirmation before entering rules/ and the compiled instructions. Do not put anything in my real profile or notebook.\n\nCopy the kit's skills/prepare-a-decision/SKILL.md into robin-practice/skills/prepare-a-decision/SKILL.md. Confirm that the copied skill, profile files and workshop note can be read. Report the full practice path and leave all schedules off.",
-    "sha256": "c5cbbdec9cbcb7b0e20360f3e3f225eff219ef51cc701f0a3bfda05157bc3efc",
+    "body": "Find the matching unpacked companion kit, asking where I saved it only if needed. Create a new disposable hub named robin-practice beside my real hub. Stop if that folder already exists; do not merge or overwrite it.\n\nCopy starter-hub/ into robin-practice, including its dot files. Copy practice/maintenance-classes/what-my-ai-knew.md into its top level and its workshop-notes.md into inbox/. File the fictional summary under profile/about-me.md, profile/people.md, profile/projects.md and profile/voice.md according to each file's subject. Preserve the summary as the source, keep uncertain claims marked, and retain unresolved questions in inbox/. Proposed behavior rules need confirmation before entering rules/ and the compiled instructions. Do not put anything in my real profile or notebook.\n\nCopy the kit's skills/prepare-a-decision/SKILL.md into robin-practice/skills/prepare-a-decision/SKILL.md. Confirm that the copied skill, profile files and workshop note can be read. Report the full practice path and leave all schedules off.",
+    "sha256": "8aa1c9ecaf0c8576091d41c9dc370cacea640451c223abb5a4870f1f368f5d78",
     "copyable": false
   },
   {
     "key": "chapter-21-text-2-20260913",
     "chapter": 21,
     "section": "Build the brief before its schedule",
-    "body": "Build skills/morning-brief/SKILL.md with these instructions, then run it once.\n\nRead AGENTS.md, the profile, current work files, decisions and inbox. Read the previous brief if there is one. Use the current date in the selected job time zone. Do not invent change over time when there is no earlier record.\n\nWrite what changed, useful work you prepared, and the decision that needs me. Separate recorded claims from your recommendations. Include a short draft or question set when the sources support one. Name important gaps and failed checks. Send nothing, buy nothing and make no commitments.\n\nSave a new file as brief/YYYY-MM-DD.md. If it already exists, preserve it and report that no second daily brief was written. For an explicit test, accept a separate practice output path and never use or overwrite today's real brief.\n\nKeep the normal brief body under 200 words. Include copyable action text in the brief itself. Use existing approved HTTPS links for longer material only when available; do not publish private material to make a link. The file a fact came from may be named on a Sources: line.\n\nLater additions may put full deadline output, unresolved urgent research and failed-check notices after the normal body. Those required sections are exempt from the 200-word limit. Never cut them to pass the limit. Omit empty optional sections.\n\nRun hub-check-brief on the completed file, fix delivery-format failures and preserve important content. A passed format check is not an evidence check. If checking fails, report the failure and keep the draft available for inspection.",
-    "sha256": "e130a25efcd26240efd906ac91981e72299023fe9b56acdc0c9ac3ebb7dba2e9",
+    "body": "Build skills/morning-brief/SKILL.md with these instructions, then run it once.\n\nRead AGENTS.md, the profile, current work files, decisions and inbox. Read the previous brief if there is one. Use the current date in the selected job time zone. Do not invent change over time when there is no earlier record.\n\nWrite what changed, useful work you prepared, and the decision that needs me. Separate recorded claims from your recommendations. Include a short draft or question set when the sources support one. Name important gaps and failed checks. Send nothing, buy nothing and make no commitments.\n\nSave a new file as brief/YYYY-MM-DD.md. If it already exists, preserve it and report that no second daily brief was written. For an explicit test, accept a separate practice output path and never use or overwrite today's real brief.\n\nKeep the normal brief body under 200 words. Include copyable action text in the brief itself. Use existing approved HTTPS links for longer material only when available; do not publish private material to make a link. The file a fact came from may be named on a Sources: line.\n\nKeep urgent unfinished work and failed-check notices visible after the normal body when they need more space. These sections are exempt from the 200-word limit. Never cut them to pass the limit. Omit empty sections.\n\nRun hub-check-brief on the completed file, fix delivery-format failures and preserve important content. A passed format check is not an evidence check. If checking fails, report the failure and keep the draft available for inspection.",
+    "sha256": "710a9e1a05bc8fc3819c8f433d85bd35cabc90686dfc1a4e3151d8085c70e58c",
     "copyable": true
   },
   {
@@ -426,7 +426,7 @@
   {
     "key": "chapter-23-text-2-20260913",
     "chapter": 23,
-    "section": "Save the prompt the monthly reminder uses",
+    "section": "Optional: bring new background from another AI tool",
     "body": "From the companion kit's profile/bring-your-context-with-you.md, copy only the first prompt, beginning 'Help me create a short briefing', into prompts/library/bring-your-context-with-you.md. Do not include the correction or download prompts. Add a purpose line: summarize accessible background for review and import; not a full conversation export. Preserve an existing saved version and show any difference before replacing it.",
     "sha256": "aec55c7826d18f72d4a6636c6ddbe65bebcdce52df1001fbd560c0b0d2496e25",
     "copyable": true
@@ -467,8 +467,8 @@
     "key": "chapter-26-box-1",
     "chapter": 25,
     "section": "Give the assistant a question it can return to",
-    "body": "Set up one research watch for the question I describe. Read relevant existing notes first. Ask only for missing information: what would count as better, which sources to trust, how often to check, and which findings would change a decision.\n\nRead the complete research-watch skill in the companion kit at the location I give you. Install it as skills/research-watch/SKILL.md in this hub. If a skill already exists there, compare it and preserve my changes; show a proposed merge rather than replacing it.\n\nCreate watch/<short-name>/requirements.md using the format required by that skill. Fill it with our agreed question, specific source URLs, criteria and check interval. Use the skill's UTC dates for its internal records. Create its supporting folders and empty records. Do not research or schedule anything yet. Show the question and requirements in ordinary language so I can correct them.",
-    "sha256": "e778e9b5b69bd139a133a302903eb3d85d3a913fe817c87218e36f3d4b3dae35",
+    "body": "Set up one research watch for the question I describe. Read relevant existing notes first. Ask only for missing information: what would count as better, which sources to trust, how often to check, and which findings would change a decision.\n\nFind the matching unpacked companion kit, asking for its location only if needed. Read its complete research-watch skill. Install it as skills/research-watch/SKILL.md in this hub. If a skill already exists there, compare it and preserve my changes; show a proposed merge rather than replacing it.\n\nCreate watch/<short-name>/requirements.md using the format required by that skill. Find and inspect the relevant source pages yourself; ask me about a source only when access or identity is uncertain. Fill the file with our agreed question, the verified source URLs, criteria and check interval. Use the skill's UTC dates for its internal records. Create its supporting folders and empty records. Do not run the research comparison or schedule anything yet. Show the question and requirements in ordinary language so I can correct them.",
+    "sha256": "715af46c8dfdd9a2dcd7239bc591936dbaea557bb114d78beb7295747afe9894",
     "copyable": true
   },
   {
@@ -611,8 +611,8 @@
     "key": "chapter-30-text-3-20260913",
     "chapter": 30,
     "section": "Move one schedule, not two",
-    "body": "Inspect this server's system time zone and Hermes scheduler configuration. Show the current local time and the next intended 07:00 run in my chosen named zone. Confirm /home/ai/hub is the working folder and skills/morning-brief/SKILL.md exists.\n\nPrepare one daily morning-brief schedule using that folder and zone. Its prompt must read AGENTS.md and the skill. Preserve existing daily briefs. If an installer-created 06:00 job exists, edit or retire it rather than adding another.\n\nAsk me to choose server-local results or delivery to my own connected Telegram chat. For local results, save brief/YYYY-MM-DD.md and show its full server path. I can ask you to display its contents in this conversation. For Telegram, verify the exact destination is my allowed chat and show it before I confirm. Save Telegram as this job's delivery setting only after that confirmation. Authorize only delivery of my brief to that chat, never messages to customers or other people. The skill still saves the file and does not send messages itself.\n\nShow the saved job record, next run, output path, delivery setting and pause control. Do not claim scheduled delivery works based on an ordinary bot conversation.",
-    "sha256": "b70f1eec346649264cde0d27b06d296015b2362435eefddabcabe291ebf77042",
+    "body": "Inspect this server's system time zone and Hermes scheduler configuration. Show the current local time and the next intended 07:00 run in my chosen named zone. Confirm /home/ai/hub is the working folder and skills/morning-brief/SKILL.md exists.\n\nPrepare one daily morning-brief schedule using that folder and zone. Confirm the laptop's version has been paused before enabling this one. Its prompt must read AGENTS.md and the skill. Preserve existing daily briefs. If an installer-created 06:00 job exists, edit or retire it rather than adding another.\n\nAsk me to choose server-local results or delivery to my own connected Telegram chat. For local results, save brief/YYYY-MM-DD.md and show its full server path. I can ask you to display its contents in this conversation. For Telegram, verify the exact destination is my allowed chat and show it before I confirm. Save Telegram as this job's delivery setting only after that confirmation. Authorize only delivery of my brief to that chat, never messages to customers or other people. The skill still saves the file and does not send messages itself.\n\nShow the saved job record, next run, output path, delivery setting and pause control. Do not claim scheduled delivery works based on an ordinary bot conversation.",
+    "sha256": "d0598264a170ed75332ce45a44f1c717116078fa11b73c4841ef608f1c1cba8b",
     "copyable": true
   },
   {

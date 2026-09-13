@@ -24,9 +24,9 @@ Start on your laptop so you can watch the first job work. An awake computer is n
 Before scheduling a skill, check whether it can find everything you normally hand it during a conversation. Ask Hermes:
 
 ```
-Read each skill in skills/. Could it run without another message from me, using only the files and tools it can already reach?
+Read the skill I want to schedule. Could it run without another message from me, using only the files and tools it can already reach?
 
-Mark each ready or not ready. For each missing input, name exactly what is needed and where the skill currently expects to get it. Also check its output destination, limits and stopping condition.
+Mark it ready or not ready. For each missing input, name exactly what is needed and where the skill currently expects to get it. Also check its output destination, limits and stopping condition.
 
 Do not change files or create schedules.
 ```
@@ -35,7 +35,7 @@ Do not change files or create schedules.
 
 The email skill may write beautifully while still depending on you to supply the email. A meeting skill may need a name and a date. Put those inputs where the job can find them. Otherwise you've arranged an early start for an assistant with nothing to do.
 
-Six of the seven skills in my earlier test still needed a message from me. They were useful skills; they simply expected me to supply part of the job. The seventh was a morning brief that could read its inputs from saved project notes.
+In an earlier test, I checked seven skills. Six still needed a message from me. They were useful skills; they simply expected me to supply part of the job. The seventh was a morning brief that could read its inputs from saved project notes.
 
 The email skill's verdict made the problem plain:
 

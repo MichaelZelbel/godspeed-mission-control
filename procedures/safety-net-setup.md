@@ -46,7 +46,7 @@ Create one snapshot and show its identifier and the files included. Do not uploa
 
 *[Copy prompt](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-18-box-3)*
 
-The installer may already have set up Git, so the assistant should preserve any history it finds. Open the new snapshot and check that it contains the work you chose. These are the files you would get back after a mistake; this is a good moment to see whether anything is missing.
+The installer may already have set up Git, so the assistant should preserve any history it finds. Have it list what the new snapshot contains and compare that list with the files you approved. Read the report for work you meant to keep; these are the files you would get back after a mistake.
 
 ## Prove that one file can come back
 
@@ -74,7 +74,7 @@ The history lives on the same drive as your work. It can rescue a file from a ba
 
 I use GitHub, a website that can store files together with their Git history. That collection is called a repository. Although GitHub is often used for code, it can keep your hub's notes and instructions too.
 
-If you want to keep your copy there, sign in to your own GitHub account. We'll ask the assistant to make the repository private. Private keeps the files out of public view; GitHub and people you authorise may still have access.
+If you want to keep your copy there, let the assistant check its access to your GitHub account and guide any necessary sign-in. We'll ask it to make the repository private. Private keeps the files out of public view; GitHub and people you authorise may still have access.
 
 Before uploading, repeat the inclusion and history review. Then ask:
 
@@ -88,7 +88,7 @@ Wait for my approval of that exact upload. After approval, upload the reviewed s
 
 *[Copy prompt](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-18-box-5)*
 
-Open the repository page while signed in and look for the **Private** label and your saved file. Then ask the assistant to compare the local and remote snapshot identifiers. Matching identifiers tell you that the copy elsewhere is the version you just reviewed, rather than an older save with a reassuring name.
+The assistant should confirm that the repository is private and that the uploaded snapshot matches the one you reviewed. It can compare the identifiers itself. Its report and repository link give you a way to inspect the saved work without having to perform that technical check.
 
 
 

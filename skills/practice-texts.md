@@ -1,12 +1,12 @@
 # Practice Texts (Chapters 11, 12 and 15)
 
-Messy sample texts for testing your **Summarize for me** skill (or any
-skill that eats pasted text). Both are fictional. Name your
-summarize skill, paste one of these under it, and watch the recipe do its
-work. (Paste it with a bare "Summarize this:" instead, with no Skill
-installed, and you will get a perfectly good generic summary that ignores
-the file in your folder entirely. That is Chapter 12's lesson, and it is
-worth seeing once.)
+These fictional texts let you check your **Summarize for me** skill against
+known facts. First use an ordinary request, "Summarize this:", followed by
+one text. Check the answer against the source and your saved instructions.
+If the assistant misses your method, ask it to read the skill by name and
+try the same text again. A change between those results can help it diagnose
+how the skill was found. Neither an installed file nor familiar headings
+alone prove that the assistant read the instructions.
 
 ## Text 1: the gym newsletter (used in Chapters 11 and 12)
 

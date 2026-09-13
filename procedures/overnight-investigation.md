@@ -39,7 +39,7 @@ Show the saved job record with its one-time schedule, working folder, time zone,
 
 Before walking away, read the saved record. Look for `robin-maintenance-once`, one future run in the displayed time zone, your practice folder and the result path `investigations/robin-maintenance-once.md`. Together, they tell you what will run, when to expect it and where you'll find the work.
 
-Keep the computer awake and its scheduler running through the scheduled time, then check the result without starting it manually. If the request fails to create the job, read the scheduling error and use the app's one-time control. Choose one future run. Robin needs help with a decision, not the same investigation delivered every morning.
+Keep the computer awake and its scheduler running through the scheduled time, then check the result without starting it manually. If the request fails to create the job, ask Hermes to diagnose the scheduling error using its current tools and help. It should arrange one future run and verify the saved job. Robin needs help with a decision, not the same investigation delivered every morning.
 
 ## Read the prepared work
 

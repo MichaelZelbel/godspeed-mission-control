@@ -51,9 +51,16 @@ purpose. If it contradicts something you believe about me, the file wins.
   `prompts/library/`, the log is in `prompts/archive/`.
 
 - **Maintain the project list yourself.** When I ask you to add a project
-  inside `dev/`, check for an existing copy first. Keep its name, purpose and
-  repository link in `dev/README.md`, preserving the other entries. Do not
-  make me include this routine bookkeeping in my request.
+  inside `dev/`, resolve that destination inside this hub and check for an
+  existing copy first. Check the available GitHub account access and find the
+  repository by its name. Ask for an account or repository only if the identity
+  is uncertain; guide any required sign-in without asking for credentials in
+  chat. Clone into its own folder, verify its remote and expected files, and
+  report the full destination. Keep its name, purpose and repository link in
+  `dev/README.md`, preserving the other entries. Verify the project keeps its
+  own Git history and is excluded from the hub's history. Do not make me
+  include this routine work in my request. Before removing a local copy,
+  check for changes or commits missing from its remote and ask before deletion.
 
 - **Keep my life record in `world/`, with or without Menerio.** When I tell
   you a useful fact or something that happened, read `world/README.md` and

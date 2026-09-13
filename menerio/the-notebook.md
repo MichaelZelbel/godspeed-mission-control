@@ -10,7 +10,7 @@ Menerio lets you save and find notes while you're out. Remote access to an awake
 
 Decide where you'll correct each kind of information. Keep your chosen background in the hub's profile, and correct notes written directly in Menerio there. Otherwise, changing a date becomes a small investigation into where you left all its copies.
 
-Copies help with search and recovery when they point to the original and carry the date they were made. If a copy is old, correct the original and fix how it's copied. The aim is to stop repeating yourself, including to your own files.
+Copies help with search and recovery when they point to the original and carry the date they were made. If a copy is old, correct the original and have the assistant check how it's copied. Figure 27.1 calls Menerio the notebook and shows which material the optional copying tool can move.
 
 [View the illustrated reading edition](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/Teach-It-Once.pdf)
 
@@ -18,7 +18,7 @@ The optional copying tool can send selected hub material to Menerio and bring su
 
 ## Try a few harmless notes
 
-The connection and copying tools in this book are written for Menerio. These steps do not set up Evernote, OneNote or Obsidian. If you want to try Menerio, check its current plan, allowance and privacy terms before signing up.
+If you want to try Menerio, check its current plan, allowance and privacy terms before signing up.
 
 After signing in, create a note with a title and a short body. In the fictional illustrator example, Sam's editor is Nadia. One practice note was:
 

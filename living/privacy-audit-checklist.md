@@ -11,7 +11,7 @@ With a cloud model, the information in the request goes to the model provider. A
 | Location | What to inspect |
 |---|---|
 | Your hub and its backup history | Current files, archived captures and earlier saved versions |
-| Hermes conversation records | Local transcripts for the profiles you use |
+| Hermes conversation records | The conversations saved by the application |
 | Hermes' own saved notes | Notes the application keeps outside your hub |
 | Providers and connected services | Data sent in requests, retention settings and granted access |
 
@@ -45,11 +45,11 @@ When I asked for cleanup, the assistant kept the originals and made a cleaned co
 
 ## Inspect the application's own records
 
-Ask Hermes where the current profile stores conversation history and saved notes, then inspect those locations locally. In the version I used, transcripts sat in a local database and saved notes included `MEMORY.md` and `USER.md` inside a `memories` folder.
+Ask Hermes where this installation stores conversation history and saved notes, and have it identify those locations without printing private contents. In the version I used, transcripts sat in a local database and saved notes included `MEMORY.md` and `USER.md` inside a `memories` folder.
 
 These application files are separate from `observations/` in your hub. Asking the assistant to save a note in the shared folder doesn't mean the app keeps no notes of its own. I checked both places during the earlier tests for that reason.
 
-Before removing a profile or memory file, read what the app says it will remove and check the other profiles you use. In one test, copying a profile carried its saved notes along. I had given it a fresh name; it had brought its memories anyway.
+Hermes can also keep separate application profiles, each with its own settings and records. These are different from the `profile/` notes inside your hub. Before removing one, read what the app says it will remove and check any others you use. In one test, copying an application profile carried its saved notes along. I had given it a fresh name; it had brought its memories anyway.
 
 Use the application's export or removal controls where available, and keep track of copies you've made in the hub, its backup or elsewhere. Deleting a local record sends no request to the provider to delete theirs.
 

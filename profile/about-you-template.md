@@ -24,8 +24,6 @@ The hub helps your AI in three ways. These are uses of the files, rather than a 
 
 [View the illustrated reading edition](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/Teach-It-Once.pdf)
 
-The background gives the assistant something useful to work with. A skill tells it how to do a job, and a schedule gives that job a time to start. We can add each of these when there's work for it to do.
-
 ## Leave room for later work
 
 The installer creates some folders you have not used yet. Leave them empty until there is something to put in them. The folder names are places to save useful work, not a checklist of chores to complete.
@@ -52,7 +50,7 @@ The installer includes `dev/`, but using it is optional.
 
 The kit instructs your assistant to save useful facts and events in `world/` as you tell it about them. This is work the assistant performs while handling your request; the folder does not collect facts by itself. If you tell it you moved to Bristol in June, it can record the move and your new city, keeping the old city as history. `profile/` is the short briefing your assistant starts with; `world/` is the more detailed record it searches when needed.
 
-Menerio is an optional online memory service where you can also save and find information. You do not need a Menerio account for the hub to remember things. If you connect one and enable copying, records saved in Menerio can also appear in `world/`. The connection supplied with this kit is for Menerio specifically. It does not connect Evernote, OneNote or Obsidian.
+If you later connect Menerio, the optional online memory service, you can also copy selected records from there into `world/`. Local records work without that connection.
 
 There are supporting files too. `README.md` explains the folder, `CLAUDE.md` points another AI app to your instructions, and `.mcp.json` holds connection settings. Names beginning with a dot may be hidden in your file browser. Your imported briefing and files you create will appear beside these. The table helps you find a home for work; it is not a list of every file you will ever see.
 

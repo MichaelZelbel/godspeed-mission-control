@@ -86,7 +86,7 @@ The companion installer can set up copying between the hub and Menerio after you
 
 
 
-The installer version inspected here runs sync **after a Git commit**, if it installed its post-commit hook, and during an hourly check. A commit is a deliberately saved version in the hub's Git history. Saving that version in Git triggers the hook; saving a file in an editor does not. Read which trigger the installer added, since it may preserve an existing custom hook.
+The inspected installer can arrange copying in two ways: after the assistant saves a version in Git, and during an hourly check. The first uses a **post-commit hook**, an action triggered by that saved version. An ordinary editor save does not trigger it. Have the assistant check which copying triggers were installed; an existing custom hook may have been preserved instead.
 
 Ask the assistant to run the installed copying helper, `hub-notebook-sync --verbose`, and explain what went out, what came back and what failed. The log is at `~/.hub/notebook-sync.log`; `~` means your user folder. A second run with nothing changed lets you check that the same material isn't uploaded twice.
 

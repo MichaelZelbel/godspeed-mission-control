@@ -68,13 +68,13 @@ The practical distinction is:
 
 [View the illustrated reading edition](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/Teach-It-Once.pdf)
 
-Both a saved prompt and a skill stay on disk. Configured skill discovery gives the assistant a way to find the method during a matching task without you naming its file. Either file can hold good instructions; neither starts work by sitting there. A schedule supplies the starting signal when you want a job to run on its own.
+Neither file starts work by sitting there. You start the job with a request, or configure a schedule to start it while you are away.
 
 ## Retest the revised master
 
 Open a fresh session and try the same newsletter. Read the answer against your revised rules. It no longer needs to resemble my example: getting your preferred date format instead of mine is the point of the exercise. The familiar input makes that change easier to see.
 
-If the interview made a second skill under another name, compare the files and keep the one you want to use. Archive the old one outside the folders Hermes searches. Two versions can volunteer for the same job, and the one that still carries your old preferences is no less willing to help.
+If the interview made a second skill under another name, ask the assistant to compare the files. Choose the version you want it to use, then have it archive the other outside the folders Hermes searches. Two versions can volunteer for the same job, and the one that still carries your old preferences is no less willing to help.
 
 ## Use the instructions elsewhere
 

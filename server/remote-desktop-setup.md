@@ -60,9 +60,9 @@ Add another messenger when you have a job for it. Each one needs its own credent
 
 ## Keep the server checks visible
 
-The gateway and web service run on the server. The desktop app runs locally. The server's scheduled checks can attempt local recovery while your desktop is closed.
+The gateway and web service run on the server. The desktop app runs locally. If your server setup includes watchdog jobs, those are scheduled checks that can detect a stopped service and try restarting it while your desktop is closed.
 
-Check that the expected watchdog jobs and web service appear in `procedures.md`, with their actual pause or stop controls.
+Ask the assistant to inspect which recovery checks are installed. Have it record them and the web service in `procedures.md`, with their actual pause or stop controls. Connecting the desktop does not, by itself, add those checks.
 
 The earlier setup used one model account for both the assistant and its AI watchdog, so both used that account's allowance. Another provider or separate watcher may add charges.
 

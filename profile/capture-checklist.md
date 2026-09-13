@@ -66,7 +66,7 @@ With another assistant, I tried a save request in four clean folders. I got four
 
 Hermes also has notes in its own application folder, separate from your hub. Ask it to name the destination and open the saved file when testing a new assistant. The familiar word “memory” does not tell you where the note went.
 
-## Keep everything, load only what today needs
+## Keep notes without loading them all
 
 My first design made the assistant read a summary of every note at the start of every session. A new note meant a new line. By the time I measured it, the list was 108 lines long, and every line went into every later job, including jobs that had no use for it. Nobody had done anything wrong. The design had been working exactly as I'd asked.
 

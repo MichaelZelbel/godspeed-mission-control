@@ -97,6 +97,8 @@ A second practice request asked for personal facts absent from the files. The re
 
 > I can't write this as asked, there's no Tomas Lindgren in `profile/people.md`, and your AGENTS.md rule #6 says I must not invent facts about your people... If new, tell me the real facts I need and I'll draft it in your voice: his role, how long you've worked together, and one honest line about what he's like. I'll leave a gap rather than smooth over anything you don't give me.
 
+Those replies show how the assistant responded to written rules. Figure 16.1 separates that from what its tools permit. We need to check the tool settings too.
+
 [View the illustrated reading edition](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/Teach-It-Once.pdf)
 
 ## Inspect what the permission system actually covers

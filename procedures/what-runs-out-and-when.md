@@ -46,13 +46,11 @@ Use such a signal only after testing that it matches your definition of done. A 
 
 ## How often a deadline appears
 
-The tool divides the window into four stages. Early in the window, reminders are rare. In the last three to fourteen days, depending on the window's length, a task can appear every day. Overdue work stays open.
+The time between your first and last day is the reminder window. The tool divides it into four stages. Early on, reminders are rare. In the last three to fourteen days, depending on the window's length, a task can appear every day. Overdue work stays open.
 
 [View the illustrated reading edition](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/Teach-It-Once.pdf)
 
 The helper calculates the selection dates from the first and last day; the assistant should use that result instead of inventing its own countdown. Starting late or having competing deadlines can change which reminders appear. The full deadline list remains available when you need to inspect everything.
-
-These dates govern text selected for the brief. They do not prove that you received or read it.
 
 ## Know what the daily limit means
 

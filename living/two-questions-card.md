@@ -43,7 +43,7 @@ I asked it to check. The next answer added plan choices and changed some billing
 
 When I asked for exact links, it admitted that the pages didn't support everything in the answer. Some links were incomplete. The comparison had looked finished well before the research was.
 
-For a comparison now, open [OpenAI's pricing information](https://learn.chatgpt.com/docs/pricing) and check the terms for your account and region. When I opened that page on 8 September 2026, the Pro plan had more than one price level. Hermes uses your account's Codex access through its ChatGPT sign-in. Check that allowance rather than inferring it from what ordinary chat allows; OpenAI currently also shares it with ChatGPT Work.
+For a comparison now, have the assistant check [OpenAI's pricing information](https://learn.chatgpt.com/docs/pricing) for your account and region, then inspect the terms that matter to your choice. Hermes uses your account's Codex access through its ChatGPT sign-in. That allowance can differ from ordinary chat, so the comparison needs to cover the service you will actually use.
 
 ## Check the claim against the page
 

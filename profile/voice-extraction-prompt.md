@@ -6,9 +6,9 @@ The draft has every fact right. It also greets your old friend as though applyin
 
 ## Supply three to five examples
 
-Choose three to five short pieces of your own writing. Ordinary emails make good samples, as do explanations, refusals and messages with bad news. Pick pieces where you recognise your own voice. Ask Hermes to save each as a separate text file in `inbox/writing-samples/`, creating the folder if needed.
+Choose three to five short pieces of your own writing. Ordinary emails make good samples, as do explanations, refusals and messages with bad news. Pick pieces where you recognise your own voice.
 
-Read the samples for private information before giving the assistant access. It can learn your sentence length and tone without somebody's real name or access details coming along for the lesson.
+Remove private details before giving the samples to Hermes. It can learn your sentence length and tone without somebody's real name or access details coming along for the lesson. Then ask it to save each sample as a separate text file in `inbox/writing-samples/`, creating the folder if needed.
 
 Then paste:
 

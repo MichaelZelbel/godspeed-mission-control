@@ -1,26 +1,25 @@
-# dev/
+# Coding projects
 
-Home for development projects and Git repositories that live on GitHub as their **own repos**.
+Keep projects you actively work on in this folder. Each project has its own folder and Git history.
 
 ## The rule
 
-Each project in here is an independent Git repository. None of them are tracked by the hub repo, because the hub's `.gitignore` excludes everything in `dev/` except this README. So you can clone, build, and commit projects here without ever polluting the hub's history.
+The hub's `.gitignore` excludes the projects from the hub's history and keeps this project list. This affects what Git saves, not what the assistant can read or change.
 
 ## What belongs here
 
-Projects you and your assistant work on **together regularly**. Not an archive, not every repo you own, just the active ones. When a project goes dormant, delete the local copy. It still lives on GitHub, and cloning it back in is one line.
+Projects you and your assistant work on regularly. Before removing a dormant project, have the assistant check for edits and commits that have not reached GitHub. A new clone would not recover those. Deleting a local copy requires your approval.
 
 ## How to use
 
-Clone a project in:
+Ask by project name, for example:
 
-```bash
-cd dev
-git clone https://github.com/<you>/<project>.git
+```
+Clone the Menerio repository into dev/ inside my hub.
 ```
 
-Each subfolder keeps its own `.git`, its own remote, its own history. The hub never sees inside.
+The assistant should check the available GitHub account, find the repository, and guide sign-in or ask which project you mean only when needed. It checks for an existing copy before cloning, verifies the result and reports where the files are. The hub's `AGENTS.md` holds the full instructions for this work.
 
 ## Currently active
 
-_(list projects here as you add them, so the registry is visible even though the code isn't)_
+No projects added yet. The assistant keeps each project's name, purpose, local folder and repository link here.

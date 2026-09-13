@@ -8,12 +8,12 @@ Build the first brief from your own hub if it already contains useful project no
 
 Robin runs a bicycle repair shop and is considering maintenance classes. Three customers have asked about puncture repair. There is no class date, price or booking yet.
 
-Download [the companion kit for this review edition](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/Teach-It-Once-Companion.zip) and unpack it. Find `practice/maintenance-classes/`. It contains `what-my-ai-knew.md`, `inbox/workshop-notes.md` and instructions. The decision skill is at `skills/prepare-a-decision/SKILL.md` in that same kit.
+Use the matching companion kit you unpacked during setup, or [download it here](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/Teach-It-Once-Companion.zip). It includes Robin's briefing and workshop notes under `practice/maintenance-classes/`, plus a skill for preparing decisions. The assistant can copy these into a separate practice hub.
 
-We'll keep the experiment in its own folder. Give Hermes the unpacked kit's actual location when you paste this:
+Ask Hermes to prepare the folder:
 
 ```
-Use the unpacked companion kit at the location I give you. Create a new disposable hub named robin-practice beside my real hub. Stop if that folder already exists; do not merge or overwrite it.
+Find the matching unpacked companion kit, asking where I saved it only if needed. Create a new disposable hub named robin-practice beside my real hub. Stop if that folder already exists; do not merge or overwrite it.
 
 Copy starter-hub/ into robin-practice, including its dot files. Copy practice/maintenance-classes/what-my-ai-knew.md into its top level and its workshop-notes.md into inbox/. File the fictional summary under profile/about-me.md, profile/people.md, profile/projects.md and profile/voice.md according to each file's subject. Preserve the summary as the source, keep uncertain claims marked, and retain unresolved questions in inbox/. Proposed behavior rules need confirmation before entering rules/ and the compiled instructions. Do not put anything in my real profile or notebook.
 
@@ -22,7 +22,7 @@ Copy the kit's skills/prepare-a-decision/SKILL.md into robin-practice/skills/pre
 
 Open the practice folder in Hermes and check that it is the working folder. You'll use the installation you already have; changing the folder gives this exercise its own files.
 
-For this exercise, we'll give each skill's exact path to the job. It can then read the copied instructions directly, without depending on whether Hermes discovers them automatically in the practice folder.
+The saved job instructions name each skill file. This lets the practice job read the copied method even if Hermes has not added the new folder to its skill search.
 
 ## Build the brief before its schedule
 
@@ -39,7 +39,7 @@ Save a new file as brief/YYYY-MM-DD.md. If it already exists, preserve it and re
 
 Keep the normal brief body under 200 words. Include copyable action text in the brief itself. Use existing approved HTTPS links for longer material only when available; do not publish private material to make a link. The file a fact came from may be named on a Sources: line.
 
-Later additions may put full deadline output, unresolved urgent research and failed-check notices after the normal body. Those required sections are exempt from the 200-word limit. Never cut them to pass the limit. Omit empty optional sections.
+Keep urgent unfinished work and failed-check notices visible after the normal body when they need more space. These sections are exempt from the 200-word limit. Never cut them to pass the limit. Omit empty sections.
 
 Run hub-check-brief on the completed file, fix delivery-format failures and preserve important content. A passed format check is not an evidence check. If checking fails, report the failure and keep the draft available for inspection.
 ```
@@ -94,9 +94,9 @@ Create one one-time test, due in 5 minutes, with this hub's full path saved as i
 
 *[Copy prompt](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-21-text-4-20260913)*
 
-Keep the computer awake and the scheduler running, and let the timer start this test without pressing **Trigger now**. Return after the scheduled time and inspect the run history and new practice result. The one-time job should have no future run. You'll have checked both that it started by itself and that it knows when to stop.
+Keep the computer awake and the scheduler running, and let the timer start this test without pressing **Trigger now**. Return after the scheduled time and ask Hermes to check the run history, new practice result and absence of a future run. Read the result itself. That checks both the automatic start and the work it produced.
 
-If nothing appears, the recorded error gives you a place to begin. A sleeping laptop, a missing model connection and a refused tool each call for a different repair, even when they leave the same empty output folder.
+If nothing appears, ask Hermes to diagnose the missed run. A sleeping laptop, a missing model connection and a refused tool each call for a different repair, even when they leave the same empty output folder.
 
 When I shut down the desktop app in a test, missed slots became one late run after restart. A missed morning brief may therefore arrive late. Read the run history to see whether that happened before rewriting the skill.
 

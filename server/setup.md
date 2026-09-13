@@ -24,7 +24,7 @@ curl -fsSL https://raw.githubusercontent.com/MichaelZelbel/teach-it-once-kit/mai
 
 That address retrieves the current public installer. Save its completion report. The installer pins a version of its shared setup code, but also downloads other current components; this is not a promise that every future installation will be byte-for-byte identical.
 
-The installer creates a limited user called `ai`, installs Hermes and prepares `/home/ai/hub`. Follow its progress as it goes. If a step fails, pause there and keep the error message; it tells you what needs attention before the steps that depend on it can continue.
+The installer creates a limited user called `ai`, installs Hermes and prepares `/home/ai/hub`. If a step fails, give the error to your existing assistant and ask it to diagnose and repair that step on the server before continuing. Keep credentials out of the copied error text.
 
 ## Answer the connection prompts
 
@@ -34,7 +34,7 @@ The installer guides you through these choices:
 
 1. **Telegram:** create a bot through Telegram's BotFather with `/newbot`. Paste its token only into the dedicated installer prompt. Send your new bot a message so the installer can identify your user. Skip this if you do not want the phone route.
 2. **Model sign-in:** open the authentication page printed by Hermes, enter the temporary code and approve on your own account. Follow the code's displayed expiry; request a new code if it expires.
-3. **Hub folder:** give the address of your existing private repository, or choose a fresh hub. The resulting folder for this route is `/home/ai/hub`.
+3. **Hub folder:** use the verified repository address your existing assistant found for you, or choose a fresh hub. The resulting folder for this route is `/home/ai/hub`.
 4. **Menerio:** this is the optional online memory service. Skip the connection unless you use it. Local files are enough for a brief or investigation.
 5. **GitHub:** use the displayed device sign-in to authorize the server. For a fresh hub, choose the private repository name and inspect the result before relying on it.
 6. **Morning brief:** leave scheduling off initially. Verify the skill, profile, time zone and delivery first.
@@ -61,18 +61,18 @@ Then begin with a few reviewed lines about yourself, your work and your preferen
 
 
 
-A harmless fact from the right file tells you that the messenger, model and folder worked together for this request. If it fails, check those three parts separately: the messenger connection, the model sign-in and access to the folder. That narrows the repair to the place where the request stopped.
+A harmless fact from the right file tells you that the messenger, model and folder worked together for this request. If it fails, ask your existing assistant to check the messenger connection, model sign-in and folder access separately. That narrows the repair to the place where the request stopped.
 
 ## Move one schedule, not two
 
-Build and manually test the morning-brief skill in this server folder if it is not already present. Use a separate practice result when today's brief exists.
+Build and manually test the morning-brief skill in this server folder if it is not already present. Use a separate practice result when today's brief exists. Before enabling its server schedule, ask the assistant on your laptop to pause the laptop's version and verify that it is paused.
 
 Then ask:
 
 ```
 Inspect this server's system time zone and Hermes scheduler configuration. Show the current local time and the next intended 07:00 run in my chosen named zone. Confirm /home/ai/hub is the working folder and skills/morning-brief/SKILL.md exists.
 
-Prepare one daily morning-brief schedule using that folder and zone. Its prompt must read AGENTS.md and the skill. Preserve existing daily briefs. If an installer-created 06:00 job exists, edit or retire it rather than adding another.
+Prepare one daily morning-brief schedule using that folder and zone. Confirm the laptop's version has been paused before enabling this one. Its prompt must read AGENTS.md and the skill. Preserve existing daily briefs. If an installer-created 06:00 job exists, edit or retire it rather than adding another.
 
 Ask me to choose server-local results or delivery to my own connected Telegram chat. For local results, save brief/YYYY-MM-DD.md and show its full server path. I can ask you to display its contents in this conversation. For Telegram, verify the exact destination is my allowed chat and show it before I confirm. Save Telegram as this job's delivery setting only after that confirmation. Authorize only delivery of my brief to that chat, never messages to customers or other people. The skill still saves the file and does not send messages itself.
 
@@ -81,7 +81,7 @@ Show the saved job record, next run, output path, delivery setting and pause con
 
 *[Copy prompt](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-30-text-3-20260913)*
 
-Pause the laptop's copy of this job before switching on the server schedule, then record the active location in `procedures.md`. Keep the skill on both machines if you like. Two versions of tomorrow's brief are unlikely to make tomorrow twice as helpful.
+Have the assistant record the active schedule's location in `procedures.md`. Keep the skill on both machines if you like. Two versions of tomorrow's brief are unlikely to make tomorrow twice as helpful.
 
 Try a one-time practice job due in five minutes, using your chosen delivery setting and `practice/brief-tests/server-timer-test.md` for the result. Afterwards, read the file and run history, and check that no future run remains. If you chose Telegram, look for the scheduled result in the intended chat. For local results, ask the server assistant to show the saved file in the conversation, or open it through a desktop connection you have configured. Then leave the daily job active.
 

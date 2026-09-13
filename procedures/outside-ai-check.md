@@ -41,7 +41,7 @@ My first manual test used notes for Sam, the fictional illustrator. Nadia was hi
 
 Check that the original note reached the archive after its contents were filed. If a statement in the profile looks odd later, you can go back to your own words.
 
-## Save the prompt the monthly reminder uses
+## Optional: bring new background from another AI tool
 
 If you still use another AI tool, useful background can accumulate there while your hub knows nothing about it. Ask that tool for a summary of who you are, people, priorities, preferences and limits from the material it can reach. Read and correct the result before importing it. This produces a briefing, not a full conversation export.
 
@@ -83,7 +83,7 @@ Read that file and run hermes insights --days 30. Report what the available reco
 
 ## Schedule it and check the result
 
-Try the review in a practice copy before giving it real captures to file. Include a writing sample and an open question: both should stay put. Then recover an archived capture and undo its profile change. You'll have checked the ordinary filing and what happens when you disagree with it.
+Ask the assistant to try the review in a practice copy before giving it real captures to file. Include a writing sample and an open question: both should stay put. Have it recover an archived capture, undo that capture's profile change and compare the files with their originals. You'll have checked the ordinary filing and what happens when you disagree with it.
 
 Choose a time when you normally consider the week ahead. Ask Hermes to schedule `weekly review` for that time in your time zone, using this hub's full path as the working folder. Have it inspect existing jobs first and update a matching job rather than creating a duplicate. Give it this prompt for each run:
 

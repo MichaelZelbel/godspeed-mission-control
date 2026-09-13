@@ -10,14 +10,14 @@ Begin with one question and a few named sources. Every check uses model time and
 
 Suppose your publishing tool cannot place the cover picture where you need it. A useful watch checks that particular feature and your current setup. “Find the best publishing tool” would send it shopping before it knows what went wrong.
 
-Ask Hermes to prepare the watch. Give it the unpacked companion kit's location, then paste:
+Ask Hermes to prepare the watch using the matching companion kit:
 
 ```
 Set up one research watch for the question I describe. Read relevant existing notes first. Ask only for missing information: what would count as better, which sources to trust, how often to check, and which findings would change a decision.
 
-Read the complete research-watch skill in the companion kit at the location I give you. Install it as skills/research-watch/SKILL.md in this hub. If a skill already exists there, compare it and preserve my changes; show a proposed merge rather than replacing it.
+Find the matching unpacked companion kit, asking for its location only if needed. Read its complete research-watch skill. Install it as skills/research-watch/SKILL.md in this hub. If a skill already exists there, compare it and preserve my changes; show a proposed merge rather than replacing it.
 
-Create watch/<short-name>/requirements.md using the format required by that skill. Fill it with our agreed question, specific source URLs, criteria and check interval. Use the skill's UTC dates for its internal records. Create its supporting folders and empty records. Do not research or schedule anything yet. Show the question and requirements in ordinary language so I can correct them.
+Create watch/<short-name>/requirements.md using the format required by that skill. Find and inspect the relevant source pages yourself; ask me about a source only when access or identity is uncertain. Fill the file with our agreed question, the verified source URLs, criteria and check interval. Use the skill's UTC dates for its internal records. Create its supporting folders and empty records. Do not run the research comparison or schedule anything yet. Show the question and requirements in ordinary language so I can correct them.
 ```
 
 *[Copy prompt](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-26-box-1)*

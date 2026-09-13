@@ -8,19 +8,19 @@ A private GitHub repository, an online copy of selected files and their Git hist
 
 This route needs a private GitHub copy of your hub. If you have not made one, ask the assistant to prepare it from reviewed local files and history, show what will be uploaded, and wait for your approval. Confirm the repository is private and the uploaded version matches before continuing.
 
-Ask your assistant to save your latest work and upload it to your private GitHub repository before leaving the first computer. Git calls that upload a push. Open the repository's page on GitHub and check that the latest changes arrived. That online copy is the version the second computer can fetch.
+Ask your assistant to save your latest work and upload it to your private GitHub repository before leaving the first computer. Git calls that upload a push. Have it verify that the uploaded version matches and give you the repository link. That online copy is the version the second computer can fetch.
 
 On Windows, download `HubSetup.exe` from the [companion kit's Releases page](https://github.com/MichaelZelbel/teach-it-once-kit/releases). Confirm that source before accepting any Windows installation warning. Choose the existing private repository when offered and keep the suggested folder inside your user folder. Untick history-collection tools unless you want their local conversations copied.
 
-On macOS or Linux, the installer accepts the existing repository address:
+For macOS or Linux, ask the assistant on your first computer to prepare the command below with the verified repository address already filled in. Then paste its finished command into the terminal on the new computer:
 
 ```
 curl -fsSL https://raw.githubusercontent.com/MichaelZelbel/teach-it-once-kit/main/install-hub.sh | bash -s -- --sources "" --repo YOUR-PRIVATE-REPOSITORY-URL
 ```
 
-Replace `YOUR-PRIVATE-REPOSITORY-URL` with your repository's web address, such as `https://github.com/your-name/your-hub.git`, using your own account and repository names. The installer copies the files and their history from that address onto this computer. Keep the installer's completion report so the assistant can inspect any failed step. The `--sources ""` option leaves local conversation collection off. The `main` URL retrieves the currently published installer.
+`YOUR-PRIVATE-REPOSITORY-URL` is a placeholder for the assistant to replace. The installer copies the files and their history from that address onto this computer and guides any required sign-in. Keep its completion report so the assistant can inspect a failed step. The `--sources ""` option leaves local conversation collection off. The address above retrieves the currently published installer.
 
-Open the installed hub in Hermes and ask for a harmless line you saved recently, with the source file. Then ask which skills are available. These are answers you can check. “Do you know me?” invites a charming reply that may tell you very little.
+Open the installed hub in Hermes and ask for a harmless line you saved recently, with the source file. Then ask it to check which skills are available. These are answers you can check. “Do you know me?” invites a charming reply that may tell you very little.
 
 Try a real skill with harmless input as well. You want to see the new machine read the file, find the skill and reach the model. Once those checks work, you're ready to continue.
 
@@ -80,7 +80,7 @@ If you use the kit's deadline helper in your morning brief, it reads those dated
 
 ## Inspect the machine's optional jobs
 
-Notebook sync and conversation collection use the computer's scheduler, which is separate from Hermes' conversation timer. Read the installer's report to see which jobs it enabled, so you know where to stop them later.
+If you enabled Menerio copying or conversation collection, those jobs use the computer's own scheduler, separate from the one that starts jobs in Hermes. Have the assistant read the installer's report and inspect which jobs are active, so you know where to stop them later.
 
 Ask the assistant to inspect the machine scheduler and explain each kit job it finds. On Windows, the relevant Task Scheduler names are **Hub notebook sync** and **Hub prompt archive**. On macOS or Linux, the installer uses the user's scheduled-command list. To stop collection, ask it to disable that specific job and verify the result, preserving unrelated jobs.
 

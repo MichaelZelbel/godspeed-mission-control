@@ -48,10 +48,10 @@ The invented approval was easy to miss because the update looked useful. Name th
 
 ## Test 3: compare the reply with the rules
 
-Now ask the assistant to check the answer against the instructions. Give it the complete input, the resulting answer and any required profile files, so it has the material needed to judge. Replace `[path to your chosen SKILL.md]` below with the skill you tested; for the summary skill from Chapter 11, use `skills/summarize-for-me/SKILL.md`.
+Now ask the assistant to check the answer against the instructions. Give it the complete input, the resulting answer and any required profile files, so it has the material needed to judge. Name the skill you tested; the assistant can find its instruction file.
 
 ```
-Check the reply below against every requirement in [path to your chosen SKILL.md] and the source material supplied with it.
+Find the instruction file for the skill I name. Check the reply below against every requirement in that file and the source material supplied with it.
 
 For each rule, say kept, broken or cannot check. Quote the relevant evidence. Do not treat the reply's own claim as proof. Name missing input needed for a judgment. Do not rewrite the reply yet.
 ```
