@@ -52,6 +52,7 @@ The full chapter-by-chapter map is in `docs/CHAPTERS.md`.
 - **Not a chatbot.** You talk to it, but its job is the work it does when you are not there.
 - **Not a cloud service.** A folder on your machine, and if you want one, a server you rent yourself.
 - **Not a memory database on its own.** Menerio is the optional notebook in Part VI; the hub works without it.
+- **Not the author's whole hub.** Michael's own hub carries three registers this kit does not ship yet: what he wants (goals, provisional or adopted, every change with its reason), what his hub expects to happen (dated forecasts it keeps score on) and what his hub is doing (work tracked from planned to verified). The book teaches the ideas behind them as prompts you can use today, in Chapter 6 (find what limits a goal), Chapter 19 (the outside view, and a number you keep score on) and Chapter 23 (progress written down), with the research behind each in Appendix F. The tools themselves are hub-only for now, so that the kit never carries a copy that drifts.
 - **Not finished.** See the status below.
 
 ## Status
