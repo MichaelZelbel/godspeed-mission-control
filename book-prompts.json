@@ -136,14 +136,6 @@
     "copyable": false
   },
   {
-    "key": "chapter-9-box-2",
-    "chapter": 8,
-    "section": "Let the hub handle the filing",
-    "body": "Update this hub's saved instructions so useful facts from our conversations are filed during the work, without a separate sorting request from me. Read the existing instructions and preserve unrelated rules.\n\nUse world/README.md for the life-record format. Search before adding a record. Keep my words, source, date and uncertainty; do not invent dates or facts. Keep events as history. When a current fact changes, close the old claim and add its replacement. Update the relevant short profile entry when the change affects it. Correct imported records at their original source.\n\nUse inbox/ only for unresolved material or things I explicitly ask you to leave there. When a relevant uncertainty is resolved in conversation, finish filing it. Preserve any original capture in archives/filed-captures/ after checking the filed content. Leave writing samples, templates and unrelated files alone.\n\nSave explicit instructions as rules using this hub's existing method. Do not turn a casual remark or an inferred preference into a new rule. Ask only when an uncertainty changes the work we are doing. Verify each save and confirm the useful change briefly.\n\nKeep this behaviour in shared hub instructions that my assistant reads. Check that the saved instructions are loaded. Do not add a schedule or change permissions.",
-    "sha256": "b4a0d0777c8cbcdbe580d8b7f42ba07c15d2e4913e0e2606131932a44cc684a9",
-    "copyable": true
-  },
-  {
     "key": "chapter-10-box-1",
     "chapter": 9,
     "section": "Use the updated background in real work",

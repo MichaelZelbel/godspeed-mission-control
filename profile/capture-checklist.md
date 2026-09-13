@@ -26,21 +26,7 @@ The inbox is a holding place for something the assistant cannot settle yet, such
 
 When you answer a question about a saved uncertainty, the hub should finish filing that note. An unresolved detail can wait until it affects real work. The assistant should not interrupt a draft to ask about an unrelated scrap of paper.
 
-The current companion instructions include this behaviour. If you are using an older hub that only piles notes into an inbox, this request teaches the change once:
-
-```
-Update this hub's saved instructions so useful facts from our conversations are filed during the work, without a separate sorting request from me. Read the existing instructions and preserve unrelated rules.
-
-Use world/README.md for the life-record format. Search before adding a record. Keep my words, source, date and uncertainty; do not invent dates or facts. Keep events as history. When a current fact changes, close the old claim and add its replacement. Update the relevant short profile entry when the change affects it. Correct imported records at their original source.
-
-Use inbox/ only for unresolved material or things I explicitly ask you to leave there. When a relevant uncertainty is resolved in conversation, finish filing it. Preserve any original capture in archives/filed-captures/ after checking the filed content. Leave writing samples, templates and unrelated files alone.
-
-Save explicit instructions as rules using this hub's existing method. Do not turn a casual remark or an inferred preference into a new rule. Ask only when an uncertainty changes the work we are doing. Verify each save and confirm the useful change briefly.
-
-Keep this behaviour in shared hub instructions that my assistant reads. Check that the saved instructions are loaded. Do not add a schedule or change permissions.
-```
-
-*[Copy prompt](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-9-box-2)*
+This behaviour is included in the matching companion instructions applied during setup. There is no separate filing prompt to remember.
 
 ## Why I changed the old inbox method
 
