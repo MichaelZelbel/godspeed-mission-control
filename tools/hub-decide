@@ -92,7 +92,17 @@ reg() {
 mkdir -p "$RUNDIR"
 # The part that needs no model runs first and is kept even if the model run dies: time passes on
 # the work tracker whether or not anything else works today.
-reg work tick            > "$RUNDIR/tick.txt"           2>/dev/null || true
+#
+# A DRY RUN MUST NOT MOVE TIME, AND THAT IS NOT A DETAIL. `tick` writes: it returns dead leases,
+# marks old plans stale, and those lines carry today's date for ever after. A --dry-run that says
+# "nothing was written" at the end while having quietly aged the register is the exact shape of
+# lie this whole program exists to refuse. So a dry run LISTS the work instead of ticking it, and
+# says so.
+if [ "$DRY" -eq 1 ]; then
+  reg work list > "$RUNDIR/tick.txt" 2>/dev/null || true
+else
+  reg work tick > "$RUNDIR/tick.txt" 2>/dev/null || true
+fi
 reg goals attention --date "$TODAY" > "$RUNDIR/attention.txt" 2>/dev/null || true
 reg forecast due --date "$TODAY"    > "$RUNDIR/forecasts-due.txt" 2>/dev/null || true
 
@@ -119,9 +129,10 @@ else neighbour hub-attention; fi
 
 if [ "$DRY" -eq 1 ]; then
   echo "Attention plan for $TODAY:"; cat "$RUNDIR/attention.txt" 2>/dev/null
-  echo; echo "Work tracker:"; cat "$RUNDIR/tick.txt" 2>/dev/null
+  echo; echo "Open work (listed, not ticked: a dry run does not move time):"; cat "$RUNDIR/tick.txt" 2>/dev/null
   [ -n "$MISSING" ] && { echo; cat "$RUNDIR/missing.txt"; }
-  echo; echo "Nothing was decided and nothing was written: this was a dry run."
+  echo; echo "Nothing was decided. Nothing in goals/, forecasts/ or work/ was changed."
+  echo "The three files this wrote are in $RUNDIR."
   exit 0
 fi
 
