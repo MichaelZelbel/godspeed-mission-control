@@ -58,6 +58,18 @@ One row per chapter that uses the kit. Status: **ready** = verified and final fo
 
 ## Parts I to V (restructured, final)
 
+> **The day's decision (2026-09-13, D-208).** The three registers behind a morning choice
+> (`goals/`, `forecasts/`, `work/`) and the programs that read them now ship here, with the
+> `next-action` recipe and the two programs that run it. The hub they came from installs them from
+> this kit rather than keeping a second copy. Harness parity evidence: `docs/harness-parity.md`.
+
+> **The numbers below are older than the manuscript, and the manuscript is the authority
+> (noticed 2026-09-13).** The book was retitled and restructured after this map was last swept, so
+> most rows here carry a chapter number and a title from before that. They are not off by a
+> constant, so they cannot be fixed by adding one. The rows added on 2026-09-13 carry the
+> manuscript's CURRENT numbers and titles, which is why they do not line up with their neighbours.
+> Sweeping the rest is its own job and is not done here.
+
 | Chapter | Kit asset | Status |
 |---|---|---|
 | 1. What Your AI Already Knows About You | `profile/bring-your-context-with-you.md` (the export prompt), `profile/about-you-template.md` (fallback only) | ready |
@@ -79,6 +91,7 @@ One row per chapter that uses the kit. Status: **ready** = verified and final fo
 | 19. Private Things Stay Private | `living/privacy-audit-checklist.md` (rewritten 2026-09-02 for Hermes: the transcript and the distillation are on the reader's disk, `hermes sessions stats`, `hermes memory status`, `hermes mcp list`) | ready |
 | 20. The Clock Changes Everything | `procedures/procedure-register.md`, `starter-hub/procedures.md` | ready |
 | 21. The Morning Brief | `procedures/morning-brief-setup.md`, `procedures/where-it-runs.md` (both rewritten to `hermes cron` 2026-09-02, on a job the builtin ticker fired on the test server) | ready |
+| 21. The Morning Brief, second half: "Decide the morning, not just describe it" (manuscript numbering) | `starter-hub/goals/README.md`, `starter-hub/forecasts/README.md`, `starter-hub/work/README.md`, `skills/next-action.md`, `tools/goals.js` + `tools/forecast.js` + `tools/work.js` (installed as `hub-goals`, `hub-forecast`, `hub-work`), `tools/hub-run`, `tools/hub-decide`, `tools/hub-cards.js`, `docs/harness-parity.md`. Gates: `tools/test-goals.sh`, `tools/test-forecast.sh`, `tools/test-work.sh`. Run live through all three assistants on a fresh reader hub before the section was written | ready |
 | 22. The Weekly Review That Runs Itself | `procedures/weekly-review-setup.md` (the clock is `hermes cron`, 2026-09-02), `procedures/outside-ai-check.md` (the monthly branch), `procedures/ai-subscription-review.md` (the second monthly branch, read from `hermes insights` since 2026-09-02) | ready |
 | 23. Watchdogs | `procedures/watchdog-setup.md` (a `hermes cron` job with `--workdir`, writes into `watch/product-watchdog.md`; the worked example ran for real 2026-09-02) | ready |
 | 24. Trust, but Verify | `living/two-questions-card.md`, `living/the-alternatives-card.md`, `procedures/keys-that-expire.md` (the "prove a check by breaking it" section at the end of the card) | ready |
@@ -117,6 +130,7 @@ All optional. The book works without every row below.
 | Chapter | Kit asset | Status |
 |---|---|---|
 | Appendix C. What You Get, In Order | `living/build-order-card.md` | ready |
+| Appendix D. The Hub Folder Layout | `starter-hub/` itself; the `goals/`, `forecasts/` and `work/` rows were added 2026-09-13 | ready |
 
 New 2026-09-02 (batch AK, the Hermes switch): `starter-hub/skills/` is back as the visible
 skills room. It vanished on 2026-08-30 when its `.gitkeep` moved into `.claude/skills/`, which

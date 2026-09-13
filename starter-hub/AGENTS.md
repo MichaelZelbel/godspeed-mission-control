@@ -42,6 +42,17 @@ purpose. If it contradicts something you believe about me, the file wins.
   not read the whole folder, that is what the page is for. This folder is the
   memory every one of my assistants shares, on every machine, which is why it
   lives here instead of inside one AI tool.
+- **Decide against `goals/`, not against whatever is loudest.** `goals/` holds
+  what I want, one card each: an outcome, a strategy or project meant to produce
+  one, or a protected commitment. A card marked **provisional** is an idea I
+  floated and you never work on it; you may ask me one clarifying question about
+  it in seven days and never a second while the first is unanswered. My silence
+  is not a yes. When I change my mind, record it with the reason
+  (`hub-goals change <id> --set "..." --why "..."`), never by rewriting the card.
+  `forecasts/` is what you expect to happen, dated and scored; `work/` is what
+  you are doing about it, and only VERIFIED closes an item, never your own word
+  that you did it. Each folder has a README with the format. Read them when the
+  subject comes up; never load all three at the start of a session.
 - **Never load `prompts/`.** It is a log of what I have typed and what the AI
   answered, plus a shelf of prompts I keep, not instructions to follow. Search it
   when I ask about a prompt I once used, or an answer I half remember, or when you

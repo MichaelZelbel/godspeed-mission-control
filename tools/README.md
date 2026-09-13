@@ -1,7 +1,7 @@
 # tools
 
-Nine small programs. The installer puts them on your computer. **They are not part
-of your hub folder, and that is deliberate.**
+Fifteen small programs. The installer puts them on your computer. **They are not
+part of your hub folder, and that is deliberate.**
 
 Chapter 4 says your hub is a folder of text files and that nothing in it needs a
 terminal. That stays true. These are software, like your assistant is software, so
@@ -129,6 +129,54 @@ hub is made of.
 ```
 hub-check-brief brief/2026-09-06.md       refuse or pass one brief
 ```
+
+The next five are one job between them: **the day's decision.** They are the
+difference between a hub that answers when you ask and a hub that works out what
+to do before you wake up. Each is useful on its own, and each says so plainly when
+one of the others is not installed.
+
+- **`goals.js`** (`hub-goals`) holds what you want, one card per goal: an outcome,
+  a strategy or project meant to produce one, or a commitment that is protected
+  whatever else is going on. A new idea is filed **provisional**, which means your
+  hub never works on it and may ask you one clarifying question about it in seven
+  days. Your silence is never a yes. Every change keeps its reason, and reaches
+  the plans underneath it. `hub-goals attention` says which goals get attention
+  today and **why on every row**, with no score anywhere in it. Chapter 6.
+- **`forecast.js`** (`hub-forecast`) holds what your hub expects to happen, with a
+  date and a number, so its judgment can be scored rather than trusted. It refuses
+  invented precision, a forecast with no reference class, and a revision that
+  would overwrite history. `hub-forecast score` counts each question once and puts
+  the score beside the plain historical baseline the forecast named, which is the
+  only comparison that means anything. Chapter 19.
+- **`work.js`** (`hub-work`) tracks what your hub is doing, and keeps three states
+  apart that a to-do list treats as one: dispatched, attempted, and verified. Only
+  verified closes an item, and "the runner said it did it" is not verified. A
+  duplicate trigger files nothing twice; anything that reaches somebody else waits
+  for your own words. Chapter 23.
+
+```
+hub-goals attention          who gets attention today, and why
+hub-forecast score           how good your hub's predictions have been
+hub-work tick                dead leases, due retries, stale plans
+```
+
+- **`hub-run`** carries out one recipe from your hub with nobody sitting at the
+  computer, through whichever assistant this machine has: Hermes, Claude Code or
+  Codex. The recipe stays a recipe. The program that runs it is one line of
+  configuration, so changing assistant does not turn every scheduled job into
+  rubble.
+- **`hub-decide`** is the one that ties them together, once a day. It moves time
+  on the work tracker, works out the attention plan, lists the forecasts that have
+  come due, then runs your `next-action` recipe with all of it in front of it. The
+  recipe writes one record for the day and files at most one thing for you. Copy
+  `skills/next-action.md` from this kit into `skills/next-action/SKILL.md` in your
+  hub first, then add one line to your schedule:
+
+```
+10 4 * * *  $HOME/.local/bin/hub-decide >> $HOME/.hub/decide.log 2>&1
+```
+
+Run `hub-decide --dry-run` any time to see the plan without deciding anything.
 
 The last two are the two arrows in Chapter 25's diagram. **Neither runs unless you
 connect a notebook**, and a reader who never connects one can ignore both.

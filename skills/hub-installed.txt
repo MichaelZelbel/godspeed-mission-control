@@ -1,0 +1,3 @@
+# Recipes this kit ships that a hub installs, one name per line, no .md.
+# scripts/repair-kit-wiring.sh in the hub reads this; a reader copies them by hand.
+next-action

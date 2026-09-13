@@ -36,9 +36,10 @@ git clone https://github.com/MichaelZelbel/teach-it-once-kit.git
 
 ## What is where
 
-- `starter-hub/`: the folder that becomes your own system. Copy this whole folder and it is your hub. Everything else here fills it up.
+- `starter-hub/`: the folder that becomes your own system. Copy this whole folder and it is your hub. Everything else here fills it up. Three of its rooms are the ones that turn a folder of notes into something that decides: `goals/` (what you want, and who gets attention today), `forecasts/` (what your hub expects to happen, dated and scored) and `work/` (what it is doing, where "it says it did it" and "somebody checked" are two different states). Each starts empty with a README explaining the format.
+- `tools/`: the small programs the installer puts on your machine, outside your hub. Among them `hub-goals`, `hub-forecast` and `hub-work` for the three rooms above, and `hub-decide`, which runs the day's decision once a day through whichever assistant you use. `tools/README.md` says what each one is for.
 - `profile/`: Part II assets. The about-you template, the people and projects interviews, the voice extraction prompt, the capture and spring-clean checklists.
-- `skills/`: Part III assets. The skill interview, the five starter recipes, the craft-skill interview, the test checklist, practice texts, and one big finished craft skill (`strip-ai-tells.md`) to see what a real one looks like. These are the book's teaching copies; in your own hub a recipe lives at `skills/<name>/SKILL.md`.
+- `skills/`: Part III assets. The skill interview, the five starter recipes, the craft-skill interview, the test checklist, practice texts, and one big finished craft skill (`strip-ai-tells.md`) to see what a real one looks like. These are the book's teaching copies; in your own hub a recipe lives at `skills/<name>/SKILL.md`. `next-action.md` is the one your hub runs by itself: copy it to `skills/next-action/SKILL.md` and `hub-decide` carries it out once a day.
 - `procedures/`: Part V and VI assets. Morning brief, weekly review, watchdog, the procedure register, the red lines, the card for keys that run out, and the card for everything else that runs out (`what-runs-out-and-when.md`).
 - `living/`: the two-questions card, the privacy audit checklist, the saved-prompt card, the printable build-order card.
 - `menerio/`: Part VI, optional. The notebook chapters: what goes in it and what stays out, the MCP connection, and two optional routes for pulling an old AI's memory in.
@@ -52,7 +53,6 @@ The full chapter-by-chapter map is in `docs/CHAPTERS.md`.
 - **Not a chatbot.** You talk to it, but its job is the work it does when you are not there.
 - **Not a cloud service.** A folder on your machine, and if you want one, a server you rent yourself.
 - **Not a memory database on its own.** Menerio is the optional notebook in Part VI; the hub works without it.
-- **Not the author's whole hub.** Michael's own hub carries three registers this kit does not ship yet: what he wants (goals, provisional or adopted, every change with its reason), what his hub expects to happen (dated forecasts it keeps score on) and what his hub is doing (work tracked from planned to verified). The book teaches the ideas behind them as prompts you can use today, in Chapter 6 (find what limits a goal), Chapter 19 (the outside view, and a number you keep score on) and Chapter 23 (progress written down), with the research behind each in Appendix F. The tools themselves are hub-only for now, so that the kit never carries a copy that drifts.
 - **Not finished.** See the status below.
 
 ## Status

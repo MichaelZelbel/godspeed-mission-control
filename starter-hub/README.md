@@ -17,7 +17,7 @@ until its subject comes up, which is what keeps the first part small.
     observations/  what it worked out on its own ........... when the subject comes up
     prompts/       what you typed to an AI ................. never, unless you ask
 
-What is here. Ten names, and they are the whole system:
+What is here. Thirteen names, and they are the whole system:
 
 - `AGENTS.md`: your AI's operating manual. How to work in this folder, and the
   short list of your rules. Hermes reads it by name at the start of every
@@ -51,6 +51,14 @@ What is here. Ten names, and they are the whole system:
   `prompts/library/` holds the prompts you keep and paste into other
   tools, and `prompts/archive/` is the log of everything you have typed.
   Chapters 13 and 31.
+- `goals/`: what you want, one card each, and who gets attention today. An
+  outcome, a strategy or project meant to produce one, or a protected
+  commitment. A new idea is filed **provisional** and is never worked on until
+  you adopt it. Starts empty.
+- `forecasts/`: what your hub expects to happen, with a date and a number, so
+  its judgment can be scored instead of trusted. Starts empty.
+- `work/`: what your hub is doing, from planned to verified, where "the runner
+  says it did it" and "somebody checked" are two different states. Starts empty.
 - `world/`: your assistant's record of people, events and facts you tell it.
   It saves and searches these files without Menerio. An optional Menerio
   connection can add imported records. `world/README.md` explains the formats.

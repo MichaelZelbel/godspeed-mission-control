@@ -3,3 +3,8 @@
 # mktemp path resolves to two different places for Git Bash and Windows python), and one
 # run of them reached a commit on 2026-08-29.
 tools/.tmp-*
+
+# Python leaves these behind when a tool here is imported. They are build output, never
+# something a reader needs, and one of them was tracked here until 2026-09-13.
+__pycache__/
+*.pyc
