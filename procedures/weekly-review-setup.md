@@ -1,8 +1,8 @@
 # Chapter 23: Set Up an Automatic Weekly Review
 
-Saving a useful note and filing it are two different pleasures. I have been rather more reliable at the first. The new deadline gets captured, but the project file still shows the old one. When the assistant reads both, it has a question instead of an answer.
+The hub saves clear updates while you work. A weekly review gives it a different job: look across the week and prepare a useful view of what moved forward, what needs attention and what it can help with next.
 
-A weekly review can file the clear changes and bring you the questions the notes can't settle. It also uses dated work and earlier reviews to show what moved forward. You get the week's work in view, with some of the maintenance already done.
+It can also resolve any remaining captures when the evidence allows, preserving the originals. You get the useful findings and questions that affect the coming week. Clear updates do not have to wait for this review before the hub uses them.
 
 ## Build a review that preserves its evidence
 
@@ -65,7 +65,7 @@ Read any existing subscription records first. Create or update profile/subscript
 
 *[Copy prompt](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-24-box-3)*
 
-Ask Hermes to inspect its usage records for the last 30 days. The helper named `hermes insights --days 30` reads those records; the assistant can run it for you. One historical run showed:
+Ask the assistant to inspect its usage records for the last 30 days. The helper named `hermes insights --days 30` reads those records; the assistant can run it for you. One historical run showed:
 
 > Estimated:   ~$0.50
 > Included:    17 session(s) (subscription, no provider invoice)
@@ -85,7 +85,7 @@ Read that file and run hermes insights --days 30. Report what the available reco
 
 Ask the assistant to try the review in a practice copy before giving it real captures to file. Include a writing sample and an open question: both should stay put. Have it recover an archived capture, undo that capture's profile change and compare the files with their originals. You'll have checked the ordinary filing and what happens when you disagree with it.
 
-Choose a time when you normally consider the week ahead. Ask Hermes to schedule `weekly review` for that time in your time zone, using this hub's full path as the working folder. Have it inspect existing jobs first and update a matching job rather than creating a duplicate. Give it this prompt for each run:
+Choose a time when you normally consider the week ahead. Ask the assistant to schedule `weekly review` for that time in your time zone, using this hub's full path as the working folder. Have it inspect existing jobs first and update a matching job rather than creating a duplicate. Give it this prompt for each run:
 
 ```
 Read AGENTS.md and follow skills/weekly-review/SKILL.md. Write this week's new review into reviews/. Apply only the local filing allowed by that skill. Report failures and uncertainty; send nothing externally.

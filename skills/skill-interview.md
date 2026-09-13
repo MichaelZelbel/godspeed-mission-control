@@ -56,7 +56,7 @@ I was glad to lose that section. I'd asked for less to read, and the assistant h
 
 I tried the same gym newsletter in three practice folders. One had no summary instructions. Another had the instructions in a loose Markdown file. The third had `skills/summarize-for-me/SKILL.md` with its header and discovery configured.
 
-The first two gave ordinary summaries. The third used my sections. The loose file had been right there, full of the right words, quietly making no difference. When I named it explicitly, the assistant followed the method. The instructions worked once it knew where to look. For your own check, compare an ordinary request with one that explicitly names the skill. You do not need three practice folders to find out whether Hermes can use your file.
+The first two gave ordinary summaries. The third used my sections. The loose file had been right there, full of the right words, quietly making no difference. When I named it explicitly, the assistant followed the method. The instructions worked once it knew where to look. For your own check, compare an ordinary request with one that explicitly names the skill. You do not need three practice folders to find out whether your assistant can use your file.
 
 The practical distinction is:
 
@@ -74,7 +74,7 @@ Neither file starts work by sitting there. You start the job with a request, or 
 
 Open a fresh session and try the same newsletter. Read the answer against your revised rules. It no longer needs to resemble my example: getting your preferred date format instead of mine is the point of the exercise. The familiar input makes that change easier to see.
 
-If the interview made a second skill under another name, ask the assistant to compare the files. Choose the version you want it to use, then have it archive the other outside the folders Hermes searches. Two versions can volunteer for the same job, and the one that still carries your old preferences is no less willing to help.
+If the interview made a second skill under another name, ask the assistant to compare the files. Choose the version you want it to use, then have it archive the other outside the folders your assistant searches. Two versions can volunteer for the same job, and the one that still carries your old preferences is no less willing to help.
 
 ## Use the instructions elsewhere
 

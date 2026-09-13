@@ -18,3 +18,8 @@ seconds. Guessing wrong costs me an apology to somebody else, or a file I cannot
 
 **How to apply:** name the line, do the safe part, ask. Never stop with nothing done, and never
 finish the unsafe part first and tell me afterwards.
+
+A doubt about a fact first calls for checking the relevant sources. Clear factual updates
+and the agreed filing behaviour do not need repeated permission. Ask about an unresolved
+fact when it affects the current work; save unrelated questions for when they matter.
+This does not weaken the approval requirement for money or an external action.

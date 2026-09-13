@@ -6,7 +6,7 @@ A few notes in `profile/people.md` give it a better chance. Include a person whe
 
 ## Check the people already in your briefing
 
-Start a fresh Hermes session in the hub and paste:
+Start a fresh session in the hub and paste:
 
 ```
 Read profile/about-me.md and the current profile/people.md. Help me improve the people file.
@@ -31,7 +31,11 @@ Begin with the people your briefing already mentions. Correcting “Alex works w
 
 Let's see what this interview can uncover. Sam Okafor is a fictional freelance illustrator. In his story, he owes a publishing client, Nadia, a 20-card illustration set. Cards 8 to 12 are four days late. That gives the interview a useful question: what does Nadia need to hear from him now?
 
-I wrote notes about Sam's work and the people in his life, then ran the interview with those notes. The people and the late project are fictional; the assistant's replies below are what it actually said. Read them as an example of how it turns a vague note about a client into useful questions. For your own interview, paste the prompt above into Hermes and answer about the people in your life.
+I wrote notes about Sam's work and the people in his life, then ran the interview with those notes. The people and the late project are fictional; the assistant's replies below are what it actually said. They show how a vague note about a client can lead to a useful question.
+
+Sam's original interview files do not come with the companion kit, and the installer does not put Sam or his clients into your personal notes. Use the prompt above with your own people. You don't need Sam's files to follow the example.
+
+The kit does include a different practice story, Robin's bicycle shop, in `practice/maintenance-classes/`. Those files are available if you want to try a fictional job later. They stay outside your working hub. Practice belongs in a separate folder, so an invented client cannot acquire a place on your real to-do list.
 
 In the people interview, the assistant first noticed that the background mostly contained roles:
 

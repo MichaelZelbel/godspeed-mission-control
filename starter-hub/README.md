@@ -12,7 +12,7 @@ You can see the initial layout in `starter-hub/` in the companion kit. Some file
 | `profile/` | Background you confirmed, including people, projects and writing preferences. |
 | `rules/` | Behavior instructions, compiled into the short rule list. |
 | `observations/` | Useful findings and inferences, kept separate from confirmed profile facts. |
-| `inbox/` | New captures, writing samples and unresolved questions. |
+| `inbox/` | Unresolved material, writing samples and notes you asked to leave untouched. Clear updates are filed during the work. |
 | `archives/filed-captures/` | Original captures after clear facts have been filed. |
 | `skills/` | Reusable job instructions, one `SKILL.md` per skill. |
 | `decisions.md` | Dated decisions and their reasons. |

@@ -10,7 +10,7 @@ Begin with one question and a few named sources. Every check uses model time and
 
 Suppose your publishing tool cannot place the cover picture where you need it. A useful watch checks that particular feature and your current setup. “Find the best publishing tool” would send it shopping before it knows what went wrong.
 
-Ask Hermes to prepare the watch using the matching companion kit:
+Ask the assistant to prepare the watch using the matching companion kit:
 
 ```
 Set up one research watch for the question I describe. Read relevant existing notes first. Ask only for missing information: what would count as better, which sources to trust, how often to check, and which findings would change a decision.
@@ -42,7 +42,7 @@ The starter limits each watch to five source pages and ten minutes per run. If t
 
 These instructions give the assistant a method. They are not a guarantee that every future run will follow it, so the first test needs a source whose changes you can judge.
 
-Ask Hermes to make a separate practice watch that reads a harmless local text file, clearly labelled as fiction. Have it test the file unchanged, with one changed claim, and with the source absent. Ask it to label these as forced practice checks, so the normal waiting interval does not make it skip them. Keep your real sources and research history untouched.
+Ask the assistant to make a separate practice watch that reads a harmless local text file, clearly labelled as fiction. Have it test the file unchanged, with one changed claim, and with the source absent. Ask it to label these as forced practice checks, so the normal waiting interval does not make it skip them. Keep your real sources and research history untouched.
 
 ## Run it once before scheduling
 

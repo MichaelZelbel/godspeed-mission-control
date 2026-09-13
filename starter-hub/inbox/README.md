@@ -1,7 +1,7 @@
 # Inbox
 
-New factual captures, writing samples and unresolved questions can live here. Name captures with a date and subject. Do not empty this folder indiscriminately.
+Unresolved questions, raw material you want left untouched and writing samples can live here. Clear useful facts from a conversation are filed during the work under the shared instructions. You do not need to return with a sorting request.
 
-File only clear factual updates under the user's instructions. Preserve the original in `archives/filed-captures/` with a unique name. Leave writing samples, unresolved import questions and doubtful captures untouched.
+When the user resolves a relevant uncertainty, finish filing it in that conversation. Preserve the original in `archives/filed-captures/` with a unique name, after checking the saved content. Leave writing samples, unresolved import questions and unrelated captures untouched. Ask about a doubt only when it changes the current work.
 
-A proposed behavior rule is not a profile fact. Keep it pending until confirmed, then use `rules/` and `hub-compile-rules` when that workflow is available. Chapter 8 teaches filing; Chapter 23 adds a weekly review with a recoverable version and a full move record.
+A proposed behavior rule is not a profile fact. Keep it pending until confirmed, then use `rules/` and `hub-compile-rules` when that workflow is available. Chapter 8 explains saving during conversation. A configured weekly review can also handle remaining clear captures; it is not a prerequisite for using a new fact today.

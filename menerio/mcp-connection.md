@@ -22,7 +22,7 @@ https://mcp.menerio.com
 
 ## Connect Hermes
 
-Ask Hermes to prepare its Menerio connection:
+Ask the assistant to prepare its Menerio connection:
 
 ```
 Configure a Menerio connection named notebook using https://mcp.menerio.com. Inspect existing connections first and preserve unrelated settings. Use the installed Hermes connection tools and their current help.

@@ -1,6 +1,6 @@
 # Chapter 20: Prepare a Job to Run on a Schedule
 
-So far, the assistant has waited for you to open Hermes and ask. That's useful while you're teaching it. Once the job is familiar, though, remembering to ask can become another small task you carry around. A morning brief would be more welcome if it arrived before you remembered you needed it.
+So far, the assistant has waited for you to open your hub and ask. That's useful while you're teaching it. Once the job is familiar, though, remembering to ask can become another small task you carry around. A morning brief would be more welcome if it arrived before you remembered you needed it.
 
 A schedule supplies that first nudge. The useful part is what waits for you afterwards: work you can read, sources you can check and choices you can make. We'll prepare the job around that result.
 
@@ -11,17 +11,17 @@ To get from an instruction to work waiting for you, put four things in place:
 1. **Instructions:** a skill file describing the work and its limits.
 2. **A start time:** once, or on a repeating schedule, in a named time zone.
 3. **An output:** a new file in a folder you check, or a tested delivery channel.
-4. **A running computer:** Hermes must be available there, with its files, model access and any required network connection.
+4. **A running computer:** Your assistant must be available there, with its files, model access and any required network connection.
 
 [View the illustrated reading edition](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/Teach-It-Once.pdf)
 
 Look for these details in the saved job when the assistant promises to check later. Its next run time and instructions show what has actually been arranged. Also choose an output folder you already open: work saved somewhere you never look becomes a diary the assistant keeps to itself.
 
-Start on your laptop so you can watch the first job work. An awake computer is necessary, but Hermes' scheduler must be running too. The desktop app can supply that service; a terminal conversation alone does not. Ask Hermes to inspect how scheduled jobs start in your installation and identify the active process. If you later use a server, the same requirements apply there.
+Start on your laptop so you can watch the first job work. An awake computer is necessary, but Hermes' scheduler must be running too. The desktop app can supply that service; a terminal conversation alone does not. Ask the assistant to inspect how scheduled jobs start in your installation and identify the active process. If you later use a server, the same requirements apply there.
 
 ## Check whether the skill can find its input
 
-Before scheduling a skill, check whether it can find everything you normally hand it during a conversation. Ask Hermes:
+Before scheduling a skill, check whether it can find everything you normally hand it during a conversation. Ask the assistant:
 
 ```
 Read the skill I want to schedule. Could it run without another message from me, using only the files and tools it can already reach?

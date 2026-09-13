@@ -11,9 +11,9 @@ This map follows the 34-chapter review manuscript dated 13 September 2026. The s
 | Chapter 5: The People Who Matter | `profile/people-interview.md` |
 | Chapter 6: Projects and Priorities | `profile/projects-interview.md` |
 | Chapter 7: Teach AI Your Writing Style | `profile/voice-extraction-prompt.md` |
-| Chapter 8: Save Useful Notes During Your Day | `profile/capture-checklist.md` |
-| Chapter 9: Keep Your AI's Information Up to Date | `profile/mirror-test.md`; `profile/spring-clean-checklist.md` |
-| Chapter 10: Correct AI Without the Argument (Optional) | Use the named files in the chapter; every text box is also in book-prompts.json. |
+| Chapter 8: Tell the Hub Once, Let It Remember | `profile/capture-checklist.md` |
+| Chapter 9: Let the Hub Keep Up With Your Life | `profile/mirror-test.md`; `profile/spring-clean-checklist.md` |
+| Chapter 10: Correct AI Without the Argument | Use the named files in the chapter; every text box is also in book-prompts.json. |
 | Chapter 11: Save a Repeated Job as an AI Skill | Use the named files in the chapter; every text box is also in book-prompts.json. |
 | Chapter 12: Make an AI Skill Work Your Way | `skills/skill-interview.md` |
 | Chapter 13: Skills for Email, Planning and Decisions | Use the named files in the chapter; every text box is also in book-prompts.json. |

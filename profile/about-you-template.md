@@ -1,6 +1,6 @@
 # Chapter 3: Organize the Files Your AI Uses
 
-Installation has left you with several new folders and one reviewed briefing. Let the assistant do the filing: separating your projects from your writing preferences helps it find the right background for each job. With Hermes open in your hub, ask:
+Installation has left you with several new folders and one reviewed briefing. Let the assistant do the filing: separating your projects from your writing preferences helps it find the right background for each job. In the hub, ask:
 
 ```
 Read what-my-ai-knew.md and file the useful parts into profile/about-me.md, profile/people.md, profile/projects.md and profile/voice.md. Use the meaning of the headings, not their exact spelling. Keep unanswered questions in inbox/. Keep the original file. Add the source and today’s date to what you import. Show me what you changed; do not fill gaps by guessing.
@@ -35,7 +35,7 @@ This table is for the day you're trying to find something. The folder names will
 | `profile/` | Background you choose to maintain about yourself, people, projects and writing |
 | `skills/` | One folder per repeated job, with a `SKILL.md` instruction file |
 | `procedures.md` | The jobs configured to run, when they start and where results go |
-| `AGENTS.md` | The short instructions the setup asks Hermes to load |
+| `AGENTS.md` | The short instructions your assistant reads |
 | `rules/` | The full explanation of each behavior rule |
 | `decisions.md` | Dated decisions and the reasons for them |
 | `inbox/` | Captured notes awaiting filing, plus material explicitly kept there |

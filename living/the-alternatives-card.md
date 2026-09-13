@@ -6,7 +6,7 @@ There are two different experiments here. Changing the model inside Hermes compa
 
 ## Try another model inside Hermes
 
-To compare models, keep Hermes and your files in place. Give each model the same task, source material and instructions so you can judge the difference in its work. Ask Hermes to show the models available through your current access and help you select one. Its `hermes model` command opens the provider and model picker when needed. Check any new cost before choosing, then try a familiar task you care about. The app can look exactly the same while the model does noticeably different work. Knowing the task gives you something better than a first impression to judge it by.
+To compare models, keep Hermes and your files in place. Give each model the same task, source material and instructions so you can judge the difference in its work. Ask the assistant to show the models available through your current access and help you select one. Its `hermes model` command opens the provider and model picker when needed. Check any new cost before choosing, then try a familiar task you care about. The app can look exactly the same while the model does noticeably different work. Knowing the task gives you something better than a first impression to judge it by.
 
 Hermes also supports fallback models, meaning alternatives it can try when the first provider fails. This is optional. Ask it to inspect the current fallback list and propose an addition only if you want one. The alternative needs valid access and enough allowance. It may not run often, but it is still a service that can charge for use or fail when called.
 

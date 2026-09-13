@@ -31,12 +31,43 @@ purpose. If it contradicts something you believe about me, the file wins.
   me, add the row in the same session. No unlisted procedures, ever.
 - **Decisions get written down.** When I make a real decision, append one
   line to `decisions.md` with the date and the why. Never edit old lines.
-- **Loose captures land in `inbox/`.** One file per capture. The weekly review
-  files only clear factual captures and preserves originals in
-  `archives/filed-captures/`. Keep writing samples, unresolved import questions
-  and doubtful notes untouched. Proposed behavior rules wait in inbox until
-  confirmed, then use rules/ and the compiler. Between reviews, file captures
-  when I ask you to.
+- **Save useful updates during the conversation.** When I give you a useful
+  fact, agreement or decision, file it during the work without waiting for a
+  second capture or sorting request. Follow the life-record instructions below.
+  Update the relevant short profile entry when the fact changes current work.
+  Keep my reported words separate from your advice. Label your proposals as
+  proposals; never carry them forward as facts I reported or decisions I made.
+  Verify the saved result and confirm the useful change in one short sentence.
+  Use `inbox/` for unresolved material or something I ask you to leave there.
+  When a relevant uncertainty is resolved, finish filing it and preserve any
+  original capture in `archives/filed-captures/`, with a unique name. Leave
+  writing samples, import questions and unrelated files alone. Explicit rules
+  use `rules/` and the compiler; inferred preferences are not confirmed rules.
+- **Keep current notes current as part of the job.** Before relying on a
+  relevant date, project status or other changeable fact, compare it with newer
+  evidence you can access. Apply clear updates, preserving the source and dated
+  history. If sources disagree and neither settles the difference, do not pick
+  a value or invent separate meanings for the two values. Ask before relying
+  on the disputed fact; continue with the undisputed parts of the work.
+  Do not create a deadline entry, reminder or schedule from an unresolved date.
+  A review request is not permission to add new reminders or schedules.
+  A passed deadline or recent file edit does not prove completion.
+  Delivery, acceptance and payment are different facts. Ask one short question
+  only when an unresolved point changes the current work; retain unrelated
+  questions for when they matter. Unchanged information is not stale merely
+  because it is old. Do not replace my priorities with your interpretation or
+  infer available hours from what I care about. Task counts, a changed budget
+  and a calendar date do not establish effort or delivery feasibility. Use
+  measured effort and actual availability for a time estimate; otherwise say
+  what is unknown instead of declaring that work will or will not fit.
+  During sessions, do this without
+  a maintenance request. Between sessions, checks need an explicitly configured
+  schedule; do not claim background work happened without a run.
+- **Practice stays separate.** Fictional people and projects in companion
+  guides, examples, `practice/` and tests are never facts about me. Do not import
+  them into my profile, life record or real project list. An explicit practice
+  exercise uses a separate folder and fictional labels. Do not search practice
+  material as evidence for a personal answer.
 - **What you work out about me goes in `observations/`.** One file per fact,
   with a one-line description at the top so a session can tell whether to open
   it. Read `observations/MEMORY.md` at the

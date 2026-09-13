@@ -8,7 +8,7 @@ The draft has every fact right. It also greets your old friend as though applyin
 
 Choose three to five short pieces of your own writing. Ordinary emails make good samples, as do explanations, refusals and messages with bad news. Pick pieces where you recognise your own voice.
 
-Remove private details before giving the samples to Hermes. It can learn your sentence length and tone without somebody's real name or access details coming along for the lesson. Then ask it to save each sample as a separate text file in `inbox/writing-samples/`, creating the folder if needed.
+Remove private details before giving the samples to the hub. It can learn your sentence length and tone without somebody's real name or access details coming along for the lesson. Then ask it to save each sample as a separate text file in `inbox/writing-samples/`, creating the folder if needed.
 
 Then paste:
 

@@ -106,9 +106,9 @@
   {
     "key": "chapter-7-box-1",
     "chapter": 6,
-    "section": "Begin with the existing list",
-    "body": "Read profile/about-me.md, profile/people.md and the current profile/projects.md. Check the existing project list before adding anything.\n\nInterview me one question at a time, at most eight questions. Help me record:\n1. Active projects, their deadlines and evidence of their real state.\n2. Up to three current priorities, in order.\n3. What should win when two priorities conflict, including time or budget I want to protect.\n\nDistinguish agreed dates from estimates and suggestions. Ask about conflicts the files cannot settle. Do not invent progress, deadlines or priorities to complete the list.\n\nShow the proposed changes, then update profile/projects.md with the facts and choices I confirm. Keep dates and sources. Record important changes of direction and their reasons in decisions.md.",
-    "sha256": "3d08b4a9efab00a851f22e11ad9bb854967ef229a0223096089cb4445ea5da92",
+    "section": "Let the hub find the starting point",
+    "body": "Read profile/about-me.md, profile/people.md and profile/projects.md. Use the project list to find relevant drafts, results and recent updates you can access. Read those before asking me for a progress report. Treat practice examples as fiction and keep them out of my real project list.\n\nGive me a short picture of the active work and the next useful step you could help complete. Distinguish agreed deadlines, estimates, current evidence and missing information.\n\nUse priorities I have already stated. If an important choice remains unclear, ask one question at a time, only about what changes the recommendation. Priorities say what matters; they do not tell you my available hours. Do not infer working hours, urgency or permission to spend from a priority.\n\nUpdate profile/projects.md with clear facts from my updates and verified sources, keeping dates and sources. Ask before replacing a priority with your interpretation. Record a confirmed change of direction and its reason in decisions.md. Keep earlier decisions as history.\n\nOffer concrete help with the next step, such as preparing a draft or comparing options. Prepare the work you can do; get my approval before sending anything or making a commitment.",
+    "sha256": "985866224f62cf6a97dba1c194c02e4a91cb1c197b1955dd85911725cc86efc3",
     "copyable": true
   },
   {
@@ -130,25 +130,33 @@
   {
     "key": "chapter-9-box-1",
     "chapter": 8,
-    "section": "Name the destination",
-    "body": "Capture this in my inbox: Nadia said today the budget for next year's book has doubled. She hinted there could be a second illustrated title in it for me.",
-    "sha256": "2f8db433813e7ba9d7d9b03004dee8fdb1640987d208f1350136b670892d7bd9",
+    "section": "Say the useful sentence",
+    "body": "Nadia said today the budget for next year's book has doubled. She hinted there could be a second illustrated title in it for me.",
+    "sha256": "35ce3f6afe0564426cd259203025638dc6ca6a7c3cfe165a0639f4c7ae1ca934",
     "copyable": false
   },
   {
     "key": "chapter-9-box-2",
     "chapter": 8,
-    "section": "File only the captures",
-    "body": "Review the capture notes in inbox/. Leave writing-samples/, unresolved import questions, templates and anything that is not clearly a capture untouched.\n\nFor each capture, identify its source, date and useful content. Suggest the correct profile file or decisions.md. Keep my reported facts separate from your interpretations. If a new value replaces an old one, update the current entry and preserve the dated change where useful.\n\nIdentify explicit instructions about how I want you to behave separately. Leave those in the inbox marked as proposed rules until I confirm them. Do not turn an inferred preference into a rule.\n\nFile the clear notes in my words. After checking that the content reached its destination, move those capture files into archives/filed-captures/, preserving their names. Do not delete them. Leave unclear notes in the inbox and ask only about the uncertainty.\n\nTell me which files changed and where the originals went.",
-    "sha256": "1bbc8db1c1b56b67a425ccb38203569b746474c21eda7a076fe48a7fd1a9aa98",
+    "section": "Let the hub handle the filing",
+    "body": "Update this hub's saved instructions so useful facts from our conversations are filed during the work, without a separate sorting request from me. Read the existing instructions and preserve unrelated rules.\n\nUse world/README.md for the life-record format. Search before adding a record. Keep my words, source, date and uncertainty; do not invent dates or facts. Keep events as history. When a current fact changes, close the old claim and add its replacement. Update the relevant short profile entry when the change affects it. Correct imported records at their original source.\n\nUse inbox/ only for unresolved material or things I explicitly ask you to leave there. When a relevant uncertainty is resolved in conversation, finish filing it. Preserve any original capture in archives/filed-captures/ after checking the filed content. Leave writing samples, templates and unrelated files alone.\n\nSave explicit instructions as rules using this hub's existing method. Do not turn a casual remark or an inferred preference into a new rule. Ask only when an uncertainty changes the work we are doing. Verify each save and confirm the useful change briefly.\n\nKeep this behaviour in shared hub instructions that my assistant reads. Check that the saved instructions are loaded. Do not add a schedule or change permissions.",
+    "sha256": "b4a0d0777c8cbcdbe580d8b7f42ba07c15d2e4913e0e2606131932a44cc684a9",
     "copyable": true
   },
   {
     "key": "chapter-10-box-1",
     "chapter": 9,
-    "section": "Keep Your AI's Information Up to Date",
-    "body": "Read the current files in profile/, excluding interview prompts, checklists and templates.\n\nDescribe my life and work from those files only: who I am, who matters, active work, priorities and how I want help.\n\nThen list possible conflicts, dates that may be stale, and claims too vague to use. Quote the conflicting lines and name their files. Separate what the files establish from what needs my confirmation.\n\nDo not search elsewhere or change anything yet. Unchanged information is not automatically outdated.",
-    "sha256": "c592bbe00064fb891e9b83defe20f3cc6881692e7a611419d1ad304243104602",
+    "section": "Use the updated background in real work",
+    "body": "What needs my attention on my current projects? Use my saved priorities and recent updates you can access. Check relevant old or conflicting notes against newer evidence before recommending a next step.\n\nUpdate clear changes in the hub's records, preserving sources and dated history. Do not infer completion from a passed deadline or a recently edited file. Ask me only about an unresolved point that changes the recommendation. Prepare useful work where you can, and leave external actions for my approval.\n\nIf sources disagree and neither settles the difference, ask before relying on the disputed value. Do not invent different meanings for conflicting dates. Continue with the undisputed parts of the work. Do not add reminders, deadline entries or schedules as part of this request.",
+    "sha256": "cd5e77b98b53982357c00840e04452df0947922aad6bef1605f2c27c69e53f34",
+    "copyable": true
+  },
+  {
+    "key": "chapter-10-correction-20260913",
+    "chapter": 10,
+    "section": "Ask for the corrected work",
+    "body": "Fix the mistake I just pointed out. Check the original request and the relevant sources, then give me the corrected work. Do the investigation and repair you can do yourself. Ask only if something essential remains unclear.\n\nIf an outdated fact or a missing instruction caused the mistake, update its existing home within this hub. Preserve unrelated instructions and dated history. Do not create a broad new rule from a one-off correction, and do not change correct source material to justify your answer.\n\nVerify the correction. Keep the explanation brief and show what changed; I do not need a long apology. Leave sending, publishing and other external actions for my approval.",
+    "sha256": "a09f14542db9c40a057e99301c032dff964a2a126243b7ffc20da36bf7595d7c",
     "copyable": true
   },
   {

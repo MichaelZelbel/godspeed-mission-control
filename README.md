@@ -6,6 +6,10 @@ Start with Chapter 1 in the book, then install Hermes and the hub in Chapter 2. 
 
 The taught route leaves conversation collection and notebook copying off. The installer can enable them when selected; do not assume they are off without checking its report. No Menerio account is needed for local world records.
 
+The matching starter instructions file useful updates during conversation and check relevant old facts while helping with a job. Clear notes do not wait for a second sorting request. Between-session checks still need a configured schedule. These instructions apply to the assistant using your hub; Hermes is the book's example installation.
+
+Sam's original interview files are not included or installed. Robin's fictional material is supplied only under `practice/maintenance-classes/`, outside the installed starter hub. Use a separate practice folder when trying it. Examples in the guides are never personal facts to import.
+
 ## What to use
 
 - profile/: context import, people, projects, writing and capture guides.

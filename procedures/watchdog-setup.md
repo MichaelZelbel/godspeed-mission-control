@@ -20,7 +20,7 @@ Keep a failed page check visible. Silence is useful after the sources have been 
 
 ## Build the first watch
 
-My product watch checks Hermes and its model access for changes that affect this book. A renamed control can make a careful instruction look careless surprisingly quickly. To try it, first ask Hermes to run the prompt below once in your hub. Then ask it to schedule the same prompt weekly, in your time zone, under the name `product watchdog`. Have it save this hub's full working-folder path, keep delivery local and check for an existing job before adding one:
+My product watch checks Hermes and its model access for changes that affect this book. A renamed control can make a careful instruction look careless surprisingly quickly. To try it, first ask the assistant to run the prompt below once in your hub. Then ask it to schedule the same prompt weekly, in your time zone, under the name `product watchdog`. Have it save this hub's full working-folder path, keep delivery local and check for an existing job before adding one:
 
 ```
 Read AGENTS.md in this working folder and follow it. Check the official Hermes Agent release notes and documentation for changes to the desktop app, scheduled jobs, skills and folder access. Check OpenAI's official ChatGPT pricing and release notes for changes to the subscription route used here. Inspect the named official pages, not just search snippets.

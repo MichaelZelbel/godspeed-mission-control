@@ -10,7 +10,7 @@ Robin runs a bicycle repair shop and is considering maintenance classes. Three c
 
 Use the matching companion kit you unpacked during setup, or [download it here](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/Teach-It-Once-Companion.zip). It includes Robin's briefing and workshop notes under `practice/maintenance-classes/`, plus a skill for preparing decisions. The assistant can copy these into a separate practice hub.
 
-Ask Hermes to prepare the folder:
+Ask the assistant to prepare the folder:
 
 ```
 Find the matching unpacked companion kit, asking where I saved it only if needed. Create a new disposable hub named robin-practice beside my real hub. Stop if that folder already exists; do not merge or overwrite it.
@@ -20,13 +20,13 @@ Copy starter-hub/ into robin-practice, including its dot files. Copy practice/ma
 Copy the kit's skills/prepare-a-decision/SKILL.md into robin-practice/skills/prepare-a-decision/SKILL.md. Confirm that the copied skill, profile files and workshop note can be read. Report the full practice path and leave all schedules off.
 ```
 
-Open the practice folder in Hermes and check that it is the working folder. You'll use the installation you already have; changing the folder gives this exercise its own files.
+Open the practice folder in your assistant and check that it is the working folder. You'll use the installation you already have; changing the folder gives this exercise its own files.
 
 The saved job instructions name each skill file. This lets the practice job read the copied method even if Hermes has not added the new folder to its skill search.
 
 ## Build the brief before its schedule
 
-In the folder you chose, tell Hermes the time zone to use, such as Europe/London. Then ask for a skill and its first brief. Reading one actual result will tell you far more about the instructions than polishing them in advance:
+In the folder you chose, tell the assistant the time zone to use, such as Europe/London. Then ask for a skill and its first brief. Reading one actual result will tell you far more about the instructions than polishing them in advance:
 
 ```
 Build skills/morning-brief/SKILL.md with these instructions, then run it once.
@@ -59,7 +59,7 @@ Read the first brief as if it had arrived tomorrow morning. Where would you slow
 
 ## Save the daily job
 
-Once the brief is useful, ask Hermes to give it a daily start time. Scheduling is a tool the assistant can use; you do not need to translate seven in the morning into a scheduling expression.
+Once the brief is useful, ask the assistant to give it a daily start time. Scheduling is a tool the assistant can use; you do not need to translate seven in the morning into a scheduling expression.
 
 ```
 Set up a daily morning brief at 7am in the time zone we agreed. Inspect existing jobs first. If a morning brief already exists for this hub, show it and update that job rather than creating a duplicate.
@@ -94,9 +94,9 @@ Create one one-time test, due in 5 minutes, with this hub's full path saved as i
 
 *[Copy prompt](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-21-text-4-20260913)*
 
-Keep the computer awake and the scheduler running, and let the timer start this test without pressing **Trigger now**. Return after the scheduled time and ask Hermes to check the run history, new practice result and absence of a future run. Read the result itself. That checks both the automatic start and the work it produced.
+Keep the computer awake and the scheduler running, and let the timer start this test without pressing **Trigger now**. Return after the scheduled time and ask the assistant to check the run history, new practice result and absence of a future run. Read the result itself. That checks both the automatic start and the work it produced.
 
-If nothing appears, ask Hermes to diagnose the missed run. A sleeping laptop, a missing model connection and a refused tool each call for a different repair, even when they leave the same empty output folder.
+If nothing appears, ask the assistant to diagnose the missed run. A sleeping laptop, a missing model connection and a refused tool each call for a different repair, even when they leave the same empty output folder.
 
 When I shut down the desktop app in a test, missed slots became one late run after restart. A missed morning brief may therefore arrive late. Read the run history to see whether that happened before rewriting the skill.
 

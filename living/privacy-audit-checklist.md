@@ -45,7 +45,7 @@ When I asked for cleanup, the assistant kept the originals and made a cleaned co
 
 ## Inspect the application's own records
 
-Ask Hermes where this installation stores conversation history and saved notes, and have it identify those locations without printing private contents. In the version I used, transcripts sat in a local database and saved notes included `MEMORY.md` and `USER.md` inside a `memories` folder.
+Ask the assistant where this installation stores conversation history and saved notes, and have it identify those locations without printing private contents. In the version I used, transcripts sat in a local database and saved notes included `MEMORY.md` and `USER.md` inside a `memories` folder.
 
 These application files are separate from `observations/` in your hub. Asking the assistant to save a note in the shared folder doesn't mean the app keeps no notes of its own. I checked both places during the earlier tests for that reason.
 

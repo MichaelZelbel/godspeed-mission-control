@@ -1,41 +1,42 @@
 # Chapter 6: Projects and Priorities
 
-Give an assistant a deadline and it can help make a plan. It may even find enough hours to finish everything, provided you give it every evening and most of Sunday.
+Ask your hub what deserves attention today, and you want help choosing. Perhaps a client is waiting for a reply. Perhaps the useful next step is already half-written in a draft. The hub can find that work, explain why it matters and help finish it.
 
-The plan balances beautifully because your free time paid the bill. A deadline says when something is due; your priorities say how much of your life you're willing to give it. Before asking the assistant to plan the week, tell it which time belongs to something other than work.
+For that, it needs to know what you are trying to achieve and where the work has reached. Most of the raw material may already be in your notes. Let it start there. You have better uses for an afternoon than reporting your progress to software.
 
-## Begin with the existing list
+## Let the hub find the starting point
 
-In Hermes, use:
+In the hub, use:
 
 ```
-Read profile/about-me.md, profile/people.md and the current profile/projects.md. Check the existing project list before adding anything.
+Read profile/about-me.md, profile/people.md and profile/projects.md. Use the project list to find relevant drafts, results and recent updates you can access. Read those before asking me for a progress report. Treat practice examples as fiction and keep them out of my real project list.
 
-Interview me one question at a time, at most eight questions. Help me record:
-1. Active projects, their deadlines and evidence of their real state.
-2. Up to three current priorities, in order.
-3. What should win when two priorities conflict, including time or budget I want to protect.
+Give me a short picture of the active work and the next useful step you could help complete. Distinguish agreed deadlines, estimates, current evidence and missing information.
 
-Distinguish agreed dates from estimates and suggestions. Ask about conflicts the files cannot settle. Do not invent progress, deadlines or priorities to complete the list.
+Use priorities I have already stated. If an important choice remains unclear, ask one question at a time, only about what changes the recommendation. Priorities say what matters; they do not tell you my available hours. Do not infer working hours, urgency or permission to spend from a priority.
 
-Show the proposed changes, then update profile/projects.md with the facts and choices I confirm. Keep dates and sources. Record important changes of direction and their reasons in decisions.md.
+Update profile/projects.md with clear facts from my updates and verified sources, keeping dates and sources. Ask before replacing a priority with your interpretation. Record a confirmed change of direction and its reason in decisions.md. Keep earlier decisions as history.
+
+Offer concrete help with the next step, such as preparing a draft or comparing options. Prepare the work you can do; get my approval before sending anything or making a commitment.
 ```
 
 *[Copy prompt](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-7-box-1)*
 
-Tell it which projects are finished and which ideas you're still thinking about. “Paid work before an unproven new idea” is useful direction. Tuesday afternoon can have a purpose even if you haven't settled the next five years.
+The useful result is a short recommendation backed by work the assistant has actually read. An empty project file is a reason to ask a focused question. It isn't an invitation to invent a busy life for you.
 
-## Describe the real state
+## Give each fact its proper job
 
-Let the assistant read the drafts, replies and project files it can reach before asking you for a progress report. You have already left evidence of the work there. Use it to fill in the project notes, then answer the questions the files cannot settle.
+A deadline says when something is due. A priority says what matters more when you have to choose. Available time says when you can work. These are separate facts.
 
-“In progress” sounds respectable and tells the assistant very little. A project can live comfortably under that label for months. “12 approved, 5 in revision and four days late, 3 not started” gives it something to work with, including a reason one email matters today and another can wait.
+For example, finishing a paid illustration job may matter more than improving a portfolio site. That tells the hub which project comes first. It says nothing about whether the illustrator has an hour available today. If that matters to a plan and the hub cannot find the answer, it should ask.
 
-If recent revision rounds took about three days, the assistant has a useful starting estimate. It should keep that uncertainty visible when discussing the next round, so an estimate doesn't become a promise to a client.
+You can also name a limit, such as a fixed budget or a day you have other plans. The hub should use the limit you gave it. A blank square on a calendar is not a volunteer application.
 
-## What the practice run found
+## Let the files save you an explanation
 
-In the practice story, Sam, a fictional illustrator, has five late cards to deliver to his client Nadia. His people notes say she dislikes surprises. His project notes record the delay. The excerpts below come from an assistant interview using those notes.
+“In progress” gives the assistant little to use. “12 approved, 5 in revision and four days late, 3 not started” gives it a reason to help with a particular piece of work.
+
+In the book's practice story, Sam is a fictional illustrator with five late cards to deliver to Nadia. His people notes say she dislikes surprises. His project notes record the delay. The excerpts below come from an earlier assistant interview using those notes.
 
 The assistant began by checking the list:
 
@@ -45,20 +46,20 @@ After combining the people and project notes, it added:
 
 > **Not yet done:** Nadia has not been told about the slip. She works months ahead and hates surprises ... heads-up needed today, calm and no over-apologising.
 
-The people file explained why Nadia needed to hear early. The project file supplied the delay. Sam could ask for help with the message without first sitting down to explain the whole difficult week.
+Sam doesn't have to explain Nadia's preferences again. The hub has enough background to prepare a calm message about the delay and leave any unconfirmed delivery date open. Sam approves the message and any new commitment before it goes out.
 
-Sam would still have to approve the message and any proposed new date before anything went to Nadia.
+That is useful support: noticing what needs attention and doing the preparation that follows.
 
-## Write the choice behind the schedule
+## Change direction in conversation
 
-A useful priority settles a choice. Finishing the paid cards before improving the portfolio site tells the assistant which work should win. Keeping Thursday evening free tells it which hours are unavailable, and a budget limits how far to take an unproven idea. Put those choices in plain words so it can use them when the week gets crowded.
+When a project finishes, say so during the work. When you decide to put one on hold, tell the hub what you have decided. The companion instructions tell it to update the current notes and keep the dated history.
 
-Saving those choices gives the assistant a reason to question a plan that looks productive on paper and feels awful to live through. If it misses one, correct it and save the correction. Thursday evening shouldn't need a fresh defence every week.
+You might mention that a client has accepted the final cards while asking for help with the invoice. The hub can use that same update to mark the delivery complete. You shouldn't need a second conversation with its filing department.
 
-When you change your mind, update the current project note and keep the earlier decision with its date and reason in `decisions.md`. That tells the assistant you chose a new direction, instead of leaving it to fit both versions of your life into one calendar.
+If the evidence is unclear, it should ask about the point that matters. Sending a draft does not prove that the client accepted it. A recent edit does not prove a project is finished.
 
-## Check the next recommendation
+## Get help with the next piece
 
-Ask which project deserves your next free hour, and read the reason. Does it use the priorities you just saved? If two of them clash, it should show you the choice instead of making it quietly for you.
+Ask what it can prepare for the project that matters now. A ready-to-edit reply, a comparison of two approaches or a checked draft gives you something useful immediately.
 
-Give the assistant a short update when you make a new decision, and let it handle the filing. You have already done the thinking. The next free hour belongs to the work you chose, not to explaining the choice all over again.
+If it produces a grand plan when you need one email, say that. The hub can narrow the job and do it. The project list earns its place when it helps you get on with your day.

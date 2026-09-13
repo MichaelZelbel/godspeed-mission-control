@@ -12,7 +12,7 @@ Check the starting material before setting a timer. In the practice hub, ask:
 Confirm that this is robin-practice. Read AGENTS.md, profile/, inbox/workshop-notes.md and skills/prepare-a-decision/SKILL.md. Confirm the profile says Robin runs a bicycle repair shop. List any missing file. Create no job until these inputs are available.
 ```
 
-If Robin's folder does not exist, unpack the matching companion kit and ask Hermes to create `robin-practice` beside your hub. Have it copy `starter-hub/` there, add the briefing and workshop note from `practice/maintenance-classes/`, and file that briefing into the practice profile. Also copy `skills/prepare-a-decision/SKILL.md` from the kit. Tell it to preserve existing folders and keep the fictional material out of your real hub. Open the new folder in Hermes and run the input check above.
+If Robin's folder does not exist, unpack the matching companion kit and ask the assistant to create `robin-practice` beside your hub. Have it copy `starter-hub/` there, add the briefing and workshop note from `practice/maintenance-classes/`, and file that briefing into the practice profile. Also copy `skills/prepare-a-decision/SKILL.md` from the kit. Tell it to preserve existing folders and keep the fictional material out of your real hub. Open the new folder in your assistant and run the input check above.
 
 If you are using your own question instead, ask the assistant to adapt the job below to your question, sources and a new output filename. Keep the one-time schedule and preparation-only limits.
 
@@ -39,7 +39,7 @@ Show the saved job record with its one-time schedule, working folder, time zone,
 
 Before walking away, read the saved record. Look for `robin-maintenance-once`, one future run in the displayed time zone, your practice folder and the result path `investigations/robin-maintenance-once.md`. Together, they tell you what will run, when to expect it and where you'll find the work.
 
-Keep the computer awake and its scheduler running through the scheduled time, then check the result without starting it manually. If the request fails to create the job, ask Hermes to diagnose the scheduling error using its current tools and help. It should arrange one future run and verify the saved job. Robin needs help with a decision, not the same investigation delivered every morning.
+Keep the computer awake and its scheduler running through the scheduled time, then check the result without starting it manually. If the request fails to create the job, ask the assistant to diagnose the scheduling error using its current tools and help. It should arrange one future run and verify the saved job. Robin needs help with a decision, not the same investigation delivered every morning.
 
 ## Read the prepared work
 

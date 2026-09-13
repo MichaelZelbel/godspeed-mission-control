@@ -20,7 +20,7 @@ curl -fsSL https://raw.githubusercontent.com/MichaelZelbel/teach-it-once-kit/mai
 
 `YOUR-PRIVATE-REPOSITORY-URL` is a placeholder for the assistant to replace. The installer copies the files and their history from that address onto this computer and guides any required sign-in. Keep its completion report so the assistant can inspect a failed step. The `--sources ""` option leaves local conversation collection off. The address above retrieves the currently published installer.
 
-Open the installed hub in Hermes and ask for a harmless line you saved recently, with the source file. Then ask it to check which skills are available. These are answers you can check. “Do you know me?” invites a charming reply that may tell you very little.
+Open the installed hub in your assistant and ask for a harmless line you saved recently, with the source file. Then ask it to check which skills are available. These are answers you can check. “Do you know me?” invites a charming reply that may tell you very little.
 
 Try a real skill with harmless input as well. You want to see the new machine read the file, find the skill and reach the model. Once those checks work, you're ready to continue.
 
