@@ -39,9 +39,26 @@ that had a shell check and let the check decide.
 The one real gap is Codex: it did not file a forecast, so its judgment on the day is not on the
 record and cannot be scored later. Claude wrote the longest record and filed the most work.
 
-**Proven on:** Windows 11. **Not yet proven on:** macOS. Linux is covered for Claude Code and
-Codex by the author's own server; Hermes on Linux runs as its own user there and was not part of
-this run.
+## And again on Linux
+
+The same seeded folder, on a rented Ubuntu server, the same day.
+
+- **Claude Code** did the whole job: 119 lines, the same six sections, attention recorded on two
+  cards, one diagnosis, one forecast, the one job verified by its own check. It put a question in
+  front of the person rather than a draft, which is a different call from the one it made on
+  Windows and a defensible one on the same evidence.
+- **Codex** never started. That machine is not signed in to it, and every request came back 401.
+  **This is the useful half of the result:** `hub-decide` wrote the honest record anyway, saying
+  the run did not finish and naming the plan it was given, so a missing decision can never be
+  mistaken for a day with nothing to decide. That guard is the reason the failure is a line in a
+  file rather than a silent gap.
+- **Hermes** was not run there. On that server it runs as its own user with a live profile that
+  answers real messages, and pointing it at a practice folder was not worth the risk of touching
+  it. So Hermes is proven on Windows and unproven on Linux, and this line is here so that nobody
+  reads the table above as covering more than it does.
+
+**Proven on:** Windows 11, all three. Linux: Claude Code only. **Not proven on:** macOS at all,
+Hermes and Codex on Linux.
 
 ## Three things this run found and fixed
 
