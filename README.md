@@ -46,7 +46,7 @@ git clone https://github.com/MichaelZelbel/teach-it-once-kit.git
 - `server/`: Part VI, optional. Scripts and guides for giving your system an always-on home.
 - `swap/`: Part VI. Config examples for running the same system on a different company's tool and model.
 
-The full chapter-by-chapter map is in `docs/CHAPTERS.md`.
+Appendix A of the book lists which files each chapter uses.
 
 ## What this is not
 
@@ -57,7 +57,7 @@ The full chapter-by-chapter map is in `docs/CHAPTERS.md`.
 
 ## Status
 
-The book is in production. Folders marked **building** in `docs/CHAPTERS.md` fill up as their chapters are verified and written. Nothing lands here before it has been run live.
+The book is in production. Folders fill up as their chapters are verified and written, and nothing lands here before it has been run live.
 
 ## License
 
