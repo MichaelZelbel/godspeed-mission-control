@@ -340,7 +340,7 @@ const PLAYBOOK_REASON = {
 };
 // An outcome with no model of how it is won sits ahead of one that has one: the research is
 // the first work, and it is work the hub can do alone.
-const playbookRank = (state) => ['none', 'refuted', 'stale'].includes(state) ? 0 : 1;
+const playbookRank = (state) => ['none', 'draft', 'refuted', 'stale'].includes(state) ? 0 : 1; // a draft is a scaffold nobody filled: as unresearched as none
 cmds.playbook = (a) => {
   const c = S.read(a._[0] || die('usage: hub-goals playbook <id> [--review-days 30] | --current | --refute --evidence "..."')) || die('no such goal');
   const d = a.date || today();
