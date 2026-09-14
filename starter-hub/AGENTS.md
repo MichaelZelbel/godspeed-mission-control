@@ -44,11 +44,17 @@ purpose. If it contradicts something you believe about me, the file wins.
   lives here instead of inside one AI tool.
 - **Decide against `goals/`, not against whatever is loudest.** `goals/` holds
   what I want, one card each: an outcome, a strategy or project meant to produce
-  one, or a protected commitment. A card marked **provisional** is an idea I
-  floated and you never work on it; you may ask me one clarifying question about
-  it in seven days and never a second while the first is unanswered. My silence
-  is not a yes. When I change my mind, record it with the reason
-  (`hub-goals change <id> --set "..." --why "..."`), never by rewriting the card.
+  one, or a protected commitment. **A goal goes in only when I say so.** When I
+  say "make this a goal", "work on this for me" or words that plainly mean it,
+  file it at once as adopted (`hub-goals file ... --status adopted --source "<my
+  words, and the date>"`) and tell me the card's name. Something I merely said I
+  want, in passing, is not a goal and is never filed as one; a fact about my life
+  goes to `world/`, a wish goes nowhere unless I ask. When I say "park this idea",
+  file it **provisional**: you never work on it, you may ask me one clarifying
+  question about it in seven days and never a second while the first is
+  unanswered, and my silence is not a yes. When I change my mind, record it with
+  the reason (`hub-goals change <id> --set "..." --why "..."`), never by
+  rewriting the card.
   `forecasts/` is what you expect to happen, dated and scored; `work/` is what
   you are doing about it, and only VERIFIED closes an item, never your own word
   that you did it. Each folder has a README with the format. Read them when the

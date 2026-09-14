@@ -65,13 +65,18 @@ Plain text. Read it, edit it, delete it. The program writes the same shape you w
 
 **provisional, adopted, paused, achieved, retired.**
 
-**Provisional is the default and it means: an idea you floated.** Your hub never works on it. It
-may ask you **one** clarifying question about it in seven days, and never a second one while the
-first is unanswered. This is the rule that lets you think out loud in front of your assistant
-without waking up to a project you never asked for.
+**A goal is filed when you say so, and it is filed adopted.** "Make this a goal" or "work on this
+for me", in a conversation, is enough: your assistant files the card with `--status adopted` and
+your words as the source, and the hub starts working on it at the next decision. Nothing you
+merely mentioned wanting lands here on its own.
 
-An idea becomes a goal when you say so: `hub-goals adopt <id> --why "..."`. Silence is never a
-yes.
+**Provisional is the parking place.** Say "park this idea" and the card is filed provisional:
+your hub never works on it, it may ask you **one** clarifying question about it in seven days,
+and never a second one while the first is unanswered. This is what lets you think out loud in
+front of your assistant without waking up to a project you never asked for. A parked idea becomes
+a goal when you say so: `hub-goals adopt <id> --why "..."`. Silence is never a yes. (The program's
+own default, when no status is given, is provisional, so a card filed by hand without `--status`
+is parked rather than started.)
 
 ## A change keeps its reason
 
