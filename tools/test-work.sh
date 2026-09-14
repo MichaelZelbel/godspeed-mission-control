@@ -19,6 +19,7 @@ mkdir -p "$TMP/rules" "$TMP/bin" "$TMP/attention"
 : > "$TMP/AGENTS.md"
 cp "$HERE/work.js" "$TMP/bin/"
 cp "$HERE/hub-cards.js" "$TMP/bin/"
+cp "$HERE/check-written.js" "$TMP/bin/"
 export HUB_ROOT="$TMP"
 export HUB_TODAY="2026-09-13"
 export HUB_NOW="2026-09-13T10:00:00.000Z"
@@ -130,6 +131,32 @@ contains "a card you answered sweeps the work under it" "$OUT" "cancelled"
 check "  and the work under the card is cancelled" "$(grep -c '^STATUS: cancelled' "$TMP/work/$ID.md")" "1"
 check "  with your words as the reason" "$(grep -c 'CANCELLED you answered M017: not this one' "$TMP/work/$ID.md")" "1"
 
+# --- a learn item is done when the answer is written somewhere a reader can open ------------------------
+OUT="$(hw file --learn "Which three tools do readers actually install first" --source test 2>&1)"; check "a learn item with no file to write into is refused" "$?" "1"
+contains "  and says why" "$OUT" "a learn item is done when the answer is written somewhere a reader can open"
+OUT="$(hw file --learn "Which three tools do readers actually install first" --path research/first-tools.md --key first-tools --source test 2>&1)"
+contains "a learn item with a path files as planned" "$OUT" ": planned"
+LEARN="$(idof first-tools)"
+check "  KIND learn" "$(grep -c '^KIND: learn' "$TMP/work/$LEARN.md")" "1"
+check "  WHAT is the question" "$(grep -c '^WHAT: Which three tools do readers actually install first' "$TMP/work/$LEARN.md")" "1"
+check "  DONE WHEN carries the path" "$(grep -c '^DONE WHEN: the answer to "Which three tools do readers actually install first" is written in research/first-tools.md, with the evidence read' "$TMP/work/$LEARN.md")" "1"
+OUT="$(hw file --what "Count the tools" --done-when "a number" --kind nonsense --source test 2>&1)"; check "a made-up kind is refused" "$?" "1"
+OUT="$(hw file --what "Count the tools" --done-when "the count is in research/tool-count.csv" --kind learn --key tool-count --source test 2>&1)"
+contains "--kind learn with a DONE WHEN that names a file files" "$OUT" ": planned"
+OUT="$(hw list 2>&1)"
+contains "list shows the kind" "$OUT" "planned    learn $LEARN"
+contains "  and do for an item filed before there was a kind" "$OUT" "failed     do    W-20260913-02"
+OUT="$(hw next --json 2>&1)"; contains "next carries KIND in JSON" "$OUT" "\"KIND\":\"learn\""
+# The point of a learn item: "we found out X" in the runner's report closes nothing; the file does,
+# and hub-check-written is the check that is not the runner.
+hw file --learn "How many readers reach chapter 5" --path research/chapter-5.md --key ch5 --check "$NODE $TMP/bin/check-written.js research/chapter-5.md --min-words 5" --source test >/dev/null
+CH5="$(idof ch5)"
+hw take "$CH5" --runner claude-laptop >/dev/null
+hw attempt "$CH5" --runner claude-laptop --ok --result "we found out it is about forty percent" >/dev/null
+OUT="$(hw verify $CH5 2>&1)"; check "a learn item whose answer was only reported stays attempted" "$?" "2"
+mkdir -p "$TMP/research"; printf '## Answer\nAbout forty percent of readers reach chapter 5, from the reading log.\n' > "$TMP/research/chapter-5.md"
+OUT="$(hw verify $CH5 2>&1)"; contains "  once the answer is written where it was promised, it verifies" "$OUT" "verified by its check"
+
 # --- sweep by goal, check ---------------------------------------------------------------------------
 hw file --what "Write the chapter" --done-when "chapter in the manuscript" --key chapter --goal book --source test >/dev/null
 OUT="$(hw sweep --goal book --stale --reason "book deadline moved" 2>&1)"
@@ -137,8 +164,21 @@ contains "a goal sweep marks stale" "$OUT" "marked stale"
 OUT="$(hw sweep --goal book --cancel --reason "book retired" 2>&1)"
 contains "  or cancels" "$OUT" "cancelled"
 OUT="$(hw check 2>&1)"; check "check passes on a clean register" "$?" "0"
+sed -i '/^KIND: /d' "$TMP/work/W-20260913-03.md"
+OUT="$(hw check 2>&1)"; check "an old card with no KIND is read as do, not a problem" "$?" "0"
+sed -i 's/^KIND: do$/KIND: ponder/' "$TMP/work/W-20260913-02.md"
+OUT="$(hw check 2>&1)"; check "a KIND that is neither do nor learn is a problem" "$?" "1"
+contains "  and named" "$OUT" "PROBLEM W-20260913-02: KIND ponder"
+sed -i 's/^KIND: ponder$/KIND: do/' "$TMP/work/W-20260913-02.md"
 sed -i 's/^STATUS: verified/STATUS: verified/; s/^OUTWARD: no/OUTWARD: yes/' "$TMP/work/W-20260913-01.md"
 OUT="$(hw check 2>&1)"; check "check fails on outward work moved without approval" "$?" "1"
+
+# --- link: the page a finished piece became --------------------------------------------------------------
+OUT="$(hw link W-20260913-01 --url "lead/drafts/x.md" 2>&1)"; check "a link that is not https is refused" "$?" "1"
+OUT="$(hw link W-20260913-01 --url "https://example.org/p/x.html" 2>&1)"
+contains "an https link is recorded" "$OUT" "link recorded"
+check "  LINK on the item" "$(grep -c '^LINK: https://example.org/p/x.html' "$TMP/work/W-20260913-01.md")" "1"
+check "  and a PUBLISHED line" "$(grep -c 'PUBLISHED https://example.org/p/x.html' "$TMP/work/W-20260913-01.md")" "1"
 
 echo
 echo "$PASS passed, $FAIL failed"

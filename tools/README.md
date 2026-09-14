@@ -178,6 +178,24 @@ hub-work tick                dead leases, due retries, stale plans
 
 Run `hub-decide --dry-run` any time to see the plan without deciding anything.
 
+- **`hub-work-run`** carries out what `hub-decide` filed for the hub itself, one item
+  per assistant run, twice a day. It takes the next runnable item under a lease,
+  hands the assistant the item, the goal, how that goal is won (the playbook) and
+  the newest diagnosis, records what the assistant says as ATTEMPTED, and runs the
+  item's own CHECK: only that check makes it VERIFIED. A finished piece becomes a
+  page and one card, through the ledger's own door. Copy `skills/work-item.md` into
+  `skills/work-item/SKILL.md` in your hub, then:
+
+```
+45 7  * * *  $HOME/.local/bin/hub-work-run >> $HOME/.hub/work.log 2>&1
+10 13 * * *  $HOME/.local/bin/hub-work-run >> $HOME/.hub/work.log 2>&1
+```
+
+- **`hub-check-written`** is the check a written piece gets: the file is there, long
+  enough, has every section it was asked for, no placeholder left, none of the words
+  your `rules/machine-words.txt` bans. It is what lets "we found out X" close a work
+  item without a person reading it first.
+
 The last two are the two arrows in Chapter 25's diagram. **Neither runs unless you
 connect a notebook**, and a reader who never connects one can ignore both.
 

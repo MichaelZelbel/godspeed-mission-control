@@ -105,6 +105,21 @@ else
 fi
 reg goals attention --date "$TODAY" > "$RUNDIR/attention.txt" 2>/dev/null || true
 reg forecast due --date "$TODAY"    > "$RUNDIR/forecasts-due.txt" 2>/dev/null || true
+reg work list --all > "$RUNDIR/work.txt" 2>/dev/null || true
+
+# YESTERDAY'S RECORD IS PUT IN FRONT OF TODAY'S RUN, NOT LEFT FOR IT TO GO AND FIND. The recipe
+# asks "what came of what you chose yesterday" and for two days nothing answered it, because the
+# only copy of yesterday sat in a folder the run was never pointed at. A decision that cannot see
+# the last one is a preference, twice. Yesterday is computed by node so a Mac without GNU date
+# still gets it right. The long decision log a hub may keep is NOT read here: it is too big to
+# hand to a run every morning, and the run folder is the record this recipe answers to.
+YESTERDAY="$("$NODE" -e 'const d=new Date(process.argv[1]+"T00:00:00Z");d.setUTCDate(d.getUTCDate()-1);console.log(d.toISOString().slice(0,10))' "$TODAY")"
+if [ -s "$HUB/routines/next-action/$YESTERDAY/decision.md" ]; then
+  cp "$HUB/routines/next-action/$YESTERDAY/decision.md" "$RUNDIR/yesterday.md"
+else
+  printf 'No decision record for %s (the run did not happen, or the folder is not here).
+' "$YESTERDAY" > "$RUNDIR/yesterday.md"
+fi
 
 # Optional neighbours. A hub that has one of them gets its output in the same folder, and a hub
 # that does not gets a note saying so and nothing else.
@@ -149,11 +164,13 @@ RUNNER="$HERE/hub-run"
 [ -x "$RUNNER" ] || { echo "hub-decide: hub-run is not installed, so no recipe could be carried out." >&2; exit 3; }
 
 PROMPT="Today is $TODAY (UTC). The run folder is $RUNDIR and it already holds attention.txt (the
-goal plan), tick.txt (the work tracker) and forecasts-due.txt from this morning, plus anything
-else that was available. Follow the next-action recipe exactly. Write $RUNDIR/decision.md, file
-the work and at most one thing for the person whose hub this is, carry out the work you took if
-it fits in the time, and save what you changed. Your final answer is the 'For you today' section
-in one plain sentence, plus the card id or the word nothing."
+goal plan), tick.txt (what time did to the work tracker), work.txt (every item on it),
+forecasts-due.txt and yesterday.md (yesterday's decision, or the line saying there was none),
+plus anything else that was available. Follow the next-action recipe exactly. Write
+$RUNDIR/decision.md, file the work the hub will do (hub-work-run carries it out later today; you
+take only what fits in two minutes) and at most one thing for the person whose hub this is, and
+save what you changed. Your final answer is the 'For you today' section in one plain sentence,
+plus the card id or the word nothing."
 
 if [ -n "$EXTRA" ] && [ -f "$EXTRA" ]; then
   bash "$RUNNER" next-action --hub "$HUB" --cwd "$HUB" --prompt-file "$EXTRA" --prompt "$PROMPT" \

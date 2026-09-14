@@ -166,6 +166,60 @@ OUT="$(hg list --all 2>&1)"; contains "  --all shows it" "$OUT" "lead"
 sed -i 's/^STATUS: adopted/STATUS: bogus/' "$TMP/goals/reassess.md"
 OUT="$(hg check 2>&1)"; check "check refuses an unknown status" "$?" "1"
 
+# --- playbook: how a goal is won is researched from people who won it, never assumed ------------
+sed -i 's/^STATUS: bogus/STATUS: adopted/' "$TMP/goals/reassess.md"
+hg file --kind outcome --title "Twenty paying readers of the newsletter" --id zz-readers --status adopted --source "chat 2026-09-13" >/dev/null
+hg file --kind outcome --title "A talk accepted at one conference" --id aa-talk --status adopted --source "chat 2026-09-13" >/dev/null
+P="$(hg playbook aa-talk 2>&1)"
+check "playbook writes goals/playbooks/<id>.md and prints the path" "$P" "goals/playbooks/aa-talk.md"
+for H in "## Who we model" "## What they do" "## In what order" "## What they track" "## Where it fails" "## Hub steps" "## Person steps" "## Unknown" "## Sources"; do
+  check "  section $H present" "$(grep -c "^$H" "$TMP/$P")" "1"
+done
+check "  it starts as a draft with a review date 30 days on" "$(grep -c '^REVIEW BY: 2026-10-13' "$TMP/$P")$(grep -c '^STATUS: draft' "$TMP/$P")" "11"
+check "  the card carries the PLAYBOOK line" "$(grep -c '^- 2026-09-13 PLAYBOOK goals/playbooks/aa-talk.md' "$TMP/goals/aa-talk.md")" "1"
+P2="$(hg playbook aa-talk 2>&1)"; check "a second call prints the path" "$P2" "$P"
+check "  and makes no second file" "$(ls "$TMP/goals/playbooks" | wc -l | tr -d ' ')" "1"
+check "  and no second PLAYBOOK line" "$(grep -c ' PLAYBOOK ' "$TMP/goals/aa-talk.md")" "1"
+OUT="$(hg attention --json 2>&1)"
+DRAFT="$(printf '%s' "$OUT" | "$NODE" -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const p=JSON.parse(s);console.log(p.active.concat(p.quiet).find(r=>r.id==="aa-talk").playbook)})')"
+check "the plan sees the draft" "$DRAFT" "draft"
+contains "  and says it is not filled in" "$(hg attention 2>&1)" "playbook is a draft, not yet filled in"
+OUT="$(hg playbook aa-talk --current 2>&1)"; check "--current is refused while a placeholder remains" "$?" "1"
+contains "  and names the section" "$OUT" "still carries the template placeholder under: Who we model"
+"$NODE" -e '
+const fs=require("fs");const p=process.argv[1];let t=fs.readFileSync(p,"utf8");
+t=t.split("\n").map(l=>l.startsWith("(")?"filled in from the sources below":l).join("\n");
+fs.writeFileSync(p,t)' "$TMP/$P"
+OUT="$(hg playbook aa-talk --current 2>&1)"; check "--current succeeds once every section is written" "$?" "0"
+check "  STATUS reads current" "$(grep -c '^STATUS: current' "$TMP/$P")" "1"
+check "  REVIEW BY is 30 days on" "$(grep -c '^REVIEW BY: 2026-10-13' "$TMP/$P")" "1"
+OUT="$(hg attention 2>&1)"
+contains "an adopted outcome without a playbook says so on its row" "$OUT" "no playbook: how this goal is won has not been researched"
+J="$(hg attention --json 2>&1)"
+ORDER="$(printf '%s' "$J" | "$NODE" -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const p=JSON.parse(s);const ids=p.active.concat(p.quiet).map(r=>r.id);console.log(ids.indexOf("zz-readers")<ids.indexOf("aa-talk")?"no-playbook-first":"playbook-first")})')"
+check "  and it outranks an otherwise-equal outcome that has a current playbook" "$ORDER" "no-playbook-first"
+PB="$(printf '%s' "$J" | "$NODE" -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const p=JSON.parse(s);const r=p.active.concat(p.quiet);console.log(r.find(x=>x.id==="aa-talk").playbook+" "+r.find(x=>x.id==="zz-readers").playbook)})')"
+check "  json carries the playbook state on both rows" "$PB" "current none"
+OUT="$(HUB_TODAY=2026-10-20 hg attention 2>&1)"
+contains "past its review date the playbook counts as stale" "$OUT" "playbook past its review date"
+OUT="$(hg playbook aa-talk --refute 2>&1)"; check "--refute without evidence is refused" "$?" "1"
+contains "  and says why" "$OUT" "evidence is required"
+check "  and the file is untouched" "$(grep -c '^STATUS: current' "$TMP/$P")" "1"
+OUT="$(hg playbook aa-talk --refute --evidence "two of the three speakers modelled were invited, none came through a cold submission" 2>&1)"
+contains "refuting a playbook is recorded" "$OUT" "playbook refuted"
+check "  the file says refuted with the date" "$(grep -c '^STATUS: refuted 2026-09-13' "$TMP/$P")" "1"
+check "  and carries the evidence" "$(grep -c '^- 2026-09-13 two of the three speakers' "$TMP/$P")" "1"
+check "  the card carries PLAYBOOK-REFUTED with the evidence" "$(grep -c 'PLAYBOOK-REFUTED goals/playbooks/aa-talk.md: two of the three' "$TMP/goals/aa-talk.md")" "1"
+OUT="$(hg attention 2>&1)"
+contains "  the next plan asks for new research before acting" "$OUT" "its playbook was refuted: research it again before acting"
+OUT="$(hg check 2>&1)"; check "check notes a missing playbook and still passes" "$?" "0"
+contains "  naming the command that writes one" "$OUT" "note zz-readers: no playbook yet (hub-goals playbook zz-readers)"
+contains "  and the refuted one" "$OUT" "note aa-talk: playbook refuted, research again"
+missing  "  neither is a PROBLEM" "$OUT" "PROBLEM"
+rm "$TMP/$P"
+OUT="$(hg check 2>&1)"; check "a playbook file deleted after filing is a PROBLEM" "$?" "1"
+contains "  and names it" "$OUT" "PROBLEM aa-talk: PLAYBOOK line names a file that is gone"
+
 echo
 echo "$PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

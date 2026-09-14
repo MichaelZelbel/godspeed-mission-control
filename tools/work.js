@@ -27,6 +27,9 @@
 //  - `sweep --card` cancels the work under a card you answered. `sweep --goal` marks the work
 //    under a changed goal stale, so a change to a goal reaches the plan beneath it instead of
 //    leaving yesterday's plan running.
+//  - An item has a KIND: `do` (the default) or `learn`. A learn item is a question, and it is
+//    done when the answer is WRITTEN somewhere a reader can open, so its DONE WHEN must name a
+//    file. "We found out X" in a runner's report closes nothing; the file does.
 //
 // The folder it owns:
 //   work/<ID>.md      one item each
@@ -49,8 +52,13 @@ const PERSON = /^(person|me|you|him|her|them|i)$/i;
 const asOwner = (v) => (PERSON.test(v) ? 'person' : v);
 const NEEDS = /^(none|person|authorization|capability:.+)$/;
 const asNeeds = (v) => (PERSON.test(v) ? 'person' : v);
-const ORDER = ['ID', 'STATUS', 'KEY', 'GOAL', 'CARD', 'WHAT', 'DONE WHEN', 'CHECK', 'OWNER', 'NEEDS', 'OUTWARD', 'ATTEMPTS', 'MAX ATTEMPTS',
-  'LEASE', 'NEXT TRY', 'STALE AFTER', 'FILED', 'SOURCE', 'RESULT', 'APPROVED'];
+const KINDS = ['do', 'learn'];
+// A learn item is done when its answer is in a file. "Names a file" means: a token with a
+// slash in it, ending in .md, .csv, .json or .txt, trailing punctuation ignored.
+const namesFile = (s) => String(s || '').split(/\s+/).map(t => t.replace(/[.,;:)"'\]]+$/, ''))
+  .some(t => t.includes('/') && /\.(md|csv|json|txt)$/i.test(t));
+const ORDER = ['ID', 'STATUS', 'KIND', 'KEY', 'GOAL', 'CARD', 'WHAT', 'DONE WHEN', 'CHECK', 'OWNER', 'NEEDS', 'OUTWARD', 'ATTEMPTS', 'MAX ATTEMPTS',
+  'LEASE', 'NEXT TRY', 'STALE AFTER', 'FILED', 'SOURCE', 'RESULT', 'LINK', 'APPROVED'];
 const S = L.store(DIR, ORDER);
 const { die, say, oneLine, flag, today, q } = L;
 const now = () => (process.env.HUB_NOW || new Date().toISOString());
@@ -69,9 +77,16 @@ function attemptsOf(c) { return parseInt(c.f.ATTEMPTS || '0', 10) || 0; }
 function maxOf(c) { return parseInt(c.f['MAX ATTEMPTS'] || '3', 10) || 3; }
 
 cmds.file = (a) => {
-  const what = oneLine(a.what);
+  if (a.learn === 'true') die('--learn needs the question, in quotes');
+  const question = oneLine(a.learn);
+  const kind = oneLine(a.kind || (question ? 'learn' : 'do'));
+  if (!KINDS.includes(kind)) die('--kind must be do or learn');
+  const what = oneLine(a.what) || question;
   if (!what) die('--what is required');
-  const done = oneLine(a['done-when']);
+  let done = oneLine(a['done-when']);
+  const where = oneLine(a.path);
+  if (!done && kind === 'learn' && where) done = `the answer to ${q(question || what)} is written in ${where}, with the evidence read`;
+  if (kind === 'learn' && !namesFile(done)) die('a learn item is done when the answer is written somewhere a reader can open: its DONE WHEN must name a file (a path ending in .md, .csv, .json or .txt), or give --path <file>');
   if (!done) die('--done-when is required: what a reader will see when this is done, so it can be verified by someone who is not the runner');
   const key = oneLine(a.key || what.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 80));
   const dup = S.all().find(c => c.f.KEY === key && OPEN.includes(c.f.STATUS));
@@ -87,7 +102,7 @@ cmds.file = (a) => {
   const id = a.id ? L.safeId(a.id) : nextId(d);
   if (S.exists(id)) die(`${id} already exists`);
   const f = {
-    ID: id, STATUS: needs === 'none' ? 'planned' : 'blocked', KEY: key, GOAL: oneLine(a.goal), CARD: oneLine(a.card), WHAT: what, 'DONE WHEN': done,
+    ID: id, STATUS: needs === 'none' ? 'planned' : 'blocked', KIND: kind, KEY: key, GOAL: oneLine(a.goal), CARD: oneLine(a.card), WHAT: what, 'DONE WHEN': done,
     CHECK: oneLine(a.check), OWNER: owner, NEEDS: needs, OUTWARD: outward, ATTEMPTS: '0', 'MAX ATTEMPTS': String(parseInt(a['max-attempts'] || '3', 10) || 3),
     'STALE AFTER': String(parseInt(a['stale-after'] || '7', 10) || 7), FILED: d, SOURCE: oneLine(a.source || 'unknown'),
   };
@@ -204,6 +219,19 @@ cmds.unblock = (a) => {
   S.write(c);
   say(`${c.id}: planned again`);
 };
+// LINK. A finished piece that became a page keeps its address on the item, so the morning
+// message and the card can hand it over without anybody digging for the file.
+cmds.link = (a) => {
+  const c = S.read(a._[0] || die('usage: hub-work link <id> --url https://...')) || die('no such work');
+  const url = oneLine(a.url);
+  if (!/^https:\/\/\S+$/.test(url)) die('--url must be one https address a reader can open');
+  const d = a.date || today();
+  c.f.LINK = url;
+  L.logLine(c, d, 'PUBLISHED', url);
+  S.write(c);
+  say(`${c.id}: link recorded`);
+};
+
 cmds.cancel = (a) => {
   const c = S.read(a._[0] || die('usage: hub-work cancel <id> --why "..."')) || die('no such work');
   if (!OPEN.includes(c.f.STATUS)) die(`${c.id} is ${c.f.STATUS}`);
@@ -272,13 +300,13 @@ cmds.next = (a) => {
     && c.f.OUTWARD !== 'yes' && c.f.NEEDS === 'none' && !leaseLive(c) && (!a.goal || c.f.GOAL === a.goal));
   if (flag(a, 'json')) { say(JSON.stringify(rows.map(c => Object.assign({ id: c.id }, c.f)))); return; }
   if (!rows.length) { say('nothing runnable now'); return; }
-  for (const c of rows) say(`${c.id.padEnd(16)} ${c.f.STATUS.padEnd(9)} ${c.f.WHAT}` + (c.f.GOAL ? `  [${c.f.GOAL}]` : ''));
+  for (const c of rows) say(`${c.id.padEnd(16)} ${c.f.STATUS.padEnd(9)} ${(c.f.KIND || 'do').padEnd(5)} ${c.f.WHAT}` + (c.f.GOAL ? `  [${c.f.GOAL}]` : ''));
 };
 cmds.list = (a) => {
   const rows = (flag(a, 'all') ? S.all() : S.all().filter(c => OPEN.includes(c.f.STATUS))).filter(c => (!a.goal || c.f.GOAL === a.goal) && (!a.status || c.f.STATUS === a.status));
   if (flag(a, 'json')) { say(JSON.stringify(rows.map(c => Object.assign({ id: c.id, log: c.log }, c.f)), null, 2)); return; }
   if (!rows.length) { say('no open work'); return; }
-  for (const c of rows) say(`${c.f.STATUS.padEnd(10)} ${c.id.padEnd(16)} ${(c.f.OWNER || '').padEnd(10)} ${c.f.WHAT}` + (c.f.NEEDS !== 'none' ? `  needs ${c.f.NEEDS}` : '') + (c.f.GOAL ? `  [${c.f.GOAL}]` : '') + (c.f.CARD ? `  {${c.f.CARD}}` : ''));
+  for (const c of rows) say(`${c.f.STATUS.padEnd(10)} ${(c.f.KIND || 'do').padEnd(5)} ${c.id.padEnd(16)} ${(c.f.OWNER || '').padEnd(10)} ${c.f.WHAT}` + (c.f.NEEDS !== 'none' ? `  needs ${c.f.NEEDS}` : '') + (c.f.GOAL ? `  [${c.f.GOAL}]` : '') + (c.f.CARD ? `  {${c.f.CARD}}` : ''));
 };
 cmds.show = (a) => { const c = S.read(a._[0] || die('which item?')) || die('no such work'); say(S.render(c).trimEnd()); };
 cmds.check = () => {
@@ -288,6 +316,7 @@ cmds.check = () => {
   for (const c of all) {
     if (c.id !== c.f.ID) problems.push(`${c.id}: ID field says ${c.f.ID}`);
     if (!STATUSES.includes(c.f.STATUS)) problems.push(`${c.id}: STATUS ${c.f.STATUS}`);
+    if (c.f.KIND && !KINDS.includes(c.f.KIND)) problems.push(`${c.id}: KIND ${c.f.KIND} (do or learn; an old card with none is do)`);
     if (!OWNERS.test(asOwner(c.f.OWNER || ''))) problems.push(`${c.id}: OWNER ${c.f.OWNER}`);
     if (!NEEDS.test(asNeeds(c.f.NEEDS || ''))) problems.push(`${c.id}: NEEDS ${c.f.NEEDS}`);
     if (!c.f['DONE WHEN']) problems.push(`${c.id}: no DONE WHEN`);
@@ -305,6 +334,8 @@ cmds.help = () => say(`hub-work: dispatched, attempted and verified are three di
   file --what "..." --done-when "..." [--key K] [--goal G] [--card C] [--check "<shell, exit 0 when done>"]
        [--owner hub|person|company:<slug>] [--needs none|person|authorization|capability:<x>] [--outward yes|no]
        [--max-attempts 3] [--stale-after 7] [--source "..."]       a second file with the same open KEY files nothing
+       [--kind do|learn]                a learn item is a question; its DONE WHEN must name a file the answer is written in
+       [--learn "<question>" --path <file>]   sugar: KIND learn, WHAT the question, DONE WHEN "the answer ... is written in <file>"
   take <id> --runner <name> [--approved-by "<your words>"]         two-hour lease; outward only with your words
   attempt <id> --runner <name> --ok --result "..." | --failed "why"   failed: retry in 1, 2, 4 days, never outward
   verify <id> [--evidence "..."]     runs CHECK; verified only on exit 0, or on evidence a person observed
@@ -312,6 +343,7 @@ cmds.help = () => say(`hub-work: dispatched, attempted and verified are three di
   sweep --card <id> --reason "..."   your answer on a card cancels the work under it (or --stale)
   sweep --goal <id> [--cancel|--stale] --reason "..."   a goal changed; its work is re-planned
   tick [--date D] [--json]           dead leases, due retries, stale plans, waiting on you over two weeks
+  link <id> --url https://...        the page a finished piece became; the note and the card hand it over
   next [--goal G] [--json] | list [--all] [--goal G] [--status S] [--json] | show <id> | check`);
 
 const a = L.parseArgs(process.argv.slice(2));

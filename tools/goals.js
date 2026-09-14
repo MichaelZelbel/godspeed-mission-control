@@ -23,15 +23,18 @@
 //
 // THE CHOICE OF ATTENTION IS EXPLICIT AND HAS NO SCORE IN IT. `attention` sorts into bands and
 // puts the reason on every row: protected, a deadline within seven days, a diagnosis that was
-// refuted, nothing looked at it for seven days, a deadline within thirty, your own word for
-// importance. Never a number invented to stand for how much something matters, because the
-// moment a number exists the thing that is easy to count wins. At most three outcomes are
-// active in a day and the rest are quiet WITH THE REASON WRITTEN DOWN. Neglect is counted from
-// the last time a goal was looked at, not from whether anything about it was measurable.
+// refuted, a playbook that is missing, refuted or past its review date, nothing looked at it for
+// seven days, a deadline within thirty, your own word for importance. Never a number invented
+// to stand for how much something matters, because the moment a number exists the thing that
+// is easy to count wins. At most three outcomes are active in a day and the rest are quiet WITH
+// THE REASON WRITTEN DOWN. Neglect is counted from the last time a goal was looked at, not from
+// whether anything about it was measurable.
 //
 // The folders it owns:
 //   goals/<ID>.md                    one card each
 //   goals/diagnoses/<ID>-<date>.md   what limits one goal, on evidence (template from `diagnose`)
+//   goals/playbooks/<ID>.md          how this goal is won, researched from people who won it (template
+//                                    from `playbook`); an outcome without one ranks ahead of one with
 //   goals/README.md                  the format, for you
 // It asks `work` (sweep) and `forecast` (flag) when a goal changes, and says so in its output if
 // either of them is not installed. It never does their job itself.
@@ -43,6 +46,7 @@ const L = require(path.join(__dirname, 'hub-cards.js'));
 const HUB = L.hubRoot(__filename);
 const DIR = path.join(HUB, 'goals');
 const DIAG = path.join(DIR, 'diagnoses');
+const PLAYBOOKS = path.join(DIR, 'playbooks');
 
 const KINDS = ['outcome', 'strategy', 'project', 'commitment'];
 const STATUSES = ['provisional', 'adopted', 'paused', 'achieved', 'retired'];
@@ -284,6 +288,100 @@ function diagnosisState(c) {
 }
 
 // ---------------------------------------------------------------------------
+// playbook: the researched model of how a goal is won. One file per goal, written from the
+// people, programs or cohorts who reached the outcome, never from what sounds reasonable. A
+// diagnosis says what limits the goal now; the playbook says what winning it looks like at all.
+// ---------------------------------------------------------------------------
+const PLAYBOOK_SECTIONS = [
+  ['## Who we model', '(named people, programs or cohorts who reached this outcome, each with the source read and how their start compares to this person\'s)'],
+  ['## What they do', '(the levers, in order of leverage, each with the evidence behind it)'],
+  ['## In what order', '(the sequence, and what they do first when starting from where this person stands)'],
+  ['## What they track', '(the numbers, how often, with what instrument)'],
+  ['## Where it fails', '(the common ways people fail at this, and the early signs)'],
+  ['## Hub steps', '(what a hub can do without the person: research, build the measurement, compute, find, draft, prepare)'],
+  ['## Person steps', '(what only the person can do, and what the hub prepares for each)'],
+  ['## Unknown', '(where the levers disagree or this person\'s case differs: the experiments that would settle it)'],
+  ['## Sources', '(every claim\'s source; UNVERIFIED where it was not read)'],
+];
+const playbookRel = (id) => `goals/playbooks/${id}.md`;
+const playbookPath = (id) => path.join(PLAYBOOKS, `${id}.md`);
+function playbookTemplate(id, d, reviewDays) {
+  return `GOAL: ${id}
+WRITTEN: ${d}
+REVIEW BY: ${L.addDays(d, reviewDays)}
+STATUS: draft
+` + PLAYBOOK_SECTIONS.map(([h, hint]) => `\n${h}\n${hint}\n`).join('');
+}
+// The sections that still carry the template's parenthesised hint, so a playbook cannot be
+// called current with a section nobody wrote.
+function playbookPlaceholders(text) {
+  const left = [];
+  let section = '';
+  for (const line of text.split('\n')) {
+    if (line.startsWith('## ')) { section = line.slice(3).trim(); continue; }
+    if (section && line.startsWith('(') && !left.includes(section)) left.push(section);
+  }
+  return left;
+}
+function playbookState(c, d) {
+  const text = L.readText(playbookPath(c.id));
+  if (!text) return last(c, ['PLAYBOOK']) ? 'missing file' : 'none';
+  if (/^STATUS: refuted/m.test(text)) return 'refuted';
+  if (/^STATUS: draft/m.test(text)) return 'draft';
+  const m = text.match(/^REVIEW BY: (\d{4}-\d{2}-\d{2})/m);
+  if (m && L.daysBetween(m[1], d || today()) > 0) return 'stale';
+  return 'current';
+}
+const PLAYBOOK_REASON = {
+  none: 'no playbook: how this goal is won has not been researched',
+  draft: 'playbook is a draft, not yet filled in',
+  refuted: 'its playbook was refuted: research it again before acting',
+  stale: 'playbook past its review date',
+};
+// An outcome with no model of how it is won sits ahead of one that has one: the research is
+// the first work, and it is work the hub can do alone.
+const playbookRank = (state) => ['none', 'refuted', 'stale'].includes(state) ? 0 : 1;
+cmds.playbook = (a) => {
+  const c = S.read(a._[0] || die('usage: hub-goals playbook <id> [--review-days 30] | --current | --refute --evidence "..."')) || die('no such goal');
+  const d = a.date || today();
+  const reviewDays = Math.max(1, parseInt(a['review-days'] || '30', 10) || 30);
+  const p = playbookPath(c.id);
+  const rel = playbookRel(c.id);
+  if (flag(a, 'refute')) {
+    if (!fs.existsSync(p)) die(`no playbook at ${rel}`);
+    const ev = oneLine(a.evidence);
+    if (!ev) die('--evidence is required: the observation that showed the model of success was wrong');
+    let text = L.readText(p);
+    text = text.replace(/^STATUS: .*$/m, 'STATUS: refuted ' + d);
+    text += `\n## Refuted\n- ${d} ${ev}\n`;
+    fs.writeFileSync(p, text, 'utf8');
+    L.logLine(c, d, 'PLAYBOOK-REFUTED', `${rel}: ${ev}`);
+    S.write(c);
+    say(`${c.id}: playbook refuted; research it again before acting on this goal`);
+    return;
+  }
+  if (flag(a, 'current')) {
+    if (!fs.existsSync(p)) die(`no playbook at ${rel}; hub-goals playbook ${c.id} writes the template`);
+    let text = L.readText(p);
+    const left = playbookPlaceholders(text);
+    if (left.length) die(`${rel} still carries the template placeholder under: ${left.join(', ')}; fill those in before calling it current`);
+    const by = L.addDays(d, reviewDays);
+    text = text.replace(/^STATUS: .*$/m, 'STATUS: current').replace(/^WRITTEN: .*$/m, `WRITTEN: ${d}`).replace(/^REVIEW BY: .*$/m, `REVIEW BY: ${by}`);
+    fs.writeFileSync(p, text, 'utf8');
+    L.logLine(c, d, 'PLAYBOOK-CURRENT', `${rel}, review by ${by}`);
+    S.write(c);
+    say(`${c.id}: playbook current, review by ${by}`);
+    return;
+  }
+  fs.mkdirSync(PLAYBOOKS, { recursive: true });
+  if (fs.existsSync(p)) { say(rel); return; }
+  fs.writeFileSync(p, playbookTemplate(c.id, d, reviewDays), 'utf8');
+  L.logLine(c, d, 'PLAYBOOK', rel);
+  S.write(c);
+  say(rel);
+};
+
+// ---------------------------------------------------------------------------
 // attention: which goals deserve attention today, and why. Weightless. Reads, never writes,
 // unless --record.
 // ---------------------------------------------------------------------------
@@ -305,6 +403,7 @@ function plan(d, seats) {
     r.sinceAttention = daysSince(c, ['ATTENTION', 'PROGRESS'], d);
     r.sinceProgress = daysSince(c, ['PROGRESS'], d);
     r.diagnosis = diagnosisState(c);
+    if (c.f.KIND === 'outcome') r.playbook = playbookState(c, d);
     r.question = openQ(c);
     if (c.f.STATUS === 'provisional') {
       r.band = 'provisional';
@@ -322,6 +421,7 @@ function plan(d, seats) {
     else if (left !== null && left <= 30) r.reasons.push(`deadline in ${left} days` + (r.nearest ? ` (${r.nearest})` : ''));
     if (r.diagnosis === 'refuted') r.reasons.push('its constraint diagnosis was refuted: diagnose again before acting');
     if (r.diagnosis === 'claims a constraint without saying what would disprove it') r.reasons.push('diagnosis claims a constraint with no disconfirming condition');
+    if (r.playbook && PLAYBOOK_REASON[r.playbook]) r.reasons.push(PLAYBOOK_REASON[r.playbook]);
     if (r.sinceAttention === null) r.reasons.push('never looked at since filing');
     else if (r.sinceAttention >= 7) r.reasons.push(`not looked at for ${r.sinceAttention} days`);
     if (r.sinceProgress === null || r.sinceProgress >= 14) r.reasons.push(r.sinceProgress === null ? 'no progress recorded yet' : `no progress in ${r.sinceProgress} days`);
@@ -331,6 +431,7 @@ function plan(d, seats) {
       c.f.PROTECTED === 'yes' ? 0 : 1,
       (left !== null && left >= 0 && left <= 7) ? 0 : 1,
       r.diagnosis === 'refuted' ? 0 : 1,
+      r.playbook ? playbookRank(r.playbook) : 1,
       (r.sinceAttention === null || r.sinceAttention >= 7) ? 0 : 1,
       (left !== null && left >= 0 && left <= 30) ? 0 : 1,
       IMPORTANCE.indexOf(r.importance) === -1 ? 2 : IMPORTANCE.indexOf(r.importance),
@@ -343,7 +444,16 @@ function plan(d, seats) {
   // work you adopted), and the plan says so.
   const byIdEarly = Object.fromEntries(rows.map(r => [r.id, r]));
   const rootOf = (id) => { let root = id; for (let i = 0; i < 6; i++) { const c = S.read(root); const up = c ? list(c.f.SERVES)[0] : ''; if (!up) return root; root = up; } return root; };
-  for (const r of rows) if (['strategy', 'project'].includes(r.kind)) { r.root = rootOf(r.id); r.standsAlone = !(byIdEarly[r.root] && byIdEarly[r.root].kind === 'outcome' && byIdEarly[r.root].status === 'adopted'); if (r.standsAlone && r.rank) r.reasons.unshift(r.root === r.id ? 'serves no outcome on the register' : `serves ${r.root}, which is ${byIdEarly[r.root] ? byIdEarly[r.root].status : 'not on the register'}: stands on its own in the ranking`); }
+  for (const r of rows) if (['strategy', 'project'].includes(r.kind)) {
+    r.root = rootOf(r.id);
+    r.standsAlone = !(byIdEarly[r.root] && byIdEarly[r.root].kind === 'outcome' && byIdEarly[r.root].status === 'adopted');
+    if (!r.standsAlone || !r.rank) continue;
+    r.reasons.unshift(r.root === r.id ? 'serves no outcome on the register' : `serves ${r.root}, which is ${byIdEarly[r.root] ? byIdEarly[r.root].status : 'not on the register'}: stands on its own in the ranking`);
+    // It is ranked like an outcome, so it is asked for a playbook like one.
+    r.playbook = playbookState(S.read(r.id), d);
+    if (PLAYBOOK_REASON[r.playbook]) r.reasons.push(PLAYBOOK_REASON[r.playbook]);
+    r.rank[3] = playbookRank(r.playbook);
+  }
   const top = rows.filter(r => r.rank && (r.kind === 'outcome' || r.kind === 'commitment' || r.standsAlone));
   top.sort((x, y) => { for (let i = 0; i < x.rank.length; i++) if (x.rank[i] !== y.rank[i]) return x.rank[i] - y.rank[i]; return x.id < y.id ? -1 : 1; });
   const protectedRows = top.filter(r => r.kind === 'commitment');
@@ -450,6 +560,13 @@ cmds.check = () => {
     const dg = diagnosisState(c);
     if (dg === 'missing file') problems.push(`${c.id}: DIAGNOSIS line names a file that is gone`);
     if (dg === 'claims a constraint without saying what would disprove it') problems.push(`${c.id}: diagnosis ${dg}`);
+    const pb = playbookState(c);
+    if (pb === 'missing file') problems.push(`${c.id}: PLAYBOOK line names a file that is gone (${playbookRel(c.id)})`);
+    else if (c.f.KIND === 'outcome' && c.f.STATUS === 'adopted') {
+      if (pb === 'none') notes.push(`${c.id}: no playbook yet (hub-goals playbook ${c.id})`);
+      if (pb === 'stale') notes.push(`${c.id}: playbook past its review date`);
+      if (pb === 'refuted') notes.push(`${c.id}: playbook refuted, research again`);
+    }
     for (const k of ['TITLE', 'MEASURE', 'OWN WORDS']) for (const [re, what] of MACHINE) if (c.f[k] && re.test(c.f[k])) problems.push(`${c.id}: ${k} carries ${what}`);
   }
   for (const n of notes) say('note ' + n);
@@ -473,6 +590,11 @@ cmds.help = () => say(`hub-goals: the register of what you want, and the choice 
   answer <id> --text "<your words>"
   diagnose <id>                           writes goals/diagnoses/<id>-<date>.md with the sections a diagnosis needs
   diagnose <id> --refute <file> --evidence "..."   the diagnosis was wrong; the next plan asks for a new one
+  playbook <id> [--review-days 30]        writes goals/playbooks/<id>.md: who won this outcome, what they did, in
+                                          what order, what they tracked, where it fails; draft until filled in
+  playbook <id> --current                 the sections are filled in; sets the review date (refused while a
+                                          template placeholder remains)
+  playbook <id> --refute --evidence "..." the model of success was wrong; the next plan asks for new research
   attention [--date D] [--active 3] [--json] [--record]   which goals get attention today and why (weightless bands)
   list [--all] [--kind K] [--json] | show <id> | tree | check`);
 
