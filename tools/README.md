@@ -168,9 +168,9 @@ hub-work tick                dead leases, due retries, stale plans
 - **`hub-decide`** is the one that ties them together, once a day. It moves time
   on the work tracker, works out the attention plan, lists the forecasts that have
   come due, then runs your `next-action` recipe with all of it in front of it. The
-  recipe writes one record for the day and files at most one thing for you. Copy
-  `skills/next-action.md` from this kit into `skills/next-action/SKILL.md` in your
-  hub first, then add one line to your schedule:
+  recipe writes one record for the day and files at most one thing for you. The
+  recipe is in every hub from day one, at `skills/next-action/SKILL.md`, because
+  the starter hub ships it; add one line to your schedule:
 
 ```
 10 4 * * *  $HOME/.local/bin/hub-decide >> $HOME/.hub/decide.log 2>&1
@@ -183,8 +183,8 @@ Run `hub-decide --dry-run` any time to see the plan without deciding anything.
   hands the assistant the item, the goal, how that goal is won (the playbook) and
   the newest diagnosis, records what the assistant says as ATTEMPTED, and runs the
   item's own CHECK: only that check makes it VERIFIED. A finished piece becomes a
-  page and one card, through the ledger's own door. Copy `skills/work-item.md` into
-  `skills/work-item/SKILL.md` in your hub, then:
+  page and one card, through the ledger's own door. Its recipe ships in the starter
+  hub too, at `skills/work-item/SKILL.md`; add two lines:
 
 ```
 45 7  * * *  $HOME/.local/bin/hub-work-run >> $HOME/.hub/work.log 2>&1

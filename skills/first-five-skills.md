@@ -6,8 +6,9 @@ copy the ones you want into `skills/` in your own hub, each as its own folder ho
 Nothing to paste, nothing to retype.
 
 They are deliberately NOT part of the installer. Your `skills/` folder
-arrives empty so the first recipe in it is one you built, in Chapter 12.
-Take these when you want them, and not before.
+arrives holding only the two recipes the hub runs by itself (`next-action`
+and `work-item`, Chapter 7), so the first recipe you put there yourself is
+one you built, in Chapter 12. Take these when you want them, and not before.
 
 If you would rather not copy files, paste a recipe into a session with
 your folder attached and say:

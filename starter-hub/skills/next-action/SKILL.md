@@ -15,8 +15,9 @@ one item at a time, later the same day.
 out to be wrong on the record. That is the whole point of the exercise. A decision nobody can
 check later is a preference.
 
-**Where to put it.** Copy this file into your hub as `skills/next-action/SKILL.md`. Then
-`hub-decide` runs it once a day, or you can say "decide today" in a conversation.
+**Where it lives.** This file is part of the starter hub, at `skills/next-action/SKILL.md`, so
+every hub the installer makes has it from day one. `hub-decide` runs it once a day, or you can say
+"decide today" in a conversation.
 
 **Three programs do the bookkeeping** and each holds the rules so that you cannot forget them:
 `hub-goals`, `hub-work`, `hub-forecast`. Run any of them with no arguments to see what it takes.

@@ -31,11 +31,14 @@ What is here. Thirteen names, and they are the whole system:
   each is written into `AGENTS.md` by `hub-compile-rules`, which is the
   only rules text your assistant reads every session. You edit the files; you
   never edit that block. Chapter 17.
-- `skills/`: one folder per recipe, each with a `SKILL.md` inside. It starts
-  empty on purpose; the installer has already told Hermes where this room is,
-  so a recipe you put here is found without you naming it. Chapters 12 to 14
-  fill it, and the five starter recipes are in the kit download beside this
-  folder, ready to copy in. The hidden `.claude/skills/` is a link the
+- `skills/`: one folder per recipe, each with a `SKILL.md` inside. Two are
+  here from day one, `next-action` and `work-item`: the first decides what your
+  hub does about your goals each day, the second carries out one piece of that
+  work. Chapter 7 shows them working; you never have to read them. The
+  installer has already told Hermes where this room is, so a recipe you put
+  here is found without you naming it. Chapters 12 to 14 fill it further, and
+  the five starter recipes are in the kit download beside this folder, ready
+  to copy in when you want them. The hidden `.claude/skills/` is a link the
   installer points at this room, never a second home.
 - `procedures.md`: the register. Everything that runs without you.
 - `decisions.md`: append-only log of real decisions.

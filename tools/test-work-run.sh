@@ -20,7 +20,7 @@ mkdir -p "$TMP/rules" "$TMP/bin" "$TMP/goals/playbooks" "$TMP/skills/work-item" 
 : > "$TMP/AGENTS.md"
 printf 'receipt\n' > "$TMP/rules/machine-words.txt"
 for f in work.js goals.js hub-cards.js hub-work-run check-written.js; do cp "$HERE/$f" "$TMP/bin/"; done
-cp "$HERE/../skills/work-item.md" "$TMP/skills/work-item/SKILL.md"
+cp "$HERE/../starter-hub/skills/work-item/SKILL.md" "$TMP/skills/work-item/SKILL.md"
 chmod +x "$TMP/bin/hub-work-run"
 
 # THE FAKE ASSISTANT. It reads the prompt the runner built, finds the path DONE WHEN names,
