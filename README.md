@@ -53,6 +53,7 @@ Appendix A of the book lists which files each chapter uses.
 Some things the book shows are deliberately not in this kit, because they need accounts, an identity check or a server that most readers will never want. Each lives in its own repository with its own one-line installer, and installs into the hub you already have.
 
 - **hub-phone** (Chapter 33): let your hub make a phone call for you. A voice agent calls as the AI assistant of you, over your own mobile number, and your assistant reads the transcript back with one of four verdicts. Needs the Chapter 31 server, an ElevenLabs account and a Twilio account. https://github.com/MichaelZelbel/hub-phone
+- **hub-video** (Chapter 34): let your hub finish your videos. You record and cut; your assistant burns in captions in one look, makes a vertical version, and builds animated title cards, slides and graphics with HyperFrames. Runs on the computer where your videos are, with no paid accounts; needs Node.js 22 and about 1.5 GB of disk. https://github.com/MichaelZelbel/hub-video
 
 ## What this is not
 
