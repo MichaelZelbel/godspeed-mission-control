@@ -48,6 +48,12 @@ git clone https://github.com/MichaelZelbel/teach-it-once-kit.git
 
 Appendix A of the book lists which files each chapter uses.
 
+## Add-ons
+
+Some things the book shows are deliberately not in this kit, because they need accounts, an identity check or a server that most readers will never want. Each lives in its own repository with its own one-line installer, and installs into the hub you already have.
+
+- **hub-phone** (Chapter 33): let your hub make a phone call for you. A voice agent calls as the AI assistant of you, over your own mobile number, and your assistant reads the transcript back with one of four verdicts. Needs the Chapter 31 server, an ElevenLabs account and a Twilio account. https://github.com/MichaelZelbel/hub-phone
+
 ## What this is not
 
 - **Not a chatbot.** You talk to it, but its job is the work it does when you are not there.
