@@ -34,7 +34,7 @@ set -uo pipefail
 
 AI_USER="${AI_USER:-ai}"
 WATCHDOG_REPO="${WATCHDOG_REPO:-https://github.com/MichaelZelbel/hermes-self-devops-watchdog.git}"
-WATCHDOG_PIN="${WATCHDOG_PIN:-v1.0.9}"
+WATCHDOG_PIN="${WATCHDOG_PIN:-v1.0.11}"
 WATCHDOG_DIR="${WATCHDOG_DIR:-/opt/hermes-watchdog}"
 LOG_DIR="${WATCHDOG_LOG_DIR:-/var/log/hermes-watchdog}"
 STATE_DIR="${WATCHDOG_STATE_DIR:-/var/lib/hermes-watchdog}"

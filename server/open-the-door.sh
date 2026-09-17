@@ -137,6 +137,24 @@ EnvironmentFile=$ENV_FILE
 ExecStart=$HERMES_BIN dashboard --host $DOOR_HOST --port $PORT --no-open
 Restart=on-failure
 RestartSec=10
+TimeoutStopSec=30
+
+# The same protections the author's own copy of this unit has always had. Until
+# 2026-09-17 this one shipped with none, although its comment said "shaped like
+# the author's own unit". This service answers on a network address, so it may
+# never gain more rights than it starts with, may write nowhere in the system
+# except the assistant's own home (where Hermes builds the web page on its first
+# start) and a /tmp of its own, and may not touch kernel settings. The '$AI_USER'
+# account was made without the right to become root, so there is nothing here
+# for NoNewPrivileges to get in the way of.
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=read-only
+ReadWritePaths=$AI_HOME
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
 
 [Install]
 WantedBy=multi-user.target

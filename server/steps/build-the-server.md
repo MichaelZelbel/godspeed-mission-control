@@ -148,7 +148,9 @@ Run as root after the install. It installs Tailscale if it is missing and runs
 with `tailscale ip -4`, asks for a username (default `ai`), generates a password
 unless `DOOR_PASSWORD` is set, replaces the three `HERMES_DASHBOARD_BASIC_AUTH_*`
 lines in `/home/ai/.hermes/.env`, writes `/etc/systemd/system/hermes-dashboard.service`
-(`User=ai`, `EnvironmentFile`, `hermes dashboard --host <address> --port 9119 --no-open`),
+(`User=ai`, `EnvironmentFile`, `hermes dashboard --host <address> --port 9119 --no-open`, and
+since 2026-09-17 the same sandbox lines the author's own unit carries: no new privileges,
+the system read-only, `/home/ai` the only writable home, a private `/tmp`),
 enables and starts it, waits up to three minutes for `/api/status` (the first
 start builds the web page), refuses to continue unless the answer carries
 `"auth_required":true`, and prints the address, username and password with the

@@ -269,6 +269,9 @@ owned by `ai`): `HERMES_DASHBOARD_BASIC_AUTH_USERNAME`, `HERMES_DASHBOARD_BASIC_
 `/etc/systemd/system/hermes-dashboard.service` with `User=ai`,
 `EnvironmentFile=/home/ai/.hermes/.env` and
 `ExecStart=/home/ai/.local/bin/hermes dashboard --host <private address> --port 9119 --no-open`,
+and the protections a service on a network address should have (`NoNewPrivileges=true`,
+`ProtectSystem=full`, `ProtectHome=read-only` with `ReadWritePaths=/home/ai`, `PrivateTmp=true`,
+`ProtectKernelTunables=true`, `ProtectKernelModules=true`, `ProtectControlGroups=true`),
 enabled and started. And the check: `curl -s http://<private address>:9119/api/status` must
 contain `"auth_required":true`. Hermes' auth gate is on for any address that is not loopback, and
 the page fails closed without a password or OAuth provider, so never bind it to a public address
