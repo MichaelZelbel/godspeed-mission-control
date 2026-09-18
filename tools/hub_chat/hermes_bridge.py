@@ -14,6 +14,18 @@ _approvals = {}
 _approval_lock = threading.RLock()
 
 
+def filter_cron_targets(job,targets,for_failure):
+    from hermes_constants import get_hermes_home
+    from .scheduled import filter_targets
+    return filter_targets(get_hermes_home(),job,targets,for_failure)
+
+
+def refuse_standalone_telegram():
+    from hermes_constants import get_hermes_home
+    from .scheduled import protected
+    return protected(get_hermes_home())
+
+
 def get(adapter):
     return getattr(adapter,'_hub_chat_boundary',None)
 

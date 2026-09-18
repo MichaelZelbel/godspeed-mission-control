@@ -69,6 +69,52 @@ class HermesRuntime(unittest.IsolatedAsyncioTestCase):
             with self.assertRaises(Forbidden): await call()
         self.assertEqual(self.transport.calls,[])
 
+    async def test_cron_and_standalone_sender_do_not_bypass_protection(self):
+        from pathlib import Path
+        from unittest.mock import patch
+        from tools.send_message_senders import _send_telegram
+        from cron.scheduler_delivery import _deliver_result
+        profile=Path(self.tmp.name)
+        (profile/'hub-chat.json').write_text(json.dumps({'enabled':True,'conversation_id':'100'}))
+        with patch('hermes_constants.get_hermes_home',return_value=profile), \
+             patch('tools.send_message_senders._telegram_bot',side_effect=AssertionError('No direct bot')):
+            result=await _send_telegram('123:fixture','100','internal status')
+            self.assertIn('error',result)
+            with patch('cron.scheduler_delivery._resolve_delivery_targets',return_value=[{'platform':'telegram','chat_id':'100'}]):
+                error=_deliver_result({'id':'internal','deliver':'telegram'},'internal transcript')
+                self.assertIn('no registered report',error)
+                with patch('hub_chat.scheduled.queue_report',return_value=None):
+                    self.assertIsNone(_deliver_result({'id':'brief','deliver':'telegram'},'ignored transcript'))
+        self.assertEqual(self.transport.calls,[])
+
+    async def test_registered_scheduled_report_waits_for_actual_receipt(self):
+        from pathlib import Path
+        import sys
+        from hub_chat.contracts import fingerprint,utcnow
+        from hub_chat.inbox import import_pending,deliver,write_receipts
+        from hub_chat.scheduled import queue_report
+        profile=Path(self.tmp.name); now=utcnow()
+        data={'messages':['Here is your requested morning brief.'],'item_ids':[],'created_at':now,'parse_mode':None}
+        data['revision']=fingerprint([data['messages'],[],now,None])
+        source=profile/'report.json'; source.write_text(json.dumps(data))
+        config={'reports':{'morning-brief':{'argv':[sys.executable,'-c','import sys; print(open(sys.argv[1]).read())',str(source)]}},
+                'scheduled_reports':{'brief1':{'name':'morning-brief','workdir':str(profile)}}}
+        self.boundary.profile=profile; self.boundary.config=config
+        task=asyncio.create_task(asyncio.to_thread(queue_report,profile,config,{'id':'brief1','workdir':str(profile)},False,5))
+        for _ in range(100):
+            if list((profile/'chat-inbox').glob('*.json')): break
+            await asyncio.sleep(0.02)
+        await asyncio.to_thread(import_pending,self.boundary)
+        rows=self.chat.store.rows("SELECT key FROM deliveries WHERE state='queued'")
+        self.assertEqual(len(rows),1)
+        self.assertFalse(task.done())
+        receipt=await deliver(self.boundary,rows[0]['key'])
+        write_receipts(self.boundary)
+        self.assertEqual(receipt.state,'sent')
+        self.assertIsNotNone(receipt.message_id)
+        self.assertIsNone(await task)
+        self.assertEqual(len(self.transport.calls),1)
+
     async def test_turn_error_does_not_expose_internal_details(self):
         with self.boundary.turn(self.event):
             await self.adapter._notify_turn_error(self.event,RuntimeError('internal worker path and execution trace'))

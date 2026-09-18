@@ -63,9 +63,11 @@ def import_pending(boundary):
                 raise ValueError('Untrusted submission fields')
             for draft in drafts:
                 boundary.chat.delivery.submit(draft)
-                if parse_mode:
+                if parse_mode or 'report' in event:
+                    detail={'parse_mode':parse_mode}
+                    if 'report' in event: detail.update(report=event['report'],revision=event['revision'])
                     with boundary.chat.store.transaction() as db:
-                        db.execute('UPDATE deliveries SET detail=? WHERE key=? AND state=?',(canonical({'parse_mode':parse_mode}),draft.delivery_key,'queued'))
+                        db.execute('UPDATE deliveries SET detail=? WHERE key=? AND state=?',(canonical(detail),draft.delivery_key,'queued'))
             accepted={'keys':[d.delivery_key for d in drafts],'state':'queued' if drafts else 'suppressed'}
         except Exception as exc:
             boundary.chat.store.audit('inbox_rejected',type(exc).__name__)
@@ -88,6 +90,15 @@ async def deliver(boundary,key):
     if not chat.delivery.claim(key):
         return chat.delivery.receipt(key)
     draft = chat.delivery.draft(key)
+    detail=chat.delivery.get(key)['detail']
+    meta=json.loads(detail) if detail.startswith('{') else {}
+    if key.startswith('report:'):
+        try:
+            from .reports import read_report
+            current,_=await asyncio.to_thread(read_report,boundary,meta['report'],meta['revision'],utcnow())
+            if not any(d==draft for d in current): raise ValueError('Report changed')
+        except Exception as exc:
+            return chat.delivery.state(key,'suppressed','Report no longer current: '+type(exc).__name__)
     facts = await asyncio.to_thread(chat.sources.refresh,[i for i,_ in draft.item_revisions],utcnow())
     errors = policy.check(draft,facts,[])
     if errors:
@@ -101,8 +112,6 @@ async def deliver(boundary,key):
         with boundary.output(draft.output_class,key):
             # Plain text is deliberately retained verbatim, with links intact.
             # A single digest is bounded to Telegram's safe text size at composition.
-            detail=chat.delivery.get(key)['detail']
-            meta=json.loads(detail) if detail.startswith('{') else {}
             result = await boundary.adapter._bot.send_message(chat_id=draft.conversation_id,text=draft.text,parse_mode=meta.get('parse_mode'))
         chat.delivery.acknowledge(Receipt(key,'sent',str(result.message_id),utcnow()),draft.text)
     except Exception as exc:

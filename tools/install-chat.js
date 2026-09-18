@@ -16,7 +16,7 @@ function entries(dir, prefix='') {
 }
 function install(kit, home=os.homedir()) {
   const files = entries(path.join(kit,'tools','hub_chat'),'tools/hub_chat/').concat(entries(path.join(kit,'integrations','hermes'),'integrations/hermes/'));
-  for (const name of ['due.js','work.js','hub-cards.js']) files.push(['tools/'+name,fs.readFileSync(path.join(kit,'tools',name))]);
+  for (const name of ['due.js','work.js','hub-cards.js','check-brief.js']) files.push(['tools/'+name,fs.readFileSync(path.join(kit,'tools',name))]);
   const manifest=Object.fromEntries(files.map(([name,data])=>[name,hash(data)]));
   const id=hash(JSON.stringify(manifest));
   const root=path.join(home,'.hub','chat');

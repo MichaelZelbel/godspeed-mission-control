@@ -208,9 +208,45 @@
              targets = [queue.pop(0)]
          if not queue:
              _gateway_queues.pop(session_key, None)
+--- a/cron/scheduler_delivery.py
++++ b/cron/scheduler_delivery.py
+@@ -1706,6 +1706,12 @@
+     ``failure_deliver`` override when present (NS-788). Returns None on success, else an error."""
+     job.pop("_bot_chat_delivery_receipts", None)
+     targets = _resolve_delivery_targets(job, for_failure=for_failure)
++    had_targets = bool(targets)
++    from _hub_chat_bridge import filter_cron_targets
++    targets, protected_errors = filter_cron_targets(job, targets, for_failure)
++    if not targets and had_targets:
++        _record_delivery_verification(job, [])
++        return "; ".join(protected_errors) if protected_errors else None
+     if not targets:
+         _record_delivery_verification(job, [])
+         return _unresolved_delivery_outcome(job, for_failure)
+@@ -1788,7 +1794,7 @@
+         logger.error("Job '%s': %s", job["id"], msg)
+         return msg
+ 
+-    delivery_errors = []
++    delivery_errors = list(protected_errors)
+     for target in targets:
+         # Bot Chat owns admission; never concurrently resume a live owner's transcript.
+         if target["platform"] == BOT_CHAT_PLATFORM:
+--- a/tools/send_message_senders.py
++++ b/tools/send_message_senders.py
+@@ -238,6 +238,9 @@
+ 
+ async def _send_telegram(token, chat_id, message, media_files=None, thread_id=None, disable_link_previews=False, force_document=False):
+     """One-shot Telegram Bot API send; parse failures fall back to plain text."""
++    from _hub_chat_bridge import refuse_standalone_telegram
++    if refuse_standalone_telegram():
++        return {"error": "Use the protected conversation delivery queue; direct Telegram sends are disabled."}
+     try:
+         formatted, send_parse_mode, _has_html = _telegram_format(message)
+         bot = _telegram_bot(token)
 --- /dev/null
 +++ b/_hub_chat_bridge.py
-@@ -0,0 +1,22 @@
+@@ -0,0 +1,24 @@
 +"""Versioned optional integration. No private hub behavior lives here."""
 +import importlib.util
 +if importlib.util.find_spec('hub_chat'):
@@ -226,6 +262,8 @@
 +    def configure(adapter,request): return request
 +    def quiet_stream(adapter): return False
 +    def guard_decision(*args): return True
++    def filter_cron_targets(job,targets,for_failure): return targets,[]
++    def refuse_standalone_telegram(): return False
 +    def approval_metadata(ctx,data): return ctx._status_thread_metadata
 +    def result_instruction(adapter): return ''
 +    def guard_result(ctx,result,history_length): return result

@@ -31,6 +31,21 @@ class Inbox(unittest.TestCase):
         self.consume(self.boundary)
         self.assertEqual(self.chat.store.rows('SELECT * FROM deliveries'),[])
 
+    def test_a_report_changed_after_queueing_is_not_delivered(self):
+        import asyncio,sys
+        from hub_chat.contracts import fingerprint,utcnow
+        from hub_chat.inbox import deliver
+        now=utcnow(); data={'messages':['A readable current brief.'],'item_ids':[],'created_at':now,'parse_mode':None}
+        data['revision']=fingerprint([data['messages'],[],now,None])
+        file=Path(self.tmp.name)/'report.json'; file.write_text(json.dumps(data))
+        self.boundary.config={'reports':{'example':{'argv':[sys.executable,'-c','import sys; print(open(sys.argv[1]).read())',str(file)]}}}
+        self.submit(Path(self.tmp.name)/'chat-inbox',{'schema':1,'report':'example','revision':data['revision']})
+        self.consume(self.boundary)
+        key=self.chat.store.rows("SELECT key FROM deliveries WHERE state='queued'")[0]['key']
+        data['messages']=['A replacement brief.']; file.write_text(json.dumps(data))
+        result=asyncio.run(deliver(self.boundary,key))
+        self.assertEqual(result.state,'suppressed')
+
     def test_stopped_service_is_not_called_a_failure_without_abnormal_exit(self):
         from hub_chat.health_source import read
         run=lambda *a,**k:NS(returncode=0,stdout='ActiveState=failed\nResult=success\nLoadState=loaded\n')

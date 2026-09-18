@@ -71,6 +71,18 @@ item identities or a registered report name, never executable commands, credenti
 or arbitrary recipients. On a service account host, provision the inbox for the
 producer group while keeping the journal owned by the gateway account.
 
+Setup registers an existing reader morning-brief job only when its saved name and
+working folder match. It leaves its schedule untouched. Delivery reads today's
+saved brief, checks its age and phone-readable form, then waits for a real receipt.
+A changed or expired report is checked again before sending. The scheduler's raw
+transcript and standalone Telegram sender cannot bypass this route.
+
+Other scheduled Telegram jobs require an explicit registered report source before
+activation. Their unclassified output is refused and the delivery error stays in
+the local job record. Failed report production currently stays local too; a clear
+failure notice for a requested report remains a migration gate. Checking a saved
+brief's age and format does not establish the truth of arbitrary prose within it.
+
 The SQLite journal is private local runtime data. Keep it outside Git and cloud
 sync. Queue acceptance is not delivery. A transport timeout leaves an uncertain
 receipt and is not retried automatically. Keep the journal during rollback.

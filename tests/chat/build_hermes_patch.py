@@ -75,6 +75,28 @@ def approval(t):
                 '            from _hub_chat_bridge import guard_decision\n            entry = queue[0]\n            if not guard_decision(session_key, entry.data.get("request_id"), choice):\n                return 0\n            targets = [queue.pop(0)]')
     return t
 
+def cron_delivery(t):
+    t=replace(t,'    targets = _resolve_delivery_targets(job, for_failure=for_failure)\n    if not targets:',
+              '    targets = _resolve_delivery_targets(job, for_failure=for_failure)\n'
+              '    had_targets = bool(targets)\n'
+              '    from _hub_chat_bridge import filter_cron_targets\n'
+              '    targets, protected_errors = filter_cron_targets(job, targets, for_failure)\n'
+              '    if not targets and had_targets:\n'
+              '        _record_delivery_verification(job, [])\n'
+              '        return "; ".join(protected_errors) if protected_errors else None\n'
+              '    if not targets:')
+    t=replace(t,'    delivery_errors = []\n    for target in targets:',
+              '    delivery_errors = list(protected_errors)\n    for target in targets:')
+    return t
+
+def senders(t):
+    return replace(t,'    """One-shot Telegram Bot API send; parse failures fall back to plain text."""\n    try:',
+                   '    """One-shot Telegram Bot API send; parse failures fall back to plain text."""\n'
+                   '    from _hub_chat_bridge import refuse_standalone_telegram\n'
+                   '    if refuse_standalone_telegram():\n'
+                   '        return {"error": "Use the protected conversation delivery queue; direct Telegram sends are disabled."}\n'
+                   '    try:')
+
 shim = '''"""Versioned optional integration. No private hub behavior lives here."""
 import importlib.util
 if importlib.util.find_spec('hub_chat'):
@@ -90,6 +112,8 @@ else:
     def configure(adapter,request): return request
     def quiet_stream(adapter): return False
     def guard_decision(*args): return True
+    def filter_cron_targets(job,targets,for_failure): return targets,[]
+    def refuse_standalone_telegram(): return False
     def approval_metadata(ctx,data): return ctx._status_thread_metadata
     def result_instruction(adapter): return ''
     def guard_result(ctx,result,history_length): return result
@@ -102,6 +126,8 @@ change('gateway/platforms/base.py',base,'base.py')
 change('plugins/platforms/telegram/adapter.py',adapter,'adapter.py')
 change('gateway/run_turn_runner.py',runner,'run_turn_runner.py')
 change('tools/approval.py',approval,'approval.py')
+change('cron/scheduler_delivery.py',cron_delivery,'scheduler_delivery.py')
+change('tools/send_message_senders.py',senders,'send_message_senders.py')
 change('_hub_chat_bridge.py',lambda t:shim)
 name = 'db64ddb58eef-hub-chat.patch'
 (out/'patches'/name).write_text(''.join(patches),encoding='utf-8',newline='\n')

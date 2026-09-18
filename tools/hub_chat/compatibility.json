@@ -19,9 +19,17 @@
       "original": "430d08bd6dd1a685d228f792377b946bcd97bcc710e74a40e86e8b9b8ac721fc",
       "patched": "2e9332ce8d9572ef2c808f33a4829e573a5998688d1a13ae8454594f8de7f787"
     },
+    "cron/scheduler_delivery.py": {
+      "original": "f88a543837a1fa588f96966b5b4432120fa04030237969cbe58587cd89538b80",
+      "patched": "866de5e78eac9f0920be513f9d06927844142a426c3da525dcc04afaf8922b52"
+    },
+    "tools/send_message_senders.py": {
+      "original": "c5356653615afe26e290b456a84fe6a8c29372dc7917a52cc561e34f1423c803",
+      "patched": "ef37a0627f9238a933597acf6efce462b874d139307899754f672af13eb19a9b"
+    },
     "_hub_chat_bridge.py": {
       "original": null,
-      "patched": "cb7863382b9aa323e2eda3eb7a83d7b5d52b9d18445cb1def93a8a44fd1294f6"
+      "patched": "157c9b50582b6a6a6f7b56004c16d0f4fa4f7a46c497395274491d6fc3ebba03"
     }
   }
 }

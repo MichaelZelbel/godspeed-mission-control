@@ -37,6 +37,8 @@ def configure(args):
                   language=args.language or config.get('language','en'),runtime=str(root),package=str(bundle))
     from .timezones import zone
     zone(config['timezone'])
+    from .scheduled import register_reports
+    register_reports(config,args.profile,args.hub,package)
     # Validate configuration before touching executable code or its import path.
     import yaml
     yaml_path=args.profile/'config.yaml'
