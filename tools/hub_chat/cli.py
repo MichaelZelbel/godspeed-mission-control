@@ -22,6 +22,8 @@ def main():
     sub.add_parser('preview')
     sub.add_parser('status')
     sub.add_parser('rollback')
+    forget=sub.add_parser('forget-text'); forget.add_argument('--before',required=True)
+    forget.add_argument('--apply',action='store_true')
     enable=sub.add_parser('enable-proactive'); enable.add_argument('--after-preview',action='store_true',required=True)
     migrate=sub.add_parser('migrate'); migrate.add_argument('file',type=Path,nargs='?')
     mode=migrate.add_mutually_exclusive_group()
@@ -79,6 +81,9 @@ def main():
             from .migrate import import_legacy
             file=args.file or args.profile/'chat-legacy.json'
             print(json.dumps(import_legacy(chat,file,dry_run=args.dry_run or not args.apply)))
+        elif args.command=='forget-text':
+            from .retention import prune
+            print(json.dumps(prune(chat.store,args.before,dry_run=not args.apply)))
         else:
             print(json.dumps({'delivery_states':chat.store.rows('SELECT state,count(*) AS count FROM deliveries GROUP BY state'),
                               'approval_states':chat.store.rows('SELECT state,count(*) AS count FROM approvals GROUP BY state')},indent=2))

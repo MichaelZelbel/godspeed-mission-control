@@ -1,5 +1,4 @@
 """Rollback a package without rolling back conversation state or enabling old senders."""
-import hashlib
 import json
 from pathlib import Path
 from .setup import atomic_json
@@ -15,18 +14,35 @@ def rollback(profile,home=None):
     current=json.loads(pointer.read_text(encoding='utf-8'))
     previous=current.get('previous')
     if not previous:
-        return {'restored':False,'proactive_paused':True,'reason':'No earlier protected package exists. Direct replies remain available; keep this boundary until a tested replacement is installed.'}
+        return {'restored':False,'proactive_paused':True,'restart_required':True,'reason':'No earlier protected package exists. Keep this boundary until a tested replacement is installed.'}
     previous=Path(previous)
     root=(home/'.hub/chat/releases').resolve()
     if previous.resolve().parent!=root:
         raise ValueError('Previous package is outside the release directory')
-    manifest=json.loads((previous/'bundle.json').read_text(encoding='utf-8'))
-    for name,digest in manifest['files'].items():
-        file=(previous/name).resolve()
-        if not file.is_relative_to(previous.resolve()) or hashlib.sha256(file.read_bytes()).hexdigest()!=digest:
-            raise ValueError('Previous package failed integrity verification')
+    from .bundle import verify
+    package_id=verify(previous)
     backup=json.loads((profile/'chat-rollback.json').read_text(encoding='utf-8'))
-    Path(backup['pth']).write_text(str(previous/'tools')+'\nimport hub_chat.startup\n',encoding='utf-8')
-    config['package']=str(previous); atomic_json(config_path,config)
-    atomic_json(pointer,{'schema':1,'id':manifest['id'],'path':str(previous),'previous':current['path']})
+    restored=backup.get('previous_config') or {}
+    if not restored.get('enabled') or Path(restored.get('package','')).resolve()!=previous.resolve():
+        raise ValueError('No matching earlier protected configuration exists; notifications remain paused')
+    recovery=Path(restored.get('recovery','')).resolve()
+    if not recovery.is_relative_to((profile/'chat-recovery').resolve()):
+        raise ValueError('Previous recovery runtime is outside this profile')
+    from .recovery import verify as verify_recovery
+    record=verify_recovery(recovery)
+    if Path(record['bundle']).resolve()!=previous.resolve():
+        raise ValueError('Previous runtime does not match the earlier package')
+    # Preserve personal communication choices changed after the upgrade.
+    for key in ('conversation_id','actor_id','timezone','language','text_retention_days'):
+        if key in config: restored[key]=config[key]
+    restored['proactive_paused']=True
+    pth=Path(backup['pth'])
+    old_pth=pth.read_text(encoding='utf-8') if pth.exists() else None
+    atomic_json(config_path,restored)
+    temporary=pth.with_suffix('.pth.rollback-tmp')
+    temporary.write_text(str(previous/'tools')+'\nimport hub_chat.startup\n',encoding='utf-8')
+    temporary.replace(pth)
+    atomic_json(pointer,{'schema':1,'id':package_id,'path':str(previous),'previous':current['path']})
+    atomic_json(profile/'chat-rollback.json',{'pth':str(pth),'previous_config':config,'previous_pth':old_pth,
+                                            'runtime':restored['runtime'],'package':str(previous)})
     return {'restored':True,'proactive_paused':True,'restart_required':True,'database_preserved':True}

@@ -20,8 +20,23 @@ Setup on a desktop without a local Telegram profile installs the tools only. It
 does not start another bot. A remote gateway must be updated on its own host.
 Setup detects the saved desktop connection and reports a pending server update;
 it does not claim that installing desktop tools updated the remote gateway.
-Automatic remote installation is not implemented. This candidate must not be
-advertised as a complete reader fix.
+The server installer owns remote updates. Desktop setup does not install software
+on a connected server or claim to have checked it.
+
+## Updating a connected server
+
+Run the server installer on the server that already runs your assistant. Keep the
+same account and hub folder. The update preserves your files, sign-in and approval
+choices. It must restart the existing gateway and verify the loaded protection
+before reporting it active. A failed check means the update is not verified.
+
+This candidate has not been released. The current public installer still serves
+the earlier version; rerunning it today does not install this candidate. The release
+checklist requires the tested installer and shared package to be published together.
+
+A desktop message saying the server was not checked is local information only.
+It does not mean an already updated server needs another update. Verification runs
+on the server, with `hub-chat --profile PROFILE doctor --require-live`.
 
 ## Operator commands
 
@@ -38,6 +53,8 @@ hub-chat --profile PROFILE migrate LEGACY_FACTS_JSON --dry-run
 hub-chat --profile PROFILE migrate LEGACY_FACTS_JSON --apply
 hub-chat replay --fixture september-18
 hub-chat --profile PROFILE rollback
+hub-chat --profile PROFILE forget-text --before 2026-01-01T00:00:00Z
+hub-chat --profile PROFILE forget-text --before 2026-01-01T00:00:00Z --apply
 ```
 
 Configuration uses the Python environment already installed with Hermes. It checks
@@ -57,6 +74,20 @@ producer group while keeping the journal owned by the gateway account.
 The SQLite journal is private local runtime data. Keep it outside Git and cloud
 sync. Queue acceptance is not delivery. A transport timeout leaves an uncertain
 receipt and is not retried automatically. Keep the journal during rollback.
+
+Message text is removed from completed local delivery records after 90 days by
+default. Set `text_retention_days` to another number from 1 to 3650, or zero to keep
+it. `forget-text` previews an earlier cutoff; `--apply` removes eligible text.
+Pending and uncertain records remain available for reconciliation. Completed
+approval text is eligible only after the final message edit was confirmed.
+Outcome records and delivery identities remain to prevent duplicate sends. This
+does not delete messages from Telegram, source documents, backups or disk remnants.
+
+Rollback validates the previous protected package and its complete recovery copy
+before switching configuration. It preserves the journal and current owner,
+language and retention choices, pauses automatic messages, and requires a restart.
+If the previous recovery copy is damaged, rollback refuses the switch and leaves
+automatic messages paused. It never restores an unprotected sender.
 
 Approval buttons address one request. Permission, expiry, and execution outcome
 are recorded separately. The original message is edited when the request expires.
@@ -81,8 +112,6 @@ use a separately configured emergency destination for that case.
 - Finish the controlled real exchange, then observe the deployed version for seven
   days without daily status messages. A transport and expiry component test alone
   does not prove incoming reply handling in the deployed gateway.
-- Complete text retention, explicit deletion, and restoration of the full previous
-  protected runtime/configuration during rollback. The current rollback preserves
-  the database and changes the package but does not certify that full recovery path.
+- Verify retention and protected rollback through the full installation matrix.
 - Publish the tested kit, bootstrap and watchdog versions together, with updated
   immutable pins. Until then, existing download links still serve the old release.

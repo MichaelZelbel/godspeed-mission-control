@@ -124,9 +124,18 @@ def write_receipts(boundary):
 
 async def pump(boundary):
     from .hermes_bridge import edit_approval,heartbeat
+    retention_day=None
     while True:
         try:
             heartbeat(boundary)
+            today=datetime.now(timezone.utc).date()
+            days=boundary.config.get('text_retention_days',90)
+            if retention_day!=today and isinstance(days,int) and 1<=days<=3650:
+                from datetime import timedelta
+                from .retention import prune
+                cutoff=(datetime.now(timezone.utc)-timedelta(days=days)).isoformat()
+                await asyncio.to_thread(prune,boundary.chat.store,cutoff)
+                retention_day=today
             await asyncio.to_thread(import_pending,boundary)
             for row in boundary.chat.store.rows("SELECT key FROM deliveries WHERE state='queued' ORDER BY created_at LIMIT 10"):
                 await deliver(boundary,row['key'])

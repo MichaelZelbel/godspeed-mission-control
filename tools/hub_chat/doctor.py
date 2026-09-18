@@ -27,6 +27,9 @@ def inspect(profile,runtime=None):
         problems.append('Conversation protection is disabled.')
     if not config.get('conversation_id') or not config.get('actor_id'):
         problems.append('The conversation owner has not been configured.')
+    retention=config.get('text_retention_days',90)
+    if type(retention) is not int or not 0<=retention<=3650:
+        problems.append('Text retention must be zero (keep text) or between one and 3650 days.')
     if not runtime and not config.get('runtime'):
         problems.append('The Hermes runtime location is missing.')
     else:

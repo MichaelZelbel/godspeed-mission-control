@@ -34,6 +34,11 @@ class Installation(unittest.TestCase):
             self.assertEqual(json.loads(raw)['state'],'remote_update_pending')
             self.assertNotIn('do-not-print',raw)
             self.assertFalse((Path(home)/'.hermes').exists())
+            self.assertTrue((Path(home)/'.hub/chat/pending-server-update.json').exists())
+            (config/'connections.json').write_text(json.dumps({'version':2,'connections':[{'kind':'ssh','host':'example.org','token':'private'}]}))
+            raw=subprocess.check_output(['node','-e',script,str(ROOT/'tools/chat-gateway.js'),home,home],text=True,env=env)
+            self.assertEqual(json.loads(raw)['state'],'remote_update_pending')
+            self.assertNotIn('private',raw)
 
     def test_repeat_bundle_install_keeps_one_version_and_no_gateway(self):
         with tempfile.TemporaryDirectory() as home:
@@ -66,6 +71,15 @@ class Installation(unittest.TestCase):
             installed=json.loads(subprocess.check_output(['node',str(ROOT/'tools/install-chat.js'),str(ROOT),home],text=True))
             self.assertEqual(verify(installed['path']),installed['id'])
             (Path(installed['path'])/'tools/hub_chat/approvals.py').write_text('stale module')
+            with self.assertRaises(ValueError): verify(installed['path'])
+
+    def test_unlisted_source_cannot_enter_an_immutable_package(self):
+        from helpers import load_chat
+        load_chat(self)
+        from hub_chat.bundle import verify
+        with tempfile.TemporaryDirectory() as home:
+            installed=json.loads(subprocess.check_output(['node',str(ROOT/'tools/install-chat.js'),str(ROOT),home],text=True))
+            (Path(installed['path'])/'tools/hub_chat/extra.py').write_text('unexpected source')
             with self.assertRaises(ValueError): verify(installed['path'])
 
     def test_due_export_is_read_only_and_keeps_closed_items_closed(self):

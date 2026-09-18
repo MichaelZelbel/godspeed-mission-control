@@ -49,6 +49,7 @@ def configure(args):
     config.setdefault('sources',[{'name':'reader-due','argv':['node',str(package/'due.js'),'export','--hub',str(args.hub)]},
                                  {'name':'reader-work','argv':['node',str(package/'work.js'),'export'],'cwd':str(args.hub)}])
     config.setdefault('proactive_paused',True)
+    config.setdefault('text_retention_days',90)
     pth=Path(sysconfig.get_paths()['purelib'])/'hub_chat.pth'
     old_pth=pth.read_text(encoding='utf-8') if pth.exists() else None
     backup=args.profile/'chat-rollback.json'
