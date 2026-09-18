@@ -46,7 +46,7 @@ def configure(args):
     display=current.setdefault('display',{}).setdefault('platforms',{}).setdefault('telegram',{})
     if not isinstance(display,dict):
         raise ValueError('Telegram display settings must be a mapping')
-    patch_result=install_patch(root,bundle/'integrations/hermes')
+    patch_result=install_patch(root,bundle/'integrations/hermes',previous=previous_config.get('package'))
     args.profile.mkdir(parents=True,exist_ok=True,mode=0o700)
     config.setdefault('sources',[{'name':'reader-due','argv':['node',str(package/'due.js'),'export','--hub',str(args.hub)]},
                                  {'name':'reader-work','argv':['node',str(package/'work.js'),'export'],'cwd':str(args.hub)}])
