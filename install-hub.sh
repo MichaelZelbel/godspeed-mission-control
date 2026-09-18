@@ -32,10 +32,10 @@ set -uo pipefail
 # exactly the code that passed its end-to-end runs, and the pin only moves by a
 # deliberate edit here. KB_BRANCH pins the library the engine fetches for
 # itself, or the entry file would be pinned while its insides floated.
-ENGINE="https://raw.githubusercontent.com/MichaelZelbel/kit-bootstrap/7eb9bb78e81d5914947b69f63671dc0682372970/setup-hub.sh"
+ENGINE="https://raw.githubusercontent.com/MichaelZelbel/kit-bootstrap/f0c0a86edec5dd24fd86b4596374ee343107fea5/setup-hub.sh"
 STARTER="https://github.com/MichaelZelbel/teach-it-once-kit.git"
-KB_BRANCH="7eb9bb78e81d5914947b69f63671dc0682372970"
-KB_TOOLS_REF="746f28420747caf6911d92e3abb5b05101876288"
+KB_BRANCH="f0c0a86edec5dd24fd86b4596374ee343107fea5"
+KB_TOOLS_REF="5a5d3084f2b2d87a25ae1b7e2d3c52db2d0369c4"
 export KB_TOOLS_REF
 export KB_BRANCH
 
