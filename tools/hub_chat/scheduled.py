@@ -88,7 +88,7 @@ def register_reports(config,profile,hub,package):
             {'name':'morning-brief','workdir':str(hub.resolve())})
         config.setdefault('reports',{}).setdefault('morning-brief',{'argv':[
             sys.executable,'-m','hub_chat.reader_brief','--hub',str(hub.resolve()),
-            '--timezone',config.get('timezone','UTC')]})
+            '--timezone',config.get('timezone','UTC'),'--language',config.get('language','en')]})
     for job in saved:
         if not uses_telegram(job): continue
         registration=config.get('scheduled_reports',{}).get(str(job.get('id')))

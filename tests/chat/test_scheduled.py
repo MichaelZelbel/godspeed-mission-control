@@ -68,20 +68,65 @@ class Scheduled(unittest.TestCase):
             self.assertTrue(protected(profile))
             self.assertFalse((profile/'chat-inbox').exists())
 
-    def test_brief_file_must_be_current_readable_and_bounded(self):
+    def test_fresh_brief_cannot_repeat_invented_decisions_or_completed_work(self):
         load_chat(self)
         from hub_chat.reader_brief import read
         with tempfile.TemporaryDirectory() as directory:
-            root=Path(directory); (root/'brief').mkdir()
-            file=root/'brief/2026-09-18.md'; file.write_text('Your draft is ready to review. https://example.org/draft')
+            root=Path(directory); (root/'brief').mkdir(); (root/'rules').mkdir(); (root/'work').mkdir()
+            file=root/'brief/2026-09-18.md'; file.write_text('You have five decisions. The finished draft still needs approval.')
+            card=root/'work/example.md'
+            card.write_text('ID: example\nSTATUS: blocked\nWHAT: Choose the cover\nDONE WHEN: Choose the blue or green cover.\nOWNER: person\nNEEDS: person\nLINK: https://example.org/cover\n\n## Log\n')
             import os
             from datetime import datetime,timezone
             now=datetime(2026,9,18,10,tzinfo=timezone.utc)
             os.utime(file,(now.timestamp(),now.timestamp()))
             result=read(root,'UTC',now)
-            self.assertEqual(result['messages'],[file.read_text()])
+            self.assertNotIn('five decisions',result['messages'][0])
+            self.assertIn('Choose the cover',result['messages'][0])
+            self.assertIn('https://example.org/cover',result['messages'][0])
+            self.assertEqual(result['item_ids'],['work:example'])
+            card.write_text(card.read_text().replace('STATUS: blocked','STATUS: verified'))
+            current=read(root,'UTC',now)
+            self.assertNotEqual(current['revision'],result['revision'])
+            self.assertEqual(current['item_ids'],[])
+            self.assertNotIn('Choose the cover',current['messages'][0])
+            self.assertIn('saved task records',current['messages'][0])
+            os.utime(file,(now.timestamp()-4*3600,now.timestamp()-4*3600))
+            with self.assertRaises(ValueError): read(root,'UTC',now)
+
+    def test_brief_file_must_be_readable_bounded_and_inside_a_recognized_hub(self):
+        load_chat(self)
+        from hub_chat.reader_brief import read
+        import os
+        from datetime import datetime,timezone
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory); (root/'brief').mkdir()
+            now=datetime(2026,9,18,10,tzinfo=timezone.utc)
+            file=root/'brief/2026-09-18.md'; file.write_text('Your draft is ready to review.')
+            os.utime(file,(now.timestamp(),now.timestamp()))
+            with self.assertRaisesRegex(ValueError,'recognized'): read(root,'UTC',now)
+            (root/'rules').mkdir()
+            self.assertIn('saved task records',read(root,'UTC',now)['messages'][0])
+            self.assertIn('gespeicherten Aufgaben',read(root,'UTC',now,language='de')['messages'][0])
             file.write_text('Open /home/example/hub/private.md')
             os.utime(file,(now.timestamp(),now.timestamp()))
             with self.assertRaises(ValueError): read(root,'UTC',now)
             file.write_text('x'*4000); os.utime(file,(now.timestamp(),now.timestamp()))
             with self.assertRaises(ValueError): read(root,'UTC',now)
+
+    def test_brief_never_claims_no_tasks_when_a_source_failed(self):
+        load_chat(self)
+        from hub_chat.reader_brief import read
+        from datetime import datetime,timezone
+        import os,subprocess
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory); (root/'brief').mkdir(); (root/'rules').mkdir()
+            now=datetime(2026,9,18,10,tzinfo=timezone.utc)
+            file=root/'brief/2026-09-18.md'; file.write_text('Everything is done.')
+            os.utime(file,(now.timestamp(),now.timestamp()))
+            real=subprocess.run
+            def only_the_task_records_fail(argv,**options):
+                if 'export' in argv: raise subprocess.CalledProcessError(1,'source')
+                return real(argv,**options)
+            with patch('hub_chat.reader_brief.subprocess.run',side_effect=only_the_task_records_fail):
+                with self.assertRaises(subprocess.CalledProcessError): read(root,'UTC',now)
