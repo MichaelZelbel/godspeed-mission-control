@@ -55,9 +55,9 @@ export KB_SELF_URL
 
 # The pin is an immutable TAG, never the moving v2 branch, so this installer runs
 # exactly the code that passed its end-to-end runs until this line is edited.
-KB_PIN="687a6f7d7a799017cb3b17fb79ce5c14f53da1ba"
-KB_TOOLS_REF="8ba2f4647dfd308b36cac410e141f5cef2244315"
-KIT_ENTRY_REF="00ee0c78fc51006e48f89abc0f88fd7b40e5966a"
+KB_PIN="e317893ce2d56efbde2f59f7eeff69d74e429a1e"
+KB_TOOLS_REF="e5e26ee540628764c6bfefe2d5cfaaa8deae0490"
+KIT_ENTRY_REF="a9e3c8429a79208ef4a6a5ff712d1d16c43942b3"
 export KB_TOOLS_REF
 LIB_URL="https://raw.githubusercontent.com/MichaelZelbel/kit-bootstrap/$KB_PIN/lib.sh"
 KIT_REPO="https://github.com/MichaelZelbel/teach-it-once-kit.git"
