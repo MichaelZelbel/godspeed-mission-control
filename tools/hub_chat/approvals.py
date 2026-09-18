@@ -14,8 +14,8 @@ class Approvals:
             raise ValueError('Action, actor and fingerprint are required')
         aid = action.get('request_id') or uuid.uuid4().hex
         with self.store.transaction() as db:
-            previous = db.execute('SELECT fingerprint,conversation FROM approvals WHERE id=?',(aid,)).fetchone()
-            if previous and (previous['fingerprint'] != action['fingerprint'] or previous['conversation'] != conversation_id):
+            previous = db.execute('SELECT fingerprint,conversation,actor FROM approvals WHERE id=?',(aid,)).fetchone()
+            if previous and (previous['fingerprint'] != action['fingerprint'] or previous['conversation'] != conversation_id or previous['actor'] != action['actor']):
                 raise ValueError('Approval identity conflict')
             db.execute('INSERT OR IGNORE INTO approvals(id,conversation,actor,fingerprint,body,expires_at,state) VALUES(?,?,?,?,?,?,?)',
                        (aid,conversation_id,action['actor'],action['fingerprint'],canonical(action),expires_at,'pending'))
@@ -65,7 +65,15 @@ class Approvals:
             db.execute("UPDATE approvals SET state='uncertain',result=? WHERE state IN ('approved','executing')", (canonical({'reason':'Execution outcome was not recorded before restart'}),))
 
     @staticmethod
-    def text(state):
+    def text(state,language='en'):
+        if language=='de':
+            return {'expired':'Diese Anfrage ist abgelaufen. Die Aktion wurde nicht ausgeführt. Es wartet nichts mehr auf deine Freigabe.',
+                    'cancelled':'Diese Anfrage wurde abgebrochen. Es wartet keine Freigabe mehr.',
+                    'denied':'Du hast diese Anfrage abgelehnt. Die Aktion wurde nicht ausgeführt.',
+                    'approved':'Du hast die Aktion freigegeben. Das Ergebnis ist noch nicht bestätigt.',
+                    'succeeded':'Die freigegebene Aktion wurde erfolgreich ausgeführt.',
+                    'failed':'Die freigegebene Aktion ist fehlgeschlagen.',
+                    'uncertain':'Ich kann nicht bestätigen, ob die Aktion abgeschlossen wurde. Ich wiederhole sie nicht automatisch.'}.get(state,'Diese Anfrage wartet auf deine Freigabe.')
         return {'expired':'This request expired. The action was not run. Nothing is waiting for your approval.',
                 'cancelled':'This request was cancelled. It is no longer waiting for your approval.',
                 'denied':'You declined this request. The action was not run.',

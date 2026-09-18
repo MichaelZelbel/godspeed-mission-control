@@ -11,7 +11,9 @@ def import_legacy(chat,path):
         return {'imported':0,'already_imported':True}
     # Validate the whole input before changing state.
     facts = [Fact.parse(dict(r,checked_at=r.get('checked_at') or utcnow())) for r in rows]
-    for fact in facts:
-        chat.store.put_fact(fact)
-    chat.store.audit(key,'Imported source identities; old send marks are unconfirmed')
+    with chat.store.transaction() as db:
+        for fact in facts:
+            chat.store.put_fact_in(db,fact)
+        db.execute('INSERT INTO audit(kind,detail,created_at) VALUES(?,?,?)',
+                   (key,'Imported source identities; old send marks are unconfirmed',utcnow()))
     return {'imported':len(facts),'delivery_receipts_created':0}

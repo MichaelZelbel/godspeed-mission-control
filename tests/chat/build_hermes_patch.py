@@ -42,6 +42,8 @@ def adapter(t):
                 '            request = _hub_chat.configure(self, request)\n            builder = builder.request(request).get_updates_request(get_updates_request)')
     t = replace(t,'            self._start_post_connect_housekeeping()\n            return True',
                 '            self._start_post_connect_housekeeping()\n            await _hub_chat.start(self)\n            return True')
+    t = replace(t,'        # Mark disconnected first so the drop guard short-circuits any flush that wins the race.',
+                '        await _hub_chat.stop(self)\n        # Mark disconnected first so the drop guard short-circuits any flush that wins the race.')
     anchor = '        def build():\n            # Short monotonic ids in callback_data map back to session_key.'
     t = replace(t,anchor,'        handled = await _hub_chat.approval_prompt(self, prompt)\n        if handled is not None:\n            return handled\n'+anchor)
     t = replace(t,'        parts = data.split(":", 2)\n        if len(parts) != 3:\n            return\n        choice = parts[1]  # once, session, always, deny',
@@ -49,6 +51,12 @@ def adapter(t):
     return t
 
 def runner(t):
+    t = replace(t,'                session_key=session_key, metadata=ctx._status_thread_metadata,',
+                '                session_key=session_key, metadata=__import__("_hub_chat_bridge").approval_metadata(ctx, {}),')
+    t = replace(t,'        combined = ctx.context_prompt or ""',
+                '        combined = ctx.context_prompt or ""\n        combined += "\\n\\n" + __import__("_hub_chat_bridge").result_instruction(ctx._status_adapter)')
+    t = replace(t,'        self._finish_stream_consumer(result, agent_history, stream_consumer)',
+                '        result = __import__("_hub_chat_bridge").guard_result(ctx, result, len(agent_history))\n        self._finish_stream_consumer(result, agent_history, stream_consumer)')
     t = replace(t,'        want_interim_messages = ctx.interim_assistant_messages_enabled',
                 '        want_interim_messages = ctx.interim_assistant_messages_enabled\n        import _hub_chat_bridge as _hub_chat\n        if _hub_chat.quiet_stream(ctx._status_adapter):\n            want_stream_deltas = want_interim_messages = False')
     t = replace(t,'                        description=desc, metadata=ctx._status_thread_metadata, **flags,',
@@ -83,6 +91,8 @@ else:
     def quiet_stream(adapter): return False
     def guard_decision(*args): return True
     def approval_metadata(ctx,data): return ctx._status_thread_metadata
+    def result_instruction(adapter): return ''
+    def guard_result(ctx,result,history_length): return result
     async def approval_prompt(*args): return None
     async def approval_callback(*args): return False
     async def start(*args): pass

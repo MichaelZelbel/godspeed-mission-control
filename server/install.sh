@@ -253,7 +253,7 @@ WHY
     # Its output is kept, not thrown away: when it stops, the reason is in the log
     # and the reader is told where, instead of being sent to run it again blind.
     HERMES_LOG="$AI_HOME/hermes-install.log"
-    su - "$AI_USER" -c 'curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash' > "$HERMES_LOG" 2>&1 \
+    su - "$AI_USER" -c 'curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash -s -- --commit db64ddb58eef6aebd0874bcdaad266ca8f6205a0' > "$HERMES_LOG" 2>&1 \
       || die "the Hermes installer did not finish for '$AI_USER'. Its output is in
    $HERMES_LOG; the last lines say why. Fix that, then run this one line again."
     chown "$AI_USER":"$AI_USER" "$HERMES_LOG" 2>/dev/null || true

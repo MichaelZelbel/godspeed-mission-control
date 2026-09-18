@@ -1,0 +1,29 @@
+name: Telegram conversation components
+on:
+  push:
+    branches: [codex/telegram-clarity]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  components:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+      - name: Exercise shared package and immutable installation
+        run: python -m unittest discover -s tests/chat -v
+      - name: Reader source regression tests
+        if: runner.os != 'Windows'
+        run: bash tools/test-work.sh
+# These component tests do not certify the executable or a complete reader setup.

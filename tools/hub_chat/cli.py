@@ -14,8 +14,12 @@ def main():
     sub = parser.add_subparsers(dest='command',required=True)
     doctor=sub.add_parser('doctor'); doctor.add_argument('--runtime',type=Path)
     queue=sub.add_parser('submit'); queue.add_argument('items',nargs='+')
+    report=sub.add_parser('submit-report'); report.add_argument('name'); report.add_argument('--revision',required=True)
+    critical=sub.add_parser('submit-critical'); critical.add_argument('item')
     sub.add_parser('preview')
     sub.add_parser('status')
+    sub.add_parser('rollback')
+    enable=sub.add_parser('enable-proactive'); enable.add_argument('--after-preview',action='store_true',required=True)
     migrate=sub.add_parser('migrate'); migrate.add_argument('file',type=Path)
     setup=sub.add_parser('configure')
     setup.add_argument('--runtime',type=Path,required=True)
@@ -23,8 +27,8 @@ def main():
     setup.add_argument('--conversation',required=True)
     setup.add_argument('--actor',required=True)
     setup.add_argument('--hub',type=Path,required=True)
-    setup.add_argument('--timezone',default='UTC')
-    setup.add_argument('--language',choices=('en','de'),default='en')
+    setup.add_argument('--timezone')
+    setup.add_argument('--language',choices=('en','de'))
     args=parser.parse_args()
     if args.command=='doctor':
         from .doctor import inspect
@@ -33,9 +37,26 @@ def main():
     if args.command=='submit':
         from .inbox import submit
         print(json.dumps(submit(args.profile/'chat-inbox',args.items))); return 0
+    if args.command=='submit-report':
+        from .inbox import submit_event
+        print(json.dumps(submit_event(args.profile/'chat-inbox',{'schema':1,'report':args.name,'revision':args.revision}))); return 0
+    if args.command=='submit-critical':
+        from .inbox import submit_event
+        print(json.dumps(submit_event(args.profile/'chat-inbox',{'schema':1,'critical_item':args.item}))); return 0
     if args.command=='configure':
         from .setup import configure
         print(json.dumps(configure(args),indent=2)); return 0
+    if args.command=='rollback':
+        from .rollback import rollback
+        print(json.dumps(rollback(args.profile),indent=2)); return 0
+    if args.command=='enable-proactive':
+        from .doctor import inspect
+        from .setup import atomic_json
+        report=inspect(args.profile)
+        if not report['healthy']: raise ValueError('Runtime checks must pass before enabling notifications')
+        file=args.profile/'hub-chat.json'; config=json.loads(file.read_text())
+        config['proactive_paused']=False; atomic_json(file,config)
+        print(json.dumps({'proactive_paused':False,'restart_required':True})); return 0
     config=json.loads((args.profile/'hub-chat.json').read_text(encoding='utf-8'))
     chat=Chat(args.profile/'chat-state',config['conversation_id'],config.get('timezone','UTC'),config.get('language','en'))
     try:

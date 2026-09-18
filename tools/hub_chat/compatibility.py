@@ -13,7 +13,13 @@ def inspect_runtime(root,manifest=None):
     root = Path(root)
     manifest = manifest or json.loads(manifest_path().read_text(encoding='utf-8'))
     problems = []
-    head = subprocess.run(['git','-C',str(root),'rev-parse','HEAD'],capture_output=True,text=True,check=True).stdout.strip()
+    marker=root/'.hub-chat-source.json'
+    if marker.exists():
+        from .recovery import verify
+        record=verify(root.parent)
+        head=record['revision']
+    else:
+        head = subprocess.run(['git','-C',str(root),'rev-parse','HEAD'],capture_output=True,text=True,check=True).stdout.strip()
     if head != manifest['hermes_commit']:
         problems.append('Hermes revision is not the tested revision')
     for name,hashes in manifest['files'].items():

@@ -145,7 +145,7 @@ say "Installing Hermes"
 if command -v hermes >/dev/null 2>&1; then
   ok "already installed: $(hermes --version 2>&1 | head -1)"
 else
-  curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash \
+  curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash -s -- --commit db64ddb58eef6aebd0874bcdaad266ca8f6205a0 \
     || die "the installer did not finish. Read what it printed above; it is
    usually a missing build tool, and it names the one it wants."
 fi

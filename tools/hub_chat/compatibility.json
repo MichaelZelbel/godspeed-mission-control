@@ -9,11 +9,11 @@
     },
     "plugins/platforms/telegram/adapter.py": {
       "original": "ce4b5ca688bb94691012b6a62b1767b349c94851e9ec9bcd7aa56d32fe3e3506",
-      "patched": "eafc744c413a22812dea413e017a28d886e8b440d5d8d9d38664d167b298000a"
+      "patched": "b8b43ad03fdf1ccd986e0b6a1f0e81b3e7a6a572231296b04c13be4544402910"
     },
     "gateway/run_turn_runner.py": {
       "original": "b87d6072f2cc13634398d380eb0857d550f75502a8ace137138cf16e00d9a763",
-      "patched": "6a4c425ffd07e857111df9f7526b4ddfc74c6a56885a0eea9cbea62ed30364fe"
+      "patched": "f1511361253860143a310dab1a59ae7659a4ca0168e337ef7fc439397e6c2f88"
     },
     "tools/approval.py": {
       "original": "430d08bd6dd1a685d228f792377b946bcd97bcc710e74a40e86e8b9b8ac721fc",
@@ -21,7 +21,7 @@
     },
     "_hub_chat_bridge.py": {
       "original": null,
-      "patched": "ba75c4a23d226fd9dc0cd09fc339756cc3b49f52f5455b728e0be3ad4dd76d52"
+      "patched": "cb7863382b9aa323e2eda3eb7a83d7b5d52b9d18445cb1def93a8a44fd1294f6"
     }
   }
 }

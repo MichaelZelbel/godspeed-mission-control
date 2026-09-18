@@ -6,3 +6,5 @@
 * text=auto eol=lf
 *.sh text eol=lf
 *.md text eol=lf
+# Unified diff context lines contain a required leading space.
+integrations/hermes/patches/*.patch -whitespace

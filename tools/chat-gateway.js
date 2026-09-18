@@ -2,6 +2,15 @@
 'use strict';
 // Setup only on the machine that owns a Hermes Telegram profile. Never start a bot here.
 const fs=require('fs'),path=require('path'),os=require('os'),cp=require('child_process');
+function remoteConnections(home) {
+  const directory=process.platform==='win32'?path.join(home,'AppData/Roaming/Hermes'):
+    process.platform==='darwin'?path.join(home,'Library/Application Support/Hermes'):path.join(home,'.config/Hermes');
+  try {
+    const saved=JSON.parse(fs.readFileSync(path.join(directory,'connections.json'),'utf8'));
+    if(saved.version!==1||!Array.isArray(saved.connections)) throw new Error('Unsupported desktop connection format');
+    return saved.connections.filter(c=>c.kind!=='local'&&typeof c.host==='string').map(c=>({kind:c.kind,label:c.label||'Remote assistant'}));
+  } catch(e) { if(e.code==='ENOENT')return []; throw e; }
+}
 function discover(home, env=process.env) {
   const candidates=[env.HUB_CHAT_PYTHON];
   for(const launcher of [env.KB_HERMES_BIN,path.join(home,'.local/bin/hermes')].filter(Boolean)) {
@@ -16,7 +25,12 @@ function discover(home, env=process.env) {
 function setup(hub, home=os.homedir()) {
   const profile=process.env.HERMES_HOME||path.join(home,'.hermes');
   const envFile=path.join(profile,'.env');
-  if(!fs.existsSync(envFile)) return {state:'desktop_only',reason:'No local Telegram profile'};
+  if(!fs.existsSync(envFile)) {
+    const connections=remoteConnections(home);
+    if(connections.length) return {state:'remote_update_pending',connections,
+      reason:'Your assistant runs on another machine. Desktop tools were installed, but Telegram protection still needs installation and verification on that server.'};
+    return {state:'desktop_only',reason:'No local Telegram profile'};
+  }
   const vars={};
   for(const line of fs.readFileSync(envFile,'utf8').split(/\r?\n/)){
     const m=line.match(/^\s*(?:export\s+)?(TELEGRAM_HOME_CHANNEL|TELEGRAM_ALLOWED_USERS)=(.*?)\s*$/);
@@ -37,8 +51,16 @@ function setup(hub, home=os.homedir()) {
     '--conversation',owners[0],'--actor',owners[0],'--hub',hub];
   const configured=cp.spawnSync(python,args,{encoding:'utf8',env:{...process.env,PYTHONPATH:path.join(bundle.path,'tools')}});
   if(configured.status!==0) throw new Error((configured.stderr||'Gateway setup failed').trim());
+  const configuration=JSON.parse(configured.stdout);
+  if(configuration.state==='disabled_by_user')return configuration;
+  const preview=cp.spawnSync(python,['-m','hub_chat.cli','--profile',profile,'preview'],{encoding:'utf8',env:{...process.env,PYTHONPATH:path.join(bundle.path,'tools')}});
+  if(preview.status!==0) throw new Error('Current reminder sources could not be previewed. Notifications remain paused.');
+  const enabled=cp.spawnSync(python,['-m','hub_chat.cli','--profile',profile,'enable-proactive','--after-preview'],{encoding:'utf8',env:{...process.env,PYTHONPATH:path.join(bundle.path,'tools')}});
+  if(enabled.status!==0) throw new Error('Conversation checks did not pass. Notifications remain paused.');
   fs.writeFileSync(path.join(chatRoot,'runtime.json'),JSON.stringify({python,runtime:root,profile}),{mode:0o600});
-  return JSON.parse(configured.stdout);
+  return configuration;
 }
-module.exports={discover,setup};
-if(require.main===module){try{console.log(JSON.stringify(setup(process.argv[2])));}catch(e){console.error(e.message);process.exitCode=1;}}
+module.exports={discover,setup,remoteConnections};
+if(require.main===module){try{const result=setup(process.argv[2]); console.log(JSON.stringify(result));
+  if(result.state==='remote_update_pending')process.exitCode=2;
+}catch(e){console.error(e.message);process.exitCode=1;}}

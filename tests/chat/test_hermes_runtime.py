@@ -2,6 +2,7 @@
 import asyncio
 import importlib.util
 import json
+import re
 import tempfile
 from types import SimpleNamespace as NS
 import unittest
@@ -33,8 +34,11 @@ class HermesRuntime(unittest.IsolatedAsyncioTestCase):
                 elif operation=='answerCallbackQuery': result=True
                 else:
                     self.calls.append((operation,payload))
+                    visible=payload.get('text','')
+                    if payload.get('parse_mode')=='MarkdownV2':
+                        visible=re.sub(r'\\([_*\[\]()~`>#+=|{}.!-])',r'\1',visible)
                     result={'message_id':payload.get('message_id',len(self.calls)),'date':1789710000,
-                            'chat':{'id':100,'type':'private'},'text':payload.get('text','')}
+                            'chat':{'id':100,'type':'private'},'text':visible}
                 return 200,json.dumps({'ok':True,'result':result}).encode()
         self.tmp=tempfile.TemporaryDirectory(); self.addCleanup(self.tmp.cleanup)
         self.chat=Chat(self.tmp.name,'100'); self.addCleanup(self.chat.close)
@@ -64,6 +68,48 @@ class HermesRuntime(unittest.IsolatedAsyncioTestCase):
         for call in (lambda:self.bot.send_message(100,'restart notice'),lambda:self.bot.edit_message_text('review',chat_id=100,message_id=1)):
             with self.assertRaises(Forbidden): await call()
         self.assertEqual(self.transport.calls,[])
+
+    async def test_turn_error_does_not_expose_internal_details(self):
+        with self.boundary.turn(self.event):
+            await self.adapter._notify_turn_error(self.event,RuntimeError('internal worker path and execution trace'))
+        self.assertEqual(len(self.transport.calls),1)
+        self.assertEqual(self.chat.store.rows("SELECT exact_text FROM deliveries WHERE state='sent'")[0]['exact_text'],
+                         'I could not finish this request. Please try again.')
+
+    async def test_incident_replay_through_actual_adapter_after_restart(self):
+        from pathlib import Path
+        from helpers import fixture
+        from hub_chat.contracts import utcnow
+        from hub_chat.inbox import deliver
+        from hub_chat.app import Chat
+        from hub_chat.runtime import Boundary
+        from hub_chat.telegram_request import GuardedRequest
+        from telegram import Bot
+        data=fixture('september-18.json')
+        self.boundary.config={'proactive_paused':False}
+        def source(ids,now):
+            return [dict(row,source='fixture',checked_at=now) for row in data['items'] if row['item_id'] in ids]
+        self.chat.sources.register('fixture',source)
+        facts=self.chat.sources.refresh([x['item_id'] for x in data['items']],utcnow())
+        draft=self.chat.compose(facts,utcnow())
+        self.chat.delivery.submit(draft)
+        receipt=await deliver(self.boundary,draft.delivery_key)
+        self.assertEqual(receipt.state,'sent')
+        self.assertEqual(len(self.transport.calls),1)
+        self.assertNotIn('five decisions',self.transport.calls[0][1]['text'].lower())
+        # Reopen the on-disk state and change the primary fact before the reply.
+        for row in data['items']:
+            if row['item_id']=='name-choice': row.update(status='done',revision='finished')
+        reopened=Chat(self.tmp.name,'100'); self.addCleanup(reopened.close)
+        reopened.sources.register('fixture',source)
+        context=reopened.context.resolve('100',receipt.message_id,'Are these still open?',utcnow())
+        self.assertEqual({f.item_id:f.status for f in context.facts},{'name-choice':'done','report':'open'})
+        self.assertEqual(context.messages[0].text,self.transport.calls[0][1]['text'])
+        with self.boundary.turn(self.event):
+            await self.adapter.send('100','Internal review results')
+            final=await self.adapter.send('100','The name has been chosen. The report is still available to read; it needs no decision.',metadata={'notify':True})
+        self.assertTrue(final.success)
+        self.assertEqual(len(self.transport.calls),2)
 
     async def test_button_resolves_its_request_and_expiry_edits_original(self):
         from tools import approval

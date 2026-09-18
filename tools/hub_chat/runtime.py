@@ -39,6 +39,24 @@ class Boundary:
     def native(self, event):
         return getattr(event,'_hub_chat_origin',None) is self._identity
 
+    def reconcile_reply(self,message,bot_id):
+        """A native Telegram reply can prove one otherwise uncertain plain-text send."""
+        if not message or str(getattr(getattr(message,'from_user',None),'id',''))!=str(bot_id): return False
+        if str(getattr(getattr(message,'chat',None),'id',''))!=self.chat.conversation_id: return False
+        text=getattr(message,'text',None)
+        if not text: return False
+        rows=self.chat.store.rows("SELECT key FROM deliveries WHERE conversation=? AND state='uncertain'",(self.chat.conversation_id,))
+        from datetime import timedelta
+        from .contracts import timestamp
+        matches=[r['key'] for r in rows if self.chat.delivery.draft(r['key']).text==text and
+                 message.date>=timestamp(self.chat.delivery.get(r['key'])['created_at'])-timedelta(seconds=5)]
+        if len(matches)!=1: return False
+        from .contracts import Receipt
+        key=matches[0]
+        self.chat.delivery.acknowledge(Receipt(key,'sent',str(message.message_id),message.date.isoformat()),text)
+        self.chat.store.audit('delivery_reconciled','Authenticated reply identified an uncertain message')
+        return True
+
     @contextmanager
     def turn(self, event):
         turn = Turn(self.chat.conversation_id,self.actor,str(event.message_id)) if self.native(event) else None
@@ -61,10 +79,18 @@ class Boundary:
         finally:
             self._output.reset(token)
 
+    @contextmanager
+    def inherit_turn(self,turn):
+        if not turn or not turn.live or self.active.get(turn.message_id) is not turn:
+            turn=None
+        token=self._turn.set(turn)
+        try: yield
+        finally: self._turn.reset(token)
+
     def allowed(self, method, payload):
         method = method.lower()
         visible = method.startswith(('send','editmessage','copymessage','forwardmessage'))
-        if method == 'sendchataction':
+        if method in ('sendchataction','setmessagereaction'):
             return False
         if not visible:
             return True
@@ -79,7 +105,7 @@ class Boundary:
         turn = self._turn.get()
         if kind in ('reply','question','requested_result'):
             return bool(turn and turn.live and turn.conversation == self.chat.conversation_id)
-        if kind == 'digest' and key:
+        if kind in ('digest','critical_failure') and key:
             try:
                 row = self.chat.delivery.get(key)
                 return row['state'] == 'sending' and row['conversation'] == self.chat.conversation_id
@@ -109,6 +135,6 @@ class Boundary:
             self.chat.delivery.submit(draft)
             self.chat.delivery.claim(part_key)
             self.chat.delivery.acknowledge(Receipt(part_key,'sent',mid,utcnow()),text)
-            if key and kind == 'digest':
+            if key and kind in ('digest','critical_failure'):
                 with self.chat.store.transaction() as db:
                     db.execute('INSERT OR IGNORE INTO message_parts VALUES(?,?,?,?)',(key,self.chat.conversation_id,mid,text))

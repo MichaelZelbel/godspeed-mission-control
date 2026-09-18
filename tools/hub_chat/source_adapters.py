@@ -28,6 +28,8 @@ def discover(config):
     for source in config.get('sources',[]):
         result = subprocess.run(source['argv'],cwd=source.get('cwd'),capture_output=True,text=True,
                                 encoding='utf-8',timeout=15,check=True)
+        if len(result.stdout)>2_000_000: raise ValueError('Source response is too large')
         rows = json.loads(result.stdout)
+        if not isinstance(rows,list): raise ValueError('Source must return a list')
         ids.extend(r['item_id'] for r in rows)
     return list(dict.fromkeys(ids))

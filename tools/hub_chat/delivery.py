@@ -40,6 +40,8 @@ class Delivery:
             return db.execute("UPDATE deliveries SET state='sending' WHERE key=? AND state='queued'", (key,)).rowcount == 1
 
     def state(self, key, state, detail=''):
+        if state not in ('failed','uncertain','suppressed'):
+            raise ValueError('Delivery success requires a confirmed receipt')
         with self.store.transaction() as db:
             db.execute('UPDATE deliveries SET state=?,detail=? WHERE key=? AND state != ?', (state, detail, key, 'sent'))
         return self.receipt(key)

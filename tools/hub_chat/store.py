@@ -72,16 +72,19 @@ class Store:
 
     def put_fact(self, fact, reopens_revision=None):
         with self.transaction() as db:
-            previous = db.execute('SELECT * FROM items WHERE id=?', (fact.item_id,)).fetchone()
-            if previous:
-                if previous['source'] != fact.source:
-                    raise ValueError('A source cannot replace another source\'s item')
-                if fact.status == 'unknown' or timestamp(previous['checked_at']) > timestamp(fact.checked_at):
-                    return
-                if previous['status'] == 'done' and fact.status == 'open' and reopens_revision != previous['revision']:
-                    return
-            db.execute('INSERT OR REPLACE INTO items VALUES(?,?,?,?,?,?)',
-                       (fact.item_id, fact.source, fact.revision, fact.status, fact.checked_at, canonical(asdict(fact))))
+            self.put_fact_in(db,fact,reopens_revision)
+
+    def put_fact_in(self,db,fact,reopens_revision=None):
+        previous = db.execute('SELECT * FROM items WHERE id=?', (fact.item_id,)).fetchone()
+        if previous:
+            if previous['source'] != fact.source:
+                raise ValueError('A source cannot replace another source\'s item')
+            if fact.status == 'unknown' or timestamp(previous['checked_at']) > timestamp(fact.checked_at):
+                return
+            if previous['status'] == 'done' and fact.status == 'open' and reopens_revision != previous['revision']:
+                return
+        db.execute('INSERT OR REPLACE INTO items VALUES(?,?,?,?,?,?)',
+                   (fact.item_id, fact.source, fact.revision, fact.status, fact.checked_at, canonical(asdict(fact))))
 
     def shown_ids(self):
         return [r['item_id'] for r in self.rows("SELECT DISTINCT item_id FROM delivery_items JOIN deliveries ON delivery_key=key WHERE state='sent'")]

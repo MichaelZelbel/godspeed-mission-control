@@ -4,3 +4,4 @@
 # there reads this list and installs the same files.
 next-action
 work-item
+clear-conversation

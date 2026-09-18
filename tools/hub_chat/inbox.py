@@ -12,12 +12,16 @@ from . import policy
 def submit(directory,item_ids):
     if not item_ids or len(item_ids)>100 or not all(isinstance(i,str) and 0<len(i)<200 for i in item_ids):
         raise ValueError('Submit between one and 100 source item identities')
+    return submit_event(directory,{'schema':1,'item_ids':item_ids})
+
+
+def submit_event(directory,event):
     root = Path(directory)
     root.mkdir(parents=True,exist_ok=True,mode=0o2770)
     name = uuid.uuid4().hex
     temporary = root/(name+'.tmp')
     with temporary.open('x',encoding='utf-8') as handle:
-        handle.write(canonical({'schema':1,'item_ids':item_ids}))
+        handle.write(canonical(event))
         handle.flush()
         os.fsync(handle.fileno())
     if os.name != 'nt':
@@ -36,23 +40,51 @@ def import_pending(boundary):
             if path.is_symlink() or path.stat().st_size>32768:
                 raise ValueError('Invalid submission file')
             event = json.loads(path.read_text(encoding='utf-8'))
-            if set(event) != {'schema','item_ids'} or event['schema'] != 1:
+            if event.get('schema') != 1:
                 raise ValueError('Unknown submission format')
-            ids = event['item_ids']
-            if not isinstance(ids,list) or len(ids)>100 or not all(isinstance(i,str) and len(i)<200 for i in ids):
-                raise ValueError('Invalid source identities')
             now = utcnow()
-            facts = boundary.chat.sources.refresh(ids,now)
-            draft = boundary.chat.compose(facts,now)
-            if draft:
+            if set(event)=={'schema','critical_item'}:
+                facts=boundary.chat.sources.refresh([event['critical_item']],now)
+                if len(facts)!=1 or facts[0].kind!='failure' or facts[0].source not in boundary.config.get('critical_sources',[]):
+                    raise ValueError('Critical event lacks a registered failure source')
+                draft=boundary.chat.compose(facts,now,purpose='critical_failure')
+                drafts,parse_mode=[draft] if draft else [],None
+            elif set(event)=={'schema','report','revision'}:
+                from .reports import read_report
+                drafts,parse_mode=read_report(boundary,event['report'],event['revision'],now)
+            elif set(event)=={'schema','item_ids'}:
+                ids = event['item_ids']
+                if not isinstance(ids,list) or len(ids)>100 or not all(isinstance(i,str) and len(i)<200 for i in ids):
+                    raise ValueError('Invalid source identities')
+                facts = boundary.chat.sources.refresh(ids,now)
+                draft = boundary.chat.compose(facts,now)
+                drafts,parse_mode=[draft] if draft else [],None
+            else:
+                raise ValueError('Untrusted submission fields')
+            for draft in drafts:
                 boundary.chat.delivery.submit(draft)
+                if parse_mode:
+                    with boundary.chat.store.transaction() as db:
+                        db.execute('UPDATE deliveries SET detail=? WHERE key=? AND state=?',(canonical({'parse_mode':parse_mode}),draft.delivery_key,'queued'))
+            accepted={'keys':[d.delivery_key for d in drafts],'state':'queued' if drafts else 'suppressed'}
         except Exception as exc:
             boundary.chat.store.audit('inbox_rejected',type(exc).__name__)
+            accepted={'keys':[],'state':'rejected','reason':type(exc).__name__}
+        (archive/(path.stem+'.accepted')).write_text(canonical(accepted),encoding='utf-8')
         path.replace(archive/path.name)
 
 
 async def deliver(boundary,key):
     chat = boundary.chat
+    if boundary.config.get('proactive_paused'):
+        return chat.delivery.receipt(key)
+    if key.startswith('report:'):
+        prefix,part=key.rsplit(':',1)
+        for earlier in range(int(part)):
+            state=chat.delivery.receipt(prefix+':'+str(earlier)).state
+            if state in ('failed','uncertain','suppressed'):
+                return chat.delivery.state(key,'suppressed','An earlier report part was not confirmed')
+            if state!='sent': return chat.delivery.receipt(key)
     if not chat.delivery.claim(key):
         return chat.delivery.receipt(key)
     draft = chat.delivery.draft(key)
@@ -62,18 +94,32 @@ async def deliver(boundary,key):
         return chat.delivery.state(key,'suppressed','; '.join(errors))
     from zoneinfo import ZoneInfo
     date = datetime.now(ZoneInfo(chat.timezone)).date()
-    sent = chat.store.rows("SELECT coalesce(sent_at,created_at) AS time FROM deliveries WHERE class='digest' AND state IN ('sent','uncertain') AND key NOT LIKE 'telegram:%'")
-    if any(datetime.fromisoformat(row['time'].replace('Z','+00:00')).astimezone(ZoneInfo(chat.timezone)).date()==date for row in sent):
+    sent = chat.store.rows("SELECT coalesce(sent_at,created_at) AS time FROM deliveries WHERE class='digest' AND state IN ('sent','uncertain') AND key NOT LIKE 'telegram:%' AND key NOT LIKE 'report:%'")
+    if draft.output_class=='digest' and not key.startswith('report:') and any(datetime.fromisoformat(row['time'].replace('Z','+00:00')).astimezone(ZoneInfo(chat.timezone)).date()==date for row in sent):
         return chat.delivery.state(key,'suppressed','Digest already sent or uncertain today')
     try:
-        with boundary.output('digest',key):
+        with boundary.output(draft.output_class,key):
             # Plain text is deliberately retained verbatim, with links intact.
             # A single digest is bounded to Telegram's safe text size at composition.
-            result = await boundary.adapter._bot.send_message(chat_id=draft.conversation_id,text=draft.text)
+            detail=chat.delivery.get(key)['detail']
+            meta=json.loads(detail) if detail.startswith('{') else {}
+            result = await boundary.adapter._bot.send_message(chat_id=draft.conversation_id,text=draft.text,parse_mode=meta.get('parse_mode'))
         chat.delivery.acknowledge(Receipt(key,'sent',str(result.message_id),utcnow()),draft.text)
     except Exception as exc:
         chat.delivery.state(key,'uncertain',type(exc).__name__)
     return chat.delivery.receipt(key)
+
+
+def write_receipts(boundary):
+    outbox=boundary.profile/'chat-outbox'; outbox.mkdir(exist_ok=True,mode=0o2770)
+    for accepted in (boundary.profile/'chat-inbox/processed').glob('*.accepted'):
+        data=json.loads(accepted.read_text(encoding='utf-8'))
+        rows=[boundary.chat.delivery.get(key) for key in data['keys']]
+        states={r['state'] for r in rows}
+        state=('sent' if states=={'sent'} else 'uncertain' if 'uncertain' in states else 'queued' if states & {'queued','sending'} else 'suppressed') if rows else data['state']
+        receipt={'state':state,'parts':[{'state':r['state'],'message_id':r['message_id'],'sent_at':r['sent_at']} for r in rows]}
+        dest=outbox/(accepted.stem+'.json'); temp=dest.with_suffix('.tmp')
+        temp.write_text(canonical(receipt),encoding='utf-8'); temp.replace(dest)
 
 
 async def pump(boundary):
@@ -83,6 +129,7 @@ async def pump(boundary):
             await asyncio.to_thread(import_pending,boundary)
             for row in boundary.chat.store.rows("SELECT key FROM deliveries WHERE state='queued' ORDER BY created_at LIMIT 10"):
                 await deliver(boundary,row['key'])
+            await asyncio.to_thread(write_receipts,boundary)
             for row in boundary.chat.store.rows("SELECT * FROM approvals WHERE state!='pending' AND message_id IS NOT NULL"):
                 if json.loads(row['result']).get('presented_state') != row['state']:
                     await edit_approval(boundary,row['id'])

@@ -20,10 +20,12 @@ class Sources:
             try:
                 rows = adapter(relevant, now)
                 validated = []
+                seen=set()
                 for row in rows:
                     fact = Fact.parse(row)
-                    if fact.item_id not in wanted or fact.source != name or fact.item_id in found:
+                    if fact.item_id not in wanted or fact.source != name or fact.item_id in found or fact.item_id in seen:
                         raise ValueError('Source returned an unexpected item')
+                    seen.add(fact.item_id)
                     validated.append((fact, row.get('reopens_revision')))
                 for fact, reopened in validated:
                     self.store.put_fact(fact, reopened)

@@ -86,7 +86,15 @@
              return True
          except Exception as e:
              self._release_platform_lock()
-@@ -3373,6 +3378,7 @@
+@@ -3160,6 +3165,7 @@
+ 
+     async def disconnect(self) -> None:
+         """Stop polling/webhook, cancel pending delayed deliveries, and disconnect."""
++        await _hub_chat.stop(self)
+         # Mark disconnected first so the drop guard short-circuits any flush that wins the race.
+         self._mark_disconnected()
+         self._polling_teardown_started = True
+@@ -3373,6 +3379,7 @@
          with contextlib.suppress(Exception):
              await self.send_typing(chat_id, metadata=metadata)
  
@@ -94,7 +102,7 @@
      async def send(
          self, chat_id: str, content: str, reply_to: Optional[str] = None, metadata: Optional[Dict[str, Any]] = None) -> SendResult:
          """Send a message to a Telegram chat."""
-@@ -3793,6 +3799,7 @@
+@@ -3793,6 +3800,7 @@
              chat_id, thread_id, metadata, reply_to_message_id=reply_to_id, reply_to_mode=reply_to_mode))
          return await self._send_message_with_thread_fallback(**kwargs)
  
@@ -102,7 +110,7 @@
      async def _send_prompt(self, what: str, chat_id: str, metadata: Optional[Dict[str, Any]], build, *,
                             parse_mode: Any = None, thread_id: Any = None, reply_to_mode: Any = None) -> SendResult:
          """Shared control-prompt shell: not-connected guard, ``build()`` → ``(text, keyboard, on_sent)`` (or a
-@@ -3847,6 +3854,9 @@
+@@ -3847,6 +3855,9 @@
      async def _send_exec_approval_prompt(self, prompt: ExecApprovalPrompt) -> SendResult:
          """Inline-keyboard approval prompt; buttons call ``resolve_gateway_approval()`` like the
          text ``/approve`` flow."""
@@ -112,7 +120,7 @@
          def build():
              # Short monotonic ids in callback_data map back to session_key.
              import itertools
-@@ -4316,6 +4326,8 @@
+@@ -4316,6 +4327,8 @@
  
      async def _handle_exec_approval_callback(self, query, data: str, cb: Dict[str, Any]) -> None:
          """``ea:<choice>:<approval_id>`` — resolve a pending exec approval."""
@@ -121,7 +129,7 @@
          parts = data.split(":", 2)
          if len(parts) != 3:
              return
-@@ -6499,6 +6511,7 @@
+@@ -6499,6 +6512,7 @@
                  reply_to_text = None
          return reply_to_id, reply_to_text
  
@@ -141,6 +149,15 @@
          if want_stream_deltas or want_interim_messages:
              try:
                  from gateway.stream_consumer import GatewayStreamConsumer
+@@ -1321,7 +1324,7 @@
+         fut = self._schedule(
+             ctx._status_adapter.send_clarify(
+                 chat_id=ctx._status_chat_id, question=question, choices=choices, clarify_id=clarify_id,
+-                session_key=session_key, metadata=ctx._status_thread_metadata,
++                session_key=session_key, metadata=__import__("_hub_chat_bridge").approval_metadata(ctx, {}),
+             ),
+             "Clarify send failed to schedule",
+         )
 @@ -1369,7 +1372,7 @@
                  fut = self._schedule(
                      adapter.send_exec_approval(
@@ -150,6 +167,22 @@
                      ),
                      "send_exec_approval scheduling error",
                  )
+@@ -1712,6 +1715,7 @@
+         ephemeral) + the gateway ephemeral prompt."""
+         ctx = self._ctx
+         combined = ctx.context_prompt or ""
++        combined += "\n\n" + __import__("_hub_chat_bridge").result_instruction(ctx._status_adapter)
+         for extra in (
+             (ctx.channel_prompt or "").strip(),
+             self._runner._get_system_prompt_for_channel(
+@@ -1799,6 +1803,7 @@
+         agent_history, observed_group_context, history_media_paths = self._load_turn_history(agent, reused_cached_agent)
+         persist_msg, persist_ts = self._prepare_turn_message(agent_history)
+         result = self._run_conversation_with_approval(agent, agent_history, observed_group_context, persist_msg, persist_ts)
++        result = __import__("_hub_chat_bridge").guard_result(ctx, result, len(agent_history))
+         self._finish_stream_consumer(result, agent_history, stream_consumer)
+         # The streaming-TTS consumer's finish() runs on the outer loop thread after the executor
+         # returns, so early run_sync returns are also finalised.
 --- a/tools/approval.py
 +++ b/tools/approval.py
 @@ -154,11 +154,20 @@
@@ -177,7 +210,7 @@
              _gateway_queues.pop(session_key, None)
 --- /dev/null
 +++ b/_hub_chat_bridge.py
-@@ -0,0 +1,20 @@
+@@ -0,0 +1,22 @@
 +"""Versioned optional integration. No private hub behavior lives here."""
 +import importlib.util
 +if importlib.util.find_spec('hub_chat'):
@@ -194,6 +227,8 @@
 +    def quiet_stream(adapter): return False
 +    def guard_decision(*args): return True
 +    def approval_metadata(ctx,data): return ctx._status_thread_metadata
++    def result_instruction(adapter): return ''
++    def guard_result(ctx,result,history_length): return result
 +    async def approval_prompt(*args): return None
 +    async def approval_callback(*args): return False
 +    async def start(*args): pass
