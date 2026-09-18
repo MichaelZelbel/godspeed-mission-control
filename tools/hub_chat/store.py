@@ -47,6 +47,9 @@ class Store:
         CREATE TABLE IF NOT EXISTS message_parts(delivery_key TEXT NOT NULL REFERENCES deliveries(key),
           conversation TEXT NOT NULL, message_id TEXT NOT NULL, text TEXT NOT NULL,
           PRIMARY KEY(conversation,message_id));
+        CREATE TABLE IF NOT EXISTS requested_results(key TEXT PRIMARY KEY,source TEXT NOT NULL,
+          external_id TEXT NOT NULL,revision TEXT NOT NULL,body TEXT NOT NULL,state TEXT NOT NULL,
+          delivery_key TEXT NOT NULL,created_at TEXT NOT NULL);
         ''')
         if self.db.execute('SELECT max(version) FROM schema_versions').fetchone()[0] != 1:
             raise ValueError('Unsupported communication schema; preserve the database and use the matching package')

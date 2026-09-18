@@ -63,6 +63,28 @@ class HermesRuntime(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(rows),1)
         self.assertEqual(rows[0]['message_id'],result.message_id)
 
+    async def test_requested_review_uses_the_existing_session_without_speaking_as_user(self):
+        from hub_chat.requested import gateway_review
+        from hub_chat.hermes_bridge import guard_result
+        answer=json.dumps({'outcome':'declined','summary':'No table is available.',
+                           'evidence':[{'turn':0,'quote':'No, fully booked.'}]})
+        async def handler(event):
+            self.assertTrue(event.internal)
+            self.assertFalse(event.allow_gateway_control)
+            self.assertFalse(self.boundary.native(event))
+            with self.boundary.output('reply'):
+                self.assertFalse(self.boundary.allowed('sendMessage',{'chat_id':'100'}))
+            result=guard_result(NS(_status_adapter=self.adapter),{'final_response':answer},0)
+            self.assertEqual(result['final_response'],'')
+            return result['final_response']
+        self.adapter.set_message_handler(handler)
+        record={'subject':'Table request','transcript':[{'role':'user','message':'No, fully booked.'}]}
+        with self.boundary.review('phone:example'):
+            result=await gateway_review(self.boundary,record)
+        self.assertEqual(result,answer)
+        self.assertEqual(self.transport.calls,[])
+        self.assertEqual(self.adapter._active_sessions,{})
+
     async def test_native_sdk_send_and_edit_cannot_bypass_adapter(self):
         from telegram.error import Forbidden
         for call in (lambda:self.bot.send_message(100,'restart notice'),lambda:self.bot.edit_message_text('review',chat_id=100,message_id=1)):

@@ -7,6 +7,39 @@ from helpers import load_chat
 
 
 class Scheduled(unittest.TestCase):
+    def test_existing_custom_telegram_report_requires_migration_before_enable(self):
+        load_chat(self)
+        from hub_chat.scheduled import register_reports
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory); (root/'cron').mkdir()
+            jobs=root/'cron/jobs.json'
+            jobs.write_text(json.dumps({'jobs':[{'id':'custom','name':'Requested weekly report','deliver':'telegram','workdir':directory}]}))
+            before=jobs.read_bytes()
+            with self.assertRaisesRegex(ValueError,'Requested weekly report'):
+                register_reports({},root,root,root)
+            self.assertEqual(jobs.read_bytes(),before)
+            config={'scheduled_reports':{'custom':{'name':'weekly','workdir':directory}},'reports':{'weekly':{'argv':['trusted-source']}}}
+            register_reports(config,root,root,root)
+
+    def test_failed_requested_report_has_one_clear_current_failure_fact(self):
+        load_chat(self)
+        from hub_chat.scheduled import failure_facts
+        from datetime import datetime,timezone
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory); (root/'cron').mkdir()
+            (root/'hub-chat.json').write_text(json.dumps({'language':'en','scheduled_reports':{'brief1':{'name':'morning-brief'}}}))
+            job={'id':'brief1','last_status':'error','last_run_at':'2026-09-18T10:00:00Z','last_error':'private internal traceback'}
+            file=root/'cron/jobs.json'; file.write_text(json.dumps({'jobs':[job]}))
+            now=datetime(2026,9,18,10,1,tzinfo=timezone.utc)
+            first=failure_facts(root,now)
+            self.assertEqual(len(first),1)
+            self.assertNotIn('traceback',json.dumps(first))
+            self.assertEqual(first[0]['status'],'open')
+            job['last_run_at']='2026-09-18T10:00:30Z'; file.write_text(json.dumps({'jobs':[job]}))
+            self.assertEqual(failure_facts(root,now)[0]['revision'],first[0]['revision'])
+            job['last_status']='ok'; file.write_text(json.dumps({'jobs':[job]}))
+            self.assertEqual(failure_facts(root,now)[0]['status'],'done')
+
     def test_known_brief_is_registered_without_editing_a_schedule(self):
         load_chat(self)
         from hub_chat.scheduled import register_reports

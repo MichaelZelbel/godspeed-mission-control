@@ -120,6 +120,26 @@ use a separately configured emergency destination for that case.
 
 ## Release blockers
 
+Requested background results can use a configured `request_sources` reader. It
+exports an authorized job identity, immutable revision, requested details and the
+completed transcript. The existing gateway reviews that transcript in its normal
+session, with no user-message or approval authority, then queues one durable reply.
+Definite outcomes require exact counterpart quotes. Provider completion is never
+treated as confirmation. Semantic interpretation still requires acceptance testing;
+quote matching alone cannot prove that every requested detail was satisfied.
+An unavailable reviewer produces a plain uncertainty message with the evidence link.
+The gateway's receipt file distinguishes confirmed and uncertain delivery.
+
+Existing Telegram schedules without a registered report source now stop setup
+before the runtime is changed. Their schedules remain intact. Registered report
+failures produce at most one clear failure message per job per day, using the
+scheduler's recorded outcome rather than its internal error text.
+
+The upgrade path verifies the previous immutable package and all current runtime
+bytes. It rehearses reversal and replacement in an isolated directory, validates
+the resulting hashes, and restores changed files if replacement fails. Unrelated
+local changes are preserved and cause a refusal rather than being overwritten.
+
 - Verify runtime recovery across the full platform installation matrix.
 - Complete existing-reader and remote-host migration, including scheduled reports.
 - Verify the executable downloaded through the reader route, not just its source.

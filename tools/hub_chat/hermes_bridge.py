@@ -49,6 +49,8 @@ def configure(adapter, request):
     chat = Chat(config_path.parent/'chat-state',str(config['conversation_id']),config.get('timezone','UTC'),config.get('language','en'))
     from .source_adapters import configure_sources
     configure_sources(chat,config)
+    from .scheduled import register_failure_source
+    register_failure_source(chat,config_path.parent)
     chat.delivery.recover()
     chat.approvals.cancel_pending('Gateway restarted')
     boundary = Boundary(chat,str(config['actor_id']))
@@ -126,6 +128,11 @@ def result_instruction(adapter):
 def guard_result(ctx,result,history_length):
     boundary=get(ctx._status_adapter)
     if not boundary or not isinstance(result,dict): return result
+    review=boundary._review.get()
+    if review is not None:
+        review['answer']=result.get('final_response') or ''
+        result['final_response']=''
+        return result
     from .evidence import collect,validate_answer
     evidence=collect(boundary.chat.store,boundary.chat.conversation_id,result.get('messages',[])[history_length:])
     for row in boundary.chat.store.rows("SELECT * FROM approvals WHERE state='approved'"):

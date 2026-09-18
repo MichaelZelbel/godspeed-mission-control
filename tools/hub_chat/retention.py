@@ -20,6 +20,14 @@ def prune(store,before,dry_run=False):
                 db.execute('UPDATE deliveries SET body=?,exact_text=NULL WHERE key=?',(canonical(body),row['key']))
                 db.execute('UPDATE message_parts SET text=? WHERE delivery_key=?',(REMOVED,row['key']))
         approvals=0
+        requests=0
+        for row in db.execute("SELECT r.key,r.body FROM requested_results r JOIN deliveries d ON d.key=r.delivery_key "
+                              "WHERE d.state IN ('sent','failed','suppressed') AND julianday(coalesce(d.sent_at,d.created_at))<julianday(?)",(before,)).fetchall():
+            body=json.loads(row['body'])
+            if body.get('text_removed'): continue
+            requests+=1
+            if not dry_run:
+                db.execute('UPDATE requested_results SET body=? WHERE key=?',(canonical({'text_removed':True}),row['key']))
         for row in db.execute("SELECT * FROM approvals WHERE state IN ('expired','cancelled','denied','succeeded','failed') "
                               "AND julianday(expires_at)<julianday(?)",(before,)).fetchall():
             body=json.loads(row['body']); result=json.loads(row['result'])
@@ -29,5 +37,5 @@ def prune(store,before,dry_run=False):
                 kept={key:body[key] for key in ('actor','fingerprint','request_id') if key in body}
                 kept.update(summary=REMOVED,text_removed=True)
                 db.execute('UPDATE approvals SET body=? WHERE id=?',(canonical(kept),row['id']))
-    return {'messages':len(changed),'approvals':approvals,'dry_run':dry_run,
+    return {'messages':len(changed),'approvals':approvals,'requests':requests,'dry_run':dry_run,
             'outcomes_preserved':True,'pending_and_uncertain_preserved':True}

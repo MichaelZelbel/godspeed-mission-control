@@ -80,6 +80,13 @@ async def deliver(boundary,key):
     chat = boundary.chat
     if boundary.config.get('proactive_paused'):
         return chat.delivery.receipt(key)
+    if key.startswith('requested:') and chat.delivery.receipt(key).state=='queued':
+        from .requested import current
+        try:
+            if not await asyncio.to_thread(current,boundary,key):
+                return chat.delivery.state(key,'suppressed','The authorized result was withdrawn or changed')
+        except Exception:
+            return chat.delivery.receipt(key)  # A temporary read error does not discard the requested result.
     if key.startswith('report:'):
         prefix,part=key.rsplit(':',1)
         for earlier in range(int(part)):
@@ -134,6 +141,7 @@ def write_receipts(boundary):
 async def pump(boundary):
     from .hermes_bridge import edit_approval,heartbeat
     retention_day=None
+    review_task=None
     while True:
         try:
             heartbeat(boundary)
@@ -146,13 +154,26 @@ async def pump(boundary):
                 await asyncio.to_thread(prune,boundary.chat.store,cutoff)
                 retention_day=today
             await asyncio.to_thread(import_pending,boundary)
+            from .scheduled import queue_failures
+            await asyncio.to_thread(queue_failures,boundary)
+            from .requested import import_requests,review_one,write_receipts as write_request_receipts
+            await asyncio.to_thread(import_requests,boundary)
+            if not boundary.config.get('proactive_paused') and (review_task is None or review_task.done()) and not boundary.adapter._active_sessions:
+                if review_task is not None:
+                    try: review_task.result()
+                    except Exception as exc: boundary.chat.store.audit('requested_review_error',type(exc).__name__)
+                review_task=asyncio.create_task(review_one(boundary))
             for row in boundary.chat.store.rows("SELECT key FROM deliveries WHERE state='queued' ORDER BY created_at LIMIT 10"):
                 await deliver(boundary,row['key'])
             await asyncio.to_thread(write_receipts,boundary)
+            await asyncio.to_thread(write_request_receipts,boundary)
             for row in boundary.chat.store.rows("SELECT * FROM approvals WHERE state!='pending' AND message_id IS NOT NULL"):
                 if json.loads(row['result']).get('presented_state') != row['state']:
                     await edit_approval(boundary,row['id'])
         except asyncio.CancelledError:
+            if review_task is not None:
+                review_task.cancel()
+                await asyncio.gather(review_task,return_exceptions=True)
             raise
         except Exception as exc:
             boundary.chat.store.audit('pump_error',type(exc).__name__)

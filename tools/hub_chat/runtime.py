@@ -25,7 +25,19 @@ class Boundary:
         self._identity = object()
         self._turn = ContextVar('hub_chat_turn', default=None)
         self._output = ContextVar('hub_chat_output', default=None)
+        self._review = ContextVar('hub_chat_review', default=None)
         self.active = {}
+
+    @contextmanager
+    def review(self,key):
+        # A review can read a requested result, but cannot borrow a user's turn.
+        value={'key':key,'answer':None}
+        token=self._review.set(value)
+        turn_token=self._turn.set(None)
+        try: yield value
+        finally:
+            self._turn.reset(turn_token)
+            self._review.reset(token)
 
     def bind(self, event, authenticated):
         if not authenticated or str(event.source.chat_id) != self.chat.conversation_id or str(event.source.user_id) != self.actor:
@@ -103,6 +115,9 @@ class Boundary:
         if method.startswith('edit') and message_id != str(payload.get('message_id','')):
             return False
         turn = self._turn.get()
+        if kind=='requested_result' and key:
+            rows=self.chat.store.rows("SELECT 1 FROM requested_results r JOIN deliveries d ON d.key=r.delivery_key WHERE d.key=? AND d.state='sending' AND r.state='reviewed' AND d.conversation=?",(key,self.chat.conversation_id))
+            return bool(rows)
         if kind in ('reply','question','requested_result'):
             return bool(turn and turn.live and turn.conversation == self.chat.conversation_id)
         if kind in ('digest','critical_failure') and key:

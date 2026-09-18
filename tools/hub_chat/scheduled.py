@@ -4,6 +4,70 @@ from pathlib import Path
 import subprocess
 import sys
 import time
+from datetime import datetime, timezone
+
+
+def jobs(profile):
+    file=Path(profile)/'cron/jobs.json'
+    if not file.exists(): return []
+    data=json.loads(file.read_text(encoding='utf-8-sig'))
+    result=data if isinstance(data,list) else data.get('jobs',[])
+    if not isinstance(result,list) or any(not isinstance(job,dict) for job in result):
+        raise ValueError('The saved schedule is not a job list')
+    return result
+
+
+def uses_telegram(job):
+    for value in (job.get('deliver','local'),job.get('failure_deliver','local')):
+        for token in str(value).lower().split(','):
+            token=token.strip()
+            if token=='telegram' or token.startswith('telegram:') or token=='all': return True
+            if token in ('origin','home'):
+                origin=job.get('origin')
+                if not isinstance(origin,dict) or origin.get('platform') in (None,'telegram'): return True
+    return False
+
+
+def failure_facts(profile,now=None):
+    from .contracts import fingerprint
+    from .timezones import zone
+    now=now or datetime.now(timezone.utc)
+    config=settings(profile)
+    day=str(now.astimezone(zone(config.get('timezone','UTC'))).date())
+    result=[]
+    for job in jobs(profile):
+        registration=config.get('scheduled_reports',{}).get(str(job.get('id')))
+        if not registration or not job.get('last_run_at'): continue
+        try: age=(now-datetime.fromisoformat(job['last_run_at'].replace('Z','+00:00'))).total_seconds()
+        except (ValueError,TypeError): continue
+        if not 0<=age<=3*3600: continue
+        failed=job.get('last_status') in ('error','interrupted','delivery_failed')
+        label='morning report' if registration['name']=='morning-brief' else 'scheduled report'
+        german=config.get('language')=='de'
+        subject=('Ich konnte die Zustellung deines geplanten Berichts nicht bestätigen' if german else 'I could not confirm delivery of your '+label)
+        result.append({'item_id':'scheduled-failure:'+str(job['id'])+':'+day,'source':'scheduled-reports',
+            'revision':fingerprint([job['id'],day,failed]),'status':'open' if failed else 'done',
+            'checked_at':now.isoformat(),'kind':'failure','subject':subject,
+            'consequence':('Es liegt kein bestätigtes Ergebnis vor.' if german else 'There is no confirmed result.'),
+            'next_action':('Bitte mich, den Bericht erneut zu prüfen.' if german else 'Ask me to check the report again.'),
+            'link':None,'deadline':None})
+    return result
+
+
+def register_failure_source(chat,profile):
+    def read(ids,now):
+        return [fact for fact in failure_facts(profile) if fact['item_id'] in ids]
+    chat.sources.register('scheduled-reports',read)
+
+
+def queue_failures(boundary):
+    from .contracts import utcnow
+    now=utcnow()
+    ids=[fact['item_id'] for fact in failure_facts(boundary.profile)]
+    facts=boundary.chat.sources.refresh(ids,now)
+    for fact in facts:
+        draft=boundary.chat.compose([fact],now,purpose='critical_failure')
+        if draft: boundary.chat.delivery.submit(draft)
 
 
 def settings(profile):
@@ -16,11 +80,8 @@ def protected(profile):
 
 
 def register_reports(config,profile,hub,package):
-    jobs_file=profile/'cron/jobs.json'
-    if not jobs_file.exists(): return
-    data=json.loads(jobs_file.read_text(encoding='utf-8-sig'))
-    jobs=data if isinstance(data,list) else data.get('jobs',[])
-    for job in jobs:
+    saved=jobs(profile)
+    for job in saved:
         if job.get('name')!='morning-brief' or not job.get('id') or not job.get('workdir'): continue
         if Path(job['workdir']).resolve()!=hub.resolve(): continue
         config.setdefault('scheduled_reports',{}).setdefault(str(job['id']),
@@ -28,6 +89,11 @@ def register_reports(config,profile,hub,package):
         config.setdefault('reports',{}).setdefault('morning-brief',{'argv':[
             sys.executable,'-m','hub_chat.reader_brief','--hub',str(hub.resolve()),
             '--timezone',config.get('timezone','UTC')]})
+    for job in saved:
+        if not uses_telegram(job): continue
+        registration=config.get('scheduled_reports',{}).get(str(job.get('id')))
+        if not registration or not config.get('reports',{}).get(registration.get('name'),{}).get('argv'):
+            raise ValueError('Migrate this existing Telegram report before enabling protection: '+str(job.get('name') or job.get('id')))
 
 
 def queue_report(profile,config,job,for_failure,timeout=90):

@@ -30,7 +30,7 @@ def configure(args):
         raise ValueError('The immutable chat bundle is incomplete')
     from .bundle import verify
     verify(bundle,check_import=True)
-    previous_config=dict(config)
+    previous_config=json.loads(json.dumps(config))
     # Only communication settings are changed. Execution permissions remain untouched.
     config.update(schema=1,enabled=True,conversation_id=args.conversation,actor_id=args.actor,
                   timezone=args.timezone or config.get('timezone') or os.environ.get('TZ','UTC'),
