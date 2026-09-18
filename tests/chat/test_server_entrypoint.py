@@ -10,6 +10,27 @@ from helpers import ROOT
 
 @unittest.skipIf(os.name=='nt','The server entry point runs on Unix')
 class RepairEntryPoint(unittest.TestCase):
+    def test_server_download_uses_exact_commit_and_refuses_failed_upgrade(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory); origin=root/'origin'; origin.mkdir()
+            def git(*args):
+                return subprocess.check_output(['git','-C',str(origin),*args],text=True,stderr=subprocess.DEVNULL).strip()
+            git('init','-q'); (origin/'file').write_text('tested'); git('add','file')
+            git('-c','user.name=Fixture','-c','user.email=fixture@example.org','commit','-qm','tested')
+            tested=git('rev-parse','HEAD')
+            (origin/'file').write_text('newer'); git('add','file')
+            git('-c','user.name=Fixture','-c','user.email=fixture@example.org','commit','-qm','newer')
+            source=(ROOT/'server/install.sh').read_text()
+            function=source[source.index('fetch_repo() {'):source.index('\n}\n',source.index('fetch_repo() {'))+3]
+            script='die() { echo "$1" >&2; exit 1; }; ok() { :; };\n'+function+'\nfetch_repo "$1" "$2" "$3" example\n'
+            target=root/'installed'
+            first=subprocess.run(['bash','-c',script,'fixture',str(origin),str(target),tested],capture_output=True,text=True)
+            self.assertEqual(first.returncode,0,first.stderr)
+            self.assertEqual((target/'file').read_text(),'tested')
+            failed=subprocess.run(['bash','-c',script,'fixture',str(origin),str(target),'0'*40],capture_output=True,text=True)
+            self.assertNotEqual(failed.returncode,0)
+            self.assertEqual((target/'file').read_text(),'tested')
+
     def test_repair_installs_tools_preserves_schedule_and_stops_on_failed_tools(self):
         with tempfile.TemporaryDirectory() as directory:
             root=Path(directory); account=root/'account'; account.mkdir()

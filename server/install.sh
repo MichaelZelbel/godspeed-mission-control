@@ -55,7 +55,10 @@ export KB_SELF_URL
 
 # The pin is an immutable TAG, never the moving v2 branch, so this installer runs
 # exactly the code that passed its end-to-end runs until this line is edited.
-KB_PIN="v2.4.1"
+KB_PIN="687a6f7d7a799017cb3b17fb79ce5c14f53da1ba"
+KB_TOOLS_REF="8ba2f4647dfd308b36cac410e141f5cef2244315"
+KIT_ENTRY_REF="00ee0c78fc51006e48f89abc0f88fd7b40e5966a"
+export KB_TOOLS_REF
 LIB_URL="https://raw.githubusercontent.com/MichaelZelbel/kit-bootstrap/$KB_PIN/lib.sh"
 KIT_REPO="https://github.com/MichaelZelbel/teach-it-once-kit.git"
 AI_USER="${AI_USER:-ai}"
@@ -355,8 +358,17 @@ WHY
   chown "$AI_USER":"$AI_USER" "$CARRY"
   chmod 0600 "$CARRY"
 
-  # Hands the rest of this script to that account and does not come back.
-  reexec_as_user "$AI_USER"
+  # Keep root's final service operation outside the assistant's account.
+  # The child still installs all personal files without root permissions.
+  CHAT_FINISH="$(mktemp)" || die "Could not prepare the final server check."
+  # Fetch root's helper from the installer source, never from the assistant's
+  # writable bin folder. That account must not gain a root execution route.
+  curl -fsSL "https://raw.githubusercontent.com/MichaelZelbel/teach-it-once-kit/$KB_TOOLS_REF/tools/chat-server.js" -o "$CHAT_FINISH" \
+    || die "Could not download the final server check."
+  trap 'rm -f "$CHAT_FINISH"' EXIT
+  ( reexec_as_user "$AI_USER" ) || die "The user-account setup did not finish. The server update is incomplete."
+  node "$CHAT_FINISH" "$AI_USER" "$AI_HOME" || die "The server update is not verified. Read the failed check above."
+  exit 0
 fi
 
 # =============================================================================
@@ -416,30 +428,24 @@ say "Getting the book's files"
 
 fetch_repo() {
   local url="$1" dir="$2" branch="${3:-}" name="$4"
-  if [ -d "$dir/.git" ]; then
-    # When a pin is named, an existing clone is MOVED to it, or a server built
-    # last month keeps running last month's code while this file says otherwise.
-    # `git pull` cannot do that from a detached tag checkout, so fetch the ref
-    # and check it out directly. Works for a tag and a branch alike.
-    if [ -n "$branch" ]; then
-      { git -C "$dir" fetch -q --depth 1 origin "$branch" \
-          && git -C "$dir" checkout -q FETCH_HEAD; } >/dev/null 2>&1 \
-        || warn "Could not update $name to $branch; using the copy already here."
-    else
-      git -C "$dir" pull --ff-only >/dev/null 2>&1 || warn "Could not update $name; using the copy already here."
-    fi
-    ok "$name updated"
-  else
-    if [ -n "$branch" ]; then
-      git clone --depth 1 --branch "$branch" "$url" "$dir" >/dev/null 2>&1 || die "Could not download $name from $url"
-    else
-      git clone --depth 1 "$url" "$dir" >/dev/null 2>&1 || die "Could not download $name from $url"
-    fi
-    ok "$name downloaded"
+  if [ ! -d "$dir/.git" ]; then
+    git clone --depth 1 --no-checkout "$url" "$dir" >/dev/null 2>&1 || die "Could not download $name from $url"
   fi
+  if [ -n "$branch" ]; then
+    { git -C "$dir" fetch -q --depth 1 origin "$branch" \
+        && git -C "$dir" checkout -q --detach FETCH_HEAD; } >/dev/null 2>&1 \
+      || die "Could not select the tested $name version. The update is incomplete."
+    if [[ "$branch" =~ ^[0-9a-f]{40}$ ]] && [ "$(git -C "$dir" rev-parse HEAD)" != "$branch" ]; then
+      die "The $name download did not match its tested version."
+    fi
+  else
+    git -C "$dir" checkout -q >/dev/null 2>&1 || die "Could not open $name."
+    git -C "$dir" pull --ff-only >/dev/null 2>&1 || die "Could not update $name."
+  fi
+  ok "$name is at the selected version"
 }
 
-fetch_repo "$KIT_REPO" "$KIT_DIR" "" "the book's kit"
+fetch_repo "$KIT_REPO" "$KIT_DIR" "$KIT_ENTRY_REF" "the tested server setup"
 fetch_repo "https://github.com/MichaelZelbel/kit-bootstrap.git" "$BOOTSTRAP_DIR" "$KB_PIN" "the shared install code"
 
 [ -f "$KIT_DIR/server/install-hermes.sh" ] || die "The kit downloaded but server/install-hermes.sh is missing from it."
@@ -540,7 +546,7 @@ else
   say "Checking Hermes against your folder"
 fi
 KB_CALLED_FROM_INSTALLER=1 HUB="$HUB" bash "$KIT_DIR/server/install-hermes.sh" \
-  || warn "the Hermes half reported a problem above. Read it before trusting the clock."
+  || die "Hermes setup did not finish. The server update is incomplete."
 
 # --- The watchdog's self-check, once, now -------------------------------------------
 # Root put the second Hermes on the clock before the sign-in existed. Now the
@@ -591,24 +597,11 @@ REG
   ok "register: the watchdog has its block in procedures.md"
 fi
 
-# --- The first message, sent the way the brief and the alerts will be sent -----------
-# `hermes send` needs no model and no running gateway for Telegram: it reads the
-# token and the home channel from ~/.hermes/.env, which is exactly the path the
-# morning brief's delivery and the watchdog's notify.sh take. A message on the
-# reader's phone at the end of the run is the proof that path is open.
+# Setup does not send a test message. Root verifies the running gateway after
+# this account finishes. The existing Telegram connection stays in its profile.
 TELEGRAM_STATE="none"
 if grep -q '^TELEGRAM_HOME_CHANNEL=[-0-9]' "$HOME/.hermes/.env" 2>/dev/null; then
   TELEGRAM_STATE="connected"
-  say "Sending you the first message"
-  BOT_TOKEN="$(sed -n 's/^TELEGRAM_BOT_TOKEN=//p' "$HOME/.hermes/.env" | head -1)"
-  BOT_NAME="$(curl -fsS -m 15 "https://api.telegram.org/bot$BOT_TOKEN/getMe" 2>/dev/null | jq -r '.result.username // "your bot"')"
-  unset BOT_TOKEN
-  if printf '%s\n' "Your server is set up, and this is your assistant's chat. Write to me here from anywhere: try \"what is in my folder?\"" \
-     | "$(kb_hermes_bin)" send -t telegram -s "Teach It Once" -q >/dev/null 2>&1; then
-    ok "sent to @$BOT_NAME: look at your phone. That message went the way the morning brief and the watchdog's alerts will go"
-  else
-    warn "Hermes could not send to Telegram yet; the three lines are in $HOME/.hermes/.env. Read: $(kb_hermes_bin) send -t telegram test"
-  fi
 elif grep -q '^TELEGRAM_BOT_TOKEN=.' "$HOME/.hermes/.env" 2>/dev/null; then
   TELEGRAM_STATE="nohello"
 fi
@@ -639,7 +632,8 @@ cat <<NEXT
 $(case "$TELEGRAM_STATE" in
   connected) cat <<'T'
 
-   Your assistant is running, and it has a phone number. Hermes' gateway is a
+   Setup files are ready. The installer now needs to finish its gateway check.
+   Hermes' gateway is a
    service on this machine, working in your folder, and it comes back after a
    reboot on its own. Your bot on Telegram is its ear: write to it from
    wherever you are and it answers from your folder. Nothing more is typed
@@ -648,14 +642,14 @@ T
   ;;
   nohello) cat <<'T'
 
-   Your assistant is running, but nobody can talk to it yet: the bot token is
+   Setup files are ready, but nobody can talk to the assistant yet: the bot token is
    here and your first message to the bot never arrived. Write to the bot on
    Telegram, then paste this one line again; it picks up at that step.
 T
   ;;
   *) cat <<'T'
 
-   Your assistant is running, but it has no ear yet: Telegram was skipped.
+   Setup files are ready. Telegram was skipped.
    When you have a bot token from BotFather, paste this one line again; it
    asks for the token first and leaves everything else as it is.
 T
