@@ -38,8 +38,8 @@ SAFE=19000
 # tag. They carry the behaviour this script must not re-learn the hard way:
 # terminal.cwd is the only lever that moves the agent, a failed one-shot still
 # exits 0, and `hermes config set` replaces a list.
-LIB_URL="https://raw.githubusercontent.com/MichaelZelbel/kit-bootstrap/e317893ce2d56efbde2f59f7eeff69d74e429a1e/lib.sh"
-KB_TOOLS_REF="${KB_TOOLS_REF:-e5e26ee540628764c6bfefe2d5cfaaa8deae0490}"
+LIB_URL="https://raw.githubusercontent.com/MichaelZelbel/kit-bootstrap/7eb9bb78e81d5914947b69f63671dc0682372970/lib.sh"
+KB_TOOLS_REF="${KB_TOOLS_REF:-746f28420747caf6911d92e3abb5b05101876288}"
 export KB_TOOLS_REF
 if ! LIB="$(curl -fsSL "$LIB_URL")" || [ -z "$LIB" ]; then
   printf '\n   STOPPED: could not download the shared install code from\n   %s\n   Check the machine has internet, then run this again.\n\n' "$LIB_URL" >&2

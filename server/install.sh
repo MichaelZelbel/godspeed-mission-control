@@ -55,8 +55,8 @@ export KB_SELF_URL
 
 # The pin is an immutable TAG, never the moving v2 branch, so this installer runs
 # exactly the code that passed its end-to-end runs until this line is edited.
-KB_PIN="e317893ce2d56efbde2f59f7eeff69d74e429a1e"
-KB_TOOLS_REF="e5e26ee540628764c6bfefe2d5cfaaa8deae0490"
+KB_PIN="7eb9bb78e81d5914947b69f63671dc0682372970"
+KB_TOOLS_REF="746f28420747caf6911d92e3abb5b05101876288"
 KIT_ENTRY_REF="a9e3c8429a79208ef4a6a5ff712d1d16c43942b3"
 export KB_TOOLS_REF
 LIB_URL="https://raw.githubusercontent.com/MichaelZelbel/kit-bootstrap/$KB_PIN/lib.sh"
