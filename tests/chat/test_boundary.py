@@ -19,6 +19,22 @@ class Boundary(unittest.IsolatedAsyncioTestCase):
     async def test_metadata_cannot_create_a_direct_reply(self):
         self.assertFalse(self.boundary.allowed('sendMessage', {'chat_id':'100','text':'review','output_class':'reply'}))
 
+    async def test_only_exact_native_bot_reply_reconciles_uncertain_delivery(self):
+        from hub_chat.contracts import Draft,timestamp,utcnow
+        draft=Draft('uncertain-example','100','digest','Example result')
+        self.chat.delivery.submit(draft)
+        self.chat.delivery.claim(draft.delivery_key)
+        self.chat.delivery.state(draft.delivery_key,'uncertain','Connection lost')
+        reply=NS(from_user=NS(id='999'),chat=NS(id='100'),text=draft.text,
+                 message_id=17,date=timestamp(utcnow()))
+        self.assertFalse(self.boundary.reconcile_reply(reply,'888'))
+        reply.text='Another result'
+        self.assertFalse(self.boundary.reconcile_reply(reply,'999'))
+        reply.text=draft.text
+        self.assertTrue(self.boundary.reconcile_reply(reply,'999'))
+        self.assertEqual(self.chat.delivery.receipt(draft.delivery_key).message_id,'17')
+        self.assertFalse(self.boundary.reconcile_reply(reply,'999'))
+
     async def test_only_native_owner_event_can_be_bound(self):
         self.assertFalse(self.boundary.bind(self.event, authenticated=False))
         self.event.source.user_id = 'other'

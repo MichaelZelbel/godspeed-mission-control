@@ -1,0 +1,12 @@
+{
+  "now": "2026-09-18T09:20:00Z",
+  "conversation": "test-chat",
+  "items": [
+    {"item_id":"completed-build","status":"done","kind":"task","subject":"Build the kit update","revision":"2"},
+    {"item_id":"completed-release","status":"done","kind":"decision","subject":"Release the kit update","revision":"2"},
+    {"item_id":"name-choice","status":"open","kind":"decision","subject":"Choose a name for the kit","revision":"1","next_action":"Choose Oak, Cedar or Birch.","consequence":"The download page waits for the name."},
+    {"item_id":"report","status":"open","kind":"report","subject":"Your audience research is ready","revision":"1","next_action":"Read it when useful.","link":"https://example.org/report"},
+    {"item_id":"machine-finding","status":"unknown","kind":"failure","subject":"A service check needs verification","revision":"1"}
+  ],
+  "followup":"What cards in this chat? Did you check these are still open?"
+}

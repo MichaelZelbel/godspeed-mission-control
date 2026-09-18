@@ -13,6 +13,9 @@ def main():
     parser.add_argument('--profile',type=Path,default=Path(os.environ.get('HERMES_HOME',Path.home()/'.hermes')))
     sub = parser.add_subparsers(dest='command',required=True)
     doctor=sub.add_parser('doctor'); doctor.add_argument('--runtime',type=Path)
+    doctor.add_argument('--json',action='store_true')
+    doctor.add_argument('--require-live',action='store_true')
+    replay=sub.add_parser('replay'); replay.add_argument('--fixture',choices=('september-18',),required=True)
     queue=sub.add_parser('submit'); queue.add_argument('items',nargs='+')
     report=sub.add_parser('submit-report'); report.add_argument('name'); report.add_argument('--revision',required=True)
     critical=sub.add_parser('submit-critical'); critical.add_argument('item')
@@ -20,7 +23,10 @@ def main():
     sub.add_parser('status')
     sub.add_parser('rollback')
     enable=sub.add_parser('enable-proactive'); enable.add_argument('--after-preview',action='store_true',required=True)
-    migrate=sub.add_parser('migrate'); migrate.add_argument('file',type=Path)
+    migrate=sub.add_parser('migrate'); migrate.add_argument('file',type=Path,nargs='?')
+    mode=migrate.add_mutually_exclusive_group()
+    mode.add_argument('--dry-run',action='store_true')
+    mode.add_argument('--apply',action='store_true')
     setup=sub.add_parser('configure')
     setup.add_argument('--runtime',type=Path,required=True)
     setup.add_argument('--bundle',type=Path,required=True)
@@ -30,10 +36,14 @@ def main():
     setup.add_argument('--timezone')
     setup.add_argument('--language',choices=('en','de'))
     args=parser.parse_args()
+    if args.command=='replay':
+        from .replay import replay
+        result=replay(args.fixture)
+        print(json.dumps(result,indent=2)); return 0 if result['passed'] else 1
     if args.command=='doctor':
         from .doctor import inspect
         report=inspect(args.profile,args.runtime)
-        print(json.dumps(report,indent=2)); return 0 if report['healthy'] else 1
+        print(json.dumps(report,indent=2)); return 0 if report['healthy'] and (not args.require_live or report['runtime_loaded']) else 1
     if args.command=='submit':
         from .inbox import submit
         print(json.dumps(submit(args.profile/'chat-inbox',args.items))); return 0
@@ -67,7 +77,8 @@ def main():
             print(draft.text if draft else 'No verified item needs a message.')
         elif args.command=='migrate':
             from .migrate import import_legacy
-            print(json.dumps(import_legacy(chat,args.file)))
+            file=args.file or args.profile/'chat-legacy.json'
+            print(json.dumps(import_legacy(chat,file,dry_run=args.dry_run or not args.apply)))
         else:
             print(json.dumps({'delivery_states':chat.store.rows('SELECT state,count(*) AS count FROM deliveries GROUP BY state'),
                               'approval_states':chat.store.rows('SELECT state,count(*) AS count FROM approvals GROUP BY state')},indent=2))

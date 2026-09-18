@@ -123,9 +123,10 @@ def write_receipts(boundary):
 
 
 async def pump(boundary):
-    from .hermes_bridge import edit_approval
+    from .hermes_bridge import edit_approval,heartbeat
     while True:
         try:
+            heartbeat(boundary)
             await asyncio.to_thread(import_pending,boundary)
             for row in boundary.chat.store.rows("SELECT key FROM deliveries WHERE state='queued' ORDER BY created_at LIMIT 10"):
                 await deliver(boundary,row['key'])

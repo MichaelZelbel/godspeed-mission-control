@@ -44,12 +44,17 @@ def configure(adapter, request):
     boundary.profile = config_path.parent
     boundary.adapter = adapter
     adapter._hub_chat_boundary = boundary
-    from .setup import atomic_json
-    import os
-    atomic_json(config_path.parent/'chat-runtime.json',{'pid':os.getpid(),'config_hash':fingerprint(config),
-                                                       'loaded_at':utcnow(),'package':str(Path(__file__).parent)})
+    boundary.loaded_at=utcnow()
     from .telegram_request import GuardedRequest
     return GuardedRequest(request,boundary)
+
+
+def heartbeat(boundary):
+    from .setup import atomic_json
+    import os
+    atomic_json(boundary.profile/'chat-runtime.json',
+                {'pid':os.getpid(),'config_hash':fingerprint(boundary.config),'loaded_at':boundary.loaded_at,
+                 'heartbeat_at':utcnow(),'package':str(Path(__file__).parent)})
 
 
 def native_event(function):

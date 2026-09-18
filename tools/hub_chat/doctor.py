@@ -2,6 +2,18 @@ import json
 import sqlite3
 from pathlib import Path
 from .compatibility import inspect_runtime
+from .contracts import fingerprint, timestamp, utcnow
+
+
+def runtime_status(profile,config):
+    try:
+        marker=json.loads((profile/'chat-runtime.json').read_text(encoding='utf-8'))
+        age=(timestamp(utcnow())-timestamp(marker['heartbeat_at'])).total_seconds()
+        current=marker.get('config_hash')==fingerprint(config) and 0<=age<=30
+        return {'runtime_loaded':current,'runtime_pid':marker.get('pid'),
+                'runtime_heartbeat_age_seconds':round(age,1),'restart_required':not current}
+    except (OSError,ValueError,KeyError,TypeError):
+        return {'runtime_loaded':False,'restart_required':True}
 
 
 def inspect(profile,runtime=None):
@@ -34,4 +46,4 @@ def inspect(profile,runtime=None):
         try: states=[{'state':state,'count':count} for state,count in db.execute('SELECT state,count(*) FROM deliveries GROUP BY state')]
         finally: db.close()
     return {'healthy':not problems,'problems':problems,'proactive_paused':config.get('proactive_paused',True),
-            'delivery_states':states,'runtime_loaded':(profile/'chat-runtime.json').exists()}
+            'delivery_states':states,**runtime_status(profile,config)}

@@ -7,6 +7,21 @@ from helpers import ROOT
 
 
 class Installation(unittest.TestCase):
+    def test_disabled_profile_does_not_patch_the_runtime(self):
+        from helpers import load_chat
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        load_chat(self)
+        from hub_chat.setup import configure
+        with tempfile.TemporaryDirectory() as directory:
+            profile=Path(directory)
+            config=profile/'hub-chat.json'
+            config.write_text('{"enabled":false}')
+            with patch('hub_chat.setup.install_patch',side_effect=AssertionError('No runtime edit allowed')):
+                result=configure(SimpleNamespace(profile=profile))
+            self.assertEqual(result['state'],'disabled_by_user')
+            self.assertEqual(config.read_text(),'{"enabled":false}')
+
     def test_remote_desktop_does_not_claim_the_server_was_updated(self):
         import os,sys
         with tempfile.TemporaryDirectory() as home:

@@ -29,11 +29,14 @@ Run these through the installed `hub-chat` launcher, using the gateway's own pro
 
 ```text
 hub-chat --profile PROFILE doctor
+hub-chat --profile PROFILE doctor --json --require-live
 hub-chat --profile PROFILE preview
 hub-chat --profile PROFILE status
 hub-chat --profile PROFILE submit SOURCE_ITEM_ID
 hub-chat --profile PROFILE submit-report REGISTERED_NAME --revision CONTENT_HASH
-hub-chat --profile PROFILE migrate LEGACY_FACTS_JSON
+hub-chat --profile PROFILE migrate LEGACY_FACTS_JSON --dry-run
+hub-chat --profile PROFILE migrate LEGACY_FACTS_JSON --apply
+hub-chat replay --fixture september-18
 hub-chat --profile PROFILE rollback
 ```
 
@@ -42,6 +45,9 @@ the runtime, applies the versioned patch, merges the managed display settings, a
 saves previous configuration. Initial configuration pauses unsolicited messages.
 Preview current sources and pass doctor before `enable-proactive --after-preview`.
 Restart the gateway to load changed settings. No setup command sends a test message.
+Doctor distinguishes an installed configuration from one loaded by the gateway.
+The live check requires a recent heartbeat with the same configuration hash.
+The fixture rehearsal uses temporary state and has no real transport option.
 
 Only configured source commands supply current state. Inbox submissions contain
 item identities or a registered report name, never executable commands, credentials,
@@ -72,7 +78,11 @@ use a separately configured emergency destination for that case.
 - Complete existing-reader and remote-host migration, including scheduled reports.
 - Verify the executable downloaded through the reader route, not just its source.
 - Run fresh-install and upgrade tests on an actual Mac.
-- Approve and run a labelled real Telegram test, then observe the deployed version
-  for seven days without daily status messages.
+- Finish the controlled real exchange, then observe the deployed version for seven
+  days without daily status messages. A transport and expiry component test alone
+  does not prove incoming reply handling in the deployed gateway.
+- Complete text retention, explicit deletion, and restoration of the full previous
+  protected runtime/configuration during rollback. The current rollback preserves
+  the database and changes the package but does not certify that full recovery path.
 - Publish the tested kit, bootstrap and watchdog versions together, with updated
   immutable pins. Until then, existing download links still serve the old release.
