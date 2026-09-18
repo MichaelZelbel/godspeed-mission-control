@@ -100,6 +100,9 @@ before switching configuration. It preserves the journal and current owner,
 language and retention choices, pauses automatic messages, and requires a restart.
 If the previous recovery copy is damaged, rollback refuses the switch and leaves
 automatic messages paused. It never restores an unprotected sender.
+An earlier package missing scheduler or standalone-send protection is refused too.
+The complete Linux saved-runtime rollback probe passed with both protections present;
+equivalent Windows and Mac recovery tests remain release gates.
 
 Approval buttons address one request. Permission, expiry, and execution outcome
 are recorded separately. The original message is edited when the request expires.

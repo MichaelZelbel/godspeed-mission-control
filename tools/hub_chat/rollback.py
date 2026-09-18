@@ -21,6 +21,13 @@ def rollback(profile,home=None):
         raise ValueError('Previous package is outside the release directory')
     from .bundle import verify
     package_id=verify(previous)
+    compatibility=json.loads((previous/'integrations/hermes/compatibility.json').read_text(encoding='utf-8'))
+    required={'gateway/platforms/base.py','plugins/platforms/telegram/adapter.py',
+              'gateway/run_turn_runner.py','tools/approval.py','cron/scheduler_delivery.py',
+              'tools/send_message_senders.py','_hub_chat_bridge.py'}
+    if not required.issubset(compatibility.get('files',{})):
+        return {'restored':False,'proactive_paused':True,'restart_required':True,
+                'reason':'The earlier package lacks complete output protection. Keep this boundary until a tested replacement is installed.'}
     backup=json.loads((profile/'chat-rollback.json').read_text(encoding='utf-8'))
     restored=backup.get('previous_config') or {}
     if not restored.get('enabled') or Path(restored.get('package','')).resolve()!=previous.resolve():

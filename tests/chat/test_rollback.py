@@ -17,6 +17,10 @@ class Rollback(unittest.TestCase):
             previous=root/'releases/previous'; previous.mkdir()
             (previous/'code.py').write_text('previous version')
             files={'code.py':hashlib.sha256((previous/'code.py').read_bytes()).hexdigest()}
+            compatibility=previous/'integrations/hermes/compatibility.json'; compatibility.parent.mkdir(parents=True)
+            compatibility.write_text(json.dumps({'files':dict.fromkeys(['gateway/platforms/base.py','plugins/platforms/telegram/adapter.py',
+                'gateway/run_turn_runner.py','tools/approval.py','cron/scheduler_delivery.py','tools/send_message_senders.py','_hub_chat_bridge.py'])}))
+            files['integrations/hermes/compatibility.json']=hashlib.sha256(compatibility.read_bytes()).hexdigest()
             package_id=hashlib.sha256(json.dumps(files,separators=(',',':')).encode()).hexdigest()
             (previous/'bundle.json').write_text(json.dumps({'id':package_id,'files':files}))
             current_package=root/'releases/current'
@@ -46,6 +50,9 @@ class Rollback(unittest.TestCase):
             home=Path(directory); profile=home/'profile'; profile.mkdir()
             root=home/'.hub/chat'; (root/'releases/old').mkdir(parents=True)
             previous=root/'releases/old'
+            compatibility=previous/'integrations/hermes/compatibility.json'; compatibility.parent.mkdir(parents=True)
+            compatibility.write_text(json.dumps({'files':dict.fromkeys(['gateway/platforms/base.py','plugins/platforms/telegram/adapter.py',
+                'gateway/run_turn_runner.py','tools/approval.py','cron/scheduler_delivery.py','tools/send_message_senders.py','_hub_chat_bridge.py'])}))
             pointer=root/'current.json'
             pointer.write_text(json.dumps({'path':'current','previous':str(previous)}))
             old={'enabled':True,'package':str(previous),'runtime':'old',
@@ -59,3 +66,8 @@ class Rollback(unittest.TestCase):
             config=json.loads((profile/'hub-chat.json').read_text())
             self.assertTrue(config['proactive_paused'])
             self.assertEqual(config['package'],'current')
+            compatibility.write_text('{"files":{}}')
+            with patch('hub_chat.bundle.verify',return_value='old'):
+                refused=rollback(profile,home)
+            self.assertFalse(refused['restored'])
+            self.assertEqual(pointer.read_bytes(),before)

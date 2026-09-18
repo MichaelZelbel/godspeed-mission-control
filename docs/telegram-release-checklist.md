@@ -22,6 +22,24 @@ Candidate implementation, not a public release.
   Local Windows: 50 passed, six Hermes-only tests skipped.
 - A fresh Linux recovery snapshot passed re-execution into its preserved interpreter
   and source with proactive sends paused. No bot connection was opened by that probe.
+- Later candidates passed 68 checks in the actual Linux Hermes environment, including
+  eight real-adapter checks with fake transport. The direct server repair/download
+  entry tests separately preserve an existing schedule and refuse malformed schedules
+  or failed pinned downloads.
+- Kit `00ee0c7` passed all three component runners:
+  https://github.com/MichaelZelbel/teach-it-once-kit/actions/runs/35341031794.
+- Bootstrap `687a6f7` passed all three component runners:
+  https://github.com/MichaelZelbel/kit-bootstrap/actions/runs/35340738782.
+- The later join/version-retention changes passed 367 Linux checks and 288 local
+  Windows PowerShell 5.1 checks. Their commit is `21bf92a`.
+- A Linux rollback probe restored an earlier package that includes scheduler and
+  standalone-send protection, restarted its saved interpreter/source with a help-only
+  invocation, and preserved an uncertain delivery record byte for byte. No Telegram
+  connection was started. Earlier candidates missing those protections are refused.
+
+The approved remote update experience uses the existing server installer. Desktop
+setup reports that the server was not checked; it does not update it remotely.
+Automatic desktop-to-server installation is no longer a release requirement.
 
 No source branch result certifies the currently published app. Remaining release
 gates include remote-server installation, existing report migration, full platform

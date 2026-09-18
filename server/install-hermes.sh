@@ -39,7 +39,7 @@ SAFE=19000
 # terminal.cwd is the only lever that moves the agent, a failed one-shot still
 # exits 0, and `hermes config set` replaces a list.
 LIB_URL="https://raw.githubusercontent.com/MichaelZelbel/kit-bootstrap/687a6f7d7a799017cb3b17fb79ce5c14f53da1ba/lib.sh"
-KB_TOOLS_REF="8ba2f4647dfd308b36cac410e141f5cef2244315"
+KB_TOOLS_REF="${KB_TOOLS_REF:-8ba2f4647dfd308b36cac410e141f5cef2244315}"
 export KB_TOOLS_REF
 if ! LIB="$(curl -fsSL "$LIB_URL")" || [ -z "$LIB" ]; then
   printf '\n   STOPPED: could not download the shared install code from\n   %s\n   Check the machine has internet, then run this again.\n\n' "$LIB_URL" >&2

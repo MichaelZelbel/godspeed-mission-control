@@ -39,6 +39,13 @@ class Installation(unittest.TestCase):
             raw=subprocess.check_output(['node','-e',script,str(ROOT/'tools/chat-gateway.js'),home,home],text=True,env=env)
             self.assertEqual(json.loads(raw)['state'],'remote_update_pending')
             self.assertNotIn('private',raw)
+            status=json.loads((Path(home)/'.hub/chat/setup-status.json').read_text())
+            self.assertIn('not checked',status['notice'])
+            self.assertNotIn('private',status['notice'])
+            (config/'connections.json').write_text('{"version":2,"connections":[]}')
+            raw=subprocess.check_output(['node','-e',script,str(ROOT/'tools/chat-gateway.js'),home,home],text=True,env=env)
+            self.assertEqual(json.loads(raw)['state'],'desktop_only')
+            self.assertFalse((Path(home)/'.hub/chat/pending-server-update.json').exists())
 
     def test_repeat_bundle_install_keeps_one_version_and_no_gateway(self):
         with tempfile.TemporaryDirectory() as home:

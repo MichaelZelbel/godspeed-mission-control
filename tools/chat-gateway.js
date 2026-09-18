@@ -25,15 +25,21 @@ function discover(home, env=process.env) {
 function setup(hub, home=os.homedir()) {
   const connections=remoteConnections(home);
   function finish(result) {
-    if(!connections.length)return result;
+    const directory=path.join(home,'.hub/chat'); fs.mkdirSync(directory,{recursive:true,mode:0o700});
+    const destination=path.join(directory,'pending-server-update.json');
+    if(connections.length) {
     const pending={...result,state:'remote_update_pending',connections,local_state:result.state||'configured',
       server_state:'not_checked',
       reason:'Desktop tools are installed. This setup has not checked or updated Telegram protection on your connected server.',
       update_url:'https://github.com/MichaelZelbel/teach-it-once-kit/blob/main/docs/telegram-conversations.md#updating-a-connected-server'};
-    const directory=path.join(home,'.hub/chat'); fs.mkdirSync(directory,{recursive:true,mode:0o700});
-    const destination=path.join(directory,'pending-server-update.json'),temporary=destination+'.tmp';
+    const temporary=destination+'.tmp';
     fs.writeFileSync(temporary,JSON.stringify(pending,null,2),{mode:0o600}); fs.renameSync(temporary,destination);
-    return pending;
+    result=pending;
+    } else if(fs.existsSync(destination))fs.unlinkSync(destination);
+    const status=path.join(directory,'setup-status.json'),temporary=status+'.tmp';
+    fs.writeFileSync(temporary,JSON.stringify({schema:1,state:result.state||'configured',notice:human(result),updated_at:new Date().toISOString()}),{mode:0o600});
+    fs.renameSync(temporary,status);
+    return result;
   }
   const profile=process.env.HERMES_HOME||path.join(home,'.hermes');
   const envFile=path.join(profile,'.env');
