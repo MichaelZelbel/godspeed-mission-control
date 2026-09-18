@@ -67,14 +67,14 @@ class Approvals:
     @staticmethod
     def text(state,language='en'):
         if language=='de':
-            return {'expired':'Diese Anfrage ist abgelaufen. Die Aktion wurde nicht ausgeführt. Es wartet nichts mehr auf deine Freigabe.',
+            return {'expired':'Diese Anfrage ist abgelaufen. Die Aktion wurde nicht ausgeführt. Für diese Anfrage ist keine Freigabe mehr nötig.',
                     'cancelled':'Diese Anfrage wurde abgebrochen. Es wartet keine Freigabe mehr.',
                     'denied':'Du hast diese Anfrage abgelehnt. Die Aktion wurde nicht ausgeführt.',
                     'approved':'Du hast die Aktion freigegeben. Das Ergebnis ist noch nicht bestätigt.',
                     'succeeded':'Die freigegebene Aktion wurde erfolgreich ausgeführt.',
                     'failed':'Die freigegebene Aktion ist fehlgeschlagen.',
                     'uncertain':'Ich kann nicht bestätigen, ob die Aktion abgeschlossen wurde. Ich wiederhole sie nicht automatisch.'}.get(state,'Diese Anfrage wartet auf deine Freigabe.')
-        return {'expired':'This request expired. The action was not run. Nothing is waiting for your approval.',
+        return {'expired':'This request expired. The action was not run. This request no longer needs your approval.',
                 'cancelled':'This request was cancelled. It is no longer waiting for your approval.',
                 'denied':'You declined this request. The action was not run.',
                 'approved':'You approved this action. Its result has not been confirmed yet.',
