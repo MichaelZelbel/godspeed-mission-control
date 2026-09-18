@@ -611,6 +611,25 @@ const day = today();
 const cmd = args[0] && !args[0].startsWith("-") ? args[0] : "";
 let rc = 0;
 switch (cmd) {
+  case "export": {
+    // Read only. Neither roll nor a self-check runs while a message is being selected.
+    const crypto = require('crypto');
+    const rows = slugs().map(slug => {
+      const o = parseFile(slug);
+      if (!o || !o.strips.length) throw new Error('Unreadable obligation: ' + slug);
+      const cur = currentWindow(o, day);
+      const strip = cur ? cur.strip : o.strips[o.strips.length - 1];
+      const status = cur ? 'open' : (o.strips.every(s => ['done','dropped','closed'].includes(s.state)) ? 'done' : 'unknown');
+      return {item_id:'due:' + slug + ':' + strip.from,source:'reader-due',
+        revision:crypto.createHash('sha256').update(JSON.stringify([o.head,strip])).digest('hex'),
+        status,checked_at:new Date().toISOString(),kind:'task',subject:o.head.TITLE || slug,
+        consequence:o.head['COST-IF-MISSED'] || '',
+        next_action:cur && ['red','orange'].includes(cur.band) ? o.head['DONE-WHEN'] || '' : '',
+        link:/^https:\/\//.test(o.head.LINK || '') ? o.head.LINK : null,deadline:strip.to};
+    });
+    console.log(JSON.stringify(rows));
+    break;
+  }
   case "": case "list": rc = cmdList(day, false); break;
   case "today": rc = cmdList(day, true); break;
   case "add": rc = cmdAdd(day); break;

@@ -1,0 +1,27 @@
+{
+  "schema": 1,
+  "hermes_commit": "db64ddb58eef6aebd0874bcdaad266ca8f6205a0",
+  "patch": "db64ddb58eef-hub-chat.patch",
+  "files": {
+    "gateway/platforms/base.py": {
+      "original": "54a6aaabac9d9800224b844b9ad12f8d3cf073a994e2b8e0d0a7f1ca80bc86ee",
+      "patched": "20fd268493ab0231b805000527e57933c504b8068a5df7bcc87d1b81e38a2f79"
+    },
+    "plugins/platforms/telegram/adapter.py": {
+      "original": "ce4b5ca688bb94691012b6a62b1767b349c94851e9ec9bcd7aa56d32fe3e3506",
+      "patched": "eafc744c413a22812dea413e017a28d886e8b440d5d8d9d38664d167b298000a"
+    },
+    "gateway/run_turn_runner.py": {
+      "original": "b87d6072f2cc13634398d380eb0857d550f75502a8ace137138cf16e00d9a763",
+      "patched": "6a4c425ffd07e857111df9f7526b4ddfc74c6a56885a0eea9cbea62ed30364fe"
+    },
+    "tools/approval.py": {
+      "original": "430d08bd6dd1a685d228f792377b946bcd97bcc710e74a40e86e8b9b8ac721fc",
+      "patched": "2e9332ce8d9572ef2c808f33a4829e573a5998688d1a13ae8454594f8de7f787"
+    },
+    "_hub_chat_bridge.py": {
+      "original": null,
+      "patched": "ba75c4a23d226fd9dc0cd09fc339756cc3b49f52f5455b728e0be3ad4dd76d52"
+    }
+  }
+}

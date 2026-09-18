@@ -308,6 +308,19 @@ cmds.list = (a) => {
   if (!rows.length) { say('no open work'); return; }
   for (const c of rows) say(`${c.f.STATUS.padEnd(10)} ${(c.f.KIND || 'do').padEnd(5)} ${c.id.padEnd(16)} ${(c.f.OWNER || '').padEnd(10)} ${c.f.WHAT}` + (c.f.NEEDS !== 'none' ? `  needs ${c.f.NEEDS}` : '') + (c.f.GOAL ? `  [${c.f.GOAL}]` : '') + (c.f.CARD ? `  {${c.f.CARD}}` : ''));
 };
+
+cmds.export = () => {
+  const crypto = require('crypto');
+  say(JSON.stringify(S.all().map(c => ({
+    item_id:'work:' + c.id,source:'reader-work',
+    revision:crypto.createHash('sha256').update(JSON.stringify(c.f)).digest('hex'),
+    status:['verified','cancelled'].includes(c.f.STATUS) ? 'done' : (OPEN.includes(c.f.STATUS) ? 'open' : 'unknown'),
+    checked_at:now(),kind:c.f.NEEDS === 'authorization' ? 'decision' : 'task',subject:c.f.WHAT,
+    consequence:'This work waits for your answer.',
+    next_action:c.f.NEEDS === 'person' || c.f.NEEDS === 'authorization' ? (c.f['DONE WHEN'] || '') : '',
+    link:/^https:\/\//.test(c.f.LINK || '') ? c.f.LINK : null
+  }))));
+};
 cmds.show = (a) => { const c = S.read(a._[0] || die('which item?')) || die('no such work'); say(S.render(c).trimEnd()); };
 cmds.check = () => {
   const all = S.all();

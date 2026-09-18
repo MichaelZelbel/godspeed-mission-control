@@ -179,6 +179,10 @@ kb_point_hermes_at_hub "$HUB" \
 
 # --------------------------------------------------------------------------
 say "Making it start again after a reboot"
+if [ -f "$HOME/.local/bin/chat-gateway.js" ]; then
+  node "$HOME/.local/bin/chat-gateway.js" "$HUB" \
+    || die "Telegram protection could not be verified. Keep the previous gateway version; run hub-chat doctor before restarting it."
+fi
 
 # Hermes generates its own service unit, and it is better than the one this
 # script used to write by hand, measured on the test server: it carries

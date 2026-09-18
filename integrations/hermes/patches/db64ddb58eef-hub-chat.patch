@@ -1,0 +1,200 @@
+--- a/gateway/platforms/base.py
++++ b/gateway/platforms/base.py
+@@ -1759,6 +1759,9 @@
+ 
+ 
+ _strip_media_directives = _strip_media_tag_directives
++
++
++import _hub_chat_bridge as _hub_chat
+ 
+ 
+ class BasePlatformAdapter(ABC):
+@@ -3233,6 +3236,7 @@
+             ttl = 0
+         return response.text, int(ttl or 0)
+ 
++    @_hub_chat.turn
+     async def _dispatch_inline_reply(self, event: MessageEvent, *, log_cmd: Optional[str] = None) -> None:
+         """Call the handler and send its reply inline, with retry, threading and
+         ephemeral deletion — no session lifecycle (active-session bypass paths)."""
+@@ -3789,6 +3793,7 @@
+             and event.message_type == MessageType.VOICE and text_content and not media_files
+             and not self._streaming_tts_turn_completed(session_key, generation, event=event))
+ 
++    @_hub_chat.final_output
+     async def _play_tts_file(
+         self, event: MessageEvent, text_content: str, tts_path: str, first: bool,
+         metadata: Dict[str, Any], record_delivery: Callable) -> bool:
+@@ -3956,6 +3961,7 @@
+             await self._finalize_delivery_obligation(obligation_id, result, event, delivery_adapter)
+         return result, delivery_adapter
+ 
++    @_hub_chat.final_output
+     async def _send_final_text(
+         self, event: MessageEvent, session_key: str, text_content: str, metadata: Dict[str, Any],
+         is_ephemeral_response: bool, ephemeral_ttl: int, record_delivery: Callable) -> None:
+@@ -3967,6 +3973,7 @@
+         if ephemeral_ttl and ephemeral_ttl > 0 and result.success and result.message_id:
+             delivery_adapter._schedule_ephemeral_delete(event.source.chat_id, result.message_id, ephemeral_ttl)
+ 
++    @_hub_chat.final_output
+     async def _notify_turn_error(self, event: MessageEvent, e: BaseException) -> Optional[dict]:
+         """Tell the user a turn failed rather than leaving radio silence (last resort:
+         a failing notice is logged, never raised). Returns the thread metadata used."""
+@@ -3983,6 +3990,7 @@
+                 "[%s] Failed to send error notification to user: %s", self.name, notify_err, exc_info=True)
+         return _thread_metadata
+ 
++    @_hub_chat.final_output
+     async def _deliver_attachments(self, event: MessageEvent, extracted: "_ExtractedResponse",
+                                    metadata: Dict[str, Any], *, anything_sent: bool,
+                                    record_delivery: Callable) -> None:
+@@ -4101,6 +4109,7 @@
+         elif current_task is not None and self._session_tasks.get(session_key) is current_task:
+             self._cleanup_finished_session_task(session_key, interrupt_event)
+ 
++    @_hub_chat.turn
+     async def _process_message_background(self, event: MessageEvent, session_key: str) -> None:
+         """Background task that actually processes the message."""
+         delivery_attempted = delivery_succeeded = False  # feeds the processing-complete hook
+--- a/plugins/platforms/telegram/adapter.py
++++ b/plugins/platforms/telegram/adapter.py
+@@ -361,6 +361,9 @@
+ 
+ class _PollingLifecycleAbort(RuntimeError):
+     """Internal control flow for polling startup fenced by teardown."""
++
++
++import _hub_chat_bridge as _hub_chat
+ 
+ 
+ class TelegramAdapter(BasePlatformAdapter):
+@@ -2988,6 +2991,7 @@
+                 builder = builder.local_mode(True)
+                 logger.info("[%s] Using Telegram local_mode (read files from disk)", self.name)
+             request, get_updates_request = await self._build_ptb_requests()
++            request = _hub_chat.configure(self, request)
+             builder = builder.request(request).get_updates_request(get_updates_request)
+             self._app = builder.build()
+             self._bot = self._app.bot
+@@ -3030,6 +3034,7 @@
+             # gateway wraps in a connect timeout — means one slow call blows the whole connect and the
+             # adapter never comes up, even though polling/webhook is already live (#46298).
+             self._start_post_connect_housekeeping()
++            await _hub_chat.start(self)
+             return True
+         except Exception as e:
+             self._release_platform_lock()
+@@ -3373,6 +3378,7 @@
+         with contextlib.suppress(Exception):
+             await self.send_typing(chat_id, metadata=metadata)
+ 
++    @_hub_chat.final_send
+     async def send(
+         self, chat_id: str, content: str, reply_to: Optional[str] = None, metadata: Optional[Dict[str, Any]] = None) -> SendResult:
+         """Send a message to a Telegram chat."""
+@@ -3793,6 +3799,7 @@
+             chat_id, thread_id, metadata, reply_to_message_id=reply_to_id, reply_to_mode=reply_to_mode))
+         return await self._send_message_with_thread_fallback(**kwargs)
+ 
++    @_hub_chat.prompt_output
+     async def _send_prompt(self, what: str, chat_id: str, metadata: Optional[Dict[str, Any]], build, *,
+                            parse_mode: Any = None, thread_id: Any = None, reply_to_mode: Any = None) -> SendResult:
+         """Shared control-prompt shell: not-connected guard, ``build()`` → ``(text, keyboard, on_sent)`` (or a
+@@ -3847,6 +3854,9 @@
+     async def _send_exec_approval_prompt(self, prompt: ExecApprovalPrompt) -> SendResult:
+         """Inline-keyboard approval prompt; buttons call ``resolve_gateway_approval()`` like the
+         text ``/approve`` flow."""
++        handled = await _hub_chat.approval_prompt(self, prompt)
++        if handled is not None:
++            return handled
+         def build():
+             # Short monotonic ids in callback_data map back to session_key.
+             import itertools
+@@ -4316,6 +4326,8 @@
+ 
+     async def _handle_exec_approval_callback(self, query, data: str, cb: Dict[str, Any]) -> None:
+         """``ea:<choice>:<approval_id>`` — resolve a pending exec approval."""
++        if await _hub_chat.approval_callback(self, query, data, cb):
++            return
+         parts = data.split(":", 2)
+         if len(parts) != 3:
+             return
+@@ -6499,6 +6511,7 @@
+                 reply_to_text = None
+         return reply_to_id, reply_to_text
+ 
++    @_hub_chat.native_event
+     def _build_message_event(self, message: Message, msg_type: MessageType, update_id: Optional[int] = None) -> MessageEvent:
+         """Build a MessageEvent from a Telegram message. ``update_id`` lets ``/restart`` record the
+         triggering offset so the new gateway process advances past it."""
+--- a/gateway/run_turn_runner.py
++++ b/gateway/run_turn_runner.py
+@@ -907,6 +907,9 @@
+             scfg.enabled and scfg.transport != "off" if plat_streaming is None else bool(plat_streaming)
+         )
+         want_interim_messages = ctx.interim_assistant_messages_enabled
++        import _hub_chat_bridge as _hub_chat
++        if _hub_chat.quiet_stream(ctx._status_adapter):
++            want_stream_deltas = want_interim_messages = False
+         if want_stream_deltas or want_interim_messages:
+             try:
+                 from gateway.stream_consumer import GatewayStreamConsumer
+@@ -1369,7 +1372,7 @@
+                 fut = self._schedule(
+                     adapter.send_exec_approval(
+                         chat_id=ctx._status_chat_id, command=cmd, session_key=ctx.session_key or "",
+-                        description=desc, metadata=ctx._status_thread_metadata, **flags,
++                        description=desc, metadata=__import__("_hub_chat_bridge").approval_metadata(ctx, approval_data), **flags,
+                     ),
+                     "send_exec_approval scheduling error",
+                 )
+--- a/tools/approval.py
++++ b/tools/approval.py
+@@ -154,11 +154,20 @@
+             targets = [entry for entry in queue if entry.data.get("request_id") == request_id]
+             if not targets:
+                 return 0
++            from _hub_chat_bridge import guard_decision
++            targets = [entry for entry in targets if guard_decision(session_key, entry.data.get("request_id"), choice)]
++            if not targets:
++                return 0
+             queue[:] = [entry for entry in queue if entry not in targets]
+         elif resolve_all:
+-            targets = list(queue)
+-            queue.clear()
++            from _hub_chat_bridge import guard_decision
++            targets = [entry for entry in queue if guard_decision(session_key, entry.data.get("request_id"), choice)]
++            queue[:] = [entry for entry in queue if entry not in targets]
+         else:
++            from _hub_chat_bridge import guard_decision
++            entry = queue[0]
++            if not guard_decision(session_key, entry.data.get("request_id"), choice):
++                return 0
+             targets = [queue.pop(0)]
+         if not queue:
+             _gateway_queues.pop(session_key, None)
+--- /dev/null
++++ b/_hub_chat_bridge.py
+@@ -0,0 +1,20 @@
++"""Versioned optional integration. No private hub behavior lives here."""
++import importlib.util
++if importlib.util.find_spec('hub_chat'):
++    from hub_chat.hermes_bridge import *
++else:
++    from hermes_constants import get_hermes_home
++    import json
++    path = get_hermes_home() / 'hub-chat.json'
++    if path.exists() and json.loads(path.read_text()).get('enabled'):
++        raise RuntimeError('Chat protection is enabled but its package is missing')
++    def identity(function): return function
++    turn = final_output = native_event = final_send = prompt_output = identity
++    def configure(adapter,request): return request
++    def quiet_stream(adapter): return False
++    def guard_decision(*args): return True
++    def approval_metadata(ctx,data): return ctx._status_thread_metadata
++    async def approval_prompt(*args): return None
++    async def approval_callback(*args): return False
++    async def start(*args): pass
++    async def stop(*args): pass

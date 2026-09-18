@@ -1,0 +1,17 @@
+"""Migration never turns an old queue acknowledgement into a delivery receipt."""
+import json
+from pathlib import Path
+from .contracts import Fact, utcnow, fingerprint
+
+
+def import_legacy(chat,path):
+    rows = json.loads(Path(path).read_text(encoding='utf-8'))
+    key = 'legacy:'+fingerprint(rows)
+    if chat.store.rows('SELECT 1 FROM audit WHERE kind=?',(key,)):
+        return {'imported':0,'already_imported':True}
+    # Validate the whole input before changing state.
+    facts = [Fact.parse(dict(r,checked_at=r.get('checked_at') or utcnow())) for r in rows]
+    for fact in facts:
+        chat.store.put_fact(fact)
+    chat.store.audit(key,'Imported source identities; old send marks are unconfirmed')
+    return {'imported':len(facts),'delivery_receipts_created':0}
