@@ -38,7 +38,9 @@ SAFE=19000
 # tag. They carry the behaviour this script must not re-learn the hard way:
 # terminal.cwd is the only lever that moves the agent, a failed one-shot still
 # exits 0, and `hermes config set` replaces a list.
-LIB_URL="https://raw.githubusercontent.com/MichaelZelbel/kit-bootstrap/v2.4.1/lib.sh"
+LIB_URL="https://raw.githubusercontent.com/MichaelZelbel/kit-bootstrap/687a6f7d7a799017cb3b17fb79ce5c14f53da1ba/lib.sh"
+KB_TOOLS_REF="8ba2f4647dfd308b36cac410e141f5cef2244315"
+export KB_TOOLS_REF
 if ! LIB="$(curl -fsSL "$LIB_URL")" || [ -z "$LIB" ]; then
   printf '\n   STOPPED: could not download the shared install code from\n   %s\n   Check the machine has internet, then run this again.\n\n' "$LIB_URL" >&2
   exit 1
@@ -160,6 +162,13 @@ HERMES="$(command -v hermes 2>/dev/null || echo "$HOME/.local/bin/hermes")"
    Look for it with:  ls -l ~/.local/bin/hermes"
 ok "found at $HERMES"
 
+say "Installing the tested conversation tools"
+command -v node >/dev/null 2>&1 || die "Node.js is missing. Run the server installer as the administrator to install the prerequisites."
+kb_install_hub_tools "$HUB" "https://github.com/MichaelZelbel/teach-it-once-kit.git" \
+  || die "The tested conversation tools could not be installed. The update is incomplete."
+[ -f "$HOME/.local/bin/chat-gateway.js" ] && [ -f "$HOME/.hub/chat/current.json" ] \
+  || die "The shared conversation package is missing. The update is incomplete."
+
 # --------------------------------------------------------------------------
 say "Pointing Hermes at your folder"
 
@@ -179,10 +188,6 @@ kb_point_hermes_at_hub "$HUB" \
 
 # --------------------------------------------------------------------------
 say "Making it start again after a reboot"
-if [ -f "$HOME/.local/bin/chat-gateway.js" ]; then
-  node "$HOME/.local/bin/chat-gateway.js" "$HUB" \
-    || die "Telegram protection could not be verified. Keep the previous gateway version; run hub-chat doctor before restarting it."
-fi
 
 # Hermes generates its own service unit, and it is better than the one this
 # script used to write by hand, measured on the test server: it carries
@@ -219,10 +224,23 @@ say "Scheduling the morning brief"
 # included; and a morning that fails lands in `hermes cron incidents` instead
 # of looking like a quiet one. The job is created now and starts firing the
 # moment the gateway below is on; a slot the gateway was down for runs once, late.
+brief_status=0
+node -e 'try {const fs=require("fs"),p=process.argv[1]; if(!fs.existsSync(p))process.exit(1); const d=JSON.parse(fs.readFileSync(p,"utf8")); process.exit((Array.isArray(d)?d:d.jobs||[]).some(j=>j.name==="morning-brief")?0:1)} catch(e) {process.exit(2)}' \
+  "${HERMES_HOME:-$HOME/.hermes}/cron/jobs.json" || brief_status=$?
+if [ "$brief_status" -eq 0 ]; then
+  ok "your existing morning-brief schedule is unchanged"
+elif [ "$brief_status" -eq 1 ]; then
 kb_cron_job "$HUB" "morning-brief" "0 6 * * *" \
   "Run the recipe in skills/morning-brief/SKILL.md; on an older hub it lives at .claude/skills/morning-brief/SKILL.md. It writes today's brief into brief/. When it is written, commit and push this folder, then reply with the brief's full text. If the recipe is missing or the brief cannot be written, say exactly that instead of staying quiet: a broken morning must never look like a quiet one." \
-  "telegram" || true
+  "telegram" || die "The morning brief could not be scheduled."
+else
+  die "The saved schedule could not be read. It has not been replaced."
 fi
+fi
+
+# Register the existing or newly created report only after the schedule exists.
+node "$HOME/.local/bin/chat-gateway.js" "$HUB" --human \
+  || die "Telegram protection could not be configured. Run hub-chat doctor before restarting the gateway."
 
 # --------------------------------------------------------------------------
 # The one-line installer prints its own closing block, with the system-service
@@ -248,10 +266,11 @@ cat <<NEXT
       BotFather (/newbot, two questions, paste the long token it hands you).
       Then send your new bot any message so it is allowed to answer you.
 
-   When both are done, switch it on and ask IT how it is doing:
+   After connecting Telegram, run this script again to configure protection.
+   Then restart the existing gateway and verify what it loaded:
 
-        $HERMES gateway start
-        $HERMES gateway status
+        $HERMES gateway restart
+        hub-chat doctor --require-live
 
       Read the status from Hermes itself, not from systemctl: a cleanly
       stopped gateway shows as "failed" to systemd, so systemctl cannot tell
