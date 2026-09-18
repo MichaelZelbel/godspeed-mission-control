@@ -15,15 +15,43 @@ def read_source(source):
     return rows
 
 
+# What a finished background job may say. Each sentence is a fact about the run, read from its
+# record: it ran to the end, it did not, or it saved a plan and changed nothing. None of them
+# says the goal was met, because the record cannot know that. The page says what happened.
+JOB_TEXT={'en':{'finished':'It ran to the end. What it did and what it found is on this page.',
+                'not_finished':'It did not run to the end. What happened is on this page.',
+                'needs_approval':'Nothing has been changed yet. The plan is on this page. To carry it out, reply: approve {approve}'},
+          'de':{'finished':'Er ist bis zum Ende gelaufen. Was er getan und gefunden hat, steht auf dieser Seite.',
+                'not_finished':'Er ist nicht zu Ende gelaufen. Was passiert ist, steht auf dieser Seite.',
+                'needs_approval':'Es wurde noch nichts geändert. Der Plan steht auf dieser Seite. Zum Ausführen antworte: approve {approve}'}}
+
+
+def render_job(record,language):
+    sentence=JOB_TEXT.get(language,JOB_TEXT['en'])[record['outcome']].format(approve=record.get('approve',''))
+    text=record['subject']+'\n'+sentence+'\n'+record['link']
+    if len(text.encode('utf-16-le'))//2>3500: raise ValueError('The result is too long')
+    return text
+
+
 def validate(record):
     if record.get('authorized') is not True: raise ValueError('The job was not authorized')
     if not re.fullmatch(r'[A-Za-z0-9_-]{1,120}',record.get('id','')): raise ValueError('Invalid request identity')
-    if record.get('outcome') not in ('needs_review','uncertain','not_completed'): raise ValueError('Provider status is not an outcome')
+    job=record.get('kind')=='job'
+    if record.get('kind') not in (None,'job'): raise ValueError('Unknown requested result kind')
+    if record.get('outcome') not in (JOB_TEXT['en'] if job else ('needs_review','uncertain','not_completed')): raise ValueError('Provider status is not an outcome')
     if record.get('revision')!=fingerprint({k:v for k,v in record.items() if k!='revision'}): raise ValueError('Requested result changed')
     age=(timestamp(utcnow())-timestamp(record['finished_at'])).total_seconds()
     if not 0<=age<=7*86400: raise ValueError('Requested result is not recent')
     if not isinstance(record.get('subject'),str) or not 1<=len(record['subject'])<=300: raise ValueError('Missing request subject')
-    if not isinstance(record.get('transcript'),list) or len(canonical(record))>100_000: raise ValueError('Invalid transcript')
+    if len(canonical(record))>100_000: raise ValueError('Requested result is too large')
+    if job:
+        # A job has no counterpart to quote. Its page is the evidence, so the page is required,
+        # and the only reply it may ask for is the approval of its own saved plan.
+        if 'transcript' in record: raise ValueError('A job result carries no transcript')
+        if not isinstance(record.get('link'),str): raise ValueError('A job result needs its page')
+        if (record['outcome']=='needs_approval')!=('approve' in record): raise ValueError('Approval reply does not match the outcome')
+        if 'approve' in record and not re.fullmatch(r'[0-9a-f]{8}',str(record['approve'])): raise ValueError('Invalid approval identity')
+    elif not isinstance(record.get('transcript'),list): raise ValueError('Invalid transcript')
     if record.get('link') and not record['link'].startswith('https://'): raise ValueError('Expected HTTPS evidence link')
 
 
@@ -108,9 +136,12 @@ async def review_one(boundary,reviewer=None):
     row=rows[0]; record=json.loads(row['body'])
     if not boundary.chat.store.rows('SELECT 1 FROM deliveries WHERE key=?',(row['delivery_key'],)):
         try:
-            with boundary.review(row['key']):
-                answer=await (reviewer(record) if reviewer else gateway_review(boundary,record))
-            text=render_review(record,answer,boundary.chat.language)
+            if record.get('kind')=='job':
+                text=render_job(record,boundary.chat.language)
+            else:
+                with boundary.review(row['key']):
+                    answer=await (reviewer(record) if reviewer else gateway_review(boundary,record))
+                text=render_review(record,answer,boundary.chat.language)
         except Exception as exc:
             boundary.chat.store.audit('requested_review_failed',type(exc).__name__)
             text=unclear(record,boundary.chat.language)

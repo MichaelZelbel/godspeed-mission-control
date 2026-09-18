@@ -79,3 +79,45 @@ class RequestedResults(unittest.IsolatedAsyncioTestCase):
         self.assertIn('could not confirm',text)
         self.assertNotIn('credentials',text)
         self.assertIn(self.record['link'],text)
+
+    def job(self,**changes):
+        from hub_chat.contracts import fingerprint,utcnow
+        record={'id':'example-job','authorized':True,'kind':'job','subject':'Check why the weekly report did not arrive',
+                'outcome':'finished','finished_at':utcnow(),'link':'https://example.org/job-report'}
+        record.update(changes); record.pop('revision',None)
+        record['revision']=fingerprint(record)
+        return record
+
+    async def test_background_job_result_is_stated_from_its_record_without_a_model(self):
+        from hub_chat.requested import import_requests,review_one
+        self.boundary.config['request_sources']=[{'name':'jobs','argv':['fixed-reader']}]
+        with patch('hub_chat.requested.read_source',return_value=[self.job()]):
+            import_requests(self.boundary)
+            review=AsyncMock(return_value='{}')
+            await review_one(self.boundary,review)
+        self.assertEqual(review.await_count,0)
+        row=self.chat.store.rows('SELECT * FROM deliveries')[0]
+        self.assertEqual(row['class'],'requested_result')
+        text=json.loads(row['body'])['text']
+        self.assertIn('Check why the weekly report did not arrive',text)
+        self.assertIn('ran to the end',text)
+        self.assertIn('https://example.org/job-report',text)
+        # Running to the end is a fact about the run. It is never worded as the goal being met.
+        for claim in ('success','fixed','solved','completed your'): self.assertNotIn(claim,text.lower())
+
+    async def test_job_that_needs_approval_names_the_exact_reply_and_says_nothing_changed(self):
+        from hub_chat.requested import render_job
+        text=render_job(self.job(outcome='needs_approval',approve='0a1b2c3d'),'en')
+        self.assertIn('Nothing has been changed',text)
+        self.assertIn('approve 0a1b2c3d',text)
+        self.assertIn('nicht zu Ende',render_job(self.job(outcome='not_finished'),'de'))
+
+    async def test_job_record_without_a_page_or_with_a_loose_approval_is_refused(self):
+        from hub_chat.requested import import_requests
+        self.boundary.config['request_sources']=[{'name':'jobs','argv':['fixed-reader']}]
+        for record in (self.job(link=None),self.job(link='http://example.org/x'),self.job(outcome='done'),
+                       self.job(outcome='needs_approval'),self.job(outcome='finished',approve='0a1b2c3d'),
+                       self.job(outcome='needs_approval',approve='rm -rf'),self.job(transcript=[{'role':'user','message':'x'}])):
+            with patch('hub_chat.requested.read_source',return_value=[record]):
+                import_requests(self.boundary)
+        self.assertEqual(self.chat.store.rows('SELECT * FROM requested_results'),[])
