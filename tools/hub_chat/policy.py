@@ -1,6 +1,6 @@
 """Selection and deterministic fallback wording. No urgency inferred from a queue."""
 from datetime import datetime
-from zoneinfo import ZoneInfo
+from .timezones import zone
 from .contracts import Draft, fingerprint, timestamp
 
 ALLOWED = frozenset(('reply','digest','question','approval','approval_result','requested_result','critical_failure'))
@@ -35,7 +35,7 @@ def compose(facts, conversation_id, now, timezone='UTC', language='en', purpose=
     chosen = sorted(select(facts, purpose, now),key=lambda f:(f.deadline or '9999',f.item_id))
     if not chosen:
         return None
-    date = timestamp(now).astimezone(ZoneInfo(timezone)).date()
+    date = timestamp(now).astimezone(zone(timezone)).date()
     parts, included = [], []
     for f in chosen:
         lines = [f.subject.rstrip('. ') + '.']

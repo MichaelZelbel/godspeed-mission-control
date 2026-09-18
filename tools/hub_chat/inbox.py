@@ -92,10 +92,10 @@ async def deliver(boundary,key):
     errors = policy.check(draft,facts,[])
     if errors:
         return chat.delivery.state(key,'suppressed','; '.join(errors))
-    from zoneinfo import ZoneInfo
-    date = datetime.now(ZoneInfo(chat.timezone)).date()
+    from .timezones import zone
+    date = datetime.now(zone(chat.timezone)).date()
     sent = chat.store.rows("SELECT coalesce(sent_at,created_at) AS time FROM deliveries WHERE class='digest' AND state IN ('sent','uncertain') AND key NOT LIKE 'telegram:%' AND key NOT LIKE 'report:%'")
-    if draft.output_class=='digest' and not key.startswith('report:') and any(datetime.fromisoformat(row['time'].replace('Z','+00:00')).astimezone(ZoneInfo(chat.timezone)).date()==date for row in sent):
+    if draft.output_class=='digest' and not key.startswith('report:') and any(datetime.fromisoformat(row['time'].replace('Z','+00:00')).astimezone(zone(chat.timezone)).date()==date for row in sent):
         return chat.delivery.state(key,'suppressed','Digest already sent or uncertain today')
     try:
         with boundary.output(draft.output_class,key):

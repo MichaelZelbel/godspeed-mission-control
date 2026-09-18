@@ -36,8 +36,8 @@ def configure(args):
     config.update(schema=1,enabled=True,conversation_id=args.conversation,actor_id=args.actor,
                   timezone=args.timezone or config.get('timezone') or os.environ.get('TZ','UTC'),
                   language=args.language or config.get('language','en'),runtime=str(root),package=str(bundle))
-    from zoneinfo import ZoneInfo
-    ZoneInfo(config['timezone'])
+    from .timezones import zone
+    zone(config['timezone'])
     config.setdefault('sources',[{'name':'reader-due','argv':['node',str(package/'due.js'),'export','--hub',str(args.hub)]},
                                  {'name':'reader-work','argv':['node',str(package/'work.js'),'export'],'cwd':str(args.hub)}])
     config.setdefault('proactive_paused',True)

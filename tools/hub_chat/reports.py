@@ -25,8 +25,8 @@ def read_report(boundary,name,revision,now):
     facts=boundary.chat.sources.refresh(ids,now)
     if any(f.status!='open' for f in facts): raise ValueError('A reported item closed or could not be checked')
     if report.get('parse_mode') not in (None,'HTML'): raise ValueError('Unsupported report format')
-    from zoneinfo import ZoneInfo
-    day=str(timestamp(now).astimezone(ZoneInfo(boundary.chat.timezone)).date())
+    from .timezones import zone
+    day=str(timestamp(now).astimezone(zone(boundary.chat.timezone)).date())
     drafts=[Draft('report:'+name+':'+day+':'+str(i),boundary.chat.conversation_id,'digest',text,
                   tuple((f.item_id,f.revision) for f in facts if (f.link and f.link in text) or f.subject in text)) for i,text in enumerate(messages)]
     return drafts,report.get('parse_mode')
