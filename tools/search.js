@@ -47,8 +47,8 @@ function help() {
   console.log("hub-search - find something in your hub");
   console.log("  hub-search <words...> [--limit N] [--local] [--json] [--hub PATH]");
   console.log("");
-  console.log("  It asks your notebook first, when one is connected, and searches the files in");
-  console.log("  your hub folder when it cannot. The last line says which of the two it did.");
+  console.log("  When your hub is copied to your notebook, it asks the notebook first, and it");
+  console.log("  searches the files in your hub folder when it cannot. The last line says which.");
 }
 
 // ---------------------------------------------------------------- arguments
@@ -322,6 +322,10 @@ async function main() {
     const k = nb.menerioKey(hub);
     if (!k.key) {
       reason = "none";
+    } else if (!nb.mirrorOn()) {
+      // A notebook is connected, but this reader never put a copy of the hub into it.
+      // Asking would cost a trip over the network to hear "nothing", every time.
+      reason = "no copy";
     } else {
       const r = await askMenerio(k.key, query, limit);
       const hits = r.body ? usableHits(r.body, terms) : null;
@@ -339,9 +343,10 @@ async function main() {
   if (localOnly) line = "local files";
   else if (answeredEmpty) line = "local files (Menerio answered and had nothing for this, so I looked here too)";
   else if (reason === "none") line = "local files (no Menerio connected)";
+  else if (reason === "no copy") line = "local files (your hub is not copied to Menerio, so there was nothing to ask it)";
   else line = "local files (Menerio not reached: " + reason + ")";
   show({ query: query, source: "local", mode: "words only", source_line: line,
-    reason: answeredEmpty ? "menerio had nothing" : reason === "none" ? "" : reason, hits: hits });
+    reason: answeredEmpty ? "menerio had nothing" : (reason === "none" || reason === "no copy") ? "" : reason, hits: hits });
 }
 
 main().then(() => process.exit(0), (e) => {

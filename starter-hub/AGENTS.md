@@ -81,11 +81,11 @@ purpose. If it contradicts something you believe about me, the file wins.
 ## Finding things, and my notebook
 
 - **Search before you say it is not here.** To find anything in this folder,
-  run `hub-search <words>`. It asks my notebook first when one is connected,
-  searches the files here when it cannot, and says on its last line which of
-  the two it did. Open the files it names. Only then may you tell me that
-  something is not in my hub. If the command is missing, search the files
-  yourself.
+  run `hub-search <words>`. It asks my notebook first when my hub is copied
+  there, searches the files here when it cannot, and says on its last line
+  which of the two it did. Open the files it names. Only then may you tell me
+  that something is not in my hub. If the command is missing, search the
+  files yourself.
 - **"Make a note", "note that", "write this down".** Follow the recipe in
   `skills/keep-a-note/SKILL.md`, every time, including its three-line reply:
   the title, the folder, the links. It files the note in my Menerio notebook

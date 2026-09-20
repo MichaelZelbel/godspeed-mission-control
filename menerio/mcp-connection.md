@@ -28,8 +28,10 @@ and never into a chat with your assistant: a chat is kept as a log.
 
 Run the installer again (the same file or line you used the first time) and say yes when it
 asks about Menerio. It asks for the key once. It locks the key into your hub's store, in
-`secrets/`, so every computer you own that opens your hub has it. Then it runs
-`hub-menerio-connect` for you.
+`secrets/`. It asks `Set a passphrase for a second computer now?` The default is no, and with
+one computer you can skip it. With a passphrase, every computer you own that opens your hub
+has the key. You can set one later by running this step again. Then it runs `hub-menerio-connect` for you, and asks one more question:
+`Copy your hub's files to Menerio for search?` The default is no. More on that below.
 
 You can run that command yourself at any time:
 
@@ -39,7 +41,15 @@ hub-menerio-connect --check    change nothing, only say how things are
 ```
 
 It prints one line per assistant: connected, already connected, not installed, or failed with
-the reason. Then it asks the notebook itself and tells you how many tools answered.
+the reason. Then it asks the notebook itself and tells you whether your key works. On a
+computer with only Hermes, the report reads:
+
+```
+Claude Code   not installed. That is fine. If you ever use it, it finds your notebook too.
+Hermes        connected. It will find your notebook the next time you open it.
+Codex         not installed
+The notebook  answered. Your key works.
+```
 
 What it does, so nothing is a secret:
 
@@ -64,14 +74,23 @@ searched its own two memory files, found nothing, and said so (measured twice, 2
 
 ## What happens after you connect
 
-- **Your hub is mirrored into the notebook**, under one folder called `hub`. Everything except
-  `dev/`. The copies rank below your own notes. Menerio never mines them for facts and never
-  exports them as files. `the-notebook.md` has the details.
-- **`hub-search <words>`** is how your assistant finds things. It asks Menerio first, by
-  meaning and by words together. When it cannot reach Menerio, it searches the files in your
-  hub and says so on its last line. It never fails because the notebook is away.
 - **"Make a note about X."** Your assistant files the note in the notebook folder that fits,
-  links it to related notes, and tells you the title, the folder and the links.
+  links it to related notes, and tells you the title, the folder and the links. The
+  `keep-a-note` skill does this. That is all a connection does by itself.
+- **Your hub is mirrored into the notebook only if you said yes** to
+  `Copy your hub's files to Menerio for search?` The answer is one line in
+  `~/.hub/device.env` on this computer: `HUB_NOTEBOOK_MIRROR=1` or `HUB_NOTEBOOK_MIRROR=0`.
+  No line means no. To change it, run the Menerio step of the installer again. On a yes, the
+  copies sit under one folder called `hub`. Everything goes except `dev/`. The copies rank
+  below your own notes. Menerio never mines them for facts and never exports them as files.
+  `the-notebook.md` has the details, and helps you decide.
+- **`hub-search <words>`** is how your assistant finds things. With the mirror on, it asks
+  Menerio first, by meaning and by words together. When it cannot reach Menerio, it searches
+  the files in your hub and says so on its last line. With the mirror off, it searches the
+  files on your computer, and the last line says your hub is not copied to Menerio. It never
+  fails because the notebook is away.
+- **Facts come down either way.** Every hour, a job brings the people, events and facts
+  Menerio holds down into `world/`, as a safety copy. That sends nothing anywhere.
 
 ## The off-switch
 

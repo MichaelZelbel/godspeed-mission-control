@@ -160,10 +160,26 @@ PULL="$SELF_DIR/world-pull.py"
 [ -f "$PULL" ] || PULL="$HUB/tools/world-pull.py"
 
 # The arrow UP: what changed in the folder, into the notebook, for search.
-out="$("$PY" "$SYNC" --apply --repo-root "$HUB" 2>&1)"
-rc=$?
-say "sync exit $rc: $(printf '%s' "$out" | tail -3 | tr '\n' ' ')"
-[ -n "$VERBOSE" ] && printf '%s\n' "$out"
+#
+# ONLY WHEN THE READER SAID YES (2026-09-20). Connecting a notebook and putting a copy of
+# the whole hub into an online account are two decisions, and until today they were one:
+# two test readers of the book, one with clients' notes in her hub and one with
+# patients', both stopped at that sentence and would not connect at all. The installer now
+# asks, the answer is one line in ~/.hub/device.env, and no line means no. The arrow DOWN
+# below still runs either way: it brings your own facts onto your own disk and sends
+# nothing anywhere.
+MIRROR="${HUB_NOTEBOOK_MIRROR:-}"
+if [ -z "$MIRROR" ] && [ -r "$HOMEDIR/.hub/device.env" ]; then
+  MIRROR="$(sed -n 's/^[[:space:]]*HUB_NOTEBOOK_MIRROR=//p' "$HOMEDIR/.hub/device.env" | head -1 | tr -d '\r')"
+fi
+if [ "$MIRROR" = "1" ]; then
+  out="$(HUB_NOTEBOOK_MIRROR=1 "$PY" "$SYNC" --apply --repo-root "$HUB" 2>&1)"
+  rc=$?
+  say "sync exit $rc: $(printf '%s' "$out" | tail -3 | tr '\n' ' ')"
+  [ -n "$VERBOSE" ] && printf '%s\n' "$out"
+else
+  say "the hub copy is switched off on this computer, so nothing was sent up"
+fi
 
 # The arrow DOWN, in the same run: the notebook's facts, kept as files in world/, so
 # they survive without the notebook. It rides here rather than on its own schedule

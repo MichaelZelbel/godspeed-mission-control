@@ -206,7 +206,10 @@ anything unless you connect Menerio**, and a reader who never connects it can ig
   `${MENERIO_API_KEY}`. The one exception is a single line in Hermes' own `.env`, because the
   Hermes desktop app is not started from a terminal. It keeps everything else in those files,
   leaves a `.bak` copy, and leaves a connection you made by hand alone. The installer runs it
-  for you when you connect Menerio.
+  for you when you connect Menerio. Its report has one line per assistant. One you do not
+  have reads `not installed`, and that is fine. The last line reads
+  `The notebook  answered. Your key works.` A connection gives you the notebook and "make a
+  note". It does not copy your hub. That is a separate question, see `notebook-sync.py` below.
 
 ```
 hub-menerio-connect            connect every assistant here, then test the connection
@@ -216,21 +219,28 @@ hub-menerio-connect --check    change nothing, only say how things are
   To switch everything off at once: in Menerio, open Settings, then API Keys, and revoke the
   key.
 
-- **`search.js`** (`hub-search`) finds things in your hub. It asks Menerio first, which
-  searches by meaning and by words together. When there is no key, no network, or no good
-  answer within eight seconds, it searches the files in your hub folder and says so on its
-  last line. It always names files in your hub, never notes, and never `AGENTS.md`, which your
-  assistant has read already. `starter-hub/AGENTS.md` tells your assistant to run it before it
-  says that something is not in your hub.
+- **`search.js`** (`hub-search`) finds things in your hub. When your hub is copied to Menerio,
+  it asks Menerio first, which searches by meaning and by words together. When there is no
+  key, no network, or no good answer within eight seconds, it searches the files in your hub
+  folder and says so on its last line. When your hub is not copied, it searches the files,
+  and the last line says
+  `source: local files (your hub is not copied to Menerio, so there was nothing to ask it)`.
+  It always names files in your hub, never notes, and never `AGENTS.md`, which your assistant
+  has read already. `starter-hub/AGENTS.md` tells your assistant to run it before it says
+  that something is not in your hub.
 
 ```
-hub-search the dentist         ask the notebook, fall back to the files
+hub-search the dentist         ask the notebook when your hub is copied there, else the files
 hub-search --local the dentist search the files only
 hub-search --limit 3 --json invoice reminder
 ```
 
-- **`notebook-sync.py`** is the mirror. It sends a copy of every Markdown file git tracks in
-  your hub up to your notebook, into one folder called `hub`. Each decision in `decisions.md`
+- **`notebook-sync.py`** is the mirror, and it runs only when you said yes. The installer asks
+  `Copy your hub's files to Menerio for search?` and the default answer is no. The answer is
+  kept per computer, as one line in `~/.hub/device.env`: `HUB_NOTEBOOK_MIRROR=1` for yes,
+  `HUB_NOTEBOOK_MIRROR=0` for no. No line means no. To change it, run the Menerio step of the
+  installer again. On a yes, it sends a copy of every Markdown file git tracks in your hub up
+  to your notebook, into one folder called `hub`. Each decision in `decisions.md`
   goes as its own note. It leaves out `dev/`, anything your `.gitignore` keeps out, records in
   `world/` that came down from Menerio, a few generated index pages, and any file over 300 KB
   (it names those). Each copy says in its first line which file it is a copy of. Menerio ranks
@@ -240,10 +250,12 @@ hub-search --limit 3 --json invoice reminder
 - **`world-pull.py`** brings the other direction down: the people, dated things and
   facts your notebook knows, written into `world/` as small files so they survive
   without the notebook. It rewrites only the files marked `origin: menerio` and
-  never touches one you wrote.
+  never touches one you wrote. It runs whatever you answered above, and it sends nothing
+  anywhere.
 
-`hub-notebook-sync` runs both of them by itself: whenever you save a change, and once an
-hour. It also hands a replaced key to Hermes. You can run them by hand to look:
+`hub-notebook-sync` runs them by itself: whenever you save a change, and once an hour. It
+runs the mirror only when `HUB_NOTEBOOK_MIRROR=1`. It always runs the pull. It also hands a
+replaced key to Hermes. You can run them by hand to look:
 
 ```
 python3 ~/.local/bin/notebook-sync.py              # dry run, shows what it would send
@@ -253,6 +265,9 @@ python3 ~/.local/bin/world-pull.py                 # dry run, shows what it woul
 python3 ~/.local/bin/world-pull.py --apply
 ```
 
+`notebook-sync.py --apply` reads your answer too. With the hub copy switched off it sends
+nothing and says so. Without `--apply` it only shows a plan.
+
 `--apply` needs the key in your terminal. The installer teaches every new terminal the key.
 In a terminal that was open before, load it by hand:
 
@@ -261,7 +276,8 @@ eval "$(hub-notebook-env)"
 ```
 
 `hub-notebook.js` is not a command. It is the part `hub-search` and `hub-menerio-connect`
-share: where your hub is, how the key is read, and which files the mirror covers.
+share: where your hub is, how the key is read, whether the mirror is on, and which files it
+covers.
 
 ## What you do with them
 

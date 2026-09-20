@@ -2,12 +2,23 @@
 
 The folder is what you teach: context, skills, rules, edited at your desk, one home on your
 disk. The notebook is what you live: notes born out in the world, written from whatever device
-is in your hand. You never copy anything between the two by hand. A program does the one copy
-that is useful, and it keeps that copy current.
+is in your hand. You never copy anything between the two by hand. A program can do the one
+copy that is useful, if you want it, and it keeps that copy current.
 
-## What the mirror does
+## What the mirror does, and whether you want it
 
-Once Menerio is connected, your hub folder is mirrored into the notebook. Every Markdown file
+Connecting Menerio gives you a notebook. It does not copy your hub. That is a separate
+choice. The installer asks `Copy your hub's files to Menerio for search?` and the default
+answer is no. Your answer is kept per computer, as one line in `~/.hub/device.env`:
+`HUB_NOTEBOOK_MIRROR=1` for yes, `HUB_NOTEBOOK_MIRROR=0` for no. No line means no. To change
+it, run the Menerio step of the installer again. It asks again.
+
+Say yes if your hub holds nothing you would mind having in an online account. Your assistant
+can then search your files by meaning. Say no if your hub holds other people's private
+details, such as clients or patients. You still have the notebook, and search still works on
+the files on your computer.
+
+When the answer is yes, your hub folder is mirrored into the notebook. Every Markdown file
 goes, except the `dev/` folder. The copies live under one folder called `hub`, laid out like
 your hub: `profile/about-me.md` becomes a note in `hub/profile`. Each decision in
 `decisions.md` becomes its own note.
@@ -19,12 +30,19 @@ your hub: `profile/about-me.md` becomes a note in `hub/profile`. Each decision i
 - **Only `observations/` is called a guess.** Those files are what a machine worked out about
   you. Their copies say so. Copies of `profile/` and `rules/` say that you wrote or decided
   them.
-- **What stays home.** `dev/`, anything your hub's `.gitignore` keeps out, any file over
-  300 KB, and the records in `world/` that came down from Menerio in the first place.
+- **What stays home.** `dev/`, anything your hub's `.gitignore` keeps out, generated index
+  files, any file over 300 KB, and the records in `world/` that came down from Menerio in
+  the first place.
 
-Your assistant uses the mirror through one command, `hub-search`. It asks Menerio first, which
-searches by meaning and by words together. When Menerio cannot be reached, it searches the
-files in your hub and says so. Either way it names files in your hub, never notes.
+Your assistant finds things through one command, `hub-search`. With the mirror on, it asks
+Menerio first, which searches by meaning and by words together. When Menerio cannot be
+reached, it searches the files in your hub and says so. With the mirror off, it searches the
+files on your computer, and its last line says
+`source: local files (your hub is not copied to Menerio, so there was nothing to ask it)`.
+Either way it names files in your hub, never notes.
+
+One thing runs whatever you answered. Every hour, a job brings the people, events and facts
+Menerio holds down into `world/` in your hub, as a safety copy. That sends nothing anywhere.
 
 ## The two rules
 
@@ -74,5 +92,6 @@ way you wrote it.
 
 Older printings imported the profile folder into Menerio by hand and asked you to import it
 again every quarter. That made you the sync program between two copies, and it is retired. A
-later printing copied nothing at all, and then three folders only. Today the whole hub is
-mirrored by a program, you do nothing, and the copies know they are copies.
+later printing copied nothing at all, then three folders only, and then the whole hub without
+asking. Today a program mirrors the whole hub only when you said yes. You do nothing after
+that, and the copies know they are copies.

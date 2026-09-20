@@ -282,12 +282,12 @@ function connectHermes(key, change) {
   const env = renderHermesEnv(envFile, key, change);
   if (!change) {
     return env === "same"
-      ? { status: "already connected", detail: "its settings name the notebook, and its .env holds your current key" }
+      ? { status: "already connected", detail: "nothing to do" }
       : { status: "not connected yet", detail: env === "added" ? "its settings name the notebook, and its .env does not hold your key yet"
         : "its settings name the notebook, and its .env holds an older key" };
   }
-  if (added) return { status: "connected", detail: "its settings now name the notebook, and its .env holds your current key" };
-  if (env === "same") return { status: "already connected", detail: "its settings name the notebook, and its .env holds your current key" };
+  if (added) return { status: "connected", detail: "it will find your notebook the next time you open it" };
+  if (env === "same") return { status: "already connected", detail: "nothing to do" };
   return { status: "connected", detail: env === "changed" ? "it was holding an older key, and now holds your current one"
     : "its settings named the notebook already, and now its .env holds your key" };
 }
@@ -459,7 +459,7 @@ async function main() {
     const hasClaude = onPath("claude") || fs.existsSync(path.join(os.homedir(), ".claude"));
     if (!hasClaude && (cc.status === "connected" || cc.status === "already connected")) {
       rows[rows.length - 1][1] = { status: "not installed",
-        detail: "if you ever use it, the notebook is already waiting in .mcp.json in your hub folder" };
+        detail: "that is fine. If you ever use it, it finds your notebook too" };
     }
   }
   attempt("Hermes", () => connectHermes(k.key, !checkOnly));
@@ -473,12 +473,12 @@ async function main() {
   }
 
   const t = await testConnection(k.key);
-  if (t.ok) console.log("  The notebook  answered with your key, and offers " + t.tools + " tools.");
+  if (t.ok) console.log("  The notebook  answered. Your key works.");
   else { failed += 1; console.log("  The notebook  failed: " + t.detail + "."); }
 
   console.log("");
   if (!checkOnly && rows.some(([, r]) => r.status === "connected")) {
-    console.log("  Open a new session in each assistant, so it picks the notebook up.");
+    console.log("  Close your assistant and open it again, so it picks the notebook up.");
   }
   if (checkOnly && rows.some(([, r]) => r.status === "not connected yet")) {
     console.log("  To connect what is not connected yet, run: hub-menerio-connect");

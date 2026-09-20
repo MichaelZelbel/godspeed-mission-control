@@ -66,7 +66,7 @@ echo "== hub-menerio-connect: once, for every assistant, and nothing else touche
 # to the hub, but the report must not claim to have connected a program that is not there.
 NO_CLAUDE=1 newbox hermes-only
 MCP="" out="$(run "$KEY1")"
-contains "a computer without Claude Code is told so, not told it was connected" "$out" "Claude Code   not installed. If you ever use it"
+contains "a computer without Claude Code is told so, not told it was connected" "$out" "Claude Code   not installed. That is fine. If you ever use it"
 [ -f "$B/hub/.mcp.json" ] && ok "  and the hub still gets its .mcp.json" || bad "  .mcp.json was not written" "$out"
 
 # 1. The launcher is the two lines every other launcher here is.
@@ -152,14 +152,14 @@ before="$(sums)"
 out="$(run "$KEY1" --check)"
 [ "$(sums)" = "$before" ] && ok "--check changes nothing, not one byte" || bad "--check changed a file"
 [ "$(echo "$out" | grep -c "^  \(Claude Code\|Hermes\|Codex\) *not connected yet\.")" = "3" ] && ok "  and says all three are not connected yet" || bad "--check did not describe a fresh computer" "$out"
-contains "  and still tests the notebook itself" "$out" "offers 3 tools"
+contains "  and still tests the notebook itself" "$out" "The notebook  answered. Your key works."
 
 out="$(run "$KEY1")"; rc=$?
 [ "$rc" = "0" ] && ok "the first run succeeds" || bad "the first run failed (exit $rc)" "$out"
 lacks "the key is never printed" "$out" "$KEY1"
 [ "$(echo "$out" | grep -c "^  \(Claude Code\|Hermes\|Codex\) *connected\.")" = "3" ] \
   && ok "one line per assistant, and all three say connected" || bad "the report is not three connected lines" "$out"
-contains "the notebook was really asked, and answered" "$out" "The notebook  answered with your key, and offers 3 tools."
+contains "the notebook was really asked, and answered" "$out" "The notebook  answered. Your key works."
 contains "the report says how to switch everything off" "$out" "open Settings, then API Keys"
 
 # .mcp.json: the block is there, in the shape Claude Code reads, and everything else stayed.

@@ -82,6 +82,39 @@ else
   bad "a reader without a notebook saw something (exit $rc)" "$out"
 fi
 
+# 9b. A notebook, but the reader never said yes to the hub copy: the runner says so and sends
+# nothing up. The UP program is replaced by one that would leave a mark if it were started.
+mkdir -p "$W/home-nomirror/.hub" "$W/hub-nomirror" "$W/bin-nomirror"
+printf 'HUB_DIR=%s
+' "$W/hub-nomirror" > "$W/home-nomirror/.hub/device.env"
+cp "$HERE/hub-notebook-sync" "$W/bin-nomirror/hub-notebook-sync"
+printf 'print("UP RAN")
+' > "$W/bin-nomirror/notebook-sync.py"
+printf 'print("world pull: write 0  remove 0")
+' > "$W/bin-nomirror/world-pull.py"
+rc=0; out="$(HOME="$W/home-nomirror" USERPROFILE="$W/home-nomirror" HUB_NOTEBOOK_MIRROR="" MENERIO_API_KEY="test-key" sh "$W/bin-nomirror/hub-notebook-sync" --verbose 2>&1)" || rc=$?
+if [ "$rc" = "0" ] && ! echo "$out" | grep -q "UP RAN" && echo "$out" | grep -q "switched off on this computer"; then
+  ok "the hub copy is off unless the reader said yes: nothing was sent up, and the log says why"
+else
+  bad "a hub whose owner never said yes was sent up anyway (exit $rc)" "$out"
+fi
+printf 'HUB_DIR=%s
+HUB_NOTEBOOK_MIRROR=1
+' "$W/hub-nomirror" > "$W/home-nomirror/.hub/device.env"
+rc=0; out="$(HOME="$W/home-nomirror" USERPROFILE="$W/home-nomirror" HUB_NOTEBOOK_MIRROR="" MENERIO_API_KEY="test-key" sh "$W/bin-nomirror/hub-notebook-sync" --verbose 2>&1)" || rc=$?
+echo "$out" | grep -q "UP RAN" && ok "  and with HUB_NOTEBOOK_MIRROR=1 in device.env it is sent" || bad "  the yes in device.env was not honoured" "$out"
+
+# 9c. The copy program itself honours the answer, so typing it by hand cannot undo a "no".
+mkdir -p "$W/home-hand/.hub" "$W/hub-hand"
+printf '# A
+' > "$W/hub-hand/AGENTS.md"
+rc=0; out="$(HOME="$W/home-hand" USERPROFILE="$W/home-hand" HUB_NOTEBOOK_MIRROR="" MENERIO_API_KEY="test-key" MENERIO_BASE_URL="http://127.0.0.1:1" "$PY" "$HERE/notebook-sync.py" --apply --repo-root "$W/hub-hand" 2>&1)" || rc=$?
+if [ "$rc" = "0" ] && echo "$out" | grep -q "switched off on this computer, so nothing was sent"; then
+  ok "typed by hand with the copy switched off: nothing is sent, and it says why"
+else
+  bad "notebook-sync.py --apply ignored the reader's no (exit $rc)" "$out"
+fi
+
 # 10 to 14. The dry run keeps the book's promise, offline: the WHOLE hub is mirrored,
 # and each decision in decisions.md is its own entry. No key and no --apply, so nothing
 # leaves the machine. Until 2026-09-20 the promise was the opposite for profile/ and
@@ -326,7 +359,7 @@ for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do [ -s "$W/stub.po
 if [ -s "$W/stub.port" ]; then
   BASE="http://127.0.0.1:$(cat "$W/stub.port")"
   ask() { "$PY" -c "import json,sys,urllib.request; d=json.load(urllib.request.urlopen(sys.argv[1]+'/__writes')); print(len(d['writes'])); print('\n'.join(d['writes']))" "$BASE"; }
-  MENERIO_API_KEY="test-key" MENERIO_BASE_URL="$BASE" "$PY" "$HERE/notebook-sync.py" --apply --repo-root "$W/hub" >"$W/run1" 2>&1
+  HUB_NOTEBOOK_MIRROR=1 MENERIO_API_KEY="test-key" MENERIO_BASE_URL="$BASE" "$PY" "$HERE/notebook-sync.py" --apply --repo-root "$W/hub" >"$W/run1" 2>&1
   first="$(ask)"
   if [ "$(echo "$first" | head -1)" = "9" ] && echo "$first" | grep -q "^POST AGENTS.md -> hub$" \
      && echo "$first" | grep -q "^POST profile/about-me.md -> hub/profile$"; then
@@ -334,7 +367,7 @@ if [ -s "$W/stub.port" ]; then
   else
     bad "the first run did not create what the plan said" "$first $(cat "$W/run1")"
   fi
-  MENERIO_API_KEY="test-key" MENERIO_BASE_URL="$BASE" "$PY" "$HERE/notebook-sync.py" --apply --repo-root "$W/hub" >"$W/run2" 2>&1
+  HUB_NOTEBOOK_MIRROR=1 MENERIO_API_KEY="test-key" MENERIO_BASE_URL="$BASE" "$PY" "$HERE/notebook-sync.py" --apply --repo-root "$W/hub" >"$W/run2" 2>&1
   second="$(ask)"
   if [ "$(echo "$second" | head -1)" = "9" ] && grep -q "create 0  update 0  trash 0" "$W/run2"; then
     ok "second run over the wire: nothing is sent again"

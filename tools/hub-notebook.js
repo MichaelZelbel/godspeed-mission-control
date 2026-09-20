@@ -176,6 +176,15 @@ function mirroredMarkdown(hub) {
   return keep;
 }
 
+// Is the hub copy switched on, on this computer? The installer asks and writes one line,
+// HUB_NOTEBOOK_MIRROR=1 or =0, into ~/.hub/device.env. No line means no: a notebook is
+// something a reader asks for, a copy of their whole hub in an online account is a second
+// decision, and "nobody asked me" must never come out as yes.
+function mirrorOn() {
+  const v = String(process.env.HUB_NOTEBOOK_MIRROR || readDeviceEnv("HUB_NOTEBOOK_MIRROR") || "").trim();
+  return v === "1";
+}
+
 module.exports = {
-  readDeviceEnv, findHub, findAge, menerioKey, mirroredMarkdown, DECISION_LOG,
+  readDeviceEnv, findHub, findAge, menerioKey, mirroredMarkdown, mirrorOn, DECISION_LOG,
 };

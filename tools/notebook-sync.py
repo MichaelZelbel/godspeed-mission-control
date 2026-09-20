@@ -610,6 +610,22 @@ def run_sync(docs: list, state: dict, client, apply: bool,
     return new_state
 
 
+def mirror_is_on() -> bool:
+    """HUB_NOTEBOOK_MIRROR from the environment, else from ~/.hub/device.env. Only "1" is yes."""
+    value = os.environ.get("HUB_NOTEBOOK_MIRROR", "").strip()
+    if not value:
+        home = os.environ.get("USERPROFILE") or os.environ.get("HOME") or os.path.expanduser("~")
+        try:
+            with open(os.path.join(home, ".hub", "device.env"), encoding="utf-8") as handle:
+                for line in handle:
+                    match = re.match(r"^\s*HUB_NOTEBOOK_MIRROR=(.*)$", line)
+                    if match:
+                        value = match.group(1).strip()
+        except OSError:
+            pass
+    return value == "1"
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="Push your hub files into your notebook for search.")
     parser.add_argument("--apply", action="store_true",
@@ -621,6 +637,16 @@ def main(argv=None) -> int:
                         help="rebuild the state file from what the notebook already "
                              "holds, before syncing. Use after a run died partway.")
     args = parser.parse_args(argv)
+
+    # THE READER'S ANSWER IS CHECKED HERE TOO. The installer asks whether the hub may be
+    # copied into the notebook, and writes HUB_NOTEBOOK_MIRROR=1 or =0 into
+    # ~/.hub/device.env. The hourly runner reads that line, but a line in a README that
+    # says "typed by hand, this sends your files whatever you answered" is a trap, not a
+    # feature. No line means no. Without --apply this still only prints a plan.
+    if args.apply and not mirror_is_on():
+        print("The hub copy is switched off on this computer, so nothing was sent. "
+              "To switch it on, run the Menerio step of the installer again and answer yes.")
+        return 0
 
     api_key = os.environ.get("MENERIO_API_KEY")
     if args.apply and not api_key:

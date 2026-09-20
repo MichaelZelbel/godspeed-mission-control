@@ -36,6 +36,9 @@ trap '[ -n "$STUB_PID" ] && kill "$STUB_PID" 2>/dev/null; rm -rf "$W"' EXIT
 # A home with nothing in it, so the key on the computer running the tests is never found.
 # USERPROFILE is what Node calls home on Windows; HOME is what it calls home everywhere else.
 export HOME="$W/home" USERPROFILE="$W/home" HUB_DIR="" HUB_AGE_KEY="$W/home/.hub/no-such-key"
+# Every case below is a reader who said yes to the hub copy, unless it says otherwise:
+# without that yes, hub-search never asks the notebook at all.
+export HUB_NOTEBOOK_MIRROR=1
 
 H="$W/hub"
 mkdir -p "$H/profile" "$H/observations" "$H/goals" "$H/dev/project" "$H/world/claims" "$H/skills/plan"
@@ -148,6 +151,14 @@ out="$(MENERIO_API_KEY=test-key MENERIO_BASE_URL="http://127.0.0.1:1" hs dentist
 [ "$rc" = "0" ] && contains "no network falls back to the files" "$(echo "$out" | tail -1)" "source: local files (Menerio not reached: no connection to it from here)" || bad "no network broke the search (exit $rc)" "$out"
 
 # 10. No key is not a failure, it is most readers.
+# A notebook is connected, but this reader never put a copy of the hub into it. Then there is
+# nothing to ask the notebook, and no trip over the network to hear "nothing".
+out="$(MENERIO_API_KEY=test-key HUB_NOTEBOOK_MIRROR=0 MENERIO_BASE_URL="http://127.0.0.1:1" hs dentist)"
+contains "with the hub copy switched off, the files answer and the last line says why" "$out" "source: local files (your hub is not copied to Menerio"
+lacks "  and it never tried the network" "$out" "not reached"
+out="$(MENERIO_API_KEY=test-key HUB_NOTEBOOK_MIRROR= MENERIO_BASE_URL="http://127.0.0.1:1" hs dentist)"
+contains "and no answer at all counts as no" "$out" "source: local files (your hub is not copied to Menerio"
+
 out="$(MENERIO_API_KEY="" hs dentist)"; rc=$?
 [ "$rc" = "0" ] && contains "no key: the files answer, and nothing is called broken" "$(echo "$out" | tail -1)" "source: local files (no Menerio connected)" || bad "no key broke the search (exit $rc)" "$out"
 lacks "  and the stand-in was never called for it" "$("$NODE" -e 'require("http").get(process.argv[1]+"/__seen",r=>{let d="";r.on("data",c=>d+=c);r.on("end",()=>console.log(d))})' "$MENERIO_BASE_URL")" '"q":"dentist"'
