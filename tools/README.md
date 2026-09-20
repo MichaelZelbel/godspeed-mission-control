@@ -250,11 +250,11 @@ hub-search --limit 3 --json invoice reminder
 - **`world-pull.py`** brings the other direction down: the people, dated things and
   facts your notebook knows, written into `world/` as small files so they survive
   without the notebook. It rewrites only the files marked `origin: menerio` and
-  never touches one you wrote. It runs whatever you answered above, and it sends nothing
-  anywhere.
+  never touches one you wrote. It follows the same answer as the mirror: with a no, it
+  does not run.
 
 `hub-notebook-sync` runs them by itself: whenever you save a change, and once an hour. It
-runs the mirror only when `HUB_NOTEBOOK_MIRROR=1`. It always runs the pull. It also hands a
+runs the mirror and the pull only when `HUB_NOTEBOOK_MIRROR=1`. It also hands a
 replaced key to Hermes. You can run them by hand to look:
 
 ```

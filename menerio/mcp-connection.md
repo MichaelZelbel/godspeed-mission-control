@@ -89,8 +89,9 @@ searched its own two memory files, found nothing, and said so (measured twice, 2
   the files in your hub and says so on its last line. With the mirror off, it searches the
   files on your computer, and the last line says your hub is not copied to Menerio. It never
   fails because the notebook is away.
-- **Facts come down either way.** Every hour, a job brings the people, events and facts
-  Menerio holds down into `world/`, as a safety copy. That sends nothing anywhere.
+- **With a yes, facts also come down.** Every hour, a job brings the people, events and
+  facts Menerio holds down into `world/`, as a safety copy. With a no, nothing moves in
+  either direction.
 
 ## The off-switch
 

@@ -41,8 +41,9 @@ files on your computer, and its last line says
 `source: local files (your hub is not copied to Menerio, so there was nothing to ask it)`.
 Either way it names files in your hub, never notes.
 
-One thing runs whatever you answered. Every hour, a job brings the people, events and facts
-Menerio holds down into `world/` in your hub, as a safety copy. That sends nothing anywhere.
+The same yes switches on one more thing. Every hour, a job brings the people, events and facts
+Menerio holds down into `world/` in your hub, as a safety copy. With a no, nothing moves in
+either direction, and nothing about Menerio runs in the background.
 
 ## The two rules
 

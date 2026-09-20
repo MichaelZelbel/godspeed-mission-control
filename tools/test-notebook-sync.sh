@@ -90,10 +90,10 @@ printf 'HUB_DIR=%s
 cp "$HERE/hub-notebook-sync" "$W/bin-nomirror/hub-notebook-sync"
 printf 'print("UP RAN")
 ' > "$W/bin-nomirror/notebook-sync.py"
-printf 'print("world pull: write 0  remove 0")
+printf 'print("DOWN RAN")
 ' > "$W/bin-nomirror/world-pull.py"
 rc=0; out="$(HOME="$W/home-nomirror" USERPROFILE="$W/home-nomirror" HUB_NOTEBOOK_MIRROR="" MENERIO_API_KEY="test-key" sh "$W/bin-nomirror/hub-notebook-sync" --verbose 2>&1)" || rc=$?
-if [ "$rc" = "0" ] && ! echo "$out" | grep -q "UP RAN" && echo "$out" | grep -q "switched off on this computer"; then
+if [ "$rc" = "0" ] && ! echo "$out" | grep -q "UP RAN" && ! echo "$out" | grep -q "DOWN RAN" && echo "$out" | grep -q "switched off on this computer, so nothing was sent or fetched"; then
   ok "the hub copy is off unless the reader said yes: nothing was sent up, and the log says why"
 else
   bad "a hub whose owner never said yes was sent up anyway (exit $rc)" "$out"
@@ -102,7 +102,7 @@ printf 'HUB_DIR=%s
 HUB_NOTEBOOK_MIRROR=1
 ' "$W/hub-nomirror" > "$W/home-nomirror/.hub/device.env"
 rc=0; out="$(HOME="$W/home-nomirror" USERPROFILE="$W/home-nomirror" HUB_NOTEBOOK_MIRROR="" MENERIO_API_KEY="test-key" sh "$W/bin-nomirror/hub-notebook-sync" --verbose 2>&1)" || rc=$?
-echo "$out" | grep -q "UP RAN" && ok "  and with HUB_NOTEBOOK_MIRROR=1 in device.env it is sent" || bad "  the yes in device.env was not honoured" "$out"
+echo "$out" | grep -q "UP RAN" && echo "$out" | grep -q "DOWN RAN" && ok "  and with HUB_NOTEBOOK_MIRROR=1 in device.env both directions run" || bad "  the yes in device.env was not honoured" "$out"
 
 # 9c. The copy program itself honours the answer, so typing it by hand cannot undo a "no".
 mkdir -p "$W/home-hand/.hub" "$W/hub-hand"

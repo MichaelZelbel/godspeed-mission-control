@@ -5,11 +5,12 @@ It works without a Menerio account. The instructions in `AGENTS.md` tell the ass
 save and search these records, using the formats below.
 
 Menerio is an optional online notebook (Chapter 28). You connect it once, through the
-installer or with `hub-menerio-connect`. From then on one thing happens by itself. The
-people, events and facts Menerio knows arrive here as files marked `origin: menerio`, as a
-safety copy. That sends nothing anywhere. Copying your hub up into the notebook, this folder
-included, so it can be searched by meaning, is a separate choice. The installer asks, and the
-default is no. On a yes, the files that came down are not sent back up. That connection is
+installer or with `hub-menerio-connect`. That gives you the notebook and copies nothing.
+Copying between your hub and Menerio is a separate choice. The installer asks, and the
+default is no. On a yes, your hub's text files, this folder included, are copied up so they
+can be searched by meaning, and the people, events and facts Menerio knows arrive here as
+files marked `origin: menerio`, as a safety copy. The files that came down are not sent back
+up. That connection is
 specifically for Menerio, not a general connection to Evernote, OneNote or Obsidian.
 
 Everything here is one small text file, so a script can answer questions like "what changed about

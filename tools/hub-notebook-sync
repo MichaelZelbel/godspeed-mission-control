@@ -166,8 +166,7 @@ PULL="$SELF_DIR/world-pull.py"
 # two test readers of the book, one with clients' notes in her hub and one with
 # patients', both stopped at that sentence and would not connect at all. The installer now
 # asks, the answer is one line in ~/.hub/device.env, and no line means no. The arrow DOWN
-# below still runs either way: it brings your own facts onto your own disk and sends
-# nothing anywhere.
+# below follows the same answer.
 MIRROR="${HUB_NOTEBOOK_MIRROR:-}"
 if [ -z "$MIRROR" ] && [ -r "$HOMEDIR/.hub/device.env" ]; then
   MIRROR="$(sed -n 's/^[[:space:]]*HUB_NOTEBOOK_MIRROR=//p' "$HOMEDIR/.hub/device.env" | head -1 | tr -d '\r')"
@@ -178,13 +177,20 @@ if [ "$MIRROR" = "1" ]; then
   say "sync exit $rc: $(printf '%s' "$out" | tail -3 | tr '\n' ' ')"
   [ -n "$VERBOSE" ] && printf '%s\n' "$out"
 else
-  say "the hub copy is switched off on this computer, so nothing was sent up"
+  say "copying between your hub and Menerio is switched off on this computer, so nothing was sent or fetched"
 fi
 
 # The arrow DOWN, in the same run: the notebook's facts, kept as files in world/, so
 # they survive without the notebook. It rides here rather than on its own schedule
 # because a second job would duplicate every guard above.
-if [ -f "$PULL" ]; then
+#
+# IT FOLLOWS THE SAME ANSWER AS THE ARROW UP (2026-09-20, second round of test readers).
+# Pulling your own facts onto your own disk sends nothing anywhere, and for one afternoon
+# it therefore ran whatever the reader had answered. Both readers found it only in the
+# chapter's last section, as "one more thing comes to you unasked", in a hub whose Chapter
+# 17 is about nothing happening unasked. A reader who says no gets a notebook and nothing
+# moving in the background in either direction. One switch, one sentence to explain.
+if [ "$MIRROR" = "1" ] && [ -f "$PULL" ]; then
   wout="$("$PY" "$PULL" --apply --repo-root "$HUB" 2>&1)"
   wrc=$?
   say "world pull exit $wrc: $(printf '%s' "$wout" | tail -3 | tr '\n' ' ')"

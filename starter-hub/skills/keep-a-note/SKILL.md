@@ -62,3 +62,5 @@ the notebook is not connected on this computer.
 - Never put a password, a card number or an access key in a note. Say that you left it out.
 - Never invent a detail, a date or a dose the person did not say.
 - Never save under `hub/`, and never edit a note whose source is a hub file.
+- Never delete a note, and never replace a note's text, unless the person asked for exactly
+  that, about that note.
