@@ -79,7 +79,7 @@ cross-vendor watchdog kit runs a different company's tool as the watcher.
 
 These watchdogs read the public web. Watching *private* things (your
 inbox, your bank, your company's systems) needs a **connector**: a door
-that lets your assistant reach one of your accounts (Chapter 26's MCP
+that lets your assistant reach one of your accounts (Chapter 28's MCP
 servers are the Hermes shape of that door).
 
 A connector is not a bigger version of chatting. It is hands. Before you

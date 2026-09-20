@@ -19,6 +19,6 @@ Same file, same rules, different doorbell. The words travel as they are; only th
 rebuilt per tool. That is what portable actually means in practice, and it is why this book kept
 insisting the important things be plain text.
 
-The notebook server is named `notebook` here, the same name Hermes knows it by (Chapter 26), and
+The notebook server is named `notebook` here, the same name Hermes knows it by (Chapter 28), and
 for the same reason: Hermes has a built-in memory of its own, and a second thing called "memory"
 gets asked the wrong questions.

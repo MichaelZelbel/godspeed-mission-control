@@ -4,9 +4,12 @@ Your assistant fills this folder as you tell it useful facts and things that hap
 It works without a Menerio account. The instructions in `AGENTS.md` tell the assistant to
 save and search these records, using the formats below.
 
-Menerio is an optional online memory service. If you connect it and enable copying, its
-records can also arrive here. That connection is specifically for Menerio, not a general
-connection to Evernote, OneNote or Obsidian.
+Menerio is an optional online notebook (Chapter 28). You connect it once, through the
+installer or with `hub-menerio-connect`. From then on two things happen by themselves. The
+people, events and facts Menerio knows arrive here as files marked `origin: menerio`. And
+your hub, this folder included, is mirrored up into the notebook so it can be searched by
+meaning. The files that came down are not sent back up. That connection is specifically for
+Menerio, not a general connection to Evernote, OneNote or Obsidian.
 
 Everything here is one small text file, so a script can answer questions like "what changed about
 Peter this year" without an AI model and without the internet. The AI only steps in when language
@@ -96,12 +99,16 @@ city claim gets an end date. A guess about why the person moved belongs in `obse
 
 ### Optional: import from Menerio
 
-Only after configuring a Menerio account, use:
+Once Menerio is connected, the import runs by itself: when you save a change, and once an
+hour. To look at what it would do, or to run it by hand:
 
 ```
-python3 tools/world-pull.py                  # dry run, shows what it would write
-python3 tools/world-pull.py --apply          # write the files
+python3 ~/.local/bin/world-pull.py           # dry run, shows what it would write
+python3 ~/.local/bin/world-pull.py --apply   # write the files
 ```
+
+To find a record, your assistant runs `hub-search <words>`. It asks Menerio first and
+searches these files when Menerio cannot be reached, so your facts are found either way.
 
 You can also write these files by hand, or let your assistant write them. The formats above are
 the whole contract.

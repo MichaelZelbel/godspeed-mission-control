@@ -47,9 +47,9 @@ It tried six doors into the notebook (`search_contacts`, `search_brain`, `get_co
 > ... her identity lives in the hub folder (people.md), which you told me not to read, so I'm
 > leaving that gap named rather than filled.
 
-The same two gaps Chapter 26's test found with Hermes, named the same way, and the folder it was
+The same two gaps Chapter 28's test found with Hermes, named the same way, and the folder it was
 told not to read left unread. That is Chapter 24's habit arriving unprompted, from a model that
-has never met you. (If your notebook holds the Chapter 25 notes, expect the answers instead of
+has never met you. (If your notebook holds the Chapter 28 notes, expect the answers instead of
 the gaps; the shape of the behaviour is the point.)
 
 ## Question three: can you run my procedures?

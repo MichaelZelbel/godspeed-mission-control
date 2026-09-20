@@ -1,6 +1,6 @@
 # tools
 
-Fifteen small programs. The installer puts them on your computer. **They are not
+Seventeen small programs. The installer puts them on your computer. **They are not
 part of your hub folder, and that is deliberate.**
 
 Chapter 4 says your hub is a folder of text files and that nothing in it needs a
@@ -196,19 +196,54 @@ Run `hub-decide --dry-run` any time to see the plan without deciding anything.
   your `rules/machine-words.txt` bans. It is what lets "we found out X" close a work
   item without a person reading it first.
 
-The last two are the two arrows in Chapter 25's diagram. **Neither runs unless you
-connect a notebook**, and a reader who never connects one can ignore both.
+The last four belong to Chapter 28, "Give Your Hub a Notebook". **None of them does
+anything unless you connect Menerio**, and a reader who never connects it can ignore all four.
 
-- **`notebook-sync.py`** sends copies of your hub files up to your notebook so you
-  can search them by meaning instead of by exact word (Chapter 26). It sends
-  `observations/`, `skills/` and each decision in `decisions.md` separately. It does not
-  send `profile/` or `AGENTS.md`, because your assistant reads those at the start of
-  every session anyway, and a search result that repeats what it is already reading
-  is noise. Your files are never changed; the copies are.
+- **`menerio-connect.js`** (`hub-menerio-connect`) connects your notebook **once**, for every
+  assistant on this computer: Claude Code (`.mcp.json` in your hub), Hermes (its own settings)
+  and Codex (its `config.toml`). It reads the key from your hub's locked store. It never asks
+  for the key and never prints it. Every file it writes only names the key, as
+  `${MENERIO_API_KEY}`. The one exception is a single line in Hermes' own `.env`, because the
+  Hermes desktop app is not started from a terminal. It keeps everything else in those files,
+  leaves a `.bak` copy, and leaves a connection you made by hand alone. The installer runs it
+  for you when you connect Menerio.
+
+```
+hub-menerio-connect            connect every assistant here, then test the connection
+hub-menerio-connect --check    change nothing, only say how things are
+```
+
+  To switch everything off at once: in Menerio, open Settings, then API Keys, and revoke the
+  key.
+
+- **`search.js`** (`hub-search`) finds things in your hub. It asks Menerio first, which
+  searches by meaning and by words together. When there is no key, no network, or no good
+  answer within eight seconds, it searches the files in your hub folder and says so on its
+  last line. It always names files in your hub, never notes, and never `AGENTS.md`, which your
+  assistant has read already. `starter-hub/AGENTS.md` tells your assistant to run it before it
+  says that something is not in your hub.
+
+```
+hub-search the dentist         ask the notebook, fall back to the files
+hub-search --local the dentist search the files only
+hub-search --limit 3 --json invoice reminder
+```
+
+- **`notebook-sync.py`** is the mirror. It sends a copy of every Markdown file git tracks in
+  your hub up to your notebook, into one folder called `hub`. Each decision in `decisions.md`
+  goes as its own note. It leaves out `dev/`, anything your `.gitignore` keeps out, records in
+  `world/` that came down from Menerio, a few generated index pages, and any file over 300 KB
+  (it names those). Each copy says in its first line which file it is a copy of. Menerio ranks
+  the copies below your own notes, never mines them for facts, and never exports them as
+  files. Your files are never changed; the copies are. It sends a file again only when the
+  file changed.
 - **`world-pull.py`** brings the other direction down: the people, dated things and
   facts your notebook knows, written into `world/` as small files so they survive
   without the notebook. It rewrites only the files marked `origin: menerio` and
   never touches one you wrote.
+
+`hub-notebook-sync` runs both of them by itself: whenever you save a change, and once an
+hour. It also hands a replaced key to Hermes. You can run them by hand to look:
 
 ```
 python3 ~/.local/bin/notebook-sync.py              # dry run, shows what it would send
@@ -218,11 +253,15 @@ python3 ~/.local/bin/world-pull.py                 # dry run, shows what it woul
 python3 ~/.local/bin/world-pull.py --apply
 ```
 
-Both need one thing in your environment first, the key you made in Chapter 26:
+`--apply` needs the key in your terminal. The installer teaches every new terminal the key.
+In a terminal that was open before, load it by hand:
 
 ```
-export MENERIO_API_KEY=your-key-here
+eval "$(hub-notebook-env)"
 ```
+
+`hub-notebook.js` is not a command. It is the part `hub-search` and `hub-menerio-connect`
+share: where your hub is, how the key is read, and which files the mirror covers.
 
 ## What you do with them
 
