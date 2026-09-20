@@ -77,7 +77,7 @@ if [ -z "$HUB" ] || ! looks_like_hub "$HUB"; then
   exit 2
 fi
 cd "$HUB" || exit 2
-export PATH="$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
+export PATH="$PATH:$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin"  # after the caller's own PATH, so a test (or a hub) that names its own programs is obeyed; cron's short PATH still finds the rest
 [ -n "$TODAY" ] || TODAY="${HUB_TODAY:-$(date -u +%Y-%m-%d)}"
 RUNDIR="$HUB/routines/work/$TODAY"
 HERE="$(cd "$(dirname "$0")" && pwd)"
