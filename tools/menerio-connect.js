@@ -450,6 +450,18 @@ async function main() {
     catch (e) { rows.push([label, { status: "failed", detail: String(e && e.message ? e.message : e) }]); }
   };
   attempt("Claude Code", () => connectClaudeCode(hub, !checkOnly));
+  // .mcp.json is written whether or not Claude Code is on this computer, because the file
+  // belongs to the hub and travels with it. But "Claude Code connected" told a reader who
+  // has only ever used Hermes that something they never installed had been connected.
+  // Say what is true for them: nothing to do, and it is there if they ever want it.
+  {
+    const cc = rows[rows.length - 1][1];
+    const hasClaude = onPath("claude") || fs.existsSync(path.join(os.homedir(), ".claude"));
+    if (!hasClaude && (cc.status === "connected" || cc.status === "already connected")) {
+      rows[rows.length - 1][1] = { status: "not installed",
+        detail: "if you ever use it, the notebook is already waiting in .mcp.json in your hub folder" };
+    }
+  }
   attempt("Hermes", () => connectHermes(k.key, !checkOnly));
   attempt("Codex", () => connectCodex(!checkOnly));
 

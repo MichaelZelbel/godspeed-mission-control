@@ -44,6 +44,9 @@ KEY2="mnr_test_key_TWO_2222"
 # One throwaway computer per case: a home, a hub, and (when asked) a Hermes and a Codex.
 newbox() {
   B="$W/$1"; rm -rf "$B"; mkdir -p "$B/home/.hub" "$B/hub" "$B/appdata"
+  # Every box is a computer that HAS Claude Code, unless a case says otherwise: the report
+  # words its Claude Code line differently for a reader who never installed it.
+  [ "${NO_CLAUDE:-}" = "1" ] || mkdir -p "$B/home/.claude"
   printf '# Manual\n' > "$B/hub/AGENTS.md"
   HH="$B/home/hermes-home"; CH="$B/home/codex-home"
 }
@@ -58,6 +61,13 @@ run() {   # run <key> [args...]   everything the program can see points into the
 sums() { ( cd "$B" && find . -type f | LC_ALL=C sort | while read -r f; do printf '%s %s\n' "$(cksum < "$f")" "$f"; done ); }
 
 echo "== hub-menerio-connect: once, for every assistant, and nothing else touched =="
+
+# A reader who has only ever used Hermes. .mcp.json is still written, because the file belongs
+# to the hub, but the report must not claim to have connected a program that is not there.
+NO_CLAUDE=1 newbox hermes-only
+MCP="" out="$(run "$KEY1")"
+contains "a computer without Claude Code is told so, not told it was connected" "$out" "Claude Code   not installed. If you ever use it"
+[ -f "$B/hub/.mcp.json" ] && ok "  and the hub still gets its .mcp.json" || bad "  .mcp.json was not written" "$out"
 
 # 1. The launcher is the two lines every other launcher here is.
 if [ "$(sed -n 2p "$HERE/hub-menerio-connect")" = 'exec node "$(dirname "$0")/menerio-connect.js" "$@"' ] && sh -n "$HERE/hub-menerio-connect"; then
