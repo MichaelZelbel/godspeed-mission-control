@@ -139,6 +139,14 @@ contains "  its lease is still the other runner's" "$(cat "$TMP/work/W-20260915-
 # --- no check at all: attempted, for a person to verify ----------------------------------------------------------
 check "an item with no check stays attempted after the assistant's word" "$(status_of W-20260915-05)" "attempted"
 
+# --- the hub's own machinery runs last, however early it was filed ------------------------------------------------
+hw file --what "Tidy the hub's own plumbing" --done-when "research/plumbing.md exists" --key plumbing --source test >/dev/null
+hw file --what "Make the thing for the goal" --done-when "research/thing.md exists" --goal five-friends --key thing --source test >/dev/null
+OUT="$(run --dry-run 2>&1)"
+PL="$(printf '%s\n' "$OUT" | grep -n "Tidy the hub's own plumbing" | head -1 | cut -d: -f1)"
+TH="$(printf '%s\n' "$OUT" | grep -n "Make the thing for the goal" | head -1 | cut -d: -f1)"
+check "work for a goal runs before the hub's own machinery" "$([ -n "$PL" ] && [ -n "$TH" ] && [ "$TH" -lt "$PL" ] && echo yes || echo no)" "yes"
+
 # --- a card the ledger refuses is written on the item, not only in a log ----------------------------------------
 hw file --learn "What does a refused card leave behind?" --path research/refused.md --check "$NODE $TMP/bin/check-written.js research/refused.md --min-words 50" --key refused --source test >/dev/null
 RID="$(grep -l 'KEY: refused' "$TMP/work"/W-*.md | head -1 | xargs basename | sed 's/.md$//')"

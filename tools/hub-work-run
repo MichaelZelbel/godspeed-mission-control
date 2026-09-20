@@ -112,9 +112,12 @@ else reg work tick 2>/dev/null | sed 's/^/tick: /'; fi
 
 # WHAT IS RUNNABLE, IN WHAT ORDER. The register already leaves out outward work, work waiting on
 # a person or a missing capability, retries whose day has not come, and anything under a live
-# lease. This program adds one rule of order: an item whose job is to find out how a goal is won
-# (KIND learn, a playbook) goes before the doing, because doing without knowing how it is won is
-# what this whole arrangement exists to stop. After that, the order they were filed in.
+# lease. This program adds the order. First an item whose job is to find out how a goal is won
+# (KIND learn, a playbook), because doing without knowing how it is won is what this whole
+# arrangement exists to stop. Then what gets MADE for a goal of the person's life. Then other
+# research. LAST the hub's own machinery: an item with no goal, or one whose goal has AREA hub.
+# Until 2026-09-20 the rest ran in the order filed, and on that day three of four slots went to
+# the hub repairing itself while the two items for the money goal waited a second day.
 ORDER_SCRIPT='
 let s=""; process.stdin.on("data",d=>s+=d).on("end",()=>{
   let rows=[]; try { rows=JSON.parse(s); } catch(e) { rows=[]; }
@@ -122,7 +125,11 @@ let s=""; process.stdin.on("data",d=>s+=d).on("end",()=>{
   if (only) rows=rows.filter(r=>r.id===only);
   const learn=(r)=>String(r.KIND||"do")==="learn";
   const play=(r)=>learn(r)&&/playbooks\//.test(String(r["DONE WHEN"]||""));
-  rows.sort((a,b)=>(play(b)-play(a))||(learn(b)-learn(a))||String(a.id).localeCompare(String(b.id)));
+  const fs=require("fs"); const areas={};
+  const area=(g)=>{ if(!g) return "hub"; if(!(g in areas)){ try { const m=fs.readFileSync("goals/"+g+".md","utf8").match(/^AREA:\s*(.+)$/m); areas[g]=m?m[1].trim().toLowerCase():"other"; } catch(e) { areas[g]="other"; } } return areas[g]; };
+  const own=(r)=>area(String(r.GOAL||"").trim())==="hub";
+  const rank=(r)=>play(r)&&!own(r)?0:(!learn(r)&&!own(r)?1:(learn(r)&&!own(r)?2:3));
+  rows.sort((a,b)=>(rank(a)-rank(b))||String(a.id).localeCompare(String(b.id)));
   for (const r of rows) console.log(r.id+"\t"+(r.KIND||"do")+"\t"+(r.WHAT||""));
 });'
 ORDER_IDS="$(reg work next --json 2>/dev/null | "$NODE" -e "$ORDER_SCRIPT" "$ONLY")"

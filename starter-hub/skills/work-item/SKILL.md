@@ -52,6 +52,16 @@ answer.
   form below. A half-thing that passes the check is worse than an honest failure, because the
   check will call it done.
 
+## Anything addressed to a named person
+
+Before you write a message, an invitation or a reply meant for one particular person, read what
+the two of them last said to each other, wherever this hub can reach it: the mail thread, the
+chat, the notes on that person. A message written from a profile and not from the conversation
+lands out of context, and they will rightly throw it away (2026-09-20: an invitation to an old
+colleague, written from a note about his hobbies while the real conversation was about something
+else entirely). If the hub cannot reach that conversation, do not write blind: end with
+`RESULT: FAILED:` naming the channel it would need to read.
+
 ## Your final answer
 
 Everything before the last line is scratch and nobody reads it. The last line is exactly one of:

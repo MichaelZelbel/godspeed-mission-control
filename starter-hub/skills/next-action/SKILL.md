@@ -111,13 +111,61 @@ own. Read it before anything else about the goal.
   work contradicts the playbook, refute that too (`hub-goals playbook <id> --refute --evidence
   "..."`) and the next run researches it again.
 
+## Step 2b. Look outside, then have ideas
+
+**This step exists because of what the first week of this recipe produced (2026-09-13 to
+2026-09-20): research papers about each goal, rewritten every time the person answered, and not
+one thing a stranger could use.** The recipe read only its own files, and it said an action had to
+come out of a playbook, so inventing the concrete thing to make was nobody's job. On 2026-09-19
+five minutes with one outside number (who actually visits his public pages) found more than the
+week had: a neglected page 120 strangers a fortnight reach by search, holding placeholder links
+and no way to his newsletter. A playbook tells you what KIND of thing wins. It never writes the
+list of things to make. That list is your job, every day.
+
+**1. Read the world before your files.** For each active outcome, read at least one number that
+lives outside this folder and that the goal's MEASURE depends on, with whatever this hub can
+reach: visitors and where they came from, subscribers, downloads, replies, a balance, a weight, a
+calendar. Write each number, where it was read and the date into the record under the goal. Look
+for the surprise: the page people find that nobody tends, the question strangers keep asking, the
+thing that works and is not being fed. A goal with no outside number read today says so under
+"Not done and why", with what would make one readable. Distrust numbers that machines inflate
+(clones, bot traffic, your own installs); say which ones you threw out.
+
+**2. Keep the ideas register.** `ideas/` holds one file per idea, `ideas/<slug>.md`, and its
+`README.md` says how. An idea is a concrete thing that could be made or done: a tool, a page, a
+list, a free product, a use case, a partnership with a named person, an experiment. Add to it from
+three sources, in this order:
+
+- **Their own words.** Anything they toss out ("why don't we...", "one idea I just had") is an
+  idea the moment it is said. It goes into the register the same day, in their words, and they are
+  never asked to repeat it. An idea of theirs that the hub lost is the worst miss this step has.
+- **What you just read outside.** Each surprise from point 1 is an idea or kills one.
+- **What the people in the playbook actually ship.** Not their advice: their things. Look at what
+  they made in their first year and ask which of those this person could make this week.
+
+Every idea file carries: GOAL, STATUS (open, chosen, made, dropped), SOURCE (whose idea, the date),
+WHAT IT IS in two sentences, WHO GETS WHAT (a stranger, or the person), SMALLEST VERSION (what one
+work run can finish), OUTSIDE NUMBER (what would show it worked, read where, by when), NEEDS FROM
+THEM (nothing, or the one thing), RISK, and your honest JUDGMENT including how it could be made
+better than it was said. Add at least three new ideas a day across the active goals until each
+active goal holds ten open ones; after that, replace the ones you drop. Quantity first: a register
+of three ideas picks a bad one.
+
+**3. Judge them without flattering anybody, the person included.** For each active goal rank the
+open ideas in the record, top three with one line each: what it would move, what it costs, why it
+beats the next one. Prefer an idea whose smallest version ends in a thing a stranger can touch
+over one that ends in a document; prefer one that can be judged by an outside number inside two
+weeks; prefer one that feeds what already works over one that starts from nothing. Say plainly
+when their idea is weaker than another, and when it is better than yours.
+
 ## Step 3. The best-supported next action, with its alternative and a forecast
 
 For each active outcome, name the action that best addresses the constraint, or the experiment
-that best reduces the uncertainty. **The action is a lever from the playbook, applied at the
-constraint, or an experiment from the playbook's Unknown section.** An action that is in
-neither is filed only with a line saying why the playbook missed it, and the playbook gets that
-lever added. In the record, compare it with **one** feasible alternative and with **carrying on
+that best reduces the uncertainty. **The action is the best idea in the register for that goal
+(Step 2b), and it must pull a lever the playbook names or test something in its Unknown section.**
+The playbook decides what kind of thing is worth making; the register holds the things. An idea
+that pulls no lever the playbook knows is filed only with a line saying why the playbook missed
+it, and the playbook gets that lever added. Mark the chosen idea `STATUS: chosen` with the date. In the record, compare it with **one** feasible alternative and with **carrying on
 as you are**: what each costs in their time, the hub's time and money; what each would show you;
 and why the one you chose wins on the evidence you have.
 
@@ -155,8 +203,16 @@ For every chosen action, file the work, one item per thing that can be checked:
 **The order is fixed, per active goal, and the record says what was filed under each or why
 nothing was:**
 
-1. **What the hub does itself:** OWNER hub, NEEDS none. Everything the playbook's "Hub steps"
-   section says a hub can do from a computer with nobody present: research, build the
+1. **What the hub makes itself:** OWNER hub, NEEDS none. **Every active goal gets at least one
+   MAKE item a day: the smallest version of the idea chosen in Step 3, ending in the thing itself
+   (the page, the tool, the list, the skill, the draft that can be sent as it is) and never in a
+   document about the thing.** A day on which an active goal got only research or bookkeeping says
+   so under "Not done and why", and two such days running is the diagnosis for that goal, ahead of
+   any other. Where the thing lands in the world, the CHECK looks at the world (the address
+   answers, the page holds the words) and a forecast carries the OUTSIDE NUMBER from the idea
+   file, due inside two weeks; when that forecast resolves, write what the number was into the
+   idea file, and let it raise or kill the ideas next to it. Then everything else the playbook's
+   "Hub steps" section says a hub can do from a computer with nobody present: research, build the
    measurement, compute the number, find the people or the options, draft the thing, prepare
    what the person will need. Each item's DONE WHEN names the file a reader will open, and its
    CHECK proves the file is there and whole (`hub-check-written <path> --min-words N` is the
@@ -193,7 +249,9 @@ Write `decision.md` in today's run folder (the prompt that called you names it):
     ## Since yesterday    what came of yesterday's choice; what the runner verified; replies
                           recorded; forecasts resolved
     ## Attention today    the active outcomes with the plan's reasons and your own, and the quiet ones
-    ## <goal id>          the playbook's state, the constraint or the open question, the evidence
+    ## <goal id>          the outside numbers read today and the surprise in them; the ideas added
+                          today and the top three ranked; then
+                          the playbook's state, the constraint or the open question, the evidence
                           for and against, the action, the alternative, carrying on as is, the
                           forecast id, the work ids in the four groups above, and what needs them
     ## For you today      the one thing for them (its id), or "nothing today, because ..."
@@ -221,7 +279,9 @@ nothing. Nothing else.
 
 Post, send, spend, sign, list, cancel or subscribe on their behalf. Adopt a provisional goal.
 Invent a person, a number, a link or a base rate. Work a goal without knowing how it is won, or
-invent the levers instead of researching them. Let the hub's own machinery take the day from an
+invent the levers instead of researching them; but never again mistake that for a ban on ideas:
+the concrete thing to make is yours to invent, daily. Lose an idea they said out loud. Let an
+active goal go a second day with nothing made for it. Count a number a machine inflated. Let the hub's own machinery take the day from an
 active goal. Take work it will not finish in this run. Mark work verified on the runner's word.
 Repeat something they answered, or ignored twice. Put more than one thing in front of them. Turn
 their silence into a yes.
