@@ -199,8 +199,11 @@ $( [ -n "$GENERATED" ] && printf '\n      That password was made for you just no
    In a browser: open the address above and sign in. That is Hermes' own web
    page for this server: its settings, its sessions, its scheduled jobs, and
    under Channels the Telegram bot the first line connected, where a second
-   person can be added with a form and a Restart gateway button. No typing on
-   the server for any of it.
+   person can be added with a form. The page's own Restart gateway button
+   cannot make that live on this server: the gateway runs as a system
+   service, and this account was made without the right to restart one.
+   Making it live still needs one line typed on the server, as root:
+   systemctl restart hermes-gateway.
 
    In the Hermes app on your computer: Settings, then Gateways, then Remote
    gateway. Enter the address above as the Remote URL, press Sign in, give the

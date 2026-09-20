@@ -283,10 +283,13 @@ register` (Nous OAuth).
 Telegram itself was connected in section 4a, by the installer. To let a second person write to
 the bot: open `http://<private address>:9119` from a computer on the same Tailscale network, sign
 in, and under **Channels** choose **Telegram**; add their numeric Telegram id (from
-**userinfobot**) to the allowed users, then **Restart gateway** on the same page. By hand, the
-same thing is a second id, comma-separated, on the `TELEGRAM_ALLOWED_USERS` line in
-`/home/ai/.hermes/.env`, and `systemctl restart hermes-gateway` as root. A stranger who writes
-to the bot gets a pairing code; `hermes pairing approve telegram <code>` as `ai` lets them in.
+**userinfobot**) to the allowed users. The page's own **Restart gateway** button cannot make it
+live here: this server's gateway runs as a system service, and `ai`, the account the page runs
+as, was made without the right to restart one (the same reason the watchdog runs on root's
+clock, section 5a). Make it live as root instead: the same second id, comma-separated, on the
+`TELEGRAM_ALLOWED_USERS` line in `/home/ai/.hermes/.env`, then `systemctl restart hermes-gateway`.
+A stranger who writes to the bot gets a pairing code; `hermes pairing approve telegram <code>` as
+`ai` lets them in.
 
 ## 12. Register it, and check it
 
