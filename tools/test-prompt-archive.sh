@@ -263,8 +263,12 @@ PICK_RC=$?
 
 # 31. The choice also arrives from ~/.hub/device.env, because the scheduled run that
 #     does most harvesting starts with almost no environment.
+#     The variable is taken OUT of this run first. On a computer whose owner has made the
+#     choice for real, it is in the environment of whoever runs these tests, the environment
+#     wins over the file, and this check failed there while the program was right.
 printf 'HUB_PROMPT_SOURCES=claude\n' >> "$W/home/.hub/device.env"
-( export HOME="$W/home" HUB_HOME="$W/home"
+( unset HUB_PROMPT_SOURCES
+  export HOME="$W/home" HUB_HOME="$W/home"
   cd "$W" && "$PY" "$ARC" --hub "$W" --dry-run archive ) >"$W/pick3.out" 2>&1
 grep -q "not read, by your choice: codex, hermes" "$W/pick3.out" \
   && ok "31 the choice recorded on the device is obeyed with no environment" \

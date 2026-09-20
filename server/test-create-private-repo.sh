@@ -75,7 +75,18 @@ rc=$?
 
 check "fresh hub repository setup exits successfully" test "$rc" -eq 0
 check "fresh hub receives its first commit" bash -c 'git -C "$1" rev-parse -q --verify HEAD >/dev/null' _ "$WORK/hub"
-check "fresh hub receives an origin" test "$(git -C "$WORK/hub" remote get-url origin)" = "$FAKE_REMOTE"
+# Compared as the same folder, not as the same spelling. Under Git Bash on Windows this
+# script says /tmp/... and git, a Windows program, writes the same place down as
+# C:/Users/.../Temp/..., so a plain string test failed on every Windows run while the
+# origin was exactly right.
+same_place() {
+  if command -v cygpath >/dev/null 2>&1; then
+    [ "$(cygpath -m "$1")" = "$(cygpath -m "$2")" ]
+  else
+    [ "$1" = "$2" ]
+  fi
+}
+check "fresh hub receives an origin" same_place "$(git -C "$WORK/hub" remote get-url origin)" "$FAKE_REMOTE"
 check "first commit reaches the remote" test "$(git --git-dir "$FAKE_REMOTE" rev-parse refs/heads/main)" = "$(git -C "$WORK/hub" rev-parse HEAD)"
 check "result reports the private GitHub address" bash -c 'case "$1" in *"private GitHub repository: https://github.com/test/hub"*) exit 0;; *) exit 1;; esac' _ "$output"
 
