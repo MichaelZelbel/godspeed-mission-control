@@ -6,3 +6,7 @@
 * text=auto eol=lf
 *.sh text eol=lf
 *.md text eol=lf
+# The two Windows launchers in tools/ are the one exception. cmd.exe reads a .cmd file
+# with Unix line endings most of the time, and "most of the time" is not what a reader
+# should get from the one command a chapter asks them to type.
+*.cmd text eol=crlf
