@@ -38,7 +38,8 @@ case "${FAKE_MODE:-ok}" in
   noresult) echo "I did things but never said so" > "$OUT"; exit 0 ;;
   failed)   echo "RESULT: FAILED: the shop needs a login this machine does not have" > "$OUT"; exit 0 ;;
   short)    [ -n "$P" ] && { mkdir -p "$(dirname "$P")"; echo "too short" > "$P"; }; echo "RESULT: wrote $P" > "$OUT"; exit 0 ;;
-  *)        [ -n "$P" ] && { mkdir -p "$(dirname "$P")"; { echo "# Answer"; for i in $(seq 1 80); do printf 'word%s ' "$i"; done; echo; echo; echo "## Sources"; echo "- https://example.org/a"; } > "$P"; }
+  *)        [ -n "${FAKE_TOUCH:-}" ] && printf 'repaired\n' > "$FAKE_TOUCH"
+            [ -n "$P" ] && { mkdir -p "$(dirname "$P")"; { echo "# Answer"; for i in $(seq 1 80); do printf 'word%s ' "$i"; done; echo; echo; echo "## Sources"; echo "- https://example.org/a"; } > "$P"; }
             echo "scratch line"; [ -n "${FAKE_SAY:-}" ] && echo "SAY: $FAKE_SAY"; echo "RESULT: wrote $P with 80 words" ;;
 esac > "${OUT:-/dev/stdout}"
 exit 0
@@ -155,6 +156,18 @@ printf '#!/usr/bin/env bash\necho "REFUSED: WHAT carries a repo path; he reads t
 OUT="$(run --only "$RID" --publish-cmd "$TMP/bin/publish" 2>&1)"
 contains "a refused card is written on the item" "$(cat "$TMP/work/$RID.md")" "CARD REFUSED, so the finished piece has not reached anyone"
 mv "$TMP/bin/hub-attention.keep" "$TMP/bin/hub-attention"
+
+# --- what an item changed is saved with the run, not only the file it named --------------------------------------
+if command -v git >/dev/null 2>&1; then
+  ( cd "$TMP" && git init -q . && git config user.email t@example.org && git config user.name t \
+    && printf 'old\n' > tool.sh && printf 'mine\n' > already-dirty.txt && git add tool.sh already-dirty.txt && git commit -q -m start \
+    && printf 'changed before the run\n' > already-dirty.txt ) >/dev/null 2>&1
+  hw file --learn "Does the runner save a program an item repaired?" --path research/saved.md --check "$NODE $TMP/bin/check-written.js research/saved.md --min-words 50" --key saved --source test >/dev/null
+  SID="$(grep -l 'KEY: saved' "$TMP/work"/W-*.md | head -1 | xargs basename | sed 's/.md$//')"
+  OUT="$(FAKE_TOUCH="tool.sh" run --only "$SID" 2>&1)"
+  contains "a program the item repaired is saved with the run" "$(git -C "$TMP" show --stat --format= HEAD 2>/dev/null)" "tool.sh"
+  missing "  and a file that was already changed before the run is left alone" "$(git -C "$TMP" show --stat --format= HEAD 2>/dev/null)" "already-dirty.txt"
+fi
 
 # --- the budget and the limit -----------------------------------------------------------------------------------
 hw file --what "One more" --done-when "research/one.md exists" --key one --source test >/dev/null

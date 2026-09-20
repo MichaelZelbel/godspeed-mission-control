@@ -133,6 +133,8 @@ let s=""; process.stdin.on("data",d=>s+=d).on("end",()=>{
   for (const r of rows) console.log(r.id+"\t"+(r.KIND||"do")+"\t"+(r.WHAT||""));
 });'
 ORDER_IDS="$(reg work next --json 2>/dev/null | "$NODE" -e "$ORDER_SCRIPT" "$ONLY")"
+RUNDIR_TOUCHED="$(mktemp 2>/dev/null || echo "/tmp/hub-work-touched-$$")"
+: > "$RUNDIR_TOUCHED"
 
 if [ -z "$ORDER_IDS" ]; then
   [ -n "$ONLY" ] && log "$ONLY is not runnable now (not planned, waiting on someone, outward, or under a lease)"
@@ -200,11 +202,29 @@ while IFS=$'\t' read -r ID KIND WHAT; do
     echo "If you made something the person will open (a draft, an answer, a page), put one line directly above RESULT that starts with SAY: and tells them in one plain sentence what is ready and for what, the way you would say it to them across a table. No file names, no folders, no ids, no tool names: that sentence is the only thing they read before they decide to open it. Housekeeping they will never open gets no SAY line."
   } > "$ITEMDIR/prompt.txt"
 
+  # WHAT THE ITEM CHANGES IS SAVED WITH THE ITEM. Until 2026-09-21 only the registers and the one
+  # file named in DONE WHEN were saved. An item that repaired a program or wrote a recipe left
+  # that change uncommitted on whichever machine ran it: recorded as verified, present nowhere
+  # else, and blocking every later pull on that machine (2026-09-19, 2026-09-20 and 2026-09-21,
+  # three days running). So the folder's state is read before and after, and what THIS item
+  # touched is added by name. What was already changed before it started is left alone.
+  BEFORE_STATE=""
+  [ -d "$HUB/.git" ] && BEFORE_STATE="$(git -C "$HUB" status --porcelain --untracked-files=all 2>/dev/null | sort)"
+
   bash "$RUNNER" work-item --hub "$HUB" --cwd "$HUB" --prompt-file "$ITEMDIR/prompt.txt" \
     --timeout "$ITEM_TIMEOUT" --out "$ITEMDIR/answer.txt" \
     --allowed-tools "Bash Read Grep Glob Write Edit WebSearch WebFetch"
   RC=$?
   RESULT_LINE="$(grep -a '^RESULT:' "$ITEMDIR/answer.txt" 2>/dev/null | tail -1 | tr -d '\r')"
+  if [ -d "$HUB/.git" ]; then
+    git -C "$HUB" status --porcelain --untracked-files=all 2>/dev/null | sort > "$ITEMDIR/.after-state"
+    printf '%s\n' "$BEFORE_STATE" | sort > "$ITEMDIR/.before-state"
+    # lines that are new or different after the item: " M path", "?? path", "A  path" ...
+    comm -13 "$ITEMDIR/.before-state" "$ITEMDIR/.after-state" | cut -c4- | sed 's/^"//; s/"$//' \
+      | grep -v -E '(^|/)\.env($|\.)|(^|/)secrets/|\.(key|pem|p12|pfx)$|(^|/)node_modules/|\.log$' \
+      >> "$RUNDIR_TOUCHED" 2>/dev/null || true
+    rm -f "$ITEMDIR/.after-state" "$ITEMDIR/.before-state"
+  fi
 
   if [ "$RC" -ne 0 ] || [ -z "$RESULT_LINE" ]; then
     WHY="the assistant ended (exit $RC) without a RESULT line; its output is in routines/work/$TODAY/$ID/answer.txt"
@@ -287,10 +307,21 @@ if [ -d "$HUB/.git" ] && command -v git >/dev/null 2>&1; then
   for f in $(reg work list --all --json 2>/dev/null | "$NODE" -e "$FILES_SCRIPT" "$TODAY"); do
     [ -f "$HUB/$f" ] && git -C "$HUB" add "$f" >/dev/null 2>&1
   done
+  if [ -s "$RUNDIR_TOUCHED" ]; then
+    sort -u "$RUNDIR_TOUCHED" | while IFS= read -r f; do
+      [ -n "$f" ] || continue
+      git -C "$HUB" add -- "$f" >/dev/null 2>&1 && log "saved with the run: $f"
+    done
+  fi
   if ! git -C "$HUB" diff --cached --quiet 2>/dev/null; then
     git -C "$HUB" commit -q -m "Work $TODAY: $DONE attempted, $VERIFIED verified" >/dev/null 2>&1 || true
-    git -C "$HUB" remote get-url origin >/dev/null 2>&1 && git -C "$HUB" push -q origin HEAD >/dev/null 2>&1 || true
+    if git -C "$HUB" remote get-url origin >/dev/null 2>&1; then
+      git -C "$HUB" pull --rebase --autostash -q origin HEAD >/dev/null 2>&1 || true
+      PUSH_OUT="$(git -C "$HUB" push -q origin HEAD 2>&1)" \
+        || log "PUSH FAILED, so today's work exists on this machine only: $(printf '%s' "$PUSH_OUT" | grep -v '^$' | tail -3 | tr '\n' ' ' | cut -c1-300)"
+    fi
   fi
 fi
 [ -n "$MISSING" ] && log "not on this computer:$MISSING"
 log "run end: $N taken, $DONE attempted, $VERIFIED verified"
+rm -f "$RUNDIR_TOUCHED" 2>/dev/null || true
