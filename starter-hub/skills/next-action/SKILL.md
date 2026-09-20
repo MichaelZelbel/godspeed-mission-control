@@ -158,6 +158,26 @@ over one that ends in a document; prefer one that can be judged by an outside nu
 weeks; prefer one that feeds what already works over one that starts from nothing. Say plainly
 when their idea is weaker than another, and when it is better than yours.
 
+**4. The hunt is a daily job, and the runner does it, not you.** You have one short run and no
+time to research well. So every day, for the goal whose register is thinnest, file ONE hunt item
+(`--kind learn`, key `idea-hunt-<goal>-<date>`, DONE WHEN "at least five new checked idea files
+exist in ideas/"). Its WHAT names one AREA to search, a different one each day, taken in turn from
+what this person owns and where their people are (their public projects, their newsletter and
+book, each product, each channel, the people and communities around their tools, what sits
+finished and unused in the hub, what the hub does not measure). The method the runner follows is
+in `ideas/README.md` under "How an idea gets in": evidence read today, then three attacks on every
+candidate, and only survivors are written. **An idea that was never attacked is not in the
+register.** On 2026-09-20 this was done once by hand for one goal: 153 candidates from live
+evidence, 89 survivors. The usual deaths are the lesson: the defect was already fixed, a
+better-known free thing already exists, the route the idea needs does not exist, or it polished a
+page nobody visits.
+
+**5. Keep the register fed and moving.** Count the open ideas per active goal that need NOTHING
+from the person. Under ten: the hunt item above is the first thing you file today. Every idea the
+runner made yesterday gets its STATUS set to `made` with the date and where it can be seen, and
+its OUTSIDE NUMBER gets a date on which you will read it. An idea whose number came in changes the
+ranking: say so in the record.
+
 ## Step 3. The best-supported next action, with its alternative and a forecast
 
 For each active outcome, name the action that best addresses the constraint, or the experiment
@@ -218,8 +238,14 @@ nothing was:**
    CHECK proves the file is there and whole (`hub-check-written <path> --min-words N` is the
    check for anything written). **`hub-work-run` carries these out later today, one at a time,
    in their own runs**; you do not do them here.
-2. **What only they can do:** OWNER person. It becomes at most **one** thing in front of them
-   today, with everything the hub could prepare already done and the full text ready to use, so
+2. **What only they can do:** OWNER person. First the hub PREPARES it to the last click as its
+   own MAKE item (the text written, the change built and tested on a branch, the file ready), and
+   only a prepared thing may be put in front of them. Then it becomes at most **one** thing in
+   front of them today, through the morning message and nowhere else: no extra page to open, no
+   list to work through. Several small yeses of the same kind (three wording fixes on their own
+   project pages, two replies of the same sort) may travel as ONE card answered with one word, if
+   each is prepared and the card says exactly what a yes sets in motion. Take the highest-scored
+   prepared idea first. It becomes at most one thing with everything the hub could prepare already done and the full text ready to use, so
    that nothing is left for them to compose. Never a second one. Never a reminder of something
    they have already answered, or ignored twice.
 3. **What nobody knows yet:** `--kind learn` (or `--learn "<question>" --path <file>`). A learn
