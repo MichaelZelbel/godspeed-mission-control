@@ -78,6 +78,24 @@ purpose. If it contradicts something you believe about me, the file wins.
   Menerio. Connecting Menerio is optional and is never required for local
   capture or retrieval. Follow my privacy rules for everything you save.
 
+## Finding things, and my notebook
+
+- **Search before you say it is not here.** To find anything in this folder,
+  run `hub-search <words>`. It asks my notebook first when one is connected,
+  searches the files here when it cannot, and says on its last line which of
+  the two it did. Open the files it names. Only then may you tell me that
+  something is not in my hub. If the command is missing, search the files
+  yourself.
+- **"Make a note", "note that", "remember this for my notebook".** When the
+  `notebook` tools are available: call `list_note_folders` and pick the folder
+  that fits, or propose one new folder. Search the notebook for related notes.
+  Call `capture_note` with `title`, `folder_path`, `tags` and the text, and
+  link each related note inside the text as `[[Exact Title]]`. Never save
+  under `hub/`: that tree is a program's mirror of this folder. Then tell me
+  in two or three lines: the title, the folder, the links and why. When the
+  `notebook` tools are not available, save to `world/` or `inbox/` as this
+  file says above, and tell me which.
+
 ## My rules
 
 Each rule is one file in `rules/`, holding the whole story: what it is, why I
