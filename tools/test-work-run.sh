@@ -140,6 +140,14 @@ contains "  its lease is still the other runner's" "$(cat "$TMP/work/W-20260915-
 # --- no check at all: attempted, for a person to verify ----------------------------------------------------------
 check "an item with no check stays attempted after the assistant's word" "$(status_of W-20260915-05)" "attempted"
 
+# --- a finished piece with no sentence for the person gets no card at all -----------------------------------------
+rm -f "$TMP/card-argv.txt"
+hw file --learn "Does housekeeping stay quiet?" --path research/quiet.md --check "$NODE $TMP/bin/check-written.js research/quiet.md --min-words 50" --key quiet --source test >/dev/null
+QID="$(grep -l 'KEY: quiet' "$TMP/work"/W-*.md | head -1 | xargs basename | sed 's/.md$//')"
+OUT="$(run --only "$QID" --publish-cmd "$TMP/bin/publish" 2>&1)"
+check "a piece with no SAY line files no card" "$([ -f "$TMP/card-argv.txt" ] && echo card || echo none)" "none"
+contains "  and the run says why" "$OUT" "no sentence for the person"
+
 # --- the hub's own machinery runs last, however early it was filed ------------------------------------------------
 hw file --what "Tidy the hub's own plumbing" --done-when "research/plumbing.md exists" --key plumbing --source test >/dev/null
 hw file --what "Make the thing for the goal" --done-when "research/thing.md exists" --goal five-friends --key thing --source test >/dev/null
@@ -153,7 +161,7 @@ hw file --learn "What does a refused card leave behind?" --path research/refused
 RID="$(grep -l 'KEY: refused' "$TMP/work"/W-*.md | head -1 | xargs basename | sed 's/.md$//')"
 cp "$TMP/bin/hub-attention" "$TMP/bin/hub-attention.keep"
 printf '#!/usr/bin/env bash\necho "REFUSED: WHAT carries a repo path; he reads this, so say it in words"\nexit 3\n' > "$TMP/bin/hub-attention"
-OUT="$(run --only "$RID" --publish-cmd "$TMP/bin/publish" 2>&1)"
+OUT="$(FAKE_SAY="Your notes on refused cards are ready." run --only "$RID" --publish-cmd "$TMP/bin/publish" 2>&1)"
 contains "a refused card is written on the item" "$(cat "$TMP/work/$RID.md")" "CARD REFUSED, so the finished piece has not reached anyone"
 mv "$TMP/bin/hub-attention.keep" "$TMP/bin/hub-attention"
 

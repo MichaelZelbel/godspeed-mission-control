@@ -36,6 +36,10 @@
 #   --max-items N           at most N items in one run (default 2)
 #   --budget SECONDS        stop starting new items after this long (default 2700)
 #   --item-timeout SECONDS  time limit for one assistant run (default 1500)
+#   --allow-tools "A B"     more tools the assistant may use, on top of files, shell and the web:
+#                           a hub names its own READ-ONLY connections here (its mail search, its
+#                           browser reader). Without them an unattended run cannot read a logged-in
+#                           page or an inbox at all, and says so (2026-09-20, the newsletter numbers).
 #   --only <id>             run this one item and nothing else
 #   --extra-prompt-file F   your hub's own additions to the recipe, added for this run only
 #   --publish-cmd "<cmd>"   a command that turns a finished file into an https page and prints
@@ -43,7 +47,7 @@
 #   --dry-run               list what would run; take nothing, run nothing, write nothing
 set -uo pipefail
 
-HUB=""; DRY=0; TODAY=""; MAX=2; BUDGET=2700; ITEM_TIMEOUT=1500; ONLY=""; EXTRA=""; PUBLISH_CMD=""
+EXTRA_TOOLS=""; HUB=""; DRY=0; TODAY=""; MAX=2; BUDGET=2700; ITEM_TIMEOUT=1500; ONLY=""; EXTRA=""; PUBLISH_CMD=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --hub) HUB="$2"; shift 2 ;;
@@ -51,6 +55,7 @@ while [ $# -gt 0 ]; do
     --max-items) MAX="$2"; shift 2 ;;
     --budget) BUDGET="$2"; shift 2 ;;
     --item-timeout) ITEM_TIMEOUT="$2"; shift 2 ;;
+    --allow-tools) EXTRA_TOOLS="$2"; shift 2 ;;
     --only) ONLY="$2"; shift 2 ;;
     --extra-prompt-file) EXTRA="$2"; shift 2 ;;
     --publish-cmd) PUBLISH_CMD="$2"; shift 2 ;;
@@ -213,7 +218,7 @@ while IFS=$'\t' read -r ID KIND WHAT; do
 
   bash "$RUNNER" work-item --hub "$HUB" --cwd "$HUB" --prompt-file "$ITEMDIR/prompt.txt" \
     --timeout "$ITEM_TIMEOUT" --out "$ITEMDIR/answer.txt" \
-    --allowed-tools "Bash Read Grep Glob Write Edit WebSearch WebFetch"
+    --allowed-tools "Bash Read Grep Glob Write Edit WebSearch WebFetch${EXTRA_TOOLS:+ $EXTRA_TOOLS}"
   RC=$?
   RESULT_LINE="$(grep -a '^RESULT:' "$ITEMDIR/answer.txt" 2>/dev/null | tail -1 | tr -d '\r')"
   if [ -d "$HUB/.git" ]; then
@@ -271,9 +276,14 @@ while IFS=$'\t' read -r ID KIND WHAT; do
       log "$ID not published here ($PUBLISH_CMD gave no address)"
     fi
   fi
-  if [ -n "$URL" ] && command -v hub-attention >/dev/null 2>&1; then
+  # NO SENTENCE FOR THE PERSON, NO CARD. The recipe tells the assistant to write a SAY line only
+  # for something the person will open. A playbook rewrite or a repair has none, and until
+  # 2026-09-21 the runner then offered the item's own description as a card, which the ledger
+  # refused for its machine words every time. Housekeeping is recorded, not announced.
+  if [ -n "$URL" ] && [ -z "$SAY" ]; then log "$ID has no sentence for the person, so no card: it is on the record and on its page"; fi
+  if [ -n "$URL" ] && [ -n "$SAY" ] && command -v hub-attention >/dev/null 2>&1; then
     CARD="$(HUB_ROOT="$HUB" hub-attention file --kind deliverable \
-      --what "${SAY:-$WHAT. It is written and ready to read.}" \
+      --what "$SAY" \
       --if-ignored "It waits unread, and the next piece is written without your verdict on this one." \
       --next "Open the link, read it, and reply with one word: keep, change or drop." \
       --link "$URL" --source "the work runner, $ID" --topic "${GOAL:-work}" --date "$TODAY" 2>&1)"
