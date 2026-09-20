@@ -88,7 +88,7 @@ function menerioKey(hub) {
   const store = path.join(hub, "secrets", "hub-secrets.env.age");
   const keyFile = process.env.HUB_AGE_KEY || path.join(os.homedir(), ".hub", "age-key.txt");
   if (!fs.existsSync(store)) return { key: "", from: "", why: "your hub carries no keys" };
-  if (!fs.existsSync(keyFile)) return { key: "", from: "", why: "this computer has not unlocked your hub's keys yet" };
+  if (!fs.existsSync(keyFile)) return { key: "", from: "", why: "this computer has not opened your hub's locked store yet" };
   const age = findAge();
   if (!age) return { key: "", from: "", why: "the small program called age is not on this computer" };
   const r = spawnSync(age, ["-d", "-i", keyFile, store], { encoding: "utf8", maxBuffer: 4e6 });
