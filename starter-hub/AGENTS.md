@@ -86,15 +86,11 @@ purpose. If it contradicts something you believe about me, the file wins.
   the two it did. Open the files it names. Only then may you tell me that
   something is not in my hub. If the command is missing, search the files
   yourself.
-- **"Make a note", "note that", "remember this for my notebook".** When the
-  `notebook` tools are available: call `list_note_folders` and pick the folder
-  that fits, or propose one new folder. Search the notebook for related notes.
-  Call `capture_note` with `title`, `folder_path`, `tags` and the text, and
-  link each related note inside the text as `[[Exact Title]]`. Never save
-  under `hub/`: that tree is a program's mirror of this folder. Then tell me
-  in two or three lines: the title, the folder, the links and why. When the
-  `notebook` tools are not available, save to `world/` or `inbox/` as this
-  file says above, and tell me which.
+- **"Make a note", "note that", "write this down".** Follow the recipe in
+  `skills/keep-a-note/SKILL.md`, every time, including its three-line reply:
+  the title, the folder, the links. It files the note in my Menerio notebook
+  when the `notebook` tools are there, and in `world/` or `inbox/` when they
+  are not.
 
 ## My rules
 

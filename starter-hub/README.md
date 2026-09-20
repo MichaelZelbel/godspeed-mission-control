@@ -31,10 +31,13 @@ What is here. Thirteen names, and they are the whole system:
   each is written into `AGENTS.md` by `hub-compile-rules`, which is the
   only rules text your assistant reads every session. You edit the files; you
   never edit that block. Chapter 17.
-- `skills/`: one folder per recipe, each with a `SKILL.md` inside. Two are
-  here from day one, `next-action` and `work-item`: the first decides what your
-  hub does about your goals each day, the second carries out one piece of that
-  work. Chapter 7 shows them working; you never have to read them. The
+- `skills/`: one folder per recipe, each with a `SKILL.md` inside. Three are
+  here from day one. `next-action` decides what your hub does about your goals
+  each day, and `work-item` carries out one piece of that work. Chapter 7
+  shows them working; you never have to read them. `keep-a-note` is what runs
+  when you say "make a note": it files the note in your Menerio notebook,
+  links it and tells you where it went (Chapter 28). Without Menerio it saves
+  into the hub's own files. The
   installer has already told Hermes where this room is, so a recipe you put
   here is found without you naming it. Chapters 12 to 14 fill it further, and
   the five starter recipes are in the kit download beside this folder, ready
