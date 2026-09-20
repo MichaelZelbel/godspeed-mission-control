@@ -269,7 +269,17 @@ function usableHits(body, terms) {
     const isDecision = rel === nb.DECISION_LOG;
     let title = String(note.title || "");
     if (!title || title === rel) title = titleOf(rel, text);
-    let snippet = String(note.snippet || "").replace(/\s+/g, " ").trim();
+    // The preview comes from the file on this disk whenever it has a line to show.
+    // Menerio found the file; the file is the real thing, and the copy opens with a line
+    // saying where it came from and then the file's header. That is what Menerio's own
+    // snippet showed on the first live run: three hits, three times "This is a file from
+    // your hub at". A decision is one section of a long file, so there the notebook's
+    // snippet is the better one, with that opening taken off.
+    let snippet = isDecision ? "" : snippetFrom(text, terms);
+    if (!snippet) {
+      snippet = String(note.snippet || "").replace(/\s+/g, " ").trim()
+        .replace(/^.*?This is (a file from your hub|a copy of the hub file)[^.]*\.( (You|It)[^.]*\.)?\s*/i, "");
+    }
     if (!snippet && typeof note.content === "string") {
       // The first lines of a mirrored note say where it came from. That is not the find.
       snippet = snippetFrom(note.content.replace(/^[^\n]*\n\n---\n\n/, ""), terms);
