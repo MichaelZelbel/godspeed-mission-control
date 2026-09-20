@@ -34,6 +34,16 @@ Later in the book, once your assistant is looking after the folder for you, it c
 git clone https://github.com/MichaelZelbel/teach-it-once-kit.git
 ```
 
+## One AGENTS.md, read by Hermes, Claude Code, Codex and OpenCode
+
+Your assistant's operating manual is one plain file, `starter-hub/AGENTS.md`. Hermes, Codex and OpenCode read it by name when they open the folder. For Claude Code the kit ships `starter-hub/CLAUDE.md`, and this is the whole file:
+
+```
+@AGENTS.md
+```
+
+Since version 2.1.277 (18 September 2026) Claude Code reads `AGENTS.md` on its own when a project has no `CLAUDE.md` ([changelog](https://code.claude.com/docs/en/changelog)). Older versions do not: checked on 2.1.270, which answered from `AGENTS.md` only with the one-line file in place. So the kit keeps that file. It works on every version, and it is the place for anything only Claude Code should read.
+
 ## What is where
 
 - `starter-hub/`: the folder that becomes your own system. Copy this whole folder and it is your hub. Everything else here fills it up. Three of its rooms are the ones that turn a folder of notes into something that decides: `goals/` (what you want, and who gets attention today), `forecasts/` (what your hub expects to happen, dated and scored) and `work/` (what it is doing, where "it says it did it" and "somebody checked" are two different states). Each starts empty with a README explaining the format.
