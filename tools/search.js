@@ -96,14 +96,15 @@ function splitHeader(text) {
   return { header: text.slice(3, end), body: after < 0 ? "" : text.slice(after + 1) };
 }
 
-// What to call a file: its first heading, else a name: or title: line in its header, else
-// the file name. A path is where a thing is; this is what it is.
+// What to call a file: the name: or title: line in its header when it has one (a skill and a
+// person in world/ both do, and their first heading is often just "What this is"), else its
+// first heading, else the file name. A path is where a thing is; this is what it is.
 function titleOf(rel, text) {
   const parts = splitHeader(text);
-  const h = parts.body.match(/^#{1,3}[ \t]+(.+?)[ \t]*#*[ \t]*$/m);
-  if (h) return h[1].trim();
   const n = parts.header.match(/^(?:name|title)[ \t]*:[ \t]*(.+)$/m);
   if (n) return n[1].trim().replace(/^["']|["']$/g, "");
+  const h = parts.body.match(/^#{1,3}[ \t]+(.+?)[ \t]*#*[ \t]*$/m);
+  if (h) return h[1].trim();
   return path.basename(rel).replace(/\.md$/i, "");
 }
 
