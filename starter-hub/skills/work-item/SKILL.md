@@ -58,3 +58,13 @@ Everything before the last line is scratch and nobody reads it. The last line is
 
     RESULT: <one sentence: what was made, at which path, and one number a reader can check>
     RESULT: FAILED: <why, in one sentence, and what would let it be done>
+
+If what you made is something the person will open (a draft to send, an answer, a plan), put one
+line directly above it:
+
+    SAY: <one plain sentence, written to them: what is ready and what it is for>
+
+That sentence becomes the card they see, and it is the only thing they read before deciding to
+open the piece. Write it the way you would say it across a table. No file names, no folders, no
+ids, no tool names: the ledger refuses a card that carries one, and a refused card means the
+finished piece reaches nobody. Housekeeping they will never open gets no SAY line.

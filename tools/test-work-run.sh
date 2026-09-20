@@ -39,7 +39,7 @@ case "${FAKE_MODE:-ok}" in
   failed)   echo "RESULT: FAILED: the shop needs a login this machine does not have" > "$OUT"; exit 0 ;;
   short)    [ -n "$P" ] && { mkdir -p "$(dirname "$P")"; echo "too short" > "$P"; }; echo "RESULT: wrote $P" > "$OUT"; exit 0 ;;
   *)        [ -n "$P" ] && { mkdir -p "$(dirname "$P")"; { echo "# Answer"; for i in $(seq 1 80); do printf 'word%s ' "$i"; done; echo; echo; echo "## Sources"; echo "- https://example.org/a"; } > "$P"; }
-            echo "scratch line"; echo "RESULT: wrote $P with 80 words" ;;
+            echo "scratch line"; [ -n "${FAKE_SAY:-}" ] && echo "SAY: $FAKE_SAY"; echo "RESULT: wrote $P with 80 words" ;;
 esac > "${OUT:-/dev/stdout}"
 exit 0
 FAKE
@@ -92,7 +92,7 @@ check "  every item still planned" "$(grep -l '^STATUS: planned' "$TMP/work"/W-*
 check "  no run folder made" "$([ -d "$TMP/routines/work" ] && echo yes || echo no)" "no"
 
 # --- one item at a time, attempted then verified by its check ---------------------------------------------
-OUT="$(run --max-items 1 --publish-cmd "$TMP/bin/publish" 2>&1)"; check "one item runs and the runner exits 0" "$?" "0"
+OUT="$(FAKE_SAY="How people in their fifties make close friends is written up for you." run --max-items 1 --publish-cmd "$TMP/bin/publish" 2>&1)"; check "one item runs and the runner exits 0" "$?" "0"
 contains "  the playbook item was taken first" "$OUT" "W-20260915-02 taken (learn)"
 contains "  the assistant saw the goal's own words" "$(cat "$TMP/routines/work/2026-09-15/W-20260915-02/prompt-seen.txt")" "five really good friends"
 contains "  and where the answer goes" "$(cat "$TMP/routines/work/2026-09-15/W-20260915-02/prompt-seen.txt")" "How this goal is won"
@@ -104,6 +104,9 @@ contains "  the finished file became a page" "$OUT" "published: https://example.
 contains "  and the page is on the item" "$(cat "$TMP/work/W-20260915-02.md")" "LINK: https://example.org/pages/five-friends.html"
 contains "  and one card went through the ledger's door" "$(cat "$TMP/card-argv.txt")" "deliverable"
 contains "  with the link on it" "$(cat "$TMP/card-argv.txt")" "https://example.org/pages/five-friends.html"
+contains "  saying what the assistant wrote for the reader" "$(cat "$TMP/card-argv.txt")" "is written up for you."
+missing "  and not the item's own description" "$(cat "$TMP/card-argv.txt")" "It is written and ready to read"
+contains "  the prompt asked for that sentence" "$(cat "$TMP/routines/work/2026-09-15/W-20260915-02/prompt-seen.txt")" "starts with SAY:"
 contains "  the run ends with its count" "$OUT" "1 taken, 1 attempted, 1 verified"
 
 # --- the runner said done, the check says not: stays attempted, run goes on --------------------------------
@@ -135,6 +138,15 @@ contains "  its lease is still the other runner's" "$(cat "$TMP/work/W-20260915-
 
 # --- no check at all: attempted, for a person to verify ----------------------------------------------------------
 check "an item with no check stays attempted after the assistant's word" "$(status_of W-20260915-05)" "attempted"
+
+# --- a card the ledger refuses is written on the item, not only in a log ----------------------------------------
+hw file --learn "What does a refused card leave behind?" --path research/refused.md --check "$NODE $TMP/bin/check-written.js research/refused.md --min-words 50" --key refused --source test >/dev/null
+RID="$(grep -l 'KEY: refused' "$TMP/work"/W-*.md | head -1 | xargs basename | sed 's/.md$//')"
+cp "$TMP/bin/hub-attention" "$TMP/bin/hub-attention.keep"
+printf '#!/usr/bin/env bash\necho "REFUSED: WHAT carries a repo path; he reads this, so say it in words"\nexit 3\n' > "$TMP/bin/hub-attention"
+OUT="$(run --only "$RID" --publish-cmd "$TMP/bin/publish" 2>&1)"
+contains "a refused card is written on the item" "$(cat "$TMP/work/$RID.md")" "CARD REFUSED, so the finished piece has not reached anyone"
+mv "$TMP/bin/hub-attention.keep" "$TMP/bin/hub-attention"
 
 # --- the budget and the limit -----------------------------------------------------------------------------------
 hw file --what "One more" --done-when "research/one.md exists" --key one --source test >/dev/null

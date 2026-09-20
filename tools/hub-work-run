@@ -190,6 +190,7 @@ while IFS=$'\t' read -r ID KIND WHAT; do
     echo
     echo "## Where things go"
     echo "Anything you write for this item goes at the path DONE WHEN names, or under routines/work/$TODAY/$ID/ if it names none. Your final line is the RESULT line the recipe describes; the register is updated by the program that called you, never by you."
+    echo "If you made something the person will open (a draft, an answer, a page), put one line directly above RESULT that starts with SAY: and tells them in one plain sentence what is ready and for what, the way you would say it to them across a table. No file names, no folders, no ids, no tool names: that sentence is the only thing they read before they decide to open it. Housekeeping they will never open gets no SAY line."
   } > "$ITEMDIR/prompt.txt"
 
   bash "$RUNNER" work-item --hub "$HUB" --cwd "$HUB" --prompt-file "$ITEMDIR/prompt.txt" \
@@ -212,6 +213,7 @@ while IFS=$'\t' read -r ID KIND WHAT; do
       continue ;;
   esac
   RESULT="$(printf '%s' "$RESULT_LINE" | sed 's/^RESULT: *//' | cut -c1-300)"
+  SAY="$(grep -a '^SAY:' "$ITEMDIR/answer.txt" 2>/dev/null | tail -1 | tr -d '\r' | sed 's/^SAY: *//' | cut -c1-300)"
   reg work attempt "$ID" --runner "$RUNNER_NAME" --ok --result "$RESULT" 2>&1 | sed 's/^/  /'
   DONE=$((DONE + 1))
 
@@ -234,7 +236,7 @@ while IFS=$'\t' read -r ID KIND WHAT; do
   FILE="$(path_in "$DONE_WHEN")"
   URL=""
   if [ -n "$FILE" ] && [ -f "$HUB/$FILE" ] && [ -n "$PUBLISH_CMD" ]; then
-    URL="$($PUBLISH_CMD "$HUB/$FILE" --title "$WHAT" 2>/dev/null | grep -oE 'https://[^ ]+' | head -1)"
+    URL="$($PUBLISH_CMD "$HUB/$FILE" --title "${SAY:-$WHAT}" 2>/dev/null | grep -oE 'https://[^ ]+' | head -1)"
     if [ -n "$URL" ]; then
       reg work link "$ID" --url "$URL" 2>&1 | sed 's/^/  /'
       log "$ID published: $URL"
@@ -244,11 +246,19 @@ while IFS=$'\t' read -r ID KIND WHAT; do
   fi
   if [ -n "$URL" ] && command -v hub-attention >/dev/null 2>&1; then
     CARD="$(HUB_ROOT="$HUB" hub-attention file --kind deliverable \
-      --what "$WHAT. It is written and ready to read." \
+      --what "${SAY:-$WHAT. It is written and ready to read.}" \
       --if-ignored "It waits unread, and the next piece is written without your verdict on this one." \
       --next "Open the link, read it, and reply with one word: keep, change or drop." \
       --link "$URL" --source "the work runner, $ID" --topic "${GOAL:-work}" --date "$TODAY" 2>&1)"
     log "card: $(printf '%s' "$CARD" | tail -1)"
+    # A REFUSED CARD IS A FINISHED PIECE NOBODY WILL SEE. Until 2026-09-20 the refusal went only
+    # to this run's log: an invitation was written, published and never reached its reader,
+    # because the card carried the item's own WHAT, which named a file. It goes on the item, where
+    # the next decision reads it.
+    case "$CARD" in *REFUSED*)
+      printf -- '- %s CARD REFUSED, so the finished piece has not reached anyone: %s\n' "$TODAY" \
+        "$(printf '%s' "$CARD" | grep -a 'REFUSED' | tail -1 | cut -c1-240)" >> "$HUB/work/$ID.md" ;;
+    esac
   fi
 done <<< "$ORDER_IDS"
 
