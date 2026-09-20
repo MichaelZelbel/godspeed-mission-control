@@ -12,7 +12,7 @@ is here the same day, in your words.
 Every file starts like this:
 
     GOAL: <the goal it serves>
-    STATUS: open | chosen | made | dropped
+    STATUS: open | chosen | prepared | made | dropped
     SOURCE: <whose idea, and the date>
     WHAT IT IS: <two sentences>
     WHO GETS WHAT: <a stranger, or you>
@@ -52,3 +52,5 @@ matters. An idea scored 3 or lower is not written. Four lessons from the first h
 polish on a page nobody visits is worth nothing; effects are small (a link under a video is
 clicked about once per 750 views); check that the route exists before promising it; and search
 whether a better-known free thing already does it.
+
+`prepared` means the hub has finished its whole part and the last step is one yes from you. `made` carries the date and where it can be seen.

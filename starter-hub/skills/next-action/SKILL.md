@@ -143,7 +143,7 @@ three sources, in this order:
 - **What the people in the playbook actually ship.** Not their advice: their things. Look at what
   they made in their first year and ask which of those this person could make this week.
 
-Every idea file carries: GOAL, STATUS (open, chosen, made, dropped), SOURCE (whose idea, the date),
+Every idea file carries: GOAL, STATUS (open, chosen, prepared, made, dropped), SOURCE (whose idea, the date),
 WHAT IT IS in two sentences, WHO GETS WHAT (a stranger, or the person), SMALLEST VERSION (what one
 work run can finish), OUTSIDE NUMBER (what would show it worked, read where, by when), NEEDS FROM
 THEM (nothing, or the one thing), RISK, and your honest JUDGMENT including how it could be made
