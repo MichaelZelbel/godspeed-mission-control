@@ -1,5 +1,18 @@
 #!/usr/bin/env python3
-"""Push hub text files into your notebook as notes, so they can be searched by meaning.
+"""Mirror your hub's text files into your notebook as notes, so they can be searched there.
+
+WHAT IS SENT: every Markdown file git tracks in the hub. Because git is asked, the
+hub's own .gitignore decides what stays home, and dev/ stays home on every hub. The
+few other exceptions are listed one by one further down, each with its reason.
+
+WHY THE WHOLE HUB (2026-09-20). Until then this sent three places only:
+observations/, skills/ and the split decisions.md. The reasoning was "skip what is
+already loaded": AGENTS.md, profile/ and rules/ are read at the start of every
+session, so a search result repeating them was called noise. That reasoning is
+retired, on the author's decision: the whole hub is to be visible and searchable
+in the notebook, from a phone, with no terminal anywhere near. The noise is handled where it
+arises instead: Menerio ranks mirrored notes below the notes you wrote yourself,
+and hub-search drops AGENTS.md from what it shows.
 
 Every note lands in a folder that mirrors where its file lives in the hub, under
 a single `hub` root: see HUB_FOLDER and folder_for below. Nothing this sync
@@ -25,26 +38,47 @@ import json
 import os
 import pathlib
 import re
+import subprocess
 import sys
 import urllib.error
 import urllib.request
 
-# Which folders are copied, and who wrote what is in them.
-#
-# Sync what gets looked UP. Skip what is already loaded: AGENTS.md, profile/ and
-# rules/ are read at the start of every session, so a search result repeating
-# them is noise. world/ is skipped because it flows the other way.
-# prompts/archive/ is years of past conversation and would crowd out everything
-# else, so it stays out.
-SYNC_SOURCES = [
-    {"folder": "observations", "author": "machine"},
-    {"folder": "skills", "author": "mixed"},
-]
+# ---- what stays home ------------------------------------------------------------------
+# THE SAME LIST LIVES IN tools/search.js (hub-search), which falls back to searching
+# exactly the files this program mirrors. Change one, change the other;
+# tools/test-hub-search.sh compares the two lists on one folder and fails when they drift.
+
+# dev/ is never sent. The starter hub's .gitignore already keeps its contents out of
+# git, but it tracks dev/README.md, and a hub somebody made by hand may track more.
+# Each project in there is its own repository with its own history; the owner's words
+# were "all hub folders except dev/", so the folder is skipped by name as well.
+# .git/ and node_modules/ only matter when there is no git to ask and the folder is
+# walked instead.
+SKIP_DIRS = ("dev", ".git", "node_modules")
+
+# world/removed/ holds the pull's own notices about records the notebook dropped. They
+# are copies of things Menerio already had and then deleted; sending them up would put
+# back, as new notes, exactly what was removed there.
+SKIP_PREFIXES = ("world/removed/",)
+
+# A file under world/ whose header says `origin: menerio` came DOWN from the notebook
+# (tools/world-pull.py writes them). Sending it back up would hand Menerio its own
+# records as new notes, and the next pull would bring those down again.
+WORLD_FOLDER = "world/"
+ORIGIN_MENERIO = re.compile(r"^origin:\s*menerio\s*$", re.IGNORECASE | re.MULTILINE)
+
+# Nothing over 300 KB is sent. prompts/archive/ holds years of pasted conversation in
+# files that size, and one of them costs a free account more of its monthly allowance
+# than a hundred ordinary notes. The run names each file it skips, in one line.
+MAX_FILE_BYTES = 300 * 1024
 
 # The visible skills/ is the room since the Hermes switch (2026-09-02). The hidden
 # .claude/skills is a link the installer points at it, so on a topped-up hub the two
-# are one folder and the visible name wins. An older hub that has not been re-run
-# still keeps its recipes under the hidden name only, and those must still be sent.
+# are one folder and the visible name wins: the hidden one is never sent as well, or
+# every skill would arrive twice. An older hub that has not been re-run still keeps
+# its recipes under the hidden name only, and those must still be sent, under the
+# ids they always had.
+SKILLS_FOLDER = "skills"
 SKILLS_ALIASES = (".claude/skills",)
 
 # Generated index files are not sent. They change on nearly every commit (the
@@ -57,18 +91,6 @@ SYNC_SKIP_FILES = frozenset({
     "skills/README.md",
     ".claude/skills/README.md",
 })
-
-
-def source_folder(repo_root: pathlib.Path, source: dict) -> str:
-    """The folder a source actually lives in on this hub: the named one, or an alias
-    when the named one is missing and an alias is there."""
-    if (repo_root / source["folder"]).is_dir():
-        return source["folder"]
-    if source["folder"] == "skills":
-        for alias in SKILLS_ALIASES:
-            if (repo_root / alias).is_dir():
-                return alias
-    return source["folder"]
 
 DECISION_LOG = "decisions.md"
 
@@ -84,13 +106,28 @@ DECISION_LOG = "decisions.md"
 # wrote" is visible before opening it.
 HUB_FOLDER = "hub"
 
+# The first line of every note says who wrote what is under it. Only observations/ is
+# called a guess, because only observations/ is one. The lines for observations/,
+# skills/ and decisions are word for word what they were before the whole hub was
+# mirrored (2026-09-20): the line is part of what gets hashed, so changing a word of
+# one would send every note of that kind again, on every hub that had already synced.
 AUTHOR_LINES = {
     "machine": "This is a file from your hub at {path}. It is text a machine "
                "wrote, which makes it a guess and not something you said.",
     "mixed": "This is a file from your hub at {path}. It was mostly written by a "
              "machine and kept because you found it useful.",
     "owner": "This is a file from your hub at {path}. You wrote or decided this.",
+    "copy": "This is a copy of the hub file at {path}. Change the file in the hub, "
+            "never this note.",
 }
+
+# Who wrote what is in a folder. Anything not named here gets the neutral "copy" line.
+AUTHOR_BY_FOLDER = (
+    ("observations/", "machine"),
+    (SKILLS_FOLDER + "/", "mixed"),
+    ("profile/", "owner"),
+    ("rules/", "owner"),
+) + tuple((alias + "/", "mixed") for alias in SKILLS_ALIASES)
 
 # The two shapes a decision takes in decisions.md. The starter hub writes them
 # as bullets, "- (YYYY-MM-DD) what and why", and a hub that outgrows one line
@@ -171,24 +208,96 @@ def split_decision_log(text: str, source_path: str) -> list:
     return docs
 
 
-def collect_documents(repo_root: pathlib.Path) -> list:
-    docs = []
-    for source in SYNC_SOURCES:
-        folder = repo_root / source_folder(repo_root, source)
-        if not folder.is_dir():
+def tracked_markdown(repo_root: pathlib.Path):
+    """Every Markdown file git tracks here, or None when git cannot answer.
+
+    Git is asked so that the hub's .gitignore decides what stays home, and so that a
+    scratch folder somebody forgot to delete is never mirrored into a notebook.
+
+    Only believed when the hub IS the top of a repository. A hub folder sitting inside
+    some other repository gets an answer too, and it is the wrong one: that repository
+    tracks none of these files, so the answer is "nothing", and "nothing" reads to the
+    rest of this program as "every file was deleted".
+    """
+    def git(*args):
+        return subprocess.run(["git", "-C", str(repo_root)] + list(args),
+                              stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=60)
+    try:
+        top = git("rev-parse", "--show-cdup")
+        if top.returncode != 0 or top.stdout.strip():
+            return None
+        # -z, because without it git quotes and escapes any path holding an umlaut.
+        listed = git("ls-files", "-z", "--cached")
+        if listed.returncode != 0:
+            return None
+    except (OSError, subprocess.SubprocessError):
+        return None
+    paths = [p for p in listed.stdout.decode("utf-8", "replace").split("\0") if p]
+    return [p for p in paths if p.lower().endswith(".md")]
+
+
+def walked_markdown(repo_root: pathlib.Path) -> list:
+    """The same question with no git to ask: walk the folder. Links are not followed,
+    which is what keeps a linked .claude/skills from arriving as a second skills/."""
+    found = []
+    for folder, dirs, files in os.walk(str(repo_root), followlinks=False):
+        rel_folder = pathlib.Path(folder).relative_to(repo_root).as_posix()
+        dirs[:] = sorted(d for d in dirs if d not in (".git", "node_modules")
+                         and not (rel_folder == "." and d in SKIP_DIRS))
+        for name in files:
+            if name.lower().endswith(".md"):
+                found.append(name if rel_folder == "." else "{}/{}".format(rel_folder, name))
+    return found
+
+
+def hub_markdown_files(repo_root: pathlib.Path, notes=None) -> list:
+    """The repo-relative paths this sync mirrors, sorted. decisions.md is not in the
+    list: it is split, one note per decision, by collect_documents.
+
+    `notes` collects one line for each file that was skipped for its size, so the
+    caller can say so; a skip nobody hears about looks like a search that is broken.
+    """
+    paths = tracked_markdown(repo_root)
+    if paths is None:
+        paths = walked_markdown(repo_root)
+    visible_skills = (repo_root / SKILLS_FOLDER).is_dir()
+    keep = []
+    for rel in sorted(set(paths)):
+        if rel == DECISION_LOG or rel in SYNC_SKIP_FILES:
             continue
-        for path in sorted(folder.rglob("*.md")):
-            rel = path.relative_to(repo_root).as_posix()
-            if rel in SYNC_SKIP_FILES:
-                continue
-            docs.append(
-                Document(
-                    doc_id=rel,
-                    title=rel,
-                    body=path.read_text(encoding="utf-8"),
-                    source_path=rel,
-                )
-            )
+        if rel.split("/", 1)[0] in SKIP_DIRS or rel.startswith(SKIP_PREFIXES):
+            continue
+        if visible_skills and any(rel.startswith(alias + "/") for alias in SKILLS_ALIASES):
+            continue
+        path = repo_root / rel
+        if not path.is_file():
+            continue          # tracked, and deleted since the last commit
+        if path.stat().st_size > MAX_FILE_BYTES:
+            if notes is not None:
+                notes.append("skipped {} ({} KB): over the {} KB limit for one note".format(
+                    rel, path.stat().st_size // 1024, MAX_FILE_BYTES // 1024))
+            continue
+        keep.append(rel)
+    return keep
+
+
+def came_from_menerio(rel: str, text: str) -> bool:
+    """True for a world/ file whose header block says `origin: menerio`."""
+    if not rel.startswith(WORLD_FOLDER) or not text.startswith("---"):
+        return False
+    end = text.find("\n---", 3)
+    return bool(ORIGIN_MENERIO.search(text[:end if end > 0 else 2000]))
+
+
+def collect_documents(repo_root: pathlib.Path, notes=None) -> list:
+    docs = []
+    for rel in hub_markdown_files(repo_root, notes):
+        # errors="replace": one file saved in an old Windows encoding must not stop
+        # the other thousand from being mirrored.
+        text = (repo_root / rel).read_text(encoding="utf-8", errors="replace")
+        if came_from_menerio(rel, text):
+            continue
+        docs.append(Document(doc_id=rel, title=rel, body=text, source_path=rel))
 
     log = repo_root / DECISION_LOG
     if log.is_file():
@@ -209,15 +318,17 @@ def folder_for(source_path: str) -> str:
 
 
 def author_for(source_path: str) -> str:
-    for source in SYNC_SOURCES:
-        names = (source["folder"],) + (SKILLS_ALIASES if source["folder"] == "skills" else ())
-        if any(source_path.startswith(n + "/") for n in names):
-            return source["author"]
+    for prefix, author in AUTHOR_BY_FOLDER:
+        if source_path.startswith(prefix):
+            return author
     if source_path.startswith(DECISION_LOG):
         return "owner"
-    # An unmapped path defaults to machine, because claiming you said
-    # something you did not is the expensive mistake in both directions.
-    return "machine"
+    # Everything else is called what it is, a copy of a file. Before the whole hub was
+    # mirrored an unmapped path defaulted to "a machine wrote this", because claiming
+    # you said something you did not was the expensive mistake. With AGENTS.md, goals/
+    # and world/ now in the mirror, calling your own words a machine's guess is the
+    # same mistake from the other side, so the neutral line claims neither.
+    return "copy"
 
 
 def build_note_body(doc: Document) -> str:
@@ -520,7 +631,10 @@ def main(argv=None) -> int:
 
     root = pathlib.Path(args.repo_root).resolve()
     state_path = root / "world" / ".sync-state.json"
-    docs = collect_documents(root)
+    skipped = []
+    docs = collect_documents(root, skipped)
+    for line in skipped:
+        print(line)
     state = load_state(state_path)
 
     client = MenerioClient(os.environ.get("MENERIO_BASE_URL", DEFAULT_BASE_URL),
