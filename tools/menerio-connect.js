@@ -391,7 +391,7 @@ async function testConnection(key) {
     if (r.error) return r.error;
     if (r.status === 401 || r.status === 403) {
       const said = (rpcBody(r.text) || {}).error;
-      return "Menerio refused the key (" + r.status + ")" + (typeof said === "string" ? ": " + said.slice(0, 160) : "");
+      return "Menerio refused the key (" + r.status + ")" + (typeof said === "string" ? ": " + said.slice(0, 160).replace(/[.\s]+$/, "") : "");
     }
     if (r.status < 200 || r.status > 299) return "Menerio answered " + r.status;
     return "";
