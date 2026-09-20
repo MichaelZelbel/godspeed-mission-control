@@ -2,7 +2,7 @@
 # hub-notebook-sync — keep your notebook and your hub current with each other, by itself.
 #
 # WHAT THIS IS FOR. Your hub is a folder of text files on your computer. Your notebook
-# (Chapter 24) is the thing that can search those files by meaning instead of by exact
+# (Chapter 28) is the thing that can search those files by meaning instead of by exact
 # word. For that to be useful it has to hold a current copy, and until something ran on
 # a schedule, it only ever held whatever was true the last time somebody typed a command.
 #
@@ -115,6 +115,19 @@ if [ -z "${MENERIO_API_KEY:-}" ]; then
   exit 0
 fi
 
+SELF_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+
+# A KEY YOU REPLACED HAS TO REACH HERMES TOO. Every other assistant only NAMES the key and
+# reads it fresh from the store. Hermes' desktop app is started from an icon, never from a
+# terminal, so it holds the one written copy, in its own .env (tools/menerio-connect.js says
+# why). This re-renders that one line when the store has changed and does nothing otherwise,
+# so a new key is everywhere within the hour. It is silent, it never fails the run, and it
+# sits before the python check because it needs node and not python.
+CONNECT="$SELF_DIR/hub-menerio-connect"
+if [ -f "$CONNECT" ] && command -v node >/dev/null 2>&1; then
+  sh "$CONNECT" --refresh --hub "$HUB" >/dev/null 2>&1 || true
+fi
+
 # PROVE python runs, never just find it. On Windows, `command -v python3` can answer
 # with the Microsoft Store alias stub: a python3.exe that exists, prints an ad for the
 # Store, and fails. That exact stub kept a scheduled job failing every hour for two days
@@ -137,7 +150,6 @@ if [ -z "$PY" ]; then
   exit 0
 fi
 
-SELF_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 SYNC="$SELF_DIR/notebook-sync.py"
 [ -f "$SYNC" ] || SYNC="$HUB/tools/notebook-sync.py"
 if [ ! -f "$SYNC" ]; then
