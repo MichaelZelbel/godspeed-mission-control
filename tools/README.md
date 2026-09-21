@@ -235,24 +235,28 @@ hub-search --local the dentist search the files only
 hub-search --limit 3 --json invoice reminder
 ```
 
-- **`hub-mail.js`** (`hub-mail`) is the one mail tool your assistants share, with its two
-  helpers `hub-mail-gmail.js` and `hub-mail-wire.js`. Email is optional: the installer tells
-  every assistant about the tool and connects nothing, and with nothing connected it only says
-  `not connected`. `hub-mail connect agentmail` gives your hub its own address (Chapter 29);
-  `hub-mail connect gmail` connects your Gmail once, for every assistant (Chapter 30). Then any
-  assistant can search, read and save draft replies in Gmail without asking again. Nothing is
-  sent until you type `hub-mail approve <code>` in a terminal after seeing the whole message.
-  Every message is handed over marked as untrusted text. What it cannot do: stop an assistant
-  that has full control of your computer from getting round it (`../mail/README.md`).
+- **`hub-mail.js`** (`hub-mail`) is the one mail tool your assistants share, with its three
+  helpers `hub-mail-gmail.js`, `hub-mail-guide.js` and `hub-mail-wire.js`. Email is optional: the
+  installer tells every assistant about the tool and connects nothing, and with nothing connected
+  it only says `not connected`. `hub-mail connect agentmail` gives your hub its own address
+  (Chapter 29). Gmail (Chapter 30) is connected by a step of the hub installer, with no command
+  to type: `hub-mail-guide.js` opens Google's pages one at a time and says what to click on each,
+  and you register your own small Google app, which belongs to you and nobody else. Then any
+  assistant can search, read messages and attachments, and save draft replies in Gmail without
+  asking again. An attachment is saved outside your hub folder, so it never enters your hub's
+  history. Your hub sends nothing: you press Send in Gmail. Every message is handed over marked
+  as untrusted text. What it cannot do: stop an assistant that has full control of your computer
+  from misusing the connection (`../mail/README.md`).
 
 ```
 hub-mail status                 which mailboxes answer, and what each may do
-hub-mail connect gmail          connect your Gmail for reading and drafts (once)
 hub-mail connect agentmail      give the hub its own address
+hub-mail connect gmail --guided the guided Gmail step, which the hub installer runs for you
 hub-mail search [--gmail] words newest received mail, or mail matching the words
-hub-mail pending                messages waiting for your approval
-hub-mail approve <code>         see one message in full, and send it
+hub-mail attachment <id> [n]    fetch one Gmail attachment to a place outside the hub folder
 hub-mail disconnect gmail       stop at once, and withdraw the permission at Google
+hub-mail pending, approve <code>  an extra for people who would rather approve a send at a
+                                terminal than press Send in Gmail; the book does not use it
 hub-mail setup                  tell every assistant on this computer about the tool
 ```
 

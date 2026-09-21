@@ -98,7 +98,7 @@ function wire({ check = false, hub = "" } = {}) {
     if (/\(failed\)/.test(line)) failed = true;
     lines.push(line);
   }
-  if (!check) lines.push("Email itself stays off until you connect it: hub-mail connect gmail (your mailbox), hub-mail connect agentmail (the hub's own address).");
+  if (!check) lines.push("Email itself stays off until you connect it: the Gmail step of the hub installer (Chapter 30) for your mailbox, hub-mail connect agentmail (Chapter 29) for the hub's own address.");
   return { lines, failed };
 }
 
