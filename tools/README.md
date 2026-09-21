@@ -1,6 +1,6 @@
 # tools
 
-Seventeen small programs. The installer puts them on your computer. **They are not
+Eighteen small programs. The installer puts them on your computer. **They are not
 part of your hub folder, and that is deliberate.**
 
 Chapter 4 says your hub is a folder of text files and that nothing in it needs a
@@ -233,6 +233,20 @@ hub-menerio-connect --check    change nothing, only say how things are
 hub-search the dentist         ask the notebook when your hub is copied there, else the files
 hub-search --local the dentist search the files only
 hub-search --limit 3 --json invoice reminder
+```
+
+- **`hub-mail.js`** (`hub-mail`) is the one mail tool your assistants share. It is optional and
+  the installer does not offer it yet; without a key it only says `not connected`. Given your
+  hub's own address on AgentMail and a key that AgentMail itself limits to reading that one
+  inbox, it lets every assistant search and read what you forwarded there. It cannot send, and
+  it hands every message over marked as untrusted text, because anyone can write to an address.
+  Connecting your own Gmail comes later; until then it says so instead of pretending.
+
+```
+hub-mail status                 which mailboxes answer, and what each may do
+hub-mail search invoice         newest received mail, or mail matching the words
+hub-mail read <message-id>      one message as text
+hub-mail mcp                    what an assistant starts, through its MCP settings
 ```
 
 - **`notebook-sync.py`** is the mirror, and it runs only when you said yes. The installer asks
