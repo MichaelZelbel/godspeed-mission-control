@@ -232,16 +232,30 @@ function mcp() {
 // A question only a person at a terminal can answer. Nothing here works for a program without
 // one: an assistant running this through its command tool has no terminal, and is told so.
 const NO_TERMINAL = 'this needs you at a terminal: open a terminal window yourself and type the command there, not through an assistant';
+//
+// WINDOWS IS DIFFERENT, AND THE FIRST VERSION NEVER WORKED THERE (found 2026-09-21 by typing
+// into a real console window; every earlier test handed in its own answers). On macOS and
+// Linux the terminal is opened by name (/dev/tty), which also works when this program's own
+// input is a pipe, as it is under `curl ... | bash`. Node cannot open the Windows console by
+// name at all (CONIN$ fails with ENOENT), so there the person is whoever is on this program's
+// own input, and only when that input is a real console. Piped input is never a console, so
+// an assistant's command tool is refused on Windows exactly as it is elsewhere.
 function terminalAsk(question, hidden) {
   return new Promise((resolve, reject) => {
     const tty = require('tty');
-    let fd;
-    try { fd = fs.openSync(process.platform === 'win32' ? 'CONIN$' : '/dev/tty', 'r'); } catch (e) { return reject(new Error(NO_TERMINAL)); }
-    if (!tty.isatty(fd)) { try { fs.closeSync(fd); } catch { /* */ } return reject(new Error(NO_TERMINAL)); }
-    const input = new tty.ReadStream(fd);
+    let input, own = false;
+    if (process.platform === 'win32') {
+      if (!process.stdin.isTTY) return reject(new Error(NO_TERMINAL));
+      input = process.stdin;
+    } else {
+      let fd;
+      try { fd = fs.openSync('/dev/tty', 'r'); } catch (e) { return reject(new Error(NO_TERMINAL)); }
+      if (!tty.isatty(fd)) { try { fs.closeSync(fd); } catch { /* */ } return reject(new Error(NO_TERMINAL)); }
+      input = new tty.ReadStream(fd); own = true;
+    }
     const rl = require('readline').createInterface({ input, output: process.stderr, terminal: true });
     if (hidden) rl._writeToOutput = s => { if (s.includes(question)) process.stderr.write(question); };
-    rl.question(question, a => { rl.close(); input.destroy(); if (hidden) process.stderr.write('\n'); resolve(a); });
+    rl.question(question, a => { rl.close(); if (own) input.destroy(); else input.pause(); if (hidden) process.stderr.write('\n'); resolve(a); });
   });
 }
 
@@ -334,5 +348,5 @@ async function main(argv) {
   }
 }
 
-module.exports = { main, TOOLS };
+module.exports = { main, TOOLS, terminalAsk };
 if (require.main === module) main(process.argv.slice(2));
