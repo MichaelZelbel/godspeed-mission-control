@@ -52,6 +52,10 @@ JS
 for _ in 1 2 3 4 5 6 7 8 9 10; do [ -s "$W/port" ] && break; sleep 0.3; done
 PORT="$(cat "$W/port")"
 export HUB_MAIL_AGENTMAIL_API="http://127.0.0.1:$PORT" HUB_MAIL_AGENTMAIL_INBOX="hub@agentmail.to" AGENTMAIL_READ_KEY="test-key"
+# A home and a hub of its own, so no case can read the locked store of the computer it runs on.
+mkdir -p "$W/home/.hub" "$W/hub"; : > "$W/hub/AGENTS.md"
+export HUB_MAIL_HOME="$W/home" HUB_DIR="$W/hub" HUB_AGE_KEY="$W/home/.hub/no-such-key"
+unset GMAIL_REFRESH_TOKEN GMAIL_CLIENT_ID GMAIL_CLIENT_SECRET
 
 mcp() {  # feed newline-delimited JSON-RPC, give the server a moment, collect its answers
   { printf '%s\n' "$@"; sleep 2; } | "$NODE" "$HERE/hub-mail.js" mcp 2>&1
@@ -82,4 +86,7 @@ OUT="$(HUB_MAIL_AGENTMAIL_API="http://127.0.0.1:1" "$NODE" "$HERE/hub-mail.js" s
 contains "9 an unreachable service reads as unreachable" "$OUT" 'unreachable'
 
 echo "$PASS passed, $FAIL failed"
+echo
+# The Gmail half: connecting, drafts, approval and sending, against a stand-in for Google.
+"$NODE" "$HERE/test-hub-mail-gmail.js" || FAIL=$((FAIL+1))
 [ "$FAIL" = 0 ]
