@@ -82,7 +82,13 @@ def home_dir():
 # person as checkboxes; a new reader here must also be added to the installer's
 # roster (kit-bootstrap: kb_ai_tool_info / Get-KitAiToolInfo), or nobody can
 # switch it off.
-SUPPORTED_SOURCES = ("claude", "codex", "hermes")
+SUPPORTED_SOURCES = ("claude", "codex", "hermes", "opencode")
+
+# What a machine with NO recorded choice reads: the sources that existed before the choice
+# did, and never a source added since. A reader added later (OpenCode, 2026-09-21) is read
+# only on a machine whose owner ticked it, because "no line" was never an answer about a
+# tool nobody had asked about yet.
+LEGACY_DEFAULT_SOURCES = ("claude", "codex", "hermes")
 
 
 def device_env_value(name):
@@ -110,15 +116,15 @@ def enabled_sources():
 
     The installer records the choice as HUB_PROMPT_SOURCES in ~/.hub/device.env
     (the environment wins, so a test or a one-off run can override it). No line
-    at all means every supported source, which is what every machine did before
-    there was a choice. An EMPTY line means none: a person who unticked every
+    at all means the sources every machine read before there was a choice, and
+    nothing added since. An EMPTY line means none: a person who unticked every
     box made a decision, not a mistake.
     """
     v = os.environ.get("HUB_PROMPT_SOURCES")
     if v is None:
         v = device_env_value("HUB_PROMPT_SOURCES")
     if v is None:
-        return set(SUPPORTED_SOURCES)
+        return set(LEGACY_DEFAULT_SOURCES)
     if v.strip() == "-":
         # "-" is NONE spelled so it survives a Windows environment variable,
         # which cannot hold an empty string.
@@ -608,6 +614,94 @@ def human_turns_hermes_store(hermes):
             yield cur
 
 
+def opencode_db():
+    """Where OpenCode keeps its conversations: one sqlite database, opencode.db, in its data
+    folder. OpenCode puts that folder in the same place on every system (Windows included):
+    $XDG_DATA_HOME/opencode, else ~/.local/share/opencode. HUB_OPENCODE_DB wins so a test can
+    point at a fixture."""
+    env = os.environ.get("HUB_OPENCODE_DB")
+    if env:
+        return env
+    base = os.environ.get("XDG_DATA_HOME") or os.path.join(home_dir(), ".local", "share")
+    return os.path.join(base, "opencode", "opencode.db")
+
+
+def human_turns_opencode(db):
+    """What you typed to OpenCode, each turn carrying the text it showed you back.
+
+    OpenCode files a conversation as a session, each message in it as a row, and each piece of
+    a message as a separate "part" (text, reasoning, a tool call, a file). Only text parts are
+    words. Two kinds of text are not yours and stay out: a part marked "synthetic" is OpenCode
+    pasting a file or a tool result into your turn, and a session with a parent is a helper
+    OpenCode started itself, whose "user" turns the main assistant wrote. On the assistant's
+    side, reasoning and tool traffic are machinery; only its text parts are the answer.
+
+    Verified on a real OpenCode 1.18 store (2026-09-21). An OpenCode old enough to keep its
+    conversations as loose JSON files instead of this database is said out loud, not guessed at.
+    """
+    if not os.path.isfile(db):
+        old = os.path.join(os.path.dirname(db), "storage")
+        if os.path.isdir(os.path.join(old, "message")):
+            print("  NOTE: this OpenCode keeps its conversations in an older format, so what you "
+                  "typed to it is NOT being archived. Update OpenCode and it will be.")
+        return
+    import sqlite3
+    try:
+        con = sqlite3.connect("file:" + db.replace("?", "%3f") + "?mode=ro", uri=True)
+        rows = con.execute(
+            "SELECT m.session_id, m.id, m.time_created, m.data, p.data, s.directory "
+            "FROM message m JOIN session s ON s.id = m.session_id "
+            "LEFT JOIN part p ON p.message_id = m.id "
+            "WHERE s.parent_id IS NULL "
+            "ORDER BY m.session_id, m.time_created, m.id, p.time_created, p.id").fetchall()
+        con.close()
+    except Exception as e:
+        print("  NOTE: could not read OpenCode's conversations (%s), so what you typed to it "
+              "is NOT being archived." % e)
+        return
+    # Regroup the part rows into one entry per message, keeping order.
+    msgs = []
+    for sid, mid, created, mdata, pdata, directory in rows:
+        if not msgs or msgs[-1]["id"] != mid:
+            try:
+                role = json.loads(mdata or "{}").get("role")
+            except Exception:
+                role = None
+            msgs.append({"sid": sid, "id": mid, "at": created, "role": role,
+                         "dir": directory or "", "texts": []})
+        try:
+            p = json.loads(pdata or "{}")
+        except Exception:
+            continue
+        if p.get("type") == "text" and not p.get("synthetic") and not p.get("ignored"):
+            t = (p.get("text") or "").strip()
+            if t:
+                msgs[-1]["texts"].append(t)
+    cur, cur_sid = None, None
+    for m in msgs:
+        if m["sid"] != cur_sid:
+            if cur:
+                yield cur
+            cur, cur_sid = None, m["sid"]
+        if m["role"] == "user":
+            if cur:
+                yield cur
+            cur = None
+            txt = "\n\n".join(m["texts"]).strip()
+            if not txt or txt.startswith("<"):
+                continue
+            try:
+                at = datetime.fromtimestamp(float(m["at"]) / 1000.0, timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+            except Exception:
+                at = ""
+            proj = os.path.basename(m["dir"].replace("\\", "/").rstrip("/"))
+            cur = {"tool": "opencode", "project": proj, "at": at, "text": txt, "answers": []}
+        elif m["role"] == "assistant" and cur is not None:
+            cur["answers"].extend(m["texts"])
+    if cur:
+        yield cur
+
+
 def harvest(hub):
     """Every source the person has switched ON. A source that is off is not read at
     all, rather than read-and-discarded: the promise to the person is that this
@@ -628,6 +722,8 @@ def harvest(hub):
         # before the current store existed, and the two overlap harmlessly because a prompt is
         # recognised by its text, so whichever reader reaches it first is the only one that counts.
         yield from human_turns_hermes_store(hermes_home())
+    if "opencode" in on:
+        yield from human_turns_opencode(opencode_db())
 
 
 # --------------------------------------------------------------------- storage

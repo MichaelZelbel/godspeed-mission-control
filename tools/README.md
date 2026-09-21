@@ -318,11 +318,13 @@ once from a terminal and read what it says.
 
 ## You choose which tools are read
 
-The installer shows you which AI tools it found on your computer and lets you
-untick any of them. Your choice is kept on that machine, in `~/.hub/device.env`
-on a line like `HUB_PROMPT_SOURCES=claude,codex`. A tool not on the list is not
-read at all. To change your mind later, edit that line or run the installer
-again. An empty value (or `-`) means nothing is read on that machine.
+Four tools can be read: Claude Code, Codex, Hermes and OpenCode. The installer
+shows a tick box for each one it finds on your computer, and on a computer that
+never had a hub every box starts unticked. Your choice is kept on that machine,
+in `~/.hub/device.env` on a line like `HUB_PROMPT_SOURCES=claude,codex`. A tool
+not on the list is not read at all. To change your mind later, edit that line or
+run the installer again. An empty value (or `-`) means nothing is read on that
+machine.
 
 ## The honest limit
 

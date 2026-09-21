@@ -248,7 +248,7 @@ echo "$P" | grep -q "stay out" && bad "29 a switched-off source was read anyway"
   || ok "29 a source switched off is not read at all"
 echo "$P" | grep -q "less salesy" && ok "29b the source that stayed on is still read" \
   || bad "29b switching one source off silenced another" "$(cat "$W/pick.out")"
-grep -q "not read, by your choice: codex, hermes" "$W/pick.out" \
+grep -q "not read, by your choice: codex, hermes, opencode" "$W/pick.out" \
   && ok "29c the harvest says out loud what it left alone" \
   || bad "29c the restriction happened in silence" "$(cat "$W/pick.out")"
 
@@ -270,7 +270,7 @@ printf 'HUB_PROMPT_SOURCES=claude\n' >> "$W/home/.hub/device.env"
 ( unset HUB_PROMPT_SOURCES
   export HOME="$W/home" HUB_HOME="$W/home"
   cd "$W" && "$PY" "$ARC" --hub "$W" --dry-run archive ) >"$W/pick3.out" 2>&1
-grep -q "not read, by your choice: codex, hermes" "$W/pick3.out" \
+grep -q "not read, by your choice: codex, hermes, opencode" "$W/pick3.out" \
   && ok "31 the choice recorded on the device is obeyed with no environment" \
   || bad "31 device.env was ignored" "$(cat "$W/pick3.out")"
 
@@ -603,6 +603,79 @@ if command -v node >/dev/null 2>&1 && [ -f "$HARV" ]; then
 else
   echo "  --   42-50 skipped: node or prompt-harvest.js not on this machine"
 fi
+
+# --- 55 to 60: OpenCode, the fourth source (2026-09-21) -----------------------------------
+#
+# WHY THESE EXIST. The installer used to show OpenCode greyed out as "cannot sync", while the
+# book teaches using it with the hub. Its conversations sit in one sqlite database, so it is
+# read now. The dangers are the Claude ones in a new shape: OpenCode pastes files and tool
+# results into YOUR turn as "synthetic" text, starts helper sessions whose "user" turns the
+# assistant wrote, and stores its reasoning as text-like parts. None of that is yours. And a
+# source added later must never be read on a machine whose owner was never asked about it.
+OC="$W/oc/opencode.db"; mkdir -p "$W/oc"
+"$PY" - "$OC" <<'PYEOF'
+import sqlite3, sys, json
+con = sqlite3.connect(sys.argv[1])
+con.execute("CREATE TABLE session (id TEXT, parent_id TEXT, directory TEXT)")
+con.execute("CREATE TABLE message (id TEXT, session_id TEXT, time_created INTEGER, data TEXT)")
+con.execute("CREATE TABLE part (id TEXT, message_id TEXT, session_id TEXT, time_created INTEGER, data TEXT)")
+con.execute("INSERT INTO session VALUES ('s1', NULL, 'C:/Users/x/projects/garden')")
+con.execute("INSERT INTO session VALUES ('s2', 's1', 'C:/Users/x/projects/garden')")
+M = [("m1", "s1", 1788330000000, "user"), ("m2", "s1", 1788330001000, "assistant"),
+     ("m3", "s1", 1788330002000, "user"), ("m4", "s1", 1788330003000, "assistant"),
+     ("m5", "s2", 1788330004000, "user")]
+for mid, sid, t, role in M:
+    con.execute("INSERT INTO message VALUES (?,?,?,?)", (mid, sid, t, json.dumps({"role": role})))
+P = [("p1", "m1", {"type": "text", "text": "opencode question about the hedge height"}),
+     ("p2", "m1", {"type": "text", "synthetic": True, "text": "Called the Read tool with a pasted file body"}),
+     ("p3", "m2", {"type": "reasoning", "text": "hidden opencode reasoning"}),
+     ("p4", "m2", {"type": "tool", "tool": "read", "state": {"output": "tool output text"}}),
+     ("p5", "m2", {"type": "text", "text": "the hedge may be two metres"}),
+     ("p6", "m3", {"type": "text", "text": "second opencode question about compost"}),
+     ("p7", "m4", {"type": "text", "text": "compost reply"}),
+     ("p8", "m5", {"type": "text", "text": "a helper session prompt the assistant wrote"})]
+for i, (pid, mid, d) in enumerate(P):
+    sid = "s2" if mid == "m5" else "s1"
+    con.execute("INSERT INTO part VALUES (?,?,?,?,?)", (pid, mid, sid, i, json.dumps(d)))
+con.commit(); con.close()
+PYEOF
+rm -f "$W/prompts/archive/"*.jsonl
+( export HOME="$W/home" HUB_HOME="$W/home" HUB_PROMPT_SOURCES="opencode" HUB_OPENCODE_DB="$OC"
+  cd "$W" && "$PY" "$ARC" --hub "$W" archive ) >"$W/oc.out" 2>&1
+OCA="$(cat "$W/prompts/archive/"*.jsonl 2>/dev/null)"
+OC1="$(echo "$OCA" | grep 'hedge height')"
+[ -n "$OC1" ] && echo "$OC1" | grep -q '"tool": *"opencode"' && echo "$OC1" | grep -q '"project": *"garden"' \
+  && ok "55 what you typed to OpenCode is filed, as opencode, under its project folder" \
+  || bad "55 the OpenCode turn is missing or mislabelled" "$(cat "$W/oc.out") $OCA"
+echo "$OCA" | grep -q "pasted file body" \
+  && bad "56 a file OpenCode pasted into the turn was filed as if you typed it" "$OCA" \
+  || ok "56 synthetic text (a pasted file, a tool result) stays out"
+echo "$OCA" | grep -q "helper session prompt" \
+  && bad "57 a helper session's prompt, written by the assistant, was filed as yours" "$OCA" \
+  || ok "57 a helper session OpenCode started itself stays out"
+if echo "$OC1" | grep -q "two metres" && ! echo "$OCA" | grep -q "hidden opencode reasoning\|tool output text" \
+   && echo "$OCA" | grep 'about compost' | grep -q "compost reply"; then
+  ok "58 each answer is the visible text only, attached to its own question"
+else
+  bad "58 OpenCode answers leaked machinery or landed on the wrong question" "$OCA"
+fi
+# 59. Not ticked means not opened.
+rm -f "$W/prompts/archive/"*.jsonl
+( export HOME="$W/home" HUB_HOME="$W/home" HUB_PROMPT_SOURCES="claude" HUB_OPENCODE_DB="$OC"
+  cd "$W" && "$PY" "$ARC" --hub "$W" archive ) >/dev/null 2>&1
+cat "$W/prompts/archive/"*.jsonl 2>/dev/null | grep -q "hedge height" \
+  && bad "59 OpenCode was read on a machine where it was switched off" \
+  || ok "59 OpenCode switched off is not read"
+# 60. A machine that never recorded a choice keeps reading what it always read, and does NOT
+#     start reading OpenCode behind its owner's back just because this program learned how.
+rm -f "$W/prompts/archive/"*.jsonl
+mkdir -p "$W/home60"
+( unset HUB_PROMPT_SOURCES
+  export HOME="$W/home60" HUB_HOME="$W/home60" USERPROFILE="$W/home60" HUB_OPENCODE_DB="$OC"
+  cd "$W" && "$PY" "$ARC" --hub "$W" archive ) >/dev/null 2>&1
+cat "$W/prompts/archive/"*.jsonl 2>/dev/null | grep -q "hedge height" \
+  && bad "60 a machine with no recorded choice started reading a newly supported tool" \
+  || ok "60 no recorded choice never switches on a tool added later"
 
 echo
 echo "  $PASS passed, $FAIL failed"
