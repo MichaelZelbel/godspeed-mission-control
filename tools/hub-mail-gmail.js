@@ -141,6 +141,24 @@ function writeStore(changes) {
   return store;
 }
 
+// After the store changed: commit that ONE file and push it, so your other computers (and a
+// server, if you have one) get the connection on their next pull, the way `hub connect menerio`
+// does it. Best effort: a hub that is not a git repository, or has no remote, is fine, and a
+// failed push is said in one line. Nothing else in the hub is committed.
+function shareStore(why) {
+  const { hub, store } = storePaths();
+  if (!hub || !store || !fs.existsSync(path.join(hub, ".git"))) return "";
+  const git = (...a) => spawnSync("git", ["-C", hub, ...a], { encoding: "utf8" });
+  const rel = path.relative(hub, store).split(path.sep).join("/");
+  git("add", "--", rel);
+  const c = git("commit", "-q", "-m", why, "--", rel);
+  if (c.status !== 0) return "";
+  if (!(git("remote").stdout || "").trim()) return "saved in your hub's history (it has no remote to send it to)";
+  const p = git("push", "-q");
+  return p.status === 0 ? "saved and sent with your hub, so your other computers get it on their next pull"
+    : "saved in your hub's history; sending it failed, so push your hub the way you usually do";
+}
+
 // The locked store first, because it is the one place a reconnect or a disconnect writes: a
 // copy of these lines in the environment (Windows persists the whole store for programs started
 // from an icon) goes stale the moment you reconnect. The environment is only used where the
@@ -643,7 +661,8 @@ async function connect({ readOnly = false, ask, say, open, clientId, clientSecre
     GMAIL_ADDRESS: prof.emailAddress, GMAIL_SCOPES: granted.filter(s => /gmail/.test(s)).join(" "), GMAIL_GENERATION: generation });
   voidProposals();
   cached = null;
-  return { address: prof.emailAddress, readOnly, store };
+  const shared = shareStore("hub-mail: connect Gmail (" + prof.emailAddress + ")");
+  return { address: prof.emailAddress, readOnly, store, shared };
 }
 
 function voidProposals() {
@@ -664,7 +683,8 @@ async function disconnect() {
     if (r.status !== 200 && r.body.error !== "invalid_token") google = "not confirmed (" + (r.body.error || r.status) + "); remove it by hand at https://myaccount.google.com/permissions";
   } catch (e) { google = "not reached; remove it by hand at https://myaccount.google.com/permissions"; }
   writeStore({ GMAIL_REFRESH_TOKEN: null, GMAIL_ADDRESS: null, GMAIL_SCOPES: null, GMAIL_GENERATION: crypto.randomBytes(6).toString("hex") });
-  return { local: "disconnected: no assistant of this hub can read or draft in that mailbox any more", google,
+  const shared = shareStore("hub-mail: disconnect Gmail");
+  return { local: "disconnected: no assistant of this hub can read or draft in that mailbox any more", google, shared,
     kept: "your Gmail messages and any drafts are untouched" };
 }
 
@@ -682,5 +702,5 @@ async function status() {
   }
 }
 
-module.exports = { findHub, credentials, search, read, draft, listDrafts, proposeSend, approve, reject, pending, tidy, connect, disconnect, status,
+module.exports = { shareStore, findHub, credentials, search, read, draft, listDrafts, proposeSend, approve, reject, pending, tidy, connect, disconnect, status,
   authorize, writeStore, readStore, buildRaw, SCOPE_READ, SCOPE_COMPOSE };

@@ -267,6 +267,18 @@ async function main() {
   ok("28 read-only cannot save drafts, and says how to change that", err instanceof Error && /reads only/.test(err.message));
   ok("29 the store keeps every other line it held", /GMAIL_ADDRESS=sam@example\.com/.test(store()));
 
+  // ---- the connection travels: only the store is committed, and it is pushed
+  const REMOTE = path.join(W, "remote.git");
+  spawnSync("git", ["init", "-q", "--bare", REMOTE]);
+  const gitH = (...a) => spawnSync("git", ["-C", HUB, "-c", "user.email=t@t", "-c", "user.name=t", ...a], { encoding: "utf8" });
+  gitH("init", "-q"); gitH("add", "AGENTS.md"); gitH("commit", "-q", "-m", "start");
+  gitH("remote", "add", "origin", REMOTE); gitH("push", "-q", "-u", "origin", "HEAD");
+  fs.writeFileSync(path.join(HUB, "unrelated-note.md"), "mine, not to be committed\n");
+  process.env.GIT_AUTHOR_NAME = process.env.GIT_COMMITTER_NAME = "t"; process.env.GIT_AUTHOR_EMAIL = process.env.GIT_COMMITTER_EMAIL = "t@t";
+  const rc = await G.connect({ ask: yes, say, open: browser });
+  const files = spawnSync("git", ["--git-dir", REMOTE, "show", "--name-only", "--format=", "HEAD"], { encoding: "utf8" }).stdout.trim();
+  ok("33b a connection is committed and pushed alone, so the other computers get it", /sent with your hub/.test(rc.shared) && files === "secrets/hub-secrets.env.age" && fs.existsSync(path.join(HUB, "unrelated-note.md")), rc.shared + " | " + files);
+
   // ---- setup: tell the assistants
   const CODEX = path.join(W, "codex"), HERMES = path.join(W, "hermes");
   fs.mkdirSync(CODEX); fs.mkdirSync(HERMES);

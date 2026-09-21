@@ -259,6 +259,7 @@ async function main(argv) {
       const r = await G.connect({ readOnly: args.includes('--read-only'), ask: terminalAsk, say: s => console.log(s) });
       console.log(`\nConnected: ${r.address}. ${r.readOnly ? 'Reading only.' : 'Your assistants can now read it and save drafts; sending waits for your approval.'}`);
       console.log('Kept in your hub\'s locked store; every assistant on every computer with this hub uses this one connection.');
+      if (r.shared) console.log('The connection is ' + r.shared + '.');
       console.log('Check it any time: hub-mail status. Stop it: hub-mail disconnect gmail');
     } else if (cmd === 'connect' && args[0] === 'agentmail') {
       console.log('Your hub\'s own address. Create the inbox and a read-only key in AgentMail first (kit: mail/hub-address.md).');
@@ -267,12 +268,15 @@ async function main(argv) {
       if (!/^[^@\s]+@[^@\s]+$/.test(inbox) || !key) throw new Error('an address and a key are both needed; nothing was changed');
       await am({ key, inbox }, '/v0/inboxes/' + encodeURIComponent(inbox));
       G.writeStore({ AGENTMAIL_READ_KEY: key, HUB_MAIL_AGENTMAIL_INBOX: inbox });
+      const shared = G.shareStore('hub-mail: connect the hub address (' + inbox + ')');
       console.log(`Connected: ${inbox}. Forward mail there and any assistant of this hub can read it.`);
+      if (shared) console.log('The key is ' + shared + '.');
     } else if (cmd === 'disconnect' && args[0] === 'gmail') {
       const r = await G.disconnect();
-      console.log(`Hub: ${r.local}.\nGoogle: ${r.google}.${r.kept ? '\n' + r.kept + '.' : ''}`);
+      console.log(`Hub: ${r.local}.\nGoogle: ${r.google}.${r.kept ? '\n' + r.kept + '.' : ''}${r.shared ? '\nThe change is ' + r.shared + '.' : ''}`);
     } else if (cmd === 'disconnect' && args[0] === 'agentmail') {
       G.writeStore({ AGENTMAIL_READ_KEY: null });
+      G.shareStore('hub-mail: disconnect the hub address');
       console.log('Hub: disconnected from its own address. The inbox and its mail stay at AgentMail; delete the key there too if you no longer want it.');
     } else if (cmd === 'pending') {
       const p = G.pending();

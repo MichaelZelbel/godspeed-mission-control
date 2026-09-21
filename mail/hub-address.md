@@ -10,6 +10,10 @@ The service used here is AgentMail, an email provider made for AI assistants. It
 had 3 inboxes, 3,000 emails a month and 100 a day when this was written (September 2026);
 check agentmail.to/pricing for today's numbers. Nothing upgrades on its own.
 
+Before you forward anything: if your mail carries other people's private details (clients'
+fees, patients' health), check that you may keep them with a company in the United States.
+Forward a harmless email first.
+
 ## 1. Create the inbox
 
 Sign up at agentmail.to with your own email address. Signing up is yours to do: it accepts
