@@ -103,7 +103,7 @@ for a human reading along, or for finding which step broke.
     failure stops before any scheduled work is added.
 14. **The morning brief, only if asked for.** `Put the morning brief on this
     server's clock (y/n) [n]`. Opt-in since 2026-09-05 (Michael's call): Chapter
-    21's job is a good first job for a reader who has been through Part V and
+    22's job is a good first job for a reader who has been through Part V and
     noise for one whose server is the first machine. No terminal means no.
     `KB_MORNING_BRIEF=yes` or `no` in the environment skips the question.
 15. **The Hermes half**, `server/install-hermes.sh`: the `AGENTS.md` ceiling
@@ -136,12 +136,12 @@ for a human reading along, or for finding which step broke.
     was skipped or the hello never came, the text says so and how the next run
     picks it up). Then the door line as root (`open-the-door.sh`) and the Hermes
     app on the reader's own computer ("Connect to existing Hermes" on its first
-    screen). Until 2026-09-06 (evening) Telegram was left to Chapter 29's web page
-    and the reader ended Chapter 28 with a running Hermes they could not talk to;
+    screen). Until 2026-09-06 (evening) Telegram was left to Chapter 33's web page
+    and the reader ended Chapter 32 with a running Hermes they could not talk to;
     before that, the closing text sent them into `su - ai` and `hermes gateway
     setup`, which Michael read as the installer not finishing its job.
 
-## The second line, `open-the-server.sh`'s sibling: `open-the-door.sh` (Chapter 29)
+## The second line, `open-the-server.sh`'s sibling: `open-the-door.sh` (Chapter 33)
 
 Run as root after the install. It installs Tailscale if it is missing and runs
 `tailscale up` (prints a sign-in address and waits), reads the private address

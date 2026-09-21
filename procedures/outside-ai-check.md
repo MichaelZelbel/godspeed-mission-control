@@ -1,4 +1,4 @@
-# The monthly question: are you still working somewhere else? (Chapter 22)
+# The monthly question: are you still working somewhere else? (Chapter 24)
 
 You did not stop using your old AI. Almost nobody does. ChatGPT stays on the
 phone, or there is one project on the web you never moved, and everything you
@@ -47,7 +47,7 @@ two at once gets you a muddle rather than a saving.
 
 1. Open the tool. Paste the prompt from `prompts/library/`.
 2. Save the answer as a file.
-3. In a session with your folder attached, file it the way Chapter 4 filed the
+3. In a session with your folder attached, file it the way Chapter 3 filed the
    first one, and ask for only what is new to be added.
 
 The filing prompt is in `profile/bring-your-context-with-you.md`, Step 4.

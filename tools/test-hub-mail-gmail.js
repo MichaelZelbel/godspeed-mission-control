@@ -103,6 +103,7 @@ const server = http.createServer((req, res) => {
       g.drafts[id] = { id, message: { id: mid, raw: b.message.raw, threadId: b.message.threadId || "t9" } };
       return out(200, { id, message: { id: mid } });
     }
+    if (p === "/drafts" && req.method === "GET") return out(200, { drafts: Object.values(g.drafts).map(d => ({ id: d.id, message: { id: d.message.id } })) });
     const dm = p.match(/^\/drafts\/([^/]+)$/);
     if (dm) {
       const d = g.drafts[decodeURIComponent(dm[1])];
@@ -171,6 +172,25 @@ async function main() {
   g.drafts[d1.draft_id].message = { id: "dm-person", raw: edited, threadId: "t1" };
   const d1c = await G.draft({ draft_id: d1.draft_id, reply_to_message_id: "m1", body: "Hub version three" });
   ok("11 a draft the person edited is never written over", d1c.draft_id !== d1.draft_id && g.drafts[d1.draft_id].message.raw === edited && /left exactly as it is/.test(d1c.note));
+
+  // Reading the draft as the person left it, then changing it on top of their words.
+  const seenDraft = await G.read({ draft_id: d1.draft_id }, wrap);
+  const version = (seenDraft.match(/^version: (\S+)/m) || [])[1];
+  ok("11b a draft can be read as it is now, with the person's words and its version", /MY OWN WORDS/.test(seenDraft) && version === "dm-person");
+  const d1d = await G.draft({ draft_id: d1.draft_id, base_version: version, reply_to_message_id: "m1", body: "MY OWN WORDS, and Thursday" });
+  ok("11c with the version it read, the hub changes the draft in place, on top of the person's edits", d1d.draft_id === d1.draft_id && /on top of/.test(d1d.note));
+  g.drafts[d1.draft_id].message = { id: "dm-person-again", raw: edited, threadId: "t1" };
+  const d1e = await G.draft({ draft_id: d1.draft_id, base_version: version, reply_to_message_id: "m1", body: "stale" });
+  ok("11d an edit made after the hub read the draft is still never written over", d1e.draft_id !== d1.draft_id && g.drafts[d1.draft_id].message.raw === edited);
+
+  // A one-word change with no reply context keeps the draft in its conversation.
+  const dT = await G.draft({ reply_to_message_id: "m1", body: "threaded" });
+  const dT2 = await G.draft({ draft_id: dT.draft_id, body: "threaded, one word changed" });
+  const rawT = Buffer.from(g.drafts[dT.draft_id].message.raw, "base64url").toString("utf8");
+  ok("11f changing a reply draft keeps its recipient, subject and conversation", dT2.draft_id === dT.draft_id && /In-Reply-To: <orig1@example\.com>/.test(rawT) && /To: Nadia <nadia@example\.com>/.test(rawT) && /Subject: Re: Cards 8 to 12/.test(rawT));
+  delete g.drafts[dT.draft_id];
+  const listed = await G.listDrafts({});
+  ok("11e a new conversation can list the drafts, so it finds the one the person means", listed.drafts.some(d => d.draft_id === d1.draft_id && /Cards 8 to 12/.test(d.subject)));
 
   // ---- sending
   const { TOOLS } = require("./hub-mail.js");

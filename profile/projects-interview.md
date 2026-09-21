@@ -1,4 +1,4 @@
-# Projects and Priorities Interview (Chapter 7)
+# Projects and Priorities Interview (Chapter 6)
 
 Fills `profile/projects.md`: what you are actually trying to get done, and
 what wins when two of those collide.

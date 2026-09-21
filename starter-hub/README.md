@@ -1,9 +1,9 @@
 # Starter hub
 
-This folder is your personal AI system. The book's installer (Chapter 3)
+This folder is your personal AI system. The book's installer (Chapter 2)
 lays everything inside `starter-hub` into your `hub` folder for you;
 Appendix D is the by-hand road, a copy into an empty `hub` folder.
-Point your assistant at the result. Chapter 4 of the book walks through
+Point your assistant at the result. Chapter 3 of the book walks through
 the layout; Parts II and III fill it up.
 
 **The folder names answer one question: when does your assistant read this?**
@@ -23,7 +23,7 @@ What is here. Thirteen names, and they are the whole system:
   short list of your rules. Hermes reads it by name at the start of every
   conversation, so nothing needs installing. Chapter 17 is where you write
   your own rules into it. (The one-line `CLAUDE.md` beside it is a signpost
-  for a developer tool; Chapter 5 explains it, and Hermes never reads it.)
+  for a developer tool; Chapter 4 explains it, and Hermes never reads it.)
 - `profile/`: who you are, your people, your projects, your voice. The
   Part II files. You write these.
 - `rules/`: one file per rule, holding the whole story of why you gave it.
@@ -56,7 +56,7 @@ What is here. Thirteen names, and they are the whole system:
   what makes it safe to keep. Two drawers, each with its own README:
   `prompts/library/` holds the prompts you keep and paste into other
   tools, and `prompts/archive/` is the log of everything you have typed.
-  Chapters 13 and 31.
+  Chapters 13 and 37.
 - `goals/`: what you want, one card each, and who gets attention today. An
   outcome, a strategy or project meant to produce one, or a protected
   commitment. A new idea is filed **provisional** and is never worked on until

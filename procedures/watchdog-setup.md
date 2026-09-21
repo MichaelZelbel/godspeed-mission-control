@@ -1,4 +1,4 @@
-# Watchdog Setup (Chapter 23)
+# Watchdog Setup (Chapter 25)
 
 A watchdog is a procedure that checks something for you and speaks up
 only when reality changed. You stop checking. It starts.
@@ -6,7 +6,7 @@ only when reality changed. You stop checking. It starts.
 A watchdog reads the public web and needs almost nothing out of your
 folder, so nothing ties it to the computer in front of you. Build it on
 your laptop first, so you can watch it work; move it to the machine that
-never sleeps (Chapter 28) the day you own one, because on a laptop it
+never sleeps (Chapter 32) the day you own one, because on a laptop it
 patrols only while Hermes is open.
 
 ## The five parts
@@ -22,7 +22,7 @@ Keep all five, in any order that reads naturally:
    Without a bar, every patrol finds *something* and you have built a
    spam machine.
 4. **The receipt.** "Tell me what changed and where you read it, with a
-   link." Chapter 24 arriving early.
+   link." Chapter 20 again.
 5. **The quiet line.** "If you find nothing solid, write exactly one
    line: 'All quiet, nothing changed.' Never pad a quiet week." A
    watchdog that says nothing is indistinguishable from a watchdog that
@@ -48,7 +48,7 @@ rotates public free tiers of several search vendors.
 - **The job has a folder, on purpose.** `--workdir` your hub is what lets
   it write its weekly line into `watch/product-watchdog.md`, a landing
   place you already walk past, and what hands the job your house rules.
-- **It wants the machine that never sleeps.** Chapter 21's rule bites
+- **It wants the machine that never sleeps.** Chapter 22's rule bites
   hardest here: on a laptop it patrols only while Hermes is open, and a
   missed Monday runs once, late, when you next open it.
 - **A hand run proves the job, not the clock.** `hermes cron run` works
@@ -70,7 +70,7 @@ rotates public free tiers of several search vendors.
 A watchdog that shares a program, a subscription and a machine with the
 thing it watches cannot see every failure: if Hermes will not start, the
 job that would have told you does not start either. For a weekly look at
-release notes that is a fair trade. For the machine itself, Chapter 28
+release notes that is a fair trade. For the machine itself, Chapter 32
 adds a check that runs with no AI in it and a test that the repairing
 agent can still answer. For a genuinely separate pair of eyes, the
 cross-vendor watchdog kit runs a different company's tool as the watcher.

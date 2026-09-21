@@ -106,7 +106,7 @@ say("");
 say("  1. Does your folder carry any keys?");
 if (!fs.existsSync(store)) {
   good("No, and that is a complete way to own a hub. Everything the book builds up to");
-  good("Chapter 24 works on plain files with no key anywhere. Nothing to check.");
+  good("Chapter 20 works on plain files with no key anywhere. Nothing to check.");
   say("");
   process.exit(0);
 }
@@ -287,7 +287,7 @@ if (fs.existsSync(expires)) {
 const plain = (r) => (r.note.split(".")[0] || r.name).trim();
 if (!fs.existsSync(expires) || !rows.length) {
   good("Nothing is written down yet, so nothing here knows when any of your keys dies.");
-  good("Chapter 27 has the one line that fixes that: secrets/expires.txt.");
+  good("Chapter 31 has the one line that fixes that: secrets/expires.txt.");
 } else {
   for (const r of rows.filter((x) => x.status === "BAD")) {
     bad("A line in secrets/expires.txt cannot be read (" + r.name + "): " + r.note);

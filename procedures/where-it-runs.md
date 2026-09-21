@@ -1,4 +1,4 @@
-# Where It Runs (Chapters 20 and 21)
+# Where It Runs (Chapters 21 and 22)
 
 The one mechanical fact that decides what every procedure in this book
 can do. Read it once, and the rest of Part V stops being confusing.
@@ -30,7 +30,7 @@ to one brief, not seven.
 ## One warning about `hermes cron status`
 
 Hermes has a second part called the gateway, which connects it to
-Telegram and the other messengers (Chapter 29), and `hermes cron status`
+Telegram and the other messengers (Chapter 32), and `hermes cron status`
 reports on the gateway. On a laptop it answers, in capitals, that cron
 jobs will NOT fire. It is telling the truth about the gateway and nothing
 about the app in front of you: it printed that sentence at the same
@@ -47,7 +47,7 @@ card.
   others", not "it runs while I sleep".
 - **The grown-up answer.** A small server of your own that never sleeps,
   with Hermes' gateway as a system service and its own copy of your
-  folder. That is Chapter 28, and every job you build on your laptop moves
+  folder. That is Chapter 32, and every job you build on your laptop moves
   there unchanged.
 
 ## The desktop screen
@@ -55,7 +55,7 @@ card.
 Hermes Desktop shows the clock as a screen called **Scheduled jobs**, with
 a **New cron** button and a form (Name, Prompt, Frequency, Deliver to,
 Model), a job card with **Trigger now**, **Pause** and **Resume**, and a
-**Manage** menu holding **Edit cron** and **Delete**. Chapter 21 walks
+**Manage** menu holding **Edit cron** and **Delete**. Chapter 22 walks
 that screen, driven for the book on 2026-09-04. A job made there runs in
 the folder Hermes was pointed at, but arrives with no house rules unless
 the prompt says so, so every prompt starts with "Read AGENTS.md at the

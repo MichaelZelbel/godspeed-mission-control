@@ -53,6 +53,7 @@ Since version 2.1.277 (18 September 2026) Claude Code reads `AGENTS.md` on its o
 - `procedures/`: Part V and VI assets. Morning brief, weekly review, watchdog, the procedure register, the red lines, the card for keys that run out, and the card for everything else that runs out (`what-runs-out-and-when.md`).
 - `living/`: the two-questions card, the privacy audit checklist, the saved-prompt card, the printable build-order card.
 - `menerio/`: Part VI, optional. Chapter 28, "Give Your Hub a Notebook". You connect Menerio once, through the installer or with `hub-menerio-connect`, and Hermes, Claude Code and Codex all have it. That gives you the notebook, and "make a note" is filed there. Copying your hub into it for search is a separate choice: the installer asks, and the default is no. On a yes, your whole hub except `dev/` is mirrored into the notebook, where the copies rank below your own notes and are never mined for facts or exported as files, and `hub-search` asks Menerio first. On a no, nothing from your hub is sent, and `hub-search` searches the files on your computer. A free account is enough: https://menerio.com/auth?tab=signup
+- `mail/`: Part VI, optional. Chapters 29 and 30. Email for your hub in three levels: paste, forward to the hub's own address, or connect your Gmail once for every assistant (reading and drafts; nothing is sent until you approve the exact message). `mail/README.md` also says plainly what the approval does not protect against.
 - `server/`: Part VI, optional. Scripts and guides for giving your system an always-on home.
 - `swap/`: Part VI. Config examples for running the same system on a different company's tool and model.
 
@@ -62,8 +63,8 @@ Appendix A of the book lists which files each chapter uses.
 
 Some things the book shows are deliberately not in this kit, because they need accounts, an identity check or a server that most readers will never want. Each lives in its own repository with its own one-line installer, and installs into the hub you already have.
 
-- **hub-phone** (Chapter 32): let your hub make a phone call for you. A voice agent calls as the AI assistant of you, over your own mobile number, and your assistant reads the transcript back with one of four verdicts. Needs the Chapter 31 server, an ElevenLabs account and a Twilio account. https://github.com/MichaelZelbel/hub-phone
-- **hub-video** (Chapter 33): let your hub finish your videos. You record and cut; your assistant burns in captions in one look, makes a vertical version, and builds animated title cards, slides and graphics with HyperFrames. Runs on the computer where your videos are, with no paid accounts; needs Node.js 22 and about 1.5 GB of disk. https://github.com/MichaelZelbel/hub-video
+- **hub-phone** (Chapter 34): let your hub make a phone call for you. A voice agent calls as the AI assistant of you, over your own mobile number, and your assistant reads the transcript back with one of four verdicts. Needs the Chapter 32 server, an ElevenLabs account and a Twilio account. https://github.com/MichaelZelbel/hub-phone
+- **hub-video** (Chapter 35): let your hub finish your videos. You record and cut; your assistant burns in captions in one look, makes a vertical version, and builds animated title cards, slides and graphics with HyperFrames. Runs on the computer where your videos are, with no paid accounts; needs Node.js 22 and about 1.5 GB of disk. https://github.com/MichaelZelbel/hub-video
 
 ## What this is not
 

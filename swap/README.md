@@ -1,6 +1,6 @@
 # swap
 
-Chapter 30: run your folder on a different company's tool and a different company's model.
+Chapter 36: run your folder on a different company's tool and a different company's model.
 
 - `opencode.json`: drop this next to your `AGENTS.md`. A dozen lines: which brain to hire, what it
   must ask before touching, and where your notebook lives. Notice what is not in it: your context,
@@ -12,7 +12,7 @@ Chapter 30: run your folder on a different company's tool and a different compan
 
 The same `AGENTS.md` is found differently by different tools. OpenCode reads it by name when it
 opens a folder, and so does Hermes, the assistant used through Parts I to V. Claude Code, the
-developer tool from Chapter 5, looks for `CLAUDE.md` instead, which is why that chapter has you
+developer tool from Chapter 4, looks for `CLAUDE.md` instead, which is why that chapter has you
 leave a one-line signpost with that name pointing at the real file.
 
 Same file, same rules, different doorbell. The words travel as they are; only the wiring gets

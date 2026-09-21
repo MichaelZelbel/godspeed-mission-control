@@ -1,4 +1,4 @@
-# What runs out, and when (Chapter 33)
+# What runs out, and when (Chapter 27)
 
 You already know the failure. A reminder goes off about something you did last
 week. You dismiss it. A month later one goes off about something you have not
@@ -149,7 +149,7 @@ past.
 
 ## Wiring it into the brief you already have
 
-Open `skills/morning-brief/SKILL.md`, the recipe you wrote in Chapter 21, and paste
+Open `skills/morning-brief/SKILL.md`, the recipe you wrote in Chapter 22, and paste
 this into the session:
 
 ```
@@ -163,18 +163,18 @@ day a week away, run the brief once, see the line appear, and drop it again.
 
 ## Your keys are already in this list
 
-If you did Chapter 27 you have `secrets/expires.txt`, with a line per key and the
+If you did Chapter 31 you have `secrets/expires.txt`, with a line per key and the
 date it dies. **`hub-due` reads that same file.** Each key becomes one of these,
 with a window running from the day your hub first learned the date to the date
 itself.
 
 So you never write a date in two places, and you have one thing nagging you
 rather than two that disagree. Changing the date in `secrets/expires.txt` is
-still the off switch it was in Chapter 27, and it is now also the proof: moving
+still the off switch it was in Chapter 31, and it is now also the proof: moving
 it forward is what replacing a key looks like from the outside, so the reminder
 closes itself.
 
-If you took the key paragraph in Chapter 27's card and pasted it into your
+If you took the key paragraph in Chapter 31's card and pasted it into your
 morning brief recipe, you can take it back out now. One thing, one place.
 
 ## If you do have a calendar
@@ -222,7 +222,7 @@ Open `procedures.md` and add one block: the daily check, what it can reach, and
 where the result lands. **One block, not one per deadline**, because there is one
 job here however long the list gets.
 
-## Prove it by breaking it (Chapter 24 again)
+## Prove it by breaking it (Chapter 20 again)
 
 Two minutes, today, while nothing is urgent.
 

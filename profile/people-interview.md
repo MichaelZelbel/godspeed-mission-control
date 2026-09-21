@@ -1,4 +1,4 @@
-# People Interview (Chapter 6)
+# People Interview (Chapter 5)
 
 Fills `profile/people.md` by letting your assistant interview you, instead of
 you staring at a blank file.
@@ -6,7 +6,7 @@ you staring at a blank file.
 ## Before you start
 
 Claude Desktop open on the **Code** side, a session with your hub folder
-selected (Chapter 3), and `profile/about-me.md` already in it (Chapters 1
+selected (Chapter 2), and `profile/about-me.md` already in it (Chapters 1
 and 2).
 
 ## The prompt

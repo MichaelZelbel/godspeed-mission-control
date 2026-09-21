@@ -1,4 +1,4 @@
-# The three traps (Chapter 28)
+# The three traps (Chapter 32)
 
 All three happened while building this chapter's server from a blank Ubuntu machine on
 2026-07-26. They are in the order you will meet them, with what changed when the server

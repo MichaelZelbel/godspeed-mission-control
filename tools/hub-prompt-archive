@@ -491,7 +491,7 @@ SPEAKER_LABEL = re.compile(r"^\[[A-Z][A-Za-z ]{0,20}\]\s*")
 def hermes_home():
     """Where Hermes keeps its own store of conversations.
 
-    Hermes is the assistant this book teaches from Chapter 3 (since 2026-09-02), and every
+    Hermes is the assistant this book teaches from Chapter 2 (since 2026-09-02), and every
     conversation you have with it, on the desktop app or in a terminal, lives in a small
     sqlite database in Hermes' own folder and nowhere else. That folder is HERMES_HOME when
     Hermes is told one (the Windows desktop app sets it to %LOCALAPPDATA%/hermes), else

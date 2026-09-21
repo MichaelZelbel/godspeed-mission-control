@@ -34,7 +34,7 @@
 //
 // WHY NODE AND NOT PYTHON
 // -----------------------
-// This was a Python program until 2026-08-21. The setup in Chapter 3 installs Git, Node.js and
+// This was a Python program until 2026-08-21. The setup in Chapter 2 installs Git, Node.js and
 // Claude Code, and it has never installed Python, so the one command the safety chapter asks a
 // reader to type worked only for the readers who happened to have Python already. It was also
 // printed as `python3 tools/compile-rules.py`, a path no reader has, because the installer puts

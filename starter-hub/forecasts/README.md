@@ -102,5 +102,5 @@ hub-forecast resolve <id> --outcome yes|no|void --evidence "..." [--value N]
 hub-forecast list | due | show <id> | score | check
 ```
 
-Chapter 19 of the book is the idea behind this folder: the outside view, and a number you keep
+Chapter 20 of the book is the idea behind this folder: the outside view, and a number you keep
 score on. The rooms next door are `goals/` and `work/`.

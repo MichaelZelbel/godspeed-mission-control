@@ -1,4 +1,4 @@
-# Morning Brief Setup (Chapter 21)
+# Morning Brief Setup (Chapter 22)
 
 A briefing about your own week, built from your own files, waiting for
 you before you start work. Two halves: write the recipe, then hang a
@@ -34,7 +34,7 @@ You get two things: `skills/morning-brief/SKILL.md` (the recipe) and
 Run it two or three more times in the same sitting: read what came out,
 edit the skill file, run it again. The facts differ every morning anyway;
 the shape is what you are training, and the loop works best while the
-last run is still fresh in your head. Chapter 20's rule: no clock for a
+last run is still fresh in your head. Chapter 21's rule: no clock for a
 recipe you have not watched run.
 
 ## One line worth stealing
@@ -69,7 +69,7 @@ Then read the job's card. Its **Next** line is the machine repeating your
 instruction back. On a laptop the job fires while Hermes is open; a 07:00
 the app was shut for is written once, late, when you next open it (see
 `where-it-runs.md`). For seven every day without thinking about it,
-Chapter 28's server.
+Chapter 32's server.
 
 ## Prove the clock, not just the recipe
 
@@ -120,5 +120,5 @@ it has often done this already. One glance to confirm.
   for approval. A brief that only writes into `brief/` never needs one.
 - The recipe is a file in your folder; the schedule lives in Hermes on the
   machine that runs it. That is why the register exists.
-- The brief is written by an AI. Chapter 24's habit applies to it like
+- The brief is written by an AI. Chapter 20's habit applies to it like
   everything else.

@@ -1,4 +1,4 @@
-# The monthly question: what are you actually paying for AI? (Chapter 22)
+# The monthly question: what are you actually paying for AI? (Chapter 24)
 
 Most people who use AI seriously end up paying for three or four things. One
 plan does almost all the work. One or two are quietly costing money every month

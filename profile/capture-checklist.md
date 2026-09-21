@@ -43,12 +43,12 @@ voice-first.
 Your folder is on your computer; the hallway is not. Hermes' answer is a
 messenger: the same program can sit on the other end of a Telegram chat, read
 the same folder and follow the same house rules, so the capture sentence works
-from a queue exactly as it works at your desk. Chapter 29 wires it, in about two
-minutes, on the machine from Chapter 28 that never sleeps.
+from a queue exactly as it works at your desk. Chapter 32 wires it, in about two
+minutes, on the machine that never sleeps, built in that same chapter.
 
 Two things to know. Your phone is the microphone; the machine running Hermes is
 the hands, and a laptop in a bag handles nothing until you open it (Chapter
-21's rule). And the message is the same sentence: "Capture this in my inbox: ..."
+22's rule). And the message is the same sentence: "Capture this in my inbox: ..."
 
 **Fallback:** capture into whatever you have to hand, then at your desk say
 *"take everything I sent you today and put it in my inbox."*

@@ -1,4 +1,4 @@
-# Build the always-on server by hand (Chapters 28 and 29)
+# Build the always-on server by hand (Chapters 32 and 33)
 
 **You probably do not need this page.** The normal way is one line, pasted into
 the server as the login you were given:
@@ -93,7 +93,7 @@ hermes auth list
 hermes model
 ```
 
-## 4a. Telegram, from one token (Chapter 28's first stop)
+## 4a. Telegram, from one token (Chapter 32's first stop)
 
 The one-line installer does this as root, after `terminal.cwd` and before the gateway service,
 so the gateway starts with Telegram already in its settings. Hermes switches Telegram on by itself
@@ -206,7 +206,7 @@ home, never in the folder. See `three-traps.md` for what happens if you skip thi
 
 The one-line installer asks before it does this (`Put the morning brief on this
 server's clock (y/n) [n]`), because a reader whose server is the first machine
-has no Chapter 21 brief to run yet. By hand, run the script when you want the
+has no Chapter 22 brief to run yet. By hand, run the script when you want the
 job, or with `KB_MORNING_BRIEF=no` in front of it for everything but the job:
 
 ```
@@ -253,7 +253,7 @@ root's crontab: `floor/quick-check.sh` every 5 minutes (root restarts a dead sys
 `TELEGRAM_HOME_CHANNEL` line section 4a wrote. Logs: `/var/log/hermes-watchdog/`. Off-switch:
 delete the block from root's crontab.
 
-## 10. The door: a private address and Hermes' web page (Chapter 29)
+## 10. The door: a private address and Hermes' web page (Chapter 33)
 
 The chapter's way is one more pasted line, as root:
 
@@ -278,7 +278,7 @@ the page fails closed without a password or OAuth provider, so never bind it to 
 with only a password; the documentation's answer for a public address is `hermes dashboard
 register` (Nous OAuth).
 
-## 11. A second person on the bot, from the web page (Chapter 29)
+## 11. A second person on the bot, from the web page (Chapter 33)
 
 Telegram itself was connected in section 4a, by the installer. To let a second person write to
 the bot: open `http://<private address>:9119` from a computer on the same Tailscale network, sign

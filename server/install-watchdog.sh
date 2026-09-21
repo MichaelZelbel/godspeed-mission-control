@@ -2,7 +2,7 @@
 # =============================================================================
 # Teach It Once - the watchdog on the always-on server. Root's half.
 #
-# Chapter 28. The one-line installer runs this as root, after Hermes and its
+# Chapter 32. The one-line installer runs this as root, after Hermes and its
 # gateway service are in place and before it hands over to the assistant's
 # account. It also runs alone, as root, to add the watchdog to a server built
 # by hand, or to bring one up to date:

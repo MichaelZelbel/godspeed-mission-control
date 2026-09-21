@@ -1,4 +1,4 @@
-# The Two-Questions Card (Chapter 24)
+# The Two-Questions Card (Chapter 20)
 
 Fluency carries no information about whether an answer was checked. A
 looked-up answer and a remembered answer arrive in the same confident
@@ -47,13 +47,13 @@ lines (Chapter 17).
 
 An answer is not simply checked or remembered end to end. It can be
 both, in the same paragraph, in the same voice. In the run printed in
-Chapter 24, two prices from memory were right, two were wrong, and one
+Chapter 20, two prices from memory were right, two were wrong, and one
 whole product tier was missing, with no seam anywhere in the wording.
 That is why the fix is a question and not a feeling.
 
 ## For procedures
 
 Bake the receipt rule into anything that reports on a schedule (the
-Chapter 23 watchdog line): "tell me where you read it, with a link."
+Chapter 25 watchdog line): "tell me where you read it, with a link."
 Scheduled reports owe receipts by default; the two questions are the
 handheld version for everything else.

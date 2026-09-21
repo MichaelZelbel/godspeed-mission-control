@@ -86,7 +86,7 @@ second profile made "to try something" carries your memory with it.
 Two kinds of door, and what leaves your machine leaves through them.
 
 **The model.** Every turn you type goes to the provider you signed in with
-in Chapter 3 and the answer comes back. Hermes sends your conversations
+in Chapter 2 and the answer comes back. Hermes sends your conversations
 nowhere else: its gateway monitoring is off unless you switch it on, and
 even then carries no message content by design. What the provider does
 with your turns is decided in your account with that company. Spend ten

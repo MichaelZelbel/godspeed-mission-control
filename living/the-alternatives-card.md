@@ -1,4 +1,4 @@
-# The Alternatives Card (Chapter 24)
+# The Alternatives Card (Chapter 20)
 
 There is a card next to this one with two questions that check whether
 an answer is true. This card checks something else: whether it was the

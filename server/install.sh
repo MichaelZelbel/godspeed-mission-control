@@ -2,7 +2,7 @@
 # =============================================================================
 # Teach It Once - the always-on server, in one line.
 #
-# Chapters 28 and 29 of the book. This puts your folder on a machine that never
+# Chapters 32 and 33 of the book. This puts your folder on a machine that never
 # sleeps, runs Hermes there as a service that starts with the machine, connects
 # your Telegram bot to it, and puts the morning brief on Hermes' own clock.
 #
@@ -34,7 +34,7 @@
 # should be called; whether to connect Menerio (optional); whether to put the
 # morning brief on the clock (opt-in). Plus two codes. What only you can do
 # afterwards: paste server/open-the-door.sh, then point the Hermes app on your
-# computer at the server (Chapter 29).
+# computer at the server (Chapter 33).
 #
 # The by-hand version of all of this is in server/setup.md, for when something
 # breaks and you want to know what it did.
@@ -82,8 +82,8 @@ unset LIB
 # /sethome would otherwise write. So three lines in ~/.hermes/.env are the whole
 # connection, and the reader's id comes from the bot's own message log after one
 # "hi" from their phone, the way the other kits do it. No web page, no /sethome.
-# Until 2026-09-06 this installer left Telegram to Chapter 29's web page, and the
-# reader ended Chapter 28 with a running Hermes they could not talk to.
+# Until 2026-09-06 this installer left Telegram to Chapter 33's web page, and the
+# reader ended Chapter 32 with a running Hermes they could not talk to.
 # The token is never printed and never logged; it only ever travels in the URL of
 # a curl call whose errors are discarded.
 telegram_api() { curl -fsS -m 15 "https://api.telegram.org/bot$1/$2" 2>/dev/null; }
@@ -507,7 +507,7 @@ bash "$KIT_DIR/server/create-private-repo.sh" "$HUB" \
 HUB_REPO="$(git -C "$HUB" remote get-url origin 2>/dev/null || true)"
 
 # --- The morning brief, only if asked for -------------------------------------
-# Chapter 21's job is a good first job for a reader who has been through Part V,
+# Chapter 22's job is a good first job for a reader who has been through Part V,
 # and noise for one whose server is the first machine in the system. So it is
 # opt-in, and the default is no (Michael, 2026-09-05). KB_MORNING_BRIEF=yes|no
 # set in the environment skips the question; with no terminal the answer is no.

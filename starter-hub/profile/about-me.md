@@ -1,7 +1,7 @@
 # About me
 
 <!-- You wrote your real version of this file in Chapter 1, by asking your
-     AI what it already knows about you and correcting it in Chapter 2. Keep
+     AI what it already knows about you and correcting it there. Keep
      that one; this template is only here in case you are starting from a
      blank page. Five short blocks, and every line should be true today. -->
 

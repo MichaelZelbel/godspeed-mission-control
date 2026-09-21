@@ -1,4 +1,4 @@
-# Bring your context with you (Chapters 1, 2 and 4)
+# Bring your context with you (Chapters 1 and 3)
 
 Your folder should not start empty. Whatever AI you have been using already knows things
 about you: who you work with, what you are building, the corrections you have made a hundred
@@ -111,7 +111,7 @@ This is the one moment where you see, on a single page, everything a company's A
 about you. Some of it will be wrong. Some of it will be from a job you left. Some of it you
 will not want on your disk at all.
 
-Three passes, and Chapter 2 of the book walks all three:
+Three passes, and Chapter 1 of the book walks all three:
 
 1. **Fix what is wrong.** Out of date, half true, or from a life you no longer live.
 2. **Cut what should never travel.** Keys first, if the prompt let any through. Then other
@@ -123,7 +123,7 @@ you would otherwise make all over again with a new assistant.
 
 ## Step 4: file it into your folder
 
-Chapter 3 of the book is where the rooms exist. Then open a session with your folder
+Chapter 2 of the book is where the rooms exist. Then open a session with your folder
 attached and say:
 
 ```
@@ -156,6 +156,6 @@ never fire.
 ## Do it again later
 
 You will keep using that other AI. Phone, browser, whatever it is. Once a month, run the
-same prompt again and file only what is new. You do not have to remember: Chapter 22's
+same prompt again and file only what is new. You do not have to remember: Chapter 24's
 weekly review asks you on the first review of each month, and `procedures/outside-ai-check.md`
 is that branch as a file.

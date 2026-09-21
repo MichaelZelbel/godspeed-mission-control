@@ -77,7 +77,7 @@ you whether the rules are in the room before you throw anything at them.
 
 One note for developers: a project inside `dev/` with its own `AGENTS.md`
 gets rules of its own, and a session started inside that project runs under
-those alone. Chapter 5 shows exactly which files each tool reads from where.
+those alone. Chapter 4 shows exactly which files each tool reads from where.
 
 ## Test with live ammunition before you trust it
 

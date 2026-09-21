@@ -19,24 +19,24 @@ cannot name what you got, the rung is not finished.
 - [ ] 1. Run the export prompt, save the answer as `what-my-ai-knew.md`
       on your Desktop, request the data export too (Ch 1). **You
       have:** what your AI already knew about you, in a file you own.
-- [ ] 2. The three cuts: wrong, private, padding (Ch 2). **You have:** a
+- [ ] 2. The three cuts: wrong, private, padding (Ch 1). **You have:** a
       page about you that is true.
 - [ ] 3. Install the app and sign in, run the hub installer, drag your
-      file in, point the app at `hub`, first job (Ch 3). **You have:**
+      file in, point the app at `hub`, first job (Ch 2). **You have:**
       the whole system installed and an assistant with hands on it.
 - [ ] 4. Walk the tour of the nine names, then file the import into
-      them (Ch 4). **You have:** rooms with something already in them,
+      them (Ch 3). **You have:** rooms with something already in them,
       and `about-me.md` as the master copy of who you are.
 - [ ] 5. Only if you write code: open the hub in your editor, make the
-      one-line signpost, clone a project into `dev/` (Ch 5). **You
+      one-line signpost, clone a project into `dev/` (Ch 4). **You
       have:** your repositories beside your profile, fenced out of the
       hub's history.
 
 ## It knows you
 
-- [ ] 6. Let it interview you about your people (Ch 6). **You have:**
+- [ ] 6. Let it interview you about your people (Ch 5). **You have:**
       `people.md`.
-- [ ] 7. Projects and priorities, with a tie-breaker (Ch 7). **You
+- [ ] 7. Projects and priorities, with a tie-breaker (Ch 6). **You
       have:** `projects.md`, and an answer to "which one is second".
 - [ ] 8. Voice, from five real things you wrote, then cut by half
       (Ch 8). **You have:** `voice.md`.
@@ -73,38 +73,38 @@ cannot name what you got, the rung is not finished.
 ## It works without you
 
 - [ ] 20. Which skills can find their own input, then fill
-      `procedures.md` (Ch 20). **You have:** one page of everything
+      `procedures.md` (Ch 21). **You have:** one page of everything
       that runs without you.
 - [ ] 21. Brief: write it, run it by hand, then the clock and where it
-      runs (Ch 21). **You have:** tomorrow morning, handled.
+      runs (Ch 22). **You have:** tomorrow morning, handled.
 - [ ] 22. Weekly review scheduled, then **Run now** rather than waiting
-      (Ch 22). **You have:** an appointment with your own week that
+      (Ch 24). **You have:** an appointment with your own week that
       keeps itself.
-- [ ] 23. Watchdog, five parts, including the quiet line (Ch 23). **You
+- [ ] 23. Watchdog, five parts, including the quiet line (Ch 25). **You
       have:** a patrol on something you check by hand today.
-- [ ] 24. The two questions (Ch 24). **You have:** the cheapest
+- [ ] 24. The two questions (Ch 20). **You have:** the cheapest
       insurance in the book.
 
 That is the system. Everything below is optional.
 
 ## Optional, when the problem shows up
 
-- [ ] 25. The notebook (Ch 25). Trigger: facts that happen away from
+- [ ] 25. The notebook (Ch 28). Trigger: facts that happen away from
       your desk keep dying on the way home.
-- [ ] 26. One memory, every tool (Ch 26). Trigger: the assistant that
+- [ ] 26. One memory, every tool (Ch 28). Trigger: the assistant that
       works for you should read those notes too.
-- [ ] 27. Every machine joined (Ch 27). Trigger: a second computer of
+- [ ] 27. Every machine joined (Ch 31). Trigger: a second computer of
       yours has an assistant that knows nothing about you.
-- [ ] 28. The always-on server (Ch 28). Trigger: you want a machine
+- [ ] 28. The always-on server (Ch 32). Trigger: you want a machine
       that runs without you. Give this one two sittings, neither of
       them tired.
-- [ ] 29. Your assistant on Telegram (Ch 29). Trigger: you read the
+- [ ] 29. Your assistant on Telegram (Ch 32). Trigger: you read the
       brief on the bus and could do nothing about it until home.
-- [ ] 30. The swap test (Ch 30). Trigger: curiosity, or a price rise.
-- [ ] 31. The prompts you save (Ch 31). Trigger: you wanted a prompt
+- [ ] 30. The swap test (Ch 36). Trigger: curiosity, or a price rise.
+- [ ] 31. The prompts you save (Ch 37). Trigger: you wanted a prompt
       that was on a computer you were not sitting at.
 
-Chapter 32 is reading, not building.
+Chapter 38 is reading, not building.
 
 ## The rungs that soak
 

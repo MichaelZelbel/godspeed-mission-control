@@ -1,4 +1,4 @@
-# OpenRouter notes (Chapter 30)
+# OpenRouter notes (Chapter 36)
 
 OpenRouter (openrouter.ai) sells access to models from many companies through one account and
 one key. It is the neutral option for the swap test: no single vendor owns your login.

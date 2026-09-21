@@ -16,11 +16,11 @@ anything that shapes your time.]
 
 ## The people who matter
 [The handful your assistant should know, by role: team, clients, family.
-Note who to loop in on what. Chapter 6 gives them a file of their own.]
+Note who to loop in on what. Chapter 5 gives them a file of their own.]
 
 ## What I am focused on now
 [Live priorities and the projects actually on your plate this month, with
-deadlines. Chapter 7 gives these a file of their own.]
+deadlines. Chapter 6 gives these a file of their own.]
 
 ## How I like to be helped
 [Answer first then why? Short bullets or full prose? Blunt or gentle? Ask
@@ -59,7 +59,7 @@ Never write in stiff corporate language. Never suggest I work through the
 night. No exclamation marks in my client emails.
 ```
 
-## Two rules from Chapter 2
+## Two rules from Chapter 1
 
 **Give it your patterns, not your keys.** Passwords, PINs, card numbers and
 recovery codes never go in a file, ever.

@@ -1,4 +1,4 @@
-# Weekly Review Setup (Chapter 22)
+# Weekly Review Setup (Chapter 24)
 
 The procedure that keeps the rest of the system true. It reads your
 profile files and your `inbox/`, does the filing itself, reports every
@@ -34,7 +34,7 @@ What each part carries:
 4. Chapter 10's mirror test, automated: two true files that disagree,
    caught by the thing that reads them side by side every week, quoting
    both lines.
-5. Your priorities from Chapter 7, cashed in as a decision about the
+5. Your priorities from Chapter 6, cashed in as a decision about the
    coming week rather than a list.
 6. The once-a-month line: a reminder, not a question, that your other
    AIs have been listening too and the export prompt brings those

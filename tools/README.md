@@ -3,7 +3,7 @@
 Eighteen small programs. The installer puts them on your computer. **They are not
 part of your hub folder, and that is deliberate.**
 
-Chapter 4 says your hub is a folder of text files and that nothing in it needs a
+Chapter 3 says your hub is a folder of text files and that nothing in it needs a
 terminal. That stays true. These are software, like your assistant is software, so
 they live where software lives on your computer and they write into the folder from
 the outside.
@@ -24,7 +24,7 @@ the outside.
   text you actually saw, so you can later ask "what was that answer again" as well
   as "what did I type".
 
-Together they are the program Chapter 4 and Chapter 31 mean when they say
+Together they are the program Chapter 3 and Chapter 37 mean when they say
 *"a program fills it"*.
 
 The third one is the only one here you type yourself.
@@ -53,7 +53,7 @@ The fourth one you also type yourself, and it answers a question nothing else as
   they are really **on this computer**, which is a different question from whether
   they are in the folder. It also reads `secrets/expires.txt` and tells you if one
   of them is about to run out. It never prints a key: names, dates and counts only.
-  Chapters 24 and 27.
+  Chapters 20 and 31.
 
 The installer gives it a launcher, so the command is:
 
@@ -75,7 +75,7 @@ The fifth is the one you will type most often.
   timesheet, a contract you have to cancel by March, a key that dies in a year.
   Each one stores the first day you can do it and the last day you still can, and
   how loud your hub gets follows how much of that window is left, so one rule
-  covers a job you have a week for and one you have a year for. Chapter 33.
+  covers a job you have a week for and one you have a year for. Chapter 27.
 
 The installer gives it a launcher, so the command is:
 
@@ -90,7 +90,7 @@ hub-due check               close whatever can prove itself done
 Two things about it are worth knowing before you use it. It **refuses anything
 without both dates**, in those words, which is the only thing between
 this and a to-do app you abandon. And it reads `secrets/expires.txt` as one of
-its sources, so the key dates from Chapter 27 are in the same list as everything
+its sources, so the key dates from Chapter 31 are in the same list as everything
 else and there is one thing nagging you rather than two that disagree.
 
 It needs no Google account and no calendar, and nothing in the program can reach
@@ -118,7 +118,7 @@ Run it in your hub folder. The idea is from Rich Schefren's open-source Atlas, w
 does this with a graph database; here it is a search over text files, which is what a
 hub is made of.
 
-- **`check-brief.js`** is the bouncer for the morning brief (Chapter 21). Before a
+- **`check-brief.js`** is the bouncer for the morning brief (Chapter 22). Before a
   brief is written or sent, it reads the text and refuses two shapes: a file path
   where the thing itself should be ("open skills/x.md and paste it" is a dead errand
   on a phone), and "read it" with nothing to read. A line that starts with
@@ -147,12 +147,12 @@ one of the others is not installed.
   invented precision, a forecast with no reference class, and a revision that
   would overwrite history. `hub-forecast score` counts each question once and puts
   the score beside the plain historical baseline the forecast named, which is the
-  only comparison that means anything. Chapter 19.
+  only comparison that means anything. Chapter 20.
 - **`work.js`** (`hub-work`) tracks what your hub is doing, and keeps three states
   apart that a to-do list treats as one: dispatched, attempted, and verified. Only
   verified closes an item, and "the runner said it did it" is not verified. A
   duplicate trigger files nothing twice; anything that reaches somebody else waits
-  for your own words. Chapter 23.
+  for your own words. Chapter 24.
 
 ```
 hub-goals attention          who gets attention today, and why
@@ -235,18 +235,25 @@ hub-search --local the dentist search the files only
 hub-search --limit 3 --json invoice reminder
 ```
 
-- **`hub-mail.js`** (`hub-mail`) is the one mail tool your assistants share. It is optional and
-  the installer does not offer it yet; without a key it only says `not connected`. Given your
-  hub's own address on AgentMail and a key that AgentMail itself limits to reading that one
-  inbox, it lets every assistant search and read what you forwarded there. It cannot send, and
-  it hands every message over marked as untrusted text, because anyone can write to an address.
-  Connecting your own Gmail comes later; until then it says so instead of pretending.
+- **`hub-mail.js`** (`hub-mail`) is the one mail tool your assistants share, with its two
+  helpers `hub-mail-gmail.js` and `hub-mail-wire.js`. Email is optional: the installer tells
+  every assistant about the tool and connects nothing, and with nothing connected it only says
+  `not connected`. `hub-mail connect agentmail` gives your hub its own address (Chapter 29);
+  `hub-mail connect gmail` connects your Gmail once, for every assistant (Chapter 30). Then any
+  assistant can search, read and save draft replies in Gmail without asking again. Nothing is
+  sent until you type `hub-mail approve <code>` in a terminal after seeing the whole message.
+  Every message is handed over marked as untrusted text. What it cannot do: stop an assistant
+  that has full control of your computer from getting round it (`../mail/README.md`).
 
 ```
 hub-mail status                 which mailboxes answer, and what each may do
-hub-mail search invoice         newest received mail, or mail matching the words
-hub-mail read <message-id>      one message as text
-hub-mail mcp                    what an assistant starts, through its MCP settings
+hub-mail connect gmail          connect your Gmail for reading and drafts (once)
+hub-mail connect agentmail      give the hub its own address
+hub-mail search [--gmail] words newest received mail, or mail matching the words
+hub-mail pending                messages waiting for your approval
+hub-mail approve <code>         see one message in full, and send it
+hub-mail disconnect gmail       stop at once, and withdraw the permission at Google
+hub-mail setup                  tell every assistant on this computer about the tool
 ```
 
 - **`notebook-sync.py`** is the mirror, and it runs only when you said yes. The installer asks
@@ -316,8 +323,8 @@ again. An empty value (or `-`) means nothing is read on that machine.
 ## The honest limit
 
 They can only harvest from an AI tool that keeps your conversations as files on
-your own computer, which means a terminal tool: Chapters 28 and 30. Claude Desktop,
-the desk from Chapter 3, keeps no such store. If that is your only tool, this finds
+your own computer, which means a terminal tool: Chapters 32 and 36. Claude Desktop,
+the desk from Chapter 2, keeps no such store. If that is your only tool, this finds
 nothing, `prompts/archive/` stays empty, and nothing is broken. Use
 `prompts/library/` next door and save the prompts you care about as you go.
 

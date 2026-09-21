@@ -1,4 +1,4 @@
-# The three questions (Chapter 30)
+# The three questions (Chapter 36)
 
 The entrance exam you give any new hire on their first morning. Open a terminal in your folder,
 type `opencode`, and ask these three. Answers below are from a real run on 2026-09-02, on the
@@ -23,7 +23,7 @@ from `AGENTS.md` as a must and a must-never, and then went further than asked:
 > this week. Everything else (Tom's contract, the parked portfolio refresh) is secondary to those two.
 
 It found `AGENTS.md` on its own, because this tool looks for that filename, as Hermes does.
-Claude Code looks for `CLAUDE.md`, which is why Chapter 5 leaves a one-line signpost. Same file,
+Claude Code looks for `CLAUDE.md`, which is why Chapter 4 leaves a one-line signpost. Same file,
 different doorbell.
 
 ## Question two: can you reach my notebook?
@@ -48,7 +48,7 @@ It tried six doors into the notebook (`search_contacts`, `search_brain`, `get_co
 > leaving that gap named rather than filled.
 
 The same two gaps Chapter 28's test found with Hermes, named the same way, and the folder it was
-told not to read left unread. That is Chapter 24's habit arriving unprompted, from a model that
+told not to read left unread. That is Chapter 20's habit arriving unprompted, from a model that
 has never met you. (If your notebook holds the Chapter 28 notes, expect the answers instead of
 the gaps; the shape of the behaviour is the point.)
 

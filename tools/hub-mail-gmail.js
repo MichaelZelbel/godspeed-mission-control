@@ -251,7 +251,8 @@ async function search(args) {
 
 async function read(args, wrap) {
   const c = credentials(); need(c);
-  if (!args.message_id) throw new Error("message_id is required (from mail_search)");
+  if (args.draft_id) return readDraft(c, args.draft_id, wrap);
+  if (!args.message_id) throw new Error("message_id is required (from mail_search), or draft_id for a draft");
   const m = await gmail(c, "GET", "/messages/" + encodeURIComponent(args.message_id) + "?format=full");
   let text = textOf(m.payload);
   const cut = text.length > MAX_TEXT;
@@ -264,6 +265,35 @@ async function read(args, wrap) {
     `Subject: ${hdr(m, "Subject")}`, att.length ? "Attachments: " + att.map(a => `${a.name} (${a.size} bytes)`).join(", ") : "", "",
     text, cut ? `[cut at ${MAX_TEXT} characters]` : "",
   ].filter(l => l !== null));
+}
+
+// What is in Gmail Drafts now, newest first: so an assistant in a new conversation finds the
+// draft the person means instead of writing a second one.
+async function listDrafts(args) {
+  const c = credentials(); need(c);
+  const limit = Math.max(1, Math.min(25, Number(args.limit) || 10));
+  const list = await gmail(c, "GET", "/drafts?" + new URLSearchParams({ maxResults: String(limit) }));
+  const drafts = [];
+  for (const d of list.drafts || []) {
+    const f = await gmail(c, "GET", "/drafts/" + encodeURIComponent(d.id) + "?format=full");
+    const m = f.message || {};
+    drafts.push({ draft_id: d.id, version: m.id, to: hdr(m, "To"), subject: hdr(m, "Subject"),
+      preview: textOf(m.payload).replace(/\s+/g, " ").slice(0, 160) });
+  }
+  return { account: "gmail", address: c.GMAIL_ADDRESS, count: drafts.length, drafts,
+    note: "Drafts are not sent. To change one: mail_read with draft_id, then mail_draft with draft_id and base_version." };
+}
+
+// A draft as it is in Gmail NOW, with the person's edits. `version` is what mail_draft needs as
+// base_version to change this text in place: that is how an assistant edits on top of what the
+// person wrote, instead of beside it.
+async function readDraft(c, draftId, wrap) {
+  const d = await gmail(c, "GET", "/drafts/" + encodeURIComponent(draftId) + "?format=full");
+  const m = d.message || {};
+  return wrap([`account: gmail (${c.GMAIL_ADDRESS})`, `draft_id: ${d.id}`, `version: ${m.id}`,
+    "This is a DRAFT in Gmail Drafts, not sent. To change it, call mail_draft with this draft_id and base_version."],
+  [`To: ${hdr(m, "To")}`, hdr(m, "Cc") ? `Cc: ${hdr(m, "Cc")}` : "", hdr(m, "Bcc") ? `Bcc: ${hdr(m, "Bcc")}` : "",
+    `Subject: ${hdr(m, "Subject")}`, "", textOf(m.payload)]);
 }
 
 // ============================================================ building a message
@@ -328,8 +358,17 @@ async function draft(args) {
   if (!canDraft(c)) throw new Error("gmail: this connection reads only, so it cannot save drafts. The reply text is in this answer; to let the hub save drafts, run: hub-mail connect gmail");
   let ctx = {};
   if (args.reply_to_message_id) ctx = await replyContext(c, args.reply_to_message_id);
+  else if (args.draft_id) {
+    // Changing an existing draft keeps what the draft already had and the call did not
+    // restate: its conversation (thread and reply headers), recipient and subject. Without
+    // this, a one-word change could move a reply out of its conversation in Gmail.
+    const cur = await gmail(c, "GET", "/drafts/" + encodeURIComponent(args.draft_id) + "?format=full").catch(e => { if (e.status === 404) return null; throw e; });
+    const cm = cur && cur.message;
+    if (cm) ctx = { threadId: cm.threadId, inReplyTo: hdr(cm, "In-Reply-To"), references: hdr(cm, "References"),
+      to: hdr(cm, "To"), subject: hdr(cm, "Subject"), cc: hdr(cm, "Cc"), bcc: hdr(cm, "Bcc") };
+  }
   const to = checkAddr(addrList(args.to !== undefined ? args.to : ctx.to), "to");
-  const m = { from: c.GMAIL_ADDRESS, to, cc: checkAddr(addrList(args.cc), "cc"), bcc: checkAddr(addrList(args.bcc), "bcc"),
+  const m = { from: c.GMAIL_ADDRESS, to, cc: checkAddr(addrList(args.cc !== undefined ? args.cc : ctx.cc), "cc"), bcc: checkAddr(addrList(args.bcc !== undefined ? args.bcc : ctx.bcc), "bcc"),
     subject: args.subject !== undefined ? String(args.subject) : ctx.subject || "", body: String(args.body || ""),
     inReplyTo: ctx.inReplyTo, references: ctx.references, attachments: readAttachments(args.attachments) };
   if (/[\r\n]/.test(m.subject)) throw new Error("subject: line breaks are not allowed");
@@ -341,12 +380,15 @@ async function draft(args) {
     let current;
     try { current = await gmail(c, "GET", "/drafts/" + encodeURIComponent(args.draft_id) + "?format=minimal"); } catch (e) { if (e.status !== 404) throw e; }
     const mine = known[args.draft_id];
-    if (current && mine && current.message && current.message.id === mine.message_id) {
+    const curId = current && current.message && current.message.id;
+    // In place only when nothing can be lost: the draft is exactly what the hub last wrote, or
+    // exactly the version the assistant read (base_version) and built this text on.
+    if (curId && ((mine && curId === mine.message_id) || (args.base_version && curId === args.base_version))) {
       saved = await gmail(c, "PUT", "/drafts/" + encodeURIComponent(args.draft_id), { id: args.draft_id, message });
-      note = "updated the draft the hub saved earlier";
+      note = mine && curId === mine.message_id ? "updated the draft the hub saved earlier" : "updated the draft, on top of the version you had edited";
     } else {
       saved = await gmail(c, "POST", "/drafts", { message });
-      note = current ? "the earlier draft was changed since the hub saved it, so it was left exactly as it is and this version was saved as a separate draft"
+      note = current ? "the earlier draft was changed since it was read, so it was left exactly as it is and this version was saved as a separate draft (read it with mail_read draft_id, then pass base_version to change it in place)"
         : "the earlier draft no longer exists, so this was saved as a new draft";
     }
   } else {
@@ -640,5 +682,5 @@ async function status() {
   }
 }
 
-module.exports = { findHub, credentials, search, read, draft, proposeSend, approve, reject, pending, tidy, connect, disconnect, status,
+module.exports = { findHub, credentials, search, read, draft, listDrafts, proposeSend, approve, reject, pending, tidy, connect, disconnect, status,
   authorize, writeStore, readStore, buildRaw, SCOPE_READ, SCOPE_COMPOSE };

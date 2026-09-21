@@ -17,10 +17,10 @@ that rule is the only reason this drawer is safe to have.
 ## The honest limit
 
 The log fills itself only if you use an AI tool that keeps your conversations as
-files on your own computer. That means a terminal tool, which is Chapter 28 and
-Chapter 30 of the book.
+files on your own computer. That means a terminal tool, which is Chapter 32 and
+Chapter 36 of the book.
 
-Claude Desktop, the desk the book gives you in Chapter 3, keeps no such store, so
+Claude Desktop, the desk the book gives you in Chapter 2, keeps no such store, so
 there is nothing for a program to harvest. If that is your only tool, this drawer
 stays empty and nothing is broken. Use `prompts/library/` next door instead, and
 save the prompts you care about as you go.

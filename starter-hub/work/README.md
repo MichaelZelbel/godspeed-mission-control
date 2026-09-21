@@ -96,5 +96,5 @@ hub-work block <id> --needs ... | unblock <id> --why ... | cancel <id> --why ...
 hub-work tick | next | list | show <id> | check
 ```
 
-Chapter 23 of the book is the idea behind this folder: progress written down, and the difference
+Chapter 24 of the book is the idea behind this folder: progress written down, and the difference
 between saying a thing is done and showing it. The rooms next door are `goals/` and `forecasts/`.

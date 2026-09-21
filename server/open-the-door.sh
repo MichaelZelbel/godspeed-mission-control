@@ -2,7 +2,7 @@
 # =============================================================================
 # Teach It Once - open a private door to the server, in one line.
 #
-# Chapter 29. After the one-line installer has built the server and connected
+# Chapter 33. After the one-line installer has built the server and connected
 # its Telegram bot, this puts a private address on it (Tailscale), gives the
 # door a username and a password, runs Hermes' web page as a service on that
 # address, and checks that the page asks for the password. From then on the web

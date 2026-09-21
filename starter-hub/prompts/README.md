@@ -10,9 +10,9 @@ every session, is not a log. It is a pile of old orders being taken as new ones.
 Two drawers. Each has its own README with the detail.
 
 - **`library/`** is the shelf: the prompts you keep and paste into other tools, one file
-  each. You put things here on purpose. Chapters 13 and 31.
+  each. You put things here on purpose. Chapters 13 and 37.
 - **`archive/`** is the log: everything you have typed, and what the AI answered, in
-  date order, filled by a program and never by you. Chapter 31.
+  date order, filled by a program and never by you. Chapter 37.
 
 ## How this is different from `skills/`
 
