@@ -402,7 +402,7 @@ function status() {
   const st = readState();
   if (!st || !st.address) {
     return { account: "gmail", route: "Himalaya on " + os.hostname(), state: "not connected", setup: supported() ? "available" : "not tested on this kind of computer",
-      note: "Optional. When the person wants it: \"Connect Gmail for me\" (hub-mail connect gmail-imap). Until then, paste an email or forward it to the hub's address." };
+      note: "Optional. When you want it, ask your assistant: Connect Gmail for me. Until then, paste an email or forward it to the hub's address." };
   }
   const can = ["search", "read", "list drafts"].concat(st.drafts ? ["save new drafts"] : []);
   return { account: "gmail", address: st.address, route: "Himalaya on " + os.hostname() + " (app password)", state: st.state === "ready" ? "connected" : st.state,
