@@ -1,30 +1,34 @@
 /*
- * hub-mail-guide.js - the guided Gmail step: the hub installer runs it, and the reader never
- * types a command.
+ * hub-mail-guide.js - the Gmail step of the hub installer: the reader signs in to Google, and
+ * the hub does the rest.
  *
  * WHY THIS FILE IS HERE (Michael, 2026-09-21). Every reader, and Michael himself, connects Gmail
  * the same way: each person registers their own small Google app once, in their own Google
- * account, and nobody else is involved. The first version handed the reader a walkthrough file
- * and a terminal command. This one does the walking: it opens each Google page, says in one plain
- * sentence what to click there, and moves on only when the reader says the step is done. At the
- * end the reader pastes the two lines Google shows, hidden, here and never into a chat; Google's
- * Allow window opens; and the mailbox Google names is shown before anything is kept.
+ * account, and nobody else is involved: no shared app, no connection company in between.
  *
- * ONE COPY OF THE WORDS. The bash installer and the Windows installer both start this program,
- * so the sentences exist once. The Menerio step had its words in both installers and they
- * drifted apart within a fortnight. STEPS below is also what mail/gmail-setup.md prints, and the
- * test compares the two.
+ * VERSION ONE OF THIS FILE WAS WRONG, AND HIS OWN RUN SAID SO THE SAME EVENING. It opened
+ * Google's developer pages one by one and told the reader what to click: eleven steps. His
+ * words: "I don't want 11 steps, never ever; I'm not going to do 11 steps, so I would stop the
+ * installation right there", and then the product in one sentence: "the reader is signing you
+ * in, and you do it in Google."
  *
- * WHERE THE SENTENCES COME FROM. Google renames its pages often, so every sentence in STEPS was
- * written from the real screen during a real run, with the date in SEEN. A sentence nobody has
- * seen live is marked `seen: ""` and the test lists it.
+ * SO THE READER DOES THREE THINGS, and the hub does everything between them:
+ *   1. signs in to Google, in a browser window the hub opens;
+ *   2. ticks the one box that agrees to Google's user data policy (an agreement is the reader's
+ *      to give, so the hub never ticks it);
+ *   3. clicks Allow, when Google asks whether this app may open the mailbox.
+ * Nothing is copied or pasted: the hub reads the app's two lines off Google's page itself.
  *
- * It keeps nothing itself: connecting, the locked store and the mailbox question are connect()
- * in hub-mail-gmail.js, the same code `hub-mail connect gmail` has always used.
+ * WHO DOES WHAT. hub-mail-browser.js opens the window and talks to it. hub-mail-google.js does
+ * the clicking in Google's pages, and hands a single click back to the reader, in one sentence,
+ * whenever Google has changed a page. connect() in hub-mail-gmail.js, the same code as ever,
+ * checks what Google granted, shows the mailbox before anything is kept, and locks the
+ * connection into the hub's store. This file is the words and the order.
+ *
+ * ONE COPY OF THE WORDS: the bash installer and the Windows installer both start this program.
  */
 "use strict";
 
-const CONSOLE = process.env.HUB_MAIL_GOOGLE_CONSOLE || "https://console.cloud.google.com";
 const APP_NAME = "My hub";
 
 // kind: "workspace" (an address on your own domain, run through Google Workspace) or "personal"
@@ -32,56 +36,37 @@ const APP_NAME = "My hub";
 // must be published, because in "Testing" Google cancels the permission after seven days.
 const kindOf = email => /@(gmail|googlemail)\.com$/i.test(String(email).trim()) ? "personal" : "workspace";
 
-// Every step: which page to open (or none: the reader is still on the same page), what to do
-// there in one sentence, and for whom. `seen` is the date the sentence was checked against the
-// real Google page.
-const STEPS = [
-  { id: "project", page: "/projectcreate", for: "all", seen: "",
-    say: `Google calls the home of your app a project. In the box "Project name", type ${APP_NAME}, then click Create.` },
-  { id: "select", page: "", for: "all", seen: "",
-    say: `A small notice appears at the top right of the page. In it, click Select project.` },
-  { id: "api", page: "/apis/library/gmail.googleapis.com", for: "all", seen: "",
-    say: `This page is the Gmail API, the door your hub will use. Check that the bar at the top says ${APP_NAME}, then click Enable.` },
-  { id: "start", page: "/auth/overview", for: "all", seen: "",
-    say: `This is where your app gets its name. Click Get started.` },
-  { id: "name", page: "", for: "all", seen: "",
-    say: `In "App name", type ${APP_NAME}. In "User support email", pick your own address. Click Next.` },
-  { id: "internal", page: "", for: "workspace", seen: "",
-    say: `Choose Internal, which means only your own organisation can use this app. Click Next.` },
-  { id: "external", page: "", for: "personal", seen: "",
-    say: `Choose External, the only choice Google offers a personal address. Click Next.` },
-  { id: "contact", page: "", for: "all", seen: "",
-    say: `Type your own email address, so Google can write to you about this app. Click Next.` },
-  { id: "agree", page: "", for: "all", seen: "",
-    say: `Tick the box to agree to Google's user data policy, click Continue, then click Create.` },
-  { id: "publish", page: "/auth/audience", for: "personal", seen: "",
-    say: `Click Publish app, then Confirm. An app left in "Testing" is cancelled by Google after seven days.` },
-  { id: "client", page: "/auth/clients/create", for: "all", seen: "",
-    say: `Under "Application type", choose Desktop app. As the name, type ${APP_NAME}. Click Create.` },
+const WHAT = [
+  "After this, every assistant of your hub can search your Gmail, read messages and their",
+  "attachments, and save draft replies in your Drafts folder. Your hub sends nothing: you read",
+  "the draft in Gmail and press Send yourself.",
 ];
-const stepsFor = kind => STEPS.filter(s => s.for === "all" || s.for === kind);
-
 const WHY = [
-  "Google only lets registered apps into a mailbox. So you register one small app.",
+  "Google only lets registered apps into a mailbox, so your hub gets a small app of its own.",
   "It belongs to you and nobody else: not to the author of the book, not to any company in between.",
-  "It costs nothing, and it takes about ten minutes, once.",
+  "It costs nothing.",
 ];
-
-const pageUrl = (page, email) => CONSOLE + page + (email ? (page.includes("?") ? "&" : "?") + "authuser=" + encodeURIComponent(email) : "");
+const YOUR_PART = [
+  "Your part is small. You sign in to Google. I set the app up while you watch.",
+  "You tick one box, and at the end you click Allow. About five minutes.",
+];
 
 /*
- * guide({ G, ask, say, open })
- *   G     hub-mail-gmail.js
- *   ask   (question, hidden) -> the reader's answer
- *   say   one line to the reader
- *   open  opens a web page
+ * guide({ G, ask, say, browser, google })
+ *   G        hub-mail-gmail.js
+ *   ask      (question, hidden) -> the reader's answer
+ *   say      one line to the reader
+ *   browser  hub-mail-browser.js (a test hands in its own)
+ *   google   hub-mail-google.js  (a test hands in its own)
  * Resolves to { connected, address } and never throws for a reader's "stop".
  */
-async function guide({ G, ask, say, open }) {
-  open = open || G.openBrowser;
-  const line = s => say(s === undefined ? "" : s);
+async function guide({ G, ask, say, browser, google }) {
+  browser = browser || require("./hub-mail-browser.js");
+  google = google || require("./hub-mail-google.js");
+  const line = s => say(google.scrub ? google.scrub(s === undefined ? "" : s) : (s === undefined ? "" : s));
   const answer = async (q, hidden) => String(await ask(q, !!hidden) || "").trim();
   const stopped = () => { line("Stopped. Nothing was changed. Start this step again whenever you like."); return { connected: false, address: "" }; };
+  const no = { connected: false, address: "" };
 
   line("Connect your Gmail to your hub");
   line("==============================");
@@ -89,128 +74,96 @@ async function guide({ G, ask, say, open }) {
   if (st.why && st.why !== "not connected") {
     line("This computer cannot open your hub's locked store (" + st.why + "), so there is nowhere safe to keep the connection.");
     line("Run the whole hub installer once, then start this step again.");
-    return { connected: false, address: "" };
+    return no;
   }
 
-  let readOnly = false;
   if (st.connected) {
     line(`Your hub is connected to ${st.address}${st.readOnly ? " (reading only)" : ""}. Every assistant of your hub uses that one connection.`);
     const a = (await answer("Press Enter to leave it as it is. Or type: again (connect again), or: remove (disconnect). ")).toLowerCase();
     if (a === "remove") {
       const r = await G.disconnect();
       line(`Hub: ${r.local}.`); line(`Google: ${r.google}.`); if (r.kept) line(r.kept + "."); if (r.shared) line("The change is " + r.shared + ".");
-      return { connected: false, address: "" };
+      return no;
     }
     if (a !== "again") { line("Left as it is."); return { connected: true, address: st.address }; }
   } else {
-    line("After this, every assistant of your hub can search your Gmail, read messages and their");
-    line("attachments, and save draft replies in your Drafts folder. Your hub sends nothing: you read");
-    line("the draft in Gmail and press Send yourself.");
+    for (const s of WHAT) line(s);
     line();
-    for (const w of WHY) line(w);
+    for (const s of WHY) line(s);
+    line();
+    for (const s of YOUR_PART) line(s);
   }
   line();
 
-  // An app that is already registered is not registered twice: a second run goes straight to
-  // Google's Allow window, which is also how "reconnect needed" is put right.
-  let clientId = "", clientSecret = "", email = "";
-  let haveApp = st.hasApp;
-  if (haveApp) {
-    const a = (await answer("Your Google app is already registered. Press Enter to use it, or type: new (register another one). ")).toLowerCase();
-    if (a === "stop") return stopped();
-    if (a === "new") haveApp = false;
-  }
+  const email = await answer("Which Gmail address do you want to connect? Type it and press Enter: ");
+  if (email.toLowerCase() === "stop") return stopped();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { line("That is not an email address, so nothing was started."); return stopped(); }
+  const kind = kindOf(email);
+  const mode = (await answer("Press Enter and I open a browser window. (If your hub should only read and never save drafts, type: read) ")).toLowerCase();
+  if (mode === "stop") return stopped();
+  const readOnly = mode === "read";
 
-  if (!haveApp) {
-    email = await answer("Which Gmail address do you want to connect? Type it and press Enter: ");
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { line("That is not an email address, so nothing was started."); return stopped(); }
-    const kind = kindOf(email);
-    line(kind === "personal"
-      ? "That is a personal Gmail address, so your app will be the kind Google calls External."
-      : "That address is on your own domain, through Google Workspace, so your app will be the kind Google calls Internal.");
-    const mode = (await answer("Press Enter to start. (If your hub should only read and never save drafts, type: read) ")).toLowerCase();
-    if (mode === "stop") return stopped();
-    readOnly = mode === "read";
+  // ---------------------------------------------------------------- the window, and the sign-in
+  let win;
+  try {
+    win = await browser.attach();
+    if (!win) win = await browser.open({ url: "https://console.cloud.google.com/welcome?hl=en" });
+  } catch (e) {
     line();
-    line("I open one Google page at a time in your browser. Sign in with " + email + " if Google asks.");
-    line("Do the one thing each step says, come back to this window, and press Enter.");
-
-    const steps = stepsFor(kind);
-    let page = "";
-    for (let i = 0; i < steps.length; i++) {
-      const s = steps[i];
-      line();
-      line(`Step ${i + 1} of ${steps.length + 2}`);
-      if (s.page) { page = pageUrl(s.page, email); open(page); line("(I opened a page in your browser.)"); }
-      line(s.say);
-      for (;;) {
-        const a = (await answer("Done? Press Enter. (again = open the page again, stop = stop here) ")).toLowerCase();
-        if (a === "stop") return stopped();
-        if (a === "again") { if (page) open(page); continue; }
-        break;
-      }
-    }
+    if (e.noBrowser) {
+      line("I need a browser I can work in, and found none on this computer: Microsoft Edge, Google Chrome, Brave or Chromium.");
+      line("Install one of them (Chrome is free at google.com/chrome), then start this step again. Nothing was changed.");
+    } else line("I could not open a browser window: " + e.message + " Nothing was changed.");
+    return no;
+  }
+  let result = no;
+  try {
+    let page = await win.page();
     line();
-    line(`Step ${steps.length + 1} of ${steps.length + 2}`);
-    line("Google now shows a small window with two lines: a Client ID and a Client secret.");
-    line("Copy each one and paste it here. You will not see what you paste. That is on purpose.");
-    line("Paste them here and never into a chat with an assistant, because chats are saved.");
-    for (;;) {
-      clientId = await answer("Paste the Client ID and press Enter: ", true);
-      if (clientId.toLowerCase() === "stop") return stopped();
-      if (/\.apps\.googleusercontent\.com$/.test(clientId)) break;
-      line("That was not the Client ID: it is the line that ends in .apps.googleusercontent.com. Copy it again.");
+    line(`Look at the ${win.name} window I just opened. It is a fresh window of its own, with nothing of yours in it.`);
+    line(`Sign in to Google there with ${email}. Your password goes to Google, on Google's own page. I cannot see it.`);
+    line("Answer whatever Google asks while you sign in. When you are in, I notice it myself and carry on.");
+    const signedIn = async () => { try { page = await win.page(); const u = await page.url(); return /^https:\/\/console\.cloud\.google\.com\//.test(u); } catch (e) { if (win.gone) throw e; return false; } };
+    const end = Date.now() + 20 * 60000;
+    while (!await signedIn()) {
+      if (Date.now() > end) { line(); line("Nobody signed in within twenty minutes, so I stopped. Nothing was changed. Start this step again when you are ready."); await win.close({ forget: true }); return no; }
+      await browser.sleep(2500);
     }
-    for (;;) {
-      clientSecret = await answer("Paste the Client secret and press Enter: ", true);
-      if (clientSecret.toLowerCase() === "stop") return stopped();
-      if (clientSecret && clientSecret !== clientId && !/\s/.test(clientSecret)) break;
-      line("That was not the Client secret: it is the shorter line under the Client ID. Copy it again.");
-    }
-    line("Got both. They go into your hub's locked store and nowhere else.");
-  } else {
-    const mode = (await answer("Press Enter to go on. (If your hub should only read and never save drafts, type: read) ")).toLowerCase();
-    if (mode === "stop") return stopped();
-    readOnly = mode === "read";
-  }
+    const who = await page.waitFor(() => { const m = document.body.innerText.match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[a-z]{2,}/); const b = [...document.querySelectorAll("[aria-label]")].map(x => x.getAttribute("aria-label")).find(x => /^Account:|Google Account:/.test(x || "")); return (b && (b.match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[a-z]{2,}/) || [])[0]) || (m && m[0]) || ""; }, { timeout: 15000 });
+    line();
+    line(`You are signed in${who ? " as " + who : ""}. Now it is my turn. Please leave the window alone until I ask you for something.`);
+    if (who && who.toLowerCase() !== email.toLowerCase()) line(`(You said ${email} and signed in as ${who}. I go on with ${who}, and at the end I show you the mailbox before anything is kept.)`);
+    line("You can watch. Google's pages will open and fill themselves in:");
 
-  line();
-  line(haveApp ? "Last step" : `Step ${stepsFor(kindOf(email)).length + 2} of ${stepsFor(kindOf(email)).length + 2}`);
-  line("Google's own window opens now and asks whether your app may open your mailbox.");
-  if (!haveApp && kindOf(email) === "personal") {
-    line("Google will warn that it has not verified this app. That is true: nobody checked it, because");
-    line("it is yours and only you use it. Click Advanced, then the line that names " + APP_NAME + ".");
-  }
-  line("Tick every box Google shows, then click " + (readOnly ? "Continue" : "Allow") + "." + (readOnly ? "" : " Google's words mention sending, because Google bundles it with drafts. Your hub does not send."));
+    const app = await google.registerApp({ page, email: who || email, kind, say: line, ask, log: () => {} });
 
-  for (let attempt = 0; attempt < 3; attempt++) {
-    try {
-      const r = await G.connect({ readOnly, ask, say: s => line(String(s).replace(/^Opening Google in your browser\./, "I opened Google's window in your browser.")),
-        open, clientId: clientId || undefined, clientSecret: clientSecret || undefined, fresh: !haveApp, loginHint: email || undefined, back: "the installer's window" });
-      line();
-      line(`Connected: ${r.address}. ${r.readOnly ? "Your hub can read it." : "Your hub can read it and save drafts in it. It sends nothing."}`);
-      line("The connection is kept in your hub's locked store, so every assistant of your hub uses it.");
-      if (r.shared) line("It is " + r.shared + ".");
-      line("Close your assistant and open it again. Then ask it, in your own words:");
-      line("   Find the newest email in my Gmail and tell me who it is from.");
-      return { connected: true, address: r.address };
-    } catch (e) {
-      line();
-      line("Not connected: " + e.message);
-      if (e.step === "api") {
-        open(pageUrl("/apis/library/gmail.googleapis.com", email));
-        line("I opened the Gmail API page again. Check that the bar at the top says " + APP_NAME + ", click Enable, and wait until the page changes.");
-        if ((await answer("Done? Press Enter to try again. (stop = stop here) ")).toLowerCase() === "stop") return stopped();
-        continue;
-      }
-      if (e.google === "invalid_client" && !haveApp) {
-        line("Google did not recognise the two lines, so one of them was not copied whole.");
-        return stopped();
-      }
-      return { connected: false, address: "" };
+    // ---------------------------------------------------------------- Google asks the reader
+    line();
+    line("Last thing, and it is yours: Google now asks, in the same window, whether your app may open your mailbox.");
+    if (kind === "personal") {
+      line("Google first warns that it has not verified this app. That is true: nobody checked it, because it is");
+      line("yours and only you use it. Click Advanced, then the line that names " + APP_NAME + ".");
     }
+    line("Tick every box Google shows, then click " + (readOnly ? "Continue" : "Allow") + "." + (readOnly ? "" : " Google's words mention sending, because Google bundles it with drafts. Your hub does not send."));
+    const r = await G.connect({ readOnly, ask, say: () => {}, open: url => page.goto(url), clientId: app.clientId, clientSecret: app.clientSecret,
+      fresh: true, loginHint: who || email, back: "the installer's window" });
+    google.forgetNote();
+    line();
+    line(`Connected: ${r.address}. ${r.readOnly ? "Your hub can read it." : "Your hub can read it and save drafts in it. It sends nothing."}`);
+    line("The connection is kept in your hub's locked store, so every assistant of your hub uses it.");
+    if (r.shared) line("It is " + r.shared + ".");
+    line("I close the browser window now and delete everything it remembered, so no signed-in window is left behind.");
+    line("Close your assistant and open it again. Then ask it, in your own words:");
+    line("   Find the newest email in my Gmail and tell me who it is from.");
+    result = { connected: true, address: r.address };
+  } catch (e) {
+    line();
+    line("Not connected: " + (win.gone ? "the browser window was closed before I was finished. Nothing was kept." : e.message));
+    if (!win.gone) line("I leave the browser window open, so you can see where it stopped. Start this step again and it goes on from there.");
+    return no;
   }
-  return { connected: false, address: "" };
+  try { await win.close({ forget: true }); } catch (e) { /* closed by hand already */ }
+  return result;
 }
 
-module.exports = { guide, STEPS, stepsFor, kindOf, pageUrl, WHY, APP_NAME };
+module.exports = { guide, kindOf, WHAT, WHY, YOUR_PART, APP_NAME };
