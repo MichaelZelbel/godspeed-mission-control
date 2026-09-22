@@ -127,6 +127,8 @@ async function main() {
   ok("16 search with no words lists the newest first", all.count === 2 && /:42$/.test(all.messages[0].message_id));
   const unread = await I.search({ unread: true });
   ok("17 unread: only the unread message", unread.count === 1 && /:41$/.test(unread.messages[0].message_id), JSON.stringify(unread.messages));
+  const two = await I.search({ query: "cards instructions" }), none = await I.search({ query: "cards koeln" });
+  ok("17b several words must all match, newest first, and only the page is fetched", two.count === 1 && none.count === 0 && two.total_matches === 1, JSON.stringify([two.count, none.count]));
   const wrap = (h, b) => h.concat(["<<<UNTRUSTED>>>"], b, ["<<<END>>>"]).join("\n");
   const cmdsBefore = f.commands.length;
   const body = await I.read({ message_id: found.messages[0].message_id }, wrap);

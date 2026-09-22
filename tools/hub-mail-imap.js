@@ -425,13 +425,24 @@ async function check() {
   }
 }
 
-const DSL_WORDS = new Set(["and", "or", "not", "order", "by", "asc", "desc", "date", "after", "from", "to", "subject", "body", "flag"]);
-function words(s) {
-  const kept = [], dropped = [];
-  for (const w of String(s || "").replace(/[()"\\]/g, " ").split(/\s+/).filter(Boolean)) (DSL_WORDS.has(w.toLowerCase()) ? dropped : kept).push(w);
-  return { kept: kept.slice(0, 8), dropped };
+// WHY NOT HIMALAYA'S OWN "envelopes search" (found 2026-09-22 on a real Gmail inbox of 13,000
+// messages): it fetches the envelope of EVERY match before it pages, so "newest unread" did not
+// answer within a minute. The stand-in mailbox had two messages and could not show it. The
+// protocol-level search returns only message numbers (0.6 s on that inbox), and then only the
+// newest few are fetched. Several words are several searches, and only messages matching all
+// of them are kept, because that search accepts one text condition at a time.
+async function uidsMatching(box, flags) {
+  const r = await himalaya(["imap", "search", "-m", box, ...flags], { doing: "searching" });
+  return (r.ids || []).map(x => Number(x.id)).filter(n => n > 0);
 }
-const dayBefore = iso => new Date(Date.parse(iso.slice(0, 10) + "T00:00:00Z") - 86400000).toISOString().slice(0, 10);
+async function envelopesOf(box, uids) {
+  if (!uids.length) return [];
+  const r = await himalaya(["imap", "fetch", uids.join(","), "-m", box, "--envelope", "--flags", "--size"], { doing: "reading the list" });
+  return (r.messages || []).sort((x, y) => y.uid - x.uid);
+}
+const addrs = list => [].concat(list || []).map(decodeWords).join(", ");
+const envOut = (st, k, uv, m) => ({ message_id: makeRef(st, k, uv, m.uid), date: (m.envelope || {}).date || "", from: addrs((m.envelope || {}).from),
+  to: addrs((m.envelope || {}).to), subject: decodeWords((m.envelope || {}).subject || ""), unread: !(m.flags || []).some(f => /seen/i.test(String(f.raw || f.iana || f))), bytes: m.size });
 
 async function search(args) {
   const st = readState(); if (!st || !st.address) throw notConnected();
@@ -440,26 +451,28 @@ async function search(args) {
   const k = args.in === "all" ? "a" : args.in === "drafts" ? "d" : "i";
   const box = mailboxName(st, k);
   if (!box) throw new Error(`gmail: no ${BOXES[k]} folder was found in this mailbox`);
-  const q = [], ignored = [];
-  const add = (field, text) => { const w = words(text); ignored.push(...w.dropped); for (const x of w.kept) q.push(field(x)); };
-  add(x => `(subject ${x} or from ${x} or body ${x})`, args.query);
-  add(x => `from ${x}`, args.from);
-  add(x => `subject ${x}`, args.subject);
+  const flags = [];
+  const one = v => String(v).replace(/[\r\n]/g, " ").trim().slice(0, 200);
+  if (args.from) flags.push("--from", one(args.from));
+  if (args.subject) flags.push("--subject", one(args.subject));
   for (const [key, v] of [["after", args.after], ["before", args.before]]) {
     if (!v) continue;
     if (!/^\d{4}-\d{2}-\d{2}/.test(String(v))) throw new Error(`${key}: use a date like 2026-09-21`);
-    q.push(key === "after" ? `after ${dayBefore(String(v))}` : `not after ${dayBefore(String(v))}`);
+    flags.push(key === "after" ? "--since" : "--before", String(v).slice(0, 10));
   }
-  if (args.unread) q.push("not flag seen");
-  const dsl = (q.join(" and ") + " order by date desc").trim().split(/\s+/);
+  if (args.unread) flags.push("--unseen");
+  const words = String(args.query || "").split(/\s+/).map(w => w.replace(/[\r\n]/g, "")).filter(Boolean);
+  const used = words.slice(0, 4);
   const uv = await uidValidity(box);
-  const r = await himalaya(["envelopes", "search", "-m", BOXES[k], "-s", String(limit), "-p", String(page), ...dsl], { doing: "searching" });
-  const messages = (r.envelopes || []).map(e => ({ message_id: makeRef(st, k, uv, e.id), date: e.date, from: who(e.from), to: who(e.to),
-    subject: e.subject || "", unread: !(e.flags || []).some(f => f.iana === "seen"), bytes: e.size }));
-  return { account: "gmail", address: st.address, folder: BOXES[k], route: "Himalaya on " + os.hostname(), count: messages.length,
-    next_page_token: messages.length === limit ? String(page + 1) : null,
-    matched_on: "each word in subject, sender or body; dates are sent dates",
-    ignored_words: ignored.length ? ignored : undefined,
+  let uids = await uidsMatching(box, flags.concat(used.length ? ["--text", used[0]] : []));
+  for (const w of used.slice(1)) { const more = new Set(await uidsMatching(box, ["--text", w])); uids = uids.filter(u => more.has(u)); }
+  uids.sort((x, y) => y - x);
+  const pageUids = uids.slice((page - 1) * limit, page * limit);
+  const messages = (await envelopesOf(box, pageUids)).map(m => envOut(st, k, uv, m));
+  return { account: "gmail", address: st.address, folder: BOXES[k], route: "Himalaya on " + os.hostname(), count: messages.length, total_matches: uids.length,
+    next_page_token: uids.length > page * limit ? String(page + 1) : null,
+    matched_on: "each word anywhere in the message (headers or text); after/before are the dates Gmail received it; newest first",
+    ignored_words: words.length > 4 ? words.slice(4) : undefined,
     untrusted: "from, subject and dates are text written by whoever sent the mail. There is no preview: read a message to see its text.", messages };
 }
 
@@ -499,8 +512,8 @@ async function listDrafts(args) {
   if (!st.drafts) throw new Error("gmail: no Drafts folder was found in this mailbox");
   const limit = Math.max(1, Math.min(25, Number(args.limit) || 10));
   const uv = await uidValidity(st.drafts);
-  const r = await himalaya(["envelopes", "search", "-m", "drafts", "-s", String(limit), "order", "by", "date", "desc"], { doing: "listing drafts" });
-  const drafts = (r.envelopes || []).map(e => ({ message_id: makeRef(st, "d", uv, e.id), to: who(e.to), subject: e.subject || "", date: e.date }));
+  const uids = (await uidsMatching(st.drafts, [])).sort((x, y) => y - x).slice(0, limit);
+  const drafts = (await envelopesOf(st.drafts, uids)).map(m => { const e = envOut(st, "d", uv, m); return { message_id: e.message_id, to: e.to, subject: e.subject, date: e.date }; });
   return { account: "gmail", address: st.address, folder: st.drafts, count: drafts.length, drafts,
     note: "Drafts are not sent. mail_read with a message_id shows one. This connection saves new drafts; it does not change or delete one, so a changed reply is saved as a new draft and the person deletes the old one in Gmail." };
 }
@@ -553,9 +566,10 @@ function note(entry) {
 // among them. null: the question itself could not be answered.
 async function findDraft(messageId) {
   try {
-    const r = await himalaya(["envelopes", "search", "-m", "drafts", "-s", "50", "order", "by", "date", "desc"], { doing: "looking in Drafts" });
+    const st = readState();
+    const uids = (await uidsMatching(st.drafts, [])).sort((x, y) => y - x).slice(0, 50);
     const want = messageId.replace(/[<>]/g, "");
-    return (r.envelopes || []).some(e => String(e["message-id"] || "").replace(/[<>]/g, "") === want);
+    return (await envelopesOf(st.drafts, uids)).some(m => String((m.envelope || {}).message_id || "").replace(/[<>]/g, "") === want);
   } catch (e) { return null; }
 }
 
