@@ -38,6 +38,8 @@
 //   hub-mail reject <code>             drop it
 //   hub-mail setup [--check]           tell every assistant on this computer about this tool
 //   hub-mail mcp                       run as an MCP server (what the assistants start)
+//   hub-mail pair request|finish <receipt>|forget   (a desktop) use the mail tool on your server
+//   hub-mail pair approve <request>|list|remove <device>   (the server) allow or remove a device
 'use strict';
 
 const fs = require('fs');
@@ -247,9 +249,14 @@ function mcp() {
     while ((i = buf.indexOf('\n')) >= 0) {
       const raw = buf.slice(0, i).trim();
       buf = buf.slice(i + 1);
-      if (raw) handle(raw).catch(e => process.stderr.write('hub-mail: ' + e.message + '\n'));
+      if (raw) { inflight++; handle(raw).catch(e => process.stderr.write('hub-mail: ' + e.message + '\n')).finally(() => { inflight--; done(); }); }
     }
   });
+  // When the assistant (or the SSH line from a paired desktop) closes, finish what was asked and
+  // leave, instead of lingering on a server with nobody on the other end.
+  let inflight = 0, ended = false;
+  const done = () => { if (ended && inflight === 0) process.stdout.write('', () => process.exit(0)); };
+  process.stdin.on('end', () => { ended = true; done(); });
   async function handle(raw) {
     let msg;
     try { msg = JSON.parse(raw); } catch { return send({ jsonrpc: '2.0', id: null, error: { code: -32700, message: 'parse error' } }); }
@@ -373,10 +380,17 @@ function flag(args, name) { const i = args.indexOf(name); if (i < 0) return fals
 async function main(argv) {
   const args = argv.slice();
   const cmd = args.shift();
-  if (cmd === 'mcp') return mcp();
+  // A desktop paired with the server carries every call there; see hub-mail-pair.js.
+  if (cmd === 'mcp') { const r = require('./hub-mail-pair.js').route(); return r ? require('./hub-mail-pair.js').relay(r) : mcp(); }
   const print = o => console.log(typeof o === 'string' ? o : JSON.stringify(o, null, 1));
   try {
-    if (!cmd || cmd === 'status') {
+    const paired = (!cmd || cmd === 'status') && require('./hub-mail-pair.js').route();
+    if (paired) {
+      const pr = require('./hub-mail-pair.js').probe(paired);
+      console.log(`mail on your server (${paired.user}@${paired.host}): ${pr.ok ? 'reachable' : 'not reachable - ' + pr.why}`);
+      if (pr.ok) console.log(pr.text);
+      process.exitCode = pr.ok ? 0 : 1;
+    } else if (!cmd || cmd === 'status') {
       const s = await status();
       if (flag(args, '--check') && gmailKind() === 'imap') s[0] = await I.check();
       for (const a of s) console.log(`${a.account}: ${a.state}${a.address ? ' (' + a.address + ')' : ''}${a.route && a.state !== 'not connected' ? ' via ' + a.route : ''}${a.error ? ' - ' + a.error : ''}${a.problem ? ' - ' + a.problem : ''}${a.note ? ' - ' + a.note : ''}${a.pending ? ` - ${a.pending} message(s) waiting for your approval: hub-mail pending` : ''}`);
@@ -446,6 +460,39 @@ async function main(argv) {
     } else if (cmd === 'reject') {
       const r = G.reject(args[0]);
       console.log(r.ok ? 'Dropped. Nothing was sent; the draft stays in Gmail.' : `Nothing to drop: ${r.why}.`);
+    } else if (cmd === 'pair') {
+      const P = require('./hub-mail-pair.js');
+      const sub = args.shift();
+      if (sub === 'request') {
+        const line = P.request({ device: args[0] });
+        console.log('This device asks your server for access to its mail tool. On the server, in a terminal that');
+        console.log('is already logged in (the one in your provider\'s web page is fine), as the account that runs');
+        console.log('your hub, type this one line:');
+        console.log('');
+        console.log('hub-mail pair approve ' + line);
+        console.log('');
+        console.log('It prints a receipt. Back here, type: hub-mail pair finish <the receipt>');
+      } else if (sub === 'approve') {
+        const r = P.approve(args[0]);
+        console.log(`Allowed "${r.device}" to start this account's mail tool, and nothing else${r.network ? ' (reached over ' + r.network + ')' : ''}. Other keys kept: ${r.kept}.`);
+        if (!r.network) console.log('This server has no Tailscale address, so the receipt names its public name; the device needs SSH to reach it.');
+        console.log('On the device, type this one line:');
+        console.log('');
+        console.log('hub-mail pair finish ' + r.receipt);
+      } else if (sub === 'finish') {
+        const r = P.finish(args[0]);
+        console.log(`Paired: this computer's assistants now use the mail tool on ${r.route.user}@${r.route.host}. The Gmail password stays on the server.`);
+        const w = require('./hub-mail-wire.js').wire({ hub: hubDir(), desktop: true });
+        for (const line of w.lines.filter(l => !/^Email itself/.test(l))) console.log(line);
+      } else if (sub === 'forget') {
+        const r = P.forget();
+        console.log(r ? `This computer no longer uses the mail tool on ${r.host}. On the server, remove its key with: hub-mail pair remove ${r.device}` : 'This computer was not paired with a server.');
+      } else if (sub === 'list') {
+        const l = P.list();
+        console.log(l.length ? 'Devices allowed to start this account\'s mail tool: ' + l.join(', ') : 'No device is allowed yet.');
+      } else if (sub === 'remove') {
+        console.log(P.remove(args[0]) ? `Removed "${args[0]}". Other devices, and the Gmail connection, are untouched.` : 'No device of that name here.');
+      } else throw new Error('pair request | pair approve <request> | pair finish <receipt> | pair list | pair remove <device> | pair forget');
     } else if (cmd === 'setup') {
       const r = require('./hub-mail-wire.js').wire({ check: flag(args, '--check'), hub: hubDir() });
       for (const line of r.lines) console.log(line);

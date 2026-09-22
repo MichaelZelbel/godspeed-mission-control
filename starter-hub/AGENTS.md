@@ -91,6 +91,8 @@ purpose. If it contradicts something you believe about me, the file wins.
   the title, the folder, the links. It files the note in my Menerio notebook
   when the `notebook` tools are there, and in `world/` or `inbox/` when they
   are not.
+- **"Connect Gmail for me", "connect my email".** Follow
+  `skills/connect-email/SKILL.md`. Never ask me for a password in a chat.
 
 ## My rules
 

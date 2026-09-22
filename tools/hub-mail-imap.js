@@ -401,11 +401,11 @@ const who = list => (list || []).map(a => a.name ? `${a.name} <${a.email}>` : a.
 function status() {
   const st = readState();
   if (!st || !st.address) {
-    return { account: "gmail", route: "this computer (Himalaya)", state: "not connected", setup: supported() ? "available" : "not tested on this kind of computer",
+    return { account: "gmail", route: "Himalaya on " + os.hostname(), state: "not connected", setup: supported() ? "available" : "not tested on this kind of computer",
       note: "Optional. When the person wants it: \"Connect Gmail for me\" (hub-mail connect gmail-imap). Until then, paste an email or forward it to the hub's address." };
   }
   const can = ["search", "read", "list drafts"].concat(st.drafts ? ["save new drafts"] : []);
-  return { account: "gmail", address: st.address, route: "this computer (Himalaya, app password)", state: st.state === "ready" ? "connected" : st.state,
+  return { account: "gmail", address: st.address, route: "Himalaya on " + os.hostname() + " (app password)", state: st.state === "ready" ? "connected" : st.state,
     can, cannot: ["send", "attachments", "change or delete a draft"].concat(st.drafts ? [] : ["save drafts (no Drafts folder was found)"]),
     signed_in: st.verified_at ? `Gmail accepted the app password for ${st.address} on ${st.verified_at}` : "not verified yet",
     problem: st.state === "ready" ? undefined : st.problem,
@@ -456,7 +456,7 @@ async function search(args) {
   const r = await himalaya(["envelopes", "search", "-m", BOXES[k], "-s", String(limit), "-p", String(page), ...dsl], { doing: "searching" });
   const messages = (r.envelopes || []).map(e => ({ message_id: makeRef(st, k, uv, e.id), date: e.date, from: who(e.from), to: who(e.to),
     subject: e.subject || "", unread: !(e.flags || []).some(f => f.iana === "seen"), bytes: e.size }));
-  return { account: "gmail", address: st.address, folder: BOXES[k], route: "Himalaya on this computer", count: messages.length,
+  return { account: "gmail", address: st.address, folder: BOXES[k], route: "Himalaya on " + os.hostname(), count: messages.length,
     next_page_token: messages.length === limit ? String(page + 1) : null,
     matched_on: "each word in subject, sender or body; dates are sent dates",
     ignored_words: ignored.length ? ignored : undefined,
@@ -487,7 +487,7 @@ async function read(args, wrap) {
   if (cut) text = text.slice(0, MAX_TEXT);
   const att = attachmentsOfPart(p);
   const h = n => decodeWords(p.get(n));
-  return wrap([`account: gmail (${st.address})`, `message_id: ${args.message_id}`, `folder: ${BOXES[ref.k]}`, `route: Himalaya on this computer`,
+  return wrap([`account: gmail (${st.address})`, `message_id: ${args.message_id}`, `folder: ${BOXES[ref.k]}`, `route: Himalaya on ${os.hostname()}`,
     "The message was read without marking it as read in Gmail." + (att.length ? " Its attachments were downloaded with it (Gmail sends a message whole) but not saved or opened." : "")],
   [`From: ${h("from")}`, `To: ${h("to")}`, h("cc") ? `Cc: ${h("cc")}` : "", `Date: ${h("date")}`, `Subject: ${h("subject")}`,
     att.length ? "Attachments (this connection does not open them; see them in Gmail): " + att.map(a => `${a.name} (${a.bytes} bytes)`).join(", ") : "", "",

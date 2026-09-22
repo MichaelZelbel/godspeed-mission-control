@@ -92,4 +92,7 @@ echo
 echo
 # Gmail through Himalaya and an app password: the real pinned program against a stand-in IMAP server.
 "$NODE" "$HERE/test-hub-mail-imap.js" || FAIL=$((FAIL+1))
+echo
+# Pairing a desktop with the mail tool on a server.
+"$NODE" "$HERE/test-hub-mail-pair.js" || FAIL=$((FAIL+1))
 [ "$FAIL" = 0 ]
