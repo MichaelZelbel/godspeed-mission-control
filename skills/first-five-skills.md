@@ -2,11 +2,11 @@
 
 Five ready-to-use recipes, one per file. The five files themselves sit
 beside this one in `skills/` in this kit, so the fastest install is to
-copy the ones you want into `skills/` in your own hub, each as its own folder holding a `SKILL.md` with the label on top.
+copy the ones you want into `skills/` in your own mission control, each as its own folder holding a `SKILL.md` with the label on top.
 Nothing to paste, nothing to retype.
 
 They are deliberately NOT part of the installer. Your `skills/` folder
-arrives holding only the two recipes the hub runs by itself (`next-action`
+arrives holding only the two recipes the mission control runs by itself (`next-action`
 and `work-item`, Chapter 7), so the first recipe you put there yourself is
 one you built, in Chapter 12. Take these when you want them, and not before.
 
@@ -25,7 +25,7 @@ you. The second time you make the same correction, it belongs in the file.
 **They fire on their own.** A `SKILL.md` in its own folder under `skills/` steps forward when
 what you asked matches its description, without you naming it. Saying the name
 still works and is the reliable way to force one: "Answer email my way" runs that
-recipe every time. A recipe left loose anywhere else in your hub does neither.
+recipe every time. A recipe left loose anywhere else in your mission control does neither.
 
 ## 1. summarize-for-me
 

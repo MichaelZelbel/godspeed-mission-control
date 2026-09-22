@@ -26,7 +26,7 @@ for a human reading along, or for finding which step broke.
    output is kept in `/home/ai/hermes-install.log`, and when it stops the
    installer names that file instead of sending you to run it again blind.
 4. **The folder's path, before the service.** `hermes config set terminal.cwd
-   /home/ai/hub`, as `ai`. The gateway copies this setting into its own
+   /home/ai/godspeed`, as `ai`. The gateway copies this setting into its own
    environment once, when it starts, so it is written first. `terminal.cwd` is
    the only setting the agent's tools obey for their working folder; the old
    `workspace` key was a silent no-op.
@@ -81,23 +81,23 @@ for a human reading along, or for finding which step broke.
    are single-use, so two programs sharing one chain log each other out.
 9. **The kit and the shared install code**, fetched to `~/teach-it-once-kit` and
    `~/.kit-bootstrap`, the latter pinned to the tag named in `install.sh`.
-10. **Your folder.** If `~/hub` is already a git folder it is topped up, not
+10. **Your folder.** If `~/godspeed` is already a git folder it is topped up, not
     replaced. Otherwise you are asked once for the repository's address; a
     GitHub address triggers `gh auth login` with a code (`ensure_gh_auth`), and
     Enter means a fresh folder from the book's starter rooms.
-11. **The laptop installer, on the server.** `setup-hub.sh --hub ~/hub
+11. **The laptop installer, on the server.** `setup-godspeed.sh --godspeed ~/godspeed
     [--repo ...] --skip-prereqs --sources hermes`: starter rooms or top-up, one
     visible `skills/` room with `.claude/skills` and `.agents/skills` as links
     to it (and a count of reachable recipes that refuses to print success on
     zero), `terminal.cwd` set and PROVED by having Hermes read a marker file
     (or "could not check yet" before the sign-in), the eighteen deny rules,
     the kit's tools, and the prompt log's hourly job.
-12. **Keys outside the folder.** `~/.hub-env` (mode 600) for the kit's plain
-    keys, and `.env*` plus `.hub-env` in the folder's `.gitignore`, before
+12. **Keys outside the folder.** `~/.mc-env` (mode 600) for the kit's plain
+    keys, and `.env*` plus `.mc-env` in the folder's `.gitignore`, before
     anything writes a secret.
 13. **The private GitHub home.** Every path runs `create-private-repo.sh`. An
     existing repository is pushed and checked. A fresh folder, or an existing
-    local folder with no `origin`, gets a name prompt with `hub` as the default,
+    local folder with no `origin`, gets a name prompt with `godspeed` as the default,
     a first commit, and a new private repository. The helper then checks that the
     branch arrived and asks GitHub to confirm the repository is private. A
     failure stops before any scheduled work is added.
@@ -109,7 +109,7 @@ for a human reading along, or for finding which step broke.
 15. **The Hermes half**, `server/install-hermes.sh`: the `AGENTS.md` ceiling
     check (refuses at 20,000 characters, warns from 19,000), the folder proof
     again, and, when step 14 said yes, the morning brief: `kb_cron_job` creates
-    `morning-brief` at `0 6 * * *` with `--workdir ~/hub` (the one thing that
+    `morning-brief` at `0 6 * * *` with `--workdir ~/godspeed` (the one thing that
     injects `AGENTS.md` into a scheduled run) and `--deliver telegram`. It does
     NOT fire the job to prove the schedule; `hermes cron run` works with no
     gateway at all and would prove nothing. It checks the gateway instead and says

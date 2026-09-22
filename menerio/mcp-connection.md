@@ -1,7 +1,7 @@
 # One notebook, every assistant (Chapter 28)
 
 MCP is a standard socket. Any AI tool that speaks it can read the same notebook. You connect
-Menerio **once**, with one key, and every way you use your hub has it: Hermes, Claude Code and
+Menerio **once**, with one key, and every way you use your mission control has it: Hermes, Claude Code and
 Codex. No tool gets a copy of your notes. Every tool reads the same shelf.
 
 ## Make the key
@@ -9,9 +9,9 @@ Codex. No tool gets a copy of your notes. Every tool reads the same shelf.
 First a free account: https://menerio.com/auth?tab=signup
 
 In Menerio, open **Settings**, then the **API Keys** tab. Press **Generate new API key**. Name
-it after your hub.
+it after your mission control.
 
-The grid under **This key may touch** starts with every box ticked. For your own hub, leave it
+The grid under **This key may touch** starts with every box ticked. For your own mission control, leave it
 that way: full access is the right shape for the key you hold yourself. Untick boxes only for
 a key you hand to somebody else's app, and that key can never do more, whatever the app asks.
 (A refused tool call names the missing box, so a too-narrow key is a one-line fix, not a
@@ -27,17 +27,17 @@ and never into a chat with your assistant: a chat is kept as a log.
 ## Connect once
 
 Run the installer again (the same file or line you used the first time) and say yes when it
-asks about Menerio. It asks for the key once. It locks the key into your hub's store, in
+asks about Menerio. It asks for the key once. It locks the key into your mission control's store, in
 `secrets/`. It asks `Set a passphrase for a second computer now?` The default is no, and with
-one computer you can skip it. With a passphrase, every computer you own that opens your hub
-has the key. You can set one later by running this step again. Then it runs `hub-menerio-connect` for you, and asks one more question:
-`Copy your hub's files to Menerio for search?` The default is no. More on that below.
+one computer you can skip it. With a passphrase, every computer you own that opens your mission control
+has the key. You can set one later by running this step again. Then it runs `mc-menerio-connect` for you, and asks one more question:
+`Copy your mission control's files to Menerio for search?` The default is no. More on that below.
 
 You can run that command yourself at any time:
 
 ```
-hub-menerio-connect            connect every assistant on this computer, then test it
-hub-menerio-connect --check    change nothing, only say how things are
+mc-menerio-connect            connect every assistant on this computer, then test it
+mc-menerio-connect --check    change nothing, only say how things are
 ```
 
 It prints one line per assistant: connected, already connected, not installed, or failed with
@@ -53,7 +53,7 @@ The notebook  answered. Your key works.
 
 What it does, so nothing is a secret:
 
-- **Claude Code:** it adds a server named `notebook` to `.mcp.json` in your hub folder. The
+- **Claude Code:** it adds a server named `notebook` to `.mcp.json` in your mission control folder. The
   file names the key as `${MENERIO_API_KEY}` and never holds it, so it can travel with your
   folder. Every other server in the file is kept.
 - **Hermes:** it adds `notebook` to Hermes' own settings, again only naming the key. It also
@@ -77,17 +77,17 @@ searched its own two memory files, found nothing, and said so (measured twice, 2
 - **"Make a note about X."** Your assistant files the note in the notebook folder that fits,
   links it to related notes, and tells you the title, the folder and the links. The
   `keep-a-note` skill does this. That is all a connection does by itself.
-- **Your hub is mirrored into the notebook only if you said yes** to
-  `Copy your hub's files to Menerio for search?` The answer is one line in
-  `~/.hub/device.env` on this computer: `HUB_NOTEBOOK_MIRROR=1` or `HUB_NOTEBOOK_MIRROR=0`.
+- **Your mission control is mirrored into the notebook only if you said yes** to
+  `Copy your mission control's files to Menerio for search?` The answer is one line in
+  `~/.godspeed/device.env` on this computer: `GODSPEED_NOTEBOOK_MIRROR=1` or `GODSPEED_NOTEBOOK_MIRROR=0`.
   No line means no. To change it, run the Menerio step of the installer again. On a yes, the
-  copies sit under one folder called `hub`. Everything goes except `dev/`. The copies rank
+  copies sit under one folder called `godspeed`. Everything goes except `dev/`. The copies rank
   below your own notes. Menerio never mines them for facts and never exports them as files.
   `the-notebook.md` has the details, and helps you decide.
-- **`hub-search <words>`** is how your assistant finds things. With the mirror on, it asks
+- **`mc-search <words>`** is how your assistant finds things. With the mirror on, it asks
   Menerio first, by meaning and by words together. When it cannot reach Menerio, it searches
-  the files in your hub and says so on its last line. With the mirror off, it searches the
-  files on your computer, and the last line says your hub is not copied to Menerio. It never
+  the files in your mission control and says so on its last line. With the mirror off, it searches the
+  files on your computer, and the last line says your mission control is not copied to Menerio. It never
   fails because the notebook is away.
 - **With a yes, facts also come down.** Every hour, a job brings the people, events and
   facts Menerio holds down into `world/`, as a safety copy. With a no, nothing moves in
@@ -100,7 +100,7 @@ Every assistant loses the notebook in that moment, on every computer. Know where
 before you need it.
 
 To replace a key, follow the steps in `procedures/keys-that-expire.md`: you make the new key,
-and it goes into your hub's locked store. Every file above only names the key, so nothing
+and it goes into your mission control's locked store. Every file above only names the key, so nothing
 else has to change. Hermes' one written line follows within the hour.
 
 ## The connection facts
@@ -143,9 +143,9 @@ tools are the ones to consider.
 
 ## Appendix: by hand
 
-You do not need this part if `hub-menerio-connect` worked. It is here for a tool the command
+You do not need this part if `mc-menerio-connect` worked. It is here for a tool the command
 does not know, and for the curious. In each case the key is only named, and the value comes
-from your terminal, which the installer taught it (`hub-notebook-env` prints it for a terminal
+from your terminal, which the installer taught it (`mc-notebook-env` prints it for a terminal
 that was not).
 
 **Hermes**, two lines, nothing to answer (checked on Hermes 0.21.2):
@@ -162,7 +162,7 @@ page of the book used `hermes mcp add notebook --url https://mcp.menerio.com`, w
 the key and stores its own copy as `MCP_NOTEBOOK_API_KEY`. That still works. It does not
 follow a key you replace.
 
-**Claude Code**, in `.mcp.json` in your hub folder:
+**Claude Code**, in `.mcp.json` in your mission control folder:
 
 ```
 {

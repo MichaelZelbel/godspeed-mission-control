@@ -30,7 +30,7 @@
 #     and a half-hourly proof that the second Hermes can still answer
 #
 # What it asks you: a Telegram bot token (Enter skips); whether a repository
-# already holds your folder, and for a fresh hub what its new private repository
+# already holds your folder, and for a fresh godspeed what its new private repository
 # should be called; whether to connect Menerio (optional); whether to put the
 # morning brief on the clock (opt-in). Plus two codes. What only you can do
 # afterwards: paste server/open-the-door.sh, then point the Hermes app on your
@@ -59,8 +59,8 @@ KB_PIN="v2.4.1"
 LIB_URL="https://raw.githubusercontent.com/MichaelZelbel/kit-bootstrap/$KB_PIN/lib.sh"
 KIT_REPO="https://github.com/MichaelZelbel/teach-it-once-kit.git"
 AI_USER="${AI_USER:-ai}"
-HUB="${HUB:-}"            # settled below: the assistant's home + /hub unless told otherwise
-HUB_REPO="${HUB_REPO:-}"  # a hub you already keep on GitHub; empty means ask, or start fresh
+GODSPEED="${GODSPEED:-}"            # settled below: the assistant's home + /godspeed unless told otherwise
+GODSPEED_REPO="${GODSPEED_REPO:-}"  # a mission control you already keep on GitHub; empty means ask, or start fresh
 
 # --- The shared groundwork ---------------------------------------------------
 # Every one of our installers needs the same first hundred lines. They live in
@@ -240,7 +240,7 @@ WHY
   fi
   AI_HOME="$(getent passwd "$AI_USER" | cut -d: -f6)"
   [ -n "$AI_HOME" ] && [ -d "$AI_HOME" ] || die "The account '$AI_USER' has no home folder."
-  HUB="${HUB:-$AI_HOME/hub}"
+  GODSPEED="${GODSPEED:-$AI_HOME/godspeed}"
 
   # Hermes is installed FOR the assistant's account, by root, before the account
   # takes over. Root has to be the one to install the gateway as a system service
@@ -266,13 +266,13 @@ WHY
   # environment once, when it starts (agent/runtime_cwd.py: "bridged once ... at
   # gateway/cron startup"). A gateway started before the folder is set works in
   # the wrong place until somebody restarts it, and a Telegram message would land
-  # in the assistant's home rather than the hub. So the folder's path is written
+  # in the assistant's home rather than the mission control. So the folder's path is written
   # first, the service second, even though the folder itself arrives later.
   say "Telling Hermes where your folder will be"
-  if su - "$AI_USER" -c "'$HERMES_BIN' config set terminal.cwd '$HUB'" >/dev/null 2>&1; then
-    ok "hub: Hermes will work in $HUB"
+  if su - "$AI_USER" -c "'$HERMES_BIN' config set terminal.cwd '$GODSPEED'" >/dev/null 2>&1; then
+    ok "godspeed: Hermes will work in $GODSPEED"
   else
-    warn "hub: could not set terminal.cwd for '$AI_USER'. The next phase tries again."
+    warn "godspeed: could not set terminal.cwd for '$AI_USER'. The next phase tries again."
   fi
 
   # THE ORDER HERE IS LOAD-BEARING TOO. Telegram goes into Hermes' env file
@@ -345,10 +345,10 @@ WHY
   # here travel in a small file the next phase reads once and deletes.
   CARRY="$AI_HOME/.kit-bootstrap-env"
   {
-    printf 'HUB=%q\n' "$HUB"
-    printf 'HUB_REPO=%q\n' "$HUB_REPO"
+    printf 'GODSPEED=%q\n' "$GODSPEED"
+    printf 'GODSPEED_REPO=%q\n' "$GODSPEED_REPO"
     printf 'AI_USER=%q\n' "$AI_USER"
-    printf 'KB_SKIP_HUB_PROOF=%q\n' "${KB_SKIP_HUB_PROOF:-}"
+    printf 'KB_SKIP_GODSPEED_PROOF=%q\n' "${KB_SKIP_GODSPEED_PROOF:-}"
     printf 'KB_SYNC_SOURCES=%q\n' "${KB_SYNC_SOURCES:-hermes}"
     printf 'KB_MORNING_BRIEF=%q\n' "${KB_MORNING_BRIEF:-}"
   } > "$CARRY"
@@ -367,7 +367,7 @@ if [ -f "$HOME/.kit-bootstrap-env" ]; then
   . "$HOME/.kit-bootstrap-env"
   rm -f "$HOME/.kit-bootstrap-env"
 fi
-HUB="${HUB:-$HOME/hub}"
+GODSPEED="${GODSPEED:-$HOME/godspeed}"
 KIT_DIR="$HOME/teach-it-once-kit"
 BOOTSTRAP_DIR="$HOME/.kit-bootstrap"
 export PATH="$HOME/.local/bin:$PATH"
@@ -401,7 +401,7 @@ say "Signing your assistant in"
 cat <<'PLAN'
    This route uses your ChatGPT account, not an API key and not a separate
    Codex subscription. A ChatGPT plan with Codex access is enough to try it.
-   For a hub that works every day, Plus or higher is the practical choice so
+   For a mission control that works every day, Plus or higher is the practical choice so
    a small allowance does not stop scheduled work. Current plan details:
    https://learn.chatgpt.com/docs/pricing
 PLAN
@@ -443,31 +443,31 @@ fetch_repo "$KIT_REPO" "$KIT_DIR" "" "the book's kit"
 fetch_repo "https://github.com/MichaelZelbel/kit-bootstrap.git" "$BOOTSTRAP_DIR" "$KB_PIN" "the shared install code"
 
 [ -f "$KIT_DIR/server/install-hermes.sh" ] || die "The kit downloaded but server/install-hermes.sh is missing from it."
-[ -f "$BOOTSTRAP_DIR/setup-hub.sh" ] || die "The shared install code downloaded but setup-hub.sh is missing from it."
+[ -f "$BOOTSTRAP_DIR/setup-godspeed.sh" ] || die "The shared install code downloaded but setup-godspeed.sh is missing from it."
 
 # --- Your folder -------------------------------------------------------------
 say "Your folder"
 
-if [ -d "$HUB/.git" ]; then
-  ok "a folder is already at $HUB; it will be brought up to date, not replaced"
-  if ! git -C "$HUB" remote get-url origin >/dev/null 2>&1; then
-    say "This hub has no online copy yet; the installer will make a private one"
+if [ -d "$GODSPEED/.git" ]; then
+  ok "a folder is already at $GODSPEED; it will be brought up to date, not replaced"
+  if ! git -C "$GODSPEED" remote get-url origin >/dev/null 2>&1; then
+    say "This mission control has no online copy yet; the installer will make a private one"
   fi
-elif [ -z "$HUB_REPO" ]; then
+elif [ -z "$GODSPEED_REPO" ]; then
   cat <<'ASK'
    Two ways to start, and the installer needs to know which:
-     1. This server joins a hub you already have, on your laptop or elsewhere.
+     1. This server joins a mission control you already have, on your laptop or elsewhere.
         Paste the address of its private GitHub copy (the one that ends in
         .git, or the https://github.com/you/name form).
      2. This server is your first machine. Press Enter, and the installer
         starts a fresh folder here from the book's starter rooms; your other
         computers can pick it up later.
 ASK
-  HUB_REPO="$(ask "Paste the address, or press Enter for a fresh folder" "")"
+  GODSPEED_REPO="$(ask "Paste the address, or press Enter for a fresh folder" "")"
 fi
 
-if [ -n "$HUB_REPO" ] && [ ! -d "$HUB/.git" ]; then
-  case "$HUB_REPO" in
+if [ -n "$GODSPEED_REPO" ] && [ ! -d "$GODSPEED/.git" ]; then
+  case "$GODSPEED_REPO" in
     *github.com*)
       say "Connecting this machine to GitHub"
       ensure_gh_auth
@@ -481,9 +481,9 @@ fi
 # provider is connected, the leash, the kit's tools, and the prompt log's own
 # clock. On a server the prompt log reads Hermes, because Hermes is what runs here.
 say "Setting the folder up the way the laptop installer does"
-SETUP_ARGS=(--hub "$HUB" --skip-prereqs --sources "${KB_SYNC_SOURCES:-hermes}")
-[ -n "$HUB_REPO" ] && SETUP_ARGS+=(--repo "$HUB_REPO")
-KB_BRANCH="$KB_PIN" bash "$BOOTSTRAP_DIR/setup-hub.sh" "${SETUP_ARGS[@]}" \
+SETUP_ARGS=(--godspeed "$GODSPEED" --skip-prereqs --sources "${KB_SYNC_SOURCES:-hermes}")
+[ -n "$GODSPEED_REPO" ] && SETUP_ARGS+=(--repo "$GODSPEED_REPO")
+KB_BRANCH="$KB_PIN" bash "$BOOTSTRAP_DIR/setup-godspeed.sh" "${SETUP_ARGS[@]}" \
   || warn "the folder setup reported a problem above. Read it; everything below still runs."
 
 # --- The keys go where the folder is not --------------------------------------
@@ -491,20 +491,20 @@ KB_BRANCH="$KB_PIN" bash "$BOOTSTRAP_DIR/setup-hub.sh" "${SETUP_ARGS[@]}" \
 # folder, and `git add -A` means everything, so a key inside the folder travels.
 say "Putting the keys where the folder is not"
 umask 077
-touch "$HOME/.hub-env"
-chmod 600 "$HOME/.hub-env"
+touch "$HOME/.mc-env"
+chmod 600 "$HOME/.mc-env"
 umask 022
-if [ -d "$HUB" ]; then
-  grep -qxF '.env*'    "$HUB/.gitignore" 2>/dev/null || echo '.env*'    >> "$HUB/.gitignore"
-  grep -qxF '.hub-env' "$HUB/.gitignore" 2>/dev/null || echo '.hub-env' >> "$HUB/.gitignore"
+if [ -d "$GODSPEED" ]; then
+  grep -qxF '.env*'    "$GODSPEED/.gitignore" 2>/dev/null || echo '.env*'    >> "$GODSPEED/.gitignore"
+  grep -qxF '.mc-env' "$GODSPEED/.gitignore" 2>/dev/null || echo '.mc-env' >> "$GODSPEED/.gitignore"
 fi
-ok "plain keys live in $HOME/.hub-env, outside the folder, and the folder ignores any that stray in"
+ok "plain keys live in $HOME/.mc-env, outside the folder, and the folder ignores any that stray in"
 
-say "Giving your hub a checked private GitHub home"
+say "Giving your mission control a checked private GitHub home"
 ensure_gh_auth
-bash "$KIT_DIR/server/create-private-repo.sh" "$HUB" \
+bash "$KIT_DIR/server/create-private-repo.sh" "$GODSPEED" \
   || die "the private GitHub repository was not created or checked. Read the reason above, then run this installer again."
-HUB_REPO="$(git -C "$HUB" remote get-url origin 2>/dev/null || true)"
+GODSPEED_REPO="$(git -C "$GODSPEED" remote get-url origin 2>/dev/null || true)"
 
 # --- The morning brief, only if asked for -------------------------------------
 # Chapter 22's job is a good first job for a reader who has been through Part V,
@@ -539,7 +539,7 @@ if [ "$KB_MORNING_BRIEF" = "yes" ]; then
 else
   say "Checking Hermes against your folder"
 fi
-KB_CALLED_FROM_INSTALLER=1 HUB="$HUB" bash "$KIT_DIR/server/install-hermes.sh" \
+KB_CALLED_FROM_INSTALLER=1 GODSPEED="$GODSPEED" bash "$KIT_DIR/server/install-hermes.sh" \
   || warn "the Hermes half reported a problem above. Read it before trusting the clock."
 
 # --- The watchdog's self-check, once, now -------------------------------------------
@@ -565,8 +565,8 @@ fi
 # not the block, and only when the job was put on the clock.
 # The starter's own register carries a "## Morning brief" EXAMPLE inside a comment, so
 # the test is for the server's line, not the heading.
-if [ "$KB_MORNING_BRIEF" = "yes" ] && [ -f "$HUB/procedures.md" ] && ! grep -q 'Lives: Hermes cron, the server' "$HUB/procedures.md"; then
-  cat >> "$HUB/procedures.md" <<REG
+if [ "$KB_MORNING_BRIEF" = "yes" ] && [ -f "$GODSPEED/procedures.md" ] && ! grep -q 'Lives: Hermes cron, the server' "$GODSPEED/procedures.md"; then
+  cat >> "$GODSPEED/procedures.md" <<REG
 
 ## Morning brief
 
@@ -577,8 +577,8 @@ Last checked: $(date +%F).
 REG
   ok "register: the morning brief has its block in procedures.md"
 fi
-if [ -f "$HUB/procedures.md" ] && [ -x /opt/hermes-watchdog/floor/quick-check.sh ] && ! grep -q '^## Server watchdog' "$HUB/procedures.md"; then
-  cat >> "$HUB/procedures.md" <<REG
+if [ -f "$GODSPEED/procedures.md" ] && [ -x /opt/hermes-watchdog/floor/quick-check.sh ] && ! grep -q '^## Server watchdog' "$GODSPEED/procedures.md"; then
+  cat >> "$GODSPEED/procedures.md" <<REG
 
 ## Server watchdog
 
@@ -616,14 +616,14 @@ fi
 # The private copy was pushed before the register line and the Hermes half wrote
 # into the folder, so send what changed since. Quiet when there is nothing new or
 # no online copy; a push that fails is said, not hidden, and breaks nothing.
-if git -C "$HUB" remote get-url origin >/dev/null 2>&1 \
-   && [ -n "$(git -C "$HUB" status --porcelain 2>/dev/null)" ]; then
-  if git -C "$HUB" add -A >/dev/null 2>&1 \
-     && git -C "$HUB" commit -q -m "Set up the always-on server" >/dev/null 2>&1 \
-     && git -C "$HUB" push -q origin HEAD >/dev/null 2>&1; then
+if git -C "$GODSPEED" remote get-url origin >/dev/null 2>&1 \
+   && [ -n "$(git -C "$GODSPEED" status --porcelain 2>/dev/null)" ]; then
+  if git -C "$GODSPEED" add -A >/dev/null 2>&1 \
+     && git -C "$GODSPEED" commit -q -m "Set up the always-on server" >/dev/null 2>&1 \
+     && git -C "$GODSPEED" push -q origin HEAD >/dev/null 2>&1; then
     ok "pushed: the online copy has everything this run wrote into your folder"
   else
-    warn "the last changes to the folder were not pushed. Ask your assistant to commit and push the folder, or run: git -C $HUB add -A && git -C $HUB commit -m 'Set up the server' && git -C $HUB push"
+    warn "the last changes to the folder were not pushed. Ask your assistant to commit and push the folder, or run: git -C $GODSPEED add -A && git -C $GODSPEED commit -m 'Set up the server' && git -C $GODSPEED push"
   fi
 fi
 

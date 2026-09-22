@@ -2,9 +2,9 @@
 'use strict';
 //
 // check-written.js - is the thing your assistant says it wrote actually there, and is it the
-// thing you asked for? Type it as `hub-check-written`.
+// thing you asked for? Type it as `mc-check-written`.
 //
-// WHY THIS EXISTS. The work register (`hub-work`) closes an item only when a check that is NOT
+// WHY THIS EXISTS. The work register (`mc-work`) closes an item only when a check that is NOT
 // the runner says so. That is easy for a job whose result is a file that appears or a test that
 // passes. It is hard for the other half of what an assistant does, which is find something out:
 // "we looked into X and the answer is Y" arrives as a sentence in a report, and a sentence in a
@@ -21,25 +21,25 @@
 // list of links and ids is exactly what belongs there, and a source that names a file or an id
 // is provenance, not a sentence you were meant to read.
 //
-//   hub-check-written research/x.md --min-words 200 --sections "## Answer,## Evidence"
+//   mc-check-written research/x.md --min-words 200 --sections "## Answer,## Evidence"
 //
 //   --min-words N     the answer has at least N words outside Sources (default 0)
 //   --max-words N     and at most N, when you want it short
 //   --sections "..."  comma-separated headings that must each start a line
-//   --hub DIR         the hub whose rules/machine-words.txt applies (default: the one you are in)
+//   --godspeed DIR         the mission control whose rules/machine-words.txt applies (default: the one you are in)
 //
 // Prints one `PROBLEM: ...` line per fault and exits 1, or `ok: <path>, <N> words` and exits 0.
-// It is meant as the CHECK of a work item: hub-work file --learn "..." --path research/x.md
-// --check "hub-check-written research/x.md --min-words 200".
+// It is meant as the CHECK of a work item: mc-work file --learn "..." --path research/x.md
+// --check "mc-check-written research/x.md --min-words 200".
 
 const fs = require('fs');
 const path = require('path');
-const L = require(path.join(__dirname, 'hub-cards.js'));
+const L = require(path.join(__dirname, 'mc-cards.js'));
 
 const { say } = L;
-const USAGE = `hub-check-written: a written answer is verified by opening it, not by the runner's word
+const USAGE = `mc-check-written: a written answer is verified by opening it, not by the runner's word
 
-  hub-check-written <path> [--min-words N] [--max-words N] [--sections "## A,## B,..."] [--hub DIR]
+  mc-check-written <path> [--min-words N] [--max-words N] [--sections "## A,## B,..."] [--godspeed DIR]
 
   exit 0 and "ok: <path>, <N> words" when the file exists, is long enough, has every section named,
   carries no leftover (placeholder) line, no em or en dash, and none of the words in
@@ -51,8 +51,8 @@ if (a.help === 'true' || a.h === 'true') { say(USAGE); process.exit(0); }
 const target = a._[0];
 if (!target) { say(USAGE); process.exit(1); }
 
-const hub = a.hub || L.hubRoot(__filename);
-const file = path.isAbsolute(target) ? target : path.join(hub, target);
+const godspeed = a.godspeed || L.godspeedRoot(__filename);
+const file = path.isAbsolute(target) ? target : path.join(godspeed, target);
 const problems = [];
 const problem = (m) => problems.push('PROBLEM: ' + m);
 const num = (k) => (a[k] === undefined ? null : parseInt(a[k], 10));
@@ -96,7 +96,7 @@ if (text.trim()) {
 
   // Machine words are checked in the body only, and never inside a link.
   const unlinked = (l) => l.replace(/https?:\/\/\S+/g, ' ');
-  for (const [re, label] of L.machineWords(hub)) {
+  for (const [re, label] of L.machineWords(godspeed)) {
     for (let i = 0; i < bodyLines.length; i++) {
       const m = unlinked(bodyLines[i]).match(re);
       if (m) { problem(`line ${i + 1} has "${m[0]}" (${label})`); break; }

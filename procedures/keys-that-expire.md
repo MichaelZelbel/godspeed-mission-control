@@ -17,7 +17,7 @@ assistant you never connected anything to.
 One command answers it:
 
 ```
-hub-check-keys
+mc-check-keys
 ```
 
 It asks four questions in order and answers each one in plain words:
@@ -81,7 +81,7 @@ SOME_LOGIN@/the/file/it/lives/in  2027-03-14  -  # what it opens, and how you re
 ```
 
 Everything else is identical. It is counted down on the same rhythm, the date is
-still the off switch, and `hub-check-keys` still asks about it. The one thing the
+still the off switch, and `mc-check-keys` still asks about it. The one thing the
 `@` changes is that the check knows not to go looking for it in your folder, so it
 never tells you a key is missing when it was never meant to be there.
 
@@ -131,11 +131,11 @@ tax return, with the same rhythm worked out from the same rule, and you never wr
 a date in two places.
 
 If you have that, take the paragraph you just pasted back out of
-`skills/morning-brief/SKILL.md` and let `hub-due today` carry keys along with everything
+`skills/morning-brief/SKILL.md` and let `mc-due today` carry keys along with everything
 else. **Two things nagging you about the same key is worse than one**, because the
 day they disagree you stop believing either.
 
-Everything else on this card stands: the file, the format, `hub-check-keys`, and the
+Everything else on this card stands: the file, the format, `mc-check-keys`, and the
 off switch below.
 
 ## The rhythm, and why it nags
@@ -168,7 +168,7 @@ So the honest sequence is:
    into that file looks exactly like success and is not.
 3. You (or it) change the date in `secrets/expires.txt`, which is what stops the
    reminder.
-4. Run `hub-check-keys` and read question 3. Being in the store is not being on
+4. Run `mc-check-keys` and read question 3. Being in the store is not being on
    the machine, and step 2 does not finish the job on its own.
 
 ## Prove the check by breaking it (Chapter 20)
@@ -179,7 +179,7 @@ It might be looking at the wrong thing, or at nothing at all.
 So break it on purpose, once, while everything is calm:
 
 - Take one key out of what your computer hands to new programs, run
-  `hub-check-keys`, and read the failure. Put it back and watch it pass.
+  `mc-check-keys`, and read the failure. Put it back and watch it pass.
 - Put a date from last month in `secrets/expires.txt`, run it, read the failure.
   Put the real date back.
 - If you have a key written with an `@`, put yesterday's date on it and run the

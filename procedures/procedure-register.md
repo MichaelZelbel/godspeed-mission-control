@@ -3,7 +3,7 @@
 The automation rule: **never run a procedure you cannot see and stop.**
 
 The register is not a document you keep somewhere. It is one file in your
-folder, `procedures.md`, and it ships with the starter hub. This card is
+folder, `procedures.md`, and it ships with the starter mission control. This card is
 how to fill it.
 
 ## Why a file in your folder, and not the app's own list

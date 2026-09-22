@@ -15,13 +15,13 @@
         "Authorization": "Bearer {env:MENERIO_API_KEY}"
       }
     },
-    "hub-mail": {
+    "mc-mail": {
       "type": "local",
       "enabled": true,
       "command": [
         "node",
         "-e",
-        "require(require('path').join(require('os').homedir(),'.local','bin','hub-mail.js')).main(process.argv.slice(1))",
+        "require(require('path').join(require('os').homedir(),'.local','bin','mc-mail.js')).main(process.argv.slice(1))",
         "mcp"
       ]
     }

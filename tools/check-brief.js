@@ -1,10 +1,10 @@
 #!/usr/bin/env node
-// tools/check-brief.js  (installed as hub-check-brief)
+// tools/check-brief.js  (installed as mc-check-brief)
 //
 // Refuse a morning brief that sends the reader to a file instead of handing
 // them the thing.
 //
-//   hub-check-brief <file>        a brief about to be written or sent ("-" = stdin)
+//   mc-check-brief <file>        a brief about to be written or sent ("-" = stdin)
 //
 // Exit 1 and say exactly what to change when the text asks its reader to act
 // but gives them a path instead of the thing or a link. Exit 0, silent, when
@@ -19,7 +19,7 @@
 //
 // WHAT IT REFUSES, two shapes only:
 //   path     anything that looks like a file location: lead/drafts/x.md,
-//            /home/you/hub/..., C:\hub\...  A "Sources:" line is the one
+//            /home/you/godspeed/..., C:\godspeed\...  A "Sources:" line is the one
 //            exemption: provenance is allowed to name its file, because nobody
 //            is asked to open it.
 //   no link  "read it", "open the draft", "skim the thread" with no https
@@ -36,7 +36,7 @@ const URL_RE = /https?:\/\/\S+/g;
 const PATHISH = [
   /\b[\w.@-]+(?:\/[\w.@-]+)+\.[a-zA-Z0-9]{1,6}\b/,            // lead/drafts/x.md
   /(?<![\w/])\/(?:home|Users|var|etc|root|srv|opt|tmp)\/\S+/, // /home/you/...
-  /\b[A-Za-z]:[\\/][\w\\/.~-]+/,                              // C:\hub\... C:/hub/...
+  /\b[A-Za-z]:[\\/][\w\\/.~-]+/,                              // C:\godspeed\... C:/godspeed/...
 ];
 const READ_THIS = /\b(read|open|skim)\s+(it|the\s+(draft|script|piece|post|page|file|thread|link))\b/i;
 
@@ -70,7 +70,7 @@ function check(text) {
 function main(argv) {
   const arg = argv[2];
   if (!arg) {
-    process.stderr.write('usage: hub-check-brief <file>   ("-" reads stdin)\n');
+    process.stderr.write('usage: mc-check-brief <file>   ("-" reads stdin)\n');
     return 2;
   }
   const text = arg === '-' ? fs.readFileSync(0, 'utf8') : fs.readFileSync(arg, 'utf8');

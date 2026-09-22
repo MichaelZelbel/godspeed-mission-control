@@ -21,16 +21,16 @@ cannot name what you got, the rung is not finished.
       have:** what your AI already knew about you, in a file you own.
 - [ ] 2. The three cuts: wrong, private, padding (Ch 1). **You have:** a
       page about you that is true.
-- [ ] 3. Install the app and sign in, run the hub installer, drag your
-      file in, point the app at `hub`, first job (Ch 2). **You have:**
+- [ ] 3. Install the app and sign in, run the mission control installer, drag your
+      file in, point the app at `godspeed`, first job (Ch 2). **You have:**
       the whole system installed and an assistant with hands on it.
 - [ ] 4. Walk the tour of the nine names, then file the import into
       them (Ch 3). **You have:** rooms with something already in them,
       and `about-me.md` as the master copy of who you are.
-- [ ] 5. Only if you write code: open the hub in your editor, make the
+- [ ] 5. Only if you write code: open the mission control in your editor, make the
       one-line signpost, clone a project into `dev/` (Ch 4). **You
       have:** your repositories beside your profile, fenced out of the
-      hub's history.
+      mission control's history.
 
 ## It knows you
 

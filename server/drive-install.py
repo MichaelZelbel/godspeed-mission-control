@@ -23,7 +23,7 @@ URL = os.environ.get(
     "INSTALL_URL",
     "https://raw.githubusercontent.com/MichaelZelbel/teach-it-once-kit/main/server/install.sh",
 )
-REPO_NAME = os.environ.get("TEST_REPO_NAME", "hub-installer-test-2026-09-05")
+REPO_NAME = os.environ.get("TEST_REPO_NAME", "mc-installer-test-2026-09-05")
 LOG = os.environ.get("INSTALL_LOG", "/root/install-run.log")
 STATE = os.environ.get("INSTALL_STATE", "/root/install-state")
 os.makedirs(STATE, exist_ok=True)
@@ -56,7 +56,7 @@ patterns = [
     re.compile(r"Name for the new private GitHub repository"),         # 6 helper prompt
     pexpect.EOF,                                                       # 7
     pexpect.TIMEOUT,                                                   # 8
-    re.compile(r"Connect (a notebook|Menerio) now\? \(y/n\) \[n\]:"),  # 9 setup-hub's Menerio question
+    re.compile(r"Connect (a notebook|Menerio) now\? \(y/n\) \[n\]:"),  # 9 setup-godspeed's Menerio question
     re.compile(r"\(y/n\) \[[yn]\]:"),                                  # 10 any other yes/no: take the default
     re.compile(r"Put the morning brief on this server's clock \(y/n\) \[n\]:"),  # 11 the opt-in brief
     re.compile(r"Paste the bot token, or press Enter to skip"),        # 12 the Telegram stop
@@ -93,9 +93,9 @@ while True:
         note("answered Y to authenticating git")
     elif i == 5:
         time.sleep(0.5)
-        answer = os.environ.get("HUB_REPO_ANSWER", "")
+        answer = os.environ.get("GODSPEED_REPO_ANSWER", "")
         child.sendline(answer)
-        note("answered the repository question with " + (repr(answer) if answer else "Enter (fresh hub)"))
+        note("answered the repository question with " + (repr(answer) if answer else "Enter (fresh godspeed)"))
     elif i == 6:
         time.sleep(0.5)
         child.sendline(REPO_NAME)

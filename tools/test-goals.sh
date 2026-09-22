@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# The gate for hub-goals: the register of what you want and the choice of attention.
+# The gate for mc-goals: the register of what you want and the choice of attention.
 # The cases are the ones this register was built for: competing goals with a protected commitment,
 # a provisional idea that never becomes work by itself, a change to an adopted goal that reaches
 # the plans under it, a bottleneck diagnosis that turns out wrong, the easy-to-count not crowding
 # out the meaningful, and a question you never answered not becoming a yes.
 #
-# Runs entirely inside a throwaway hub root. It never reads or writes the real goals/.
+# Runs entirely inside a throwaway godspeed root. It never reads or writes the real goals/.
 # Usage: bash tools/test-goals.sh   (from a checkout of this kit)
 set -uo pipefail
 
@@ -21,9 +21,9 @@ trap 'rm -rf "$TMP"' EXIT
 mkdir -p "$TMP/rules" "$TMP/bin"
 : > "$TMP/AGENTS.md"
 cp "$HERE/goals.js" "$HERE/work.js" "$HERE/forecast.js" "$TMP/bin/"
-cp "$HERE/hub-cards.js" "$TMP/bin/"
-export HUB_ROOT="$TMP"
-export HUB_TODAY="2026-09-13"
+cp "$HERE/mc-cards.js" "$TMP/bin/"
+export GODSPEED_ROOT="$TMP"
+export GODSPEED_TODAY="2026-09-13"
 hg() { "$NODE" "$TMP/bin/goals.js" "$@"; }
 hw() { "$NODE" "$TMP/bin/work.js" "$@"; }
 hf() { "$NODE" "$TMP/bin/forecast.js" "$@"; }
@@ -35,12 +35,12 @@ check() { if [ "$2" = "$3" ]; then ok "$1"; else bad "$1 (wanted [$3], got [$2])
 contains() { case "$2" in *"$3"*) ok "$1";; *) bad "$1 (missing [$3] in: $(printf '%s' "$2" | head -5))";; esac; }
 missing()  { case "$2" in *"$3"*) bad "$1 (should not contain [$3])";; *) ok "$1";; esac; }
 
-echo "hub-goals gate"
+echo "mc-goals gate"
 
 # --- filing --------------------------------------------------------------------------------
 OUT="$(hg file --kind outcome --title "Age healthy, strong in my 90s" --id health --area health --status adopted --importance core --source "said it on 2026-09-06" 2>&1)"
 contains "an adopted outcome files" "$OUT" "health: adopted outcome filed"
-OUT="$(hg file --kind outcome --title "No source" 2>&1)"; check "a goal without a source is refused (never a goal the hub invented)" "$?" "1"
+OUT="$(hg file --kind outcome --title "No source" 2>&1)"; check "a goal without a source is refused (never a goal the mission control invented)" "$?" "1"
 contains "  and says why" "$OUT" "source is required"
 OUT="$(hg file --kind outcome --title "Weighted" --source x --importance 7 2>&1)"; check "a numeric importance is refused" "$?" "1"
 contains "  your word for it, never a number" "$OUT" "never a number"
@@ -59,7 +59,7 @@ OUT="$(hg file --kind outcome --title "Bad date" --deadline "next year" --source
 OUT="$(hg file --kind outcome --title "Age healthy" --id health --source x --status adopted 2>&1)"; check "the same id twice is refused" "$?" "1"
 
 # --- attention: competing goals, a protected commitment, provisional never active ------------
-hg file --kind outcome --title "The hub as a real working system" --id hub --area hub --status adopted --importance high --source "priorities 2026-06-15" --deadline 2026-09-15 >/dev/null
+hg file --kind outcome --title "The mission control as a real working system" --id godspeed --area godspeed --status adopted --importance high --source "priorities 2026-06-15" --deadline 2026-09-15 >/dev/null
 hg file --kind outcome --title "Ship the kits with a first market signal" --id kits --area money --status adopted --importance high --source "priorities 2026-06-15" --deadline 2026-09-15 >/dev/null
 hg file --kind outcome --title "Keep the friendships I have" --id keep-friends --area relationships --status adopted --source "chat" >/dev/null
 OUT="$(hg attention 2>&1)"
@@ -86,13 +86,13 @@ contains "with one seat the red deadline wins" "$(printf '%s' "$OUT" | sed -n '/
 hg attention --record --why "day one" >/dev/null 2>&1
 # Give the deadline goals progress every day; the relationships outcome gets none and is never looked at.
 for D in 2026-09-14 2026-09-15 2026-09-16 2026-09-17 2026-09-18 2026-09-19 2026-09-20; do
-  HUB_TODAY=$D hg progress hub --evidence "another commit landed" >/dev/null
-  HUB_TODAY=$D hg progress kits --evidence "another listing draft" >/dev/null
-  HUB_TODAY=$D hg attention --record --active 2 >/dev/null 2>&1
+  GODSPEED_TODAY=$D hg progress godspeed --evidence "another commit landed" >/dev/null
+  GODSPEED_TODAY=$D hg progress kits --evidence "another listing draft" >/dev/null
+  GODSPEED_TODAY=$D hg attention --record --active 2 >/dev/null 2>&1
 done
 check "within the week the never-looked-at outcome was rotated in at least once" "$(grep -c '^- 2026-09-1[4-9] ATTENTION' "$TMP/goals/keep-friends.md" | awk '{print ($1>=1)?"yes":"no"}')" "yes"
 contains "  with neglect as the stated reason" "$(grep 'ATTENTION' "$TMP/goals/keep-friends.md")" "looked at"
-OUT="$(HUB_TODAY=2026-09-30 hg attention --active 2 2>&1)"
+OUT="$(GODSPEED_TODAY=2026-09-30 hg attention --active 2 2>&1)"
 contains "a passed deadline is a re-set flag, not urgency" "$OUT" "deadline passed"
 missing  "  and does not by itself hold a seat over a neglected outcome" "$(printf '%s' "$OUT" | sed -n '/^active:/,/^quiet/p' | head -2)" "kits"
 
@@ -116,19 +116,19 @@ hg adopt money --why "you said on 2026-09-20: yes, make it a goal" >/dev/null 2>
 check "adopting a provisional idea writes the ADOPTED line with your words" "$(grep -c '^- 2026-09-13 ADOPTED you said on 2026-09-20' "$TMP/goals/money.md")" "1"
 
 # --- questions: one in seven days, silence is never a yes --------------------------------------
-OUT="$(hg question friends --text "Is five friends by the end of 2027 a goal you want the hub to work on?" 2>&1)"
+OUT="$(hg question friends --text "Is five friends by the end of 2027 a goal you want the mission control to work on?" 2>&1)"
 contains "a question is recorded" "$OUT" "friends: question recorded"
 OUT="$(hg question friends --text "again" 2>&1)"; check "a second question while one is open is refused" "$?" "1"
 contains "  and says to record the answer first" "$OUT" "record the answer first"
 OUT="$(hg attention 2>&1)"
 contains "an open question shows on the provisional row" "$OUT" "question open since 2026-09-13"
-OUT="$(HUB_TODAY=2026-09-30 hg attention 2>&1)"
+OUT="$(GODSPEED_TODAY=2026-09-30 hg attention 2>&1)"
 missing "silence for 17 days does not adopt the goal" "$(printf '%s' "$OUT" | sed -n '/^active:/,/^provisional/p')" "  friends "
 hg answer friends --text "not now, ask me in December" >/dev/null
 check "your answer is stored word for word" "$(grep -c 'ANSWER "not now, ask me in December"' "$TMP/goals/friends.md")" "1"
 hg file --kind outcome --title "Reassess me" --id reassess --status adopted --source x >/dev/null
 hg question reassess --text "still wanted?" --date 2026-09-01 >/dev/null
-OUT="$(HUB_TODAY=2026-09-20 hg attention 2>&1)"
+OUT="$(GODSPEED_TODAY=2026-09-20 hg attention 2>&1)"
 contains "an adopted goal with a question unanswered for two weeks says reassess, not yes" "$OUT" "unanswered for 19 days: reassess"
 
 # --- diagnosis: a wrong bottleneck is recorded as wrong, never quietly kept -----------------------
@@ -172,7 +172,7 @@ hg file --kind outcome --title "Twenty paying readers of the newsletter" --id zz
 hg file --kind outcome --title "A talk accepted at one conference" --id aa-talk --status adopted --source "chat 2026-09-13" >/dev/null
 P="$(hg playbook aa-talk 2>&1)"
 check "playbook writes goals/playbooks/<id>.md and prints the path" "$P" "goals/playbooks/aa-talk.md"
-for H in "## Who we model" "## What they do" "## In what order" "## What they track" "## Where it fails" "## Hub steps" "## Person steps" "## Unknown" "## Sources"; do
+for H in "## Who we model" "## What they do" "## In what order" "## What they track" "## Where it fails" "## Godspeed steps" "## Person steps" "## Unknown" "## Sources"; do
   check "  section $H present" "$(grep -c "^$H" "$TMP/$P")" "1"
 done
 check "  it starts as a draft with a review date 30 days on" "$(grep -c '^REVIEW BY: 2026-10-13' "$TMP/$P")$(grep -c '^STATUS: draft' "$TMP/$P")" "11"
@@ -200,7 +200,7 @@ ORDER="$(printf '%s' "$J" | "$NODE" -e 'let s="";process.stdin.on("data",d=>s+=d
 check "  and it outranks an otherwise-equal outcome that has a current playbook" "$ORDER" "no-playbook-first"
 PB="$(printf '%s' "$J" | "$NODE" -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const p=JSON.parse(s);const r=p.active.concat(p.quiet);console.log(r.find(x=>x.id==="aa-talk").playbook+" "+r.find(x=>x.id==="zz-readers").playbook)})')"
 check "  json carries the playbook state on both rows" "$PB" "current none"
-OUT="$(HUB_TODAY=2026-10-20 hg attention 2>&1)"
+OUT="$(GODSPEED_TODAY=2026-10-20 hg attention 2>&1)"
 contains "past its review date the playbook counts as stale" "$OUT" "playbook past its review date"
 OUT="$(hg playbook aa-talk --refute 2>&1)"; check "--refute without evidence is refused" "$?" "1"
 contains "  and says why" "$OUT" "evidence is required"
@@ -213,7 +213,7 @@ check "  the card carries PLAYBOOK-REFUTED with the evidence" "$(grep -c 'PLAYBO
 OUT="$(hg attention 2>&1)"
 contains "  the next plan asks for new research before acting" "$OUT" "its playbook was refuted: research it again before acting"
 OUT="$(hg check 2>&1)"; check "check notes a missing playbook and still passes" "$?" "0"
-contains "  naming the command that writes one" "$OUT" "note zz-readers: no playbook yet (hub-goals playbook zz-readers)"
+contains "  naming the command that writes one" "$OUT" "note zz-readers: no playbook yet (mc-goals playbook zz-readers)"
 contains "  and the refuted one" "$OUT" "note aa-talk: playbook refuted, research again"
 missing  "  neither is a PROBLEM" "$OUT" "PROBLEM"
 rm "$TMP/$P"

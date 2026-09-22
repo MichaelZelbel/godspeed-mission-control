@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # The prompt collector: what must never reach a repository, and what must never be missed.
 #
-# WHY THIS FILE IS HERE AND NOT IN A HUB. The two programs in tools/ are what the book means
-# by "a program fills it". They used to live in one person's private hub, and so did their
+# WHY THIS FILE IS HERE AND NOT IN A GODSPEED. The two programs in tools/ are what the book means
+# by "a program fills it". They used to live in one person's private godspeed, and so did their
 # tests. Since 2026-08-10 there is one copy of each, here, in the kit that readers install
 # from, so the tests live beside the thing they test.
 #
@@ -18,16 +18,16 @@
 # Usage: bash tools/test-prompt-archive.sh
 set -u
 HERE="$(cd "$(dirname "$0")" && pwd)"
-ARC="$HERE/hub-prompt-archive"
+ARC="$HERE/mc-prompt-archive"
 PY_BIN="${PYTHON:-python3}"; command -v "$PY_BIN" >/dev/null 2>&1 || PY_BIN=python
 PY="$PY_BIN"
 PASS=0; FAIL=0
 ok()  { echo "  ok   $1"; PASS=$((PASS+1)); }
 bad() { echo "  FAIL $1"; FAIL=$((FAIL+1)); [ -n "${2:-}" ] && echo "       $2"; }
 
-# The fixture hub is built the way the hub this kit INSTALLS is built: observations/, and no
+# The fixture godspeed is built the way the mission control this kit INSTALLS is built: observations/, and no
 # memory/. It made a memory/ until 2026-08-29, which is why this suite stayed green through the
-# eight days both tools were unable to find a real hub at all (see the note in prompt-harvest.js).
+# eight days both tools were unable to find a real godspeed at all (see the note in prompt-harvest.js).
 # A fixture that is kinder than the world is a fixture that cannot fail.
 W="$HERE/.tmp-archive-test.$$"; rm -rf "$W"; mkdir -p "$W/observations" "$W/home"
 trap 'rm -rf "$W"' EXIT
@@ -35,11 +35,11 @@ trap 'rm -rf "$W"' EXIT
 # bots this suite would otherwise find the REAL ones and archive real chats into a throwaway
 # folder. Cases 24 onward set this to their own fixture. A test that reads live data is not a
 # test.
-export HUB_HERMES_HOME="$W/no-hermes"
+export GODSPEED_HERMES_HOME="$W/no-hermes"
 
 echo "== the prompt archive: what must never reach the repository =="
 
-mkdir -p "$W/home/.claude/projects/proj" "$W/home/.hub"
+mkdir -p "$W/home/.claude/projects/proj" "$W/home/.godspeed"
 J="$W/home/.claude/projects/proj/s.jsonl"
 w() { printf '%s\n' "$1" >> "$J"; }
 w '{"type":"user","timestamp":"2026-07-01T10:00:00Z","message":{"content":"Rewrite the landing page headline, shorter and less salesy."}}'
@@ -52,9 +52,9 @@ w '{"type":"user","timestamp":"2026-07-01T10:06:00Z","message":{"content":"Autho
 # A credential shape nothing above matches by name. The last-resort guard must DROP this
 # whole line rather than store a partly-cleaned version of it.
 w '{"type":"user","timestamp":"2026-07-01T10:07:00Z","message":{"content":"use this value Xq7ZmP2vLd8RtY4wNb1CfH6jGk3sVe9AuQ5oIrTzB0xM as the credential"}}'
-printf 'Umbrella Consolidated\n' > "$W/home/.hub/redact.txt"
+printf 'Umbrella Consolidated\n' > "$W/home/.godspeed/redact.txt"
 
-( export HOME="$W/home" HUB_HOME="$W/home"; cd "$W" && "$PY" "$ARC" --hub "$W" archive ) >"$W/arc.out" 2>&1
+( export HOME="$W/home" GODSPEED_HOME="$W/home"; cd "$W" && "$PY" "$ARC" --godspeed "$W" archive ) >"$W/arc.out" 2>&1
 A="$(cat "$W/prompts/archive/"*.jsonl 2>/dev/null)"
 
 # 11. The ordinary prompt is kept. An archive that keeps nothing is safe and useless.
@@ -82,16 +82,16 @@ echo "$A" | grep -q "drwxr-xr-x" && bad "15 a tool result was archived as if he 
 
 # 16. Harvesting again must add nothing, because this runs on a schedule.
 B1=$(cat "$W/prompts/archive/"*.jsonl | wc -l)
-( export HOME="$W/home" HUB_HOME="$W/home"; cd "$W" && "$PY" "$ARC" --hub "$W" archive ) >/dev/null 2>&1
+( export HOME="$W/home" GODSPEED_HOME="$W/home"; cd "$W" && "$PY" "$ARC" --godspeed "$W" archive ) >/dev/null 2>&1
 B2=$(cat "$W/prompts/archive/"*.jsonl | wc -l)
 [ "$B1" = "$B2" ] && ok "16 harvesting twice adds nothing" || bad "16 the archive duplicated itself" "$B1 -> $B2"
 
 # 17. Search has to find it, from any machine, or the whole archive is write-only.
-( export HOME="$W/home" HUB_HOME="$W/home"; "$PY" "$ARC" --hub "$W" search salesy ) 2>&1 | grep -q "less salesy" \
+( export HOME="$W/home" GODSPEED_HOME="$W/home"; "$PY" "$ARC" --godspeed "$W" search salesy ) 2>&1 | grep -q "less salesy" \
   && ok "17 search finds an archived prompt" || bad "17 search could not find what was archived"
 
 # 18. A miss is a checked absence, said out loud, never silence.
-( export HOME="$W/home" HUB_HOME="$W/home"; "$PY" "$ARC" --hub "$W" search zzzznotpresent ) 2>&1 | grep -qi "checked absence" \
+( export HOME="$W/home" GODSPEED_HOME="$W/home"; "$PY" "$ARC" --godspeed "$W" search zzzznotpresent ) 2>&1 | grep -qi "checked absence" \
   && ok "18 a search miss says it is a checked absence" || bad "18 a miss said nothing useful"
 
 # --- 19 to 21: what he types on his PHONE, and the drawer's own front door -------------
@@ -108,7 +108,7 @@ cat > "$TG" <<'EOF'
 {"ts": "2026-08-01T09:00:30", "dir": "out", "text": "the bot answering him about the dentist"}
 {"ts": "2026-08-01T09:01:00", "role": "user", "text": "and add milk to the shopping list"}
 EOF
-( export HOME="$W/home" HUB_HOME="$W/home" HUB_TELEGRAM_TRANSCRIPT="$TG"; cd "$W" && "$PY" "$ARC" --hub "$W" archive ) >"$W/tg.out" 2>&1
+( export HOME="$W/home" GODSPEED_HOME="$W/home" GODSPEED_TELEGRAM_TRANSCRIPT="$TG"; cd "$W" && "$PY" "$ARC" --godspeed "$W" archive ) >"$W/tg.out" 2>&1
 T="$(cat "$W/prompts/archive/"*.jsonl 2>/dev/null)"
 
 # 19. The shape the real file actually has. This is the bug itself, held shut.
@@ -131,7 +131,7 @@ echo "$T" | grep -q "add milk" && ok "21 a line marked role:user is still archiv
 # 22. The drawer's own README explains the drawer to a human. It is not a prompt, and counting
 #     it as one would put the explanation in every search result.
 mkdir -p "$W/prompts/library"
-saved_count() { ( export HOME="$W/home" HUB_HOME="$W/home"; "$PY" "$ARC" --hub "$W" stats ) 2>&1 \
+saved_count() { ( export HOME="$W/home" GODSPEED_HOME="$W/home"; "$PY" "$ARC" --godspeed "$W" stats ) 2>&1 \
   | sed -n 's/^saved prompts *\([0-9]*\).*/\1/p'; }
 S1=$(saved_count)
 printf '# The shelf\n\nAn explanation, not a prompt. It mentions salesy on purpose.\n' > "$W/prompts/library/README.md"
@@ -141,21 +141,21 @@ S2=$(saved_count)
 
 # 22b. And it must not turn up as a search hit either, or the explanation of the drawer starts
 #      answering questions about its contents.
-( export HOME="$W/home" HUB_HOME="$W/home"; "$PY" "$ARC" --hub "$W" search salesy ) 2>&1 | grep -q "README" \
+( export HOME="$W/home" GODSPEED_HOME="$W/home"; "$PY" "$ARC" --godspeed "$W" search salesy ) 2>&1 | grep -q "README" \
   && bad "22b the drawer README came back as a search hit" \
   || ok "22b the drawer README is not a search hit"
 
 # 23. Rescrub is what makes the name list useful, because a name is always added too late.
-printf 'Umbrella Consolidated\n' > "$W/home/.hub/redact.txt" 2>/dev/null || { mkdir -p "$W/home/.hub"; printf 'Umbrella Consolidated\n' > "$W/home/.hub/redact.txt"; }
+printf 'Umbrella Consolidated\n' > "$W/home/.godspeed/redact.txt" 2>/dev/null || { mkdir -p "$W/home/.godspeed"; printf 'Umbrella Consolidated\n' > "$W/home/.godspeed/redact.txt"; }
 printf '{"id":"deadbeefdeadbeef","at":"2026-07-01T10:00:00","machine":"test","tool":"claude-code","project":"","text":"a note about Umbrella Consolidated and its billing"}\n' >> "$W/prompts/archive/test-2026-07.jsonl"
-( export HOME="$W/home" HUB_HOME="$W/home"; "$PY" "$ARC" --hub "$W" rescrub ) >"$W/rs.out" 2>&1
+( export HOME="$W/home" GODSPEED_HOME="$W/home"; "$PY" "$ARC" --godspeed "$W" rescrub ) >"$W/rs.out" 2>&1
 grep -qi "Umbrella Consolidated" "$W/prompts/archive/test-2026-07.jsonl" \
   && bad "23 rescrub left a named party in a prompt that was already stored" "$(cat "$W/rs.out")" \
   || ok "23 rescrub cleans a name out of what was already archived"
 
 # --- 24 to 28: EVERY bot he talks to, not the one bot somebody plumbed ------------------
 #
-# WHY THESE FIVE EXIST. On 2026-08-10 the drawer held what he had typed to one bot, the hub
+# WHY THESE FIVE EXIST. On 2026-08-10 the drawer held what he had typed to one bot, the mission control
 # bot, and to none of the other eight running beside it on the same server. Claire on the
 # Pattern Lab board, the health advisor, three Ownward Studio desks: 281 prompts, thrown away,
 # with every guard green, because the guards counted machines and the server was contributing.
@@ -188,8 +188,8 @@ bot("quiet-desk", [
 ])
 PYEOF
 
-( export HOME="$W/home" HUB_HOME="$W/home" HUB_HERMES_HOME="$HH" HUB_TELEGRAM_TRANSCRIPT="$W/none.jsonl"
-  cd "$W" && "$PY" "$ARC" --hub "$W" archive ) >"$W/bots.out" 2>&1
+( export HOME="$W/home" GODSPEED_HOME="$W/home" GODSPEED_HERMES_HOME="$HH" GODSPEED_TELEGRAM_TRANSCRIPT="$W/none.jsonl"
+  cd "$W" && "$PY" "$ARC" --godspeed "$W" archive ) >"$W/bots.out" 2>&1
 B="$(cat "$W/prompts/archive/"*.jsonl 2>/dev/null)"
 
 # 24. The bug itself: a bot with no file of its own is read anyway.
@@ -207,7 +207,7 @@ echo "$B" | grep -q '"project": *"claire"' \
 echo "$B" | grep -q "WORK ORDER" && bad "26 a work order from our own machinery was archived as his prompt" \
   || ok "26 a message our machinery injected is not archived"
 
-# 27. The bot's reply is never a PROMPT, and the sessions where the hub gives the bot work
+# 27. The bot's reply is never a PROMPT, and the sessions where the mission control gives the bot work
 #     stay out entirely - their "user" turns are a program talking, and so are their replies.
 if echo "$B" | grep -q '"text": "Claire replying' || echo "$B" | grep -q "You are board desk"; then
   bad "27 the bot's replies or its work sessions were archived as prompts"
@@ -221,8 +221,8 @@ echo "$B" | grep '"text": "what is the board deciding' | grep -q "Claire replyin
 # 28. The guard that would have caught all of this: a source with prompts in it and none of
 #     them archived must FAIL, by name. Counting machines could never see this.
 rm -f "$W/prompts/archive/"*.jsonl
-( export HOME="$W/home" HUB_HOME="$W/home" HUB_HERMES_HOME="$HH" HUB_TELEGRAM_TRANSCRIPT="$W/none.jsonl"
-  "$PY" "$ARC" --hub "$W" sources ) >"$W/src.out" 2>&1
+( export HOME="$W/home" GODSPEED_HOME="$W/home" GODSPEED_HERMES_HOME="$HH" GODSPEED_TELEGRAM_TRANSCRIPT="$W/none.jsonl"
+  "$PY" "$ARC" --godspeed "$W" sources ) >"$W/src.out" 2>&1
 SRC_RC=$?
 [ "$SRC_RC" -ne 0 ] && grep -q "hermes/claire" "$W/src.out" \
   && ok "28 sources fails and names the bot whose prompts reach none of the archive" \
@@ -232,7 +232,7 @@ SRC_RC=$?
 #
 # WHY THESE EXIST. Until 2026-08-11 this collector read every source it knew, on every
 # machine, with nothing anywhere asking the person. The installer now shows what it found
-# and records the choice as HUB_PROMPT_SOURCES (environment, or ~/.hub/device.env for a
+# and records the choice as GODSPEED_PROMPT_SOURCES (environment, or ~/.godspeed/device.env for a
 # scheduled run that has no environment). A source switched off must not be READ at all,
 # and its silence must read as the person's choice, never as a leak.
 
@@ -241,8 +241,8 @@ mkdir -p "$W/home/.codex/sessions"
 printf '{"timestamp":"2026-08-02T10:00:00Z","payload":{"role":"user","content":"a codex prompt that must stay out"}}\n' \
   > "$W/home/.codex/sessions/s.jsonl"
 rm -f "$W/prompts/archive/"*.jsonl
-( export HOME="$W/home" HUB_HOME="$W/home" HUB_PROMPT_SOURCES="claude"
-  cd "$W" && "$PY" "$ARC" --hub "$W" archive ) >"$W/pick.out" 2>&1
+( export HOME="$W/home" GODSPEED_HOME="$W/home" GODSPEED_PROMPT_SOURCES="claude"
+  cd "$W" && "$PY" "$ARC" --godspeed "$W" archive ) >"$W/pick.out" 2>&1
 P="$(cat "$W/prompts/archive/"*.jsonl 2>/dev/null)"
 echo "$P" | grep -q "stay out" && bad "29 a switched-off source was read anyway" \
   || ok "29 a source switched off is not read at all"
@@ -254,22 +254,22 @@ grep -q "not read, by your choice: codex, hermes, opencode" "$W/pick.out" \
 
 # 30. `sources` treats off as a decision: exit 0, and the off list is printed so the
 #     morning selftest reads silence as a choice instead of alarming on it.
-( export HOME="$W/home" HUB_HOME="$W/home" HUB_PROMPT_SOURCES="claude"
-  "$PY" "$ARC" --hub "$W" sources ) >"$W/pick2.out" 2>&1
+( export HOME="$W/home" GODSPEED_HOME="$W/home" GODSPEED_PROMPT_SOURCES="claude"
+  "$PY" "$ARC" --godspeed "$W" sources ) >"$W/pick2.out" 2>&1
 PICK_RC=$?
 [ "$PICK_RC" -eq 0 ] && grep -q "switched off by your choice" "$W/pick2.out" \
   && ok "30 sources calls an off source a choice, not a leak" \
   || bad "30 an off source alarmed or went unmentioned" "rc=$PICK_RC $(cat "$W/pick2.out")"
 
-# 31. The choice also arrives from ~/.hub/device.env, because the scheduled run that
+# 31. The choice also arrives from ~/.godspeed/device.env, because the scheduled run that
 #     does most harvesting starts with almost no environment.
 #     The variable is taken OUT of this run first. On a computer whose owner has made the
 #     choice for real, it is in the environment of whoever runs these tests, the environment
 #     wins over the file, and this check failed there while the program was right.
-printf 'HUB_PROMPT_SOURCES=claude\n' >> "$W/home/.hub/device.env"
-( unset HUB_PROMPT_SOURCES
-  export HOME="$W/home" HUB_HOME="$W/home"
-  cd "$W" && "$PY" "$ARC" --hub "$W" --dry-run archive ) >"$W/pick3.out" 2>&1
+printf 'GODSPEED_PROMPT_SOURCES=claude\n' >> "$W/home/.godspeed/device.env"
+( unset GODSPEED_PROMPT_SOURCES
+  export HOME="$W/home" GODSPEED_HOME="$W/home"
+  cd "$W" && "$PY" "$ARC" --godspeed "$W" --dry-run archive ) >"$W/pick3.out" 2>&1
 grep -q "not read, by your choice: codex, hermes, opencode" "$W/pick3.out" \
   && ok "31 the choice recorded on the device is obeyed with no environment" \
   || bad "31 device.env was ignored" "$(cat "$W/pick3.out")"
@@ -281,7 +281,7 @@ grep -q "not read, by your choice: codex, hermes, opencode" "$W/pick3.out" \
 # prompt. The dangers are exact mirrors of the prompt-side ones: machinery (thinking, tool
 # calls, tool output) leaking in as if the person saw it; a reply attached to the wrong
 # question; a whole reply lost for one credential-shaped line; and a reply that arrived
-# after the harvest staying lost for ever. Note: check 31 wrote HUB_PROMPT_SOURCES=claude
+# after the harvest staying lost for ever. Note: check 31 wrote GODSPEED_PROMPT_SOURCES=claude
 # into the fixture device.env, so every run below says its sources out loud.
 
 mkdir -p "$W/home/.claude/projects/pairproj"
@@ -307,8 +307,8 @@ with open(os.path.join(d, "s.jsonl"), "w") as fh:
     fh.write(json.dumps({"type": "assistant", "uuid": "ca1", "parentUuid": "cu1",
                          "message": {"content": [{"type": "text", "text": big}]}}) + "\n")
 PYEOF
-( export HOME="$W/home" HUB_HOME="$W/home" HUB_PROMPT_SOURCES="claude"
-  cd "$W" && "$PY" "$ARC" --hub "$W" archive ) >"$W/ans.out" 2>&1
+( export HOME="$W/home" GODSPEED_HOME="$W/home" GODSPEED_PROMPT_SOURCES="claude"
+  cd "$W" && "$PY" "$ARC" --godspeed "$W" archive ) >"$W/ans.out" 2>&1
 AN="$(cat "$W/prompts/archive/"*.jsonl 2>/dev/null)"
 
 # 32. The answer holds every piece of text the person SAW during the turn, and nothing of
@@ -355,13 +355,13 @@ fi
 
 # 35. A reply longer than the cap is cut, and says so. An archive is for finding things
 #     again, not for storing every file a reply ever pasted.
-echo "$AN" | grep '"text": "cap test question' | grep -q "answer truncated by hub-prompt-archive" \
+echo "$AN" | grep '"text": "cap test question' | grep -q "answer truncated by mc-prompt-archive" \
   && ok "35 an oversized answer is capped with a marker saying so" \
   || bad "35 an oversized answer was stored whole or lost"
 
 # 36. Search finds a thing said only in an ANSWER, and marks which side matched, because
 #     "what was that answer again" is the question this whole field exists for.
-SRCH="$(export HOME="$W/home" HUB_HOME="$W/home"; "$PY" "$ARC" --hub "$W" search threehundredthousand 2>&1)"
+SRCH="$(export HOME="$W/home" GODSPEED_HOME="$W/home"; "$PY" "$ARC" --godspeed "$W" search threehundredthousand 2>&1)"
 if echo "$SRCH" | grep -q "Q: pair test question" && echo "$SRCH" | grep -q "A: .*threehundredthousand"; then
   ok "36 search finds text that only ever appeared in a reply, marked A:"
 else
@@ -385,14 +385,14 @@ with open(os.path.join(w, "prompts", "archive", "test-2026-07.jsonl"), "a", newl
                          "tool": "claude-code", "project": "bfproj",
                          "text": "backfill test question"}) + "\n")
 PYEOF
-( export HOME="$W/home" HUB_HOME="$W/home" HUB_PROMPT_SOURCES="claude"
-  cd "$W" && "$PY" "$ARC" --hub "$W" backfill ) >"$W/bf.out" 2>&1
+( export HOME="$W/home" GODSPEED_HOME="$W/home" GODSPEED_PROMPT_SOURCES="claude"
+  cd "$W" && "$PY" "$ARC" --godspeed "$W" backfill ) >"$W/bf.out" 2>&1
 grep '"text": "backfill test question' "$W/prompts/archive/test-2026-07.jsonl" | grep -q "backfilled reply text" \
   && ok "37 backfill attaches an answer to a row archived before answers existed" \
   || bad "37 backfill did not fill the old row" "$(cat "$W/bf.out")"
 cat "$W/prompts/archive/"*.jsonl > "$W/snap1"
-( export HOME="$W/home" HUB_HOME="$W/home" HUB_PROMPT_SOURCES="claude"
-  cd "$W" && "$PY" "$ARC" --hub "$W" backfill ) >/dev/null 2>&1
+( export HOME="$W/home" GODSPEED_HOME="$W/home" GODSPEED_PROMPT_SOURCES="claude"
+  cd "$W" && "$PY" "$ARC" --godspeed "$W" backfill ) >/dev/null 2>&1
 cat "$W/prompts/archive/"*.jsonl > "$W/snap2"
 cmp -s "$W/snap1" "$W/snap2" && ok "37b a second backfill changes nothing" \
   || bad "37b backfill is not idempotent"
@@ -403,12 +403,12 @@ cmp -s "$W/snap1" "$W/snap2" && ok "37b a second backfill changes nothing" \
 mkdir -p "$W/home/.claude/projects/healproj"
 H2="$W/home/.claude/projects/healproj/s.jsonl"
 printf '%s\n' '{"type":"user","uuid":"h1","timestamp":"2026-07-05T09:00:00Z","message":{"content":"self heal test question"}}' > "$H2"
-( export HOME="$W/home" HUB_HOME="$W/home" HUB_PROMPT_SOURCES="claude"
-  cd "$W" && "$PY" "$ARC" --hub "$W" archive ) >/dev/null 2>&1
+( export HOME="$W/home" GODSPEED_HOME="$W/home" GODSPEED_PROMPT_SOURCES="claude"
+  cd "$W" && "$PY" "$ARC" --godspeed "$W" archive ) >/dev/null 2>&1
 C1=$(cat "$W/prompts/archive/"*.jsonl | wc -l)
 printf '%s\n' '{"type":"assistant","uuid":"h2","parentUuid":"h1","message":{"content":[{"type":"text","text":"the late healed reply"}]}}' >> "$H2"
-( export HOME="$W/home" HUB_HOME="$W/home" HUB_PROMPT_SOURCES="claude"
-  cd "$W" && "$PY" "$ARC" --hub "$W" archive ) >"$W/heal.out" 2>&1
+( export HOME="$W/home" GODSPEED_HOME="$W/home" GODSPEED_PROMPT_SOURCES="claude"
+  cd "$W" && "$PY" "$ARC" --godspeed "$W" archive ) >"$W/heal.out" 2>&1
 C2=$(cat "$W/prompts/archive/"*.jsonl | wc -l)
 if [ "$C1" = "$C2" ] && cat "$W/prompts/archive/"*.jsonl | grep '"text": "self heal test question' | grep -q "the late healed reply"; then
   ok "38 a reply that arrived after the harvest is attached by the next one"
@@ -425,8 +425,8 @@ printf '%s\n%s\n%s\n%s\n' \
   '{"timestamp":"2026-08-02T11:00:05Z","type":"response_item","payload":{"type":"message","role":"assistant","content":"[external_agent_tool_call: run the tests]"}}' \
   '{"timestamp":"2026-08-02T11:00:10Z","type":"response_item","payload":{"type":"message","role":"assistant","content":"the codex visible reply"}}' \
   > "$W/home/.codex/sessions/s2.jsonl"
-( export HOME="$W/home" HUB_HOME="$W/home" HUB_PROMPT_SOURCES="codex"
-  cd "$W" && "$PY" "$ARC" --hub "$W" archive ) >"$W/cx.out" 2>&1
+( export HOME="$W/home" GODSPEED_HOME="$W/home" GODSPEED_PROMPT_SOURCES="codex"
+  cd "$W" && "$PY" "$ARC" --godspeed "$W" archive ) >"$W/cx.out" 2>&1
 CX="$(cat "$W/prompts/archive/"*.jsonl 2>/dev/null)"
 CXROWS=$(echo "$CX" | grep -c '"text": "codex answer test question')
 CXROW="$(echo "$CX" | grep '"text": "codex answer test question')"
@@ -461,10 +461,10 @@ for sid, role, txt in (("d1", "user", "typed into the desktop app about the gard
     con.execute("INSERT INTO messages VALUES (?,?,?,?)", (sid, role, txt, 1785875150.0))
 con.commit(); con.close()
 PYEOF
-( export HOME="$W/home3" HUB_HOME="$W/home3" HUB_PROMPT_SOURCES="hermes" HUB_TELEGRAM_TRANSCRIPT="$W/none.jsonl"
-  unset HUB_HERMES_HOME; export HERMES_HOME="$HH3"
-  mkdir -p "$W/home3" "$W/hub3/prompts/archive" && cd "$W/hub3" && "$PY" "$ARC" --hub "$W/hub3" archive ) >"$W/win.out" 2>&1
-B3="$(cat "$W/hub3/prompts/archive/"*.jsonl 2>/dev/null)"
+( export HOME="$W/home3" GODSPEED_HOME="$W/home3" GODSPEED_PROMPT_SOURCES="hermes" GODSPEED_TELEGRAM_TRANSCRIPT="$W/none.jsonl"
+  unset GODSPEED_HERMES_HOME; export HERMES_HOME="$HH3"
+  mkdir -p "$W/home3" "$W/godspeed3/prompts/archive" && cd "$W/godspeed3" && "$PY" "$ARC" --godspeed "$W/godspeed3" archive ) >"$W/win.out" 2>&1
+B3="$(cat "$W/godspeed3/prompts/archive/"*.jsonl 2>/dev/null)"
 echo "$B3" | grep -q "garden fence"   && ok "51 HERMES_HOME with the default profile's state.db at its root is read (the Windows shape)"   || bad "51 the Windows-shaped store was not read" "$(cat "$W/win.out")"
 echo "$B3" | grep -q "terminal about the fence quote"   && ok "52 a terminal (cli) conversation counts as the person's"   || bad "52 the cli session was skipped" "$(cat "$W/win.out")"
 echo "$B3" | grep -q "cron job's own prompt"   && bad "53 a cron job's prompt was filed as if a person typed it" "$B3"   || ok "53 a cron session's prompt is not a person's and stays out"
@@ -489,9 +489,9 @@ for role, txt in [
     con.execute("INSERT INTO messages VALUES ('s9',?,?,1785875150.0)", (role, txt))
 con.commit(); con.close()
 PYEOF
-( export HOME="$W/home" HUB_HOME="$W/home" HUB_PROMPT_SOURCES="hermes" \
-         HUB_HERMES_HOME="$HH2" HUB_TELEGRAM_TRANSCRIPT="$W/none.jsonl"
-  cd "$W" && "$PY" "$ARC" --hub "$W" archive ) >"$W/ord.out" 2>&1
+( export HOME="$W/home" GODSPEED_HOME="$W/home" GODSPEED_PROMPT_SOURCES="hermes" \
+         GODSPEED_HERMES_HOME="$HH2" GODSPEED_TELEGRAM_TRANSCRIPT="$W/none.jsonl"
+  cd "$W" && "$PY" "$ARC" --godspeed "$W" archive ) >"$W/ord.out" 2>&1
 OD="$(cat "$W/prompts/archive/"*.jsonl 2>/dev/null)"
 OD1="$(echo "$OD" | grep '"text": "order test question one')"
 if echo "$OD1" | grep -q "reply to question one" && ! echo "$OD1" | grep -q "reply meant for the machinery" \
@@ -512,7 +512,7 @@ with open(os.path.join(w, "prompts", "archive", "test-2026-07.jsonl"), "a", newl
                          "tool": "claude-code", "project": "", "text": "a question about the client",
                          "answer": "the client Umbrella Consolidated pays late, keep that in mind"}) + "\n")
 PYEOF
-( export HOME="$W/home" HUB_HOME="$W/home"; "$PY" "$ARC" --hub "$W" rescrub ) >"$W/rs2.out" 2>&1
+( export HOME="$W/home" GODSPEED_HOME="$W/home"; "$PY" "$ARC" --godspeed "$W" rescrub ) >"$W/rs2.out" 2>&1
 RSROW="$(grep '"id": "feedfacefeedface"' "$W/prompts/archive/test-2026-07.jsonl")"
 if echo "$RSROW" | grep -qi "Umbrella Consolidated"; then
   bad "41 rescrub left a named party inside a stored answer" "$(cat "$W/rs2.out")"
@@ -522,40 +522,40 @@ else
   bad "41 rescrub destroyed the answer instead of cleaning it" "$RSROW"
 fi
 
-# 42-45. CAN THE PAIR STILL FIND A HUB? (2026-08-29)
+# 42-45. CAN THE PAIR STILL FIND A GODSPEED? (2026-08-29)
 #
-# Everything above this line tests what the archive does once it knows where the hub is. For
+# Everything above this line tests what the archive does once it knows where the mission control is. For
 # eight days the answer was that it never got that far: prompt-harvest.js decided a folder was
-# a hub only if it held `memory/`, the hub renamed that folder on 2026-08-21, and all three of
-# Michael's machines went quiet the same day with no error anyone would see. The starter hub
+# a mission control only if it held `memory/`, the mission control renamed that folder on 2026-08-21, and all three of
+# Michael's machines went quiet the same day with no error anyone would see. The starter godspeed
 # this kit installs has never had a `memory/`, so the tool shipped broken for every new reader.
 # These four cases are the ones that would have caught it on the day.
 HARV="$HERE/prompt-harvest.js"
 if command -v node >/dev/null 2>&1 && [ -f "$HARV" ]; then
-  mkdir -p "$W/hubcheck/new" "$W/hubcheck/new/observations" \
-           "$W/hubcheck/old" "$W/hubcheck/old/memory" \
-           "$W/hubcheck/declared/scripts/config" "$W/hubcheck/notahub"
-  : > "$W/hubcheck/declared/scripts/config/hub-layout.json"
-  # `--where` prints the hub it resolved and touches nothing, so hub-finding can be tested
+  mkdir -p "$W/godspeedcheck/new" "$W/godspeedcheck/new/observations" \
+           "$W/godspeedcheck/old" "$W/godspeedcheck/old/memory" \
+           "$W/godspeedcheck/declared/scripts/config" "$W/godspeedcheck/notagodspeed"
+  : > "$W/godspeedcheck/declared/scripts/config/mc-layout.json"
+  # `--where` prints the mission control it resolved and touches nothing, so mc-finding can be tested
   # without starting a real harvest inside a throwaway folder.
   findable() {
-    HUB_DIR="$1" HOME="$W/home" USERPROFILE="$W/home" node "$HARV" --where >"$W/hc.out" 2>"$W/hc.err" || true
-    [ -s "$W/hc.out" ] && ! grep -q "could not find your hub" "$W/hc.err"
+    GODSPEED_DIR="$1" HOME="$W/home" USERPROFILE="$W/home" node "$HARV" --where >"$W/hc.out" 2>"$W/hc.err" || true
+    [ -s "$W/hc.out" ] && ! grep -q "could not find your mission control" "$W/hc.err"
   }
-  findable "$W/hubcheck/new" \
-    && ok "42 a hub with observations/ and no memory/ is found - the layout this kit ships" \
-    || bad "42 the hub this kit installs is not recognised as a hub" "$(cat "$W/hc.err")"
-  findable "$W/hubcheck/old" \
-    && ok "43 a hub still carrying the old memory/ is found - an older reader keeps working" \
-    || bad "43 an older memory/ hub stopped being recognised" "$(cat "$W/hc.err")"
-  findable "$W/hubcheck/declared" \
-    && ok "44 a hub is recognised by the layout file it declares, whatever it named its folders" \
-    || bad "44 hub-layout.json was not accepted as proof of a hub" "$(cat "$W/hc.err")"
-  # An explicitly set HUB_DIR is believed. Michael's PC had it set correctly the whole time and
+  findable "$W/godspeedcheck/new" \
+    && ok "42 a mission control with observations/ and no memory/ is found - the layout this kit ships" \
+    || bad "42 the mission control this kit installs is not recognised as a mission control" "$(cat "$W/hc.err")"
+  findable "$W/godspeedcheck/old" \
+    && ok "43 a mission control still carrying the old memory/ is found - an older reader keeps working" \
+    || bad "43 an older memory/ godspeed stopped being recognised" "$(cat "$W/hc.err")"
+  findable "$W/godspeedcheck/declared" \
+    && ok "44 a mission control is recognised by the layout file it declares, whatever it named its folders" \
+    || bad "44 mc-layout.json was not accepted as proof of a mission control" "$(cat "$W/hc.err")"
+  # An explicitly set GODSPEED_DIR is believed. Michael's PC had it set correctly the whole time and
   # was overruled on the strength of a missing folder, so "he told us" has to beat "it looks odd".
-  findable "$W/hubcheck/notahub" \
-    && ok "45 a HUB_DIR someone set by hand is believed, not second-guessed" \
-    || bad "45 an explicitly set HUB_DIR was overruled" "$(cat "$W/hc.err")"
+  findable "$W/godspeedcheck/notagodspeed" \
+    && ok "45 a GODSPEED_DIR someone set by hand is believed, not second-guessed" \
+    || bad "45 an explicitly set GODSPEED_DIR was overruled" "$(cat "$W/hc.err")"
 
   # 46-49. DOES EVERY RUN LEAVE A RECEIPT? (2026-08-29)
   # The eight-day outage was not a missing error message. The harvester printed a correct and
@@ -564,15 +564,15 @@ if command -v node >/dev/null 2>&1 && [ -f "$HARV" ]; then
   # that: a run that finds nothing writes nothing, and so does a run that never happened.
   # Every path out of this program now files prompts/archive/status/<machine>.json.
   R="$W/receipts"; mkdir -p "$R/home"
-  mkdir -p "$R/hub/prompts/archive" "$R/hub/observations"
-  rcpt() { cat "$R/hub/prompts/archive/status/testbox.json" 2>/dev/null; }
+  mkdir -p "$R/godspeed/prompts/archive" "$R/godspeed/observations"
+  rcpt() { cat "$R/godspeed/prompts/archive/status/testbox.json" 2>/dev/null; }
 
-  # A run that cannot find a hub has nowhere to file a receipt - unless it remembers the hub
+  # A run that cannot find a mission control has nowhere to file a receipt - unless it remembers the mission control
   # it used last, which is exactly the run where one is worth having. So: succeed once so the
-  # machine remembers, then break hub-finding and check it still reports.
-  HUB_MACHINE=testbox HOME="$R/home" USERPROFILE="$R/home" HUB_DIR="$R/hub" node "$HARV" --no-push >/dev/null 2>&1
+  # machine remembers, then break mc-finding and check it still reports.
+  GODSPEED_MACHINE=testbox HOME="$R/home" USERPROFILE="$R/home" GODSPEED_DIR="$R/godspeed" node "$HARV" --no-push >/dev/null 2>&1
   rcpt | grep -q '"ok": true' \
-    && ok "46 a successful run says so in the hub, in its own file" \
+    && ok "46 a successful run says so in the mission control, in its own file" \
     || bad "46 no receipt after a good run" "$(rcpt)"
   rcpt | grep -q '"tool_version"' \
     && ok "47 the receipt names which copy of the pair this machine is running" \
@@ -581,11 +581,11 @@ if command -v node >/dev/null 2>&1 && [ -f "$HARV" ]; then
   # A FAILING RUN MUST REPORT TOO, and that is the whole point. Forced by putting this program
   # somewhere its collector is not, which is a real state a machine reaches: the pair is
   # installed together and one half can be replaced, moved or half-updated on its own.
-  # (Hub-finding itself cannot be broken from a test on a machine that HAS a hub at one of the
+  # (Godspeed-finding itself cannot be broken from a test on a machine that HAS a mission control at one of the
   # well-known paths, and a test-only way to blind it would be a hole in the shipped program.)
   mkdir -p "$R/lonely"
   cp "$HARV" "$R/lonely/prompt-harvest.js"
-  HUB_MACHINE=testbox HOME="$R/home" USERPROFILE="$R/home" HUB_DIR="$R/hub" \
+  GODSPEED_MACHINE=testbox HOME="$R/home" USERPROFILE="$R/home" GODSPEED_DIR="$R/godspeed" \
     node "$R/lonely/prompt-harvest.js" --no-push >/dev/null 2>&1
   rcpt | grep -q '"ok": false' \
     && ok "48 a run that CANNOT do its job still files a receipt saying so" \
@@ -594,12 +594,12 @@ if command -v node >/dev/null 2>&1 && [ -f "$HARV" ]; then
     && ok "49 and the receipt carries the machine's own sentence, to be quoted back" \
     || bad "49 the receipt records no reason, so the alert has to guess again" "$(rcpt)"
 
-  # 50. The one failure a test cannot force is the one that happened: no hub anywhere. There
-  # is no repository to write into then, so the machine remembers the hub it used last and
+  # 50. The one failure a test cannot force is the one that happened: no mission control anywhere. There
+  # is no repository to write into then, so the machine remembers the mission control it used last and
   # files the bad news there. Without this, the run that most needs to report cannot.
-  [ -s "$R/home/.hub/prompt-harvest-hub" ] \
-    && ok "50 a good run remembers its hub, so a later blind run still has somewhere to report" \
-    || bad "50 nothing remembered, so a hub-finding failure would be silent again"
+  [ -s "$R/home/.godspeed/prompt-harvest-godspeed" ] \
+    && ok "50 a good run remembers its mission control, so a later blind run still has somewhere to report" \
+    || bad "50 nothing remembered, so a mc-finding failure would be silent again"
 else
   echo "  --   42-50 skipped: node or prompt-harvest.js not on this machine"
 fi
@@ -607,7 +607,7 @@ fi
 # --- 55 to 60: OpenCode, the fourth source (2026-09-21) -----------------------------------
 #
 # WHY THESE EXIST. The installer used to show OpenCode greyed out as "cannot sync", while the
-# book teaches using it with the hub. Its conversations sit in one sqlite database, so it is
+# book teaches using it with the mission control. Its conversations sit in one sqlite database, so it is
 # read now. The dangers are the Claude ones in a new shape: OpenCode pastes files and tool
 # results into YOUR turn as "synthetic" text, starts helper sessions whose "user" turns the
 # assistant wrote, and stores its reasoning as text-like parts. None of that is yours. And a
@@ -640,8 +640,8 @@ for i, (pid, mid, d) in enumerate(P):
 con.commit(); con.close()
 PYEOF
 rm -f "$W/prompts/archive/"*.jsonl
-( export HOME="$W/home" HUB_HOME="$W/home" HUB_PROMPT_SOURCES="opencode" HUB_OPENCODE_DB="$OC"
-  cd "$W" && "$PY" "$ARC" --hub "$W" archive ) >"$W/oc.out" 2>&1
+( export HOME="$W/home" GODSPEED_HOME="$W/home" GODSPEED_PROMPT_SOURCES="opencode" GODSPEED_OPENCODE_DB="$OC"
+  cd "$W" && "$PY" "$ARC" --godspeed "$W" archive ) >"$W/oc.out" 2>&1
 OCA="$(cat "$W/prompts/archive/"*.jsonl 2>/dev/null)"
 OC1="$(echo "$OCA" | grep 'hedge height')"
 [ -n "$OC1" ] && echo "$OC1" | grep -q '"tool": *"opencode"' && echo "$OC1" | grep -q '"project": *"garden"' \
@@ -661,8 +661,8 @@ else
 fi
 # 59. Not ticked means not opened.
 rm -f "$W/prompts/archive/"*.jsonl
-( export HOME="$W/home" HUB_HOME="$W/home" HUB_PROMPT_SOURCES="claude" HUB_OPENCODE_DB="$OC"
-  cd "$W" && "$PY" "$ARC" --hub "$W" archive ) >/dev/null 2>&1
+( export HOME="$W/home" GODSPEED_HOME="$W/home" GODSPEED_PROMPT_SOURCES="claude" GODSPEED_OPENCODE_DB="$OC"
+  cd "$W" && "$PY" "$ARC" --godspeed "$W" archive ) >/dev/null 2>&1
 cat "$W/prompts/archive/"*.jsonl 2>/dev/null | grep -q "hedge height" \
   && bad "59 OpenCode was read on a machine where it was switched off" \
   || ok "59 OpenCode switched off is not read"
@@ -670,9 +670,9 @@ cat "$W/prompts/archive/"*.jsonl 2>/dev/null | grep -q "hedge height" \
 #     start reading OpenCode behind its owner's back just because this program learned how.
 rm -f "$W/prompts/archive/"*.jsonl
 mkdir -p "$W/home60"
-( unset HUB_PROMPT_SOURCES
-  export HOME="$W/home60" HUB_HOME="$W/home60" USERPROFILE="$W/home60" HUB_OPENCODE_DB="$OC"
-  cd "$W" && "$PY" "$ARC" --hub "$W" archive ) >/dev/null 2>&1
+( unset GODSPEED_PROMPT_SOURCES
+  export HOME="$W/home60" GODSPEED_HOME="$W/home60" USERPROFILE="$W/home60" GODSPEED_OPENCODE_DB="$OC"
+  cd "$W" && "$PY" "$ARC" --godspeed "$W" archive ) >/dev/null 2>&1
 cat "$W/prompts/archive/"*.jsonl 2>/dev/null | grep -q "hedge height" \
   && bad "60 a machine with no recorded choice started reading a newly supported tool" \
   || ok "60 no recorded choice never switches on a tool added later"

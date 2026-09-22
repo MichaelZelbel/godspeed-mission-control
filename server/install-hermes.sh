@@ -26,15 +26,15 @@
 
 set -uo pipefail
 
-HUB="${HUB:-$HOME/hub}"
-BRAIN="$HUB/AGENTS.md"
+GODSPEED="${GODSPEED:-$HOME/godspeed}"
+BRAIN="$GODSPEED/AGENTS.md"
 
 # Hermes reads a profile file up to this many characters and no further.
 CEILING=20000
 SAFE=19000
 
 # --- The shared install code, pinned -----------------------------------------
-# The same primitives the hub installer uses, fetched from an immutable
+# The same primitives the mission control installer uses, fetched from an immutable
 # tag. They carry the behaviour this script must not re-learn the hard way:
 # terminal.cwd is the only lever that moves the agent, a failed one-shot still
 # exits 0, and `hermes config set` replaces a list.
@@ -60,10 +60,10 @@ say "Checking where you are running this"
    account for a reason: the account you log in with can destroy the machine, and
    your assistant does not need that. Log in as that user and run this again."
 
-[ -d "$HUB" ] || die "No folder at $HUB. That folder is your assistant's memory,
-   the one Chapter 32 put on this machine. Set HUB=/path/to/it and run this again."
+[ -d "$GODSPEED" ] || die "No folder at $GODSPEED. That folder is your assistant's memory,
+   the one Chapter 32 put on this machine. Set GODSPEED=/path/to/it and run this again."
 
-ok "running as $(whoami), folder found at $HUB"
+ok "running as $(whoami), folder found at $GODSPEED"
 
 # --------------------------------------------------------------------------
 # THE CEILING NOBODY TELLS YOU ABOUT.
@@ -95,7 +95,7 @@ if [ -f "$BRAIN" ]; then
     ok "AGENTS.md is $N characters, $((SAFE - N)) below the line"
   fi
 else
-  warn "no AGENTS.md in $HUB yet. Hermes will still run; it just will not know
+  warn "no AGENTS.md in $GODSPEED yet. Hermes will still run; it just will not know
    anything about you until you write one."
 fi
 
@@ -167,13 +167,13 @@ say "Pointing Hermes at your folder"
 # folder, measured on this kit's own test server. This step used to set
 # `workspace`, which is not a recognised Hermes key: the command succeeded,
 # Hermes warned, the warning went to /dev/null, and the reader was told it
-# worked while Hermes ignored it entirely. kb_point_hermes_at_hub sets the
+# worked while Hermes ignored it entirely. kb_point_hermes_at_godspeed sets the
 # real key and then PROVES the folder is readable with a file read once a
 # provider is connected; before the sign-in it says plainly it could not
 # check yet.
 KB_HERMES_BIN="$HERMES"
 export KB_HERMES_BIN
-kb_point_hermes_at_hub "$HUB" \
+kb_point_hermes_at_godspeed "$GODSPEED" \
   || warn "read what it said just above. Do not rely on scheduled jobs finding
    your files until this is sorted."
 
@@ -185,7 +185,7 @@ say "Making it start again after a reboot"
 # HERMES_HOME, PATH and its self-update coordination flag, it pins
 # WorkingDirectory to its own home because a movable folder crash-loops the
 # unit before Python even loads, and it detects and reports lingering itself.
-# The hub is reached through terminal.cwd, set above, never through the unit.
+# The mission control is reached through terminal.cwd, set above, never through the unit.
 # ONE GATEWAY PER MACHINE. The one-line installer's root phase installs the
 # gateway as a SYSTEM service, and a user service beside it is the dual-unit
 # trap: newer Hermes warns "Both user and system gateway services are installed"
@@ -215,8 +215,8 @@ say "Scheduling the morning brief"
 # included; and a morning that fails lands in `hermes cron incidents` instead
 # of looking like a quiet one. The job is created now and starts firing the
 # moment the gateway below is on; a slot the gateway was down for runs once, late.
-kb_cron_job "$HUB" "morning-brief" "0 6 * * *" \
-  "Run the recipe in skills/morning-brief/SKILL.md; on an older hub it lives at .claude/skills/morning-brief/SKILL.md. It writes today's brief into brief/. When it is written, commit and push this folder, then reply with the brief's full text. If the recipe is missing or the brief cannot be written, say exactly that instead of staying quiet: a broken morning must never look like a quiet one." \
+kb_cron_job "$GODSPEED" "morning-brief" "0 6 * * *" \
+  "Run the recipe in skills/morning-brief/SKILL.md; on an older godspeed it lives at .claude/skills/morning-brief/SKILL.md. It writes today's brief into brief/. When it is written, commit and push this folder, then reply with the brief's full text. If the recipe is missing or the brief cannot be written, say exactly that instead of staying quiet: a broken morning must never look like a quiet one." \
   "telegram" || true
 fi
 

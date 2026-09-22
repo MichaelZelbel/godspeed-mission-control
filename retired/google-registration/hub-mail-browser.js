@@ -1,16 +1,16 @@
 /*
- * hub-mail-browser.js - a browser window the hub can work in, for the Gmail step.
+ * mc-mail-browser.js - a browser window the mission control can work in, for the Gmail step.
  *
  * WHY THIS FILE IS HERE (Michael, 2026-09-21, after trying the first guided step himself).
  * The first version opened Google's pages and told the reader what to click on each: eleven
  * steps of Google's developer console. His verdict: "Nobody is going to do 11 steps", and his
- * picture of the product: "the reader is signing you in, and you do it in Google". So the hub
- * opens a browser window of its own, the reader signs in to Google there, and the hub does the
+ * picture of the product: "the reader is signing you in, and you do it in Google". So the mission control
+ * opens a browser window of its own, the reader signs in to Google there, and the mission control does the
  * clicking in that window while the reader watches.
  *
  * HOW. The reader's own Edge, Chrome, Brave or Chromium is started the ordinary way, as a
  * normal browser with a profile folder of its own, and with its remote-debugging door open on
- * this computer only (127.0.0.1, a port the browser picks). The hub talks to it through that
+ * this computer only (127.0.0.1, a port the browser picks). The mission control talks to it through that
  * door (the Chrome DevTools Protocol). It is NOT started in "automation mode": Google refuses
  * sign-ins in a browser that announces itself as automated, and accepts them in a normal one.
  *
@@ -18,7 +18,7 @@
  * there is no package to install. The few lines of WebSocket below are why.
  *
  * THE PROFILE FOLDER HOLDS THE READER'S GOOGLE SIGN-IN while the step runs. It lives outside
- * the hub folder (~/.hub/mail/browser), and close({ forget: true }) deletes it, so no signed-in
+ * the mission control folder (~/.godspeed/mail/browser), and close({ forget: true }) deletes it, so no signed-in
  * browser is left lying around for anything to pick up afterwards.
  */
 "use strict";
@@ -32,7 +32,7 @@ const { spawn, spawnSync } = require("child_process");
 
 // ============================================================ which browser
 function findBrowser() {
-  if (process.env.HUB_MAIL_BROWSER) return fs.existsSync(process.env.HUB_MAIL_BROWSER) ? process.env.HUB_MAIL_BROWSER : "";
+  if (process.env.GODSPEED_MAIL_BROWSER) return fs.existsSync(process.env.GODSPEED_MAIL_BROWSER) ? process.env.GODSPEED_MAIL_BROWSER : "";
   const h = os.homedir(), c = [];
   if (process.platform === "win32") {
     const pf = [process.env["ProgramFiles"], process.env["ProgramFiles(x86)"], process.env.LOCALAPPDATA].filter(Boolean);
@@ -103,8 +103,8 @@ const getJson = url => new Promise((resolve, reject) => {
 });
 
 function profileDir() {
-  const home = process.env.HUB_MAIL_HOME || os.homedir();
-  return path.join(home, ".hub", "mail", "browser");
+  const home = process.env.GODSPEED_MAIL_HOME || os.homedir();
+  return path.join(home, ".godspeed", "mail", "browser");
 }
 
 /*
@@ -113,14 +113,14 @@ function profileDir() {
  */
 async function open({ url = "about:blank", dir = profileDir() } = {}) {
   const exe = findBrowser();
-  if (!exe) { const e = new Error("no browser the hub can work in was found on this computer (Edge, Chrome, Brave or Chromium)"); e.noBrowser = true; throw e; }
+  if (!exe) { const e = new Error("no browser the mission control can work in was found on this computer (Edge, Chrome, Brave or Chromium)"); e.noBrowser = true; throw e; }
   fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
   const portFile = path.join(dir, "DevToolsActivePort");
   try { fs.unlinkSync(portFile); } catch (e) { /* first start */ }
   // A CLEAN WINDOW, AND WHY IT HAS TO BE SAID (found on Michael's PC, 2026-09-21). A new Edge
   // profile is not empty: Edge signs it in to the person's Microsoft account by itself, syncs
   // their extensions into it, and every extension opens its welcome tab. His window came up with
-  // eleven tabs, eight of them crypto wallets, in a window the hub was about to click in. So
+  // eleven tabs, eight of them crypto wallets, in a window the mission control was about to click in. So
   // extensions and sync are off in this window: it holds Google's pages and nothing else.
   const child = spawn(exe, ["--remote-debugging-port=0", "--user-data-dir=" + dir, "--no-first-run", "--no-default-browser-check",
     "--disable-extensions", "--disable-sync", "--disable-component-extensions-with-background-pages",
@@ -163,7 +163,7 @@ class Browser {
     const id = this.nextId++;
     return new Promise((resolve, reject) => { this.waiting.set(id, { resolve, reject }); this.ws.send(JSON.stringify({ id, method, params, sessionId })); });
   }
-  // The tab the hub works in: Google's, when there is one; never an extension's or the
+  // The tab the mission control works in: Google's, when there is one; never an extension's or the
   // browser's own pages, whatever else has opened itself beside it.
   async page() {
     const { targetInfos } = await this.send("Target.getTargets");

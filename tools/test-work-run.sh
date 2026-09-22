@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# The gate for hub-work-run: the runner takes one item at a time under a lease, what the
+# The gate for mc-work-run: the runner takes one item at a time under a lease, what the
 # assistant says is only ATTEMPTED, the item's own check is what verifies, a dead assistant is a
 # failure with a retry gap, a dry run touches nothing, a finished piece becomes a page and one
-# card through the ledger's own door. No model runs here: a fake hub-run stands in for it.
-# Runs in a throwaway hub root; never touches a real work/.
+# card through the ledger's own door. No model runs here: a fake mc-run stands in for it.
+# Runs in a throwaway godspeed root; never touches a real work/.
 # Usage: bash tools/test-work-run.sh   (from a checkout of this kit)
 set -uo pipefail
 
@@ -19,16 +19,16 @@ trap 'rm -rf "$TMP"' EXIT
 mkdir -p "$TMP/rules" "$TMP/bin" "$TMP/goals/playbooks" "$TMP/skills/work-item" "$TMP/research"
 : > "$TMP/AGENTS.md"
 printf 'receipt\n' > "$TMP/rules/machine-words.txt"
-for f in work.js goals.js hub-cards.js hub-work-run check-written.js; do cp "$HERE/$f" "$TMP/bin/"; done
-cp "$HERE/../starter-hub/skills/work-item/SKILL.md" "$TMP/skills/work-item/SKILL.md"
-chmod +x "$TMP/bin/hub-work-run"
+for f in work.js goals.js mc-cards.js mc-work-run check-written.js; do cp "$HERE/$f" "$TMP/bin/"; done
+cp "$HERE/../starter-godspeed/skills/work-item/SKILL.md" "$TMP/skills/work-item/SKILL.md"
+chmod +x "$TMP/bin/mc-work-run"
 
 # THE FAKE ASSISTANT. It reads the prompt the runner built, finds the path DONE WHEN names,
 # writes a file there, and answers with one RESULT line. FAKE_MODE picks the failure to imitate.
-cat > "$TMP/bin/hub-run" <<'FAKE'
+cat > "$TMP/bin/mc-run" <<'FAKE'
 #!/usr/bin/env bash
 PF=""; OUT=""; SKILL=""
-while [ $# -gt 0 ]; do case "$1" in --prompt-file) PF="$2"; shift 2;; --out) OUT="$2"; shift 2;; --hub|--cwd|--prompt|--timeout|--allowed-tools) shift 2;; *) [ -z "$SKILL" ] && SKILL="$1"; shift;; esac; done
+while [ $# -gt 0 ]; do case "$1" in --prompt-file) PF="$2"; shift 2;; --out) OUT="$2"; shift 2;; --godspeed|--cwd|--prompt|--timeout|--allowed-tools) shift 2;; *) [ -z "$SKILL" ] && SKILL="$1"; shift;; esac; done
 [ "$SKILL" = "work-item" ] || { echo "wrong recipe: $SKILL" >&2; exit 9; }
 cp "$PF" "$(dirname "$OUT")/prompt-seen.txt"
 mkdir -p "$(dirname "$OUT")"
@@ -44,7 +44,7 @@ case "${FAKE_MODE:-ok}" in
 esac > "${OUT:-/dev/stdout}"
 exit 0
 FAKE
-chmod +x "$TMP/bin/hub-run"
+chmod +x "$TMP/bin/mc-run"
 
 # A fake publisher and a fake ledger, so the last two steps are seen without a server.
 cat > "$TMP/bin/publish" <<'PUB'
@@ -52,20 +52,20 @@ cat > "$TMP/bin/publish" <<'PUB'
 echo "https://example.org/pages/$(basename "$1" .md).html"
 PUB
 chmod +x "$TMP/bin/publish"
-cat > "$TMP/bin/hub-attention" <<'LEDGER'
+cat > "$TMP/bin/mc-attention" <<'LEDGER'
 #!/usr/bin/env bash
-printf '%s\n' "$@" > "$HUB_ROOT/card-argv.txt"
+printf '%s\n' "$@" > "$GODSPEED_ROOT/card-argv.txt"
 echo "filed 2026-09-15-work-x (deliverable)"
 LEDGER
-chmod +x "$TMP/bin/hub-attention"
+chmod +x "$TMP/bin/mc-attention"
 
-export HUB_ROOT="$TMP"
-export HUB_TODAY="2026-09-15"
-export HUB_NOW="2026-09-15T08:00:00.000Z"
+export GODSPEED_ROOT="$TMP"
+export GODSPEED_TODAY="2026-09-15"
+export GODSPEED_NOW="2026-09-15T08:00:00.000Z"
 export PATH="$TMP/bin:$PATH"
 hw() { "$NODE" "$TMP/bin/work.js" "$@"; }
 hg() { "$NODE" "$TMP/bin/goals.js" "$@"; }
-run() { bash "$TMP/bin/hub-work-run" --hub "$TMP" "$@"; }
+run() { bash "$TMP/bin/mc-work-run" --godspeed "$TMP" "$@"; }
 status_of() { sed -n 's/^STATUS: //p' "$TMP/work/$1.md"; }
 
 PASS=0; FAIL=0
@@ -75,7 +75,7 @@ check() { if [ "$2" = "$3" ]; then ok "$1"; else bad "$1 (wanted [$3], got [$2])
 contains() { case "$2" in *"$3"*) ok "$1";; *) bad "$1 (missing [$3] in: $(printf '%s' "$2" | head -5))";; esac; }
 missing()  { case "$2" in *"$3"*) bad "$1 (should not contain [$3])";; *) ok "$1";; esac; }
 
-echo "hub-work-run gate"
+echo "mc-work-run gate"
 
 # --- nothing to run, dry run ---------------------------------------------------------------------
 OUT="$(run 2>&1)"; check "an empty register is a quiet exit 0" "$?" "0"
@@ -124,7 +124,7 @@ contains "  with the reason and a retry day" "$(cat "$TMP/work/W-20260915-03.md"
 contains "  named in the run" "$OUT" "without a RESULT line"
 OUT="$(run --only W-20260915-03 2>&1)"
 contains "  and it is not hammered the same day" "$OUT" "not runnable now"
-OUT="$(HUB_TODAY=2026-09-16 FAKE_MODE=failed run --only W-20260915-03 2>&1)"
+OUT="$(GODSPEED_TODAY=2026-09-16 FAKE_MODE=failed run --only W-20260915-03 2>&1)"
 check "  on the retry day a FAILED line is a failure with its reason" "$(status_of W-20260915-03)" "failed"
 contains "  the reason is the assistant's own" "$(cat "$TMP/work/W-20260915-03.md")" "the shop needs a login this machine does not have"
 
@@ -148,22 +148,22 @@ OUT="$(run --only "$QID" --publish-cmd "$TMP/bin/publish" 2>&1)"
 check "a piece with no SAY line files no card" "$([ -f "$TMP/card-argv.txt" ] && echo card || echo none)" "none"
 contains "  and the run says why" "$OUT" "no sentence for the person"
 
-# --- the hub's own machinery runs last, however early it was filed ------------------------------------------------
-hw file --what "Tidy the hub's own plumbing" --done-when "research/plumbing.md exists" --key plumbing --source test >/dev/null
+# --- the mission control's own machinery runs last, however early it was filed ------------------------------------------------
+hw file --what "Tidy the mission control's own plumbing" --done-when "research/plumbing.md exists" --key plumbing --source test >/dev/null
 hw file --what "Make the thing for the goal" --done-when "research/thing.md exists" --goal five-friends --key thing --source test >/dev/null
 OUT="$(run --dry-run 2>&1)"
-PL="$(printf '%s\n' "$OUT" | grep -n "Tidy the hub's own plumbing" | head -1 | cut -d: -f1)"
+PL="$(printf '%s\n' "$OUT" | grep -n "Tidy the mission control's own plumbing" | head -1 | cut -d: -f1)"
 TH="$(printf '%s\n' "$OUT" | grep -n "Make the thing for the goal" | head -1 | cut -d: -f1)"
-check "work for a goal runs before the hub's own machinery" "$([ -n "$PL" ] && [ -n "$TH" ] && [ "$TH" -lt "$PL" ] && echo yes || echo no)" "yes"
+check "work for a goal runs before the mission control's own machinery" "$([ -n "$PL" ] && [ -n "$TH" ] && [ "$TH" -lt "$PL" ] && echo yes || echo no)" "yes"
 
 # --- a card the ledger refuses is written on the item, not only in a log ----------------------------------------
 hw file --learn "What does a refused card leave behind?" --path research/refused.md --check "$NODE $TMP/bin/check-written.js research/refused.md --min-words 50" --key refused --source test >/dev/null
 RID="$(grep -l 'KEY: refused' "$TMP/work"/W-*.md | head -1 | xargs basename | sed 's/.md$//')"
-cp "$TMP/bin/hub-attention" "$TMP/bin/hub-attention.keep"
-printf '#!/usr/bin/env bash\necho "REFUSED: WHAT carries a repo path; he reads this, so say it in words"\nexit 3\n' > "$TMP/bin/hub-attention"
+cp "$TMP/bin/mc-attention" "$TMP/bin/mc-attention.keep"
+printf '#!/usr/bin/env bash\necho "REFUSED: WHAT carries a repo path; he reads this, so say it in words"\nexit 3\n' > "$TMP/bin/mc-attention"
 OUT="$(FAKE_SAY="Your notes on refused cards are ready." run --only "$RID" --publish-cmd "$TMP/bin/publish" 2>&1)"
 contains "a refused card is written on the item" "$(cat "$TMP/work/$RID.md")" "CARD REFUSED, so the finished piece has not reached anyone"
-mv "$TMP/bin/hub-attention.keep" "$TMP/bin/hub-attention"
+mv "$TMP/bin/mc-attention.keep" "$TMP/bin/mc-attention"
 
 # --- what an item changed is saved with the run, not only the file it named --------------------------------------
 if command -v git >/dev/null 2>&1; then

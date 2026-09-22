@@ -56,7 +56,7 @@ Three findings from building it on a blank machine on 2026-07-26, and what Herme
    give the assistant its own user account that can reach almost nothing. Hermes ships the
    other half: a scheduled job that reaches for a dangerous command is refused, not paused.
 2. **`git add -A` will commit your keys.** Keep the key file OUTSIDE the folder, in the home
-   directory, and put `.env*` and `.hub-env` in `.gitignore` as a second net.
+   directory, and put `.env*` and `.mc-env` in `.gitignore` as a second net.
 3. **A silent failure looks exactly like a quiet morning.** The job's own prompt orders it to
    say so when the recipe is missing or the brief cannot be written, `hermes cron incidents`
    keeps the record, and `hermes cron status` says in one line whether the clock will fire at

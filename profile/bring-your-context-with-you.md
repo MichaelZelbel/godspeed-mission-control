@@ -100,7 +100,7 @@ your disk except this instruction. The prompt is the first guard, and Step 3 is 
 ## Step 2: save the whole answer, unedited
 
 Download the file, or copy the whole answer into a new plain text file. Save it at the top
-of your `hub` folder, called `what-my-ai-knew.md`.
+of your `godspeed` folder, called `what-my-ai-knew.md`.
 
 Save it whole, before you change a word. It is the dated record of everything one company's
 AI believed about you, and you only get to take that photograph once.

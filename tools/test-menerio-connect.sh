@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The gate for hub-menerio-connect: connect the notebook once, for every assistant.
+# The gate for mc-menerio-connect: connect the notebook once, for every assistant.
 #
 # WHY THIS FILE IS HERE. This program edits settings files that belong to other programs
 # (Hermes' config.yaml and .env, Codex's config.toml) and one that belongs to the reader
@@ -41,39 +41,39 @@ SAFE_PATH="$(dirname "$NODE"):/usr/bin:/bin"
 KEY1="mnr_test_key_ONE_1111"
 KEY2="mnr_test_key_TWO_2222"
 
-# One throwaway computer per case: a home, a hub, and (when asked) a Hermes and a Codex.
+# One throwaway computer per case: a home, a mission control, and (when asked) a Hermes and a Codex.
 newbox() {
-  B="$W/$1"; rm -rf "$B"; mkdir -p "$B/home/.hub" "$B/hub" "$B/appdata"
+  B="$W/$1"; rm -rf "$B"; mkdir -p "$B/home/.godspeed" "$B/godspeed" "$B/appdata"
   # Every box is a computer that HAS Claude Code, unless a case says otherwise: the report
   # words its Claude Code line differently for a reader who never installed it.
   [ "${NO_CLAUDE:-}" = "1" ] || mkdir -p "$B/home/.claude"
-  printf '# Manual\n' > "$B/hub/AGENTS.md"
+  printf '# Manual\n' > "$B/godspeed/AGENTS.md"
   HH="$B/home/hermes-home"; CH="$B/home/codex-home"
 }
 run() {   # run <key> [args...]   everything the program can see points into the box
   local key="$1"; shift
   HOME="$B/home" USERPROFILE="$B/home" LOCALAPPDATA="$B/appdata" APPDATA="$B/appdata" \
-  HERMES_HOME="$HH" CODEX_HOME="$CH" HUB_DIR="" HUB_AGE_KEY="$B/home/.hub/none" \
+  HERMES_HOME="$HH" CODEX_HOME="$CH" GODSPEED_DIR="" GODSPEED_AGE_KEY="$B/home/.godspeed/none" \
   PATH="${RUN_PATH:-$SAFE_PATH}" MENERIO_API_KEY="$key" MENERIO_MCP_URL="${MCP:-http://127.0.0.1:1}" \
-  HUB_CONNECT_NO_HERMES_CLI="${NO_CLI:-}" \
-    "$NODE" "$HERE/menerio-connect.js" --hub "$B/hub" "$@" 2>&1
+  GODSPEED_CONNECT_NO_HERMES_CLI="${NO_CLI:-}" \
+    "$NODE" "$HERE/menerio-connect.js" --godspeed "$B/godspeed" "$@" 2>&1
 }
 sums() { ( cd "$B" && find . -type f | LC_ALL=C sort | while read -r f; do printf '%s %s\n' "$(cksum < "$f")" "$f"; done ); }
 
-echo "== hub-menerio-connect: once, for every assistant, and nothing else touched =="
+echo "== mc-menerio-connect: once, for every assistant, and nothing else touched =="
 
 # A reader who has only ever used Hermes. .mcp.json is still written, because the file belongs
-# to the hub, but the report must not claim to have connected a program that is not there.
+# to the mission control, but the report must not claim to have connected a program that is not there.
 NO_CLAUDE=1 newbox hermes-only
 MCP="" out="$(run "$KEY1")"
 contains "a computer without Claude Code is told so, not told it was connected" "$out" "Claude Code   not installed. That is fine. If you ever use it"
-[ -f "$B/hub/.mcp.json" ] && ok "  and the hub still gets its .mcp.json" || bad "  .mcp.json was not written" "$out"
+[ -f "$B/godspeed/.mcp.json" ] && ok "  and the mission control still gets its .mcp.json" || bad "  .mcp.json was not written" "$out"
 
 # 1. The launcher is the two lines every other launcher here is.
-if [ "$(sed -n 2p "$HERE/hub-menerio-connect")" = 'exec node "$(dirname "$0")/menerio-connect.js" "$@"' ] && sh -n "$HERE/hub-menerio-connect"; then
+if [ "$(sed -n 2p "$HERE/mc-menerio-connect")" = 'exec node "$(dirname "$0")/menerio-connect.js" "$@"' ] && sh -n "$HERE/mc-menerio-connect"; then
   ok "the launcher starts menerio-connect.js from the folder it sits in"
 else
-  bad "the hub-menerio-connect launcher is not the usual two lines"
+  bad "the mc-menerio-connect launcher is not the usual two lines"
 fi
 
 # ---- the stand-in notebook -----------------------------------------------------------------
@@ -112,18 +112,18 @@ MCP="http://127.0.0.1:$(cat "$W/stub.port")"
 
 # ---- no key: most readers ------------------------------------------------------------------
 newbox nokey; mkdir -p "$HH" "$CH"
-printf '{\n  "mcpServers": {}\n}\n' > "$B/hub/.mcp.json"
+printf '{\n  "mcpServers": {}\n}\n' > "$B/godspeed/.mcp.json"
 before="$(sums)"
 out="$(run "")"; rc=$?
 [ "$rc" = "1" ] && contains "no key: it says so kindly, and where a free account is made" "$out" "https://menerio.com/auth?tab=signup" || bad "no key was not handled (exit $rc)" "$out"
-contains "  and says your hub works without one" "$out" "Your hub works without one"
+contains "  and says your mission control works without one" "$out" "Your mission control works without one"
 [ "$(sums)" = "$before" ] && ok "  and nothing was written anywhere" || bad "no key, and files changed anyway"
 out="$(run "" --check)"; [ "$?" = "0" ] && ok "  and --check without a key is not a failure" || bad "--check without a key failed" "$out"
 out="$(run "" --refresh)"; [ "$?" = "0" ] && [ -z "$out" ] && ok "  and --refresh without a key says nothing" || bad "--refresh without a key spoke" "$out"
 
-# ---- the first run on a fresh starter hub --------------------------------------------------
+# ---- the first run on a fresh starter godspeed --------------------------------------------------
 newbox fresh; mkdir -p "$HH" "$CH"
-cat > "$B/hub/.mcp.json" <<'EOF'
+cat > "$B/godspeed/.mcp.json" <<'EOF'
 {
   "mcpServers": {
     "calendar": { "command": "npx", "args": ["-y", "some-calendar"] }
@@ -168,12 +168,12 @@ if "$NODE" -e '
   const good = n.type === "http" && n.url === "https://mcp.menerio.com" &&
     n.headers.Authorization === "Bearer ${MENERIO_API_KEY}" &&
     d.mcpServers.calendar.command === "npx" && d.somethingElse.keep === true;
-  process.exit(good ? 0 : 1);' "$B/hub/.mcp.json"; then
+  process.exit(good ? 0 : 1);' "$B/godspeed/.mcp.json"; then
   ok ".mcp.json: notebook added as http with the key NAMED, every other server and key kept"
 else
-  bad ".mcp.json is not right" "$(cat "$B/hub/.mcp.json")"
+  bad ".mcp.json is not right" "$(cat "$B/godspeed/.mcp.json")"
 fi
-lacks ".mcp.json does not hold the key" "$(cat "$B/hub/.mcp.json")" "$KEY1"
+lacks ".mcp.json does not hold the key" "$(cat "$B/godspeed/.mcp.json")" "$KEY1"
 
 # Hermes: a block at the end, the rest of the file as it was, a copy of the old file, the key
 # in .env and nowhere else.
@@ -285,7 +285,7 @@ mcp_servers:
 EOF
 printf 'MCP_NOTEBOOK_API_KEY=mnr_the_old_hand_made_one\n' > "$HH/.env"
 printf '[mcp_servers.memory]\nurl = "https://mcp.menerio.com/"\nbearer_token_env_var = "MY_OWN_NAME"\n' > "$CH/config.toml"
-printf '{"mcpServers": {"memory": {"type": "http", "url": "https://mcp.menerio.com", "headers": {"Authorization": "Bearer ${MENERIO_API_KEY}"}}}}\n' > "$B/hub/.mcp.json"
+printf '{"mcpServers": {"memory": {"type": "http", "url": "https://mcp.menerio.com", "headers": {"Authorization": "Bearer ${MENERIO_API_KEY}"}}}}\n' > "$B/godspeed/.mcp.json"
 before="$(sums)"
 out="$(run "$KEY1")"; rc=$?
 [ "$rc" = "0" ] && [ "$(sums)" = "$before" ] && ok "connections made by hand, under any name: not one file is touched" || bad "a hand-made connection was edited (exit $rc)" "$out"
@@ -297,10 +297,10 @@ run "$KEY2" --refresh >/dev/null
 
 # ---- files it cannot read are left alone, and that is a failure it admits -------------------
 newbox broken
-printf '{ this is not json' > "$B/hub/.mcp.json"
+printf '{ this is not json' > "$B/godspeed/.mcp.json"
 out="$(run "$KEY1")"; rc=$?
-[ "$rc" = "1" ] && [ "$(cat "$B/hub/.mcp.json")" = '{ this is not json' ] && ok "a .mcp.json that is not JSON is left exactly as it is, and the run says failed" || bad "a broken .mcp.json was not handled (exit $rc)" "$out"
-contains "  with the reason on the line" "$out" "Claude Code   failed: .mcp.json in your hub folder is not valid JSON"
+[ "$rc" = "1" ] && [ "$(cat "$B/godspeed/.mcp.json")" = '{ this is not json' ] && ok "a .mcp.json that is not JSON is left exactly as it is, and the run says failed" || bad "a broken .mcp.json was not handled (exit $rc)" "$out"
+contains "  with the reason on the line" "$out" "Claude Code   failed: .mcp.json in your mission control folder is not valid JSON"
 contains "an assistant that is not on the computer is called not installed" "$out" "Hermes        not installed"
 newbox name-taken; mkdir -p "$CH"
 printf '[mcp_servers.notebook]\nurl = "https://example.com/mcp"\n' > "$CH/config.toml"
@@ -312,11 +312,11 @@ else
   bad "a 'notebook' that pointed somewhere else was overwritten" "$(cat "$CH/config.toml")"
 fi
 
-# ---- no hub file yet ------------------------------------------------------------------------
+# ---- no mission control file yet ------------------------------------------------------------------------
 newbox no-mcp-json
 out="$(run "$KEY1")"
-"$NODE" -e 'const d=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.exit(d.mcpServers.notebook.url==="https://mcp.menerio.com"?0:1)' "$B/hub/.mcp.json" \
-  && ok "a hub with no .mcp.json gets one" || bad "no .mcp.json was written" "$out"
+"$NODE" -e 'const d=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.exit(d.mcpServers.notebook.url==="https://mcp.menerio.com"?0:1)' "$B/godspeed/.mcp.json" \
+  && ok "a mission control with no .mcp.json gets one" || bad "no .mcp.json was written" "$out"
 
 # ---- the notebook says no -------------------------------------------------------------------
 newbox refused
@@ -330,18 +330,18 @@ contains "no network: said plainly" "$out" "The notebook  failed: this computer 
 # The runner is copied somewhere with no notebook-sync.py beside it, so it stops right after
 # the refresh and never gets as far as calling a notebook, real or not.
 newbox runner; mkdir -p "$HH" "$B/bin"
-cp "$HERE/hub-notebook-sync" "$HERE/hub-menerio-connect" "$HERE/menerio-connect.js" "$HERE/hub-notebook.js" "$B/bin/"
+cp "$HERE/mc-notebook-sync" "$HERE/mc-menerio-connect" "$HERE/menerio-connect.js" "$HERE/mc-notebook.js" "$B/bin/"
 printf 'mcp_servers:\n  notebook:\n    url: https://mcp.menerio.com\n    headers:\n      Authorization: Bearer ${MENERIO_API_KEY}\n' > "$HH/config.yaml"
 printf 'MENERIO_API_KEY=%s\n' "$KEY1" > "$HH/.env"
-printf 'HUB_DIR=%s\n' "$B/hub" > "$B/home/.hub/device.env"
+printf 'GODSPEED_DIR=%s\n' "$B/godspeed" > "$B/home/.godspeed/device.env"
 out="$(HOME="$B/home" USERPROFILE="$B/home" LOCALAPPDATA="$B/appdata" HERMES_HOME="$HH" CODEX_HOME="$CH" \
-       PATH="$SAFE_PATH" MENERIO_API_KEY="$KEY2" MENERIO_BASE_URL="http://127.0.0.1:1" sh "$B/bin/hub-notebook-sync" --hub "$B/hub" 2>&1)"; rc=$?
+       PATH="$SAFE_PATH" MENERIO_API_KEY="$KEY2" MENERIO_BASE_URL="http://127.0.0.1:1" sh "$B/bin/mc-notebook-sync" --godspeed "$B/godspeed" 2>&1)"; rc=$?
 if [ "$rc" = "0" ] && [ -z "$out" ] && [ "$(cat "$HH/.env")" = "MENERIO_API_KEY=$KEY2" ]; then
-  ok "hub-notebook-sync runs --refresh once it has the key: Hermes holds the new key, and the run stays silent"
+  ok "mc-notebook-sync runs --refresh once it has the key: Hermes holds the new key, and the run stays silent"
 else
   bad "the runner did not refresh Hermes (exit $rc)" "$out"
 fi
-lacks "  and the runner's log does not hold the key" "$(cat "$B/home/.hub/notebook-sync.log" 2>/dev/null)" "$KEY2"
+lacks "  and the runner's log does not hold the key" "$(cat "$B/home/.godspeed/notebook-sync.log" 2>/dev/null)" "$KEY2"
 
 # ---- the real Hermes command, when this computer has one --------------------------------------
 # Everything above used the careful hand edit. With a real `hermes` on PATH the program asks

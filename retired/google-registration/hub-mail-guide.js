@@ -1,6 +1,6 @@
 /*
- * hub-mail-guide.js - the Gmail step of the hub installer: the reader signs in to Google, and
- * the hub does the rest.
+ * mc-mail-guide.js - the Gmail step of the mission control installer: the reader signs in to Google, and
+ * the mission control does the rest.
  *
  * WHY THIS FILE IS HERE (Michael, 2026-09-21). Every reader, and Michael himself, connects Gmail
  * the same way: each person registers their own small Google app once, in their own Google
@@ -12,24 +12,24 @@
  * installation right there", and then the product in one sentence: "the reader is signing you
  * in, and you do it in Google."
  *
- * SO THE READER DOES THREE THINGS, and the hub does everything between them:
- *   1. signs in to Google, in a browser window the hub opens;
+ * SO THE READER DOES THREE THINGS, and the mission control does everything between them:
+ *   1. signs in to Google, in a browser window the mission control opens;
  *   2. ticks the one box that agrees to Google's user data policy (an agreement is the reader's
- *      to give, so the hub never ticks it);
+ *      to give, so the mission control never ticks it);
  *   3. clicks Allow, when Google asks whether this app may open the mailbox.
- * Nothing is copied or pasted: the hub reads the app's two lines off Google's page itself.
+ * Nothing is copied or pasted: the mission control reads the app's two lines off Google's page itself.
  *
- * WHO DOES WHAT. hub-mail-browser.js opens the window and talks to it. hub-mail-google.js does
+ * WHO DOES WHAT. mc-mail-browser.js opens the window and talks to it. mc-mail-google.js does
  * the clicking in Google's pages, and hands a single click back to the reader, in one sentence,
- * whenever Google has changed a page. connect() in hub-mail-gmail.js, the same code as ever,
+ * whenever Google has changed a page. connect() in mc-mail-gmail.js, the same code as ever,
  * checks what Google granted, shows the mailbox before anything is kept, and locks the
- * connection into the hub's store. This file is the words and the order.
+ * connection into the mission control's store. This file is the words and the order.
  *
  * ONE COPY OF THE WORDS: the bash installer and the Windows installer both start this program.
  */
 "use strict";
 
-const APP_NAME = "My hub";
+const APP_NAME = "My mission control";
 
 // kind: "workspace" (an address on your own domain, run through Google Workspace) or "personal"
 // (an address ending in @gmail.com). Workspace apps are Internal; personal ones are External and
@@ -37,12 +37,12 @@ const APP_NAME = "My hub";
 const kindOf = email => /@(gmail|googlemail)\.com$/i.test(String(email).trim()) ? "personal" : "workspace";
 
 const WHAT = [
-  "After this, every assistant of your hub can search your Gmail, read messages and their",
-  "attachments, and save draft replies in your Drafts folder. Your hub sends nothing: you read",
+  "After this, every assistant of your mission control can search your Gmail, read messages and their",
+  "attachments, and save draft replies in your Drafts folder. Your mission control sends nothing: you read",
   "the draft in Gmail and press Send yourself.",
 ];
 const WHY = [
-  "Google only lets registered apps into a mailbox, so your hub gets a small app of its own.",
+  "Google only lets registered apps into a mailbox, so your mission control gets a small app of its own.",
   "It belongs to you and nobody else: not to the author of the book, not to any company in between.",
   "It costs nothing.",
 ];
@@ -53,36 +53,36 @@ const YOUR_PART = [
 
 /*
  * guide({ G, ask, say, browser, google })
- *   G        hub-mail-gmail.js
+ *   G        mc-mail-gmail.js
  *   ask      (question, hidden) -> the reader's answer
  *   say      one line to the reader
- *   browser  hub-mail-browser.js (a test hands in its own)
- *   google   hub-mail-google.js  (a test hands in its own)
+ *   browser  mc-mail-browser.js (a test hands in its own)
+ *   google   mc-mail-google.js  (a test hands in its own)
  * Resolves to { connected, address } and never throws for a reader's "stop".
  */
 async function guide({ G, ask, say, browser, google }) {
-  browser = browser || require("./hub-mail-browser.js");
-  google = google || require("./hub-mail-google.js");
+  browser = browser || require("./mc-mail-browser.js");
+  google = google || require("./mc-mail-google.js");
   const line = s => say(google.scrub ? google.scrub(s === undefined ? "" : s) : (s === undefined ? "" : s));
   const answer = async (q, hidden) => String(await ask(q, !!hidden) || "").trim();
   const stopped = () => { line("Stopped. Nothing was changed. Start this step again whenever you like."); return { connected: false, address: "" }; };
   const no = { connected: false, address: "" };
 
-  line("Connect your Gmail to your hub");
+  line("Connect your Gmail to your mission control");
   line("==============================");
   const st = G.state();
   if (st.why && st.why !== "not connected") {
-    line("This computer cannot open your hub's locked store (" + st.why + "), so there is nowhere safe to keep the connection.");
-    line("Run the whole hub installer once, then start this step again.");
+    line("This computer cannot open your mission control's locked store (" + st.why + "), so there is nowhere safe to keep the connection.");
+    line("Run the whole godspeed installer once, then start this step again.");
     return no;
   }
 
   if (st.connected) {
-    line(`Your hub is connected to ${st.address}${st.readOnly ? " (reading only)" : ""}. Every assistant of your hub uses that one connection.`);
+    line(`Your mission control is connected to ${st.address}${st.readOnly ? " (reading only)" : ""}. Every assistant of your mission control uses that one connection.`);
     const a = (await answer("Press Enter to leave it as it is. Or type: again (connect again), or: remove (disconnect). ")).toLowerCase();
     if (a === "remove") {
       const r = await G.disconnect();
-      line(`Hub: ${r.local}.`); line(`Google: ${r.google}.`); if (r.kept) line(r.kept + "."); if (r.shared) line("The change is " + r.shared + ".");
+      line(`Godspeed: ${r.local}.`); line(`Google: ${r.google}.`); if (r.kept) line(r.kept + "."); if (r.shared) line("The change is " + r.shared + ".");
       return no;
     }
     if (a !== "again") { line("Left as it is."); return { connected: true, address: st.address }; }
@@ -99,7 +99,7 @@ async function guide({ G, ask, say, browser, google }) {
   if (email.toLowerCase() === "stop") return stopped();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { line("That is not an email address, so nothing was started."); return stopped(); }
   const kind = kindOf(email);
-  const mode = (await answer("Press Enter and I open a browser window. (If your hub should only read and never save drafts, type: read) ")).toLowerCase();
+  const mode = (await answer("Press Enter and I open a browser window. (If your mission control should only read and never save drafts, type: read) ")).toLowerCase();
   if (mode === "stop") return stopped();
   const readOnly = mode === "read";
 
@@ -144,13 +144,13 @@ async function guide({ G, ask, say, browser, google }) {
       line("Google first warns that it has not verified this app. That is true: nobody checked it, because it is");
       line("yours and only you use it. Click Advanced, then the line that names " + APP_NAME + ".");
     }
-    line("Tick every box Google shows, then click " + (readOnly ? "Continue" : "Allow") + "." + (readOnly ? "" : " Google's words mention sending, because Google bundles it with drafts. Your hub does not send."));
+    line("Tick every box Google shows, then click " + (readOnly ? "Continue" : "Allow") + "." + (readOnly ? "" : " Google's words mention sending, because Google bundles it with drafts. Your mission control does not send."));
     const r = await G.connect({ readOnly, ask, say: () => {}, open: url => page.goto(url), clientId: app.clientId, clientSecret: app.clientSecret,
       fresh: true, loginHint: who || email, back: "the installer's window" });
     google.forgetNote();
     line();
-    line(`Connected: ${r.address}. ${r.readOnly ? "Your hub can read it." : "Your hub can read it and save drafts in it. It sends nothing."}`);
-    line("The connection is kept in your hub's locked store, so every assistant of your hub uses it.");
+    line(`Connected: ${r.address}. ${r.readOnly ? "Your mission control can read it." : "Your mission control can read it and save drafts in it. It sends nothing."}`);
+    line("The connection is kept in your mission control's locked store, so every assistant of your mission control uses it.");
     if (r.shared) line("It is " + r.shared + ".");
     line("I close the browser window now and delete everything it remembered, so no signed-in window is left behind.");
     line("Close your assistant and open it again. Then ask it, in your own words:");

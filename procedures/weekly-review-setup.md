@@ -46,10 +46,10 @@ The same line as the brief, with a weekday in the fifth field. `0 7 * * 1`
 is Monday at seven:
 
 ```
-hermes cron create "0 7 * * 1" "Follow skills/weekly-review/SKILL.md and write this week's review into reviews/." --name weekly-review --workdir /path/to/your/hub
+hermes cron create "0 7 * * 1" "Follow skills/weekly-review/SKILL.md and write this week's review into reviews/." --name weekly-review --workdir /path/to/your/godspeed
 ```
 
-Your hub as `--workdir`, because the review reads your files just as the
+Your mission control as `--workdir`, because the review reads your files just as the
 brief does, and because that is what hands the job your `AGENTS.md`.
 Sunday evening works as well as Monday morning; pick the moment you
 already plan your week. On a laptop the job fires while Hermes is open; a

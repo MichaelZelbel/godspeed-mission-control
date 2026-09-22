@@ -2,9 +2,9 @@
 'use strict';
 //
 // goals.js - what you want, one card each, and the choice of which goals get attention today.
-// Type it as `hub-goals`.
+// Type it as `mc-goals`.
 //
-// WHY THIS EXISTS. A hub without this has deadlines, promises and a to-do pile, and nothing
+// WHY THIS EXISTS. A mission control without this has deadlines, promises and a to-do pile, and nothing
 // that says what any of it is FOR. The first thing that goes wrong is that a means gets carried
 // as if it were the end: "post every day" sits in the system as a goal, and the thing it was
 // supposed to buy you is written down nowhere. The second is that the loudest queue wins every
@@ -41,10 +41,10 @@
 
 const fs = require('fs');
 const path = require('path');
-const L = require(path.join(__dirname, 'hub-cards.js'));
+const L = require(path.join(__dirname, 'mc-cards.js'));
 
-const HUB = L.hubRoot(__filename);
-const DIR = path.join(HUB, 'goals');
+const GODSPEED = L.godspeedRoot(__filename);
+const DIR = path.join(GODSPEED, 'goals');
 const DIAG = path.join(DIR, 'diagnoses');
 const PLAYBOOKS = path.join(DIR, 'playbooks');
 
@@ -57,7 +57,7 @@ const ORDER = ['ID', 'KIND', 'STATUS', 'AREA', 'TITLE', 'OWN WORDS', 'MEASURE', 
   'PROTECTED', 'OWNER', 'IMPORTANCE', 'ENERGY', 'RESOURCES', 'CADENCE', 'REVIEW', 'SOURCE', 'FILED', 'NOTE'];
 const S = L.store(DIR, ORDER);
 const { die, say, oneLine, flag, today, q } = L;
-const MACHINE = L.machineWords(HUB);
+const MACHINE = L.machineWords(GODSPEED);
 
 const cmds = {};
 
@@ -81,7 +81,7 @@ cmds.file = (a) => {
   if (!STATUSES.includes(status)) die(`--status must be one of: ${STATUSES.join(', ')}`);
   const title = oneLine(a.title);
   if (!title) die('--title is required, in your own words where possible');
-  if (!oneLine(a.source)) die('--source is required: where this goal was said (a date and a channel), so it is never a goal the hub invented');
+  if (!oneLine(a.source)) die('--source is required: where this goal was said (a date and a channel), so it is never a goal the mission control invented');
   const d = a.date || today();
   if (a.deadline && !L.isoDate(a.deadline) && a.deadline !== 'unresolved') die('--deadline must be YYYY-MM-DD or the word unresolved');
   const importance = String(a.importance || 'normal').toLowerCase();
@@ -121,21 +121,21 @@ function propagate(c, d, what, why, opts) {
   }
   const closing = ['retired', 'paused', 'achieved'].includes(c.f.STATUS);
   const reason = `${c.id} changed ${what}: ${why}`;
-  // The two programs next door. Neither is required: a hub with only this one still keeps its
+  // The two programs next door. Neither is required: a mission control with only this one still keeps its
   // goals honestly, and the line below says plainly which half of the propagation happened.
-  const w = L.runNode(__filename, HUB, 'work', ['sweep', '--goal', c.id, closing ? '--cancel' : '--stale', '--reason', reason, '--date', d]);
-  const fc = L.runNode(__filename, HUB, 'forecast', ['flag', '--goal', c.id, '--reason', reason, '--date', d]);
+  const w = L.runNode(__filename, GODSPEED, 'work', ['sweep', '--goal', c.id, closing ? '--cancel' : '--stale', '--reason', reason, '--date', d]);
+  const fc = L.runNode(__filename, GODSPEED, 'forecast', ['flag', '--goal', c.id, '--reason', reason, '--date', d]);
   const told = (r, name, missingLine) => r.ok ? oneLine(r.out)
     : r.missing ? `${name} is not installed on this computer, so ${missingLine}`
     : `${name} could not be asked: ` + oneLine(r.err);
   return {
     touched,
-    work: told(w, 'hub-work', 'nothing under this goal was marked stale; re-plan it by hand'),
-    forecasts: told(fc, 'hub-forecast', 'no forecast under this goal was flagged for review'),
+    work: told(w, 'mc-work', 'nothing under this goal was marked stale; re-plan it by hand'),
+    forecasts: told(fc, 'mc-forecast', 'no forecast under this goal was flagged for review'),
   };
 }
 cmds.change = (a) => {
-  const c = S.read(a._[0] || die('usage: hub-goals change <id> --set FIELD=value [--set ...] --why "..."')) || die('no such goal');
+  const c = S.read(a._[0] || die('usage: mc-goals change <id> --set FIELD=value [--set ...] --why "..."')) || die('no such goal');
   const why = oneLine(a.why);
   if (!why) die('--why is required: a goal changes for a reason, and the reason is kept');
   const sets = [].concat(a.set === undefined ? [] : a.set);
@@ -171,13 +171,13 @@ cmds.change = (a) => {
 };
 for (const [name, status] of [['adopt', 'adopted'], ['retire', 'retired'], ['pause', 'paused'], ['achieve', 'achieved']]) {
   cmds[name] = (a) => {
-    if (!a._[0]) die(`usage: hub-goals ${name} <id> --why "..."`);
+    if (!a._[0]) die(`usage: mc-goals ${name} <id> --why "..."`);
     cmds.change({ _: [a._[0]], set: `STATUS=${status}`, why: a.why, date: a.date });
   };
 }
 
 cmds.progress = (a) => {
-  const c = S.read(a._[0] || die('usage: hub-goals progress <id> --evidence "..."')) || die('no such goal');
+  const c = S.read(a._[0] || die('usage: mc-goals progress <id> --evidence "..."')) || die('no such goal');
   const ev = oneLine(a.evidence);
   if (!ev) die('--evidence is required: what exists in the world now that did not before, and where it was read');
   const d = a.date || today();
@@ -186,12 +186,12 @@ cmds.progress = (a) => {
   say(`${c.id}: progress recorded`);
 };
 cmds.question = (a) => {
-  const c = S.read(a._[0] || die('usage: hub-goals question <id> --text "..."')) || die('no such goal');
+  const c = S.read(a._[0] || die('usage: mc-goals question <id> --text "..."')) || die('no such goal');
   const t = oneLine(a.text);
   if (!t) die('--text is required');
   const d = a.date || today();
   const open = last(c, ['QUESTION', 'ANSWER']);
-  if (open && open.event === 'QUESTION' && !flag(a, 'force')) die(`${c.id} already has an open question from ${open.date}; record the answer first (hub-goals answer)`);
+  if (open && open.event === 'QUESTION' && !flag(a, 'force')) die(`${c.id} already has an open question from ${open.date}; record the answer first (mc-goals answer)`);
   const recent = c.log.filter(l => l.event === 'QUESTION' && L.daysBetween(l.date, d) < 7);
   if (recent.length && !flag(a, 'force')) die(`${c.id} was asked on ${recent[0].date}; one question in seven days, so you are not managed by your own goal list`);
   L.logLine(c, d, 'QUESTION', t);
@@ -199,7 +199,7 @@ cmds.question = (a) => {
   say(`${c.id}: question recorded (${t.slice(0, 80)})`);
 };
 cmds.answer = (a) => {
-  const c = S.read(a._[0] || die('usage: hub-goals answer <id> --text "<your words>"')) || die('no such goal');
+  const c = S.read(a._[0] || die('usage: mc-goals answer <id> --text "<your words>"')) || die('no such goal');
   const t = oneLine(a.text);
   if (!t) die('--text is required: your words, as you said them');
   const d = a.date || today();
@@ -248,10 +248,10 @@ METHOD: undecided
 `;
 }
 cmds.diagnose = (a) => {
-  const c = S.read(a._[0] || die('usage: hub-goals diagnose <id> [--refute <file> --evidence "..."]')) || die('no such goal');
+  const c = S.read(a._[0] || die('usage: mc-goals diagnose <id> [--refute <file> --evidence "..."]')) || die('no such goal');
   const d = a.date || today();
   if (a.refute) {
-    const p = path.isAbsolute(a.refute) ? a.refute : path.join(HUB, a.refute);
+    const p = path.isAbsolute(a.refute) ? a.refute : path.join(GODSPEED, a.refute);
     if (!fs.existsSync(p)) die(`no diagnosis at ${a.refute}`);
     const ev = oneLine(a.evidence);
     if (!ev) die('--evidence is required: the observation that disconfirmed it');
@@ -259,24 +259,24 @@ cmds.diagnose = (a) => {
     text = text.replace(/^STATUS: .*$/m, 'STATUS: refuted ' + d);
     text += `\n## Refuted\n- ${d} ${ev}\n`;
     fs.writeFileSync(p, text, 'utf8');
-    L.logLine(c, d, 'REFUTED', `${path.relative(HUB, p).replace(/\\/g, '/')}: ${ev}`);
+    L.logLine(c, d, 'REFUTED', `${path.relative(GODSPEED, p).replace(/\\/g, '/')}: ${ev}`);
     S.write(c);
     say(`${c.id}: diagnosis refuted; the next attention plan asks for a new one`);
     return;
   }
   fs.mkdirSync(DIAG, { recursive: true });
   const p = path.join(DIAG, `${c.id}-${d}.md`);
-  if (fs.existsSync(p)) { say(path.relative(HUB, p).replace(/\\/g, '/')); return; }
+  if (fs.existsSync(p)) { say(path.relative(GODSPEED, p).replace(/\\/g, '/')); return; }
   fs.writeFileSync(p, diagTemplate(c.id, d), 'utf8');
-  L.logLine(c, d, 'DIAGNOSIS', path.relative(HUB, p).replace(/\\/g, '/'));
+  L.logLine(c, d, 'DIAGNOSIS', path.relative(GODSPEED, p).replace(/\\/g, '/'));
   S.write(c);
-  say(path.relative(HUB, p).replace(/\\/g, '/'));
+  say(path.relative(GODSPEED, p).replace(/\\/g, '/'));
 };
 function diagnosisState(c) {
   const dg = last(c, ['DIAGNOSIS', 'REFUTED']);
   if (!dg) return 'none';
   if (dg.event === 'REFUTED') return 'refuted';
-  const p = path.join(HUB, dg.rest);
+  const p = path.join(GODSPEED, dg.rest);
   const text = L.readText(p);
   if (!text) return 'missing file';
   if (/^STATUS: refuted/m.test(text)) return 'refuted';
@@ -298,8 +298,8 @@ const PLAYBOOK_SECTIONS = [
   ['## In what order', '(the sequence, and what they do first when starting from where this person stands)'],
   ['## What they track', '(the numbers, how often, with what instrument)'],
   ['## Where it fails', '(the common ways people fail at this, and the early signs)'],
-  ['## Hub steps', '(what a hub can do without the person: research, build the measurement, compute, find, draft, prepare)'],
-  ['## Person steps', '(what only the person can do, and what the hub prepares for each)'],
+  ['## Godspeed steps', '(what a mission control can do without the person: research, build the measurement, compute, find, draft, prepare)'],
+  ['## Person steps', '(what only the person can do, and what the mission control prepares for each)'],
   ['## Unknown', '(where the levers disagree or this person\'s case differs: the experiments that would settle it)'],
   ['## Sources', '(every claim\'s source; UNVERIFIED where it was not read)'],
 ];
@@ -339,10 +339,10 @@ const PLAYBOOK_REASON = {
   stale: 'playbook past its review date',
 };
 // An outcome with no model of how it is won sits ahead of one that has one: the research is
-// the first work, and it is work the hub can do alone.
+// the first work, and it is work the mission control can do alone.
 const playbookRank = (state) => ['none', 'draft', 'refuted', 'stale'].includes(state) ? 0 : 1; // a draft is a scaffold nobody filled: as unresearched as none
 cmds.playbook = (a) => {
-  const c = S.read(a._[0] || die('usage: hub-goals playbook <id> [--review-days 30] | --current | --refute --evidence "..."')) || die('no such goal');
+  const c = S.read(a._[0] || die('usage: mc-goals playbook <id> [--review-days 30] | --current | --refute --evidence "..."')) || die('no such goal');
   const d = a.date || today();
   const reviewDays = Math.max(1, parseInt(a['review-days'] || '30', 10) || 30);
   const p = playbookPath(c.id);
@@ -361,7 +361,7 @@ cmds.playbook = (a) => {
     return;
   }
   if (flag(a, 'current')) {
-    if (!fs.existsSync(p)) die(`no playbook at ${rel}; hub-goals playbook ${c.id} writes the template`);
+    if (!fs.existsSync(p)) die(`no playbook at ${rel}; mc-goals playbook ${c.id} writes the template`);
     let text = L.readText(p);
     const left = playbookPlaceholders(text);
     if (left.length) die(`${rel} still carries the template placeholder under: ${left.join(', ')}; fill those in before calling it current`);
@@ -517,7 +517,7 @@ cmds.list = (a) => {
   const kind = a.kind ? String(a.kind).toLowerCase() : '';
   const shown = rows.filter(c => !kind || c.f.KIND === kind);
   if (flag(a, 'json')) { say(JSON.stringify(shown.map(c => Object.assign({ id: c.id, log: c.log }, c.f)), null, 2)); return; }
-  if (!shown.length) { say('No goals on the register yet. `hub-goals file` adds one; provisional is the default status.'); return; }
+  if (!shown.length) { say('No goals on the register yet. `mc-goals file` adds one; provisional is the default status.'); return; }
   for (const c of shown) {
     say(`${(c.f.STATUS || '?').padEnd(11)} ${c.f.KIND.padEnd(11)} ${c.id.padEnd(34)} ${c.f.TITLE}` +
       (c.f.DEADLINE ? `  (by ${c.f.DEADLINE})` : '') + (c.f.SERVES ? `  -> ${c.f.SERVES}` : ''));
@@ -563,7 +563,7 @@ cmds.check = () => {
     const pb = playbookState(c);
     if (pb === 'missing file') problems.push(`${c.id}: PLAYBOOK line names a file that is gone (${playbookRel(c.id)})`);
     else if (c.f.KIND === 'outcome' && c.f.STATUS === 'adopted') {
-      if (pb === 'none') notes.push(`${c.id}: no playbook yet (hub-goals playbook ${c.id})`);
+      if (pb === 'none') notes.push(`${c.id}: no playbook yet (mc-goals playbook ${c.id})`);
       if (pb === 'stale') notes.push(`${c.id}: playbook past its review date`);
       if (pb === 'refuted') notes.push(`${c.id}: playbook refuted, research again`);
     }
@@ -574,10 +574,10 @@ cmds.check = () => {
   for (const p of problems) say('PROBLEM ' + p);
   process.exit(1);
 };
-cmds.help = () => say(`hub-goals: the register of what you want, and the choice of attention today
+cmds.help = () => say(`mc-goals: the register of what you want, and the choice of attention today
 
   file --kind outcome|strategy|project|commitment --title "..." --source "<when and where you said it>"
-       [--status provisional|adopted] [--area health|money|relationships|work|hub|other] [--measure "..."]
+       [--status provisional|adopted] [--area health|money|relationships|work|godspeed|other] [--measure "..."]
        [--deadline YYYY-MM-DD|unresolved] [--serves <id,id>] [--depends-on <id>] [--importance core|high|normal]
        [--energy low|medium|high] [--resources "..."] [--own-words "..."] [--review YYYY-MM-DD] [--id <id>]
   change <id> --set "FIELD=value[;FIELD=value]" --why "..."     keeps the old value in the log, writes a REVIEW

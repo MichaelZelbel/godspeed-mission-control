@@ -1,19 +1,19 @@
 #!/usr/bin/env node
 /*
- * search.js - find something in your hub, by meaning when your notebook can be reached and
+ * search.js - find something in your mission control, by meaning when your notebook can be reached and
  * by plain words when it cannot.
  *
- * WHY THIS EXISTS. A hub is a folder of text files, and the way an assistant looks for
+ * WHY THIS EXISTS. A mission control is a folder of text files, and the way an assistant looks for
  * something in a folder is by exact word. Ask for "the dentist" and a note that says "Dr. Aydin,
  * teeth" is not found, and the assistant then tells you, with confidence, that you never wrote
- * it down. A connected notebook holds a copy of the whole hub (tools/notebook-sync.py) and
+ * it down. A connected notebook holds a copy of the whole godspeed (tools/notebook-sync.py) and
  * searches it by meaning and by words together. So this asks the notebook first.
  *
  * IT NEVER NEEDS THE NOTEBOOK. Most readers never connect one, a train has no network, a key
  * runs out. In every one of those cases this searches the same files on disk instead and says,
  * on the last line, which of the two it did and why. It is never an error to have no notebook.
  *
- * WHAT COMES BACK IS ALWAYS A FILE IN YOUR HUB. A hit from the notebook is matched to the
+ * WHAT COMES BACK IS ALWAYS A FILE IN YOUR GODSPEED. A hit from the notebook is matched to the
  * file it is a copy of, and dropped when that file is gone: the file is the truth, the note is
  * a copy, and a copy of something you deleted is not an answer.
  *
@@ -21,11 +21,11 @@
  * it again tells it nothing, and it matches nearly every question because it talks about
  * everything.
  *
- *   hub-search <words...>        search
- *   hub-search --limit N ...     at most N hits (8 when you do not say)
- *   hub-search --local ...       do not ask the notebook, search the files
- *   hub-search --json ...        the same answer, for a program to read
- *   hub-search --hub PATH ...    search a hub somewhere else
+ *   mc-search <words...>        search
+ *   mc-search --limit N ...     at most N hits (8 when you do not say)
+ *   mc-search --local ...       do not ask the notebook, search the files
+ *   mc-search --json ...        the same answer, for a program to read
+ *   mc-search --godspeed PATH ...    search a mission control somewhere else
  *
  * Exit code 0 whenever the search ran, also when it found nothing.
  */
@@ -35,29 +35,29 @@ const fs = require("fs");
 const path = require("path");
 const http = require("http");
 const https = require("https");
-const nb = require("./hub-notebook.js");
+const nb = require("./mc-notebook.js");
 
 const DEFAULT_BASE_URL = "https://tjeapelvjlmbxafsmjef.supabase.co/functions/v1";
 // Eight seconds. An assistant is waiting on this in the middle of a sentence, and the files
-// on disk answer in well under one. HUB_SEARCH_TIMEOUT_MS exists for the test suite only.
-const TIMEOUT_MS = parseInt(process.env.HUB_SEARCH_TIMEOUT_MS || "", 10) || 8000;
+// on disk answer in well under one. GODSPEED_SEARCH_TIMEOUT_MS exists for the test suite only.
+const TIMEOUT_MS = parseInt(process.env.GODSPEED_SEARCH_TIMEOUT_MS || "", 10) || 8000;
 const NEVER_A_HIT = "agents.md";
 
 function help() {
-  console.log("hub-search - find something in your hub");
-  console.log("  hub-search <words...> [--limit N] [--local] [--json] [--hub PATH]");
+  console.log("mc-search - find something in your mission control");
+  console.log("  mc-search <words...> [--limit N] [--local] [--json] [--godspeed PATH]");
   console.log("");
-  console.log("  When your hub is copied to your notebook, it asks the notebook first, and it");
-  console.log("  searches the files in your hub folder when it cannot. The last line says which.");
+  console.log("  When your mission control is copied to your notebook, it asks the notebook first, and it");
+  console.log("  searches the files in your mission control folder when it cannot. The last line says which.");
 }
 
 // ---------------------------------------------------------------- arguments
 const raw = process.argv.slice(2);
 const words = [];
-let hubArg = "", limit = 8, localOnly = false, asJson = false, listFiles = false;
+let godspeedArg = "", limit = 8, localOnly = false, asJson = false, listFiles = false;
 for (let i = 0; i < raw.length; i++) {
   const a = raw[i];
-  if (a === "--hub") { hubArg = raw[i + 1] || ""; i += 1; continue; }
+  if (a === "--godspeed") { godspeedArg = raw[i + 1] || ""; i += 1; continue; }
   if (a === "--limit") { limit = parseInt(raw[i + 1], 10) || 8; i += 1; continue; }
   if (a === "--local") { localOnly = true; continue; }
   if (a === "--json") { asJson = true; continue; }
@@ -69,14 +69,14 @@ for (let i = 0; i < raw.length; i++) {
 }
 limit = Math.max(1, Math.min(50, limit));
 
-const hub = nb.findHub(hubArg);
-if (!hub) {
-  console.log("I could not find your hub folder. Run this inside it, or say where it is:");
-  console.log("  hub-search --hub /path/to/your/hub <words>");
+const godspeed = nb.findHub(godspeedArg);
+if (!godspeed) {
+  console.log("I could not find your mission control folder. Run this inside it, or say where it is:");
+  console.log("  mc-search --godspeed /path/to/your/godspeed <words>");
   process.exit(1);
 }
 if (listFiles) {
-  for (const f of nb.mirroredMarkdown(hub)) console.log(f);
+  for (const f of nb.mirroredMarkdown(godspeed)) console.log(f);
   process.exit(0);
 }
 const query = words.join(" ").trim();
@@ -84,7 +84,7 @@ if (!query) { help(); process.exit(1); }
 
 // ---------------------------------------------------------------- reading a file for display
 function readText(rel) {
-  try { return fs.readFileSync(path.join(hub, rel), "utf8"); } catch (e) { return ""; }
+  try { return fs.readFileSync(path.join(godspeed, rel), "utf8"); } catch (e) { return ""; }
 }
 
 // The text under the small header block, when a file has one.
@@ -141,7 +141,7 @@ function snippetFrom(text, terms) {
 }
 
 // ---------------------------------------------------------------- the local search
-// No index, no database: read the files and count. A hub is a few hundred small files and
+// No index, no database: read the files and count. A mission control is a few hundred small files and
 // this takes less time than the network call it stands in for.
 //
 // WHAT IS SEARCHED: the files the mirror covers, plus two the mirror handles differently.
@@ -155,8 +155,8 @@ function snippetFrom(text, terms) {
 // headings. Then how often the word turns up in the text, which flattens out fast so that a
 // long file cannot win by length. A file holding every word you asked for gets a bonus.
 function localSearch(terms, max) {
-  const files = nb.mirroredMarkdown(hub);
-  if (fs.existsSync(path.join(hub, nb.DECISION_LOG))) files.push(nb.DECISION_LOG);
+  const files = nb.mirroredMarkdown(godspeed);
+  if (fs.existsSync(path.join(godspeed, nb.DECISION_LOG))) files.push(nb.DECISION_LOG);
   const hits = [];
   for (const rel of files) {
     if (rel.toLowerCase() === NEVER_A_HIT) continue;
@@ -196,7 +196,7 @@ function askMenerio(key, q, max) {
     let url;
     try {
       url = new URL(base + "/hub-api-notes/search?q=" + encodeURIComponent(q) +
-        "&source_app=hub&limit=" + max);
+        "&source_app=godspeed&limit=" + max);
     } catch (e) { return resolve({ error: "the notebook address is not a web address" }); }
     const lib = url.protocol === "http:" ? http : https;
     let done = false;
@@ -229,11 +229,11 @@ function askMenerio(key, q, max) {
   });
 }
 
-// Which hub file a note is the copy of. The notebook says so in source_id, which is the hub
+// Which godspeed file a note is the copy of. The notebook says so in source_id, which is the mission control
 // path, and for a decision `decisions.md#<key>`. An older Menerio does not send source_id;
 // then the title is the path, because that is what the mirror names every note, and a
-// decision is known by sitting at the top of the hub folder with a date for a name.
-function hubPathOf(note) {
+// decision is known by sitting at the top of the mission control folder with a date for a name.
+function godspeedPathOf(note) {
   let p = "";
   if (typeof note.source_id === "string" && note.source_id) {
     p = note.source_id.split("#")[0];
@@ -241,11 +241,11 @@ function hubPathOf(note) {
     const title = String(note.title || "");
     const folder = String(note.folder_path || "").replace(/^\/+|\/+$/g, "");
     if (/\.md$/i.test(title) && title.includes("/")) p = title;
-    else if (/\.md$/i.test(title)) p = (folder.startsWith("hub/") ? folder.slice(4) + "/" : "") + title;
-    else if ((folder === "hub" || !folder) && /^\d{4}-\d{2}-\d{2}\b/.test(title)) p = nb.DECISION_LOG;
+    else if (/\.md$/i.test(title)) p = (folder.startsWith("godspeed/") ? folder.slice(4) + "/" : "") + title;
+    else if ((folder === "godspeed" || !folder) && /^\d{4}-\d{2}-\d{2}\b/.test(title)) p = nb.DECISION_LOG;
   }
   p = p.replace(/\\/g, "/").replace(/^\.\//, "");
-  // A path is only ever believed INSIDE the hub.
+  // A path is only ever believed INSIDE the mission control.
   if (!p || p.startsWith("/") || /^[A-Za-z]:/.test(p) || p.split("/").includes("..")) return "";
   return p;
 }
@@ -259,10 +259,10 @@ function usableHits(body, terms) {
   const hits = [];
   for (const note of list) {
     if (!note || typeof note !== "object") continue;
-    // An older Menerio ignores source_app=hub and also returns notes you wrote yourself.
-    // Those are not copies of a hub file, and the notebook's own tools are the way to them.
-    if (note.source_app && note.source_app !== "hub") continue;
-    const rel = hubPathOf(note);
+    // An older Menerio ignores source_app=godspeed and also returns notes you wrote yourself.
+    // Those are not copies of a mission control file, and the notebook's own tools are the way to them.
+    if (note.source_app && note.source_app !== "godspeed") continue;
+    const rel = godspeedPathOf(note);
     if (!rel || rel.toLowerCase() === NEVER_A_HIT) continue;
     const text = readText(rel);
     if (!text) continue;                       // the file is gone, so the copy is no answer
@@ -273,12 +273,12 @@ function usableHits(body, terms) {
     // Menerio found the file; the file is the real thing, and the copy opens with a line
     // saying where it came from and then the file's header. That is what Menerio's own
     // snippet showed on the first live run: three hits, three times "This is a file from
-    // your hub at". A decision is one section of a long file, so there the notebook's
+    // your mission control at". A decision is one section of a long file, so there the notebook's
     // snippet is the better one, with that opening taken off.
     let snippet = isDecision ? "" : snippetFrom(text, terms);
     if (!snippet) {
       snippet = String(note.snippet || "").replace(/\s+/g, " ").trim()
-        .replace(/^.*?This is (a file from your hub|a copy of the hub file)[^.]*\.( (You|It)[^.]*\.)?\s*/i, "");
+        .replace(/^.*?This is (a file from your mission control|a copy of the mission control file)[^.]*\.( (You|It)[^.]*\.)?\s*/i, "");
     }
     if (!snippet && typeof note.content === "string") {
       // The first lines of a mirrored note say where it came from. That is not the find.
@@ -319,11 +319,11 @@ async function main() {
   let reason = "";
   let answeredEmpty = false;
   if (!localOnly) {
-    const k = nb.menerioKey(hub);
+    const k = nb.menerioKey(godspeed);
     if (!k.key) {
       reason = "none";
     } else if (!nb.mirrorOn()) {
-      // A notebook is connected, but this reader never put a copy of the hub into it.
+      // A notebook is connected, but this reader never put a copy of the mission control into it.
       // Asking would cost a trip over the network to hear "nothing", every time.
       reason = "no copy";
     } else {
@@ -343,13 +343,13 @@ async function main() {
   if (localOnly) line = "local files";
   else if (answeredEmpty) line = "local files (Menerio answered and had nothing for this, so I looked here too)";
   else if (reason === "none") line = "local files (no Menerio connected)";
-  else if (reason === "no copy") line = "local files (your hub is not copied to Menerio, so there was nothing to ask it)";
+  else if (reason === "no copy") line = "local files (your mission control is not copied to Menerio, so there was nothing to ask it)";
   else line = "local files (Menerio not reached: " + reason + ")";
   show({ query: query, source: "local", mode: "words only", source_line: line,
     reason: answeredEmpty ? "menerio had nothing" : (reason === "none" || reason === "no copy") ? "" : reason, hits: hits });
 }
 
 main().then(() => process.exit(0), (e) => {
-  console.log("hub-search stopped: " + (e && e.message ? e.message : e));
+  console.log("mc-search stopped: " + (e && e.message ? e.message : e));
   process.exit(1);
 });

@@ -1,27 +1,27 @@
 # menerio
 
-Optional. Chapter 28, "Give Your Hub a Notebook". Everything else in the book works without
+Optional. Chapter 28, "Give Your Godspeed a Notebook". Everything else in the book works without
 this folder.
 
-Menerio is the notebook. It can do two jobs for your hub. The first comes with the
+Menerio is the notebook. It can do two jobs for your mission control. The first comes with the
 connection. The second is a separate choice, and it is yours.
 
 1. **It holds the notes you write out in the world.** On the phone, in a hallway, in a shop.
    Every assistant you use can read them and add to them. Say "make a note" and the
    `keep-a-note` skill files it there. That is all a connection does by itself.
-2. **It can make your whole hub searchable by meaning.** The installer asks
-   `Copy your hub's files to Menerio for search?` and the default answer is no. When you say
-   yes, a small program mirrors your hub's text files into the notebook, under one folder
-   called `hub`. Everything is mirrored except `dev/`. Your assistant then finds "the
+2. **It can make your whole mission control searchable by meaning.** The installer asks
+   `Copy your mission control's files to Menerio for search?` and the default answer is no. When you say
+   yes, a small program mirrors your mission control's text files into the notebook, under one folder
+   called `godspeed`. Everything is mirrored except `dev/`. Your assistant then finds "the
    dentist" even when the file says "Dr. Aydin, teeth". When you say no, nothing from your
-   hub is sent, and `hub-search` searches the files on your computer.
+   mission control is sent, and `mc-search` searches the files on your computer.
 
-When you said yes: the files in your hub stay the truth. The mirrored notes are copies, and
+When you said yes: the files in your mission control stay the truth. The mirrored notes are copies, and
 each copy says so in its first line. Menerio ranks them below the notes you wrote yourself.
 It never mines them for facts, and it never exports them as files. To change something,
-change the file in your hub. The copy follows within the hour.
+change the file in your mission control. The copy follows within the hour.
 
-You connect it **once**. The installer asks for your key, locks it into your hub, and gives
+You connect it **once**. The installer asks for your key, locks it into your mission control, and gives
 the same connection to Hermes, Claude Code and Codex. Then it asks the question above. Make
 a free account here first: https://menerio.com/auth?tab=signup
 
@@ -38,7 +38,7 @@ A new free account gets **500 AI credits**, refilled monthly. A note costs about
 month's allowance covers more notes than a diligent month produces. (Measured on a brand new
 free account, 2026-08-13: four notes plus all their machine filing cost 10 credits.)
 
-The mirror, when you switched it on, sends each hub file once, and after that only the
+The mirror, when you switched it on, sends each mission control file once, and after that only the
 files you changed. It never sends a file larger than 300 KB, so years of pasted conversation
 in `prompts/archive/` cannot eat your allowance. It tells you which files it skipped.
 

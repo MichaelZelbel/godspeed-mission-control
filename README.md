@@ -14,15 +14,15 @@ This kit is Godspeed Mission Control itself, plus every template from the book *
 
 Whichever computer you use, one thing to run and no decisions to make. It works out for itself whether this machine needs a first setup or an update.
 
-**On Windows:** **[download HubSetup.exe](https://github.com/MichaelZelbel/teach-it-once-kit/releases/latest/download/HubSetup.exe)** and double-click it. Nothing to type, no terminal.
+**On Windows:** **[download GodspeedSetup.exe](https://github.com/MichaelZelbel/teach-it-once-kit/releases/latest/download/GodspeedSetup.exe)** and double-click it. Nothing to type, no terminal.
 
 **On a Mac or Linux:** open a terminal and paste this one line. (A terminal is the normal way to install things on those systems, which is why they get a line and Windows gets a file.)
 
 ```
-curl -fsSL https://raw.githubusercontent.com/MichaelZelbel/teach-it-once-kit/main/install-hub.sh | bash
+curl -fsSL https://raw.githubusercontent.com/MichaelZelbel/teach-it-once-kit/main/install-godspeed.sh | bash
 ```
 
-Either one sets up your mission control with the `starter-hub/` folder below already in place. It installs the few things it needs underneath: Git, Node.js, and on Linux Hermes itself (on Windows it checks that Hermes Desktop is there). It also makes one memory that every machine you own shares. If that computer already has a mission control, it updates that one instead. Run it as often as you like; it never deletes anything you have written.
+Either one sets up your mission control with the `starter-godspeed/` folder below already in place. It installs the few things it needs underneath: Git, Node.js, and on Linux Hermes itself (on Windows it checks that Hermes Desktop is there). It also makes one memory that every machine you own shares. If that computer already has a mission control, it updates that one instead. Run it as often as you like; it never deletes anything you have written.
 
 **Windows will warn you the first time.** You will see a blue box saying "Windows protected your PC", and at first the only button is *Don't run*. Click **More info**, then **Run anyway**. Windows shows this for any program whose publisher it has not seen enough copies of yet. It is not a virus warning and says nothing about whether the program is safe.
 
@@ -38,7 +38,7 @@ git clone https://github.com/MichaelZelbel/teach-it-once-kit.git
 
 ## One AGENTS.md, read by Hermes, Claude Code, Codex and OpenCode
 
-Your assistant's operating manual is one plain file, `starter-hub/AGENTS.md`. Hermes, Codex and OpenCode read it by name when they open the folder. For Claude Code the kit ships `starter-hub/CLAUDE.md`, and this is the whole file:
+Your assistant's operating manual is one plain file, `starter-godspeed/AGENTS.md`. Hermes, Codex and OpenCode read it by name when they open the folder. For Claude Code the kit ships `starter-godspeed/CLAUDE.md`, and this is the whole file:
 
 ```
 @AGENTS.md
@@ -48,13 +48,13 @@ Since version 2.1.277 (18 September 2026) Claude Code reads `AGENTS.md` on its o
 
 ## What is where
 
-- `starter-hub/`: the folder that becomes your own system. Copy this whole folder and it is your mission control. Everything else here fills it up. Three of its rooms are the ones that turn a folder of notes into something that decides: `goals/` (what you want, and who gets attention today), `forecasts/` (what your mission control expects to happen, dated and scored) and `work/` (what it is doing, where "it says it did it" and "somebody checked" are two different states). Each starts empty with a README explaining the format.
-- `tools/`: the small programs the installer puts on your machine, outside your mission control. Among them `hub-search`, which finds things in your mission control (through your notebook when it is copied there, in the files when not), `hub-goals`, `hub-forecast` and `hub-work` for the three rooms above, `hub-decide`, which runs the day's decision once a day through whichever assistant you use, and `hub-work-run`, which carries out the work that decision filed, one item per assistant run, verified by each item's own check (`hub-check-written` for anything written). `tools/README.md` says what each one is for.
+- `starter-godspeed/`: the folder that becomes your own system. Copy this whole folder and it is your mission control. Everything else here fills it up. Three of its rooms are the ones that turn a folder of notes into something that decides: `goals/` (what you want, and who gets attention today), `forecasts/` (what your mission control expects to happen, dated and scored) and `work/` (what it is doing, where "it says it did it" and "somebody checked" are two different states). Each starts empty with a README explaining the format.
+- `tools/`: the small programs the installer puts on your machine, outside your mission control. Among them `mc-search`, which finds things in your mission control (through your notebook when it is copied there, in the files when not), `mc-goals`, `mc-forecast` and `mc-work` for the three rooms above, `mc-decide`, which runs the day's decision once a day through whichever assistant you use, and `mc-work-run`, which carries out the work that decision filed, one item per assistant run, verified by each item's own check (`mc-check-written` for anything written). `tools/README.md` says what each one is for.
 - `profile/`: Part II assets. The about-you template, the people and projects interviews, the voice extraction prompt, the capture and spring-clean checklists.
-- `skills/`: Part III assets. The skill interview, the five starter recipes, the craft-skill interview, the test checklist, practice texts, and one big finished craft skill (`strip-ai-tells.md`) to see what a real one looks like. These are the book's teaching copies; in your own mission control a recipe lives at `skills/<name>/SKILL.md`. The two recipes the hub runs by itself are not here: `next-action` and `work-item` ship inside `starter-hub/skills/`, so every mission control has them from day one. So does `keep-a-note`, the recipe behind "make a note" (Chapter 28). `hub-decide` carries out the first once a day, and `hub-work-run` carries out one filed item at a time with the second.
+- `skills/`: Part III assets. The skill interview, the five starter recipes, the craft-skill interview, the test checklist, practice texts, and one big finished craft skill (`strip-ai-tells.md`) to see what a real one looks like. These are the book's teaching copies; in your own mission control a recipe lives at `skills/<name>/SKILL.md`. The two recipes the mission control runs by itself are not here: `next-action` and `work-item` ship inside `starter-godspeed/skills/`, so every mission control has them from day one. So does `keep-a-note`, the recipe behind "make a note" (Chapter 28). `mc-decide` carries out the first once a day, and `mc-work-run` carries out one filed item at a time with the second.
 - `procedures/`: Part V and VI assets. Morning brief, weekly review, watchdog, the procedure register, the red lines, the card for keys that run out, and the card for everything else that runs out (`what-runs-out-and-when.md`).
 - `living/`: the two-questions card, the privacy audit checklist, the saved-prompt card, the printable build-order card.
-- `menerio/`: Part VI, optional. Chapter 28, "Give Your Mission Control a Notebook". You connect Menerio once, through the installer or with `hub-menerio-connect`, and Hermes, Claude Code and Codex all have it. That gives you the notebook, and "make a note" is filed there. Copying your mission control into it for search is a separate choice: the installer asks, and the default is no. On a yes, your whole mission control except `dev/` is mirrored into the notebook, where the copies rank below your own notes and are never mined for facts or exported as files, and `hub-search` asks Menerio first. On a no, nothing from your mission control is sent, and `hub-search` searches the files on your computer. A free account is enough: https://menerio.com/auth?tab=signup
+- `menerio/`: Part VI, optional. Chapter 28, "Give Your Mission Control a Notebook". You connect Menerio once, through the installer or with `mc-menerio-connect`, and Hermes, Claude Code and Codex all have it. That gives you the notebook, and "make a note" is filed there. Copying your mission control into it for search is a separate choice: the installer asks, and the default is no. On a yes, your whole mission control except `dev/` is mirrored into the notebook, where the copies rank below your own notes and are never mined for facts or exported as files, and `mc-search` asks Menerio first. On a no, nothing from your mission control is sent, and `mc-search` searches the files on your computer. A free account is enough: https://menerio.com/auth?tab=signup
 - `mail/`: Part VI, optional. Chapters 29 and 30. Email for your mission control in three levels: paste, forward to its own address, or connect your Gmail once for every assistant (reading and drafts; nothing is sent until you approve the exact message). `mail/README.md` also says plainly what the approval does not protect against.
 - `server/`: Part VI, optional. Scripts and guides for giving your system an always-on home.
 - `swap/`: Part VI. Config examples for running the same system on a different company's tool and model.
@@ -63,10 +63,10 @@ Appendix A of the book lists which files each chapter uses.
 
 ## Add-ons
 
-Some things the book shows are deliberately not in this kit, because they need accounts, an identity check or a server that most readers will never want. Each lives in its own repository with its own one-line installer, and installs into the hub you already have.
+Some things the book shows are deliberately not in this kit, because they need accounts, an identity check or a server that most readers will never want. Each lives in its own repository with its own one-line installer, and installs into the mission control you already have.
 
-- **hub-phone** (Chapter 34): let your hub make a phone call for you. A voice agent calls as the AI assistant of you, over your own mobile number, and your assistant reads the transcript back with one of four verdicts. Needs the Chapter 32 server, an ElevenLabs account and a Twilio account. https://github.com/MichaelZelbel/hub-phone
-- **hub-video** (Chapter 35): let your hub finish your videos. You record and cut; your assistant burns in captions in one look, makes a vertical version, and builds animated title cards, slides and graphics with HyperFrames. Runs on the computer where your videos are, with no paid accounts; needs Node.js 22 and about 1.5 GB of disk. https://github.com/MichaelZelbel/hub-video
+- **mc-phone** (Chapter 34): let your mission control make a phone call for you. A voice agent calls as the AI assistant of you, over your own mobile number, and your assistant reads the transcript back with one of four verdicts. Needs the Chapter 32 server, an ElevenLabs account and a Twilio account. https://github.com/MichaelZelbel/mc-phone
+- **mc-video** (Chapter 35): let your mission control finish your videos. You record and cut; your assistant burns in captions in one look, makes a vertical version, and builds animated title cards, slides and graphics with HyperFrames. Runs on the computer where your videos are, with no paid accounts; needs Node.js 22 and about 1.5 GB of disk. https://github.com/MichaelZelbel/mc-video
 
 ## What this is not
 

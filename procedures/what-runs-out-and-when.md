@@ -26,7 +26,7 @@ left, and a fraction is something a computer can be quiet or loud about.
                    first half     to a quarter   to a tenth
 ```
 
-Your hub says nothing for the first half. A line now and then through the second
+Your mission control says nothing for the first half. A line now and then through the second
 half. Its own line in the last quarter. Every single morning in the last tenth,
 and always on the last day whatever the arithmetic says.
 
@@ -42,7 +42,7 @@ not the rule.** Fix the window.
 ## The four questions, and you answer them once
 
 ```
-hub-due add car-service --title "Car service before the warranty runs out" \
+mc-due add car-service --title "Car service before the warranty runs out" \
   --from 2026-09-01 --to 2027-02-28 \
   --done-when "The car has been serviced at a garage the warranty accepts." \
   --cost "The warranty ends. A gearbox after that is mine to pay for." \
@@ -54,7 +54,7 @@ That is four answers in one line:
 1. **What is true when this is finished?** (`--done-when`)
 2. **From when to when can you do it?** (`--from`, `--to`)
 3. **What does it cost you if it slips?** (`--cost`)
-4. **How could your hub tell you did it, without asking?** (below)
+4. **How could your mission control tell you did it, without asking?** (below)
 
 You are never asked again. Everything the thing does for the rest of its life is
 judged against those answers.
@@ -62,10 +62,10 @@ judged against those answers.
 Or say it in words, in a session with your folder attached:
 
 ```
-Add something with a deadline to my hub. Ask me exactly four questions, once, and never ask them again: (1) what is true when this is finished, (2) from what day to what day can I do it, (3) what does it cost me if it slips, (4) how could you tell I had done it without asking me. If I cannot give you a last day, say so plainly and do not add it: something with no last day is a wish, and this list is not for wishes. Then run hub-due add with my answers, and show me the four answers as you recorded them so I can fix them now rather than in six months.
+Add something with a deadline to my mission control. Ask me exactly four questions, once, and never ask them again: (1) what is true when this is finished, (2) from what day to what day can I do it, (3) what does it cost me if it slips, (4) how could you tell I had done it without asking me. If I cannot give you a last day, say so plainly and do not add it: something with no last day is a wish, and this list is not for wishes. Then run mc-due add with my answers, and show me the four answers as you recorded them so I can fix them now rather than in six months.
 ```
 
-*Bookmark the prompt, if you like: [querino.ai/prompts/add-a-deadline-to-my-hub](https://querino.ai/prompts/add-a-deadline-to-my-hub)*
+*Bookmark the prompt, if you like: [querino.ai/prompts/add-a-deadline-to-my-mission control](https://querino.ai/prompts/add-a-deadline-to-my-mission control)*
 
 ## Question four is the whole card
 
@@ -79,11 +79,11 @@ Those close themselves. The moment you act, the nagging stops, without you
 telling anything anything. That is not a nice extra. **That is the failure that
 kills every reminder app**, fixed.
 
-Most things cannot. Nobody can tell your hub that you filed a timesheet into
+Most things cannot. Nobody can tell your mission control that you filed a timesheet into
 your employer's website. Those wait for your word:
 
 ```
-hub-due done car-service
+mc-due done car-service
 ```
 
 **Both answers are fine.** What is not fine is skipping the question, because
@@ -96,7 +96,7 @@ waits for you, and says so on screen rather than pretending.
 
 ## No date, not eligible
 
-`hub-due add` refuses anything without both dates, in exactly those words.
+`mc-due add` refuses anything without both dates, in exactly those words.
 
 That refusal is the only thing between this and a to-do app you abandon in three
 weeks. A shopping list of vague intentions gets ignored, and once you are
@@ -112,7 +112,7 @@ from you, and it deletes the file and its whole history, which is why the comman
 makes you type it out:
 
 ```
-hub-due drop car-service --yes
+mc-due drop car-service --yes
 ```
 
 A window that closed without being done **stays open**. Nothing sweeps it away
@@ -125,7 +125,7 @@ uncomfortable on purpose.
 Your morning brief reads one command:
 
 ```
-hub-due today
+mc-due today
 ```
 
 It gives back **at most three**, loudest first, and never the same thing twice in
@@ -153,7 +153,7 @@ Open `skills/morning-brief/SKILL.md`, the recipe you wrote in Chapter 22, and pa
 this into the session:
 
 ```
-Open skills/morning-brief/SKILL.md and add one part, near the top. Run the command hub-due today and put whatever it gives back into the brief, word for word, changing nothing and adding nothing. If it says nothing needs saying today, leave the part out entirely rather than writing that nothing is due. Do not work out for yourself which deadlines matter or how many to show: that command already decided, and its cap of three a day is the only reason this stays readable. Change nothing else in the file.
+Open skills/morning-brief/SKILL.md and add one part, near the top. Run the command mc-due today and put whatever it gives back into the brief, word for word, changing nothing and adding nothing. If it says nothing needs saying today, leave the part out entirely rather than writing that nothing is due. Do not work out for yourself which deadlines matter or how many to show: that command already decided, and its cap of three a day is the only reason this stays readable. Change nothing else in the file.
 ```
 
 *Bookmark the prompt, if you like: [querino.ai/prompts/put-my-deadlines-in-my-brief](https://querino.ai/prompts/put-my-deadlines-in-my-brief)*
@@ -164,8 +164,8 @@ day a week away, run the brief once, see the line appear, and drop it again.
 ## Your keys are already in this list
 
 If you did Chapter 31 you have `secrets/expires.txt`, with a line per key and the
-date it dies. **`hub-due` reads that same file.** Each key becomes one of these,
-with a window running from the day your hub first learned the date to the date
+date it dies. **`mc-due` reads that same file.** Each key becomes one of these,
+with a window running from the day your mission control first learned the date to the date
 itself.
 
 So you never write a date in two places, and you have one thing nagging you
@@ -184,8 +184,8 @@ morning brief recipe, you can take it back out now. One thing, one place.
 Not two. Two entries about one date is the same mistake as two reminder apps:
 the day they disagree with each other, you stop reading both.
 
-**Which day.** The day your hub starts being loud, not the day the thing dies.
-`hub-due` works that day out from the same rule as everything else, so there is
+**Which day.** The day your mission control starts being loud, not the day the thing dies.
+`mc-due` works that day out from the same rule as everything else, so there is
 nothing for you to pick. The death date goes in the **title**, so the single
 entry still tells you both things:
 
@@ -198,17 +198,17 @@ An entry on the day the thing dies sounds sensible and is a trap. If you renewed
 it three weeks ago, that entry is now a lie sitting in your calendar, and you
 have to remember to go and take it out. You will not.
 
-**It takes itself out.** When you finish something, your hub deletes its entry,
+**It takes itself out.** When you finish something, your mission control deletes its entry,
 as long as the day has not arrived yet. A day that has already passed is left
 alone: that one is a record of what happened. This is the half that makes a
 single entry safe to have at all, because the same thing that stops the nagging
 removes the entry.
 
-**Give it a real start time**, never an all-day entry, or the rest of your hub
+**Give it a real start time**, never an all-day entry, or the rest of your mission control
 reads it as background noise and skips it.
 
 **And the other direction.** Write an event on your phone with a line in its
-notes like `hub: from 1 Feb`, and your assistant picks it up on the next morning
+notes like `mission control: from 1 Feb`, and your assistant picks it up on the next morning
 run.
 
 That is all of it. **The calendar never decides when you get nagged, and never
@@ -226,10 +226,10 @@ job here however long the list gets.
 
 Two minutes, today, while nothing is urgent.
 
-- Add something with a last day two days from now. Run `hub-due today` and watch
+- Add something with a last day two days from now. Run `mc-due today` and watch
   it come out loud. Drop it again.
 - Add one with a `file-newer` self check pointing at a file that does not exist.
-  Run `hub-due check`, see it stay open. Create the file. Run it again and watch
+  Run `mc-due check`, see it stay open. Create the file. Run it again and watch
   it close itself with nobody asked.
 
 Now you know what it looks like when it works, rather than only what it looks

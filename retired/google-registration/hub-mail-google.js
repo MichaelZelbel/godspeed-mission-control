@@ -1,22 +1,22 @@
 /*
- * hub-mail-google.js - the hub registers the reader's own small Google app, in the reader's
+ * mc-mail-google.js - the mission control registers the reader's own small Google app, in the reader's
  * browser window, while the reader watches.
  *
  * WHY THIS FILE IS HERE (Michael, 2026-09-21): "the reader is signing you in, and you do it in
  * Google." The reader does three things: signs in, ticks the box that agrees to Google's terms
- * (an agreement is the reader's to give, never the hub's), and clicks Allow at the end. The hub
+ * (an agreement is the reader's to give, never the mission control's), and clicks Allow at the end. The mission control
  * does everything between: the project, the Gmail API, the app's name and audience, the desktop
  * client, and it reads the Client ID and secret off the page itself, so nothing is copied or
  * pasted by anybody.
  *
  * GOOGLE CHANGES ITS PAGES. Every move below is written as "find it, do it, check that it
- * happened". When a move cannot find what it is looking for, the hub does not stop and does not
+ * happened". When a move cannot find what it is looking for, the mission control does not stop and does not
  * guess: it tells the reader in one sentence what to click in the window, and goes on as soon as
  * the page shows that it happened. So a renamed button costs a reader one click, not the evening.
- * Every page is opened with hl=en, so the words the hub looks for are English whatever language
+ * Every page is opened with hl=en, so the words the mission control looks for are English whatever language
  * the reader's Google account speaks.
  *
- * It keeps a small note of how far it got (~/.hub/mail/google-setup.json: the project's id and
+ * It keeps a small note of how far it got (~/.godspeed/mail/google-setup.json: the project's id and
  * the last finished move, never a secret), so a run that was interrupted goes on where it was
  * instead of making a second project.
  */
@@ -25,13 +25,13 @@
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
-const { sleep } = require("./hub-mail-browser.js");
+const { sleep } = require("./mc-mail-browser.js");
 
-const CONSOLE = process.env.HUB_MAIL_GOOGLE_CONSOLE || "https://console.cloud.google.com";
-const APP_NAME = "My hub";
+const CONSOLE = process.env.GODSPEED_MAIL_GOOGLE_CONSOLE || "https://console.cloud.google.com";
+const APP_NAME = "My mission control";
 
 // ============================================================ how far it got
-const noteFile = () => path.join(process.env.HUB_MAIL_HOME || os.homedir(), ".hub", "mail", "google-setup.json");
+const noteFile = () => path.join(process.env.GODSPEED_MAIL_HOME || os.homedir(), ".godspeed", "mail", "google-setup.json");
 const readNote = () => { try { return JSON.parse(fs.readFileSync(noteFile(), "utf8")); } catch (e) { return {}; } };
 function writeNote(n) { fs.mkdirSync(path.dirname(noteFile()), { recursive: true, mode: 0o700 }); fs.writeFileSync(noteFile(), JSON.stringify(n, null, 1), { mode: 0o600 }); }
 function forgetNote() { try { fs.unlinkSync(noteFile()); } catch (e) { /* none */ } }
@@ -132,10 +132,10 @@ class Worker {
   }
 
   /*
-   * One move: try it; when the hub cannot do it, the reader does that one thing in the window.
-   *   doIt()   -> true when the hub did it
+   * One move: try it; when the mission control cannot do it, the reader does that one thing in the window.
+   *   doIt()   -> true when the mission control did it
    *   done()   -> true when the page shows that it happened (whoever did it)
-   *   sentence -> what to tell the reader when the hub could not
+   *   sentence -> what to tell the reader when the mission control could not
    */
   async move(name, { doIt, done, sentence, timeout = 120000 }) {
     this.log("move: " + name);
@@ -155,7 +155,7 @@ class Worker {
 }
 
 // ============================================================ the moves
-// Written from Google's real pages, read in the hub's own window on 2026-09-21 (account
+// Written from Google's real pages, read in the mission control's own window on 2026-09-21 (account
 // michael@zelbel.de, a Workspace address). The words in the patterns are the words on those pages.
 
 const inDialog = "[role=dialog] button, mat-dialog-container button";
@@ -215,8 +215,8 @@ async function switchOnGmail(w, projectId) {
   });
 }
 
-// The app's name and who may use it: ONE Google page with four sections. The hub fills three.
-// The fourth is a box that agrees to Google's user data policy, and the hub never ticks it.
+// The app's name and who may use it: ONE Google page with four sections. The mission control fills three.
+// The fourth is a box that agrees to Google's user data policy, and the mission control never ticks it.
 async function nameTheApp(w, projectId, email, kind) {
   await w.go("/auth/overview/create?project=" + projectId);
   const hasForm = await w.page.waitFor(() => !!document.querySelector('input[formcontrolname="displayName"]') || /App name/.test(document.body.innerText), { timeout: 15000 });
@@ -280,7 +280,7 @@ async function publishIfExternal(w, projectId, kind) {
   });
 }
 
-// The app's key. Google shows the two lines once, in a small window; the hub reads them off the
+// The app's key. Google shows the two lines once, in a small window; the mission control reads them off the
 // page itself and closes the window. Nobody copies or pastes, and neither line is printed.
 async function makeTheKey(w, projectId) {
   await w.go("/auth/clients/create?project=" + projectId);

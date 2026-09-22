@@ -60,7 +60,7 @@ That is the whole of it.
 
 ```
 Now put a private backup copy of this folder on GitHub, so my work
-survives if this laptop dies. It must be private. Call it hub-backup.
+survives if this laptop dies. It must be private. Call it godspeed-backup.
 I do not want to type any commands. Tell me the web address when it
 is done.
 ```

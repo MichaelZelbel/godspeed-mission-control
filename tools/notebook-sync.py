@@ -1,35 +1,35 @@
 #!/usr/bin/env python3
-"""Mirror your hub's text files into your notebook as notes, so they can be searched there.
+"""Mirror your mission control's text files into your notebook as notes, so they can be searched there.
 
-WHAT IS SENT: every Markdown file git tracks in the hub. Because git is asked, the
-hub's own .gitignore decides what stays home, and dev/ stays home on every hub. The
+WHAT IS SENT: every Markdown file git tracks in the mission control. Because git is asked, the
+mission control's own .gitignore decides what stays home, and dev/ stays home on every mission control. The
 few other exceptions are listed one by one further down, each with its reason.
 
-WHY THE WHOLE HUB (2026-09-20). Until then this sent three places only:
+WHY THE WHOLE GODSPEED (2026-09-20). Until then this sent three places only:
 observations/, skills/ and the split decisions.md. The reasoning was "skip what is
 already loaded": AGENTS.md, profile/ and rules/ are read at the start of every
 session, so a search result repeating them was called noise. That reasoning is
-retired, on the author's decision: the whole hub is to be visible and searchable
+retired, on the author's decision: the whole godspeed is to be visible and searchable
 in the notebook, from a phone, with no terminal anywhere near. The noise is handled where it
 arises instead: Menerio ranks mirrored notes below the notes you wrote yourself,
-and hub-search drops AGENTS.md from what it shows.
+and mc-search drops AGENTS.md from what it shows.
 
-Every note lands in a folder that mirrors where its file lives in the hub, under
-a single `hub` root: see HUB_FOLDER and folder_for below. Nothing this sync
+Every note lands in a folder that mirrors where its file lives in the mission control, under
+a single `godspeed` root: see GODSPEED_FOLDER and folder_for below. Nothing this sync
 sends is left at the notebook's top level.
 
 One way only. The files on disk stay the source of truth. Menerio holds a copy it
-indexes for search and must never read facts out of, because the hub's
+indexes for search and must never read facts out of, because the mission control's
 observations are machine-written guesses and a system that mines its own guesses
 ends up citing them back as things you said. The guard that enforces that
-lives in Menerio, in supabase/functions/_shared/hub-source.ts.
+lives in Menerio, in supabase/functions/_shared/mc-source.ts.
 
 Usage:
     python3 tools/notebook-sync.py              show what would be sent
     python3 tools/notebook-sync.py --apply      send it
 
 Needs MENERIO_API_KEY in the environment. The installer teaches new terminals
-the credential; by hand it is:  eval "$(hub-notebook-env)"
+the credential; by hand it is:  eval "$(mc-notebook-env)"
 """
 import argparse
 import dataclasses
@@ -44,14 +44,14 @@ import urllib.error
 import urllib.request
 
 # ---- what stays home ------------------------------------------------------------------
-# THE SAME LIST LIVES IN tools/search.js (hub-search), which falls back to searching
+# THE SAME LIST LIVES IN tools/search.js (mc-search), which falls back to searching
 # exactly the files this program mirrors. Change one, change the other;
-# tools/test-hub-search.sh compares the two lists on one folder and fails when they drift.
+# tools/test-mc-search.sh compares the two lists on one folder and fails when they drift.
 
-# dev/ is never sent. The starter hub's .gitignore already keeps its contents out of
-# git, but it tracks dev/README.md, and a hub somebody made by hand may track more.
+# dev/ is never sent. The starter mission control's .gitignore already keeps its contents out of
+# git, but it tracks dev/README.md, and a mission control somebody made by hand may track more.
 # Each project in there is its own repository with its own history; the owner's words
-# were "all hub folders except dev/", so the folder is skipped by name as well.
+# were "all godspeed folders except dev/", so the folder is skipped by name as well.
 # .git/ and node_modules/ only matter when there is no git to ask and the folder is
 # walked instead.
 SKIP_DIRS = ("dev", ".git", "node_modules")
@@ -73,9 +73,9 @@ ORIGIN_MENERIO = re.compile(r"^origin:\s*menerio\s*$", re.IGNORECASE | re.MULTIL
 MAX_FILE_BYTES = 300 * 1024
 
 # The visible skills/ is the room since the Hermes switch (2026-09-02). The hidden
-# .claude/skills is a link the installer points at it, so on a topped-up hub the two
+# .claude/skills is a link the installer points at it, so on a topped-up godspeed the two
 # are one folder and the visible name wins: the hidden one is never sent as well, or
-# every skill would arrive twice. An older hub that has not been re-run still keeps
+# every skill would arrive twice. An older godspeed that has not been re-run still keeps
 # its recipes under the hidden name only, and those must still be sent, under the
 # ids they always had.
 SKILLS_FOLDER = "skills"
@@ -95,29 +95,29 @@ SYNC_SKIP_FILES = frozenset({
 DECISION_LOG = "decisions.md"
 
 # Everything this sync sends lives under one folder in the notebook, and inside
-# it the hub's own layout is reproduced exactly: observations/x.md becomes a
-# note in hub/observations.
+# it the mission control's own layout is reproduced exactly: observations/x.md becomes a
+# note in godspeed/observations.
 #
 # Two reasons it is not left at the root, which is where the column defaults.
-# The notebook is YOUR memory and holds notes you wrote yourself; hub copies
+# The notebook is YOUR memory and holds notes you wrote yourself; godspeed copies
 # loose at the top level bury them under machine output. And a note's folder is
 # the second thing that says where it came from, after the provenance line in
 # the body, so the answer to "is this something I said or something a machine
 # wrote" is visible before opening it.
-HUB_FOLDER = "hub"
+GODSPEED_FOLDER = "godspeed"
 
 # The first line of every note says who wrote what is under it. Only observations/ is
 # called a guess, because only observations/ is one. The lines for observations/,
-# skills/ and decisions are word for word what they were before the whole hub was
+# skills/ and decisions are word for word what they were before the whole godspeed was
 # mirrored (2026-09-20): the line is part of what gets hashed, so changing a word of
-# one would send every note of that kind again, on every hub that had already synced.
+# one would send every note of that kind again, on every mission control that had already synced.
 AUTHOR_LINES = {
-    "machine": "This is a file from your hub at {path}. It is text a machine "
+    "machine": "This is a file from your mission control at {path}. It is text a machine "
                "wrote, which makes it a guess and not something you said.",
-    "mixed": "This is a file from your hub at {path}. It was mostly written by a "
+    "mixed": "This is a file from your mission control at {path}. It was mostly written by a "
              "machine and kept because you found it useful.",
-    "owner": "This is a file from your hub at {path}. You wrote or decided this.",
-    "copy": "This is a copy of the hub file at {path}. Change the file in the hub, "
+    "owner": "This is a file from your mission control at {path}. You wrote or decided this.",
+    "copy": "This is a copy of the mission control file at {path}. Change the file in the mission control, "
             "never this note.",
 }
 
@@ -129,8 +129,8 @@ AUTHOR_BY_FOLDER = (
     ("rules/", "owner"),
 ) + tuple((alias + "/", "mixed") for alias in SKILLS_ALIASES)
 
-# The two shapes a decision takes in decisions.md. The starter hub writes them
-# as bullets, "- (YYYY-MM-DD) what and why", and a hub that outgrows one line
+# The two shapes a decision takes in decisions.md. The starter godspeed writes them
+# as bullets, "- (YYYY-MM-DD) what and why", and a mission control that outgrows one line
 # per decision uses a dated heading. Both are decisions, and missing a shape
 # means missing decisions SILENTLY: the splitter simply appends unrecognised
 # lines to whatever it has open, so a missed heading folds many decisions into
@@ -211,10 +211,10 @@ def split_decision_log(text: str, source_path: str) -> list:
 def tracked_markdown(repo_root: pathlib.Path):
     """Every Markdown file git tracks here, or None when git cannot answer.
 
-    Git is asked so that the hub's .gitignore decides what stays home, and so that a
+    Git is asked so that the mission control's .gitignore decides what stays home, and so that a
     scratch folder somebody forgot to delete is never mirrored into a notebook.
 
-    Only believed when the hub IS the top of a repository. A hub folder sitting inside
+    Only believed when the mission control IS the top of a repository. A mission control folder sitting inside
     some other repository gets an answer too, and it is the wrong one: that repository
     tracks none of these files, so the answer is "nothing", and "nothing" reads to the
     rest of this program as "every file was deleted".
@@ -250,7 +250,7 @@ def walked_markdown(repo_root: pathlib.Path) -> list:
     return found
 
 
-def hub_markdown_files(repo_root: pathlib.Path, notes=None) -> list:
+def godspeed_markdown_files(repo_root: pathlib.Path, notes=None) -> list:
     """The repo-relative paths this sync mirrors, sorted. decisions.md is not in the
     list: it is split, one note per decision, by collect_documents.
 
@@ -291,7 +291,7 @@ def came_from_menerio(rel: str, text: str) -> bool:
 
 def collect_documents(repo_root: pathlib.Path, notes=None) -> list:
     docs = []
-    for rel in hub_markdown_files(repo_root, notes):
+    for rel in godspeed_markdown_files(repo_root, notes):
         # errors="replace": one file saved in an old Windows encoding must not stop
         # the other thousand from being mirrored.
         text = (repo_root / rel).read_text(encoding="utf-8", errors="replace")
@@ -306,15 +306,15 @@ def collect_documents(repo_root: pathlib.Path, notes=None) -> list:
 
 
 def folder_for(source_path: str) -> str:
-    """The notebook folder a document belongs in: the hub's own path, under HUB_FOLDER.
+    """The notebook folder a document belongs in: the mission control's own path, under GODSPEED_FOLDER.
 
     Derived from the source path rather than stored on the Document, so there is
     one answer and it cannot drift from the file it describes. A document at the
-    repository root, which is every decision, gets HUB_FOLDER itself: that
-    mirrors the hub, where decisions.md is one file at the top.
+    repository root, which is every decision, gets GODSPEED_FOLDER itself: that
+    mirrors the mission control, where decisions.md is one file at the top.
     """
     parent, _, _ = source_path.rpartition("/")
-    return "{}/{}".format(HUB_FOLDER, parent) if parent else HUB_FOLDER
+    return "{}/{}".format(GODSPEED_FOLDER, parent) if parent else GODSPEED_FOLDER
 
 
 def author_for(source_path: str) -> str:
@@ -323,7 +323,7 @@ def author_for(source_path: str) -> str:
             return author
     if source_path.startswith(DECISION_LOG):
         return "owner"
-    # Everything else is called what it is, a copy of a file. Before the whole hub was
+    # Everything else is called what it is, a copy of a file. Before the whole godspeed was
     # mirrored an unmapped path defaulted to "a machine wrote this", because claiming
     # you said something you did not was the expensive mistake. With AGENTS.md, goals/
     # and world/ now in the mirror, calling your own words a machine's guess is the
@@ -364,9 +364,9 @@ def plan_actions(docs: list, state: dict) -> dict:
     trash = [entry["note_id"] for doc_id, entry in state.items() if doc_id not in seen]
 
     # THE MASS-TRASH GUARD (2026-08-21). A note is thrown away when the cache remembers a
-    # document the hub no longer has, which is right when you delete a file and catastrophic
+    # document the mission control no longer has, which is right when you delete a file and catastrophic
     # when a lot of paths change at once. Both happen: this installer renames folders on an
-    # older hub, and one rename of a file everything points at turned every remembered id
+    # older godspeed, and one rename of a file everything points at turned every remembered id
     # into a stranger. On Michael's laptop that trashed 89 of his decisions in one run, and
     # on his work PC an older copy of this program trashed 299 notes the same way.
     #
@@ -375,7 +375,7 @@ def plan_actions(docs: list, state: dict) -> dict:
     # more than a third of what it tracks throws away nothing instead, and says why. The cure
     # is --reconcile, which asks the notebook what it actually holds and matches by title.
     if trash and len(state) and len(trash) > max(10, len(state) // 3):
-        print("refusing to trash {} of the {} notes this hub tracks: that is not a few "
+        print("refusing to trash {} of the {} notes this mission control tracks: that is not a few "
               "deleted files, it is a cache that no longer matches the folder. Nothing was "
               "thrown away. Run once with --reconcile to rebuild it from the notebook."
               .format(len(trash), len(state)))
@@ -473,7 +473,7 @@ class MenerioClient:
         result = self._call("POST", "", {
             "title": title,
             "content": body,
-            "source_app": "hub",
+            "source_app": "godspeed",
             "source_id": source_id,
             "folder_path": folder,
         })
@@ -493,7 +493,7 @@ class MenerioClient:
             page = self._call("GET", "?limit=100&offset={}".format(offset)).get("data", [])
             if not page:
                 break
-            notes += [n for n in page if n.get("source_app") == "hub"]
+            notes += [n for n in page if n.get("source_app") == "godspeed"]
             offset += len(page)
             if len(page) < 100:
                 break
@@ -611,14 +611,14 @@ def run_sync(docs: list, state: dict, client, apply: bool,
 
 
 def mirror_is_on() -> bool:
-    """HUB_NOTEBOOK_MIRROR from the environment, else from ~/.hub/device.env. Only "1" is yes."""
-    value = os.environ.get("HUB_NOTEBOOK_MIRROR", "").strip()
+    """GODSPEED_NOTEBOOK_MIRROR from the environment, else from ~/.godspeed/device.env. Only "1" is yes."""
+    value = os.environ.get("GODSPEED_NOTEBOOK_MIRROR", "").strip()
     if not value:
         home = os.environ.get("USERPROFILE") or os.environ.get("HOME") or os.path.expanduser("~")
         try:
-            with open(os.path.join(home, ".hub", "device.env"), encoding="utf-8") as handle:
+            with open(os.path.join(home, ".godspeed", "device.env"), encoding="utf-8") as handle:
                 for line in handle:
-                    match = re.match(r"^\s*HUB_NOTEBOOK_MIRROR=(.*)$", line)
+                    match = re.match(r"^\s*GODSPEED_NOTEBOOK_MIRROR=(.*)$", line)
                     if match:
                         value = match.group(1).strip()
         except OSError:
@@ -627,7 +627,7 @@ def mirror_is_on() -> bool:
 
 
 def main(argv=None) -> int:
-    parser = argparse.ArgumentParser(description="Push your hub files into your notebook for search.")
+    parser = argparse.ArgumentParser(description="Push your mission control files into your notebook for search.")
     parser.add_argument("--apply", action="store_true",
                         help="actually send. Without it, print what would happen.")
     parser.add_argument("--repo-root", default=".")
@@ -638,13 +638,13 @@ def main(argv=None) -> int:
                              "holds, before syncing. Use after a run died partway.")
     args = parser.parse_args(argv)
 
-    # THE READER'S ANSWER IS CHECKED HERE TOO. The installer asks whether the hub may be
-    # copied into the notebook, and writes HUB_NOTEBOOK_MIRROR=1 or =0 into
-    # ~/.hub/device.env. The hourly runner reads that line, but a line in a README that
+    # THE READER'S ANSWER IS CHECKED HERE TOO. The installer asks whether the mission control may be
+    # copied into the notebook, and writes GODSPEED_NOTEBOOK_MIRROR=1 or =0 into
+    # ~/.godspeed/device.env. The hourly runner reads that line, but a line in a README that
     # says "typed by hand, this sends your files whatever you answered" is a trap, not a
     # feature. No line means no. Without --apply this still only prints a plan.
     if args.apply and not mirror_is_on():
-        print("The hub copy is switched off on this computer, so nothing was sent. "
+        print("The mission control copy is switched off on this computer, so nothing was sent. "
               "To switch it on, run the Menerio step of the installer again and answer yes.")
         return 0
 
@@ -652,7 +652,7 @@ def main(argv=None) -> int:
     if args.apply and not api_key:
         print("MENERIO_API_KEY is not set. Open a new terminal (the installer "
               "teaches them the credential), or load it by hand: "
-              "eval \"$(hub-notebook-env)\"", file=sys.stderr)
+              "eval \"$(mc-notebook-env)\"", file=sys.stderr)
         return 2
 
     root = pathlib.Path(args.repo_root).resolve()
@@ -681,7 +681,7 @@ def main(argv=None) -> int:
         state = reconcile_state(docs, remote)
         state_path.parent.mkdir(parents=True, exist_ok=True)
         save_state(state_path, state)
-        print("reconciled: {} note(s) in the notebook, {} matched to a file in your hub".format(
+        print("reconciled: {} note(s) in the notebook, {} matched to a file in your mission control".format(
             len(remote), len(state)))
 
     if args.limit:

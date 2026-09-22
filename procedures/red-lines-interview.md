@@ -17,7 +17,7 @@ Ask about anything in my life that deserves its own line.
 
 Then rewrite the files in rules/ in my words, keeping the header at the top of each one, and show me what changed before you save it.
 
-When I say yes, run hub-compile-rules so AGENTS.md catches up.
+When I say yes, run mc-compile-rules so AGENTS.md catches up.
 ```
 
 Two rules for judging what comes out:
@@ -28,5 +28,5 @@ Two rules for judging what comes out:
   name" covers apps you have not connected yet. "Never use the email
   connector" does not.
 
-After the rewrite, `hub-compile-rules` puts the new one-liners into
+After the rewrite, `mc-compile-rules` puts the new one-liners into
 `AGENTS.md`; then throw the grenades from `red-lines-template.md` again.

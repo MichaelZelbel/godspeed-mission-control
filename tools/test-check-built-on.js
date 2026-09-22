@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-// Smoke test for tools/check-built-on.js: a throwaway hub root, files written
+// Smoke test for tools/check-built-on.js: a throwaway godspeed root, files written
 // by hand, PASS/FAIL per check, non-zero exit on any FAIL. No dependencies.
-// The same test runs against the hub's own copy in scripts/; the two programs
+// The same test runs against the mission control's own copy in scripts/; the two programs
 // differ only in their front door.
 //
 // Run: node tools/test-check-built-on.js
@@ -156,7 +156,7 @@ check('observations, archives and drafts are history and not scanned',
   parsed && parsed.findings.every((f) => f.file === 'lead/positions/y.md'), r.out);
 check('lead positions are scanned', parsed && parsed.findings.length === 1, r.out);
 
-// --- an empty hub is clean, and says why ------------------------------------
+// --- an empty godspeed is clean, and says why ------------------------------------
 root = freshHub();
 r = run(root);
 check('no closed claims exits clean', r.code === 0 && /no closed/i.test(r.out), r.out);

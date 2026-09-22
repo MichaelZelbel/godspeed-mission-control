@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# The gate for hub-check-written: a written answer closes a learn item only when a check that is
+# The gate for mc-check-written: a written answer closes a learn item only when a check that is
 # not the runner has opened the file. The cases are the ways a "we found out X" goes wrong: the
 # file is not there, it is too short to hold an answer, a template line was never filled, a
 # section that was asked for is missing, it reads like a machine wrote it (em dash, a banned
 # word, a long id), or it is padded past the length asked for. A Sources section is provenance
 # and is neither counted nor searched.
-# Runs in a throwaway hub root; never touches a real hub.
+# Runs in a throwaway godspeed root; never touches a real godspeed.
 # Usage: bash tools/test-check-written.sh   (from a checkout of this kit)
 set -uo pipefail
 
@@ -22,8 +22,8 @@ mkdir -p "$TMP/rules" "$TMP/bin" "$TMP/research"
 : > "$TMP/AGENTS.md"
 printf 'receipt\nstderr\n' > "$TMP/rules/machine-words.txt"
 cp "$HERE/check-written.js" "$TMP/bin/"
-cp "$HERE/hub-cards.js" "$TMP/bin/"
-export HUB_ROOT="$TMP"
+cp "$HERE/mc-cards.js" "$TMP/bin/"
+export GODSPEED_ROOT="$TMP"
 cw() { "$NODE" "$TMP/bin/check-written.js" "$@"; }
 
 PASS=0; FAIL=0
@@ -43,11 +43,11 @@ one two three four five six seven eight nine ten"
 EMDASH="$(printf '\342\200\224')"
 HEXID="9f8e7d6c5b4a39281706f5e4d3c2b1a0"
 
-echo "hub-check-written gate"
+echo "mc-check-written gate"
 
 # --- no args, help -------------------------------------------------------------------------------------
 OUT="$(cw 2>&1)"; check "no arguments prints usage and fails" "$?" "1"
-contains "  the usage names the command" "$OUT" "hub-check-written <path>"
+contains "  the usage names the command" "$OUT" "mc-check-written <path>"
 OUT="$(cw --help 2>&1)"; check "--help exits 0" "$?" "0"
 
 # --- the good case ---------------------------------------------------------------------------------------

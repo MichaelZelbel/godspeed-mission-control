@@ -7,42 +7,42 @@ copy that is useful, if you want it, and it keeps that copy current.
 
 ## What the mirror does, and whether you want it
 
-Connecting Menerio gives you a notebook. It does not copy your hub. That is a separate
-choice. The installer asks `Copy your hub's files to Menerio for search?` and the default
-answer is no. Your answer is kept per computer, as one line in `~/.hub/device.env`:
-`HUB_NOTEBOOK_MIRROR=1` for yes, `HUB_NOTEBOOK_MIRROR=0` for no. No line means no. To change
+Connecting Menerio gives you a notebook. It does not copy your mission control. That is a separate
+choice. The installer asks `Copy your mission control's files to Menerio for search?` and the default
+answer is no. Your answer is kept per computer, as one line in `~/.godspeed/device.env`:
+`GODSPEED_NOTEBOOK_MIRROR=1` for yes, `GODSPEED_NOTEBOOK_MIRROR=0` for no. No line means no. To change
 it, run the Menerio step of the installer again. It asks again.
 
-Say yes if your hub holds nothing you would mind having in an online account. Your assistant
-can then search your files by meaning. Say no if your hub holds other people's private
+Say yes if your mission control holds nothing you would mind having in an online account. Your assistant
+can then search your files by meaning. Say no if your mission control holds other people's private
 details, such as clients or patients. You still have the notebook, and search still works on
 the files on your computer.
 
-When the answer is yes, your hub folder is mirrored into the notebook. Every Markdown file
-goes, except the `dev/` folder. The copies live under one folder called `hub`, laid out like
-your hub: `profile/about-me.md` becomes a note in `hub/profile`. Each decision in
+When the answer is yes, your mission control folder is mirrored into the notebook. Every Markdown file
+goes, except the `dev/` folder. The copies live under one folder called `godspeed`, laid out like
+your mission control: `profile/about-me.md` becomes a note in `mission control/profile`. Each decision in
 `decisions.md` becomes its own note.
 
 - **The file stays the truth.** Every copy says in its first line which file it came from.
-  Change the file in your hub, never the note. The copy follows by itself, within the hour.
+  Change the file in your mission control, never the note. The copy follows by itself, within the hour.
 - **Your own notes come first.** Menerio ranks mirrored copies below the notes you wrote
   yourself. It never mines the copies for facts, and it never exports them as files.
 - **Only `observations/` is called a guess.** Those files are what a machine worked out about
   you. Their copies say so. Copies of `profile/` and `rules/` say that you wrote or decided
   them.
-- **What stays home.** `dev/`, anything your hub's `.gitignore` keeps out, generated index
+- **What stays home.** `dev/`, anything your mission control's `.gitignore` keeps out, generated index
   files, any file over 300 KB, and the records in `world/` that came down from Menerio in
   the first place.
 
-Your assistant finds things through one command, `hub-search`. With the mirror on, it asks
+Your assistant finds things through one command, `mc-search`. With the mirror on, it asks
 Menerio first, which searches by meaning and by words together. When Menerio cannot be
-reached, it searches the files in your hub and says so. With the mirror off, it searches the
+reached, it searches the files in your mission control and says so. With the mirror off, it searches the
 files on your computer, and its last line says
-`source: local files (your hub is not copied to Menerio, so there was nothing to ask it)`.
-Either way it names files in your hub, never notes.
+`source: local files (your mission control is not copied to Menerio, so there was nothing to ask it)`.
+Either way it names files in your mission control, never notes.
 
 The same yes switches on one more thing. Every hour, a job brings the people, events and facts
-Menerio holds down into `world/` in your hub, as a safety copy. With a no, nothing moves in
+Menerio holds down into `world/` in your mission control, as a safety copy. With a no, nothing moves in
 either direction, and nothing about Menerio runs in the background.
 
 ## The two rules
@@ -50,7 +50,7 @@ either direction, and nothing about Menerio runs in the background.
 1. **Secrets stay out.** Chapter 19's piles decide: only "may travel" facts go in. For personal
    notes worth keeping anyway, every note has an **AI** switch; flipped to **Hidden**, the note
    is excluded from People, from the pages, and from every connected AI tool. A file that must
-   never leave your computer belongs in `dev/` or in your hub's `.gitignore`.
+   never leave your computer belongs in `dev/` or in your mission control's `.gitignore`.
 2. **One fact, one home.** A fact born at your desk lives in the folder. A fact born out in the
    world lives in the notebook. Do not retype one into the other. The moment you keep two
    copies matching by hand, you are the sync program, and that person always quits. The mirror
@@ -74,7 +74,7 @@ a new note.
 
 You can also tell your assistant "make a note about the call with Nadia". It picks the folder
 that fits, links the note to related ones, and tells you the title, the folder and the links.
-It never files your notes under `hub`, because that folder belongs to the mirror.
+It never files your notes under `godspeed`, because that folder belongs to the mirror.
 
 ## The machine files, you review
 
@@ -93,6 +93,6 @@ way you wrote it.
 
 Older printings imported the profile folder into Menerio by hand and asked you to import it
 again every quarter. That made you the sync program between two copies, and it is retired. A
-later printing copied nothing at all, then three folders only, and then the whole hub without
-asking. Today a program mirrors the whole hub only when you said yes. You do nothing after
+later printing copied nothing at all, then three folders only, and then the whole mission control without
+asking. Today a program mirrors the whole mission control only when you said yes. You do nothing after
 that, and the copies know they are copies.

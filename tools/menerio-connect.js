@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 /*
- * menerio-connect.js - connect your notebook ONCE, and every way you use your hub has it:
+ * menerio-connect.js - connect your notebook ONCE, and every way you use your mission control has it:
  * Claude Code, Hermes and Codex.
  *
  * WHY THIS EXISTS. Each assistant keeps its list of connections somewhere else. Claude Code
- * reads .mcp.json in your hub folder. Hermes keeps config.yaml and a .env of its own, outside
+ * reads .mcp.json in your mission control folder. Hermes keeps config.yaml and a .env of its own, outside
  * your folder. Codex keeps config.toml in its own folder. Until 2026-09-20 the kit shipped an
  * empty .mcp.json that the installer would not touch once it existed, and told you to type
  * a command per assistant and paste your key into each. Three places, three copies of one
@@ -14,7 +14,7 @@
  * MENERIO_API_KEY and none of them holds it, with one exception: Hermes' own .env. The Hermes
  * desktop app is started from an icon and not from a terminal, so it never sees what your
  * terminal knows, and its own .env is the only place it looks. That one line is rendered from
- * the locked store in your hub, and `--refresh` renders it again when the store changes. The
+ * the locked store in your mission control, and `--refresh` renders it again when the store changes. The
  * hourly notebook job runs `--refresh`, so a key you replace reaches Hermes within the hour.
  *
  * IT NEVER ASKS FOR THE KEY AND NEVER PRINTS IT. The installer puts the key into the locked
@@ -24,10 +24,10 @@
  * page of the book made by hand keeps working, under whatever name it has, and is reported.
  * Every other line of every file is kept. Running this twice changes nothing the second time.
  *
- *   hub-menerio-connect             connect whatever is on this computer, then test it
- *   hub-menerio-connect --check     change nothing, say how things are
- *   hub-menerio-connect --refresh   quiet: only re-render Hermes' key line if the key changed
- *   hub-menerio-connect --hub PATH  a hub somewhere else
+ *   mc-menerio-connect             connect whatever is on this computer, then test it
+ *   mc-menerio-connect --check     change nothing, say how things are
+ *   mc-menerio-connect --refresh   quiet: only re-render Hermes' key line if the key changed
+ *   mc-menerio-connect --godspeed PATH  a mission control somewhere else
  *
  * Exit code 0 unless something failed.
  */
@@ -39,7 +39,7 @@ const path = require("path");
 const http = require("http");
 const https = require("https");
 const { spawnSync } = require("child_process");
-const nb = require("./hub-notebook.js");
+const nb = require("./mc-notebook.js");
 
 const MCP_URL = "https://mcp.menerio.com";
 // The name matters. Hermes has a memory tool of its own, and a connection called `memory`
@@ -50,17 +50,17 @@ const KEY_REF = "${" + KEY_NAME + "}";
 const OLD_HERMES_KEY_NAME = "MCP_NOTEBOOK_API_KEY";
 
 // ---------------------------------------------------------------- arguments
-let hubArg = "", checkOnly = false, refreshOnly = false;
+let godspeedArg = "", checkOnly = false, refreshOnly = false;
 const argv = process.argv.slice(2);
 for (let i = 0; i < argv.length; i++) {
-  if (argv[i] === "--hub") { hubArg = argv[i + 1] || ""; i += 1; continue; }
+  if (argv[i] === "--godspeed") { godspeedArg = argv[i + 1] || ""; i += 1; continue; }
   if (argv[i] === "--check") { checkOnly = true; continue; }
   if (argv[i] === "--refresh") { refreshOnly = true; continue; }
   if (argv[i] === "-h" || argv[i] === "--help") {
-    console.log("hub-menerio-connect - connect your notebook once, for Claude Code, Hermes and Codex");
-    console.log("  hub-menerio-connect [--check] [--refresh] [--hub PATH]");
+    console.log("mc-menerio-connect - connect your notebook once, for Claude Code, Hermes and Codex");
+    console.log("  mc-menerio-connect [--check] [--refresh] [--godspeed PATH]");
     console.log("");
-    console.log("  It reads the key from your hub's locked store. It never asks for it.");
+    console.log("  It reads the key from your mission control's locked store. It never asks for it.");
     process.exit(0);
   }
 }
@@ -96,36 +96,36 @@ function onPath(name) {
 }
 
 // ================================================================ Claude Code: .mcp.json
-// The file in your hub folder that Claude Code reads whenever it opens the folder. It names
+// The file in your mission control folder that Claude Code reads whenever it opens the folder. It names
 // the key and never holds it, which is why it can sit in the folder and travel to your backup.
-function connectClaudeCode(hub, change) {
-  const file = path.join(hub, ".mcp.json");
+function connectClaudeCode(godspeed, change) {
+  const file = path.join(godspeed, ".mcp.json");
   const before = readIf(file);
   let doc = {};
   if (before !== null && before.trim()) {
     try { doc = JSON.parse(before); } catch (e) {
-      return { status: "failed", detail: ".mcp.json in your hub folder is not valid JSON, so I left it alone" };
+      return { status: "failed", detail: ".mcp.json in your mission control folder is not valid JSON, so I left it alone" };
     }
     if (!doc || typeof doc !== "object" || Array.isArray(doc)) {
-      return { status: "failed", detail: ".mcp.json in your hub folder is not the shape I expected, so I left it alone" };
+      return { status: "failed", detail: ".mcp.json in your mission control folder is not the shape I expected, so I left it alone" };
     }
   }
   const servers = (doc.mcpServers && typeof doc.mcpServers === "object") ? doc.mcpServers : {};
   for (const name of Object.keys(servers)) {
     if (servers[name] && sameUrl(servers[name].url)) {
       return { status: "already connected", detail: name === SERVER_NAME
-        ? ".mcp.json in your hub folder names the notebook"
+        ? ".mcp.json in your mission control folder names the notebook"
         : ".mcp.json already reaches the notebook under the name `" + name + "`, so I added nothing" };
     }
   }
   if (servers[SERVER_NAME]) {
     return { status: "failed", detail: ".mcp.json already has a `" + SERVER_NAME + "` that points somewhere else, so I left it alone" };
   }
-  if (!change) return { status: "not connected yet", detail: ".mcp.json in your hub folder does not name the notebook" };
+  if (!change) return { status: "not connected yet", detail: ".mcp.json in your mission control folder does not name the notebook" };
   servers[SERVER_NAME] = { type: "http", url: MCP_URL, headers: { Authorization: "Bearer " + KEY_REF } };
   doc.mcpServers = servers;
   fs.writeFileSync(file, JSON.stringify(doc, null, 2) + "\n");
-  return { status: "connected", detail: "I added the notebook to .mcp.json in your hub folder" };
+  return { status: "connected", detail: "I added the notebook to .mcp.json in your mission control folder" };
 }
 
 // ================================================================ Hermes
@@ -263,7 +263,7 @@ function connectHermes(key, change) {
     // Hermes' own command first: it knows its file better than this program does. It is two
     // plain calls and asks nothing. Verified on Hermes 0.21.2. It rewrites the whole file and
     // drops comments, as every `hermes config set` does, which is why the copy is made first.
-    if (bin && !/\.(cmd|bat)$/i.test(bin) && !process.env.HUB_CONNECT_NO_HERMES_CLI) {
+    if (bin && !/\.(cmd|bat)$/i.test(bin) && !process.env.GODSPEED_CONNECT_NO_HERMES_CLI) {
       const set = (k, v) => spawnSync(bin, ["config", "set", k, v], { encoding: "utf8", timeout: 60000 });
       set("mcp_servers." + SERVER_NAME + ".url", MCP_URL);
       set("mcp_servers." + SERVER_NAME + ".headers.Authorization", "Bearer " + KEY_REF);
@@ -397,7 +397,7 @@ async function testConnection(key) {
     return "";
   };
   const hello = await post(url, key, { jsonrpc: "2.0", id: 1, method: "initialize", params: {
-    protocolVersion: "2025-03-26", capabilities: {}, clientInfo: { name: "hub-menerio-connect", version: "1" } } });
+    protocolVersion: "2025-03-26", capabilities: {}, clientInfo: { name: "mc-menerio-connect", version: "1" } } });
   let why = refused(hello);
   if (why) return { ok: false, detail: why };
   const session = hello.session;
@@ -414,8 +414,8 @@ async function testConnection(key) {
 
 // ================================================================ the run
 async function main() {
-  const hub = nb.findHub(hubArg);
-  const k = nb.menerioKey(hub);
+  const godspeed = nb.findHub(godspeedArg);
+  const k = nb.menerioKey(godspeed);
 
   if (refreshOnly) {                      // never a word, never a failure: a schedule runs this
     if (k.key) { try { refreshHermes(k.key); } catch (e) { /* the next hour tries again */ } }
@@ -424,21 +424,21 @@ async function main() {
 
   console.log("");
   console.log(checkOnly ? "Checking how your notebook is connected. Nothing is changed."
-    : "Connecting your notebook to every way you use your hub.");
+    : "Connecting your notebook to every way you use your mission control.");
   console.log("");
-  if (!hub) {
-    console.log("  I could not find your hub folder. Run this inside it, or say where it is:");
-    console.log("    hub-menerio-connect --hub /path/to/your/hub");
+  if (!godspeed) {
+    console.log("  I could not find your mission control folder. Run this inside it, or say where it is:");
+    console.log("    mc-menerio-connect --godspeed /path/to/your/godspeed");
     console.log("");
     return 1;
   }
-  console.log("  Your hub folder: " + hub);
+  console.log("  Your mission control folder: " + godspeed);
   console.log("");
   if (!k.key) {
     console.log("  There is no Menerio key here: " + k.why + ".");
-    console.log("  That is fine if you do not want a notebook. Your hub works without one.");
+    console.log("  That is fine if you do not want a notebook. Your mission control works without one.");
     console.log("  If you do want one: make a free account at https://menerio.com/auth?tab=signup");
-    console.log("  and run the installer again. It asks for the key once and locks it into your hub.");
+    console.log("  and run the installer again. It asks for the key once and locks it into your mission control.");
     console.log("  Please do not paste the key into a chat.");
     console.log("");
     return checkOnly ? 0 : 1;
@@ -449,9 +449,9 @@ async function main() {
     try { rows.push([label, fn()]); }
     catch (e) { rows.push([label, { status: "failed", detail: String(e && e.message ? e.message : e) }]); }
   };
-  attempt("Claude Code", () => connectClaudeCode(hub, !checkOnly));
+  attempt("Claude Code", () => connectClaudeCode(godspeed, !checkOnly));
   // .mcp.json is written whether or not Claude Code is on this computer, because the file
-  // belongs to the hub and travels with it. But "Claude Code connected" told a reader who
+  // belongs to the mission control and travels with it. But "Claude Code connected" told a reader who
   // has only ever used Hermes that something they never installed had been connected.
   // Say what is true for them: nothing to do, and it is there if they ever want it.
   {
@@ -481,7 +481,7 @@ async function main() {
     console.log("  Close your assistant and open it again, so it picks the notebook up.");
   }
   if (checkOnly && rows.some(([, r]) => r.status === "not connected yet")) {
-    console.log("  To connect what is not connected yet, run: hub-menerio-connect");
+    console.log("  To connect what is not connected yet, run: mc-menerio-connect");
   }
   console.log("  To switch everything off at once: in Menerio, open Settings, then API Keys,");
   console.log("  and revoke the key. Every assistant above loses the notebook in that moment.");
@@ -490,6 +490,6 @@ async function main() {
 }
 
 main().then((code) => process.exit(code), (e) => {
-  console.log("hub-menerio-connect stopped: " + (e && e.message ? e.message : e));
+  console.log("mc-menerio-connect stopped: " + (e && e.message ? e.message : e));
   process.exit(1);
 });
