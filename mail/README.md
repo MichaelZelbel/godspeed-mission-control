@@ -1,58 +1,78 @@
 # mail
 
-Email is optional. Your hub works without it, and the first installation asks nothing about it.
+Email is optional. Your hub works without it, and installing or updating the hub asks nothing
+about it.
 
 There are three levels, and you can stop at any of them:
 
 1. **Paste.** Copy an email into the conversation. Nothing is connected. Chapter 14.
 2. **Forward.** Give your hub its own address and forward the messages you choose.
    [hub-address.md](hub-address.md), Chapter 29.
-3. **Connect.** Let your hub search your Gmail, read messages and attachments, and save draft
-   replies there. [gmail-setup.md](gmail-setup.md), Chapter 30.
+3. **Connect.** Let your hub search your Gmail, read a message you pick, and save draft replies
+   in Gmail's Drafts folder. Chapter 30.
 
-Both connections belong to your hub, not to one assistant. You connect once, and every assistant
-you use with your hub shares it.
+**Connecting Gmail: ask for it.** Tell your assistant *Connect Gmail for me*. The hub fetches a
+small free mail program (Himalaya), and a window opens on your computer. In that window you type
+your Gmail address; the hub opens Google's app password page, where you make an app password (16
+letters Google creates for one program); and you type those letters in the window. Never in the
+chat. The hub checks them with Gmail before keeping anything.
 
-**Connecting Gmail needs no command.** It is a step of the hub installer: on Windows you click
-**Update my hub** in the Start menu and say yes when it asks about Gmail; on macOS and Linux you
-paste the installer's one line with `--only gmail` at the end. It opens Google's pages for you,
-one at a time, and says what to click on each.
+On a server with no screen, the assistant gives you one command to type in the server's own
+terminal instead, and the terminal in your provider's web page is fine for that. The Google page
+opens on your phone or laptop.
+
+**What Google needs from your account.** App passwords exist only when 2-Step Verification is
+switched on, and some work or school accounts turn them off. If Google's page says the setting is
+not available for your account, that account cannot use this route: keep pasting, or forward to
+the hub's own address. Nothing on your account is changed by the hub.
 
 **Your hub sends nothing.** It saves a draft in Gmail. You read it there, change what you like,
-and press Send yourself.
+and press Send yourself. Saving a draft you asked for needs no extra approval.
+
+**One connection, several assistants.** Every assistant on the computer where you connected uses
+the same connection: Claude Code, Codex, Hermes, and Claude Desktop once it has been restarted.
+A second computer does not get your Gmail by copying the hub folder; see Chapter 31.
 
 ## What protects you, and what does not
 
-- **Your email provider enforces some limits itself.** The hub's own address can be given a key
-  that can only read. A Gmail connection can only do what you allowed on Google's screen, in the
-  one mailbox you allowed.
-- **Your hub checks the rest.** No tool your assistant has can send. Text inside an email or an
-  attachment is treated as information, never as an instruction. An attachment your assistant
-  reads is saved outside your hub folder, so it never ends up in your hub's history.
+- **Where the password is.** Only on the computer you connected, locked in
+  `~/.hub/mail/imap/`, a folder readable by your own account. It is never in your hub folder,
+  never in its history, and never in a chat.
+- **What the hub lets an assistant do.** Search, read one message, list Drafts, save a new
+  draft. There is no send tool, and the mail program is set up with no way to send. Text inside
+  an email is treated as information, never as an instruction.
+- **What an app password itself allows.** An app password opens your whole mailbox to any
+  program that holds it, sending included. The lock on disk and the missing send tool protect
+  you against mistakes and against an email trying to talk your assistant into something. They
+  do not stop someone, or an assistant, with full control of your computer who sets out to use
+  the password another way. If that worries you, keep to pasting or forwarding.
 - **The AI company sees what your hub reads.** The text of each mail your hub reads goes to the
   company behind your assistant, the same as anything you paste into a conversation.
-- **What it cannot do.** An assistant that has full control of your computer (and many do,
-  because you let them run commands) could misuse the connection: it could read the stored
-  connection and talk to Google itself. If that worries you, keep to pasting or forwarding.
+- **Attachments.** Gmail sends a message whole, so reading one downloads its attachments too.
+  The hub names them but does not save or open them; open them in Gmail.
 
 ## If something goes wrong
 
-- Your assistant says Gmail needs **reconnecting**: Google stopped accepting the connection (you
-  removed it, changed your password, or the app was still in "Testing"). Start the Gmail step
-  again. It reuses the app you registered and only opens Google's Allow window.
+- Your assistant says Gmail needs **reconnecting**: Gmail stopped accepting the app password.
+  Removing it at Google, or changing your Google password, does that. Ask *Connect Gmail for me*
+  again and make a new one.
 - Your assistant says it has **no mail tool**: close it and open it again.
-- You want it **gone**: start the Gmail step again and type `remove`.
+- A draft result says **uncertain**: Gmail did not confirm the save. Look in Drafts before asking
+  again; the hub will not save a second copy by itself.
+- You want it **gone**: `hub-mail disconnect gmail`, then remove the app password on Google's
+  app password page. Removing it at Google is what stops every copy.
 
 ## For people who like a terminal
 
 None of this is needed, and the book uses none of it.
 
 ```
-hub-mail status                     what is connected, and what it may do
+hub-mail status [--check]           what is connected, and what it may do (--check asks Gmail)
+hub-mail connect gmail-imap         connect Gmail on this computer
 hub-mail connect agentmail          give the hub its own address
-hub-mail connect gmail --guided     the guided Gmail step, without the installer around it
-hub-mail attachment <id> [number]   fetch one attachment to a place outside the hub folder
-hub-mail disconnect gmail           stop, and withdraw the permission at Google
-hub-mail pending                    an extra: messages you asked to approve at a terminal
-hub-mail approve <code>             an extra: see one message in full, and send it once
+hub-mail disconnect gmail           stop using Gmail on this computer
+hub-mail setup --check              start the mail tool the way each assistant does, and say which answer
 ```
+
+A Gmail connection made before 2026-09-22 the older way (your own Google app) keeps working as
+it did. That way of connecting is retired; `hub-mail connect gmail` says so.

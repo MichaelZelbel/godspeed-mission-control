@@ -1,0 +1,14 @@
+{
+  "about": "The one mail program hub-mail uses for Gmail: Himalaya, pinned to one release and one archive per kind of computer. hub-mail-imap.js downloads the archive for this computer, refuses it unless its SHA-256 matches the line below, and keeps it in ~/.hub/mail/imap/bin. It never upgrades it by itself and never touches a Himalaya the person installed. A kind of computer is offered only when `tested` names a real run on it; the others get the paste-and-draft fallback.",
+  "version": "2.1.0",
+  "release": "https://github.com/pimalaya/himalaya/releases/tag/v2.1.0",
+  "download": "https://github.com/pimalaya/himalaya/releases/download/v2.1.0/",
+  "license": "MIT OR Apache-2.0 (third-party/himalaya/ in the kit holds both texts)",
+  "assets": {
+    "win32-x64": { "asset": "himalaya.x86_64-windows.tgz", "sha256": "61f1a797cbf6ed3502d18986cd1205b18e2ba06b39002af745e62cde1e46cf81", "binary": "himalaya.exe", "tested": "2026-09-22 Windows 11 x64: kit tests against the stand-in" },
+    "linux-x64": { "asset": "himalaya.x86_64-linux.tgz", "sha256": "683a2ab8e1534f01e6bda3a69e204d564c31fbfbe20511fc7bc60b67f2e85884", "binary": "himalaya", "tested": "2026-09-22 Ubuntu x64: kit tests against the stand-in" },
+    "linux-arm64": { "asset": "himalaya.aarch64-linux.tgz", "sha256": "c41adab4bc220ba816cdbf865a5df8dc3b358b39ec58b4be0ed2f64e46b1d182", "binary": "himalaya", "tested": "" },
+    "darwin-arm64": { "asset": "himalaya.aarch64-darwin.tgz", "sha256": "a5a787b7c4dbf065408e7772908fc75c799626f4cebab8e9c78fafe3e2fa585c", "binary": "himalaya", "tested": "" },
+    "darwin-x64": { "asset": "himalaya.x86_64-darwin.tgz", "sha256": "0e61604709e7e84b5142ebebc85c52d7beb38f09ffd3506fae6041245c35d2a7", "binary": "himalaya", "tested": "" }
+  }
+}

@@ -70,10 +70,10 @@ contains "2 it lists the read tools" "$OUT" '"mail_read"'
 lacks    "3 a notification gets no answer" "$(printf '%s' "$OUT" | grep -c '"id":null')" '1'
 lacks    "4 no tool can send" "$OUT" 'mail_send'
 
-OUT="$(mcp '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"mail_read","arguments":{"message_id":"<m1@x>"}}}')"
+OUT="$(mcp '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"mail_read","arguments":{"account":"hub","message_id":"<m1@x>"}}}')"
 contains "5 a message body arrives marked untrusted" "$OUT" 'UNTRUSTED EMAIL CONTENT'
 contains "5b and closed again after the body" "$OUT" 'END OF UNTRUSTED EMAIL CONTENT'
-OUT="$(mcp '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"mail_search","arguments":{"query":"cards"}}}')"
+OUT="$(mcp '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"mail_search","arguments":{"account":"hub","query":"cards"}}}')"
 lacks    "6 search does not return the hub's own sent mail" "$OUT" '<s1@x>'
 
 OUT="$(AGENTMAIL_READ_KEY="" "$NODE" "$HERE/hub-mail.js" status 2>&1)"
@@ -87,6 +87,9 @@ contains "9 an unreachable service reads as unreachable" "$OUT" 'unreachable'
 
 echo "$PASS passed, $FAIL failed"
 echo
-# The Gmail half: connecting, drafts, approval and sending, against a stand-in for Google.
+# A Gmail connection made the older way: drafts, approval and sending, against a stand-in for Google.
 "$NODE" "$HERE/test-hub-mail-gmail.js" || FAIL=$((FAIL+1))
+echo
+# Gmail through Himalaya and an app password: the real pinned program against a stand-in IMAP server.
+"$NODE" "$HERE/test-hub-mail-imap.js" || FAIL=$((FAIL+1))
 [ "$FAIL" = 0 ]

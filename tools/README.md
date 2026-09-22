@@ -235,29 +235,27 @@ hub-search --local the dentist search the files only
 hub-search --limit 3 --json invoice reminder
 ```
 
-- **`hub-mail.js`** (`hub-mail`) is the one mail tool your assistants share, with its three
-  helpers `hub-mail-gmail.js`, `hub-mail-guide.js` and `hub-mail-wire.js`. Email is optional: the
-  installer tells every assistant about the tool and connects nothing, and with nothing connected
-  it only says `not connected`. `hub-mail connect agentmail` gives your hub its own address
-  (Chapter 29). Gmail (Chapter 30) is connected by a step of the hub installer, with no command
-  to type: `hub-mail-guide.js` opens Google's pages one at a time and says what to click on each,
-  and you register your own small Google app, which belongs to you and nobody else. Then any
-  assistant can search, read messages and attachments, and save draft replies in Gmail without
-  asking again. An attachment is saved outside your hub folder, so it never enters your hub's
-  history. Your hub sends nothing: you press Send in Gmail. Every message is handed over marked
-  as untrusted text. What it cannot do: stop an assistant that has full control of your computer
-  from misusing the connection (`../mail/README.md`).
+- **`hub-mail.js`** (`hub-mail`) is the one mail tool your assistants share, with its helpers
+  `hub-mail-imap.js` (Gmail through Himalaya), `hub-mail-gmail.js` (the locked store, and Gmail
+  connections made the older way) and `hub-mail-wire.js` (telling each assistant about the tool).
+  Email is optional: the installer tells every assistant about the tool and connects nothing,
+  and with nothing connected it only says `not connected`. `hub-mail connect agentmail` gives
+  your hub its own address (Chapter 29). Gmail (Chapter 30) is connected when you ask your
+  assistant *Connect Gmail for me*: the hub fetches Himalaya 2.1.0 (pinned by its SHA-256 in
+  `hub-mail-himalaya.json`), and you type a Google app password in a window of your own
+  computer, never in a chat. Then any assistant on that computer can search, read a message and
+  save a new draft in Gmail without asking again. Your hub sends nothing: you press Send in
+  Gmail. Every message is handed over marked as untrusted text. What it cannot do: stop an
+  assistant that has full control of your computer from misusing the app password
+  (`../mail/README.md`).
 
 ```
-hub-mail status                 which mailboxes answer, and what each may do
+hub-mail status [--check]       which mailboxes answer, through what, and what each may do
+hub-mail connect gmail-imap     connect Gmail on this computer (the app password is typed in a window)
 hub-mail connect agentmail      give the hub its own address
-hub-mail connect gmail --guided the guided Gmail step, which the hub installer runs for you
-hub-mail search [--gmail] words newest received mail, or mail matching the words
-hub-mail attachment <id> [n]    fetch one Gmail attachment to a place outside the hub folder
-hub-mail disconnect gmail       stop at once, and withdraw the permission at Google
-hub-mail pending, approve <code>  an extra for people who would rather approve a send at a
-                                terminal than press Send in Gmail; the book does not use it
-hub-mail setup                  tell every assistant on this computer about the tool
+hub-mail search [--hub] words   newest Gmail (or, with --hub, the hub's own address)
+hub-mail disconnect gmail       stop using Gmail on this computer
+hub-mail setup [--check]        tell every assistant on this computer about the tool (--check: start each one)
 ```
 
 - **`notebook-sync.py`** is the mirror, and it runs only when you said yes. The installer asks

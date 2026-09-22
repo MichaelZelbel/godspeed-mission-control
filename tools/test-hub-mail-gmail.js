@@ -16,10 +16,11 @@
  *   attachments: one is fetched to a place outside the hub folder, text comes back marked
  *     untrusted, a name that tries to climb out of its folder cannot, and a place inside the hub
  *     is refused;
- *   setup: the tool is added to each assistant once, with no key in any file;
- *   the guided step the installer runs: one Google page at a time, the right kind of app for the
- *     address, both pasted lines hidden, no command for the reader to type, and its sentences are
- *     the ones mail/gmail-setup.md prints.
+ *   setup: the tool is added to each assistant once, with no key in any file.
+ *
+ * Connecting that way is retired for new connections (2026-09-22); these checks keep a connection
+ * someone already made working. The retired guided step and its checks are in git history, and
+ * its files in retired/google-registration/.
  *
  * Usage: node tools/test-hub-mail-gmail.js
  */
@@ -351,66 +352,6 @@ async function main() {
   ok("32 no key in any assistant file", !/r\d|s3cret|AGENTMAIL|REFRESH/.test(JSON.stringify(mcpj) + toml + yaml));
   const launched = spawnSync(process.execPath, ["-e", mcpj.mcpServers["hub-mail"].args[1], "status"], { env: { ...process.env, HOME: HOME, USERPROFILE: HOME }, encoding: "utf8" });
   ok("33 the entry starts the tool from ~/.local/bin on any computer", /Cannot find module/.test(launched.stderr) && /\.local[\\/]bin[\\/]hub-mail\.js/.test(launched.stderr), "expected a clean 'not installed here' in a home without the tool");
-
-  // ---- the guided step the installer runs
-  const Guide = require("./hub-mail-guide.js");
-  const blank = () => G.writeStore({ GMAIL_CLIENT_ID: null, GMAIL_CLIENT_SECRET: null, GMAIL_REFRESH_TOKEN: null, GMAIL_ADDRESS: null, GMAIL_SCOPES: null });
-  // A reader played from a script: [what the question must contain, the answer]. Anything not
-  // scripted gets Enter, which is what "done, next" is.
-  const reader = script => { const asked = []; const left = script.slice();
-    return { asked, ask: async (q, hidden) => { asked.push({ q, hidden: !!hidden }); const i = left.findIndex(x => x[0].test(q)); if (i < 0) return ""; return left.splice(i, 1)[0][1]; } }; };
-  const walk = async (script) => { const said = [], opened = []; const r = reader(script);
-    const res = await Guide.guide({ G, ask: r.ask, say: s => said.push(String(s)), open: async u => { opened.push(u); if (u.startsWith(base + "/auth?")) await browser(u); } });
-    return { res, said: said.join("\n"), opened, asked: r.asked }; };
-  process.env.HUB_MAIL_GOOGLE_CONSOLE = "https://console.example";
-  delete require.cache[require.resolve("./hub-mail-guide.js")];
-
-  blank();
-  let gr = await walk([[/Which Gmail address/, "sam@sam-studio.example"], [/Client ID/, "123-abc.apps.googleusercontent.com"], [/Client secret/, "s3cret"], [/Is this the one/, "yes"]]);
-  const pages = gr.opened.filter(u => !u.startsWith(base));
-  ok("40 a Workspace address gets an Internal app: one Google page at a time, in order, and no publish step",
-    gr.res.connected && /Choose Internal/.test(gr.said) && !/Choose External|Publish app/.test(gr.said)
-    && pages.map(u => new URL(u).pathname).join(" ") === "/projectcreate /apis/library/gmail.googleapis.com /auth/overview /auth/clients/create", pages.join(" "));
-  ok("41 every Google page opens under the address being connected, and so does Google's Allow window", pages.every(u => /authuser=sam%40sam-studio\.example/.test(u)) && g.hint === "sam@sam-studio.example");
-  ok("42 both pasted lines are hidden, and the secret is never printed", gr.asked.filter(a => /Client (ID|secret)/.test(a.q)).length === 2 && gr.asked.filter(a => /Client (ID|secret)/.test(a.q)).every(a => a.hidden) && !/s3cret/.test(gr.said));
-  ok("43 the mailbox Google names is shown, and the reader is asked whether it is the one", gr.asked.some(a => /sam@example\.com/.test(a.q) && /Is this the one\?/.test(a.q)));
-  ok("44 the connection is in the locked store, with the pasted lines", /GMAIL_CLIENT_ID=123-abc/.test(store()) && /GMAIL_CLIENT_SECRET=s3cret/.test(store()) && /GMAIL_REFRESH_TOKEN=r/.test(store()));
-  ok("45 the reader is never told to type a command, and no dash is used as punctuation", !/hub-mail|terminal/i.test(gr.said) && !/[\u2013\u2014]| - /.test(gr.said), gr.said);
-  ok("46 it says why Google wants the little app, and that the hub sends nothing", /only lets registered apps/.test(gr.said) && /belongs to you and nobody else/.test(gr.said) && /press Send yourself/.test(gr.said));
-
-  gr = await walk([]);
-  ok("47 on a connected hub, Enter leaves everything as it is and opens nothing", gr.res.connected && gr.opened.length === 0 && /Left as it is/.test(gr.said));
-  gr = await walk([[/leave it as it is/, "again"], [/already registered/, ""], [/Is this the one/, "yes"]]);
-  ok("48 connecting again reuses the app already registered: no Google Cloud page, only the Allow window", gr.res.connected && gr.opened.length === 1 && gr.opened[0].startsWith(base + "/auth?"));
-  gr = await walk([[/leave it as it is/, "remove"]]);
-  ok("49 'remove' disconnects, without a command", !gr.res.connected && /disconnected/.test(gr.said) && !/GMAIL_REFRESH_TOKEN/.test(store()));
-
-  blank();
-  gr = await walk([[/Which Gmail address/, "sam.okafor.art@gmail.com"], [/Client ID/, "not-an-id"], [/Client ID/, "9-z.apps.googleusercontent.com"], [/Client secret/, "s2"], [/Is this the one/, "yes"]]);
-  ok("50 a personal address gets an External app, the publish step, and the warning about Google's unverified screen",
-    gr.res.connected && /Choose External/.test(gr.said) && /Publish app/.test(gr.said) && /has not verified/.test(gr.said) && !/Choose Internal/.test(gr.said)
-    && gr.opened.some(u => /\/auth\/audience/.test(u)));
-  ok("51 a wrong paste is asked for again instead of being used", /That was not the Client ID/.test(gr.said) && /GMAIL_CLIENT_ID=9-z/.test(store()));
-
-  blank();
-  gr = await walk([[/Which Gmail address/, "sam@sam-studio.example"], [/Done\?/, ""], [/Done\?/, "stop"]]);
-  ok("52 'stop' at any step changes nothing", !gr.res.connected && /Nothing was changed/.test(gr.said) && !/GMAIL_(CLIENT|REFRESH|ADDRESS)/.test(store()));
-
-  g.apiOff = 1;
-  gr = await walk([[/Which Gmail address/, "sam@sam-studio.example"], [/Client ID/, "123-abc.apps.googleusercontent.com"], [/Client secret/, "s3cret"], [/Is this the one/, "yes"]]);
-  ok("53 a Gmail API that was not switched on is named, its page is opened again, and the next try connects",
-    gr.res.connected && /not switched on/.test(gr.said) && gr.opened.filter(u => /gmail\.googleapis\.com/.test(u)).length === 2, gr.said);
-  g.apiOff = 0;
-
-  blank();
-  gr = await walk([[/Which Gmail address/, "sam@sam-studio.example"], [/Press Enter to start/, "read"], [/Client ID/, "123-abc.apps.googleusercontent.com"], [/Client secret/, "s3cret"], [/Is this the one/, "yes"]]);
-  ok("54 reading only is one typed word at the start, and Google is asked for reading alone", gr.res.connected && !/compose/.test(g.authScope) && /Your hub can read it\./.test(gr.said));
-
-  const walkthrough = fs.readFileSync(path.join(__dirname, "..", "mail", "gmail-setup.md"), "utf8").replace(/\s+/g, " ");
-  const missing = Guide.STEPS.filter(x => !walkthrough.includes(x.say.replace(/\s+/g, " "))).map(x => x.id);
-  ok("55 every sentence the guided step says is printed, word for word, in mail/gmail-setup.md", missing.length === 0, "missing: " + missing.join(", "));
-  const unseen = Guide.STEPS.filter(x => !x.seen).map(x => x.id);
-  if (unseen.length) console.log("  note sentences not yet checked against Google's real page: " + unseen.join(", "));
 
   server.close();
   fs.rmSync(W, { recursive: true, force: true });

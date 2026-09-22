@@ -237,7 +237,7 @@ async function gmail(c, method, p, body) {
 }
 
 function need(c) {
-  if (!c.GMAIL_REFRESH_TOKEN) throw new Error("gmail: not connected. When the person wants it, they run the Gmail step of the hub installer (Chapter 30). Until then, they can paste an email or forward it to the hub's address.");
+  if (!c.GMAIL_REFRESH_TOKEN) throw new Error("gmail: not connected. When the person wants it, they ask their assistant \"Connect Gmail for me\" (Chapter 30). Until then, they can paste an email or forward it to the hub's address.");
 }
 
 // ============================================================ reading
@@ -449,7 +449,7 @@ async function replyContext(c, messageId) {
 // separate draft and says so.
 async function draft(args) {
   const c = credentials(); need(c);
-  if (!canDraft(c)) throw new Error("gmail: this connection reads only, so it cannot save drafts. Give the person the reply as text. To let the hub save drafts, they run the Gmail step of the hub installer again and choose reading and drafts.");
+  if (!canDraft(c)) throw new Error("gmail: this connection reads only, so it cannot save drafts. Give the person the reply as text. To let the hub save drafts, they ask their assistant \"Connect Gmail for me\", which connects Gmail the current way.");
   let ctx = {};
   if (args.reply_to_message_id) ctx = await replyContext(c, args.reply_to_message_id);
   else if (args.draft_id) {
@@ -807,7 +807,7 @@ function state() {
 
 async function status() {
   const c = credentials();
-  if (!c.GMAIL_REFRESH_TOKEN) return { account: "gmail", state: "not connected", note: "Optional. When you want it, run the Gmail step of the hub installer (Chapter 30). Until then, paste an email or forward it to the hub's address." };
+  if (!c.GMAIL_REFRESH_TOKEN) return { account: "gmail", state: "not connected", note: "Optional. When you want it, ask your assistant \"Connect Gmail for me\" (Chapter 30). Until then, paste an email or forward it to the hub's address." };
   try {
     const prof = await gmail(c, "GET", "/profile");
     return { account: "gmail", address: prof.emailAddress, state: canDraft(c) ? "connected" : "reading only",
@@ -819,5 +819,5 @@ async function status() {
   }
 }
 
-module.exports = { shareStore, findHub, credentials, state, attachment, openBrowser, search, read, draft, listDrafts, proposeSend, approve, reject, pending, tidy, connect, disconnect, status,
+module.exports = { findAge, readDeviceEnv, shareStore, findHub, credentials, state, attachment, openBrowser, search, read, draft, listDrafts, proposeSend, approve, reject, pending, tidy, connect, disconnect, status,
   authorize, writeStore, readStore, buildRaw, SCOPE_READ, SCOPE_COMPOSE };
