@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# Teach It Once - set up your hub on this Mac or Linux computer, in one line.
+# Teach It Once - set up Godspeed Mission Control on this Mac or Linux computer, in one line.
 #
 #   curl -fsSL https://raw.githubusercontent.com/MichaelZelbel/teach-it-once-kit/main/install-hub.sh | bash
 #
@@ -8,9 +8,9 @@
 # instead. Different front door, same promise: one thing to run, no decisions.
 #
 # It works out for itself what this computer needs:
-#   no hub here yet  -> makes one from starter-hub/ in this kit, the folder the
+#   none here yet    -> makes one from starter-hub/ in this kit, the folder the
 #                       book walks you through chapter by chapter
-#   a hub already    -> brings it up to date and re-checks the wiring
+#   one already      -> brings it up to date and re-checks the wiring
 #
 # It also installs what is missing underneath (Git, Node.js, Hermes) and
 # gives every machine you own one shared memory.

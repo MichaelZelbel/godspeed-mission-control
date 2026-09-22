@@ -71,15 +71,15 @@ These were real faults in the programs, each found by running them rather than b
 2. **Hermes started in the wrong folder.** It remembers the folder each saved conversation was in
    and returns there, so changing folder before running it is not enough. `hub-run` now passes
    `--in`.
-3. **The deadline list answered from the wrong hub.** On a machine that already had a hub,
+3. **The deadline list answered from the wrong mission control.** On a machine that already had one,
    `hub-due` reported three deadlines that were not in the folder being decided, because it works
    the folder out for itself and that machine had another answer written down. `hub-decide` now
    tells every program it calls which folder it is deciding. The Claude run is what caught this:
    it noticed that `due/` and the deadline list disagreed and wrote it into "Not done and why"
    rather than passing it on.
 
-That third one is worth keeping in mind if you ever run a second hub on a machine that already has
-one. A program that works out the folder for itself is fine with one hub and quietly wrong with
+That third one is worth keeping in mind if you ever run a second mission control on a machine that already has
+one. A program that works out the folder for itself is fine with one and quietly wrong with
 two.
 
 ## Running it yourself

@@ -32,12 +32,12 @@ What is here. Thirteen names, and they are the whole system:
   only rules text your assistant reads every session. You edit the files; you
   never edit that block. Chapter 17.
 - `skills/`: one folder per recipe, each with a `SKILL.md` inside. Three are
-  here from day one. `next-action` decides what your hub does about your goals
+  here from day one. `next-action` decides what your mission control does about your goals
   each day, and `work-item` carries out one piece of that work. Chapter 7
   shows them working; you never have to read them. `keep-a-note` is what runs
   when you say "make a note": it files the note in your Menerio notebook,
   links it and tells you where it went (Chapter 28). Without Menerio it saves
-  into the hub's own files. The
+  into its own files. The
   installer has already told Hermes where this room is, so a recipe you put
   here is found without you naming it. Chapters 12 to 14 fill it further, and
   the five starter recipes are in the kit download beside this folder, ready
@@ -61,9 +61,9 @@ What is here. Thirteen names, and they are the whole system:
   outcome, a strategy or project meant to produce one, or a protected
   commitment. A new idea is filed **provisional** and is never worked on until
   you adopt it. Starts empty.
-- `forecasts/`: what your hub expects to happen, with a date and a number, so
+- `forecasts/`: what your mission control expects to happen, with a date and a number, so
   its judgment can be scored instead of trusted. Starts empty.
-- `work/`: what your hub is doing, from planned to verified, where "the runner
+- `work/`: what your mission control is doing, from planned to verified, where "the runner
   says it did it" and "somebody checked" are two different states. Starts empty.
 - `world/`: your assistant's record of people, events and facts you tell it.
   It saves and searches these files without Menerio. An optional Menerio
