@@ -94,9 +94,9 @@ printf '## Answer\n%s\nsee https://example.org/%s/receipt for the page\n' "$SIXT
 OUT="$(cw research/link.md 2>&1)"; check "a machine word inside an https link is allowed" "$?" "0"
 
 # --- Sources is provenance: not counted, not searched ------------------------------------------------------
-printf '## Answer\n%s\n\n## Sources\nhttps://example.org/%s\nreceipt receipt %s\n' "$SIXTY" "$HEXID" "$HEXID" > "$TMP/research/sources.md"
-OUT="$(cw research/sources.md --min-words 50 2>&1)"; check "a Sources section with ids and banned words still passes" "$?" "0"
-check "  and its words are not counted" "$OUT" "ok: research/sources.md, 62 words"
+printf '## Answer\n%s\n\n## Sources\nhttps://example.org/%s\nreceipt receipt %s\n' "$SIXTY" "$HEXID" "$HEXID" > "$TMP/research/provenance.md"
+OUT="$(cw research/provenance.md --min-words 50 2>&1)"; check "a Sources section with ids and banned words still passes" "$?" "0"
+check "  and its words are not counted" "$OUT" "ok: research/provenance.md, 62 words"
 printf '## Answer\nten words here in the body only, and nothing more\n\n## sources\n%s\n' "$SIXTY" > "$TMP/research/padded.md"
 OUT="$(cw research/padded.md --min-words 50 2>&1)"; check "padding the Sources section does not reach the minimum" "$?" "1"
 contains "  and the count excludes it, any case" "$OUT" "12 words outside Sources, fewer than the 50 asked for"
