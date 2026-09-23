@@ -57,7 +57,7 @@ export KB_SELF_URL
 # exactly the code that passed its end-to-end runs until this line is edited.
 KB_PIN="v2.4.1"
 LIB_URL="https://raw.githubusercontent.com/MichaelZelbel/kit-bootstrap/$KB_PIN/lib.sh"
-KIT_REPO="https://github.com/MichaelZelbel/teach-it-once-kit.git"
+KIT_REPO="https://github.com/MichaelZelbel/godspeed-mission-control.git"
 AI_USER="${AI_USER:-ai}"
 GODSPEED="${GODSPEED:-}"            # settled below: the assistant's home + /godspeed unless told otherwise
 GODSPEED_REPO="${GODSPEED_REPO:-}"  # a mission control you already keep on GitHub; empty means ask, or start fresh

@@ -166,7 +166,7 @@ If you have no repository yet, the one-line installer does this for you. By hand
 start from the book's starter rooms and make one:
 
 ```
-git clone --depth 1 https://github.com/MichaelZelbel/teach-it-once-kit.git ~/teach-it-once-kit
+git clone --depth 1 https://github.com/MichaelZelbel/godspeed-mission-control.git ~/teach-it-once-kit
 cp -R ~/teach-it-once-kit/starter-godspeed/. ~/godspeed/
 cd ~/godspeed && git init -b main && git add -A && git commit -m "My folder"
 gh repo create YOUR-REPO --private --source . --push

@@ -14,7 +14,7 @@ This kit is Godspeed Mission Control itself, plus every template from the book *
 
 Whichever computer you use, one thing to run and no decisions to make. It works out for itself whether this machine needs a first setup or an update.
 
-**On Windows:** **[download GodspeedSetup.exe](https://github.com/MichaelZelbel/teach-it-once-kit/releases/latest/download/GodspeedSetup.exe)** and double-click it. Nothing to type, no terminal.
+**On Windows:** **[download GodspeedSetup.exe](https://github.com/MichaelZelbel/godspeed-mission-control/releases/latest/download/GodspeedSetup.exe)** and double-click it. Nothing to type, no terminal.
 
 **On a Mac or Linux:** open a terminal and paste this one line. (A terminal is the normal way to install things on those systems, which is why they get a line and Windows gets a file.)
 
@@ -33,7 +33,7 @@ No terminal needed: click the green **Code** button on GitHub and choose **Downl
 Later in the book, once your assistant is looking after the folder for you, it can keep this up to date with git instead:
 
 ```
-git clone https://github.com/MichaelZelbel/teach-it-once-kit.git
+git clone https://github.com/MichaelZelbel/godspeed-mission-control.git
 ```
 
 ## One AGENTS.md, read by Hermes, Claude Code, Codex and OpenCode
