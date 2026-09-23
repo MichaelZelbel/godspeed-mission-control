@@ -7,7 +7,7 @@
 # account. It also runs alone, as root, to add the watchdog to a server built
 # by hand, or to bring one up to date:
 #
-#   curl -fsSL https://raw.githubusercontent.com/MichaelZelbel/teach-it-once-kit/main/server/install-watchdog.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/MichaelZelbel/godspeed-mission-control/main/server/install-watchdog.sh | bash
 #
 # It is safe to run twice. Nothing here deletes anything.
 #

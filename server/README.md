@@ -18,7 +18,7 @@ brief is a later chapter, so the installer asks before it puts that job on the c
 Log in to the machine you rented and paste this one line:
 
 ```
-curl -fsSL https://raw.githubusercontent.com/MichaelZelbel/teach-it-once-kit/main/server/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/MichaelZelbel/godspeed-mission-control/main/server/install.sh | bash
 ```
 
 It first explains the ChatGPT choice. The route uses ChatGPT's included Codex allowance rather

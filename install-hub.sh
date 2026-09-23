@@ -6,7 +6,7 @@
 # does not redirect a moved file: a bookmark, a printed line, or a short link that still
 # says install-hub.sh would simply 404. It runs the real installer and nothing else.
 set -euo pipefail
-NEW="https://raw.githubusercontent.com/MichaelZelbel/teach-it-once-kit/main/install-godspeed.sh"
+NEW="https://raw.githubusercontent.com/MichaelZelbel/godspeed-mission-control/main/install-godspeed.sh"
 SCRIPT="$(curl -fsSL "$NEW")" || {
   echo "could not download the installer from:" >&2
   echo "       $NEW" >&2

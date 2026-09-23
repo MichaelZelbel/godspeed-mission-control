@@ -8,7 +8,7 @@
 #
 # On the server you just rented, logged in as root, paste this:
 #
-#   curl -fsSL https://raw.githubusercontent.com/MichaelZelbel/teach-it-once-kit/main/server/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/MichaelZelbel/godspeed-mission-control/main/server/install.sh | bash
 #
 # It is safe to run twice. Nothing here deletes anything.
 #
@@ -50,7 +50,7 @@ export KB_TAG
 # This script's own address. reexec_as_user re-downloads it to hand it to the
 # assistant's account, because a script arriving through a pipe has no file on
 # disk to re-run. Overridable so a test can hand it a local copy.
-KB_SELF_URL="${KB_SELF_URL:-https://raw.githubusercontent.com/MichaelZelbel/teach-it-once-kit/main/server/install.sh}"
+KB_SELF_URL="${KB_SELF_URL:-https://raw.githubusercontent.com/MichaelZelbel/godspeed-mission-control/main/server/install.sh}"
 export KB_SELF_URL
 
 # The pin is an immutable TAG, never the moving v2 branch, so this installer runs
@@ -335,10 +335,10 @@ WHY
   if WD_SCRIPT="$(curl -fsSL "$WATCHDOG_INSTALL_URL")" && [ -n "$WD_SCRIPT" ]; then
     AI_USER="$AI_USER" bash -c "$WD_SCRIPT" \
       || warn "the watchdog reported a problem above. Everything else still runs; add it later with:
-   curl -fsSL https://raw.githubusercontent.com/MichaelZelbel/teach-it-once-kit/main/server/install-watchdog.sh | bash"
+   curl -fsSL https://raw.githubusercontent.com/MichaelZelbel/godspeed-mission-control/main/server/install-watchdog.sh | bash"
   else
     warn "could not download the watchdog's installer from $WATCHDOG_INSTALL_URL. Everything else still runs; add it later with:
-   curl -fsSL https://raw.githubusercontent.com/MichaelZelbel/teach-it-once-kit/main/server/install-watchdog.sh | bash"
+   curl -fsSL https://raw.githubusercontent.com/MichaelZelbel/godspeed-mission-control/main/server/install-watchdog.sh | bash"
   fi
 
   # `su -` starts the next phase with a clean environment, so the choices made
@@ -670,7 +670,7 @@ esac)
       first), runs Hermes' own web page as a service, and prints the page's
       address, a username and a password:
 
-        curl -fsSL https://raw.githubusercontent.com/MichaelZelbel/teach-it-once-kit/main/server/open-the-door.sh | bash
+        curl -fsSL https://raw.githubusercontent.com/MichaelZelbel/godspeed-mission-control/main/server/open-the-door.sh | bash
 
    2. Install the Hermes app on your computer. On its first screen choose
       "Connect to existing Hermes" (or later: Settings, Gateways, Remote

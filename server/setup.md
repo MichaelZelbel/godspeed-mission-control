@@ -4,7 +4,7 @@
 the server as the login you were given:
 
 ```
-curl -fsSL https://raw.githubusercontent.com/MichaelZelbel/teach-it-once-kit/main/server/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/MichaelZelbel/godspeed-mission-control/main/server/install.sh | bash
 ```
 
 That does everything below, explains the ChatGPT choice, asks whether a
@@ -236,7 +236,7 @@ The one-line installer does this as root, between the gateway service and the ha
 it is one line, as root, and it is safe to run again:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/MichaelZelbel/teach-it-once-kit/main/server/install-watchdog.sh | bash
+curl -fsSL https://raw.githubusercontent.com/MichaelZelbel/godspeed-mission-control/main/server/install-watchdog.sh | bash
 ```
 
 What it builds, and why it is on root's crontab and not on `hermes cron`: the gateway's clock stops
@@ -258,7 +258,7 @@ delete the block from root's crontab.
 The chapter's way is one more pasted line, as root:
 
 ```
-curl -fsSL https://raw.githubusercontent.com/MichaelZelbel/teach-it-once-kit/main/server/open-the-door.sh | bash
+curl -fsSL https://raw.githubusercontent.com/MichaelZelbel/godspeed-mission-control/main/server/open-the-door.sh | bash
 ```
 
 By hand, the same four things. Tailscale: `curl -fsSL https://tailscale.com/install.sh | sh`,

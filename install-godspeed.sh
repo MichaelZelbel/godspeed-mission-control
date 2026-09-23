@@ -2,7 +2,7 @@
 # =============================================================================
 # Teach It Once - set up Godspeed Mission Control on this Mac or Linux computer, in one line.
 #
-#   curl -fsSL https://raw.githubusercontent.com/MichaelZelbel/teach-it-once-kit/main/install-godspeed.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/MichaelZelbel/godspeed-mission-control/main/install-godspeed.sh | bash
 #
 # On Windows, download GodspeedSetup.exe from the releases page and double-click it
 # instead. Different front door, same promise: one thing to run, no decisions.

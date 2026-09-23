@@ -11,7 +11,7 @@
 #
 # On the server, logged in as root, paste this:
 #
-#   curl -fsSL https://raw.githubusercontent.com/MichaelZelbel/teach-it-once-kit/main/server/open-the-door.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/MichaelZelbel/godspeed-mission-control/main/server/open-the-door.sh | bash
 #
 # It is safe to run twice. Nothing here deletes anything.
 #

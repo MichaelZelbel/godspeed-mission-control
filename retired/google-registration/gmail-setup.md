@@ -21,7 +21,7 @@ You do not type any commands. The mission control installer does the walking.
 - **macOS and Linux:** open the Terminal, paste this one line and press Enter.
 
   ```
-  curl -fsSL https://raw.githubusercontent.com/MichaelZelbel/teach-it-once-kit/main/install-godspeed.sh | bash -s -- --only gmail
+  curl -fsSL https://raw.githubusercontent.com/MichaelZelbel/godspeed-mission-control/main/install-godspeed.sh | bash -s -- --only gmail
   ```
 
 It asks which Gmail address you want to connect. Then it opens one Google page at a time in your

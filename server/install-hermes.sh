@@ -11,7 +11,7 @@
 # this folder covers Chapters 32 and 33 together, and does everything below as
 # part of it:
 #
-#     curl -fsSL https://raw.githubusercontent.com/MichaelZelbel/teach-it-once-kit/main/server/install.sh | bash
+#     curl -fsSL https://raw.githubusercontent.com/MichaelZelbel/godspeed-mission-control/main/server/install.sh | bash
 #
 # This script stays for two cases: you already built the server by hand and only
 # want the Hermes half, or something broke and you want to run just this part

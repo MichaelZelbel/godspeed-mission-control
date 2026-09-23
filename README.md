@@ -19,7 +19,7 @@ Whichever computer you use, one thing to run and no decisions to make. It works 
 **On a Mac or Linux:** open a terminal and paste this one line. (A terminal is the normal way to install things on those systems, which is why they get a line and Windows gets a file.)
 
 ```
-curl -fsSL https://raw.githubusercontent.com/MichaelZelbel/teach-it-once-kit/main/install-godspeed.sh | bash
+curl -fsSL https://raw.githubusercontent.com/MichaelZelbel/godspeed-mission-control/main/install-godspeed.sh | bash
 ```
 
 Either one sets up your mission control with the `starter-godspeed/` folder below already in place. It installs the few things it needs underneath: Git, Node.js, and on Linux Hermes itself (on Windows it checks that Hermes Desktop is there). It also makes one memory that every machine you own shares. If that computer already has a mission control, it updates that one instead. Run it as often as you like; it never deletes anything you have written.

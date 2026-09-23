@@ -21,7 +21,7 @@ import pexpect
 
 URL = os.environ.get(
     "INSTALL_URL",
-    "https://raw.githubusercontent.com/MichaelZelbel/teach-it-once-kit/main/server/install.sh",
+    "https://raw.githubusercontent.com/MichaelZelbel/godspeed-mission-control/main/server/install.sh",
 )
 REPO_NAME = os.environ.get("TEST_REPO_NAME", "mc-installer-test-2026-09-05")
 LOG = os.environ.get("INSTALL_LOG", "/root/install-run.log")
