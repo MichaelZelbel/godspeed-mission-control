@@ -35,9 +35,10 @@ const path = require("path");
 const crypto = require("crypto");
 const { spawn, spawnSync } = require("child_process");
 
-// The mail folder is decided once, in mc-mail-gmail.js, for every part of the mail tool: a desktop
-// paired before 2026-09-22 keeps its key and route under ~/.hub/mail, beside its other mail state.
-const inMail = name => path.join(require("./mc-mail-gmail.js").mailRoot(), name);
+const home = () => process.env.GODSPEED_MAIL_HOME || process.env.HUB_MAIL_HOME || os.homedir();
+// Never one name: a desktop paired before 2026-09-22 keeps its key and route under ~/.hub/mail.
+const inMail = name => [path.join(home(), ".godspeed", "mail", name), path.join(home(), ".hub", "mail", name)]
+  .find(p => fs.existsSync(p)) || path.join(home(), ".godspeed", "mail", name);
 const sshDir = () => inMail("ssh");
 const routeFile = () => inMail("route.json");
 const REQ = "godspeedmail-pair-1.", REC = "godspeedmail-receipt-1.";

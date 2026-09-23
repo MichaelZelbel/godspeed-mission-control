@@ -58,18 +58,8 @@ function home() { return process.env.GODSPEED_MAIL_HOME || process.env.HUB_MAIL_
 // still has only those, so each lookup takes the new name when it exists, the old one when only
 // that exists, and the new one for a machine that has neither yet.
 function firstThere(paths) { return paths.find(p => fs.existsSync(p)) || paths[0]; }
-// The mail folder, decided ONCE for every part of the mail tool (Gmail here, Himalaya in
-// mc-mail-imap.js, pairing in mc-mail-pair.js): the new one if it holds anything, else the old
-// one if it does, else the new one. Deciding per part by "does my subfolder exist" let an empty
-// ~/.godspeed/mail hide a real ~/.hub/mail, and split one machine's mail state across two trees.
-function hasContent(d) { try { return fs.readdirSync(d).length > 0; } catch (e) { return false; } }
-function mailRoot() {
-  const now = path.join(home(), ".godspeed", "mail"), before = path.join(home(), ".hub", "mail");
-  if (hasContent(now)) return now;
-  return hasContent(before) ? before : now;
-}
 function stateDir() {
-  const d = mailRoot();
+  const d = firstThere([path.join(home(), ".godspeed", "mail"), path.join(home(), ".hub", "mail")]);
   fs.mkdirSync(d, { recursive: true, mode: 0o700 });
   return d;
 }
@@ -844,4 +834,4 @@ async function status() {
 }
 
 module.exports = { findAge, readDeviceEnv, shareStore, findHub, credentials, state, attachment, openBrowser, search, read, draft, listDrafts, proposeSend, approve, reject, pending, tidy, connect, disconnect, status,
-  authorize, writeStore, readStore, buildRaw, SCOPE_READ, SCOPE_COMPOSE, storePaths, stateDir, mailRoot };
+  authorize, writeStore, readStore, buildRaw, SCOPE_READ, SCOPE_COMPOSE, storePaths, stateDir };
