@@ -44,7 +44,7 @@ It tried six doors into the notebook (`search_contacts`, `search_brain`, `get_co
 > **How does she want bad news delivered?**
 > - **Nothing.** No note, no claim, no contact field anywhere in the notebook addresses this.
 >
-> ... her identity lives in the hub folder (people.md), which you told me not to read, so I'm
+> ... her identity lives in Mission Control folder (people.md), which you told me not to read, so I'm
 > leaving that gap named rather than filled.
 
 The same two gaps Chapter 26's test found with Hermes, named the same way, and the folder it was

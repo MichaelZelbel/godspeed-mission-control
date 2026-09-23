@@ -39,10 +39,10 @@ expect('a repo path in the steps is refused',
   'To act: open lead/drafts/2026-09-05-lines.md and paste the first line.\n', 1, 'lead/drafts');
 
 expect('an absolute server path is refused',
-  'The brief lives at /home/hermes/.hermes/profiles/hub/workspace/brief/today.md now.\n', 1, '/home/');
+  'The brief lives at /home/hermes/.hermes/profiles/godspeed/workspace/brief/today.md now.\n', 1, '/home/');
 
 expect('a Windows path is refused',
-  'Open C:/hub/lead/queue.md for the list.\n', 1, 'C:/hub');
+  'Open C:/godspeed/lead/queue.md for the list.\n', 1, 'C:/godspeed');
 
 expect('a Sources line may name its file',
   'The counts: 3 posts, 12 replies.\n' +

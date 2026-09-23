@@ -44,9 +44,9 @@ history and rotating the key.
 
 **The fix, both halves.**
 
-- Keep the key file outside the folder: `~/.hub-env`, not `hub/.env`. Hermes keeps its own
+- Keep the key file outside the folder: `~/.mc-env`, not `godspeed/.env`. Hermes keeps its own
   secrets (the Telegram token, its sign-in) in its own home, never in the folder.
-- Add a `.gitignore` in the folder containing `.env*` and `.hub-env`, as a second net.
+- Add a `.gitignore` in the folder containing `.env*` and `.mc-env`, as a second net.
 
 Do this before the first push, not after. The installer does.
 

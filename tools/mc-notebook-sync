@@ -1,0 +1,165 @@
+#!/bin/sh
+# mc-notebook-sync — keep your notebook and your mission control current with each other, by itself.
+#
+# WHAT THIS IS FOR. Your mission control is a folder of text files on your computer. Your notebook
+# (Chapter 24) is the thing that can search those files by meaning instead of by exact
+# word. For that to be useful it has to hold a current copy, and until something ran on
+# a schedule, it only ever held whatever was true the last time somebody typed a command.
+#
+# Two things start it, and neither needs you:
+#   - the moment you save a change (the post-commit hook in your mission control folder)
+#   - once an hour, for whatever happened while the computer was asleep
+#
+# Each run sends what changed UP (tools/notebook-sync.py) and then brings the notebook's
+# facts DOWN into world/ (tools/world-pull.py). The two arrows ride in one run because
+# they share everything that can go wrong: the key, the python, the lock.
+#
+# IT IS SILENT AND HARMLESS WHEN YOU HAVE NO NOTEBOOK. A mission control built from the book has no
+# notebook and needs none: everything in the book works on plain files. No connection
+# means no arrows, no error and no daily complaint about a thing you never asked for.
+# The freshness pull still runs either way: a machine with no notebook still deserves a
+# folder that is never more than an hour behind, and the pull needs no key and no python.
+#
+# Usage: mc-notebook-sync [--godspeed DIR] [--verbose]
+set -u
+
+GODSPEED=""
+VERBOSE=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --godspeed)     GODSPEED="${2:-}"; shift 2 ;;
+    --verbose) VERBOSE=1; shift ;;
+    *) shift ;;
+  esac
+done
+
+# Never use a bare $HOME: a scheduled job can be started with almost no environment at all.
+HOMEDIR="${HOME:-}"
+[ -n "$HOMEDIR" ] || HOMEDIR="$(getent passwd "$(id -u)" 2>/dev/null | cut -d: -f6)"
+[ -n "$HOMEDIR" ] || HOMEDIR=/tmp
+
+LOG="$HOMEDIR/.godspeed/notebook-sync.log"
+mkdir -p "$HOMEDIR/.godspeed" 2>/dev/null || true
+say() { [ -n "$VERBOSE" ] && echo "$*"; echo "$(date 2>/dev/null) $*" >> "$LOG" 2>/dev/null || true; }
+
+# Where Mission Control is was written down when this computer was joined, because a job started
+# by the schedule cannot look around and guess.
+if [ -z "$GODSPEED" ] && [ -r "$HOMEDIR/.godspeed/device.env" ]; then
+  GODSPEED="$(sed -n 's/^[[:space:]]*GODSPEED_DIR=//p' "$HOMEDIR/.godspeed/device.env" | head -1)"
+fi
+if [ -z "$GODSPEED" ] || [ ! -d "$GODSPEED" ]; then
+  say "no mission control folder recorded on this computer, nothing to do"
+  exit 0
+fi
+
+# One run at a time. The hourly job and a save can land in the same second, and two
+# uploads of the same new file race into two notes. mkdir is the atomic primitive that
+# exists everywhere, including Git Bash on Windows, where flock does not.
+LOCK="$HOMEDIR/.godspeed/notebook-sync.lock"
+if ! mkdir "$LOCK" 2>/dev/null; then
+  # A lock older than an hour is a crashed run, not a running one.
+  if [ -d "$LOCK" ] && [ -z "$(find "$LOCK" -maxdepth 0 -mmin -60 2>/dev/null)" ]; then
+    rmdir "$LOCK" 2>/dev/null
+    mkdir "$LOCK" 2>/dev/null || { say "another sync holds the lock, skipping"; exit 0; }
+    say "cleared a stale lock left by a run that died"
+  else
+    say "another sync is running, skipping"
+    exit 0
+  fi
+fi
+trap 'rmdir "$LOCK" 2>/dev/null || true' EXIT
+
+# THE FRESHNESS FLOOR. An idle machine should drift at most an hour behind the folder,
+# so the hourly run pulls when it is safe. Safe means all of: a remote exists, the tree
+# is clean, and no rebase or merge is in flight. A dirty tree is your work in progress
+# and is never touched. The pull can fire Mission Control's own hooks, whose sync run finds
+# this lock and skips, harmlessly. Never push from here: pushing stays a decision, not
+# a schedule.
+#
+# NAME THE BRANCH, DO NOT LET GIT GUESS IT. `git pull --rebase origin` with no branch
+# works only on a clone whose branch has an upstream configured, and a folder that was
+# copied, restored from a backup, or cloned by a tool often has none. Git then refuses
+# with "you must specify a branch on the command line", every hour, and the run carries
+# on to the sync so nothing looks broken. On the machine this was found on, that had
+# been the answer every hour for days behind a dirty tree that was hiding it. A detached
+# HEAD yields no branch name and is skipped, because there is nothing to pull onto.
+BRANCH="$(git -C "$GODSPEED" symbolic-ref --quiet --short HEAD 2>/dev/null || true)"
+if [ -n "$BRANCH" ] \
+   && git -C "$GODSPEED" rev-parse --is-inside-work-tree >/dev/null 2>&1 \
+   && git -C "$GODSPEED" remote get-url origin >/dev/null 2>&1 \
+   && [ ! -e "$(git -C "$GODSPEED" rev-parse --git-path rebase-merge 2>/dev/null)" ] \
+   && [ ! -e "$(git -C "$GODSPEED" rev-parse --git-path rebase-apply 2>/dev/null)" ] \
+   && [ ! -e "$(git -C "$GODSPEED" rev-parse --git-path MERGE_HEAD 2>/dev/null)" ] \
+   && [ -z "$(git -C "$GODSPEED" status --porcelain 2>/dev/null)" ]; then
+  PULL_OUT="$(GIT_TERMINAL_PROMPT=0 git -C "$GODSPEED" pull --rebase origin "$BRANCH" 2>&1)"
+  PULL_RC=$?
+  if [ "$PULL_RC" -ne 0 ]; then
+    GIT_TERMINAL_PROMPT=0 git -C "$GODSPEED" rebase --abort >/dev/null 2>&1 || true
+    say "freshness pull failed, syncing what is here: $(printf '%s' "$PULL_OUT" | tr '\n' ' ' | tail -c 140)"
+  else
+    say "freshness pull: $(printf '%s' "$PULL_OUT" | tail -n 1 | head -c 140)"
+  fi
+fi
+
+# The connection travels with the folder: one small key on this computer opens the
+# credentials kept inside Mission Control. No key, or no credentials, means there is no notebook
+# here, which is a normal and complete way to own a mission control. Checked AFTER the freshness
+# pull on purpose: the pull serves every mission control, notebook or not.
+KEY="${GODSPEED_AGE_KEY:-$HOMEDIR/.godspeed/age-key.txt}"
+STORE="$GODSPEED/secrets/mc-secrets.env.age"
+if [ -z "${MENERIO_API_KEY:-}" ] && [ -r "$KEY" ] && [ -f "$STORE" ] && command -v age >/dev/null 2>&1; then
+  eval "$(age -d -i "$KEY" "$STORE" 2>/dev/null | sed -n 's/^\([A-Za-z_][A-Za-z0-9_]*\)=\(.*\)$/export \1='"'"'\2'"'"'/p')" 2>/dev/null || true
+fi
+if [ -z "${MENERIO_API_KEY:-}" ]; then
+  say "no notebook is connected on this computer, nothing to do"
+  exit 0
+fi
+
+# PROVE python runs, never just find it. On Windows, `command -v python3` can answer
+# with the Microsoft Store alias stub: a python3.exe that exists, prints an ad for the
+# Store, and fails. That exact stub kept a scheduled job failing every hour for two days
+# while the real python sat one name further down the list. Run the candidate and look
+# at the answer. Absolute paths are tried only after PATH, so a machine that manages its
+# own python keeps managing it.
+PY=""
+for c in python3 python; do
+  command -v "$c" >/dev/null 2>&1 || continue
+  "$c" -c "pass" >/dev/null 2>&1 && { PY="$c"; break; }
+done
+if [ -z "$PY" ]; then
+  for c in /opt/homebrew/bin/python3 /usr/local/bin/python3 /usr/bin/python3 \
+           "$HOMEDIR/.local/bin/python3"; do
+    [ -x "$c" ] && "$c" -c "pass" >/dev/null 2>&1 && { PY="$c"; break; }
+  done
+fi
+if [ -z "$PY" ]; then
+  say "Python is not on this computer, so the notebook cannot be updated"
+  exit 0
+fi
+
+SELF_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+SYNC="$SELF_DIR/notebook-sync.py"
+[ -f "$SYNC" ] || SYNC="$GODSPEED/tools/notebook-sync.py"
+if [ ! -f "$SYNC" ]; then
+  say "the notebook program is not installed on this computer"
+  exit 0
+fi
+PULL="$SELF_DIR/world-pull.py"
+[ -f "$PULL" ] || PULL="$GODSPEED/tools/world-pull.py"
+
+# The arrow UP: what changed in the folder, into the notebook, for search.
+out="$("$PY" "$SYNC" --apply --repo-root "$GODSPEED" 2>&1)"
+rc=$?
+say "sync exit $rc: $(printf '%s' "$out" | tail -3 | tr '\n' ' ')"
+[ -n "$VERBOSE" ] && printf '%s\n' "$out"
+
+# The arrow DOWN, in the same run: the notebook's facts, kept as files in world/, so
+# they survive without the notebook. It rides here rather than on its own schedule
+# because a second job would duplicate every guard above.
+if [ -f "$PULL" ]; then
+  wout="$("$PY" "$PULL" --apply --repo-root "$GODSPEED" 2>&1)"
+  wrc=$?
+  say "world pull exit $wrc: $(printf '%s' "$wout" | tail -3 | tr '\n' ' ')"
+  [ -n "$VERBOSE" ] && printf '%s\n' "$wout"
+fi
+exit 0

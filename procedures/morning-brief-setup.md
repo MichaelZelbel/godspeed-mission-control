@@ -18,12 +18,12 @@ invented facts. Where you do not know something, say so plainly.
 When the brief tells me to do something, the step is one I can do
 from my phone in a minute, and the full text I would copy is right
 there in the brief; never send me to a file path. Before you write
-the file, run hub-check-brief on it and fix whatever it refuses.
+the file, run mc-check-brief on it and fix whatever it refuses.
 Then run it once so I can see today's brief.
 ```
 
 The two new middle sentences are the delivery contract, and the check is
-its enforcement: `hub-check-brief` (installed with this kit) refuses a
+its enforcement: `mc-check-brief` (installed with this kit) refuses a
 brief that sends you to a file instead of handing you the thing. A rule
 in the recipe can be forgotten by a session; the check cannot. If the
 command is missing, run this kit's installer again and it appears.
@@ -53,10 +53,10 @@ Run the brief again and check the new closing line.
 
 ## Half two: the clock
 
-One line, in a terminal, with your hub's full path at the end:
+One line, in a terminal, with your mission control's full path at the end:
 
 ```
-hermes cron create "0 7 * * *" "Follow skills/morning-brief/SKILL.md and write today's brief as a dated file in brief/." --name morning-brief --workdir /path/to/your/hub
+hermes cron create "0 7 * * *" "Follow skills/morning-brief/SKILL.md and write today's brief as a dated file in brief/." --name morning-brief --workdir /path/to/your/godspeed
 ```
 
 Hermes answers with the job's card: the id, the name, the schedule, the
@@ -78,7 +78,7 @@ Set a throwaway job three minutes ahead and watch it fire (verified
 00:59:38 with `source=builtin`, and a second dated brief in `brief/`):
 
 ```
-hermes cron create "59 00 * * *" "Follow skills/morning-brief/SKILL.md and write today's brief as a dated file in brief/." --name clock-test --workdir /path/to/your/hub
+hermes cron create "59 00 * * *" "Follow skills/morning-brief/SKILL.md and write today's brief as a dated file in brief/." --name clock-test --workdir /path/to/your/godspeed
 hermes cron runs
 hermes cron remove clock-test
 ```

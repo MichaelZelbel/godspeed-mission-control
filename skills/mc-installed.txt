@@ -1,0 +1,6 @@
+# Recipes the starter mission control ships, one name per line; each lives at
+# starter-godspeed/skills/<name>/SKILL.md. A reader's mission control gets them from the installer.
+# The author's mission control is not made from the starter, so scripts/repair-kit-wiring.sh
+# there reads this list and installs the same files.
+next-action
+work-item

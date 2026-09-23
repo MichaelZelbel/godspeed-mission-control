@@ -42,11 +42,11 @@
 // touches, and the installer already knows how to make a Windows launcher for a Node program.
 //
 // USAGE
-//     hub-compile-rules             rewrite the block in AGENTS.md
-//     hub-compile-rules --check     say whether it is out of date, change nothing
+//     mc-compile-rules             rewrite the block in AGENTS.md
+//     mc-compile-rules --check     say whether it is out of date, change nothing
 //
-// Run it from your hub folder, or give it the folder:
-//     hub-compile-rules --hub /path/to/hub
+// Run it from your mission control folder, or give it the folder:
+//     mc-compile-rules --godspeed /path/to/godspeed
 
 'use strict'
 
@@ -96,19 +96,19 @@ function allDigits (s) {
 }
 
 function main (argv) {
-  let hub = process.cwd()
-  const at = argv.indexOf('--hub')
-  if (at !== -1) hub = path.resolve(argv[at + 1] || '')
+  let godspeed = process.cwd()
+  const at = argv.indexOf('--godspeed')
+  if (at !== -1) godspeed = path.resolve(argv[at + 1] || '')
   const check = argv.indexOf('--check') !== -1
 
-  const rulesDir = path.join(hub, 'rules')
-  const agents = path.join(hub, 'AGENTS.md')
+  const rulesDir = path.join(godspeed, 'rules')
+  const agents = path.join(godspeed, 'AGENTS.md')
   if (!fs.existsSync(rulesDir) || !fs.statSync(rulesDir).isDirectory()) {
-    process.stderr.write('There is no rules/ folder in ' + hub + ', so there is nothing to compile.\n')
+    process.stderr.write('There is no rules/ folder in ' + godspeed + ', so there is nothing to compile.\n')
     return 2
   }
   if (!fs.existsSync(agents) || !fs.statSync(agents).isFile()) {
-    process.stderr.write('There is no AGENTS.md in ' + hub + '. That is the file your rules go into.\n')
+    process.stderr.write('There is no AGENTS.md in ' + godspeed + '. That is the file your rules go into.\n')
     return 2
   }
 
@@ -143,7 +143,7 @@ function main (argv) {
   }
 
   const parts = [
-    BEGIN + ' - written by hub-compile-rules from the files in rules/. Edit those, not this. -->',
+    BEGIN + ' - written by mc-compile-rules from the files in rules/. Edit those, not this. -->',
     ''
   ]
   let n = 0
@@ -193,7 +193,7 @@ function main (argv) {
 
   if (check) {
     if (next !== cur) {
-      process.stderr.write('AGENTS.md is out of date. Run: hub-compile-rules\n')
+      process.stderr.write('AGENTS.md is out of date. Run: mc-compile-rules\n')
       return 1
     }
     process.stdout.write('AGENTS.md is up to date: ' + n + ' rules, ' + block.length + ' characters.\n')

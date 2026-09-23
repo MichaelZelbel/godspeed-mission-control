@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # The two sync arrows and their runner: what must stay quiet, and what must never happen.
 #
-# WHY THIS FILE IS HERE. tools/notebook-sync.py, tools/world-pull.py and hub-notebook-sync
+# WHY THIS FILE IS HERE. tools/notebook-sync.py, tools/world-pull.py and mc-notebook-sync
 # are what Chapter 26 means by the notebook keeping itself current. They run unattended,
 # on a schedule, on machines whose owner never asked to see them, and that shape carries
 # two promises the rest of the kit does not:
@@ -46,7 +46,7 @@ for f in notebook-sync.py world-pull.py; do
 done
 
 # 5 + 6. The runner and the credential helper parse as shell.
-for f in hub-notebook-sync hub-notebook-env; do
+for f in mc-notebook-sync mc-notebook-env; do
   if bash -n "$HERE/$f" 2>"$W/err"; then
     ok "$f parses as shell"
   else
@@ -56,26 +56,26 @@ done
 
 # 7. The runner never pushes. It pulls to stay fresh; pushing stays a decision a person
 # makes, never something a schedule does.
-if [ "$(grep -Ec 'git +push' "$HERE/hub-notebook-sync")" = "0" ]; then
+if [ "$(grep -Ec 'git +push' "$HERE/mc-notebook-sync")" = "0" ]; then
   ok "the runner never contains git push"
 else
   bad "THE RUNNER PUSHES, which turns a schedule into a decision-maker"
 fi
 
-# 8. No hub recorded on this computer: silent, exit 0. This is most readers' machines
+# 8. No mission control recorded on this computer: silent, exit 0. This is most readers' machines
 # before the installer runs, and any output here becomes a daily complaint.
-mkdir -p "$W/home-empty/.hub"
-rc=0; out="$(HOME="$W/home-empty" MENERIO_API_KEY="" sh "$HERE/hub-notebook-sync" 2>&1)" || rc=$?
+mkdir -p "$W/home-empty/.godspeed"
+rc=0; out="$(HOME="$W/home-empty" MENERIO_API_KEY="" sh "$HERE/mc-notebook-sync" 2>&1)" || rc=$?
 if [ "$rc" = "0" ] && [ -z "$out" ]; then
-  ok "no hub recorded: exit 0 and not a word"
+  ok "no mission control recorded: exit 0 and not a word"
 else
-  bad "a reader with no hub saw something (exit $rc)" "$out"
+  bad "a reader with no mission control saw something (exit $rc)" "$out"
 fi
 
-# 9. A hub but no notebook: silent, exit 0. This is most readers' machines forever.
-mkdir -p "$W/home-nokey/.hub" "$W/hub-nokey"
-printf 'HUB_DIR=%s\n' "$W/hub-nokey" > "$W/home-nokey/.hub/device.env"
-rc=0; out="$(HOME="$W/home-nokey" MENERIO_API_KEY="" sh "$HERE/hub-notebook-sync" 2>&1)" || rc=$?
+# 9. A mission control but no notebook: silent, exit 0. This is most readers' machines forever.
+mkdir -p "$W/home-nokey/.godspeed" "$W/mc-nokey"
+printf 'GODSPEED_DIR=%s\n' "$W/mc-nokey" > "$W/home-nokey/.godspeed/device.env"
+rc=0; out="$(HOME="$W/home-nokey" MENERIO_API_KEY="" sh "$HERE/mc-notebook-sync" 2>&1)" || rc=$?
 if [ "$rc" = "0" ] && [ -z "$out" ]; then
   ok "no notebook connected: exit 0 and not a word"
 else
@@ -86,38 +86,38 @@ fi
 # skills/, and each decision in decisions.md as its own entry. It does not send
 # profile/ or AGENTS.md." No key and no --apply, so nothing leaves the machine.
 # The visible skills/ is the room since the Hermes switch (2026-09-02); .claude/skills
-# is a link the installer makes, and on an older hub it may still be the only room.
-mkdir -p "$W/hub/observations" "$W/hub/skills/plan-my-day" "$W/hub/profile"
-printf 'You proofread before sending.\n' > "$W/hub/observations/quirk.md"
-printf '# Plan my day\n'                 > "$W/hub/skills/plan-my-day/SKILL.md"
-printf '# About me\n'                    > "$W/hub/profile/about-me.md"
-printf '# Manual\n'                      > "$W/hub/AGENTS.md"
-cat > "$W/hub/decisions.md" <<'DECEOF'
+# is a link the installer makes, and on an older mission control it may still be the only room.
+mkdir -p "$W/godspeed/observations" "$W/godspeed/skills/plan-my-day" "$W/godspeed/profile"
+printf 'You proofread before sending.\n' > "$W/godspeed/observations/quirk.md"
+printf '# Plan my day\n'                 > "$W/godspeed/skills/plan-my-day/SKILL.md"
+printf '# About me\n'                    > "$W/godspeed/profile/about-me.md"
+printf '# Manual\n'                      > "$W/godspeed/AGENTS.md"
+cat > "$W/godspeed/decisions.md" <<'DECEOF'
 # Decisions
 
 - (2026-01-05) Chose one AI subscription instead of two, because the best
   tool is the one I open daily.
-- 2026-02-11 Named the folder hub, so every tool calls it the same thing.
+- 2026-02-11 Named the folder mission control, so every tool calls it the same thing.
 
 ## 2026-03-01 Moved the notebook key
 Why: one key, one off-switch.
 DECEOF
 
-plan="$(MENERIO_API_KEY="" "$PY" "$HERE/notebook-sync.py" --repo-root "$W/hub" 2>&1)"
+plan="$(MENERIO_API_KEY="" "$PY" "$HERE/notebook-sync.py" --repo-root "$W/godspeed" 2>&1)"
 
 echo "$plan" | grep -q "would create observations/quirk.md" \
   && ok "observations/ is sent" || bad "observations/ was not in the plan" "$plan"
 echo "$plan" | grep -q "would create skills/plan-my-day/SKILL.md" \
   && ok "the visible skills/ is sent" || bad "skills/ was not in the plan" "$plan"
 
-# An older hub that has not been topped up keeps its recipes in .claude/skills only.
+# An older mission control that has not been topped up keeps its recipes in .claude/skills only.
 # It must still be sent, or a reader who skipped the re-run loses their recipes from
 # the notebook without a word.
-mkdir -p "$W/oldhub/.claude/skills/plan-my-day"
-printf '# Plan my day\n' > "$W/oldhub/.claude/skills/plan-my-day/SKILL.md"
-oldplan="$(MENERIO_API_KEY="" "$PY" "$HERE/notebook-sync.py" --repo-root "$W/oldhub" 2>&1)"
+mkdir -p "$W/oldgodspeed/.claude/skills/plan-my-day"
+printf '# Plan my day\n' > "$W/oldgodspeed/.claude/skills/plan-my-day/SKILL.md"
+oldplan="$(MENERIO_API_KEY="" "$PY" "$HERE/notebook-sync.py" --repo-root "$W/oldgodspeed" 2>&1)"
 echo "$oldplan" | grep -q "would create .claude/skills/plan-my-day/SKILL.md" \
-  && ok "an older hub's .claude/skills/ is still sent" || bad "the older hub's recipes were not in the plan" "$oldplan"
+  && ok "an older mission control's .claude/skills/ is still sent" || bad "the older mission control's recipes were not in the plan" "$oldplan"
 
 n="$(echo "$plan" | grep -c "would create decisions.md#")"
 if [ "$n" = "3" ]; then
@@ -164,15 +164,15 @@ spec = importlib.util.spec_from_file_location("ns", sys.argv[1])
 ns = importlib.util.module_from_spec(spec); spec.loader.exec_module(ns)
 
 many = {"observations/gone%d.md" % i: {"note_id": "n%d" % i, "hash": "h",
-        "folder": "hub/observations"} for i in range(100)}
+        "folder": "godspeed/observations"} for i in range(100)}
 print("MASS", len(ns.plan_actions([], many)["trash"]))
 
 docs = [ns.Document(doc_id="observations/o%d.md" % i, title="o%d" % i, body="b",
                     source_path="observations/o%d.md" % i) for i in range(97)]
 few = {d.doc_id: {"note_id": "n", "hash": ns.content_hash(ns.build_note_body(d)),
                   "folder": ns.folder_for(d.source_path)} for d in docs}
-few["observations/deleted-1.md"] = {"note_id": "x1", "hash": "h", "folder": "hub/observations"}
-few["observations/deleted-2.md"] = {"note_id": "x2", "hash": "h", "folder": "hub/observations"}
+few["observations/deleted-1.md"] = {"note_id": "x1", "hash": "h", "folder": "godspeed/observations"}
+few["observations/deleted-2.md"] = {"note_id": "x2", "hash": "h", "folder": "godspeed/observations"}
 print("FEW", len(ns.plan_actions(docs, few)["trash"]))
 GUARDEOF
 )"

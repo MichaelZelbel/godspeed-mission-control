@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# The gate for hub-work: dispatched, attempted and verified stay three states; a duplicate
+# The gate for mc-work: dispatched, attempted and verified stay three states; a duplicate
 # trigger files nothing; a lease keeps two runners off one item; outward work never runs or
 # retries on its own; a reply on a card cancels the work under it; time makes plans stale.
-# Runs in a throwaway hub root; never touches the real work/.
+# Runs in a throwaway mission control root; never touches the real work/.
 # Usage: bash tools/test-work.sh   (from a checkout of this kit)
 set -uo pipefail
 
@@ -18,11 +18,11 @@ trap 'rm -rf "$TMP"' EXIT
 mkdir -p "$TMP/rules" "$TMP/bin" "$TMP/attention"
 : > "$TMP/AGENTS.md"
 cp "$HERE/work.js" "$TMP/bin/"
-cp "$HERE/hub-cards.js" "$TMP/bin/"
+cp "$HERE/mc-cards.js" "$TMP/bin/"
 cp "$HERE/check-written.js" "$TMP/bin/"
-export HUB_ROOT="$TMP"
-export HUB_TODAY="2026-09-13"
-export HUB_NOW="2026-09-13T10:00:00.000Z"
+export GODSPEED_ROOT="$TMP"
+export GODSPEED_TODAY="2026-09-13"
+export GODSPEED_NOW="2026-09-13T10:00:00.000Z"
 hw() { "$NODE" "$TMP/bin/work.js" "$@"; }
 idof() { hw list --all --json | "$NODE" -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const x=JSON.parse(s).find(x=>x.KEY===process.argv[1]);console.log(x?x.id:"none")})' "$1"; }
 
@@ -33,7 +33,7 @@ check() { if [ "$2" = "$3" ]; then ok "$1"; else bad "$1 (wanted [$3], got [$2])
 contains() { case "$2" in *"$3"*) ok "$1";; *) bad "$1 (missing [$3] in: $(printf '%s' "$2" | head -5))";; esac; }
 missing()  { case "$2" in *"$3"*) bad "$1 (should not contain [$3])";; *) ok "$1";; esac; }
 
-echo "hub-work gate"
+echo "mc-work gate"
 
 # --- filing and duplicate triggers ---------------------------------------------------------------
 OUT="$(hw file --what "Redraft the three lines" 2>&1)"; check "no done-when, no item" "$?" "1"
@@ -66,7 +66,7 @@ OUT="$(hw attempt W-20260913-01 --runner claude-laptop --ok --result "filed card
 contains "an attempt is attempted, not verified" "$OUT" "attempted, not yet verified"
 check "  status attempted" "$(grep -c '^STATUS: attempted' "$TMP/work/W-20260913-01.md")" "1"
 check "  attempts counted" "$(grep -c '^ATTEMPTS: 1' "$TMP/work/W-20260913-01.md")" "1"
-OUT="$(hw verify W-20260913-01 --evidence "done" 2>&1)"; check "the word done is not evidence for hub-owned work" "$?" "1"
+OUT="$(hw verify W-20260913-01 --evidence "done" 2>&1)"; check "the word done is not evidence for mc-owned work" "$?" "1"
 OUT="$(hw verify W-20260913-01 --evidence "opened attention/M025.md, the three lines are in DRAFT" 2>&1)"
 contains "evidence naming what was observed verifies" "$OUT" "verified by observation"
 OUT="$(hw take W-20260913-03 --runner claude-laptop 2>&1)"
@@ -86,15 +86,15 @@ OUT="$(hw attempt $DREAM --runner claude-laptop --failed "browser bridge unreach
 contains "a failure schedules a retry one day later" "$OUT" "retry 2026-09-14"
 OUT="$(hw take $DREAM --runner claude-laptop 2>&1)"; check "retrying before the gap is refused" "$?" "1"
 contains "  a gap, not a hammer" "$OUT" "a failure gets a gap, not a hammer"
-OUT="$(HUB_TODAY=2026-09-14 hw next 2>&1)"; contains "on the retry day it is next again" "$OUT" "$DREAM"
-HUB_TODAY=2026-09-14 hw take $DREAM --runner claude-laptop >/dev/null
-OUT="$(HUB_TODAY=2026-09-14 hw attempt $DREAM --runner claude-laptop --failed "still unreachable" 2>&1)"
+OUT="$(GODSPEED_TODAY=2026-09-14 hw next 2>&1)"; contains "on the retry day it is next again" "$OUT" "$DREAM"
+GODSPEED_TODAY=2026-09-14 hw take $DREAM --runner claude-laptop >/dev/null
+OUT="$(GODSPEED_TODAY=2026-09-14 hw attempt $DREAM --runner claude-laptop --failed "still unreachable" 2>&1)"
 contains "the second failure waits two days" "$OUT" "retry 2026-09-16"
-HUB_TODAY=2026-09-16 hw take $DREAM --runner claude-laptop >/dev/null
-OUT="$(HUB_TODAY=2026-09-16 hw attempt $DREAM --runner claude-laptop --failed "still" 2>&1)"
+GODSPEED_TODAY=2026-09-16 hw take $DREAM --runner claude-laptop >/dev/null
+OUT="$(GODSPEED_TODAY=2026-09-16 hw attempt $DREAM --runner claude-laptop --failed "still" 2>&1)"
 missing "the third failure has no retry" "$OUT" "retry 2026"
-OUT="$(HUB_TODAY=2026-09-20 hw take $DREAM --runner claude-laptop 2>&1)"; check "attempts used up, a person decides" "$?" "1"
-OUT="$(HUB_TODAY=2026-09-20 hw tick 2>&1)"; contains "  and tick names it" "$OUT" "$DREAM: failed, attempts used up or outward; a person decides"
+OUT="$(GODSPEED_TODAY=2026-09-20 hw take $DREAM --runner claude-laptop 2>&1)"; check "attempts used up, a person decides" "$?" "1"
+OUT="$(GODSPEED_TODAY=2026-09-20 hw tick 2>&1)"; contains "  and tick names it" "$OUT" "$DREAM: failed, attempts used up or outward; a person decides"
 
 # --- outward: never taken without your words, never retried on its own ---------------------------------
 OUT="$(hw unblock W-20260913-02 --why "approval" 2>&1)"; check "outward work is not unblocked without your words" "$?" "1"
@@ -106,24 +106,24 @@ check "  APPROVED holds your words" "$(grep -c '^APPROVED: 2026-09-13 "same pric
 OUT="$(hw attempt W-20260913-02 --runner claude-laptop --failed "the shop login had expired" 2>&1)"
 contains "an outward failure has no retry" "$OUT" "failed (the shop login had expired)"
 missing "  no retry date" "$OUT" "retry 2026"
-OUT="$(HUB_TODAY=2026-10-01 hw next 2>&1)"; missing "  and next never offers it" "$OUT" "W-20260913-02"
+OUT="$(GODSPEED_TODAY=2026-10-01 hw next 2>&1)"; missing "  and next never offers it" "$OUT" "W-20260913-02"
 
 # --- tick: dead leases, stale plans, waiting on you ----------------------------------------------------
 hw file --what "Mirror the results table into the summary page" --done-when "the page shows the table" --key mirror --source test >/dev/null
 MIRROR="$(idof mirror)"
 hw take "$MIRROR" --runner hermes-server >/dev/null
-OUT="$(HUB_NOW=2026-09-13T13:00:00.000Z hw tick 2>&1)"
+OUT="$(GODSPEED_NOW=2026-09-13T13:00:00.000Z hw tick 2>&1)"
 contains "an expired lease with no attempt goes back to planned" "$OUT" "$MIRROR: lease of hermes-server expired, planned again"
-OUT="$(HUB_TODAY=2026-09-21 hw tick 2>&1)"
+OUT="$(GODSPEED_TODAY=2026-09-21 hw tick 2>&1)"
 contains "a plan nothing touched for a week is stale" "$OUT" "$MIRROR: stale after 8 days"
 hw file --what "Pick a price" --done-when "you named a number" --owner person --key price --source test >/dev/null
-OUT="$(HUB_TODAY=2026-09-28 hw tick 2>&1)"
+OUT="$(GODSPEED_TODAY=2026-09-28 hw tick 2>&1)"
 contains "waiting on you for two weeks is named for reassessment, not repeated" "$OUT" "waiting on you for 15 days; reassess whether it is still wanted, do not ask again the same way"
 
 # --- a reply on a card reaches the work under it --------------------------------------------------------
 hw file --what "Build the picture for M017" --done-when "a picture is saved beside the card" --key visual --card M017 --source test >/dev/null
 ID="$(hw list --json | "$NODE" -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{console.log(JSON.parse(s).find(x=>x.KEY==="visual").id)})')"
-# In a hub that has one, the card ledger calls this itself when you answer a card. Here the
+# In a mission control that has one, the card ledger calls this itself when you answer a card. Here the
 # call is made directly, because the rule being tested belongs to this program: an answer on a
 # card closes the work that was filed under it, with your words as the reason.
 OUT="$(hw sweep --card M017 --reason "you answered M017: not this one, super lame" 2>&1)"
@@ -148,7 +148,7 @@ contains "list shows the kind" "$OUT" "planned    learn $LEARN"
 contains "  and do for an item filed before there was a kind" "$OUT" "failed     do    W-20260913-02"
 OUT="$(hw next --json 2>&1)"; contains "next carries KIND in JSON" "$OUT" "\"KIND\":\"learn\""
 # The point of a learn item: "we found out X" in the runner's report closes nothing; the file does,
-# and hub-check-written is the check that is not the runner.
+# and mc-check-written is the check that is not the runner.
 hw file --learn "How many readers reach chapter 5" --path research/chapter-5.md --key ch5 --check "$NODE $TMP/bin/check-written.js research/chapter-5.md --min-words 5" --source test >/dev/null
 CH5="$(idof ch5)"
 hw take "$CH5" --runner claude-laptop >/dev/null

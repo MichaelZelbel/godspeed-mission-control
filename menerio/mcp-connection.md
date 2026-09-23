@@ -10,7 +10,7 @@ Menerio, then **Settings**, then the **API Keys** tab. Press **Generate new API 
 after the tool or machine that will use it, because in six months you will want to know which
 key belongs where.
 
-The grid under **This key may touch** starts with every box ticked. For your own hub or
+The grid under **This key may touch** starts with every box ticked. For your own mission control or
 assistant, leave it that way: full access is the right shape for the key you hold yourself.
 Untick boxes only for a key you hand to somebody else's app, and that key can never do more,
 whatever the app asks. (A refused tool call names the missing box, so a too-narrow key is a

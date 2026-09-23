@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 'use strict';
 //
-// work.js - what your hub decided to do, tracked from planned to verified, so a job is not lost
+// work.js - what your mission control decided to do, tracked from planned to verified, so a job is not lost
 // between sessions, not run twice when something fires twice, and never called done because a
-// model said it was done. Type it as `hub-work`.
+// model said it was done. Type it as `mc-work`.
 //
 // WHY THIS EXISTS. An assistant that works while you are asleep has one characteristic failure,
 // and it is not that it does the wrong thing. It is that it produces something, writes down that
@@ -38,16 +38,16 @@
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const L = require(path.join(__dirname, 'hub-cards.js'));
+const L = require(path.join(__dirname, 'mc-cards.js'));
 
-const HUB = L.hubRoot(__filename);
-const DIR = path.join(HUB, 'work');
+const GODSPEED = L.godspeedRoot(__filename);
+const DIR = path.join(GODSPEED, 'work');
 const STATUSES = ['planned', 'dispatched', 'attempted', 'verified', 'failed', 'blocked', 'stale', 'cancelled'];
 const OPEN = ['planned', 'dispatched', 'attempted', 'failed', 'blocked', 'stale'];
-// WHO OWNS AN ITEM. `hub` is your assistant, `person` is you, `company:<slug>` is a group of
+// WHO OWNS AN ITEM. `godspeed` is your assistant, `person` is you, `company:<slug>` is a group of
 // agents you set up to do one job. `him`, `her`, `them`, `me` and `you` are all accepted and
 // stored as `person`, because an older note of yours should keep running.
-const OWNERS = /^(hub|person|company:[a-z0-9-]+)$/;
+const OWNERS = /^(godspeed|person|company:[a-z0-9-]+)$/;
 const PERSON = /^(person|me|you|him|her|them|i)$/i;
 const asOwner = (v) => (PERSON.test(v) ? 'person' : v);
 const NEEDS = /^(none|person|authorization|capability:.+)$/;
@@ -61,7 +61,7 @@ const ORDER = ['ID', 'STATUS', 'KIND', 'KEY', 'GOAL', 'CARD', 'WHAT', 'DONE WHEN
   'LEASE', 'NEXT TRY', 'STALE AFTER', 'FILED', 'SOURCE', 'RESULT', 'LINK', 'APPROVED'];
 const S = L.store(DIR, ORDER);
 const { die, say, oneLine, flag, today, q } = L;
-const now = () => (process.env.HUB_NOW || new Date().toISOString());
+const now = () => (process.env.GODSPEED_NOW || new Date().toISOString());
 const cmds = {};
 
 function nextId(d) {
@@ -91,8 +91,8 @@ cmds.file = (a) => {
   const key = oneLine(a.key || what.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 80));
   const dup = S.all().find(c => c.f.KEY === key && OPEN.includes(c.f.STATUS));
   if (dup) { say(`${dup.id}: already on the register with this key (${dup.f.STATUS}); nothing filed twice`); return; }
-  const owner = asOwner(oneLine(a.owner || 'hub'));
-  if (!OWNERS.test(owner)) die('--owner must be hub, person or company:<slug>');
+  const owner = asOwner(oneLine(a.owner || 'godspeed'));
+  if (!OWNERS.test(owner)) die('--owner must be godspeed, person or company:<slug>');
   let needs = asNeeds(oneLine(a.needs || 'none'));
   if (!NEEDS.test(needs)) die('--needs must be none, person, authorization or capability:<what is missing>');
   const outward = a.outward === 'yes' ? 'yes' : 'no';
@@ -114,7 +114,7 @@ cmds.file = (a) => {
 };
 
 cmds.take = (a) => {
-  const c = S.read(a._[0] || die('usage: hub-work take <id> --runner <name> [--approved-by "<your words>"]')) || die('no such work');
+  const c = S.read(a._[0] || die('usage: mc-work take <id> --runner <name> [--approved-by "<your words>"]')) || die('no such work');
   const runner = oneLine(a.runner);
   if (!runner) die('--runner is required: which harness on which machine');
   const d = a.date || today();
@@ -138,7 +138,7 @@ cmds.take = (a) => {
 };
 
 cmds.attempt = (a) => {
-  const c = S.read(a._[0] || die('usage: hub-work attempt <id> --runner <name> (--ok --result "..." | --failed "why")')) || die('no such work');
+  const c = S.read(a._[0] || die('usage: mc-work attempt <id> --runner <name> (--ok --result "..." | --failed "why")')) || die('no such work');
   const runner = oneLine(a.runner);
   const d = a.date || today();
   const live = leaseLive(c);
@@ -164,16 +164,16 @@ cmds.attempt = (a) => {
   c.f.RESULT = result;
   L.logLine(c, d, 'ATTEMPTED', `attempt ${attemptsOf(c)} by ${runner || 'unnamed'}: ${result}`);
   S.write(c);
-  say(`${c.id}: attempted, not yet verified (run: hub-work verify ${c.id})`);
+  say(`${c.id}: attempted, not yet verified (run: mc-work verify ${c.id})`);
 };
 
 cmds.verify = (a) => {
-  const c = S.read(a._[0] || die('usage: hub-work verify <id> [--evidence "what was observed, where"]')) || die('no such work');
+  const c = S.read(a._[0] || die('usage: mc-work verify <id> [--evidence "what was observed, where"]')) || die('no such work');
   if (!['attempted', 'dispatched', 'planned'].includes(c.f.STATUS)) die(`${c.id} is ${c.f.STATUS}`);
   const d = a.date || today();
   const ev = oneLine(a.evidence);
   if (c.f.CHECK) {
-    const r = spawnSync(process.platform === 'win32' ? 'bash' : 'sh', ['-c', c.f.CHECK], { cwd: HUB, encoding: 'utf8', timeout: 120000, env: Object.assign({}, process.env, { HUB_ROOT: HUB }) });
+    const r = spawnSync(process.platform === 'win32' ? 'bash' : 'sh', ['-c', c.f.CHECK], { cwd: GODSPEED, encoding: 'utf8', timeout: 120000, env: Object.assign({}, process.env, { GODSPEED_ROOT: GODSPEED }) });
     if (r.status === 0) {
       c.f.STATUS = 'verified'; c.f.LEASE = '';
       L.logLine(c, d, 'VERIFIED', `check passed (${c.f.CHECK})` + (ev ? `; ${ev}` : ''));
@@ -189,7 +189,7 @@ cmds.verify = (a) => {
     }
   }
   if (!ev) die(`${c.id} has ${c.f.CHECK ? 'a failing check' : 'no check'}; verify with --evidence "<what a person observed, where>" or add a CHECK`);
-  if (c.f.OWNER === 'hub' && !c.f.CHECK && !/\b(saw|read|opened|screenshot|observed|https?:)/i.test(ev)) die('evidence for hub-owned work names what was observed or a link; "done" is not evidence');
+  if (c.f.OWNER === 'godspeed' && !c.f.CHECK && !/\b(saw|read|opened|screenshot|observed|https?:)/i.test(ev)) die('evidence for mc-owned work names what was observed or a link; "done" is not evidence');
   c.f.STATUS = 'verified'; c.f.LEASE = '';
   L.logLine(c, d, 'VERIFIED', `by observation: ${ev}`);
   S.write(c);
@@ -197,7 +197,7 @@ cmds.verify = (a) => {
 };
 
 cmds.block = (a) => {
-  const c = S.read(a._[0] || die('usage: hub-work block <id> --needs person|authorization|capability:<x>')) || die('no such work');
+  const c = S.read(a._[0] || die('usage: mc-work block <id> --needs person|authorization|capability:<x>')) || die('no such work');
   const needs = asNeeds(oneLine(a.needs));
   if (!NEEDS.test(needs) || needs === 'none') die('--needs must be person, authorization or capability:<what>');
   const d = a.date || today();
@@ -207,7 +207,7 @@ cmds.block = (a) => {
   say(`${c.id}: blocked, needs ${needs}`);
 };
 cmds.unblock = (a) => {
-  const c = S.read(a._[0] || die('usage: hub-work unblock <id> --why "..."')) || die('no such work');
+  const c = S.read(a._[0] || die('usage: mc-work unblock <id> --why "..."')) || die('no such work');
   if (c.f.STATUS !== 'blocked') die(`${c.id} is ${c.f.STATUS}`);
   const why = oneLine(a.why);
   if (!why) die('--why is required: what arrived (your word on it, the missing capability, the approval)');
@@ -222,7 +222,7 @@ cmds.unblock = (a) => {
 // LINK. A finished piece that became a page keeps its address on the item, so the morning
 // message and the card can hand it over without anybody digging for the file.
 cmds.link = (a) => {
-  const c = S.read(a._[0] || die('usage: hub-work link <id> --url https://...')) || die('no such work');
+  const c = S.read(a._[0] || die('usage: mc-work link <id> --url https://...')) || die('no such work');
   const url = oneLine(a.url);
   if (!/^https:\/\/\S+$/.test(url)) die('--url must be one https address a reader can open');
   const d = a.date || today();
@@ -233,7 +233,7 @@ cmds.link = (a) => {
 };
 
 cmds.cancel = (a) => {
-  const c = S.read(a._[0] || die('usage: hub-work cancel <id> --why "..."')) || die('no such work');
+  const c = S.read(a._[0] || die('usage: mc-work cancel <id> --why "..."')) || die('no such work');
   if (!OPEN.includes(c.f.STATUS)) die(`${c.id} is ${c.f.STATUS}`);
   const why = oneLine(a.why);
   if (!why) die('--why is required');
@@ -251,7 +251,7 @@ cmds.sweep = (a) => {
   let hit = [];
   if (a.card) hit = S.all().filter(c => OPEN.includes(c.f.STATUS) && c.f.CARD === a.card);
   else if (a.goal) hit = S.all().filter(c => OPEN.includes(c.f.STATUS) && c.f.GOAL === a.goal);
-  else die('usage: hub-work sweep (--card <id> | --goal <id>) [--cancel|--stale] --reason "..."');
+  else die('usage: mc-work sweep (--card <id> | --goal <id>) [--cancel|--stale] --reason "..."');
   const cancel = a.card ? !flag(a, 'stale') : flag(a, 'cancel');
   for (const c of hit) {
     c.f.LEASE = '';
@@ -329,10 +329,10 @@ cmds.check = () => {
   for (const p of problems) say('PROBLEM ' + p);
   process.exit(1);
 };
-cmds.help = () => say(`hub-work: dispatched, attempted and verified are three different things
+cmds.help = () => say(`mc-work: dispatched, attempted and verified are three different things
 
   file --what "..." --done-when "..." [--key K] [--goal G] [--card C] [--check "<shell, exit 0 when done>"]
-       [--owner hub|person|company:<slug>] [--needs none|person|authorization|capability:<x>] [--outward yes|no]
+       [--owner godspeed|person|company:<slug>] [--needs none|person|authorization|capability:<x>] [--outward yes|no]
        [--max-attempts 3] [--stale-after 7] [--source "..."]       a second file with the same open KEY files nothing
        [--kind do|learn]                a learn item is a question; its DONE WHEN must name a file the answer is written in
        [--learn "<question>" --path <file>]   sugar: KIND learn, WHAT the question, DONE WHEN "the answer ... is written in <file>"

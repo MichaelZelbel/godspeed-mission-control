@@ -30,10 +30,10 @@ Keep all five, in any order that reads naturally:
 
 ## Worked example (the author's own, run for real 2026-09-02)
 
-One line, weekly on Monday at nine, your hub as the working folder:
+One line, weekly on Monday at nine, your mission control as the working folder:
 
 ```
-hermes cron create "0 9 * * 1" "Run my product watchdog. Search the web for changes announced in the last seven days to Hermes Agent: its desktop app, its scheduled jobs, its skills, or how it gets access to a folder. Also check for changes to what a ChatGPT subscription costs or includes. Only report changes that alter what a user sees, clicks or pays. For each change, tell me what changed and where you read it, with a link. Append the result to watch/product-watchdog.md, newest at the top, with the date on it. If you find nothing solid, write exactly one line: \"All quiet, nothing changed.\" Never pad a quiet week." --name product-watchdog --workdir /path/to/your/hub
+hermes cron create "0 9 * * 1" "Run my product watchdog. Search the web for changes announced in the last seven days to Hermes Agent: its desktop app, its scheduled jobs, its skills, or how it gets access to a folder. Also check for changes to what a ChatGPT subscription costs or includes. Only report changes that alter what a user sees, clicks or pays. For each change, tell me what changed and where you read it, with a link. Append the result to watch/product-watchdog.md, newest at the top, with the date on it. If you find nothing solid, write exactly one line: \"All quiet, nothing changed.\" Never pad a quiet week." --name product-watchdog --workdir /path/to/your/godspeed
 ```
 
 Then `hermes cron run product-watchdog` to see it work once, right now. On
@@ -45,7 +45,7 @@ rotates public free tiers of several search vendors.
 
 ## Where to put it
 
-- **The job has a folder, on purpose.** `--workdir` your hub is what lets
+- **The job has a folder, on purpose.** `--workdir` your mission control is what lets
   it write its weekly line into `watch/product-watchdog.md`, a landing
   place you already walk past, and what hands the job your house rules.
 - **It wants the machine that never sleeps.** Chapter 21's rule bites

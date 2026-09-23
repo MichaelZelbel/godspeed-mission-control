@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 'use strict';
 //
-// forecast.js - what your hub expects to happen, written down so it can be wrong on the record.
-// Type it as `hub-forecast`.
+// forecast.js - what your mission control expects to happen, written down so it can be wrong on the record.
+// Type it as `mc-forecast`.
 //
 // WHY THIS EXISTS. Every plan carries a prediction whether or not anybody writes one: "this will
 // sell", "I will keep it up this time", "the client will say yes next week". Unwritten, a
@@ -36,10 +36,10 @@
 //   forecasts/README.md   the format, for you
 
 const path = require('path');
-const L = require(path.join(__dirname, 'hub-cards.js'));
+const L = require(path.join(__dirname, 'mc-cards.js'));
 
-const HUB = L.hubRoot(__filename);
-const DIR = path.join(HUB, 'forecasts');
+const GODSPEED = L.godspeedRoot(__filename);
+const DIR = path.join(GODSPEED, 'forecasts');
 const STATUSES = ['open', 'resolved', 'void'];
 const QUALITY = ['strong', 'moderate', 'weak', 'none'];
 const ORDER = ['ID', 'STATUS', 'GOAL', 'QUESTION', 'RESOLVES WHEN', 'DEADLINE', 'MADE ON', 'P', 'LOW', 'HIGH', 'UNIT', 'BASELINE',
@@ -106,7 +106,7 @@ cmds.file = (a) => {
 };
 
 cmds.revise = (a) => {
-  const c = S.read(a._[0] || die('usage: hub-forecast revise <id> --p 0.xx --why "..."')) || die('no such forecast');
+  const c = S.read(a._[0] || die('usage: mc-forecast revise <id> --p 0.xx --why "..."')) || die('no such forecast');
   if (c.f.STATUS !== 'open') die(`${c.id} is ${c.f.STATUS}; history is not revised`);
   const why = oneLine(a.why);
   if (!why) die('--why is required: what evidence moved the number');
@@ -138,7 +138,7 @@ cmds.flag = (a) => {
 };
 
 cmds.resolve = (a) => {
-  const c = S.read(a._[0] || die('usage: hub-forecast resolve <id> --outcome yes|no|void --evidence "..." [--value N]')) || die('no such forecast');
+  const c = S.read(a._[0] || die('usage: mc-forecast resolve <id> --outcome yes|no|void --evidence "..." [--value N]')) || die('no such forecast');
   if (c.f.STATUS !== 'open') die(`${c.id} is already ${c.f.STATUS}`);
   const o = String(a.outcome || '').toLowerCase();
   if (!['yes', 'no', 'void'].includes(o)) die('--outcome must be yes, no or void (the question became unanswerable)');
@@ -210,7 +210,7 @@ cmds.score = (a) => {
   if (!n) { say('no resolved binary forecasts yet; the first score exists when the first deadline passes and is resolved with evidence'); return; }
   say(`Forecast score over ${n} resolved question(s), each counted once at its last pre-deadline probability`);
   say(`  mean Brier (0 is perfect, 0.25 is a coin at 50%, 1 is confidently wrong): ${out.meanBrier.toFixed(3)}` + (out.meanBrierFirst !== null ? `; at first filing ${out.meanBrierFirst.toFixed(3)}` : ''));
-  if (withBase.length) say(`  same questions, the named historical baseline: hub ${out.meanBrierOnBaselineQuestions.toFixed(3)} vs baseline ${out.baselineMeanBrier.toFixed(3)} over ${withBase.length}`);
+  if (withBase.length) say(`  same questions, the named historical baseline: godspeed ${out.meanBrierOnBaselineQuestions.toFixed(3)} vs baseline ${out.baselineMeanBrier.toFixed(3)} over ${withBase.length}`);
   else say('  no baseline named on any resolved question, so there is nothing to beat yet');
   say('  calibration (bucket, n, mean forecast, observed rate):');
   for (const b of buckets) if (b.n) say(`    ${b.range}  n=${b.n}  forecast ${b.meanP.toFixed(2)}  observed ${b.observed.toFixed(2)}`);
@@ -241,7 +241,7 @@ cmds.check = () => {
   for (const p of problems) say('PROBLEM ' + p);
   process.exit(1);
 };
-cmds.help = () => say(`hub-forecast: explicit forecasts, revisions kept, scored once per question
+cmds.help = () => say(`mc-forecast: explicit forecasts, revisions kept, scored once per question
 
   file --question "..." --resolves-when "..." --deadline YYYY-MM-DD (--p 0.xx | --low N --high N --unit U)
        --reference-class "..." --evidence "..." [--evidence-quality strong|moderate|weak|none]

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# The gate for hub-forecast: forecasts with their reference class, revisions that never overwrite
+# The gate for mc-forecast: forecasts with their reference class, revisions that never overwrite
 # history, resolutions with evidence, and a score that counts each question once against the
-# baseline it named. Runs in a throwaway hub root; never touches the real forecasts/.
+# baseline it named. Runs in a throwaway mission control root; never touches the real forecasts/.
 # Usage: bash tools/test-forecast.sh   (from a checkout of this kit)
 set -uo pipefail
 
@@ -17,9 +17,9 @@ trap 'rm -rf "$TMP"' EXIT
 mkdir -p "$TMP/rules" "$TMP/bin"
 : > "$TMP/AGENTS.md"
 cp "$HERE/forecast.js" "$TMP/bin/"
-cp "$HERE/hub-cards.js" "$TMP/bin/"
-export HUB_ROOT="$TMP"
-export HUB_TODAY="2026-09-13"
+cp "$HERE/mc-cards.js" "$TMP/bin/"
+export GODSPEED_ROOT="$TMP"
+export GODSPEED_TODAY="2026-09-13"
 hf() { "$NODE" "$TMP/bin/forecast.js" "$@"; }
 
 PASS=0; FAIL=0
@@ -29,7 +29,7 @@ check() { if [ "$2" = "$3" ]; then ok "$1"; else bad "$1 (wanted [$3], got [$2])
 contains() { case "$2" in *"$3"*) ok "$1";; *) bad "$1 (missing [$3] in: $(printf '%s' "$2" | head -5))";; esac; }
 missing()  { case "$2" in *"$3"*) bad "$1 (should not contain [$3])";; *) ok "$1";; esac; }
 
-echo "hub-forecast gate"
+echo "mc-forecast gate"
 
 BASE=(--resolves-when "a post card carries OUTCOME posted with a link" --reference-class "nine post cards shown in 14 days, none posted; three posted on day one in August" --evidence "outcomes table 2026-09-13" --failures-included yes --fit "same person, same channel" --differs "the lines are now redrafts of ones that were refused")
 
@@ -52,31 +52,31 @@ OUT="$(hf file --question "Kit sales" --id R2 --deadline 2026-10-24 --low 0 "${B
 # --- revisions append, never overwrite ---------------------------------------------------------
 OUT="$(hf revise F1 --p 0.3 2>&1)"; check "a revision without a reason is refused" "$?" "1"
 OUT="$(hf revise F1 --p 0.2 --why "same" 2>&1)"; check "a revision to the same number is refused" "$?" "1"
-OUT="$(HUB_TODAY=2026-09-16 hf revise F1 --p 0.35 --why "you said on 09-15 that you liked the second line" 2>&1)"
+OUT="$(GODSPEED_TODAY=2026-09-16 hf revise F1 --p 0.35 --why "you said on 09-15 that you liked the second line" 2>&1)"
 contains "a revision with a reason is recorded" "$OUT" "1 revision(s) on record"
 check "  the header holds the new number" "$(grep -c '^P: 0.35' "$TMP/forecasts/F1.md")" "1"
 check "  the first number stays in the log" "$(grep -c '^- 2026-09-13 MADE p=0.2$' "$TMP/forecasts/F1.md")" "1"
 check "  the revision line says from what and why" "$(grep -c '^- 2026-09-16 REVISED p=0.35 from 0.2 because you said' "$TMP/forecasts/F1.md")" "1"
-OUT="$(HUB_TODAY=2026-09-27 hf revise F1 --p 0.5 --why "late" 2>&1)"; check "a revision after the deadline is refused" "$?" "1"
+OUT="$(GODSPEED_TODAY=2026-09-27 hf revise F1 --p 0.5 --why "late" 2>&1)"; check "a revision after the deadline is refused" "$?" "1"
 contains "  and says to resolve instead" "$OUT" "resolve it, do not revise it"
 
 # --- resolution needs evidence; the score uses the last pre-deadline number once -------------------
-OUT="$(HUB_TODAY=2026-09-27 hf resolve F1 --outcome yes 2>&1)"; check "a resolution without evidence is refused" "$?" "1"
-OUT="$(HUB_TODAY=2026-09-27 hf due 2>&1)"; contains "due lists a forecast past its deadline" "$OUT" "F1"
-OUT="$(HUB_TODAY=2026-09-27 hf resolve F1 --outcome no --evidence "no post card carries OUTCOME posted on 09-27, and the page shows nothing new" 2>&1)"
+OUT="$(GODSPEED_TODAY=2026-09-27 hf resolve F1 --outcome yes 2>&1)"; check "a resolution without evidence is refused" "$?" "1"
+OUT="$(GODSPEED_TODAY=2026-09-27 hf due 2>&1)"; contains "due lists a forecast past its deadline" "$OUT" "F1"
+OUT="$(GODSPEED_TODAY=2026-09-27 hf resolve F1 --outcome no --evidence "no post card carries OUTCOME posted on 09-27, and the page shows nothing new" 2>&1)"
 contains "resolution prints the Brier at the last number" "$OUT" "Brier 0.122 at p=0.35"
 contains "  and the baseline's" "$OUT" "baseline 0.010 at p=0.1"
-OUT="$(HUB_TODAY=2026-09-27 hf resolve F1 --outcome yes --evidence x 2>&1)"; check "a resolved forecast is not resolved twice" "$?" "1"
+OUT="$(GODSPEED_TODAY=2026-09-27 hf resolve F1 --outcome yes --evidence x 2>&1)"; check "a resolved forecast is not resolved twice" "$?" "1"
 OUT="$(hf score 2>&1)"
 contains "score counts the question once" "$OUT" "over 1 resolved question(s), each counted once"
 contains "  mean Brier at the final number" "$OUT" "mean Brier (0 is perfect, 0.25 is a coin at 50%, 1 is confidently wrong): 0.122"
 contains "  and at first filing separately" "$OUT" "at first filing 0.040"
-contains "  compared with the named baseline on the same question" "$OUT" "hub 0.122 vs baseline 0.010 over 1"
+contains "  compared with the named baseline on the same question" "$OUT" "godspeed 0.122 vs baseline 0.010 over 1"
 contains "  with the small-n warning" "$OUT" "fewer than five resolved questions: a note, not a track record"
 # five more, to see calibration buckets and horizon split
 for i in 2 3 4 5 6; do hf file --question "q$i" --id F$i --deadline 2026-11-01 --p 0.8 "${BASE[@]}" >/dev/null; done
-for i in 2 3 4 5; do HUB_TODAY=2026-11-02 hf resolve F$i --outcome yes --evidence "seen" >/dev/null; done
-HUB_TODAY=2026-11-02 hf resolve F6 --outcome no --evidence "seen" >/dev/null
+for i in 2 3 4 5; do GODSPEED_TODAY=2026-11-02 hf resolve F$i --outcome yes --evidence "seen" >/dev/null; done
+GODSPEED_TODAY=2026-11-02 hf resolve F6 --outcome no --evidence "seen" >/dev/null
 OUT="$(hf score 2>&1)"
 contains "calibration bucket 0.8-1.0 shows 5 forecasts at 0.80 with 0.80 observed" "$OUT" "0.8-1.0  n=5  forecast 0.80  observed 0.80"
 contains "horizons are split" "$OUT" "by horizon: under 30 days 0.122, 30 days and more 0.160"
@@ -101,7 +101,7 @@ OUT="$(hf score 2>&1)"; contains "  and not scored" "$OUT" "over 6 resolved"
 # --- check ---------------------------------------------------------------------------------------
 OUT="$(hf check 2>&1)"; check "check passes on a clean register" "$?" "0"
 hf file --question "old" --id OLD --deadline 2026-09-20 --p 0.5 "${BASE[@]}" >/dev/null
-OUT="$(HUB_TODAY=2026-10-20 hf check 2>&1)"; check "check fails on a deadline two weeks past and still open" "$?" "1"
+OUT="$(GODSPEED_TODAY=2026-10-20 hf check 2>&1)"; check "check fails on a deadline two weeks past and still open" "$?" "1"
 contains "  and says resolve it" "$OUT" "resolve it"
 
 echo

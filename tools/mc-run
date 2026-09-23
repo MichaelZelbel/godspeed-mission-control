@@ -1,0 +1,150 @@
+#!/usr/bin/env bash
+# mc-run: run one of your mission control's recipes with no one sitting at the computer, through whichever
+# assistant this machine has.
+#
+# WHY THIS EXISTS. A recipe that only runs when you are typing is not a system, it is a habit.
+# But the moment you schedule one, the recipe gets written into the schedule: the command, the
+# model, the flags and the prompt all end up in a line in a crontab that only works on the
+# computer it was typed on, and only for the one program it names. Change assistant and every
+# scheduled job is rubble.
+#
+# So the recipe stays a recipe - a `SKILL.md` in your mission control - and the program that carries it out
+# is ONE line of configuration. Hermes, Claude Code and Codex all get the same recipe, reading
+# the same folder, with the same tools. That is the whole job of this file.
+#
+# USAGE
+#   mc-run <recipe-name> [--cwd DIR] [--prompt-file FILE | --prompt TEXT] [--timeout SECONDS]
+#           [--out FILE] [--allowed-tools "Bash Read Write"] [--godspeed DIR] [--list]
+#
+# The prompt it builds is: the recipe's own text, then whatever extra you passed (usually
+# today's date and where to write), then one line saying which folder and which assistant.
+# The assistant's final answer goes to --out, or to the screen.
+#
+# WHICH ASSISTANT
+#   GODSPEED_RUNNER=hermes|claude|codex, else the runner line in your mission control at
+#   scripts/config/mc-runner.env or ~/.godspeed/device.env, else the first of hermes, claude, codex
+#   that is on this machine.
+#     hermes:  hermes -z "$PROMPT" --in "$CWD"   (add -p only if GODSPEED_HERMES_PROFILE is set)
+#     claude:  claude -p --permission-mode acceptEdits --output-format text
+#     codex:   codex exec --sandbox workspace-write --skip-git-repo-check -
+#
+# The exit code is the assistant's own. Nothing in here reads or edits the answer.
+set -uo pipefail
+
+SKILL=""; CWD=""; PROMPT_FILE=""; PROMPT_TEXT=""; TIMEOUT=1500; OUT=""; ALLOWED=""; GODSPEED=""; LIST=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --cwd) CWD="$2"; shift 2 ;;
+    --godspeed) GODSPEED="$2"; shift 2 ;;
+    --prompt-file) PROMPT_FILE="$2"; shift 2 ;;
+    --prompt) PROMPT_TEXT="$2"; shift 2 ;;
+    --timeout) TIMEOUT="$2"; shift 2 ;;
+    --out) OUT="$2"; shift 2 ;;
+    --allowed-tools) ALLOWED="$2"; shift 2 ;;
+    --list) LIST=1; shift ;;
+    -h|--help) sed -n '2,33p' "$0"; exit 0 ;;
+    *) if [ -z "$SKILL" ]; then SKILL="$1"; shift; else echo "mc-run: I do not know the argument $1" >&2; exit 2; fi ;;
+  esac
+done
+
+# WHERE IS MY MISSION CONTROL? The same three answers the rest of these programs give, in the same order, so
+# that two programs can never disagree about which folder they are working on.
+looks_like_godspeed() { [ -d "${1:-}/rules" ] || [ -d "${1:-}/observations" ]; }
+if [ -z "$GODSPEED" ]; then GODSPEED="${GODSPEED_ROOT:-}"; fi
+if [ -z "$GODSPEED" ] || ! looks_like_godspeed "$GODSPEED"; then
+  D="${CWD:-$PWD}"; GODSPEED=""
+  for _ in 1 2 3 4 5 6 7 8; do
+    looks_like_godspeed "$D" && { GODSPEED="$D"; break; }
+    P="$(dirname "$D")"; [ "$P" = "$D" ] && break; D="$P"
+  done
+fi
+if [ -z "$GODSPEED" ] && [ -r "$HOME/.godspeed/device.env" ]; then
+  GODSPEED="$(sed -n 's/^[[:space:]]*\(export[[:space:]]*\)\{0,1\}GODSPEED_DIR=//p' "$HOME/.godspeed/device.env" | tail -1 | tr -d '"'"'"' ' | tr -d '\r')"
+fi
+if [ -z "$GODSPEED" ] || ! looks_like_godspeed "$GODSPEED"; then
+  echo "mc-run: I could not find your mission control. Run this inside it, or pass --godspeed /path/to/godspeed." >&2
+  exit 2
+fi
+[ -n "$CWD" ] || CWD="$GODSPEED"
+export PATH="$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
+
+# WHERE A RECIPE LIVES. Your own recipes are `skills/<name>/SKILL.md`. A developer tool reads
+# them through the hidden `.claude/skills` link, which is the same room seen from another door,
+# and a single file dropped in as `skills/<name>.md` also works, because that is the shape the
+# kit ships them in and somebody will copy one straight across.
+skill_file() {
+  for p in "$GODSPEED/skills/$1/SKILL.md" "$GODSPEED/.claude/skills/$1/SKILL.md" "$GODSPEED/skills/$1.md"; do
+    [ -f "$p" ] && { printf '%s\n' "$p"; return 0; }
+  done
+  return 1
+}
+if [ "$LIST" -eq 1 ]; then
+  ls -1 "$GODSPEED/skills" 2>/dev/null | sed 's/\.md$//'
+  exit 0
+fi
+[ -n "$SKILL" ] || { echo "mc-run: which recipe? (mc-run --list shows them)" >&2; exit 2; }
+SKILL_FILE="$(skill_file "$SKILL")" || {
+  echo "mc-run: there is no recipe called $SKILL in $GODSPEED/skills. mc-run --list shows what is there." >&2
+  exit 2
+}
+
+RUNNER="${GODSPEED_RUNNER:-}"
+for f in "$GODSPEED/scripts/config/mc-runner.env" "$HOME/.godspeed/device.env"; do
+  [ -n "$RUNNER" ] && break
+  [ -r "$f" ] && RUNNER="$(sed -n 's/^[[:space:]]*\(export[[:space:]]*\)\{0,1\}GODSPEED_RUNNER=//p' "$f" | tail -1 | tr -d '"'"'"' ' | tr -d '\r')"
+done
+if [ -z "$RUNNER" ]; then
+  for c in hermes claude codex; do command -v "$c" >/dev/null 2>&1 && { RUNNER="$c"; break; }; done
+fi
+[ -n "$RUNNER" ] || { echo "mc-run: no assistant on this computer (I looked for hermes, claude and codex)." >&2; exit 3; }
+command -v "$RUNNER" >/dev/null 2>&1 || { echo "mc-run: $RUNNER is the chosen assistant and it is not on this computer." >&2; exit 3; }
+
+# A recipe file opens with a short header between two lines of three dashes. Strip it: it is
+# there for the index that lists your recipes, not for the model, and a prompt that BEGINS with
+# three dashes is read by some of these programs as a command-line option instead of as text.
+PROMPT="$(awk 'NR==1 && /^---$/ {skip=1; next} skip && /^---$/ {skip=0; next} !skip' "$SKILL_FILE")"
+[ -n "$PROMPT_FILE" ] && PROMPT="$PROMPT"$'\n\n'"$(cat "$PROMPT_FILE")"
+[ -n "$PROMPT_TEXT" ] && PROMPT="$PROMPT"$'\n\n'"$PROMPT_TEXT"
+PROMPT="$PROMPT"$'\n\n'"Working directory: $CWD. Godspeed: $GODSPEED. Assistant: $RUNNER."
+
+cd "$CWD" || exit 2
+# A Mac has no `timeout` unless somebody installed one, and a job with no time limit that hangs
+# is worse than one that has to run without a limit. So: use it where it exists, say nothing
+# where it does not, and never fail for its absence.
+if command -v timeout >/dev/null 2>&1; then TO() { timeout "$TIMEOUT" "$@"; }
+elif command -v gtimeout >/dev/null 2>&1; then TO() { gtimeout "$TIMEOUT" "$@"; }
+else TO() { "$@"; }
+fi
+
+# The prompt goes in on standard input wherever the program allows it: there is no limit on how
+# long it can be that way, and nothing inside it can be mistaken for an option.
+run_claude() {
+  if [ -n "$ALLOWED" ]; then
+    # shellcheck disable=SC2086
+    printf '%s' "$PROMPT" | TO claude -p --permission-mode acceptEdits --output-format text --allowedTools $ALLOWED
+  else
+    printf '%s' "$PROMPT" | TO claude -p --permission-mode acceptEdits --output-format text
+  fi
+}
+# Hermes keeps a folder with each saved conversation and puts itself back there when it starts,
+# so changing folder before running it is not enough on its own: `--in` is what actually points
+# it at your mission control. Most people have one Hermes and never need `GODSPEED_HERMES_PROFILE`; set it only if
+# you keep several separate Hermes setups on one machine.
+run_hermes() {
+  if [ -n "${GODSPEED_HERMES_PROFILE:-}" ]; then TO hermes -p "$GODSPEED_HERMES_PROFILE" -z "$PROMPT" --in "$CWD"
+  else TO hermes -z "$PROMPT" --in "$CWD"; fi
+}
+# Codex refuses to work in a folder it has not been told to trust, and says so instead of
+# starting, which is the right way round. `--skip-git-repo-check` is what lets it work on a mission control
+# that is not a git repository, and a mission control is allowed not to be one. `--full-auto` is the retired
+# spelling of the sandbox that may write in the folder it was pointed at.
+run_codex()  { printf '%s' "$PROMPT" | TO codex exec --sandbox workspace-write --skip-git-repo-check -; }
+
+if [ -n "$OUT" ]; then
+  mkdir -p "$(dirname "$OUT")"
+  "run_$RUNNER" > "$OUT.tmp" 2> "$OUT.stderr"; RC=$?
+  mv -f "$OUT.tmp" "$OUT"
+else
+  "run_$RUNNER"; RC=$?
+fi
+exit "$RC"

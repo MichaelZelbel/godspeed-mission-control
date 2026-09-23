@@ -129,7 +129,7 @@ Two commands, in this order, and the order is the point. The gateway copies
 path is written before the service exists:
 
 ```
-sudo -u ai -H /home/ai/.local/bin/hermes config set terminal.cwd /home/ai/hub
+sudo -u ai -H /home/ai/.local/bin/hermes config set terminal.cwd /home/ai/godspeed
 sudo /home/ai/.local/bin/hermes gateway install --system --run-as-user ai --start-on-login --force
 ```
 
@@ -156,7 +156,7 @@ then, back as `ai`:
 ```
 gh auth login --hostname github.com --git-protocol https --web --skip-ssh-key
 gh auth setup-git
-gh repo clone YOUR-NAME/YOUR-REPO hub
+gh repo clone YOUR-NAME/YOUR-REPO godspeed
 ```
 
 `gh auth login` shows a short code and a web address. Open the address on your
@@ -167,21 +167,21 @@ start from the book's starter rooms and make one:
 
 ```
 git clone --depth 1 https://github.com/MichaelZelbel/teach-it-once-kit.git ~/teach-it-once-kit
-cp -R ~/teach-it-once-kit/starter-hub/. ~/hub/
-cd ~/hub && git init -b main && git add -A && git commit -m "My folder"
+cp -R ~/teach-it-once-kit/starter-godspeed/. ~/godspeed/
+cd ~/godspeed && git init -b main && git add -A && git commit -m "My folder"
 gh repo create YOUR-REPO --private --source . --push
 ```
 
 **The long way**, a deploy key, if you would rather not put a GitHub login on a
 rented machine at all: `ssh-keygen -t ed25519`, paste the public half under the
 repository's **Settings**, **Deploy keys** with write access, and
-`git clone git@github.com:YOUR-NAME/YOUR-REPO.git hub`.
+`git clone git@github.com:YOUR-NAME/YOUR-REPO.git godspeed`.
 
 ## 7. Wire the folder the way the laptop is wired
 
 ```
 git clone --depth 1 --branch v2.4 https://github.com/MichaelZelbel/kit-bootstrap.git ~/.kit-bootstrap
-KB_BRANCH=v2.4.1 bash ~/.kit-bootstrap/setup-hub.sh --hub ~/hub --skip-prereqs --sources hermes
+KB_BRANCH=v2.4.1 bash ~/.kit-bootstrap/setup-godspeed.sh --godspeed ~/godspeed --skip-prereqs --sources hermes
 ```
 
 This is the same script the laptop installer runs. It tops the folder up with
@@ -194,8 +194,8 @@ kit's tools, and puts the prompt log on an hourly clock. Read what it prints.
 ## 8. Put the keys where the folder is not
 
 ```
-umask 077 && touch ~/.hub-env && chmod 600 ~/.hub-env
-cd ~/hub && printf '.env*\n.hub-env\n' >> .gitignore
+umask 077 && touch ~/.mc-env && chmod 600 ~/.mc-env
+cd ~/godspeed && printf '.env*\n.mc-env\n' >> .gitignore
 ```
 
 Both halves. The morning job commits and pushes, and `git add -A` means
@@ -210,7 +210,7 @@ has no Chapter 21 brief to run yet. By hand, run the script when you want the
 job, or with `KB_MORNING_BRIEF=no` in front of it for everything but the job:
 
 ```
-HUB=~/hub bash ~/teach-it-once-kit/server/install-hermes.sh
+GODSPEED=~/godspeed bash ~/teach-it-once-kit/server/install-hermes.sh
 ```
 
 That script checks the `AGENTS.md` ceiling (it refuses at 20,000 characters and
@@ -220,7 +220,7 @@ gateway to the system service from section 5, and creates the job:
 ```
 hermes cron create "0 6 * * *" \
   "Run the recipe in skills/morning-brief/SKILL.md. It writes today's brief into brief/. When it is written, commit and push this folder, then reply with the brief's full text. If the recipe is missing or the brief cannot be written, say exactly that instead of staying quiet." \
-  --name morning-brief --workdir "$HOME/hub" --deliver telegram
+  --name morning-brief --workdir "$HOME/godspeed" --deliver telegram
 ```
 
 Two things about that command earn their place. `--workdir` is the one thing

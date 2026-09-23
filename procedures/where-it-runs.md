@@ -64,7 +64,7 @@ top of this folder and follow it."
 ## The four parts of a cron line (the typed twin, for a machine with no screen)
 
 ```
-hermes cron create "0 7 * * *" "Follow skills/morning-brief/SKILL.md and write today's brief as a dated file in brief/." --name morning-brief --workdir /path/to/your/hub
+hermes cron create "0 7 * * *" "Follow skills/morning-brief/SKILL.md and write today's brief as a dated file in brief/." --name morning-brief --workdir /path/to/your/godspeed
 ```
 
 - **Schedule.** Five fields, minute then hour: `0 7 * * *` is seven every
@@ -74,7 +74,7 @@ hermes cron create "0 7 * * *" "Follow skills/morning-brief/SKILL.md and write t
 - **Prompt.** One line that names the recipe. A scheduled run is a
   stranger to your session; say the name and the recipe runs.
 - **Name.** What you will recognise in `hermes cron list`.
-- **Workdir.** Your hub, full path. It is the folder the job runs in AND
+- **Workdir.** Your mission control, full path. It is the folder the job runs in AND
   the thing that hands the job your `AGENTS.md`: Hermes' own help says it
   "injects AGENTS.md" from there. Never leave it out.
 

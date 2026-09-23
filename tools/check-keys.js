@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 /*
- * check-keys.js - are the keys your hub folder is carrying actually ON this computer,
+ * check-keys.js - are the keys your mission control folder is carrying actually ON this computer,
  * and is any of them about to run out?
  *
- * WHY THIS EXISTS. Your hub keeps your keys locked inside the folder, so connecting a
+ * WHY THIS EXISTS. Your mission control keeps your keys locked inside the folder, so connecting a
  * service once connects it on every computer you own. There is one more step after that,
  * and it is invisible: the key has to be handed to the programs running on THIS machine.
  * "It is in the folder" and "it is on this computer" are two different facts, and only the
@@ -17,8 +17,8 @@
  * It is counted down like any other and it is never reported as missing from the folder,
  * because it was never meant to be in there.
  *
- *   hub-check-keys              check this computer
- *   hub-check-keys --hub PATH   check a hub somewhere else
+ *   mc-check-keys              check this computer
+ *   mc-check-keys --godspeed PATH   check a mission control somewhere else
  *
  * Exit code 0 when the chain holds, 1 when it does not, so it can be put in something that
  * runs on its own if you ever want that.
@@ -36,30 +36,30 @@ const say = (s) => console.log(s);
 const good = (s) => say("     " + s);
 const bad = (s) => { problems++; say("     " + s); };
 
-// ---------------------------------------------------------------- where is the hub
+// ---------------------------------------------------------------- where is Mission Control
 function readDeviceEnv(name) {
-  const f = path.join(os.homedir(), ".hub", "device.env");
+  const f = path.join(os.homedir(), ".godspeed", "device.env");
   try {
     for (const line of fs.readFileSync(f, "utf8").split(/\r?\n/)) {
       const m = line.match(new RegExp("^\\s*" + name + "=(.*)$"));
       if (m) return m[1].trim();
     }
-  } catch (e) { /* no device.env is normal on a hub somebody made by hand */ }
+  } catch (e) { /* no device.env is normal on a mission control somebody made by hand */ }
   return "";
 }
 
-let hub = "";
+let godspeed = "";
 const args = process.argv.slice(2);
 for (let i = 0; i < args.length; i++) {
-  if (args[i] === "--hub") hub = args[i + 1] || "";
+  if (args[i] === "--godspeed") godspeed = args[i + 1] || "";
   if (args[i] === "-h" || args[i] === "--help") {
-    say("hub-check-keys - are your hub's keys really on this computer?");
-    say("  hub-check-keys [--hub PATH]");
+    say("mc-check-keys - are your mission control's keys really on this computer?");
+    say("  mc-check-keys [--godspeed PATH]");
     process.exit(0);
   }
 }
-if (!hub) hub = process.env.HUB_DIR || readDeviceEnv("HUB_DIR") || process.cwd();
-hub = path.resolve(hub);
+if (!godspeed) godspeed = process.env.GODSPEED_DIR || readDeviceEnv("GODSPEED_DIR") || process.cwd();
+godspeed = path.resolve(godspeed);
 
 // ---------------------------------------------------------------- finding `age`
 // The small program that opens the locked store. NOT assumed to be on PATH: on a Mac it
@@ -92,20 +92,20 @@ function findAge() {
   return "";
 }
 
-const store = path.join(hub, "secrets", "hub-secrets.env.age");
-const sealed = path.join(hub, "secrets", "hub-key.age");
-const keyFile = process.env.HUB_AGE_KEY || path.join(os.homedir(), ".hub", "age-key.txt");
+const store = path.join(godspeed, "secrets", "mc-secrets.env.age");
+const sealed = path.join(godspeed, "secrets", "mc-key.age");
+const keyFile = process.env.GODSPEED_AGE_KEY || path.join(os.homedir(), ".godspeed", "age-key.txt");
 
 say("");
-say("Checking the keys your hub folder is carrying.");
+say("Checking the keys your mission control folder is carrying.");
 say("");
-say("  Your hub folder: " + hub);
+say("  Your mission control folder: " + godspeed);
 say("");
 
 // ---------------------------------------------------------------- 1. any keys at all?
 say("  1. Does your folder carry any keys?");
 if (!fs.existsSync(store)) {
-  good("No, and that is a complete way to own a hub. Everything the book builds up to");
+  good("No, and that is a complete way to own a mission control. Everything the book builds up to");
   good("Chapter 24 works on plain files with no key anywhere. Nothing to check.");
   say("");
   process.exit(0);
@@ -121,7 +121,7 @@ const values = {};
 if (!fs.existsSync(keyFile)) {
   if (fs.existsSync(sealed)) {
     bad("No. Your folder carries the key, and this computer has not unlocked it yet.");
-    bad("What to do: run the installer again here and type your hub passphrase once.");
+    bad("What to do: run the installer again here and type your mission control passphrase once.");
   } else {
     bad("No. This computer has no key, and your folder carries no locked copy of one.");
     bad("What to do: on the computer that CAN open them, run the installer again. It");
@@ -139,7 +139,7 @@ if (!fs.existsSync(keyFile)) {
   }
   if (!names.length) {
     bad("No. The key on this computer does not open this folder's store, so it belongs to");
-    bad("a different hub. What to do: run the installer again here and type your hub");
+    bad("a different mission control. What to do: run the installer again here and type your mission control");
     bad("passphrase, which replaces the key with the right one.");
   } else {
     good("Yes. It carries " + names.length + " key" + (names.length === 1 ? "" : "s") + ".");
@@ -201,7 +201,7 @@ if (!names.length) {
   // honest test is to start a terminal the way you do and see what it ends up holding.
   const rcs = [".bashrc", ".zshrc"].map((f) => path.join(os.homedir(), f));
   const wired = rcs.filter((f) => {
-    try { return /hub-notebook-env/.test(fs.readFileSync(f, "utf8")); } catch (e) { return false; }
+    try { return /mc-notebook-env/.test(fs.readFileSync(f, "utf8")); } catch (e) { return false; }
   });
   if (!wired.length) {
     bad("No. Nothing in this computer's start-up hands your keys to the programs you");
@@ -242,10 +242,10 @@ say("");
 // you on the day it happens: the service simply starts saying no, and the message it gives
 // back blames whatever asked.
 say("  4. Is any of them about to run out?");
-const expires = path.join(hub, "secrets", "expires.txt");
+const expires = path.join(godspeed, "secrets", "expires.txt");
 const rows = [];
 if (fs.existsSync(expires)) {
-  const today = process.env.HUB_TODAY || new Date().toISOString().slice(0, 10);
+  const today = process.env.GODSPEED_TODAY || new Date().toISOString().slice(0, 10);
   const dayOf = (s) =>
     Math.floor(Date.UTC(+s.slice(0, 4), +s.slice(5, 7) - 1, +s.slice(8, 10)) / 86400000);
   const now = dayOf(today);
