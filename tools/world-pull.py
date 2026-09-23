@@ -223,13 +223,65 @@ def read_existing(root, folder):
     if not directory.is_dir():
         return out
     for path in sorted(directory.glob("*.md")):
-        text = path.read_text(encoding="utf-8")
+        # One file that is not UTF-8 (2026-09-23) used to stop the whole pull with a
+        # traceback, every hour, until a person found it. It is kept as ours and
+        # untouched: never rewritten, never deleted, only reported.
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as err:
+            print("  skipped unreadable {}/{}: {}".format(folder, path.name, err))
+            # Still listed, so its name counts as taken and no new record is
+            # written over it.
+            out[path.name] = {"text": None, "fields": {}, "origin": GODSPEED}
+            continue
         fields, _ = parse_frontmatter(text)
         out[path.name] = {
             "text": text,
             "fields": fields,
             "origin": origin_of(text),
         }
+    return out
+
+
+# ONE RECORD, ONE FILE (2026-09-23). Every machine that runs the pull names a new
+# file after what IT already holds (`unique_name`), so the server and a laptop can
+# write the same new record as `...-undated.md` and `...-undated-2.md`, and git
+# merges the two into one folder. Nothing then noticed: the lookup took whichever
+# came first and the other copy sat there for good, never updated and never removed,
+# because its record was still alive. Measured that day: 2 entities and at least 4
+# claims mirrored twice, and the 2026-09-22 and 2026-09-23 removal notices list the
+# same record under two file names. So the files carrying one id are ranked, the
+# first is the record's file, and any other Menerio-owned copy is dropped.
+# Ours before Menerio's (a human's file is never the one to go), then the plain
+# name before its "-2" twin.
+def files_by_id(existing):
+    """menerio_id -> the files carrying it, best first."""
+    out = {}
+    for name, info in existing.items():
+        menerio_id = info["fields"].get("menerio_id", "").strip()
+        if menerio_id:
+            out.setdefault(menerio_id, []).append(name)
+    for names in out.values():
+        names.sort(key=lambda n: (existing[n]["origin"] != GODSPEED, len(n), n))
+    return out
+
+
+# A MALFORMED RECORD SKIPS ITSELF, NOT THE RUN (2026-09-23). One row without an id
+# or a slug raised KeyError before a single file was written, so every hourly pull
+# failed until Menerio changed. A row with no id cannot own a mirror file and is
+# left out; a row with an id but no slug gets one from its name, its title or its id.
+def usable_records(records, kind):
+    out = []
+    for record in records or []:
+        if not isinstance(record, dict) or not str(record.get("id") or "").strip():
+            print("  skipped a {} record with no id: {}".format(kind, str(record)[:120]))
+            continue
+        record = dict(record)
+        record["id"] = str(record["id"]).strip()
+        if kind != "claim" and not str(record.get("slug") or "").strip():
+            record["slug"] = (slugify(record.get("name") or record.get("title") or "")
+                              or record["id"])
+        out.append(record)
     return out
 
 
@@ -242,10 +294,8 @@ def match_entity_file(record, existing, claimed):
     matched twice, so two Menerio duplicates cannot collapse into one file.
     """
     wanted_id = record["id"]
-    for name, info in existing.items():
-        if name in claimed:
-            continue
-        if info["fields"].get("menerio_id", "").strip() == wanted_id:
+    for name in files_by_id(existing).get(wanted_id, []):
+        if name not in claimed:
             return name
 
     record_name = (record.get("name") or "").strip().lower()
@@ -292,9 +342,9 @@ def plan_pull(world, root, self_slug="me"):
     Nothing owned by Mission Control is ever in the remove list, and the only mission control file
     that appears in the write list is an entity gaining its menerio_id line.
     """
-    entities = world.get("entities") or []
-    events = world.get("events") or []
-    claims = world.get("claims") or []
+    entities = usable_records(world.get("entities"), "entity")
+    events = usable_records(world.get("events"), "event")
+    claims = usable_records(world.get("claims"), "claim")
 
     existing_entities = read_existing(root, "entities")
     existing_events = read_existing(root, "events")
@@ -324,12 +374,10 @@ def plan_pull(world, root, self_slug="me"):
             return self_slug
         return slug_by_id.get(subject_id, "unknown")
 
+    event_files = files_by_id(existing_events)
     event_names = set(existing_events)
     for record in sorted(events, key=lambda r: r["id"]):
-        existing = next(
-            (n for n, i in existing_events.items() if i["fields"].get("menerio_id") == record["id"]),
-            None,
-        )
+        existing = (event_files.get(record["id"]) or [None])[0]
         name = existing or unique_name(record["slug"] + ".md", event_names)
         event_names.add(name)
         if existing and existing_events[existing]["origin"] == GODSPEED:
@@ -339,12 +387,10 @@ def plan_pull(world, root, self_slug="me"):
         if not existing or existing_events[existing]["text"] != text:
             writes.append(PulledFile("world/events/" + name, text, record["id"], "event"))
 
+    claim_files = files_by_id(existing_claims)
     claim_names = set(existing_claims)
     for record in sorted(claims, key=lambda r: r["id"]):
-        existing = next(
-            (n for n, i in existing_claims.items() if i["fields"].get("menerio_id") == record["id"]),
-            None,
-        )
+        existing = (claim_files.get(record["id"]) or [None])[0]
         subject = subject_slug(record.get("subject_kind", "self"), record.get("subject_id"))
         obj = slug_by_id.get(record.get("object_id") or "")
         base = "{}--{}--{}.md".format(
@@ -363,12 +409,14 @@ def plan_pull(world, root, self_slug="me"):
     # copy. A mc-owned file is never in this list.
     seen_ids = {r["id"] for r in entities} | {r["id"] for r in events} | {r["id"] for r in claims}
     removals = []
+    duplicates = []
     menerio_owned = {"entities": 0, "events": 0, "claims": 0}
     for folder, existing in (
         ("entities", existing_entities),
         ("events", existing_events),
         ("claims", existing_claims),
     ):
+        ranked = files_by_id(existing)
         for name, info in existing.items():
             if info["origin"] != MENERIO:
                 continue
@@ -376,11 +424,46 @@ def plan_pull(world, root, self_slug="me"):
             menerio_id = info["fields"].get("menerio_id", "").strip()
             if menerio_id and menerio_id not in seen_ids:
                 removals.append("world/{}/{}".format(folder, name))
+            elif menerio_id and ranked[menerio_id][0] != name:
+                # A second copy of a live record. Not a removal: the fact stays in
+                # the first file, so it goes without a notice and past the guard.
+                duplicates.append(("world/{}/{}".format(folder, name),
+                                   "world/{}/{}".format(folder, ranked[menerio_id][0])))
 
-    return {"write": writes, "remove": sorted(removals), "menerio_owned": menerio_owned}
+    # How many records Menerio answered with per folder, so the guard can tell an
+    # empty answer from a folder that really emptied.
+    answered = {"entities": len(entities), "events": len(events), "claims": len(claims)}
+    return {"write": writes, "remove": sorted(removals), "menerio_owned": menerio_owned,
+            "duplicates": sorted(duplicates), "answered": answered}
 
 
 # --- talking to Menerio -----------------------------------------------------
+
+
+KINDS = ("entities", "events", "claims")
+
+
+class IncompleteAnswer(Exception):
+    """Menerio answered, but not with the whole World. Nothing may be deleted on it."""
+
+
+# EVERY PAGE, AND ONLY A WHOLE ANSWER (2026-09-23). This used to ask once for
+# `limit=2000` and take whatever came back as the complete World. Two ways that is
+# a deletion rather than a read: the endpoint pages (`offset`), and the database
+# behind it may cap a page below what was asked for, so the day any kind grows past
+# one page every record beyond it looks deleted, oldest first, a few at a time and
+# far below the guard. And a 200 whose body has no `data`, or a `data` missing one
+# kind, became an empty World: every Menerio-owned file of that kind scheduled for
+# removal. So the client now pages until each kind comes back empty or short, and
+# anything that is not three lists raises IncompleteAnswer before a plan is made.
+MAX_PAGES = 50
+
+
+def _rows(data, kind):
+    rows = data.get(kind) if isinstance(data, dict) else None
+    if not isinstance(rows, list):
+        raise IncompleteAnswer("Menerio's answer has no {} list".format(kind))
+    return rows
 
 
 class WorldClient:
@@ -388,8 +471,8 @@ class WorldClient:
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
 
-    def fetch(self, updated_since=None, limit=2000):
-        query = "?limit={}".format(limit)
+    def fetch_page(self, offset=0, limit=2000, updated_since=None):
+        query = "?limit={}&offset={}".format(limit, offset)
         if updated_since:
             query += "&updated_since={}".format(updated_since)
         request = urllib.request.Request(
@@ -399,7 +482,36 @@ class WorldClient:
         )
         with urllib.request.urlopen(request, timeout=120) as response:
             payload = json.loads(response.read().decode("utf-8"))
-        return payload.get("data") or {}
+        if not isinstance(payload, dict):
+            raise IncompleteAnswer("Menerio's answer is not an object")
+        return payload.get("data")
+
+    def fetch(self, updated_since=None, limit=2000):
+        out = {kind: [] for kind in KINDS}
+        seen = {kind: set() for kind in KINDS}
+        open_kinds = set(KINDS)
+        offset = 0
+        for _ in range(MAX_PAGES):
+            data = self.fetch_page(offset, limit, updated_since)
+            pages = {kind: _rows(data, kind) for kind in KINDS}
+            # The page size is what the server really handed back, which may be
+            # less than `limit`. A kind that returned fewer rows than the fullest
+            # kind on this page has nothing left.
+            size = max(len(rows) for rows in pages.values())
+            for kind in list(open_kinds):
+                rows = pages[kind]
+                for row in rows:
+                    key = row.get("id") if isinstance(row, dict) else None
+                    if key is not None and key in seen[kind]:
+                        continue
+                    seen[kind].add(key)
+                    out[kind].append(row)
+                if not rows or len(rows) < size:
+                    open_kinds.discard(kind)
+            if not open_kinds or size == 0:
+                return out
+            offset += size
+        raise IncompleteAnswer("still paging after {} pages".format(MAX_PAGES))
 
 
 # THE REMOVAL GUARD, because this pull runs unattended. A record deleted in
@@ -427,6 +539,11 @@ def guard_removals(plan):
     for folder, paths in by_folder.items():
         owned = plan["menerio_owned"].get(folder, 0)
         if len(paths) > MASS_REMOVAL_FLOOR and len(paths) * 2 > owned:
+            refused[folder] = len(paths)
+        # An EMPTY answer for a folder that holds Menerio's files is refused at any
+        # size (2026-09-23). The floor of 20 meant a folder of 20 or fewer, like
+        # events on a young install, could be emptied by one blank answer.
+        elif plan.get("answered", {}).get(folder, 1) == 0:
             refused[folder] = len(paths)
     if not refused:
         return plan["remove"], {}
@@ -492,6 +609,25 @@ def write_removal_notice(root, removed, today):
     return relative
 
 
+# WRITE BESIDE, THEN RENAME (2026-09-23). write_text truncates first, so a pull
+# killed mid-write (a reboot, the job timeout) left a half file. A half file has no
+# closing `---`, so it reads as having no frontmatter, which means no origin line,
+# which means OURS: the pull never touched it again and wrote the same record a
+# second time under a new name. os.replace is atomic on Linux and Windows alike, and
+# the temporary name does not end in .md, so no reader ever lists it.
+def write_atomic(target, text):
+    target = pathlib.Path(target)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    temporary = target.with_name(".{}.{}.tmp".format(target.name, os.getpid()))
+    try:
+        with open(temporary, "w", encoding="utf-8", newline="\n") as handle:
+            handle.write(text)
+        os.replace(temporary, target)
+    finally:
+        if temporary.exists():
+            temporary.unlink()
+
+
 def run_pull(world, root, client_label, apply_changes, self_slug="me",
              allow_mass_removal=False, today=None):
     plan = plan_pull(world, root, self_slug=self_slug)
@@ -501,6 +637,8 @@ def run_pull(world, root, client_label, apply_changes, self_slug="me",
             print("  would write  {}".format(item.path))
         for path in plan["remove"]:
             print("  would remove {}".format(path))
+        for path, kept in plan["duplicates"]:
+            print("  would drop duplicate {} (same record as {})".format(path, kept))
         return plan
 
     removals = plan["remove"]
@@ -513,10 +651,13 @@ def run_pull(world, root, client_label, apply_changes, self_slug="me",
                       count, plan["menerio_owned"].get(folder, 0), folder))
 
     for item in plan["write"]:
-        target = root / item.path
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(item.text, encoding="utf-8")
+        write_atomic(root / item.path, item.text)
         print("  wrote  {}".format(item.path))
+    for path, kept in plan["duplicates"]:
+        target = root / path
+        if target.is_file():
+            target.unlink()
+            print("  dropped duplicate {} (same record as {})".format(path, kept))
     # Read each record before deleting it, so the notice can hold what was lost
     # rather than only its filename. A path that is already gone is skipped here
     # and in the notice: it was never this run's to lose.
@@ -606,6 +747,10 @@ def main(argv=None):
         body = err.read().decode("utf-8", "replace")[:400]
         print("Menerio refused the request: HTTP {} {}".format(err.code, body), file=sys.stderr)
         return 1
+    except (IncompleteAnswer, urllib.error.URLError, OSError, ValueError) as err:
+        # Nothing is written or deleted on an answer that is not whole.
+        print("Menerio's answer was incomplete, nothing changed: {}".format(err), file=sys.stderr)
+        return 1
 
     if args.updated_since:
         # A partial answer cannot tell a deleted record from an unchanged one.
@@ -614,9 +759,7 @@ def main(argv=None):
         print("partial pull since {}: write {}".format(args.updated_since, len(plan["write"])))
         if args.apply:
             for item in plan["write"]:
-                target = root / item.path
-                target.parent.mkdir(parents=True, exist_ok=True)
-                target.write_text(item.text, encoding="utf-8")
+                write_atomic(root / item.path, item.text)
                 print("  wrote  {}".format(item.path))
         else:
             for item in plan["write"]:
