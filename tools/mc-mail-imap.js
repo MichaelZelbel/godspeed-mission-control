@@ -54,10 +54,9 @@ const RUN_MS = () => Number(process.env.GODSPEED_MAIL_IMAP_TIMEOUT_MS) || 60000;
 const STALE_MS = 5 * 60000;
 
 // ============================================================ where things are
-const home = () => process.env.GODSPEED_MAIL_HOME || process.env.HUB_MAIL_HOME || os.homedir();
-// Never one name: ~/.hub/mail/imap on a machine connected before 2026-09-22, when only it exists.
-const base = () => [path.join(home(), ".godspeed", "mail", "imap"), path.join(home(), ".hub", "mail", "imap")]
-  .find(p => fs.existsSync(p)) || path.join(home(), ".godspeed", "mail", "imap");
+// The mail folder is decided once, in mc-mail-gmail.js, for every part of the mail tool: on a
+// machine connected before 2026-09-22 that is ~/.hub/mail, and this part must not pick on its own.
+const base = () => path.join(G.mailRoot(), "imap");
 const file = name => path.join(base(), name);
 const platformKey = () => process.platform + "-" + process.arch;
 const asset = () => MANIFEST.assets[platformKey()] || null;

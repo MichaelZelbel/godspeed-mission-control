@@ -88,6 +88,27 @@ try {
   t("and ~/.godspeed/mail/imap for Himalaya", () =>
     assert.strictEqual(I.base(), path.join(home, ".godspeed", "mail", "imap")));
 
+  // ---- one decision for the whole mail folder (found by the final review, 2026-09-23) --------
+  // Each part used to choose between ~/.hub/mail and ~/.godspeed/mail on its own, by whether its
+  // own subfolder existed. With an EMPTY ~/.godspeed/mail beside a real ~/.hub/mail (Michael's
+  // work PC had exactly that), a pending Gmail proposal vanished from view the moment another
+  // part created its first folder under the new name.
+  const home2 = path.join(work, "home2");
+  fs.mkdirSync(path.join(home2, ".godspeed", "mail"), { recursive: true });
+  put(path.join(home2, ".hub", "mail", "proposals.json"), "[]");
+  process.env.GODSPEED_MAIL_HOME = home2;
+  t("an empty ~/.godspeed/mail does not hide a real ~/.hub/mail", () =>
+    assert.strictEqual(G.stateDir(), path.join(home2, ".hub", "mail")));
+  t("Himalaya follows the same folder, before it has one of its own", () =>
+    assert.strictEqual(I.base(), path.join(home2, ".hub", "mail", "imap")));
+  fs.mkdirSync(I.base(), { recursive: true });
+  t("and after it made its folder, the Gmail part still reads the same place", () =>
+    assert.strictEqual(G.stateDir(), path.join(home2, ".hub", "mail")));
+  put(path.join(home2, ".hub", "mail", "route.json"), JSON.stringify({ kind: "ssh", host: "same-tree" }));
+  t("and the pairing route is read from that same place", () =>
+    assert.strictEqual((P.route() || {}).host, "same-tree"));
+  process.env.GODSPEED_MAIL_HOME = home;
+
   // ---- a new machine with nothing yet gets only the new names -------------------------------
   fs.rmSync(home, { recursive: true, force: true });
   fs.mkdirSync(home);
