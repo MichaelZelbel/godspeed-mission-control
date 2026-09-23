@@ -1,5 +1,5 @@
 
-# Test fixtures. The suites build a whole throwaway hub inside tools/ on purpose (an
+# Test fixtures. The suites build a whole throwaway godspeed inside tools/ on purpose (an
 # mktemp path resolves to two different places for Git Bash and Windows python), and one
 # run of them reached a commit on 2026-08-29.
 tools/.tmp-*

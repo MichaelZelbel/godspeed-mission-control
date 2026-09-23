@@ -6,7 +6,7 @@ A few notes in `profile/people.md` give it a better chance. Include a person whe
 
 ## Check the people already in your briefing
 
-Start a fresh session in the hub and paste:
+Start a fresh session in Mission Control and paste:
 
 ```
 Read profile/about-me.md and the current profile/people.md. Help me improve the people file.
@@ -23,7 +23,7 @@ Keep the source and date of current claims. Label my interpretations as interpre
 When we finish, show the proposed changes and update profile/people.md with the corrections I confirm.
 ```
 
-*[Copy prompt](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-6-box-1)*
+*[Copy prompt](https://srv1328602.hstgr.cloud/godspeed/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-6-box-1)*
 
 Begin with the people your briefing already mentions. Correcting “Alex works with me” is easier than writing Alex's entry from scratch, and the assistant can ask about a missing detail when it matters. The interview should save you the work of deciding what to explain.
 
@@ -35,7 +35,7 @@ I wrote notes about Sam's work and the people in his life, then ran the intervie
 
 Sam's original interview files do not come with the companion kit, and the installer does not put Sam or his clients into your personal notes. Use the prompt above with your own people. You don't need Sam's files to follow the example.
 
-The kit does include a different practice story, Robin's bicycle shop, in `practice/maintenance-classes/`. Those files are available if you want to try a fictional job later. They stay outside your working hub. Practice belongs in a separate folder, so an invented client cannot acquire a place on your real to-do list.
+The kit does include a different practice story, Robin's bicycle shop, in `practice/maintenance-classes/`. Those files are available if you want to try a fictional job later. They stay outside your working mission control. Practice belongs in a separate folder, so an invented client cannot acquire a place on your real to-do list.
 
 In the people interview, the assistant first noticed that the background mostly contained roles:
 

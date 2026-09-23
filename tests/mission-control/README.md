@@ -16,7 +16,7 @@ The reusable exercise recipe is `skills/work-through-a-decision/SKILL.md`. The s
 
 ## Rerunning
 
-Use a fresh practice copy outside the live hub for each case. Do not reuse an existing `output/decision.md` as proof of a new run. Compare input hashes before and after. Restrict tools to the needed file, calculation and public-read functions; a local terminal is not a sandbox.
+Use a fresh practice copy outside the live mission control for each case. Do not reuse an existing `output/decision.md` as proof of a new run. Compare input hashes before and after. Restrict tools to the needed file, calculation and public-read functions; a local terminal is not a sandbox.
 
 The proof used Hermes v0.20.6, OpenAI provider `openai-codex`, model `gpt-6-astra`, Python 3.11.16, and Windows. Named disposable profile `tio-proof` was used for scheduling, with no live integrations or personal memory. It reused existing model sign-in through Hermes's supported profile mechanism. No credential values were copied into these files.
 

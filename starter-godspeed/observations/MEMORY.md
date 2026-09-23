@@ -15,7 +15,7 @@ its own as you work.
 **Why it lives here and not inside the AI tool.** Every AI assistant keeps notes
 about you in a folder that belongs to the tool, on one machine. So the notes
 never leave that machine, and your other assistants cannot see them. This folder
-is inside your hub instead, which means it travels with everything else in the
+is inside your mission control instead, which means it travels with everything else in the
 folder, and every assistant on every machine you own reads the same one.
 
 ## The four folders, and the only thing that separates them is WHEN they are read

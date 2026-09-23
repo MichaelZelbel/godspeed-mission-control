@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Pull Menerio's World down into the hub's world/ folder as markdown.
+"""Pull Menerio's World down into Mission Control's world/ folder as markdown.
 
 One way only, and it never writes to Menerio. What this buys is insurance, not
 ability: if Menerio disappeared tomorrow the facts would still be in git.
@@ -7,10 +7,10 @@ ability: if Menerio disappeared tomorrow the facts would still be in git.
 The ownership rule is the whole design, and this script is written so it cannot
 break it by accident:
 
-  origin: hub      this side wrote it. Never overwritten. Never deleted.
+  origin: godspeed      this side wrote it. Never overwritten. Never deleted.
   origin: menerio  Menerio wrote it and this is a copy. Rewritten every run.
 
-A file with no origin line at all is treated as origin: hub, because the twelve
+A file with no origin line at all is treated as origin: godspeed, because the twelve
 files that existed before this script have no origin line and losing one of them
 is worse than keeping a stale copy.
 
@@ -32,10 +32,10 @@ import urllib.request
 
 DEFAULT_BASE_URL = "https://tjeapelvjlmbxafsmjef.supabase.co/functions/v1"
 
-HUB = "hub"
+GODSPEED = "godspeed"
 MENERIO = "menerio"
 
-# A claim's confidence in hub words, decided by who wrote it. A machine's guess
+# A claim's confidence in godspeed words, decided by who wrote it. A machine's guess
 # is never "certain", however sure the machine sounded.
 CONFIDENCE_BY_AUTHOR = {"human": "certain", "machine": "likely"}
 
@@ -64,7 +64,7 @@ def parse_frontmatter(text):
 def origin_of(text):
     """Who owns this file. Anything that is not explicitly Menerio's is ours."""
     fields, _ = parse_frontmatter(text)
-    return MENERIO if fields.get("origin", "").strip().lower() == MENERIO else HUB
+    return MENERIO if fields.get("origin", "").strip().lower() == MENERIO else GODSPEED
 
 
 def parse_list(value):
@@ -101,10 +101,10 @@ def slugify(name):
 
 
 def render_entity(record, existing_text=None):
-    """A Menerio entity as a hub entity file.
+    """A Menerio entity as a mission control entity file.
 
-    When the hub already has a file for this thing, only one line is added to
-    it: menerio_id. Everything the hub wrote stays exactly as it was, because
+    When Mission Control already has a file for this thing, only one line is added to
+    it: menerio_id. Everything Mission Control wrote stays exactly as it was, because
     that file is a file a human may have edited.
     """
     if existing_text is not None:
@@ -234,9 +234,9 @@ def read_existing(root, folder):
 
 
 def match_entity_file(record, existing, claimed):
-    """Find the hub's file for this Menerio entity, or None for a new one.
+    """Find Mission Control's file for this Menerio entity, or None for a new one.
 
-    Menerio calls him "Michael Zelbel" and the hub file is michael.md, so a slug
+    Menerio calls him "Michael Zelbel" and Mission Control file is michael.md, so a slug
     comparison alone would write a second file for the same person. Name and
     alias are checked as well. A file already claimed by another record is never
     matched twice, so two Menerio duplicates cannot collapse into one file.
@@ -289,7 +289,7 @@ def unique_name(base, taken):
 def plan_pull(world, root, self_slug="me"):
     """Work out every file to write and every file to remove.
 
-    Nothing owned by the hub is ever in the remove list, and the only hub file
+    Nothing owned by Mission Control is ever in the remove list, and the only mission control file
     that appears in the write list is an entity gaining its menerio_id line.
     """
     entities = world.get("entities") or []
@@ -332,7 +332,7 @@ def plan_pull(world, root, self_slug="me"):
         )
         name = existing or unique_name(record["slug"] + ".md", event_names)
         event_names.add(name)
-        if existing and existing_events[existing]["origin"] == HUB:
+        if existing and existing_events[existing]["origin"] == GODSPEED:
             continue
         participants = [slug_by_id[p] for p in (record.get("participants") or []) if p in slug_by_id]
         text = render_event(record, participants)
@@ -353,14 +353,14 @@ def plan_pull(world, root, self_slug="me"):
         )
         name = existing or unique_name(base, claim_names)
         claim_names.add(name)
-        if existing and existing_claims[existing]["origin"] == HUB:
+        if existing and existing_claims[existing]["origin"] == GODSPEED:
             continue
         text = render_claim(record, subject, obj)
         if not existing or existing_claims[existing]["text"] != text:
             writes.append(PulledFile("world/claims/" + name, text, record["id"], "claim"))
 
     # A record that is gone from Menerio takes its copy with it, but only its
-    # copy. A hub-owned file is never in this list.
+    # copy. A mc-owned file is never in this list.
     seen_ids = {r["id"] for r in entities} | {r["id"] for r in events} | {r["id"] for r in claims}
     removals = []
     menerio_owned = {"entities": 0, "events": 0, "claims": 0}
@@ -393,7 +393,7 @@ class WorldClient:
         if updated_since:
             query += "&updated_since={}".format(updated_since)
         request = urllib.request.Request(
-            "{}/hub-api-world{}".format(self.base_url, query),
+            "{}/mc-api-world{}".format(self.base_url, query),
             method="GET",
             headers={"Authorization": "Bearer {}".format(self.api_key)},
         )
@@ -459,7 +459,7 @@ helps someone who already knows to look.
 
 Nothing reads this file. Decide what each record deserves, then delete it:
 
-- still true and the notebook dropped it -> re-create the file with `origin: hub`, which the
+- still true and the notebook dropped it -> re-create the file with `origin: godspeed`, which the
   pull never deletes, or put the fact back into the notebook
 - no longer true -> nothing to do
 """
@@ -543,17 +543,17 @@ def run_pull(world, root, client_label, apply_changes, self_slug="me",
 
 
 def resolve_self_slug(root, explicit=None):
-    """The entity slug that means the owner of this hub.
+    """The entity slug that means the owner of this mission control.
 
-    Order: the --self-slug flag, the HUB_SELF_SLUG environment variable, then
+    Order: the --self-slug flag, the GODSPEED_SELF_SLUG environment variable, then
     the entity file under world/entities/ whose frontmatter says `self: true`,
     then "me". The file marker is the one that travels: it lives in the folder,
     so every machine and every scheduled run agrees on who the owner is without
-    a flag being typed anywhere. A hub needs zero configuration this way.
+    a flag being typed anywhere. A mission control needs zero configuration this way.
     """
     if explicit:
         return explicit
-    env = os.environ.get("HUB_SELF_SLUG")
+    env = os.environ.get("GODSPEED_SELF_SLUG")
     if env:
         return env
     entities = pathlib.Path(root) / "world" / "entities"
@@ -580,8 +580,8 @@ def main(argv=None):
                         help="write the files. Without it, print what would happen.")
     parser.add_argument("--repo-root", default=".")
     parser.add_argument("--self-slug", default=None,
-                        help="the entity slug that means the owner of this hub. "
-                             "Unset, it is read from HUB_SELF_SLUG or from the "
+                        help="the entity slug that means the owner of this mission control. "
+                             "Unset, it is read from GODSPEED_SELF_SLUG or from the "
                              "world/entities file marked `self: true`.")
     parser.add_argument("--updated-since", default=None,
                         help="only records changed since this date. Skips removals.")
@@ -594,7 +594,7 @@ def main(argv=None):
     if not api_key:
         print("MENERIO_API_KEY is not set. Open a new terminal (the installer "
               "teaches them the credential), or load it by hand: "
-              "eval \"$(hub-notebook-env)\"", file=sys.stderr)
+              "eval \"$(mc-notebook-env)\"", file=sys.stderr)
         return 2
 
     root = pathlib.Path(args.repo_root).resolve()

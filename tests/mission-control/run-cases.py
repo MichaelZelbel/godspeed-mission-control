@@ -7,9 +7,9 @@ import shutil
 import subprocess
 import time
 
-KIT = Path('C:/hub/dev/teach-it-once-kit-mission-control')
+KIT = Path('C:/godspeed/dev/teach-it-once-kit-mission-control')
 ROOT = Path('C:/Users/micha/AppData/Local/Temp/tio-mission-control-cases')
-EVIDENCE = Path('C:/hub/dev/ownward-studio-mission-control/company-memory/book/chapter-verification/mission-control-raw')
+EVIDENCE = Path('C:/godspeed/dev/ownward-studio-mission-control/company-memory/book/chapter-verification/mission-control-raw')
 EVIDENCE.mkdir(parents=True, exist_ok=True)
 PROMPT = (KIT / 'tests/mission-control/prompt.txt').read_text(encoding='utf-8')
 

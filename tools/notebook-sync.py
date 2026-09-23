@@ -1,22 +1,22 @@
 #!/usr/bin/env python3
-"""Push hub text files into your notebook as notes, so they can be searched by meaning.
+"""Push godspeed text files into your notebook as notes, so they can be searched by meaning.
 
-Every note lands in a folder that mirrors where its file lives in the hub, under
-a single `hub` root: see HUB_FOLDER and folder_for below. Nothing this sync
+Every note lands in a folder that mirrors where its file lives in Mission Control, under
+a single `godspeed` root: see GODSPEED_FOLDER and folder_for below. Nothing this sync
 sends is left at the notebook's top level.
 
 One way only. The files on disk stay the source of truth. Menerio holds a copy it
-indexes for search and must never read facts out of, because the hub's
+indexes for search and must never read facts out of, because Mission Control's
 observations are machine-written guesses and a system that mines its own guesses
 ends up citing them back as things you said. The guard that enforces that
-lives in Menerio, in supabase/functions/_shared/hub-source.ts.
+lives in Menerio, in supabase/functions/_shared/mc-source.ts.
 
 Usage:
     python3 tools/notebook-sync.py              show what would be sent
     python3 tools/notebook-sync.py --apply      send it
 
 Needs MENERIO_API_KEY in the environment. The installer teaches new terminals
-the credential; by hand it is:  eval "$(hub-notebook-env)"
+the credential; by hand it is:  eval "$(mc-notebook-env)"
 """
 import argparse
 import dataclasses
@@ -42,8 +42,8 @@ SYNC_SOURCES = [
 ]
 
 # The visible skills/ is the room since the Hermes switch (2026-09-02). The hidden
-# .claude/skills is a link the installer points at it, so on a topped-up hub the two
-# are one folder and the visible name wins. An older hub that has not been re-run
+# .claude/skills is a link the installer points at it, so on a topped-up godspeed the two
+# are one folder and the visible name wins. An older mission control that has not been re-run
 # still keeps its recipes under the hidden name only, and those must still be sent.
 SKILLS_ALIASES = (".claude/skills",)
 
@@ -60,7 +60,7 @@ SYNC_SKIP_FILES = frozenset({
 
 
 def source_folder(repo_root: pathlib.Path, source: dict) -> str:
-    """The folder a source actually lives in on this hub: the named one, or an alias
+    """The folder a source actually lives in on this godspeed: the named one, or an alias
     when the named one is missing and an alias is there."""
     if (repo_root / source["folder"]).is_dir():
         return source["folder"]
@@ -73,27 +73,27 @@ def source_folder(repo_root: pathlib.Path, source: dict) -> str:
 DECISION_LOG = "decisions.md"
 
 # Everything this sync sends lives under one folder in the notebook, and inside
-# it the hub's own layout is reproduced exactly: observations/x.md becomes a
-# note in hub/observations.
+# it Mission Control's own layout is reproduced exactly: observations/x.md becomes a
+# note in godspeed/observations.
 #
 # Two reasons it is not left at the root, which is where the column defaults.
-# The notebook is YOUR memory and holds notes you wrote yourself; hub copies
+# The notebook is YOUR memory and holds notes you wrote yourself; godspeed copies
 # loose at the top level bury them under machine output. And a note's folder is
 # the second thing that says where it came from, after the provenance line in
 # the body, so the answer to "is this something I said or something a machine
 # wrote" is visible before opening it.
-HUB_FOLDER = "hub"
+GODSPEED_FOLDER = "godspeed"
 
 AUTHOR_LINES = {
-    "machine": "This is a file from your hub at {path}. It is text a machine "
+    "machine": "This is a file from your mission control at {path}. It is text a machine "
                "wrote, which makes it a guess and not something you said.",
-    "mixed": "This is a file from your hub at {path}. It was mostly written by a "
+    "mixed": "This is a file from your mission control at {path}. It was mostly written by a "
              "machine and kept because you found it useful.",
-    "owner": "This is a file from your hub at {path}. You wrote or decided this.",
+    "owner": "This is a file from your mission control at {path}. You wrote or decided this.",
 }
 
-# The two shapes a decision takes in decisions.md. The starter hub writes them
-# as bullets, "- (YYYY-MM-DD) what and why", and a hub that outgrows one line
+# The two shapes a decision takes in decisions.md. The starter mission control writes them
+# as bullets, "- (YYYY-MM-DD) what and why", and a mission control that outgrows one line
 # per decision uses a dated heading. Both are decisions, and missing a shape
 # means missing decisions SILENTLY: the splitter simply appends unrecognised
 # lines to whatever it has open, so a missed heading folds many decisions into
@@ -197,15 +197,15 @@ def collect_documents(repo_root: pathlib.Path) -> list:
 
 
 def folder_for(source_path: str) -> str:
-    """The notebook folder a document belongs in: the hub's own path, under HUB_FOLDER.
+    """The notebook folder a document belongs in: Mission Control's own path, under GODSPEED_FOLDER.
 
     Derived from the source path rather than stored on the Document, so there is
     one answer and it cannot drift from the file it describes. A document at the
-    repository root, which is every decision, gets HUB_FOLDER itself: that
-    mirrors the hub, where decisions.md is one file at the top.
+    repository root, which is every decision, gets GODSPEED_FOLDER itself: that
+    mirrors Mission Control, where decisions.md is one file at the top.
     """
     parent, _, _ = source_path.rpartition("/")
-    return "{}/{}".format(HUB_FOLDER, parent) if parent else HUB_FOLDER
+    return "{}/{}".format(GODSPEED_FOLDER, parent) if parent else GODSPEED_FOLDER
 
 
 def author_for(source_path: str) -> str:
@@ -253,9 +253,9 @@ def plan_actions(docs: list, state: dict) -> dict:
     trash = [entry["note_id"] for doc_id, entry in state.items() if doc_id not in seen]
 
     # THE MASS-TRASH GUARD (2026-08-21). A note is thrown away when the cache remembers a
-    # document the hub no longer has, which is right when you delete a file and catastrophic
+    # document Mission Control no longer has, which is right when you delete a file and catastrophic
     # when a lot of paths change at once. Both happen: this installer renames folders on an
-    # older hub, and one rename of a file everything points at turned every remembered id
+    # older godspeed, and one rename of a file everything points at turned every remembered id
     # into a stranger. On Michael's laptop that trashed 89 of his decisions in one run, and
     # on his work PC an older copy of this program trashed 299 notes the same way.
     #
@@ -264,7 +264,7 @@ def plan_actions(docs: list, state: dict) -> dict:
     # more than a third of what it tracks throws away nothing instead, and says why. The cure
     # is --reconcile, which asks the notebook what it actually holds and matches by title.
     if trash and len(state) and len(trash) > max(10, len(state) // 3):
-        print("refusing to trash {} of the {} notes this hub tracks: that is not a few "
+        print("refusing to trash {} of the {} notes this mission control tracks: that is not a few "
               "deleted files, it is a cache that no longer matches the folder. Nothing was "
               "thrown away. Run once with --reconcile to rebuild it from the notebook."
               .format(len(trash), len(state)))
@@ -346,7 +346,7 @@ class MenerioClient:
 
     def _send(self, method: str, path: str, data):
         request = urllib.request.Request(
-            "{}/hub-api-notes{}".format(self.base_url, path),
+            "{}/mc-api-notes{}".format(self.base_url, path),
             data=data,
             method=method,
             headers={
@@ -362,7 +362,7 @@ class MenerioClient:
         result = self._call("POST", "", {
             "title": title,
             "content": body,
-            "source_app": "hub",
+            "source_app": "godspeed",
             "source_id": source_id,
             "folder_path": folder,
         })
@@ -375,14 +375,14 @@ class MenerioClient:
     def trash_note(self, note_id: str) -> None:
         self._call("DELETE", "/{}".format(note_id))
 
-    def list_hub_notes(self) -> list:
+    def list_godspeed_notes(self) -> list:
         """Every note the notebook holds that this sync created, across all pages."""
         notes, offset = [], 0
         while True:
             page = self._call("GET", "?limit=100&offset={}".format(offset)).get("data", [])
             if not page:
                 break
-            notes += [n for n in page if n.get("source_app") == "hub"]
+            notes += [n for n in page if n.get("source_app") == "godspeed"]
             offset += len(page)
             if len(page) < 100:
                 break
@@ -500,7 +500,7 @@ def run_sync(docs: list, state: dict, client, apply: bool,
 
 
 def main(argv=None) -> int:
-    parser = argparse.ArgumentParser(description="Push your hub files into your notebook for search.")
+    parser = argparse.ArgumentParser(description="Push your mission control files into your notebook for search.")
     parser.add_argument("--apply", action="store_true",
                         help="actually send. Without it, print what would happen.")
     parser.add_argument("--repo-root", default=".")
@@ -515,7 +515,7 @@ def main(argv=None) -> int:
     if args.apply and not api_key:
         print("MENERIO_API_KEY is not set. Open a new terminal (the installer "
               "teaches them the credential), or load it by hand: "
-              "eval \"$(hub-notebook-env)\"", file=sys.stderr)
+              "eval \"$(mc-notebook-env)\"", file=sys.stderr)
         return 2
 
     root = pathlib.Path(args.repo_root).resolve()
@@ -537,11 +537,11 @@ def main(argv=None) -> int:
             return 2
         if cold_start and not args.reconcile:
             print("no local cache here, so asking the notebook what it already holds...")
-        remote = client.list_hub_notes()
+        remote = client.list_godspeed_notes()
         state = reconcile_state(docs, remote)
         state_path.parent.mkdir(parents=True, exist_ok=True)
         save_state(state_path, state)
-        print("reconciled: {} note(s) in the notebook, {} matched to a file in your hub".format(
+        print("reconciled: {} note(s) in the notebook, {} matched to a file in your mission control".format(
             len(remote), len(state)))
 
     if args.limit:
@@ -570,7 +570,7 @@ def main(argv=None) -> int:
     if args.apply and failures and api_key:
         print("\n{} document(s) were refused, so this machine's cache is out of date. "
               "Asking the notebook and trying once more...".format(len(failures)))
-        state = reconcile_state(docs, client.list_hub_notes())
+        state = reconcile_state(docs, client.list_godspeed_notes())
         save_state(state_path, state)
         failures = []
         new_state = run_sync(docs, state, client, apply=True,

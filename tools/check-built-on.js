@@ -1,12 +1,12 @@
 #!/usr/bin/env node
-// tools/check-built-on.js  (installed as hub-check-built-on)
+// tools/check-built-on.js  (installed as mc-check-built-on)
 //
 // When a fact stops being true, what did you write while it still held?
 //
-//   hub-check-built-on                          every fact that changed, in the hub you run it from
-//   hub-check-built-on --claim <subject/attribute>
-//   hub-check-built-on --json
-//   hub-check-built-on --hub <path>             a hub somewhere else
+//   mc-check-built-on                          every fact that changed, in Mission Control you run it from
+//   mc-check-built-on --claim <subject/attribute>
+//   mc-check-built-on --json
+//   mc-check-built-on --godspeed <path>             a mission control somewhere else
 //
 // Exit 1 when something live is still built on a closed fact, 0 when clean.
 //
@@ -17,11 +17,11 @@
 // Schefren's open-source Atlas (github.com/RichSchefren/atlas): when a fact
 // changes, walk to everything that depended on it, at the moment it changes,
 // not when someone next asks. His version is a graph database. This one is a
-// string search plus a declared line, because a hub is text files.
+// string search plus a declared line, because a mission control is text files.
 //
 // TWO WAYS A RECORD CAN BE BUILT ON A FACT:
 //   value     the closed value appears, whole-word and case-insensitive, in a
-//             file the hub treats as current. Cheap, needs nothing declared,
+//             file Mission Control treats as current. Cheap, needs nothing declared,
 //             cannot see a paraphrase.
 //   rests_on  the record says so: `rests_on: [subject/attribute]` in a file's
 //             front matter, or `**Rests on:** subject/attribute` in a decision
@@ -42,7 +42,7 @@
 const fs = require('fs');
 const path = require('path');
 
-// Where the hub keeps what it treats as CURRENT. History lives elsewhere and
+// Where Mission Control keeps what it treats as CURRENT. History lives elsewhere and
 // is deliberately absent: observations/ and decisions.md are records of what
 // was thought at the time, prompts/ and archives/ are verbatim, world/ is the
 // claims themselves. decisions.md is read for rests_on lines only, never for
@@ -279,7 +279,7 @@ function report(result, asJson) {
 function cli() {
   const argv = process.argv.slice(2);
   const flag = (name) => { const i = argv.indexOf(name); return i >= 0 ? argv[i + 1] : undefined; };
-  const root = flag('--hub') || flag('--dir') || process.cwd();
+  const root = flag('--godspeed') || flag('--dir') || process.cwd();
   const claimFlag = flag('--claim');
   const opts = {};
   if (claimFlag) {

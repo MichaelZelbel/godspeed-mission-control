@@ -2,17 +2,17 @@
 
 Some decisions occupy your mind long before they get a place in your calendar. You know the next step is to read the material, compare the choices or draft a question, but the preparation keeps waiting. Give that work to an investigation job, with a clear question and an end. When you return, you can start with something to consider.
 
-We'll use Robin, the fictional bicycle-shop owner considering maintenance classes, so you can judge the result against a small set of known facts. His practice hub is separate from your own. Use a real question instead if your hub can already reach the sources needed to answer it.
+We'll use Robin, the fictional bicycle-shop owner considering maintenance classes, so you can judge the result against a small set of known facts. His practice mission control is separate from your own. Use a real question instead if your mission control can already reach the sources needed to answer it.
 
 ## Check the starting material
 
-Check the starting material before setting a timer. In the practice hub, ask:
+Check the starting material before setting a timer. In the practice mission control, ask:
 
 ```
 Confirm that this is robin-practice. Read AGENTS.md, profile/, inbox/workshop-notes.md and skills/prepare-a-decision/SKILL.md. Confirm the profile says Robin runs a bicycle repair shop. List any missing file. Create no job until these inputs are available.
 ```
 
-If Robin's folder does not exist, unpack the matching companion kit and ask the assistant to create `robin-practice` beside your hub. Have it copy `starter-hub/` there, add the briefing and workshop note from `practice/maintenance-classes/`, and file that briefing into the practice profile. Also copy `skills/prepare-a-decision/SKILL.md` from the kit. Tell it to preserve existing folders and keep the fictional material out of your real hub. Open the new folder in your assistant and run the input check above.
+If Robin's folder does not exist, unpack the matching companion kit and ask the assistant to create `robin-practice` beside your mission control. Have it copy `starter-godspeed/` there, add the briefing and workshop note from `practice/maintenance-classes/`, and file that briefing into the practice profile. Also copy `skills/prepare-a-decision/SKILL.md` from the kit. Tell it to preserve existing folders and keep the fictional material out of your real mission control. Open the new folder in your assistant and run the input check above.
 
 If you are using your own question instead, ask the assistant to adapt the job below to your question, sources and a new output filename. Keep the one-time schedule and preparation-only limits.
 

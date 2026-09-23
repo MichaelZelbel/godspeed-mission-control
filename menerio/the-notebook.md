@@ -1,20 +1,20 @@
 # Chapter 27: Use Menerio for Notes on the Go
 
-A note on your computer is handy until you're somewhere else. Then it becomes an impressively well-organized answer you can't reach. [Menerio](https://menerio.com) is an online memory service I built, where you can save and find notes from your phone too. This chapter uses a Menerio account. It is optional: your hub already saves its own records in `world/` without one.
+A note on your computer is handy until you're somewhere else. Then it becomes an impressively well-organized answer you can't reach. [Menerio](https://menerio.com) is an online memory service I built, where you can save and find notes from your phone too. This chapter uses a Menerio account. It is optional: your mission control already saves its own records in `world/` without one.
 
 I wanted somewhere to save notes after a call on a train. A client asked about a spring quote. The number was in my project file, on a computer at home. Before hanging up, she mentioned a changed budget. I could neither retrieve the old number nor conveniently save the new one.
 
-Menerio lets you save and find notes while you're out. Remote access to an awake computer serves a different purpose: it lets you use the hub files stored on that computer. For my train call, Menerio could have caught the new budget; remote access could have retrieved the old quote. Menerio alone won't put every hub file on your phone.
+Menerio lets you save and find notes while you're out. Remote access to an awake computer serves a different purpose: it lets you use Mission Control files stored on that computer. For my train call, Menerio could have caught the new budget; remote access could have retrieved the old quote. Menerio alone won't put every mission control file on your phone.
 
 ## Choose where to keep the original
 
-Decide where you'll correct each kind of information. Keep your chosen background in the hub's profile, and correct notes written directly in Menerio there. Otherwise, changing a date becomes a small investigation into where you left all its copies.
+Decide where you'll correct each kind of information. Keep your chosen background in Mission Control's profile, and correct notes written directly in Menerio there. Otherwise, changing a date becomes a small investigation into where you left all its copies.
 
 Copies help with search and recovery when they point to the original and carry the date they were made. If a copy is old, correct the original and have the assistant check how it's copied. Figure 27.1 calls Menerio the notebook and shows which material the optional copying tool can move.
 
-[View the illustrated reading edition](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/Teach-It-Once.pdf)
+[View the illustrated reading edition](https://srv1328602.hstgr.cloud/godspeed/8d0da988c1c44fbaa71bdfef1d4144dc/Teach-It-Once.pdf)
 
-The optional copying tool can send selected hub material to Menerio and bring supported Menerio records into `world/`. It does not upload profile files. Even with copying enabled, my quote in `profile/projects.md` would not automatically become searchable in Menerio on my phone.
+The optional copying tool can send selected mission control material to Menerio and bring supported Menerio records into `world/`. It does not upload profile files. Even with copying enabled, my quote in `profile/projects.md` would not automatically become searchable in Menerio on my phone.
 
 ## Try a few harmless notes
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""hub-prompt-archive - put what you actually typed into your hub, so any AI can search it.
+"""mc-prompt-archive - put what you actually typed into your mission control, so any AI can search it.
 
 WHY THIS FILE EXISTS. You should be able to ask any of your assistants about a prompt you
 wrote months ago, or a project you did with one. The raw material already exists and nothing
@@ -22,14 +22,14 @@ after scrubbing, with a marker saying so. Rows written before this existed simpl
 field; `backfill` fills it in from transcripts that still exist.
 
 WHAT IS REMOVED BEFORE ANYTHING IS WRITTEN. A session transcript is the one place secrets
-show up by accident: a key pasted while debugging, an employer or client name that this hub
+show up by accident: a key pasted while debugging, an employer or client name that this mission control
 is not allowed to hold. So every line passes a scrubber first:
 
   - by shape, needing no configuration: API keys and tokens, Authorization headers,
     private-key blocks, long random-looking strings, email addresses;
-  - by name, from a list you keep OUTSIDE your hub, because a list of the names you must
+  - by name, from a list you keep OUTSIDE your mission control, because a list of the names you must
     never store is itself a file you must never store. Put one name per line in
-    ~/.hub/redact.txt, or set HUB_REDACT_TERMS.
+    ~/.godspeed/redact.txt, or set GODSPEED_REDACT_TERMS.
 
 A PROMPT that still looks risky after scrubbing is dropped whole rather than half-cleaned:
 refusing to store a prompt costs one prompt; storing a key costs a key. An ANSWER loses only
@@ -37,18 +37,18 @@ the offending line, because replies legitimately carry commit hashes and encoded
 dropping a whole reply for one such line would empty the drawer of exactly what it is for.
 
 Usage:
-  hub-prompt-archive                       harvest this machine, write into prompts/archive/
-  hub-prompt-archive --dry-run             show what it would add, write nothing
-  hub-prompt-archive search <term>...      search everything every machine has archived
-  hub-prompt-archive stats                 what is in the archive, and which machine stopped sending
-  hub-prompt-archive sources               every place on THIS machine he types, and whether the
+  mc-prompt-archive                       harvest this machine, write into prompts/archive/
+  mc-prompt-archive --dry-run             show what it would add, write nothing
+  mc-prompt-archive search <term>...      search everything every machine has archived
+  mc-prompt-archive stats                 what is in the archive, and which machine stopped sending
+  mc-prompt-archive sources               every place on THIS machine he types, and whether the
                                            archive has it. Exit 1 if a source reaches none of it.
-  hub-prompt-archive rescrub               re-run the scrubber over what is already stored,
+  mc-prompt-archive rescrub               re-run the scrubber over what is already stored,
                                            for the day a name is added to the list too late
-  hub-prompt-archive backfill              attach answers to rows archived before answers
+  mc-prompt-archive backfill              attach answers to rows archived before answers
                                            existed, from transcripts still on this machine
 Options:
-  --hub DIR · --since YYYY-MM-DD · --limit N (search results, default 12)
+  --godspeed DIR · --since YYYY-MM-DD · --limit N (search results, default 12)
 """
 
 import glob
@@ -70,12 +70,12 @@ except Exception:
 def home_dir():
     """Where the AI tools keep their session logs.
 
-    HUB_HOME wins, and it exists for two real reasons rather than for tidiness. On Windows,
+    GODSPEED_HOME wins, and it exists for two real reasons rather than for tidiness. On Windows,
     Python resolves "~" from USERPROFILE and ignores HOME, so a test that sets HOME silently
     harvests your real sessions instead of its fixture, and reports green. And on the
     server this runs from cron, where HOME is whatever systemd decided.
     """
-    return os.environ.get("HUB_HOME") or os.path.expanduser("~")
+    return os.environ.get("GODSPEED_HOME") or os.path.expanduser("~")
 
 
 # The sources this collector can read. The installer shows this same list to the
@@ -86,10 +86,10 @@ SUPPORTED_SOURCES = ("claude", "codex", "hermes")
 
 
 def device_env_value(name):
-    """One value from ~/.hub/device.env. Read here as well as by the launcher,
-    because this program is also run directly (`hub prompts archive`), where
+    """One value from ~/.godspeed/device.env. Read here as well as by the launcher,
+    because this program is also run directly (`godspeed prompts archive`), where
     nothing has loaded that file into the environment first."""
-    p = os.path.join(home_dir(), ".hub", "device.env")
+    p = os.path.join(home_dir(), ".godspeed", "device.env")
     if not os.path.isfile(p):
         return None
     try:
@@ -108,15 +108,15 @@ def device_env_value(name):
 def enabled_sources():
     """Which AI tools this machine's owner said may be read.
 
-    The installer records the choice as HUB_PROMPT_SOURCES in ~/.hub/device.env
+    The installer records the choice as GODSPEED_PROMPT_SOURCES in ~/.godspeed/device.env
     (the environment wins, so a test or a one-off run can override it). No line
     at all means every supported source, which is what every machine did before
     there was a choice. An EMPTY line means none: a person who unticked every
     box made a decision, not a mistake.
     """
-    v = os.environ.get("HUB_PROMPT_SOURCES")
+    v = os.environ.get("GODSPEED_PROMPT_SOURCES")
     if v is None:
-        v = device_env_value("HUB_PROMPT_SOURCES")
+        v = device_env_value("GODSPEED_PROMPT_SOURCES")
     if v is None:
         return set(SUPPORTED_SOURCES)
     if v.strip() == "-":
@@ -126,35 +126,35 @@ def enabled_sources():
     return {s.strip().lower() for s in v.split(",") if s.strip()}
 
 
-def hub_root(argv_hub=None):
-    if argv_hub:
-        return os.path.abspath(argv_hub)
-    env = os.environ.get("HUB_DIR")
+def godspeed_root(argv_godspeed=None):
+    if argv_godspeed:
+        return os.path.abspath(argv_godspeed)
+    env = os.environ.get("GODSPEED_DIR")
     if env:
         return os.path.abspath(env)
     here = os.path.dirname(os.path.abspath(__file__))
     cand = os.path.abspath(os.path.join(here, "..", ".."))
-    if looks_like_hub(cand):
+    if looks_like_godspeed(cand):
         return cand
-    for c in ("/root/hub", os.path.expanduser("~/hub"), "C:\\hub"):
-        if looks_like_hub(c):
+    for c in ("/root/godspeed", os.path.expanduser("~/godspeed"), "C:\\godspeed"):
+        if looks_like_godspeed(c):
             return c
     return cand
 
 
-# A hub is recognised by the folders it declares, not by one hardcoded name. This asked for
-# `memory/` until 2026-08-29, which stopped being a hub folder on 2026-08-21, and the starter
-# hub this kit installs has never had one. See the long note in prompt-harvest.js: the two
-# programs are a pair and they have to agree about what a hub is.
-HUB_MARKERS = ("observations", "profile", "rules", "prompts", "memory")
+# A mission control is recognised by the folders it declares, not by one hardcoded name. This asked for
+# `memory/` until 2026-08-29, which stopped being a mission control folder on 2026-08-21, and the starter
+# godspeed this kit installs has never had one. See the long note in prompt-harvest.js: the two
+# programs are a pair and they have to agree about what a mission control is.
+GODSPEED_MARKERS = ("observations", "profile", "rules", "prompts", "memory")
 
 
-def looks_like_hub(path):
+def looks_like_godspeed(path):
     if not path:
         return False
-    if os.path.isfile(os.path.join(path, "scripts", "config", "hub-layout.json")):
+    if os.path.isfile(os.path.join(path, "scripts", "config", "mc-layout.json")):
         return True
-    return any(os.path.isdir(os.path.join(path, d)) for d in HUB_MARKERS)
+    return any(os.path.isdir(os.path.join(path, d)) for d in GODSPEED_MARKERS)
 
 
 # --------------------------------------------------------------- the scrubber
@@ -186,9 +186,9 @@ STILL_RISKY = re.compile(r"[A-Za-z0-9+/_\-]{40,}={0,2}")
 
 def redact_terms():
     out = []
-    env = os.environ.get("HUB_REDACT_TERMS", "")
+    env = os.environ.get("GODSPEED_REDACT_TERMS", "")
     out += [t.strip() for t in env.split(",") if t.strip()]
-    p = os.path.join(home_dir(), ".hub", "redact.txt")
+    p = os.path.join(home_dir(), ".godspeed", "redact.txt")
     if os.path.isfile(p):
         for line in io.open(p, encoding="utf-8", errors="replace"):
             line = line.split("#", 1)[0].strip()
@@ -264,7 +264,7 @@ def prepare_answer(raw, terms):
     t = scrub_answer(raw, terms)
     if len(t) > ANSWER_CAP:
         t = (t[:ANSWER_CAP]
-             + "\n[answer truncated by hub-prompt-archive: kept %d of %d characters]"
+             + "\n[answer truncated by mc-prompt-archive: kept %d of %d characters]"
              % (ANSWER_CAP, len(t)))
     return t
 
@@ -469,7 +469,7 @@ def human_turns_hermes(path):
         yield cur
 
 
-TELEGRAM_TRANSCRIPT = "/var/lib/hub-telegram/transcript.jsonl"
+TELEGRAM_TRANSCRIPT = "/var/lib/mc-telegram/transcript.jsonl"
 
 
 # A message our own machinery put into a chat wearing the human's role. The courier hands a
@@ -498,11 +498,11 @@ def hermes_home():
     the platform default. The DEFAULT profile keeps its store at the root of that folder as
     state.db; every other profile keeps its own under profiles/<name>/state.db.
 
-    HUB_HERMES_HOME wins so a test can point at a fixture. Then HERMES_HOME, then the
+    GODSPEED_HERMES_HOME wins so a test can point at a fixture. Then HERMES_HOME, then the
     Windows default, then a server-wide install, then this user's own, then nothing at all,
     which is the correct answer on a computer that never ran Hermes.
     """
-    env = os.environ.get("HUB_HERMES_HOME")
+    env = os.environ.get("GODSPEED_HERMES_HOME")
     if env:
         return env
     candidates = []
@@ -608,7 +608,7 @@ def human_turns_hermes_store(hermes):
             yield cur
 
 
-def harvest(hub):
+def harvest(godspeed):
     """Every source the person has switched ON. A source that is off is not read at
     all, rather than read-and-discarded: the promise to the person is that this
     program does not open that tool's files, not that it forgets what it saw."""
@@ -623,7 +623,7 @@ def harvest(hub):
     if "hermes" in on:
         # Overridable so a test can point it at a fixture. A path compiled into the code is a
         # path no test can reach, which is exactly how the "dir" bug above survived.
-        yield from human_turns_hermes(os.environ.get("HUB_TELEGRAM_TRANSCRIPT") or TELEGRAM_TRANSCRIPT)
+        yield from human_turns_hermes(os.environ.get("GODSPEED_TELEGRAM_TRANSCRIPT") or TELEGRAM_TRANSCRIPT)
         # Kept alongside the line above rather than replacing it: that file carries chat from
         # before the current store existed, and the two overlap harmlessly because a prompt is
         # recognised by its text, so whichever reader reaches it first is the only one that counts.
@@ -632,11 +632,11 @@ def harvest(hub):
 
 # --------------------------------------------------------------------- storage
 
-def archive_dir(hub):
-    return os.path.join(hub, "prompts", "archive")
+def archive_dir(godspeed):
+    return os.path.join(godspeed, "prompts", "archive")
 
 
-def library_files(hub):
+def library_files(godspeed):
     """The saved prompts, which is every .md in the shelf EXCEPT its own front door.
 
     prompts/README.md and prompts/library/README.md explain the drawers to a human. They are
@@ -644,14 +644,14 @@ def library_files(hub):
     search result and inflate `stats` by two.
     """
     out = []
-    for f in sorted(glob.glob(os.path.join(hub, "prompts", "library", "*.md"))):
+    for f in sorted(glob.glob(os.path.join(godspeed, "prompts", "library", "*.md"))):
         if os.path.basename(f).lower() in ("readme.md", "index.md"):
             continue
         out.append(f)
     return out
 
 
-def lock_or_exit(hub):
+def lock_or_exit(godspeed):
     """One harvest at a time on one machine.
 
     Three things now start a harvest (a session ending, the daily task, a human proving it
@@ -660,8 +660,8 @@ def lock_or_exit(hub):
     is the cheapest fix that works on Windows and Linux alike. A stale lock older than an
     hour is ignored: a crashed run must not switch the harvest off for ever.
     """
-    os.makedirs(archive_dir(hub), exist_ok=True)
-    p = os.path.join(archive_dir(hub), ".harvest.lock")
+    os.makedirs(archive_dir(godspeed), exist_ok=True)
+    p = os.path.join(archive_dir(godspeed), ".harvest.lock")
     try:
         if os.path.isfile(p) and (datetime.now(timezone.utc).timestamp() - os.path.getmtime(p)) > 3600:
             os.remove(p)
@@ -676,9 +676,9 @@ def lock_or_exit(hub):
     return p
 
 
-def load_seen(hub):
+def load_seen(godspeed):
     seen = set()
-    for f in sorted(glob.glob(os.path.join(archive_dir(hub), "*.jsonl"))):
+    for f in sorted(glob.glob(os.path.join(archive_dir(godspeed), "*.jsonl"))):
         try:
             for line in io.open(f, encoding="utf-8", errors="replace"):
                 try:
@@ -696,15 +696,15 @@ def month_of(at):
     return datetime.now(timezone.utc).strftime("%Y-%m")
 
 
-def cmd_harvest(hub, dry, since, machine):
+def cmd_harvest(godspeed, dry, since, machine):
     lock = None
     if not dry:
-        lock = lock_or_exit(hub)
+        lock = lock_or_exit(godspeed)
         if lock is None:
             print("another harvest is already running on this machine, so this one did nothing")
             return 0
     try:
-        return _harvest_locked(hub, dry, since, machine)
+        return _harvest_locked(godspeed, dry, since, machine)
     finally:
         if lock:
             try:
@@ -713,12 +713,12 @@ def cmd_harvest(hub, dry, since, machine):
                 pass
 
 
-def _harvest_locked(hub, dry, since, machine):
+def _harvest_locked(godspeed, dry, since, machine):
     terms = redact_terms()
-    seen = load_seen(hub)
+    seen = load_seen(godspeed)
     buckets, added, dropped, dupes = {}, 0, 0, 0
     patch = {}
-    for rec in harvest(hub):
+    for rec in harvest(godspeed):
         if since and (rec["at"] or "")[:10] < since:
             continue
         rid = hashlib.sha256(("%s|%s" % (rec["tool"], rec["text"])).encode("utf-8")).hexdigest()[:16]
@@ -750,14 +750,14 @@ def _harvest_locked(hub, dry, since, machine):
 
     healed = 0
     if not dry:
-        os.makedirs(archive_dir(hub), exist_ok=True)
+        os.makedirs(archive_dir(godspeed), exist_ok=True)
         for month, rows in sorted(buckets.items()):
-            p = os.path.join(archive_dir(hub), "%s-%s.jsonl" % (machine, month))
+            p = os.path.join(archive_dir(godspeed), "%s-%s.jsonl" % (machine, month))
             with io.open(p, "a", encoding="utf-8", newline="\n") as fh:
                 for r in sorted(rows, key=lambda r: r["at"]):
                     fh.write(json.dumps(r, ensure_ascii=False) + "\n")
         if patch:
-            healed = attach_answers(hub, patch, terms, False)
+            healed = attach_answers(godspeed, patch, terms, False)
 
     print("%s %d prompt%s from this machine (%s)"
           % ("would archive" if dry else "archived", added, "" if added == 1 else "s", machine))
@@ -774,12 +774,12 @@ def _harvest_locked(hub, dry, since, machine):
         print("  %d dropped: still looked like a credential after scrubbing" % dropped)
     if not terms:
         print("\n  NOTE: no name list configured, so only key-shaped text was removed.")
-        print("  To also strip employer or client names: put one per line in ~/.hub/redact.txt")
-        print("  (that file is never committed), or set HUB_REDACT_TERMS in the secrets store.")
+        print("  To also strip employer or client names: put one per line in ~/.godspeed/redact.txt")
+        print("  (that file is never committed), or set GODSPEED_REDACT_TERMS in the secrets store.")
     return 0
 
 
-def attach_answers(hub, answer_map, terms, dry):
+def attach_answers(godspeed, answer_map, terms, dry):
     """Write answers onto rows that are already archived and have none.
 
     ANY machine's monthly file may hold the row: prompts are deduplicated across the
@@ -788,7 +788,7 @@ def attach_answers(hub, answer_map, terms, dry):
     files are appended to by harvests and synced by git, and a half-written monthly
     file would be seen by both."""
     updated = 0
-    for f in sorted(glob.glob(os.path.join(archive_dir(hub), "*.jsonl"))):
+    for f in sorted(glob.glob(os.path.join(archive_dir(godspeed), "*.jsonl"))):
         out, file_changed = [], False
         try:
             src = io.open(f, encoding="utf-8", errors="replace")
@@ -820,7 +820,7 @@ def attach_answers(hub, answer_map, terms, dry):
     return updated
 
 
-def cmd_backfill(hub, dry):
+def cmd_backfill(godspeed, dry):
     """Attach answers to prompts archived before answers existed.
 
     The harvest has kept each prompt's answer only since the feature shipped; every
@@ -831,32 +831,32 @@ def cmd_backfill(hub, dry):
     nothing: a row that has its answer is never a candidate again."""
     lock = None
     if not dry:
-        lock = lock_or_exit(hub)
+        lock = lock_or_exit(godspeed)
         if lock is None:
             print("another harvest is already running on this machine, so this one did nothing")
             return 0
     try:
         terms = redact_terms()
         wanted, total = set(), 0
-        for r in all_rows(hub):
+        for r in all_rows(godspeed):
             total += 1
             if not r.get("answer"):
                 wanted.add(r.get("id"))
         answers = {}
-        for rec in harvest(hub):
+        for rec in harvest(godspeed):
             rid = hashlib.sha256(("%s|%s" % (rec["tool"], rec["text"])).encode("utf-8")).hexdigest()[:16]
             if rid not in wanted:
                 continue
             ans = join_answer(rec.get("answers") or [])
             if ans and len(ans) > len(answers.get(rid, "")):
                 answers[rid] = ans
-        updated = attach_answers(hub, answers, terms, dry)
+        updated = attach_answers(godspeed, answers, terms, dry)
         print("%s answers onto %d of %d answer-less archived prompts (%d archived in all)"
               % ("would write" if dry else "wrote", updated, len(wanted), total))
         left = len(wanted) - updated
         if left:
             print("  %d still have no answer here: the transcript is gone, or lives on "
-                  "another machine - run `hub prompts backfill` there too" % left)
+                  "another machine - run `godspeed prompts backfill` there too" % left)
         if updated and not dry:
             print("Commit prompts/archive/ so every machine gets the answers.")
         return 0
@@ -868,12 +868,12 @@ def cmd_backfill(hub, dry):
                 pass
 
 
-def cmd_rescrub(hub, dry):
+def cmd_rescrub(godspeed, dry):
     """Run today's scrubber over what is ALREADY in the archive.
 
     WHY THIS EXISTS. The scrubber only ever ran at the moment a prompt was written, so the
     name list protected the future and nothing else. The day you add your employer to
-    ~/.hub/redact.txt, every prompt already in the repository still carries it. That is the
+    ~/.godspeed/redact.txt, every prompt already in the repository still carries it. That is the
     wrong way round: the list is exactly the thing you discover you needed AFTER the fact.
 
     A row that is now clean is rewritten. A row that now looks like a credential is dropped
@@ -882,10 +882,10 @@ def cmd_rescrub(hub, dry):
     terms = redact_terms()
     if not terms:
         print("no name list found, so a rescrub would only redo the key-shaped patterns.")
-        print("Put one name per line in %s (never committed), or set HUB_REDACT_TERMS."
-              % os.path.join(home_dir(), ".hub", "redact.txt"))
+        print("Put one name per line in %s (never committed), or set GODSPEED_REDACT_TERMS."
+              % os.path.join(home_dir(), ".godspeed", "redact.txt"))
     changed = dropped = total = 0
-    for f in sorted(glob.glob(os.path.join(archive_dir(hub), "*.jsonl"))):
+    for f in sorted(glob.glob(os.path.join(archive_dir(godspeed), "*.jsonl"))):
         out, file_changed = [], False
         for line in io.open(f, encoding="utf-8", errors="replace"):
             line = line.rstrip("\n")
@@ -929,7 +929,7 @@ def cmd_rescrub(hub, dry):
     return 0
 
 
-def cmd_sources(hub, machine):
+def cmd_sources(godspeed, machine):
     """Every place on THIS machine that you type to an AI, and whether it reaches the drawer.
 
     WHY THIS COMMAND EXISTS. The guard we already had counts prompts per MACHINE, and it was
@@ -945,9 +945,9 @@ def cmd_sources(hub, machine):
 
     Exit 0 = every source this machine has is represented, 1 = at least one is not.
     """
-    seen = load_seen(hub)
+    seen = load_seen(godspeed)
     have, total, newest = {}, {}, {}
-    for rec in harvest(hub):
+    for rec in harvest(godspeed):
         key = (rec["tool"], rec["project"] if rec["tool"] in ("telegram", "hermes") else "")
         rid = hashlib.sha256(("%s|%s" % (rec["tool"], rec["text"])).encode("utf-8")).hexdigest()[:16]
         total[key] = total.get(key, 0) + 1
@@ -983,13 +983,13 @@ def cmd_sources(hub, machine):
     for name, n in leaks:
         print("PROMPT SOURCE LOST: %d prompt%s typed into '%s' on this machine, and not one of "
               "them is in the archive. Everything you say there is being thrown away. Run "
-              "`hub prompts archive` here and read what it says."
+              "`godspeed prompts archive` here and read what it says."
               % (n, "" if n == 1 else "s", name))
     return 1 if leaks else 0
 
 
-def all_rows(hub):
-    for f in sorted(glob.glob(os.path.join(archive_dir(hub), "*.jsonl"))):
+def all_rows(godspeed):
+    for f in sorted(glob.glob(os.path.join(archive_dir(godspeed), "*.jsonl"))):
         try:
             for line in io.open(f, encoding="utf-8", errors="replace"):
                 try:
@@ -1000,12 +1000,12 @@ def all_rows(hub):
             continue
 
 
-def cmd_search(hub, terms, limit):
+def cmd_search(godspeed, terms, limit):
     if not terms:
-        sys.stderr.write("usage: hub prompts search <term> [<term>...]\n"); return 1
+        sys.stderr.write("usage: godspeed prompts search <term> [<term>...]\n"); return 1
     low = [t.lower() for t in terms]
     hits, total = [], 0
-    for r in all_rows(hub):
+    for r in all_rows(godspeed):
         total += 1
         hay = (r.get("text", "") + "\n" + r.get("answer", "")).lower()
         n = sum(1 for x in low if x in hay)
@@ -1013,7 +1013,7 @@ def cmd_search(hub, terms, limit):
             hits.append((n, hay.count(low[0]), r))
 
     lib = []
-    for f in library_files(hub):
+    for f in library_files(godspeed):
         body = io.open(f, encoding="utf-8", errors="replace").read()
         if all(x in body.lower() for x in low):
             lib.append((os.path.basename(f)[:-3], body))
@@ -1021,7 +1021,7 @@ def cmd_search(hub, terms, limit):
     if not hits and not lib:
         print("nothing you have typed to any AI matches %s." % " + ".join(terms))
         print("That is a checked absence, not an error. The archive covers what has been")
-        print("harvested so far: run `hub prompts archive` on a machine to add its history.")
+        print("harvested so far: run `godspeed prompts archive` on a machine to add its history.")
         return 0
 
     if lib:
@@ -1029,7 +1029,7 @@ def cmd_search(hub, terms, limit):
         for name, body in lib[:limit]:
             purpose = re.search(r"^purpose:\s*\"?(.+?)\"?$", body, re.M)
             print("  %s%s" % (name, " - " + purpose.group(1) if purpose else ""))
-            print("     read it: hub prompts get %s" % name)
+            print("     read it: godspeed prompts get %s" % name)
         print("")
 
     hits.sort(key=lambda h: (-h[0], -h[1], h[2].get("at", "")))
@@ -1059,14 +1059,14 @@ def cmd_search(hub, terms, limit):
     return 0
 
 
-def cmd_get(hub, args):
+def cmd_get(godspeed, args):
     if not args:
-        sys.stderr.write("usage: hub prompts get <name>\n"); return 1
+        sys.stderr.write("usage: godspeed prompts get <name>\n"); return 1
     want = args[0].lower().removesuffix(".md")
-    for f in library_files(hub):
+    for f in library_files(godspeed):
         if os.path.basename(f)[:-3].lower() == want:
             sys.stdout.write(io.open(f, encoding="utf-8").read()); return 0
-    part = [f for f in library_files(hub) if want in os.path.basename(f).lower()]
+    part = [f for f in library_files(godspeed) if want in os.path.basename(f).lower()]
     if len(part) == 1:
         sys.stdout.write(io.open(part[0], encoding="utf-8").read()); return 0
     if part:
@@ -1074,19 +1074,19 @@ def cmd_get(hub, args):
         for f in part:
             print("  %s" % os.path.basename(f)[:-3])
         return 1
-    print("no saved prompt called '%s'. Try: hub prompts search %s" % (args[0], args[0]))
+    print("no saved prompt called '%s'. Try: godspeed prompts search %s" % (args[0], args[0]))
     return 1
 
 
-def cmd_stats(hub):
+def cmd_stats(godspeed):
     """What is in the archive, and WHICH MACHINE STOPPED SENDING.
 
     The count alone is what let this run for a month with only the work PC in it: 1,122
     prompts looks healthy until you notice every one is from the same computer. So the
     newest prompt per source is printed beside the count. A source whose newest prompt is
-    weeks old is a harvest that has quietly stopped, and hub-selftest reads exactly this.
+    weeks old is a harvest that has quietly stopped, and mc-selftest reads exactly this.
     """
-    rows = list(all_rows(hub))
+    rows = list(all_rows(godspeed))
     by, last = {}, {}
     for r in rows:
         k = (r.get("machine", "?"), r.get("tool", "?"))
@@ -1103,7 +1103,7 @@ def cmd_stats(hub):
     for k, n in sorted(by.items(), key=lambda kv: -kv[1]):
         print("  %-14s %-12s %8d  %s" % (k[0], k[1], n, last.get(k) or "undated"))
     print("machines           %d" % len(set(m for m, _t in by)))
-    print("saved prompts      %d  (prompts/library/)" % len(library_files(hub)))
+    print("saved prompts      %d  (prompts/library/)" % len(library_files(godspeed)))
     dates = sorted(r.get("at", "")[:10] for r in rows if r.get("at"))
     if dates:
         print("covers             %s to %s" % (dates[0], dates[-1]))
@@ -1111,12 +1111,12 @@ def cmd_stats(hub):
 
 
 def main(argv):
-    args, hub_arg, dry, since, limit = [], None, False, None, 12
+    args, godspeed_arg, dry, since, limit = [], None, False, None, 12
     i = 1
     while i < len(argv):
         a = argv[i]
-        if a == "--hub" and i + 1 < len(argv):
-            hub_arg = argv[i + 1]; i += 2; continue
+        if a == "--godspeed" and i + 1 < len(argv):
+            godspeed_arg = argv[i + 1]; i += 2; continue
         if a == "--since" and i + 1 < len(argv):
             since = argv[i + 1]; i += 2; continue
         if a == "--limit" and i + 1 < len(argv):
@@ -1129,25 +1129,25 @@ def main(argv):
             dry = True; i += 1; continue
         args.append(a); i += 1
 
-    hub = hub_root(hub_arg)
-    machine = re.sub(r"[^a-z0-9]+", "-", (os.environ.get("HUB_MACHINE") or socket.gethostname()).lower()).strip("-")
+    godspeed = godspeed_root(godspeed_arg)
+    machine = re.sub(r"[^a-z0-9]+", "-", (os.environ.get("GODSPEED_MACHINE") or socket.gethostname()).lower()).strip("-")
     cmd = args[0] if args else "archive"
     rest = args[1:]
     if cmd in ("archive", "harvest"):
-        return cmd_harvest(hub, dry, since, machine)
+        return cmd_harvest(godspeed, dry, since, machine)
     if cmd == "search":
-        return cmd_search(hub, rest, limit)
+        return cmd_search(godspeed, rest, limit)
     if cmd == "get":
-        return cmd_get(hub, rest)
+        return cmd_get(godspeed, rest)
     if cmd == "stats":
-        return cmd_stats(hub)
+        return cmd_stats(godspeed)
     if cmd == "sources":
-        return cmd_sources(hub, machine)
+        return cmd_sources(godspeed, machine)
     if cmd == "rescrub":
-        return cmd_rescrub(hub, dry)
+        return cmd_rescrub(godspeed, dry)
     if cmd == "backfill":
-        return cmd_backfill(hub, dry)
-    sys.stderr.write("usage: hub prompts archive | search <term> | get <name> | stats | sources | rescrub | backfill\n")
+        return cmd_backfill(godspeed, dry)
+    sys.stderr.write("usage: godspeed prompts archive | search <term> | get <name> | stats | sources | rescrub | backfill\n")
     return 1
 
 

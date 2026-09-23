@@ -4,13 +4,13 @@ A useful note in Menerio, the optional online memory service, should be availabl
 
 For example, you might ask for the printing quote you saved in Menerio. The assistant needs permission to search that account and retrieve the note. The connection uses MCP, a standard for giving an AI app tools supplied by another service. You can ask the assistant to configure it. Each app needs its own connection, and retrieved text may enter that app's conversation records.
 
-This connection needs your own Menerio account and a note you can recognise. Before connecting, sign in and save one harmless note, then find it again in Menerio itself. You can use an account you already have; the local hub needs no notebook connection unless you choose this addition.
+This connection needs your own Menerio account and a note you can recognise. Before connecting, sign in and save one harmless note, then find it again in Menerio itself. You can use an account you already have; the local mission control needs no notebook connection unless you choose this addition.
 
 ## Create a key with limited access
 
 In Menerio, open **Settings**, then **API Keys**. Name the key for the tool or computer that will use it. Review the available data categories and enable only what that job needs.
 
-Put the generated key in your password manager. It works like a password, so it belongs outside chats, screenshots and ordinary hub files. Some key pages show the value only once; if this page asks you to copy it now, save it before leaving.
+Put the generated key in your password manager. It works like a password, so it belongs outside chats, screenshots and ordinary mission control files. Some key pages show the value only once; if this page asks you to copy it now, save it before leaving.
 
 I recommend a separate key for each app. It takes a little more setup, but you can stop one connection without disturbing the others. A shared key is quicker to arrange; cancelling it also stops every connection using it.
 
@@ -32,9 +32,9 @@ Prepare a secure local token-entry step for me. Do not ask me to paste the key i
 After I enter it, list and test the connection. Begin with tools that only read. Show whether the server returned tools and report any error. Do not expand permissions to repair a failed test.
 ```
 
-*[Copy prompt](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-28-text-2-20260913)*
+*[Copy prompt](https://srv1328602.hstgr.cloud/godspeed/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-28-text-2-20260913)*
 
-`notebook` is the saved connection name; the service is Menerio. In the tested Hermes setup, the interactive `hermes mcp add` command offered a dedicated authentication prompt and saved the token outside the hub in Hermes' own `.env` file. That file also needs protection.
+`notebook` is the saved connection name; the service is Menerio. In the tested Hermes setup, the interactive `hermes mcp add` command offered a dedicated authentication prompt and saved the token outside Mission Control in Hermes' own `.env` file. That file also needs protection.
 
 A successful connection test tells you the server returned tools. My earlier run listed 58; your count can differ. It does not yet tell you that the assistant will choose those tools for your question. We will check that with a note you know is there.
 
@@ -45,12 +45,12 @@ Claude Code is another AI assistant that can work with files on your computer. I
 Ask the assistant to prepare the configuration and input method first:
 
 ```
-Configure a notebook connection for Claude Code in this hub. Inspect the existing .mcp.json and current client help before editing. Keep unrelated connections. Use https://mcp.menerio.com and an Authorization header that refers to ${MENERIO_API_KEY}, never the literal credential.
+Configure a notebook connection for Claude Code in this mission control. Inspect the existing .mcp.json and current client help before editing. Keep unrelated connections. Use https://mcp.menerio.com and an Authorization header that refers to ${MENERIO_API_KEY}, never the literal credential.
 
 Show me a masked local input method for this operating system, so I can load the key without putting it in chat or shell history. Launch the client from the environment containing the key and test a read-only connection. Report success or the actual error without printing values. Do not broaden key permissions or enable writes to repair a read failure.
 ```
 
-*[Copy prompt](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-28-text-3-20260913)*
+*[Copy prompt](https://srv1328602.hstgr.cloud/godspeed/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-28-text-3-20260913)*
 
 In the setup checked here, Hermes uses its own connection settings rather than the project's `.mcp.json`. Each computer also needs the real secret available locally; the placeholder in the configuration supplies its name.
 
@@ -76,21 +76,21 @@ Earlier attempts had searched Hermes' local memory or other folders. I had suppl
 
 ## Optional: copy selected records
 
-The companion installer can set up copying between the hub and Menerio after you choose the connection. Before turning it on, look through what it proposes to copy and where it plans to keep the key.
+The companion installer can set up copying between Mission Control and Menerio after you choose the connection. Before turning it on, look through what it proposes to copy and where it plans to keep the key.
 
 | Direction | What the inspected setup copies |
 |---|---|
-| Hub to Menerio | Observations, skills and individual decisions. |
+| Mission Control to Menerio | Observations, skills and individual decisions. |
 | Excluded from that upload | `profile/` and `AGENTS.md`. |
-| Menerio to hub | Supported people, events and claims into `world/`, marked with their source. |
+| Menerio to Mission Control | Supported people, events and claims into `world/`, marked with their source. |
 
 
 
 The inspected installer can arrange copying in two ways: after the assistant saves a version in Git, and during an hourly check. The first uses a **post-commit hook**, an action triggered by that saved version. An ordinary editor save does not trigger it. Have the assistant check which copying triggers were installed; an existing custom hook may have been preserved instead.
 
-Ask the assistant to run the installed copying helper, `hub-notebook-sync --verbose`, and explain what went out, what came back and what failed. The log is at `~/.hub/notebook-sync.log`; `~` means your user folder. A second run with nothing changed lets you check that the same material isn't uploaded twice.
+Ask the assistant to run the installed copying helper, `mc-notebook-sync --verbose`, and explain what went out, what came back and what failed. The log is at `~/.godspeed/notebook-sync.log`; `~` means your user folder. A second run with nothing changed lets you check that the same material isn't uploaded twice.
 
-A file marked `origin: menerio` came from Menerio. A later sync may replace it, so make corrections in Menerio itself. Files marked `origin: hub` were written locally by you or your assistant. The copying tool preserves those files. They work independently of the Menerio connection.
+A file marked `origin: menerio` came from Menerio. A later sync may replace it, so make corrections in Menerio itself. Files marked `origin: godspeed` were written locally by you or your assistant. The copying tool preserves those files. They work independently of the Menerio connection.
 
 It also checks for a response that looks like an unexpected mass removal. That's a useful safeguard, and a reason to keep the recovery copies you arranged earlier.
 

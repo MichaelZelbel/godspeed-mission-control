@@ -6,7 +6,7 @@ I once wanted a book cover while travelling. I had already worked out a useful i
 
 ## Know which prompt folder you mean
 
-The hub has two places for different kinds of prompt material. In `prompts/library/`, you keep instructions you deliberately want to reuse, such as an image prompt or a request for a summary of your background.
+Mission Control has two places for different kinds of prompt material. In `prompts/library/`, you keep instructions you deliberately want to reuse, such as an image prompt or a request for a summary of your background.
 
 In `prompts/archive/`, you may have conversation text from supported local tools, **if you enabled collection**. The setup choices taught here leave it off. An installer using automatic source selection may enable tools it finds. Even when enabled, the archive won't contain every conversation you've had with an AI service.
 
@@ -22,7 +22,7 @@ Start your library with the few instructions you know you'll use again. Conversa
 
 ## Choose what may go online
 
-You can keep prompt files in your hub and save old versions in its Git history. Choose a prompt manager when browser access, comparisons or shareable links would make those files more useful.
+You can keep prompt files in your mission control and save old versions in its Git history. Choose a prompt manager when browser access, comparisons or shareable links would make those files more useful.
 
 The example uses [Querino](https://querino.ai), which I built. Read its current plan and controls before deciding to sign up. You don't need a particular credit offer or edit price for this exercise.
 
@@ -56,7 +56,7 @@ Try the copy button yourself. It should give a reader the prompt you approved. A
 
 Download the revised Markdown and compare it with `prompts/library/`. Keep the old version in history and update the local original you've chosen. With two copies, decide where changes begin. That saves you wondering later which “final” version you meant.
 
-[View the illustrated reading edition](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/Teach-It-Once.pdf)
+[View the illustrated reading edition](https://srv1328602.hstgr.cloud/godspeed/8d0da988c1c44fbaa71bdfef1d4144dc/Teach-It-Once.pdf)
 
 Open the download and check that the complete prompt is there, ready to use. That tests whether this piece of work can leave the service with you. Exporting an entire account needs its own check.
 

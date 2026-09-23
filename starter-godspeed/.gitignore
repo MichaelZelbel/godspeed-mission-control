@@ -6,7 +6,7 @@ node_modules/
 __pycache__/
 *.log
 
-# Dev projects: each is its own GitHub repo, excluded from the hub repo.
+# Dev projects: each is its own GitHub repo, excluded from Mission Control repo.
 # The folder + README stay tracked so the convention persists; contents don't.
 dev/*
 !dev/README.md

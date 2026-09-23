@@ -18,7 +18,7 @@
  *   yellow  the second half
  *   green   the first half
  *
- * THE PART THAT MAKES IT NOT A TO-DO LIST. Every obligation says how your hub could tell it was
+ * THE PART THAT MAKES IT NOT A TO-DO LIST. Every obligation says how your mission control could tell it was
  * done WITHOUT asking you. The ones that can, close themselves the moment you act. The ones that
  * cannot say so and wait for your word, which is most of them, and that is fine. Asking the
  * question is what matters.
@@ -26,15 +26,15 @@
  * NO DATE, NOT ELIGIBLE. This refuses anything without both dates, on purpose. Let undated wishes
  * in and within a month it is a to-do app you do not maintain.
  *
- *   hub-due                    everything, loudest first
- *   hub-due today              at most three, for your morning brief to read
- *   hub-due add <name> --title "..." --from YYYY-MM-DD --to YYYY-MM-DD
+ *   mc-due                    everything, loudest first
+ *   mc-due today              at most three, for your morning brief to read
+ *   mc-due add <name> --title "..." --from YYYY-MM-DD --to YYYY-MM-DD
  *          --done-when "..." --cost "..." [--repeats monthly|yearly|"every N days"]
  *          [--self-check none|file-newer] [--self-check-arg PATH] [--link URL]
- *   hub-due done <name>        you did it
- *   hub-due drop <name> --yes  delete it, history and all
- *   hub-due check              run the self checks, close what is provably done
- *   hub-due --hub PATH         work on a hub somewhere else
+ *   mc-due done <name>        you did it
+ *   mc-due drop <name> --yes  delete it, history and all
+ *   mc-due check              run the self checks, close what is provably done
+ *   mc-due --godspeed PATH         work on a mission control somewhere else
  *
  * It reads secrets/expires.txt too, if you have one, so the dates your keys die are obligations
  * like everything else and you never write a date in two places.
@@ -47,54 +47,54 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 
-// ---------------------------------------------------------------- where is the hub
+// ---------------------------------------------------------------- where is Mission Control
 function readDeviceEnv(name) {
-  const f = path.join(os.homedir(), ".hub", "device.env");
+  const f = path.join(os.homedir(), ".godspeed", "device.env");
   try {
     for (const line of fs.readFileSync(f, "utf8").split(/\r?\n/)) {
       const m = line.match(new RegExp("^\\s*" + name + "=(.*)$"));
       if (m) return m[1].trim();
     }
-  } catch (e) { /* no device.env is normal on a hub somebody made by hand */ }
+  } catch (e) { /* no device.env is normal on a mission control somebody made by hand */ }
   return "";
 }
 
-// --hub and its value are pulled OUT of the list before anything else looks at it. Left in, the
-// very first thing a person types (hub-due --hub /somewhere check) reads "--hub" as the command
+// --godspeed and its value are pulled OUT of the list before anything else looks at it. Left in, the
+// very first thing a person types (mc-due --godspeed /somewhere check) reads "--godspeed" as the command
 // and quietly runs the list instead, which looks like it worked.
 const raw = process.argv.slice(2);
 const args = [];
-let hub = "";
+let godspeed = "";
 for (let i = 0; i < raw.length; i++) {
-  if (raw[i] === "--hub") { hub = raw[i + 1] || ""; i += 1; continue; }
+  if (raw[i] === "--godspeed") { godspeed = raw[i + 1] || ""; i += 1; continue; }
   if (raw[i] === "-h" || raw[i] === "--help") { help(); process.exit(0); }
   args.push(raw[i]);
 }
-if (!hub) hub = readDeviceEnv("HUB_DIR");
-if (!hub) hub = process.env.HUB_DIR || "";
-if (!hub) {
+if (!godspeed) godspeed = readDeviceEnv("GODSPEED_DIR");
+if (!godspeed) godspeed = process.env.GODSPEED_DIR || "";
+if (!godspeed) {
   // Walk up from here. Somebody sitting in their own folder should not have to say where it is.
   let d = process.cwd();
   for (let i = 0; i < 6; i++) {
-    if (fs.existsSync(path.join(d, "AGENTS.md")) || fs.existsSync(path.join(d, "profile"))) { hub = d; break; }
+    if (fs.existsSync(path.join(d, "AGENTS.md")) || fs.existsSync(path.join(d, "profile"))) { godspeed = d; break; }
     const up = path.dirname(d);
     if (up === d) break;
     d = up;
   }
 }
-if (!hub || !fs.existsSync(hub)) {
-  console.log("I could not find your hub folder.");
-  console.log("Run this from inside it, or say where it is:  hub-due --hub /path/to/your/hub");
+if (!godspeed || !fs.existsSync(godspeed)) {
+  console.log("I could not find your mission control folder.");
+  console.log("Run this from inside it, or say where it is:  mc-due --godspeed /path/to/your/godspeed");
   process.exit(1);
 }
-const DUE = path.join(hub, "due");
-const EXPIRES = path.join(hub, "secrets", "expires.txt");
+const DUE = path.join(godspeed, "due");
+const EXPIRES = path.join(godspeed, "secrets", "expires.txt");
 
 // ---------------------------------------------------------------- dates
 // Everything is YYYY-MM-DD and UTC. A date that means two different days on two of your computers
 // is how a monthly job runs twice, or never.
 function today() {
-  const o = (process.env.HUB_TODAY || "").trim();
+  const o = (process.env.GODSPEED_TODAY || "").trim();
   if (/^\d{4}-\d{2}-\d{2}$/.test(o)) return o;
   return new Date().toISOString().slice(0, 10);
 }
@@ -403,7 +403,7 @@ function sentence(r, day) {
 }
 
 // ---------------------------------------------------------------- the self checks
-// How your hub could tell this was done WITHOUT asking you. Only one is possible without help from
+// How your mission control could tell this was done WITHOUT asking you. Only one is possible without help from
 // somebody else's website, and it is the cheapest thing there is: did a file change inside the
 // window. `none` is the honest answer for most obligations and it is not second best.
 function selfCheck(o, strip) {
@@ -411,7 +411,7 @@ function selfCheck(o, strip) {
   if (kind === "file-newer") {
     const rel = (o.head["SELF-CHECK-ARG"] || "").trim();
     if (!rel) return { error: "it says to look at a file but does not say which one" };
-    const p = path.isAbsolute(rel) ? rel : path.join(hub, rel);
+    const p = path.isAbsolute(rel) ? rel : path.join(godspeed, rel);
     let st;
     try { st = fs.statSync(p); } catch (e) { return { done: false }; }
     const when = new Date(st.mtimeMs).toISOString().slice(0, 10);
@@ -430,18 +430,18 @@ const has = (name) => args.indexOf(name) >= 0;
 const CAP = 3;
 
 function help() {
-  console.log(`hub-due - the things with a last day, and how loud to be about them
+  console.log(`mc-due - the things with a last day, and how loud to be about them
 
-  hub-due                         everything, loudest first
-  hub-due today                   at most three, for your morning brief
-  hub-due add <name> --title "..." --from YYYY-MM-DD --to YYYY-MM-DD
+  mc-due                         everything, loudest first
+  mc-due today                   at most three, for your morning brief
+  mc-due add <name> --title "..." --from YYYY-MM-DD --to YYYY-MM-DD
           --done-when "..." --cost "..."
           [--repeats monthly|yearly|"every N days"]
           [--self-check none|file-newer] [--self-check-arg PATH] [--link URL]
-  hub-due done <name>             you did it
-  hub-due drop <name> --yes       delete it, history and all
-  hub-due check                   run the self checks, close what is provably done
-  hub-due --hub PATH              a hub somewhere else
+  mc-due done <name>             you did it
+  mc-due drop <name> --yes       delete it, history and all
+  mc-due check                   run the self checks, close what is provably done
+  mc-due --godspeed PATH              a mission control somewhere else
 
 How loud it gets comes from how much of the window is left, and from nothing else: quiet
 through the first half, then a quarter, then a tenth, then every day. One rule, whether the
@@ -452,7 +452,7 @@ function cmdList(day, capped) {
   const rows = load(day);
   if (!rows.length) {
     console.log("Nothing with a last day yet.");
-    console.log("Add one:  hub-due add tax --title \"My tax return\" --from 2027-01-01 --to 2027-07-31 \\");
+    console.log("Add one:  mc-due add tax --title \"My tax return\" --from 2027-01-01 --to 2027-07-31 \\");
     console.log("            --done-when \"it is filed\" --cost \"a late fee, and they estimate my income themselves\"");
     return 0;
   }
@@ -497,7 +497,7 @@ function cmdList(day, capped) {
     if (!capped) {
       const c = (r.o.head["SELF-CHECK"] || "none").toLowerCase();
       console.log("               " + (c === "none"
-        ? "only your word closes this one:  hub-due done " + r.slug
+        ? "only your word closes this one:  mc-due done " + r.slug
         : "closes itself when " + (r.o.head["SELF-CHECK"] || "")));
     }
   }
@@ -506,7 +506,7 @@ function cmdList(day, capped) {
 
 function cmdAdd(day) {
   const slug = slugify(args[1] || "");
-  if (!slug) { console.log("Give it a short name:  hub-due add tax --title ..."); return 1; }
+  if (!slug) { console.log("Give it a short name:  mc-due add tax --title ..."); return 1; }
   if (fs.existsSync(filePath(slug))) { console.log("You already have one called " + slug + "."); return 1; }
   const from = argOf("--from", ""), to = argOf("--to", "");
   if (!isDate(from) || !isDate(to)) {
@@ -520,7 +520,7 @@ function cmdAdd(day) {
   const doneWhen = argOf("--done-when", ""), cost = argOf("--cost", "");
   if (!doneWhen || !cost) {
     console.log("It also needs --done-when (what is true when this is finished) and --cost (what it costs you if it slips).");
-    console.log("Those two are what let your hub write you a line worth reading instead of a nag.");
+    console.log("Those two are what let your mission control write you a line worth reading instead of a nag.");
     return 1;
   }
   const repeats = argOf("--repeats", "no");
@@ -543,17 +543,17 @@ function cmdAdd(day) {
     ? "Made " + slug + ". You cannot start it until " + from + ", and the last day is " + to + "."
     : "Made " + slug + ". Window " + from + " to " + to + ", and today there is " + WORDS[b0].toLowerCase() + ".");
   console.log(sc === "none"
-    ? "It cannot tell by itself that you did it, so it waits for your word:  hub-due done " + slug
+    ? "It cannot tell by itself that you did it, so it waits for your word:  mc-due done " + slug
     : "It closes itself when " + argOf("--self-check-arg", "that file") + " changes inside the window.");
   return 0;
 }
 
 function cmdDone(day) {
   const slug = args[1];
-  if (!slug) { console.log("Which one?  hub-due done <name>"); return 1; }
+  if (!slug) { console.log("Which one?  mc-due done <name>"); return 1; }
   roll(day);
   const o = parseFile(slug);
-  if (!o) { console.log("You have nothing called " + slug + ". Type hub-due to see the list."); return 1; }
+  if (!o) { console.log("You have nothing called " + slug + ". Type mc-due to see the list."); return 1; }
   const cur = currentWindow(o, day);
   if (!cur) { console.log("Nothing was open on " + slug + "."); return 0; }
   cur.strip.state = "done"; cur.strip.closed = day;
@@ -566,7 +566,7 @@ function cmdDone(day) {
 
 function cmdDrop() {
   const slug = args[1];
-  if (!slug) { console.log("Which one?  hub-due drop <name> --yes"); return 1; }
+  if (!slug) { console.log("Which one?  mc-due drop <name> --yes"); return 1; }
   if (!has("--yes")) {
     console.log("Dropping deletes it and everything it remembers. Add --yes if that is what you mean.");
     return 1;

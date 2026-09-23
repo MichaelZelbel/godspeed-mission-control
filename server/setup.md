@@ -1,8 +1,8 @@
-# Chapter 30: Install Your Hub on a Linux Server
+# Chapter 30: Install Your Mission Control on a Linux Server
 
-Closing the laptop is a pleasant way to end the day. Unfortunately, a job scheduled on it still needs the computer awake. A Linux server gives that job another place to run and lets you reach the hub from your phone. I recommend adding one when you have useful work that should continue after you close the lid. While you're still testing those jobs, keep using the laptop.
+Closing the laptop is a pleasant way to end the day. Unfortunately, a job scheduled on it still needs the computer awake. A Linux server gives that job another place to run and lets you reach Mission Control from your phone. I recommend adding one when you have useful work that should continue after you close the lid. While you're still testing those jobs, keep using the laptop.
 
-A rented server is another computer in a data centre, with its own copy of your hub. The company hosting it looks after the physical machine; you still have the assistant's setup to look after. The server's model sign-in and schedule belong to that computer, even when you bring the hub files from your existing repository.
+A rented server is another computer in a data centre, with its own copy of your mission control. The company hosting it looks after the physical machine; you still have the assistant's setup to look after. The server's model sign-in and schedule belong to that computer, even when you bring Mission Control files from your existing repository.
 
 ## Check the requirements before renting
 
@@ -24,7 +24,7 @@ curl -fsSL https://raw.githubusercontent.com/MichaelZelbel/teach-it-once-kit/mai
 
 That address retrieves the current public installer. Save its completion report. The installer pins a version of its shared setup code, but also downloads other current components; this is not a promise that every future installation will be byte-for-byte identical.
 
-The installer creates a limited user called `ai`, installs Hermes and prepares `/home/ai/hub`. If a step fails, give the error to your existing assistant and ask it to diagnose and repair that step on the server before continuing. Keep credentials out of the copied error text.
+The installer creates a limited user called `ai`, installs Hermes and prepares `/home/ai/godspeed`. If a step fails, give the error to your existing assistant and ask it to diagnose and repair that step on the server before continuing. Keep credentials out of the copied error text.
 
 ## Answer the connection prompts
 
@@ -34,30 +34,30 @@ The installer guides you through these choices:
 
 1. **Telegram:** create a bot through Telegram's BotFather with `/newbot`. Paste its token only into the dedicated installer prompt. Send your new bot a message so the installer can identify your user. Skip this if you do not want the phone route.
 2. **Model sign-in:** open the authentication page printed by Hermes, enter the temporary code and approve on your own account. Follow the code's displayed expiry; request a new code if it expires.
-3. **Hub folder:** use the verified repository address your existing assistant found for you, or choose a fresh hub. The resulting folder for this route is `/home/ai/hub`.
+3. **Godspeed folder:** use the verified repository address your existing assistant found for you, or choose a fresh mission control. The resulting folder for this route is `/home/ai/godspeed`.
 4. **Menerio:** this is the optional online memory service. Skip the connection unless you use it. Local files are enough for a brief or investigation.
-5. **GitHub:** use the displayed device sign-in to authorize the server. For a fresh hub, choose the private repository name and inspect the result before relying on it.
+5. **GitHub:** use the displayed device sign-in to authorize the server. For a fresh mission control, choose the private repository name and inspect the result before relying on it.
 6. **Morning brief:** leave scheduling off initially. Verify the skill, profile, time zone and delivery first.
 
-When I first built this setup by hand, there was no installer yet. My first working run sent the brief to my phone and pushed the files to GitHub. It also pushed the file holding my API key, which I had put inside the hub folder.
+When I first built this setup by hand, there was no installer yet. My first working run sent the brief to my phone and pushed the files to GitHub. It also pushed the file holding my API key, which I had put inside Mission Control folder.
 
 The repository was private, but I still had to rewrite its history and replace the key. Ten minutes of unpleasantness for one lazy file placement. I'd like that story to stay mine.
 
-Credentials must stay out of the tracked hub in plaintext. Check the installer's reported locations and which files entered the first upload. The current server script creates and pushes a private repository for a fresh hub; it does not pause for the book's separate file-by-file privacy review. Keep a first-server hub empty of personal material until that initial setup is checked. For an existing hub, review its files and earlier history before giving the server access.
+Credentials must stay out of the tracked mission control in plaintext. Check the installer's reported locations and which files entered the first upload. The current server script creates and pushes a private repository for a fresh mission control; it does not pause for the book's separate file-by-file privacy review. Keep a first-server mission control empty of personal material until that initial setup is checked. For an existing mission control, review its files and earlier history before giving the server access.
 
 ## Check the folder before asking personal questions
 
-If this server joined your existing hub, ask through your connected Telegram bot. If you skipped Telegram, start an interactive conversation in the server terminal with `su - ai`, then `cd /home/ai/hub`, then `hermes`. Use that conversation for the same request:
+If this server joined your existing mission control, ask through your connected Telegram bot. If you skipped Telegram, start an interactive conversation in the server terminal with `su - ai`, then `cd /home/ai/godspeed`, then `hermes`. Use that conversation for the same request:
 
 ```
-Read /home/ai/hub/AGENTS.md. Confirm the working folder. Name the profile files you can read and quote one harmless fact from the file I specify. Do not change anything or use memory from an earlier conversation.
+Read /home/ai/godspeed/AGENTS.md. Confirm the working folder. Name the profile files you can read and quote one harmless fact from the file I specify. Do not change anything or use memory from an earlier conversation.
 ```
 
-*[Copy prompt](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-30-text-2-20260913)*
+*[Copy prompt](https://srv1328602.hstgr.cloud/godspeed/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-30-text-2-20260913)*
 
-For a fresh hub, first ask the server assistant to download the [matching companion kit](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/Teach-It-Once-Companion.zip) and follow its `setup/match-edition.md` guide for `/home/ai/hub`. Ask it to preserve the server's paths and working connections. This brings the installed instructions into line with this edition before you add personal material.
+For a fresh mission control, first ask the server assistant to download the [matching companion kit](https://srv1328602.hstgr.cloud/godspeed/8d0da988c1c44fbaa71bdfef1d4144dc/Teach-It-Once-Companion.zip) and follow its `setup/match-edition.md` guide for `/home/ai/godspeed`. Ask it to preserve the server's paths and working connections. This brings the installed instructions into line with this edition before you add personal material.
 
-Then begin with a few reviewed lines about yourself, your work and your preferences. You can use the briefing you already saved or write those lines now. Paste only that reviewed text into your server conversation and ask the assistant to save it as `/home/ai/hub/what-my-ai-knew.md`. Then ask it to file the useful parts into the profile's about-me, people, projects and voice files, keeping the original and leaving unanswered questions in the inbox. Inspect the saved facts before asking personal questions.
+Then begin with a few reviewed lines about yourself, your work and your preferences. You can use the briefing you already saved or write those lines now. Paste only that reviewed text into your server conversation and ask the assistant to save it as `/home/ai/godspeed/what-my-ai-knew.md`. Then ask it to file the useful parts into the profile's about-me, people, projects and voice files, keeping the original and leaving unanswered questions in the inbox. Inspect the saved facts before asking personal questions.
 
 
 
@@ -70,7 +70,7 @@ Build and manually test the morning-brief skill in this server folder if it is n
 Then ask:
 
 ```
-Inspect this server's system time zone and Hermes scheduler configuration. Show the current local time and the next intended 07:00 run in my chosen named zone. Confirm /home/ai/hub is the working folder and skills/morning-brief/SKILL.md exists.
+Inspect this server's system time zone and Hermes scheduler configuration. Show the current local time and the next intended 07:00 run in my chosen named zone. Confirm /home/ai/godspeed is the working folder and skills/morning-brief/SKILL.md exists.
 
 Prepare one daily morning-brief schedule using that folder and zone. Confirm the laptop's version has been paused before enabling this one. Its prompt must read AGENTS.md and the skill. Preserve existing daily briefs. If an installer-created 06:00 job exists, edit or retire it rather than adding another.
 
@@ -79,7 +79,7 @@ Ask me to choose server-local results or delivery to my own connected Telegram c
 Show the saved job record, next run, output path, delivery setting and pause control. Do not claim scheduled delivery works based on an ordinary bot conversation.
 ```
 
-*[Copy prompt](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-30-text-3-20260913)*
+*[Copy prompt](https://srv1328602.hstgr.cloud/godspeed/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-30-text-3-20260913)*
 
 Have the assistant record the active schedule's location in `procedures.md`. Keep the skill on both machines if you like. Two versions of tomorrow's brief are unlikely to make tomorrow twice as helpful.
 
@@ -93,7 +93,7 @@ The basic service check can work without a model. The check that asks the model 
 
 These checks all run on the same server. If the server or its network goes down, they may be unable to look or send word. A monitor on another computer would be a separate addition.
 
-The `ai` user has fewer rights than root, but it can still change its own files and use the credentials it holds. Keep the rules requiring approval for spending, sending and destructive changes in the server hub's instructions too.
+The `ai` user has fewer rights than root, but it can still change its own files and use the credentials it holds. Keep the rules requiring approval for spending, sending and destructive changes in the server mission control's instructions too.
 
 ## Confirm what survives a restart
 

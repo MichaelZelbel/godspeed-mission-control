@@ -1,15 +1,15 @@
 #!/bin/sh
-# hub-notebook-env — print the credentials your hub folder carries, as shell exports.
+# mc-notebook-env — print the credentials your mission control folder carries, as shell exports.
 #
 # WHY THIS EXISTS. The file that tells your assistant where your notebook is (.mcp.json)
 # NAMES the credential rather than carrying it: it says ${MENERIO_API_KEY}. That is on
 # purpose, so the file itself holds no secret and is safe to keep in the folder and push.
 # Something then has to put the real value into this computer's environment, and this is
-# that something. It reads the locked store inside your hub with the small key on this
+# that something. It reads the locked store inside your mission control with the small key on this
 # computer, and prints nothing at all if there is no notebook here.
 #
 # It is wired into your shell start-up by the installer, so you never run it yourself.
-# By hand, if you want to see what it does:  eval "$(hub-notebook-env)"
+# By hand, if you want to see what it does:  eval "$(mc-notebook-env)"
 #
 # It prints NAMES and VALUES, so never paste its output anywhere.
 set -u
@@ -18,14 +18,14 @@ HOMEDIR="${HOME:-}"
 [ -n "$HOMEDIR" ] || HOMEDIR="$(getent passwd "$(id -u)" 2>/dev/null | cut -d: -f6)"
 [ -n "$HOMEDIR" ] || exit 0
 
-HUB="${1:-}"
-if [ -z "$HUB" ] && [ -r "$HOMEDIR/.hub/device.env" ]; then
-  HUB="$(sed -n 's/^[[:space:]]*HUB_DIR=//p' "$HOMEDIR/.hub/device.env" | head -1)"
+GODSPEED="${1:-}"
+if [ -z "$GODSPEED" ] && [ -r "$HOMEDIR/.godspeed/device.env" ]; then
+  GODSPEED="$(sed -n 's/^[[:space:]]*GODSPEED_DIR=//p' "$HOMEDIR/.godspeed/device.env" | head -1)"
 fi
-[ -n "$HUB" ] && [ -d "$HUB" ] || exit 0
+[ -n "$GODSPEED" ] && [ -d "$GODSPEED" ] || exit 0
 
-KEY="${HUB_AGE_KEY:-$HOMEDIR/.hub/age-key.txt}"
-STORE="$HUB/secrets/hub-secrets.env.age"
+KEY="${GODSPEED_AGE_KEY:-$HOMEDIR/.godspeed/age-key.txt}"
+STORE="$GODSPEED/secrets/mc-secrets.env.age"
 [ -r "$KEY" ] && [ -f "$STORE" ] || exit 0
 command -v age >/dev/null 2>&1 || exit 0
 

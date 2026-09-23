@@ -4,4 +4,4 @@ Unresolved questions, raw material you want left untouched and writing samples c
 
 When the user resolves a relevant uncertainty, finish filing it in that conversation. Preserve the original in `archives/filed-captures/` with a unique name, after checking the saved content. Leave writing samples, unresolved import questions and unrelated captures untouched. Ask about a doubt only when it changes the current work.
 
-A proposed behavior rule is not a profile fact. Keep it pending until confirmed, then use `rules/` and `hub-compile-rules` when that workflow is available. Chapter 8 explains saving during conversation. A configured weekly review can also handle remaining clear captures; it is not a prerequisite for using a new fact today.
+A proposed behavior rule is not a profile fact. Keep it pending until confirmed, then use `rules/` and `mc-compile-rules` when that workflow is available. Chapter 8 explains saving during conversation. A configured weekly review can also handle remaining clear captures; it is not a prerequisite for using a new fact today.

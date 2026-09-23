@@ -2,11 +2,11 @@
 
 Telegram is a good place to ask a quick question. A long result or a folder full of files deserves more room. This optional setup puts the server within reach of your desktop app, so you can read and work on the computer in front of you.
 
-The assistant and hub stay on the server; the desktop app gives you a way to reach them. A file on your screen can therefore belong to a computer elsewhere. Check the selected connection before editing, even when the window looks familiar.
+The assistant and Mission Control stay on the server; the desktop app gives you a way to reach them. A file on your screen can therefore belong to a computer elsewhere. Check the selected connection before editing, even when the window looks familiar.
 
 ## Add a private network connection
 
-You need an existing Linux server with Hermes installed for the `ai` account and your hub at `/home/ai/hub`. This chapter adds access to that working server; it does not install the assistant itself.
+You need an existing Linux server with Hermes installed for the `ai` account and your mission control at `/home/ai/godspeed`. This chapter adds access to that working server; it does not install the assistant itself.
 
 The companion setup uses Tailscale, which connects your computer and server over a private network. Before signing up, read [Tailscale's current setup guide](https://tailscale.com/docs/how-to/quickstart) and the plan offered to your account. Its access rules determine which of your connected devices can reach each other.
 
@@ -37,10 +37,10 @@ The tested interface called this **Connect to existing Hermes**. Enter the priva
 Confirm which connection is selected. Ask:
 
 ```
-Without changing files, show this session's working folder and read the heading of /home/ai/hub/AGENTS.md. List the next scheduled job on this server with its time zone. If this is a local connection, say so instead of searching for a similarly named folder.
+Without changing files, show this session's working folder and read the heading of /home/ai/godspeed/AGENTS.md. List the next scheduled job on this server with its time zone. If this is a local connection, say so instead of searching for a similarly named folder.
 ```
 
-*[Copy prompt](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-31-text-3-20260913)*
+*[Copy prompt](https://srv1328602.hstgr.cloud/godspeed/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-31-text-3-20260913)*
 
 Open a server result you recognise in the file browser. It is still on the server, but now you have the screen space to read it properly. This is the convenience we installed the connection for.
 

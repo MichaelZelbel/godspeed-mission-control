@@ -1,6 +1,6 @@
 # Chapter 20: Prepare a Job to Run on a Schedule
 
-So far, the assistant has waited for you to open your hub and ask. That's useful while you're teaching it. Once the job is familiar, though, remembering to ask can become another small task you carry around. A morning brief would be more welcome if it arrived before you remembered you needed it.
+So far, the assistant has waited for you to open your mission control and ask. That's useful while you're teaching it. Once the job is familiar, though, remembering to ask can become another small task you carry around. A morning brief would be more welcome if it arrived before you remembered you needed it.
 
 A schedule supplies that first nudge. The useful part is what waits for you afterwards: work you can read, sources you can check and choices you can make. We'll prepare the job around that result.
 
@@ -13,7 +13,7 @@ To get from an instruction to work waiting for you, put four things in place:
 3. **An output:** a new file in a folder you check, or a tested delivery channel.
 4. **A running computer:** Your assistant must be available there, with its files, model access and any required network connection.
 
-[View the illustrated reading edition](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/Teach-It-Once.pdf)
+[View the illustrated reading edition](https://srv1328602.hstgr.cloud/godspeed/8d0da988c1c44fbaa71bdfef1d4144dc/Teach-It-Once.pdf)
 
 Look for these details in the saved job when the assistant promises to check later. Its next run time and instructions show what has actually been arranged. Also choose an output folder you already open: work saved somewhere you never look becomes a diary the assistant keeps to itself.
 
@@ -31,7 +31,7 @@ Mark it ready or not ready. For each missing input, name exactly what is needed 
 Do not change files or create schedules.
 ```
 
-*[Copy prompt](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-21-box-1)*
+*[Copy prompt](https://srv1328602.hstgr.cloud/godspeed/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-21-box-1)*
 
 The email skill may write beautifully while still depending on you to supply the email. A meeting skill may need a name and a date. Put those inputs where the job can find them. Otherwise you've arranged an early start for an assistant with nothing to do.
 
@@ -69,8 +69,8 @@ Inspect the schedules you can actually reach. Update procedures.md with one bloc
 Mark planned jobs as not scheduled. Do not invent a job or a successful test from a conversation about one. Report any schedule you could not inspect.
 ```
 
-*[Copy prompt](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-21-box-2)*
+*[Copy prompt](https://srv1328602.hstgr.cloud/godspeed/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-21-box-2)*
 
 If the inspection finds an existing job, try its stop control while stopping is an exercise rather than an urgent search. If you have no jobs yet, keep the empty list; the first morning brief will give you one to record. Leave unfinished plans marked "not scheduled" until the schedule is saved. A record with an honest gap is more useful than one that makes your plans look complete.
 
-For a morning brief, use `brief/` in your hub as the output folder. Let the assistant create it and record the saved job. A local result is enough to begin; phone delivery is a separate connection to test when you need it.
+For a morning brief, use `brief/` in your mission control as the output folder. Let the assistant create it and record the saved job. A local result is enough to begin; phone delivery is a separate connection to test when you need it.

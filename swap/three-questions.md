@@ -1,4 +1,4 @@
-# Chapter 32: Try Your Hub With Another AI Assistant
+# Chapter 32: Try Your Mission Control With Another AI Assistant
 
 After putting this much care into your files, it's worth finding out how well they work with another assistant. Choose a job you know and let a second tool try it. You'll see which background and methods it can use immediately, and which parts of the setup still need your attention.
 
@@ -19,16 +19,16 @@ I used OpenCode, another assistant that works with local files, with a Moonshot 
 Ask your current assistant to prepare the second app:
 
 ```
-Help me test this hub with OpenCode. Read the current official installation, configuration and provider documentation. Inspect what is already installed before adding anything.
+Help me test this mission control with OpenCode. Read the current official installation, configuration and provider documentation. Inspect what is already installed before adding anything.
 
 Use a provider account and model I choose after seeing the current access requirements and cost. Do not sign me up, fund an account or copy a credential into chat.
 
 Install the supported version for this computer if needed. Preserve existing configuration and AGENTS.md. Set permission to ask before file edits and shell commands. Inspect combined project and user settings for other active connections; do not silently enable them.
 
-Prepare a secure local sign-in or masked token-entry step and open the assistant in this hub. Confirm the folder and configured model. Keep schedules unchanged.
+Prepare a secure local sign-in or masked token-entry step and open the assistant in this mission control. Confirm the folder and configured model. Keep schedules unchanged.
 ```
 
-*[Copy prompt](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-32-text-1-20260913)*
+*[Copy prompt](https://srv1328602.hstgr.cloud/godspeed/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-32-text-1-20260913)*
 
 The [OpenCode installation guide](https://opencode.ai/docs/) lists the supported routes, and its [configuration guide](https://opencode.ai/docs/config/) explains how project and user settings combine. The assistant can handle the installation and settings. You choose any paid access and complete the secure sign-in.
 
@@ -36,18 +36,18 @@ A configuration can name a credential without containing it. The running app sti
 
 ## Test the local files first
 
-Open the second assistant in your hub and ask:
+Open the second assistant in your mission control and ask:
 
 ```
 Whose folder is this, what are the house rules you must follow here, and which file would you check for what matters most right now? Answer from what is in the folder. Do not change anything. Name the files you actually read.
 ```
 
-*[Copy prompt](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-33-box-5)*
+*[Copy prompt](https://srv1328602.hstgr.cloud/godspeed/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-33-box-5)*
 
 In the 2 September 2026 test with fictional illustrator Sam's folder, the answer began:
 
 > **1. Whose folder is this**
-> Sam Okafor's, a freelance illustrator based in Bristol, UK, who draws for children's publishers and the occasional brand (from `profile/about-me.md`). This folder is Sam's "hub": the shared world of profile, rules, skills, procedures, and decisions that `AGENTS.md` says to read first every session.
+> Sam Okafor's, a freelance illustrator based in Bristol, UK, who draws for children's publishers and the occasional brand (from `profile/about-me.md`). This folder is Sam's "godspeed": the shared world of profile, rules, skills, procedures, and decisions that `AGENTS.md` says to read first every session.
 
 It also found Sam's priorities. That was a useful first result: the new assistant had read the files and used them in its answer. I still wanted to see it do a job. Describing the house rules correctly is promising, but it isn't much of a test of behaviour.
 
@@ -57,7 +57,7 @@ For the next question, choose one of your saved skills. If you installed the day
 Read skills/plan-my-day/SKILL.md. In three sentences, explain what it produces and the limits it follows. Do not execute the skill or change anything. End with exactly: Nothing modified.
 ```
 
-*[Copy prompt](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-33-box-6)*
+*[Copy prompt](https://srv1328602.hstgr.cloud/godspeed/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-33-box-6)*
 
 The original test described the older recipe correctly and ended with “Nothing modified.” Compare your answer with the skill file you have now, since the recipe may have changed. You're checking how accurately this assistant read your method, not how closely it repeated my result.
 

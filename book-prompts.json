@@ -27,7 +27,7 @@
     "key": "chapter-2-text-1-20260913",
     "chapter": 2,
     "section": "Install on macOS or Linux",
-    "body": "curl -fsSL https://raw.githubusercontent.com/MichaelZelbel/teach-it-once-kit/main/install-hub.sh | bash -s -- --sources \"\"",
+    "body": "curl -fsSL https://raw.githubusercontent.com/MichaelZelbel/teach-it-once-kit/main/install-godspeed.sh | bash -s -- --sources \"\"",
     "sha256": "71bc932d4a99e8208e5850db535d0e33e96fb689fe9e4454f50458f2019c40b5",
     "copyable": false
   },
@@ -35,7 +35,7 @@
     "key": "chapter-2-text-2-20260913",
     "chapter": 2,
     "section": "Install on macOS or Linux",
-    "body": "cd ~/hub\nhermes",
+    "body": "cd ~/godspeed\nhermes",
     "sha256": "fd9d122f713bd65c68d764344d0b0bd8f2ce64919e494e4264b182c83ebc1608",
     "copyable": false
   },
@@ -51,7 +51,7 @@
     "key": "chapter-2-text-4-20260913",
     "chapter": 2,
     "section": "Match the instructions to this edition",
-    "body": "Find the matching Teach It Once companion kit I downloaded and unpacked. If you cannot identify it, ask me where I saved it. Read its setup/match-edition.md and use that guide to bring this hub's shared instructions into agreement with the kit. Preserve my personal information, decisions, rules and existing work. Save a local recovery copy before changing guidance. Check that the resulting instructions are complete and fit this installation's size allowance.\n\nCheck whether conversation collection or notebook copying was enabled. Leave both off for this first setup, disabling only those kit jobs if necessary. Record what changed and any remaining failure. Do not connect a service, upload files or create a new schedule.",
+    "body": "Find the matching Teach It Once companion kit I downloaded and unpacked. If you cannot identify it, ask me where I saved it. Read its setup/match-edition.md and use that guide to bring this mission control's shared instructions into agreement with the kit. Preserve my personal information, decisions, rules and existing work. Save a local recovery copy before changing guidance. Check that the resulting instructions are complete and fit this installation's size allowance.\n\nCheck whether conversation collection or notebook copying was enabled. Leave both off for this first setup, disabling only those kit jobs if necessary. Record what changed and any remaining failure. Do not connect a service, upload files or create a new schedule.",
     "sha256": "d9843ef88b3954749ca006e9bd21c1d7895fb72434cfdee8bdf4b3b704871cc8",
     "copyable": true
   },
@@ -67,7 +67,7 @@
     "key": "chapter-4-text-1-20260913",
     "chapter": 4,
     "section": "Ask your assistant to add a project",
-    "body": "Clone the Menerio repository into dev/ inside my hub.",
+    "body": "Clone the Menerio repository into dev/ inside my mission control.",
     "sha256": "c39868733b227d7d77ba8a028f342727a627392c8ff29292a3921f11f94fd3fd",
     "copyable": false
   },
@@ -75,7 +75,7 @@
     "key": "chapter-4-text-2-20260913",
     "chapter": 4,
     "section": "Keep each project's history separate",
-    "body": "Check that the projects inside dev/ have their own Git histories and are excluded from the hub's history. Keep dev/README.md in the hub's history. Check a real project file and preview what the hub would save. Tell me which file you checked and what you found. Do not delete anything or change existing history.",
+    "body": "Check that the projects inside dev/ have their own Git histories and are excluded from Mission Control's history. Keep dev/README.md in Mission Control's history. Check a real project file and preview what Mission Control would save. Tell me which file you checked and what you found. Do not delete anything or change existing history.",
     "sha256": "8870a32c3fc0b601d417f957fdf8edcceea650b3881f85112bea284fb0159c0c",
     "copyable": true
   },
@@ -83,7 +83,7 @@
     "key": "chapter-4-text-3-20260913",
     "chapter": 4,
     "section": "Tell the assistant how to work on this project",
-    "body": "Check the instructions for this project and the AI tool I am using. Show me the instruction files this session received, including any account-wide instructions. If you can only show that a file exists, say so. Read the hub's AGENTS.md and this project's instruction files. Explain any conflicting instructions and propose a correction. Keep existing instructions until I approve a change.",
+    "body": "Check the instructions for this project and the AI tool I am using. Show me the instruction files this session received, including any account-wide instructions. If you can only show that a file exists, say so. Read Mission Control's AGENTS.md and this project's instruction files. Explain any conflicting instructions and propose a correction. Keep existing instructions until I approve a change.",
     "sha256": "75e25682469611b568c9ebf9ab76b6f40db9ae4bdf94d27fbea08f3327d38b63",
     "copyable": true
   },
@@ -106,7 +106,7 @@
   {
     "key": "chapter-7-box-1",
     "chapter": 6,
-    "section": "Let the hub find the starting point",
+    "section": "Let Mission Control find the starting point",
     "body": "Read profile/about-me.md, profile/people.md and profile/projects.md. Use the project list to find relevant drafts, results and recent updates you can access. Read those before asking me for a progress report. Treat practice examples as fiction and keep them out of my real project list.\n\nGive me a short picture of the active work and the next useful step you could help complete. Distinguish agreed deadlines, estimates, current evidence and missing information.\n\nUse priorities I have already stated. If an important choice remains unclear, ask one question at a time, only about what changes the recommendation. Priorities say what matters; they do not tell you my available hours. Do not infer working hours, urgency or permission to spend from a priority.\n\nUpdate profile/projects.md with clear facts from my updates and verified sources, keeping dates and sources. Ask before replacing a priority with your interpretation. Record a confirmed change of direction and its reason in decisions.md. Keep earlier decisions as history.\n\nOffer concrete help with the next step, such as preparing a draft or comparing options. Prepare the work you can do; get my approval before sending anything or making a commitment.",
     "sha256": "985866224f62cf6a97dba1c194c02e4a91cb1c197b1955dd85911725cc86efc3",
     "copyable": true
@@ -139,7 +139,7 @@
     "key": "chapter-10-box-1",
     "chapter": 9,
     "section": "Use the updated background in real work",
-    "body": "What needs my attention on my current projects? Use my saved priorities and recent updates you can access. Check relevant old or conflicting notes against newer evidence before recommending a next step.\n\nUpdate clear changes in the hub's records, preserving sources and dated history. Do not infer completion from a passed deadline or a recently edited file. Ask me only about an unresolved point that changes the recommendation. Prepare useful work where you can, and leave external actions for my approval.\n\nIf sources disagree and neither settles the difference, ask before relying on the disputed value. Do not invent different meanings for conflicting dates. Continue with the undisputed parts of the work. Do not add reminders, deadline entries or schedules as part of this request.",
+    "body": "What needs my attention on my current projects? Use my saved priorities and recent updates you can access. Check relevant old or conflicting notes against newer evidence before recommending a next step.\n\nUpdate clear changes in Mission Control's records, preserving sources and dated history. Do not infer completion from a passed deadline or a recently edited file. Ask me only about an unresolved point that changes the recommendation. Prepare useful work where you can, and leave external actions for my approval.\n\nIf sources disagree and neither settles the difference, ask before relying on the disputed value. Do not invent different meanings for conflicting dates. Continue with the undisputed parts of the work. Do not add reminders, deadline entries or schedules as part of this request.",
     "sha256": "cd5e77b98b53982357c00840e04452df0947922aad6bef1605f2c27c69e53f34",
     "copyable": true
   },
@@ -147,7 +147,7 @@
     "key": "chapter-10-correction-20260913",
     "chapter": 10,
     "section": "Ask for the corrected work",
-    "body": "Fix the mistake I just pointed out. Check the original request and the relevant sources, then give me the corrected work. Do the investigation and repair you can do yourself. Ask only if something essential remains unclear.\n\nIf an outdated fact or a missing instruction caused the mistake, update its existing home within this hub. Preserve unrelated instructions and dated history. Do not create a broad new rule from a one-off correction, and do not change correct source material to justify your answer.\n\nVerify the correction. Keep the explanation brief and show what changed; I do not need a long apology. Leave sending, publishing and other external actions for my approval.",
+    "body": "Fix the mistake I just pointed out. Check the original request and the relevant sources, then give me the corrected work. Do the investigation and repair you can do yourself. Ask only if something essential remains unclear.\n\nIf an outdated fact or a missing instruction caused the mistake, update its existing home within this mission control. Preserve unrelated instructions and dated history. Do not create a broad new rule from a one-off correction, and do not change correct source material to justify your answer.\n\nVerify the correction. Keep the explanation brief and show what changed; I do not need a long apology. Leave sending, publishing and other external actions for my approval.",
     "sha256": "a09f14542db9c40a057e99301c032dff964a2a126243b7ffc20da36bf7595d7c",
     "copyable": true
   },
@@ -243,7 +243,7 @@
     "key": "chapter-17-box-1",
     "chapter": 16,
     "section": "Read the rules before changing them",
-    "body": "Read the files in rules/. Interview me about them, one question at a time:\n\n- whether you may ever send messages in my name\n- whether you may ever spend money\n- when you may delete\n- what I want you to store about other people, anywhere from \"nothing they could not read over my shoulder\" to \"useful facts, but never their secrets\"\n\nAsk about anything in my life that deserves its own line.\n\nThen rewrite the files in rules/ in my words, keeping the header at the top of each one, and show me what changed before you save it.\n\nWhen I say yes, run hub-compile-rules so AGENTS.md catches up.",
+    "body": "Read the files in rules/. Interview me about them, one question at a time:\n\n- whether you may ever send messages in my name\n- whether you may ever spend money\n- when you may delete\n- what I want you to store about other people, anywhere from \"nothing they could not read over my shoulder\" to \"useful facts, but never their secrets\"\n\nAsk about anything in my life that deserves its own line.\n\nThen rewrite the files in rules/ in my words, keeping the header at the top of each one, and show me what changed before you save it.\n\nWhen I say yes, run mc-compile-rules so AGENTS.md catches up.",
     "sha256": "1cf466cc64348d784f9c71200ad455ad9260468aa58250119e6a5705aeafb2d3",
     "copyable": true
   },
@@ -274,7 +274,7 @@
   {
     "key": "chapter-17-text-1-20260913",
     "chapter": 17,
-    "section": "Back Up Your Hub and Undo Mistakes",
+    "section": "Back Up Your Mission Control and Undo Mistakes",
     "body": "# My voice\n\nProfessional. Friendly. Concise.",
     "sha256": "7fa16618885c97a62429b4f1f3b073af44421206fdbc7ff211e79b9742e30743",
     "copyable": false
@@ -283,7 +283,7 @@
     "key": "chapter-17-text-2-20260913",
     "chapter": 17,
     "section": "Review before the first snapshot",
-    "body": "Before making a first snapshot or uploading anything, inspect this hub locally for files that should not enter its history: credentials, payment details, private conversation archives, personal material I did not intend to copy, and nested projects.\n\nInspect the existing Git status and history too, if present. Check whether excluded files were already tracked. Do not print secret values into this chat and do not upload file contents to a separate scanning service. Report paths, kinds of information and the proposed action only.\n\nDo not change files or history yet. Show what would be included, what would be excluded and what needs my decision. Explain that this inspection may miss sensitive information.",
+    "body": "Before making a first snapshot or uploading anything, inspect this mission control locally for files that should not enter its history: credentials, payment details, private conversation archives, personal material I did not intend to copy, and nested projects.\n\nInspect the existing Git status and history too, if present. Check whether excluded files were already tracked. Do not print secret values into this chat and do not upload file contents to a separate scanning service. Report paths, kinds of information and the proposed action only.\n\nDo not change files or history yet. Show what would be included, what would be excluded and what needs my decision. Explain that this inspection may miss sensitive information.",
     "sha256": "b09659b1cb8abbef495b8d5663cb6bfb9067570edc92389fb489706d341dd63b",
     "copyable": true
   },
@@ -291,7 +291,7 @@
     "key": "chapter-18-box-3",
     "chapter": 17,
     "section": "Create local version history",
-    "body": "Set up local Git version history for this hub, using only the files I approved after the privacy review. Preserve existing history. Exclude the agreed private material and nested projects; verify the exclusions before saving.\n\nCreate one snapshot and show its identifier and the files included. Do not upload it or create an automatic job. Explain how I can ask to restore one file without losing unrelated work.",
+    "body": "Set up local Git version history for this mission control, using only the files I approved after the privacy review. Preserve existing history. Exclude the agreed private material and nested projects; verify the exclusions before saving.\n\nCreate one snapshot and show its identifier and the files included. Do not upload it or create an automatic job. Explain how I can ask to restore one file without losing unrelated work.",
     "sha256": "03751ce9d545ccccf75ec81eab232400fb6c72c0a17a97e185686c10e2d37a16",
     "copyable": true
   },
@@ -307,15 +307,15 @@
     "key": "chapter-18-box-5",
     "chapter": 17,
     "section": "Make a private copy away from this computer",
-    "body": "Prepare a private GitHub backup named hub-backup for the reviewed hub history. If that name already exists, inspect it and do not replace it.\n\nBefore uploading, show the destination, confirm its private visibility, and show the files and history that will leave this computer. Check again for unintended tracked files and sensitive earlier versions. Do not print credential values.\n\nWait for my approval of that exact upload. After approval, upload the reviewed snapshot, verify the remote snapshot identifier matches, and give me the repository link. Do not create an automatic sync job.",
+    "body": "Prepare a private GitHub backup named mc-backup for the reviewed mission control history. If that name already exists, inspect it and do not replace it.\n\nBefore uploading, show the destination, confirm its private visibility, and show the files and history that will leave this computer. Check again for unintended tracked files and sensitive earlier versions. Do not print credential values.\n\nWait for my approval of that exact upload. After approval, upload the reviewed snapshot, verify the remote snapshot identifier matches, and give me the repository link. Do not create an automatic sync job.",
     "sha256": "9c807082f70fd9fe33d0b1e91d3109ec24b87e50d1c79759a395de82100d10f8",
     "copyable": true
   },
   {
     "key": "chapter-19-box-1",
     "chapter": 18,
-    "section": "Review the hub again",
-    "body": "Review where this hub's information is stored or sent. Begin with a local file inventory and the configured backup destinations. Include current files, archives and earlier Git history where present.\n\nIdentify credentials, unintended personal material and information about other people that deserves review. Do not print secret values or send files to a separate scanning service. Report paths and categories. Do not change or upload anything.\n\nSeparately list the assistant's local conversation and memory locations, plus configured providers and connected services you can actually inspect. Mark unknown destinations or retention settings as unknown. Distinguish what a local deletion would remove from copies elsewhere.",
+    "section": "Review Mission Control again",
+    "body": "Review where this mission control's information is stored or sent. Begin with a local file inventory and the configured backup destinations. Include current files, archives and earlier Git history where present.\n\nIdentify credentials, unintended personal material and information about other people that deserves review. Do not print secret values or send files to a separate scanning service. Report paths and categories. Do not change or upload anything.\n\nSeparately list the assistant's local conversation and memory locations, plus configured providers and connected services you can actually inspect. Mark unknown destinations or retention settings as unknown. Distinguish what a local deletion would remove from copies elsewhere.",
     "sha256": "a5eda9ed530d4661885b9f5136e150b799d9510b65f06f480c9db2d01e74c2c2",
     "copyable": true
   },
@@ -363,7 +363,7 @@
     "key": "chapter-21-text-1-20260913",
     "chapter": 21,
     "section": "Optional practice: Robin's bicycle shop",
-    "body": "Find the matching unpacked companion kit, asking where I saved it only if needed. Create a new disposable hub named robin-practice beside my real hub. Stop if that folder already exists; do not merge or overwrite it.\n\nCopy starter-hub/ into robin-practice, including its dot files. Copy practice/maintenance-classes/what-my-ai-knew.md into its top level and its workshop-notes.md into inbox/. File the fictional summary under profile/about-me.md, profile/people.md, profile/projects.md and profile/voice.md according to each file's subject. Preserve the summary as the source, keep uncertain claims marked, and retain unresolved questions in inbox/. Proposed behavior rules need confirmation before entering rules/ and the compiled instructions. Do not put anything in my real profile or notebook.\n\nCopy the kit's skills/prepare-a-decision/SKILL.md into robin-practice/skills/prepare-a-decision/SKILL.md. Confirm that the copied skill, profile files and workshop note can be read. Report the full practice path and leave all schedules off.",
+    "body": "Find the matching unpacked companion kit, asking where I saved it only if needed. Create a new disposable mission control named robin-practice beside my real mission control. Stop if that folder already exists; do not merge or overwrite it.\n\nCopy starter-godspeed/ into robin-practice, including its dot files. Copy practice/maintenance-classes/what-my-ai-knew.md into its top level and its workshop-notes.md into inbox/. File the fictional summary under profile/about-me.md, profile/people.md, profile/projects.md and profile/voice.md according to each file's subject. Preserve the summary as the source, keep uncertain claims marked, and retain unresolved questions in inbox/. Proposed behavior rules need confirmation before entering rules/ and the compiled instructions. Do not put anything in my real profile or notebook.\n\nCopy the kit's skills/prepare-a-decision/SKILL.md into robin-practice/skills/prepare-a-decision/SKILL.md. Confirm that the copied skill, profile files and workshop note can be read. Report the full practice path and leave all schedules off.",
     "sha256": "8aa1c9ecaf0c8576091d41c9dc370cacea640451c223abb5a4870f1f368f5d78",
     "copyable": false
   },
@@ -371,7 +371,7 @@
     "key": "chapter-21-text-2-20260913",
     "chapter": 21,
     "section": "Build the brief before its schedule",
-    "body": "Build skills/morning-brief/SKILL.md with these instructions, then run it once.\n\nRead AGENTS.md, the profile, current work files, decisions and inbox. Read the previous brief if there is one. Use the current date in the selected job time zone. Do not invent change over time when there is no earlier record.\n\nWrite what changed, useful work you prepared, and the decision that needs me. Separate recorded claims from your recommendations. Include a short draft or question set when the sources support one. Name important gaps and failed checks. Send nothing, buy nothing and make no commitments.\n\nSave a new file as brief/YYYY-MM-DD.md. If it already exists, preserve it and report that no second daily brief was written. For an explicit test, accept a separate practice output path and never use or overwrite today's real brief.\n\nKeep the normal brief body under 200 words. Include copyable action text in the brief itself. Use existing approved HTTPS links for longer material only when available; do not publish private material to make a link. The file a fact came from may be named on a Sources: line.\n\nKeep urgent unfinished work and failed-check notices visible after the normal body when they need more space. These sections are exempt from the 200-word limit. Never cut them to pass the limit. Omit empty sections.\n\nRun hub-check-brief on the completed file, fix delivery-format failures and preserve important content. A passed format check is not an evidence check. If checking fails, report the failure and keep the draft available for inspection.",
+    "body": "Build skills/morning-brief/SKILL.md with these instructions, then run it once.\n\nRead AGENTS.md, the profile, current work files, decisions and inbox. Read the previous brief if there is one. Use the current date in the selected job time zone. Do not invent change over time when there is no earlier record.\n\nWrite what changed, useful work you prepared, and the decision that needs me. Separate recorded claims from your recommendations. Include a short draft or question set when the sources support one. Name important gaps and failed checks. Send nothing, buy nothing and make no commitments.\n\nSave a new file as brief/YYYY-MM-DD.md. If it already exists, preserve it and report that no second daily brief was written. For an explicit test, accept a separate practice output path and never use or overwrite today's real brief.\n\nKeep the normal brief body under 200 words. Include copyable action text in the brief itself. Use existing approved HTTPS links for longer material only when available; do not publish private material to make a link. The file a fact came from may be named on a Sources: line.\n\nKeep urgent unfinished work and failed-check notices visible after the normal body when they need more space. These sections are exempt from the 200-word limit. Never cut them to pass the limit. Omit empty sections.\n\nRun mc-check-brief on the completed file, fix delivery-format failures and preserve important content. A passed format check is not an evidence check. If checking fails, report the failure and keep the draft available for inspection.",
     "sha256": "710a9e1a05bc8fc3819c8f433d85bd35cabc90686dfc1a4e3151d8085c70e58c",
     "copyable": true
   },
@@ -379,7 +379,7 @@
     "key": "chapter-21-text-3-20260913",
     "chapter": 21,
     "section": "Save the daily job",
-    "body": "Set up a daily morning brief at 7am in the time zone we agreed. Inspect existing jobs first. If a morning brief already exists for this hub, show it and update that job rather than creating a duplicate.\n\nUse this hub's full path as the job's working folder. Save this job prompt:\nRead AGENTS.md in the working folder and follow it. Read skills/morning-brief/SKILL.md and write today's brief to brief/ using that skill. Preserve any existing daily brief. Report unavailable inputs or failed checks. Do not send anything externally.\n\nKeep delivery local. Confirm that the scheduler is running on this computer; a saved job alone is not enough. If it needs setup, explain what must run and configure it within my existing permissions. Do not change other jobs or a shared time-zone setting silently.\n\nShow the saved job's working folder, time zone, next run, result location and pause control. Record these in procedures.md. If any part cannot be checked, say which part and do not describe the schedule as ready.",
+    "body": "Set up a daily morning brief at 7am in the time zone we agreed. Inspect existing jobs first. If a morning brief already exists for this mission control, show it and update that job rather than creating a duplicate.\n\nUse this mission control's full path as the job's working folder. Save this job prompt:\nRead AGENTS.md in the working folder and follow it. Read skills/morning-brief/SKILL.md and write today's brief to brief/ using that skill. Preserve any existing daily brief. Report unavailable inputs or failed checks. Do not send anything externally.\n\nKeep delivery local. Confirm that the scheduler is running on this computer; a saved job alone is not enough. If it needs setup, explain what must run and configure it within my existing permissions. Do not change other jobs or a shared time-zone setting silently.\n\nShow the saved job's working folder, time zone, next run, result location and pause control. Record these in procedures.md. If any part cannot be checked, say which part and do not describe the schedule as ready.",
     "sha256": "6e103f4071c691040a33bdc35c360a41db62d21cd2d8c30f42e7d1ad6b1782f8",
     "copyable": true
   },
@@ -387,7 +387,7 @@
     "key": "chapter-21-text-4-20260913",
     "chapter": 21,
     "section": "Test the work and the timer separately",
-    "body": "Create one one-time test, due in 5 minutes, with this hub's full path saved as its working folder. Show its saved job record, actual time zone and next run. Its prompt must read AGENTS.md and skills/morning-brief/SKILL.md, then write to practice/brief-tests/timer-test.md as an explicit test output. Refuse to overwrite that file. Use no external delivery. Add the test and its stop control to procedures.md.",
+    "body": "Create one one-time test, due in 5 minutes, with this mission control's full path saved as its working folder. Show its saved job record, actual time zone and next run. Its prompt must read AGENTS.md and skills/morning-brief/SKILL.md, then write to practice/brief-tests/timer-test.md as an explicit test output. Refuse to overwrite that file. Use no external delivery. Add the test and its stop control to procedures.md.",
     "sha256": "779d8f1ab4ba6c5d8ab25cfc0a27c8a4271e55ee33f25c680cbbce0ca19f4896",
     "copyable": true
   },
@@ -419,7 +419,7 @@
     "key": "chapter-24-box-1",
     "chapter": 23,
     "section": "Build a review that preserves its evidence",
-    "body": "Create skills/weekly-review/SKILL.md with these instructions.\n\nRead AGENTS.md, profile/, decisions.md, inbox/ and the latest earlier review in reviews/. Use available dated work records or version history for comparisons. On the first run, say there is no earlier review; describe the current record without inventing last week's state.\n\nFile only clear factual captures. Preserve writing samples, unresolved import questions and other noncapture material. For each filed capture, make the smallest supported update to its proper file, then move the original into archives/filed-captures/ with a unique name. Never overwrite an archive entry. Keep uncertain captures in inbox/. Report source, destination and exact change.\n\nDistinguish a factual update from a proposed behavior rule. Leave proposed rules in inbox/ until I confirm them. A confirmed behavior rule belongs in rules/ and must be compiled with hub-compile-rules; do not hide it in a profile fact or observation. Report any compilation failure.\n\nBefore filing, save a local version-history snapshot of the affected files under the hub's rules. If a recoverable snapshot cannot be made, prepare proposed changes without applying them and report why. Send or publish nothing.\n\nWrite a new dated review in reviews/. Preserve existing reviews. Include progress toward recorded goals, clear updates filed, unresolved questions, contradictory source lines and one priority to protect. Prepare a useful draft where possible. Do not equate missing records with no work done.\n\nKeep the summary under 250 words. Put the full filing record below it when needed; never omit a move merely to shorten the summary. Skip empty sections.\n\nOnly if prompts/library/bring-your-context-with-you.md exists and I still use another AI tool, include one reminder on the first review of the month to bring over useful new background. Do not claim to know what the other tool contains. Record that the reminder was included so a same-month retry does not repeat it.\n\nFor a test, accept a separate practice destination. Do not replace the real review or file real captures while testing fictional inputs.",
+    "body": "Create skills/weekly-review/SKILL.md with these instructions.\n\nRead AGENTS.md, profile/, decisions.md, inbox/ and the latest earlier review in reviews/. Use available dated work records or version history for comparisons. On the first run, say there is no earlier review; describe the current record without inventing last week's state.\n\nFile only clear factual captures. Preserve writing samples, unresolved import questions and other noncapture material. For each filed capture, make the smallest supported update to its proper file, then move the original into archives/filed-captures/ with a unique name. Never overwrite an archive entry. Keep uncertain captures in inbox/. Report source, destination and exact change.\n\nDistinguish a factual update from a proposed behavior rule. Leave proposed rules in inbox/ until I confirm them. A confirmed behavior rule belongs in rules/ and must be compiled with mc-compile-rules; do not hide it in a profile fact or observation. Report any compilation failure.\n\nBefore filing, save a local version-history snapshot of the affected files under Mission Control's rules. If a recoverable snapshot cannot be made, prepare proposed changes without applying them and report why. Send or publish nothing.\n\nWrite a new dated review in reviews/. Preserve existing reviews. Include progress toward recorded goals, clear updates filed, unresolved questions, contradictory source lines and one priority to protect. Prepare a useful draft where possible. Do not equate missing records with no work done.\n\nKeep the summary under 250 words. Put the full filing record below it when needed; never omit a move merely to shorten the summary. Skip empty sections.\n\nOnly if prompts/library/bring-your-context-with-you.md exists and I still use another AI tool, include one reminder on the first review of the month to bring over useful new background. Do not claim to know what the other tool contains. Record that the reminder was included so a same-month retry does not repeat it.\n\nFor a test, accept a separate practice destination. Do not replace the real review or file real captures while testing fictional inputs.",
     "sha256": "ada5a89c6436a60d36611c83c46f06694146471ceafd874806cd1fb4f3dfdad2",
     "copyable": true
   },
@@ -467,7 +467,7 @@
     "key": "chapter-26-box-1",
     "chapter": 25,
     "section": "Give the assistant a question it can return to",
-    "body": "Set up one research watch for the question I describe. Read relevant existing notes first. Ask only for missing information: what would count as better, which sources to trust, how often to check, and which findings would change a decision.\n\nFind the matching unpacked companion kit, asking for its location only if needed. Read its complete research-watch skill. Install it as skills/research-watch/SKILL.md in this hub. If a skill already exists there, compare it and preserve my changes; show a proposed merge rather than replacing it.\n\nCreate watch/<short-name>/requirements.md using the format required by that skill. Find and inspect the relevant source pages yourself; ask me about a source only when access or identity is uncertain. Fill the file with our agreed question, the verified source URLs, criteria and check interval. Use the skill's UTC dates for its internal records. Create its supporting folders and empty records. Do not run the research comparison or schedule anything yet. Show the question and requirements in ordinary language so I can correct them.",
+    "body": "Set up one research watch for the question I describe. Read relevant existing notes first. Ask only for missing information: what would count as better, which sources to trust, how often to check, and which findings would change a decision.\n\nFind the matching unpacked companion kit, asking for its location only if needed. Read its complete research-watch skill. Install it as skills/research-watch/SKILL.md in this mission control. If a skill already exists there, compare it and preserve my changes; show a proposed merge rather than replacing it.\n\nCreate watch/<short-name>/requirements.md using the format required by that skill. Find and inspect the relevant source pages yourself; ask me about a source only when access or identity is uncertain. Fill the file with our agreed question, the verified source URLs, criteria and check interval. Use the skill's UTC dates for its internal records. Create its supporting folders and empty records. Do not run the research comparison or schedule anything yet. Show the question and requirements in ordinary language so I can correct them.",
     "sha256": "715af46c8dfdd9a2dcd7239bc591936dbaea557bb114d78beb7295747afe9894",
     "copyable": true
   },
@@ -475,7 +475,7 @@
     "key": "chapter-26-box-4",
     "chapter": 25,
     "section": "Run it once before scheduling",
-    "body": "Read AGENTS.md and skills/research-watch/SKILL.md. Run the due research watches in this hub now. Show the resulting attempt lines, source coverage, open findings and next check dates. Do not create a schedule or send a notification.",
+    "body": "Read AGENTS.md and skills/research-watch/SKILL.md. Run the due research watches in this mission control now. Show the resulting attempt lines, source coverage, open findings and next check dates. Do not create a schedule or send a notification.",
     "sha256": "d30835f285747c32cd1fb05cce46b5aace914797a64d2151b778f98286b44117",
     "copyable": true
   },
@@ -483,7 +483,7 @@
     "key": "chapter-25-text-3-20260913",
     "chapter": 25,
     "section": "Replace the older watch before adding the common schedule",
-    "body": "Inspect existing jobs and create or update one daily job named research watches, at 06:30 in the same named time zone as my morning brief. Save this hub's full path as its working folder. Its prompt is: Read AGENTS.md, then follow skills/research-watch/SKILL.md for the due watches in watch/. Write results only; send nothing externally.\n\nShow the actual saved job, working folder, named time zone, next run and pause control. The starter skill still records UTC dates; the timer's displayed zone is a separate setting. Check that an older schedule for the same subjects is paused. Update procedures.md. If the scheduler uses another time zone, resolve and show the equivalent next run before relying on it.",
+    "body": "Inspect existing jobs and create or update one daily job named research watches, at 06:30 in the same named time zone as my morning brief. Save this mission control's full path as its working folder. Its prompt is: Read AGENTS.md, then follow skills/research-watch/SKILL.md for the due watches in watch/. Write results only; send nothing externally.\n\nShow the actual saved job, working folder, named time zone, next run and pause control. The starter skill still records UTC dates; the timer's displayed zone is a separate setting. Check that an older schedule for the same subjects is paused. Update procedures.md. If the scheduler uses another time zone, resolve and show the equivalent next run before relying on it.",
     "sha256": "8b1ca8276a72fbdc2d119dd75f42b84d7197e87c8c1343c07f7251e9a20ddd16",
     "copyable": true
   },
@@ -491,7 +491,7 @@
     "key": "chapter-25-text-4-20260913",
     "chapter": 25,
     "section": "Put the findings in the morning brief",
-    "body": "Update skills/morning-brief/SKILL.md to read each active watch's requirements.md, findings.md and latest log lines. Add a Research section after the normal body.\n\nUse the research skill's UTC due-date rules to check whether a required run is missing or overdue. Read the common schedule's latest run record if accessible. An empty log means no completed check exists. An old success does not prove the latest scheduled check happened. Report a missing or overdue check with its last success and next retry when known. If the schedule record cannot be read, say its status is unknown. Do not invent a failure record or change research state during brief generation.\n\nInclude every unresolved urgent finding and every open failed-check notice, with its age, source and next retry when known. Summarize useful findings once when possible; background remains in the research files. Do not delete or resolve a finding because it was omitted or already mentioned. A repeated unresolved urgent finding may be labelled still open instead of presented as fresh news.\n\nKeep the normal body under 200 words. Required urgent and failed-check text is additional and must not be silently shortened away. Use direct source links and include the practical finding itself. Name the file a fact came from only on Sources: lines. Do not publish private material to obtain a link.\n\nTest in a disposable hub with a separate output at practice/brief-tests/research-test.md. Include an urgent finding, an unchanged useful finding, a failed source and an overdue watch whose last recorded run succeeded. The overdue watch must remain visible even though it has no failed-source finding. Preserve today's real brief and do not change real research state during the test.",
+    "body": "Update skills/morning-brief/SKILL.md to read each active watch's requirements.md, findings.md and latest log lines. Add a Research section after the normal body.\n\nUse the research skill's UTC due-date rules to check whether a required run is missing or overdue. Read the common schedule's latest run record if accessible. An empty log means no completed check exists. An old success does not prove the latest scheduled check happened. Report a missing or overdue check with its last success and next retry when known. If the schedule record cannot be read, say its status is unknown. Do not invent a failure record or change research state during brief generation.\n\nInclude every unresolved urgent finding and every open failed-check notice, with its age, source and next retry when known. Summarize useful findings once when possible; background remains in the research files. Do not delete or resolve a finding because it was omitted or already mentioned. A repeated unresolved urgent finding may be labelled still open instead of presented as fresh news.\n\nKeep the normal body under 200 words. Required urgent and failed-check text is additional and must not be silently shortened away. Use direct source links and include the practical finding itself. Name the file a fact came from only on Sources: lines. Do not publish private material to obtain a link.\n\nTest in a disposable mission control with a separate output at practice/brief-tests/research-test.md. Include an urgent finding, an unchanged useful finding, a failed source and an overdue watch whose last recorded run succeeded. The overdue watch must remain visible even though it has no failed-source finding. Preserve today's real brief and do not change real research state during the test.",
     "sha256": "a7c8814b524c8f8288c13822bcf4f87b08343fa261d89ea4c981fe92371ba94b",
     "copyable": true
   },
@@ -507,7 +507,7 @@
     "key": "chapter-27-box-1",
     "chapter": 26,
     "section": "Record the first and last day",
-    "body": "Add a deadline to my hub. Read existing relevant records first, then ask only for missing facts: what counts as finished, the first and last day I can act, the consequence of delay, and whether any available evidence can reliably establish completion.\n\nRequire both dates. Use manual completion, --self-check none, unless we have explicitly tested a better completion signal. Do not treat a recently edited draft or a new backup file as proof that the work succeeded.\n\nCheck hub-due --help, then use hub-due add with a unique simple name and my confirmed answers. Show the saved dates and completion condition. Do not create a second reminder schedule.",
+    "body": "Add a deadline to my mission control. Read existing relevant records first, then ask only for missing facts: what counts as finished, the first and last day I can act, the consequence of delay, and whether any available evidence can reliably establish completion.\n\nRequire both dates. Use manual completion, --self-check none, unless we have explicitly tested a better completion signal. Do not treat a recently edited draft or a new backup file as proof that the work succeeded.\n\nCheck mc-due --help, then use mc-due add with a unique simple name and my confirmed answers. Show the saved dates and completion condition. Do not create a second reminder schedule.",
     "sha256": "68d3665aa61652085eb48851d9af27d1766e3d347d1c96d2da1b0152fac79411",
     "copyable": true
   },
@@ -515,7 +515,7 @@
     "key": "chapter-26-text-2-20260913",
     "chapter": 26,
     "section": "Let the daily check follow the work",
-    "body": "The return form has been accepted. Mark that deadline done in my hub, then run the deadline check and show whether it still appears in today's reminders. Keep its history. If you find more than one matching task, ask which one I mean.",
+    "body": "The return form has been accepted. Mark that deadline done in my mission control, then run the deadline check and show whether it still appears in today's reminders. Keep its history. If you find more than one matching task, ask which one I mean.",
     "sha256": "5c941a117fabd94c1c45b2156a7c20f2b5f84778bd10075095e46e8167a33755",
     "copyable": false
   },
@@ -523,7 +523,7 @@
     "key": "chapter-27-box-6",
     "chapter": 26,
     "section": "Add the full cycle to the brief",
-    "body": "Update skills/morning-brief/SKILL.md with a Deadlines section.\n\nFirst run hub-due check in the intended hub, then hub-due today. Preserve any errors or failed-check notices. Include the selected deadline output word for word, including the overload message and all titles. Omit the section only when the command explicitly says nothing needs saying or no deadlines exist, and there was no check error.\n\nDo not calculate urgency yourself. Keep the normal brief body under 200 words, but put required deadline text and check failures after that body without a word limit. Preserve any existing Research section and its unresolved urgent findings. The 200-word target must not delete important material.\n\nPreserve today's existing brief. For testing, use a disposable hub, its own --hub path on every deadline command and a new output at practice/brief-tests/deadline-test.md. Do not add fictional deadlines to my real list or overwrite my real brief.\n\nRun hub-check-brief on the full result. If raw deadline text contains a local path that the checker refuses, preserve the raw output and report the conflict; do not silently alter required text. Use clear human titles when creating deadlines so they do not need local paths.",
+    "body": "Update skills/morning-brief/SKILL.md with a Deadlines section.\n\nFirst run mc-due check in the intended mission control, then mc-due today. Preserve any errors or failed-check notices. Include the selected deadline output word for word, including the overload message and all titles. Omit the section only when the command explicitly says nothing needs saying or no deadlines exist, and there was no check error.\n\nDo not calculate urgency yourself. Keep the normal brief body under 200 words, but put required deadline text and check failures after that body without a word limit. Preserve any existing Research section and its unresolved urgent findings. The 200-word target must not delete important material.\n\nPreserve today's existing brief. For testing, use a disposable mission control, its own --godspeed path on every deadline command and a new output at practice/brief-tests/deadline-test.md. Do not add fictional deadlines to my real list or overwrite my real brief.\n\nRun mc-check-brief on the full result. If raw deadline text contains a local path that the checker refuses, preserve the raw output and report the conflict; do not silently alter required text. Use clear human titles when creating deadlines so they do not need local paths.",
     "sha256": "25a4af2551d8f7cc03f9dddda20573fd2c399ae834366f6729b185b12331905f",
     "copyable": true
   },
@@ -563,7 +563,7 @@
     "key": "chapter-28-text-3-20260913",
     "chapter": 28,
     "section": "Optional: connect Claude Code",
-    "body": "Configure a notebook connection for Claude Code in this hub. Inspect the existing .mcp.json and current client help before editing. Keep unrelated connections. Use https://mcp.menerio.com and an Authorization header that refers to ${MENERIO_API_KEY}, never the literal credential.\n\nShow me a masked local input method for this operating system, so I can load the key without putting it in chat or shell history. Launch the client from the environment containing the key and test a read-only connection. Report success or the actual error without printing values. Do not broaden key permissions or enable writes to repair a read failure.",
+    "body": "Configure a notebook connection for Claude Code in this mission control. Inspect the existing .mcp.json and current client help before editing. Keep unrelated connections. Use https://mcp.menerio.com and an Authorization header that refers to ${MENERIO_API_KEY}, never the literal credential.\n\nShow me a masked local input method for this operating system, so I can load the key without putting it in chat or shell history. Launch the client from the environment containing the key and test a read-only connection. Report success or the actual error without printing values. Do not broaden key permissions or enable writes to repair a read failure.",
     "sha256": "70eb99733c449626351f771dbdb5b73093f80eb92e012aed34728bc2c9bf020f",
     "copyable": true
   },
@@ -578,8 +578,8 @@
   {
     "key": "chapter-29-text-1-20260913",
     "chapter": 29,
-    "section": "Join the existing hub",
-    "body": "curl -fsSL https://raw.githubusercontent.com/MichaelZelbel/teach-it-once-kit/main/install-hub.sh | bash -s -- --sources \"\" --repo YOUR-PRIVATE-REPOSITORY-URL",
+    "section": "Join the existing mission control",
+    "body": "curl -fsSL https://raw.githubusercontent.com/MichaelZelbel/teach-it-once-kit/main/install-godspeed.sh | bash -s -- --sources \"\" --repo YOUR-PRIVATE-REPOSITORY-URL",
     "sha256": "19b6b5b2e4847225e091228e2f7a5b05e0fb851a82a815c4bd50a13184e3f2eb",
     "copyable": false
   },
@@ -587,7 +587,7 @@
     "key": "chapter-30-box-5",
     "chapter": 29,
     "section": "Renew the existing entry",
-    "body": "I have replaced the credential for the service I name. Inspect the existing record and update its one entry in secrets/expires.txt. Do not append a duplicate. Record the verified expiry and renewal page, or preserve an explicit unknown state if the service does not establish a date. Keep credential values out of this file and out of chat.\n\nHelp me load the replacement through a masked local input or the existing encrypted store. Run hub-check-keys, then the service's read-only connection test without printing any credential. Update the existing tracked renewal after checking the evidence. Do not treat a newer file timestamp as successful renewal.",
+    "body": "I have replaced the credential for the service I name. Inspect the existing record and update its one entry in secrets/expires.txt. Do not append a duplicate. Record the verified expiry and renewal page, or preserve an explicit unknown state if the service does not establish a date. Keep credential values out of this file and out of chat.\n\nHelp me load the replacement through a masked local input or the existing encrypted store. Run mc-check-keys, then the service's read-only connection test without printing any credential. Update the existing tracked renewal after checking the evidence. Do not treat a newer file timestamp as successful renewal.",
     "sha256": "37d623c19f3962c84f81441b4efe2ab5d7d1514ee08ebb97e35a370f768c8371",
     "copyable": true
   },
@@ -603,7 +603,7 @@
     "key": "chapter-30-text-2-20260913",
     "chapter": 30,
     "section": "Check the folder before asking personal questions",
-    "body": "Read /home/ai/hub/AGENTS.md. Confirm the working folder. Name the profile files you can read and quote one harmless fact from the file I specify. Do not change anything or use memory from an earlier conversation.",
+    "body": "Read /home/ai/godspeed/AGENTS.md. Confirm the working folder. Name the profile files you can read and quote one harmless fact from the file I specify. Do not change anything or use memory from an earlier conversation.",
     "sha256": "7b07dcd047f61f0233cebfb491eaddf510542b29c677ebca0f83d5eba8146535",
     "copyable": true
   },
@@ -611,7 +611,7 @@
     "key": "chapter-30-text-3-20260913",
     "chapter": 30,
     "section": "Move one schedule, not two",
-    "body": "Inspect this server's system time zone and Hermes scheduler configuration. Show the current local time and the next intended 07:00 run in my chosen named zone. Confirm /home/ai/hub is the working folder and skills/morning-brief/SKILL.md exists.\n\nPrepare one daily morning-brief schedule using that folder and zone. Confirm the laptop's version has been paused before enabling this one. Its prompt must read AGENTS.md and the skill. Preserve existing daily briefs. If an installer-created 06:00 job exists, edit or retire it rather than adding another.\n\nAsk me to choose server-local results or delivery to my own connected Telegram chat. For local results, save brief/YYYY-MM-DD.md and show its full server path. I can ask you to display its contents in this conversation. For Telegram, verify the exact destination is my allowed chat and show it before I confirm. Save Telegram as this job's delivery setting only after that confirmation. Authorize only delivery of my brief to that chat, never messages to customers or other people. The skill still saves the file and does not send messages itself.\n\nShow the saved job record, next run, output path, delivery setting and pause control. Do not claim scheduled delivery works based on an ordinary bot conversation.",
+    "body": "Inspect this server's system time zone and Hermes scheduler configuration. Show the current local time and the next intended 07:00 run in my chosen named zone. Confirm /home/ai/godspeed is the working folder and skills/morning-brief/SKILL.md exists.\n\nPrepare one daily morning-brief schedule using that folder and zone. Confirm the laptop's version has been paused before enabling this one. Its prompt must read AGENTS.md and the skill. Preserve existing daily briefs. If an installer-created 06:00 job exists, edit or retire it rather than adding another.\n\nAsk me to choose server-local results or delivery to my own connected Telegram chat. For local results, save brief/YYYY-MM-DD.md and show its full server path. I can ask you to display its contents in this conversation. For Telegram, verify the exact destination is my allowed chat and show it before I confirm. Save Telegram as this job's delivery setting only after that confirmation. Authorize only delivery of my brief to that chat, never messages to customers or other people. The skill still saves the file and does not send messages itself.\n\nShow the saved job record, next run, output path, delivery setting and pause control. Do not claim scheduled delivery works based on an ordinary bot conversation.",
     "sha256": "d0598264a170ed75332ce45a44f1c717116078fa11b73c4841ef608f1c1cba8b",
     "copyable": true
   },
@@ -635,7 +635,7 @@
     "key": "chapter-31-text-3-20260913",
     "chapter": 31,
     "section": "Connect the desktop app",
-    "body": "Without changing files, show this session's working folder and read the heading of /home/ai/hub/AGENTS.md. List the next scheduled job on this server with its time zone. If this is a local connection, say so instead of searching for a similarly named folder.",
+    "body": "Without changing files, show this session's working folder and read the heading of /home/ai/godspeed/AGENTS.md. List the next scheduled job on this server with its time zone. If this is a local connection, say so instead of searching for a similarly named folder.",
     "sha256": "b5c1f95385df093445a179a4722fcd9baa7feec1b59e82281d0024b68804ed26",
     "copyable": true
   },
@@ -643,7 +643,7 @@
     "key": "chapter-32-text-1-20260913",
     "chapter": 32,
     "section": "Prepare a second assistant",
-    "body": "Help me test this hub with OpenCode. Read the current official installation, configuration and provider documentation. Inspect what is already installed before adding anything.\n\nUse a provider account and model I choose after seeing the current access requirements and cost. Do not sign me up, fund an account or copy a credential into chat.\n\nInstall the supported version for this computer if needed. Preserve existing configuration and AGENTS.md. Set permission to ask before file edits and shell commands. Inspect combined project and user settings for other active connections; do not silently enable them.\n\nPrepare a secure local sign-in or masked token-entry step and open the assistant in this hub. Confirm the folder and configured model. Keep schedules unchanged.",
+    "body": "Help me test this mission control with OpenCode. Read the current official installation, configuration and provider documentation. Inspect what is already installed before adding anything.\n\nUse a provider account and model I choose after seeing the current access requirements and cost. Do not sign me up, fund an account or copy a credential into chat.\n\nInstall the supported version for this computer if needed. Preserve existing configuration and AGENTS.md. Set permission to ask before file edits and shell commands. Inspect combined project and user settings for other active connections; do not silently enable them.\n\nPrepare a secure local sign-in or masked token-entry step and open the assistant in this mission control. Confirm the folder and configured model. Keep schedules unchanged.",
     "sha256": "ae2845d9dc1e62a0e4ebce4cda8028dc0f53a5ce8dc39452381ebe279f10e3ae",
     "copyable": true
   },

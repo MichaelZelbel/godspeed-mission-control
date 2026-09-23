@@ -1,8 +1,8 @@
 # Deadlines (Chapter 26)
 
-This folder starts empty. `hub-due` stores each deadline's first day, last day, completion condition and consequence here. Run `hub-due --help` for the installed command syntax.
+This folder starts empty. `mc-due` stores each deadline's first day, last day, completion condition and consequence here. Run `mc-due --help` for the installed command syntax.
 
-The morning brief runs `hub-due check` first, then `hub-due today`. Manual completion is the default: `hub-due done NAME`. Dropping an entry and its history requires `hub-due drop NAME --yes`.
+The morning brief runs `mc-due check` first, then `mc-due today`. Manual completion is the default: `mc-due done NAME`. Dropping an entry and its history requires `mc-due drop NAME --yes`.
 
 The `file-newer` option checks modification time only. It can close an unfinished draft and is not proof of a successful backup, renewal or submission. Use it only for a tested completion signal. Missing or failed checks must not be reported as completion.
 

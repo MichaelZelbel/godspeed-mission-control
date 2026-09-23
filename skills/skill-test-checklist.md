@@ -4,7 +4,7 @@ A skill can give you a good answer and still need your help every time. By then,
 
 ## Test 1: start fresh
 
-Choose a skill and save a realistic test input. Open a new session in the hub, name the skill and provide only the input its instructions require. Wait for the result before adding hints.
+Choose a skill and save a realistic test input. Open a new session in Mission Control, name the skill and provide only the input its instructions require. Wait for the result before adding hints.
 
 Start with the details that matter most to the job: the source the skill must read, the date it must keep, the promise it must leave to you. Check these against the saved input and instructions.
 
@@ -32,7 +32,7 @@ The revised instruction became:
 
 ## Test 2: remove a required source
 
-Ask the assistant to create a separate, empty practice folder, then open it in a new session. Provide the skill text and a realistic job, but leave out one source the instructions require. Tell the assistant to use only the supplied practice material. Leave your working hub where it is. We can test a missing file without removing files you use for real work.
+Ask the assistant to create a separate, empty practice folder, then open it in a new session. Provide the skill text and a realistic job, but leave out one source the instructions require. Tell the assistant to use only the supplied practice material. Leave your working mission control where it is. We can test a missing file without removing files you use for real work.
 
 A skill that requires profile files should tell you when it can't find them. A limited result is useful if it makes the gaps clear. Filling those gaps with invented background would defeat the test.
 
@@ -56,7 +56,7 @@ Find the instruction file for the skill I name. Check the reply below against ev
 For each rule, say kept, broken or cannot check. Quote the relevant evidence. Do not treat the reply's own claim as proof. Name missing input needed for a judgment. Do not rewrite the reply yet.
 ```
 
-*[Copy prompt](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-16-box-2)*
+*[Copy prompt](https://srv1328602.hstgr.cloud/godspeed/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-16-box-2)*
 
 The earlier email recipe asked for uncertainty marks, then insisted on a draft with no extra remarks. When I asked the assistant to check the result, those instructions collided:
 

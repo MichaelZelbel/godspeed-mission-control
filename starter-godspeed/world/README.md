@@ -27,12 +27,12 @@ why a claim can carry a start date and an end date, and an event only carries it
 
 Every file carries an `origin:` line, and it decides who may write to it.
 
-- `origin: hub` means you or your assistant wrote it locally. The pull never touches it and never
+- `origin: godspeed` means you or your assistant wrote it locally. The pull never touches it and never
   deletes it.
 - `origin: menerio` means Menerio wrote it and this is a copy. It is rewritten on every
   pull, so an edit made here is lost at the next one. **Fix the fact in Menerio instead.**
 
-A file with no `origin:` line at all counts as `origin: hub`, so anything you write by hand is
+A file with no `origin:` line at all counts as `origin: godspeed`, so anything you write by hand is
 safe by default.
 
 No fact ever has two writers. That is why there is no merge step, nothing to resolve, and no
@@ -47,7 +47,7 @@ Every file starts with a small block between `---` lines, then free text.
 ```
 ---
 slug: peter-mueller
-origin: hub
+origin: godspeed
 name: Peter Mueller
 type: person
 aliases: [Peter, Pete]
@@ -60,7 +60,7 @@ Free-text description.
 ```
 ---
 date: 2026-08-11
-origin: hub
+origin: godspeed
 participants: [me, peter-mueller]
 source: where this came from
 ---
@@ -72,7 +72,7 @@ What happened, in free text.
 ```
 ---
 subject: peter-mueller
-origin: hub
+origin: godspeed
 attribute: relationship-to-me
 value: friend
 valid_from: 2024-03-01
@@ -109,7 +109,7 @@ the whole contract.
 ## When a fact changes
 
 A claim that stops being true gets a `valid_to` date and stays. That is half the job. The
-other half is asking what you wrote while it still held. `hub-check-built-on` reads every
+other half is asking what you wrote while it still held. `mc-check-built-on` reads every
 claim with an end date, searches `profile/`, `rules/`, `procedures.md` and `AGENTS.md` for
 the old value, and names each line it finds. It changes nothing; you decide whether a line
 is stale or is history. Two rules make it useful:
@@ -121,6 +121,6 @@ is stale or is history. Two rules make it useful:
   value is not written in it. Your assistant can add the line when it writes the file.
 
 ```
-hub-check-built-on                        every fact that changed
-hub-check-built-on --claim me/city        one fact
+mc-check-built-on                        every fact that changed
+mc-check-built-on --claim me/city        one fact
 ```

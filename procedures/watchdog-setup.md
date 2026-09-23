@@ -20,7 +20,7 @@ Keep a failed page check visible. Silence is useful after the sources have been 
 
 ## Build the first watch
 
-My product watch checks Hermes and its model access for changes that affect this book. A renamed control can make a careful instruction look careless surprisingly quickly. To try it, first ask the assistant to run the prompt below once in your hub. Then ask it to schedule the same prompt weekly, in your time zone, under the name `product watchdog`. Have it save this hub's full working-folder path, keep delivery local and check for an existing job before adding one:
+My product watch checks Hermes and its model access for changes that affect this book. A renamed control can make a careful instruction look careless surprisingly quickly. To try it, first ask the assistant to run the prompt below once in your mission control. Then ask it to schedule the same prompt weekly, in your time zone, under the name `product watchdog`. Have it save this mission control's full working-folder path, keep delivery local and check for an existing job before adding one:
 
 ```
 Read AGENTS.md in this working folder and follow it. Check the official Hermes Agent release notes and documentation for changes to the desktop app, scheduled jobs, skills and folder access. Check OpenAI's official ChatGPT pricing and release notes for changes to the subscription route used here. Inspect the named official pages, not just search snippets.
@@ -32,7 +32,7 @@ For each source record its URL, check time and whether it was read. Report chang
 Append a new dated section at the END of watch/product-watchdog.md. Use Changed, Checked and unchanged, or Not checked. If any required source failed, list the failed sources and preserve any partial results. Retry at the next scheduled run; do not create another job. Never replace a failure with a quiet-success line. Send nothing externally and change no account settings.
 ```
 
-*[Copy prompt](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-25-box-1)*
+*[Copy prompt](https://srv1328602.hstgr.cloud/godspeed/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-25-box-1)*
 
 Read the saved job's time zone, next run, working folder and stop control. Start with its local report, which gives you something to inspect without setting up delivery. To receive it on your phone, connect a delivery channel and test that a message actually arrives.
 
@@ -56,7 +56,7 @@ I tested an email request in another AI app connected to my mailbox. I asked it 
 
 Several Petras are a poor substitute for an approval step. The assistant had looked for a recipient, but the test didn't show what would happen if only one matched. It hadn't asked me to approve a draft either. I still needed to settle both questions before trusting the connection with a real message.
 
-I later tried an automatic purchase request in a hub whose rules required approval before spending: watch a drawing tablet and buy below 500 euros. The response offered this instead:
+I later tried an automatic purchase request in a mission control whose rules required approval before spending: watch a drawing tablet and buy below 500 euros. The response offered this instead:
 
 > **Daily price watch → ping you when it drops below €500 → you click buy.**
 

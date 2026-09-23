@@ -6,7 +6,7 @@ You'll make that choice in two places. **Written rules** tell the model how to b
 
 ## Read the rules before changing them
 
-The starter hub keeps each rule's full explanation in `rules/`, with a short list in `AGENTS.md` pointing to those files. This gives the assistant a short instruction to read at the start and somewhere to look when it needs the reason or an exception. Edit the full explanation; a program generates the short list from it.
+The starter mission control keeps each rule's full explanation in `rules/`, with a short list in `AGENTS.md` pointing to those files. This gives the assistant a short instruction to read at the start and somewhere to look when it needs the reason or an exception. Edit the full explanation; a program generates the short list from it.
 
 Read the starter rules against the work you plan to give the assistant. They cover money, messages, deletion, your name, uncertain facts and other people's private information. They also tell it to finish useful preparation before asking for approval. I want a complete draft to read at that point. Approving the intention to draft would leave me with another decision coming and still no draft.
 
@@ -24,12 +24,12 @@ Ask about anything in my life that deserves its own line.
 
 Then rewrite the files in rules/ in my words, keeping the header at the top of each one, and show me what changed before you save it.
 
-When I say yes, run hub-compile-rules so AGENTS.md catches up.
+When I say yes, run mc-compile-rules so AGENTS.md catches up.
 ```
 
-*[Copy prompt](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-17-box-1)*
+*[Copy prompt](https://srv1328602.hstgr.cloud/godspeed/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-17-box-1)*
 
-The prompt asks the assistant to run `hub-compile-rules`, the program that refreshes the short list after you confirm the changes. Open `AGENTS.md` and read that list. If anything is wrong, tell the assistant to correct the source rule and refresh it again. An edit made only in the generated list would disappear at the next run.
+The prompt asks the assistant to run `mc-compile-rules`, the program that refreshes the short list after you confirm the changes. Open `AGENTS.md` and read that list. If anything is wrong, tell the assistant to correct the source rule and refresh it again. An edit made only in the generated list would disappear at the next run.
 
 If the program is missing, ask the assistant to repair that part of the companion installation while preserving your files. You do not need to rebuild your rules by hand.
 
@@ -51,7 +51,7 @@ We can check whether a new session responds to an instruction without involving 
 When you answer anything in this folder, start your reply with the single word PELICAN on its own line.
 ```
 
-Save it, start a fresh session in the hub, and ask:
+Save it, start a fresh session in Mission Control, and ask:
 
 ```
 What is 2 plus 2? Answer in as few words as possible.
@@ -99,7 +99,7 @@ A second practice request asked for personal facts absent from the files. The re
 
 Those replies show how the assistant responded to written rules. Figure 16.1 separates that from what its tools permit. We need to check the tool settings too.
 
-[View the illustrated reading edition](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/Teach-It-Once.pdf)
+[View the illustrated reading edition](https://srv1328602.hstgr.cloud/godspeed/8d0da988c1c44fbaa71bdfef1d4144dc/Teach-It-Once.pdf)
 
 ## Inspect what the permission system actually covers
 

@@ -21,9 +21,9 @@ check() {
   fi
 }
 
-mkdir -p "$WORK/bin" "$WORK/hub"
-printf '# My hub\n' > "$WORK/hub/README.md"
-git -C "$WORK/hub" init -q -b main
+mkdir -p "$WORK/bin" "$WORK/godspeed"
+printf '# My godspeed\n' > "$WORK/godspeed/README.md"
+git -C "$WORK/godspeed" init -q -b main
 
 cat > "$WORK/bin/gh" <<'GH'
 #!/usr/bin/env bash
@@ -70,43 +70,43 @@ export FAKE_REMOTE="$WORK/remote.git"
 mkdir -p "$WORK/home"
 cd "$WORK/home" || exit 1
 
-output="$(bash "$CREATE_REPO_SCRIPT" "$WORK/hub" hub 2>&1)"
+output="$(bash "$CREATE_REPO_SCRIPT" "$WORK/godspeed" godspeed 2>&1)"
 rc=$?
 
-check "fresh hub repository setup exits successfully" test "$rc" -eq 0
-check "fresh hub receives its first commit" bash -c 'git -C "$1" rev-parse -q --verify HEAD >/dev/null' _ "$WORK/hub"
-check "fresh hub receives an origin" test "$(git -C "$WORK/hub" remote get-url origin)" = "$FAKE_REMOTE"
-check "first commit reaches the remote" test "$(git --git-dir "$FAKE_REMOTE" rev-parse refs/heads/main)" = "$(git -C "$WORK/hub" rev-parse HEAD)"
+check "fresh godspeed repository setup exits successfully" test "$rc" -eq 0
+check "fresh godspeed receives its first commit" bash -c 'git -C "$1" rev-parse -q --verify HEAD >/dev/null' _ "$WORK/godspeed"
+check "fresh godspeed receives an origin" test "$(git -C "$WORK/godspeed" remote get-url origin)" = "$FAKE_REMOTE"
+check "first commit reaches the remote" test "$(git --git-dir "$FAKE_REMOTE" rev-parse refs/heads/main)" = "$(git -C "$WORK/godspeed" rev-parse HEAD)"
 check "result reports the private GitHub address" bash -c 'case "$1" in *"private GitHub repository: https://github.com/test/hub"*) exit 0;; *) exit 1;; esac' _ "$output"
 
-mkdir -p "$WORK/hub2"
-printf '# Recovered hub\n' > "$WORK/hub2/README.md"
-git -C "$WORK/hub2" init -q -b main
-git -C "$WORK/hub2" config user.name "Test User"
-git -C "$WORK/hub2" config user.email "test@example.com"
-git -C "$WORK/hub2" add README.md
-git -C "$WORK/hub2" commit -q -m "Existing local commit"
+mkdir -p "$WORK/godspeed2"
+printf '# Recovered godspeed\n' > "$WORK/godspeed2/README.md"
+git -C "$WORK/godspeed2" init -q -b main
+git -C "$WORK/godspeed2" config user.name "Test User"
+git -C "$WORK/godspeed2" config user.email "test@example.com"
+git -C "$WORK/godspeed2" add README.md
+git -C "$WORK/godspeed2" commit -q -m "Existing local commit"
 git init --bare -q "$WORK/recovery-remote.git"
-git -C "$WORK/hub2" remote add origin "$WORK/recovery-remote.git"
+git -C "$WORK/godspeed2" remote add origin "$WORK/recovery-remote.git"
 export FAKE_REMOTE="$WORK/recovery-remote.git"
 
-recovery_output="$(bash "$CREATE_REPO_SCRIPT" "$WORK/hub2" ignored 2>&1)"
+recovery_output="$(bash "$CREATE_REPO_SCRIPT" "$WORK/godspeed2" ignored 2>&1)"
 recovery_rc=$?
 
 check "a retry with an origin but no remote branch succeeds" test "$recovery_rc" -eq 0
-check "a retry pushes the missing branch" test "$(git --git-dir "$WORK/recovery-remote.git" rev-parse refs/heads/main)" = "$(git -C "$WORK/hub2" rev-parse HEAD)"
+check "a retry pushes the missing branch" test "$(git --git-dir "$WORK/recovery-remote.git" rev-parse refs/heads/main)" = "$(git -C "$WORK/godspeed2" rev-parse HEAD)"
 check "a retry still verifies privacy" bash -c 'case "$1" in *"private GitHub repository: https://github.com/test/hub"*) exit 0;; *) exit 1;; esac' _ "$recovery_output"
 
-mkdir -p "$WORK/hub3"
-printf '# Ubuntu default branch\n' > "$WORK/hub3/README.md"
-git -C "$WORK/hub3" -c init.defaultBranch=master init -q
+mkdir -p "$WORK/godspeed3"
+printf '# Ubuntu default branch\n' > "$WORK/godspeed3/README.md"
+git -C "$WORK/godspeed3" -c init.defaultBranch=master init -q
 export FAKE_REMOTE="$WORK/master-remote.git"
 
-master_output="$(bash "$CREATE_REPO_SCRIPT" "$WORK/hub3" hub 2>&1)"
+master_output="$(bash "$CREATE_REPO_SCRIPT" "$WORK/godspeed3" godspeed 2>&1)"
 master_rc=$?
 
-check "a hub started on master is pushed as main" test "$master_rc" -eq 0
-check "the local branch is renamed to main before the first push" test "$(git -C "$WORK/hub3" branch --show-current)" = "main"
+check "a mission control started on master is pushed as main" test "$master_rc" -eq 0
+check "the local branch is renamed to main before the first push" test "$(git -C "$WORK/godspeed3" branch --show-current)" = "main"
 check "the remote receives main, not master" git --git-dir "$WORK/master-remote.git" show-ref --verify --quiet refs/heads/main
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"

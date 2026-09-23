@@ -1,4 +1,4 @@
-# Chapter 17: Back Up Your Hub and Undo Mistakes
+# Chapter 17: Back Up Your Mission Control and Undo Mistakes
 
 I broke my writing guide while writing a chapter about backups. I would have preferred a less convincing demonstration.
 
@@ -21,14 +21,14 @@ Git saves versions of the files you choose, so you can recover good work after a
 Begin by having the assistant inspect the files on this computer and show you what would enter that history:
 
 ```
-Before making a first snapshot or uploading anything, inspect this hub locally for files that should not enter its history: credentials, payment details, private conversation archives, personal material I did not intend to copy, and nested projects.
+Before making a first snapshot or uploading anything, inspect this mission control locally for files that should not enter its history: credentials, payment details, private conversation archives, personal material I did not intend to copy, and nested projects.
 
 Inspect the existing Git status and history too, if present. Check whether excluded files were already tracked. Do not print secret values into this chat and do not upload file contents to a separate scanning service. Report paths, kinds of information and the proposed action only.
 
 Do not change files or history yet. Show what would be included, what would be excluded and what needs my decision. Explain that this inspection may miss sensitive information.
 ```
 
-*[Copy prompt](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-17-text-2-20260913)*
+*[Copy prompt](https://srv1328602.hstgr.cloud/godspeed/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-17-text-2-20260913)*
 
 Keep the inspection local where possible, and ask for categories of findings rather than the secret contents. There is a catch here: a cloud assistant may send what its file tools read to its model provider. Review especially sensitive files yourself if that exposure would defeat the purpose of checking them.
 
@@ -39,12 +39,12 @@ An ignore rule tells Git to leave out files it isn't already tracking. It has no
 Once you've reviewed which files belong in the history, ask for the first snapshot:
 
 ```
-Set up local Git version history for this hub, using only the files I approved after the privacy review. Preserve existing history. Exclude the agreed private material and nested projects; verify the exclusions before saving.
+Set up local Git version history for this mission control, using only the files I approved after the privacy review. Preserve existing history. Exclude the agreed private material and nested projects; verify the exclusions before saving.
 
 Create one snapshot and show its identifier and the files included. Do not upload it or create an automatic job. Explain how I can ask to restore one file without losing unrelated work.
 ```
 
-*[Copy prompt](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-18-box-3)*
+*[Copy prompt](https://srv1328602.hstgr.cloud/godspeed/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-18-box-3)*
 
 The installer may already have set up Git, so the assistant should preserve any history it finds. Have it list what the new snapshot contains and compare that list with the files you approved. Read the report for work you meant to keep; these are the files you would get back after a mistake.
 
@@ -58,7 +58,7 @@ Save that file in a local Git snapshot without including unrelated changes. Then
 Restore backup-practice.txt from the saved snapshot. Compare the restored contents with the original sentence and show the result. Do not alter any other files or upload anything.
 ```
 
-*[Copy prompt](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-17-text-4-20260913)*
+*[Copy prompt](https://srv1328602.hstgr.cloud/godspeed/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-17-text-4-20260913)*
 
 Open the restored file and look for the original sentence. You have now watched a change being undone. The same principle applies to real work: a snapshot saved before an edit gives you a version to return to.
 
@@ -72,27 +72,27 @@ I opened the file and found my detailed guide again. I hadn't learned a recovery
 
 The history lives on the same drive as your work. It can rescue a file from a bad edit, but it shares the drive's fate if the computer is lost. A separate online copy gives you somewhere to recover that work from.
 
-I use GitHub, a website that can store files together with their Git history. That collection is called a repository. Although GitHub is often used for code, it can keep your hub's notes and instructions too.
+I use GitHub, a website that can store files together with their Git history. That collection is called a repository. Although GitHub is often used for code, it can keep your mission control's notes and instructions too.
 
 If you want to keep your copy there, let the assistant check its access to your GitHub account and guide any necessary sign-in. We'll ask it to make the repository private. Private keeps the files out of public view; GitHub and people you authorise may still have access.
 
 Before uploading, repeat the inclusion and history review. Then ask:
 
 ```
-Prepare a private GitHub backup named hub-backup for the reviewed hub history. If that name already exists, inspect it and do not replace it.
+Prepare a private GitHub backup named mc-backup for the reviewed mission control history. If that name already exists, inspect it and do not replace it.
 
 Before uploading, show the destination, confirm its private visibility, and show the files and history that will leave this computer. Check again for unintended tracked files and sensitive earlier versions. Do not print credential values.
 
 Wait for my approval of that exact upload. After approval, upload the reviewed snapshot, verify the remote snapshot identifier matches, and give me the repository link. Do not create an automatic sync job.
 ```
 
-*[Copy prompt](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-18-box-5)*
+*[Copy prompt](https://srv1328602.hstgr.cloud/godspeed/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-18-box-5)*
 
 The assistant should confirm that the repository is private and that the uploaded snapshot matches the one you reviewed. It can compare the identifiers itself. Its report and repository link give you a way to inspect the saved work without having to perform that technical check.
 
 
 
-[View the illustrated reading edition](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/Teach-It-Once.pdf)
+[View the illustrated reading edition](https://srv1328602.hstgr.cloud/godspeed/8d0da988c1c44fbaa71bdfef1d4144dc/Teach-It-Once.pdf)
 
 ## Save again when work changes
 
@@ -106,8 +106,8 @@ If you later schedule these saves, ask the assistant to record the job, its dest
 
 ## Optional: edit the same files in another app
 
-To browse the hub, start with any editor you already like that opens Markdown files. A plain text editor is enough. Obsidian is a useful choice if you prefer a dedicated notes app. In the version used here, "Open folder as vault" opened the existing hub. *Vault* sounds more impressive than *folder*, but here it means the folder you're opening.
+To browse Mission Control, start with any editor you already like that opens Markdown files. A plain text editor is enough. Obsidian is a useful choice if you prefer a dedicated notes app. In the version used here, "Open folder as vault" opened the existing mission control. *Vault* sounds more impressive than *folder*, but here it means the folder you're opening.
 
-Open the existing hub in the editor. You don't need to make a copy, install community add-ons or add another sync service to read it. Working on the same files spares you the later puzzle of why the assistant can't see the changes you just made.
+Open the existing mission control in the editor. You don't need to make a copy, install community add-ons or add another sync service to read it. Working on the same files spares you the later puzzle of why the assistant can't see the changes you just made.
 
 Before you leave this chapter, check that the practice file came back and, if you chose a remote backup, that the reviewed snapshot arrived there. Credentials left out of Git need their own safe home, such as a password manager. You can then make the next useful edit knowing which version you would ask to get back.

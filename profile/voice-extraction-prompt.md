@@ -8,7 +8,7 @@ The draft has every fact right. It also greets your old friend as though applyin
 
 Choose three to five short pieces of your own writing. Ordinary emails make good samples, as do explanations, refusals and messages with bad news. Pick pieces where you recognise your own voice.
 
-Remove private details before giving the samples to the hub. It can learn your sentence length and tone without somebody's real name or access details coming along for the lesson. Then ask it to save each sample as a separate text file in `inbox/writing-samples/`, creating the folder if needed.
+Remove private details before giving the samples to Mission Control. It can learn your sentence length and tone without somebody's real name or access details coming along for the lesson. Then ask it to save each sample as a separate text file in `inbox/writing-samples/`, creating the folder if needed.
 
 Then paste:
 
@@ -22,7 +22,7 @@ Keep explicit preferences I already confirmed separate from patterns you infer. 
 Show the proposed profile/voice.md, then save the version I confirm. Keep the writing samples.
 ```
 
-*[Copy prompt](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-8-box-1)*
+*[Copy prompt](https://srv1328602.hstgr.cloud/godspeed/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-8-box-1)*
 
 ## Keep what you recognise
 

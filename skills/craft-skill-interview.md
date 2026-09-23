@@ -20,7 +20,7 @@ Ask one question at a time, five questions maximum, about:
 Then propose up to three skills, each with a name and what it takes in and gives back. Do not invent a third candidate to fill the list.
 ```
 
-*[Copy prompt](https://srv1328602.hstgr.cloud/hub/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-15-box-1)*
+*[Copy prompt](https://srv1328602.hstgr.cloud/godspeed/8d0da988c1c44fbaa71bdfef1d4144dc/prompts.html#chapter-15-box-1)*
 
 Two questions from the interview were especially useful:
 
