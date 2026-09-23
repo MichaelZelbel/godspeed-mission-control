@@ -15,7 +15,7 @@ done
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
-mkdir -p "$TMP/rules" "$TMP/bin" "$TMP/attention"
+mkdir -p "$TMP/rules" "$TMP/bin"
 : > "$TMP/AGENTS.md"
 cp "$HERE/work.js" "$TMP/bin/"
 cp "$HERE/mc-cards.js" "$TMP/bin/"
