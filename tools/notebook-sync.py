@@ -457,7 +457,7 @@ class MenerioClient:
 
     def _send(self, method: str, path: str, data):
         request = urllib.request.Request(
-            "{}/hub-api-notes{}".format(self.base_url, path),
+            "{}/mc-api-notes{}".format(self.base_url, path),
             data=data,
             method=method,
             headers={
@@ -486,7 +486,7 @@ class MenerioClient:
     def trash_note(self, note_id: str) -> None:
         self._call("DELETE", "/{}".format(note_id))
 
-    def list_hub_notes(self) -> list:
+    def list_godspeed_notes(self) -> list:
         """Every note the notebook holds that this sync created, across all pages."""
         notes, offset = [], 0
         while True:
@@ -677,7 +677,7 @@ def main(argv=None) -> int:
             return 2
         if cold_start and not args.reconcile:
             print("no local cache here, so asking the notebook what it already holds...")
-        remote = client.list_hub_notes()
+        remote = client.list_godspeed_notes()
         state = reconcile_state(docs, remote)
         state_path.parent.mkdir(parents=True, exist_ok=True)
         save_state(state_path, state)
@@ -710,7 +710,7 @@ def main(argv=None) -> int:
     if args.apply and failures and api_key:
         print("\n{} document(s) were refused, so this machine's cache is out of date. "
               "Asking the notebook and trying once more...".format(len(failures)))
-        state = reconcile_state(docs, client.list_hub_notes())
+        state = reconcile_state(docs, client.list_godspeed_notes())
         save_state(state_path, state)
         failures = []
         new_state = run_sync(docs, state, client, apply=True,

@@ -21,34 +21,34 @@ const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
 
-function isHub(d) {
+function isGodspeed(d) {
   return !!d && (fs.existsSync(path.join(d, 'rules')) || fs.existsSync(path.join(d, 'observations')));
 }
 function walkUp(from) {
   let d = from;
   for (let i = 0; i < 8; i++) {
-    if (isHub(d)) return d;
+    if (isGodspeed(d)) return d;
     const up = path.dirname(d);
     if (up === d) break;
     d = up;
   }
   return null;
 }
-function recordedHub() {
+function recordedGodspeed() {
   try {
     const home = process.env.HOME || process.env.USERPROFILE || '';
     const t = fs.readFileSync(path.join(home, '.godspeed', 'device.env'), 'utf8');
     const m = t.replace(/\r/g, '').match(/^[ \t]*(?:export[ \t]+)?GODSPEED_DIR=(.*)$/m);
     const d = m ? m[1].trim().replace(/^["']|["']$/g, '') : '';
-    return isHub(d) ? d : null;
+    return isGodspeed(d) ? d : null;
   } catch (e) { return null; }
 }
 function godspeedRoot(fromFile) {
-  if (process.env.GODSPEED_ROOT && isHub(process.env.GODSPEED_ROOT)) return process.env.GODSPEED_ROOT;
+  if (process.env.GODSPEED_ROOT && isGodspeed(process.env.GODSPEED_ROOT)) return process.env.GODSPEED_ROOT;
   // These programs are installed OUTSIDE your mission control, so walking up from this file only finds one
   // on a machine where they happen to sit inside a mission control. The folder you are standing in is the
   // answer that works for a person typing the command; device.env is the answer for a schedule.
-  return walkUp(process.cwd()) || walkUp(path.dirname(fs.realpathSync(fromFile))) || recordedHub() || process.cwd();
+  return walkUp(process.cwd()) || walkUp(path.dirname(fs.realpathSync(fromFile))) || recordedGodspeed() || process.cwd();
 }
 
 const today = () => (process.env.GODSPEED_TODAY || new Date().toISOString().slice(0, 10));
@@ -191,7 +191,7 @@ function sibling(fromFile, godspeed, name) {
   const dirs = [
     path.dirname(fs.realpathSync(fromFile)),
     path.join(home, '.local', 'bin'),
-    path.join(godspeed, 'agents', 'hub-cli'),
+    path.join(godspeed, 'agents', 'mc-cli'),
   ];
   for (const d of dirs) {
     const p = path.join(d, name + '.js');

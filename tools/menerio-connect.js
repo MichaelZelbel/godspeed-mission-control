@@ -414,7 +414,7 @@ async function testConnection(key) {
 
 // ================================================================ the run
 async function main() {
-  const godspeed = nb.findHub(godspeedArg);
+  const godspeed = nb.findGodspeed(godspeedArg);
   const k = nb.menerioKey(godspeed);
 
   if (refreshOnly) {                      // never a word, never a failure: a schedule runs this

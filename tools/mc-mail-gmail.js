@@ -76,7 +76,7 @@ function readDeviceEnv(name) {
 // What you said, what the installer wrote down, then a walk up from here. Each is used only
 // if the folder really exists: a GODSPEED_DIR mangled on its way through a shell is skipped, not
 // believed.
-function findHub() {
+function findGodspeed() {
   for (const h of [process.env.GODSPEED_DIR, readDeviceEnv("GODSPEED_DIR")]) {
     if (h && fs.existsSync(path.join(h, "AGENTS.md"))) return path.resolve(h);
   }
@@ -98,7 +98,7 @@ function findAge(name) {
   return r.error ? "" : name;
 }
 function storePaths() {
-  const godspeed = findHub();
+  const godspeed = findGodspeed();
   return { godspeed, store: godspeed ? path.join(godspeed, "secrets", "mc-secrets.env.age") : "",
     key: process.env.GODSPEED_AGE_KEY || path.join(home(), ".godspeed", "age-key.txt") };
 }
@@ -318,7 +318,7 @@ function inside(child, parent) {
   return rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel));
 }
 function attachmentDir(messageId) {
-  const godspeed = findHub();
+  const godspeed = findGodspeed();
   const dir = path.join(stateDir(), "attachments", String(messageId).replace(/[^A-Za-z0-9_-]/g, "_"));
   if (godspeed && inside(dir, godspeed)) throw new Error("the place for attachments (" + dir + ") is inside your mission control folder, and an attachment must never end up in your mission control's history. Nothing was saved.");
   fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
@@ -402,7 +402,7 @@ function checkAddr(list, field) {
   return list;
 }
 function readAttachments(list) {
-  const godspeed = findHub(), out = [];
+  const godspeed = findGodspeed(), out = [];
   let total = 0;
   for (const p of [].concat(list || [])) {
     const full = path.resolve(godspeed || process.cwd(), p);
@@ -819,5 +819,5 @@ async function status() {
   }
 }
 
-module.exports = { findAge, readDeviceEnv, shareStore, findHub, credentials, state, attachment, openBrowser, search, read, draft, listDrafts, proposeSend, approve, reject, pending, tidy, connect, disconnect, status,
+module.exports = { findAge, readDeviceEnv, shareStore, findGodspeed, credentials, state, attachment, openBrowser, search, read, draft, listDrafts, proposeSend, approve, reject, pending, tidy, connect, disconnect, status,
   authorize, writeStore, readStore, buildRaw, SCOPE_READ, SCOPE_COMPOSE };

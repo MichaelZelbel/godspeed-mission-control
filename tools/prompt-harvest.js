@@ -95,7 +95,7 @@ const STAMP = path.join(os.homedir(), '.godspeed', 'prompt-harvest-last');
  * on the strength of a missing folder. If someone has said where their godspeed is, that is the
  * answer; guessing is only for when nobody has said. */
 const GODSPEED_MARKERS = ['observations', 'profile', 'rules', 'prompts', 'memory'];
-function looksLikeHub(p) {
+function looksLikeGodspeed(p) {
   try {
     if (!p) return false;
     if (fs.existsSync(path.join(p, 'scripts', 'config', 'mc-layout.json'))) return true;
@@ -104,7 +104,7 @@ function looksLikeHub(p) {
     });
   } catch (_) { return false; }
 }
-function findHub() {
+function findGodspeed() {
   /* Said out loud beats inferred. Only the shape of the answer is checked: a GODSPEED_DIR that
    * names something which is not a directory at all is a typo worth reporting, not obeyed. */
   const told = process.env.GODSPEED_DIR;
@@ -114,11 +114,11 @@ function findHub() {
        + '~/.godspeed/device.env, or unset it and I will look in the usual places.');
   }
   const cands = [path.join(os.homedir(), 'godspeed'), '/root/godspeed', 'C:\\godspeed'];
-  for (const c of cands) if (looksLikeHub(c)) return path.resolve(c);
+  for (const c of cands) if (looksLikeGodspeed(c)) return path.resolve(c);
   const up = path.resolve(__dirname, '..');
-  return looksLikeHub(up) ? up : null;
+  return looksLikeGodspeed(up) ? up : null;
 }
-const GODSPEED = findHub();
+const GODSPEED = findGodspeed();
 
 /* The collector is the other half of this pair and travels with it, so look next to this file
  * first. The two fallbacks are for a mission control that still carries its own copy from before this
@@ -126,7 +126,7 @@ const GODSPEED = findHub();
 function findCollector() {
   const names = [path.join(__dirname, 'mc-prompt-archive')];
   if (GODSPEED) {
-    names.push(path.join(GODSPEED, 'agents', 'hub-cli', 'hub-prompt-archive'));
+    names.push(path.join(GODSPEED, 'agents', 'mc-cli', 'mc-prompt-archive'));
     names.push(path.join(GODSPEED, 'bin', 'mc-prompt-archive'));
   }
   for (const n of names) { try { if (fs.statSync(n).isFile()) return n; } catch (_) {} }
@@ -189,7 +189,7 @@ const MACHINE = (process.env.GODSPEED_MACHINE || os.hostname()).toLowerCase()
  * is no repository to write a receipt into, which is exactly when one is worth having, so a
  * failing run files its receipt in the mission control it used last. Used for the receipt only, never to
  * decide where to harvest: a remembered path is evidence about the past, not an instruction. */
-const LAST_HUB = path.join(os.homedir(), '.godspeed', 'prompt-harvest-godspeed');
+const LAST_GODSPEED = path.join(os.homedir(), '.godspeed', 'prompt-harvest-godspeed');
 
 function toolVersion() {
   /* Which copy of this pair is this machine running? These programs are INSTALLED, and an
@@ -211,7 +211,7 @@ function receipt(fields) {
      * memory, not a place, and writing into it would quietly recreate a folder somebody got
      * rid of - mkdir -p is happy to build a whole tree out of a stale note to self. */
     try {
-      const remembered = fs.readFileSync(LAST_HUB, 'utf8').trim();
+      const remembered = fs.readFileSync(LAST_GODSPEED, 'utf8').trim();
       if (remembered && fs.statSync(remembered).isDirectory()) godspeed = remembered;
     } catch (_) {}
   }
@@ -232,7 +232,7 @@ function receipt(fields) {
     fs.writeFileSync(path.join(dir, MACHINE + '.json'),
                      JSON.stringify(body, null, 2) + '\n');
   } catch (e) { warn('could not write the run receipt: ' + String(e.message || e)); }
-  if (GODSPEED) { try { fs.writeFileSync(LAST_HUB, GODSPEED + '\n'); } catch (_) {} }
+  if (GODSPEED) { try { fs.writeFileSync(LAST_GODSPEED, GODSPEED + '\n'); } catch (_) {} }
 }
 
 /* How many rows the collector added, and which sources it could read, taken from its own

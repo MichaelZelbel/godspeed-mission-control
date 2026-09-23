@@ -69,7 +69,7 @@ for (let i = 0; i < raw.length; i++) {
 }
 limit = Math.max(1, Math.min(50, limit));
 
-const godspeed = nb.findHub(godspeedArg);
+const godspeed = nb.findGodspeed(godspeedArg);
 if (!godspeed) {
   console.log("I could not find your mission control folder. Run this inside it, or say where it is:");
   console.log("  mc-search --godspeed /path/to/your/godspeed <words>");
@@ -195,7 +195,7 @@ function askMenerio(key, q, max) {
     const base = (process.env.MENERIO_BASE_URL || DEFAULT_BASE_URL).replace(/\/+$/, "");
     let url;
     try {
-      url = new URL(base + "/hub-api-notes/search?q=" + encodeURIComponent(q) +
+      url = new URL(base + "/mc-api-notes/search?q=" + encodeURIComponent(q) +
         "&source_app=godspeed&limit=" + max);
     } catch (e) { return resolve({ error: "the notebook address is not a web address" }); }
     const lib = url.protocol === "http:" ? http : https;

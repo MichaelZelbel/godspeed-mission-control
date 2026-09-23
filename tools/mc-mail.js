@@ -56,7 +56,7 @@ const UNTRUSTED_CLOSE = '<<<END OF UNTRUSTED EMAIL CONTENT>>>';
 const wrap = (head, body) => head.concat([UNTRUSTED_OPEN], body, [UNTRUSTED_CLOSE]).join('\n');
 
 // ----------------------------------------------------------------------- the mission control's own address
-const godspeedDir = () => G.findHub();
+const godspeedDir = () => G.findGodspeed();
 // The key and the address: the environment first, then the mission control's locked store, then (for the
 // address only) the mission control's .mcp.json, where an older setup wrote it.
 function agentmailConfig() {
@@ -103,13 +103,13 @@ async function am(cfg, p, params) {
   throw new Error(last || 'AgentMail not reached');
 }
 const inboxPath = cfg => '/v0/inboxes/' + encodeURIComponent(cfg.inbox);
-function needHub() {
+function needGodspeed() {
   const cfg = agentmailConfig();
   if (!cfg.key || !cfg.inbox) throw new Error('godspeed: the mission control has no address of its own yet. Optional; when you want one: mc-mail connect agentmail');
   return cfg;
 }
 
-const HubBox = {
+const GodspeedBox = {
   async status() {
     const cfg = agentmailConfig();
     if (!cfg.key || !cfg.inbox) return { account: 'godspeed', state: 'not connected', note: 'Optional: give the mission control its own address with mc-mail connect agentmail.' };
@@ -122,7 +122,7 @@ const HubBox = {
     }
   },
   async search(args) {
-    const cfg = needHub();
+    const cfg = needGodspeed();
     const limit = Math.max(1, Math.min(25, Number(args.limit) || 10));
     const res = args.query
       ? await am(cfg, inboxPath(cfg) + '/messages/search', { q: args.query, limit, page_token: args.page_token, after: args.after, before: args.before })
@@ -133,7 +133,7 @@ const HubBox = {
       messages: msgs.map(m => ({ message_id: m.message_id, date: m.timestamp, from: m.from, subject: m.subject, preview: (m.preview || '').slice(0, 200) })) };
   },
   async read(args) {
-    const cfg = needHub();
+    const cfg = needGodspeed();
     if (!args.message_id) throw new Error('message_id is required (from mail_search)');
     const m = await am(cfg, inboxPath(cfg) + '/messages/' + encodeURIComponent(args.message_id));
     let text = m.extracted_text || m.text || '';
@@ -159,7 +159,7 @@ const OAuthBox = { search: G.search, read: args => G.read(args, wrap), drafts: G
 // address is reached by asking for account "godspeed".
 function box(account) {
   const a = account || 'gmail';
-  if (a === 'godspeed') return HubBox;
+  if (a === 'godspeed') return GodspeedBox;
   if (a === 'gmail' || a === 'gmail-oauth') {
     const k = a === 'gmail-oauth' ? (G.credentials().GMAIL_REFRESH_TOKEN ? 'oauth' : '') : gmailKind();
     if (k === 'imap') return ImapBox;
@@ -179,7 +179,7 @@ async function status() {
   if (k === 'imap') out.push(I.status());
   if (G.credentials().GMAIL_REFRESH_TOKEN) out.push(Object.assign(await G.status(), k === 'imap' ? { account: 'gmail-oauth', note: 'A Gmail connection made the older way, kept as it was. Reach it with account "gmail-oauth".' } : {}));
   if (!k) out.push(I.status());
-  out.push(await HubBox.status());
+  out.push(await GodspeedBox.status());
   return out;
 }
 

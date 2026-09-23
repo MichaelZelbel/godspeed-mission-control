@@ -30,7 +30,7 @@ function readDeviceEnv(name) {
 
 // The same order mc-due uses: what you said, what the installer wrote down, what the
 // environment says, and last a walk up from where you are sitting.
-function findHub(explicit) {
+function findGodspeed(explicit) {
   let godspeed = explicit || readDeviceEnv("GODSPEED_DIR") || process.env.GODSPEED_DIR || "";
   if (!godspeed) {
     let d = process.cwd();
@@ -186,5 +186,5 @@ function mirrorOn() {
 }
 
 module.exports = {
-  readDeviceEnv, findHub, findAge, menerioKey, mirroredMarkdown, mirrorOn, DECISION_LOG,
+  readDeviceEnv, findGodspeed, findAge, menerioKey, mirroredMarkdown, mirrorOn, DECISION_LOG,
 };

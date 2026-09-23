@@ -117,7 +117,7 @@ lacks "a path that points outside the mission control is not believed" "$out" "o
 contains "a decision comes back as decisions.md, under its own title" "$out" "decisions.md
   2026-01-05 Changed dentist"
 seen="$("$NODE" -e 'require("http").get(process.argv[1]+"/__seen",r=>{let d="";r.on("data",c=>d+=c);r.on("end",()=>console.log(d))})' "$MENERIO_BASE_URL")"
-contains "the call asks for godspeed copies only, with the limit and the key as a Bearer header" "$seen" '"path":"/hub-api-notes/search","q":"the dentist","source_app":"godspeed","limit":"5","auth":"Bearer test-key"'
+contains "the call asks for godspeed copies only, with the limit and the key as a Bearer header" "$seen" '"path":"/mc-api-notes/search","q":"the dentist","source_app":"godspeed","limit":"5","auth":"Bearer test-key"'
 
 # 5. An older Menerio: no source_id, no snippet, no mode, and it ignores source_app=godspeed.
 out="$(MENERIO_API_KEY=test-key hs oldshape dentist)"
