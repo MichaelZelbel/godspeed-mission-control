@@ -61,30 +61,22 @@ const godspeedDir = () => G.findHub();
 // address only) the mission control's .mcp.json, where an older setup wrote it.
 function agentmailConfig() {
   let key = (process.env.AGENTMAIL_READ_KEY || '').trim();
-  // Never one name: before 2026-09-22 the address was HUB_MAIL_AGENTMAIL_INBOX, in the environment,
-  // in the store and in a .mcp.json entry called hub-mail. The new name wins where both exist.
-  const INBOX_NAMES = ['GODSPEED_MAIL_AGENTMAIL_INBOX', 'HUB_MAIL_AGENTMAIL_INBOX'];
-  let inbox = INBOX_NAMES.map(n => (process.env[n] || '').trim()).find(Boolean) || '';
+  let inbox = (process.env.GODSPEED_MAIL_AGENTMAIL_INBOX || '').trim();
   if (/^unset/.test(key)) key = '';
   if (!key || !inbox) {
     const s = G.readStore();
-    const found = {};
     for (const line of s.lines || []) {
-      const m = line.match(/^(AGENTMAIL_READ_KEY|GODSPEED_MAIL_AGENTMAIL_INBOX|HUB_MAIL_AGENTMAIL_INBOX)=(.*)$/);
-      if (m && !(m[1] in found)) found[m[1]] = m[2].trim();
+      const m = line.match(/^(AGENTMAIL_READ_KEY|GODSPEED_MAIL_AGENTMAIL_INBOX)=(.*)$/);
+      if (!m) continue;
+      if (m[1] === 'AGENTMAIL_READ_KEY' && !key) key = m[2].trim();
+      if (m[1] === 'GODSPEED_MAIL_AGENTMAIL_INBOX' && !inbox) inbox = m[2].trim();
     }
-    if (!key) key = found.AGENTMAIL_READ_KEY || '';
-    if (!inbox) inbox = INBOX_NAMES.map(n => found[n]).find(Boolean) || '';
   }
   if (!inbox) {
     for (const dir of [godspeedDir(), process.cwd()].filter(Boolean)) {
       try {
-        const servers = JSON.parse(fs.readFileSync(path.join(dir, '.mcp.json'), 'utf8')).mcpServers || {};
-        for (const env of ['mc-mail', 'hub-mail'].map(k => (servers[k] || {}).env || {})) {
-          const v = INBOX_NAMES.map(n => env[n]).find(x => x && !/\$\{/.test(x));
-          if (v) { inbox = v; break; }
-        }
-        if (inbox) break;
+        const env = ((JSON.parse(fs.readFileSync(path.join(dir, '.mcp.json'), 'utf8')).mcpServers || {})['mc-mail'] || {}).env || {};
+        if (env.GODSPEED_MAIL_AGENTMAIL_INBOX && !/\$\{/.test(env.GODSPEED_MAIL_AGENTMAIL_INBOX)) { inbox = env.GODSPEED_MAIL_AGENTMAIL_INBOX; break; }
       } catch { /* not a mission control, or no mail entry */ }
     }
   }
@@ -516,5 +508,5 @@ async function main(argv) {
   }
 }
 
-module.exports = { main, TOOLS, terminalAsk, agentmailConfig };
+module.exports = { main, TOOLS, terminalAsk };
 if (require.main === module) main(process.argv.slice(2));

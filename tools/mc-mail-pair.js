@@ -35,12 +35,9 @@ const path = require("path");
 const crypto = require("crypto");
 const { spawn, spawnSync } = require("child_process");
 
-const home = () => process.env.GODSPEED_MAIL_HOME || process.env.HUB_MAIL_HOME || os.homedir();
-// Never one name: a desktop paired before 2026-09-22 keeps its key and route under ~/.hub/mail.
-const inMail = name => [path.join(home(), ".godspeed", "mail", name), path.join(home(), ".hub", "mail", name)]
-  .find(p => fs.existsSync(p)) || path.join(home(), ".godspeed", "mail", name);
-const sshDir = () => inMail("ssh");
-const routeFile = () => inMail("route.json");
+const home = () => process.env.GODSPEED_MAIL_HOME || os.homedir();
+const sshDir = () => path.join(home(), ".godspeed", "mail", "ssh");
+const routeFile = () => path.join(home(), ".godspeed", "mail", "route.json");
 const REQ = "godspeedmail-pair-1.", REC = "godspeedmail-receipt-1.";
 const DEVICE = /^[A-Za-z0-9._-]{1,40}$/;
 const USER = /^[a-z_][a-z0-9_-]{0,31}$/;

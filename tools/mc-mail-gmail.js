@@ -52,14 +52,9 @@ const KEEP_ATTACHMENT_DAYS = 30;
 const KEYS = ["GMAIL_CLIENT_ID", "GMAIL_CLIENT_SECRET", "GMAIL_REFRESH_TOKEN", "GMAIL_ADDRESS", "GMAIL_SCOPES", "GMAIL_GENERATION"];
 
 // ============================================================ where things are
-function home() { return process.env.GODSPEED_MAIL_HOME || process.env.HUB_MAIL_HOME || os.homedir(); }
-// NEVER ONE NAME. Until 2026-09-22 everything here lived under ~/.hub/, the store was
-// secrets/hub-secrets.env.age and the folder was named by HUB_DIR. A machine set up before then
-// still has only those, so each lookup takes the new name when it exists, the old one when only
-// that exists, and the new one for a machine that has neither yet.
-function firstThere(paths) { return paths.find(p => fs.existsSync(p)) || paths[0]; }
+function home() { return process.env.GODSPEED_MAIL_HOME || os.homedir(); }
 function stateDir() {
-  const d = firstThere([path.join(home(), ".godspeed", "mail"), path.join(home(), ".hub", "mail")]);
+  const d = path.join(home(), ".godspeed", "mail");
   fs.mkdirSync(d, { recursive: true, mode: 0o700 });
   return d;
 }
@@ -73,22 +68,16 @@ function writeJson(name, data) {
 }
 
 function readDeviceEnv(name) {
-  // ~/.godspeed/device.env under the new name, then ~/.hub/device.env under the old one.
-  const places = [[path.join(home(), ".godspeed", "device.env"), name]];
-  if (/^GODSPEED_/.test(name)) places.push([path.join(home(), ".hub", "device.env"), name.replace(/^GODSPEED_/, "HUB_")]);
-  for (const [file, key] of places) {
-    try {
-      const m = fs.readFileSync(file, "utf8").match(new RegExp("^\\s*" + key + "=(.*)$", "m"));
-      if (m) return m[1].trim().replace(/^["']|["']$/g, "");
-    } catch (e) { /* not on this machine */ }
-  }
-  return "";
+  try {
+    const m = fs.readFileSync(path.join(home(), ".godspeed", "device.env"), "utf8").match(new RegExp("^\\s*" + name + "=(.*)$", "m"));
+    return m ? m[1].trim().replace(/^["']|["']$/g, "") : "";
+  } catch (e) { return ""; }
 }
 // What you said, what the installer wrote down, then a walk up from here. Each is used only
 // if the folder really exists: a GODSPEED_DIR mangled on its way through a shell is skipped, not
 // believed.
 function findHub() {
-  for (const h of [process.env.GODSPEED_DIR, process.env.HUB_DIR, readDeviceEnv("GODSPEED_DIR")]) {
+  for (const h of [process.env.GODSPEED_DIR, readDeviceEnv("GODSPEED_DIR")]) {
     if (h && fs.existsSync(path.join(h, "AGENTS.md"))) return path.resolve(h);
   }
   let d = process.cwd();
@@ -110,11 +99,8 @@ function findAge(name) {
 }
 function storePaths() {
   const godspeed = findHub();
-  return { godspeed,
-    store: godspeed ? firstThere([path.join(godspeed, "secrets", "mc-secrets.env.age"),
-      path.join(godspeed, "secrets", "hub-secrets.env.age")]) : "",
-    key: process.env.GODSPEED_AGE_KEY || process.env.HUB_AGE_KEY ||
-      firstThere([path.join(home(), ".godspeed", "age-key.txt"), path.join(home(), ".hub", "age-key.txt")]) };
+  return { godspeed, store: godspeed ? path.join(godspeed, "secrets", "mc-secrets.env.age") : "",
+    key: process.env.GODSPEED_AGE_KEY || path.join(home(), ".godspeed", "age-key.txt") };
 }
 function readStore() {
   const { store, key } = storePaths();
@@ -834,4 +820,4 @@ async function status() {
 }
 
 module.exports = { findAge, readDeviceEnv, shareStore, findHub, credentials, state, attachment, openBrowser, search, read, draft, listDrafts, proposeSend, approve, reject, pending, tidy, connect, disconnect, status,
-  authorize, writeStore, readStore, buildRaw, SCOPE_READ, SCOPE_COMPOSE, storePaths, stateDir };
+  authorize, writeStore, readStore, buildRaw, SCOPE_READ, SCOPE_COMPOSE };
