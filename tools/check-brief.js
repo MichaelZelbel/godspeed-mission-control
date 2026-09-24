@@ -56,7 +56,9 @@ const PATHISH = [
   /\b[A-Za-z]:[\\/][\w\\/.~-]+/,                              // C:\godspeed\... C:/godspeed/...
 ];
 const READ_THIS = /\b(read|open|skim)\s+(it|the\s+(draft|script|piece|post|page|file|thread|link))\b/i;
-const QUOTED = /["\u201c]([^"\u201c\u201d]{25,}?)["\u201d]/g;
+// Never across a line break: with straight quotes, two short quotes in different paragraphs were
+// paired and the prose between them taken for a line to post (found 2026-09-24).
+const QUOTED = /["\u201c]([^"\u201c\u201d\n]{25,}?)["\u201d]/g;
 const READY = /\b(?:as is|as-is|ready to send|ready to post|post (?:it|this|one|a line)|paste (?:it|this)|send (?:him|her|them|this)|copy (?:it|this))\b/i;
 // The former name as it was used for the product: "your", "my" or "the" before the word. A
 // coworking one, or somebody else's product that ends in the word, is not ours.
