@@ -179,6 +179,15 @@ SECRET_PATTERNS = [
     (re.compile(r"(?i)\b(bearer)\s+\S{8,}"),                         r"\1 [removed]"),
     (re.compile(r"(?i)\b(api[_-]?key|secret|token|password|passwd|pwd)\s*[:=]\s*\S+"),
      r"\1=[removed]"),
+    # A password said in a sentence, in either language: "Dein Passwort ist das folgende:  X",
+    # "my password is X". The pattern above wants the colon right after the word, so a
+    # 32-character sudo password typed in German on 2026-05-01 sat in the archive until
+    # 2026-09-24, and it was too short for STILL_RISKY's 40 to catch it either.
+    # The value must look like a secret (letters and digits, six or more), so "is it good"
+    # and "the password field is empty" pass untouched.
+    (re.compile(r"(?i)\b(passwor[dt]|kennwort|passphrase)\b([^\n:=]{0,40}?(?:[:=]|\b(?:ist|is|lautet)\b))"
+                r"\s*(?=\S*\d)(?=\S*[A-Za-z])\S{6,}"),
+     r"\1\2 [removed]"),
     (re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----", re.S),
      "[private key removed]"),
     (re.compile(r"\bage1[a-z0-9]{40,}"),                            "[key removed]"),

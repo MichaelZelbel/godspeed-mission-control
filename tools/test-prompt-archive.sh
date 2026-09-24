@@ -677,6 +677,26 @@ cat "$W/prompts/archive/"*.jsonl 2>/dev/null | grep -q "hedge height" \
   && bad "60 a machine with no recorded choice started reading a newly supported tool" \
   || ok "60 no recorded choice never switches on a tool added later"
 
+# 61. A password said in a sentence is removed, in German too, and prose about passwords is not.
+#     The real case: "Dein Passwort ist das folgende:  <32 characters>" sat in the archive from
+#     2026-05-01 to 2026-09-24, because the old pattern wanted the colon right after the word.
+P61="$("$PY" - "$ARC" <<'PYEOF'
+import importlib.machinery, importlib.util, sys
+l = importlib.machinery.SourceFileLoader("pa", sys.argv[1])
+s = importlib.util.spec_from_loader("pa", l); m = importlib.util.module_from_spec(s); l.exec_module(m)
+cases = [("Dein Passwort ist das folgende:  Xq7vRt2LmP9wKd4Zb8Nc", False),
+         ("my password is hunter22x", False),
+         ("I forgot which password manager I use, is it good?", True),
+         ("the password field is empty", True)]
+for text, keep in cases:
+    out = m.scrub(text, [])[0]
+    if (out == text) != keep:
+        print("FAIL", text, "->", out)
+PYEOF
+)"
+[ -z "$P61" ] && ok "61 a password in a sentence is removed, prose about passwords is kept" \
+  || bad "61 the sentence-password scrub is wrong" "$P61"
+
 echo
 echo "  $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ] || exit 1
