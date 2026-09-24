@@ -57,4 +57,48 @@ expect('"read it" with nothing to read is refused',
 expect('"open the draft" is fine when a link rides along',
   'Open the draft: https://example.com/draft and change the last line.\n', 0);
 
+// ---- 2026-09-24: repeats, the former name, and texts the judge could not find ----------------
+const fs = require('fs');
+const os = require('os');
+const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'brief-'));
+const LINE = "My AI still asks twice before sending a text. Meta's new one already sold someone's car. ;-)";
+fs.writeFileSync(path.join(dir, '2026-09-23.md'),
+  'Anthropic put out Claude Opus 5.5.\nhttps://www.anthropic.com/claude-opus-5-5\n\n1. Post this:\n"' + LINE + '"\n');
+fs.writeFileSync(path.join(dir, '2026-06-01.md'), 'Too old to count.\nhttps://example.com/june\n');
+
+function expectFile(name, day, input, wantCode, wantInOutput) {
+  const f = path.join(dir, day + '.md');
+  fs.writeFileSync(f, input);
+  let r;
+  try { r = { code: 0, out: execFileSync('node', [script, f], { encoding: 'utf8' }) }; }
+  catch (e) { r = { code: e.status, out: (e.stdout || '').toString() }; }
+  fs.unlinkSync(f);
+  const ok = r.code === wantCode && (!wantInOutput || r.out.includes(wantInOutput));
+  console.log((ok ? 'PASS' : 'FAIL') + '  ' + name);
+  if (!ok) { failures++; console.log('  got exit ' + r.code + ':\n' + r.out); }
+}
+
+expectFile('a link an earlier brief carried is refused', '2026-09-24',
+  'Anthropic shipped Claude Opus 5.5 yesterday.\nhttps://www.anthropic.com/claude-opus-5-5\n', 1, 'brief of 2026-09-23');
+expectFile('a line to post an earlier brief offered is refused, even reworded a little', '2026-09-24',
+  '1. Pick one and post it:\n"My AI still asks twice before sending a text. Meta\'s new one already sold a car. ;-)"\n', 1,
+  'already offered this line');
+expectFile('a brief older than 45 days does not count', '2026-09-24',
+  'Still worth it.\nhttps://example.com/june\n', 0);
+expectFile('a brief is never compared with itself or a later one', '2026-09-22',
+  'Anthropic news.\nhttps://www.anthropic.com/claude-opus-5-5\n', 0);
+const H = 'h' + 'ub';  // the former name, in halves so no name check reads it here
+expect('the former name for the product is refused',
+  'Your ' + H + ' finished the backup overnight.\n', 1, 'former name');
+expect('the word in its everyday sense passes',
+  'The coworking ' + H + ' downtown opens a second floor. GitHub is down.\n', 0);
+expect('a text to send without quotes is refused',
+  '1. Send him the message below. Ready to send as is:\nHi Deshraj, I posted about memory today because you are right.\n', 1,
+  'without quotes');
+expect('a quoted text to send passes',
+  '1. Send him this as is:\n"Hi Deshraj, I posted about memory today because you are right."\n', 0);
+expect('a task with nothing to send passes',
+  '1. Cancel the old mailboxes, then tell me it is done.\n', 0);
+fs.rmSync(dir, { recursive: true, force: true });
+
 process.exit(failures ? 1 : 0);

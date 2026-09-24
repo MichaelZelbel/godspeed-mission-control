@@ -215,9 +215,29 @@ say "Scheduling the morning brief"
 # included; and a morning that fails lands in `hermes cron incidents` instead
 # of looking like a quiet one. The job is created now and starts firing the
 # moment the gateway below is on; a slot the gateway was down for runs once, late.
-kb_cron_job "$GODSPEED" "morning-brief" "0 6 * * *" \
-  "Run the recipe in skills/morning-brief/SKILL.md; on an older godspeed it lives at .claude/skills/morning-brief/SKILL.md. It writes today's brief into brief/. When it is written, commit and push this folder, then reply with the brief's full text. If the recipe is missing or the brief cannot be written, say exactly that instead of staying quiet: a broken morning must never look like a quiet one." \
-  "telegram" || true
+# THE CHECKS RUN IN THE JOB, NOT ONLY IN THE RECIPE (2026-09-24). A recipe a reader wrote
+# before mc-judge-brief existed never calls it, so the job itself runs both: mc-check-brief
+# refuses a path, a repeat of an earlier brief and a text to send without quotes; mc-judge-brief
+# asks your assistant, in a clean session, whether a stranger would understand and like every
+# line you are handed to post, and cuts what fails. The author's own brief repeated old news and
+# offered lines that would have backfired until exactly these two ran on every morning.
+BRIEF_PROMPT="Run the recipe in skills/morning-brief/SKILL.md; on an older godspeed it lives at .claude/skills/morning-brief/SKILL.md. It writes today's brief into brief/. Then run mc-check-brief on that file and fix whatever it refuses, and run mc-judge-brief on it: it removes every line to post that fails its judge, and nothing it removed goes back in. When it is done, commit and push this folder, then reply with the brief's full text exactly as the file now holds it. If the recipe is missing or the brief cannot be written, say exactly that instead of staying quiet: a broken morning must never look like a quiet one."
+kb_cron_job "$GODSPEED" "morning-brief" "0 6 * * *" "$BRIEF_PROMPT" "telegram" || true
+# An existing job keeps whatever prompt it was created with, so it is brought up to date here.
+BRIEF_JOB="$("$HERMES" cron list 2>/dev/null | awk '/^[[:space:]]*[0-9a-f]{8,}([[:space:]]|$)/ {id=$1} /Name:[[:space:]]*morning-brief[[:space:]]*$/ {print id; exit}')"
+if [ -n "$BRIEF_JOB" ] && "$HERMES" cron edit "$BRIEF_JOB" --prompt "$BRIEF_PROMPT" >/dev/null 2>&1; then
+  ok "clock: the morning brief now runs its two checks before it reaches you"
+fi
+
+# YOUR ASSISTANT KNOWS WHAT IT SENT YOU (2026-09-24). Without this, the brief arrives on Telegram
+# but never enters the conversation you reply into, and "what did item 3 mean?" meets an
+# assistant that has not seen item 3. The author's own bot could not answer exactly that. With it,
+# Hermes writes each delivered brief into your chat, and opens one if none is open.
+if "$HERMES" config set cron.mirror_delivery true >/dev/null 2>&1; then
+  ok "chat: the morning brief lands in your conversation too, so you can ask about it"
+else
+  warn "chat: could not switch on cron.mirror_delivery. Run: $HERMES config set cron.mirror_delivery true"
+fi
 fi
 
 # --------------------------------------------------------------------------

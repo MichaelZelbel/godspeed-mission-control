@@ -17,15 +17,26 @@ named with today's date. Under 200 words, plain words, no pep talk, no
 invented facts. Where you do not know something, say so plainly.
 When the brief tells me to do something, the step is one I can do
 from my phone in a minute, and the full text I would copy is right
-there in the brief; never send me to a file path. Before you write
-the file, run mc-check-brief on it and fix whatever it refuses.
-Then run it once so I can see today's brief.
+there in the brief, in double quotes; never send me to a file path.
+Before you write the file, run mc-check-brief on it and fix whatever
+it refuses. Then run mc-judge-brief on the file, and never put back
+what it removed. Then run it once so I can see today's brief.
 ```
 
-The two new middle sentences are the delivery contract, and the check is
-its enforcement: `mc-check-brief` (installed with this kit) refuses a
-brief that sends you to a file instead of handing you the thing. A rule
-in the recipe can be forgotten by a session; the check cannot. If the
+The sentences about my phone and the quotes are the delivery contract, and
+two commands enforce it (both installed with this kit):
+
+- `mc-check-brief` refuses a brief that sends you to a file instead of
+  handing you the thing, repeats a link or a line to post from any brief of
+  the last 45 days in `brief/`, or hands you a text to send without quotes.
+- `mc-judge-brief` asks your assistant, in a clean session that sees nothing
+  else, whether a stranger would understand and like each line you are given
+  to post, and whether a news story was already in an earlier brief under
+  another link. It asks three times about every line, keeps a line only when
+  two answers say yes, keeps the best one, and cuts the rest. It only ever
+  removes.
+
+A rule in the recipe can be forgotten by a session; a command cannot. If a
 command is missing, run this kit's installer again and it appears.
 
 You get two things: `skills/morning-brief/SKILL.md` (the recipe) and

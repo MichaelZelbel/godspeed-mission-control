@@ -31,6 +31,10 @@ purpose. If it contradicts something you believe about me, the file wins.
   for one when its description matches what I asked, without me naming it.
   When I do name a skill, run its file exactly. When I correct the same thing
   twice, add the correction to the skill file.
+- **The morning brief is yours.** A message in my chat that starts
+  `[Cron delivery: morning-brief]` is the brief you sent me, placed there by
+  Hermes; it is your own words, not mine. When I ask about it, answer from it in
+  the first person, and never tell me it was not sent.
 - **Procedures are listed, always.** Anything that runs on its own is a row
   in `procedures.md`. If you and I set up something new that runs without
   me, add the row in the same session. No unlisted procedures, ever.

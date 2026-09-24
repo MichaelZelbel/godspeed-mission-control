@@ -119,15 +119,28 @@ does this with a graph database; here it is a search over text files, which is w
 mission control is made of.
 
 - **`check-brief.js`** is the bouncer for the morning brief (Chapter 22). Before a
-  brief is written or sent, it reads the text and refuses two shapes: a file path
-  where the thing itself should be ("open skills/x.md and paste it" is a dead errand
-  on a phone), and "read it" with nothing to read. A line that starts with
-  "Sources:" may still name its file; provenance is allowed, errands are not. The
-  recipe in `procedures/morning-brief-setup.md` runs it before every brief, because
-  a promise written in a recipe can be forgotten by a session and a check cannot.
+  brief is written or sent, it reads the text and refuses a file path where the
+  thing itself should be ("open skills/x.md and paste it" is a dead errand on a
+  phone), "read it" with nothing to read, a link or a line to post that a brief of
+  the last 45 days in `brief/` already carried, the product's former name, and a
+  text to post or send without quotes. A line that starts with "Sources:" may still
+  name its file; provenance is allowed, errands are not. The recipe in
+  `procedures/morning-brief-setup.md` runs it before every brief, because a promise
+  written in a recipe can be forgotten by a session and a check cannot.
+- **`judge-brief.js`** (`mc-judge-brief`) is the second step, and it only cuts. It
+  asks your own assistant, through `mc-run`, in an empty folder so it sees nothing
+  but the lines: would a stranger understand this line to post, like it, read it as
+  a pitch, or turn it against you, and is every claim in it sourced? Three answers
+  per line, two must say yes, the best line of each item stays and the rest go.
+  It also drops a news story an earlier brief told under another link, but only
+  on a quote it finds word for word in that brief. After a cut it may correct a
+  count ("three things" to "two"), and keeps that edit only when it changed a few
+  words and added nothing. When your assistant cannot be reached, lines to post
+  are cut: an empty slot beats a line nobody judged.
 
 ```
 mc-check-brief brief/2026-09-06.md       refuse or pass one brief
+mc-judge-brief brief/2026-09-06.md       judge it, and cut what fails (--dry only prints)
 ```
 
 The next five are one job between them: **the day's decision.** They are the
