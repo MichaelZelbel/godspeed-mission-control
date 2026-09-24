@@ -36,6 +36,8 @@
 #   --max-items N           at most N items in one run (default 2)
 #   --budget SECONDS        stop starting new items after this long (default 2700)
 #   --item-timeout SECONDS  time limit for one assistant run (default 1500)
+#   --apply-tools "A B"     tools that change things outside (click, type, fill), given ONLY to an
+#                           outward item that carries your approval, and to no other item
 #   --allow-tools "A B"     more tools the assistant may use, on top of files, shell and the web:
 #                           a mission control names its own READ-ONLY connections here (its mail search, its
 #                           browser reader). Without them an unattended run cannot read a logged-in
@@ -47,7 +49,7 @@
 #   --dry-run               list what would run; take nothing, run nothing, write nothing
 set -uo pipefail
 
-EXTRA_TOOLS=""; GODSPEED=""; DRY=0; TODAY=""; MAX=2; BUDGET=2700; ITEM_TIMEOUT=1500; ONLY=""; EXTRA=""; PUBLISH_CMD=""
+EXTRA_TOOLS=""; APPLY_TOOLS=""; GODSPEED=""; DRY=0; TODAY=""; MAX=2; BUDGET=2700; ITEM_TIMEOUT=1500; ONLY=""; EXTRA=""; PUBLISH_CMD=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --godspeed) GODSPEED="$2"; shift 2 ;;
@@ -56,6 +58,7 @@ while [ $# -gt 0 ]; do
     --budget) BUDGET="$2"; shift 2 ;;
     --item-timeout) ITEM_TIMEOUT="$2"; shift 2 ;;
     --allow-tools) EXTRA_TOOLS="$2"; shift 2 ;;
+    --apply-tools) APPLY_TOOLS="$2"; shift 2 ;;
     --only) ONLY="$2"; shift 2 ;;
     --extra-prompt-file) EXTRA="$2"; shift 2 ;;
     --publish-cmd) PUBLISH_CMD="$2"; shift 2 ;;
@@ -133,7 +136,8 @@ let s=""; process.stdin.on("data",d=>s+=d).on("end",()=>{
   const fs=require("fs"); const areas={};
   const area=(g)=>{ if(!g) return "godspeed"; if(!(g in areas)){ try { const m=fs.readFileSync("goals/"+g+".md","utf8").match(/^AREA:\s*(.+)$/m); areas[g]=m?m[1].trim().toLowerCase():"other"; } catch(e) { areas[g]="other"; } } return areas[g]; };
   const own=(r)=>area(String(r.GOAL||"").trim())==="godspeed";
-  const rank=(r)=>play(r)&&!own(r)?0:(!learn(r)&&!own(r)?1:(learn(r)&&!own(r)?2:3));
+  const apply=(r)=>String(r.OUTWARD||"")==="yes"&&String(r.APPROVED||"")!=="";
+  const rank=(r)=>apply(r)?-1:(play(r)&&!own(r)?0:(!learn(r)&&!own(r)?1:(learn(r)&&!own(r)?2:3)));
   rows.sort((a,b)=>(rank(a)-rank(b))||String(a.id).localeCompare(String(b.id)));
   for (const r of rows) console.log(r.id+"\t"+(r.KIND||"do")+"\t"+(r.WHAT||""));
 });'
@@ -185,6 +189,14 @@ while IFS=$'\t' read -r ID KIND WHAT; do
   SHOW="$(reg work show "$ID" 2>/dev/null)"
   GOAL="$(field "$SHOW" GOAL)"
   DONE_WHEN="$(field "$SHOW" 'DONE WHEN')"
+  # AN APPROVED MOVE MAY WRITE (2026-09-24). Outward work reaches the runner only once the person's
+  # own words are on it (APPROVED), and only then does this one item get the tools that change
+  # things outside: the rest of the run stays read-only, as before.
+  APPROVED=""; ITEM_TOOLS="$EXTRA_TOOLS"
+  if [ "$(field "$SHOW" OUTWARD)" = "yes" ]; then
+    APPROVED="$(field "$SHOW" APPROVED)"
+    [ -n "$APPROVED" ] && [ -n "$APPLY_TOOLS" ] && ITEM_TOOLS="${ITEM_TOOLS:+$ITEM_TOOLS }$APPLY_TOOLS"
+  fi
   {
     echo "Today is $TODAY (UTC). The mission control is $GODSPEED and that is the folder you are working in."
     echo
@@ -201,6 +213,12 @@ while IFS=$'\t' read -r ID KIND WHAT; do
       if [ -n "$DG" ]; then cat "$DG"; else echo "(none)"; fi
     fi
     if [ -n "$EXTRA" ] && [ -f "$EXTRA" ]; then echo; cat "$EXTRA"; fi
+    if [ -n "$APPROVED" ]; then
+      echo
+      echo "## This item is an approved move: apply it"
+      echo "The person said yes to exactly this, in these words: $APPROVED"
+      echo "Carry out WHAT at the place it names, exactly as prepared (the AFTER text or file the item or its preview names), and nothing beyond it. First read and save what is there now (NOW) under routines/work/$TODAY/$ID/before.txt so it can be put back. Then apply it with the tools you have: an API or command line first, the signed-in browser if that is the only way. Then read the live place again and quote what it now shows. If the live place differs from what the move expected, or applying it would do anything the yes did not cover, stop and end with RESULT: FAILED naming what differs."
+    fi
     echo
     echo "## Where things go"
     echo "Anything you write for this item goes at the path DONE WHEN names, or under routines/work/$TODAY/$ID/ if it names none. Your final line is the RESULT line the recipe describes; the register is updated by the program that called you, never by you."
@@ -218,7 +236,7 @@ while IFS=$'\t' read -r ID KIND WHAT; do
 
   bash "$RUNNER" work-item --godspeed "$GODSPEED" --cwd "$GODSPEED" --prompt-file "$ITEMDIR/prompt.txt" \
     --timeout "$ITEM_TIMEOUT" --out "$ITEMDIR/answer.txt" \
-    --allowed-tools "Bash Read Grep Glob Write Edit WebSearch WebFetch${EXTRA_TOOLS:+ $EXTRA_TOOLS}"
+    --allowed-tools "Bash Read Grep Glob Write Edit WebSearch WebFetch${ITEM_TOOLS:+ $ITEM_TOOLS}"
   RC=$?
   RESULT_LINE="$(grep -a '^RESULT:' "$ITEMDIR/answer.txt" 2>/dev/null | tail -1 | tr -d '\r')"
   if [ -d "$GODSPEED/.git" ]; then

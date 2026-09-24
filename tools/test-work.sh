@@ -98,10 +98,11 @@ OUT="$(GODSPEED_TODAY=2026-09-20 hw tick 2>&1)"; contains "  and tick names it" 
 
 # --- outward: never taken without your words, never retried on its own ---------------------------------
 OUT="$(hw unblock W-20260913-02 --why "approval" 2>&1)"; check "outward work is not unblocked without your words" "$?" "1"
+OUT="$(hw next 2>&1)"; missing "outward work you have not approved is never offered to the runner" "$OUT" "W-20260913-02"
 hw unblock W-20260913-02 --why "you answered on your phone" --approved-by "same price as the other one, go" >/dev/null
-OUT="$(hw take W-20260913-02 --runner claude-laptop 2>&1)"; check "taking outward work without quoting you is refused" "$?" "1"
-OUT="$(hw take W-20260913-02 --runner claude-laptop --approved-by "same price as the other one, go" 2>&1)"
-contains "with your words it is dispatched" "$OUT" "dispatched to claude-laptop"
+OUT="$(hw next 2>&1)"; contains "once your words are on it, the runner is offered it" "$OUT" "W-20260913-02"
+OUT="$(hw take W-20260913-02 --runner claude-laptop 2>&1)"
+contains "and takes it without quoting you a second time" "$OUT" "dispatched to claude-laptop"
 check "  APPROVED holds your words" "$(grep -c '^APPROVED: 2026-09-13 "same price as the other one, go"' "$TMP/work/W-20260913-02.md")" "1"
 OUT="$(hw attempt W-20260913-02 --runner claude-laptop --failed "the shop login had expired" 2>&1)"
 contains "an outward failure has no retry" "$OUT" "failed (the shop login had expired)"

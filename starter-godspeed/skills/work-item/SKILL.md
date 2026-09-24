@@ -42,7 +42,10 @@ answer.
 
 ## What you never do
 
-- Post, send, spend, list, sign up, cancel or subscribe on anyone's behalf.
+- Post, send, spend, list, sign up, cancel or subscribe on anyone's behalf. The one exception is
+  an approved move: the prompt then says "This item is an approved move" and quotes the person's
+  yes. Apply exactly that change, save what was there before, check the live place afterwards, and
+  do nothing the yes did not cover.
 - Message the person whose mission control this is, in any channel. A finished piece reaches them through
   the ledger, not from you.
 - Write outside the mission control folder, or change anything on the register (`mc-work`).

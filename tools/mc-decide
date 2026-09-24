@@ -103,7 +103,11 @@ if [ "$DRY" -eq 1 ]; then
 else
   reg work tick > "$RUNDIR/tick.txt" 2>/dev/null || true
 fi
-reg goals attention --date "$TODAY" > "$RUNDIR/attention.txt" 2>/dev/null || true
+# A day already decided keeps the plan it was decided on: a second run by hand (to finish short
+# moves, below) must not recompute which goals are active and move the goalposts under them.
+if [ -s "$RUNDIR/decision.md" ] && [ -s "$RUNDIR/attention.txt" ]; then :; else
+  reg goals attention --date "$TODAY" > "$RUNDIR/attention.txt" 2>/dev/null || true
+fi
 reg forecast due --date "$TODAY"    > "$RUNDIR/forecasts-due.txt" 2>/dev/null || true
 reg work list --all > "$RUNDIR/work.txt" 2>/dev/null || true
 
@@ -154,9 +158,17 @@ fi
 # A DECISION ALREADY WRITTEN TODAY IS NOT WRITTEN TWICE. A schedule that fires twice, or a run
 # you start by hand after one that failed, must not produce two plans for one day. The runner's
 # own "it did not run" record does not count as a decision, so a retry after a failure decides.
+# One exception: a day whose moves are short (see below) and were never sent back is finished,
+# not decided again, so running mc-decide a second time by hand completes the moves.
+ALREADY=0
 if [ -s "$RUNDIR/decision.md" ] && ! grep -q "did not finish and wrote no record of its own" "$RUNDIR/decision.md"; then
-  echo "$TODAY is already decided ($RUNDIR/decision.md). Nothing was decided twice."
-  exit 0
+  if [ -f "$HERE/check-moves.js" ] && [ ! -s "$RUNDIR/answer-moves.txt" ]      && ! GODSPEED_ROOT="$GODSPEED" "$NODE" "$HERE/check-moves.js" --godspeed "$GODSPEED" --date "$TODAY" >/dev/null 2>&1; then
+    ALREADY=1
+    echo "$TODAY is already decided; its moves are short, so only they are finished now."
+  else
+    echo "$TODAY is already decided ($RUNDIR/decision.md). Nothing was decided twice."
+    exit 0
+  fi
 fi
 
 RUNNER="$HERE/mc-run"
@@ -168,11 +180,12 @@ goal plan), tick.txt (what time did to the work tracker), work.txt (every item o
 forecasts-due.txt and yesterday.md (yesterday's decision, or the line saying there was none),
 plus anything else that was available. Follow the next-action recipe exactly. Write
 $RUNDIR/decision.md, file the work the mission control will do (mc-work-run carries it out later today; you
-take only what fits in two minutes) and at most one thing for the person whose godspeed this is, and
+take only what fits in two minutes), the day's moves and their one ship-list card for the person, and
 save what you changed. Your final answer is the 'For you today' section in one plain sentence,
 plus the card id or the word nothing."
 
-if [ -n "$EXTRA" ] && [ -f "$EXTRA" ]; then
+if [ "$ALREADY" -eq 1 ]; then :
+elif [ -n "$EXTRA" ] && [ -f "$EXTRA" ]; then
   bash "$RUNNER" next-action --godspeed "$GODSPEED" --cwd "$GODSPEED" --prompt-file "$EXTRA" --prompt "$PROMPT" \
     --timeout "$TIMEOUT" --out "$RUNDIR/answer.txt" \
     --allowed-tools "Bash Read Grep Glob Write Edit WebSearch WebFetch" || true
@@ -180,6 +193,32 @@ else
   bash "$RUNNER" next-action --godspeed "$GODSPEED" --cwd "$GODSPEED" --prompt "$PROMPT" --timeout "$TIMEOUT" \
     --out "$RUNDIR/answer.txt" \
     --allowed-tools "Bash Read Grep Glob Write Edit WebSearch WebFetch" || true
+fi
+
+# A DAY OF PAPER GOES BACK FOR ITS MOVES (2026-09-24). The recipe asks for three moves per active
+# goal, each prepared to the last click. Two test runs read that and made two moves across three
+# goals in eight of their forty minutes. So the count is checked by a program, and a run that
+# falls short is sent back ONCE with the exact gaps, in the same folder, to finish them. A second
+# shortfall is written into the record as it stands, never hidden.
+if [ -s "$RUNDIR/decision.md" ] && [ -f "$HERE/check-moves.js" ]; then
+  GAPS="$(GODSPEED_ROOT="$GODSPEED" "$NODE" "$HERE/check-moves.js" --godspeed "$GODSPEED" --date "$TODAY" 2>&1)"
+  if [ $? -ne 0 ]; then
+    FIX="Today is $TODAY (UTC). Today's decision in $RUNDIR is written, but the moves check
+(mc-check-moves --date $TODAY) says it is not finished:
+$GAPS
+Follow the next-action recipe's Step 3 for exactly these gaps: add the missing moves to
+$RUNDIR/moves.md, each prepared in full (NOW read live, AFTER written out, somebody outside who
+did it), or a line 'FEWER <goal>: <why>' where a goal truly has no more today. Then put every new
+move that needs a yes on today's ship list card (refresh it, do not file a second card),
+republish the moves page, file the APPLY and MAKE items, update the Moves and For you today
+sections of decision.md, and run the check again until it prints OK. Your final answer is the
+'For you today' section in one plain sentence."
+    bash "$RUNNER" next-action --godspeed "$GODSPEED" --cwd "$GODSPEED" ${EXTRA:+--prompt-file "$EXTRA"} --prompt "$FIX" \
+      --timeout "$TIMEOUT" --out "$RUNDIR/answer-moves.txt" \
+      --allowed-tools "Bash Read Grep Glob Write Edit WebSearch WebFetch" || true
+    GAPS="$(GODSPEED_ROOT="$GODSPEED" "$NODE" "$HERE/check-moves.js" --godspeed "$GODSPEED" --date "$TODAY" 2>&1)" \
+      || printf '\n## Moves check\n\nStill short after one return run:\n\n%s\n' "$GAPS" >> "$RUNDIR/decision.md"
+  fi
 fi
 
 # EVERY RUN LEAVES A RECORD DATED TODAY. If the assistant wrote none, this writes the honest

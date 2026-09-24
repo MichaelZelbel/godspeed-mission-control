@@ -124,10 +124,12 @@ cmds.take = (a) => {
   const live = leaseLive(c);
   if (live && live.runner !== runner) die(`${c.id} is held by ${live.runner} until ${live.until}`);
   if (c.f.OUTWARD === 'yes') {
+    // Approved once is approved for this item: a yes already on record (from `unblock
+    // --approved-by`) lets the runner take it, so a move the person said yes to actually lands
+    // instead of waiting for someone to carry it out by hand (2026-09-24).
     const ok = oneLine(a['approved-by']);
-    if (!ok) die(`${c.id} is outward, so it reaches somebody else: it is taken only with --approved-by "<your words, as you said them>"`);
-    c.f.APPROVED = `${d} ${q(ok)}`;
-    L.logLine(c, d, 'APPROVED', q(ok));
+    if (!ok && !c.f.APPROVED) die(`${c.id} is outward, so it reaches somebody else: it is taken only with --approved-by "<your words, as you said them>"`);
+    if (ok) { c.f.APPROVED = `${d} ${q(ok)}`; L.logLine(c, d, 'APPROVED', q(ok)); }
   }
   const until = new Date(Date.parse(now()) + 2 * 3600 * 1000).toISOString();
   c.f.LEASE = `${runner} until ${until}`;
@@ -297,7 +299,7 @@ cmds.tick = (a) => {
 cmds.next = (a) => {
   const d = a.date || today();
   const rows = S.all().filter(c => (c.f.STATUS === 'planned' || (c.f.STATUS === 'failed' && c.f['NEXT TRY'] && c.f['NEXT TRY'] <= d && attemptsOf(c) < maxOf(c)))
-    && c.f.OUTWARD !== 'yes' && c.f.NEEDS === 'none' && !leaseLive(c) && (!a.goal || c.f.GOAL === a.goal));
+    && (c.f.OUTWARD !== 'yes' || (c.f.APPROVED && c.f.STATUS === 'planned')) && c.f.NEEDS === 'none' && !leaseLive(c) && (!a.goal || c.f.GOAL === a.goal));
   if (flag(a, 'json')) { say(JSON.stringify(rows.map(c => Object.assign({ id: c.id }, c.f)))); return; }
   if (!rows.length) { say('nothing runnable now'); return; }
   for (const c of rows) say(`${c.id.padEnd(16)} ${c.f.STATUS.padEnd(9)} ${(c.f.KIND || 'do').padEnd(5)} ${c.f.WHAT}` + (c.f.GOAL ? `  [${c.f.GOAL}]` : ''));

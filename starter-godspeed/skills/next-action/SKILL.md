@@ -1,6 +1,6 @@
 ---
 name: next-action
-description: The mission control's one decision of the day. Reads your goals, how each is won, the attention plan, the diagnoses, the forecasts, the open work and your last replies, then writes one record for the day, files the work the mission control will do itself (a runner carries it out later the same day), files at most one thing only you can do, and does the two-minute things at once. Runs on its own before the morning message, or by hand ("decide today", "what is the best next thing to do").
+description: The mission control's one decision of the day. Reads your goals, how each is won, the attention plan, the diagnoses, the forecasts, the open work and your last replies, then writes one record for the day, files the work the mission control will do itself (a runner carries it out later the same day), files the moves it will make in the world and puts the ones that need your yes on one daily ship list, and does the two-minute things at once. Runs on its own before the morning message, or by hand ("decide today", "what is the best next thing to do").
 ---
 
 ## What this is
@@ -14,6 +14,62 @@ one item at a time, later the same day.
 "Best" here means the best-supported judgment under uncertainty, written down so that it can turn
 out to be wrong on the record. That is the whole point of the exercise. A decision nobody can
 check later is a preference.
+
+## What a good day is: moves, not paper
+
+**A goal moves when something outside this folder changes: a page, a profile, a listing, a
+price, a message someone read, a number.** Research, diagnoses, forecasts, idea files and drafts
+are how you choose a move; none of them is one. The first version of this recipe produced two
+weeks of well-kept paper for a money goal and not one change a stranger could see (2026-09-24).
+Its person asked for the opposite: find out what people who got closer to this goal did at this
+stage, then do exactly that, every day, as much of it as the mission control can.
+
+So every active goal leaves today's run with **moves**: up to three a day, each a concrete change
+in the world, prepared to the last click. A move has, in the record and in its work item:
+
+- **WHERE**: the live place it changes (a profile, a page, a listing, a repository, a post).
+- **NOW**: what is there today, read live in this run, quoted.
+- **AFTER**: the exact new text, file or setting, written out in full. Not "improve the bio": the bio.
+- **WHO DID THIS**: a named person, creator or company that did this thing at this stage, with
+  where you read it. The move copies what worked for someone, not what sounds sensible.
+- **HOW IT LANDS**: who applies it and with what (an API, a signed-in browser, a company, or the
+  person because only they can), and the live CHECK that shows it landed.
+- **UNDO**: how to put NOW back.
+
+**Standing permissions.** A goal's `ALLOWED:` line lists what the mission control may change on
+its own for that goal ("update my profile texts every week", "fix wording on my own project
+pages"). A move inside it is filed OWNER mission control, NEEDS none, and the runner applies it,
+checks it live and keeps NOW for the undo. Only the person writes an ALLOWED line; you may ask for
+one (see the ship list), never assume one.
+
+**The ship list.** Every prepared move outside ALLOWED goes on ONE card a day: numbered lines, each
+one sentence saying what changes where, plus one link to a page showing every NOW and AFTER side
+by side. They answer "ship all", some numbers, or nothing. A yes, quoted, unblocks those moves and
+the runner applies them the same day; the person never has to carry out a prepared move by hand
+when the mission control has a way to apply it. An unanswered line expires after seven days and is
+never re-asked. A thing only they can do (record a video, sign a form) is one line on the same
+card, not a second card. When one kind of move keeps coming back to the list, add a line asking
+whether it may become a standing permission.
+
+**Rhythms.** A goal may carry `RHYTHM:` lines ("weekly: refresh every profile text, researched
+against the best profiles in the niche, varied so it never goes stale"). When one is due, its move
+is filed first that day.
+
+**The scoreboard.** The record opens with how many moves reached the world in the last seven days,
+per active goal, and which, and what the outside numbers did after them. A goal at zero moves for
+seven days gets the diagnosis "moves are not landing" ahead of any other, and today's work is to
+fix why: the missing permission, the missing sign-in, the card nobody could answer. A goal whose
+moves landed but whose numbers stayed flat for fourteen days changes channel or offer, and writes
+one line on what that attempt taught. Only outside numbers grade a move; your own confidence in a
+diagnosis never does (agents that grade themselves reuse their most confident mistakes).
+
+**What usually works from a small start** (read, not remembered: Paul Graham's "Do things that
+don't scale", Substack's own growth figures, Anthropic's Project Vend): at a tiny audience the
+people who got somewhere reached people by hand, a few named ones a day, and grew inside the
+platform where their readers already were (recommendations and replies, not one more post). A
+profile works as a shop window: who it helps, one free thing, one paid thing; change one element
+at a time and read the profile's own numbers before and after. Let these shape the moves you pick;
+the playbook for the goal overrides them where it has better evidence.
 
 **Where it lives.** This file is part of the starter mission control, at `skills/next-action/SKILL.md`, so
 every mission control the installer makes has it from day one. `mc-decide` runs it once a day, or you can say
@@ -32,6 +88,9 @@ If one of them says it is not installed, say so in the record and carry on with 
    `mc-goals change <id> --set "FIELD=value" --why "<their words, and the date>"`,
    `mc-goals answer <id> --text "..."`, `mc-goals adopt <id> --why "..."`.
    **Never read silence as a yes.** An idea they did not answer is still provisional.
+   **An answer to a ship list** ("ship all", "1 and 3", "not 2") unblocks exactly the APPLY
+   items it names, with their words quoted: `mc-work unblock <id> --why "ship list answer"
+   --approved-by "<their words>"`. Lines it did not name stay on the list until they expire.
 2. `tick.txt` and `work.txt` in the run folder: what time did to the tracker, and every item on
    it. What is in flight, what the runner verified since yesterday, what failed, what is waiting
    on them or on something the mission control cannot do. A failed item whose attempts are used up is a
@@ -159,7 +218,7 @@ weeks; prefer one that feeds what already works over one that starts from nothin
 when their idea is weaker than another, and when it is better than yours.
 
 **4. The hunt is a daily job, and the runner does it, not you.** You have one short run and no
-time to research well. So every day, for the goal whose register is thinnest, file ONE hunt item
+time to research well. So on a day when an active goal holds fewer than ten open ideas, for the thinnest one, file ONE hunt item
 (`--kind learn`, key `idea-hunt-<goal>-<date>`, DONE WHEN "at least five new checked idea files
 exist in ideas/"). Its WHAT names one AREA to search, a different one each day, taken in turn from
 what this person owns and where their people are (their public projects, their newsletter and
@@ -178,19 +237,69 @@ runner made yesterday gets its STATUS set to `made` with the date and where it c
 its OUTSIDE NUMBER gets a date on which you will read it. An idea whose number came in changes the
 ranking: say so in the record.
 
-## Step 3. The best-supported next action, with its alternative and a forecast
+## Step 3. Today's moves, prepared in this run
 
-For each active outcome, name the action that best addresses the constraint, or the experiment
-that best reduces the uncertainty. **The action is the best idea in the register for that goal
-(Step 2b), and it must pull a lever the playbook names or test something in its Unknown section.**
-The playbook decides what kind of thing is worth making; the register holds the things. An idea
-that pulls no lever the playbook knows is filed only with a line saying why the playbook missed
-it, and the playbook gets that lever added. Mark the chosen idea `STATUS: chosen` with the date. In the record, compare it with **one** feasible alternative and with **carrying on
-as you are**: what each costs in their time, the mission control's time and money; what each would show you;
-and why the one you chose wins on the evidence you have.
+This step is the day's output. Everything before it exists to choose these well.
 
-Keep this in proportion. A routine step gets one sentence. Something that will cost them hours
-or money gets the full comparison.
+**1. Pick three moves per active goal**, fewer only when a line `FEWER <goal>: <why>` in
+`moves.md` says why. Two things are never the why: a thin ideas register (the next rung comes from
+what people who reached this goal did, read today, not from the register) and a platform nobody
+is signed in to (prepare the move anyway; its ship-list line asks for the one sign-in, after which
+every later move there lands without them). A goal about their own life (health, friends) moves
+in their life, not on a public page: a booking held, a list written for the shop, a message
+drafted to the right person, an entry in their calendar. This run has time; spend it here. Pick
+them in this order: a RHYTHM line of the goal that is
+due; then the next rung, which is the answer to "what did people who reached this goal do at the
+stage this person is at now, that this person has not done yet?" (the playbook's "In what order";
+where it is silent, read two or three real cases today and copy what they did); then the best
+idea in the register (Step 2b). A research task, a tool for the mission control, a diagnosis or a
+measurement is not a move. At least one move per active goal, or the record says under "Not done
+and why" what stopped it, and that obstacle becomes tomorrow's first move.
+
+**2. Prepare each small move now, not later.** For a move whose AFTER is short (a bio, a headline,
+a description, a pinned line, a price, a reply of a few sentences), read NOW live in this run and
+write AFTER in full in this run. A move too big for this run (a page, a file, a script) gets a
+MAKE item for the runner (Step 4), and joins the ship list the day it is ready.
+
+**3. Write every prepared move into `moves.md` in today's run folder**, one block each:
+
+    ### <n>. <one line a stranger understands: what changes where>
+    GOAL: <id>
+    WHERE: <the live address>
+    NOW: <quoted, read live today>
+    AFTER: <the exact new version, in full>
+    WHO DID THIS: <a named person or company outside this mission control, what they did, where
+                  you read it today; this mission control's own past work is never the example>
+    HOW IT LANDS: <API | signed-in browser | company | only the person> and the live CHECK;
+                  "only the person" is the last resort: look for a route the mission control
+                  holds first (another field, another page, an API) and say which you tried
+    UNDO: <how NOW comes back>
+    PERMISSION: <the ALLOWED line that covers it, or "ship list">
+
+**4. Apply or ask.** A move covered by the goal's ALLOWED line gets an APPLY item (Step 4) and the
+runner applies it today. Every other prepared move, together with prepared moves from earlier days
+that are still unanswered and under seven days old, goes on today's ship list: publish `moves.md`
+as a page (the mission control's own publish command, if it has one) and file ONE card:
+
+    godspeed attention file --kind approval --owner godspeed --topic ship-list-<date>
+      --what "<N> changes are ready: <the numbered one-line list>"
+      --if-ignored "Nothing changes. Each line expires after seven days and is never asked again."
+      --next "Reply ship all, or the numbers you want. I apply them today and check each one live."
+      --link <the published page>
+
+A mission control without that ledger writes the same card as the "For you today" section. Then
+file each listed move's APPLY item `--outward yes` with KEY `apply-<slug>`; the answer, quoted,
+unblocks the ones they chose (`mc-work unblock <id> --approved-by "<their words>"`). Write each
+item's id into its block as a line `APPLY: <id>` right under the heading, so an answer by number
+reaches the right item. On the card, a line that only they can do says so ("yours to film"), and
+the NEXT line promises "I apply the rest the same day" only for moves the mission control can apply.
+
+**5. Check before you finish.** Run `mc-check-moves --date <today>`. It counts the moves per
+active goal and reads every block for the fields above; keep working until it prints OK. If it is
+not installed, check the same things by eye and say so in the record.
+
+**6. Compare only what is expensive.** Keep this in proportion. A routine move gets one sentence and no forecast. Something that will
+cost them hours or money gets the full comparison.
 
 Before a commitment of that size, look at comparable cases. Your own history first: what has
 this mission control actually done before, including the times it did not work. Then outside cases you can
@@ -223,31 +332,17 @@ For every chosen action, file the work, one item per thing that can be checked:
 **The order is fixed, per active goal, and the record says what was filed under each or why
 nothing was:**
 
-1. **What the mission control makes itself:** OWNER mission control, NEEDS none. **Every active goal gets at least one
-   MAKE item a day: the smallest version of the idea chosen in Step 3, ending in the thing itself
-   (the page, the tool, the list, the skill, the draft that can be sent as it is) and never in a
-   document about the thing.** A day on which an active goal got only research or bookkeeping says
-   so under "Not done and why", and two such days running is the diagnosis for that goal, ahead of
-   any other. Where the thing lands in the world, the CHECK looks at the world (the address
-   answers, the page holds the words) and a forecast carries the OUTSIDE NUMBER from the idea
-   file, due inside two weeks; when that forecast resolves, write what the number was into the
-   idea file, and let it raise or kill the ideas next to it. Then everything else the playbook's
-   "Godspeed steps" section says a mission control can do from a computer with nobody present: research, build the
-   measurement, compute the number, find the people or the options, draft the thing, prepare
-   what the person will need. Each item's DONE WHEN names the file a reader will open, and its
-   CHECK proves the file is there and whole (`mc-check-written <path> --min-words N` is the
-   check for anything written). **`mc-work-run` carries these out later today, one at a time,
-   in their own runs**; you do not do them here.
-2. **What only they can do:** OWNER person. First the mission control PREPARES it to the last click as its
-   own MAKE item (the text written, the change built and tested on a branch, the file ready), and
-   only a prepared thing may be put in front of them. Then it becomes at most **one** thing in
-   front of them today, through the morning message and nowhere else: no extra page to open, no
-   list to work through. Several small yeses of the same kind (three wording fixes on their own
-   project pages, two replies of the same sort) may travel as ONE card answered with one word, if
-   each is prepared and the card says exactly what a yes sets in motion. Take the highest-scored
-   prepared idea first. It becomes at most one thing with everything the mission control could prepare already done and the full text ready to use, so
-   that nothing is left for them to compose. Never a second one. Never a reminder of something
-   they have already answered, or ignored twice.
+1. **The moves (Step 3):** a MAKE item for each move too big to prepare in the decision run, its
+   DONE WHEN the finished thing and a block for it appended to that day's `moves.md`; and an APPLY
+   item for each prepared move, `--outward yes` unless ALLOWED covers it, its CHECK reading the
+   live place (the address answers, the page holds the new words). Where a move should move an
+   outside number, file a forecast due inside two weeks and let the number, not your opinion,
+   raise or kill the ideas next to it.
+2. **Everything else the mission control can do alone** that the playbook's "Godspeed steps" names and the
+   moves need: find the people or the options, build the missing sign-in or tool a move is waiting
+   on. Each item's DONE WHEN names what a reader will open or see, and its CHECK proves it.
+   **`mc-work-run` carries these out later today, one at a time, in their own runs.** Never a
+   document about the thing in place of the thing.
 3. **What nobody knows yet:** `--kind learn` (or `--learn "<question>" --path <file>`). A learn
    item is done when the answer is written where a reader can open it, with the evidence read.
    File one wherever the playbook's levers disagree, the person's case differs, or the
@@ -272,19 +367,21 @@ taking it as it stands.
 Write `decision.md` in today's run folder (the prompt that called you names it):
 
     # Decision <today>
+    ## Scoreboard         moves that reached the world in the last seven days, per active goal,
+                          each with where it can be seen; zero is written as zero
     ## Since yesterday    what came of yesterday's choice; what the runner verified; replies
                           recorded; forecasts resolved
     ## Attention today    the active outcomes with the plan's reasons and your own, and the quiet ones
-    ## <goal id>          the outside numbers read today and the surprise in them; the ideas added
-                          today and the top three ranked; then
-                          the playbook's state, the constraint or the open question, the evidence
-                          for and against, the action, the alternative, carrying on as is, the
-                          forecast id, the work ids in the four groups above, and what needs them
-    ## For you today      the one thing for them (its id), or "nothing today, because ..."
+    ## <goal id>          short: the outside numbers read today and the surprise in them; the
+                          next rung and who did it; the constraint if it changed; the work ids
+    ## Moves              every move from moves.md in one line each: goal, what changes where,
+                          and whether it is applied today (ALLOWED), on the ship list, or waiting
+                          on a MAKE item
+    ## For you today      the ship list card (its id and its numbered lines), or "nothing today, because ..."
     ## Not done and why   what you could not read, verify or run; what capability was missing
     ## Next decision      what tomorrow's run should look at first
 
-Then take and do only what fits in about two minutes: a reading, a record, a check, a line on a
+Preparing the small moves in Step 3 is part of deciding, not taking work. Beyond that, take and do only what fits in about two minutes: a reading, a record, a check, a line on a
 card. Take nothing you will not finish in this run (`mc-work take <id> --runner <name>`, then
 `mc-work attempt ... --ok --result "..."` or `--failed "why"`, then `mc-work verify`). **What
 the runner says it did is ATTEMPTED, never verified.** Everything longer stays planned for
@@ -303,11 +400,11 @@ nothing. Nothing else.
 
 ## What this must never do
 
-Post, send, spend, sign, list, cancel or subscribe on their behalf. Adopt a provisional goal.
+Post, send, spend, sign, list, cancel or subscribe on their behalf without their quoted yes or a standing permission that covers it. Adopt a provisional goal.
 Invent a person, a number, a link or a base rate. Work a goal without knowing how it is won, or
 invent the levers instead of researching them; but never again mistake that for a ban on ideas:
 the concrete thing to make is yours to invent, daily. Lose an idea they said out loud. Let an
 active goal go a second day with nothing made for it. Count a number a machine inflated. Let the mission control's own machinery take the day from an
 active goal. Take work it will not finish in this run. Mark work verified on the runner's word.
-Repeat something they answered, or ignored twice. Put more than one thing in front of them. Turn
+Repeat something they answered, or ignored twice. Put more than one card in front of them. Let an active goal end a day with only paper. Turn
 their silence into a yes.
