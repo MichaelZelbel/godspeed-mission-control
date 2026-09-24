@@ -45,8 +45,9 @@ const QUESTIONS = [
   'conversation on the basis of being liked and trusted a little.',
   'Judge each line as a stranger on LinkedIn who does not know its author and sees the line with',
   "only what 'seen_with' says (a comment is read under the post it answers; a post appears alone):",
-  '1. UNDERSTAND: with only that, would they get what is meant? Every "my AI", "theirs", "the',
-  '   country", "the new one", product or event must be clear. A confused mind always says no.',
+  '1. UNDERSTAND: with only that, would they get what is meant at once? They know nothing about the',
+  '   author, their products, projects or earlier posts. Every "my AI", "theirs", "the country",',
+  '   "the new one", product or event must be clear. A confused mind always says no.',
   '2. LIKE: would they actually smile, laugh or nod? Not "it is clever": the bar is high. Insider',
   '   words (AGI, alignment, agents, memory, architecture) are not funny to strangers. A comment',
   '   that warmly and genuinely answers the question a post asks needs no joke.',
@@ -56,7 +57,9 @@ const QUESTIONS = [
   "5. TRUE: every specific claim about others (a number, a named event, what a named company or",
   "   person did) must appear in 'facts_given'. What the author says about their own life, and",
   '   common knowledge, passes.',
-  'A line passes only if it passes all five.',
+  '6. AGREE: would nearly everyone in that group nod along? No argument picked, no side taken',
+  '   against someone, no contrarian "actually", nothing that starts a fight in the replies.',
+  'A line passes only if it passes all six.',
 ].join('\n');
 
 function ask(prompt) {
@@ -140,7 +143,7 @@ function socialReview(text, askFn, votes = 3) {
   });
   const prompt = QUESTIONS + '\n\nThe lines:\n' + JSON.stringify(table, null, 1) +
     '\n\nAnswer with a JSON list only, one entry per line, lines copied exactly: [{"item": 1, "line": "<exact line>", ' +
-    '"understand": true, "like": true, "pitch": false, "backfire": false, "true": true, "why": "<one sentence>", "rank": 1}]. ' +
+    '"understand": true, "like": true, "pitch": false, "backfire": false, "true": true, "agree": true, "why": "<one sentence>", "rank": 1}]. ' +
     'rank orders the passing lines of one item, 1 = best. Be the strict stranger, not the author.';
   const found = [];
   for (let i = 0; i < votes; i++) {
@@ -154,7 +157,7 @@ function socialReview(text, askFn, votes = 3) {
     for (const line of t.lines) {
       const vs = found.map(vote => vote.find(v => v && norm(v.line) === norm(line)));
       const oks = vs.map(v => !!v && v.understand === true && v.like === true && v.pitch === false &&
-        v.backfire === false && v.true === true);
+        v.backfire === false && v.true === true && v.agree === true);
       const pass = oks.filter(Boolean).length >= 2;
       const why = (vs.find((v, i) => v && !oks[i]) || vs.find(Boolean) || {}).why ||
         (found.length ? 'no verdict' : 'your assistant could not be reached, so nothing unjudged goes out');
