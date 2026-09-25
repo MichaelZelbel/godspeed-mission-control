@@ -59,7 +59,10 @@ const QUESTIONS = [
   '   common knowledge, passes.',
   '6. AGREE: would nearly everyone in that group nod along? No argument picked, no side taken',
   '   against someone, no contrarian "actually", nothing that starts a fight in the replies.',
-  'A line passes only if it passes all six.',
+  '7. SUBSTANCE: does it give them something? A concrete detail of their own experience, a real',
+  '   number, a view they had not quite heard, or a joke that truly lands. A generic tip, a platitude,',
+  '   a restatement of the post, or a polite question anyone could ask fails, however pleasant.',
+  'A line passes only if it passes all seven.',
 ].join('\n');
 
 function ask(prompt) {
@@ -143,7 +146,7 @@ function socialReview(text, askFn, votes = 3) {
   });
   const prompt = QUESTIONS + '\n\nThe lines:\n' + JSON.stringify(table, null, 1) +
     '\n\nAnswer with a JSON list only, one entry per line, lines copied exactly: [{"item": 1, "line": "<exact line>", ' +
-    '"understand": true, "like": true, "pitch": false, "backfire": false, "true": true, "agree": true, "why": "<one sentence>", "rank": 1}]. ' +
+    '"understand": true, "like": true, "pitch": false, "backfire": false, "true": true, "agree": true, "substance": true, "why": "<one sentence>", "rank": 1}]. ' +
     'rank orders the passing lines of one item, 1 = best. Be the strict stranger, not the author.';
   const found = [];
   for (let i = 0; i < votes; i++) {
@@ -157,7 +160,7 @@ function socialReview(text, askFn, votes = 3) {
     for (const line of t.lines) {
       const vs = found.map(vote => vote.find(v => v && norm(v.line) === norm(line)));
       const oks = vs.map(v => !!v && v.understand === true && v.like === true && v.pitch === false &&
-        v.backfire === false && v.true === true && v.agree === true);
+        v.backfire === false && v.true === true && v.agree === true && v.substance === true);
       const pass = oks.filter(Boolean).length >= 2;
       const why = (vs.find((v, i) => v && !oks[i]) || vs.find(Boolean) || {}).why ||
         (found.length ? 'no verdict' : 'your assistant could not be reached, so nothing unjudged goes out');
