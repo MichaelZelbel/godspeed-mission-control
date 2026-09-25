@@ -147,7 +147,88 @@ function unquoted(text) {
     '    so mc-judge-brief can find and judge it.');
 }
 
-function check(text, earlier) {
+// ONE STORY PER SUBJECT, AND A SUBJECT YOU KEEP HEARING ABOUT RESTS (2026-09-25, the same rule as the
+// author's server, scripts/briefing/note.py subject_errors). His brief of that morning carried two
+// stories about the same new AI assistant, the second one making an argument the two days before had
+// already made, with every link new. The subject of a story is the named things it is about.
+const SUBJECT_STOP = new Set(('The A An And But So Since Your You My I It In On At For That This These Those AI Worth ' +
+  'Meanwhile Also Today Yesterday Monday Tuesday Wednesday Thursday Friday Saturday Sunday January February March ' +
+  'April May June July August September October November December Mission Control Two Three One Both If When What ' +
+  'Why How Its Their Not Nothing Everything Here There Only New Now Personal Good Big News Read Open').split(' '));
+const BIG_NAMES = new Set(('Meta Google Apple Microsoft Amazon OpenAI Anthropic xAI Nvidia SAP Claude LinkedIn GitHub ' +
+  'Hacker Verge TechCrunch Ars Technica Wired Reuters Bloomberg').split(' '));
+function subjects(para) {
+  // The first sentence, where the news is: the rest says why it matters and names the reader's own context.
+  const body = para.replace(URL_RE, ' ').split(/\s+/).join(' ').trim();
+  const first = body.split(/(?<=[.!?])\s+(?=[A-Z"“])/)[0];
+  const out = new Set();
+  for (const m of first.matchAll(/\b([A-Z][A-Za-z0-9]+(?:\.[0-9]+)?)(?:['’]s)?\b/g)) {
+    if (!SUBJECT_STOP.has(m[1]) && m[1].length > 2) out.add(m[1]);
+  }
+  return out;
+}
+function sameSubject(a, b) {
+  const shared = [...a].filter(x => b.has(x));
+  return shared.length >= 2 || shared.some(x => !BIG_NAMES.has(x));
+}
+function newsUnits(text) {
+  const out = [];
+  for (const p of text.split(/\n\s*\n/)) {
+    if (/^\s*\d\.\s/.test(p)) continue;
+    let cur = [], seenLink = false;
+    const flush = () => { if (cur.length && linksOf(cur.join('\n')).length) out.push(cur.join('\n')); cur = []; seenLink = false; };
+    for (const line of p.split('\n')) {
+      if (/^\s*https?:\/\/\S+\s*$/.test(line)) { cur.push(line); seenLink = true; continue; }
+      if (seenLink) flush();
+      cur.push(line);
+    }
+    flush();
+  }
+  return out;
+}
+function subjectFaults(text, earlier, day) {
+  const faults = [], seen = [];
+  const since = new Date(Date.parse(day) - 4 * 86400000).toISOString().slice(0, 10);
+  const recent = earlier.filter(h => h.date >= since && h.date < day).map(h => [h.date, newsUnits(h.text).map(subjects)]);
+  for (const u of newsUnits(text)) {
+    const mine = subjects(u);
+    if (!mine.size) continue;
+    const link = linksOf(u)[0].replace(/[.,;)]+$/, '');
+    const twin = seen.find(s => sameSubject(mine, s));
+    const told = recent.filter(([, subs]) => subs.some(s => sameSubject(mine, s))).map(([d]) => d);
+    if (twin) {
+      faults.push('REFUSED: a second story on the same subject in one brief:\n    ' + link +
+        '\n    Keep the stronger of the two; one story per subject.');
+    } else if (told.length >= 2) {
+      faults.push('REFUSED: this subject was in the news of the briefs of ' + told.join(' and ') + ':\n    ' + link +
+        '\n    Let it rest today; a subject heard three mornings running is not news.');
+    }
+    seen.push(mine);
+  }
+  return faults;
+}
+
+// The opening says what today is; it never counts or previews the items, and a paragraph never points
+// at another by number or place (2026-09-25). A check may cut an item or a story after the brief is
+// written, and "two small things today" or "the page in item 1" is then wrong.
+const PREVIEW = /\b(?:(?:one|two|three|four|a single|a few|several|no)\s+(?:small\s+|quick\s+|big\s+|short\s+|live\s+)?(?:things?|decisions?|items?|asks?|tasks?|moves?)|decisions? for you|short list|your list|on your plate|to do today|only you)\b/i;
+const POINTER = /\b(?:in item \d|item \d\b|items? (?:one|two|three)\b|(?:page|link|post|item)s? (?:above|below)|see (?:above|below)|(?:the )?(?:one|item) above)/i;
+function shapeFaults(text) {
+  const faults = [];
+  const paras = text.split(/\n\s*\n/).filter(p => p.trim());
+  if (paras.length && !/^\s*\d\.\s/.test(paras[0]) && !/^#/.test(paras[0].trim())) {
+    const m = paras[0].replace(URL_RE, ' ').match(PREVIEW);
+    if (m) faults.push('REFUSED: the opening counts or previews the items ("' + m[0] + '").\n    Say what today is; ' +
+      'let the items speak for themselves.');
+  }
+  for (const p of paras) {
+    const m = p.replace(URL_RE, ' ').match(POINTER);
+    if (m) faults.push('REFUSED: a paragraph points at another one ("' + m[0] + '").\n    Give its own link, or say it in place.');
+  }
+  return faults;
+}
+
+function check(text, earlier, day) {
   const faults = [];
   const lines = text.split('\n');
   lines.forEach((line, i) => {
@@ -171,7 +252,8 @@ function check(text, earlier) {
       'REFUSED: the brief says "' + text.match(READ_THIS)[0] + '" and carries nothing to ' +
       'read.\n    An instruction to read something must carry the thing or a link to it.');
   }
-  return faults.concat(repeats(text, earlier || []), formerName(text), unquoted(text));
+  return faults.concat(repeats(text, earlier || []), formerName(text), unquoted(text),
+    subjectFaults(text, earlier || [], day || new Date().toISOString().slice(0, 10)), shapeFaults(text));
 }
 
 function main(argv) {
@@ -188,11 +270,11 @@ function main(argv) {
   const named = arg === '-' ? null : (path.basename(arg).match(DATED) || [])[1];
   const day = named || new Date().toISOString().slice(0, 10);
   if (!dir) dir = named ? path.dirname(arg) : 'brief';
-  const faults = check(text, history(dir, day));
+  const faults = check(text, history(dir, day), day);
   if (!faults.length) return 0;
   process.stdout.write(faults.join('\n\n') + '\n');
   return 1;
 }
 
 if (require.main === module) process.exit(main(process.argv));
-module.exports = { check, history, postLines, identity, similar, items, linksOf };
+module.exports = { check, history, postLines, identity, similar, items, linksOf, subjects, subjectFaults, shapeFaults };

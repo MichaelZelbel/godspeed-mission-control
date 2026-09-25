@@ -99,6 +99,20 @@ expect('a quoted text to send passes',
   '1. Send him this as is:\n"Hi Deshraj, I posted about memory today because you are right."\n', 0);
 expect('a task with nothing to send passes',
   '1. Cancel the old mailboxes, then tell me it is done.\n', 0);
+// 2026-09-25, the same rules as the author's server (scripts/briefing/note.py).
+expect('a second story on the same subject in one brief is refused',
+  'Friday.\n\nMeta\'s new assistant, Muse, copies OpenClaw\'s files.\nhttps://a.example/muse-copies\n\n' +
+  'At its show, Meta said Muse will read your mail.\nhttps://b.example/muse-mail\n', 1, 'same subject');
+expect('two different stories that share only a big company pass',
+  'Friday.\n\nMeta cut its glasses price.\nhttps://a.example/glasses\n\nMeta\'s Muse got video calls.\nhttps://b.example/muse\n', 0);
+fs.writeFileSync(path.join(dir, '2026-09-22.md'), 'Tuesday.\n\nMuse, Meta\'s assistant, launched.\nhttps://c.example/muse-launch\n');
+fs.writeFileSync(path.join(dir, '2026-09-21.md'), 'Monday.\n\nMuse gets a Mac app.\nhttps://c.example/muse-mac\n');
+expectFile('a subject in the news of two of the last four briefs rests', '2026-09-24',
+  'Thursday.\n\nMuse now books tables for you.\nhttps://d.example/muse-tables\n', 1, 'Let it rest');
+expect('an opening that previews the items is refused',
+  'Tuesday, and a light one: a single small decision for you.\n\n1. Cancel the mailboxes, then tell me it is done.\n', 1, 'opening');
+expect('a paragraph pointing at another by number is refused',
+  'Friday.\n\nI built the sample. It is on the page in item 1.\n\n1. Reply "ship all".\nhttps://e.example/moves\n', 1, 'points at another');
 fs.rmSync(dir, { recursive: true, force: true });
 
 process.exit(failures ? 1 : 0);
