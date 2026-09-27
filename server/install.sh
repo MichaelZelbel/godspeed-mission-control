@@ -61,8 +61,8 @@ LIB_URL="https://raw.githubusercontent.com/MichaelZelbel/kit-bootstrap/$KB_PIN/l
 # The agent cage (see "The agent cage" in phase 1): one file from kit-bootstrap at its
 # own immutable tag, checked against this hash before it runs. A bump is these two lines;
 # server/test-agent-cage.sh checks they still describe the same file.
-AGENT_CAGE_PIN="agent-cage-v1.0.1"
-AGENT_CAGE_SHA256="07ef1424074690d3ec465b21cf67592a5e0e9c37ae54236782cbcfc98c7e419d"
+AGENT_CAGE_PIN="agent-cage-v1.0.2"
+AGENT_CAGE_SHA256="8b995b52a76220c94d9d8f25e9a406a0164e06c0a4da6cd0afd048353379bc9e"
 AGENT_CAGE_URL="${AGENT_CAGE_URL:-https://raw.githubusercontent.com/MichaelZelbel/kit-bootstrap/$AGENT_CAGE_PIN/agent-cage.sh}"
 KIT_REPO="https://github.com/MichaelZelbel/godspeed-mission-control.git"
 AI_USER="${AI_USER:-ai}"

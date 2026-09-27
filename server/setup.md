@@ -160,8 +160,8 @@ fixed tag, and you check its fingerprint before you run it. Do this before the w
 (section 9a), because the watchdog's AI lines are written to run through it.
 
 ```bash
-curl -fsSL -o /usr/local/sbin/agent-cage.sh https://raw.githubusercontent.com/MichaelZelbel/kit-bootstrap/agent-cage-v1.0.1/agent-cage.sh
-echo "07ef1424074690d3ec465b21cf67592a5e0e9c37ae54236782cbcfc98c7e419d  /usr/local/sbin/agent-cage.sh" | sha256sum -c -
+curl -fsSL -o /usr/local/sbin/agent-cage.sh https://raw.githubusercontent.com/MichaelZelbel/kit-bootstrap/agent-cage-v1.0.2/agent-cage.sh
+echo "8b995b52a76220c94d9d8f25e9a406a0164e06c0a4da6cd0afd048353379bc9e  /usr/local/sbin/agent-cage.sh" | sha256sum -c -
 bash /usr/local/sbin/agent-cage.sh install
 bash /usr/local/sbin/agent-cage.sh watch-unit 'hermes-gateway*.service'
 bash /usr/local/sbin/agent-cage.sh watch-unit 'hermes-dashboard*.service'
