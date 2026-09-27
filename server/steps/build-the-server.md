@@ -51,7 +51,17 @@ for a human reading along, or for finding which step broke.
    install command's exit status. It starts with the machine, no login needed,
    and came back fourteen seconds after a reboot on the test server. There is
    one system gateway per machine, named `hermes-gateway.service`.
-5a. **The watchdog, on root's clock** (`server/install-watchdog.sh`, added
+5b. **The agent cage** (added 2026-09-27). Downloads `agent-cage.sh` from
+   `kit-bootstrap` at the tag `AGENT_CAGE_PIN` names, checks its SHA-256 against
+   `AGENT_CAGE_SHA256` (both at the top of `install.sh`) and refuses to run a file
+   that differs, then runs `install`, `watch-unit 'hermes-gateway*.service'`,
+   `watch-unit 'hermes-dashboard*.service'` and `selftest`. Why: on 2026-09-21 an
+   agent's search with an empty folder name searched the whole disk, outlived the
+   connection that started it, and held a core for five days. After this, every
+   agent command has a time limit that also ends what it started, one core at
+   most, and a place behind the machine's own services. A failed self-test is
+   said and does not stop the install. Safe to run again.
+5c. **The watchdog, on root's clock** (`server/install-watchdog.sh`, added
    2026-09-06). Clones `hermes-self-devops-watchdog` at a pinned tag into
    `/opt/hermes-watchdog`, fetches its hash-verified floor, makes the `watchdog`
    profile for `ai` (own memory and sessions, the gateway's credential store),
@@ -59,7 +69,9 @@ for a human reading along, or for finding which step broke.
    it both ways, and writes one marked block into root's crontab: the floor
    every 5 minutes (root restarts a dead system unit once, no AI), the
    self-check every 30 minutes (one word from the second Hermes, through
-   `sudo -n -u ai`), the deep check four times a day. Alerts go out as `ai`
+   `sudo -n -u ai`), the deep check four times a day. The self-check and the
+   deep check run through `agent-cage` (10 and 30 minutes at most); the floor
+   does not, because it has no AI in it and must always get to run. Alerts go out as `ai`
    through `hermes send -t telegram`, so the reader's one bot, connected in
    step 5a, serves both Hermes. Then the floor runs once.
    Four times a day and not hourly: every run spends the reader's ChatGPT

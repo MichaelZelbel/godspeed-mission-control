@@ -57,6 +57,13 @@ export KB_SELF_URL
 # exactly the code that passed its end-to-end runs until this line is edited.
 KB_PIN="v2.4.1"
 LIB_URL="https://raw.githubusercontent.com/MichaelZelbel/kit-bootstrap/$KB_PIN/lib.sh"
+
+# The agent cage (see "The agent cage" in phase 1): one file from kit-bootstrap at its
+# own immutable tag, checked against this hash before it runs. A bump is these two lines;
+# server/test-agent-cage.sh checks they still describe the same file.
+AGENT_CAGE_PIN="agent-cage-v1.0.0"
+AGENT_CAGE_SHA256="4654f9287f0aa4fa64d5d72d8b01eedf7907cbe6acd97f651d414b243dcd32c6"
+AGENT_CAGE_URL="${AGENT_CAGE_URL:-https://raw.githubusercontent.com/MichaelZelbel/kit-bootstrap/$AGENT_CAGE_PIN/agent-cage.sh}"
 KIT_REPO="https://github.com/MichaelZelbel/godspeed-mission-control.git"
 AI_USER="${AI_USER:-ai}"
 GODSPEED="${GODSPEED:-}"            # settled below: the assistant's home + /godspeed unless told otherwise
@@ -314,6 +321,53 @@ WHY
   export KB_HERMES_BIN
   kb_install_gateway "$AI_USER" || true
 
+  # --- The agent cage ----------------------------------------------------------
+  # Before the watchdog, because the watchdog's AI lines are written to run through
+  # it. On 2026-09-21 one search an AI agent started on a server ran with an empty
+  # folder name, searched the whole disk forever, outlived the connection that
+  # started it, and held a processor core for five days until the hosting company
+  # slowed the machine down. So every command an agent runs here gets a time limit
+  # that also ends whatever it started, one core at most, and a place behind the
+  # machine's own services. One file from kit-bootstrap, at a pinned tag, checked
+  # against its hash (AGENT_CAGE_PIN and AGENT_CAGE_SHA256 at the top). A file that
+  # does not match is never run. Safe to run again: install and watch-unit refresh.
+  say "Putting a cage around your assistant's commands"
+  cat <<'WHY'
+   An assistant that works on a server will one day start a command that never
+   ends. Closing the chat does not stop it, and it can keep the machine busy for
+   days. So every command your assistant runs gets a time limit that also ends
+   everything it started, at most one processor core, and a place behind the
+   machine's own services.
+WHY
+  CAGE_TMP="$(mktemp)"
+  if ! curl -fsSL "$AGENT_CAGE_URL" -o "$CAGE_TMP" 2>/dev/null || [ ! -s "$CAGE_TMP" ]; then
+    warn "could not download the agent cage from $AGENT_CAGE_URL.
+   Everything else still runs, without the cage. Run this one line again later."
+  elif [ "$(sha256sum "$CAGE_TMP" | cut -d' ' -f1)" != "$AGENT_CAGE_SHA256" ]; then
+    warn "REFUSED: the agent cage downloaded from $AGENT_CAGE_URL is not the file
+   this installer was checked against (its SHA-256 differs from $AGENT_CAGE_SHA256).
+   It was NOT run. Everything else still runs, without the cage. Tell the author."
+  else
+    install -m 0755 "$CAGE_TMP" /usr/local/sbin/agent-cage.sh
+    if bash /usr/local/sbin/agent-cage.sh install; then
+      # The gateway runs what the assistant types in Telegram; the dashboard (from
+      # server/open-the-door.sh) runs what it types in the app. A glob is matched on
+      # every patrol, so naming the dashboard before it exists is fine.
+      bash /usr/local/sbin/agent-cage.sh watch-unit 'hermes-gateway*.service' >/dev/null || true
+      bash /usr/local/sbin/agent-cage.sh watch-unit 'hermes-dashboard*.service' >/dev/null || true
+      ok "agent cage $AGENT_CAGE_PIN installed and watching the gateway and the dashboard"
+      if bash /usr/local/sbin/agent-cage.sh selftest >/tmp/agent-cage-selftest.log 2>&1; then
+        ok "the cage stopped a runaway test command, as it should"
+      else
+        warn "the agent cage's self-test did not pass. Everything else still runs.
+   What it said is in /tmp/agent-cage-selftest.log; run 'agent-cage.sh selftest' as root to see it again."
+      fi
+    else
+      warn "the agent cage did not install (read what it printed above). Everything else still runs."
+    fi
+  fi
+  rm -f "$CAGE_TMP"
+
   # --- The watchdog ------------------------------------------------------------
   # Root's half lives in its own script, so a server built by hand can add it
   # alone, and so the test rig can run it alone. It is fetched from beside this
@@ -550,9 +604,12 @@ if [ -x /opt/hermes-watchdog/templates/selftest.sh ] && [ -d "$HOME/.hermes/prof
   say "Asking the second Hermes, the watchdog, to answer one word"
   WD_STATE="$HOME/.local/state/hermes-watchdog"
   mkdir -p "$WD_STATE"
+  # Through the cage when it is here, like every other AI run on this machine.
+  WD_CAGE=()
+  [ -x /usr/local/bin/agent-cage ] && WD_CAGE=(/usr/local/bin/agent-cage --max 10m --)
   if HERMES_BIN="$(kb_hermes_bin)" WATCHDOG_HOME="$HOME/.hermes/profiles/watchdog" LOG_FILE="$WD_STATE/selftest.log" \
      STATE_DIR="$WD_STATE" NOTIFY=/nonexistent PROBE_TIMEOUT=180 \
-     bash /opt/hermes-watchdog/templates/selftest.sh >/dev/null 2>&1; then
+     "${WD_CAGE[@]}" bash /opt/hermes-watchdog/templates/selftest.sh >/dev/null 2>&1; then
     ok "watchdog: the second Hermes answers, on the same sign-in as your assistant"
   else
     warn "watchdog: the second Hermes could not answer yet ($(tail -1 "$WD_STATE/selftest.log" 2>/dev/null | sed 's/^[^|]*| //' | cut -c1-160)).

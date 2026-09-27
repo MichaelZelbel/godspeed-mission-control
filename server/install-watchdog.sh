@@ -144,6 +144,27 @@ ok "leash on: $GOT refusals, checked both ways (a firewall reset is refused, ord
 # home that holds the Telegram token.
 say "Putting the watchdog on the machine's clock"
 mkdir -p "$LOG_DIR" "$STATE_DIR"
+# The two lines that run an AI (the self-check asks Hermes one word, the deep
+# check is a whole Hermes run) go through the agent cage that server/install.sh
+# puts on the machine: a hard time limit that also ends everything the run
+# started, one processor core at most, behind the machine's own services.
+# The limits leave room above the scripts' own: the self-check's probe gives up
+# after 120 seconds, a deep-check prompt after 900. Only these two lines are
+# caged, never root's whole crontab (no SHELL= here), because root may carry
+# jobs of the reader's own. The floor (quick-check.sh) stays uncaged on purpose:
+# it is plain shell with no AI in it, ends in seconds, and is the one line that
+# has to run, and restart the gateway, even when the cage's share of the
+# machine is full. Without the cage (a server built by hand that skipped it),
+# the same limits come from plain `timeout`, and the reader is told.
+if [ -x /usr/local/bin/agent-cage ]; then
+  CAGE_SELFTEST="/usr/local/bin/agent-cage --max 10m --"
+  CAGE_DEEP="/usr/local/bin/agent-cage --max 30m --"
+else
+  CAGE_SELFTEST="timeout --kill-after=30s 10m"
+  CAGE_DEEP="timeout --kill-after=30s 30m"
+  warn "the agent cage is not on this machine, so the watchdog's AI runs get a plain time limit
+   only. Add the cage (server/setup.md, step \"The agent cage\"), then run this again."
+fi
 START="# teach-it-once:watchdog start"
 END="# teach-it-once:watchdog end"
 BLOCK="$(cat <<EOF
@@ -162,8 +183,8 @@ LOG_DIR=$LOG_DIR
 FLOOR_LOG=$LOG_DIR/quick.log
 FLOOR_STATE=""
 */5 * * * * $WATCHDOG_DIR/floor/quick-check.sh
-$SELFTEST_EVERY $WATCHDOG_DIR/templates/selftest.sh
-$DEEP_CHECK_AT $WATCHDOG_DIR/templates/run-prompt.sh six-hour-deep-check
+$SELFTEST_EVERY $CAGE_SELFTEST $WATCHDOG_DIR/templates/selftest.sh
+$DEEP_CHECK_AT $CAGE_DEEP $WATCHDOG_DIR/templates/run-prompt.sh six-hour-deep-check
 $END
 EOF
 )"

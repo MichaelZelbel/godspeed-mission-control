@@ -147,6 +147,36 @@ recognised Hermes key: the command succeeded, Hermes ignored it, and the
 assistant knew your house rules and still could not open the folder they
 describe.
 
+## 5a. The agent cage, as root
+
+An assistant that works on a server will one day start a command that never ends. On
+2026-09-21 one did: a search whose folder name came out empty searched the whole disk,
+kept going after the connection that started it was closed, and held a processor core
+for five days until the hosting company slowed the machine down. Closing the chat does
+not stop a command. The cage does: every command an agent runs gets a time limit that
+also ends everything it started, at most one processor core, and a place behind the
+machine's own services. It is one file from the public `kit-bootstrap` repository, at a
+fixed tag, and you check its fingerprint before you run it. Do this before the watchdog
+(section 9a), because the watchdog's AI lines are written to run through it.
+
+```bash
+curl -fsSL -o /usr/local/sbin/agent-cage.sh https://raw.githubusercontent.com/MichaelZelbel/kit-bootstrap/agent-cage-v1.0.0/agent-cage.sh
+echo "4654f9287f0aa4fa64d5d72d8b01eedf7907cbe6acd97f651d414b243dcd32c6  /usr/local/sbin/agent-cage.sh" | sha256sum -c -
+bash /usr/local/sbin/agent-cage.sh install
+bash /usr/local/sbin/agent-cage.sh watch-unit 'hermes-gateway*.service'
+bash /usr/local/sbin/agent-cage.sh watch-unit 'hermes-dashboard*.service'
+bash /usr/local/sbin/agent-cage.sh selftest
+```
+
+If `sha256sum -c` does not say `OK`, stop and do not run the file. `install` puts
+`agent-cage` in `/usr/local/bin` (run anything as `agent-cage --max 30m -- command`),
+a patrol that every ten minutes stops busy leftovers of closed sessions and busy
+children of the two watched services, and `agent.slice`, where every caged command
+lives and which together may use at most three quarters of the machine. `selftest`
+starts a runaway command on purpose and proves it is stopped. All of it is safe to run
+again. `agent-cage.sh check` says whether every piece is still in place;
+`agent-cage.sh uninstall` removes it.
+
 ## 6. Give the server your folder
 
 **The short way**, which is what the one-line installer does: install the
@@ -248,7 +278,10 @@ both ways, and writes one block between `# teach-it-once:watchdog start` and `en
 root's crontab: `floor/quick-check.sh` every 5 minutes (root restarts a dead system unit once),
 `templates/selftest.sh` every 30 minutes (asks the second Hermes for one word through
 `OPERATOR_CMD`, alerts SELF-HEALING IS DOWN when it cannot), and
-`templates/run-prompt.sh six-hour-deep-check` four times a day. Alerts go out through
+`templates/run-prompt.sh six-hour-deep-check` four times a day. The self-check and the deep
+check run through `agent-cage --max 10m --` and `agent-cage --max 30m --` (section 5a; without
+the cage, plain `timeout` with the same limits); the floor stays uncaged, because it has no AI
+in it and must restart the gateway even when the cage's share of the machine is full. Alerts go out through
 `hermes send -t telegram` as `ai` (`SEND_CMD`, `SEND_HOME`), to the bot's home channel, the
 `TELEGRAM_HOME_CHANNEL` line section 4a wrote. Logs: `/var/log/hermes-watchdog/`. Off-switch:
 delete the block from root's crontab.

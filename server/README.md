@@ -47,6 +47,16 @@ The installer stands on `kit-bootstrap`, a small public repository that holds th
 shared with the other kits, so the same code is not maintained in two places:
 <https://github.com/MichaelZelbel/kit-bootstrap>
 
+**The agent cage.** Before the watchdog, the installer puts a cage around every command your
+assistant runs on the server. An assistant will one day start a command that never ends, and
+closing the chat does not stop it: in September 2026 a search with an empty folder name searched
+a whole disk, outlived the connection that started it, and kept a server busy for five days. In
+the cage, every agent command has a time limit that also ends everything it started, may use at
+most one processor core, and waits behind the machine's own services. It is one file,
+`agent-cage.sh` from `kit-bootstrap`, fetched at a fixed tag and checked against its fingerprint
+before it runs (`AGENT_CAGE_PIN` and `AGENT_CAGE_SHA256` at the top of `install.sh`). By hand:
+`setup.md`, section 5a. `test-agent-cage.sh` checks the pin and the wiring.
+
 ## Read this before you build anything
 
 Three findings from building it on a blank machine on 2026-07-26, and what Hermes changed.
