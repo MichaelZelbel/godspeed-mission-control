@@ -93,8 +93,11 @@ function sessionText(payload) {
         if (!x || x.type !== "tool_use" || !x.input) continue;
         if (x.input.file_path) out.push(String(x.input.file_path).replace(/[\\/]/g, " "));
         if (x.input.notebook_path) out.push(String(x.input.notebook_path).replace(/[\\/]/g, " "));
+        // Only what follows `git commit` (its message), never the edits chained in front of it:
+        // a command that rewrites five files and then commits is not five subjects of the work.
         const cmd = String(x.input.command || "");
-        if (/\bgit\b[^\n]*\bcommit\b/.test(cmd)) out.push(cmd);
+        const at = cmd.search(/\bgit\b[^\n]*?\bcommit\b/);
+        if (at >= 0) out.push(cmd.slice(at));
       }
     }
   }
