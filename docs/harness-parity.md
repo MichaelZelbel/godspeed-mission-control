@@ -92,3 +92,23 @@ mc-decide --date 2026-09-13         decide as if it were another day
 
 The record lands in `routines/next-action/<date>/` in your mission control, next to the plan and the work
 tracker's output it was given.
+
+## Closing a deadline when the work is done with you
+
+Added 2026-09-28. When a deadline's work is finished in a working session (you approve the post,
+send the email, file the form with your assistant), the session should close it right there, with
+what shows it: `mc-due done <name> --evidence "..."`, which writes the closing into `world/events/`.
+The morning brief reads that, so it never hands you back work you already did.
+
+| | Claude Code | Hermes | Codex | OpenClaw |
+|---|---|---|---|---|
+| Told to close it in the same turn (the recipe) | yes | yes | yes | yes |
+| Stopped once before the session ends if it forgot | yes, `.claude/hooks/obligation-close-check.js` | no stop boundary | no stop boundary | no stop boundary |
+| A daily net that closes it from your own words | no | no | no | no |
+
+**The gap, said plainly.** Only Claude Code has a moment at the end of every session where a
+program can check. On the other three, a deadline finished in conversation stays open until the
+assistant remembers or you say `mc-due done`. The mission control this kit comes from closes that
+gap with a daily job that reads what you typed and closes a deadline on your quoted words; the kit
+does not ship that job, because it needs a paid model call every day. Proven by
+`tools/test-obligation-close-hook.js` (Claude Code) and `tools/test-due.sh` (the events themselves).

@@ -83,8 +83,20 @@ Most things cannot. Nobody can tell your mission control that you filed a timesh
 your employer's website. Those wait for your word:
 
 ```
-mc-due done car-service
+mc-due done car-service --evidence "the garage invoice, 12 January"
 ```
+
+That does not change the file in `due/`. It writes one small note in `world/events/`
+saying the thing was finished and what shows it, and everything that asks "is this
+still open" reads that note. One place for the answer, so nothing can disagree.
+
+**When you do it with your assistant, it closes it for you.** If you approve,
+send or publish the thing in a working session, that is your word, and the
+assistant closes it before the session ends instead of asking you to say so again
+later. In Claude Code a stop check (`.claude/hooks/obligation-close-check.js`, in
+your mission control) makes sure it does, once per deadline per session. Hermes,
+Codex and OpenClaw have no such stop, so the instruction is simply: close it in the
+same turn you finished it.
 
 **Both answers are fine.** What is not fine is skipping the question, because
 the answer changes what you build. Ask it every time, even when you already know
@@ -108,8 +120,9 @@ last day and a real consequence, or nothing.**
 **Open. Done. Dropped.**
 
 Done can happen by itself, when there is a self check. Dropped only ever comes
-from you, and it deletes the file and its whole history, which is why the command
-makes you type it out:
+from you, which is why the command makes you type it out. Nothing is deleted:
+the file stays as the record of what you planned, and a note in `world/events/`
+says you called it off:
 
 ```
 mc-due drop car-service --yes

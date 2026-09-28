@@ -31,10 +31,22 @@
  *   mc-due add <name> --title "..." --from YYYY-MM-DD --to YYYY-MM-DD
  *          --done-when "..." --cost "..." [--repeats monthly|yearly|"every N days"]
  *          [--self-check none|file-newer] [--self-check-arg PATH] [--link URL]
- *   mc-due done <name>        you did it
- *   mc-due drop <name> --yes  delete it, history and all
+ *   mc-due done <name> [--evidence "..."]   you did it: writes the event that closes it
+ *   mc-due drop <name> --yes  call it off: an event too, and nothing is deleted
  *   mc-due check              run the self checks, close what is provably done
+ *   mc-due state [--json]     open or not, for every one, and what closed it
  *   mc-due --godspeed PATH         work on a mission control somewhere else
+ *
+ * DONE IS SOMETHING THAT HAPPENED, SO IT LIVES WITH THE THINGS THAT HAPPENED. A file in due/ is the
+ * plan: what, the window, what finished means. Whether a window is finished is never written in it.
+ * It is an event in world/events/ carrying `closes: [due/<name>]` (or `due/<name>#<first day>` for one
+ * window of a repeating job) and an `evidence:` line saying what shows it, and every reader works
+ * "open" out from those events. Why: in the mission control this kit comes from, a post was
+ * approved and published in a working session and the memory recorded it that day, while the
+ * deadline file kept its own "open" word, so the morning brief told its owner for five mornings
+ * that the finished work was waiting. Two copies of one fact drift; one copy cannot. An older file
+ * that still says `done <date>` on a STRIP line keeps working, and the first run turns that word
+ * into an event (its own log line is the evidence) before removing it.
  *
  * It reads secrets/expires.txt too, if you have one, so the dates your keys die are obligations
  * like everything else and you never write a date in two places.
@@ -89,6 +101,7 @@ if (!godspeed || !fs.existsSync(godspeed)) {
 }
 const DUE = path.join(godspeed, "due");
 const EXPIRES = path.join(godspeed, "secrets", "expires.txt");
+const EVENTS_DIR = path.join(godspeed, "world", "events");
 
 // ---------------------------------------------------------------- dates
 // Everything is YYYY-MM-DD and UTC. A date that means two different days on two of your computers
@@ -219,22 +232,142 @@ function slugs() {
     .filter((f) => f.endsWith(".md") && f !== "README.md" && !f.startsWith("."))
     .map((f) => f.slice(0, -3)).sort();
 }
+const CACHE = new Map();
 function parseFile(slug) {
+  if (CACHE.has(slug)) return CACHE.get(slug);
   const p = filePath(slug);
   const text = readText(p);
   if (!text) return null;
   const head = {}, strips = [], log = [], said = [];
   for (const raw of text.split(/\r?\n/)) {
     const line = raw.replace(/\s+$/, "");
-    let m = line.match(/^STRIP:\s*(\S+)\s+(\S+)\s+(\S+)(?:\s+(\S+))?\s*$/);
-    if (m) { strips.push({ from: m[1], to: m[2], state: m[3].toLowerCase(), closed: m[4] || "" }); continue; }
+    // `STRIP: <from> <to>`. An older line may still say `open` or `done <date>`: kept as `legacy`
+    // and honoured until it has been turned into an event.
+    let m = line.match(/^STRIP:\s*(\S+)\s+(\S+)(?:\s+(\S+))?(?:\s+(\S+))?\s*$/);
+    if (m) {
+      const word = (m[3] || "").toLowerCase();
+      strips.push({ from: m[1], to: m[2], state: "open", closed: "", legacy: word === "done" ? (m[4] || m[2]) : "" });
+      continue;
+    }
     m = line.match(/^-\s*(\d{4}-\d{2}-\d{2})\s+SAID\s+(\S+)\s*$/);
     if (m) { said.push({ date: m[1], channel: m[2] }); log.push(line); continue; }
     if (/^-\s/.test(line)) { log.push(line); continue; }
     m = line.match(/^([A-Z][A-Z0-9-]{1,30}):\s?(.*)$/);
     if (m && !(m[1] in head)) head[m[1]] = m[2].trim();
   }
-  return { slug, path: p, head, strips, log, said };
+  const o = { slug, path: p, text, head, strips, log, said };
+  applyEvents(o);
+  CACHE.set(slug, o);
+  return o;
+}
+
+// ---------------------------------------------------------------- the events: the only "is it done"
+let EVENTS = null;
+const UNPROVEN = [];
+function frontmatter(text) {
+  const m = String(text).replace(/\r\n/g, "\n").match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/);
+  if (!m) return null;
+  const meta = {};
+  for (const line of m[1].split("\n")) {
+    const kv = line.match(/^([A-Za-z_][A-Za-z0-9_-]*):\s*(.*)$/);
+    if (!kv) continue;
+    const v = kv[2].trim();
+    meta[kv[1]] = v.startsWith("[") && v.endsWith("]")
+      ? v.slice(1, -1).split(",").map((x) => x.trim().replace(/^["']|["']$/g, "")).filter(Boolean)
+      : v.replace(/^["']|["']$/g, "");
+  }
+  return meta;
+}
+function parseRef(r) {
+  const m = String(r || "").trim().match(/^due\/([a-z0-9][a-z0-9-]*)(?:\.md)?(?:#(\d{4}-\d{2}-\d{2}))?$/);
+  return m ? { slug: m[1], window: m[2] || "" } : null;
+}
+const listOf = (v) => (Array.isArray(v) ? v : v ? [v] : []);
+function worldEvents() {
+  if (EVENTS) return EVENTS;
+  EVENTS = [];
+  let files = [];
+  try { files = fs.readdirSync(EVENTS_DIR).filter((f) => f.endsWith(".md")).sort(); } catch (e) { return EVENTS; }
+  for (const f of files) {
+    const text = readText(path.join(EVENTS_DIR, f));
+    if (!/^(closes|drops):/m.test(text)) continue;
+    const meta = frontmatter(text);
+    if (!meta || !isDate(meta.date)) continue;
+    const closes = listOf(meta.closes).map(parseRef).filter(Boolean);
+    const drops = listOf(meta.drops).map(parseRef).filter(Boolean);
+    if (!closes.length && !drops.length) continue;
+    // No evidence, no closing: an event that says a thing is done without what shows it closes nothing.
+    if (!String(meta.evidence || "").trim()) { UNPROVEN.push("world/events/" + f); continue; }
+    EVENTS.push({ file: "world/events/" + f, date: meta.date, closes, drops });
+  }
+  return EVENTS;
+}
+// A named window closes that one; a bare name closes the window that was current on the event's day.
+function targetStrip(o, ref, date) {
+  const open = o.strips.filter((s) => s.state === "open");
+  if (!open.length) return null;
+  if (ref.window) return open.find((s) => s.from === ref.window) || null;
+  const started = open.filter((s) => s.from <= date);
+  return started.length ? started[started.length - 1] : open[0];
+}
+function applyEvents(o) {
+  for (const s of o.strips) { s.state = "open"; s.closed = ""; s.by = ""; }
+  o.dropped = null;
+  const acts = [];
+  for (const e of worldEvents()) {
+    for (const r of e.closes) if (r.slug === o.slug) acts.push({ date: e.date, ref: r, by: e.file, legacy: false });
+    for (const r of e.drops) if (r.slug === o.slug && (!o.dropped || e.date < o.dropped.date)) o.dropped = { date: e.date, by: e.file };
+  }
+  for (const s of o.strips) if (s.legacy) acts.push({ date: s.legacy, ref: { slug: o.slug, window: s.from }, by: "", legacy: true });
+  acts.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.legacy === b.legacy ? 0 : a.legacy ? 1 : -1));
+  for (const a of acts) {
+    const s = targetStrip(o, a.ref, a.date);
+    if (s) { s.state = "done"; s.closed = a.date; s.by = a.by || "legacy"; }
+  }
+  if (o.dropped) for (const s of o.strips) if (s.state === "open") { s.state = "dropped"; s.closed = o.dropped.date; s.by = o.dropped.by; }
+}
+// The one writer of a closing or a drop: one new file per event, never an edit of an old one.
+function writeEvent(day, { closes = [], drops = [], evidence, source, text }) {
+  if (!String(evidence || "").trim()) return null;
+  const first = (closes[0] || drops[0] || "due/thing").replace(/^due\//, "").replace(/#.*/, "");
+  const base = day + "-" + slugify(first + " " + (closes.length ? "closed" : "dropped"));
+  let file = path.join(EVENTS_DIR, base + ".md");
+  for (let n = 2; fs.existsSync(file); n++) file = path.join(EVENTS_DIR, base + "-" + n + ".md");
+  const lines = ["---", "date: " + day, "participants: [me]"];
+  if (closes.length) lines.push("closes: [" + closes.join(", ") + "]");
+  if (drops.length) lines.push("drops: [" + drops.join(", ") + "]");
+  lines.push("evidence: " + String(evidence).replace(/\s+/g, " ").trim(), "source: " + (source || "mc-due"),
+             "written_by: mc-due", "origin: mission control", "---", "", String(text || "").trim(), "");
+  if (!writeText(file, lines.join("\n"))) return null;
+  const rel = "world/events/" + path.basename(file);
+  worldEvents().push({ file: rel, date: day, closes: closes.map(parseRef).filter(Boolean), drops: drops.map(parseRef).filter(Boolean) });
+  for (const x of CACHE.values()) applyEvents(x);
+  return rel;
+}
+// An older file that still says `done <date>`: the closing becomes an event on its true date, with
+// the file's own log line of that day as the evidence, and only then does the word go.
+function migrateLegacy(notes) {
+  for (const slug of slugs()) {
+    const o = parseFile(slug);
+    if (!o) continue;
+    if (!o.strips.some((s) => s.legacy) && !/^STRIP:\s*\S+\s+\S+\s+open\b/m.test(o.text || "")) continue;
+    let moved = true, wrote = 0;
+    for (const s of o.strips) {
+      if (!s.legacy || s.by !== "legacy") continue;
+      const said = o.log.filter((l) => l.startsWith("- " + s.legacy + " ") && !/ SAID /.test(l)).map((l) => l.slice(13).trim());
+      const rel = writeEvent(s.legacy, {
+        closes: ["due/" + slug + "#" + s.from],
+        evidence: "due/" + slug + ".md log, " + s.legacy + ": " + (said.length ? said[said.length - 1] : "the file said done").slice(0, 300),
+        source: "moved out of the deadline file",
+        text: (o.head["TITLE"] || slug) + ": finished (window " + s.from + " to " + s.to + ").",
+      });
+      if (!rel) moved = false; else wrote += 1;
+    }
+    if (!moved) continue;
+    for (const s of o.strips) s.legacy = "";
+    save(o);
+    if (wrote) notes.push(slug + ": " + wrote + " closing(s) moved into world/events/");
+  }
 }
 const ORDER = ["TITLE", "DONE-WHEN", "COST-IF-MISSED", "SELF-CHECK", "SELF-CHECK-ARG",
                "REPEATS", "LINK", "SOURCE"];
@@ -246,13 +379,14 @@ function render(o) {
   // stop editing by hand, and these are meant to be edited by hand.
   for (const k of Object.keys(o.head)) if (!ORDER.includes(k)) out.push(k + ": " + H(k));
   out.push("", "## Windows", "");
-  for (const s of o.strips) out.push(["STRIP:", s.from, s.to, s.state, s.closed].filter(Boolean).join(" "));
+  // The window only. A state word survives only while it is still the one record of that closing.
+  for (const s of o.strips) out.push(["STRIP:", s.from, s.to].concat(s.legacy && s.by === "legacy" ? ["done", s.legacy] : []).join(" "));
   out.push("", "## Log", "");
   for (const l of o.log) out.push(l);
   out.push("");
   return out.join("\n");
 }
-const save = (o) => writeText(o.path, render(o));
+const save = (o) => { CACHE.set(o.slug, o); return writeText(o.path, render(o)); };
 const logLine = (o, day, t) => o.log.push("- " + day + " " + t);
 
 function currentWindow(o, day) {
@@ -297,7 +431,7 @@ function adoptKeys(day, notes) {
     let o = parseFile(slug);
     const plain = (note.split(".")[0] || "").trim() || "one of your keys";
     if (!o) {
-      o = { slug, path: filePath(slug), strips: [{ from: day, to: when, state: "open", closed: "" }], log: [], said: [],
+      o = { slug, path: filePath(slug), strips: [{ from: day, to: when, state: "open", closed: "", legacy: "" }], log: [], said: [],
         head: {
           // Not "Get a new " + the sentence: half these notes start with "The key that..." and it
           // came out as "Get a new the key that...". Put the verb at the end and no case surgery
@@ -321,9 +455,16 @@ function adoptKeys(day, notes) {
     if (cur && when > cur.to) {
       // The date moved forward, which is what getting a new key looks like from the outside. So
       // this one is finished, and the key's next life starts today. Nobody had to be asked.
-      cur.state = "done"; cur.closed = day;
-      o.strips.push({ from: day, to: when, state: "open", closed: "" });
-      logLine(o, day, "closed itself: the date in secrets/expires.txt moved to " + when + ", so you replaced the key");
+      const rel = writeEvent(day, {
+        closes: ["due/" + slug + "#" + cur.from],
+        evidence: "the date in secrets/expires.txt moved from " + cur.to + " to " + when + ", so the key was replaced",
+        source: "mc-due, secrets/expires.txt",
+        text: (o.head["TITLE"] || slug) + ": the key was replaced; it now lasts until " + when + ".",
+      });
+      if (!rel) continue;
+      o.strips.push({ from: day, to: when, state: "open", closed: "", legacy: "" });
+      applyEvents(o);
+      logLine(o, day, "closed itself (" + rel + "): the date in secrets/expires.txt moved to " + when + ", so you replaced the key");
       save(o);
       notes.push(slug + " closed itself: the date moved to " + when);
     } else if (cur && when < cur.to) {
@@ -336,7 +477,7 @@ function adoptKeys(day, notes) {
 function growWindows(day, notes) {
   for (const slug of slugs()) {
     const o = parseFile(slug);
-    if (!o || !o.strips.length) continue;
+    if (!o || !o.strips.length || o.dropped) continue;
     const rep = repeatOf(o.head["REPEATS"]);
     if (!rep) continue;
     // COUNTED FROM THE FIRST WINDOW, NEVER FROM THE ONE BEFORE. Stepping from the previous one is
@@ -348,18 +489,19 @@ function growWindows(day, notes) {
       const step = rep.kind === "months" ? (a) => addMonths(a, rep.n * k) : (a) => addDays(a, rep.n * k);
       const from = step(anchor.from), to = step(anchor.to);
       if (!from || !to || to <= newest.to) break;
-      o.strips.push({ from, to, state: "open", closed: "" });
+      o.strips.push({ from, to, state: "open", closed: "", legacy: "" });
       newest = o.strips[o.strips.length - 1];
       added += 1;
     }
     if (added) {
+      applyEvents(o);
       logLine(o, day, "the next window opened: " + newest.from + " to " + newest.to);
       save(o);
       notes.push(slug + ": next window " + newest.from + " to " + newest.to);
     }
   }
 }
-function roll(day) { const notes = []; adoptKeys(day, notes); growWindows(day, notes); return notes; }
+function roll(day) { const notes = []; migrateLegacy(notes); adoptKeys(day, notes); growWindows(day, notes); return notes; }
 
 function load(day) {
   roll(day);
@@ -370,7 +512,7 @@ function load(day) {
     const cur = currentWindow(o, day);
     rows.push({
       o, slug, title: o.head["TITLE"] || slug,
-      band: cur ? cur.band : "closed",
+      band: cur ? cur.band : (o.dropped ? "dropped" : "closed"),
       strip: cur ? cur.strip : null,
       left: cur ? daysBetween(day, cur.strip.to) + 1 : null,
       missed: cur ? cur.missed : 0,
@@ -438,9 +580,10 @@ function help() {
           --done-when "..." --cost "..."
           [--repeats monthly|yearly|"every N days"]
           [--self-check none|file-newer] [--self-check-arg PATH] [--link URL]
-  mc-due done <name>             you did it
-  mc-due drop <name> --yes       delete it, history and all
+  mc-due done <name> [--evidence "..."]   you did it (written down as an event in world/events/)
+  mc-due drop <name> --yes       call it off; nothing is deleted
   mc-due check                   run the self checks, close what is provably done
+  mc-due state [--json]          open or not, for every one, and what closed it
   mc-due --godspeed PATH              a mission control somewhere else
 
 How loud it gets comes from how much of the window is left, and from nothing else: quiet
@@ -456,7 +599,7 @@ function cmdList(day, capped) {
     console.log("            --done-when \"it is filed\" --cost \"a late fee, and they estimate my income themselves\"");
     return 0;
   }
-  const live = rows.filter((r) => r.strip && r.band !== "closed" && r.band !== "unopened");
+  const live = rows.filter((r) => r.strip && r.band !== "closed" && r.band !== "dropped" && r.band !== "unopened");
   // MORE THAN THREE RUNNING OUT IN THE SAME WEEK BECOMES ONE LINE. Seven lines is a page nobody
   // reads, and "you have taken on too much this week" is the honest thing that week is about.
   const soon = live.filter((r) => {
@@ -492,7 +635,7 @@ function cmdList(day, capped) {
   }
   if (!show.length) { console.log("Nothing needs saying today."); return 0; }
   for (const r of show) {
-    if (!r.strip) { console.log("DONE      " + r.title); continue; }
+    if (!r.strip) { console.log((r.o.dropped ? "CALLED OFF     " : "DONE      ") + r.title); continue; }
     console.log(WORDS[r.band].padEnd(15) + sentence(r, day));
     if (!capped) {
       const c = (r.o.head["SELF-CHECK"] || "none").toLowerCase();
@@ -556,10 +699,18 @@ function cmdDone(day) {
   if (!o) { console.log("You have nothing called " + slug + ". Type mc-due to see the list."); return 1; }
   const cur = currentWindow(o, day);
   if (!cur) { console.log("Nothing was open on " + slug + "."); return 0; }
-  cur.strip.state = "done"; cur.strip.closed = day;
-  logLine(o, day, "you said it was done");
+  // Your word is the evidence, plus whatever you or your assistant name as showing it.
+  const extra = String(argOf("--evidence", "") || "").trim();
+  const rel = writeEvent(day, {
+    closes: ["due/" + slug + "#" + cur.strip.from],
+    evidence: "you said so" + (extra ? "; " + extra : ""),
+    source: "mc-due done",
+    text: (o.head["TITLE"] || slug) + ": done (window " + cur.strip.from + " to " + cur.strip.to + ").",
+  });
+  if (!rel) { console.log("I could not write it down, so nothing was closed."); return 1; }
+  logLine(o, day, "you said it was done (" + rel + ")");
   save(o);
-  console.log("Closed " + slug + " (" + cur.strip.from + " to " + cur.strip.to + ").");
+  console.log("Closed " + slug + " (" + cur.strip.from + " to " + cur.strip.to + "): " + rel);
   if (repeatOf(o.head["REPEATS"])) console.log("It repeats, so the next window opens when this one ends.");
   return 0;
 }
@@ -568,13 +719,21 @@ function cmdDrop() {
   const slug = args[1];
   if (!slug) { console.log("Which one?  mc-due drop <name> --yes"); return 1; }
   if (!has("--yes")) {
-    console.log("Dropping deletes it and everything it remembers. Add --yes if that is what you mean.");
+    console.log("Dropping calls it off for good. Add --yes if that is what you mean.");
     return 1;
   }
-  const p = filePath(slug);
-  if (!fs.existsSync(p)) { console.log("You have nothing called " + slug + "."); return 1; }
-  try { fs.unlinkSync(p); } catch (e) { console.log("Could not delete it: " + e.message); return 1; }
-  console.log("Dropped " + slug + ". It is gone, and nothing will mention it again.");
+  const o = parseFile(slug);
+  if (!o) { console.log("You have nothing called " + slug + "."); return 1; }
+  if (o.dropped) { console.log(slug + " was already called off."); return 0; }
+  const extra = String(argOf("--evidence", "") || "").trim();
+  const rel = writeEvent(today(), {
+    drops: ["due/" + slug], evidence: "you said so" + (extra ? "; " + extra : ""), source: "mc-due drop",
+    text: (o.head["TITLE"] || slug) + ": called off.",
+  });
+  if (!rel) { console.log("I could not write it down, so nothing was dropped."); return 1; }
+  logLine(o, today(), "dropped (" + rel + ")");
+  save(o);
+  console.log("Dropped " + slug + ". Nothing will mention it again; the file stays as history.");
   return 0;
 }
 
@@ -594,17 +753,36 @@ function cmdCheck(day) {
     const r = selfCheck(o, cur.strip);
     if (r.error) { console.log("  due/" + slug + ".md: " + r.error); problems++; continue; }
     if (r.done) {
-      cur.strip.state = "done"; cur.strip.closed = day;
-      logLine(o, day, "closed itself: " + r.why);
+      const rel = writeEvent(day, {
+        closes: ["due/" + slug + "#" + cur.strip.from], evidence: "self check: " + r.why, source: "mc-due check",
+        text: (o.head["TITLE"] || slug) + ": finished, seen by its self check.",
+      });
+      if (!rel) { console.log("  due/" + slug + ".md: could not write the closing down"); problems++; continue; }
+      logLine(o, day, "closed itself (" + rel + "): " + r.why);
       save(o);
       console.log("  closed itself: " + (o.head["TITLE"] || slug) + " (" + r.why + ")");
       closed++;
     }
   }
+  for (const f of UNPROVEN) { console.log("  " + f + " says it closes something but not what shows it, so it closes nothing."); problems++; }
   const n = slugs().length;
   console.log("Looked at " + n + " thing" + (n === 1 ? "" : "s") + " with a last day. " +
     closed + " closed " + (closed === 1 ? "itself" : "themselves") + ", " + problems + " need a look.");
   return problems ? 1 : 0;
+}
+
+function cmdState(day) {
+  const rows = load(day).map((r) => {
+    const last = r.o.strips.filter((s) => s.state !== "open").sort((a, b) => (a.closed < b.closed ? -1 : 1)).pop();
+    return {
+      slug: r.slug, title: r.title, state: r.band === "unopened" ? "unopened" : r.strip ? "open" : r.band,
+      firstDay: r.strip ? r.strip.from : "", lastDay: r.strip ? r.strip.to : "",
+      doneWhen: (r.o.head["DONE-WHEN"] || "").trim(), closedOn: last ? last.closed : "", closedBy: last ? last.by : "",
+    };
+  });
+  if (has("--json")) { console.log(JSON.stringify(rows)); return 0; }
+  for (const r of rows) console.log(r.state.toUpperCase().padEnd(9) + r.slug + (r.closedBy && r.state !== "open" ? "  (" + r.closedBy + ")" : ""));
+  return 0;
 }
 
 const day = today();
@@ -617,6 +795,7 @@ switch (cmd) {
   case "done": rc = cmdDone(day); break;
   case "drop": rc = cmdDrop(); break;
   case "check": rc = cmdCheck(day); break;
+  case "state": rc = cmdState(day); break;
   default: console.log("I do not know \"" + cmd + "\"."); help(); rc = 1;
 }
 process.exit(rc);

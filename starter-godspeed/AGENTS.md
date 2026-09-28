@@ -89,6 +89,10 @@ purpose. If it contradicts something you believe about me, the file wins.
   Records marked `origin: menerio` are imported copies: correct those in
   Menerio. Connecting Menerio is optional and is never required for local
   capture or retrieval. Follow my privacy rules for everything you save.
+- **A deadline we finish together is closed in the same turn.** When I approve,
+  send or do something in `due/` with you, run `mc-due done <name> --evidence
+  "<my words or a commit>"` before you stop, so my brief never shows it again.
+  Never ask me to confirm it later. Never close one on a guess.
 
 ## Finding things, and my notebook
 

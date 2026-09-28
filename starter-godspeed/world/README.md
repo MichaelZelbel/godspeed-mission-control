@@ -72,6 +72,19 @@ source: where this came from
 What happened, in free text.
 ```
 
+**An event can finish one of your deadlines.** Two more lines do it:
+
+```
+closes: [due/car-service]
+evidence: the garage's invoice is in my mail, 2027-01-12
+```
+
+`closes:` names files in `due/` that this event finished (`due/<name>#<first day>` names one
+window of a repeating one); `drops:` works the same for one you called off. `evidence:` is
+required: an event that says a thing is done without what shows it closes nothing. This is the
+only place "done" is written, so the deadline list, your brief and your assistant all read the
+same answer. `mc-due done` writes such an event for you.
+
 `claims/<subject>--<attribute>--<date>.md`:
 
 ```
