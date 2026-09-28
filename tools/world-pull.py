@@ -176,7 +176,6 @@ def render_claim(record, subject_slug, object_slug=None):
     if record.get("valid_to"):
         lines.append("valid_to: {}".format(record["valid_to"]))
     # When to DOUBT this fact, as opposed to when it stopped being true.
-    # Absent on rows the view cannot date (a profile entry has no dates at all).
     if record.get("review_by"):
         lines.append("review_by: {}".format(record["review_by"]))
     lines.append(
@@ -191,6 +190,9 @@ def render_claim(record, subject_slug, object_slug=None):
     # contradiction. An absent field means "not known, use the fallback".
     if record.get("cardinality") in ("one", "many"):
         lines.append("cardinality: {}".format(record["cardinality"]))
+    # The profile section the fact is filed under. Display only, optional.
+    if record.get("category"):
+        lines.append("category: {}".format(record["category"]))
     lines += [
         "source: menerio {}".format(record.get("origin", "unknown")),
         "written_by: {}".format(author),
@@ -383,13 +385,18 @@ def plan_pull(world, root, self_slug="me"):
 # --- talking to Menerio -----------------------------------------------------
 
 
+WORLD_KINDS = ("entities", "events", "claims")
+PAGE_SIZE = 1000
+MAX_RECORDS = 200000
+
+
 class WorldClient:
     def __init__(self, base_url, api_key):
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
 
-    def fetch(self, updated_since=None, limit=2000):
-        query = "?limit={}".format(limit)
+    def fetch_page(self, updated_since, limit, offset):
+        query = "?limit={}&offset={}".format(limit, offset)
         if updated_since:
             query += "&updated_since={}".format(updated_since)
         request = urllib.request.Request(
@@ -400,6 +407,23 @@ class WorldClient:
         with urllib.request.urlopen(request, timeout=120) as response:
             payload = json.loads(response.read().decode("utf-8"))
         return payload.get("data") or {}
+
+    def fetch(self, updated_since=None, limit=PAGE_SIZE):
+        """Every record, page by page. One request used to stop at the server's
+        row cap without saying so, and a pull that saw a truncated list would
+        treat everything past it as deleted."""
+        merged = {kind: [] for kind in WORLD_KINDS}
+        offset = 0
+        while True:
+            page = self.fetch_page(updated_since, limit, offset)
+            for kind in WORLD_KINDS:
+                merged[kind].extend(page.get(kind) or [])
+            if all(len(page.get(kind) or []) < limit for kind in WORLD_KINDS):
+                return merged
+            offset += limit
+            if offset >= MAX_RECORDS:
+                raise RuntimeError("Menerio returned more than {} records per kind; "
+                                   "refusing to guess where the list ends".format(MAX_RECORDS))
 
 
 # THE REMOVAL GUARD, because this pull runs unattended. A record deleted in
