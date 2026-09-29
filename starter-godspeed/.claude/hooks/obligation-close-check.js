@@ -10,11 +10,17 @@
  * published that day, but nobody ran `mc-due done`, so for five mornings the brief said the
  * finished work was waiting. Done is now an event in world/events/ (see due/README.md), and this
  * hook is the moment every session passes: it asks `mc-due state` which deadlines are not closed
- * yet, compares their names with what THIS session did (your own messages, the files it wrote,
- * its commit messages), and when enough of a deadline's words appear it stops the session once
- * and names it. The assistant then closes it with what shows it
- * (`mc-due done <name> --evidence "..."`) or says in one line why it is not finished. Your
- * approving or doing the work in the session is your word; you are never asked to confirm it.
+ * yet, compares their titles with what THIS session said (your own messages and its commit
+ * messages, never file paths), and when at least half of a title's words appear, one of them
+ * specific to that deadline, it stops the session once and names it. The assistant then closes it
+ * with what shows it (`mc-due done <name> --evidence "..."`) and may say so in one line. If it is
+ * not finished, the assistant does nothing and says nothing: you never hear about a deadline a
+ * session did not finish. Your approving or doing the work in the session is your word; you are
+ * never asked to confirm it.
+ *
+ * A deadline with a self check (a key whose date lives in secrets/expires.txt, a backup file) is
+ * never raised on words: `mc-due check` proves it closed by itself, and this hook runs that check
+ * quietly when the session edited secrets/expires.txt. Words are a guess; a self check is proof.
  *
  * Never twice: each deadline is raised at most once per session, and a stop that follows a block
  * always passes. On any error it lets the session end: it must never trap you.
@@ -40,10 +46,29 @@ const COMMON = new Set((
   "please thanks thank okay good work working session change changes update updated"
 ).split(/\s+/));
 
-function words(s) {
-  return String(s || "").toLowerCase().normalize("NFKD").replace(/[̀-ͯ]/g, "")
-    .split(/[^a-z0-9]+/).filter((w) => w.length >= 4 && !COMMON.has(w) && !/^\d+$/.test(w));
+// Words that count toward a match but can never be its anchor: they describe how half the
+// deadlines are done (a key, a deploy, a login, a post), or name an assistant that comes up in
+// nearly every session, so a session full of them has not done any one.
+const GENERIC = new Set((
+  "deploy database server machine machines token login access cron claude code supabase renew " +
+  "replace replacing read lets email account page link store hermes openclaw codex post posts free"
+).split(/\s+/));
+
+// Each word, and each hyphenated name joined as well ("Ko-fi" is kofi), because the part that
+// names a thing is often too short to count on its own. A part of a hyphenated name counts toward
+// a match but is never an anchor: "self" is not "Self-Ops".
+function tokens(s) {
+  const out = [];
+  const flat = String(s || "").toLowerCase().normalize("NFKD").replace(/[̀-ͯ]/g, "");
+  for (const g of flat.match(/[a-z0-9]+(?:-[a-z0-9]+)*/g) || []) {
+    const parts = g.split("-");
+    if (parts.length > 1) out.push({ w: parts.join(""), anchor: true });
+    for (const p of parts) out.push({ w: p, anchor: parts.length === 1 });
+  }
+  return out.filter((t) => t.w.length >= 4 && !COMMON.has(t.w) && !/^\d+$/.test(t.w));
 }
+
+function words(s) { return tokens(s).map((t) => t.w); }
 
 function projectDir() {
   const here = path.dirname(path.dirname(path.dirname(fs.realpathSync(__filename))));
@@ -61,22 +86,41 @@ function dueTool() {
   return cands.find((p) => p && fs.existsSync(p)) || "";
 }
 
-function stillOpen(root) {
+function due(root, args) {
   const tool = dueTool();
-  if (!tool) return [];
-  const r = spawnSync(process.execPath, [tool, "--godspeed", root, "state", "--json"], {
+  if (!tool) return null;
+  return spawnSync(process.execPath, [tool, "--godspeed", root].concat(args), {
     encoding: "utf8", timeout: 8000, env: Object.assign({}, process.env, { GODSPEED_ROOT: root }),
   });
-  if (r.status !== 0) return [];
+}
+
+function stillOpen(root) {
+  const r = due(root, ["state", "--json"]);
+  if (!r || r.status !== 0) return [];
   const rows = JSON.parse(r.stdout || "[]");
   return Array.isArray(rows) ? rows.filter((x) => x && (x.state === "open" || x.state === "unopened")) : [];
 }
 
-// Never the assistant's own prose, which quotes the brief and would match every deadline it names.
-function sessionText(payload) {
+// An older due.js has no selfCheck in its rows, so the head is read from the file.
+function selfCheck(root, o) {
+  if (typeof o.selfCheck === "string") return o.selfCheck || "none";
+  try {
+    const m = fs.readFileSync(path.join(root, "due", o.slug + ".md"), "utf8").match(/^SELF-CHECK:[ \t]*(.*)$/m);
+    return (m && m[1].trim().toLowerCase()) || "none";
+  } catch (_) {
+    return "none";
+  }
+}
+
+// What this session said: the person's messages and the commit messages. Never the assistant's
+// own prose, which quotes the brief and would match every deadline it names, and never file
+// paths, whose folder names are where the work sat, not what it was. Also whether it touched a
+// key's date, for `mc-due check`.
+function readSession(payload) {
   const tp = payload.transcript_path ?? payload.transcriptPath;
-  if (!tp || !fs.existsSync(tp)) return "";
+  if (!tp || !fs.existsSync(tp)) return { text: "", touchedSecrets: false };
   const out = [];
+  let touchedSecrets = false;
   for (const line of fs.readFileSync(tp, "utf8").split(/\r?\n/)) {
     if (!line.trim()) continue;
     let o;
@@ -91,29 +135,56 @@ function sessionText(payload) {
     } else if (o.type === "assistant" && Array.isArray(c)) {
       for (const x of c) {
         if (!x || x.type !== "tool_use" || !x.input) continue;
-        if (x.input.file_path) out.push(String(x.input.file_path).replace(/[\\/]/g, " "));
-        if (x.input.notebook_path) out.push(String(x.input.notebook_path).replace(/[\\/]/g, " "));
-        // Only what follows `git commit` (its message), never the edits chained in front of it:
-        // a command that rewrites five files and then commits is not five subjects of the work.
         const cmd = String(x.input.command || "");
-        const at = cmd.search(/\bgit\b[^\n]*?\bcommit\b/);
-        if (at >= 0) out.push(cmd.slice(at));
+        if (/secrets[\\/]+expires\.txt$/i.test(String(x.input.file_path || "")) ||
+            /secrets-(edit|set)\b|secrets[\\/]+expires\.txt/i.test(cmd)) touchedSecrets = true;
+        const message = commitMessage(cmd);
+        if (message) out.push(message);
       }
     }
   }
-  return out.join("\n");
+  return { text: out.join("\n"), touchedSecrets };
 }
 
-function need(n) { return n <= 2 ? n : n <= 4 ? 2 : 3; }
+// Only the `git commit` itself and its message, never the edits chained in front of it (a command
+// that rewrites five files and then commits is not five subjects of the work) and never a script
+// that merely quotes a commit somewhere in its middle. The commit runs to the first line break
+// outside quotes; a heredoc it reads its message from is added.
+function commitMessage(cmd) {
+  // A command that starts with git (after a line break, ;, &&, || or a pipe), options allowed.
+  const m = /(?:^|[\n;&|(])[ \t]*(git\b(?:[ \t]+-[^\s]+(?:[ \t]+[^\s-][^\s]*)?)*?[ \t]+commit\b)/.exec(cmd);
+  if (!m) return "";
+  const rest = cmd.slice(m.index + m[0].length - m[1].length);
+  let q = null, i = 0;
+  for (; i < rest.length; i++) {
+    const c = rest[i];
+    if (c === "\\") { i++; continue; }
+    if (q) { if (c === q) q = null; } else if (c === '"' || c === "'") q = c; else if (c === "\n") break;
+  }
+  const line = rest.slice(0, i);
+  const hd = line.match(/<<-?\s*['"]?(\w+)['"]?/);
+  if (!hd || new RegExp("\\n\\s*" + hd[1] + "\\b").test(line)) return line; // -m "$(cat <<EOF ...)" is all quoted
+  const body = rest.slice(i).match(new RegExp("\\n([\\s\\S]*?)\\n\\s*" + hd[1] + "\\s*(?:\\n|$)"));
+  return line + (body ? "\n" + body[1] : "");
+}
+
+// At least half the title's words, never fewer than two: a one-word title is never matched.
+function need(n) { return Math.max(2, Math.ceil(n / 2)); }
 
 function matches(obligations, text) {
   const seen = new Set(words(text));
+  const termsOf = new Map(obligations.map((o) => [o.slug, [...new Set(words(o.title))]]));
   const hits = [];
   for (const o of obligations) {
-    const terms = [...new Set(words(o.title).concat(words(String(o.slug).replace(/-/g, " "))))];
-    if (!terms.length) continue;
+    const terms = termsOf.get(o.slug);
     const found = terms.filter((w) => seen.has(w));
-    if (found.length >= need(terms.length)) hits.push(Object.assign({ found }, o));
+    if (found.length < need(terms.length)) continue;
+    // The anchor: a word that names THIS deadline and no other one. Two deadlines about the same
+    // newsletter post share "newsletter", so each is told apart by its own word (welcome, publish).
+    const whole = new Set(tokens(o.title).filter((t) => t.anchor).map((t) => t.w));
+    const anchors = found.filter((w) => whole.has(w) && !GENERIC.has(w) &&
+      !obligations.some((x) => x.slug !== o.slug && termsOf.get(x.slug).includes(w)));
+    if (anchors.length) hits.push(Object.assign({ found }, o));
   }
   return hits;
 }
@@ -138,9 +209,12 @@ function main() {
     if (payload.stop_hook_active ?? payload.stopHookActive) process.exit(0);
     const root = projectDir();
     if (!root) process.exit(0);
-    const text = sessionText(payload);
+    const { text, touchedSecrets } = readSession(payload);
+    // A renewed key closes itself by its own proof; this only makes that happen now instead of at
+    // the next morning run. Quiet, bounded, and whatever it says, it never blocks.
+    if (touchedSecrets) { try { due(root, ["check"]); } catch (_) { /* fail open */ } }
     if (!text) process.exit(0);
-    const open = stillOpen(root);
+    const open = stillOpen(root).filter((o) => selfCheck(root, o) === "none");
     if (!open.length) process.exit(0);
     const f = raisedFile(payload.session_id ?? payload.sessionId);
     let raised = [];
@@ -154,15 +228,15 @@ function main() {
       process.exit(0); // cannot remember that it asked, so it does not ask: never twice
     }
     const lines = hits.map((o) => `- ${o.slug}: ${o.title}. Finished when: ${o.doneWhen || "(not written)"}` +
-      ` (this session touched: ${o.found.join(", ")})`);
+      ` (words it shares with this session: ${o.found.join(", ")})`);
     const reason =
-      "Before ending: this session's work overlaps " + (hits.length === 1 ? "a deadline" : "deadlines") +
-      " still open in due/, which the morning brief will keep showing the person until an event closes it:\n" +
+      "This session may have finished " + (hits.length === 1 ? "an open deadline" : "open deadlines") + ":\n" +
       lines.join("\n") + "\n" +
       "For each one: if this session's work, or what the person said or approved in it, meets 'finished when', " +
-      "close it now with the evidence: mc-due done <name> --evidence \"<a commit, or their words>\". " +
-      "If it is not finished, say in one line why. Do not ask the person to confirm it: their approval in this " +
-      "session is their word. This check runs once per deadline per session.";
+      "close it now: mc-due done <name> --evidence \"<a commit, or their words>\", and you may say so in one " +
+      "line of your final message. If it does not, do nothing and do not mention it: end the turn without any " +
+      "text about it. Do not ask the person to confirm it: their approval in this session is their word. " +
+      "This check runs once per deadline per session.";
     process.stdout.write(JSON.stringify({ decision: "block", reason }));
     process.exit(0);
   } catch (_) {
@@ -171,4 +245,4 @@ function main() {
 }
 
 if (require.main === module) main();
-module.exports = { words, matches, need };
+module.exports = { words, matches, need, commitMessage };

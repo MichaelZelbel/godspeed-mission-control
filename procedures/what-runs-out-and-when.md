@@ -94,7 +94,9 @@ still open" reads that note. One place for the answer, so nothing can disagree.
 send or publish the thing in a working session, that is your word, and the
 assistant closes it before the session ends instead of asking you to say so again
 later. In Claude Code a stop check (`.claude/hooks/obligation-close-check.js`, in
-your mission control) makes sure it does, once per deadline per session. Hermes,
+your mission control) makes sure it does, once per deadline per session. It never
+reminds you of a deadline the session did not finish, and it leaves a key to the check
+that already notices the date in `secrets/expires.txt` moving. Hermes,
 Codex and OpenClaw have no such stop, so the instruction is simply: close it in the
 same turn you finished it.
 

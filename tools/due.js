@@ -778,6 +778,8 @@ function cmdState(day) {
       slug: r.slug, title: r.title, state: r.band === "unopened" ? "unopened" : r.strip ? "open" : r.band,
       firstDay: r.strip ? r.strip.from : "", lastDay: r.strip ? r.strip.to : "",
       doneWhen: (r.o.head["DONE-WHEN"] || "").trim(), closedOn: last ? last.closed : "", closedBy: last ? last.by : "",
+      // Anything but "none" closes itself in `mc-due check`, so the stop check never guesses at it.
+      selfCheck: (r.o.head["SELF-CHECK"] || "").trim().toLowerCase() || "none",
     };
   });
   if (has("--json")) { console.log(JSON.stringify(rows)); return 0; }
