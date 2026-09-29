@@ -1,5 +1,7 @@
 # Teach It Once: Companion Kit
 
+**New here? Start with [the post that introduces this kit](https://michaelzelbel.substack.com/p/astronauts-have-mission-control-here), and subscribe there to hear when it changes.**
+
 **Astronauts have mission control. This is how you build yours out of AI.**
 
 **It is called Godspeed Mission Control. It answers to Godspeed, Mission Control and Speedy.**
