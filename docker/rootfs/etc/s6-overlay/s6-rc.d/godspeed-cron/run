@@ -1,0 +1,9 @@
+#!/command/with-contenv sh
+# shellcheck shell=sh
+# The container's clock for the installer's own daily jobs (usr/local/bin/crontab
+# explains the file). Hermes' scheduled jobs are separate and live in the gateway.
+# supercronic runs the file as the assistant's account and re-reads it when it changes.
+export HOME=/opt/data
+TAB="${GODSPEED_CRONTAB:-${HERMES_HOME:-/opt/data}/.godspeed/crontab}"
+/command/s6-setuidgid hermes sh -c 'mkdir -p "$(dirname "$1")" && touch "$1"' sh "$TAB"
+exec /command/s6-setuidgid hermes /usr/local/bin/supercronic -quiet -inotify "$TAB"

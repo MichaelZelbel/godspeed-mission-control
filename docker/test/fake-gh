@@ -1,0 +1,18 @@
+#!/bin/bash
+# A stand-in for the GitHub tool, for docker/test.sh only. It answers the handful of calls
+# the installer makes as a signed-in account would, and "creates" the private repository
+# as a bare git repository inside the container, so the whole install runs with no
+# GitHub account and no network write. Mounted over /usr/local/bin/gh by the test.
+set -u
+REMOTE=/opt/data/.fake-github/godspeed.git   # in the volume, so it outlives an upgrade like GitHub does
+case "${1:-} ${2:-}" in
+  "auth status"|"auth setup-git"|"auth login") exit 0 ;;
+  "api user") echo "test-reader"; exit 0 ;;
+  "repo create")
+    src=""; while [ $# -gt 0 ]; do [ "$1" = --source ] && src="$2"; shift; done
+    mkdir -p "$(dirname "$REMOTE")" && git init -q --bare "$REMOTE" \
+      && git -C "$src" remote add origin "$REMOTE" \
+      && git -C "$src" push -q -u origin HEAD ;;
+  "repo view") printf 'true\t%s\n' "$REMOTE" ;;
+  *) exit 0 ;;
+esac

@@ -1,0 +1,84 @@
+# The Docker image: tested on every change that can touch it, published when it passes.
+#
+#   test     builds the image twice and walks the reader's path (docker/test.sh)
+#   publish  main -> :latest and :sha-<commit>; a v* tag -> :<version>. Both
+#            processor kinds (amd64, arm64), signed with a keyless signature, and
+#            scanned for known vulnerabilities (reported, not blocking: most come
+#            from the Hermes base image, which is updated by bumping its pin).
+name: docker
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+    paths: ["docker/**", "server/**", ".github/workflows/docker.yml", ".dockerignore"]
+  pull_request:
+    paths: ["docker/**", "server/**", ".github/workflows/docker.yml", ".dockerignore"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  IMAGE: ghcr.io/michaelzelbel/godspeed-mission-control
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - name: The reader's path, twice
+        run: bash docker/test.sh
+
+  publish:
+    needs: test
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      packages: write
+      id-token: write   # the keyless signature
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-qemu-action@v4
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,prefix=sha-
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+      - id: build
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: docker/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VERSION=${{ steps.meta.outputs.version }}
+            REVISION=${{ github.sha }}
+          provenance: true
+          sbom: true
+      - uses: sigstore/cosign-installer@v4.1.2
+      - name: Sign
+        run: cosign sign --yes "${IMAGE}@${{ steps.build.outputs.digest }}"
+      - name: Scan
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ env.IMAGE }}@${{ steps.build.outputs.digest }}
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "0"

@@ -1,0 +1,5 @@
+.git
+.github
+tools/.tmp-*
+**/__pycache__
+*.pyc

@@ -72,7 +72,18 @@ GODSPEED_REPO="${GODSPEED_REPO:-}"  # a mission control you already keep on GitH
 # --- The shared groundwork ---------------------------------------------------
 # Every one of our installers needs the same first hundred lines. They live in
 # one repository now, so a fix reaches all of them. See kit-bootstrap/README.md.
-if ! LIB="$(curl -fsSL "$LIB_URL")" || [ -z "$LIB" ]; then
+#
+# KB_CONTAINER=1 is the Docker image (docker/ in this repository). There the machine's half
+# is already done by the image: no root, no systemd, no second account (the image runs as
+# its own non-root user), a supervisor that keeps the gateway up, and the container's own
+# CPU, memory and process limits in place of the agent cage. So only phase 2 runs, plus
+# the Telegram stop that phase 1 owns on a plain server. The image carries the kit and
+# kit-bootstrap at this file's pin (KB_KIT_DIR, KB_BOOTSTRAP_DIR), so it runs exactly the
+# code it was built and tested with.
+KB_CONTAINER="${KB_CONTAINER:-}"
+if [ -n "${KB_BOOTSTRAP_DIR:-}" ] && [ -s "$KB_BOOTSTRAP_DIR/lib.sh" ]; then
+  LIB="$(cat "$KB_BOOTSTRAP_DIR/lib.sh")"
+elif ! LIB="$(curl -fsSL "$LIB_URL")" || [ -z "$LIB" ]; then
   echo "Could not download the installer's shared parts from:" >&2
   echo "  $LIB_URL" >&2
   echo "Check the machine has internet, then run this again." >&2
@@ -203,6 +214,10 @@ WHY
 # =============================================================================
 # PHASE 1 - as root: the things only an administrator may do
 # =============================================================================
+if [ -n "$KB_CONTAINER" ] && kb_is_root; then
+  die "In the Docker image this runs as the assistant's account, never as root. Start it with:
+   docker compose exec godspeed godspeed-setup"
+fi
 if kb_is_root; then
   say "Setting up the machine"
 
@@ -422,11 +437,14 @@ if [ -f "$HOME/.kit-bootstrap-env" ]; then
   rm -f "$HOME/.kit-bootstrap-env"
 fi
 GODSPEED="${GODSPEED:-$HOME/godspeed}"
-KIT_DIR="$HOME/teach-it-once-kit"
-BOOTSTRAP_DIR="$HOME/.kit-bootstrap"
+KIT_DIR="${KB_KIT_DIR:-$HOME/teach-it-once-kit}"
+BOOTSTRAP_DIR="${KB_BOOTSTRAP_DIR:-$HOME/.kit-bootstrap}"
 export PATH="$HOME/.local/bin:$PATH"
-KB_HERMES_BIN="${KB_HERMES_BIN:-$HOME/.local/bin/hermes}"
+KB_HERMES_BIN="${KB_HERMES_BIN:-$(command -v hermes 2>/dev/null || printf '%s' "$HOME/.local/bin/hermes")}"
 export KB_HERMES_BIN
+# Where Hermes keeps its settings and keys. ~/.hermes on a plain server; the image sets
+# HERMES_HOME=/opt/data, the one volume that survives an upgrade.
+HERMES_DIR="${HERMES_HOME:-$HOME/.hermes}"
 
 # If someone ran this as an ordinary user on a machine that is missing the
 # basics, say the useful thing rather than failing on a permission error.
@@ -447,6 +465,23 @@ fi
 say "Installing your assistant"
 kb_install_hermes || die "Hermes is not on this machine and could not be installed. Read what it printed above."
 
+# In the image, the Telegram stop phase 1 owns on a plain server. Same order rule: a
+# running gateway holds the bot's message log (Telegram hands it to one reader at a
+# time), so it is stopped while the reader's first message is read. The end of this
+# script starts it again with everything in place.
+if [ -n "$KB_CONTAINER" ]; then
+  say "Connecting your Telegram bot"
+  mkdir -p "$HERMES_DIR"
+  if grep -q '^TELEGRAM_BOT_TOKEN=.' "$HERMES_DIR/.env" 2>/dev/null && grep -q '^TELEGRAM_ALLOWED_USERS=[0-9]' "$HERMES_DIR/.env" 2>/dev/null; then
+    ok "Telegram is already connected here; not asking again"
+  elif [ "${KB_TELEGRAM_SKIP:-}" = "1" ]; then
+    warn "Telegram skipped, as asked (KB_TELEGRAM_SKIP=1)"
+  else
+    "$(kb_hermes_bin)" gateway stop >/dev/null 2>&1 || true
+    connect_telegram "$HERMES_DIR/.env" "$(id -un)" || true
+  fi
+fi
+
 # The sign-in. A device code: open the address on any device, type the code.
 # This path uses ChatGPT's included Codex allowance, not an API bill.
 # `hermes login` is deprecated and is never used here. A code that runs out is
@@ -459,11 +494,17 @@ cat <<'PLAN'
    a small allowance does not stop scheduled work. Current plan details:
    https://learn.chatgpt.com/docs/pricing
 PLAN
+# KB_SIGNIN_SKIP=1 leaves the sign-in for later: the image's build test runs the whole
+# installer with nobody there to type a code.
+if [ "${KB_SIGNIN_SKIP:-}" = "1" ]; then
+  warn "sign-in skipped, as asked (KB_SIGNIN_SKIP=1). Later: $(kb_hermes_bin) auth add openai-codex --type oauth --no-browser"
+else
 kb_hermes_signin openai-codex \
   || warn "Hermes is not signed in yet. Everything below still gets set up, and
    the folder check will say it could not check yet. When you are ready:
    $(kb_hermes_bin) auth add openai-codex --type oauth --no-browser
    then run this one line again."
+fi
 
 # --- The kit, and the shared install code ------------------------------------
 say "Getting the book's files"
@@ -493,8 +534,12 @@ fetch_repo() {
   fi
 }
 
-fetch_repo "$KIT_REPO" "$KIT_DIR" "" "the book's kit"
-fetch_repo "https://github.com/MichaelZelbel/kit-bootstrap.git" "$BOOTSTRAP_DIR" "$KB_PIN" "the shared install code"
+if [ -n "$KB_CONTAINER" ] && [ -n "${KB_KIT_DIR:-}" ] && [ -n "${KB_BOOTSTRAP_DIR:-}" ]; then
+  ok "the book's kit and the shared install code came with the image"
+else
+  fetch_repo "$KIT_REPO" "$KIT_DIR" "" "the book's kit"
+  fetch_repo "https://github.com/MichaelZelbel/kit-bootstrap.git" "$BOOTSTRAP_DIR" "$KB_PIN" "the shared install code"
+fi
 
 [ -f "$KIT_DIR/server/install-hermes.sh" ] || die "The kit downloaded but server/install-hermes.sh is missing from it."
 [ -f "$BOOTSTRAP_DIR/setup-godspeed.sh" ] || die "The shared install code downloaded but setup-godspeed.sh is missing from it."
@@ -556,7 +601,9 @@ ok "plain keys live in $HOME/.mc-env, outside the folder, and the folder ignores
 
 say "Giving your mission control a checked private GitHub home"
 ensure_gh_auth
-bash "$KIT_DIR/server/create-private-repo.sh" "$GODSPEED" \
+# KB_REPO_NAME names a fresh folder's repository without the question (a test, or
+# anyone scripting the install); empty means ask.
+bash "$KIT_DIR/server/create-private-repo.sh" "$GODSPEED" "${KB_REPO_NAME:-}" \
   || die "the private GitHub repository was not created or checked. Read the reason above, then run this installer again."
 GODSPEED_REPO="$(git -C "$GODSPEED" remote get-url origin 2>/dev/null || true)"
 
@@ -647,6 +694,19 @@ Last checked: $(date +%F).
 REG
   ok "register: the watchdog has its block in procedures.md"
 fi
+if [ -n "$KB_CONTAINER" ] && [ -f "$GODSPEED/procedures.md" ] && ! grep -q '^## Container patrol' "$GODSPEED/procedures.md"; then
+  cat >> "$GODSPEED/procedures.md" <<REG
+
+## Container patrol
+
+Does: keeps the assistant from wearing the server out. The container may use at most the CPU, memory and number of processes set in compose.yaml; inside it, every ten minutes, a patrol stops any command the assistant started that has run for over an hour while keeping a processor core busy, and tells my Telegram once a day when the container stays near its CPU limit for an hour.
+Rhythm: every 10 min.             Lands: my Telegram, only when something was stopped or stays busy.
+Lives: the godspeed-patrol service inside the container.
+Off-switch: GODSPEED_PATROL=off in compose.yaml, then docker compose up -d. The container's limits stay either way.
+Last checked: $(date +%F).
+REG
+  ok "register: the container patrol has its block in procedures.md"
+fi
 
 # --- The first message, sent the way the brief and the alerts will be sent -----------
 # `hermes send` needs no model and no running gateway for Telegram: it reads the
@@ -654,19 +714,19 @@ fi
 # morning brief's delivery and the watchdog's notify.sh take. A message on the
 # reader's phone at the end of the run is the proof that path is open.
 TELEGRAM_STATE="none"
-if grep -q '^TELEGRAM_HOME_CHANNEL=[-0-9]' "$HOME/.hermes/.env" 2>/dev/null; then
+if grep -q '^TELEGRAM_HOME_CHANNEL=[-0-9]' "$HERMES_DIR/.env" 2>/dev/null; then
   TELEGRAM_STATE="connected"
   say "Sending you the first message"
-  BOT_TOKEN="$(sed -n 's/^TELEGRAM_BOT_TOKEN=//p' "$HOME/.hermes/.env" | head -1)"
+  BOT_TOKEN="$(sed -n 's/^TELEGRAM_BOT_TOKEN=//p' "$HERMES_DIR/.env" | head -1)"
   BOT_NAME="$(curl -fsS -m 15 "https://api.telegram.org/bot$BOT_TOKEN/getMe" 2>/dev/null | jq -r '.result.username // "your bot"')"
   unset BOT_TOKEN
   if printf '%s\n' "Your server is set up, and this is your assistant's chat. Write to me here from anywhere: try \"what is in my folder?\"" \
      | "$(kb_hermes_bin)" send -t telegram -s "Teach It Once" -q >/dev/null 2>&1; then
     ok "sent to @$BOT_NAME: look at your phone. That message went the way the morning brief and the watchdog's alerts will go"
   else
-    warn "Hermes could not send to Telegram yet; the three lines are in $HOME/.hermes/.env. Read: $(kb_hermes_bin) send -t telegram test"
+    warn "Hermes could not send to Telegram yet; the three lines are in $HERMES_DIR/.env. Read: $(kb_hermes_bin) send -t telegram test"
   fi
-elif grep -q '^TELEGRAM_BOT_TOKEN=.' "$HOME/.hermes/.env" 2>/dev/null; then
+elif grep -q '^TELEGRAM_BOT_TOKEN=.' "$HERMES_DIR/.env" 2>/dev/null; then
   TELEGRAM_STATE="nohello"
 fi
 
@@ -682,6 +742,42 @@ if git -C "$GODSPEED" remote get-url origin >/dev/null 2>&1 \
   else
     warn "the last changes to the folder were not pushed. Ask your assistant to commit and push the folder, or run: git -C $GODSPEED add -A && git -C $GODSPEED commit -m 'Set up the server' && git -C $GODSPEED push"
   fi
+fi
+
+# --- The image's ending ----------------------------------------------------------
+# The gateway reads terminal.cwd and the Telegram lines once, when it starts, so it is
+# started again now that both are in place. Then the image's own closing words: no
+# Tailscale line and no watchdog paragraph, because neither is part of the image.
+if [ -n "$KB_CONTAINER" ]; then
+  say "Starting your assistant with everything in place"
+  if "$(kb_hermes_bin)" gateway restart >/dev/null 2>&1 || "$(kb_hermes_bin)" gateway start >/dev/null 2>&1; then
+    ok "the gateway is running, in $GODSPEED, and the container's supervisor restarts it if it ever stops"
+  else
+    warn "the gateway did not start. Read: docker compose logs godspeed"
+  fi
+  case "$TELEGRAM_STATE" in
+    connected) C_EAR="Your assistant is running and your Telegram bot is its ear: write to it
+   from anywhere and it answers from your folder." ;;
+    nohello)   C_EAR="Your assistant is running, but nobody can talk to it yet: your first
+   message to the bot never arrived. Write to the bot, then run setup again." ;;
+    *)         C_EAR="Your assistant is running, but it has no ear yet: Telegram was
+   skipped. Run setup again when you have a bot token from BotFather." ;;
+  esac
+  cat <<NEXT
+
+   $C_EAR
+
+   Everything lives in one Docker volume: your folder, Hermes' settings, the
+   sign-ins. The container cannot reach the rest of this server, and it may use
+   at most the CPU and memory set in compose.yaml. It can still use every account
+   you connect to it, so connect only what you want it to act on.
+
+   Run setup again at any time; it keeps what is done:
+     docker compose exec godspeed godspeed-setup
+   Update to the newest version:
+     docker compose pull && docker compose up -d
+NEXT
+  exit 0
 fi
 
 # --- What is left, and only you can do it ------------------------------------

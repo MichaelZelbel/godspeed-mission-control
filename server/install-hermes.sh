@@ -39,7 +39,11 @@ SAFE=19000
 # terminal.cwd is the only lever that moves the agent, a failed one-shot still
 # exits 0, and `hermes config set` replaces a list.
 LIB_URL="https://raw.githubusercontent.com/MichaelZelbel/kit-bootstrap/v2.11/lib.sh"
-if ! LIB="$(curl -fsSL "$LIB_URL")" || [ -z "$LIB" ]; then
+# The Docker image carries its own copy at the same pin (KB_BOOTSTRAP_DIR), so an image
+# runs exactly the code it was built and tested with.
+if [ -n "${KB_BOOTSTRAP_DIR:-}" ] && [ -s "$KB_BOOTSTRAP_DIR/lib.sh" ]; then
+  LIB="$(cat "$KB_BOOTSTRAP_DIR/lib.sh")"
+elif ! LIB="$(curl -fsSL "$LIB_URL")" || [ -z "$LIB" ]; then
   printf '\n   STOPPED: could not download the shared install code from\n   %s\n   Check the machine has internet, then run this again.\n\n' "$LIB_URL" >&2
   exit 1
 fi
@@ -191,7 +195,12 @@ say "Making it start again after a reboot"
 # trap: newer Hermes warns "Both user and system gateway services are installed"
 # and `hermes gateway status` reports the user unit, so a stopped user unit hides a
 # running system one. When the system unit is there, this step leaves it alone.
-if [ -f /etc/systemd/system/hermes-gateway.service ]; then
+#
+# IN THE DOCKER IMAGE there is no systemd at all: the image's own supervisor (s6) runs the
+# gateway and restarts it, and `docker compose` brings the container back after a reboot.
+if [ -n "${KB_CONTAINER:-}" ]; then
+  ok "the container's supervisor keeps the gateway running and Docker starts it with the machine; no service to install"
+elif [ -f /etc/systemd/system/hermes-gateway.service ]; then
   ok "a system service is already in charge of the gateway (installed as root); not adding a user service beside it"
 elif "$HERMES" gateway install --start-on-login --no-start-now; then
   ok "service installed and enabled; it starts with the machine from now on"

@@ -1,0 +1,27 @@
+#!/command/with-contenv sh
+# shellcheck shell=sh
+# After `docker compose pull && docker compose up -d`, the new image re-runs the
+# installer's update path ONCE, by itself, on the volume the old one left: the tools in
+# the folder and in ~/.local/bin, the skills links, the leash, the gateway's settings.
+# Nothing is asked (sign-in and Telegram are left as they are); the answers from the
+# first setup stay, the morning brief's included. Skipped on a fresh volume, where there is nothing to update yet.
+# A longrun that finishes its one job and then sleeps, so it never delays the gateway.
+export HOME=/opt/data
+DATA="${HERMES_HOME:-/opt/data}"
+LOG="$DATA/logs/godspeed-upgrade.log"
+STAMP="$DATA/.godspeed/image-version"
+NOW="$(cat /opt/godspeed/VERSION 2>/dev/null || echo unknown)"
+if [ -d "$DATA/godspeed/.git" ] && [ "$(cat "$STAMP" 2>/dev/null)" != "$NOW" ]; then
+  /command/s6-setuidgid hermes sh -c '
+    mkdir -p "$(dirname "$1")" "$(dirname "$2")"
+    echo "$(date -u +%FT%TZ) updating to image $3" >> "$1"
+    brief=no
+    hermes cron list --all 2>/dev/null | grep -qE "Name:[[:space:]]+morning-brief[[:space:]]*\$" && brief=yes
+    if KB_SIGNIN_SKIP=1 KB_TELEGRAM_SKIP=1 KB_MORNING_BRIEF="$brief" \
+       timeout 1800 /usr/local/bin/godspeed-setup < /dev/null >> "$1" 2>&1; then
+      echo "$3" > "$2"; echo "$(date -u +%FT%TZ) done" >> "$1"
+    else
+      echo "$(date -u +%FT%TZ) the update run reported a problem; it runs again at the next start" >> "$1"
+    fi' sh "$LOG" "$STAMP" "$NOW"
+fi
+exec sleep infinity

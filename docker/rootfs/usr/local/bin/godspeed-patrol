@@ -1,0 +1,132 @@
+#!/bin/bash
+# godspeed-patrol: the Docker image's answer to the agent cage.
+#
+# WHY: on 2026-09-21 a command an AI agent started (a search whose folder name came out
+# empty, so it searched the whole disk, /proc included) held a processor core for 5.4
+# days until the hosting company throttled the server. On a plain server kit-bootstrap's
+# agent-cage.sh stops that class of accident, and it needs systemd, which a container
+# does not have. In the image the job is split in two:
+#
+#   the walls   compose.yaml gives the container a CPU, memory and process limit, so
+#               nothing the assistant starts can take more of the server than that,
+#               however long it runs. That part needs nothing in here.
+#   the patrol  this file. Every PATROL_EVERY seconds it stops a BUSY process (over
+#               REAP_PCT of one core since the last round, older than REAP_MIN_AGE) that
+#               is not a service the supervisor runs, and it tells Telegram once a day
+#               when the whole container stays above WARN_PCT of its CPU limit for
+#               WARN_RUNS rounds in a row. Idle leftovers cost nothing and may be wanted,
+#               so they stay. Silence is normal.
+#
+# Hermes' own terminal tool already ends a foreground command after terminal.timeout
+# (180 s by default); what escapes it is a background job, a nohup, a detached child.
+# Those are what this catches. Runs as the assistant's own account, which is all it
+# needs: everything it may stop belongs to that account.
+#
+# Log: $HERMES_HOME/logs/godspeed-patrol.log. Off: GODSPEED_PATROL=off.
+set -u
+
+PATROL_EVERY="${PATROL_EVERY:-600}"
+REAP_PCT="${REAP_PCT:-50}"
+REAP_MIN_AGE="${REAP_MIN_AGE:-3600}"
+WARN_PCT="${WARN_PCT:-80}"
+WARN_RUNS="${WARN_RUNS:-6}"
+HOME_DIR="${HERMES_HOME:-/opt/data}"
+DIR="${PATROL_STATE:-$HOME_DIR/.godspeed-patrol}"
+LOG="$HOME_DIR/logs/godspeed-patrol.log"
+DRY="${DRY_RUN:-0}"
+mkdir -p "$DIR" "$(dirname "$LOG")"
+
+now() { date -u +%Y-%m-%dT%H:%M:%SZ; }
+log() { echo "$(now) $*" >>"$LOG"; }
+
+notify() {
+  [ "$DRY" = 1 ] && { log "would tell Telegram: $1"; return 0; }
+  grep -q '^TELEGRAM_HOME_CHANNEL=[-0-9]' "$HOME_DIR/.env" 2>/dev/null || { log "no Telegram to tell: $1"; return 0; }
+  printf '%s\n' "$1" | hermes send -t telegram -s "Godspeed Mission Control" -q >/dev/null 2>&1 \
+    || log "telegram send failed"
+}
+
+# The processes the supervisor runs as services, and everything that is not ours, are
+# never touched: a service's main process has an s6-supervise parent.
+supervised_pids() {
+  local p
+  for p in /proc/[0-9]*; do
+    [ "$(cat "$p/comm" 2>/dev/null)" = s6-supervise ] || continue
+    pgrep -P "${p#/proc/}" 2>/dev/null
+  done
+}
+
+one_round() {
+  local me hz up t_now t_prev dt prev cur stops skip
+  me="$(id -u)"; hz="$(getconf CLK_TCK)"; t_now="$(date +%s)"
+  up="$(cut -d' ' -f1 /proc/uptime | cut -d. -f1)"
+  prev="$DIR/ticks.prev"; cur="$DIR/ticks.cur"; : >"$cur"; [ -f "$prev" ] || : >"$prev"
+  t_prev="$(cat "$DIR/ticks.time" 2>/dev/null || echo 0)"
+  dt=$(( t_now - t_prev )); [ "$dt" -gt 0 ] || dt=1
+  skip=" $$ $PPID $(supervised_pids | tr '\n' ' ') "
+
+  # One awk over every process of this account: pid start ticks, compared with last round.
+  stops="$(for p in /proc/[0-9]*; do
+             pid="${p#/proc/}"
+             case "$skip" in *" $pid "*) continue ;; esac
+             [ "$(stat -c %u "$p" 2>/dev/null)" = "$me" ] && echo "$pid"
+           done | awk -v hz="$hz" -v up="$up" -v dt="$dt" -v tprev="$t_prev" \
+                      -v pctmin="$REAP_PCT" -v agemin="$REAP_MIN_AGE" -v cur="$cur" '
+    FILENAME == ARGV[1] { old[$1 " " $2] = $3; next }
+    {
+      pid = $1; line = ""
+      if ((getline line < ("/proc/" pid "/stat")) <= 0) next
+      close("/proc/" pid "/stat")
+      sub(/.*\) /, "", line); split(line, f, " ")
+      ticks = f[12] + f[13]; start = f[20]
+      print pid, start, ticks > cur
+      age = up - int(start / hz)
+      if (age < agemin || tprev <= 0) next
+      key = pid " " start
+      if (!(key in old)) next
+      pct = int((ticks - old[key]) * 100 / hz / dt)
+      if (pct >= pctmin) print pid, age, pct
+    }' "$prev" - 2>/dev/null)"
+
+  printf '%s\n' "$stops" | while read -r pid age pct; do
+    [ -n "$pid" ] || continue
+    cmd="$(tr '\0' ' ' <"/proc/$pid/cmdline" 2>/dev/null | cut -c1-200)"
+    log "stop pid=$pid age=${age}s cpu=${pct}% cmd=$cmd dry=$DRY"
+    [ "$DRY" = 1 ] && continue
+    kill -TERM "$pid" 2>/dev/null; sleep 5; kill -KILL "$pid" 2>/dev/null
+    notify "I stopped a command that had run for $(( age / 3600 ))h $(( age % 3600 / 60 ))min while keeping a processor core ${pct}% busy: ${cmd:0:120}. If it was meant to run that long, start it again and tell me so."
+  done
+  mv "$cur" "$prev"; echo "$t_now" >"$DIR/ticks.time"
+
+  # The whole container against its own CPU limit (cgroup v2), not against the server.
+  local usage quota period cores used_prev t_used_prev load streak today
+  usage="$(awk '$1=="usage_usec"{print $2}' /sys/fs/cgroup/cpu.stat 2>/dev/null)"
+  [ -n "$usage" ] || return 0
+  read -r quota period 2>/dev/null < /sys/fs/cgroup/cpu.max || return 0
+  if [ "$quota" = max ]; then cores="$(nproc)"; cores=$(( cores * 100 )); else cores=$(( quota * 100 / period )); fi
+  read -r used_prev t_used_prev 2>/dev/null < "$DIR/usage.prev" || { used_prev=0; t_used_prev=0; }
+  echo "$usage $t_now" >"$DIR/usage.prev"
+  [ "$t_used_prev" -gt 0 ] && [ "$t_now" -gt "$t_used_prev" ] && [ "$cores" -gt 0 ] || return 0
+  # percent of the limit = used core-seconds / (limit in cores * seconds)
+  load=$(( (usage - used_prev) * 100 * 100 / (cores * (t_now - t_used_prev) * 1000000) ))
+  log "cpu=${load}% of the container's limit of $(( cores / 100 )).$(printf %02d $(( cores % 100 ))) cores"
+  if [ "$load" -lt "$WARN_PCT" ]; then echo 0 >"$DIR/streak"; return 0; fi
+  streak=$(( $(cat "$DIR/streak" 2>/dev/null || echo 0) + 1 )); echo "$streak" >"$DIR/streak"
+  [ "$streak" -ge "$WARN_RUNS" ] || return 0
+  today="$(date -u +%F)"
+  [ "$(cat "$DIR/warned" 2>/dev/null)" = "$today" ] && return 0
+  notify "Your assistant's container has used over ${WARN_PCT}% of its CPU limit for $(( WARN_RUNS * PATROL_EVERY / 60 )) minutes. The rest of the server is safe, the limit holds, but your assistant will be slow until whatever is running finishes. Ask me: what is keeping you busy?"
+  echo "$today" >"$DIR/warned"
+}
+
+case "${1:-}" in
+  once) one_round; exit 0 ;;
+esac
+
+case "${GODSPEED_PATROL:-on}" in
+  off|no|0|false) log "patrol off (GODSPEED_PATROL=${GODSPEED_PATROL})"; exec sleep infinity ;;
+esac
+while :; do
+  one_round
+  sleep "$PATROL_EVERY"
+done

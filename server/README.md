@@ -13,6 +13,13 @@ the machine. You can bring the repository from Chapter 18 or let the installer m
 one from the starter rooms. For a reader whose server is the first machine in the system, the
 brief is a later chapter, so the installer asks before it puts that job on the clock.
 
+**Two ways to put it there.** This folder installs your assistant onto the server
+itself, with the run of the machine. `docker/` in this repository installs the same thing
+inside one container instead: the assistant cannot reach the rest of the server, and it
+gets a CPU and memory limit. Choose Docker when you are setting it up for someone else, or
+when the server has other jobs to do; choose this folder when you want the assistant to
+look after the server. One line either way; `docker/README.md` has the Docker one.
+
 ## Start here
 
 Log in to the machine you rented and paste this one line:

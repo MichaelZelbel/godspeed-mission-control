@@ -1,0 +1,30 @@
+#!/bin/bash
+# godspeed-setup: the Docker image's installer, run inside the running container:
+#
+#   docker compose exec godspeed godspeed-setup
+#
+# It is server/install.sh from this repository, baked into the image at build time, in
+# container mode (KB_CONTAINER=1, set by the image): the machine's half is the image's
+# job, so only the assistant's half runs, plus the Telegram stop. Safe to run again at
+# any time; it keeps what is done and asks only for what is missing.
+set -u
+
+# `docker compose exec` arrives as root. Everything this writes must belong to the
+# account the gateway runs as, or the gateway cannot read its own sign-in afterwards.
+if [ "$(id -u)" = 0 ]; then
+  export HOME=/opt/data
+  exec /command/s6-setuidgid hermes "$0" "$@"
+fi
+export HOME=/opt/data
+cd "$HOME" || exit 1
+# shellcheck disable=SC1091
+. /opt/hermes/.venv/bin/activate 2>/dev/null || true
+
+bash "${KB_KIT_DIR:-/opt/godspeed/kit}/server/install.sh" "$@"
+rc=$?
+# Recorded so the next start of THIS image does not run the update path again
+# (etc/s6-overlay/s6-rc.d/godspeed-upgrade runs it once per new image).
+if [ "$rc" -eq 0 ] && [ -d "${GODSPEED:-/opt/data/godspeed}/.git" ]; then
+  mkdir -p "$HOME/.godspeed" && cat /opt/godspeed/VERSION > "$HOME/.godspeed/image-version" 2>/dev/null
+fi
+exit "$rc"
