@@ -266,6 +266,17 @@ function main() {
    * work", which is what the check on the other side reads. */
   if (ONCE_A_DAY && alreadyRanToday()) { say('already harvested today'); return 0; }
 
+  /* A scheduled run that needs the folder to stay at one commit (the morning brief) sets
+   * GODSPEED_HOLD_REPO for everything it starts. Found 2026-09-25: each assistant session the
+   * brief started ended with this program, which pulled mid-run. Nothing is lost by skipping:
+   * the logs stay where they are and the daily run archives them. */
+  if (process.env.GODSPEED_HOLD_REPO) { say('the mission control folder is held by a running job; skipped'); return 0; }
+
+  /* A session a scheduled job started (GODSPEED_MACHINE_RUN, set by mc-run since 2026-09-29) typed
+   * nothing a person typed, so its ending is no reason to harvest. The collector skips those
+   * sessions' turns on its own (their transcripts say print mode); this only saves the pull. */
+  if (process.env.GODSPEED_MACHINE_RUN) { say('a scheduled job, not a person, ran this session; skipped'); return 0; }
+
   if (!GODSPEED) {
     const msg = 'I could not find your mission control folder, so there is nowhere to file what you have '
       + 'typed. Set GODSPEED_DIR in ~/.godspeed/device.env to the folder your mission control is in, or run the '

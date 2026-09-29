@@ -697,6 +697,30 @@ PYEOF
 [ -z "$P61" ] && ok "61 a password in a sentence is removed, prose about passwords is kept" \
   || bad "61 the sentence-password scrub is wrong" "$P61"
 
+# 62. A session a scheduled job started in print mode is the job's words, not the person's.
+#     Found 2026-09-29: a third of one server's monthly file was the morning note writer's prompt.
+#     A row already moved out to prompts/machine-runs/ is not archived a second time either.
+rm -f "$W/prompts/archive/"*.jsonl
+mkdir -p "$W/home62/.claude/projects/p62" "$W/prompts/machine-runs"
+cat > "$W/home62/.claude/projects/p62/s.jsonl" <<'EOF'
+{"type":"user","entrypoint":"sdk-cli","timestamp":"2026-09-29T05:16:00Z","message":{"content":"You are Mission Control writing the morning note"}}
+{"type":"user","entrypoint":"cli","timestamp":"2026-09-29T09:00:00Z","message":{"content":"plan my garden shed build"}}
+{"type":"user","timestamp":"2026-09-29T09:05:00Z","message":{"content":"older transcript without a marker"}}
+{"type":"user","entrypoint":"cli","timestamp":"2026-09-29T09:10:00Z","message":{"content":"already moved to the other drawer"}}
+EOF
+MID="$("$PY" -c 'import hashlib;print(hashlib.sha256(b"claude-code|already moved to the other drawer").hexdigest()[:16])')"
+echo "{\"id\":\"$MID\",\"text\":\"already moved to the other drawer\"}" > "$W/prompts/machine-runs/x-2026-09.jsonl"
+( export HOME="$W/home62" GODSPEED_HOME="$W/home62" USERPROFILE="$W/home62" GODSPEED_PROMPT_SOURCES="claude"
+  cd "$W" && "$PY" "$ARC" --godspeed "$W" archive ) >/dev/null 2>&1
+A62="$(cat "$W/prompts/archive/"*.jsonl 2>/dev/null)"
+if echo "$A62" | grep -q "garden shed" && echo "$A62" | grep -q "without a marker" \
+   && ! echo "$A62" | grep -q "morning note" && ! echo "$A62" | grep -q "already moved"; then
+  ok "62 a print-mode session and a row moved to machine-runs stay out; typed turns stay in"
+else
+  bad "62 a scheduled job's prompt reached the typed-prompt drawer, or a typed one was lost" "$A62"
+fi
+rm -rf "$W/prompts/machine-runs"
+
 echo
 echo "  $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ] || exit 1
