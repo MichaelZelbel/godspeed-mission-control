@@ -62,6 +62,11 @@ check "the deadline tool takes a target alone, and asks once when it has passed"
    "$D" --godspeed "$G" add present --title "A present" --target 2026-04-20 --done-when "bought" >/dev/null &&
    "$D" --godspeed "$G" today | grep -q "A present: you aimed for 2026-04-20. A new date, or as soon as you can?" &&
    "$D" --godspeed "$G" drop present --yes >/dev/null'
+# The weekly number (D-266): the goal register a reader receives reads, bets and settles, and the
+# next-action recipe in the mission control carries the BET line.
+check "the goal register reads, bets and settles each goal's weekly number" x sh -c \
+  'H=$(/opt/data/.local/bin/mc-goals help) && for w in "read <id>" "bets --moves" "settle ["; do printf "%s" "$H" | grep -qF "$w" || exit 1; done &&
+   grep -q "BET:" /opt/data/godspeed/skills/next-action/SKILL.md'
 check "the image version is recorded" sh -c "docker exec godspeed grep -q '^v1+' /opt/data/.godspeed/image-version"
 check "healthy after setup restarted the gateway" wait_healthy
 check "nothing in the volume belongs to root" sh -c "[ -z \"\$(docker exec godspeed find /opt/data -user root -print -quit)\" ]"
