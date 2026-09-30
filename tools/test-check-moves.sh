@@ -79,6 +79,14 @@ OUT="$(run)"; case "$OUT" in *"not a reason for fewer"*) ok "  and so is no play
 { move 1 money-goal "Simon Willison" "x"; move 2 money-goal "a" "y"; move 3 money-goal "b" "z"; echo "FEWER health-goal: the playbook's next rung is an invitation that waits on his answer of 2026-09-22"; } > "$RUN/moves.md"
 OUT="$(run)"; [ $? -eq 0 ] && ok "  but a reason that only mentions the playbook stands" || bad "  playbook mention: $OUT"
 
+# Found by a test reader on Hermes (2026-09-30): moves headed "### Move 1: ..." were invisible to
+# the check, so FEWER lines covered them and not one field was checked (a bet with no APPLY got
+# through, and no bet reached the goal card).
+{ printf '## money-goal\n\n'; move 1 money-goal "Simon Willison" "x" | sed 's/^### 1\. /### Move 1: /'; move 2 money-goal "a" "y"; move 3 money-goal "b" "z"; echo "FEWER health-goal: the week's scale reading lands on Sunday"; } > "$RUN/moves.md"
+OUT="$(run)"; case "$OUT" in *'heading "### <n>.'*) ok "a move without the numbered heading is found, not skipped";; *) bad "unnumbered heading: $OUT";; esac
+{ move 1 money-goal "Simon Willison" "x"; move 2 money-goal "a" "y"; move 3 money-goal "b" "z" | sed 's/^### 3\. /#### Also: /'; echo "FEWER health-goal: the week's scale reading lands on Sunday"; } > "$RUN/moves.md"
+OUT="$(run)"; case "$OUT" in *'heading "### <n>.'*) ok "  and two moves under one numbered heading are found too";; *) bad "two under one: $OUT";; esac
+
 # --- the weekly number (2026-09-30) ----------------------------------------------------------
 full() { move 1 money-goal "Simon Willison" "x"; move 2 money-goal "Justin Welsh" "y"; move 3 money-goal "swyx" "z"; echo "FEWER health-goal: the week's scale reading lands on Sunday"; }
 full > "$RUN/moves.md"

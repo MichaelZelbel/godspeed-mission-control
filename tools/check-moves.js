@@ -85,6 +85,14 @@ if (text === null) {
 
 const FIELDS = ['GOAL', 'WHERE', 'NOW', 'AFTER', 'WHO DID THIS', 'HOW IT LANDS', 'UNDO', 'PERMISSION'];
 const blocks = text.split(/^(?=###? \d+\.)/m).filter(b => /^###? \d+\./.test(b));
+// A MOVE THE CHECK CANNOT SEE IS NOT CHECKED (2026-09-30). A run on Hermes headed its moves
+// "### Move 1: ...": no block matched, FEWER lines covered the count, and not one field was read
+// (a bet with no APPLY got through, and mc-goals bets, which splits the same way, recorded none).
+// Every GOAL line must sit in its own numbered block.
+const goalLines = (s) => (s.match(/^GOAL:/gm) || []).length;
+const seen = blocks.reduce((n, b) => n + Math.min(goalLines(b), 1), 0);
+const unseen = goalLines(text) - seen;
+if (unseen > 0) problems.push(`${unseen} move(s) are not under a heading "### <n>. <what changes where>" of their own (a "GOAL:" line outside one, or two moves under one heading), so their fields cannot be checked and their bets never reach the goal card; give every move that heading, numbered 1, 2, 3...`);
 const counts = {};
 for (const b of blocks) {
   const title = b.split('\n')[0].replace(/^#+\s*/, '').trim();
