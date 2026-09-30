@@ -83,6 +83,11 @@ full | awk '{print} /^GOAL:/{print "BET: 2 -> 4 within seven days of going live"
 OUT="$(run)"; [ $? -eq 0 ] && ok "every move with a BET, and a reading this week, passes" || bad "BET passes: $OUT"
 full | awk '{print} /^GOAL:/{print "BET: 2 → 4"}' > "$RUN/moves.md"
 OUT="$(run)"; [ $? -eq 0 ] && ok "  the arrow may be →" || bad "  unicode arrow: $OUT"
+# Found by the replay of 2026-09-30: moves that bet on no change ("2 -> 2, this one bets on a reply").
+full | awk '{print} /^GOAL:/{n++; print (n==2 ? "BET: 2 -> 2 (held, not a one-off)" : "BET: 2 -> 4")}' > "$RUN/moves.md"
+OUT="$(run)"; case "$OUT" in *"bets on no change"*) ok "a bet of no change is refused: it is not a move for this goal";; *) bad "no-change bet: $OUT";; esac
+full | awk '{print} /^GOAL:/{print "BET: 2.0 -> 2"}' > "$RUN/moves.md"
+OUT="$(run)"; case "$OUT" in *"bets on no change"*) ok "  also when written 2.0 -> 2";; *) bad "  2.0 -> 2: $OUT";; esac
 full | awk '{print} /^GOAL:/{print "BET: 2 -> 4"}' | grep -v '^APPLY' > "$RUN/moves.md"
 OUT="$(run)"; case "$OUT" in *'a move with a bet needs "APPLY'*) ok "a bet without its APPLY item fails, even off the ship list";; *) bad "APPLY for bets: $OUT";; esac
 full | awk '{print} /^GOAL:/{print "BET: 2 -> 4"}' > "$RUN/moves.md"

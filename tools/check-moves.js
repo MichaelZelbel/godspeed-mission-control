@@ -63,7 +63,7 @@ function leadOf(goal) {
 // A weekly number set in the last seven days may wait for its first reading: a number only the
 // person can tell is asked for on the day's card, and the answer can take a few days.
 const fresh = (lead) => lead.lastSet && days(lead.lastSet, DATE) <= 7;
-const BET_LINE = /^BET:[ \t]*-?\d+(?:\.\d+)?\s*(?:->|→)\s*-?\d+(?:\.\d+)?/m;
+const BET_LINE = /^BET:[ \t]*(-?\d+(?:\.\d+)?)\s*(?:->|→)\s*(-?\d+(?:\.\d+)?)/m;
 
 const att = read(path.join(RUN, 'attention.txt'));
 const active = [];
@@ -105,7 +105,12 @@ for (const b of blocks) {
   // A move on the ship list that the mission control applies needs its work item named, or a
   // "ship 2" answer reaches nothing (ship-list-apply reads this line).
   const lead = leadOf(goal);
-  if (lead && !BET_LINE.test(b)) problems.push(`move "${title}": ${goal} has a weekly number, so the move needs a line "BET: <the number now> -> <what you expect seven days after it goes live>"`);
+  const bet = b.match(BET_LINE);
+  if (lead && !bet) problems.push(`move "${title}": ${goal} has a weekly number, so the move needs a line "BET: <the number now> -> <what you expect seven days after it goes live>"`);
+  // A bet of no change is not a move for this goal (the replay of 2026-09-30 made three: a
+  // thank-you "betting on a reply", a call's topics "that add no contact", run days "held"). Name
+  // the change it should make, or file it as work beside the moves.
+  else if (lead && parseFloat(bet[1]) === parseFloat(bet[2])) problems.push(`move "${title}": its BET (${bet[1]} -> ${bet[2]}) bets on no change, so it is not a move for ${goal}'s weekly number; name the change you expect within seven days of going live, or file it as work beside the moves`);
   const onList = /ship list/i.test(f.PERMISSION || '');
   const his = /^\s*only the person/i.test(f['HOW IT LANDS'] || '');
   if (!/^APPLY:\s*\S+/m.test(b)) {

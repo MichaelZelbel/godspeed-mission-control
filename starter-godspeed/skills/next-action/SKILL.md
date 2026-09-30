@@ -296,7 +296,9 @@ MAKE item for the runner (Step 4), and joins the ship list the day it is ready.
 Every move of a goal with a LEAD carries a BET and an APPLY item, including a move only the person
 can make: file it OWNER person, its CHECK a line a machine can run that shows it happened (the mail
 is in Sent, the event is in the calendar); its seven days start the day that item is verified.
-`mc-decide` copies the bets onto the goal cards after the check passes.
+`mc-decide` copies the bets onto the goal cards after the check passes. A bet names a change: a
+step whose honest bet is no change (a thank-you, a call's agenda, a habit held) is not a move for
+that number; file it as work beside the moves, and the check refuses it as a move.
 
 **4. Apply or ask.** A move covered by the goal's ALLOWED line gets an APPLY item (Step 4) and the
 runner applies it today. Every other prepared move, together with prepared moves from earlier days
