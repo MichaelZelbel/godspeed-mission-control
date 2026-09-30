@@ -1,0 +1,20 @@
+name: tools-test
+on:
+  push:
+    branches: [main]
+    paths: ['tools/**', 'starter-godspeed/**', '.github/workflows/tools-test.yml']
+  pull_request:
+    paths: ['tools/**', 'starter-godspeed/**']
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - name: tool tests
+        run: |
+          set -e
+          for t in tools/test-goals.sh tools/test-check-moves.sh tools/test-work.sh tools/test-work-run.sh tools/test-forecast.sh tools/test-check-written.sh; do
+            echo "== $t"; bash "$t"
+          done
