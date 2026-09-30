@@ -55,7 +55,7 @@ export KB_SELF_URL
 
 # The pin is an immutable TAG, never the moving v2 branch, so this installer runs
 # exactly the code that passed its end-to-end runs until this line is edited.
-KB_PIN="v2.13"
+KB_PIN="v2.15"
 LIB_URL="https://raw.githubusercontent.com/MichaelZelbel/kit-bootstrap/$KB_PIN/lib.sh"
 
 # The agent cage (see "The agent cage" in phase 1): one file from kit-bootstrap at its
