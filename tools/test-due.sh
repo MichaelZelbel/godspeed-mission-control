@@ -158,11 +158,19 @@ contains "and written into the log" "$(cat "$G/due/present.md")" "you said as so
 missing "and changes nothing else: still quiet" "$(said 2026-05-20)" "PRESENT"
 contains "still weekly" "$(said 2026-05-25)" "PRESENT: still open"
 
+# --- a day far behind you is said at once: usually the wrong year -----------------------------------
+fresh
+OUT="$(GODSPEED_TODAY=2026-09-30 d add taxes --title T --target 2024-12-20 --to 2025-01-31 --done-when x --cost y)"
+contains "a deadline long past is still taken, and said out loud" "$OUT" "Careful: the last day, 2025-01-31, was 607 days ago."
+contains "and the target too" "$OUT" "Careful: the day you would like it done, 2024-12-20, was 649 days ago."
+missing "a target a few days back is normal and not warned about" "$(GODSPEED_TODAY=2026-09-30 d add fence2 --title F --target 2026-09-21 --done-when x)" "Careful"
+
 # --- a new date is the new target ------------------------------------------------------------------
 fresh
 GODSPEED_TODAY=2026-04-01 d add fence --title "FENCE" --target 2026-05-01 --done-when painted >/dev/null
 said 2026-05-01 >/dev/null; said 2026-05-02 >/dev/null
 contains "a new day before the start is refused" "$(GODSPEED_TODAY=2026-05-02 d target fence 2026-03-01)" "before the day you can start"
+contains "a guessed flag gets the one right form back" "$(GODSPEED_TODAY=2026-05-02 d target fence --to 2026-06-15)" "mc-due target fence 2027-03-14"
 contains "a new date becomes the target" "$(GODSPEED_TODAY=2026-05-02 d target fence 2026-06-15)" "you would like it done by 2026-06-15"
 contains "kept beside the old one" "$(cat "$G/due/fence.md")" "STRIP: 2026-04-01 - target 2026-05-01 moved 2026-06-15"
 missing "quiet again until then" "$(said 2026-05-09; said 2026-06-14)" "FENCE"

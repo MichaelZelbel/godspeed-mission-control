@@ -860,6 +860,13 @@ function cmdAdd(day) {
   else if (b0 === "aiming") console.log("Made " + slug + ". You would like it done by " + target + ". Nothing is said about it before that day.");
   else if (b0 === "target") console.log("Made " + slug + ". You would like it done today, " + target + ".");
   else console.log("Made " + slug + ". The day you would like it done, " + target + ", has already passed, so your next brief asks: a new date, or as soon as you can?");
+  // A day well behind you is usually the wrong year, which an assistant can write as easily as a
+  // person (a practice run wrote 2024 for 2026). It is still accepted, because an overdue deadline
+  // is real too, but it is said while it is easy to fix.
+  for (const [label, d] of [["the day you would like it done", target], ["the last day", to]]) {
+    const ago = d ? daysBetween(d, day) : 0;
+    if (ago > 30) console.log("Careful: " + label + ", " + d + ", was " + ago + " days ago. If you meant a day still ahead, correct it in due/" + slug + ".md now.");
+  }
   console.log(sc === "none"
     ? "It cannot tell by itself that you did it, so it waits for your word:  mc-due done " + slug
     : "It closes itself when " + argOf("--self-check-arg", "that file") + " changes inside the window.");
@@ -912,7 +919,12 @@ function cmdTarget(day) {
     console.log("Kept " + slug + " open, as soon as you can. Your brief mentions it about once a week until you say it is done.");
     return 0;
   }
-  if (!isDate(what)) { console.log("A new day is written year first, like 2027-03-14, or say asap."); return 1; }
+  if (!isDate(what)) {
+    // An assistant once wrote `mc-due target <name> --to <day>`: say the one right form.
+    console.log("Give the new day on its own, year first:  mc-due target " + slug + " 2027-03-14   or:  mc-due target " + slug + " asap");
+    if (/^--/.test(what)) console.log("(--to is a deadline, which this does not change.)");
+    return 1;
+  }
   if (what < s.from) { console.log("That day (" + what + ") is before the day you can start (" + s.from + ")."); return 1; }
   if (s.to && what > s.to) {
     console.log("That day (" + what + ") is after the day it starts costing you (" + s.to + "). A target sits on or before the deadline.");
