@@ -121,10 +121,12 @@ for (const b of blocks) {
   else if (lead && parseFloat(bet[1]) === parseFloat(bet[2])) problems.push(`move "${title}": its BET (${bet[1]} -> ${bet[2]}) bets on no change, so it is not a move for ${goal}'s weekly number; name the change you expect within seven days of going live, or file it as work beside the moves`);
   const onList = /ship list/i.test(f.PERMISSION || '');
   const his = /^\s*only the person/i.test(f['HOW IT LANDS'] || '');
-  if (!/^APPLY:\s*\S+/m.test(b)) {
-    if (lead) problems.push(`move "${title}": a move with a bet needs "APPLY: <work id>", the item whose verification starts its seven days (a move only the person can make gets an item they own, whose CHECK shows it happened)`);
-    else if (onList && !his) problems.push(`move "${title}": on the ship list but no "APPLY: <work id>" line, so an answer by number cannot reach it`);
-  }
+  const applyTo = (b.match(/^APPLY:[ \t]*(\S+)/m) || [])[1];
+  if (lead && !applyTo) problems.push(`move "${title}": a move with a bet needs "APPLY: <work id>", the item whose verification starts its seven days (a move only the person can make gets an item they own, whose CHECK shows it happened)`);
+  // The item exists by the time this runs, so a bet names it or it is lost (final review of D-266:
+  // "APPLY: (filed below)" passed, and mc-goals bets could record nothing for it).
+  else if (lead && !(/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(applyTo) && fs.existsSync(path.join(ROOT, 'work', applyTo + '.md')))) problems.push(`move "${title}": its APPLY (${applyTo}) names no work item on the register; file the item and write its id there, or the bet never reaches ${goal}'s card`);
+  else if (!lead && !/^APPLY:\s*\S+/m.test(b) && onList && !his) problems.push(`move "${title}": on the ship list but no "APPLY: <work id>" line, so an answer by number cannot reach it`);
   const after = (f.AFTER || '').trim();
   const file = after.match(/([A-Za-z0-9_.-]+\/[A-Za-z0-9_./-]+\.(?:md|txt|html|json|csv))/);
   if (file && after.length < 200) {
@@ -153,15 +155,21 @@ for (const g of active) {
   const n = counts[g] || 0;
   if (n < PER && !fewer[g]) problems.push(`${g}: ${n} move(s), fewer than ${PER}, and no "FEWER ${g}: <why>" line`);
 }
+// A NUMBER ONLY THE PERSON CAN TELL, NOT TOLD (final review of D-266): "UNREAD <goal>: <where and
+// when it was asked>" lets the day pass honestly, the way FEWER does for moves; settle then writes
+// "unread" by itself when a verdict's reading never comes. Without it the only way through was to
+// re-record an old value as today's reading.
+const unread = {};
+for (const m of text.matchAll(/^UNREAD ([a-z0-9-]+):[ \t]*(\S[^\n]*)$/gm)) unread[m[1]] = m[2];
 for (const g of active) {
   const lead = leadOf(g);
-  if (lead && (!lead.lastRead || days(lead.lastRead, DATE) > 7) && !fresh(lead)) problems.push(`${g}: its weekly number was not read in the last seven days; read it and record it: mc-goals read ${g} <number> --where "..."`);
+  if (lead && !unread[g] && (!lead.lastRead || days(lead.lastRead, DATE) > 7) && !fresh(lead)) problems.push(`${g}: its weekly number was not read in the last seven days; read it and record it: mc-goals read ${g} <number> --where "...", or, when only the person can tell it and has not, write a line "UNREAD ${g}: <where and when you asked>"`);
 }
 const settleTxt = read(path.join(RUN, 'settle.txt')) || '';
 const dueLine = settleTxt.match(/^read today:[ \t]*(.*)$/m);
 for (const g of (dueLine ? dueLine[1].split(/\s+/) : []).filter(x => x && x !== 'none')) {
   const lead = leadOf(g);
-  if (lead && lead.lastRead !== DATE) problems.push(`${g}: a verdict is due today and its weekly number has no reading dated ${DATE}; read it and record it: mc-goals read ${g} <number> --where "..."`);
+  if (lead && !unread[g] && lead.lastRead !== DATE) problems.push(`${g}: a verdict is due today and its weekly number has no reading dated ${DATE}; read it and record it: mc-goals read ${g} <number> --where "...", or, when only the person can tell it and has not, write a line "UNREAD ${g}: <where and when you asked>"`);
 }
 
 if (problems.length) {

@@ -168,6 +168,10 @@ cmds.change = (a) => {
   }
   if (!changed.length) { say(`${c.id}: nothing changed`); return; }
   S.write(c);
+  // The weekly number is how the goal is judged, not what it is (2026-09-30, found by the final
+  // review of D-266): propagating it marked every open item under the goal stale, so his yes on a
+  // ship-list line could no longer unblock it and a planned item left the runner's queue.
+  if (changed.every(k => k === 'LEAD')) { say(`${c.id}: changed LEAD (${why}); the goal's work and forecasts stand as they are`); return; }
   const r = propagate(c, d, changed.join(', '), why);
   say(`${c.id}: changed ${changed.join(', ')} (${why})`);
   if (r.touched.length) say(`  review line written on: ${r.touched.join(', ')}`);
@@ -331,7 +335,8 @@ cmds.bets = (a) => {
     const title = b.split('\n')[0].replace(/^#+\s*\d+\.\s*/, '').replace(/"/g, "'").trim();
     // Only a work item that exists can put a move live, so only its bet is recorded (2026-09-30:
     // a run called this before filing its items, and "APPLY: (filed below)" became a bet on an
-    // item called "(filed"). The move is recorded the next time this runs, once the item exists.
+    // item called "(filed"). The moves check refuses such a move, so when mc-decide runs this after
+    // the check every bet names a filed item, and a run that called it too early is recorded then.
     if (!workCard(work)) { skipped.push(`"${title}": APPLY ${work} names no work item on the register yet`); continue; }
     L.logLine(c, d, 'BET', `${work} ${bet[1]} -> ${bet[2]} "${title}"`);
     S.write(c);

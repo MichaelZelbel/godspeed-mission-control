@@ -325,6 +325,20 @@ check "  nothing reaches the card" "$(grep -c 'BET (filed' "$TMP/goals/readers.m
 mkmoves "$M" readers "$W6" "6 -> 9"
 OUT="$(hg bets --moves "$M" --date 2026-10-30 2>&1)"; contains "  once the item is filed, the same move's bet is recorded" "$OUT" "1 bet(s) recorded"
 
+# Found by the final review (2026-09-30): setting a weekly number went through the same path as a
+# change of the goal itself, so every open item under the goal was marked stale: a blocked
+# ship-list item could no longer be unblocked by his yes, a planned one left the runner's queue.
+hg file --kind outcome --title "A goal with work under it" --id lead-work --status adopted --source t >/dev/null 2>&1
+WB="$(hw file --what "Waits for his yes" --done-when "applied" --goal lead-work --key lw-one --outward yes --source t | cut -d: -f1)"
+WP="$(hw file --what "The runner does it" --done-when "done" --goal lead-work --key lw-two --source t | cut -d: -f1)"
+hg change lead-work --set "LEAD=sign-ups | total | the inbox" --why "its playbook" >/dev/null 2>&1
+check "setting a LEAD leaves a blocked item under the goal as it was" "$(sed -n 's/^STATUS: //p' "$TMP/work/$WB.md")" "blocked"
+check "  and a planned one" "$(sed -n 's/^STATUS: //p' "$TMP/work/$WP.md")" "planned"
+hg change lead-work --set "LEAD=sign-ups | per week | the inbox" --why "counted weekly after all" >/dev/null 2>&1
+check "  changing it again leaves them too" "$(sed -n 's/^STATUS: //p' "$TMP/work/$WP.md")" "planned"
+hg change lead-work --set "MEASURE=fifty readers" --why "a real change of the goal" >/dev/null 2>&1
+check "  while a change of the goal itself still marks its work stale" "$(sed -n 's/^STATUS: //p' "$TMP/work/$WP.md")" "stale"
+
 echo
 echo "$PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

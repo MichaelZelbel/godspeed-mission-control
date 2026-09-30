@@ -95,6 +95,12 @@ printf 'ID: money-goal\nKIND: outcome\nSTATUS: adopted\nLEAD: people who join th
 OUT="$(run)"; case "$OUT" in *'needs a line "BET:'*) ok "a move for a goal with a weekly number needs a BET";; *) bad "BET required: $OUT";; esac
 case "$OUT" in *"not read in the last seven days"*) ok "  and a reading older than seven days fails";; *) bad "  stale reading: $OUT";; esac
 printf -- '- 2026-09-23 READ 2 (subscriber mails)\n' >> "$TMP/goals/money-goal.md"
+for i in 1 2 3; do printf 'ID: W-20260924-0%s\nSTATUS: blocked\n\n## Log\n' "$i" > "$TMP/work/W-20260924-0$i.md"; done
+# Found by the final review (2026-09-30): a placeholder APPLY passed, and its bet never reached the card.
+full | awk '{print} /^GOAL:/{print "BET: 2 -> 4"}' | sed 's/^APPLY: W-20260924-01$/APPLY: (filed below)/' > "$RUN/moves.md"
+OUT="$(run)"; case "$OUT" in *"names no work item on the register"*) ok "a bet whose APPLY names no filed work item fails";; *) bad "placeholder APPLY: $OUT";; esac
+full | awk '{print} /^GOAL:/{print "BET: 2 -> 4"}' | sed 's/^APPLY: W-20260924-01$/APPLY:/' > "$RUN/moves.md"
+OUT="$(run)"; case "$OUT" in *'needs "APPLY'*) ok "  and an empty APPLY line is no APPLY line";; *) bad "empty APPLY: $OUT";; esac
 full | awk '{print} /^GOAL:/{print "BET: 2 -> 4 within seven days of going live"}' > "$RUN/moves.md"
 OUT="$(run)"; [ $? -eq 0 ] && ok "every move with a BET, and a reading this week, passes" || bad "BET passes: $OUT"
 full | awk '{print} /^GOAL:/{print "BET: 2 → 4"}' > "$RUN/moves.md"
@@ -116,5 +122,15 @@ printf 'ID: money-goal\nKIND: outcome\nSTATUS: adopted\nLEAD: runs this week | p
 OUT="$(run)"; [ $? -eq 0 ] && ok "a weekly number set in the last seven days may wait for its first reading" || bad "grace for a new LEAD: $OUT"
 printf 'ID: money-goal\nKIND: outcome\nSTATUS: adopted\nLEAD: runs this week | per week | the person tells it\n\n## Log\n- 2026-09-10 CHANGED LEAD "" -> "runs this week | per week | the person tells it" because test\n' > "$TMP/goals/money-goal.md"
 OUT="$(run)"; case "$OUT" in *"not read in the last seven days"*) ok "  but not for longer than a week";; *) bad "  grace ends: $OUT";; esac
+# Found by the final review (2026-09-30): a number only the person can tell, not told this week,
+# had no honest way through; the pressure was to re-record an old value as today's reading.
+{ full | awk '{print} /^GOAL:/{print "BET: 2 -> 4"}'; echo "UNREAD money-goal: asked on the card of 2026-09-22 and again today, no answer yet"; } > "$RUN/moves.md"
+for i in 1 2 3; do [ -f "$TMP/work/W-20260924-0$i.md" ] || printf 'ID: W-20260924-0%s\nSTATUS: blocked\n\n## Log\n' "$i" > "$TMP/work/W-20260924-0$i.md"; done
+OUT="$(run)"; [ $? -eq 0 ] && ok "a number the person has not told passes with an UNREAD line that says where it was asked" || bad "UNREAD line: $OUT"
+printf 'Weekly numbers on %s.\nread today: money-goal\n' "$D" > "$RUN/settle.txt"
+OUT="$(run)"; [ $? -eq 0 ] && ok "  also when a verdict is due today" || bad "  UNREAD with read today: $OUT"
+rm -f "$RUN/settle.txt"
+{ full | awk '{print} /^GOAL:/{print "BET: 2 -> 4"}'; echo "UNREAD money-goal:"; } > "$RUN/moves.md"
+OUT="$(run)"; case "$OUT" in *"not read in the last seven days"*) ok "  but an UNREAD line with no reason does not count";; *) bad "  empty UNREAD: $OUT";; esac
 
 echo; echo "$PASS passed, $FAIL failed"; [ "$FAIL" -eq 0 ]

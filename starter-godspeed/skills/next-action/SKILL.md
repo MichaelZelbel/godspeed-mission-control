@@ -200,7 +200,9 @@ within a week, and can be changed by what you can do this week; with no playbook
 today's reading says people who reached this goal counted weekly.
 `mc-goals change <id> --set "LEAD=..." --why "<the source>"`. Prefer a number this mission control
 can read by itself; take one the person must tell only when nothing else counts it, and then ask
-for it once a week on the day's card. Then read at least one more number outside this folder that
+for it once a week on the day's card. When they have not told it yet, write a line
+`UNREAD <goal>: <where and when you asked>` in `moves.md`, and never record an old value as
+today's reading. Then read at least one more number outside this folder that
 the goal's MEASURE depends on, and write each number, where it was read and the date into the
 record under the goal. Look
 for the surprise: the page people find that nobody tends, the question strangers keep asking, the
