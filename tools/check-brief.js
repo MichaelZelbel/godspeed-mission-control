@@ -35,6 +35,17 @@
 //   unquoted   a text to post or send ("send this as is", "post it") with no
 //              quoted line: mc-judge-brief finds the lines it judges by their
 //              quotes, so a text without them would reach you unjudged.
+//   deadline   a line that talks about something still open in due/ anywhere but in
+//              mc-due's own lines or under a Deadlines heading. mc-due today decides
+//              what is said about those and on which morning (Chapter 27).
+//
+// WHY THE LAST ONE (2026-09-30). In the practice run for targets, the brief was told in
+// its recipe, in plain words, that the deadline lines are the only place it speaks about
+// due/. It still wrote "the fence is a week overdue" beside the helper's calm weekly line,
+// carried over from an earlier brief: a target missed costs nothing and is never overdue,
+// and a line in the prose every morning undoes the helper's once-a-week rhythm. Prose did
+// not hold three runs in a row, so the check does. Only things still open are matched, so a
+// brief may still say that yesterday you filed the tax return.
 //
 // WHY THE LAST THREE (2026-09-24). The author's own morning brief repeated the
 // same two stories on two mornings, offered three LinkedIn lines his own AI
@@ -64,6 +75,12 @@ const READY = /\b(?:as is|as-is|ready to send|ready to post|post (?:it|this|one|
 // coworking one, or somebody else's product that ends in the word, is not ours.
 const FORMER = /\b(?:your|my|the)\s+[Hh][Uu][Bb]\b/gi;
 const DATED = /^(\d{4}-\d{2}-\d{2})/;
+// mc-due's own lines: its tag, two spaces or more, then the thing. And its overload message.
+const DUE_LINE = /^\s*(?:RUNNING OUT|SOON|ON THE WAY|PLENTY OF TIME|NOT YET|AIMING FOR|TARGET TODAY|WHEN YOU CAN|DONE|CALLED OFF)\s{2,}\S/;
+const DUE_OVERLOAD = /things run out of time this week|Pick the two you will really do|^\s*-\s.*\(last day \d{4}-\d{2}-\d{2}\)\s*$/;
+const STOPWORDS = new Set(('the and for you your with from that this have what when will would like done ' +
+  'day days need needs one our his her its are was not but all can get got out own new old now due ' +
+  'jan feb mar apr may jun jul aug sep oct nov dec').split(' '));
 const HISTORY_DAYS = 45;
 
 function linksOf(text) { return text.match(URL_RE) || []; }
@@ -228,7 +245,65 @@ function shapeFaults(text) {
   return faults;
 }
 
-function check(text, earlier, day) {
+// The mission control a brief belongs to: the nearest folder above it with a due/ folder and an
+// AGENTS.md. None (a brief checked from stdin, far from any) means this check has nothing to read.
+function missionControlOf(start) {
+  let d = path.resolve(start || '.');
+  for (let i = 0; i < 6; i++) {
+    if (fs.existsSync(path.join(d, 'due')) && fs.existsSync(path.join(d, 'AGENTS.md'))) return d;
+    const up = path.dirname(d);
+    if (up === d) break;
+    d = up;
+  }
+  return null;
+}
+// The titles of what is still open, asked of mc-due itself (it sits next to this file), so
+// "open" means exactly what it means everywhere else: no event in world/events/ closed it.
+// Asked for the brief's own day, and "open" includes what has not opened yet: neither is for the
+// prose to bring up.
+function openTitles(root, day) {
+  const due = path.join(__dirname, 'due.js');
+  if (!root || !fs.existsSync(due)) return [];
+  const env = Object.assign({}, process.env, day ? { GODSPEED_TODAY: day } : {});
+  const r = require('child_process').spawnSync(process.execPath, [due, '--godspeed', root, 'state', '--json'], { encoding: 'utf8', env });
+  try { return JSON.parse(r.stdout).filter(x => x.state !== 'closed' && x.state !== 'dropped').map(x => x.title); } catch (e) { return []; }
+}
+function keywords(s) {
+  return [...new Set(String(s).toLowerCase().replace(/[^a-z0-9\u00e0-\u024f]+/g, ' ').split(/\s+/)
+    .filter(w => w.length >= 3 && !STOPWORDS.has(w) && !/^\d+$/.test(w)))];
+}
+// A line names a title when it carries at least half of the title's words, and at least two of
+// them (one, of five letters or more, for a one-word title).
+function names(line, title) {
+  const tw = keywords(title);
+  if (!tw.length) return false;
+  const lw = new Set(keywords(line));
+  const hit = tw.filter(w => lw.has(w)).length;
+  if (tw.length === 1) return hit === 1 && tw[0].length >= 5;
+  return hit >= 2 && hit * 2 >= tw.length;
+}
+function deadlineFaults(text, root, day) {
+  const titles = openTitles(root, day);
+  if (!titles.length) return [];
+  const faults = [];
+  let underDeadlines = false;
+  text.split('\n').forEach((line, i) => {
+    const h = line.match(/^\s*#{1,6}\s+(.*)$/);
+    if (h) { underDeadlines = /deadline/i.test(h[1]); return; }
+    if (underDeadlines || DUE_LINE.test(line) || DUE_OVERLOAD.test(line)) return;
+    if (line.trim().replace(/^\*+/, '').toLowerCase().startsWith('sources:')) return;
+    const t = titles.find(x => names(line, x));
+    if (t) {
+      faults.push('REFUSED, line ' + (i + 1) + ': this talks about "' + t + '" outside the deadline lines:\n' +
+        '    ' + line.trim() + '\n' +
+        '    Only mc-due today says what to mention about the things in due/, and on which\n' +
+        '    morning. Take this mention out; the Deadlines section carries what is due today.');
+    }
+  });
+  return faults;
+}
+
+function check(text, earlier, day, root) {
   const faults = [];
   const lines = text.split('\n');
   lines.forEach((line, i) => {
@@ -253,7 +328,8 @@ function check(text, earlier, day) {
       'read.\n    An instruction to read something must carry the thing or a link to it.');
   }
   return faults.concat(repeats(text, earlier || []), formerName(text), unquoted(text),
-    subjectFaults(text, earlier || [], day || new Date().toISOString().slice(0, 10)), shapeFaults(text));
+    subjectFaults(text, earlier || [], day || new Date().toISOString().slice(0, 10)), shapeFaults(text),
+    deadlineFaults(text, root, day));
 }
 
 function main(argv) {
@@ -270,11 +346,11 @@ function main(argv) {
   const named = arg === '-' ? null : (path.basename(arg).match(DATED) || [])[1];
   const day = named || new Date().toISOString().slice(0, 10);
   if (!dir) dir = named ? path.dirname(arg) : 'brief';
-  const faults = check(text, history(dir, day), day);
+  const faults = check(text, history(dir, day), day, missionControlOf(arg === '-' ? process.cwd() : path.dirname(arg)));
   if (!faults.length) return 0;
   process.stdout.write(faults.join('\n\n') + '\n');
   return 1;
 }
 
 if (require.main === module) process.exit(main(process.argv));
-module.exports = { check, history, postLines, identity, similar, items, linksOf, subjects, subjectFaults, shapeFaults };
+module.exports = { check, history, postLines, identity, similar, items, linksOf, subjects, subjectFaults, shapeFaults, names, deadlineFaults };

@@ -95,7 +95,9 @@ purpose. If it contradicts something you believe about me, the file wins.
   by?" Then keep it with `mc-due add` (`--target`, `--to` or both; see
   `mc-due --help`), and never turn one kind into the other. When my brief asks
   "A new date, or as soon as you can?" and I answer, record my answer with
-  `mc-due target`.
+  `mc-due target`. Read `due/` only through `mc-due`: never open those files
+  to judge what is urgent or late, and never call a day I would like
+  something done late or overdue. Only `mc-due today` says what to mention.
 - **A deadline we finish together is closed in the same turn.** When I approve,
   send or do something in `due/` with you, run `mc-due done <name> --evidence
   "<my words or a commit>"` before you stop, so my brief never shows it again.

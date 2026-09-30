@@ -115,4 +115,42 @@ expect('a paragraph pointing at another by number is refused',
   'Friday.\n\nI built the sample. It is on the page in item 1.\n\n1. Reply "ship all".\nhttps://e.example/moves\n', 1, 'points at another');
 fs.rmSync(dir, { recursive: true, force: true });
 
+
+// --- deadline: only mc-due's lines speak about what is open in due/ (2026-09-30) ---------------
+{
+  const fs = require('fs'), os = require('os');
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'brief-due-'));
+  fs.mkdirSync(path.join(root, 'due')); fs.mkdirSync(path.join(root, 'brief'));
+  fs.writeFileSync(path.join(root, 'AGENTS.md'), '');
+  const due = (...a) => execFileSync('node', [path.join(__dirname, 'due.js'), '--godspeed', root, ...a],
+    { encoding: 'utf8', env: Object.assign({}, process.env, { GODSPEED_TODAY: '2026-10-07' }) });
+  due('add', 'fence', '--title', 'Repaint the garden fence', '--target', '2026-09-21', '--done-when', 'painted');
+  due('add', 'present', '--title', 'Birthday present for Priya', '--target', '2026-10-08', '--done-when', 'bought');
+  due('add', 'tax', '--title', 'UK tax return', '--to', '2027-01-31', '--done-when', 'filed', '--cost', 'a fine');
+  due('done', 'tax');
+  const briefAt = (name, body) => { const f = path.join(root, 'brief', name); fs.writeFileSync(f, body); return f; };
+  const runFile = (f) => {
+    try { return { code: 0, out: execFileSync('node', [script, f], { encoding: 'utf8' }) }; }
+    catch (e) { return { code: e.status, out: (e.stdout || '').toString() }; }
+  };
+  const want = (name, f, code, text) => {
+    const r = runFile(f);
+    const ok = r.code === code && (!text || r.out.includes(text));
+    console.log((ok ? 'PASS' : 'FAIL') + '  ' + name);
+    if (!ok) { failures++; console.log('    got exit ' + r.code + ':\n' + r.out); }
+  };
+  want('the helper\'s own line may name an open thing',
+    briefAt('2026-10-07.md', '# Brief\n\nNothing new.\n\n## Deadlines\n\nWHEN YOU CAN   Repaint the garden fence: still open, as soon as you can. You aimed for 2026-09-21.\n'), 0);
+  want('a line elsewhere that names it is refused',
+    briefAt('2026-10-07.md', '# Brief\n\nThe garden fence is a week overdue now.\n\n## Deadlines\n\nWHEN YOU CAN   Repaint the garden fence: still open.\n'),
+    1, 'outside the deadline lines');
+  want('so is one about a thing the helper kept quiet today',
+    briefAt('2026-10-07.md', '# Brief\n\nPriya\'s present is due tomorrow.\n'), 1, 'Birthday present for Priya');
+  want('a thing already done may be mentioned anywhere',
+    briefAt('2026-10-07.md', '# Brief\n\nYou filed the UK tax return yesterday. Well done.\n'), 0);
+  want('a Sources line may name the files it came from',
+    briefAt('2026-10-07.md', '# Brief\n\nNothing new.\n\nSources: the garden fence entry, mc-due today\n'), 0);
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
 process.exit(failures ? 1 : 0);
