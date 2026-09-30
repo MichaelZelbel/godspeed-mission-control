@@ -19,9 +19,20 @@ USER root
 
 # gh signs the machine in to GitHub with a code and creates the private repository; jq
 # reads Telegram's answers; age seals the notebook key. The rest is already in the base.
-RUN apt-get update \
- && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends gh jq age procps \
- && rm -rf /var/lib/apt/lists/*
+# gh comes from GitHub's own package source (docs/install_linux.md in cli/cli), not Debian's:
+# Debian's is 2.46, which does not know `gh auth login --skip-ssh-key`, the flag the shared
+# installer (kit-bootstrap ensure_gh_auth) uses. Found on the first real Telegram setup,
+# 2026-10-01; the tests stand in for gh, so none of them could see it.
+RUN set -eu; \
+    mkdir -p -m 755 /etc/apt/keyrings; \
+    curl -fsSL -o /etc/apt/keyrings/githubcli-archive-keyring.gpg https://cli.github.com/packages/githubcli-archive-keyring.gpg; \
+    chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg; \
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+      > /etc/apt/sources.list.d/github-cli.list; \
+    apt-get update; \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends gh jq age procps; \
+    rm -rf /var/lib/apt/lists/*; \
+    gh auth login --help | grep -q -- --skip-ssh-key
 
 # supercronic runs the installer's own daily jobs (the prompt archive, the notebook
 # sync), which it puts on the clock with `crontab`; a container has no cron daemon.

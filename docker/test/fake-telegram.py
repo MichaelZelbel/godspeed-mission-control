@@ -24,7 +24,7 @@ class Fake:
     def __init__(self, token, scenario, record=None):
         self.token = token
         self.cv = threading.Condition()
-        self.updates, self.sent, self.edits, self.calls = [], [], [], {}
+        self.updates, self.sent, self.edits, self.calls, self.deleted = [], [], [], {}, []
         self.next_update, self.next_msg = 1, 100
         self.users = scenario.get("users", {})
         self.rules = scenario.get("rules", [])
@@ -78,6 +78,8 @@ class Fake:
                             self.act(a)
                 self.save()
                 return {"message_id": m["message_id"], "chat": {"id": m["chat_id"]}, "text": m["text"]}
+            if method == "deleteMessage":
+                self.deleted.append(p.get("message_id"))
             if method == "editMessageText":
                 self.edits.append(p.get("text", ""))
                 self.save()
@@ -86,7 +88,7 @@ class Fake:
     def save(self):
         if self.record:
             with open(self.record, "w", encoding="utf-8") as f:
-                json.dump({"sent": self.sent, "edits": self.edits, "calls": self.calls}, f, indent=1)
+                json.dump({"sent": self.sent, "edits": self.edits, "calls": self.calls, "deleted": self.deleted}, f, indent=1)
 
 
 def serve(fake, port=0):

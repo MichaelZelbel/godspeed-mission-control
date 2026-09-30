@@ -114,8 +114,7 @@ cat > "$WORK/tg/scenario.json" <<'EOF'
 {"users": {"111": {"first_name": "Tess", "username": "tess"}, "999": {"first_name": "Eve"}},
  "start": [{"from": 111, "text": "/start"}, {"from": 999, "text": "hi"}],
  "rules": [{"when": "already have a Mission Control", "do": [{"from": 111, "press": "repo:fresh"}]},
-           {"when": "morning brief", "do": [{"from": 111, "press": "brief:no"}]},
-           {"when": "tell him once", "do": [{"from": 111, "press": "count:no"}]}]}
+           {"when": "morning brief", "do": [{"from": 111, "press": "brief:no"}]}]}
 EOF
 cat > "$WORK/compose.override.yaml" <<EOF
 services:
@@ -144,7 +143,8 @@ check "the first writer is greeted and owns the bot" grep -q 'Hi Tess' "$WORK/tg
 check "a stranger is turned away" grep -q 'This assistant belongs to someone else' "$WORK/tg/record.json"
 check "the installer built the folder and pushed it" x sh -c \
   'test -f /opt/data/godspeed/AGENTS.md && git -C /opt/data/godspeed ls-remote --exit-code origin >/dev/null'
-check "the answers reached the installer (install count: no)" x grep -q '^GODSPEED_INSTALL_COUNT=0' /opt/data/.godspeed/device.env
+check "the chat asks no install-count question and the installer sends nothing" x grep -q '^GODSPEED_INSTALL_COUNT=0' /opt/data/.godspeed/device.env
+check "the image's GitHub tool knows every flag the shared installer uses" x sh -c '/usr/bin/gh auth login --help | grep -q -- --skip-ssh-key'
 check "the bot is handed to Hermes, for its owner only" x sh -c \
   "grep -qx 'TELEGRAM_ALLOWED_USERS=111' /opt/data/.env && grep -qx 'TELEGRAM_HOME_CHANNEL=111' /opt/data/.env && grep -q '^TELEGRAM_BOT_TOKEN=' /opt/data/.env"
 check "the Hermes settings file is private" x sh -c '[ "$(stat -c %a /opt/data/.env)" = 600 ]'

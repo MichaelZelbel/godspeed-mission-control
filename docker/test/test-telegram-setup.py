@@ -56,6 +56,26 @@ mark = os.path.join(d, "chatgpt-signed-in")
 if a[:2] == ["auth", "list"]:
     if os.path.exists(mark): print("openai-codex (1 credential)")
     sys.exit(0)
+state_f = os.path.join(d, "hermes-state.json")
+st = json.load(open(state_f)) if os.path.exists(state_f) else {"keys": {}}
+def save(): json.dump(st, open(state_f, "w"))
+if a[:3] == ["config", "set", "model.provider"]:
+    st["provider"] = a[3]; save(); sys.exit(0)
+if a[:3] == ["config", "set", "model.default"]:
+    st["model"] = a[3]; save(); sys.exit(0)
+if a[:2] == ["auth", "remove"]:
+    st["keys"].pop(a[2], None); save(); sys.exit(0)
+if a[:2] == ["auth", "add"] and "api-key" in a:
+    st["keys"][a[2]] = a[a.index("--api-key") + 1]; save(); print("Added %s credential" % a[2]); sys.exit(0)
+if a[:2] == ["chat", "--oneshot"]:
+    # The proof question: ChatGPT answers only on the models the plan may use, a key only when good.
+    p = st.get("provider")
+    if p == "openai-codex":
+        ok = os.path.exists(mark) and st.get("model") in os.environ.get("FAKE_CODEX_OK", "gpt-5.6-terra").split(",")
+    else:
+        ok = "bad" not in st["keys"].get(p, "bad")
+    if ok: print("ready"); sys.exit(0)
+    print("Provider said: HTTP 400: {\"detail\":\"The '%s' model is not supported\"}" % st.get("model")); sys.exit(1)
 if a[:2] == ["auth", "add"]:
     # What hermes_cli/auth_codex.py prints, colours included.
     print("To continue, follow these steps:\n")
@@ -79,6 +99,8 @@ d = os.environ["FAKE_DIR"]; a = sys.argv[1:]
 open(os.path.join(d, "gh-calls"), "a").write(" ".join(a) + "\n")
 mark = os.path.join(d, "github-signed-in")
 if a[:2] == ["auth", "status"]: sys.exit(0 if os.path.exists(mark) else 1)
+if a[:2] == ["auth", "login"] and "--skip-ssh-key" in a:
+    sys.stderr.write("unknown flag: --skip-ssh-key\n\nUsage:  gh auth login [flags]\n"); sys.exit(1)
 if a[:2] == ["auth", "login"]:
     sys.stderr.write("! First copy your one-time code: 1A2B-3C4D\n")
     sys.stderr.write("Open this URL to continue in your web browser: https://github.com/login/device\n")
@@ -93,7 +115,7 @@ sys.exit(0)
 FAKE_SETUP = r'''
 import json, os, subprocess, sys, time
 d = os.environ["FAKE_DIR"]
-keys = ["KB_TELEGRAM_SKIP", "KB_MORNING_BRIEF", "GODSPEED_INSTALL_COUNT", "GODSPEED_REPO", "KB_REPO_NAME",
+keys = ["KB_TELEGRAM_SKIP", "KB_SIGNIN_SKIP", "KB_MORNING_BRIEF", "GODSPEED_INSTALL_COUNT", "GODSPEED_REPO", "KB_REPO_NAME",
         "GODSPEED_TELEGRAM_TOKEN", "GODSPEED_TELEGRAM_OWNER"]
 runs = os.path.join(d, "setup-runs.json")
 seen = json.load(open(runs)) if os.path.exists(runs) else []
@@ -160,7 +182,8 @@ def scenario_run(name, scenario, extra_env=None, env_file=None, timeout=120):
          "log": read(home, "logs", "godspeed-telegram-setup.log"),
          "runs": json.loads(read(fakes, "setup-runs.json") or "[]"),
          "hermes": read(fakes, "hermes-calls"), "gh": read(fakes, "gh-calls"),
-         "hermes_sent": read(fakes, "hermes-sent"), "env_extra": env}
+         "hermes_sent": read(fakes, "hermes-sent"), "env_extra": env,
+         "hstate": json.loads(read(fakes, "hermes-state.json") or "{}")}
     if rc != 0:
         print(out[-3000:])
     return r
@@ -217,10 +240,10 @@ def test_happy():
         "users": USERS,
         "start": [{"from": 111, "text": "/start"}, {"from": 999, "text": "hi, is this yours?"}],
         "rules": [
+            {"when": "Which AI should I think with", "do": [{"from": 111, "press": "openai-codex"}]},
             {"when": "already have a Mission Control", "do": [{"from": 111, "press": "repo:fresh"}]},
             {"when": "morning brief", "do": [{"from": 111, "press": "brief:yes"}]},
             {"when": "Whose 06:00", "do": [{"from": 111, "text": "Tokyo" if have_zones() else "UK"}]},
-            {"when": "tell him once", "do": [{"from": 111, "press": "count:no"}]},
             {"when": "Setting everything up now", "do": [{"from": 111, "text": "are you there?"}]},
         ]})
     to_anna, to_eve = r["to"](111), r["to"](999)
@@ -229,7 +252,14 @@ def test_happy():
     check("the welcome greets them by name", any_has(to_anna, "Hi Anna", "Three short steps"))
     check("a stranger is told it is taken, and nothing else", to_eve == ["This assistant belongs to someone else."])
     check("the ChatGPT address and code arrive", any_has(to_anna, "https://auth.openai.com/codex/device", "<code>ABCD-12345</code>"))
-    check("ChatGPT is confirmed", "ChatGPT is connected." in to_anna)
+    check("the brain question offers ChatGPT, OpenRouter, Claude, OpenAI, Gemini and the rest",
+          any(m["buttons"] == ["openai-codex", "openrouter", "anthropic", "openai-api", "gemini", "more"]
+              for m in r["fake"].sent))
+    check("ChatGPT: a model the plan refuses is passed over, the one that answers is kept",
+          r["hstate"].get("provider") == "openai-codex" and r["hstate"].get("model") == "gpt-5.6-terra"
+          and r["hermes"].count("chat --oneshot") >= 2)
+    check("the brain counts as connected only after it answered a test question",
+          any_has(to_anna, "ChatGPT is connected, and I answered a first test question"))
     check("the GitHub address and code arrive", any_has(to_anna, "https://github.com/login/device", "<code>1A2B-3C4D</code>"))
     check("GitHub is confirmed with the account", any_has(to_anna, "GitHub is connected as anna"))
     check("git is set up to push after the sign-in", "auth setup-git" in r["gh"])
@@ -237,6 +267,7 @@ def test_happy():
     check("the installer ran once, with the answers and no token",
           len(r["runs"]) == 1 and run.get("KB_MORNING_BRIEF") == "yes" and run.get("GODSPEED_INSTALL_COUNT") == "no"
           and run.get("KB_REPO_NAME") == "godspeed" and run.get("KB_TELEGRAM_SKIP") == "1"
+          and run.get("KB_SIGNIN_SKIP") == "1"
           and not run.get("GODSPEED_REPO") and not run.get("GODSPEED_TELEGRAM_TOKEN"))
     check("progress is shown while it works", any("Working on: Your folder" in e for e in r["fake"].edits))
     check("a message during the install gets an answer", any_has(to_anna, "Still working on"))
@@ -264,12 +295,12 @@ def test_snags():
         "users": USERS,
         "start": [{"from": 999, "text": "/start"}, {"from": 111, "text": "/start"}],
         "rules": [
+            {"when": "Which AI should I think with", "do": [{"from": 111, "press": "openai-codex"}]},
             {"when": "That code ran out", "do": [{"from": 111, "press": "retry"}]},
             {"when": "already have a Mission Control", "do": [{"from": 111, "press": "repo:have"}]},
             {"when": "Send me its address", "do": [{"from": 111, "text": "github.com/anna/nope"}]},
             {"when": "I cannot open", "do": [{"from": 111, "text": "https://github.com/anna/mission"}]},
             {"when": "morning brief", "do": [{"from": 111, "text": "whatever"}, {"from": 111, "press": "brief:no"}]},
-            {"when": "tell him once", "do": [{"from": 111, "press": "count:yes"}]},
             {"when": "Setup stopped at", "do": [{"from": 111, "press": "setup:retry"}]},
         ]}, extra_env={"GODSPEED_TELEGRAM_OWNER": "@Anna", "FAKE_HERMES_FAIL_FIRST": "1",
                        "FAKE_SETUP_FAIL_FIRST": "1", "FAKE_GH_REPOS": "anna/mission"})
@@ -278,7 +309,7 @@ def test_snags():
     check("the named owner takes it though a stranger wrote first",
           r["state"].get("owner_id") == 111 and to_eve == ["This assistant belongs to someone else."])
     check("a code that ran out offers a new one, and the new one works",
-          r["hermes"].count("auth add openai-codex") == 2 and "ChatGPT is connected." in to_anna)
+          r["hermes"].count("auth add openai-codex") == 2 and any_has(to_anna, "ChatGPT is connected, and I answered"))
     check("a wrong address is said, and asked again", any_has(to_anna, "I cannot open github.com/anna/nope"))
     check("typing instead of tapping gets a nudge", "Tap one of the buttons above, please." in to_anna)
     check("a stop says where and why", any_has(to_anna, "Setup stopped at", "private GitHub home",
@@ -286,7 +317,7 @@ def test_snags():
     runs = r["runs"]
     check("Try again runs the installer again, with the same answers",
           len(runs) == 2 and runs[1].get("GODSPEED_REPO") == "https://github.com/anna/mission.git"
-          and runs[1].get("KB_MORNING_BRIEF") == "no" and runs[1].get("GODSPEED_INSTALL_COUNT") == "yes"
+          and runs[1].get("KB_MORNING_BRIEF") == "no" and runs[1].get("GODSPEED_INSTALL_COUNT") == "no"
           and not runs[1].get("KB_REPO_NAME"))
     check("the last message carries the address they gave", any_has(to_anna, "https://github.com/anna/mission.git"))
     check("no brief, no question about the clock", not any_has(to_anna, "Whose 06:00") and "timezone" not in r["hermes"])
@@ -298,17 +329,50 @@ def test_found_repo():
         "users": USERS,
         "start": [{"from": 111, "text": "/start"}],
         "rules": [
+            {"when": "Which AI should I think with", "do": [{"from": 111, "press": "more"}]},
+            {"when": "Which one", "do": [{"from": 111, "press": "deepseek"}]},
+            {"when": "Send me your DeepSeek API key", "do": [{"from": 111, "text": "sk-deepseek-good-0123456789"}]},
             {"when": "Is that your", "do": [{"from": 111, "press": "found:no"}]},
             {"when": "morning brief", "do": [{"from": 111, "press": "brief:yes"}]},
             {"when": "Whose 06:00", "do": [{"from": 111, "text": "Krefeld"}]},
             {"when": "do not know the clock of Krefeld", "do": [{"from": 111, "press": "tz:keep"}]},
-            {"when": "tell him once", "do": [{"from": 111, "press": "count:no"}]},
         ]}, extra_env={"FAKE_GH_REPOS": "anna/godspeed,anna/godspeed-mission-control"})
     check("it asks whether that one is theirs", any_has(r["to"](111), "anna/godspeed</b> on your GitHub"))
     check("starting fresh picks a name that is free",
           r["runs"] and r["runs"][-1].get("KB_REPO_NAME") == "godspeed-2")
+    check("another provider from the longer list, by key, and the key message deleted",
+          r["hstate"].get("provider") == "deepseek" and len(r["fake"].deleted) == 1
+          and any_has(r["to"](111), "DeepSeek is connected"))
     check("a town the clock does not know is said, and the server's clock can be kept",
           any_has(r["to"](111), "I do not know the clock of Krefeld") and "config set timezone Europe/Berlin" in r["hermes"])
+
+
+def test_key_provider():
+    good, bad = "sk-or-good-0123456789abcdef", "sk-or-bad-0123456789abcdef"
+    r = scenario_run("OpenRouter by key: a short answer, a key that fails, a key that works", {
+        "users": USERS,
+        "start": [{"from": 111, "text": "/start"}],
+        "rules": [
+            {"when": "Which AI should I think with", "do": [{"from": 111, "press": "openrouter"}]},
+            {"when": "Send me your OpenRouter API key", "do": [{"from": 111, "text": "short"}]},
+            {"when": "does not look like an API key", "do": [{"from": 111, "text": bad}]},
+            {"when": "did not answer with that key", "do": [{"from": 111, "text": good}]},
+            {"when": "already have a Mission Control", "do": [{"from": 111, "press": "repo:fresh"}]},
+            {"when": "morning brief", "do": [{"from": 111, "press": "brief:no"}]},
+        ]})
+    to_anna = r["to"](111)
+    check("it finishes, exit 0", r["rc"] == 0)
+    check("no ChatGPT sign-in is started for another provider", "auth add openai-codex" not in r["hermes"])
+    check("something that is not a key is said", any_has(to_anna, "That does not look like an API key"))
+    check("a key that fails is said, with what the provider answered",
+          any_has(to_anna, "OpenRouter did not answer with that key", "Provider said"))
+    check("the key that works is kept, with Hermes' default model for OpenRouter",
+          r["hstate"].get("provider") == "openrouter" and r["hstate"].get("keys", {}).get("openrouter") == good
+          and r["hstate"].get("model") == "z-ai/glm-5.2")
+    check("every message with a key is deleted from the chat", len(r["fake"].deleted) == 3)
+    check("no key is in the log, the output or any message the bot sent",
+          all(k not in r["log"] and k not in r["out"] and not any_has(to_anna, k) for k in (good, bad)))
+    check("the installer's own ChatGPT sign-in is skipped", r["runs"] and r["runs"][-1].get("KB_SIGNIN_SKIP") == "1")
 
 
 def test_nothing_to_do():
@@ -327,6 +391,7 @@ if __name__ == "__main__":
     test_happy()
     test_snags()
     test_found_repo()
+    test_key_provider()
     test_nothing_to_do()
     print()
     if FAILS:

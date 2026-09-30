@@ -43,12 +43,16 @@ Telegram bot.
    for environment variables if its form has one, or in a file called `.env` beside
    `compose.yaml` holding the line `GODSPEED_TELEGRAM_TOKEN=123456789:ABCdef...`, then
    `docker compose up -d`.
-3. Open your bot in Telegram and press Start.
+3. Open your bot in Telegram and press Start. A bot you have written to before shows no Start
+   button; then send it any message.
 
-The bot then walks you through it: a code to type on ChatGPT's sign-in page, a code to type
-on GitHub's, and a few questions as buttons (a new folder or the one you already have, the
-morning brief and which city's clock it follows, and whether this server may tell Michael
-the install worked). Then it runs
+The bot then walks you through it. First your assistant's brain, the AI company it thinks
+with, paid by you directly: ChatGPT (a code to type on ChatGPT's sign-in page), OpenRouter,
+Claude, OpenAI, Google Gemini, or any other provider Hermes supports, by pasting its key (the
+bot deletes that message at once). It only goes on once the assistant has answered a test
+question with it. Then a code to type on GitHub's page, and a few questions as buttons (a new
+folder or the one you already have, and the morning brief with which city's clock it
+follows). Then it runs
 the same setup as `godspeed-setup`, hands itself over to your assistant, and ends with the
 line that puts the same mission control on your Windows PC or Mac.
 

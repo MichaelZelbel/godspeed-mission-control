@@ -68,10 +68,15 @@ WINDOWS_EXE = "https://github.com/MichaelZelbel/godspeed-mission-control/release
 ONE_LINER = "https://raw.githubusercontent.com/MichaelZelbel/godspeed-mission-control/main/install-godspeed.sh"
 
 
+SECRETS = []   # keys the reader sent, masked in every log line like the bot token
+
+
 def log(msg):
     line = "%s %s" % (time.strftime("%Y-%m-%dT%H:%M:%S"), msg)
     if TOKEN:
         line = line.replace(TOKEN, "<token>")
+    for s in SECRETS:
+        line = line.replace(s, "<key>")
     print(line, flush=True)
     try:
         os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
@@ -263,7 +268,16 @@ class Chat:
         if not self._is_owner(who, chat):
             self._refuse(chat.get("id"))
             return None
+        self.last_text_id = m.get("message_id")   # so a key the reader sent can be deleted
         return ("text", (m.get("text") or "").strip())
+
+    def delete_last_text(self):
+        if getattr(self, "last_text_id", None):
+            try:
+                tg("deleteMessage", chat_id=self.st["chat_id"], message_id=self.last_text_id)
+            except TelegramError as e:
+                log("could not delete the message with the key (%s)" % e)
+            self.last_text_id = None
 
     def _may_claim(self, who):
         if not OWNER_WANTED:
@@ -520,23 +534,163 @@ def ask_zone(chat):
 
 # --- The steps -------------------------------------------------------------------------------
 
-def step_chatgpt(chat):
+# --- The brain: which AI company the assistant thinks with ---------------------------------
+# Any provider Hermes knows. The five most asked-for are buttons; the rest come from Hermes' own
+# list (hermes_cli.models_catalog_static.CANONICAL_PROVIDERS, the providers whose sign-in is a
+# key). Each gets Hermes' own default model for it (hermes_cli.models.get_default_model_for_
+# provider). Nothing counts as connected until the assistant has answered a test question with
+# it: on 2026-10-01 a real ChatGPT sign-in finished, the model setting still named a Claude
+# model through another route, and the first "Hi" was refused. The test question finds that.
+
+TOP_BRAINS = [("openai-codex", "ChatGPT (sign in with your ChatGPT plan)"),
+              ("openrouter", "OpenRouter (one key, many AI models)"),
+              ("anthropic", "Claude (Anthropic API key)"),
+              ("openai-api", "OpenAI (API key)"),
+              ("gemini", "Google Gemini (API key)")]
+# Where Hermes cannot be asked (a test run), these stand in for its list and its defaults.
+FALLBACK_MORE = [("deepseek", "DeepSeek"), ("xai", "xAI"), ("fireworks", "Fireworks AI"),("huggingface", "Hugging Face"),
+                 ("nvidia", "NVIDIA NIM"), ("kimi-coding", "Kimi / Kimi Coding Plan"), ("zai", "Z.AI / GLM")]
+FALLBACK_MODELS = {"openrouter": "z-ai/glm-5.2", "anthropic": "claude-fable-5.1", "openai-api": "gpt-6-sol",
+                   "gemini": "gemini-3.8-flash", "deepseek": "deepseek-flash", "xai": "grok-4.6"}
+FALLBACK_CODEX = ["gpt-6-sol", "gpt-5.6-terra", "gpt-5.5", "gpt-5.4"]
+# Key providers that need more than a key (a local program, an endpoint, a cloud account).
+NOT_A_KEY_ALONE = {"lmstudio", "azure-foundry", "copilot", "custom", "commandcode-anthropic", "actual", "router"}
+PROOF_QUESTION = "Reply with the single word: ready"
+
+
+def more_brains():
+    """(slug, label) of every provider Hermes takes a key for, beyond the five buttons."""
+    top = {s for s, _ in TOP_BRAINS}
+    try:
+        from hermes_cli.auth import PROVIDER_REGISTRY
+        from hermes_cli.models_catalog_static import CANONICAL_PROVIDERS
+        out = [(p.slug, p.label) for p in CANONICAL_PROVIDERS
+               if getattr(PROVIDER_REGISTRY.get(p.slug), "auth_type", None) == "api_key"
+               and p.slug not in top and p.slug not in NOT_A_KEY_ALONE]
+        return out or FALLBACK_MORE
+    except Exception:
+        return FALLBACK_MORE
+
+
+def brain_label(slug):
+    for s, label in TOP_BRAINS + more_brains():
+        if s == slug:
+            return label.split(" (")[0]
+    return slug
+
+
+def default_model(slug):
+    try:
+        from hermes_cli.models import get_default_model_for_provider
+        return get_default_model_for_provider(slug) or FALLBACK_MODELS.get(slug, "")
+    except Exception:
+        return FALLBACK_MODELS.get(slug, "")
+
+
+def codex_models():
+    try:
+        from hermes_cli.codex_models import DEFAULT_CODEX_MODELS
+        first = default_model("openai-codex")
+        return list(dict.fromkeys(m for m in [first] + list(DEFAULT_CODEX_MODELS) if m))[:8]
+    except Exception:
+        return FALLBACK_CODEX
+
+
+def use_model(slug, model):
+    run(HERMES + ["config", "set", "model.provider", slug], timeout=60)
+    if model:
+        run(HERMES + ["config", "set", "model.default", model], timeout=60)
+
+
+def proof():
+    """(True, "") when the assistant answers a question with the AI set up, else (False, why)."""
+    rc, out = run(HERMES + ["chat", "--oneshot", "-q", PROOF_QUESTION], timeout=180)
+    if rc == 0:
+        return True, ""
+    text = ANSI.sub("", out)
+    why = next((l.strip() for l in text.splitlines() if "Provider said" in l or "HTTP" in l), "")
+    return False, why or next((l.strip() for l in reversed(text.splitlines()) if l.strip()), "no answer")
+
+
+def step_brain(chat):
+    st = chat.st
     if os.environ.get("KB_SIGNIN_SKIP") == "1":
-        log("ChatGPT: skipped, as asked (KB_SIGNIN_SKIP=1)")
+        log("brain: skipped, as asked (KB_SIGNIN_SKIP=1)")
         return
-    if chatgpt_done():
-        chat.send("Step 1 of 3: ChatGPT is already connected.")
+    if st.get("brain_ok"):
+        chat.send("Step 1 of 3: my brain is already set up (%s)." % esc(brain_label(st.get("brain", ""))))
         return
-    chat.send("<b>Step 1 of 3: ChatGPT.</b> One moment, I am asking ChatGPT for a sign-in code.")
-    device_signin(
-        chat, "ChatGPT",
-        HERMES + ["auth", "add", "openai-codex", "--type", "oauth", "--no-browser"], True,
-        lambda url, code: (
-            "Open this page on your phone or computer:\n%s\n\nType this code there:\n<code>%s</code>\n\n"
-            "Sign in with your ChatGPT account. Any plan with Codex works; Plus or higher is best "
-            "for daily use. The code lasts 15 minutes, and I write back as soon as it went through." % (url, code)),
-        chatgpt_done)
-    chat.send("ChatGPT is connected.")
+    while True:
+        slug = st.get("brain")
+        if not slug:
+            slug = chat.ask(
+                "<b>Step 1 of 3: my brain.</b> Which AI should I think with? You pay that company "
+                "directly, with a plan or key you already have or make now. You can switch later.",
+                [(s, label) for s, label in TOP_BRAINS] + [("more", "Another provider")])
+            if slug == "more":
+                slug = chat.ask("Which one?", more_brains())
+            st["brain"] = slug
+            save_state(st)
+        ok = brain_chatgpt(chat) if slug == "openai-codex" else brain_key(chat, slug)
+        if ok:
+            st["brain_ok"] = True
+            save_state(st)
+            chat.send("%s is connected, and I answered a first test question with it. To switch to "
+                      "another AI later, send /model here." % esc(brain_label(slug)))
+            return
+        st.pop("brain", None)       # "Pick another AI"
+        save_state(st)
+
+
+def brain_chatgpt(chat):
+    if not chatgpt_done():
+        chat.send("One moment, I am asking ChatGPT for a sign-in code.")
+        device_signin(
+            chat, "ChatGPT",
+            HERMES + ["auth", "add", "openai-codex", "--type", "oauth", "--no-browser"], True,
+            lambda url, code: (
+                "Open this page on your phone or computer:\n%s\n\nType this code there:\n<code>%s</code>\n\n"
+                "Sign in with your ChatGPT account. Any plan with Codex works; Plus or higher is best "
+                "for daily use. The code lasts 15 minutes, and I write back as soon as it went through." % (url, code)),
+            chatgpt_done)
+        chat.send("You are signed in to ChatGPT. One moment, I am finding a model your plan may use.")
+    why = ""
+    for model in codex_models():       # which ones a plan may use differs; the first that answers wins
+        use_model("openai-codex", model)
+        ok, why = proof()
+        log("brain: ChatGPT with %s: %s" % (model, "answers" if ok else why[:200]))
+        if ok:
+            return True
+    a = chat.ask("You are signed in to ChatGPT, but none of its models answered me. ChatGPT said: %s"
+                 % esc(why[:400]), [("brain:retry", "Try again"), ("brain:other", "Pick another AI")])
+    return a == "brain:retry" and brain_chatgpt(chat)
+
+
+def brain_key(chat, slug):
+    name = brain_label(slug)
+    prompt = ("Send me your %s API key. You make one in your %s account. I delete your message as "
+              "soon as I have read it, so the key does not stay in this chat." % (esc(name), esc(name)))
+    while True:
+        a = chat.ask(prompt, [("brain:other", "Pick another AI")], free_text=True)
+        if a == "brain:other":
+            return False
+        key = a.strip()
+        chat.delete_last_text()
+        if not key or re.search(r"\s", key) or len(key) < 16:
+            prompt = "That does not look like an API key. Send the whole key, or pick another AI."
+            continue
+        SECRETS.append(key)
+        chat.send("Thanks, I deleted your message. Checking the key with %s..." % esc(name))
+        run(HERMES + ["auth", "remove", slug, "godspeed-setup"], timeout=60)   # a key tried before
+        rc, _ = run(HERMES + ["auth", "add", slug, "--type", "api-key", "--api-key", key,
+                              "--label", "godspeed-setup"], timeout=60)
+        use_model(slug, default_model(slug))
+        ok, why = proof() if rc == 0 else (False, "the key could not be stored")
+        log("brain: %s: %s" % (slug, "answers" if ok else why[:200]))
+        if ok:
+            return True
+        prompt = ("%s did not answer with that key. It said: %s\n\nSend another key, or pick another AI."
+                  % (esc(name), esc(why[:400])))
 
 
 def step_github(chat):
@@ -548,7 +702,9 @@ def step_github(chat):
                   "One moment, I am asking GitHub for a sign-in code.")
         device_signin(
             chat, "GitHub",
-            GH + ["auth", "login", "--hostname", "github.com", "--git-protocol", "https", "--web", "--skip-ssh-key"],
+            # No --skip-ssh-key: the image's gh (Debian's 2.46) does not know it and stops with its
+            # usage text, found on the first real run, 2026-10-01. With https it asks nothing anyway.
+            GH + ["auth", "login", "--hostname", "github.com", "--git-protocol", "https", "--web"],
             False,
             lambda url, code: (
                 "No GitHub account yet? Make a free one first: https://github.com/signup\n\n"
@@ -577,14 +733,6 @@ def step_questions(chat):
         save_state(st)
     if st.get("brief") and "tz" not in st:
         st["tz"] = ask_zone(chat)
-        save_state(st)
-    if "count" not in st:
-        st["count"] = chat.ask(
-            "Last one, and it changes nothing for you. Michael, who made Godspeed Mission Control, "
-            "cannot see whether anybody installs it. May this server tell him once that the setup "
-            "worked? It sends the word 'installed', the version and a random number made just now. "
-            "No name, no files, and the server that receives it keeps no address.",
-            [("count:yes", "Yes, tell him"), ("count:no", "No")]) == "count:yes"
         save_state(st)
 
 
@@ -628,9 +776,13 @@ def step_install(chat):
     env = dict(os.environ)
     for k in ("GODSPEED_TELEGRAM_TOKEN", "GODSPEED_TELEGRAM_OWNER"):
         env.pop(k, None)
-    env.update(KB_TELEGRAM_SKIP="1",
+    # The brain is set up and proved already (step_brain), so the installer's own ChatGPT
+    # sign-in is skipped: for any other provider it would wait fifteen minutes for a code
+    # nobody sees. The install count is not asked in the chat (Michael, 2026-10-01: it brings
+    # nothing), so it is answered no and nothing is sent.
+    env.update(KB_TELEGRAM_SKIP="1", KB_SIGNIN_SKIP="1",
                KB_MORNING_BRIEF="yes" if st.get("brief") else "no",
-               GODSPEED_INSTALL_COUNT="yes" if st.get("count") else "no")
+               GODSPEED_INSTALL_COUNT="no")
     if st.get("repo"):
         env["GODSPEED_REPO"] = "https://github.com/%s.git" % st["repo"]
     elif not os.path.isdir(os.path.join(GODSPEED, ".git")):
@@ -756,13 +908,13 @@ def main():
         chat.send(
             "Hi %s. I am your Godspeed Mission Control, running on your own server.\n\n"
             "Three short steps and I am ready, about ten minutes:\n"
-            "1. Connect ChatGPT. That is my brain, and your own ChatGPT plan pays for it.\n"
+            "1. Choose my brain: the AI company I think with. You pay it directly.\n"
             "2. Connect GitHub. That is where your folder is kept, private to you.\n"
             "3. A few quick questions.\n\n"
             "From now on I answer only you." % esc(st.get("owner_name", "there")))
     else:
         chat.send("I restarted, and I am picking up where we were.")
-    step_chatgpt(chat)
+    step_brain(chat)
     step_github(chat)
     step_questions(chat)
     step_install(chat)
