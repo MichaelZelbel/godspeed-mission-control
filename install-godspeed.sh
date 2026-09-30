@@ -32,9 +32,9 @@ set -uo pipefail
 # exactly the code that passed its end-to-end runs, and the pin only moves by a
 # deliberate edit here. KB_BRANCH pins the library the engine fetches for
 # itself, or the entry file would be pinned while its insides floated.
-ENGINE="https://raw.githubusercontent.com/MichaelZelbel/kit-bootstrap/v2.11/setup-godspeed.sh"
+ENGINE="https://raw.githubusercontent.com/MichaelZelbel/kit-bootstrap/v2.13/setup-godspeed.sh"
 STARTER="https://github.com/MichaelZelbel/godspeed-mission-control.git"
-KB_BRANCH="v2.11"
+KB_BRANCH="v2.13"
 export KB_BRANCH
 
 SCRIPT="$(curl -fsSL "$ENGINE")" || SCRIPT=""

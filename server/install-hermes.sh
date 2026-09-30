@@ -38,7 +38,7 @@ SAFE=19000
 # tag. They carry the behaviour this script must not re-learn the hard way:
 # terminal.cwd is the only lever that moves the agent, a failed one-shot still
 # exits 0, and `hermes config set` replaces a list.
-LIB_URL="https://raw.githubusercontent.com/MichaelZelbel/kit-bootstrap/v2.11/lib.sh"
+LIB_URL="https://raw.githubusercontent.com/MichaelZelbel/kit-bootstrap/v2.13/lib.sh"
 # The Docker image carries its own copy at the same pin (KB_BOOTSTRAP_DIR), so an image
 # runs exactly the code it was built and tested with.
 if [ -n "${KB_BOOTSTRAP_DIR:-}" ] && [ -s "$KB_BOOTSTRAP_DIR/lib.sh" ]; then
