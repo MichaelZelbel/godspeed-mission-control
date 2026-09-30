@@ -23,6 +23,13 @@ services:
       TZ: ${TZ:-Europe/Berlin}
       # The patrol that stops runaway commands inside the container. on | off
       GODSPEED_PATROL: ${GODSPEED_PATROL:-on}
+      # Setup from Telegram, with no terminal: your bot's token from BotFather. With it,
+      # press Start in your bot and the setup arrives as messages (docker/README.md).
+      # Empty means setup by terminal: docker compose exec godspeed godspeed-setup
+      GODSPEED_TELEGRAM_TOKEN: ${GODSPEED_TELEGRAM_TOKEN:-}
+      # Optional: only this Telegram @username (or numeric id) may take the bot. Empty
+      # means the first person to write to it, which is you if you write first.
+      GODSPEED_TELEGRAM_OWNER: ${GODSPEED_TELEGRAM_OWNER:-}
 
     # THE WALLS. Whatever the assistant starts, the container as a whole never gets more
     # than this. One core by default, which leaves the rest of the server to everything

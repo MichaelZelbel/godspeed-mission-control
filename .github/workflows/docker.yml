@@ -28,6 +28,8 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
+      - name: Setup from Telegram, against a stand-in Telegram
+        run: python3 docker/test/test-telegram-setup.py
       - name: The reader's path, twice
         run: bash docker/test.sh
 

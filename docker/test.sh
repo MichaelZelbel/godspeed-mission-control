@@ -99,10 +99,79 @@ for _ in $(seq 1 200); do docker exec godspeed grep -q '^v2+' /opt/data/.godspee
 check "the new image ran the update path once" sh -c "docker exec godspeed grep -q '^v2+' /opt/data/.godspeed/image-version"
 check "the folder survived the upgrade" x grep -q 'remember me' /opt/data/godspeed/volume-probe.txt
 check "healthy after the upgrade" wait_healthy
+check "without a bot token the chat setup stays out of the way" sh -c \
+  "! docker exec godspeed pgrep -f 'bin/godspeed-telegram-setup'"
+
+# Setup from Telegram (usr/local/bin/godspeed-telegram-setup): a fresh volume that is given a
+# bot token and nothing else, as a hosting company's form would. A stand-in Telegram inside the
+# container (docker/test/fake-telegram.py) plays the reader: Start, a stranger writing second,
+# three buttons. The real installer runs; only GitHub (fake-gh) and the ChatGPT code are stood in.
+echo "== setup from Telegram, on a fresh volume, nothing typed"
+docker compose down -v >/dev/null 2>&1
+TG_TOKEN="123456789:TESTtoken_docker"
+mkdir -p "$WORK/tg"
+cat > "$WORK/tg/scenario.json" <<'EOF'
+{"users": {"111": {"first_name": "Tess", "username": "tess"}, "999": {"first_name": "Eve"}},
+ "start": [{"from": 111, "text": "/start"}, {"from": 999, "text": "hi"}],
+ "rules": [{"when": "already have a Mission Control", "do": [{"from": 111, "press": "repo:fresh"}]},
+           {"when": "morning brief", "do": [{"from": 111, "press": "brief:no"}]},
+           {"when": "tell him once", "do": [{"from": 111, "press": "count:no"}]}]}
+EOF
+cat > "$WORK/compose.override.yaml" <<EOF
+services:
+  godspeed:
+    image: $IMG
+    pull_policy: never
+    environment:
+      GODSPEED_TELEGRAM_TOKEN: "$TG_TOKEN"
+      GODSPEED_TELEGRAM_API: "http://127.0.0.1:8081"
+      KB_SIGNIN_SKIP: "1"
+    volumes:
+      - $ROOT/docker/test/fake-gh:/usr/local/bin/gh:ro
+      - $ROOT/docker/test/fake-telegram.py:/opt/test/fake-telegram.py:ro
+      - $ROOT/docker/test/probe-chatgpt-code.py:/opt/test/probe-chatgpt-code.py:ro
+      - $WORK/tg:/opt/test/tg
+EOF
+docker compose up -d >/dev/null 2>&1
+check "the container is healthy with only a bot token" wait_healthy
+docker exec -d godspeed sh -c 'PY=/opt/hermes/.venv/bin/python3; [ -x "$PY" ] || PY=python3;
+  exec "$PY" /opt/test/fake-telegram.py --port 8081 --token "'"$TG_TOKEN"'" \
+    --scenario /opt/test/tg/scenario.json --record /opt/test/tg/record.json'
+tg_done() { docker exec godspeed grep -q '"done": true' /opt/data/.godspeed/telegram-setup.json 2>/dev/null; }
+for _ in $(seq 1 300); do tg_done && break; sleep 3; done
+check "the chat setup finishes by itself" tg_done
+check "the first writer is greeted and owns the bot" grep -q 'Hi Tess' "$WORK/tg/record.json"
+check "a stranger is turned away" grep -q 'This assistant belongs to someone else' "$WORK/tg/record.json"
+check "the installer built the folder and pushed it" x sh -c \
+  'test -f /opt/data/godspeed/AGENTS.md && git -C /opt/data/godspeed ls-remote --exit-code origin >/dev/null'
+check "the answers reached the installer (install count: no)" x grep -q '^GODSPEED_INSTALL_COUNT=0' /opt/data/.godspeed/device.env
+check "the bot is handed to Hermes, for its owner only" x sh -c \
+  "grep -qx 'TELEGRAM_ALLOWED_USERS=111' /opt/data/.env && grep -qx 'TELEGRAM_HOME_CHANNEL=111' /opt/data/.env && grep -q '^TELEGRAM_BOT_TOKEN=' /opt/data/.env"
+check "the Hermes settings file is private" x sh -c '[ "$(stat -c %a /opt/data/.env)" = 600 ]'
+check "the first message reached the chat" grep -q 'this is its chat' "$WORK/tg/record.json"
+check "the token is not in the chat setup's log" sh -c \
+  "docker exec godspeed test -s /opt/data/logs/godspeed-telegram-setup.log && ! docker exec godspeed grep -qF '$TG_TOKEN' /opt/data/logs/godspeed-telegram-setup.log"
+check "the chat setup is gone once done" sh -c "! docker exec godspeed pgrep -f 'bin/godspeed-telegram-setup'"
+check "nothing in the volume belongs to root after the chat setup" sh -c "[ -z \"\$(docker exec godspeed find /opt/data -user root -print -quit)\" ]"
+check "healthy after the bot was handed over" wait_healthy
+
+# The one part stood in above is the ChatGPT code. Here the real Hermes of this image prints
+# one, in a throwaway settings folder, and the chat setup must read it. No network is not
+# counted as a failure; a code printed and not read is.
+PROBE="$(docker exec -u hermes -e HOME=/opt/data godspeed sh -c \
+  'D=$(mktemp -d); PY=/opt/hermes/.venv/bin/python3; [ -x "$PY" ] || PY=python3;
+   HERMES_HOME=$D PATH=/opt/hermes/.venv/bin:$PATH timeout 90 "$PY" /opt/test/probe-chatgpt-code.py; rm -rf "$D"' 2>&1 | tail -1)"
+case "$PROBE" in
+  FOUND*)      printf 'PASS  the real ChatGPT sign-in prints a code the chat setup reads (%s)\n' "${PROBE#FOUND }" ;;
+  UNREACHED*)  printf 'NOTE  ChatGPT'"'"'s sign-in could not be reached from here, so the real code was not read: %s\n' "${PROBE#UNREACHED }" ;;
+  *)           printf 'FAIL  the chat setup cannot read the code the real ChatGPT sign-in prints: %s\n' "$PROBE"; FAILS=$((FAILS+1)) ;;
+esac
 
 echo
 if [ "$FAILS" -eq 0 ]; then echo "ALL PASS"; else
   echo "$FAILS FAILED. Setup's output:"; sed 's/\x1b\[[0-9;]*m//g' "$WORK/setup.log" | tail -60
   docker exec godspeed tail -20 /opt/data/logs/godspeed-upgrade.log 2>/dev/null
+  echo "== the chat setup's log"; docker exec godspeed tail -60 /opt/data/logs/godspeed-telegram-setup.log 2>/dev/null
+  echo "== what the stand-in Telegram received"; cat "$WORK/tg/record.json" 2>/dev/null | head -80
   exit 1
 fi

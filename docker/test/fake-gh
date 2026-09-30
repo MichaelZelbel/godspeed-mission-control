@@ -13,6 +13,8 @@ case "${1:-} ${2:-}" in
     mkdir -p "$(dirname "$REMOTE")" && git init -q --bare "$REMOTE" \
       && git -C "$src" remote add origin "$REMOTE" \
       && git -C "$src" push -q -u origin HEAD ;;
-  "repo view") printf 'true\t%s\n' "$REMOTE" ;;
+  # Asked about a named repository (the Telegram setup's "is there one already?"), the
+  # stand-in account has none. Asked with no name, from inside the folder, it is the one made.
+  "repo view") case "${3:-}" in ""|--*) printf 'true\t%s\n' "$REMOTE" ;; *) exit 1 ;; esac ;;
   *) exit 0 ;;
 esac

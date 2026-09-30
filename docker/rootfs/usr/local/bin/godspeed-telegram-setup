@@ -1,0 +1,721 @@
+#!/usr/bin/env python3
+# =============================================================================
+# godspeed-telegram-setup: the whole setup as a chat with the reader's own bot.
+#
+# For a server bought with nothing typed on it: a "Deploy on Hostinger" button, or
+# `docker compose up -d` with GODSPEED_TELEGRAM_TOKEN in the environment. The reader
+# makes a bot with BotFather, gives its token to the server once, presses Start in
+# Telegram, and everything `godspeed-setup` asks on a terminal arrives as messages:
+# the ChatGPT code, the GitHub code, and the questions, as buttons.
+#
+# It does not replace the installer. It collects the answers and the two sign-ins,
+# then runs the same `godspeed-setup` with those answers in the environment and no
+# keyboard, exactly the way docker/test.sh runs it. So there is still one installer
+# to fix, and a terminal setup and a Telegram setup build the same server.
+#
+# Why a program of its own and not Hermes: the assistant cannot talk before ChatGPT
+# is connected, and connecting ChatGPT is the first thing to do. This needs no model.
+#
+# ONE READER AT A TIME. Telegram hands a bot's messages to one reader, so while this
+# runs the gateway must not have the token: it is written into Hermes' env file only
+# at the end, after the installer finished, and the gateway is restarted to pick it
+# up. The environment variable is named GODSPEED_TELEGRAM_TOKEN and not
+# TELEGRAM_BOT_TOKEN for the same reason: Hermes would take the second one itself.
+#
+# Who owns the bot: the first person to write to it in a private chat, the same
+# rule the terminal setup uses (its "send it any message; hi will do"), unless
+# GODSPEED_TELEGRAM_OWNER names a numeric Telegram id or an @username.
+#
+# Run by the s6 service godspeed-telegram-setup, as the assistant's account. Exits
+# 0 when setup is done or there is nothing for it to do, so the service sleeps.
+# Safe to restart at any point: answers and the Telegram position are kept in
+# ~/.godspeed/telegram-setup.json, and finished sign-ins are never asked again.
+# The token is never printed and never logged.
+# =============================================================================
+import html
+import json
+import os
+import re
+import shlex
+import subprocess
+import sys
+import threading
+import time
+import urllib.error
+import urllib.request
+
+try:
+    import pty  # POSIX only; Hermes prints its code at once only on a terminal
+except ImportError:  # pragma: no cover - Windows test runs
+    pty = None
+
+HOME = os.environ.get("HOME") or os.path.expanduser("~")
+TOKEN = os.environ.get("GODSPEED_TELEGRAM_TOKEN", "").strip()
+OWNER_WANTED = os.environ.get("GODSPEED_TELEGRAM_OWNER", "").strip()
+API = os.environ.get("GODSPEED_TELEGRAM_API", "https://api.telegram.org").rstrip("/")
+STATE_FILE = os.environ.get("GODSPEED_TG_STATE", os.path.join(HOME, ".godspeed", "telegram-setup.json"))
+LOG_FILE = os.environ.get("GODSPEED_TG_LOG", os.path.join(HOME, "logs", "godspeed-telegram-setup.log"))
+HERMES = shlex.split(os.environ.get("GODSPEED_TG_HERMES", "hermes"))
+GH = shlex.split(os.environ.get("GODSPEED_TG_GH", "gh"))
+SETUP = shlex.split(os.environ.get("GODSPEED_TG_SETUP", "/usr/local/bin/godspeed-setup"))
+HERMES_DIR = os.environ.get("HERMES_HOME") or os.path.join(HOME, ".hermes")
+GODSPEED = os.environ.get("GODSPEED") or os.path.join(HOME, "godspeed")
+TZ = os.environ.get("TZ", "Europe/Berlin")
+SIGNIN_MINUTES = 16          # the device codes last fifteen
+SETUP_MINUTES = 45
+
+WINDOWS_EXE = "https://github.com/MichaelZelbel/godspeed-mission-control/releases/latest/download/GodspeedSetup.exe"
+ONE_LINER = "https://raw.githubusercontent.com/MichaelZelbel/godspeed-mission-control/main/install-godspeed.sh"
+
+
+def log(msg):
+    line = "%s %s" % (time.strftime("%Y-%m-%dT%H:%M:%S"), msg)
+    if TOKEN:
+        line = line.replace(TOKEN, "<token>")
+    print(line, flush=True)
+    try:
+        os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
+        with open(LOG_FILE, "a", encoding="utf-8") as f:
+            f.write(line + "\n")
+    except OSError:
+        pass
+
+
+def esc(s):
+    return html.escape(str(s), quote=False)
+
+
+# --- The state, kept across restarts ------------------------------------------------------
+
+def load_state():
+    try:
+        with open(STATE_FILE, encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {}
+
+
+def save_state(st):
+    os.makedirs(os.path.dirname(STATE_FILE), exist_ok=True)
+    tmp = STATE_FILE + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(st, f, indent=1)
+    os.replace(tmp, STATE_FILE)
+
+
+def env_lines():
+    try:
+        with open(os.path.join(HERMES_DIR, ".env"), encoding="utf-8") as f:
+            return f.read().splitlines()
+    except OSError:
+        return []
+
+
+def env_has(prefix, pattern=r"."):
+    return any(re.match(re.escape(prefix) + pattern, l) for l in env_lines())
+
+
+def write_telegram_env(user_id, chat_id):
+    """The same three lines server/install.sh's telegram_write puts there."""
+    path = os.path.join(HERMES_DIR, ".env")
+    os.makedirs(HERMES_DIR, exist_ok=True)
+    keep = [l for l in env_lines() if not re.match(r"TELEGRAM_(BOT_TOKEN|ALLOWED_USERS|HOME_CHANNEL)=", l)]
+    keep += ["TELEGRAM_BOT_TOKEN=%s" % TOKEN, "TELEGRAM_ALLOWED_USERS=%s" % user_id,
+             "TELEGRAM_HOME_CHANNEL=%s" % chat_id]
+    old = os.umask(0o077)
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            f.write("\n".join(keep) + "\n")
+    finally:
+        os.umask(old)
+    try:
+        os.chmod(path, 0o600)
+    except OSError:
+        pass
+
+
+def run(cmd, timeout=120, stdin_text=None):
+    """A quiet command: (exit code, output). A missing program is exit 127."""
+    try:
+        p = subprocess.run(cmd, input=stdin_text, capture_output=True, text=True, timeout=timeout)
+        return p.returncode, (p.stdout or "") + (p.stderr or "")
+    except FileNotFoundError:
+        return 127, ""
+    except subprocess.TimeoutExpired:
+        return 124, ""
+
+
+# --- Telegram ------------------------------------------------------------------------------
+
+class TelegramError(Exception):
+    def __init__(self, msg, code=None):
+        super().__init__(msg)
+        self.code = code
+
+
+def tg(method, http_timeout=30, **params):
+    body = json.dumps({k: v for k, v in params.items() if v is not None}).encode()
+    req = urllib.request.Request("%s/bot%s/%s" % (API, TOKEN, method), data=body,
+                                 headers={"Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=http_timeout) as r:
+            data = json.loads(r.read().decode() or "{}")
+    except urllib.error.HTTPError as e:
+        try:
+            data = json.loads(e.read().decode() or "{}")
+        except ValueError:
+            data = {}
+        raise TelegramError("%s: HTTP %s %s" % (method, e.code, data.get("description", "")), e.code)
+    except (urllib.error.URLError, OSError, ValueError) as e:
+        raise TelegramError("%s: %s" % (method, getattr(e, "reason", e)))
+    if not data.get("ok"):
+        raise TelegramError("%s: %s" % (method, data.get("description", "not ok")), data.get("error_code"))
+    return data.get("result")
+
+
+def keyboard(buttons):
+    if not buttons:
+        return None
+    return {"inline_keyboard": [[{"text": label, "callback_data": data}] for data, label in buttons]}
+
+
+class Chat:
+    """The conversation with the owner, and the door for everybody else."""
+
+    def __init__(self, st):
+        self.st = st
+        self.refused = {}
+        self.question = None        # (text, buttons) to show again on /start
+
+    # sending
+    def send(self, text, buttons=None):
+        for attempt in range(5):
+            try:
+                return tg("sendMessage", chat_id=self.st["chat_id"], text=text, parse_mode="HTML",
+                          disable_web_page_preview=True, reply_markup=keyboard(buttons))
+            except TelegramError as e:
+                log("could not send a message (%s); trying again" % e)
+                time.sleep(2 + attempt * 3)
+        return None
+
+    def edit(self, message, text):
+        if not message:
+            return
+        try:
+            tg("editMessageText", chat_id=self.st["chat_id"], message_id=message["message_id"],
+               text=text, parse_mode="HTML", disable_web_page_preview=True)
+        except TelegramError:
+            pass
+
+    # receiving
+    def poll(self, timeout):
+        """One round of updates. Returns the owner's events as ("text"|"button", value)."""
+        try:
+            updates = tg("getUpdates", http_timeout=timeout + 15, offset=self.st.get("offset"),
+                         allowed_updates=["message", "callback_query"], timeout=timeout)
+        except TelegramError as e:
+            if e.code == 409:
+                log("another program is reading this bot's messages (Telegram says conflict); waiting")
+            else:
+                log("could not reach Telegram (%s); waiting" % e)
+            time.sleep(10)
+            return []
+        events = []
+        for u in updates or []:
+            self.st["offset"] = u["update_id"] + 1
+            ev = self._event(u)
+            if ev:
+                events.append(ev)
+        save_state(self.st)
+        return events
+
+    def _event(self, u):
+        if "callback_query" in u:
+            cq = u["callback_query"]
+            who, msg = cq.get("from", {}), cq.get("message") or {}
+            chat = msg.get("chat", {})
+            try:
+                tg("answerCallbackQuery", callback_query_id=cq["id"])
+            except TelegramError:
+                pass
+            if not self._is_owner(who, chat):
+                return None
+            if msg.get("message_id"):
+                try:
+                    tg("editMessageReplyMarkup", chat_id=chat.get("id"), message_id=msg["message_id"],
+                       reply_markup={"inline_keyboard": []})
+                except TelegramError:
+                    pass
+            return ("button", cq.get("data", ""))
+        m = u.get("message")
+        if not m or m.get("chat", {}).get("type") != "private":
+            return None
+        who, chat = m.get("from", {}), m["chat"]
+        if not self.st.get("owner_id"):
+            if not self._may_claim(who):
+                self._refuse(chat.get("id"))
+                return None
+            self.st.update(owner_id=who["id"], chat_id=chat["id"],
+                           owner_name=who.get("first_name") or who.get("username") or "there")
+            save_state(self.st)
+            log("owner: Telegram id %s" % who["id"])
+            return ("claimed", m.get("text", ""))
+        if not self._is_owner(who, chat):
+            self._refuse(chat.get("id"))
+            return None
+        return ("text", (m.get("text") or "").strip())
+
+    def _may_claim(self, who):
+        if not OWNER_WANTED:
+            return True
+        want = OWNER_WANTED.lstrip("@").lower()
+        return str(who.get("id")) == want or (who.get("username") or "").lower() == want
+
+    def _is_owner(self, who, chat):
+        return self.st.get("owner_id") and who.get("id") == self.st["owner_id"] \
+            and chat.get("id") == self.st["chat_id"]
+
+    def _refuse(self, chat_id):
+        if not chat_id or time.time() - self.refused.get(chat_id, 0) < 3600:
+            return
+        self.refused[chat_id] = time.time()
+        try:
+            tg("sendMessage", chat_id=chat_id, text="This assistant belongs to someone else.")
+        except TelegramError:
+            pass
+
+    # asking
+    def ask(self, text, buttons, free_text=False):
+        """Ask with buttons; returns the button's data, or the typed text when free_text."""
+        self.question = (text, buttons)
+        self.send(text, buttons)
+        while True:
+            for kind, value in self.poll(50):
+                if kind == "button" and any(value == d for d, _ in buttons):
+                    self.question = None
+                    return value
+                if kind in ("text", "claimed"):
+                    low = value.lower()
+                    if low.startswith("/start"):
+                        self.send(text, buttons)
+                        continue
+                    for d, label in buttons:
+                        if low == label.lower():
+                            self.question = None
+                            return d
+                    if free_text and value:
+                        self.question = None
+                        return value
+                    self.send("Tap one of the buttons above, please.")
+
+
+# --- The sign-ins ----------------------------------------------------------------------------
+
+ANSI = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]|\x1b\][^\x07]*\x07|\r")
+DASHED_CODE = re.compile(r"\b([A-Z0-9]{4,6}-[A-Z0-9]{4,6})\b")
+
+
+def find_device_code(raw):
+    """(url, code) from what a device sign-in printed, or None while either is missing.
+
+    Hermes (hermes_cli/auth_codex.py) prints the address and the code each on its own
+    line under "1. Open this URL" and "2. Enter this code:". gh prints "First copy your
+    one-time code: 1A2B-3C4D", or "One-time code (1A2B-3C4D) copied to clipboard" where
+    it has a clipboard, and "Open this URL to continue in your web browser: <url>"."""
+    text = ANSI.sub("", raw)
+    url = None
+    for u in re.findall(r"https?://[^\s'\"<>]+", text):
+        url = u.rstrip(".,);")
+        break
+    code = None
+    lines = [l.strip() for l in text.splitlines()]
+    for i, l in enumerate(lines):
+        m = re.search(r"code[^:()]*:\s*([A-Za-z0-9]+(?:-[A-Za-z0-9]+)*)\s*$", l, re.I)
+        if m and not m.group(1).lower().startswith("http"):
+            code = m.group(1)
+            break
+        if re.search(r"code:?$", l, re.I):
+            nxt = next((x for x in lines[i + 1:] if x), "")
+            if nxt and not nxt.lower().startswith("http"):
+                code = nxt.split()[0]
+                break
+    if not code:
+        m = DASHED_CODE.search(text)
+        code = m.group(1) if m else None
+    return (url, code) if url and code else None
+
+
+class Proc:
+    """A sign-in command whose output is read while it waits for the reader."""
+
+    def __init__(self, cmd, terminal):
+        self.out = ""
+        self.lock = threading.Lock()
+        popen = {"env": dict(os.environ, PYTHONUNBUFFERED="1")}
+        if os.name == "posix":
+            popen["start_new_session"] = True
+        if terminal and pty is not None:
+            master, slave = pty.openpty()
+            self.p = subprocess.Popen(cmd, stdin=slave, stdout=slave, stderr=slave, close_fds=True, **popen)
+            os.close(slave)
+            threading.Thread(target=self._read_fd, args=(master,), daemon=True).start()
+        else:
+            self.p = subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                                      stderr=subprocess.STDOUT, **popen)
+            threading.Thread(target=self._read_pipe, daemon=True).start()
+
+    def _add(self, chunk):
+        with self.lock:
+            self.out += chunk
+
+    def _read_fd(self, fd):
+        while True:
+            try:
+                b = os.read(fd, 4096)
+            except OSError:
+                break
+            if not b:
+                break
+            self._add(b.decode("utf-8", "replace"))
+        os.close(fd)
+
+    def _read_pipe(self):
+        for b in iter(lambda: self.p.stdout.read1(4096) if hasattr(self.p.stdout, "read1") else self.p.stdout.read(1), b""):
+            self._add(b.decode("utf-8", "replace"))
+
+    def text(self):
+        with self.lock:
+            return self.out
+
+    def stop(self):
+        if self.p.poll() is not None:
+            return
+        try:
+            if os.name == "posix":
+                import signal
+                os.killpg(self.p.pid, signal.SIGTERM)
+            else:
+                self.p.kill()
+            self.p.wait(10)
+        except Exception:
+            self.p.kill()
+
+
+def device_signin(chat, what, cmd, terminal, intro, is_done):
+    """Runs one device-code sign-in until it is done, offering a fresh code when one runs out."""
+    while True:
+        log("%s: starting the sign-in" % what)
+        proc = Proc(cmd, terminal)
+        started, shown, reminder = time.time(), None, None
+        while True:
+            if not shown:
+                found = find_device_code(proc.text())
+                if found:
+                    url, code = found
+                    reminder = "Still waiting for the code to go through. Open %s and type <code>%s</code>" % (esc(url), esc(code))
+                    shown = chat.send(intro(esc(url), esc(code)))
+            if proc.p.poll() is not None:
+                time.sleep(0.5)     # the reader thread takes the last lines
+                break
+            if time.time() - started > SIGNIN_MINUTES * 60:
+                proc.stop()
+                break
+            if not shown and time.time() - started > 90:
+                proc.stop()
+                break
+            for kind, value in chat.poll(3):
+                if kind in ("text", "claimed"):
+                    chat.send(reminder or "One moment, the code is on its way.")
+        if is_done():
+            log("%s: signed in" % what)
+            return True
+        tail = ANSI.sub("", proc.text()).strip().splitlines()[-3:]
+        log("%s: not signed in (exit %s): %s" % (what, proc.p.returncode, " | ".join(tail)))
+        if shown:
+            text = "That code ran out, or the sign-in did not go through. Nothing is broken."
+        else:
+            text = "I could not get a sign-in code from %s this time. Nothing is broken." % what
+        chat.ask(text, [("retry", "Get a new code")])
+
+
+def chatgpt_done():
+    rc, out = run(HERMES + ["auth", "list"], timeout=60)
+    return rc == 0 and re.search(r"^openai-codex \([0-9]+ credential", out, re.M) is not None
+
+
+def github_done():
+    return run(GH + ["auth", "status"], timeout=60)[0] == 0
+
+
+def github_login():
+    rc, out = run(GH + ["api", "user", "--jq", ".login"], timeout=60)
+    return out.strip().splitlines()[0] if rc == 0 and out.strip() else ""
+
+
+def repo_exists(spec):
+    return run(GH + ["repo", "view", spec, "--json", "name"], timeout=60)[0] == 0
+
+
+def normalise_repo(text, login):
+    t = text.strip().strip("<>").strip()
+    m = re.match(r"^(?:https?://)?(?:www\.)?github\.com[/:]([\w.-]+)/([\w.-]+?)(?:\.git)?/?$", t) \
+        or re.match(r"^git@github\.com:([\w.-]+)/([\w.-]+?)(?:\.git)?$", t) \
+        or re.match(r"^([\w.-]+)/([\w.-]+?)(?:\.git)?$", t)
+    if m:
+        return "%s/%s" % (m.group(1), m.group(2))
+    if login and re.match(r"^[\w.-]+$", t):
+        return "%s/%s" % (login, t)
+    return None
+
+
+# --- The steps -------------------------------------------------------------------------------
+
+def step_chatgpt(chat):
+    if os.environ.get("KB_SIGNIN_SKIP") == "1":
+        log("ChatGPT: skipped, as asked (KB_SIGNIN_SKIP=1)")
+        return
+    if chatgpt_done():
+        chat.send("Step 1 of 3: ChatGPT is already connected.")
+        return
+    chat.send("<b>Step 1 of 3: ChatGPT.</b> One moment, I am asking ChatGPT for a sign-in code.")
+    device_signin(
+        chat, "ChatGPT",
+        HERMES + ["auth", "add", "openai-codex", "--type", "oauth", "--no-browser"], True,
+        lambda url, code: (
+            "Open this page on your phone or computer:\n%s\n\nType this code there:\n<code>%s</code>\n\n"
+            "Sign in with your ChatGPT account. Any plan with Codex works; Plus or higher is best "
+            "for daily use. The code lasts 15 minutes, and I write back as soon as it went through." % (url, code)),
+        chatgpt_done)
+    chat.send("ChatGPT is connected.")
+
+
+def step_github(chat):
+    if github_done():
+        login = github_login()
+        chat.send("Step 2 of 3: GitHub is already connected%s." % (" as " + esc(login) if login else ""))
+    else:
+        chat.send("<b>Step 2 of 3: GitHub.</b> That is where your folder is kept, private to you. "
+                  "One moment, I am asking GitHub for a sign-in code.")
+        device_signin(
+            chat, "GitHub",
+            GH + ["auth", "login", "--hostname", "github.com", "--git-protocol", "https", "--web", "--skip-ssh-key"],
+            False,
+            lambda url, code: (
+                "No GitHub account yet? Make a free one first: https://github.com/signup\n\n"
+                "Then open this page:\n%s\n\nType this code there:\n<code>%s</code>" % (url, code)),
+            github_done)
+        login = github_login()
+        chat.send("GitHub is connected%s." % (" as " + esc(login) if login else ""))
+    # Signing in without a terminal leaves git itself unconfigured (gh sets it up only when
+    # it could ask), and the installer's own sign-in step is skipped because this one ran.
+    run(GH + ["auth", "setup-git"], timeout=60)
+    chat.st["login"] = login
+    save_state(chat.st)
+
+
+def step_questions(chat):
+    st = chat.st
+    login = st.get("login") or github_login()
+    if "repo" not in st:
+        st["repo"] = ask_repo(chat, login)
+        save_state(st)
+    if "brief" not in st:
+        st["brief"] = chat.ask(
+            "Would you like a morning brief? Every day at 06:00 (%s time) I read your profile and "
+            "send you a short note for the day, here." % esc(TZ),
+            [("brief:yes", "Yes please"), ("brief:no", "Not now")]) == "brief:yes"
+        save_state(st)
+    if "count" not in st:
+        st["count"] = chat.ask(
+            "Last one, and it changes nothing for you. Michael, who made Godspeed Mission Control, "
+            "cannot see whether anybody installs it. May this server tell him once that the setup "
+            "worked? It sends the word 'installed', the version and a random number made just now. "
+            "No name, no files, and the server that receives it keeps no address.",
+            [("count:yes", "Yes, tell him"), ("count:no", "No")]) == "count:yes"
+        save_state(st)
+
+
+def ask_repo(chat, login):
+    """"" for a fresh folder, or "owner/name" of the mission control to fetch."""
+    chat.send("<b>Step 3 of 3: three quick questions.</b>")
+    if login and repo_exists("%s/godspeed" % login):
+        a = chat.ask("I found a repository called <b>%s/godspeed</b> on your GitHub. Is that your "
+                     "Mission Control from another computer?" % esc(login),
+                     [("found:yes", "Yes, use it"), ("found:no", "No, start fresh")])
+        if a == "found:yes":
+            return "%s/godspeed" % login
+        return ""
+    a = chat.ask("Do you already have a Mission Control on another computer, kept on GitHub?",
+                 [("repo:fresh", "No, start fresh"), ("repo:have", "Yes, I have one")])
+    if a == "repo:fresh":
+        return ""
+    example = "https://github.com/%s/godspeed" % (login or "you")
+    prompt = "Send me its address. It looks like %s" % esc(example)
+    while True:
+        a = chat.ask(prompt, [("repo:fresh", "Start fresh instead")], free_text=True)
+        if a == "repo:fresh":
+            return ""
+        spec = normalise_repo(a, login)
+        if spec and repo_exists(spec):
+            return spec
+        prompt = ("I cannot open %s with your GitHub account. Check the address and send it again, "
+                  "or start fresh." % esc(a))
+
+
+def fresh_repo_name(login):
+    for name in ["godspeed", "godspeed-mission-control"] + ["godspeed-%d" % i for i in range(2, 10)]:
+        if not login or not repo_exists("%s/%s" % (login, name)):
+            return name
+    return "godspeed-%d" % int(time.time())
+
+
+def step_install(chat):
+    """The installer, unchanged, with the answers in its environment and no keyboard."""
+    st = chat.st
+    env = dict(os.environ)
+    for k in ("GODSPEED_TELEGRAM_TOKEN", "GODSPEED_TELEGRAM_OWNER"):
+        env.pop(k, None)
+    env.update(KB_TELEGRAM_SKIP="1",
+               KB_MORNING_BRIEF="yes" if st.get("brief") else "no",
+               GODSPEED_INSTALL_COUNT="yes" if st.get("count") else "no")
+    if st.get("repo"):
+        env["GODSPEED_REPO"] = "https://github.com/%s.git" % st["repo"]
+    elif not os.path.isdir(os.path.join(GODSPEED, ".git")):
+        env["KB_REPO_NAME"] = st.get("repo_name") or fresh_repo_name(st.get("login", ""))
+        st["repo_name"] = env["KB_REPO_NAME"]
+        save_state(st)
+    while True:
+        status = chat.send("Setting everything up now. This takes about five minutes.\n\nWorking on: getting started")
+        log("setup: running the installer")
+        try:
+            logf = open(LOG_FILE, "a", encoding="utf-8")
+        except OSError:
+            logf = subprocess.DEVNULL
+        p = subprocess.Popen(SETUP, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                             stderr=subprocess.STDOUT, env=env)
+        box = {"section": "getting started", "reason": "", "lines": []}
+
+        def pump():
+            for raw in iter(p.stdout.readline, b""):
+                line = ANSI.sub("", raw.decode("utf-8", "replace")).rstrip()
+                if logf is not subprocess.DEVNULL:
+                    logf.write(line + "\n")
+                    logf.flush()
+                if line.startswith("== "):
+                    box["section"] = line[3:].strip()
+                m = re.match(r"^\s*(?:\[stop\]|STOPPED:|stop:)\s*(.*)", line)
+                if m:
+                    box["reason"] = m.group(1)
+                box["lines"].append(line)
+                box["lines"] = box["lines"][-20:]
+        reader = threading.Thread(target=pump, daemon=True)
+        reader.start()
+        shown, started = None, time.time()
+        while p.poll() is None:
+            if box["section"] != shown:
+                shown = box["section"]
+                chat.edit(status, "Setting everything up now. This takes about five minutes.\n\nWorking on: %s" % esc(shown))
+            if time.time() - started > SETUP_MINUTES * 60:
+                p.kill()
+                box["reason"] = "it took longer than %d minutes" % SETUP_MINUTES
+                break
+            for kind, value in chat.poll(5):
+                if kind in ("text", "claimed"):
+                    chat.send("Still working on: %s. I message you when it is done." % esc(box["section"]))
+        p.wait()
+        reader.join(5)
+        if logf is not subprocess.DEVNULL:
+            logf.close()
+        if p.returncode == 0 and os.path.isdir(os.path.join(GODSPEED, ".git")):
+            log("setup: the installer finished")
+            chat.edit(status, "Setting everything up now.\n\nDone.")
+            return
+        reason = box["reason"] or next((l for l in reversed(box["lines"]) if l.strip()), "no reason given")
+        log("setup: the installer stopped (exit %s) at %s: %s" % (p.returncode, box["section"], reason))
+        chat.ask("Setup stopped at: <b>%s</b>\nWhat it said: %s\n\nNothing is lost. Tap Try again and I "
+                 "start from where it stopped." % (esc(box["section"]), esc(reason[:500])),
+                 [("setup:retry", "Try again")])
+
+
+def step_hand_over(chat):
+    """The bot goes to the assistant: the three lines, a gateway restart, the first message."""
+    st = chat.st
+    write_telegram_env(st["owner_id"], st["chat_id"])
+    rc, _ = run(HERMES + ["gateway", "restart"], timeout=180)
+    if rc != 0:
+        rc, _ = run(HERMES + ["gateway", "start"], timeout=180)
+    log("hand-over: Telegram written to Hermes' settings; gateway restart exit %s" % rc)
+    first = ("Your Godspeed Mission Control is set up, and this is its chat. Write to me here from "
+             "anywhere: try \"what is in my folder?\"")
+    # Sent the way the morning brief and the alerts will be sent, which proves that road.
+    rc, _ = run(HERMES + ["send", "-t", "telegram", "-s", "Godspeed Mission Control", "-q"],
+                timeout=120, stdin_text=first + "\n")
+    if rc != 0:
+        log("hand-over: hermes send did not deliver (exit %s); sending directly" % rc)
+        chat.send(esc(first))
+    rc, url = run(["git", "-C", GODSPEED, "remote", "get-url", "origin"], timeout=30)
+    url = url.strip() if rc == 0 else ""
+    if url.startswith("https://github.com/"):
+        chat.send(
+            "Want me on your computer too? Same folder, same memory.\n\n"
+            "<b>Windows:</b> download and run %s\nWhere it asks for \"Address of a mission control you "
+            "already have\", paste:\n<code>%s</code>\nIf it asks you to sign in to GitHub, use the same "
+            "account.\n\n<b>Mac or Linux:</b> paste this into a terminal:\n<code>curl -fsSL %s | bash -s -- --repo %s</code>"
+            % (WINDOWS_EXE, esc(url), ONE_LINER, esc(url)))
+
+
+def main():
+    if not TOKEN:
+        log("no GODSPEED_TELEGRAM_TOKEN: nothing to do (setup by terminal: docker compose exec godspeed godspeed-setup)")
+        return 0
+    st = load_state()
+    if st.get("done"):
+        return 0
+    if env_has("TELEGRAM_BOT_TOKEN="):
+        log("Hermes already has a Telegram bot (the terminal setup connected it); the chat setup stays out of its way")
+        return 0
+    if not re.match(r"^[0-9]+:[A-Za-z0-9_-]+$", TOKEN):
+        log("GODSPEED_TELEGRAM_TOKEN does not look like a bot token (BotFather's has the shape 123456789:ABCdef...). "
+            "Fix it in the server's settings and restart the container.")
+        return 0
+    while True:
+        try:
+            me = tg("getMe")
+            break
+        except TelegramError as e:
+            if e.code in (401, 404):
+                log("Telegram does not accept GODSPEED_TELEGRAM_TOKEN. Check it against BotFather's message, "
+                    "fix it in the server's settings and restart the container.")
+                return 0
+            log("could not reach Telegram (%s); trying again in 30 seconds" % e)
+            time.sleep(30)
+    log("waiting for the first message to @%s" % me.get("username", "your bot"))
+    chat = Chat(st)
+    if not st.get("owner_id"):
+        while not st.get("owner_id"):
+            chat.poll(50)
+        chat.send(
+            "Hi %s. I am your Godspeed Mission Control, running on your own server.\n\n"
+            "Three short steps and I am ready, about ten minutes:\n"
+            "1. Connect ChatGPT. That is my brain, and your own ChatGPT plan pays for it.\n"
+            "2. Connect GitHub. That is where your folder is kept, private to you.\n"
+            "3. Three quick questions.\n\n"
+            "From now on I answer only you." % esc(st.get("owner_name", "there")))
+    else:
+        chat.send("I restarted, and I am picking up where we were.")
+    step_chatgpt(chat)
+    step_github(chat)
+    step_questions(chat)
+    step_install(chat)
+    step_hand_over(chat)
+    st["done"] = True
+    save_state(st)
+    log("done: the bot belongs to the assistant now")
+    return 0
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main())
+    except KeyboardInterrupt:
+        sys.exit(1)

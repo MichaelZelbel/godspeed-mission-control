@@ -53,8 +53,9 @@ RUN set -eu; \
 
 COPY docker/rootfs/ /
 RUN chmod 755 /usr/local/bin/godspeed-setup /usr/local/bin/godspeed-patrol /usr/local/bin/crontab \
+              /usr/local/bin/godspeed-telegram-setup \
               /etc/s6-overlay/s6-rc.d/godspeed-patrol/run /etc/s6-overlay/s6-rc.d/godspeed-cron/run \
-              /etc/s6-overlay/s6-rc.d/godspeed-upgrade/run
+              /etc/s6-overlay/s6-rc.d/godspeed-upgrade/run /etc/s6-overlay/s6-rc.d/godspeed-telegram-setup/run
 
 # Which image this is, so a new one knows to run the update path once on an old volume.
 ARG VERSION=dev

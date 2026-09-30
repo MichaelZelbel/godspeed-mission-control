@@ -31,6 +31,35 @@ docker compose up -d
 docker compose exec godspeed godspeed-setup
 ```
 
+## Set it up from Telegram, with nothing typed on the server
+
+For a server you never want to open a terminal on, for example one a hosting company
+starts for you from `compose.yaml`. The whole setup then happens in a chat with your own
+Telegram bot.
+
+1. Make the bot: in Telegram, open BotFather, send `/newbot`, pick a name and a username
+   ending in "bot". BotFather answers with a token in the shape `123456789:ABCdef...`.
+2. Give the server that token as `GODSPEED_TELEGRAM_TOKEN`: in the hosting company's field
+   for environment variables if its form has one, or in a file called `.env` beside
+   `compose.yaml` holding the line `GODSPEED_TELEGRAM_TOKEN=123456789:ABCdef...`, then
+   `docker compose up -d`.
+3. Open your bot in Telegram and press Start.
+
+The bot then walks you through it: a code to type on ChatGPT's sign-in page, a code to type
+on GitHub's, and three questions as buttons (a new folder or the one you already have, the
+morning brief, and whether this server may tell Michael the install worked). Then it runs
+the same setup as `godspeed-setup`, hands itself over to your assistant, and ends with the
+line that puts the same mission control on your Windows PC or Mac.
+
+**Write to your bot first.** The first person to write to it owns it, the same rule the
+terminal setup uses, and nobody knows a bot's name until you share it. To be strict about
+it, also set `GODSPEED_TELEGRAM_OWNER` to your Telegram @username. If somebody else ever
+took it first, start over with a fresh volume: `docker compose down -v`, then up again.
+
+Nothing here is needed on a server set up by terminal: without the token the chat setup
+does nothing, and it never touches a bot the terminal setup already connected. Its log:
+`docker compose exec godspeed cat /opt/data/logs/godspeed-telegram-setup.log`.
+
 ## Everyday
 
 - Run setup again, to add Telegram later or fix a step: `docker compose exec godspeed godspeed-setup`
@@ -69,4 +98,7 @@ brings the supervisor that restarts the gateway, and adds only what the installe
 needs. Setup is `server/install.sh` in container mode, from the same commit, so the
 container and a plain server run the same steps. What is only in the image lives in
 `docker/rootfs/`: the setup command, the patrol, a small scheduler for the installer's
-own daily jobs, and the one-time update on a new image.
+own daily jobs, the one-time update on a new image, and the setup from Telegram
+(`godspeed-telegram-setup`, which collects the answers in the chat and then runs the same
+setup command with them). `docker/test/test-telegram-setup.py` tests that chat against a
+stand-in Telegram on any computer; `docker/test.sh` runs it again inside the image.
