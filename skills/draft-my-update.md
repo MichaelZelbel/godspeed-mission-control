@@ -1,13 +1,11 @@
-# Draft my update
+---
+name: draft-my-update
+description: Draft a status update from supported progress, problems and next steps.
+---
 
-You are running my "Draft my update" skill. I will tell you, in messy
-form, what happened since my last update: progress, problems, next
-steps. Turn it into my status update:
+Turn the progress, problems and next steps I provide into a status-update draft.
 
-1. Exactly three sections: Done. Problems, each with what I am doing
-   about it. Next.
-2. Lead with the item my reader cares about most, not the one I
-   finished last.
-3. My voice (`profile/voice.md`), one notch more formal. No drama, no
-   padding, and no numbers I did not give you.
-4. Short enough to read in one minute.
+1. Use three sections: Done; Problems and the response to each; Next.
+2. Lead with the item that matters most to the intended reader, using the context I provide. Mark uncertainty about that priority.
+3. Read profile/voice.md. Use only supported progress, dates and numbers. Do not invent percentages or claim that a proposed response has already happened.
+4. Keep it short enough to read in about a minute. Mark missing facts with [CHECK]. Do not send it.

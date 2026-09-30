@@ -1,62 +1,69 @@
 # People Interview (Chapter 5)
 
-Fills `profile/people.md` by letting your assistant interview you, instead of
-you staring at a blank file.
+Improves `profile/people.md` by letting your assistant interview you, starting from the
+people your briefing already mentions, instead of you staring at a blank file.
 
 ## Before you start
 
-Claude Desktop open on the **Code** side, a session with your mission control folder
-selected (Chapter 2), and `profile/about-me.md` already in it (Chapters 1
-and 2).
+A fresh session in your mission control (Chapter 2), with `profile/about-me.md` already
+filled from your reviewed briefing (Chapters 1 and 3).
 
 ## The prompt
 
 ```
-Read profile/about-me.md, then help me fill in profile/people.md.
-Interview me about the people whose existence changes how I decide or
-how I word things. Start by telling me who you already suspect from my
-about-me file. Then ask me one question at a time, no more than eight
-in total. When we are done, write profile/people.md yourself: one short
-block per person, with their role, the one or two things that change
-how I deal with them, and anything live between us right now. Do not
-invent anyone.
+Read profile/about-me.md and the current profile/people.md. Help me improve the people file.
+
+First show the people and roles those files actually mention. Distinguish a recorded name from a guess. Then ask one question at a time, at most eight questions, about what would change a decision or a draft.
+
+Keep one short block per person:
+- their role in my life or work
+- one or two practical preferences or facts that change how I deal with them
+- any current agreement, problem or unfinished conversation
+
+Keep the source and date of current claims. Label my interpretations as interpretations. Do not invent anyone or collect private details the work does not need.
+
+When we finish, show the proposed changes and update profile/people.md with the corrections I confirm.
 ```
+
+*[Copy prompt](https://querino.ai/prompts/people-interview)*
 
 Answer in plain speech. You are talking, not filing.
 
 ## Who belongs in the file
 
-The handful who turn up in your decisions. Your manager. The two or three
-clients who eat your week. Your partner. The colleague who is a landmine.
-
-The test: **if knowing this person would change how you word something or
-what you decide, they belong.** If not, leave them out. A short sharp cast
-beats a phone book, and you can add to it forever.
+**Include a person when knowing about them would change a draft or decision.** If not,
+leave them out. You are not building a second address book, and you can add to it as the
+work brings people up.
 
 ## The three things worth saying about anyone
 
-1. **Who they are to you.** Role and relationship.
-2. **What changes how you deal with them.** What they care about, what sets
-   them off, how they like to be handled.
-3. **What is live right now** (optional). The part that goes stale, and what
-   Chapter 10 keeps honest.
+1. **Their role** in your life or work.
+2. **One or two practical preferences or facts** that change how you deal with them.
+3. **Any current agreement, problem or unfinished conversation.** The part that goes stale,
+   and what Chapter 10 keeps up to date.
 
-Specific beats complete. "Hates surprises and works months ahead" is worth
-more than three paragraphs of background.
+What they said, what you agreed and what you have seen are worth more than a long account
+of their personality.
 
 ## The privacy line
 
-Give it your patterns, not your keys. For other people, use the
-over-the-shoulder test: **write only what you would be comfortable with them
-reading over your shoulder.** Their preferences, yes. Their private life, no.
-Chapter 17 turns this into a rule your assistant has to follow.
+Keep only what the work needs. For other people, **write only what you would be comfortable
+with them reading over your shoulder.** Chapter 17 turns this into a rule your assistant has
+to follow.
+
+## Check what was saved
+
+- [ ] You recognise every person in `profile/people.md`.
+- [ ] The agreements are right.
+- [ ] No guess has quietly become a fact about what somebody thinks.
+- [ ] A changed preference or an exception gets a dated update, not a silent rewrite.
 
 ## If you would rather write it by hand
 
 Same three things per person, one block each:
 
 ```
-## [Name] [role and relationship]
+## [Name] [role in your life or work]
 - [What changes how you deal with them.]
-- **Live:** [any open situation between you right now.]
+- **Current:** [any agreement, problem or unfinished conversation right now.]
 ```

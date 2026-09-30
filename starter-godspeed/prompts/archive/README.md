@@ -1,7 +1,8 @@
 # The prompt log
 
-Everything you have typed to an AI, and what it answered, kept so nothing is
-lost. One file per month.
+If you switched on conversation collection, this drawer keeps what you typed to
+the AI assistants on this computer, and what they answered, so nothing is lost.
+One file per month.
 
 This drawer is not for reading. It is for looking things up. Months from now you
 will want to know how you got some result you liked, and the answer is the words
@@ -16,14 +17,21 @@ that rule is the only reason this drawer is safe to have.
 
 ## The honest limit
 
-The log fills itself only if you use an AI tool that keeps your conversations as
-files on your own computer. That means a terminal tool, which is Chapter 32 and
-Chapter 36 of the book.
+Collection is optional, and the setup the book teaches leaves it off. On a
+computer getting its first mission control, the installer copies nothing until
+you tick a tool on its **Your conversations** page, or name it after `--sources`
+on macOS and Linux (Chapters 2 and 31). With collection off, this drawer stays
+empty and nothing is broken. Use `prompts/library/` next door instead, and save
+the prompts you care about as you go.
 
-Claude Desktop, the desk the book gives you in Chapter 2, keeps no such store, so
-there is nothing for a program to harvest. If that is your only tool, this drawer
-stays empty and nothing is broken. Use `prompts/library/` next door instead, and
-save the prompts you care about as you go.
+When it is on, a program copies the conversation text that supported assistants
+keep as files on this computer: Hermes, Claude Code, Codex and OpenCode. It
+cannot reach chats that live only in a browser or an online account, so the log
+never holds every conversation you have had with an AI.
+
+To stop collecting, ask your assistant to disable that one job (on Windows it is
+the Task Scheduler entry **Godspeed prompt archive**) and to check that it is off.
+Deleting a file in here does not stop the job.
 
 ## One file per machine, and why that matters
 
@@ -51,7 +59,9 @@ on your phone and the computer named in `machine` is only where the record was k
 `answer` holds only text you actually saw on the screen, never the AI's internal
 working or the commands it ran. Lines that look like a password are removed, and
 a reply longer than about twenty thousand characters is cut short with a marker
-saying so.
+saying so. That filter catches recognised patterns only, and private facts do not
+all look like passwords, so review this drawer before it goes to a remote backup
+(Chapter 18).
 
 ## How to look something up
 

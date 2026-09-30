@@ -26,8 +26,15 @@ and never into a chat with your assistant: a chat is kept as a log.
 
 ## Connect once
 
-Run the installer again (the same file or line you used the first time) and say yes when it
-asks about Menerio. It asks for the key once. It locks the key into your mission control's store, in
+Start the connect step. On Windows, open the Start menu and click **Update my mission control**
+(if that entry is missing, run `GodspeedSetup.exe` again). On macOS and Linux, paste this line
+into the Terminal:
+
+```
+curl -fsSL https://teachitonce.com/install | bash -s -- --only menerio
+```
+
+It asks `Connect Menerio now?` Type `y`. It asks for the key once. It locks the key into your mission control's store, in
 `secrets/`. It asks `Set a passphrase for a second computer now?` The default is no, and with
 one computer you can skip it. With a passphrase, every computer you own that opens your mission control
 has the key. You can set one later by running this step again. Then it runs `mc-menerio-connect` for you, and asks one more question:
@@ -98,6 +105,12 @@ searched its own two memory files, found nothing, and said so (measured twice, 2
 One key, one switch. In Menerio, open **Settings**, then **API Keys**, and revoke the key.
 Every assistant loses the notebook in that moment, on every computer. Know where that page is
 before you need it.
+
+To take your notes with you first, ask your assistant while the key still works:
+
+```
+Copy every note I wrote in my Menerio notebook into a folder named notes-export in this mission control folder, one file per note, with the full text.
+```
 
 To replace a key, follow the steps in `procedures/keys-that-expire.md`: you make the new key,
 and it goes into your mission control's locked store. Every file above only names the key, so nothing

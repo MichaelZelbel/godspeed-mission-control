@@ -1,35 +1,25 @@
 # The Alternatives Card (Chapter 20)
 
-There is a card next to this one with two questions that check whether
-an answer is true. This card checks something else: whether it was the
-best way to do the thing. Different failure, and it is a sneaky one. An
-answer can be completely correct and still be the third best idea you
-could have had.
-
-## Why this happens
-
-You asked once. It picked one way to do the thing and wrote it up well.
-There were probably five ways. Nothing in the reply tells you that a
-choice was even made.
+There is a card next to this one with two questions that check whether an answer is true.
+This card checks a plan. A plan is an answer too, and plans are usually too hopeful.
 
 ## The question
 
+Before you trust an estimate, ask for the comparable cases first:
+
 ```
-Brainstorm five other approaches to this. Try them out. Then debate
-which one is best and tell me which one you would pick if you were me.
+Before you estimate this, list comparable cases you can actually find, including the ones that failed. Say how each fits and where it differs, and how good the evidence is. Then give your estimate, starting from those cases, and say what you changed and why.
 ```
+
+*[Copy prompt](https://querino.ai/prompts/ask-for-the-outside-view)*
 
 ## The part doing the work
 
-"If you were me" is the whole trick. It pulls the answer out of the
-abstract and into your actual situation. Leave those four words out and
-you get a textbook comparison of five options. Put them in and you get
-a recommendation.
+"Including the ones that failed" and "starting from those cases". The comparison comes
+first and the estimate second, so the estimate starts from what happened to others, not from
+your hopes.
 
 ## When to use it
 
-Not on small things. The two questions next door fire before you act.
-This one fires before you commit to something you will live with:
-choosing between two tools, or wording something you cannot easily take
-back. The first answer always looks fine. That is the reason to ask,
-not a reason to skip it.
+Not on small things. Use it before you commit to a plan you will live with: a cost, a date,
+a result you are counting on.

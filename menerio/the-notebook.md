@@ -20,7 +20,7 @@ the files on your computer.
 
 When the answer is yes, your mission control folder is mirrored into the notebook. Every Markdown file
 goes, except the `dev/` folder. The copies live under one folder called `godspeed`, laid out like
-your mission control: `profile/about-me.md` becomes a note in `mission control/profile`. Each decision in
+your mission control: `profile/about-me.md` becomes a note in `godspeed/profile`. Each decision in
 `decisions.md` becomes its own note.
 
 - **The file stays the truth.** Every copy says in its first line which file it came from.
@@ -47,10 +47,11 @@ either direction, and nothing about Menerio runs in the background.
 
 ## The two rules
 
-1. **Secrets stay out.** Chapter 19's piles decide: only "may travel" facts go in. For personal
-   notes worth keeping anyway, every note has an **AI** switch; flipped to **Hidden**, the note
-   is excluded from People, from the pages, and from every connected AI tool. A file that must
-   never leave your computer belongs in `dev/` or in your mission control's `.gitignore`.
+1. **Secrets stay out.** Put into the notebook what you would put into any online notes app,
+   and nothing more. For personal notes worth keeping anyway, every note has an **AI** switch;
+   flipped to **Hidden**, the note is excluded from People, from the pages, and from every
+   connected AI tool. A file that must never leave your computer belongs in `dev/` or in your
+   mission control's `.gitignore`.
 2. **One fact, one home.** A fact born at your desk lives in the folder. A fact born out in the
    world lives in the notebook. Do not retype one into the other. The moment you keep two
    copies matching by hand, you are the sync program, and that person always quits. The mirror
@@ -72,9 +73,40 @@ hinted there could be a second illustrated title in it for me.
 On a phone, menerio.com is the same app in a narrower coat: search box on top, plus button for
 a new note.
 
-You can also tell your assistant "make a note about the call with Nadia". It picks the folder
-that fits, links the note to related ones, and tells you the title, the folder and the links.
-It never files your notes under `godspeed`, because that folder belongs to the mirror.
+You can also tell your assistant to make a note. It picks the folder that fits, links the note
+to related ones, and tells you the title, the folder and the links. It never files your notes
+under `godspeed`, because that folder belongs to the mirror.
+
+If your days are full of other people's confidential details, teach it one rule before your
+first note:
+
+```
+From now on, show me every note and wait for my yes before you save it.
+```
+
+Say a note the way you would say it to a person:
+
+```
+Make a note: Priya takes magnesium glycinate for sleep and says it works. 400 mg in the evening. She has taken it for a year.
+```
+
+A second note on the same subject gets linked to the first:
+
+```
+Make a note: Dr. Aydin says magnesium is fine with my blood pressure tablets, but not within two hours of them.
+```
+
+The folder it picks is a first guess. When you disagree, say so:
+
+```
+Move the Priya note to Health.
+```
+
+To get it back, ask in a fresh session, and ask for the note's name so you can check the answer:
+
+```
+What did Priya recommend for sleep, and what was the dose? Name the note you read.
+```
 
 ## The machine files, you review
 

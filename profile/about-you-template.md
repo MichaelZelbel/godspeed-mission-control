@@ -1,11 +1,11 @@
-# About-You Template (Chapters 1 and 2)
+# About-You Template (Chapters 1 and 3)
 
-In Chapter 1 your assistant writes `profile/about-me.md` for you, out of what
-it already knows about you. This template is the **fallback**: use it if you
-are new to the tool and the extraction came back thin or empty.
+In Chapter 1 the AI you already use writes a short briefing about you under five headings,
+and Chapter 3 files it into `profile/about-me.md`. This template is the **fallback**: use it
+if you are new to AI tools or the briefing came back thin or empty.
 
-Write it straight into `profile/about-me.md` in your folder. Two or three true
-lines under each heading is plenty. Ten minutes.
+It uses the same five headings. Write it straight into `profile/about-me.md` in your
+mission control. A few true lines under each heading are plenty.
 
 ```
 # About me
@@ -61,9 +61,8 @@ night. No exclamation marks in my client emails.
 
 ## Two rules from Chapter 1
 
-**Give it your patterns, not your keys.** Passwords, PINs, card numbers and
-recovery codes never go in a file, ever.
+**Keep credentials out.** Passwords, access keys, payment details and other
+credentials never go in this file. Keep them in a password manager.
 
-**Dense beats complete.** Aim for something you can read in under a minute,
-where every line would change how a good assistant answers you today. Delete
-anything that would not.
+**A few accurate lines beat a complete page.** Mark anything you are unsure of
+with (?), and leave a gap visible rather than filling it with a guess.

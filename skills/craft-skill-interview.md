@@ -1,47 +1,55 @@
 # Craft-Skill Interview Prompt (Chapter 15)
 
-Do not brainstorm your craft skills; get interviewed. Open a session with
-your folder attached and paste:
+Find skills for your own work by getting interviewed. The assistant reads
+your profile and work records first and asks only about what they cannot
+answer.
+
+Open a session in your mission control and paste:
 
 ```
-I want to build skills for my specific job: recipes I save once as files
-in skills/ and reuse. Interview me to find my three best candidates. Ask
-one question at a time, five questions maximum, about the tasks I repeat
-every week, the ones I always explain the same way, and the ones I dread.
-Then propose three skills, each with a name and what it takes in and
-gives back.
+I want to build skills for my specific job: instructions saved in skills/<name>/SKILL.md and reused. Read my existing profile and work records first. Interview me only about what those records cannot answer, to find up to three useful candidates.
+
+Ask one question at a time, five questions maximum, about:
+
+- the tasks I repeat every week
+- the ones I always explain the same way
+- the ones I dread
+
+Then propose up to three skills, each with a name and what it takes in and gives back. Do not invent a third candidate to fill the list.
 ```
 
-Answer honestly, especially about dread. The task you push to Friday
-afternoon usually has the clearest pattern and the least joy, which makes
-it close to the perfect candidate.
+*[Copy prompt](https://querino.ai/prompts/craft-skill-interview)*
 
-Answer the "what do you correct more than once" question honestly too.
-Those sentences are pure scar tissue, and they become the numbered rules
-in the file. In the run recorded for Chapter 15, one grumpy sentence
-("never promise a delivery date unless I said the date myself, and stop
-apologising twice") turned into two rules and a whole extra skill.
-
-## Filter the three proposals
+## Filter the proposals
 
 Build a proposed skill only if it passes all three filters:
 
-1. **The input already exists.** It eats something your work already
-   produces (a voice note, an email, shift notes). Special input kills
-   the habit.
-2. **The output is something you already need.** The handover, the
-   follow-up, the lesson plan. Not a report nobody asked for.
-3. **The judgment stays with you.** A skill formats, drafts, structures,
-   flags. It does not decide. If the task is mostly judgment, the skill
-   is the briefing before your decision, not the decision.
+1. **The input already exists.** It starts from something your work
+   already produces, such as an email, project file or set of notes.
+2. **The output is something you need.** Someone expects it, not a
+   report nobody will open.
+3. **You can judge the result and keep the authority.** The assistant
+   may compare, criticise or recommend. It does not acquire permission
+   to make a commitment.
 
-## Then build them
+If one proposal fits, build that one.
 
-Say "write number 1". Each one lands as its own folder in `skills/`, same anatomy
-as everything else: the job, the shape, the rules. Read the file before
-you accept it, and check that it names the profile files it depends on
-(`profile/projects.md`, `profile/voice.md`) rather than assuming.
+## Then build it
 
-Expect to feed each craft skill two or three corrections in its first
-week. That is the recipe learning your taste. Chapter 16 turns those
-corrections into a habit.
+Ask the assistant to write the full `skills/<name>/SKILL.md` and show you
+the result. Check that it describes the input, the sources to read and
+what to do when information is missing, and that it leaves sending,
+publishing and other external actions out unless you deliberately
+authorise them.
+
+## First run
+
+1. Give the skill a normal example with enough detail to do the job.
+2. Try again with a needed fact removed. A question or a clearly marked
+   blank passes; a plausible invention fails.
+3. Put corrections to repeated habits in the skill, and this week's
+   changed facts in the project record.
+4. Give it a job in a fresh conversation and read the result before
+   adding anything you explained during the interview.
+
+Chapter 16 tests the finished skill.

@@ -114,8 +114,10 @@ city claim gets an end date. A guess about why the person moved belongs in `obse
 
 ### Optional: import from Menerio
 
-Once Menerio is connected, the import runs by itself: when you save a change, and once an
-hour. To look at what it would do, or to run it by hand:
+Once Menerio is connected and you have said yes to copying, the import runs by itself: when
+you save a change, and once an hour. It brings down the people, events and facts Menerio
+keeps, not your notes or their attachments; to take the notes themselves, ask your assistant
+for a separate export (Chapter 28). To look at what it would do, or to run it by hand:
 
 ```
 python3 ~/.local/bin/world-pull.py           # dry run, shows what it would write

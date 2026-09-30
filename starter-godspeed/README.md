@@ -1,8 +1,8 @@
 # Starter mission control
 
 This folder is your personal AI system. The book's installer (Chapter 2)
-lays everything inside `starter-godspeed` into your `godspeed` folder for you;
-Appendix D is the by-hand road, a copy into an empty `godspeed` folder.
+lays everything inside `starter-godspeed` into your `godspeed` folder for you,
+and Appendix D is the map of every folder in it.
 Point your assistant at the result. Chapter 3 of the book walks through
 the layout; Parts II and III fill it up.
 
@@ -45,7 +45,11 @@ What is here. Thirteen names, and they are the whole system:
   installer points at this room, never a second home.
 - `procedures.md`: the register. Everything that runs without you.
 - `decisions.md`: append-only log of real decisions.
-- `inbox/`: where loose captures land between weekly reviews.
+- `inbox/`: notes that need clarification, writing samples and material you
+  want kept untouched. Clear facts are filed during the conversation instead
+  (Chapter 9). When a doubt is settled, the original capture moves to
+  `archives/filed-captures/`, a folder your assistant makes the first time it
+  needs it.
 - `observations/`: what your assistant works out about you and writes down
   itself, one file per fact, with a page called `MEMORY.md` that it
   reads at the start of a session and that tells it where everything goes.
@@ -55,8 +59,8 @@ What is here. Thirteen names, and they are the whole system:
   folder on its own**, it only searches it when you ask, and that rule is
   what makes it safe to keep. Two drawers, each with its own README:
   `prompts/library/` holds the prompts you keep and paste into other
-  tools, and `prompts/archive/` is the log of everything you have typed.
-  Chapters 13 and 37.
+  tools, and `prompts/archive/` is the optional log of your conversations,
+  empty unless you switched collection on. Chapters 13 and 37.
 - `goals/`: what you want, one card each, and who gets attention today. An
   outcome, a strategy or project meant to produce one, or a protected
   commitment. A new idea is filed **provisional** and is never worked on until

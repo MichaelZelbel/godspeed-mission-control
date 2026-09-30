@@ -44,15 +44,19 @@ whole thing work, because now there is a *window*, and a window has a fraction
 left, and a fraction is something a computer can be quiet or loud about.
 
 ```
-        window opens                                          last day
-             |------------------------------------------------|
-             |<---- quiet ---->|<-- soon -->|<-quicker->|loud--|
-                   first half     to a quarter   to a tenth
+  window opens                                                  last day
+       |----------------------------------------------------------|
+       |   PLENTY OF TIME    |  ON THE WAY  |   SOON   | RUNNING OUT |
+         more than half left   half to a      a quarter  the loud days
+                               quarter left   or less    at the end
 ```
 
-Your mission control says nothing for the first half. A line now and then through the second
-half. Its own line in the last quarter. Every single morning in the last tenth,
-and always on the last day whatever the arithmetic says.
+The first words of each deadline line in your brief are those four names. Your
+mission control says a thing once when its window opens, then at most once a month
+through the first half. A line about every fortnight until a quarter is left.
+Its own line about weekly after that. Every single morning in the loud days at
+the end: a tenth of the window, never fewer than three days and never more
+than fourteen, so a year-long task does not shout for a month.
 
 **One rule, whether the window is a week or a year.** That is the point of it. A
 monthly timesheet you can file from the 1st to the 28th goes quiet, gentle,
@@ -126,7 +130,13 @@ your employer's website. Those wait for your word:
 mc-due done car-service --evidence "the garage invoice, 12 January"
 ```
 
-That does not change the file in `due/`. It writes one small note in `world/events/`
+Or say it to your assistant in words, like this:
+
+```
+I bought the present. Mark it done in my mission control, then run the daily check and show whether it still appears in today's reminders. Keep its history. If you find more than one match, ask which one I mean.
+```
+
+Marking it done does not change the file in `due/`. It writes one small note in `world/events/`
 saying the thing was finished and what shows it, and everything that asks "is this
 still open" reads that note. One place for the answer, so nothing can disagree.
 
@@ -146,7 +156,9 @@ it is "it cannot", and write "it cannot" down.
 
 Today the program can check one thing by itself: whether a file changed inside
 the window. It also picks up your key dates on its own (below). Everything else
-waits for you, and says so on screen rather than pretending.
+waits for you, and says so on screen rather than pretending. Leave the file
+check off until you have tested it: a changed file does not prove the work
+succeeded, and a new backup file may be incomplete.
 
 ## No date, not eligible
 
@@ -180,14 +192,18 @@ because the likeliest reason is that you did it and forgot to say so.
 
 ## Three a day, and the honest week
 
-Your morning brief reads one command:
+Your morning brief runs two commands, in this order: `check` closes what is
+provably done, so yesterday's finished work is not on today's list, and only
+then `today` chooses:
 
 ```
+mc-due check
 mc-due today
 ```
 
-It gives back **at most three**, loudest first, and never the same thing twice in
-one day. Everything quiet is invisible.
+It gives back **at most three**, loudest first. Asked twice on the same
+morning, it gives the same three, so a brief written again after a failure does
+not hand you more. Everything quiet is invisible.
 
 That cap is the reason you can have a hundred of these. Researchers who studied
 reminders inside hospital software found that the chance of a reminder being
@@ -195,15 +211,16 @@ acted on **dropped by about 30% for each extra one in the same batch**. Six good
 reminders are worse than three. Ten are worse than none, because by then you are
 not reading any of them.
 
-And when more than three run out in the same week, you do not get four lines. You
-get one:
+And when more than three run out in the same week, you do not get four reminder
+lines. You get one message, with all of them listed under it:
 
 > 5 things run out of time this week, which is more than one morning can carry.
-> Pick the two you will really do, and drop or move the rest.
+> Pick the two you will really do, and drop or move the rest:
+>   - (each title, with its last day)
 
 That is not the program giving up. That week's real news is that you took on too
-much, and one sentence saying so is more useful than five lines you will scroll
-past.
+much, and saying so, with the whole list in front of you, is more useful than
+five separate reminders you will scroll past.
 
 ## Wiring it into the brief you already have
 
@@ -211,21 +228,22 @@ Open the chat in your mission control, the one whose brief you set up in Chapter
 and paste this:
 
 ```
-Update skills/morning-brief/SKILL.md with a Deadlines section.
+Update skills/morning-brief/SKILL.md with a section called Deadlines and targets.
 
-First run mc-due check in the intended mission control, then mc-due today. Preserve any errors or failed-check notices. Include the selected deadline output word for word, including the overload message and all titles. Omit the section only when the command explicitly says nothing needs saying or no deadlines exist, and there was no check error.
+First run mc-due check, then mc-due today. Put what mc-due today prints into that section word for word, every title included, and keep any error it reports. Leave the section out only when it says nothing needs saying and there was no error.
 
-That output is the only place the brief speaks about anything in due/. Do not read due/ files yourself, repeat those items in another section, carry them over from an earlier brief, or calculate urgency. A day I would like something done is not a deadline: never call it overdue or urgent. Keep the normal brief body under 200 words, but put required deadline text and check failures after that body without a word limit. Preserve any existing Research section and its unresolved urgent findings. The 200-word target must not delete important material.
+That section is the only place the brief speaks about anything in due/. Do not read due/ files yourself, repeat those items elsewhere, carry them over from an earlier brief, or work out urgency yourself. A day I would like something done is not a deadline: never call it overdue or urgent. Keep the rest of the brief under 200 words; this section does not count toward that limit. Keep any Research section as it is.
 
-Preserve today's existing brief. For testing, use a disposable mission control, its own --godspeed path on every deadline command and a new output at practice/brief-tests/deadline-test.md. Do not add fictional deadlines to my real list or overwrite my real brief.
-
-Run mc-check-brief on the full result. If raw deadline text contains a local path that the checker refuses, preserve the raw output and report the conflict; do not silently alter required text. Use clear human titles when creating deadlines so they do not need local paths.
+Add one line to the morning brief's entry in procedures.md saying it now runs mc-due. Preserve today's brief. To show me it works, write a test brief to practice/brief-tests/deadline-test.md and show me its Deadlines and targets section. Do not add made-up items to my real list.
 ```
 
 *Bookmark the prompt, if you like: [querino.ai/prompts/put-my-deadlines-in-my-brief](https://querino.ai/prompts/put-my-deadlines-in-my-brief)*
 
-Then check it now rather than in two months. Add something with a made-up last
-day a week away, run the brief once, see the line appear, and drop it again.
+Add your first real thing before you paste it. Then read the test brief it
+shows you and find your things in its Deadlines and targets section. With an
+empty list the section is left out, and that is correct. `mc-check-brief`
+refuses a brief that talks about an open item anywhere else, so a missed
+target never turns up as "overdue" further down.
 
 ## Your keys are already in this list
 
@@ -285,13 +303,16 @@ reminder that goes off about something you did last week.
 
 ## Now put it in the register
 
-Open `procedures.md` and add one block: the daily check, what it can reach, and
-where the result lands. **One block, not one per deadline**, because there is one
-job here however long the list gets.
+The daily check runs inside the morning brief, so it needs no schedule and no
+block of its own. The prompt above adds one line to the morning brief's block
+in `procedures.md` saying it now runs `mc-due`. **One line, not one per
+deadline**, because there is one job here however long the list gets.
 
 ## Prove it by breaking it (Chapter 20 again)
 
-Two minutes, today, while nothing is urgent.
+Two minutes, today, while nothing is urgent, in a practice mission control
+rather than your real list: add `--godspeed` and the practice folder's path to
+every command.
 
 - Add something with a last day two days from now. Run `mc-due today` and watch
   it come out loud. Drop it again.
@@ -303,3 +324,16 @@ Two minutes, today, while nothing is urgent.
 
 Now you know what it looks like when it works, rather than only what it looks
 like when it has nothing to say.
+
+## If your mission control is older than 30 September 2026
+
+`mc-due` can handle targets since the kit update of 30 September 2026. If you
+installed before then, update once. On Windows, open the Start menu and click
+**Update my mission control**. On macOS and Linux, run this in the Terminal:
+
+```
+curl -fsSL https://teachitonce.com/install | bash
+```
+
+On a server from Chapter 32, run that chapter's installer line again, as
+`root`. Your folder and your earlier choices stay as they are.

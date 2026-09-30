@@ -20,6 +20,8 @@ Then rewrite the files in rules/ in my words, keeping the header at the top of e
 When I say yes, run mc-compile-rules so AGENTS.md catches up.
 ```
 
+*[Copy prompt](https://querino.ai/prompts/red-lines-interview)*
+
 Two rules for judging what comes out:
 
 - **Keep it to about ten lines.** A rulebook short enough to hold in your

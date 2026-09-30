@@ -1,134 +1,72 @@
 # The Privacy Audit (Chapter 19)
 
-Once a quarter, in the same sitting as the spring-clean (Chapter 10). Four
-drawers, about ten minutes including the folder pass. Three of the four now
-live on your own disk, which makes this shorter than it used to be.
+Where your information is kept, and where it goes when an assistant reads it. Run it before
+the first upload to a backup or any other destination, and again when you add a connection.
+Four drawers.
 
-## Drawer one: your folder (do this one first)
+## Drawer one: your mission control and its backup history
 
-The drawer that did not exist before this book, and the only one where you
-can fix a problem completely rather than manage it.
-
-In a session in Hermes, which has been working in your folder since the
-installer pointed it there:
+Current files, archived captures and earlier saved versions. In your mission control, ask:
 
 ```
-Go through every file in this folder and tell me what should not be in
-here. I am about to put this folder somewhere other people could reach
-it. Do not change anything yet, just show me the list and why.
+Review where this mission control's information is stored or sent. Begin with a local file inventory and the configured backup destinations. Include current files, archives and earlier Git history where present.
+
+Identify credentials, unintended personal material and information about other people that deserves review. Do not print secret values or send files to a separate scanning service. Report paths and categories. Do not change or upload anything.
+
+Separately list the assistant's local conversation and memory locations, plus configured providers and connected services you can actually inspect. Mark unknown destinations or retention settings as unknown. Distinguish what a local deletion would remove from copies elsewhere.
 ```
 
-Note the last clause. Read the list before anything moves.
+*[Copy prompt](https://querino.ai/prompts/privacy-audit)*
 
-Then, when you agree with it:
+What a cloud assistant reads may itself go to the provider, so for the most sensitive material
+make a local list and inspect it yourself.
 
-```
-Yes, do all of it. Clean it up.
-```
+What the audit looks for:
 
-What should happen: a cleaned **copy** appears in a sibling folder, and
-your original is untouched, because the never-delete line says "clean up" is not a
-green light for deleting. If your original got edited, run the book's
-PELICAN test (Chapter 17): either `AGENTS.md` is not being read, or the
-rule has been edited out of it.
+1. **Credentials**: passwords, access keys, card numbers. Out of the folder, always.
+2. **Other people's private information**: anything the work does not need.
+3. **Bad news not yet delivered**, and other project problems not meant for sharing.
+4. **Other personal material** you did not mean to keep.
 
-Keep the habit: the private original stays on your machine, and only ever
-a cleaned copy goes outward.
+A rule in `AGENTS.md` binds the assistant, not a person who can open the folder, so these
+need to be out of the folder. When you ask for cleanup, the originals should stay and a
+cleaned copy appear beside them; read the copy and its history yourself before sharing.
 
-What the audit looks for, in the order that matters:
+## Drawer two: Hermes conversation records
 
-1. **Keys**: passwords, PINs, card numbers, account numbers, recovery
-   codes. Out of the folder, always.
-2. **Other people's private business**: health, relationships, money,
-   anything told to you in confidence. Not yours to store.
-3. **Bad news that has not been delivered yet**: a slip the client has
-   not been told about. Being readable before you have said it is the
-   worst possible order.
-4. **Your own commercial state**: rates, negotiations, client lists.
-5. **Things that merely identify you**: full name, city, client mix.
+Ask the assistant where this installation stores its conversation history, and have it name
+the locations without printing private contents.
 
-## Drawer two: the transcript
+## Drawer three: Hermes' own saved notes
 
-Every conversation you have had with Hermes, word for word. It is on your
-disk, not on a website: one small database per profile, inside Hermes' own
-folder. Nothing to export and nothing to unshare, because nothing was ever
-shared.
+Ask the same for the notes the app keeps outside your mission control, such as `MEMORY.md`
+and `USER.md` inside a `memories` folder. They are separate from `observations/`, so check
+both.
 
-To see how much is there, in a terminal:
+Hermes can also keep separate application profiles, each with its own records, and copying a
+profile can carry its saved notes along. Before removing one, read what the app says it will
+remove.
 
-```
-hermes sessions stats
-```
+## Drawer four: providers and connected services
 
-Three lines: sessions, messages, size. To read one conversation as plain
-text, `hermes sessions export` writes it out (as Markdown with
-`--format md`). To make them all go away, delete the profile; Hermes warns
-in as many words that this removes "all config, API keys, memories,
-sessions, skills, cron jobs".
+- [ ] Each connection names the job it serves. Research and preparation start read-only.
+- [ ] Your model provider's retention and training settings are set the way you want, in
+      your account with that provider.
+- [ ] Credentials sit in the supported secret store or sign-in system, never in ordinary
+      notes or prompts.
+- [ ] If you connect your mailbox (Chapter 30), the text of each message your mission control
+      reads goes to the model provider. Forwarding single messages to its own address
+      (Chapter 29) shares less.
 
-## Drawer three: what the assistant remembers on its own
+## Removing a detail
 
-Two text files, `MEMORY.md` and `USER.md`, in the `memories` folder inside
-Hermes' own folder (on Windows, `%LOCALAPPDATA%\hermes\memories`; a
-profile keeps its own pair inside its profile folder). Open them in any
-text editor. Read them the way the person you live with would read them.
-Correct what is wrong, remove what should not be there, or empty the file.
+Follow every place it could have reached: the current file, old versions, app notes,
+conversations, exports and provider records. Deleting a local record sends no request to the
+provider to delete theirs.
 
-`hermes memory status` shows whether the built-in memory is switched on
-and whether any external memory provider has replaced it.
+## The sorting rule
 
-One trap, measured on Hermes 0.20.6: `hermes profile create <name> --clone`
-copies both memory files into the new profile and does not say so. A
-second profile made "to try something" carries your memory with it.
-
-## Drawer four: the doors
-
-Two kinds of door, and what leaves your machine leaves through them.
-
-**The model.** Every turn you type goes to the provider you signed in with
-in Chapter 2 and the answer comes back. Hermes sends your conversations
-nowhere else: its gateway monitoring is off unless you switch it on, and
-even then carries no message content by design. What the provider does
-with your turns is decided in your account with that company. Spend ten
-minutes there once and set the training and retention choices the way you
-want; the switch that matters is theirs, not Hermes'.
-
-**Connected tools.** Chapter 28 connects MCP servers. Each is a line in
-Hermes' own settings:
-
-```
-hermes mcp list
-```
-
-One question per row: does this connection still earn its access? Remove
-what you stopped using with `hermes mcp remove <name>`. Different in kind
-from the other drawers, because a connected mailbox is everything,
-including other people's letters to you.
-
-## The sorting rule (pin this)
-
-**Give it your patterns, not your keys.**
-
-- Patterns (in): who matters, projects, preferences, plans, voice.
-- Keys (never): passwords, PINs, full card numbers, recovery codes,
-  anything that IS access rather than information.
-- Other people's secrets (never): what they told you in confidence stays
-  out. Working facts about them are fine, in words you could defend to
-  their face. Rule 8 in your house rules is where you set this dial.
-
-## What "private" honestly means
-
-Everything above is privacy on your machine: your conversations, your
-assistant's memory of you and your folder all live on a disk you own. The
-honest limit is the model. Each turn is sent to the provider you chose,
-under its rules, so a cloud model is roughly as private as a reputable
-email account: private enough for your calendar, your drafts, your people
-pages and your plans, not private enough for keys or for anything you
-would not put in an email. For people who want more, `hermes egress` keeps
-your real keys out of the assistant's hands entirely; it is off until you
-ask for it.
-
-The part that is different now: the thing you value most was never in
-anybody's account. It is in your folder, with a private copy you control.
-If the trade with a provider ever stops being worth it, you point Hermes at
-a different one and keep everything.
+- **In:** who matters, projects, preferences, plans, voice.
+- **Never:** passwords, access keys, full card numbers, anything that is access rather than
+  information.
+- **Other people:** only the detail the work needs, in words you could defend to their face.

@@ -42,10 +42,11 @@ you the sizes, so you worry about the right one.
 
 Once a month, four things:
 
-1. Reads your receipts and works out what each plan actually carried.
-2. Asks you **one** question, if there is something it cannot work out.
-3. Writes you a page you can look at.
-4. Tells you if something looks like dead weight, and leaves the decision to you.
+1. Reads your receipts and your list, and reports what the records cover,
+   the known charges, and what it could not measure.
+2. Keeps subscription fees apart from extra usage charges.
+3. Recommends a change only with its evidence and the tradeoff.
+4. Cancels, buys and changes nothing: the decision stays yours.
 
 ## The rule that keeps it honest
 
@@ -62,21 +63,15 @@ having is ten real jobs from your own month run through both, judged by you.
 
 ## Step 1: start the list
 
-In a session in Hermes:
+In a session in Hermes, then name the plans you pay for:
 
 ```
-Create profile/subscriptions.md. Add one block per AI subscription I pay
-for, in this shape, and leave anything I have not told you blank rather
-than guessing:
-
-## (name of the plan)
-Costs: ($X per month, or blank).  Renews: (a day of the month, or blank).
-Receipts: (hermes insights, or none).  Status: active.
-
-The ones I pay for right now are: (list them).
+Read any existing subscription records first. Create or update profile/subscriptions.md with one block per AI plan I confirm: plan name, price and currency, renewal date, source of usage evidence, and status. Keep unknown values marked unknown. Do not duplicate an existing plan or infer that a missing receipt means no usage.
 ```
 
-Blanks are not a failure. A blank is next month's question.
+*[Copy prompt](https://querino.ai/prompts/subscriptions-list)*
+
+An unknown is not a failure. It is next month's question.
 
 ## Step 2: read the receipts
 
@@ -94,15 +89,15 @@ and it took one prompt.
 Add it to the weekly review you already have, on the first review of the month:
 
 ```
-Open skills/weekly-review/SKILL.md and add a part that runs ONLY on the first
-review of a calendar month: run hermes insights --days 30, read its cost
-section and its models table, compare them against profile/subscriptions.md,
-and tell me three things. What each plan carried. Anything I am paying for
-that carried nothing. And ONE question, if the list cannot answer something
-the receipts raise. Never tell me which model is better. Never show a plan
-you could not measure as zero, say you could not measure it.
-Change nothing else.
+Add an optional monthly subscription section to skills/weekly-review/SKILL.md. Run it only on the first review of the month when profile/subscriptions.md exists.
+
+Read that file and run hermes insights --days 30. Report what the available records cover, known charges and unknown usage. Treat activity in other tools as unmeasured unless their records are available. Distinguish subscription fees from extra usage charges. Recommend a change only with its evidence and tradeoff. Cancel, buy and change nothing. If the command fails, report that failure rather than zero usage.
 ```
+
+*[Copy prompt](https://querino.ai/prompts/monthly-subscription-review)*
+
+To put the rule above into the recipe too, tell your assistant to add one
+sentence to that section: "Never tell me which model is better."
 
 ## The two mistakes to design out, and why
 

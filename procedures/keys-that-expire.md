@@ -55,7 +55,9 @@ SOME_SERVICE_TOKEN  2027-03-14  https://example.com/account/tokens  # what it op
 ```
 
 Write `never` instead of a date for one you checked and that does not expire.
-Write `-` instead of a page when there is nowhere to go and get one.
+Write `-` instead of a page when there is nowhere to go and get one. If the
+service gives no date at all, do not invent one: record "expiry unknown" as a
+comment line starting with `#`.
 
 **Never put a key itself in that file.** It is plain text and it travels with
 your folder. Names, dates, file paths and links only.
@@ -120,8 +122,9 @@ date, and the page I get a new one from. Change nothing else in the file.
 ```
 
 Then check it now rather than in two months. Put a made-up line in
-`secrets/expires.txt` with a date a week away, run the brief once, see the line
-appear, and take it out again.
+`secrets/expires.txt` with a date a week away, run the brief once as a test
+with a practice output path (the recipe never writes a second brief for the
+same day), see the line appear, and take it out again.
 
 ## If you have done Chapter 27, skip the wiring above
 
@@ -170,6 +173,17 @@ So the honest sequence is:
    reminder.
 4. Run `mc-check-keys` and read question 3. Being in the store is not being on
    the machine, and step 2 does not finish the job on its own.
+
+Once you have the new key, your assistant can do steps 2 to 4 with this
+prompt, and add a read-only test of the service itself:
+
+```
+I have replaced the credential for the service I name. Inspect the existing record and update its one entry in secrets/expires.txt. Do not append a duplicate. Record the verified expiry and renewal page, or preserve an explicit unknown state if the service does not establish a date. Keep credential values out of this file and out of chat.
+
+Help me load the replacement through a masked local input or the existing encrypted store. Run mc-check-keys, then the service's read-only connection test without printing any credential. Update the existing tracked renewal after checking the evidence. Do not treat a newer file timestamp as successful renewal.
+```
+
+*[Copy prompt](https://querino.ai/prompts/write-down-when-a-key-dies)*
 
 ## Prove the check by breaking it (Chapter 20)
 

@@ -1,69 +1,58 @@
 # Voice Extraction (Chapter 8)
 
-A one-time job that fills `profile/voice.md`. You do not describe your voice.
-You show it, and let your assistant do the describing, because it can count
-habits you have never noticed about yourself.
+Fills `profile/voice.md`. You do not describe your voice. You show it with a few samples,
+and your assistant proposes rules you can accept or correct.
 
-## Step 1: collect five real things you wrote
+## Step 1: supply three to five samples
 
-Make a folder `inbox/writing-samples/` and put a plain text file in it with
-three to five things you actually wrote.
+Choose three to five short pieces of your own writing where you recognise your voice:
 
-Not your best writing. Your **normal** writing:
+- an ordinary email
+- an explanation
+- a refusal
+- a message with bad news
 
-- an email you sent this week
-- a message where you explained something to a friend
-- one where you said no to someone
-- one where you delivered slightly bad news
-
-Include the bad-news one if you can. Anyone sounds like themselves when
-things are going well.
+Remove private details first. Then ask your mission control to save each sample as a
+separate text file in `inbox/writing-samples/`, creating the folder if needed.
 
 ## Step 2: run the extraction
 
-In a session with your folder selected:
+In your mission control, paste:
 
 ```
-Read every file in inbox/writing-samples/. Study how I actually write,
-then write profile/voice.md as a set of concrete, mechanical rules
-another writer could follow: typical sentence length, how I open and
-close a message, how direct I am, how I deliver bad news, words and
-phrases I really use, and the words I would clearly never use. Do not
-flatter me. Where a rule comes from a real line of mine, quote the
-line. Finish with a never list.
+Read the files in inbox/writing-samples/ and the current profile/voice.md. Propose a short set of writing rules based on the examples.
+
+Cover sentence length, openings and closings, directness, bad news, spelling, familiar phrases and phrases to avoid. Quote a sample line where it supports a rule. Label uncertain patterns; a few examples do not establish what I always or never write.
+
+Keep explicit preferences I already confirmed separate from patterns you infer. Do not flatter me. Finish with a short list of phrases or habits to avoid.
+
+Show the proposed profile/voice.md, then save the version I confirm. Keep the writing samples.
 ```
 
-## Step 3: cut it down
+*[Copy prompt](https://querino.ai/prompts/voice-from-samples)*
 
-It will hand you more rules than you have. A real run on five ordinary
-messages came back with over a hundred lines.
+## Step 3: keep what you recognise
 
-Go through once and delete anything you do not recognise. You want a page you
-could hand to a human ghostwriter, not a style manual nobody finishes. Short
-rules get followed; long ones get skimmed, by both of you.
+- [ ] Cut repeated points and every rule you do not recognise.
+- [ ] Check how far each rule should apply. If you write differently in reports and in
+      personal messages, say so before one habit becomes a rule for everything.
+- [ ] Keep the short list of phrases and habits to avoid, and add the phrases you catch
+      yourself deleting.
 
-**Keep the never list whole.** It is the load-bearing part. Positive rules
-bend under pressure, because "be warm" can mean anything. "Never write
-`circle back`" has exactly one meaning.
+Good rules are concrete enough to check, and quote a sample line where they can.
 
-## What good output looks like
+## Step 4: try one real draft
 
-Mechanical, countable, checkable. Real lines from a real run:
+Ask for a real message to someone in your files without explaining your style again. Leave
+it unsent while you compare it with your samples, and notice what you still want to change.
 
-- Numbers are always digits, including small ones.
-- British spelling: `colour`, `palette`, `apologise`, `organise`.
-- `genuinely` as the only intensifier.
-- Never apologise more than once, and never in the opening line.
+## Save the correction, not just the better sentence
 
-Nobody knows that about themselves. That is the point.
-
-## Register, in one line
-
-Your voice changes with the room, and one line in the file covers it: more
-formal for your manager, fully casual for your partner. The rules are a
-floor, not a cage.
+Tell the assistant what to correct and have it save the lesson where it belongs: a phrase
+you keep cutting goes into `profile/voice.md`, a wrong date into the project file. Add new
+samples when a different kind of message comes along.
 
 ## The boundary
 
-It drafts, you send. The better it sounds, the more carefully you read it
-before it leaves the house (Chapter 20).
+It drafts, you send. A sentence can sound exactly like you and still promise something you
+never agreed to, so read it before it leaves the house (Chapter 20).

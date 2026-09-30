@@ -23,31 +23,49 @@ Keep all five, in any order that reads naturally:
    spam machine.
 4. **The receipt.** "Tell me what changed and where you read it, with a
    link." Chapter 20 again.
-5. **The quiet line.** "If you find nothing solid, write exactly one
-   line: 'All quiet, nothing changed.' Never pad a quiet week." A
-   watchdog that says nothing is indistinguishable from a watchdog that
-   broke. Silence you can trust has to be spoken out loud.
+5. **Three outcomes, never two.** Changed; Checked and unchanged; or Not
+   checked, naming the sources it could not read. A watchdog that says
+   nothing is indistinguishable from a watchdog that broke, and a page it
+   could not open is not a quiet week. Silence you can trust has to be
+   spoken out loud, and only after the sources were read.
 
 ## Worked example (the author's own, run for real 2026-09-02)
 
-One line, weekly on Monday at nine, your mission control as the working folder:
+First ask your assistant to run this prompt once in your mission control.
+Then ask it to schedule the same prompt weekly, in your time zone, under the
+name `product watchdog`, with this mission control's full path as the working
+folder, delivery kept local, and a check for an existing job before it adds
+one:
 
 ```
-hermes cron create "0 9 * * 1" "Run my product watchdog. Search the web for changes announced in the last seven days to Hermes Agent: its desktop app, its scheduled jobs, its skills, or how it gets access to a folder. Also check for changes to what a ChatGPT subscription costs or includes. Only report changes that alter what a user sees, clicks or pays. For each change, tell me what changed and where you read it, with a link. Append the result to watch/product-watchdog.md, newest at the top, with the date on it. If you find nothing solid, write exactly one line: \"All quiet, nothing changed.\" Never pad a quiet week." --name product-watchdog --workdir /path/to/your/godspeed
+Read AGENTS.md in this working folder and follow it. Check the official Hermes Agent release notes and documentation for changes to the desktop app, scheduled jobs, skills and folder access. Check OpenAI's official ChatGPT pricing and release notes for changes to the subscription route used here. Inspect the named official pages, not just search snippets.
+
+Read watch/product-watchdog.md if it exists. On the first run establish a dated baseline; do not call the current page a newly announced change without evidence of when it changed.
+
+For each source record its URL, check time and whether it was read. Report changes only when they affect what a reader sees, clicks or pays. Explain the practical effect and link the supporting page. Do not repeat an already recorded finding based on the same evidence.
+
+Append a new dated section at the END of watch/product-watchdog.md. Use Changed, Checked and unchanged, or Not checked. If any required source failed, list the failed sources and preserve any partial results. Retry at the next scheduled run; do not create another job. Never replace a failure with a quiet-success line. Send nothing externally and change no account settings.
 ```
 
-Then `hermes cron run product-watchdog` to see it work once, right now. On
-Hermes 0.20.6 the first run came back with seven dated findings and their
-links (three of them Hermes 0.21.0 release notes, one of them the fact
+*[Copy prompt](https://querino.ai/prompts/product-watchdog)*
+
+Then read the saved job's time zone, next run, working folder and stop
+control. If a source will not open, ask the assistant to find a readable
+official alternative that answers the same question, and to show you what
+it used.
+
+On Hermes 0.20.6 the first run came back with seven dated findings and
+their links (three of them Hermes 0.21.0 release notes, one of them the fact
 that writes to `AGENTS.md` and skills are now approval-gated) plus one
 line saying no price change was found. Web search needs no key: Hermes
 rotates public free tiers of several search vendors.
 
 ## Where to put it
 
-- **The job has a folder, on purpose.** `--workdir` your mission control is what lets
-  it write its weekly line into `watch/product-watchdog.md`, a landing
-  place you already walk past, and what hands the job your house rules.
+- **The job has a folder, on purpose.** The saved working folder is what
+  lets it write its weekly section into `watch/product-watchdog.md`, a
+  landing place you already walk past; the prompt's first line has it read
+  your house rules there.
 - **It wants the machine that never sleeps.** Chapter 22's rule bites
   hardest here: on a laptop it patrols only while Hermes is open, and a
   missed Monday runs once, late, when you next open it.
@@ -96,5 +114,6 @@ Two layers, and you want both:
 
 ## Then the paperwork
 
-One block in `procedures.md`, including the off-switch (`hermes cron pause
-product-watchdog`). Nothing runs unlisted.
+One block in `procedures.md`, including the off-switch (**Pause** on the
+job's card, or `hermes cron pause "product watchdog"`). Nothing runs
+unlisted.

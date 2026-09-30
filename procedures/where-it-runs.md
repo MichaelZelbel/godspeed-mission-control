@@ -58,32 +58,36 @@ Model), a job card with **Trigger now**, **Pause** and **Resume**, and a
 **Manage** menu holding **Edit cron** and **Delete**. Chapter 22 walks
 that screen, driven for the book on 2026-09-04. A job made there runs in
 the folder Hermes was pointed at, but arrives with no house rules unless
-the prompt says so, so every prompt starts with "Read AGENTS.md at the
-top of this folder and follow it."
+the prompt says so, so every prompt starts with "Read AGENTS.md in the
+working folder and follow it."
 
 ## The four parts of a cron line (the typed twin, for a machine with no screen)
 
 ```
-hermes cron create "0 7 * * *" "Follow skills/morning-brief/SKILL.md and write today's brief as a dated file in brief/." --name morning-brief --workdir /path/to/your/godspeed
+hermes cron create "0 7 * * *" "Read AGENTS.md in the working folder and follow it. Read skills/morning-brief/SKILL.md and write today's brief to brief/ using that skill. Preserve any existing daily brief. Report unavailable inputs or failed checks. Do not send anything externally." --name morning-brief --workdir /path/to/your/godspeed
 ```
 
 - **Schedule.** Five fields, minute then hour: `0 7 * * *` is seven every
   morning. Phrases work too; Hermes' own examples are `30m`, `every 2h`
   and `0 9 * * *`. There is no once-an-hour floor: a two-minute job fired
   every two minutes.
-- **Prompt.** One line that names the recipe. A scheduled run is a
-  stranger to your session; say the name and the recipe runs.
+- **Prompt.** The job prompt from Chapter 22: read `AGENTS.md` first, then
+  the recipe. A scheduled run is a stranger to your session; name the rules
+  and the recipe and both run.
 - **Name.** What you will recognise in `hermes cron list`.
-- **Workdir.** Your mission control, full path. It is the folder the job runs in AND
-  the thing that hands the job your `AGENTS.md`: Hermes' own help says it
-  "injects AGENTS.md" from there. Never leave it out.
+- **Workdir.** Your mission control, full path. It is the folder the job runs
+  in, and Hermes' own help says it "injects AGENTS.md" from there. A
+  scheduled test for the book still missed the rules, which is why the
+  prompt opens by reading `AGENTS.md`. Never leave the workdir out.
 
 ## A hand run proves the recipe, not the clock
 
 **Trigger now** on the card, or `hermes cron run <name>` in a terminal,
 fires a job immediately. Its run record says `source=direct`; a run the
 clock fired says `source=builtin`. Testing with a hand run and closing
-the lid proves the recipe and nothing about the schedule.
+the lid proves the recipe and nothing about the schedule. To prove the
+clock, let a one-time test job start by itself: the timer test in
+`morning-brief-setup.md`.
 
 ## Jobs never ask
 

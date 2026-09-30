@@ -1,37 +1,30 @@
 # The Mirror Test (Chapter 10)
 
-One prompt. Run it whenever the answers start feeling slightly off-target, and
-always at the start of a spring-clean.
+One prompt. Run it when you want to choose your next task, and whenever the answers start
+feeling slightly off-target.
 
 ```
-Read every file in profile/. Describe my current life and work back to
-me from those files only: who I am, who matters, what I am working on,
-what my priorities are, and how I want to be spoken to. Then list
-anything in those files that is out of date, contradicts something
-else, or is too vague to act on. Do not look outside profile/ and do
-not change anything yet.
+What needs my attention on my current projects? Use my saved priorities and recent updates you can access. Check relevant old or conflicting notes against newer evidence before recommending a next step.
+
+Update clear changes in the mission control's records, preserving sources and dated history. Do not infer completion from a passed deadline or a recently edited file. Ask me only about an unresolved point that changes the recommendation. Prepare useful work where you can, and leave external actions for my approval.
+
+If sources disagree and neither settles the difference, ask before relying on the disputed value. Do not invent different meanings for conflicting dates. Continue with the undisputed parts of the work. Do not add reminders, deadline entries or schedules as part of this request.
 ```
+
+*[Copy prompt](https://querino.ai/prompts/what-needs-my-attention)*
 
 ## What you get
 
-**A portrait**, drawn only from your own files. Read it like a new colleague's
-summary of your life after two weeks in the job.
+**A recommendation**, backed by your saved priorities and the updates it could reach, with
+useful work prepared where it can.
 
-**A list of problems**, which is the valuable half. It comes from something
-that has just read every context file side by side. You have not done that
-since you wrote them, and two files can each be true while disagreeing with
-each other.
+**Clear changes updated** in your records, with sources and dated history kept.
 
-Real findings from a real run, on files written the same afternoon:
+**Questions only where they matter**: about an unresolved point that changes the
+recommendation.
 
-> **"End of the month" vs 2026-07-28.** `about-me.md` says the card set is due
-> "end of the month". `projects.md` pins it to Tuesday 2026-07-28. Those are 3
-> days apart. Which one is right?
+## Why the last paragraph matters
 
-> "No deadline for a year" and "only moves when the top two are clear" means it
-> never moves. Either kill it as a live project or give it a real trigger.
-
-## Why the last line matters
-
-*Do not change anything yet.* You want the list before the surgery. Fixes go
-through the four moves in `spring-clean-checklist.md`.
+When two notes disagree and nothing newer settles it, you want the question before the
+assistant relies on either value. The same paragraph keeps this request from adding
+reminders, deadlines or schedules. The rules it follows are on `spring-clean-checklist.md`.

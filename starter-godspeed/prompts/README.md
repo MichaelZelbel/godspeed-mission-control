@@ -11,8 +11,10 @@ Two drawers. Each has its own README with the detail.
 
 - **`library/`** is the shelf: the prompts you keep and paste into other tools, one file
   each. You put things here on purpose. Chapters 13 and 37.
-- **`archive/`** is the log: everything you have typed, and what the AI answered, in
-  date order, filled by a program and never by you. Chapter 37.
+- **`archive/`** is the log, and it is optional: if you switched on conversation
+  collection, what you typed to the assistants on this computer, and what they answered,
+  in date order, filled by a program and never by you. The setup the book teaches leaves
+  collection off, so an empty drawer is normal. Chapters 31 and 37.
 
 ## How this is different from `skills/`
 
@@ -25,7 +27,8 @@ If your assistant runs it, it is a skill and it belongs in `skills/`, where the 
 top of the file is how your assistant knows when to use it. If you paste it somewhere else,
 it is a saved prompt and it belongs in `library/`.
 
-Your assistant cannot draw a book cover, so a cover prompt is always the second kind.
+A cover prompt meant for a separate image tool is the second kind: you carry it to that
+tool, and your assistant here never runs it.
 
 Getting it wrong is quiet in both directions. A saved prompt in `skills/` never fires,
 because there is no job in your folder for it to do. A skill in `library/` can never be

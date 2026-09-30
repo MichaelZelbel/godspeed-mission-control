@@ -1,12 +1,19 @@
 # Practice Texts (Chapters 12, 13 and 16)
 
-Messy sample texts for testing your **Summarize for me** skill (or any
-skill that eats pasted text). Both are fictional. Name your
-summarize skill, paste one of these under it, and watch the recipe do its
-work. (Paste it with a bare "Summarize this:" instead, with no Skill
-installed, and you will get a perfectly good generic summary that ignores
-the file in your folder entirely. That is Chapter 13's lesson, and it is
-worth seeing once.)
+Two fictional texts for testing your **Summarize for me** skill, or any
+skill that takes pasted text. Each has known facts you can check the
+answer against.
+
+1. Open a fresh session and paste "Summarize this:" followed by one
+   text. Leave out the skill's name.
+2. Look for the skill's three sections, then compare every amount and
+   date with the original.
+3. If the answer uses a different format, ask the assistant to read
+   `skills/summarize-for-me/SKILL.md` and try again. If that fixes it,
+   have it inspect the folder and skill settings to find out why it
+   missed the file.
+4. Keep each text with its answer. When you change the skill, try the
+   same text again in a fresh session and compare the results.
 
 ## Text 1: the gym newsletter (used in Chapters 12 and 13)
 
@@ -28,8 +35,9 @@ fee, sorry about that, not our idea. Anyway that is all from us, see you
 at the gym!
 ```
 
-What a good run finds: the one action that costs money (re-confirm the
-direct-debit mandate by the 31st), with its date, on its own line.
+What a good run finds: under Money and deadlines, re-confirm the
+direct-debit mandate in the member portal by the 31st, or pay a 5 euro
+fee.
 
 ## Text 2: the property manager's letter (used in Chapter 16)
 
@@ -43,4 +51,5 @@ entrance stays open the whole time but the side entrance will be locked
 from the 4th. Kind regards, the property management.
 ```
 
-What a good run finds: clear your balcony before Tuesday, August 4.
+What a good run finds: under Money and deadlines, remove all plants and
+personal items from your balcony before Tuesday August 4th.

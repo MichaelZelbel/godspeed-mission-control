@@ -1,7 +1,7 @@
 # menerio
 
-Optional. Chapter 28, "Give Your Godspeed a Notebook". Everything else in the book works without
-this folder.
+Optional. Chapter 28, "Give Your Mission Control a Notebook". Everything else in the book works
+without this folder.
 
 Menerio is the notebook. It can do two jobs for your mission control. The first comes with the
 connection. The second is a separate choice, and it is yours.
@@ -29,8 +29,8 @@ a free account here first: https://menerio.com/auth?tab=signup
 |---|---|
 | `the-notebook.md` | What goes in the notebook, the mirror and whether you want it, the first notes, the Review Queue, search. |
 | `mcp-connection.md` | Making the key, connecting once, checking it, switching it off. A short "by hand" part at the end. |
-| `ai-memory-transport.md` | Optional route: pulling out what an old chat product remembers about you and importing it as notes. |
-| `interview-transfer.md` | Optional route: filling the notebook by being interviewed, when you would rather talk than paste. |
+| `ai-memory-transport.md` | What the two copies move, your files up and Menerio's facts down into `world/`, and why neither is a backup of your notes. |
+| `interview-transfer.md` | Where to start instead of an interview: the reviewed briefing from Chapter 1, filed into your mission control first. |
 
 ## The one number worth knowing before you start
 

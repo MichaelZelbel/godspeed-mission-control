@@ -1,42 +1,42 @@
 # Projects and Priorities Interview (Chapter 6)
 
-Fills `profile/projects.md`: what you are actually trying to get done, and
-what wins when two of those collide.
+Keeps `profile/projects.md` useful: your mission control reads the work you already have,
+names the project that deserves attention and offers help with the next step.
 
 ## The prompt
 
 ```
-Read profile/about-me.md and profile/people.md, then help me fill in
-profile/projects.md. Interview me about what I am actually trying to
-get done. One question at a time, no more than eight. I want three
-things out of it: every live project with its deadline and its real
-state; my top three priorities in order; and one line saying which one
-wins when two of them collide. Then write the file yourself.
+Read profile/about-me.md, profile/people.md and profile/projects.md. Use the project list to find relevant drafts, results and recent updates you can access. Read those before asking me for a progress report. Treat practice examples as fiction and keep them out of my real project list.
+
+Give me a short picture of the active work and the next useful step you could help complete. Distinguish agreed deadlines, estimates, current evidence and missing information.
+
+Use priorities I have already stated. If an important choice remains unclear, ask one question at a time, only about what changes the recommendation. Priorities say what matters; they do not tell you my available hours. Do not infer working hours, urgency or permission to spend from a priority.
+
+Update profile/projects.md with clear facts from my updates and verified sources, keeping dates and sources. Ask before replacing a priority with your interpretation. Record a confirmed change of direction and its reason in decisions.md. Keep earlier decisions as history.
+
+Offer concrete help with the next step, such as preparing a draft or comparing options. Prepare the work you can do; get my approval before sending anything or making a commitment.
 ```
 
-The first line matters: it reads your people file too, so the project entries
-come out knowing who the work is for.
+*[Copy prompt](https://querino.ai/prompts/find-the-goals-starting-point)*
+
+The result should name a project, explain why it deserves attention and offer help with the
+next step. If the saved material does not show what you are working on, it asks.
 
 ## Describe the mess, not the plan
 
-The single habit that makes this file useful.
+Not "the card set is in progress" but "12 approved, 5 in revision and four days late, 3 not
+started."
 
-Not "the card set is in progress" but "12 approved, 5 in revision and running
-four days late, 3 not started."
+## Keep the facts apart
 
-Not "revisions take a while" but "revision rounds always take 3 days and I
-always forget that."
+- **Priority:** what matters more when two projects compete.
+- **Deadline:** when the work is expected. Agreed dates and estimates are marked as which.
+- **Available time:** when you can work. A priority does not say this, so the assistant
+  asks if your notes and calendar cannot tell it.
+- **Limits:** a fixed budget, or an afternoon already promised to someone else.
 
-The plan you can get from your own head. The four days late is what changes
-the answer.
-
-## A priority is a tie-breaker
-
-A task is something you do. A priority is something that decides, at the
-moment two demands collide and one has to lose.
-
-Ten priorities is zero priorities. **Three, in order, plus one line saying
-which wins.** That last line is what turns a list into a decision rule.
+Write goals down separately and say which are firm and which you are only weighing. A goal
+you are only weighing gets a question from time to time, never work.
 
 ## What the file should end up holding
 
@@ -44,27 +44,31 @@ which wins.** That last line is what turns a list into a decision rule.
 ## Live projects
 
 ### [Project]
-- **Deadline:**
-- **State:** [real state, including what is late and what you keep forgetting]
+- **Deadline:** [date, marked agreed or estimate]
+- **State:** [real state, including what is late] (source, date)
 
-## Top three priorities, in order
-1.
-2.
-3.
+## What matters most
+[Which project wins when two compete, and why.]
 
-## Tiebreaker
-When two collide, [which one] wins.
+## Limits
+[Budget, days already promised, anything else that caps the work.]
 ```
 
-## You do not need a Project inside the app
+A confirmed change of direction, with its reason, goes into `decisions.md`.
 
-Your folder is already the room. The state lives in this file, the work files
-live next to it, and any assistant you point at the folder walks in knowing
-all of it. Nothing to maintain in two places, and nothing left behind when you
-change tools.
+## When a project is not moving
+
+Use this to find the one thing holding the project back, and a small test when the evidence
+does not point at one cause.
+
+```
+For the project that matters now, name the one thing most likely holding it back, and say what evidence supports that. Then say what observation would show you are wrong about it. If the evidence does not support one cause, propose the smallest test that would settle it. Keep verified facts, inferences and open questions in separate lists.
+```
+
+*[Copy prompt](https://querino.ai/prompts/find-what-limits-the-goal)*
 
 ## Keeping it true
 
-Projects rot faster than people. When something ships, say so and let your
-assistant clear the entry. When your three change, change them the same day.
-Chapter 10 is the routine; Part V hands it to a procedure that runs on its own.
+When you finish a project or put one on hold, tell your mission control during the work. It
+updates the project list and keeps the earlier decision with its date and reason. Chapter 10
+is the routine; Part V hands it to jobs that run on their own.

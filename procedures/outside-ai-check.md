@@ -20,22 +20,22 @@ seconds. If you answer yes, the prompt is already saved and waiting.
 Once, in a session with your folder attached:
 
 ```
-Save the prompt I used in Chapter 1 to pull my context out of my old
-AI into prompts/library/bring-your-context-with-you.md, with a purpose
-line at the top saying what it is for and where it came from. The kit
-has the full text at profile/bring-your-context-with-you.md.
+From the companion kit's profile/bring-your-context-with-you.md, copy only the first prompt, beginning 'Help me create a short briefing', into prompts/library/bring-your-context-with-you.md. Do not include the correction or download prompts. Add a purpose line: summarize accessible background for review and import; not a full conversation export. Preserve an existing saved version and show any difference before replacing it.
 ```
+
+*[Copy prompt](https://querino.ai/prompts/bring-background-from-another-ai)*
 
 ## Step 2: add the monthly part to your weekly review
 
-If you built the weekly review before this asset existed, you do not have to
-rebuild it. Add the part:
+If you built the weekly review from the prompt in `weekly-review-setup.md`, it
+already carries this reminder: skip this step. If you built it before that,
+you do not have to rebuild it. Add the part:
 
 ```
 Open skills/weekly-review/SKILL.md and add a part, which runs ONLY when
 this is the first review of a calendar month: ask me whether I have been
 using any AI outside this folder since the last time, name the tools I
-said I use if you know them, and tell me the export prompt is saved in
+said I use if you know them, and tell me the briefing prompt is saved in
 prompts/library/bring-your-context-with-you.md. One short paragraph, and
 nothing in the other three weeks of the month. Change nothing else.
 ```
@@ -46,11 +46,11 @@ One tool at a time. Each one has its own memory and its own answer, so doing
 two at once gets you a muddle rather than a saving.
 
 1. Open the tool. Paste the prompt from `prompts/library/`.
-2. Save the answer as a file.
+2. Read the answer and correct it before you keep it. Choose which details
+   may travel, and leave guesses and open questions visible. Save it as a
+   file.
 3. In a session with your folder attached, file it the way Chapter 3 filed the
    first one, and ask for only what is new to be added.
-
-The filing prompt is in `profile/bring-your-context-with-you.md`, Step 4.
 
 ## The one line that keeps this honest
 

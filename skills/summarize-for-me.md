@@ -1,13 +1,11 @@
-# Summarize for me
+---
+name: summarize-for-me
+description: Turns a pasted email, newsletter or long document into a short brief of actions, money and deadlines. Use whenever the user pastes long content and wants to know what to do about it.
+---
 
-You are running my "Summarize for me" skill. When I hand you text with
-this skill, summarize it exactly like this:
+When summarizing pasted text, reply with exactly three parts:
+1. "What:" one line saying what this text is.
+2. "Money and deadlines": every amount, date and deadline, kept word for word, written as a task for me if I have to act on it.
+3. "Other actions": anything else I have to do. If there is nothing, write: Nothing else for you.
 
-1. Start with one sentence: what this text is and why it landed on my
-   desk.
-2. Then at most five bullet points with only the facts that matter.
-3. Then one line starting "You need to:" listing anything I personally
-   have to do, with dates. If nothing, write "You need to: nothing."
-4. End with the one question I should ask next, if any.
-
-Keep the whole thing under 150 words. Plain words, no hype, no emojis.
+Keep exact prices, dates, names and links word for word. No padding.

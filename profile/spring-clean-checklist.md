@@ -1,60 +1,36 @@
 # Spring-Clean Checklist (Chapter 10)
 
-Fifteen minutes, quarterly (monthly if your work moves fast). Run it sooner
-whenever answers start feeling slightly off-target.
-
-The problem is not that your assistant forgets. It is that a picture of your
-life which never updates is a picture of a life you used to have.
+Your mission control keeps its notes current while it helps you. Use this card whenever
+answers start feeling slightly off-target, to check that it is doing so.
 
 ## 1. The mirror test
 
-In a session with your folder selected:
+Run the prompt in `mirror-test.md` in your mission control.
 
-```
-Read every file in profile/. Describe my current life and work back to
-me from those files only: who I am, who matters, what I am working on,
-what my priorities are, and how I want to be spoken to. Then list
-anything in those files that is out of date, contradicts something
-else, or is too vague to act on. Do not look outside profile/ and do
-not change anything yet.
-```
+## 2. The moves it should make
 
-Two halves. The **portrait** you read like a new colleague's summary of your
-life: mostly right, weirdly off in a couple of places. The **list** is the one
-that earns the fifteen minutes, because it comes from something that has just
-read all four files side by side, which you have not done since you wrote them.
-
-Note the last line of the prompt. You want the list before the surgery.
-
-## 2. The four moves
-
-Work the list, in the files.
-
-- [ ] **Delete the dead.** Finished projects, people who are gone, situations
-      that resolved. Delete the lines; do not archive them into a corner of
-      the same file.
-- [ ] **Correct the changed.** New job, new rate, moved deadline. A wrong fact
-      is worse than no fact, because you will act on it.
-- [ ] **Squeeze the mumbles.** Three vague lines about the same client, grown
-      over three months of captures, become one line that earns its space.
-- [ ] **Re-read the ones that stay.** `about-me.md` and your three priorities
-      drift too, just slower. If your priorities are word for word what they
-      were three months ago, be honest about why.
+- [ ] **Updates come from the work.** When you mention a change, it updates the saved note
+      and keeps the previous version with its date.
+- [ ] **Completion has a scope.** A delivered job leaves the invoice on the list until
+      payment is confirmed.
+- [ ] **Disagreements get checked first.** When two notes disagree, it looks for newer
+      evidence, and asks you only if the sources still disagree.
+- [ ] **An old note can still be right.** A passed deadline is a reason to check, not proof
+      the work finished. A suspicion stays visible as a suspicion.
+- [ ] **It checks only what it can reach.** A change that happened on a phone call reaches
+      it when you mention it.
 
 ## 3. Re-run the mirror test
 
-The portrait should now read true, and the list should be short. Done.
+The recommendation should now rest on current notes, with few or no open questions.
 
 ## Rhythm
 
-- **Quarterly:** enough for most lives
-- **Monthly:** fast-moving work
-- **Mirror test alone:** any time answers drift off-target, the way a radio
-  drifts off station
+- **Any time answers drift off-target:** the mirror test and this card.
+- **Between conversations:** nothing checks unless a scheduled job does. The morning brief
+  (Chapter 22) and the weekly review (Chapter 24) can check for changes while you are away.
 
 ## Why this is the ownership move
 
-You just read everything your assistant believes about you, corrected what was
-wrong, and deleted what you did not want it to know. No request form, no
-support ticket, nobody's permission. Try that with the advertising profile
-some platform keeps on you.
+Everything your assistant believes about you is in files you can open, correct and back up
+yourself. No request form, no support ticket, nobody's permission.

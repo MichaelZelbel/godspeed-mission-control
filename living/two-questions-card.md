@@ -1,59 +1,60 @@
 # The Two-Questions Card (Chapter 20)
 
-Fluency carries no information about whether an answer was checked. A
-looked-up answer and a remembered answer arrive in the same confident
-English. So before you act on an answer, make it declare its status.
+A clear answer with a source link can look like research without being research. Before you
+act on an answer, find out whether the assistant read a source, and whether that source
+supports what it said.
 
 ## The habit
 
-After any answer you are about to act on, type:
+After any answer you are about to act on, ask:
 
 ```
 Did you check that, or do you remember it?
 ```
 
-Every answer sits in one of two piles, checked or remembered. This
-question makes your assistant say which, plainly. Then:
+Then:
 
 ```
 What would make this wrong?
 ```
 
-This surfaces the assumptions (renamed products, regional differences,
-stale dates, things it guessed about your situation). If the stakes
-deserve it, finish with the cure:
+The first gives you a source to inspect, the second a condition to test. Use your own words
+if you prefer.
+
+## Check the claim against the page
+
+When the answer supports a choice, ask for its sources:
 
 ```
-Now check it.
+For the claims that support your recommendation, name the sources you actually inspected and give working links. State when you checked them.
+
+For each claim, explain what the source establishes and what it does not. Separate direct source statements from your inference. If a source is missing, outdated or about a different case, keep the claim unverified and revise the recommendation accordingly.
+
+Do not make a purchase or commitment.
 ```
 
-Add your country or situation ("Now check it, for Germany") to force
-answers about your world, not the average world.
+*[Copy prompt](https://querino.ai/prompts/check-the-claim-against-the-source)*
 
-## The visual tell
+A link is not the check. Open it and read the part that is supposed to support the answer:
+for a price, the billing period, tax and which plan includes the feature you want.
 
-When your assistant actually looked, the reply carries source links.
-Links mean it looked; no links usually means it remembered. (As of this
-writing. If in doubt, ask the first question.)
+## Keep four kinds of statement apart
+
+| Kind | What it tells you |
+|---|---|
+| Source-supported claim | A named source supports this statement, subject to that source's limits |
+| Assumption | A missing value has been chosen temporarily to explore a possibility |
+| Recommendation | The assistant advises a choice using the evidence, assumptions and your goals |
+| Completed action | Something happened and left a result that can be checked |
 
 ## When to run it
 
-Not on every message. The trigger is action: before you spend money,
-send a message, book something, change a treatment, or quote a number
-to another human, the answer pays the toll. Same trigger as your red
-lines (Chapter 17).
+Not on every message. Spend the care on answers you are about to use: a number you will
+quote, a message you will send, a purchase you are weighing up. Medical decisions need a
+qualified clinician; the assistant can prepare the questions and sources.
 
-## The half-right trap
+## For jobs that run while you are away
 
-An answer is not simply checked or remembered end to end. It can be
-both, in the same paragraph, in the same voice. In the run printed in
-Chapter 20, two prices from memory were right, two were wrong, and one
-whole product tier was missing, with no seam anywhere in the wording.
-That is why the fix is a question and not a feeling.
-
-## For procedures
-
-Bake the receipt rule into anything that reports on a schedule (the
-Chapter 25 watchdog line): "tell me where you read it, with a link."
-Scheduled reports owe receipts by default; the two questions are the
-handheld version for everything else.
+The prepared result should show what was done, what supports the answer and what still needs
+a decision, with a link to each supporting page. The Chapter 25 watchdog prompt already asks
+for that link.

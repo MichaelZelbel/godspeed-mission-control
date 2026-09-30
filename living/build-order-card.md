@@ -1,114 +1,103 @@
 # The Build Order (Appendix C)
 
-One rung, one sitting of about twenty minutes, one thing you now have.
-Print this, put it where you make coffee, tick rungs with a pen.
+If you've set the book aside for a while, this list will help you find your place. Look for the result you last checked.
 
-There are no dates on this card on purpose. Climb three rungs on a good
-Sunday or one a week; the order matters, the pace does not, and the
-system works at every height.
+Tick each chapter when its result works. If you fall off, do not restart: resume where you
+stopped. Each line names the kit files that chapter uses.
 
-**The four rules:** twenty minutes is a ceiling, not a target (stop
-mid-rung and resume next sitting); a maintenance sitting is a real rung
-(read yesterday's output, correct one thing, never build angry); one
-tool all the way up; every rung pays on the day you climb it, so if you
-cannot name what you got, the rung is not finished.
-**If you fall off:** do not restart, resume. There is no streak.
+## Part I: Start Your Mission Control
 
-## Take it out
+- [ ] Chapter 1: Start Your AI Briefing With What It Already Knows. Kit:
+      `profile/bring-your-context-with-you.md`; fallback `profile/about-you-template.md`.
+- [ ] Chapter 2: Install Hermes and Create Your Mission Control. Kit: the installer
+      (`GodspeedSetup.exe` on Windows, `install-godspeed.sh` on macOS and Linux) and
+      `setup/match-edition.md`.
+- [ ] Chapter 3: Organize the Files Your AI Uses. Kit: `starter-godspeed/`; the filing
+      request is Step 4 of `profile/bring-your-context-with-you.md`.
+- [ ] Chapter 4, optional: Use Your Mission Control for Coding Projects. Kit:
+      `coding/project-setup.md`, `starter-godspeed/dev/README.md` and
+      `starter-godspeed/.gitignore`.
 
-- [ ] 1. Run the export prompt, save the answer as `what-my-ai-knew.md`
-      on your Desktop, request the data export too (Ch 1). **You
-      have:** what your AI already knew about you, in a file you own.
-- [ ] 2. The three cuts: wrong, private, padding (Ch 1). **You have:** a
-      page about you that is true.
-- [ ] 3. Install the app and sign in, run the mission control installer, drag your
-      file in, point the app at `godspeed`, first job (Ch 2). **You have:**
-      the whole system installed and an assistant with hands on it.
-- [ ] 4. Walk the tour of the nine names, then file the import into
-      them (Ch 3). **You have:** rooms with something already in them,
-      and `about-me.md` as the master copy of who you are.
-- [ ] 5. Only if you write code: open the mission control in your editor, make the
-      one-line signpost, clone a project into `dev/` (Ch 4). **You
-      have:** your repositories beside your profile, fenced out of the
-      mission control's history.
+## Part II: Give AI Useful Background
 
-## It knows you
+- [ ] Chapter 5: The People Who Matter. Kit: `profile/people-interview.md`.
+- [ ] Chapter 6: Projects and Priorities. Kit: `profile/projects-interview.md`.
+- [ ] Chapter 7: Give Mission Control a Goal, Then Let It Work. Kit:
+      `starter-godspeed/goals/`, `starter-godspeed/forecasts/`, `starter-godspeed/work/`,
+      `starter-godspeed/skills/next-action/` and `starter-godspeed/skills/work-item/`.
+- [ ] Chapter 8: Teach AI Your Writing Style. Kit: `profile/voice-extraction-prompt.md`.
+- [ ] Chapter 9: Tell Mission Control Once, Let It Remember. Kit:
+      `profile/capture-checklist.md`.
+- [ ] Chapter 10: Let Mission Control Keep Up With Your Life. Kit: `profile/mirror-test.md`
+      and `profile/spring-clean-checklist.md`.
+- [ ] Chapter 11: Correct AI Without the Argument. No kit file.
 
-- [ ] 6. Let it interview you about your people (Ch 5). **You have:**
-      `people.md`.
-- [ ] 7. Projects and priorities, with a tie-breaker (Ch 6). **You
-      have:** `projects.md`, and an answer to "which one is second".
-- [ ] 8. Voice, from five real things you wrote, then cut by half
-      (Ch 8). **You have:** `voice.md`.
-- [ ] 9. Capture habit on: five triggers, a prompt that empties the
-      inbox, and meet `observations/` (Ch 9). **You have:** the rung
-      that keeps paying.
-- [ ] 10. The mirror test and the four moves (Ch 10). **You have:**
-      proof your files are still true.
-- [ ] 11. The charm counter: set the countdown, adopt the one rule,
-      reset without mercy (Ch 11). **You have:** a tone you picked on
-      purpose.
+## Part III: Teach AI Repeated Jobs
 
-## It works your way
+- [ ] Chapter 12: Save a Repeated Job as an AI Skill. Kit: `skills/practice-texts.md`.
+- [ ] Chapter 13: Make an AI Skill Work Your Way. Kit: `skills/skill-interview.md` and
+      `living/saved-prompt-card.md`.
+- [ ] Chapter 14: Skills for Email, Planning and Decisions. Kit:
+      `skills/first-five-skills.md` and `skills/prepare-a-decision/SKILL.md`.
+- [ ] Chapter 15: Create Skills for Your Own Work. Kit: `skills/craft-skill-interview.md`.
+- [ ] Chapter 16: Check That Your AI Skills Work. Kit: `skills/skill-test-checklist.md`.
 
-- [ ] 12. Make one folder and one `SKILL.md` by hand, then ask without
-      naming it (Ch 12). **You have:** a skill that steps forward on its own.
-- [ ] 13. Get interviewed, get the recipe it writes (Ch 13). **You have:** `skills/summarize-for-me/SKILL.md` as the master.
-- [ ] 14. The other four starters (Ch 14). **You have:** five recipes
-      for the jobs everyone repeats.
-- [ ] 15. Craft interview, then build them one at a time, two sittings
-      for most people (Ch 15). **You have:** recipes made of your job.
-- [ ] 16. Cold start, stranger, rule check (Ch 16). **You have:** the
-      knowledge that a vague recipe improvises instead of failing.
+## Part IV: Set Limits and Check the Work
 
-## It is safe
+- [ ] Chapter 17: Set Limits on What AI May Do. Kit: `procedures/red-lines-interview.md`
+      and `procedures/red-lines-template.md`.
+- [ ] Chapter 18: Back Up Your Mission Control and Undo Mistakes. Kit:
+      `procedures/safety-net-setup.md`.
+- [ ] Chapter 19: Check Where Your Private Information Goes. Kit:
+      `living/privacy-audit-checklist.md`.
+- [ ] Chapter 20: Check AI's Answers Before You Act. Kit: `living/two-questions-card.md`
+      and `living/the-alternatives-card.md`.
 
-- [ ] 17. Write the red lines, install them in both places, fire live
-      ammunition (Ch 17). **You have:** rules you have watched hold.
-- [ ] 18. Version history plus a private copy off the machine (Ch 18).
-      **You have:** an undo for the bad day you have not had yet.
-- [ ] 19. Privacy audit: folder first, then the app (Ch 19). **You
-      have:** four drawers and certainty about each.
+## Part V: Have Work Ready When You Return
 
-## It works without you
+- [ ] Chapter 21: Prepare a Job to Run on a Schedule. Kit:
+      `procedures/procedure-register.md`.
+- [ ] Chapter 22: The Morning Brief. Kit: `procedures/morning-brief-setup.md`,
+      `procedures/where-it-runs.md`, the commands in `tools/` (`mc-goals`, `mc-forecast`,
+      `mc-work`, `mc-run`, `mc-decide`, `mc-work-run`, `mc-check-written`) and, for the
+      practice run, `practice/maintenance-classes/`.
+- [ ] Chapter 23: Let AI Investigate a Question While You Are Away. Kit:
+      `practice/maintenance-classes/` and `skills/prepare-a-decision/SKILL.md`.
+- [ ] Chapter 24: Set Up an Automatic Weekly Review. Kit:
+      `procedures/weekly-review-setup.md`, `procedures/outside-ai-check.md` and
+      `procedures/ai-subscription-review.md`.
+- [ ] Chapter 25: Get Alerts When a Page or Product Changes. Kit:
+      `procedures/watchdog-setup.md`.
+- [ ] Chapter 26: Keep Researching a Question Over Time. Kit:
+      `procedures/research-watch-setup.md` and `skills/research-watch/SKILL.md`.
+- [ ] Chapter 27: Track Deadlines Until the Work Is Done. Kit: `tools/due.js`, installed
+      as `mc-due`, and `procedures/what-runs-out-and-when.md`.
 
-- [ ] 20. Which skills can find their own input, then fill
-      `procedures.md` (Ch 21). **You have:** one page of everything
-      that runs without you.
-- [ ] 21. Brief: write it, run it by hand, then the clock and where it
-      runs (Ch 22). **You have:** tomorrow morning, handled.
-- [ ] 22. Weekly review scheduled, then **Run now** rather than waiting
-      (Ch 24). **You have:** an appointment with your own week that
-      keeps itself.
-- [ ] 23. Watchdog, five parts, including the quiet line (Ch 25). **You
-      have:** a patrol on something you check by hand today.
-- [ ] 24. The two questions (Ch 20). **You have:** the cheapest
-      insurance in the book.
+## Part VI: Add What You Need
 
-That is the system. Everything below is optional.
-
-## Optional, when the problem shows up
-
-- [ ] 25. The notebook (Ch 28). Trigger: facts that happen away from
-      your desk keep dying on the way home.
-- [ ] 26. One memory, every tool (Ch 28). Trigger: the assistant that
-      works for you should read those notes too.
-- [ ] 27. Every machine joined (Ch 31). Trigger: a second computer of
-      yours has an assistant that knows nothing about you.
-- [ ] 28. The always-on server (Ch 32). Trigger: you want a machine
-      that runs without you. Give this one two sittings, neither of
-      them tired.
-- [ ] 29. Your assistant on Telegram (Ch 32). Trigger: you read the
-      brief on the bus and could do nothing about it until home.
-- [ ] 30. The swap test (Ch 36). Trigger: curiosity, or a price rise.
-- [ ] 31. The prompts you save (Ch 37). Trigger: you wanted a prompt
-      that was on a computer you were not sitting at.
-
-Chapter 38 is reading, not building.
-
-## The rungs that soak
-
-Rungs 9, 21 and 22 are not built, they are lived. The capture habit
-needs real days, the brief needs mornings, the weekly review needs a
-Monday and then another Monday. Climb them early and keep going; they
-fill in behind you.
+- [ ] Chapter 28, optional: Give Your Mission Control a Notebook. Kit:
+      `menerio/the-notebook.md`, `menerio/mcp-connection.md`, `mc-menerio-connect`,
+      `mc-search` and `starter-godspeed/skills/keep-a-note/`.
+- [ ] Chapter 29, optional: Give Your Mission Control Its Own Email Address. Kit:
+      `mail/README.md`, `mail/mc-address.md` and `tools/mc-mail.js`, installed as `mc-mail`.
+- [ ] Chapter 30, optional: Let Your Mission Control Read Your Mail. Kit: `mail/README.md`,
+      `mc-mail` with `tools/mc-mail-imap.js`, and `starter-godspeed/skills/connect-email/`.
+- [ ] Chapter 31, optional: Use the Same Mission Control on Another Computer. Kit: the
+      joining installer and `procedures/keys-that-expire.md`.
+- [ ] Chapter 32, optional: Install Your Mission Control on a Linux Server. Kit:
+      `server/install.sh`, `server/install-watchdog.sh`, `server/setup.md` and
+      `server/three-traps.md`.
+- [ ] Chapter 33, optional: Use Your Server From the Desktop App. Kit:
+      `server/open-the-door.sh`.
+- [ ] Chapter 34, optional: Let Your Mission Control Make a Phone Call for You. Not in the
+      kit: the `mc-phone` add-on at https://github.com/MichaelZelbel/mc-phone.
+- [ ] Chapter 35, optional: Let Your Mission Control Finish Your Videos. Not in the kit:
+      the `mc-video` add-on at https://github.com/MichaelZelbel/mc-video.
+- [ ] Chapter 36, optional: Try Your Mission Control With Another AI Assistant. Kit:
+      `swap/opencode.json`, `swap/three-questions.md` and `swap/openrouter-notes.md`.
+- [ ] Chapter 37, optional: Reach and Share Your Saved Prompts Online. Kit:
+      `living/saved-prompt-card.md` and the README files under `starter-godspeed/prompts/`.
+- [ ] Chapter 38: Let Your Mission Control Coach You. Not in the kit: the `godspeed-coach`
+      add-on at https://github.com/MichaelZelbel/godspeed-coach.
+- [ ] Chapter 39: Keep the Jobs That Give You Time Back. No new kit file: your mission
+      control's `procedures.md` and `decisions.md`.

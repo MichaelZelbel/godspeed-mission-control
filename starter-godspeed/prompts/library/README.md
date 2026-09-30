@@ -30,10 +30,10 @@ The plain version of the difference:
 | Where it runs | in this folder | anywhere, including tools that cannot see this folder |
 | How it is found | the assistant reads the header and picks | you search for it, or ask your assistant to |
 
-The clearest example is a prompt for making a book cover. The tool that makes the
-picture cannot see this folder and never will, and your assistant cannot draw a
-picture either. So nobody here can run it. It is a saved prompt, and this drawer
-is where saved prompts live.
+The clearest example is a prompt for a separate image tool, such as one that
+makes a book cover. That tool cannot see this folder and never will, so the
+prompt is something you carry to it, and your assistant here never runs it. It
+is a saved prompt, and this drawer is where saved prompts live.
 
 ## How a saved prompt is written
 
@@ -55,12 +55,20 @@ you search, so write it for the version of you who has forgotten this file exist
 
 - **Ask.** "Save that prompt in my prompts library, call it cover-art, and write
   a purpose line for it."
-- **From your old AI.** Chapter 1's export asks your previous assistant for the
-  prompts behind the jobs it does for you again and again. Those land here.
+- **The Chapter 1 briefing prompt.** Chapter 24 saves it here as
+  `bring-your-context-with-you.md`, so the weekly review can remind you to bring
+  new background over from another AI tool.
 
 ## How to get things out
 
 Ask your assistant. "Find the prompt I used for the cover art." It will search
-this folder and the log next door in `prompts/archive/`.
+this folder and, if you switched collection on, the log next door in
+`prompts/archive/`.
+
+## An online copy, if you want one
+
+Chapter 37 gives a prompt a web copy you can reach from another device or share.
+Remove private details before it goes online. When you bring a revised version
+back, compare it with the file here and decide which copy your changes start in.
 
 Nothing here yet. It fills up as you work.
