@@ -2,7 +2,7 @@
 
 Optional. About ten minutes. Free for light use.
 
-Your mission control gets an address of its own, for example `sam-mission control@agentmail.to`. You forward the
+Your mission control gets an address of its own, for example `sam-mc@agentmail.to`. You forward the
 messages you want it to see; it never sees the rest of your mail. The book's Chapter 29 shows
 what to do with it.
 
