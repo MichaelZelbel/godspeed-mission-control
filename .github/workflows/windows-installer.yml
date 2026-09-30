@@ -1,0 +1,277 @@
+name: windows installer
+# Windows readers get the same code as macOS and Linux readers, always.
+#
+# macOS and Linux readers run install-godspeed.sh, which pins one kit-bootstrap tag (KB_BRANCH).
+# Windows readers download GodspeedSetup.exe, which carries a pin of its own. Until 2026-09-30 that
+# .exe was built by hand on a laptop whenever someone remembered, and it fell behind: that evening
+# macOS and Linux fetched kit-bootstrap v2.16 while the public .exe still fetched v2.13.
+#
+# So the pin in install-godspeed.sh is the one source of truth. Whenever the latest release does not
+# carry it, this workflow builds GodspeedSetup.exe from exactly that tag on a fresh GitHub Windows
+# machine, runs it the way a reader does (a first install, and an update over the previous public
+# release), and publishes it as the latest release only if every check passes. A failed check
+# publishes nothing: readers keep the previous installer, and the run is red.
+#
+# The installer's version is the pin's version: kit-bootstrap v2.16 is Installer 2.16.0, the same
+# number on every platform. Reader-facing notes come from docs/releases/<version>.md; its first line
+# ("# ...") ends the release title. Without that file the release says only that Windows now runs
+# the same code as macOS and Linux.
+on:
+  push:
+    branches: [main]
+    paths: [install-godspeed.sh, docs/releases/**, .github/workflows/windows-installer.yml]
+  schedule:
+    - cron: '23 3 * * *'   # daily: catches a failed run, or a release someone published by hand
+  workflow_dispatch:
+concurrency:
+  group: windows-installer
+  cancel-in-progress: false
+permissions:
+  contents: write
+env:
+  KB_REPO: https://github.com/MichaelZelbel/kit-bootstrap
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      pin: ${{ steps.p.outputs.pin }}
+      version: ${{ steps.p.outputs.version }}
+      prev: ${{ steps.p.outputs.prev }}
+      action: ${{ steps.p.outputs.action }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: p
+        name: Which tag macOS and Linux get, and whether Windows has it
+        env: { GH_TOKEN: '${{ github.token }}' }
+        run: |
+          set -euo pipefail
+          pin="$(sed -n 's/^KB_BRANCH="\(v[0-9][0-9.]*\)".*/\1/p' install-godspeed.sh)"
+          engine="$(sed -n 's#^ENGINE=".*/kit-bootstrap/\(v[0-9][0-9.]*\)/setup-godspeed\.sh"#\1#p' install-godspeed.sh)"
+          [ -n "$pin" ] || { echo "install-godspeed.sh names no KB_BRANCH tag"; exit 1; }
+          [ "$engine" = "$pin" ] || { echo "install-godspeed.sh disagrees with itself: ENGINE $engine, KB_BRANCH $pin"; exit 1; }
+          git ls-remote --exit-code --tags "$KB_REPO" "refs/tags/$pin" >/dev/null || { echo "kit-bootstrap has no tag $pin"; exit 1; }
+          version="${pin#v}"; case "$version" in *.*.*) ;; *) version="$version.0" ;; esac
+          latest="$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq .tag_name 2>/dev/null || true)"
+          if [ "$latest" = "v$version" ]; then action=none
+          elif gh api "repos/$GITHUB_REPOSITORY/releases/tags/v$version" >/dev/null 2>&1; then action=relabel
+          else action=build; fi
+          echo "macOS and Linux get $pin; the latest release is ${latest:-none}; Installer $version: $action"
+          { echo "pin=$pin"; echo "version=$version"; echo "prev=$latest"; echo "action=$action"; } >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: plan
+    if: needs.plan.outputs.action == 'build'
+    runs-on: windows-latest
+    timeout-minutes: 20
+    env:
+      PIN: ${{ needs.plan.outputs.pin }}
+      VERSION: ${{ needs.plan.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: MichaelZelbel/kit-bootstrap
+          ref: refs/tags/${{ needs.plan.outputs.pin }}
+          fetch-depth: 0
+      - name: Build GodspeedSetup.exe from exactly that tag, pinned to it
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $head = (git rev-parse HEAD).Trim()
+          $tagged = (git rev-parse "$env:PIN^{commit}").Trim()
+          if ($head -ne $tagged) { throw "checked out $head, but $env:PIN names $tagged" }
+          if (git status --porcelain) { throw "the checkout is not clean" }
+          # The tag's own godspeed-setup.iss may still name an older pin (v2.16's says v2.15), so the
+          # two defines are set here, in a copy, and nothing else in the wizard changes.
+          Set-Location windows
+          $text = [IO.File]::ReadAllText((Join-Path $PWD 'godspeed-setup.iss'))
+          foreach ($name in 'KbPin', 'AppVersion') {
+            $n = ([regex]::Matches($text, "(?m)^#define\s+$name\s+`"[^`"]*`"")).Count
+            if ($n -ne 1) { throw "godspeed-setup.iss defines $name $n times, expected once" }
+          }
+          $text = $text -replace '(?m)^#define\s+KbPin\s+"[^"]*"', "#define KbPin `"$env:PIN`""
+          $text = $text -replace '(?m)^#define\s+AppVersion\s+"[^"]*"', "#define AppVersion `"$env:VERSION`""
+          [IO.File]::WriteAllText((Join-Path $PWD 'godspeed-setup.release.iss'), $text, [Text.UTF8Encoding]::new($false))
+          $iscc = @((Get-Command iscc -ErrorAction SilentlyContinue).Source,
+                    "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe", "$env:ProgramFiles\Inno Setup 6\ISCC.exe") |
+                  Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+          if (-not $iscc) {
+            choco install innosetup -y --no-progress | Out-Null
+            $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          }
+          & $iscc /Qp godspeed-setup.release.iss
+          if ($LASTEXITCODE -ne 0) { throw "the compiler failed with exit code $LASTEXITCODE" }
+          $exe = Get-Item dist\GodspeedSetup.exe
+          if ($exe.VersionInfo.FileVersion -notlike "$env:VERSION*") { throw "the .exe says version $($exe.VersionInfo.FileVersion), expected $env:VERSION" }
+          "built Installer $env:VERSION, pinned to $env:PIN, from $($head.Substring(0,7))"
+          "sha256: $((Get-FileHash $exe -Algorithm SHA256).Hash)"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GodspeedSetup
+          path: windows/dist/GodspeedSetup.exe
+          if-no-files-found: error
+
+  # A fresh GitHub Windows machine has no mission control, no Git setup of the reader's and nobody
+  # at the keyboard: the reader who clicks Next everywhere.
+  fresh:
+    needs: [plan, build]
+    runs-on: windows-latest
+    timeout-minutes: 40
+    env:
+      PIN: ${{ needs.plan.outputs.pin }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { path: kit }
+      - uses: actions/download-artifact@v4
+        with: { name: GodspeedSetup }
+      - name: Run it the way a reader who clicks Next everywhere does
+        shell: pwsh
+        env: { KB_NOTEBOOK: skip }
+        run: |
+          $p = Start-Process .\GodspeedSetup.exe -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/LOG=setup.log' -PassThru
+          if (-not $p.WaitForExit(900000)) { "STILL RUNNING AFTER 15 MINUTES"; Get-Content "$env:LOCALAPPDATA\Godspeed\setup-log.txt" -Tail 40 -ErrorAction SilentlyContinue; exit 1 }
+          Get-Content "$env:LOCALAPPDATA\Godspeed\setup-log.txt" -Tail 25 -ErrorAction SilentlyContinue
+          "installer exit: $($p.ExitCode)"; if ($p.ExitCode -ne 0) { exit 1 }
+      - name: What a Windows reader has
+        shell: pwsh
+        run: |
+          $bin = Join-Path $HOME '.local\bin'; $env:PATH = "$bin;$env:PATH"
+          $mc = Join-Path $HOME 'godspeed'; $fail = 0
+          function Want($what, [scriptblock]$test) {
+            $ok = $false; try { $ok = [bool](& $test) } catch { Write-Host "   $_" }
+            if ($ok) { Write-Host "ok    $what" } else { Write-Host "FAIL  $what"; $script:fail++ }
+          }
+          Want "the mission control exists at $mc" { Test-Path (Join-Path $mc 'AGENTS.md') }
+          foreach ($c in 'mc-goals','mc-forecast','mc-work','mc-run','mc-decide','mc-work-run','mc-check-written','mc-due','mc-check-keys','mc-check-moves') {
+            Want "$c is installed as a command" { Test-Path (Join-Path $bin "$c.cmd") }
+          }
+          $lnk = Get-ChildItem "$env:APPDATA\Microsoft\Windows\Start Menu\Programs", "$env:ProgramData\Microsoft\Windows\Start Menu\Programs" -Recurse -Filter 'Update my mission control.lnk' -ErrorAction SilentlyContinue | Select-Object -First 1
+          Want "the Start menu updater fetches $env:PIN, the tag macOS and Linux get" {
+            (New-Object -ComObject WScript.Shell).CreateShortcut($lnk.FullName).Arguments -match "-KbBranch `"$([regex]::Escape($env:PIN))`""
+          }
+          Want "the next-action recipe is in the mission control" { Test-Path (Join-Path $mc 'skills\next-action\SKILL.md') }
+          Push-Location $mc
+          $o = (& cmd /c "mc-decide --dry-run 2>&1") | Out-String
+          Write-Host ($o | Select-Object -First 20)
+          Want "mc-decide runs" { $o -notmatch 'not recognized' }
+          Pop-Location
+          $envfile = @(Get-Content (Join-Path $HOME '.godspeed\device.env') -ErrorAction SilentlyContinue)
+          Want "a first mission control copies no conversations until the reader ticks a tool" { @($envfile | Where-Object { $_ -eq 'GODSPEED_PROMPT_SOURCES=' }).Count -eq 1 }
+          Want "nobody at the keyboard means the install is not counted" { -not ($envfile -match '^GODSPEED_INSTALL_COUNT=yes') }
+          if ($fail) { throw "$fail failed" } else { "ALL PASS" }
+      - name: The kit's tool tests, on this machine
+        shell: bash
+        run: |
+          fail=0
+          for t in test-goals.sh test-check-moves.sh test-work.sh test-work-run.sh test-forecast.sh test-check-written.sh; do
+            r="$(bash "kit/tools/$t" 2>&1 | tail -1)"; echo "$t: $r"; case "$r" in *" 0 failed"*) ;; *) fail=1 ;; esac
+          done
+          exit $fail
+
+  # A reader who installed the previous public release runs the new one over it: their own edits
+  # stay byte for byte, and the updater moves to the new tag.
+  upgrade:
+    needs: [plan, build]
+    runs-on: windows-latest
+    timeout-minutes: 50
+    env:
+      PIN: ${{ needs.plan.outputs.pin }}
+      PREV: ${{ needs.plan.outputs.prev }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { name: GodspeedSetup }
+      - name: The previous release, installed the way a reader did
+        shell: pwsh
+        env: { KB_NOTEBOOK: skip }
+        run: |
+          Invoke-WebRequest "https://github.com/$env:GITHUB_REPOSITORY/releases/download/$env:PREV/GodspeedSetup.exe" -OutFile prev.exe
+          $p = Start-Process .\prev.exe -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES' -PassThru
+          if (-not $p.WaitForExit(900000)) { "the previous release hung"; exit 1 }
+          "previous installer ($env:PREV) exit: $($p.ExitCode)"; if ($p.ExitCode -ne 0) { exit 1 }
+      - name: The reader's own changes
+        shell: bash
+        run: |
+          set -e
+          R="$HOME/godspeed/skills/next-action/SKILL.md"; test -f "$R"
+          printf '\nA line the reader added.\n' >> "$R"
+          printf 'Something only this reader knows.\n' > "$HOME/godspeed/profile/reader-note.md"
+          sha256sum "$R" "$HOME/godspeed/profile/reader-note.md" > before.sha
+      - name: The new release over it (the reader's update)
+        shell: pwsh
+        env: { KB_NOTEBOOK: skip }
+        run: |
+          $p = Start-Process .\GodspeedSetup.exe -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/LOG=setup.log' -PassThru
+          if (-not $p.WaitForExit(900000)) { "the new release hung"; exit 1 }
+          Get-Content "$env:LOCALAPPDATA\Godspeed\setup-log.txt" -Tail 20 -ErrorAction SilentlyContinue
+          "installer exit: $($p.ExitCode)"; if ($p.ExitCode -ne 0) { exit 1 }
+      - name: The reader's changes survived
+        shell: bash
+        run: |
+          sha256sum -c before.sha && echo "ok    the edited recipe and the reader's own file are byte for byte as they were"
+      - name: The updater moved to the new tag
+        shell: pwsh
+        run: |
+          $fail = 0
+          function Want($what, [scriptblock]$test) {
+            $ok = $false; try { $ok = [bool](& $test) } catch { Write-Host "   $_" }
+            if ($ok) { Write-Host "ok    $what" } else { Write-Host "FAIL  $what"; $script:fail++ }
+          }
+          $lnk = Get-ChildItem "$env:APPDATA\Microsoft\Windows\Start Menu\Programs", "$env:ProgramData\Microsoft\Windows\Start Menu\Programs" -Recurse -Filter 'Update my mission control.lnk' -ErrorAction SilentlyContinue | Select-Object -First 1
+          Want "the Start menu updater now fetches $env:PIN" {
+            (New-Object -ComObject WScript.Shell).CreateShortcut($lnk.FullName).Arguments -match "-KbBranch `"$([regex]::Escape($env:PIN))`""
+          }
+          $bin = Join-Path $HOME '.local\bin'
+          foreach ($c in 'mc-goals','mc-decide','mc-due','mc-check-moves') {
+            Want "$c is still a command" { Test-Path (Join-Path $bin "$c.cmd") }
+          }
+          if ($fail) { throw "$fail failed" } else { "ALL PASS" }
+
+  publish:
+    needs: [plan, build, fresh, upgrade]
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PIN: ${{ needs.plan.outputs.pin }}
+      VERSION: ${{ needs.plan.outputs.version }}
+      PREV: ${{ needs.plan.outputs.prev }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { name: GodspeedSetup }
+      - name: Publish it as the latest release, then download it the way a reader does
+        run: |
+          set -euo pipefail
+          sha="$(sha256sum GodspeedSetup.exe | cut -d' ' -f1 | tr a-f A-F)"
+          notes="docs/releases/$VERSION.md"
+          if [ -f "$notes" ]; then
+            phrase="$(sed -n '1s/^# *//p' "$notes")"; body="$(tail -n +2 "$notes")"
+          else
+            phrase=""
+            body="This release brings the Windows installer to the code macOS and Linux readers already get."
+          fi
+          [ -n "$phrase" ] || phrase="Windows runs the same code as macOS and Linux"
+          cmd="$(grep -m1 -o 'curl -fsSL [^ ]* | bash' README.md || true)"
+          [ -n "$cmd" ] || cmd="curl -fsSL https://raw.githubusercontent.com/$GITHUB_REPOSITORY/main/install-godspeed.sh | bash"
+          {
+            printf '%s\n\n' "$body"
+            printf -- '- Pins: kit-bootstrap **%s**.\n\n' "$PIN"
+            printf '**Windows:** download `GodspeedSetup.exe` below and double-click it. **macOS and Linux:** `%s`\n\n' "$cmd"
+            printf 'GodspeedSetup.exe SHA-256: `%s`\n' "$sha"
+          } > release.md
+          gh release create "v$VERSION" GodspeedSetup.exe --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --title "Installer v$VERSION (Windows, macOS, Linux) - $phrase" --notes-file release.md --latest
+          for i in 1 2 3 4 5 6; do
+            curl -fsSL -o got.exe "https://github.com/$GITHUB_REPOSITORY/releases/latest/download/GodspeedSetup.exe" &&
+              [ "$(sha256sum got.exe | cut -d' ' -f1 | tr a-f A-F)" = "$sha" ] && { echo "the public download is Installer $VERSION ($sha)"; exit 0; }
+            sleep 10
+          done
+          echo "the public download is not the file that passed"; exit 1
+
+  relabel:
+    needs: plan
+    if: needs.plan.outputs.action == 'relabel'
+    runs-on: ubuntu-latest
+    env: { GH_TOKEN: '${{ github.token }}' }
+    steps:
+      - name: The release for this pin exists but another one is marked latest
+        run: gh release edit "v${{ needs.plan.outputs.version }}" --repo "$GITHUB_REPOSITORY" --latest
