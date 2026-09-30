@@ -75,8 +75,9 @@ const READY = /\b(?:as is|as-is|ready to send|ready to post|post (?:it|this|one|
 // coworking one, or somebody else's product that ends in the word, is not ours.
 const FORMER = /\b(?:your|my|the)\s+[Hh][Uu][Bb]\b/gi;
 const DATED = /^(\d{4}-\d{2}-\d{2})/;
-// mc-due's own lines: its tag, two spaces or more, then the thing. And its overload message.
-const DUE_LINE = /^\s*(?:RUNNING OUT|SOON|ON THE WAY|PLENTY OF TIME|NOT YET|AIMING FOR|TARGET TODAY|WHEN YOU CAN|DONE|CALLED OFF)\s{2,}\S/;
+// mc-due's own lines: its tag in capitals, then the thing (PLENTY OF TIME fills its column, so one
+// space can be all there is). And its overload message.
+const DUE_LINE = /^\s*(?:RUNNING OUT|SOON|ON THE WAY|PLENTY OF TIME|NOT YET|AIMING FOR|TARGET TODAY|WHEN YOU CAN|DONE|CALLED OFF)\s+\S/;
 const DUE_OVERLOAD = /things run out of time this week|Pick the two you will really do|^\s*-\s.*\(last day \d{4}-\d{2}-\d{2}\)\s*$/;
 const STOPWORDS = new Set(('the and for you your with from that this have what when will would like done ' +
   'day days need needs one our his her its are was not but all can get got out own new old now due ' +
