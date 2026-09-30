@@ -32,7 +32,8 @@
 # What it asks you: a Telegram bot token (Enter skips); whether a repository
 # already holds your folder, and for a fresh godspeed what its new private repository
 # should be called; whether to connect Menerio (optional); whether to put the
-# morning brief on the clock (opt-in). Plus two codes. What only you can do
+# morning brief on the clock (opt-in); whether it may tell Michael the install
+# worked (opt-in, default no, asked once). Plus two codes. What only you can do
 # afterwards: paste server/open-the-door.sh, then point the Hermes app on your
 # computer at the server (Chapter 33).
 #
@@ -547,7 +548,9 @@ fi
 # --- Your folder -------------------------------------------------------------
 say "Your folder"
 
+INSTALL_RUN="new"
 if [ -d "$GODSPEED/.git" ]; then
+  INSTALL_RUN="update"
   ok "a folder is already at $GODSPEED; it will be brought up to date, not replaced"
   if ! git -C "$GODSPEED" remote get-url origin >/dev/null 2>&1; then
     say "This mission control has no online copy yet; the installer will make a private one"
@@ -582,7 +585,8 @@ fi
 say "Setting the folder up the way the laptop installer does"
 SETUP_ARGS=(--godspeed "$GODSPEED" --skip-prereqs --sources "${KB_SYNC_SOURCES:-hermes}")
 [ -n "$GODSPEED_REPO" ] && SETUP_ARGS+=(--repo "$GODSPEED_REPO")
-KB_BRANCH="$KB_PIN" bash "$BOOTSTRAP_DIR/setup-godspeed.sh" "${SETUP_ARGS[@]}" \
+# KB_INSTALL_COUNT_SKIP: the install count is asked below, once, with this server's own kind.
+KB_INSTALL_COUNT_SKIP=1 KB_BRANCH="$KB_PIN" bash "$BOOTSTRAP_DIR/setup-godspeed.sh" "${SETUP_ARGS[@]}" \
   || warn "the folder setup reported a problem above. Read it; everything below still runs."
 
 # --- The keys go where the folder is not --------------------------------------
@@ -627,6 +631,12 @@ ASK
   fi
 fi
 export KB_MORNING_BRIEF
+
+# --- The install count, asked once, default no ----------------------------------
+# THE INSTALL COUNT in kit-bootstrap's lib.sh: may this server tell Michael that the install
+# worked, and later that its first morning brief arrived. GODSPEED_INSTALL_COUNT=yes|no answers
+# it without asking; with no terminal the answer is no and nothing is sent.
+command -v kb_choose_install_count >/dev/null 2>&1 && kb_choose_install_count
 
 # --- The Hermes half: the ceiling, the folder proof, the clock ---------------
 # One script, shared with readers who built the server by hand, so there is
@@ -728,6 +738,41 @@ if grep -q '^TELEGRAM_HOME_CHANNEL=[-0-9]' "$HERMES_DIR/.env" 2>/dev/null; then
   fi
 elif grep -q '^TELEGRAM_BOT_TOKEN=.' "$HERMES_DIR/.env" 2>/dev/null; then
   TELEGRAM_STATE="nohello"
+fi
+
+# --- The install count: the word itself, and the brief's one later word -----------------
+# Sent only after a yes, once per server however often this runs. The first morning brief
+# is Hermes' to deliver, hours from now, so a small job asks Hermes once a day whether it
+# arrived, sends one word when it did, and takes itself off the clock (tools/mc-install-count).
+if [ -n "$KB_CONTAINER" ]; then INSTALL_KIND="docker"; else INSTALL_KIND="server"; fi
+if command -v kb_install_count_send >/dev/null 2>&1; then
+  kb_install_count_send installed "$INSTALL_KIND" "${INSTALL_RUN:-new}"
+  IC_SENT=",$(kb_device_env_get GODSPEED_INSTALL_COUNT_SENT),"
+  if [ "$(kb_install_count)" = "1" ] && [ "$KB_MORNING_BRIEF" = "yes" ] \
+     && [ -x "$HOME/.local/bin/mc-install-count" ] && [ "${IC_SENT#*,first-brief,}" = "$IC_SENT" ]; then
+    IC_CUR="$(crontab -l 2>/dev/null || true)"
+    case "$IC_CUR" in
+      *mc-install-count*) ;;
+      *) { [ -n "$IC_CUR" ] && printf '%s\n' "$IC_CUR"
+           printf '# Tell Michael once that the first morning brief arrived; removes itself after (mc-install-count)\n'
+           printf '17 7 * * * "%s" first-brief --hermes-home "%s" >> "%s/.godspeed/install-count.log" 2>&1\n' \
+             "$HOME/.local/bin/mc-install-count" "$HERMES_DIR" "$HOME"; } | crontab - 2>/dev/null \
+           && ok "install count: once your first morning brief has arrived, one more word goes to Michael, then that job is gone" ;;
+    esac
+    if [ -f "$GODSPEED/procedures.md" ] && ! grep -q '^## Install count' "$GODSPEED/procedures.md"; then
+      cat >> "$GODSPEED/procedures.md" <<REG
+
+## Install count
+
+Does: once, after my first morning brief arrived, tells Michael (who made Mission Control) that it did. It sends one word and the random number made when I said yes; nothing about the brief.
+Rhythm: daily, 07:17, until it has sent once; then it takes itself off the clock.
+Lands: nowhere on this server; one line in Michael's install count.
+Lives: this account's clock, mc-install-count.
+Off-switch: set GODSPEED_INSTALL_COUNT=0 in ~/.godspeed/device.env; the job then removes itself.
+Last checked: $(date +%F).
+REG
+    fi
+  fi
 fi
 
 # The private copy was pushed before the register line and the Hermes half wrote

@@ -326,6 +326,15 @@ eval "$(mc-notebook-env)"
 share: where your mission control is, how the key is read, whether the mirror is on, and which files it
 covers.
 
+**`mc-install-count`** only ever runs on a server where you said yes to the installer's
+last question: may it tell Michael, who made this, that the install worked. The installer
+sends that word itself. This program waits for the second one: once a day it asks Hermes
+whether your first morning brief ran and reached your phone, and the day it did, it sends
+the word `first-brief` with the random number made at your yes, then takes its own line off
+the clock. It never reads the brief, and after a no, or with `DO_NOT_TRACK` set, it sends
+nothing and removes itself. To take a yes back, set `GODSPEED_INSTALL_COUNT=0` in
+`~/.godspeed/device.env`.
+
 ## What you do with them
 
 For the two prompt programs, nothing. The installer schedules them and they run on

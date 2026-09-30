@@ -67,6 +67,12 @@ check "the deadline tool takes a target alone, and asks once when it has passed"
 check "the goal register reads, bets and settles each goal's weekly number" x sh -c \
   'H=$(/opt/data/.local/bin/mc-goals help) && for w in "read <id>" "bets --moves" "settle ["; do printf "%s" "$H" | grep -qF "$w" || exit 1; done &&
    grep -q "BET:" /opt/data/godspeed/skills/next-action/SKILL.md'
+# The install count (kit-bootstrap lib.sh, THE INSTALL COUNT): asked only of a person, so an
+# unattended setup writes no answer and sends nothing, and the program that would send the
+# first-brief word is installed and does nothing without a yes.
+check "unattended setup writes no install-count answer" x sh -c '! grep -q "^GODSPEED_INSTALL_COUNT" /opt/data/.godspeed/device.env'
+check "the install-count program is installed and silent without a yes" x sh -c \
+  'test -x /opt/data/.local/bin/mc-install-count && KB_INSTALL_COUNT_URL=http://127.0.0.1:9/none /opt/data/.local/bin/mc-install-count first-brief'
 check "the image version is recorded" sh -c "docker exec godspeed grep -q '^v1+' /opt/data/.godspeed/image-version"
 check "healthy after setup restarted the gateway" wait_healthy
 check "nothing in the volume belongs to root" sh -c "[ -z \"\$(docker exec godspeed find /opt/data -user root -print -quit)\" ]"

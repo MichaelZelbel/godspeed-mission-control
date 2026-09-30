@@ -15,6 +15,6 @@ jobs:
       - name: tool tests
         run: |
           set -e
-          for t in tools/test-goals.sh tools/test-check-moves.sh tools/test-work.sh tools/test-work-run.sh tools/test-forecast.sh tools/test-check-written.sh tools/test-world-pull.sh; do
+          for t in tools/test-install-count.sh tools/test-goals.sh tools/test-check-moves.sh tools/test-work.sh tools/test-work-run.sh tools/test-forecast.sh tools/test-check-written.sh tools/test-world-pull.sh; do
             echo "== $t"; bash "$t"
           done

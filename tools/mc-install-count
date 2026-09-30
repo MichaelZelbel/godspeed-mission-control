@@ -1,0 +1,96 @@
+#!/bin/sh
+# mc-install-count — tells Michael, once, that this server's first morning brief arrived.
+#
+# WHAT THIS IS FOR. The installer asks one question at the end, default no: may this computer
+# tell Michael, who made Mission Control, that the install worked? (THE INSTALL COUNT in
+# kit-bootstrap's lib.sh has the whole story.) On a yes the installer sends "installed" itself.
+# An install that finished is not yet a Mission Control that works, though, and the first
+# morning brief reaching your phone is the moment it does. Only Hermes knows when that happened,
+# so this asks Hermes, once a day, until the answer is yes, then sends one more word,
+# "first-brief", and takes its own line off the clock. It never runs again after that.
+#
+# WHAT IT READS AND SENDS. It reads three lines of ~/.godspeed/device.env and one job's last
+# result in Hermes' cron/jobs.json: did "morning-brief" run with status ok and deliver without
+# an error. It sends the product, the word first-brief and the random number the installer made
+# at your yes. Nothing about the brief itself, ever. With no yes in device.env, or DO_NOT_TRACK
+# set, it sends nothing and takes itself off the clock.
+#
+# Usage: mc-install-count first-brief [--hermes-home DIR]
+set -u
+
+[ "${1:-}" = "first-brief" ] || { echo "usage: mc-install-count first-brief [--hermes-home DIR]" >&2; exit 2; }
+shift
+HERMES_AT=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --hermes-home) HERMES_AT="${2:-}"; shift 2 ;;
+    *) shift ;;
+  esac
+done
+
+# Never a bare $HOME: a scheduled job can start with almost no environment.
+HOMEDIR="${HOME:-}"
+[ -n "$HOMEDIR" ] || HOMEDIR="$(getent passwd "$(id -u)" 2>/dev/null | cut -d: -f6)"
+[ -n "$HOMEDIR" ] || exit 0
+ENVF="$HOMEDIR/.godspeed/device.env"
+URL="${KB_INSTALL_COUNT_URL:-https://srv1328602.hstgr.cloud/signal/v1}"
+CRON="${KB_CRONTAB:-crontab}"
+
+env_get() { sed -n "s/^[[:space:]]*$1=//p" "$ENVF" 2>/dev/null | tail -1 | tr -d ' \r'; }
+
+env_set() {
+  if grep -q "^[[:space:]]*$1=" "$ENVF" 2>/dev/null; then
+    sed "s|^[[:space:]]*$1=.*|$1=$2|" "$ENVF" > "$ENVF.tmp.$$" && mv "$ENVF.tmp.$$" "$ENVF"
+  else
+    printf '%s=%s\n' "$1" "$2" >> "$ENVF"
+  fi
+}
+
+# Off the clock: the one line that runs this, and nothing else in the schedule.
+off_the_clock() {
+  command -v "$CRON" >/dev/null 2>&1 || return 0
+  cur="$("$CRON" -l 2>/dev/null)" || return 0
+  case "$cur" in *mc-install-count*) ;; *) return 0 ;; esac
+  printf '%s\n' "$cur" | grep -v -e 'mc-install-count' -e '# Tell Michael once that the first morning brief arrived' | "$CRON" - 2>/dev/null || true
+}
+
+case "${DO_NOT_TRACK:-}" in ""|0|false|no) ;; *) off_the_clock; exit 0 ;; esac
+[ "$(env_get GODSPEED_INSTALL_COUNT)" = "1" ] || { off_the_clock; exit 0; }
+ID="$(env_get GODSPEED_INSTALL_ID)"
+[ -n "$ID" ] || { off_the_clock; exit 0; }
+SENT="$(env_get GODSPEED_INSTALL_COUNT_SENT)"
+case ",$SENT," in *,first-brief,*) off_the_clock; exit 0 ;; esac
+
+# Hermes keeps its jobs in <its home>/cron/jobs.json: ~/.hermes on a server, the volume in
+# the Docker image. The first file that exists wins.
+JOBS=""
+for d in "$HERMES_AT" "${HERMES_HOME:-}" "$HOMEDIR/.hermes" "$HOMEDIR"; do
+  [ -n "$d" ] && [ -f "$d/cron/jobs.json" ] && { JOBS="$d/cron/jobs.json"; break; }
+done
+[ -n "$JOBS" ] || exit 0   # no Hermes here yet: ask again tomorrow
+
+# Did the morning brief run and reach you? python3 is there wherever Hermes is.
+DELIVERED="$(python3 - "$JOBS" <<'PY' 2>/dev/null
+import json, sys
+try:
+    d = json.load(open(sys.argv[1], encoding="utf-8"))
+except Exception:
+    print("no"); sys.exit(0)
+jobs = d.get("jobs", d) if isinstance(d, dict) else d
+if isinstance(jobs, dict):
+    jobs = list(jobs.values())
+ok = any(isinstance(j, dict) and j.get("name") == "morning-brief" and j.get("last_run_at")
+         and j.get("last_status") == "ok" and not j.get("last_delivery_error") for j in jobs or [])
+print("yes" if ok else "no")
+PY
+)"
+[ "$DELIVERED" = "yes" ] || exit 0
+
+command -v curl >/dev/null 2>&1 || exit 0
+if curl -fsS -m 8 -o /dev/null -X POST -H 'Content-Type: application/json' \
+     --data "{\"product\":\"mission-control\",\"event\":\"first-brief\",\"install\":\"$ID\"}" "$URL" >/dev/null 2>&1; then
+  env_set GODSPEED_INSTALL_COUNT_SENT "${SENT:+$SENT,}first-brief"
+  echo "$(date -u +%Y-%m-%dT%H:%MZ) told Michael the first morning brief arrived; this job is now off the clock"
+  off_the_clock
+fi
+exit 0
