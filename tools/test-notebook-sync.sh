@@ -179,6 +179,69 @@ GUARDEOF
 echo "$guard" | grep -q "^MASS 0$"   && ok "a cache that no longer matches the folder throws nothing away"   || bad "the mass-trash guard did not hold" "$guard"
 echo "$guard" | grep -q "^FEW 2$"   && ok "two deleted files still retire their two notes"   || bad "ordinary deletions stopped working" "$guard"
 
+# ---- a recipe's first line claims nothing about the reader -----------------------------
+# skills/ used to open every note with "kept because you found it useful". Nobody was asked:
+# the recipes arrive with the kit and with every skill installed since, 407 of them on the
+# author's notebook by 2026-09-23. A provenance line that overstates provenance is worse
+# than none, so a recipe is called what it is, a copy of a file.
+prov="$("$PY" - "$HERE/notebook-sync.py" <<'PROVEOF'
+import importlib.util, sys
+spec = importlib.util.spec_from_file_location("ns", sys.argv[1])
+ns = importlib.util.module_from_spec(spec); spec.loader.exec_module(ns)
+for path in ("skills/plan-my-day/SKILL.md", ".claude/skills/plan-my-day/SKILL.md"):
+    doc = ns.Document(doc_id=path, title=path, body="# Plan my day", source_path=path)
+    print(ns.build_note_body(doc).splitlines()[0])
+PROVEOF
+)"
+if echo "$prov" | grep -qi "found it useful\|kept because\|you wrote\|you said"; then
+  bad "a recipe's note still claims something about the reader" "$prov"
+elif [ "$(echo "$prov" | grep -c "^This is a copy of the mission control file at ")" = "2" ]; then
+  ok "a recipe is called a copy of a file, under either folder name"
+else
+  bad "a recipe's first line is not the copy line" "$prov"
+fi
+
+# ---- many resends ask the notebook first ----------------------------------------------
+# Every computer keeps its own record of what it last sent. When one line of the note
+# changes, every computer would send every note again and the notebook would bill each
+# resend, so a run about to resend many notes first asks what the notebook already holds.
+# The first computer sends; the others find it done and send nothing.
+many="$("$PY" - "$HERE/notebook-sync.py" <<'MANYEOF'
+import importlib.util, sys
+spec = importlib.util.spec_from_file_location("ns", sys.argv[1])
+ns = importlib.util.module_from_spec(spec); spec.loader.exec_module(ns)
+
+docs = [ns.Document(doc_id="skills/s%d/SKILL.md" % i, title="skills/s%d/SKILL.md" % i,
+                    body="# recipe %d" % i, source_path="skills/s%d/SKILL.md" % i) for i in range(30)]
+old = {d.doc_id: {"note_id": "n%d" % i, "hash": "an older line",
+                  "folder": ns.folder_for(d.source_path)} for i, d in enumerate(docs)}
+
+class Notebook:
+    def __init__(self, holds_new):
+        self.holds_new, self.updates, self.lists = holds_new, 0, 0
+    def list_godspeed_notes(self):
+        self.lists += 1
+        return [{"id": "n%d" % i, "title": d.title, "folder_path": ns.folder_for(d.source_path),
+                 "content": ns.build_note_body(d) if self.holds_new else "an older line"}
+                for i, d in enumerate(docs)]
+    def update_note(self, *a):
+        self.updates += 1
+
+done = Notebook(holds_new=True)
+ns.run_sync(docs, dict(old), done, apply=True)
+print("ALREADY", done.updates, done.lists)
+behind = Notebook(holds_new=False)
+ns.run_sync(docs, dict(old), behind, apply=True)
+print("BEHIND", behind.updates)
+few = Notebook(holds_new=True)
+ns.run_sync(docs[:3], {k: old[k] for k in list(old)[:3]}, few, apply=True)
+print("FEW", few.updates, few.lists)
+MANYEOF
+)"
+echo "$many" | grep -q "^ALREADY 0 1$" && ok "notes another computer already resent are not sent again" || bad "a resend the notebook already holds was sent again" "$many"
+echo "$many" | grep -q "^BEHIND 30$"   && ok "notes the notebook holds in the older form are still sent" || bad "the check stopped a real resend" "$many"
+echo "$many" | grep -q "^FEW 3 0$"     && ok "a few changed files are sent without asking first" || bad "an ordinary save asked the notebook first" "$many"
+
 echo
 echo "  $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ] || exit 1
