@@ -55,13 +55,18 @@ whether it may become a standing permission.
 against the best profiles in the niche, varied so it never goes stale"). When one is due, its move
 is filed first that day.
 
-**The scoreboard.** The record opens with how many moves reached the world in the last seven days,
-per active goal, and which, and what the outside numbers did after them. A goal at zero moves for
-seven days gets the diagnosis "moves are not landing" ahead of any other, and today's work is to
-fix why: the missing permission, the missing sign-in, the card nobody could answer. A goal whose
-moves landed but whose numbers stayed flat for fourteen days changes channel or offer, and writes
-one line on what that attempt taught. Only outside numbers grade a move; your own confidence in a
-diagnosis never does (agents that grade themselves reuse their most confident mistakes).
+**The scoreboard is each goal's weekly number.** Every adopted outcome names ONE number, counted
+weekly, a step before its MEASURE, that people who reached this goal counted: its `LEAD:` line
+(`<what is counted> | total or per week | <where it is read>`). A savings balance moves over a
+year; the people who join a newsletter move in a week. Every move bets on that number, and seven
+days after a move goes live `mc-goals settle` reads the number and writes the verdict on the
+goal's card: worked, moved, flat, unread or never live. It is in `settle.txt` in the run folder
+before you start, and the record opens with it. You never grade a move yourself: agents that
+grade their own work reuse their most confident mistakes. Read the verdicts this way: repeat and
+extend what worked; a kind of move that came back flat twice for a goal is not made again unless
+its block says what is different this time; unread means the number was not read, and reading it
+is that goal's first job today; never live means the move never reached the world, and why (an
+unanswered line, a missing sign-in) is today's problem to fix.
 
 **What usually works from a small start** (read, not remembered: Paul Graham's "Do things that
 don't scale", Substack's own growth figures, Anthropic's Project Vend): at a tiny audience the
@@ -112,6 +117,9 @@ whose playbook is missing, refuted or past its review date takes a seat**, becau
 goal without knowing how it is won is guessing. An outcome nobody has looked at for a week takes
 a seat ahead of the ones that get counted every day, which is the rule that stops the measurable
 parts of a life from crowding out the rest. At most three outcomes are active.
+An outcome with nothing in flight (no move of it live or waiting for its verdict) takes a seat
+ahead of one whose moves are still out: a goal waiting on its numbers can rest a day, because a
+verdict is coming.
 
 **Read every reason on every row.** You are allowed to disagree with the plan. If you do, write
 down why in the record and choose differently. What you may not do is choose differently in
@@ -181,10 +189,18 @@ week had: a neglected page 120 strangers a fortnight reach by search, holding pl
 and no way to his newsletter. A playbook tells you what KIND of thing wins. It never writes the
 list of things to make. That list is your job, every day.
 
-**1. Read the world before your files.** For each active outcome, read at least one number that
-lives outside this folder and that the goal's MEASURE depends on, with whatever this mission control can
-reach: visitors and where they came from, subscribers, downloads, replies, a balance, a weight, a
-calendar. Write each number, where it was read and the date into the record under the goal. Look
+**1. Read the world before your files, the weekly number first.** For each active outcome, and
+for every goal `settle.txt` names under "read today", read its LEAD and record it:
+`mc-goals read <id> <number> --where "<where you read it, and when>"`. A number the person told
+you counts; quote their words in --where. An outcome with no LEAD gets one today, before any move:
+from its playbook's "What they track", the one that counts something people do, can be read
+within a week, and can be changed by what you can do this week; with no playbook yet, from what
+today's reading says people who reached this goal counted weekly.
+`mc-goals change <id> --set "LEAD=..." --why "<the source>"`. Prefer a number this mission control
+can read by itself; take one the person must tell only when nothing else counts it, and then ask
+for it once a week on the day's card. Then read at least one more number outside this folder that
+the goal's MEASURE depends on, and write each number, where it was read and the date into the
+record under the goal. Look
 for the surprise: the page people find that nobody tends, the question strangers keep asking, the
 thing that works and is not being fed. A goal with no outside number read today says so under
 "Not done and why", with what would make one readable. Distrust numbers that machines inflate
@@ -204,7 +220,7 @@ three sources, in this order:
 
 Every idea file carries: GOAL, STATUS (open, chosen, prepared, made, dropped), SOURCE (whose idea, the date),
 WHAT IT IS in two sentences, WHO GETS WHAT (a stranger, or the person), SMALLEST VERSION (what one
-work run can finish), OUTSIDE NUMBER (what would show it worked, read where, by when), NEEDS FROM
+work run can finish), BET (how it should change the goal's weekly number within seven days of going live), NEEDS FROM
 THEM (nothing, or the one thing), RISK, and your honest JUDGMENT including how it could be made
 better than it was said. Add at least three new ideas a day across the active goals until each
 active goal holds ten open ones; after that, replace the ones you drop. Quantity first: a register
@@ -213,8 +229,7 @@ of three ideas picks a bad one.
 **3. Judge them without flattering anybody, the person included.** For each active goal rank the
 open ideas in the record, top three with one line each: what it would move, what it costs, why it
 beats the next one. Prefer an idea whose smallest version ends in a thing a stranger can touch
-over one that ends in a document; prefer one that can be judged by an outside number inside two
-weeks; prefer one that feeds what already works over one that starts from nothing. Say plainly
+over one that ends in a document; prefer one whose bet can be read inside seven days; prefer one that feeds what already works over one that starts from nothing. Say plainly
 when their idea is weaker than another, and when it is better than yours.
 
 **4. The hunt is a daily job, and the runner does it, not you.** You have one short run and no
@@ -233,9 +248,8 @@ page nobody visits.
 
 **5. Keep the register fed and moving.** Count the open ideas per active goal that need NOTHING
 from the person. Under ten: the hunt item above is the first thing you file today. Every idea the
-runner made yesterday gets its STATUS set to `made` with the date and where it can be seen, and
-its OUTSIDE NUMBER gets a date on which you will read it. An idea whose number came in changes the
-ranking: say so in the record.
+runner made yesterday gets its STATUS set to `made` with the date and where it can be seen. A verdict in settle.txt on a move
+made from an idea changes the ranking of the ideas like it: say so in the record.
 
 ## Step 3. Today's moves, prepared in this run
 
@@ -253,7 +267,9 @@ due; then the next rung, which is the answer to "what did people who reached thi
 stage this person is at now, that this person has not done yet?" (the playbook's "In what order";
 where it is silent, read two or three real cases today and copy what they did); then the best
 idea in the register (Step 2b). A research task, a tool for the mission control, a diagnosis or a
-measurement is not a move. At least one move per active goal, or the record says under "Not done
+measurement is not a move. Nor is a move that cannot plausibly change the goal's weekly number
+within seven days of going live, however good it looks: a page nobody visits, a profile nobody
+opens. At least one move per active goal, or the record says under "Not done
 and why" what stopped it, and that obstacle becomes tomorrow's first move.
 
 **2. Prepare each small move now, not later.** For a move whose AFTER is short (a bio, a headline,
@@ -265,6 +281,7 @@ MAKE item for the runner (Step 4), and joins the ship list the day it is ready.
 
     ### <n>. <one line a stranger understands: what changes where>
     GOAL: <id>
+    BET: <the weekly number now> -> <what you expect it to be seven days after this goes live>
     WHERE: <the live address>
     NOW: <quoted, read live today>
     AFTER: <the exact new version, in full>
@@ -275,6 +292,11 @@ MAKE item for the runner (Step 4), and joins the ship list the day it is ready.
                   holds first (another field, another page, an API) and say which you tried
     UNDO: <how NOW comes back>
     PERMISSION: <the ALLOWED line that covers it, or "ship list">
+
+Every move of a goal with a LEAD carries a BET and an APPLY item, including a move only the person
+can make: file it OWNER person, its CHECK a line a machine can run that shows it happened (the mail
+is in Sent, the event is in the calendar); its seven days start the day that item is verified.
+`mc-decide` copies the bets onto the goal cards after the check passes.
 
 **4. Apply or ask.** A move covered by the goal's ALLOWED line gets an APPLY item (Step 4) and the
 runner applies it today. Every other prepared move, together with prepared moves from earlier days
@@ -295,7 +317,9 @@ reaches the right item. On the card, a line that only they can do says so ("your
 the NEXT line promises "I apply the rest the same day" only for moves the mission control can apply.
 
 **5. Check before you finish.** Run `mc-check-moves --date <today>`. It counts the moves per
-active goal and reads every block for the fields above; keep working until it prints OK. If it is
+active goal and reads every block for the fields above, checks every move of a goal with a
+weekly number for its BET and APPLY line, and checks that each active goal's number was read this
+week; keep working until it prints OK. If it is
 not installed, check the same things by eye and say so in the record.
 
 **6. Compare only what is expensive.** Keep this in proportion. A routine move gets one sentence and no forecast. Something that will
@@ -335,9 +359,8 @@ nothing was:**
 1. **The moves (Step 3):** a MAKE item for each move too big to prepare in the decision run, its
    DONE WHEN the finished thing and a block for it appended to that day's `moves.md`; and an APPLY
    item for each prepared move, `--outward yes` unless ALLOWED covers it, its CHECK reading the
-   live place (the address answers, the page holds the new words). Where a move should move an
-   outside number, file a forecast due inside two weeks and let the number, not your opinion,
-   raise or kill the ideas next to it.
+   live place (the address answers, the page holds the new words). The move's bet is its
+   forecast; file an `mc-forecast` only for a material action (Step 3.6).
 2. **Everything else the mission control can do alone** that the playbook's "Godspeed steps" names and the
    moves need: find the people or the options, build the missing sign-in or tool a move is waiting
    on. Each item's DONE WHEN names what a reader will open or see, and its CHECK proves it.
@@ -367,8 +390,9 @@ taking it as it stands.
 Write `decision.md` in today's run folder (the prompt that called you names it):
 
     # Decision <today>
-    ## Scoreboard         moves that reached the world in the last seven days, per active goal,
-                          each with where it can be seen; zero is written as zero
+    ## Scoreboard         from settle.txt, per active goal: the weekly number now and a week ago,
+                          each verdict settled since yesterday, the moves still out and when their
+                          verdicts are due; zero is written as zero
     ## Since yesterday    what came of yesterday's choice; what the runner verified; replies
                           recorded; forecasts resolved
     ## Attention today    the active outcomes with the plan's reasons and your own, and the quiet ones
@@ -389,8 +413,8 @@ the runner says it did is ATTEMPTED, never verified.** Everything longer stays p
 
 ## Step 6. What came back
 
-Before you finish, read the items VERIFIED since yesterday (they are in `work.txt` with their
-RESULT and LINK) and let each one change something: a PROGRESS line on the goal where a number
+Before you finish, read the verdicts in `settle.txt` and the items VERIFIED since yesterday (in
+`work.txt` with their RESULT and LINK), and let each one change something: a PROGRESS line on the goal where a number
 moved (`mc-goals progress <id> --evidence "..."`), a refuted diagnosis or playbook where the
 result contradicts it, a resolved forecast where one depended on the item. A result nobody reads
 back into the plan was work for its own sake.
@@ -406,5 +430,5 @@ invent the levers instead of researching them; but never again mistake that for 
 the concrete thing to make is yours to invent, daily. Lose an idea they said out loud. Let an
 active goal go a second day with nothing made for it. Count a number a machine inflated. Let the mission control's own machinery take the day from an
 active goal. Take work it will not finish in this run. Mark work verified on the runner's word.
-Repeat something they answered, or ignored twice. Put more than one card in front of them. Let an active goal end a day with only paper. Turn
+Grade its own move. Repeat something they answered, or ignored twice. Put more than one card in front of them. Let an active goal end a day with only paper. Turn
 their silence into a yes.

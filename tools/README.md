@@ -159,6 +159,12 @@ one of the others is not installed.
   days. Your silence is never a yes. Every change keeps its reason, and reaches
   the plans underneath it. `mc-goals attention` says which goals get attention
   today and **why on every row**, with no score anywhere in it. Chapter 6.
+  An outcome can also name **one weekly number** (`LEAD:`), a step before its
+  MEASURE: `mc-goals read` records a reading (READ), every move of the goal bets
+  on the number (BET, copied onto the card by `mc-goals bets`), and seven days
+  after a move went live `mc-goals settle` writes the verdict from the readings
+  (RESULT: worked, moved, flat, unread or never-live). The run that made the
+  move never grades it.
 - **`forecast.js`** (`mc-forecast`) holds what your mission control expects to happen, with a
   date and a number, so its judgment can be scored rather than trusted. It refuses
   invented precision, a forecast with no reference class, and a revision that
@@ -173,6 +179,7 @@ one of the others is not installed.
 
 ```
 mc-goals attention          who gets attention today, and why
+mc-goals settle             each goal's weekly number, and the verdicts on its moves
 mc-forecast score           how good your mission control's predictions have been
 mc-work tick                dead leases, due retries, stale plans
 ```

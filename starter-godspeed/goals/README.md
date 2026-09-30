@@ -43,6 +43,7 @@ AREA: health
 TITLE: Stay healthy and strong into my 90s
 OWN WORDS: I train because I want to be strong at 90
 MEASURE: what would show it is moving, and where that is read from
+LEAD: strength sessions | per week | I tell it       the weekly number, see below
 DEADLINE: 2027-09-13          a date, or the word unresolved
 SERVES:                        the id of the outcome a strategy or project serves
 PROTECTED: no
@@ -57,6 +58,9 @@ SOURCE: said it on 2026-09-06  required: a goal nobody can trace back to you is 
 - 2026-09-21 ATTENTION active today: nothing had looked at it for 8 days
 - 2026-10-01 CHANGED DEADLINE "2027-09-13" -> "2027-12-31" because I moved the checkpoint
 - 2026-10-03 ANSWER "not now, ask me in December"
+- 2026-10-04 READ 1 (he said one session this week)
+- 2026-10-04 BET W-20261004-01 1 -> 2 "Two gym slots in his calendar for next week"
+- 2026-10-12 RESULT W-20261004-01 worked: 1 -> 2 in the seven days after it went live on 2026-10-05 (bet 1 -> 2)
 ```
 
 Plain text. Read it, edit it, delete it. The program writes the same shape you would.
@@ -114,6 +118,38 @@ number attached wins every morning, for ever.
 A deadline that has passed is a flag to re-set it or retire it. It is not urgency. A question you
 never answered means "reassess whether this is still wanted", never "go ahead".
 
+An outcome with nothing in flight (no move of it waiting for its verdict, below) sits ahead of one
+whose moves are still out. A goal waiting on its numbers can rest a day, because a verdict is
+coming.
+
+## The weekly number: every move is a bet, and the numbers settle it
+
+A MEASURE moves over months: a savings balance, a weight, five friends. A single change your
+mission control makes cannot move it in a week, so a MEASURE alone can never say whether that
+change did anything. So an outcome also names one number a step before it, counted weekly, that
+people who reached the same goal counted:
+
+    LEAD: <what is counted> | total | <where it is read>        a running count: people who ever subscribed
+    LEAD: <what is counted> | per week | <where it is read>     one week's count: days with enough protein
+
+Your mission control picks it from the goal's playbook ("What they track") and writes where it got
+it; you change it the same way you change anything else on the card. Then three kinds of line
+appear in the log, all written by programs:
+
+- **READ** `mc-goals read <id> <number> --where "..."`: this week's reading. A number you tell your
+  mission control counts, with your words quoted.
+- **BET** every move of the goal says what the number is now and what it should be seven days
+  after the move goes live. `mc-decide` copies each one onto the card.
+- **RESULT** seven days after a move went live, `mc-goals settle` compares the readings and writes
+  the verdict: worked, moved (the right way, short of the bet), flat, unread (nobody read the
+  number) or never-live (the move never reached the world). The run that made the move never
+  grades it.
+
+`mc-goals settle` is also the scoreboard: per goal, the number now and a week ago, each verdict,
+and the moves still out. It is the answer to "what did my mission control do for this goal, and
+what came of it?" A goal without a LEAD keeps working exactly as before; its moves just cannot be
+judged.
+
 ## What limits a goal: the diagnosis
 
     mc-goals diagnose <id>
@@ -138,6 +174,9 @@ mc-goals question <id> --text "..."           one in seven days, never two at on
 mc-goals answer <id> --text "<your words>"
 mc-goals diagnose <id>                        what is limiting it, on evidence
 mc-goals attention                            who gets attention today, and why
+mc-goals read <id> <number> --where "..."     this week's reading of the weekly number
+mc-goals bets --moves <moves.md>              copies each move's bet onto its goal (mc-decide runs it)
+mc-goals settle [--dry-run]                   the verdicts, seven days after each move went live
 mc-goals list | show <id> | tree | check
 ```
 
