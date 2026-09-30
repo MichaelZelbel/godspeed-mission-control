@@ -403,7 +403,9 @@ Write `decision.md` in today's run folder (the prompt that called you names it):
     ## Moves              every move from moves.md in one line each: goal, what changes where,
                           and whether it is applied today (ALLOWED), on the ship list, or waiting
                           on a MAKE item
-    ## For you today      the ship list card (its id and its numbered lines), or "nothing today, because ..."
+    ## For you today      the ship list card (its id and its numbered lines), or "nothing today, because ...";
+                          and for each active goal whose weekly number only the person can tell and
+                          that was not read today, one plain question asking for it (on the card too)
     ## Not done and why   what you could not read, verify or run; what capability was missing
     ## Next decision      what tomorrow's run should look at first
 
