@@ -320,6 +320,7 @@ cmds.bets = (a) => {
   const num = '(-?\\d+(?:\\.\\d+)?)';
   const arrow = new RegExp(num + '\\s*(?:->|\u2192)\\s*' + num);
   let n = 0;
+  const skipped = [];
   for (const b of text.split(/^(?=###? \d+\.)/m).filter(x => /^###? \d+\./.test(x))) {
     const field = (k) => { const m = b.match(new RegExp('^' + k + ':[ \\t]*(\\S.*)$', 'm')); return m ? m[1].trim() : ''; };
     const goal = field('GOAL').split(/\s+/)[0], work = field('APPLY').split(/\s+/)[0];
@@ -328,11 +329,16 @@ cmds.bets = (a) => {
     const c = S.read(goal);
     if (!parseLead(c.f.LEAD) || betsOf(c).some(x => x.work === work)) continue;
     const title = b.split('\n')[0].replace(/^#+\s*\d+\.\s*/, '').replace(/"/g, "'").trim();
+    // Only a work item that exists can put a move live, so only its bet is recorded (2026-09-30:
+    // a run called this before filing its items, and "APPLY: (filed below)" became a bet on an
+    // item called "(filed"). The move is recorded the next time this runs, once the item exists.
+    if (!workCard(work)) { skipped.push(`"${title}": APPLY ${work} names no work item on the register yet`); continue; }
     L.logLine(c, d, 'BET', `${work} ${bet[1]} -> ${bet[2]} "${title}"`);
     S.write(c);
     n++;
   }
   say(`${n} bet(s) recorded from ${file}`);
+  for (const s of skipped) say(`  not recorded: ${s}`);
 };
 
 cmds.settle = (a) => {

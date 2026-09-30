@@ -315,6 +315,16 @@ OUT="$(h2 attention --active 1 2>&1)"
 contains "a standalone strategy with a refuted diagnosis still outranks an outcome that only lacks a playbook" "$(printf '%s\n' "$OUT" | sed -n '/^active:/{n;p}')" "yy-way"
 rm -rf "$R2"
 
+# Found by a test reader (2026-09-30): the run called bets itself before filing its items, and
+# "APPLY: (filed below)" put a bet on the card for a work item called "(filed".
+W6="$(hw file --what "A later line" --done-when "shown" --goal readers --key nl-six --source test --date 2026-10-30 | cut -d: -f1)"
+mkmoves "$M" readers "(filed below, id to follow)" "6 -> 9"
+OUT="$(hg bets --moves "$M" --date 2026-10-30 2>&1)"; contains "an APPLY that names no work item records no bet" "$OUT" "0 bet(s) recorded"
+contains "  and says which move and why" "$OUT" "no work item on the register"
+check "  nothing reaches the card" "$(grep -c 'BET (filed' "$TMP/goals/readers.md")" "0"
+mkmoves "$M" readers "$W6" "6 -> 9"
+OUT="$(hg bets --moves "$M" --date 2026-10-30 2>&1)"; contains "  once the item is filed, the same move's bet is recorded" "$OUT" "1 bet(s) recorded"
+
 echo
 echo "$PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]
