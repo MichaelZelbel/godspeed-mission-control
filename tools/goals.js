@@ -30,6 +30,10 @@
 // THE REASON WRITTEN DOWN. Neglect is counted from the last time a goal was looked at, not from
 // whether anything about it was measurable.
 //
+// An outcome with nothing in flight (no move of it live or waiting for its seven-day verdict on
+// the goal's weekly number, see "the weekly number" below) ranks ahead of one whose moves are
+// still out: a goal waiting on its numbers can rest a day, because a verdict is coming.
+//
 // The folders it owns:
 //   goals/<ID>.md                    one card each
 //   goals/diagnoses/<ID>-<date>.md   what limits one goal, on evidence (template from `diagnose`)
@@ -574,6 +578,10 @@ function plan(d, seats) {
     r.diagnosis = diagnosisState(c);
     if (c.f.KIND === 'outcome') r.playbook = playbookState(c, d);
     r.question = openQ(c);
+    // THE LOOP DECIDES WHO RESTS (2026-09-30). A goal whose moves are out in the world is waiting
+    // for their verdicts and can rest a day; one with nothing in flight needs moves. Four goals
+    // marked core and three seats meant a "core always sits" rule could not have held.
+    if (c.f.KIND === 'outcome') r.flight = parseLead(c.f.LEAD) ? betsOf(c).filter(b => !settledIds(c).has(b.work)).length : null;
     if (c.f.STATUS === 'provisional') {
       r.band = 'provisional';
       const qd = daysSince(c, ['QUESTION'], d);
@@ -596,9 +604,13 @@ function plan(d, seats) {
     if (r.sinceProgress === null || r.sinceProgress >= 14) r.reasons.push(r.sinceProgress === null ? 'no progress recorded yet' : `no progress in ${r.sinceProgress} days`);
     if (r.question && L.daysBetween(r.question.date, d) >= 14) r.reasons.push(`question unanswered for ${L.daysBetween(r.question.date, d)} days: reassess relevance or timing, silence is not a yes`);
     if (!c.f.MEASURE) r.reasons.push('no measure named; counted by attention, not by numbers');
+    if (c.f.KIND === 'outcome') r.reasons.push(r.flight === null ? 'no weekly number (LEAD) yet: set one before its moves can be judged'
+      : r.flight === 0 ? 'nothing in flight: no move live or waiting on its weekly number'
+      : `${r.flight} move(s) in flight on its weekly number`);
     r.rank = [
       c.f.PROTECTED === 'yes' ? 0 : 1,
       (left !== null && left >= 0 && left <= 7) ? 0 : 1,
+      r.flight ? 1 : 0,
       r.diagnosis === 'refuted' ? 0 : 1,
       r.playbook ? playbookRank(r.playbook) : 1,
       (r.sinceAttention === null || r.sinceAttention >= 7) ? 0 : 1,
@@ -621,7 +633,7 @@ function plan(d, seats) {
     // It is ranked like an outcome, so it is asked for a playbook like one.
     r.playbook = playbookState(S.read(r.id), d);
     if (PLAYBOOK_REASON[r.playbook]) r.reasons.push(PLAYBOOK_REASON[r.playbook]);
-    r.rank[3] = playbookRank(r.playbook);
+    r.rank[4] = playbookRank(r.playbook);   // the playbook key (the flight key sits at 2)
   }
   const top = rows.filter(r => r.rank && (r.kind === 'outcome' || r.kind === 'commitment' || r.standsAlone));
   top.sort((x, y) => { for (let i = 0; i < x.rank.length; i++) if (x.rank[i] !== y.rank[i]) return x.rank[i] - y.rank[i]; return x.id < y.id ? -1 : 1; });
@@ -725,6 +737,8 @@ cmds.check = () => {
       else { const u = S.read(up); if (u && c.f.STATUS === 'adopted' && u.f.STATUS === 'provisional') notes.push(`${c.id}: adopted, serves provisional ${up}; the means is firmer than the end, which is allowed and worth a question`); }
     }
     if (c.f.STATUS === 'adopted' && !last(c, ['ADOPTED'])) problems.push(`${c.id}: adopted with no ADOPTED line (who adopted it, when?)`);
+    if (c.f.LEAD && !parseLead(c.f.LEAD)) problems.push(`${c.id}: LEAD is not ${LEAD_FORM}`);
+    if (c.f.KIND === 'outcome' && c.f.STATUS === 'adopted' && !c.f.LEAD) notes.push(`${c.id}: no weekly number yet (LEAD); its moves cannot be judged`);
     for (const l of c.log) if (l.event === 'CHANGED' && !/ because /.test(l.rest)) problems.push(`${c.id}: a CHANGED line without a reason`);
     const dg = diagnosisState(c);
     if (dg === 'missing file') problems.push(`${c.id}: DIAGNOSIS line names a file that is gone`);
@@ -764,6 +778,10 @@ cmds.help = () => say(`mc-goals: the register of what you want, and the choice o
   playbook <id> --current                 the sections are filled in; sets the review date (refused while a
                                           template placeholder remains)
   playbook <id> --refute --evidence "..." the model of success was wrong; the next plan asks for new research
+  read <id> <number> --where "..."        this week's reading of the goal's weekly number (LEAD)
+  bets --moves <moves.md>                 copies each move's BET onto its goal (mc-decide runs it)
+  settle [--date D] [--dry-run] [--json]  seven days after a move went live: worked, moved, flat, unread
+                                          or never-live, written by this program from the readings
   attention [--date D] [--active 3] [--json] [--record]   which goals get attention today and why (weightless bands)
   list [--all] [--kind K] [--json] | show <id> | tree | check`);
 

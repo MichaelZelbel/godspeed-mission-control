@@ -287,6 +287,34 @@ check "  and writes nothing" "$(grep -c RESULT "$TMP/goals/headaches.md")" "0"
 OUT="$(hg settle --date 2026-10-08 2>&1)"; contains "a number meant to fall that fell to the bet worked (per week)" "$OUT" "$W5 worked: 3 -> 1"
 check "  and the real run writes it" "$(grep -c RESULT "$TMP/goals/headaches.md")" "1"
 
+# --- attention follows the loop (2026-09-30) ----------------------------------------------------
+OUT="$(hg attention --date 2026-10-30 2>&1)"
+contains "an outcome with no weekly number says so" "$OUT" "no weekly number (LEAD) yet"
+J="$(hg attention --date 2026-10-30 --json --active 5)"
+FL="$(printf '%s' "$J" | "$NODE" -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const p=JSON.parse(s);const r=p.active.concat(p.quiet).find(x=>x.id==="readers");console.log(String(r.flight))})')"
+check "  json carries how many moves are in flight" "$FL" "0"
+sed -i 's/^LEAD: .*/LEAD: broken/' "$TMP/goals/headaches.md"
+OUT="$(hg check 2>&1)"; check "a LEAD that is not in the three-part form is a PROBLEM" "$?" "1"
+contains "  and names the form" "$OUT" "PROBLEM headaches: LEAD is"
+sed -i 's/^LEAD: broken/LEAD: days with a headache | per week | the person tells it/' "$TMP/goals/headaches.md"
+OUT="$(hg check 2>&1)"; contains "an adopted outcome without a LEAD is a note, not a problem" "$OUT" "no weekly number yet"
+# The flight key sits before the diagnosis key, so a strategy that stands on its own has its
+# playbook key written one place later than before; a refuted diagnosis must still come first.
+R2="$(mktemp -d)"; mkdir -p "$R2/rules"; : > "$R2/AGENTS.md"
+h2() { GODSPEED_ROOT="$R2" "$NODE" "$TMP/bin/goals.js" "$@"; }
+h2 file --kind outcome --title "Zed outcome" --id zz-out --status adopted --source t >/dev/null 2>&1
+h2 file --kind strategy --title "Yonder way" --id yy-way --status adopted --source t >/dev/null 2>&1
+P2="$(h2 diagnose yy-way 2>&1)"; h2 diagnose yy-way --refute "$P2" --evidence "the numbers said otherwise" >/dev/null 2>&1
+P2="$(h2 playbook yy-way 2>&1)"
+"$NODE" -e '
+const fs=require("fs");const p=process.argv[1];let t=fs.readFileSync(p,"utf8");
+t=t.split("\n").map(l=>l.startsWith("(")?"filled in from the sources below":l).join("\n");
+fs.writeFileSync(p,t)' "$R2/$P2"
+h2 playbook yy-way --current >/dev/null 2>&1
+OUT="$(h2 attention --active 1 2>&1)"
+contains "a standalone strategy with a refuted diagnosis still outranks an outcome that only lacks a playbook" "$(printf '%s\n' "$OUT" | sed -n '/^active:/{n;p}')" "yy-way"
+rm -rf "$R2"
+
 echo
 echo "$PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]
