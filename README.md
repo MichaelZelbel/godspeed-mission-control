@@ -10,7 +10,7 @@ A personal support system that lives in a folder you own. It runs on a clock and
 
 Not a dashboard. A dashboard shows screens and waits. This one acts, and it is the only AI you use that calls first.
 
-This kit is Godspeed Mission Control itself, plus every template from the book **Teach It Once** by Michael Zelbel. The subtitle says what it is: *Set up a personal AI that knows you and works on its own*. It runs on your laptop with Hermes; developers can use Claude Code or OpenCode instead (`swap/`). An optional always-on server lives in `server/`. Everything the book asks you to copy, paste, fill in, or print is here, so you never have to type a template from a page.
+This kit is Godspeed Mission Control itself, plus every template from the book **[Teach It Once](https://leanpub.com/teachitonce)** by Michael Zelbel. The subtitle says what it is: *Set up a personal AI that knows you and works on its own*. It runs on your laptop with Hermes; developers can use Claude Code or OpenCode instead (`swap/`). An optional always-on server lives in `server/`. Everything the book asks you to copy, paste, fill in, or print is here, so you never have to type a template from a page.
 
 ## Let it set itself up
 
