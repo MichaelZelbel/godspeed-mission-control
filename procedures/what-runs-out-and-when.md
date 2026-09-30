@@ -27,8 +27,8 @@ the end of February.
 day passes, it never gets louder. The next morning it asks you once, "A new date,
 or as soon as you can?" A new date becomes the new target. "As soon as you can",
 or no answer at all, keeps it open with a gentle line in your brief about once a
-week until you finish it or drop it. It never reaches your phone as a push
-message, and it always comes after every deadline in your morning's three places.
+week until you finish it or drop it. It never gets louder than that line,
+and it always comes after every deadline in your morning's three places.
 
 **A target and a deadline** behave like the deadline, plus one mention on the
 target day. After the target the line says you are past it and names the
@@ -174,8 +174,9 @@ mc-due drop car-service --yes
 
 A window that closed without being done **stays open**. Nothing sweeps it away
 after a while, because for a deadline "nobody got round to it" is the failure and
-not a quiet success. It sits there, loud, until you close it or drop it. That is
-uncomfortable on purpose.
+not a quiet success. It stays in the full list until you close it or drop it. Your
+brief mentions it twice more, three days apart, and then waits for your word,
+because the likeliest reason is that you did it and forgot to say so.
 
 ## Three a day, and the honest week
 
@@ -206,11 +207,19 @@ past.
 
 ## Wiring it into the brief you already have
 
-Open `skills/morning-brief/SKILL.md`, the recipe you wrote in Chapter 22, and paste
-this into the session:
+Open the chat in your mission control, the one whose brief you set up in Chapter 22,
+and paste this:
 
 ```
-Open skills/morning-brief/SKILL.md and add one part, near the top. Run the command mc-due today and put whatever it gives back into the brief, word for word, changing nothing and adding nothing. If it says nothing needs saying today, leave the part out entirely rather than writing that nothing is due. Do not work out for yourself which deadlines matter or how many to show: that command already decided, and its cap of three a day is the only reason this stays readable. Change nothing else in the file.
+Update skills/morning-brief/SKILL.md with a Deadlines section.
+
+First run mc-due check in the intended mission control, then mc-due today. Preserve any errors or failed-check notices. Include the selected deadline output word for word, including the overload message and all titles. Omit the section only when the command explicitly says nothing needs saying or no deadlines exist, and there was no check error.
+
+That output is the only place the brief speaks about anything in due/. Do not read due/ files yourself, repeat those items in another section, carry them over from an earlier brief, or calculate urgency. A day I would like something done is not a deadline: never call it overdue or urgent. Keep the normal brief body under 200 words, but put required deadline text and check failures after that body without a word limit. Preserve any existing Research section and its unresolved urgent findings. The 200-word target must not delete important material.
+
+Preserve today's existing brief. For testing, use a disposable mission control, its own --godspeed path on every deadline command and a new output at practice/brief-tests/deadline-test.md. Do not add fictional deadlines to my real list or overwrite my real brief.
+
+Run mc-check-brief on the full result. If raw deadline text contains a local path that the checker refuses, preserve the raw output and report the conflict; do not silently alter required text. Use clear human titles when creating deadlines so they do not need local paths.
 ```
 
 *Bookmark the prompt, if you like: [querino.ai/prompts/put-my-deadlines-in-my-brief](https://querino.ai/prompts/put-my-deadlines-in-my-brief)*

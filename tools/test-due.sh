@@ -211,6 +211,15 @@ check "an old window file is byte for byte unchanged by list, check and state" "
 contains "and read the way it always was" "$(GODSPEED_TODAY=2026-01-20 d)" "ON THE WAY     OLDFORM: 13 days left, and the last one is 2026-02-01."
 missing "with no target words" "$(GODSPEED_TODAY=2026-01-20 d; GODSPEED_TODAY=2026-01-20 d state --json)" "target"
 
+# --- past its last day: twice more, three days apart, then quiet until you answer ---------------------
+fresh
+d add late --title "LATE" --from 2026-01-01 --to 2026-01-10 --done-when x --cost y >/dev/null
+contains "the day after the last day it is said" "$(said 2026-01-11)" "LATE: the last day was yesterday, 2026-01-10."
+missing "the next morning it is quiet" "$(said 2026-01-12)" "LATE"
+contains "three days later it is said once more" "$(said 2026-01-14)" "LATE"
+missing "and after that it waits for your word" "$(said 2026-01-20)" "LATE"
+contains "while the full list still shows it open" "$(GODSPEED_TODAY=2026-01-20 d)" "LATE: the last day was 2026-01-10"
+
 # --- ranking in the morning's three places -------------------------------------------------------
 fresh
 for n in 1 2 3; do d add "dl$n" --title "DL$n" --from 2026-01-01 --to 2026-01-10 --done-when x --cost y >/dev/null; done
