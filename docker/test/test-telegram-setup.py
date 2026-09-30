@@ -166,6 +166,14 @@ def scenario_run(name, scenario, extra_env=None, env_file=None, timeout=120):
     return r
 
 
+def have_zones():
+    try:
+        from zoneinfo import available_timezones
+        return bool(available_timezones())
+    except Exception:
+        return False
+
+
 def any_has(texts, *needles):
     return any(all(n in t for n in needles) for t in texts)
 
@@ -193,6 +201,15 @@ def test_codes():
           [m.normalise_repo(x, "anna") for x in ("https://github.com/anna/godspeed", "github.com/anna/godspeed.git",
            "git@github.com:anna/godspeed.git", "anna/godspeed", "godspeed", "not an address!")]
           == ["anna/godspeed"] * 5 + [None])
+    check("a country or a German city with no zone of its own",
+          [m.find_zone(x) for x in ("Germany", "München", "Düsseldorf", "UK")] ==
+          ["Europe/Berlin", "Europe/Berlin", "Europe/Berlin", "Europe/London"])
+    if have_zones():
+        check("a city is its zone, in any case, with spaces",
+              [m.find_zone(x) for x in ("london", "New York", "Asia/Tokyo", "sao paulo", "Krefeld")] ==
+              ["Europe/London", "America/New_York", "Asia/Tokyo", "America/Sao_Paulo", None])
+    else:
+        print("NOTE  no time zone database on this computer (pip install tzdata), so city names are not checked here")
 
 
 def test_happy():
@@ -202,6 +219,7 @@ def test_happy():
         "rules": [
             {"when": "already have a Mission Control", "do": [{"from": 111, "press": "repo:fresh"}]},
             {"when": "morning brief", "do": [{"from": 111, "press": "brief:yes"}]},
+            {"when": "Whose 06:00", "do": [{"from": 111, "text": "Tokyo" if have_zones() else "UK"}]},
             {"when": "tell him once", "do": [{"from": 111, "press": "count:no"}]},
             {"when": "Setting everything up now", "do": [{"from": 111, "text": "are you there?"}]},
         ]})
@@ -226,6 +244,10 @@ def test_happy():
           "TELEGRAM_BOT_TOKEN=%s" % TOKEN in r["env"] and "TELEGRAM_ALLOWED_USERS=111" in r["env"]
           and "TELEGRAM_HOME_CHANNEL=111" in r["env"])
     check("the gateway is restarted to take it", "gateway restart" in r["hermes"])
+    zone, city = ("Asia/Tokyo", "Tokyo") if have_zones() else ("Europe/London", "London")
+    check("the city they typed becomes Hermes' clock, before the restart",
+          "Got it: %s time." % city in to_anna
+          and 0 <= r["hermes"].find("config set timezone %s" % zone) < r["hermes"].find("gateway restart"))
     check("the first message goes the brief's road (hermes send)", "this is its chat" in r["hermes_sent"])
     check("the last message carries the address for another computer",
           any_has(to_anna, "GodspeedSetup.exe", "<code>https://github.com/anna/godspeed.git</code>", "--repo https://github.com/anna/godspeed.git"))
@@ -267,6 +289,7 @@ def test_snags():
           and runs[1].get("KB_MORNING_BRIEF") == "no" and runs[1].get("GODSPEED_INSTALL_COUNT") == "yes"
           and not runs[1].get("KB_REPO_NAME"))
     check("the last message carries the address they gave", any_has(to_anna, "https://github.com/anna/mission.git"))
+    check("no brief, no question about the clock", not any_has(to_anna, "Whose 06:00") and "timezone" not in r["hermes"])
     check("setup is marked done", r["state"].get("done") is True)
 
 
@@ -276,12 +299,16 @@ def test_found_repo():
         "start": [{"from": 111, "text": "/start"}],
         "rules": [
             {"when": "Is that your", "do": [{"from": 111, "press": "found:no"}]},
-            {"when": "morning brief", "do": [{"from": 111, "press": "brief:no"}]},
+            {"when": "morning brief", "do": [{"from": 111, "press": "brief:yes"}]},
+            {"when": "Whose 06:00", "do": [{"from": 111, "text": "Krefeld"}]},
+            {"when": "do not know the clock of Krefeld", "do": [{"from": 111, "press": "tz:keep"}]},
             {"when": "tell him once", "do": [{"from": 111, "press": "count:no"}]},
         ]}, extra_env={"FAKE_GH_REPOS": "anna/godspeed,anna/godspeed-mission-control"})
     check("it asks whether that one is theirs", any_has(r["to"](111), "anna/godspeed</b> on your GitHub"))
     check("starting fresh picks a name that is free",
           r["runs"] and r["runs"][-1].get("KB_REPO_NAME") == "godspeed-2")
+    check("a town the clock does not know is said, and the server's clock can be kept",
+          any_has(r["to"](111), "I do not know the clock of Krefeld") and "config set timezone Europe/Berlin" in r["hermes"])
 
 
 def test_nothing_to_do():

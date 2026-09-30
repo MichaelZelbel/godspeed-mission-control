@@ -468,6 +468,56 @@ def normalise_repo(text, login):
     return None
 
 
+# A few answers the zone database has no city for. Everything else is matched against the
+# database's own city names (Europe/London, America/New_York, Asia/Tokyo ...).
+ZONE_WORDS = {"germany": "Europe/Berlin", "deutschland": "Europe/Berlin", "austria": "Europe/Vienna",
+              "osterreich": "Europe/Vienna", "switzerland": "Europe/Zurich", "schweiz": "Europe/Zurich",
+              "uk": "Europe/London", "england": "Europe/London", "britain": "Europe/London",
+              "munich": "Europe/Berlin", "munchen": "Europe/Berlin", "hamburg": "Europe/Berlin",
+              "cologne": "Europe/Berlin", "koln": "Europe/Berlin", "frankfurt": "Europe/Berlin",
+              "dusseldorf": "Europe/Berlin", "san_francisco": "America/Los_Angeles",
+              "seattle": "America/Los_Angeles", "boston": "America/New_York", "washington": "America/New_York",
+              "miami": "America/New_York", "dallas": "America/Chicago", "austin": "America/Chicago"}
+ZONE_REGIONS = ("Europe", "America", "Asia", "Africa", "Australia", "Pacific", "Atlantic", "Indian")
+
+
+def find_zone(text):
+    """The IANA zone for a city or zone name the reader typed, or None."""
+    try:
+        from zoneinfo import available_timezones
+        zones = available_timezones()
+    except Exception:
+        return None
+    t = text.strip()
+    if t in zones and "/" in t:
+        return t
+    key = re.sub(r"[\s-]+", "_", t.lower().translate(str.maketrans("äöüß", "aous")))
+    if key in ZONE_WORDS:
+        return ZONE_WORDS[key]
+    for z in sorted(zones):
+        parts = z.split("/")
+        if parts[0] in ZONE_REGIONS and parts[-1].lower() == key:
+            return z
+    return None
+
+
+def ask_zone(chat):
+    """Whose 06:00: the reader's city, as the zone Hermes' clock and schedules run on."""
+    here = TZ if find_zone(TZ) else "Europe/Berlin"
+    city = here.split("/")[-1].replace("_", " ")
+    prompt = "Whose 06:00? Send me the city you live in, like London or New York, or tap %s." % esc(city)
+    while True:
+        a = chat.ask(prompt, [("tz:keep", city)], free_text=True)
+        if a == "tz:keep":
+            return here
+        zone = find_zone(a)
+        if zone:
+            chat.send("Got it: %s time." % esc(zone.split("/")[-1].replace("_", " ")))
+            return zone
+        prompt = ("I do not know the clock of %s. Send the nearest big city, or tap %s."
+                  % (esc(a[:60]), esc(city)))
+
+
 # --- The steps -------------------------------------------------------------------------------
 
 def step_chatgpt(chat):
@@ -521,9 +571,12 @@ def step_questions(chat):
         save_state(st)
     if "brief" not in st:
         st["brief"] = chat.ask(
-            "Would you like a morning brief? Every day at 06:00 (%s time) I read your profile and "
-            "send you a short note for the day, here." % esc(TZ),
+            "Would you like a morning brief? Every day at 06:00 I read your profile and send you "
+            "a short note for the day, here.",
             [("brief:yes", "Yes please"), ("brief:no", "Not now")]) == "brief:yes"
+        save_state(st)
+    if st.get("brief") and "tz" not in st:
+        st["tz"] = ask_zone(chat)
         save_state(st)
     if "count" not in st:
         st["count"] = chat.ask(
@@ -537,7 +590,7 @@ def step_questions(chat):
 
 def ask_repo(chat, login):
     """"" for a fresh folder, or "owner/name" of the mission control to fetch."""
-    chat.send("<b>Step 3 of 3: three quick questions.</b>")
+    chat.send("<b>Step 3 of 3: a few quick questions.</b>")
     if login and repo_exists("%s/godspeed" % login):
         a = chat.ask("I found a repository called <b>%s/godspeed</b> on your GitHub. Is that your "
                      "Mission Control from another computer?" % esc(login),
@@ -641,6 +694,12 @@ def step_hand_over(chat):
     """The bot goes to the assistant: the three lines, a gateway restart, the first message."""
     st = chat.st
     write_telegram_env(st["owner_id"], st["chat_id"])
+    # The reader's clock, which Hermes' own clock and every schedule run on (hermes_time.py:
+    # HERMES_TIMEZONE, then `timezone` in config.yaml, then the server's). Read at start, so
+    # it goes in before the restart below.
+    if st.get("tz"):
+        rc, _ = run(HERMES + ["config", "set", "timezone", st["tz"]], timeout=60)
+        log("hand-over: Hermes' clock set to %s (exit %s)" % (st["tz"], rc))
     rc, _ = run(HERMES + ["gateway", "restart"], timeout=180)
     if rc != 0:
         rc, _ = run(HERMES + ["gateway", "start"], timeout=180)
@@ -699,7 +758,7 @@ def main():
             "Three short steps and I am ready, about ten minutes:\n"
             "1. Connect ChatGPT. That is my brain, and your own ChatGPT plan pays for it.\n"
             "2. Connect GitHub. That is where your folder is kept, private to you.\n"
-            "3. Three quick questions.\n\n"
+            "3. A few quick questions.\n\n"
             "From now on I answer only you." % esc(st.get("owner_name", "there")))
     else:
         chat.send("I restarted, and I am picking up where we were.")

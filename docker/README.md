@@ -46,8 +46,9 @@ Telegram bot.
 3. Open your bot in Telegram and press Start.
 
 The bot then walks you through it: a code to type on ChatGPT's sign-in page, a code to type
-on GitHub's, and three questions as buttons (a new folder or the one you already have, the
-morning brief, and whether this server may tell Michael the install worked). Then it runs
+on GitHub's, and a few questions as buttons (a new folder or the one you already have, the
+morning brief and which city's clock it follows, and whether this server may tell Michael
+the install worked). Then it runs
 the same setup as `godspeed-setup`, hands itself over to your assistant, and ends with the
 line that puts the same mission control on your Windows PC or Mac.
 
