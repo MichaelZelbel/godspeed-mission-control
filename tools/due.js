@@ -825,6 +825,10 @@ function cmdAdd(day) {
   }
   // The day you can start is today unless you say otherwise, but never after the day it ends: a
   // target or a deadline already behind you opens its window on that day instead.
+  // A name with a history keeps it: a closing or a drop in world/events/ names the thing by this
+  // name, so a new thing under it would be born closed or called off (found in a practice run).
+  const used = worldEvents().find((e) => e.closes.concat(e.drops).some((r) => r.slug === slug));
+  if (used) { console.log("The name " + slug + " was used before (" + used.file + "), and its history would come with it. Pick another name."); return 1; }
   const from = given || [day, target, to].filter(Boolean).sort()[0];
   if (to && to < from) { console.log("The last day (" + to + ") is before the first day (" + from + ")."); return 1; }
   if (target && target < from) { console.log("The day you would like it done (" + target + ") is before the day you can start (" + from + ")."); return 1; }

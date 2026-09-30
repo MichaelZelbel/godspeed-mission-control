@@ -166,6 +166,12 @@ contains "and the target too" "$OUT" "Careful: the day you would like it done, 2
 contains "the same name twice says how to change the one there is" "$(GODSPEED_TODAY=2026-09-30 d add taxes --title T --to 2027-01-31 --done-when x --cost y)" "edit the STRIP line in due/taxes.md"
 missing "a target a few days back is normal and not warned about" "$(GODSPEED_TODAY=2026-09-30 d add fence2 --title F --target 2026-09-21 --done-when x)" "Careful"
 
+# --- a name with a history is not reused ------------------------------------------------------------
+GODSPEED_TODAY=2026-09-30 d add oldtax --title T --to 2027-01-31 --done-when x --cost y >/dev/null
+GODSPEED_TODAY=2026-09-30 d drop oldtax --yes >/dev/null
+rm -f "$G/due/oldtax.md"
+contains "a name a drop or a closing already names is refused" "$(GODSPEED_TODAY=2026-09-30 d add oldtax --title T --to 2027-01-31 --done-when x --cost y)" "was used before"
+
 # --- a new date is the new target ------------------------------------------------------------------
 fresh
 GODSPEED_TODAY=2026-04-01 d add fence --title "FENCE" --target 2026-05-01 --done-when painted >/dev/null

@@ -98,6 +98,8 @@ purpose. If it contradicts something you believe about me, the file wins.
   `mc-due target`. Read `due/` only through `mc-due`: never open those files
   to judge what is urgent or late, and never call a day I would like
   something done late or overdue. Only `mc-due today` says what to mention.
+  Only I drop one. To fix a wrong date, correct the file; never drop it and
+  add another.
 - **A deadline we finish together is closed in the same turn.** When I approve,
   send or do something in `due/` with you, run `mc-due done <name> --evidence
   "<my words or a commit>"` before you stop, so my brief never shows it again.
