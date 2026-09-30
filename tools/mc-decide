@@ -103,6 +103,15 @@ if [ "$DRY" -eq 1 ]; then
 else
   reg work tick > "$RUNDIR/tick.txt" 2>/dev/null || true
 fi
+# THE WEEKLY NUMBERS ARE SETTLED BEFORE ANYTHING IS DECIDED (2026-09-30). Seven days after a move
+# went live, mc-goals reads its goal's weekly number and writes the verdict itself; the run that
+# made the move never grades it. It runs before the attention plan, because a goal whose moves are
+# still out can rest a day and one with nothing in flight cannot. A dry run writes nothing here.
+if [ "$DRY" -eq 1 ]; then
+  reg goals settle --date "$TODAY" --dry-run > "$RUNDIR/settle.txt" 2>/dev/null || true
+else
+  reg goals settle --date "$TODAY" > "$RUNDIR/settle.txt" 2>/dev/null || true
+fi
 # A day already decided keeps the plan it was decided on: a second run by hand (to finish short
 # moves, below) must not recompute which goals are active and move the goalposts under them.
 if [ -s "$RUNDIR/decision.md" ] && [ -s "$RUNDIR/attention.txt" ]; then :; else
@@ -175,8 +184,9 @@ RUNNER="$HERE/mc-run"
 [ -x "$RUNNER" ] || RUNNER="$HOME/.local/bin/mc-run"
 [ -x "$RUNNER" ] || { echo "mc-decide: mc-run is not installed, so no recipe could be carried out." >&2; exit 3; }
 
-PROMPT="Today is $TODAY (UTC). The run folder is $RUNDIR and it already holds attention.txt (the
-goal plan), tick.txt (what time did to the work tracker), work.txt (every item on it),
+PROMPT="Today is $TODAY (UTC). The run folder is $RUNDIR and it already holds settle.txt (each
+goal's weekly number and the verdicts on earlier moves; read it first), attention.txt (the goal
+plan), tick.txt (what time did to the work tracker), work.txt (every item on it),
 forecasts-due.txt and yesterday.md (yesterday's decision, or the line saying there was none),
 plus anything else that was available. Follow the next-action recipe exactly. Write
 $RUNDIR/decision.md, file the work the mission control will do (mc-work-run carries it out later today; you
@@ -219,6 +229,13 @@ sections of decision.md, and run the check again until it prints OK. Your final 
     GAPS="$(GODSPEED_ROOT="$GODSPEED" "$NODE" "$HERE/check-moves.js" --godspeed "$GODSPEED" --date "$TODAY" 2>&1)" \
       || printf '\n## Moves check\n\nStill short after one return run:\n\n%s\n' "$GAPS" >> "$RUNDIR/decision.md"
   fi
+fi
+
+# THE BETS GO ON THE CARDS BY PROGRAM, NOT BY THE RUN (2026-09-30). Each move's BET in moves.md is
+# copied onto its goal's card with the work item that puts it live, so settle finds it in seven
+# days. A run that forgot a command cannot lose a bet this way, and nothing is recorded twice.
+if [ "$DRY" -eq 0 ] && [ -s "$RUNDIR/moves.md" ]; then
+  reg goals bets --moves "$RUNDIR/moves.md" --date "$TODAY" > "$RUNDIR/bets.txt" 2>&1 || true
 fi
 
 # EVERY RUN LEAVES A RECORD DATED TODAY. If the assistant wrote none, this writes the honest
