@@ -25,7 +25,7 @@ look after the server. One line either way; `docker/README.md` has the Docker on
 Log in to the machine you rented and paste this one line:
 
 ```
-curl -fsSL https://raw.githubusercontent.com/MichaelZelbel/godspeed-mission-control/main/server/install.sh | bash
+curl -fsSL https://godspeedmissioncontrol.com/server | bash
 ```
 
 It first explains the ChatGPT choice. The route uses ChatGPT's included Codex allowance rather

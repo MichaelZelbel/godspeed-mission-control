@@ -4,7 +4,7 @@
 the server as the login you were given:
 
 ```
-curl -fsSL https://raw.githubusercontent.com/MichaelZelbel/godspeed-mission-control/main/server/install.sh | bash
+curl -fsSL https://godspeedmissioncontrol.com/server | bash
 ```
 
 That does everything below, explains the ChatGPT choice, asks whether a
