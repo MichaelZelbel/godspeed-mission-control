@@ -220,6 +220,19 @@ rm "$TMP/$P"
 OUT="$(hg check 2>&1)"; check "a playbook file deleted after filing is a PROBLEM" "$?" "1"
 contains "  and names it" "$OUT" "PROBLEM aa-talk: PLAYBOOK line names a file that is gone"
 
+# --- the weekly number: LEAD and READ (2026-09-30) --------------------------------------------
+hg file --kind outcome --title "People who read my newsletter" --id readers --area money --status adopted --source "said it on 2026-09-30" >/dev/null 2>&1
+OUT="$(hg change readers --set "LEAD=people who join the newsletter | someday | the inbox" --why "test" 2>&1)"; check "a LEAD that is not total or per week is refused" "$?" "1"
+contains "  and says the form" "$OUT" "total or per week"
+OUT="$(hg read readers 3 --where "inbox" 2>&1)"; check "a reading before the goal has a LEAD is refused" "$?" "1"
+OUT="$(hg change readers --set "LEAD=people who join the newsletter | total | subscriber mails in the inbox" --why "its playbook's What they track, 2026-09-30" 2>&1)"; check "a LEAD in the three-part form is accepted" "$?" "0"
+check "  and sits on the card" "$(grep -c '^LEAD: people who join the newsletter | total | subscriber mails in the inbox' "$TMP/goals/readers.md")" "1"
+OUT="$(hg read readers seven --where "inbox" 2>&1)"; check "a reading that is not a number is refused" "$?" "1"
+OUT="$(hg read readers 3 2>&1)"; check "a reading without --where is refused" "$?" "1"
+OUT="$(hg read readers 2 --where "subscriber mails, first count" --date 2026-10-01 2>&1)"; check "a reading is recorded" "$?" "0"
+hg read readers 3 --where "subscriber mails, recounted" --date 2026-10-01 >/dev/null 2>&1
+check "  both lines stay in the log (it is only added to)" "$(grep -c ' READ ' "$TMP/goals/readers.md")" "2"
+
 echo
 echo "$PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

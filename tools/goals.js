@@ -53,7 +53,7 @@ const STATUSES = ['provisional', 'adopted', 'paused', 'achieved', 'retired'];
 const ACTIVE = ['adopted'];
 const IMPORTANCE = ['core', 'high', 'normal'];
 const ENERGY = ['low', 'medium', 'high'];
-const ORDER = ['ID', 'KIND', 'STATUS', 'AREA', 'TITLE', 'OWN WORDS', 'MEASURE', 'DEADLINE', 'SERVES', 'DEPENDS ON',
+const ORDER = ['ID', 'KIND', 'STATUS', 'AREA', 'TITLE', 'OWN WORDS', 'MEASURE', 'LEAD', 'DEADLINE', 'SERVES', 'DEPENDS ON',
   'PROTECTED', 'OWNER', 'IMPORTANCE', 'ENERGY', 'RESOURCES', 'CADENCE', 'REVIEW', 'SOURCE', 'FILED', 'NOTE'];
 const S = L.store(DIR, ORDER);
 const { die, say, oneLine, flag, today, q } = L;
@@ -154,6 +154,7 @@ cmds.change = (a) => {
     if (k === 'IMPORTANCE' && !IMPORTANCE.includes(v)) die(`IMPORTANCE must be one of: ${IMPORTANCE.join(', ')}`);
     if (k === 'DEADLINE' && v && !L.isoDate(v) && v !== 'unresolved') die('DEADLINE must be YYYY-MM-DD or unresolved');
     if (k === 'SERVES') for (const up of list(v)) if (!S.exists(up)) die(`SERVES ${up}: no such goal`);
+    if (k === 'LEAD' && v && !parseLead(v)) die(`LEAD is ${LEAD_FORM}`);
     const old = c.f[k] || '';
     if (old === v) continue;
     c.f[k] = v;
@@ -184,6 +185,54 @@ cmds.progress = (a) => {
   L.logLine(c, d, 'PROGRESS', ev);
   S.write(c);
   say(`${c.id}: progress recorded`);
+};
+
+// ---------------------------------------------------------------------------
+// the weekly number: LEAD on the card; READ, BET and RESULT lines in its log
+// ---------------------------------------------------------------------------
+// WHY THIS EXISTS (2026-09-30). The daily decision made moves and graded them by one thing:
+// whether they reached the world. Asked what it had done for his money goal in 48 hours, the
+// honest answer was three changes, no outcome, and its own checks set four and six weeks out. A
+// goal's MEASURE (a balance, a weight, five friends) moves over months, and nothing between it
+// and a move could move in a week. So an outcome names one weekly number a step before its
+// MEASURE, one that people who reached the goal counted (its playbook's "What they track"):
+//
+//   LEAD: <what is counted, in plain words> | total | <where it is read>
+//   LEAD: <what is counted, in plain words> | per week | <where it is read>
+//
+// total is a running count (people who ever subscribed); per week is one week's count (days
+// with enough protein this week). Every move bets on the number, and seven days after the move
+// went live THIS PROGRAM reads the number and writes the verdict (settle, below). The run that
+// made the move never grades it: an assistant that grades its own work reuses its most
+// confident mistakes. Model: The 4 Disciplines of Execution (lead measures, a scoreboard, a
+// weekly cadence of accountability).
+const LEAD_KINDS = ['total', 'per week'];
+const LEAD_FORM = '"<what is counted> | total or per week | <where it is read>"';
+const NUM = /^-?\d+(?:\.\d+)?$/;
+function parseLead(v) {
+  const p = String(v || '').split('|').map(s => s.trim());
+  return (p.length === 3 && p[0] && LEAD_KINDS.includes(p[1]) && p[2]) ? { what: p[0], kind: p[1], where: p[2] } : null;
+}
+// One reading per day counts: the last one written that day. The log keeps every line.
+function readings(c) {
+  const byDate = {};
+  for (const l of c.log) if (l.event === 'READ') { const v = l.rest.split(' ')[0]; if (NUM.test(v)) byDate[l.date] = parseFloat(v); }
+  return Object.keys(byDate).sort().map(date => ({ date, value: byDate[date] }));
+}
+function lastBetween(rs, from, to) { let hit = null; for (const r of rs) if (r.date >= from && r.date <= to) hit = r; return hit; }
+function firstBetween(rs, from, to) { for (const r of rs) if (r.date >= from && r.date <= to) return r; return null; }
+
+cmds.read = (a) => {
+  const c = S.read(a._[0] || die('usage: mc-goals read <id> <number> --where "<where it was read, and when>"')) || die('no such goal');
+  if (!parseLead(c.f.LEAD)) die(`${c.id} has no weekly number (LEAD) to read; set one first: mc-goals change ${c.id} --set "LEAD=..." --why "..."`);
+  const v = String(a._[1] === undefined ? '' : a._[1]);
+  if (!NUM.test(v)) die('the reading is a plain number, as it was read, without units');
+  const where = oneLine(a.where);
+  if (!where || where === 'true') die('--where is required: where the number was read, so the next run can read it the same way');
+  const d = a.date || today();
+  L.logLine(c, d, 'READ', `${v} (${where})`);
+  S.write(c);
+  say(`${c.id}: ${v} read on ${d}`);
 };
 cmds.question = (a) => {
   const c = S.read(a._[0] || die('usage: mc-goals question <id> --text "..."')) || die('no such goal');
