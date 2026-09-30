@@ -18,7 +18,7 @@ server's own terminal). You do everything else. Email is optional; never push it
   https://myaccount.google.com/apppasswords and make a new one, and do not use the pasted one.
 - **Nothing is sent.** Saving a draft the person asked for needs no extra approval. They press
   Send in Gmail.
-- **Gmail is not the mission control's own address.** `account: "mission control"` is a different mailbox. Never answer a
+- **Gmail is not the mission control's own address.** `account: "godspeed"` is a different mailbox. Never answer a
   question about their Gmail from it.
 - **Say only what you saw.** "Connected" means `mail_status` said so after a check, not that a
   settings file exists.

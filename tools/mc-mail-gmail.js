@@ -120,7 +120,7 @@ function writeStore(changes) {
   const { godspeed, store, key } = storePaths();
   if (!godspeed) throw new Error("no mission control folder found, so there is nowhere to keep the connection");
   const age = findAge("age"), keygen = findAge("age-keygen");
-  if (!age || !keygen) throw new Error("the small program called age is not on this computer. The mission control installer fetches it: run it once, then try again.");
+  if (!age || !keygen) throw new Error("the small program called age is not on this computer. Ask your assistant to install age (the installer fetches it only with the notebook), then try again.");
   if (!fs.existsSync(key)) {
     // No key and a store that exists: somebody else's lock, never to be written over.
     if (fs.existsSync(store)) throw new Error("this computer has no key to your mission control's locked store yet. Run the mission control installer on it first.");

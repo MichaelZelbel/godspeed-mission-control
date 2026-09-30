@@ -242,6 +242,21 @@ if kb_is_root; then
   fi
   ok "a C++ compiler is here, for the one part of Hermes that is built on the machine"
 
+  # age locks the mission control's credentials and the Gmail app password (the book's Chapters
+  # 28 to 30). The assistant's account cannot install it later, so root does it here. Until
+  # 2026-09-30 only the Docker image had it, and connecting Gmail on a plain server stopped after
+  # the app password was typed, with advice (run the installer again) that could not help.
+  if ! command -v age >/dev/null 2>&1 || ! command -v age-keygen >/dev/null 2>&1; then
+    log "Installing age, the small program that locks your credentials..."
+    if [ "${KB_APT_UPDATED:-0}" -eq 0 ]; then
+      apt-get update -y >/dev/null 2>&1 || warn "Could not refresh the software list; trying the install anyway."
+      KB_APT_UPDATED=1
+    fi
+    DEBIAN_FRONTEND=noninteractive apt-get install -y age >/dev/null 2>&1 \
+      || warn "Could not install age. Gmail and the notebook need it later: run 'apt install age' as root first."
+  fi
+  command -v age >/dev/null 2>&1 && ok "age is here, to lock your credentials"
+
   # Installed now, as root, because the assistant's account will not be allowed
   # to install software - and that is the point of that account, not a problem
   # with it.

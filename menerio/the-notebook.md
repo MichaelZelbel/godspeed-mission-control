@@ -20,7 +20,7 @@ the files on your computer.
 
 When the answer is yes, your mission control folder is mirrored into the notebook. Every Markdown file
 goes, except the `dev/` folder. The copies live under one folder called `godspeed`, laid out like
-your mission control: `profile/about-me.md` becomes a note in `mission control/profile`. Each decision in
+your mission control: `profile/about-me.md` becomes a note in `godspeed/profile`. Each decision in
 `decisions.md` becomes its own note.
 
 - **The file stays the truth.** Every copy says in its first line which file it came from.

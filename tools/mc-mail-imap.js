@@ -156,7 +156,7 @@ function mailKey() {
   const keyFile = file("key.txt");
   if (fs.existsSync(keyFile)) return keyFile;
   const keygen = G.findAge("age-keygen");
-  if (!keygen) throw new Error("the small program called age is not on this computer. The mission control installer fetches it: run it once, then try again.");
+  if (!keygen) throw new Error("the small program called age is not on this computer. Ask your assistant to install age (the installer fetches it only with the notebook), then try again.");
   ensureBase();
   const r = spawnSync(keygen, ["-o", keyFile], { encoding: "utf8", windowsHide: true });
   if (r.status !== 0 || !fs.existsSync(keyFile)) throw new Error("could not make a key for the mail password on this computer");
@@ -167,7 +167,7 @@ function lockPassword(password, target) {
   ensureBase();
   if (process.platform === "win32" && !fs.existsSync(path.join(base(), ".acl"))) throw new Error("the mail folder could not be made private to this Windows account, so the password was not stored");
   const age = G.findAge("age"), keygen = G.findAge("age-keygen");
-  if (!age || !keygen) throw new Error("the small program called age is not on this computer. The mission control installer fetches it: run it once, then try again.");
+  if (!age || !keygen) throw new Error("the small program called age is not on this computer. Ask your assistant to install age (the installer fetches it only with the notebook), then try again.");
   const key = mailKey();
   const pub = spawnSync(keygen, ["-y", key], { encoding: "utf8", windowsHide: true });
   const recipient = (pub.stdout || "").trim().split(/\r?\n/).pop();
