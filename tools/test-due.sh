@@ -163,6 +163,7 @@ fresh
 OUT="$(GODSPEED_TODAY=2026-09-30 d add taxes --title T --target 2024-12-20 --to 2025-01-31 --done-when x --cost y)"
 contains "a deadline long past is still taken, and said out loud" "$OUT" "Careful: the last day, 2025-01-31, was 607 days ago."
 contains "and the target too" "$OUT" "Careful: the day you would like it done, 2024-12-20, was 649 days ago."
+contains "the same name twice says how to change the one there is" "$(GODSPEED_TODAY=2026-09-30 d add taxes --title T --to 2027-01-31 --done-when x --cost y)" "edit the STRIP line in due/taxes.md"
 missing "a target a few days back is normal and not warned about" "$(GODSPEED_TODAY=2026-09-30 d add fence2 --title F --target 2026-09-21 --done-when x)" "Careful"
 
 # --- a new date is the new target ------------------------------------------------------------------

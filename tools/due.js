@@ -804,7 +804,13 @@ function cmdList(day, capped) {
 function cmdAdd(day) {
   const slug = slugify(args[1] || "");
   if (!slug) { console.log("Give it a short name:  mc-due add tax --title ..."); return 1; }
-  if (fs.existsSync(filePath(slug))) { console.log("You already have one called " + slug + "."); return 1; }
+  // Say how to change the one that exists. A practice run met the bare refusal by adding a second
+  // tax return beside the wrong one, which left two things reminding about one date.
+  if (fs.existsSync(filePath(slug))) {
+    console.log("You already have one called " + slug + ". Never add a second one for the same thing.");
+    console.log("To change its dates, edit the STRIP line in due/" + slug + ".md (for a new target: mc-due target " + slug + " YYYY-MM-DD).");
+    return 1;
+  }
   const given = argOf("--from", ""), to = argOf("--to", argOf("--deadline", "")), target = argOf("--target", "");
   if ((given && !isDate(given)) || (to && !isDate(to)) || (target && !isDate(target))) {
     console.log("Every date is written year first, like 2027-03-14.");
