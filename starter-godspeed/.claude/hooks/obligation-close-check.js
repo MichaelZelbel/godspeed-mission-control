@@ -13,7 +13,7 @@
  * yet, compares their titles with what THIS session said (your own messages and its commit
  * messages, never file paths), and when at least half of a title's words appear, one of them
  * specific to that deadline, it stops the session once and names it. The assistant then closes it
- * with what shows it (`mc-due done <name> --evidence "..."`) and may say so in one line. If it is
+ * with what shows it (`mc-due done <name> --evidence "..."`) and may say in plain words what is now settled. If it is
  * not finished, the assistant does nothing and says nothing: you never hear about a deadline a
  * session did not finish. Your approving or doing the work in the session is your word; you are
  * never asked to confirm it.
@@ -233,8 +233,9 @@ function main() {
       "This session may have finished " + (hits.length === 1 ? "an open deadline" : "open deadlines") + ":\n" +
       lines.join("\n") + "\n" +
       "For each one: if this session's work, or what the person said or approved in it, meets 'finished when', " +
-      "close it now: mc-due done <name> --evidence \"<a commit, or their words>\", and you may say so in one " +
-      "line of your final message. If it does not, do nothing and do not mention it: end the turn without any " +
+      "close it now: mc-due done <name> --evidence \"<a commit, or their words>\". If you mention it in your " +
+      "final message, say in plain words what is now settled and why, never its name, the command or the " +
+      "matched words. If it does not, do nothing and do not mention it: end the turn without any " +
       "text about it. Do not ask the person to confirm it: their approval in this session is their word. " +
       "This check runs once per deadline per session.";
     process.stdout.write(JSON.stringify({ decision: "block", reason }));
