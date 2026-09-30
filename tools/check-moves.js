@@ -133,7 +133,10 @@ const fewer = {};
 // Running out of time is refused too: the run has forty minutes and the moves are where they go
 // (test run 6 said "not in the time this run had" at minute 13). A reason may run over several
 // lines, and all of it is read, up to the next blank line, move or FEWER line.
-const REFUSED = /\b(register|ideas?\b|signed[- ]in|sign-in|session|log(?:ged)?[- ]?in|no route|route .*not hold|in the time|time (?:this|the) run|run had|to (?:that|the same) standard)/i;
+// A missing or draft playbook is refused as well (2026-09-30, a test reader on Hermes gave a new
+// goal no moves "because the playbook is a draft"): the runner researches it, and today's moves
+// come from two or three real cases read today.
+const REFUSED = /\b(register|ideas?\b|signed[- ]in|sign-in|session|log(?:ged)?[- ]?in|no route|route .*not hold|in the time|time (?:this|the) run|run had|to (?:that|the same) standard|no playbook|playbook (?:is |was )?(?:a |still )?(?:draft|missing|not (?:yet )?(?:written|researched|current))|draft playbook)/i;
 for (const m of text.matchAll(/^FEWER ([a-z0-9-]+):[ \t]*(\S[^\n]*(?:\n(?![ \t]*\n)(?!#+ \d+\.)(?!FEWER )[^\n]*)*)/gm)) {
   if (REFUSED.test(m[2])) problems.push(`FEWER ${m[1]}: a thin ideas register, a missing sign-in or running out of time is not a reason for fewer moves; read what people who reached this goal did at this stage, prepare moves for unsigned platforms anyway (the ship list asks for the sign-in), and use the time the run has`);
   else fewer[m[1]] = m[2];

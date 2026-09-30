@@ -152,7 +152,9 @@ own. Read it before anything else about the goal.
         --goal <id> --key playbook-<id> --source next-action
 
   Then diagnose only what the goal card and its log already show, and move on. Do not invent
-  the levers yourself at four in the morning; that is what the research is for.
+  the levers yourself at four in the morning; that is what the research is for. A missing
+  playbook stops neither the weekly number nor the moves: the goal still gets its LEAD today
+  (Step 2b) and its moves (Step 3), taken from two or three real cases you read today.
 - **With a playbook**, the diagnosis names WHICH of its levers is the constraint for this
   person, and cites the playbook's evidence. Read the goal's own log and the most recent
   diagnosis in `goals/diagnoses/`. Read the evidence live wherever you can, the file, the page,

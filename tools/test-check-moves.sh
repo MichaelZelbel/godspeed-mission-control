@@ -70,6 +70,14 @@ OUT="$(run)"; case "$OUT" in *"no \"APPLY"*) ok "a ship-list move with no APPLY 
 OUT="$(run)"; case "$OUT" in *"not a reason for fewer"*) ok "a refused reason on the second line of FEWER is still read";; *) bad "second line read: $OUT";; esac
 { move 1 money-goal "Simon Willison" "x"; move 2 money-goal "a" "y"; move 3 money-goal "b" "z"; echo "FEWER health-goal: a third was not prepared in the time this run had"; } > "$RUN/moves.md"
 OUT="$(run)"; case "$OUT" in *"not a reason for fewer"*) ok "running out of time is refused";; *) bad "time refused: $OUT";; esac
+# Found by a test reader on Hermes (2026-09-30): a brand-new goal got no moves "because the
+# playbook is a draft". The recipe answers that too: read two or three real cases today.
+{ move 1 money-goal "Simon Willison" "x"; move 2 money-goal "a" "y"; move 3 money-goal "b" "z"; echo "FEWER health-goal: playbook is draft (STATUS: draft); the recipe forbids working a goal without knowing how it is won"; } > "$RUN/moves.md"
+OUT="$(run)"; case "$OUT" in *"not a reason for fewer"*) ok "a draft playbook is refused as the reason for fewer";; *) bad "draft playbook refused: $OUT";; esac
+{ move 1 money-goal "Simon Willison" "x"; move 2 money-goal "a" "y"; move 3 money-goal "b" "z"; echo "FEWER health-goal: there is no playbook yet"; } > "$RUN/moves.md"
+OUT="$(run)"; case "$OUT" in *"not a reason for fewer"*) ok "  and so is no playbook";; *) bad "no playbook refused: $OUT";; esac
+{ move 1 money-goal "Simon Willison" "x"; move 2 money-goal "a" "y"; move 3 money-goal "b" "z"; echo "FEWER health-goal: the playbook's next rung is an invitation that waits on his answer of 2026-09-22"; } > "$RUN/moves.md"
+OUT="$(run)"; [ $? -eq 0 ] && ok "  but a reason that only mentions the playbook stands" || bad "  playbook mention: $OUT"
 
 # --- the weekly number (2026-09-30) ----------------------------------------------------------
 full() { move 1 money-goal "Simon Willison" "x"; move 2 money-goal "Justin Welsh" "y"; move 3 money-goal "swyx" "z"; echo "FEWER health-goal: the week's scale reading lands on Sunday"; }
