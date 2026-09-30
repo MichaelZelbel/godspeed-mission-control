@@ -283,14 +283,26 @@ echo "$lines" | grep "^observations/quirk.md" | grep -q "which makes it a guess"
   && ok "only observations/ is called a machine's guess" || bad "the guess line is on the wrong notes" "$lines"
 [ "$(echo "$lines" | grep "^profile/\|^rules/" | grep -c "You wrote or decided this")" = "2" ] \
   && ok "profile/ and rules/ say you wrote or decided them" || bad "profile/ or rules/ carries the wrong line" "$lines"
-[ "$(echo "$lines" | grep "^AGENTS.md\|^goals/\|^world/" | grep -c "This is a copy of the mission control file at .*Change the file in the mission control, never this note")" = "3" ] \
+[ "$(echo "$lines" | grep "^AGENTS.md\|^goals/\|^world/\|^skills/" | grep -c "This is a copy of the mission control file at .*Change the file in the mission control, never this note")" = "4" ] \
   && ok "everything else says it is a copy, and to change the file and never the note" || bad "the neutral line is missing" "$lines"
+# skills/ said "kept because you found it useful" until 2026-10-01. Nobody was asked: recipes
+# arrive with the kit and with every skill installed since, 407 of them on the author's
+# notebook by 2026-09-23. A provenance line that overstates provenance is worse than none.
+if echo "$lines" | grep -qi "found it useful\|kept because"; then
+  bad "a note still claims the reader found it useful" "$lines"
+else
+  ok "no note claims the reader found it useful"
+fi
 
 # ---- a mission control that already synced sends nothing again --------------------------------------
 # The ids and the first line of a note are what the cache is keyed and hashed on. The
 # strings below are the ones the program shipped with BEFORE the whole godspeed was mirrored,
 # copied here on purpose and not imported, so a change to either is caught as what it
 # is: every reader's notebook paying for every note a second time.
+#
+# ONE DELIBERATE EXCEPTION (2026-10-01): skills/ changed its line on purpose, because the
+# old one claimed the reader found every recipe useful. Its notes are sent again once,
+# and only its notes; everything else must still update nothing.
 resend="$("$PY" - "$HERE/notebook-sync.py" "$W/godspeed" <<'OLDEOF'
 import hashlib, importlib.util, pathlib, sys
 spec = importlib.util.spec_from_file_location("ns", sys.argv[1])
@@ -315,13 +327,14 @@ for d in docs:
 plan = ns.plan_actions(docs, state)
 print("OLDIDS", " ".join(sorted(state)))
 print("UPDATE", len(plan["update"]), "TRASH", len(plan["trash"]))
+print("UPDATED", " ".join(sorted(d.doc_id for d, _ in plan["update"])))
 print("CREATE", " ".join(sorted(d.doc_id for d in plan["create"])))
 OLDEOF
 )"
 echo "$resend" | grep -q "^OLDIDS decisions.md#2026-01-05-chose-one-ai-subscription-instead-of-two-because decisions.md#2026-02-11-named-the-folder-godspeed-so-every-tool-calls-it decisions.md#2026-03-01-moved-the-notebook-key observations/quirk.md skills/plan-my-day/SKILL.md$" \
   && ok "the ids of notes sent before 2026-09-20 are what they always were" || bad "a document id changed" "$resend"
-echo "$resend" | grep -q "^UPDATE 0 TRASH 0$" \
-  && ok "an already-synced godspeed updates and trashes nothing it sent before" || bad "old notes would be sent again" "$resend"
+echo "$resend" | grep -q "^UPDATE 1 TRASH 0$" && echo "$resend" | grep -q "^UPDATED skills/plan-my-day/SKILL.md$" \
+  && ok "an already-synced godspeed resends only its recipes, once, and trashes nothing" || bad "old notes other than the recipes would be sent again" "$resend"
 echo "$resend" | grep -q "^CREATE AGENTS.md goals/health.md profile/about-me.md rules/when-in-doubt-ask.md$" \
   && ok "and creates only the files the mirror newly covers" || bad "the newly covered files are not what was expected" "$resend"
 
@@ -425,6 +438,47 @@ GUARDEOF
 )"
 echo "$guard" | grep -q "^MASS 0$"   && ok "a cache that no longer matches the folder throws nothing away"   || bad "the mass-trash guard did not hold" "$guard"
 echo "$guard" | grep -q "^FEW 2$"   && ok "two deleted files still retire their two notes"   || bad "ordinary deletions stopped working" "$guard"
+
+# ---- many resends ask the notebook first ----------------------------------------------
+# Every computer keeps its own record of what it last sent. When one line of the note
+# changes, every computer would send every note again and the notebook would bill each
+# resend, so a run about to resend many notes first asks what the notebook already holds.
+# The first computer sends; the others find it done and send nothing.
+many="$("$PY" - "$HERE/notebook-sync.py" <<'MANYEOF'
+import importlib.util, sys
+spec = importlib.util.spec_from_file_location("ns", sys.argv[1])
+ns = importlib.util.module_from_spec(spec); spec.loader.exec_module(ns)
+
+docs = [ns.Document(doc_id="skills/s%d/SKILL.md" % i, title="skills/s%d/SKILL.md" % i,
+                    body="# recipe %d" % i, source_path="skills/s%d/SKILL.md" % i) for i in range(30)]
+old = {d.doc_id: {"note_id": "n%d" % i, "hash": "an older line",
+                  "folder": ns.folder_for(d.source_path)} for i, d in enumerate(docs)}
+
+class Notebook:
+    def __init__(self, holds_new):
+        self.holds_new, self.updates, self.lists = holds_new, 0, 0
+    def list_godspeed_notes(self):
+        self.lists += 1
+        return [{"id": "n%d" % i, "title": d.title, "folder_path": ns.folder_for(d.source_path),
+                 "content": ns.build_note_body(d) if self.holds_new else "an older line"}
+                for i, d in enumerate(docs)]
+    def update_note(self, *a):
+        self.updates += 1
+
+done = Notebook(holds_new=True)
+ns.run_sync(docs, dict(old), done, apply=True)
+print("ALREADY", done.updates, done.lists)
+behind = Notebook(holds_new=False)
+ns.run_sync(docs, dict(old), behind, apply=True)
+print("BEHIND", behind.updates)
+few = Notebook(holds_new=True)
+ns.run_sync(docs[:3], {k: old[k] for k in list(old)[:3]}, few, apply=True)
+print("FEW", few.updates, few.lists)
+MANYEOF
+)"
+echo "$many" | grep -q "^ALREADY 0 1$" && ok "notes another computer already resent are not sent again" || bad "a resend the notebook already holds was sent again" "$many"
+echo "$many" | grep -q "^BEHIND 30$"   && ok "notes the notebook holds in the older form are still sent" || bad "the check stopped a real resend" "$many"
+echo "$many" | grep -q "^FEW 3 0$"     && ok "a few changed files are sent without asking first" || bad "an ordinary save asked the notebook first" "$many"
 
 echo
 echo "  $PASS passed, $FAIL failed"

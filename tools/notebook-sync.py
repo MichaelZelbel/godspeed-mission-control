@@ -107,15 +107,19 @@ DECISION_LOG = "decisions.md"
 GODSPEED_FOLDER = "godspeed"
 
 # The first line of every note says who wrote what is under it. Only observations/ is
-# called a guess, because only observations/ is one. The lines for observations/,
-# skills/ and decisions are word for word what they were before the whole godspeed was
-# mirrored (2026-09-20): the line is part of what gets hashed, so changing a word of
-# one would send every note of that kind again, on every mission control that had already synced.
+# called a guess, because only observations/ is one. The lines for observations/ and
+# decisions are word for word what they were before the whole godspeed was mirrored
+# (2026-09-20): the line is part of what gets hashed, so changing a word of one sends
+# every note of that kind again, on every mission control that had already synced.
+#
+# skills/ was changed anyway, on 2026-10-01, and is sent again once. Its line was "mostly
+# written by a machine and kept because you found it useful", and nobody was asked:
+# recipes arrive with the kit and with every skill installed since, 407 of them on the
+# author's notebook by 2026-09-23. A provenance line that overstates provenance is worse
+# than none, so a recipe is now called what it is, a copy.
 AUTHOR_LINES = {
     "machine": "This is a file from your mission control at {path}. It is text a machine "
                "wrote, which makes it a guess and not something you said.",
-    "mixed": "This is a file from your mission control at {path}. It was mostly written by a "
-             "machine and kept because you found it useful.",
     "owner": "This is a file from your mission control at {path}. You wrote or decided this.",
     "copy": "This is a copy of the mission control file at {path}. Change the file in the mission control, "
             "never this note.",
@@ -124,10 +128,9 @@ AUTHOR_LINES = {
 # Who wrote what is in a folder. Anything not named here gets the neutral "copy" line.
 AUTHOR_BY_FOLDER = (
     ("observations/", "machine"),
-    (SKILLS_FOLDER + "/", "mixed"),
     ("profile/", "owner"),
     ("rules/", "owner"),
-) + tuple((alias + "/", "mixed") for alias in SKILLS_ALIASES)
+)
 
 # The two shapes a decision takes in decisions.md. The starter godspeed writes them
 # as bullets, "- (YYYY-MM-DD) what and why", and a mission control that outgrows one line
@@ -539,6 +542,9 @@ def reconcile_state(docs: list, remote_notes: list) -> dict:
     return state
 
 
+MANY_UPDATES = 20
+
+
 def run_sync(docs: list, state: dict, client, apply: bool,
              on_progress=None, failures=None) -> dict:
     """Send the plan, and never lose finished work to one bad document.
@@ -552,6 +558,21 @@ def run_sync(docs: list, state: dict, client, apply: bool,
     if failures is None:
         failures = []
     plan = plan_actions(docs, state)
+
+    # MANY RESENDS ASK THE NOTEBOOK FIRST (2026-10-01). This computer's cache says what IT
+    # last sent, not what the notebook holds. When one line of every note changes, each
+    # computer that syncs would send every note again, and the notebook bills each resend
+    # for its search pass. So a run about to resend many notes first asks which of them the
+    # notebook already holds in exactly this form: the first computer sends, the others
+    # find the work done. A few changed files, the ordinary save, never pay for the question.
+    if apply and len(plan["update"]) > MANY_UPDATES:
+        try:
+            held = reconcile_state([doc for doc, _ in plan["update"]], client.list_godspeed_notes())
+            state = dict(state)
+            state.update(held)
+            plan = plan_actions(docs, state)
+        except Exception as err:
+            print("could not ask the notebook what it already holds ({}), so sending all of them".format(err))
     print("create {}  update {}  trash {}".format(
         len(plan["create"]), len(plan["update"]), len(plan["trash"])))
     if not apply:
