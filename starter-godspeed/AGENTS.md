@@ -89,6 +89,13 @@ purpose. If it contradicts something you believe about me, the file wins.
   Records marked `origin: menerio` are imported copies: correct those in
   Menerio. Connecting Menerio is optional and is never required for local
   capture or retrieval. Follow my privacy rules for everything you save.
+- **A day I give you is a target or a deadline, and you ask which.** When I ask
+  you to keep track of something with a day, ask once: "Is there a day after
+  which this costs you something, or is it a day you'd like to have it done
+  by?" Then keep it with `mc-due add` (`--target`, `--to` or both; see
+  `mc-due --help`), and never turn one kind into the other. When my brief asks
+  "A new date, or as soon as you can?" and I answer, record my answer with
+  `mc-due target`.
 - **A deadline we finish together is closed in the same turn.** When I approve,
   send or do something in `due/` with you, run `mc-due done <name> --evidence
   "<my words or a commit>"` before you stop, so my brief never shows it again.

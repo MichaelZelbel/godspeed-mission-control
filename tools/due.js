@@ -23,14 +23,32 @@
  * cannot say so and wait for your word, which is most of them, and that is fine. Asking the
  * question is what matters.
  *
- * NO DATE, NOT ELIGIBLE. This refuses anything without both dates, on purpose. Let undated wishes
- * in and within a month it is a to-do app you do not maintain.
+ * THREE DATES, AND AT LEAST ONE OF THE LAST TWO. Every thing in here can carry the day you can
+ * start (optional, today if you leave it out), the day you would like it done (a TARGET: soft,
+ * missing it costs nothing) and the day it starts costing you (a DEADLINE: hard, the window
+ * above). Many people only ever need the target.
+ *
+ *   deadline only        the window and its four steps, exactly as described above
+ *   target only          quiet until the day, one mention on it, then ONE question the morning
+ *                        after ("A new date, or as soon as you can?"), then a gentle line about
+ *                        once a week in the brief, never louder
+ *   target and deadline  the deadline's steps, plus one mention on the target day, and after it
+ *                        the line says so and names the deadline; no question, the deadline rules
+ *   repeating            the target sits at the same place inside every window
+ *
+ * One behaviour for every target, not a setting per thing. A window line reads
+ * `STRIP: <start> <deadline, or - for none> [target <day>] [moved <day>]`, and every line written
+ * before targets existed, `STRIP: <from> <to>`, is a start and a deadline and is never rewritten.
+ *
+ * NO DATE, NOT ELIGIBLE. This refuses anything with neither a target nor a deadline, on purpose.
+ * Let undated wishes in and within a month it is a to-do app you do not maintain.
  *
  *   mc-due                    everything, loudest first
  *   mc-due today              at most three, for your morning brief to read
- *   mc-due add <name> --title "..." --from YYYY-MM-DD --to YYYY-MM-DD
- *          --done-when "..." --cost "..." [--repeats monthly|yearly|"every N days"]
+ *   mc-due add <name> --title "..." [--from YYYY-MM-DD] --target YYYY-MM-DD and/or --to YYYY-MM-DD
+ *          --done-when "..." [--cost "..."] [--repeats monthly|yearly|"every N days"]
  *          [--self-check none|file-newer] [--self-check-arg PATH] [--link URL]
+ *   mc-due target <name> YYYY-MM-DD|asap    a new day you would like it done, or as soon as you can
  *   mc-due done <name> [--evidence "..."]   you did it: writes the event that closes it
  *   mc-due drop <name> --yes  call it off: an event too, and nothing is deleted
  *   mc-due check              run the self checks, close what is provably done
@@ -154,12 +172,18 @@ function repeatOf(text) {
 // The only place that decides how loud something is, and the only reason this scales. Integer
 // arithmetic on purpose: a tenth is not exactly representable, and a boundary decided by floating
 // point is a bug nobody can reproduce.
-const RANK = { red: 0, orange: 1, yellow: 2, green: 3, unopened: 4 };
+// The last three belong to a target and never to a deadline: before its day, on it, and after it.
+// Past a target ranks below every deadline step, so "as soon as you can" only ever takes a place in
+// your morning that no deadline wanted. The target day sits just under "soon", because it is one
+// day and would otherwise lose its only morning to a fortnightly line.
+const RANK = { red: 0, orange: 1, target: 2, yellow: 3, green: 4, asap: 5, aiming: 6, unopened: 7 };
 // How many days must pass before the same thing may be mentioned again.
 const GAP = { red: 1, orange: 7, yellow: 14, green: 30 };
+// After the one question, a target that passed comes back about once a week, and never louder.
+const ASAP_GAP = 7;
 const WORDS = {
   red: "RUNNING OUT", orange: "SOON", yellow: "ON THE WAY", green: "PLENTY OF TIME",
-  unopened: "NOT YET",
+  unopened: "NOT YET", aiming: "AIMING FOR", target: "TARGET TODAY", asap: "WHEN YOU CAN",
 };
 
 // HOW LONG THE LOUD PHASE IS, in days, and it is the only place that decides.
@@ -218,6 +242,30 @@ function bandOf(from, to, day) {
   return "green";
 }
 
+// A window's target is the day you moved it to, if you did; the planned one stays on the line so a
+// repeating thing's later windows keep their place. A window ends on its deadline, or with none, on
+// its target.
+const aimOf = (s) => (s && (s.moved || s.target)) || "";
+const endOf = (s) => (s && (s.to || aimOf(s))) || "";
+// The step of one window. A deadline decides whenever there is one, target or not, so every window
+// written before targets existed gets exactly the answer it always got.
+function bandFor(s, day) {
+  if (!s) return null;
+  if (s.to) return bandOf(s.from, s.to, day);
+  const t = aimOf(s);
+  if (!isDate(s.from) || !isDate(t) || !isDate(day) || t < s.from) return null;
+  if (day < s.from) return "unopened";
+  if (day < t) return "aiming";
+  if (day === t) return "target";
+  return "asap";
+}
+// The first day anything was said after the target: that mention is the one question.
+function firstSaidAfter(o, t) {
+  let first = "";
+  for (const x of o.said) if (x.date > t && (!first || x.date < first)) first = x.date;
+  return first;
+}
+
 // ---------------------------------------------------------------- the files
 function readText(p) { try { return fs.readFileSync(p, "utf8"); } catch (e) { return ""; } }
 function writeText(p, s) {
@@ -242,11 +290,21 @@ function parseFile(slug) {
   for (const raw of text.split(/\r?\n/)) {
     const line = raw.replace(/\s+$/, "");
     // `STRIP: <from> <to>`. An older line may still say `open` or `done <date>`: kept as `legacy`
-    // and honoured until it has been turned into an event.
-    let m = line.match(/^STRIP:\s*(\S+)\s+(\S+)(?:\s+(\S+))?(?:\s+(\S+))?\s*$/);
+    // and honoured until it has been turned into an event. The deadline may be `-` (a target only),
+    // and `target <day>` or `moved <day>` may follow. A word nothing here knows is kept, never eaten.
+    let m = line.match(/^STRIP:\s*(\S+)\s+(\S+)((?:\s+\S+)*)\s*$/);
     if (m) {
-      const word = (m[3] || "").toLowerCase();
-      strips.push({ from: m[1], to: m[2], state: "open", closed: "", legacy: word === "done" ? (m[4] || m[2]) : "" });
+      const st = { from: m[1], to: m[2] === "-" ? "" : m[2], target: "", moved: "", extra: [],
+                   state: "open", closed: "", legacy: "" };
+      const w = m[3].trim() ? m[3].trim().split(/\s+/) : [];
+      for (let k = 0; k < w.length; k++) {
+        const word = w[k].toLowerCase();
+        if (word === "open") continue;
+        if (word === "done") { st.legacy = isDate(w[k + 1]) ? w[++k] : (st.to || st.from); continue; }
+        if ((word === "target" || word === "moved") && isDate(w[k + 1])) { st[word] = w[++k]; continue; }
+        st.extra.push(w[k]);
+      }
+      strips.push(st);
       continue;
     }
     m = line.match(/^-\s*(\d{4}-\d{2}-\d{2})\s+SAID\s+(\S+)\s*$/);
@@ -359,7 +417,7 @@ function migrateLegacy(notes) {
         closes: ["due/" + slug + "#" + s.from],
         evidence: "due/" + slug + ".md log, " + s.legacy + ": " + (said.length ? said[said.length - 1] : "the file said done").slice(0, 300),
         source: "moved out of the deadline file",
-        text: (o.head["TITLE"] || slug) + ": finished (window " + s.from + " to " + s.to + ").",
+        text: (o.head["TITLE"] || slug) + ": finished (window " + windowWords(s) + ").",
       });
       if (!rel) moved = false; else wrote += 1;
     }
@@ -380,11 +438,25 @@ function render(o) {
   for (const k of Object.keys(o.head)) if (!ORDER.includes(k)) out.push(k + ": " + H(k));
   out.push("", "## Windows", "");
   // The window only. A state word survives only while it is still the one record of that closing.
-  for (const s of o.strips) out.push(["STRIP:", s.from, s.to].concat(s.legacy && s.by === "legacy" ? ["done", s.legacy] : []).join(" "));
+  for (const s of o.strips) out.push(stripLine(s));
   out.push("", "## Log", "");
   for (const l of o.log) out.push(l);
   out.push("");
   return out.join("\n");
+}
+// A window with a deadline and no target is `STRIP: <from> <to>` and nothing else, byte for byte
+// what it always was, so no file you already have changes when it is written back.
+function stripLine(s) {
+  return ["STRIP:", s.from, s.to || "-"]
+    .concat(s.target ? ["target", s.target] : [], s.moved ? ["moved", s.moved] : [])
+    .concat(s.legacy && s.by === "legacy" ? ["done", s.legacy] : [], s.extra || [])
+    .join(" ");
+}
+// A window in words. A deadline window reads as it always has.
+function windowWords(s) {
+  const aim = aimOf(s);
+  if (!aim) return s.from + " to " + s.to;
+  return s.from + (s.to ? " to " + s.to + ", aiming for " + aim : ", aiming for " + aim);
 }
 const save = (o) => { CACHE.set(o.slug, o); return writeText(o.path, render(o)); };
 const logLine = (o, day, t) => o.log.push("- " + day + " " + t);
@@ -399,14 +471,14 @@ function currentWindow(o, day) {
   if (repeatOf(o.head["REPEATS"])) {
     const started = open.filter((s) => s.from <= day);
     const s = started.length ? started[started.length - 1] : open[0];
-    const b = bandOf(s.from, s.to, day);
-    return b ? { strip: s, band: b, missed: open.filter((x) => x !== s && x.to < day).length } : null;
+    const b = bandFor(s, day);
+    return b ? { strip: s, band: b, missed: open.filter((x) => x !== s && endOf(x) < day).length } : null;
   }
   let best = null, bestRank = Infinity;
   for (const s of open) {
-    const b = bandOf(s.from, s.to, day);
+    const b = bandFor(s, day);
     if (!b) continue;
-    const r = RANK[b] * 1000000 + daysBetween(day, s.to) + 50000;
+    const r = RANK[b] * 1000000 + daysBetween(day, endOf(s)) + 50000;
     if (r < bestRank) { bestRank = r; best = { strip: s, band: b, missed: 0 }; }
   }
   return best;
@@ -482,26 +554,54 @@ function growWindows(day, notes) {
     if (!rep) continue;
     // COUNTED FROM THE FIRST WINDOW, NEVER FROM THE ONE BEFORE. Stepping from the previous one is
     // how a job ending on the 31st gets clamped to the 28th in February and then stays there.
+    // A window with no deadline ends on its target, and its target is stepped from the first
+    // window's exactly like the dates around it.
     const anchor = o.strips[0];
     let newest = o.strips[o.strips.length - 1], added = 0;
-    while (newest.to < day && added < 240) {
+    while (endOf(newest) && endOf(newest) < day && added < 240) {
       const k = o.strips.length;
       const step = rep.kind === "months" ? (a) => addMonths(a, rep.n * k) : (a) => addDays(a, rep.n * k);
-      const from = step(anchor.from), to = step(anchor.to);
-      if (!from || !to || to <= newest.to) break;
-      o.strips.push({ from, to, state: "open", closed: "", legacy: "" });
+      const from = step(anchor.from), to = anchor.to ? step(anchor.to) : "";
+      const w = { from, to, target: anchor.target ? step(anchor.target) : "", moved: "", extra: [],
+                  state: "open", closed: "", legacy: "" };
+      if (!from || !endOf(w) || endOf(w) <= endOf(newest)) break;
+      o.strips.push(w);
       newest = o.strips[o.strips.length - 1];
       added += 1;
     }
     if (added) {
       applyEvents(o);
-      logLine(o, day, "the next window opened: " + newest.from + " to " + newest.to);
+      logLine(o, day, "the next window opened: " + windowWords(newest));
       save(o);
-      notes.push(slug + ": next window " + newest.from + " to " + newest.to);
+      notes.push(slug + ": next window " + windowWords(newest));
     }
   }
 }
-function roll(day) { const notes = []; migrateLegacy(notes); adoptKeys(day, notes); growWindows(day, notes); return notes; }
+// ---------------------------------------------------------------- your due/ README, kept current
+// An update replaces this program but never a file in your mission control: starter files are
+// copied once and then they are yours. So somebody who installed before targets existed would keep
+// a README describing two dates for ever, beside a program that knows three. This keeps the room's
+// README current, but ONLY when it is exactly a copy this kit once shipped. One you changed by hand
+// is yours and is never touched. Fingerprints: sha256 of each shipped version, line endings
+// ignored, first 16 characters.
+const SHIPPED_READMES = [
+  "e1e1f8072396ad20", "4f75edcae9a8f66c", "b783ca077e858d36", "10afeedb162f4649",
+  "53b028714c10f9c5", "d06b4543c3d443ba", "ee5bc45cc2b90854",
+];
+function keepReadmeCurrent(notes) {
+  const p = path.join(DUE, "README.md");
+  let text;
+  try { text = fs.readFileSync(p, "utf8"); } catch (e) { return; }
+  const plain = text.replace(/\r\n/g, "\n");
+  if (plain === README) return;
+  const h = require("crypto").createHash("sha256").update(plain).digest("hex").slice(0, 16);
+  if (!SHIPPED_READMES.includes(h)) return;
+  if (writeText(p, text.includes("\r\n") ? README.replace(/\n/g, "\r\n") : README)) {
+    notes.push("due/README.md brought up to date (you had not changed it)");
+  }
+}
+
+function roll(day) { const notes = []; keepReadmeCurrent(notes); migrateLegacy(notes); adoptKeys(day, notes); growWindows(day, notes); return notes; }
 
 function load(day) {
   roll(day);
@@ -514,7 +614,7 @@ function load(day) {
       o, slug, title: o.head["TITLE"] || slug,
       band: cur ? cur.band : (o.dropped ? "dropped" : "closed"),
       strip: cur ? cur.strip : null,
-      left: cur ? daysBetween(day, cur.strip.to) + 1 : null,
+      left: cur ? daysBetween(day, endOf(cur.strip)) + 1 : null,
       missed: cur ? cur.missed : 0,
       lastSaid: o.said.reduce((b, s) => (s.date <= day && (!b || s.date > b) ? s.date : b), null),
     });
@@ -528,20 +628,66 @@ function load(day) {
   return rows;
 }
 
+// The one question is being asked: a target with no deadline has passed, and today is the first
+// morning anything is said about it since, or nothing has been said yet. Asking again the same
+// morning gives the same page.
+function asking(r, day) {
+  if (!r.strip || r.strip.to || r.band !== "asap") return false;
+  const first = firstSaidAfter(r.o, aimOf(r.strip));
+  return !first || first === day;
+}
+
 function sentence(r, day) {
-  const to = r.strip.to, left = r.left;
+  const to = r.strip.to, left = r.left, aim = aimOf(r.strip);
   const also = r.missed
     ? " And " + r.missed + " earlier one" + (r.missed === 1 ? "" : "s") + " closed without you saying it was done."
     : "";
   if (r.band === "unopened") {
     const wait = daysBetween(day, r.strip.from);
+    const ends = !to ? "you would like it done by " + aim
+      : (aim ? "you would like it done by " + aim + ", and the last day is " + to : "the last day is " + to);
     return r.title + ": you cannot start yet. It opens on " + r.strip.from + ", in " + wait +
-      " day" + (wait === 1 ? "" : "s") + ", and the last day is " + to + ".";
+      " day" + (wait === 1 ? "" : "s") + ", and " + ends + ".";
+  }
+  // A target with no deadline: the day you aimed for, then the one question, then a gentle line.
+  if (!to) {
+    if (r.band === "aiming") {
+      const n = daysBetween(day, aim);
+      return r.title + ": you would like it done by " + aim + (n === 1 ? ", tomorrow." : ", in " + n + " days.") + also;
+    }
+    if (r.band === "target") return r.title + ": today, " + aim + ", is the day you would like it done." + also;
+    if (asking(r, day)) return r.title + ": you aimed for " + aim + ". A new date, or as soon as you can?" + also;
+    return r.title + ": still open, as soon as you can. You aimed for " + aim + "." + also;
   }
   if (left < 0) return r.title + ": the last day was " + to + ", " + (-left) + " day" + (left === -1 ? "" : "s") + " ago." + also;
   if (left === 0) return r.title + ": the last day was yesterday, " + to + "." + also;
-  if (left === 1) return r.title + ": today is the last day, " + to + "." + also;
-  return r.title + ": " + left + " days left, and the last one is " + to + "." + also;
+  // A target beside a deadline: said first, and not at all once the deadline has passed.
+  const lead = !aim || day < aim ? "" : (day === aim ? " today is the day you aimed for (" + aim + ")." : " past the day you aimed for (" + aim + ").");
+  const after = aim && day < aim ? " You would like it done by " + aim + "." : "";
+  if (lead) {
+    if (left === 1) return r.title + ":" + lead + " Today is the last day, " + to + "." + also;
+    return r.title + ":" + lead + " " + left + " days left, and the last one is " + to + "." + also;
+  }
+  if (left === 1) return r.title + ": today is the last day, " + to + "." + after + also;
+  return r.title + ": " + left + " days left, and the last one is " + to + "." + after + also;
+}
+
+// Whether a thing may be said this morning. A deadline follows its step's gap; a target follows
+// the one rule every target follows: nothing before its day, one mention on it, one question the
+// first morning after, then about once a week. A deadline with a target also speaks on that day.
+function sayable(r, day) {
+  const aim = aimOf(r.strip);
+  if (!r.strip.to) {
+    if (r.band === "aiming") return false;
+    if (r.band === "target") return true;
+    if (r.band !== "asap") return false;
+    if (!firstSaidAfter(r.o, aim)) return true;
+    return !r.lastSaid || daysBetween(r.lastSaid, day) >= ASAP_GAP;
+  }
+  if (aim && day === aim) return true;
+  const gap = gapFor(r.strip, r.band);
+  if (!gap) return false;
+  return !r.lastSaid || daysBetween(r.lastSaid, day) >= gap;
 }
 
 // ---------------------------------------------------------------- the self checks
@@ -576,19 +722,26 @@ function help() {
 
   mc-due                         everything, loudest first
   mc-due today                   at most three, for your morning brief
-  mc-due add <name> --title "..." --from YYYY-MM-DD --to YYYY-MM-DD
-          --done-when "..." --cost "..."
+  mc-due add <name> --title "..." [--from YYYY-MM-DD]
+          --target YYYY-MM-DD and/or --to YYYY-MM-DD
+          --done-when "..." [--cost "..."]
           [--repeats monthly|yearly|"every N days"]
           [--self-check none|file-newer] [--self-check-arg PATH] [--link URL]
+          --from is the day you can start (today if you leave it out). --target is the day
+          you would like it done. --to is the last day before it costs you, and needs --cost.
+          At least one of --target and --to.
+  mc-due target <name> YYYY-MM-DD   a new day you would like it done
+  mc-due target <name> asap         as soon as you can (it stays, mentioned about weekly)
   mc-due done <name> [--evidence "..."]   you did it (written down as an event in world/events/)
   mc-due drop <name> --yes       call it off; nothing is deleted
   mc-due check                   run the self checks, close what is provably done
   mc-due state [--json]          open or not, for every one, and what closed it
   mc-due --godspeed PATH              a mission control somewhere else
 
-How loud it gets comes from how much of the window is left, and from nothing else: quiet
-through the first half, then a quarter, then a tenth, then every day. One rule, whether the
-window is a week or a year. Nothing to tune.`);
+How loud a deadline gets comes from how much of the window is left, and from nothing else:
+quiet through the first half, then a quarter, then a tenth, then every day. One rule, whether
+the window is a week or a year. Nothing to tune. A target alone is quiet until its day, says
+so that day, asks once after it, then comes back about once a week and never gets louder.`);
 }
 
 function cmdList(day, capped) {
@@ -620,12 +773,7 @@ function cmdList(day, capped) {
   if (capped) {
     const saidToday = live.filter((r) => r.o.said.some((x) => x.date === day && x.channel === "brief"));
     const room = Math.max(0, CAP - saidToday.length);
-    const fresh = live.filter((r) => {
-      if (saidToday.includes(r)) return false;
-      const gap = gapFor(r.strip, r.band);
-      if (!gap) return false;
-      return !r.lastSaid || daysBetween(r.lastSaid, day) >= gap;
-    }).slice(0, room);
+    const fresh = live.filter((r) => !saidToday.includes(r) && sayable(r, day)).slice(0, room);
     show = saidToday.concat(fresh);
     for (const r of fresh) {
       r.o.said.push({ date: day, channel: "brief" });
@@ -637,6 +785,12 @@ function cmdList(day, capped) {
   for (const r of show) {
     if (!r.strip) { console.log((r.o.dropped ? "CALLED OFF     " : "DONE      ") + r.title); continue; }
     console.log(WORDS[r.band].padEnd(15) + sentence(r, day));
+    // In the full list the question comes with its two answers, so the assistant knows what to
+    // run when you reply. Your brief (today) gets the question alone, in plain words.
+    if (!capped && asking(r, day)) {
+      console.log("               a new date:  mc-due target " + r.slug + " YYYY-MM-DD" +
+                  "    as soon as you can:  mc-due target " + r.slug + " asap");
+    }
     if (!capped) {
       const c = (r.o.head["SELF-CHECK"] || "none").toLowerCase();
       console.log("               " + (c === "none"
@@ -651,19 +805,34 @@ function cmdAdd(day) {
   const slug = slugify(args[1] || "");
   if (!slug) { console.log("Give it a short name:  mc-due add tax --title ..."); return 1; }
   if (fs.existsSync(filePath(slug))) { console.log("You already have one called " + slug + "."); return 1; }
-  const from = argOf("--from", ""), to = argOf("--to", "");
-  if (!isDate(from) || !isDate(to)) {
-    console.log("This needs BOTH dates: --from (the first day you can do it) and --to (the last day you still can),");
-    console.log("each written year first, like 2027-03-14.");
-    console.log("");
-    console.log("No date, not eligible. Something with no last day is a wish, and this is not a to-do list.");
+  const given = argOf("--from", ""), to = argOf("--to", argOf("--deadline", "")), target = argOf("--target", "");
+  if ((given && !isDate(given)) || (to && !isDate(to)) || (target && !isDate(target))) {
+    console.log("Every date is written year first, like 2027-03-14.");
     return 1;
   }
-  if (to < from) { console.log("The last day (" + to + ") is before the first day (" + from + ")."); return 1; }
+  if (!to && !target) {
+    console.log("This needs a day: --target (the day you would like it done), --to (the last day before it");
+    console.log("costs you), or both. Each written year first, like 2027-03-14.");
+    console.log("");
+    console.log("No date, not eligible. Something with no day at all is a wish, and this is not a to-do list.");
+    return 1;
+  }
+  // The day you can start is today unless you say otherwise, but never after the day it ends: a
+  // target or a deadline already behind you opens its window on that day instead.
+  const from = given || [day, target, to].filter(Boolean).sort()[0];
+  if (to && to < from) { console.log("The last day (" + to + ") is before the first day (" + from + ")."); return 1; }
+  if (target && target < from) { console.log("The day you would like it done (" + target + ") is before the day you can start (" + from + ")."); return 1; }
+  if (target && to && target > to) {
+    console.log("The day you would like it done (" + target + ") is after the day it starts costing you (" + to + ").");
+    console.log("A target sits on or before the deadline.");
+    return 1;
+  }
   const doneWhen = argOf("--done-when", ""), cost = argOf("--cost", "");
-  if (!doneWhen || !cost) {
-    console.log("It also needs --done-when (what is true when this is finished) and --cost (what it costs you if it slips).");
-    console.log("Those two are what let your mission control write you a line worth reading instead of a nag.");
+  // What slipping costs is only asked when there is a deadline. A target alone costs nothing when
+  // you miss it, by definition, and you are not asked to invent a cost.
+  if (!doneWhen || (to && !cost)) {
+    console.log("It also needs --done-when (what is true when this is finished)" + (to ? " and --cost (what it costs you if it slips)" : "") + ".");
+    console.log("That is what lets your mission control write you a line worth reading instead of a nag.");
     return 1;
   }
   const repeats = argOf("--repeats", "no");
@@ -673,18 +842,24 @@ function cmdAdd(day) {
   }
   const sc = (argOf("--self-check", "none") || "none").toLowerCase();
   if (sc !== "none" && sc !== "file-newer") { console.log("--self-check must be none or file-newer."); return 1; }
-  const o = { slug, path: filePath(slug), strips: [{ from, to, state: "open", closed: "" }], log: [], said: [],
+  const o = { slug, path: filePath(slug), strips: [{ from, to, target, moved: "", extra: [], state: "open", closed: "", legacy: "" }], log: [], said: [],
     head: {
       "TITLE": argOf("--title", slug), "DONE-WHEN": doneWhen, "COST-IF-MISSED": cost,
       "SELF-CHECK": sc, "SELF-CHECK-ARG": argOf("--self-check-arg", ""),
       "REPEATS": repeats, "LINK": argOf("--link", ""), "SOURCE": "you, " + day,
     } };
-  logLine(o, day, "created, window " + from + " to " + to);
+  logLine(o, day, "created, window " + windowWords(o.strips[0]));
   if (!save(o)) return 1;
-  const b0 = bandOf(from, to, day);
-  console.log(b0 === "unopened"
-    ? "Made " + slug + ". You cannot start it until " + from + ", and the last day is " + to + "."
-    : "Made " + slug + ". Window " + from + " to " + to + ", and today there is " + WORDS[b0].toLowerCase() + ".");
+  const b0 = bandFor(o.strips[0], day);
+  if (to) {
+    console.log(b0 === "unopened"
+      ? "Made " + slug + ". You cannot start it until " + from + ", and the last day is " + to + "."
+      : "Made " + slug + ". Window " + from + " to " + to + ", and today there is " + WORDS[b0].toLowerCase() + ".");
+    if (target) console.log("You would like it done by " + target + ", and that day it is mentioned once.");
+  } else if (b0 === "unopened") console.log("Made " + slug + ". You cannot start it until " + from + ", and you would like it done by " + target + ".");
+  else if (b0 === "aiming") console.log("Made " + slug + ". You would like it done by " + target + ". Nothing is said about it before that day.");
+  else if (b0 === "target") console.log("Made " + slug + ". You would like it done today, " + target + ".");
+  else console.log("Made " + slug + ". The day you would like it done, " + target + ", has already passed, so your next brief asks: a new date, or as soon as you can?");
   console.log(sc === "none"
     ? "It cannot tell by itself that you did it, so it waits for your word:  mc-due done " + slug
     : "It closes itself when " + argOf("--self-check-arg", "that file") + " changes inside the window.");
@@ -705,13 +880,64 @@ function cmdDone(day) {
     closes: ["due/" + slug + "#" + cur.strip.from],
     evidence: "you said so" + (extra ? "; " + extra : ""),
     source: "mc-due done",
-    text: (o.head["TITLE"] || slug) + ": done (window " + cur.strip.from + " to " + cur.strip.to + ").",
+    text: (o.head["TITLE"] || slug) + ": done (window " + windowWords(cur.strip) + ").",
   });
   if (!rel) { console.log("I could not write it down, so nothing was closed."); return 1; }
   logLine(o, day, "you said it was done (" + rel + ")");
   save(o);
-  console.log("Closed " + slug + " (" + cur.strip.from + " to " + cur.strip.to + "): " + rel);
+  console.log("Closed " + slug + " (" + windowWords(cur.strip) + "): " + rel);
   if (repeatOf(o.head["REPEATS"])) console.log("It repeats, so the next window opens when this one ends.");
+  return 0;
+}
+
+// TARGET. Your answer after a target passed, or a target for something that has none yet.
+//   mc-due target <name> YYYY-MM-DD   the new day you would like it done
+//   mc-due target <name> asap         as soon as you can
+// "As soon as you can" changes nothing but the log, because it behaves exactly like no answer. A new
+// day is written as `moved` beside the planned one, so a repeating thing's next window is still
+// planned from its first.
+function cmdTarget(day) {
+  const slug = args[1], what = String(args[2] || "").trim();
+  if (!slug || !what) { console.log("Which one, and what day?  mc-due target <name> YYYY-MM-DD   or   mc-due target <name> asap"); return 1; }
+  roll(day);
+  const o = parseFile(slug);
+  if (!o) { console.log("You have nothing called " + slug + ". Type mc-due to see the list."); return 1; }
+  const cur = currentWindow(o, day);
+  if (!cur) { console.log("Nothing is open on " + slug + ", so there is no day to move."); return 1; }
+  const s = cur.strip, old = aimOf(s);
+  if (/^(asap|as-soon-as-you-can)$/i.test(what)) {
+    if (!old) { console.log(slug + " has no day you aimed for. As soon as you can is the answer to a target that passed."); return 1; }
+    logLine(o, day, "you said as soon as you can, after aiming for " + old);
+    save(o);
+    console.log("Kept " + slug + " open, as soon as you can. Your brief mentions it about once a week until you say it is done.");
+    return 0;
+  }
+  if (!isDate(what)) { console.log("A new day is written year first, like 2027-03-14, or say asap."); return 1; }
+  if (what < s.from) { console.log("That day (" + what + ") is before the day you can start (" + s.from + ")."); return 1; }
+  if (s.to && what > s.to) {
+    console.log("That day (" + what + ") is after the day it starts costing you (" + s.to + "). A target sits on or before the deadline.");
+    return 1;
+  }
+  if (s.target) s.moved = what === s.target ? "" : what;
+  else {
+    s.target = what;
+    // A repeating thing gets the same place in every window, planned from the first one.
+    const rep = repeatOf(o.head["REPEATS"]), anchor = o.strips[0];
+    if (rep && anchor !== s && !anchor.target) {
+      const t = addDays(anchor.from, daysBetween(s.from, what));
+      anchor.target = anchor.to && t > anchor.to ? anchor.to : t;
+    }
+    if (rep && anchor.target) {
+      o.strips.forEach((w, k) => {
+        if (k === 0 || w === s || w.from <= s.from || w.target) return;
+        const t = rep.kind === "months" ? addMonths(anchor.target, rep.n * k) : addDays(anchor.target, rep.n * k);
+        w.target = w.to && t > w.to ? w.to : t;
+      });
+    }
+  }
+  logLine(o, day, old ? "you moved the day you would like it done from " + old + " to " + what : "you would like it done by " + what);
+  save(o);
+  console.log("Moved " + slug + ": you would like it done by " + what + (s.to ? ", and the last day is still " + s.to : "") + ".");
   return 0;
 }
 
@@ -777,6 +1003,7 @@ function cmdState(day) {
     return {
       slug: r.slug, title: r.title, state: r.band === "unopened" ? "unopened" : r.strip ? "open" : r.band,
       firstDay: r.strip ? r.strip.from : "", lastDay: r.strip ? r.strip.to : "",
+      ...(r.strip && aimOf(r.strip) ? { targetDay: aimOf(r.strip) } : {}),
       doneWhen: (r.o.head["DONE-WHEN"] || "").trim(), closedOn: last ? last.closed : "", closedBy: last ? last.by : "",
       // Anything but "none" closes itself in `mc-due check`, so the stop check never guesses at it.
       selfCheck: (r.o.head["SELF-CHECK"] || "").trim().toLowerCase() || "none",
@@ -787,6 +1014,10 @@ function cmdState(day) {
   return 0;
 }
 
+// readme:begin (a copy of starter-godspeed/due/README.md; tools/test-due.sh checks it byte for byte)
+const README = "# due - the things with a day\n\n**This room starts empty, and an empty one costs you nothing.** It fills the first time you tell\nyour mission control about something with a day attached: a day you would like it done by, or a\nlast day before it costs you (Chapter 27). If you never do, you have an empty folder and you have\nlost nothing.\n\n## Why this is not a reminder\n\nA calendar reminder fires on a date and knows nothing else. It cannot tell whether you already did\nthe thing, so it goes off afterwards, and after that happens a few times you stop reading\nreminders. Then one of them stops on its last occurrence whether or not the job got done, and that\nis the one that mattered.\n\nEverything in here is built to fix both halves of that.\n\n## Three dates, and you usually need only one\n\nEvery thing in here can carry up to three dates:\n\n- **The day you can start.** Optional. If you leave it out, it is the day you add the thing.\n- **The day you would like it done.** A target, soft, like a date in a calendar. Missing it costs\n  you nothing.\n- **The day it starts costing you.** A deadline, hard: after it there is a fee, a fine, a lost\n  chance.\n\nIt needs at least a target or a deadline. Many people only ever need the target.\n\n| What it has | What your mission control does |\n|---|---|\n| **A deadline only** | The window below: quiet at first, louder as the last day comes, and after the last day it stays until you close it or drop it. |\n| **A target only** | Nothing until that day. One mention on the day. Once it has passed it never gets louder: the next morning it asks you once, \"A new date, or as soon as you can?\" A new date becomes the new target. \"As soon as you can\", or no answer at all, keeps it open with a gentle line in your brief about once a week, until you finish it or drop it. |\n| **Both** (a tax return: aim for the end of January, must by the end of February) | The deadline's window, plus one mention on the target day. After the target it says you are past it and names the deadline. It does not ask for a new date, because the deadline decides. |\n| **Repeating** | A new window each time. The target sits at the same place inside every window. |\n\nIn your morning's three places, a target you have passed comes after every deadline, and it never\nreaches your phone as a push message. It is a wish you gave yourself, not a bill.\n\n## The window, for a deadline\n\nA deadline holds **the first day you can do the thing, and the last day you still can.** Not a due\ndate. A window.\n\nHow loud your mission control gets follows how much of the window is left, as a fraction:\n\n| Left of the window | Your mission control |\n|---|---|\n| more than half | says it once when the window opens, then at most monthly |\n| half to a quarter | a line in your brief about every fortnight |\n| a quarter to a tenth | its own line, near the top, about weekly |\n| the loud days at the end: a tenth of the window, never fewer than three days and never more than fourteen | every morning |\n\n**One rule, whether the window is a week or a year.** That is the whole reason you can have a\nhundred of these. There is nothing to tune per item, and if a thing feels like it needs its own\nsetting, the window is wrong rather than the rule. A target adds no setting either: every target\nbehaves the same way.\n\n## What a file looks like\n\nOne file per thing, named however you like:\n\n```\ndue/car-service.md\n\nTITLE:          Car service before the warranty runs out\nDONE-WHEN:      The car has been serviced at a garage the warranty accepts.\nCOST-IF-MISSED: The warranty ends. A gearbox after that is mine to pay for.\nSELF-CHECK:     none\nSELF-CHECK-ARG:\nREPEATS:        yearly\nLINK:           https://example.com/book-a-service\nSOURCE:         me, 2026-08-29\n\n## Windows\nSTRIP: 2026-09-01 2027-02-28\n\n## Log\n- 2026-08-29 created, window 2026-09-01 to 2027-02-28\n```\n\nA target is one more word on the window line. A present to buy before a birthday, with no\ndeadline at all, reads `STRIP: 2026-04-20 - target 2026-05-10`: from the 20th of April, aiming for\nthe 10th of May, and the `-` says there is no last day. With both, it is\n`STRIP: 2026-10-01 2027-02-28 target 2027-01-31`. When you give a new day after missing one, it is\nwritten beside the old one as `moved 2027-02-10`.\n\nPlain text. Read it, edit it, delete it. The program writes the same shape you would.\n\n**A repeating thing is ONE file that grows a new window each time**, never one file per occurrence.\nThat is what keeps a hundred of these at a hundred files instead of thousands.\n\n## The four questions, asked once\n\nWhen you add one, answer four things and never be asked again:\n\n1. What is true when this is finished?\n2. Is there a day after which this costs you something, or is it a day you would like to have it\n   done by? (Or both. And if you cannot start yet, from when.)\n3. What does it cost you if it slips? Only asked when there is a deadline: a target costs nothing.\n4. **How could your mission control tell you did it, without asking you?**\n\nThe fourth is the one that matters and the one everybody skips. Some things can answer it. A key is\nreplaced when the date in `secrets/expires.txt` moves. A backup happened if the file is newer than\nthe window. Those close themselves and never nag you again after you act, which is exactly the\nfailure that kills every reminder app.\n\nMost things cannot answer it, and **that is a fine answer**. Nobody can tell your mission control that you\nsubmitted a timesheet into somebody else's website. Those say so and wait for you to say the word.\nAsk the question anyway, every time, because knowing which kind a thing is changes what you build\naround it.\n\n## No date, not eligible\n\n`mc-due add` refuses anything that has neither a target nor a deadline, in those words. That\nrefusal is the only thing between this folder and a to-do app you stop maintaining. \"Someday\" is\nnot a target; \"by the 10th of May\" is.\n\n## Three states, and only three\n\n**open, done, dropped.** Done can happen by itself when there is a self check. **Dropped only ever\ncomes from you**, which is why the command makes you type `--yes`.\n\n**Done is never written in here.** A file in this room is the plan. When a thing is finished,\nthat is something that happened, so it goes where the things that happened go: a small file in\n`world/events/` that says `closes: [due/car-service]` and, on an `evidence:` line, what shows it\n(your words, a receipt, a commit). A drop is the same with `drops:`. Everything that asks \"is this\nstill open\" works it out from those, so there is only one place the answer can live and nothing\ncan disagree with it. Why: in the mission control this kit comes from, a post was approved and\npublished in a working session, the memory wrote that down the same day, and the deadline file\nkept saying open, so the morning brief told its owner for five mornings that the finished work was\nwaiting. `mc-due done` and `mc-due drop` write the event for you, and when your assistant finishes\none of these with you in a session it closes it before the session ends.\n\nSomething whose window closed without being done **stays open**. Nothing tidies it away, because\nfor a deadline \"nobody got to it\" is the failure, not a quiet success.\n\n## Your keys are already in here\n\nIf you have `secrets/expires.txt` from Chapter 31, `mc-due` reads it and treats each key as one of\nthese. You never write a date in two places, and there is one thing nagging you rather than two\nthat disagree. Moving the date in that file is still the off switch, and it is now also the proof:\nmoving it forward is what replacing a key looks like from outside, so the reminder closes itself.\n\n## You do not need a calendar\n\nNot for any of this. If you do have one, your assistant can add **one entry per thing**, and one is\nthe whole rule. For a deadline it goes on the day your mission control starts being loud, not on the day the thing dies, and\nthe death date goes in the title so the single entry says both. For a target it goes on the target\nday, and a thing with both gets the target-day entry with the deadline in its title. Never two\nentries about one date: the day they disagree with each other you stop believing either.\n\nIt comes out again when you finish, as long as the day has not passed yet. That is the part that\nmakes one entry safe, because otherwise an entry you already acted on sits there being wrong. A day\nthat has already gone by is left alone: it is a record of what happened.\n\nYou can also go the other way and add one from your phone, by writing an event that says\n`mission control: from 1 Feb`. **The calendar never decides when you get nagged and never knows whether you\nacted.**\n\n## The commands\n\n```\nmc-due                     everything, loudest first\nmc-due today               at most three, which is what your morning brief reads\nmc-due add <name> ...      make one: --target, --to (the deadline), or both\nmc-due target <name> D     a new day you would like it done (or: asap, as soon as you can)\nmc-due done <name>         you did it (an event in world/events/ says so)\nmc-due drop <name> --yes   call it off; nothing is deleted\nmc-due check               run the self checks, close what is provably done\nmc-due state               which are open, and what closed the others\n```\n\nThe card is `procedures/what-runs-out-and-when.md` in the kit. Chapter 27.\n";
+// readme:end
+
 const day = today();
 const cmd = args[0] && !args[0].startsWith("-") ? args[0] : "";
 let rc = 0;
@@ -795,6 +1026,7 @@ switch (cmd) {
   case "today": rc = cmdList(day, true); break;
   case "add": rc = cmdAdd(day); break;
   case "done": rc = cmdDone(day); break;
+  case "target": rc = cmdTarget(day); break;
   case "drop": rc = cmdDrop(); break;
   case "check": rc = cmdCheck(day); break;
   case "state": rc = cmdState(day); break;

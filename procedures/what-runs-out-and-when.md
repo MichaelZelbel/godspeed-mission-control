@@ -10,9 +10,33 @@ The reminder was not wrong. It just had no way of knowing.
 anything on this card.** If you have a calendar you can wire two small extras in
 at the end. Skip them and you lose nothing.
 
-## The one idea: a window, not a due date
+## Three dates, and you usually need one
 
-Write down two dates for everything, not one. **The first day you can do it, and
+Everything in `due/` can carry up to three dates:
+
+- **The day you can start.** Leave it out and it is today.
+- **The day you would like it done.** A target. Soft: missing it costs nothing.
+- **The day it starts costing you.** A deadline. Hard: a fee, a fine, a lost chance.
+
+You need at least a target or a deadline. Plenty of things only have a target:
+the present to buy before a birthday, the fence you want painted before summer.
+A tax return has both: you aim for the end of January, and you must be done by
+the end of February.
+
+**A target alone** stays quiet until its day and is mentioned once on it. If the
+day passes, it never gets louder. The next morning it asks you once, "A new date,
+or as soon as you can?" A new date becomes the new target. "As soon as you can",
+or no answer at all, keeps it open with a gentle line in your brief about once a
+week until you finish it or drop it. It never reaches your phone as a push
+message, and it always comes after every deadline in your morning's three places.
+
+**A target and a deadline** behave like the deadline, plus one mention on the
+target day. After the target the line says you are past it and names the
+deadline. It does not ask for a new date: the deadline decides.
+
+## A deadline is a window, not a due date
+
+For a deadline, write down two dates, not one. **The first day you can do it, and
 the last day you still can.**
 
 That second date is the one everybody writes. The first one is what makes the
@@ -37,7 +61,8 @@ same thing at its own speed. Nothing is set per item. Nothing to tune, nothing
 to forget to tune.
 
 If something ever feels like it needs its own setting, **the window is wrong,
-not the rule.** Fix the window.
+not the rule.** Fix the window. A target adds no setting either: every target
+behaves the same way.
 
 ## The four questions, and you answer them once
 
@@ -47,13 +72,19 @@ mc-due add car-service --title "Car service before the warranty runs out" \
   --done-when "The car has been serviced at a garage the warranty accepts." \
   --cost "The warranty ends. A gearbox after that is mine to pay for." \
   --repeats yearly
+
+mc-due add present --title "Birthday present for Nadia" --target 2027-05-10 \
+  --done-when "The present is bought and wrapped."
 ```
 
 That is four answers in one line:
 
 1. **What is true when this is finished?** (`--done-when`)
-2. **From when to when can you do it?** (`--from`, `--to`)
-3. **What does it cost you if it slips?** (`--cost`)
+2. **Is there a day after which this costs you something, or is it a day you'd
+   like to have it done by?** (`--to` for the first, `--target` for the second,
+   both if both; `--from` only when you cannot start today)
+3. **What does it cost you if it slips?** (`--cost`, only with a deadline: a
+   target costs nothing when you miss it)
 4. **How could your mission control tell you did it, without asking?** (below)
 
 You are never asked again. Everything the thing does for the rest of its life is
@@ -62,10 +93,19 @@ judged against those answers.
 Or say it in words, in a session with your folder attached:
 
 ```
-Add something with a deadline to my mission control. Ask me exactly four questions, once, and never ask them again: (1) what is true when this is finished, (2) from what day to what day can I do it, (3) what does it cost me if it slips, (4) how could you tell I had done it without asking me. If I cannot give you a last day, say so plainly and do not add it: something with no last day is a wish, and this list is not for wishes. Then run mc-due add with my answers, and show me the four answers as you recorded them so I can fix them now rather than in six months.
+Add something with a day to my mission control. Read existing relevant records first, then ask only for missing facts: what counts as finished; "Is there a day after which this costs you something, or is it a day you'd like to have it done by?" (it can be both; ask which day I can start only if it is not today); what it costs me if it slips, only when there is a deadline; and whether any available evidence can reliably establish completion.
+
+Keep the two kinds of day apart: never turn a day I would like it done into a deadline, or the reverse. If I can give neither, say so and add nothing. Use manual completion, --self-check none, unless we have explicitly tested a better completion signal. Do not treat a recently edited draft or a new backup file as proof that the work succeeded.
+
+Check mc-due --help, then use mc-due add with a unique simple name, --target, --to or both, and my confirmed answers. Show the saved dates and completion condition. Do not create a second reminder schedule.
 ```
 
-*Bookmark the prompt, if you like: [querino.ai/prompts/add-a-deadline-to-my-mission control](https://querino.ai/prompts/add-a-deadline-to-my-mission control)*
+*Bookmark the prompt, if you like: [querino.ai/prompts/add-a-deadline-to-my-mission-control](https://querino.ai/prompts/add-a-deadline-to-my-mission-control)*
+
+When a target has passed and your brief asks "A new date, or as soon as you
+can?", just answer your assistant in words ("make it the 20th", "as soon as I
+can"). It records the answer with `mc-due target`. Saying nothing is also an
+answer: it means as soon as you can.
 
 ## Question four is the whole card
 
@@ -110,12 +150,14 @@ waits for you, and says so on screen rather than pretending.
 
 ## No date, not eligible
 
-`mc-due add` refuses anything without both dates, in exactly those words.
+`mc-due add` refuses anything that has neither a target nor a deadline, in
+exactly those words.
 
 That refusal is the only thing between this and a to-do app you abandon in three
 weeks. A shopping list of vague intentions gets ignored, and once you are
-ignoring the list you are ignoring the tax return in it too. **Things with a real
-last day and a real consequence, or nothing.**
+ignoring the list you are ignoring the tax return in it too. **A real day, a day
+you would like it done or a day it starts costing you, or nothing.** "Someday" is
+not a day.
 
 ## Three states, and only three
 
@@ -199,10 +241,11 @@ morning brief recipe, you can take it back out now. One thing, one place.
 Not two. Two entries about one date is the same mistake as two reminder apps:
 the day they disagree with each other, you stop reading both.
 
-**Which day.** The day your mission control starts being loud, not the day the thing dies.
-`mc-due` works that day out from the same rule as everything else, so there is
-nothing for you to pick. The death date goes in the **title**, so the single
-entry still tells you both things:
+**Which day.** For a target, the target day: the day you chose. For a deadline,
+the day your mission control starts being loud, not the day the thing dies, and
+the death date goes in the **title**, so the single entry still tells you both
+things. A thing with both gets the target-day entry, with the deadline in its
+title:
 
 ```
 Tue 23 July, 09:00
@@ -213,11 +256,11 @@ An entry on the day the thing dies sounds sensible and is a trap. If you renewed
 it three weeks ago, that entry is now a lie sitting in your calendar, and you
 have to remember to go and take it out. You will not.
 
-**It takes itself out.** When you finish something, your mission control deletes its entry,
-as long as the day has not arrived yet. A day that has already passed is left
-alone: that one is a record of what happened. This is the half that makes a
-single entry safe to have at all, because the same thing that stops the nagging
-removes the entry.
+**Take it out when you finish**, as long as its day has not arrived yet: ask
+your assistant to, or do it by hand. `mc-due` cannot reach your calendar, so this
+part is yours or your assistant's. A day that has already passed is left alone:
+that one is a record of what happened. When you move a target, move its entry
+with it. This is the half that makes a single entry safe to have at all.
 
 **Give it a real start time**, never an all-day entry, or the rest of your mission control
 reads it as background noise and skips it.
@@ -243,6 +286,8 @@ Two minutes, today, while nothing is urgent.
 
 - Add something with a last day two days from now. Run `mc-due today` and watch
   it come out loud. Drop it again.
+- Add something with only a target, dated yesterday. Run `mc-due today` and read
+  the one question it asks. Answer "as soon as you can", then drop it.
 - Add one with a `file-newer` self check pointing at a file that does not exist.
   Run `mc-due check`, see it stay open. Create the file. Run it again and watch
   it close itself with nobody asked.

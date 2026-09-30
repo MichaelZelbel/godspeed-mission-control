@@ -119,6 +119,128 @@ check "then the word goes" "$(grep -c '^STRIP: 2026-01-01 2026-01-10$' "$G/due/o
 GODSPEED_TODAY=2026-01-06 d >/dev/null
 check "moving twice writes one event" "$(ls "$G/world/events" | grep -c old)" "1"
 
+# =================================================================================================
+# THREE DATES: the day you can start, the day you would like it done (a target, soft) and the day
+# it starts costing you (a deadline, hard). At least one of the last two.
+# =================================================================================================
+fresh() { rm -f "$G"/due/*.md "$G"/world/events/*.md; }
+said() { GODSPEED_TODAY="$1" d today; }
+fresh
+
+# --- still no date, not eligible -----------------------------------------------------------------
+contains "neither a target nor a deadline is refused" "$(d add wish --title W --done-when x)" "No date, not eligible"
+[ -f "$G/due/wish.md" ] && bad "and leaves no file" || ok "and leaves no file"
+contains "a start alone is no day either" "$(d add half --title H --from 2026-01-01 --done-when x --cost y)" "No date, not eligible"
+contains "a target after the deadline is refused" "$(d add up --title U --from 2026-01-01 --target 2026-03-01 --to 2026-02-01 --done-when x --cost y)" "A target sits on or before the deadline"
+contains "a deadline still says what it costs" "$(d add nc --title N --target 2026-02-01 --to 2026-03-01 --done-when x)" "what it costs you if it slips"
+
+# --- a target only: quiet, one mention, one question, then about weekly ------------------------------
+OUT="$(GODSPEED_TODAY=2026-04-20 d add present --title "PRESENT" --target 2026-05-10 --done-when "the present is bought")"
+contains "a target alone is enough, and no cost is asked for" "$OUT" "Nothing is said about it before that day"
+contains "the start is today and there is no deadline" "$(cat "$G/due/present.md")" "STRIP: 2026-04-20 - target 2026-05-10"
+contains "the list says when" "$(GODSPEED_TODAY=2026-05-01 d)" "AIMING FOR     PRESENT: you would like it done by 2026-05-10, in 9 days."
+missing "the brief says nothing before the day" "$(said 2026-04-21; said 2026-05-09)" "PRESENT"
+contains "on the day it is said once" "$(said 2026-05-10)" "TARGET TODAY   PRESENT: today, 2026-05-10, is the day you would like it done."
+OUT="$(said 2026-05-11)"
+contains "the next morning it asks once" "$OUT" "PRESENT: you aimed for 2026-05-10. A new date, or as soon as you can?"
+missing "the brief gets the question in plain words, no commands" "$OUT" "mc-due target"
+contains "the full list shows the two answers under it" "$(GODSPEED_TODAY=2026-05-11 d)" "mc-due target present YYYY-MM-DD    as soon as you can:  mc-due target present asap"
+contains "asking again that morning gives the same page" "$(said 2026-05-11)" "A new date, or as soon as you can?"
+missing "no answer: quiet the next day" "$(said 2026-05-12)" "PRESENT"
+missing "and six days after the question" "$(said 2026-05-17)" "PRESENT"
+OUT="$(said 2026-05-18)"
+contains "a week later, the gentle line" "$OUT" "WHEN YOU CAN   PRESENT: still open, as soon as you can. You aimed for 2026-05-10."
+missing "which does not ask again" "$OUT" "A new date"
+contains "it never becomes a deadline, a year on" "$(GODSPEED_TODAY=2027-05-10 d)" "WHEN YOU CAN   PRESENT"
+contains "state names the day aimed for" "$(GODSPEED_TODAY=2026-05-18 d state --json)" '"targetDay":"2026-05-10"'
+contains "as soon as you can is taken as the answer" "$(GODSPEED_TODAY=2026-05-19 d target present asap)" "Kept present open, as soon as you can"
+contains "and written into the log" "$(cat "$G/due/present.md")" "you said as soon as you can, after aiming for 2026-05-10"
+missing "and changes nothing else: still quiet" "$(said 2026-05-20)" "PRESENT"
+contains "still weekly" "$(said 2026-05-25)" "PRESENT: still open"
+
+# --- a new date is the new target ------------------------------------------------------------------
+fresh
+GODSPEED_TODAY=2026-04-01 d add fence --title "FENCE" --target 2026-05-01 --done-when painted >/dev/null
+said 2026-05-01 >/dev/null; said 2026-05-02 >/dev/null
+contains "a new day before the start is refused" "$(GODSPEED_TODAY=2026-05-02 d target fence 2026-03-01)" "before the day you can start"
+contains "a new date becomes the target" "$(GODSPEED_TODAY=2026-05-02 d target fence 2026-06-15)" "you would like it done by 2026-06-15"
+contains "kept beside the old one" "$(cat "$G/due/fence.md")" "STRIP: 2026-04-01 - target 2026-05-01 moved 2026-06-15"
+missing "quiet again until then" "$(said 2026-05-09; said 2026-06-14)" "FENCE"
+contains "one mention on the new day" "$(said 2026-06-15)" "FENCE: today, 2026-06-15"
+contains "and the question again if it passes too" "$(said 2026-06-16)" "you aimed for 2026-06-15. A new date"
+GODSPEED_TODAY=2026-06-20 d done fence >/dev/null
+contains "done closes a target like anything else" "$(cat "$G"/world/events/2026-06-20-fence-closed.md)" "done (window 2026-04-01, aiming for 2026-06-15)"
+
+# --- a target and a deadline: the deadline rules, plus the target day ------------------------------
+fresh
+d add tax  --title "TAX"  --from 2026-10-01 --target 2027-01-31 --to 2027-02-28 --done-when filed --cost "a fee" >/dev/null
+d add twin --title "TWIN" --from 2026-10-01                     --to 2027-02-28 --done-when filed --cost "a fee" >/dev/null
+step() { GODSPEED_TODAY="$2" d | grep -- "$1:" | cut -c1-15; }
+for day in 2026-10-01 2026-12-15 2027-01-31 2027-02-20 2027-03-05; do
+  check "on $day the step is the deadline's, target or not" "$(step TAX $day)" "$(step TWIN $day)"
+done
+contains "before the target it names both" "$(GODSPEED_TODAY=2026-12-15 d)" "You would like it done by 2027-01-31."
+said 2027-01-28 >/dev/null
+OUT="$(said 2027-01-31)"
+contains "the target day is said though the step would wait" "$OUT" "TAX: today is the day you aimed for (2027-01-31). 29 days left, and the last one is 2027-02-28."
+missing "while the same deadline without a target waits" "$OUT" "TWIN"
+contains "after the target it says so and names the deadline" "$(GODSPEED_TODAY=2027-02-01 d)" "TAX: past the day you aimed for (2027-01-31). 28 days left, and the last one is 2027-02-28."
+missing "and never asks for a new date" "$(GODSPEED_TODAY=2027-02-01 d; said 2027-02-10)" "A new date"
+
+# --- a deadline only: exactly as before, and an old file is left as it was ----------------------------
+fresh
+printf '# OLDFORM\n\nTITLE: OLDFORM\nDONE-WHEN: x\nCOST-IF-MISSED: y\nSELF-CHECK: none\nSELF-CHECK-ARG: \nREPEATS: no\nLINK: \nSOURCE: you\n\n## Windows\n\nSTRIP: 2026-01-01 2026-02-01\n\n## Log\n\n- 2026-01-01 created, window 2026-01-01 to 2026-02-01\n' > "$G/due/oldform.md"
+BEFORE="$(cat "$G/due/oldform.md")"
+for day in 2026-01-05 2026-01-20 2026-02-03; do GODSPEED_TODAY=$day d >/dev/null; GODSPEED_TODAY=$day d check >/dev/null; GODSPEED_TODAY=$day d state --json >/dev/null; done
+check "an old window file is byte for byte unchanged by list, check and state" "$(cat "$G/due/oldform.md")" "$BEFORE"
+contains "and read the way it always was" "$(GODSPEED_TODAY=2026-01-20 d)" "ON THE WAY     OLDFORM: 13 days left, and the last one is 2026-02-01."
+missing "with no target words" "$(GODSPEED_TODAY=2026-01-20 d; GODSPEED_TODAY=2026-01-20 d state --json)" "target"
+
+# --- ranking in the morning's three places -------------------------------------------------------
+fresh
+for n in 1 2 3; do d add "dl$n" --title "DL$n" --from 2026-01-01 --to 2026-01-10 --done-when x --cost y >/dev/null; done
+d add waits --title "WAITS" --from 2026-01-01 --target 2026-01-05 --done-when x >/dev/null
+missing "three running-out deadlines come before a passed target" "$(said 2026-01-09)" "WAITS"
+GODSPEED_TODAY=2026-01-09 d done dl3 >/dev/null
+OUT="$(said 2026-01-10)"
+contains "with a place free, it gets the place" "$OUT" "WAITS: you aimed for 2026-01-05"
+check "and it comes last" "$(printf '%s\n' "$OUT" | grep -v '^ ' | tail -1 | grep -c WAITS)" "1"
+fresh
+for n in 1 2 3; do d add "gr$n" --title "GR$n" --from 2026-01-01 --to 2027-01-01 --done-when x --cost y >/dev/null; done
+d add waits2 --title "WAITS2" --from 2025-12-01 --target 2025-12-20 --done-when x >/dev/null
+missing "a passed target comes after even a quiet deadline's first mention" "$(said 2026-01-02)" "WAITS2"
+
+# --- repeating: the target keeps its place in every window -----------------------------------------
+fresh
+d add sheet --title "SHEET" --from 2026-01-01 --target 2026-01-20 --to 2026-01-31 --repeats monthly --done-when x --cost y >/dev/null
+GODSPEED_TODAY=2026-03-15 d >/dev/null
+contains "February keeps the target's place" "$(cat "$G/due/sheet.md")" "STRIP: 2026-02-01 2026-02-28 target 2026-02-20"
+contains "and March too" "$(cat "$G/due/sheet.md")" "STRIP: 2026-03-01 2026-03-31 target 2026-03-20"
+GODSPEED_TODAY=2026-01-05 d add bins --title "BINS" --target 2026-01-09 --repeats weekly --done-when x >/dev/null
+GODSPEED_TODAY=2026-01-10 d >/dev/null
+contains "a repeating target grows its next window once the target passed" "$(cat "$G/due/bins.md")" "STRIP: 2026-01-12 - target 2026-01-16"
+contains "the passed one stays as soon as you can until then" "$(GODSPEED_TODAY=2026-01-10 d)" "WHEN YOU CAN   BINS"
+
+# --- your due/README.md: brought up to date only if you never changed it ----------------------------
+KIT="$(cd "$HERE/.." && pwd)"
+EMBED="$(node -e '
+const s = require("fs").readFileSync(process.argv[1], "utf8");
+const m = s.match(/^const README = (".*");$/m); process.stdout.write(m ? JSON.parse(m[1]) : "");' "$HERE/due.js")"
+check "the README inside due.js is the kit's README, byte for byte (python embed_readme.py if not)" \
+  "$EMBED" "$(tr -d '\r' < "$KIT/starter-godspeed/due/README.md")"
+if git -C "$KIT" cat-file -e d6583b2 2>/dev/null; then
+  git -C "$KIT" show d6583b2:starter-godspeed/due/README.md > "$G/due/README.md"
+  GODSPEED_TODAY=2026-01-10 d >/dev/null
+  check "an unchanged older README is brought up to date" "$(cat "$G/due/README.md")" "$(cat "$KIT/starter-godspeed/due/README.md")"
+  git -C "$KIT" show d6583b2:starter-godspeed/due/README.md | sed 's/an empty one costs you nothing/an empty one costs me nothing/' > "$G/due/README.md"
+  MINE="$(cat "$G/due/README.md")"
+  GODSPEED_TODAY=2026-01-10 d >/dev/null
+  check "a README you changed by hand is never touched" "$(cat "$G/due/README.md")" "$MINE"
+  rm -f "$G/due/README.md"
+else
+  ok "the kit's history is not here (a shallow copy), so the README refresh is checked where it is"
+fi
+
 echo
 echo "due.js: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

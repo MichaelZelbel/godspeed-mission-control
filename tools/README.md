@@ -71,24 +71,28 @@ ends up holding.
 
 The fifth is the one you will type most often.
 
-- **`due.js`** holds everything in your life that has a last day: a tax return, a
-  timesheet, a contract you have to cancel by March, a key that dies in a year.
-  Each one stores the first day you can do it and the last day you still can, and
-  how loud your mission control gets follows how much of that window is left, so one rule
-  covers a job you have a week for and one you have a year for. Chapter 27.
+- **`due.js`** holds everything in your life that has a day attached: a tax return, a
+  timesheet, a contract you have to cancel by March, a key that dies in a year, a
+  present you would like to buy before a birthday. Each one has a day you would like
+  it done (a target, soft), a day it starts costing you (a deadline, hard), or both.
+  For a deadline, how loud your mission control gets follows how much of the window
+  is left, so one rule covers a job you have a week for and one you have a year for.
+  A target alone is quiet until its day, asks once if it passes, and then waits
+  gently. Chapter 27.
 
 The installer gives it a launcher, so the command is:
 
 ```
 mc-due                     everything, loudest first
 mc-due today               at most three, which is what your morning brief reads
-mc-due add <name> ...      make one
+mc-due add <name> ...      make one: --target, --to (the deadline), or both
+mc-due target <name> D     a new day you would like it done, or asap
 mc-due done <name>         you did it
 mc-due check               close whatever can prove itself done
 ```
 
 Two things about it are worth knowing before you use it. It **refuses anything
-without both dates**, in those words, which is the only thing between
+with neither a target nor a deadline**, in those words, which is the only thing between
 this and a to-do app you abandon. And it reads `secrets/expires.txt` as one of
 its sources, so the key dates from Chapter 31 are in the same list as everything
 else and there is one thing nagging you rather than two that disagree.
