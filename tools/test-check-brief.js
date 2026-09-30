@@ -148,6 +148,10 @@ fs.rmSync(dir, { recursive: true, force: true });
     briefAt('2026-10-07.md', '# Brief\n\nPriya\'s present is due tomorrow.\n'), 1, 'Birthday present for Priya');
   want('the helper line is allowed under any heading, even one space after its tag',
     briefAt('2026-10-07.md', '# Brief\n\n## When you can\n\nPLENTY OF TIME Repaint the garden fence: today is the day you aimed for.\n'), 0);
+  want('one word of the title with talk of its day is enough',
+    briefAt('2026-10-07.md', '# Brief\n\nThe fence: pick a new target date or drop it.\n'), 1, 'Repaint the garden fence');
+  want('the same word with no talk of a day is left alone',
+    briefAt('2026-10-07.md', '# Brief\n\nThe neighbour asked about the fence colour.\n'), 0);
   want('a thing already done may be mentioned anywhere',
     briefAt('2026-10-07.md', '# Brief\n\nYou filed the UK tax return yesterday. Well done.\n'), 0);
   want('a Sources line may name the files it came from',

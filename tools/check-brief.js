@@ -273,15 +273,20 @@ function keywords(s) {
   return [...new Set(String(s).toLowerCase().replace(/[^a-z0-9\u00e0-\u024f]+/g, ' ').split(/\s+/)
     .filter(w => w.length >= 3 && !STOPWORDS.has(w) && !/^\d+$/.test(w)))];
 }
-// A line names a title when it carries at least half of the title's words, and at least two of
-// them (one, of five letters or more, for a one-word title).
+// A line names a title when it carries at least half of the title's words and at least two of them,
+// or one of its words of four letters or more AND talks about timing. The second half is what a
+// brief actually writes: "the fence: pick a new target date or drop it" names the fence once (found
+// in the practice run for targets, where the two-word rule let exactly that line through). Timing
+// words are what make it a mention of the thing's day rather than of a fence in general.
+const TIMING = /\b(?:target|deadline|overdue|late|due|aimed|unanswered|drop|dropped|new date|as soon as|last day|days left|days ago|tomorrow|still open|remains open|is open)\b/i;
 function names(line, title) {
   const tw = keywords(title);
   if (!tw.length) return false;
   const lw = new Set(keywords(line));
-  const hit = tw.filter(w => lw.has(w)).length;
-  if (tw.length === 1) return hit === 1 && tw[0].length >= 5;
-  return hit >= 2 && hit * 2 >= tw.length;
+  const hits = tw.filter(w => lw.has(w));
+  if (hits.length >= 2 && hits.length * 2 >= tw.length) return true;
+  if (tw.length === 1 && hits.length === 1 && tw[0].length >= 5) return true;
+  return hits.some(w => w.length >= 4) && TIMING.test(line);
 }
 function deadlineFaults(text, root, day) {
   const titles = openTitles(root, day);
