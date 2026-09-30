@@ -71,4 +71,29 @@ OUT="$(run)"; case "$OUT" in *"not a reason for fewer"*) ok "a refused reason on
 { move 1 money-goal "Simon Willison" "x"; move 2 money-goal "a" "y"; move 3 money-goal "b" "z"; echo "FEWER health-goal: a third was not prepared in the time this run had"; } > "$RUN/moves.md"
 OUT="$(run)"; case "$OUT" in *"not a reason for fewer"*) ok "running out of time is refused";; *) bad "time refused: $OUT";; esac
 
+# --- the weekly number (2026-09-30) ----------------------------------------------------------
+full() { move 1 money-goal "Simon Willison" "x"; move 2 money-goal "Justin Welsh" "y"; move 3 money-goal "swyx" "z"; echo "FEWER health-goal: the week's scale reading lands on Sunday"; }
+full > "$RUN/moves.md"
+OUT="$(run)"; [ $? -eq 0 ] && ok "a goal without a weekly number is checked as before (an older recipe keeps working)" || bad "no LEAD, old rules: $OUT"
+printf 'ID: money-goal\nKIND: outcome\nSTATUS: adopted\nLEAD: people who join the newsletter | total | subscriber mails\n\n## Log\n- 2026-09-10 READ 2 (subscriber mails)\n' > "$TMP/goals/money-goal.md"
+OUT="$(run)"; case "$OUT" in *'needs a line "BET:'*) ok "a move for a goal with a weekly number needs a BET";; *) bad "BET required: $OUT";; esac
+case "$OUT" in *"not read in the last seven days"*) ok "  and a reading older than seven days fails";; *) bad "  stale reading: $OUT";; esac
+printf -- '- 2026-09-23 READ 2 (subscriber mails)\n' >> "$TMP/goals/money-goal.md"
+full | awk '{print} /^GOAL:/{print "BET: 2 -> 4 within seven days of going live"}' > "$RUN/moves.md"
+OUT="$(run)"; [ $? -eq 0 ] && ok "every move with a BET, and a reading this week, passes" || bad "BET passes: $OUT"
+full | awk '{print} /^GOAL:/{print "BET: 2 → 4"}' > "$RUN/moves.md"
+OUT="$(run)"; [ $? -eq 0 ] && ok "  the arrow may be →" || bad "  unicode arrow: $OUT"
+full | awk '{print} /^GOAL:/{print "BET: 2 -> 4"}' | grep -v '^APPLY' > "$RUN/moves.md"
+OUT="$(run)"; case "$OUT" in *'a move with a bet needs "APPLY'*) ok "a bet without its APPLY item fails, even off the ship list";; *) bad "APPLY for bets: $OUT";; esac
+full | awk '{print} /^GOAL:/{print "BET: 2 -> 4"}' > "$RUN/moves.md"
+printf 'Weekly numbers on %s.\nread today: money-goal\n' "$D" > "$RUN/settle.txt"
+OUT="$(run)"; case "$OUT" in *"a verdict is due today"*) ok "a goal named under read today needs a reading dated today";; *) bad "read today: $OUT";; esac
+printf -- '- %s READ 3 (subscriber mails)\n' "$D" >> "$TMP/goals/money-goal.md"
+OUT="$(run)"; [ $? -eq 0 ] && ok "  and passes once it has one" || bad "  read today passes: $OUT"
+rm -f "$RUN/settle.txt"
+printf 'ID: money-goal\nKIND: outcome\nSTATUS: adopted\nLEAD: runs this week | per week | the person tells it\n\n## Log\n- 2026-09-20 CHANGED LEAD "" -> "runs this week | per week | the person tells it" because test\n' > "$TMP/goals/money-goal.md"
+OUT="$(run)"; [ $? -eq 0 ] && ok "a weekly number set in the last seven days may wait for its first reading" || bad "grace for a new LEAD: $OUT"
+printf 'ID: money-goal\nKIND: outcome\nSTATUS: adopted\nLEAD: runs this week | per week | the person tells it\n\n## Log\n- 2026-09-10 CHANGED LEAD "" -> "runs this week | per week | the person tells it" because test\n' > "$TMP/goals/money-goal.md"
+OUT="$(run)"; case "$OUT" in *"not read in the last seven days"*) ok "  but not for longer than a week";; *) bad "  grace ends: $OUT";; esac
+
 echo; echo "$PASS passed, $FAIL failed"; [ "$FAIL" -eq 0 ]

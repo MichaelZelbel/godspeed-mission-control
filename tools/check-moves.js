@@ -21,6 +21,10 @@
 //     work id or an idea file.
 //   - AFTER is the thing itself, or names a file that exists and is not empty.
 //   - a ship-list move the mission control applies names its work item on an APPLY line.
+//   - a goal whose card names a weekly number (LEAD) is judged by it (2026-09-30): each of its
+//     moves carries "BET: <now> -> <expected seven days after it goes live>" and an APPLY line,
+//     the number was read in the last seven days, and a goal settle.txt names under "read today"
+//     has a reading dated today. A goal with no LEAD is checked exactly as before.
 //
 //   mc-check-moves --date 2026-09-24 [--per-goal 3] [--godspeed DIR]
 //
@@ -46,6 +50,20 @@ const RUN = path.join(ROOT, 'routines', 'next-action', DATE);
 
 const problems = [];
 const read = (p) => { try { return fs.readFileSync(p, 'utf8').replace(/\r/g, ''); } catch (e) { return null; } };
+const days = (a, b) => Math.round((new Date(b + 'T00:00:00Z') - new Date(a + 'T00:00:00Z')) / 86400000);
+function leadOf(goal) {
+  if (!/^[a-z0-9][a-z0-9-]*$/.test(goal)) return null;
+  const t = read(path.join(ROOT, 'goals', goal + '.md'));
+  const m = t && t.match(/^LEAD:[ \t]*(.+)$/m);
+  if (!m || m[1].split('|').length !== 3) return null;
+  const reads = [...t.matchAll(/^- (\d{4}-\d{2}-\d{2}) READ /gm)].map(x => x[1]).sort();
+  const sets = [...t.matchAll(/^- (\d{4}-\d{2}-\d{2}) CHANGED LEAD /gm)].map(x => x[1]).sort();
+  return { lastRead: reads.length ? reads[reads.length - 1] : null, lastSet: sets.length ? sets[sets.length - 1] : null };
+}
+// A weekly number set in the last seven days may wait for its first reading: a number only the
+// person can tell is asked for on the day's card, and the answer can take a few days.
+const fresh = (lead) => lead.lastSet && days(lead.lastSet, DATE) <= 7;
+const BET_LINE = /^BET:[ \t]*-?\d+(?:\.\d+)?\s*(?:->|→)\s*-?\d+(?:\.\d+)?/m;
 
 const att = read(path.join(RUN, 'attention.txt'));
 const active = [];
@@ -86,9 +104,14 @@ for (const b of blocks) {
   }
   // A move on the ship list that the mission control applies needs its work item named, or a
   // "ship 2" answer reaches nothing (ship-list-apply reads this line).
+  const lead = leadOf(goal);
+  if (lead && !BET_LINE.test(b)) problems.push(`move "${title}": ${goal} has a weekly number, so the move needs a line "BET: <the number now> -> <what you expect seven days after it goes live>"`);
   const onList = /ship list/i.test(f.PERMISSION || '');
   const his = /^\s*only the person/i.test(f['HOW IT LANDS'] || '');
-  if (onList && !his && !/^APPLY:\s*\S+/m.test(b)) problems.push(`move "${title}": on the ship list but no "APPLY: <work id>" line, so an answer by number cannot reach it`);
+  if (!/^APPLY:\s*\S+/m.test(b)) {
+    if (lead) problems.push(`move "${title}": a move with a bet needs "APPLY: <work id>", the item whose verification starts its seven days (a move only the person can make gets an item they own, whose CHECK shows it happened)`);
+    else if (onList && !his) problems.push(`move "${title}": on the ship list but no "APPLY: <work id>" line, so an answer by number cannot reach it`);
+  }
   const after = (f.AFTER || '').trim();
   const file = after.match(/([A-Za-z0-9_.-]+\/[A-Za-z0-9_./-]+\.(?:md|txt|html|json|csv))/);
   if (file && after.length < 200) {
@@ -113,6 +136,16 @@ for (const m of text.matchAll(/^FEWER ([a-z0-9-]+):[ \t]*(\S[^\n]*(?:\n(?![ \t]*
 for (const g of active) {
   const n = counts[g] || 0;
   if (n < PER && !fewer[g]) problems.push(`${g}: ${n} move(s), fewer than ${PER}, and no "FEWER ${g}: <why>" line`);
+}
+for (const g of active) {
+  const lead = leadOf(g);
+  if (lead && (!lead.lastRead || days(lead.lastRead, DATE) > 7) && !fresh(lead)) problems.push(`${g}: its weekly number was not read in the last seven days; read it and record it: mc-goals read ${g} <number> --where "..."`);
+}
+const settleTxt = read(path.join(RUN, 'settle.txt')) || '';
+const dueLine = settleTxt.match(/^read today:[ \t]*(.*)$/m);
+for (const g of (dueLine ? dueLine[1].split(/\s+/) : []).filter(x => x && x !== 'none')) {
+  const lead = leadOf(g);
+  if (lead && lead.lastRead !== DATE) problems.push(`${g}: a verdict is due today and its weekly number has no reading dated ${DATE}; read it and record it: mc-goals read ${g} <number> --where "..."`);
 }
 
 if (problems.length) {
