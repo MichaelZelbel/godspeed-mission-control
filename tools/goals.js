@@ -234,6 +234,126 @@ cmds.read = (a) => {
   S.write(c);
   say(`${c.id}: ${v} read on ${d}`);
 };
+
+const BET_RE = /^(\S+) (-?\d+(?:\.\d+)?) -> (-?\d+(?:\.\d+)?)(?: "(.*)")?$/;
+const WORK = L.store(path.join(GODSPEED, 'work'), []);   // read only: goals never writes work cards
+function betsOf(c) {
+  return c.log.filter(l => l.event === 'BET').map(l => {
+    const m = l.rest.match(BET_RE);
+    return m ? { work: m[1], from: parseFloat(m[2]), to: parseFloat(m[3]), title: m[4] || '', date: l.date } : null;
+  }).filter(Boolean);
+}
+function settledIds(c) { return new Set(c.log.filter(l => l.event === 'RESULT').map(l => l.rest.split(' ')[0])); }
+function workCard(id) { return /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(id) && WORK.exists(id) ? WORK.read(id) : null; }
+// The day a move reached the world is the day its work item was first verified.
+function liveDate(w) { const v = w && w.log.find(l => l.event === 'VERIFIED'); return v ? v.date : null; }
+
+// THE VERDICT, FROM NUMBERS ONLY. total: the gain from the last reading before the move went live
+// (no older than three days before the bet) to the first reading seven to ten days after it did.
+// per week: that first reading against the bet's own starting number. A bet from 3 to 1 is a
+// number meant to fall. worked: it reached the bet. moved: the right way, short of the bet.
+// flat: not the right way. unread: a reading is missing. Returns null while a reading may still come.
+function judge(lead, rs, b, live, d) {
+  const due = L.addDays(live, 7), late = L.addDays(due, 3);
+  const after = firstBetween(rs, due, late);
+  if (!after) return d > late ? { verdict: 'unread', why: `no reading between ${due} and ${late}` } : null;
+  let from = b.from;
+  if (lead.kind === 'total') {
+    const start = lastBetween(rs, L.addDays(b.date, -3), live);
+    if (!start) return { verdict: 'unread', why: `no reading between ${L.addDays(b.date, -3)} and the day it went live, ${live}` };
+    from = start.value;
+  }
+  const dir = b.to >= b.from ? 1 : -1;
+  const want = (b.to - b.from) * dir, got = (after.value - from) * dir;
+  return { verdict: got <= 0 ? 'flat' : got >= want ? 'worked' : 'moved', from, to: after.value };
+}
+
+function settle(d, write) {
+  const rows = [];
+  for (const c of S.all()) {
+    if (c.f.KIND !== 'outcome' || !isOpen(c)) continue;
+    const lead = parseLead(c.f.LEAD);
+    const r = { id: c.id, lead, now: null, before: null, today: [], earlier: [], live: [], waiting: [], readToday: false };
+    rows.push(r);
+    if (!lead) continue;
+    const rs = readings(c);
+    r.now = rs.length ? rs[rs.length - 1] : null;
+    r.before = r.now ? lastBetween(rs, L.addDays(r.now.date, -10), L.addDays(r.now.date, -7)) : null;
+    r.earlier = c.log.filter(l => l.event === 'RESULT' && L.daysBetween(l.date, d) <= 14).map(l => `${l.date} ${l.rest}`);
+    const done = settledIds(c);
+    const bets = betsOf(c);
+    const lives = Object.fromEntries(bets.map(b => [b.work, liveDate(workCard(b.work))]));
+    for (const b of bets) {
+      if (done.has(b.work)) continue;
+      const w = workCard(b.work), live = lives[b.work];
+      let line;
+      if (!w) line = `${b.work} never-live: no such work item`;
+      else if (!live && w.f.STATUS === 'cancelled') line = `${b.work} never-live: the work was cancelled`;
+      else if (!live && L.daysBetween(b.date, d) > 7) line = `${b.work} never-live: not live within seven days of the bet`;
+      else if (!live) { r.waiting.push({ work: b.work, title: b.title, since: b.date }); continue; }
+      else {
+        const due = L.addDays(live, 7);
+        const j = d >= due ? judge(lead, rs, b, live, d) : null;
+        if (!j) { r.live.push({ work: b.work, title: b.title, live, due }); if (d >= due) r.readToday = true; continue; }
+        const shared = bets.filter(o => o.work !== b.work && lives[o.work] && Math.abs(L.daysBetween(lives[o.work], live)) < 7).map(o => o.work);
+        line = j.verdict === 'unread' ? `${b.work} unread: ${j.why}`
+          : `${b.work} ${j.verdict}: ${j.from} -> ${j.to} in the seven days after it went live on ${live} (bet ${b.from} -> ${b.to})`
+            + (shared.length ? `; shared with ${shared.join(', ')}` : '');
+      }
+      r.today.push(line);
+      if (write) L.logLine(c, d, 'RESULT', line);
+    }
+    if (write && r.today.length) S.write(c);
+  }
+  return rows;
+}
+
+cmds.bets = (a) => {
+  const file = a.moves && a.moves !== 'true' ? a.moves : die('usage: mc-goals bets --moves <run folder>/moves.md [--date D]');
+  const text = L.readText(file);
+  if (!text) die(`${file} is empty or not there`);
+  const d = a.date || today();
+  const num = '(-?\\d+(?:\\.\\d+)?)';
+  const arrow = new RegExp(num + '\\s*(?:->|\u2192)\\s*' + num);
+  let n = 0;
+  for (const b of text.split(/^(?=###? \d+\.)/m).filter(x => /^###? \d+\./.test(x))) {
+    const field = (k) => { const m = b.match(new RegExp('^' + k + ':[ \\t]*(\\S.*)$', 'm')); return m ? m[1].trim() : ''; };
+    const goal = field('GOAL').split(/\s+/)[0], work = field('APPLY').split(/\s+/)[0];
+    const bet = field('BET').match(arrow);
+    if (!goal || !work || !bet || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(goal) || !S.exists(goal)) continue;
+    const c = S.read(goal);
+    if (!parseLead(c.f.LEAD) || betsOf(c).some(x => x.work === work)) continue;
+    const title = b.split('\n')[0].replace(/^#+\s*\d+\.\s*/, '').replace(/"/g, "'").trim();
+    L.logLine(c, d, 'BET', `${work} ${bet[1]} -> ${bet[2]} "${title}"`);
+    S.write(c);
+    n++;
+  }
+  say(`${n} bet(s) recorded from ${file}`);
+};
+
+cmds.settle = (a) => {
+  const d = a.date || today();
+  const rows = settle(d, !flag(a, 'dry-run'));
+  if (flag(a, 'json')) { say(JSON.stringify(rows, null, 2)); return; }
+  say(`Weekly numbers on ${d}. Every verdict here was worked out by mc-goals from the readings, never by the run that made the move.`);
+  if (!rows.length) say('No adopted outcome on the register.');
+  for (const r of rows) {
+    if (!r.lead) { say(`${r.id}: no weekly number yet, so none of its moves can be judged. Set one from its playbook's "What they track": mc-goals change ${r.id} --set "LEAD=<what is counted> | total or per week | <where it is read>" --why "<the source>"`); continue; }
+    say(`${r.id}: ${r.lead.what} (${r.lead.kind}, read from ${r.lead.where})`);
+    if (!r.now) say('  never read yet');
+    else {
+      const diff = r.before ? r.now.value - r.before.value : null;
+      say(`  now ${r.now.value}, read ${r.now.date}` + (r.before ? `; ${r.before.value} on ${r.before.date} (${diff >= 0 ? '+' : ''}${diff})` : ''));
+      if (L.daysBetween(r.now.date, d) > 7) say(`  not read for ${L.daysBetween(r.now.date, d)} days`);
+    }
+    for (const s of r.today) say(`  settled today: ${s}`);
+    for (const s of r.earlier) say(`  settled earlier: ${s}`);
+    for (const s of r.live) say(`  live since ${s.live}, verdict due ${s.due}: ${s.work} ${s.title}`);
+    for (const s of r.waiting) say(`  not live yet, bet placed ${s.since}: ${s.work} ${s.title}`);
+  }
+  const due = rows.filter(r => r.readToday).map(r => r.id);
+  say(`read today: ${due.length ? due.join(' ') : 'none'}`);
+};
 cmds.question = (a) => {
   const c = S.read(a._[0] || die('usage: mc-goals question <id> --text "..."')) || die('no such goal');
   const t = oneLine(a.text);
