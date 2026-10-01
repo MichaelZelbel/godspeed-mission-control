@@ -58,9 +58,10 @@ patterns = [
     pexpect.TIMEOUT,                                                   # 8
     re.compile(r"Connect (a notebook|Menerio) now\? \(y/n\) \[n\]:"),  # 9 setup-godspeed's Menerio question
     re.compile(r"\(y/n\) \[[yn]\]:"),                                  # 10 any other yes/no: take the default
-    re.compile(r"Put the morning brief on this server's clock \(y/n\) \[n\]:"),  # 11 the opt-in brief
+    re.compile(r"Send you a morning brief every day at 06:00 \S+ time \(y/n\) \[n\]:"),  # 11 the opt-in brief
     re.compile(r"Paste the bot token, or press Enter to skip"),        # 12 the Telegram stop
     re.compile(r"Press Enter once you have sent it"),                  # 13 the hello step
+    re.compile(r"Add that line to your morning brief \(y/n\) \[n\]:"),  # 14 the Observed State line
 ]
 hermes_cancelled = False
 telegram_answers = os.environ.get("TELEGRAM_ANSWER", "").split("|") if os.environ.get("TELEGRAM_ANSWER") else []
@@ -126,6 +127,11 @@ while True:
             time.sleep(0.5)
         child.sendline("")
         note("pressed Enter at the hello step")
+    elif i == 14:
+        time.sleep(0.5)
+        answer = os.environ.get("OBSERVED_ANSWER", "")
+        child.sendline(answer)
+        note("answered the Observed State question with " + (repr(answer) if answer else "Enter (no)"))
     elif i == 10:
         time.sleep(0.5)
         child.sendline("")

@@ -19,7 +19,7 @@ curl -fsSL https://raw.githubusercontent.com/MichaelZelbel/godspeed-mission-cont
 It installs Docker if it is missing, starts the container and runs setup inside it.
 Setup asks three things: your Telegram bot's token (BotFather gives you one in two
 minutes), whether you already keep a mission control on GitHub, and whether you want
-the morning brief. Two codes appear along the way, one for ChatGPT and one for GitHub;
+the morning brief (and, with it, the optional one line about the world from observedstate.com). Two codes appear along the way, one for ChatGPT and one for GitHub;
 type each on any device.
 
 By hand, with Docker already installed:
@@ -51,8 +51,8 @@ with, paid by you directly: ChatGPT (a code to type on ChatGPT's sign-in page), 
 Claude, OpenAI, Google Gemini, or any other provider Hermes supports, by pasting its key (the
 bot deletes that message at once). It only goes on once the assistant has answered a test
 question with it. Then a code to type on GitHub's page, and a few questions as buttons (a new
-folder or the one you already have, and the morning brief with which city's clock it
-follows). Then it runs
+folder or the one you already have, the morning brief with which city's clock it
+follows, and whether it ends with one line about the world). Then it runs
 the same setup as `godspeed-setup`, hands itself over to your assistant, and ends with the
 line that puts the same mission control on your Windows PC or Mac.
 

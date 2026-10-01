@@ -122,10 +122,18 @@ function history(dir, day) {
     .map(([n, d]) => ({ date: d, text: fs.readFileSync(path.join(dir, n), 'utf8') }));
 }
 
+// The one line mc-observed-state adds at the end of a brief carries the same link every
+// morning on purpose (Observed State's credit), so it is never a repeat, in either direction.
+const WORLD_LINE = /^The observed state of the world:/;
+function withoutWorldLine(text) {
+  return String(text).split('\n').filter(l => !WORLD_LINE.test(l.trim())).join('\n');
+}
+
 function repeats(text, earlier) {
   const faults = [];
   const seen = new Map();
-  for (const h of earlier) for (const u of linksOf(h.text)) seen.set(identity(u), h.date);
+  text = withoutWorldLine(text);
+  for (const h of earlier) for (const u of linksOf(withoutWorldLine(h.text))) seen.set(identity(u), h.date);
   for (const u of linksOf(text)) {
     const d = seen.get(identity(u));
     if (d) {

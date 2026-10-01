@@ -343,7 +343,7 @@ WHY
 
   say "Installing the gateway as a system service"
   cat <<'WHY'
-   The clock that fires the morning brief lives inside this service, and the
+   The timer that sends your morning brief lives inside this service, and the
    messenger answers from it. As a system service it starts when the machine
    does, with nobody logged in, and comes back after a reboot on its own.
    This is the one thing on this page that has to be done as root.
@@ -436,6 +436,7 @@ WHY
     printf 'KB_SKIP_GODSPEED_PROOF=%q\n' "${KB_SKIP_GODSPEED_PROOF:-}"
     printf 'KB_SYNC_SOURCES=%q\n' "${KB_SYNC_SOURCES:-hermes}"
     printf 'KB_MORNING_BRIEF=%q\n' "${KB_MORNING_BRIEF:-}"
+    printf 'KB_OBSERVED_STATE=%q\n' "${KB_OBSERVED_STATE:-}"
   } > "$CARRY"
   chown "$AI_USER":"$AI_USER" "$CARRY"
   chmod 0600 "$CARRY"
@@ -631,21 +632,74 @@ GODSPEED_REPO="$(git -C "$GODSPEED" remote get-url origin 2>/dev/null || true)"
 # and noise for one whose server is the first machine in the system. So it is
 # opt-in, and the default is no (Michael, 2026-09-05). KB_MORNING_BRIEF=yes|no
 # set in the environment skips the question; with no terminal the answer is no.
+#
+# SAY WHAT IT IS BEFORE ASKING (Michael, 2026-10-02). The question used to be "Put the morning
+# brief on this server's clock", which assumed the reader already knew what a morning brief
+# is and which clock was meant. Someone seeing it for the first time thinks they missed a
+# step. So it says what the message is, when it comes and in which time zone (the server's:
+# nothing here sets another), what it is made from, and then asks the plain question.
+brief_zone() {
+  local z="${HERMES_TIMEZONE:-}"
+  [ -n "$z" ] || z="$(timedatectl show -p Timezone --value 2>/dev/null || true)"
+  [ -n "$z" ] || z="$(readlink /etc/localtime 2>/dev/null | sed -n 's#.*/zoneinfo/##p')"
+  [ -n "$z" ] || z="${TZ:-}"
+  [ -n "$z" ] || z="$(date +%Z 2>/dev/null || true)"
+  case "$z" in ""|Etc/UTC|Etc/Universal|Universal|UCT|Zulu) z="UTC" ;; esac
+  printf '%s' "$z"
+}
 if [ "${KB_MORNING_BRIEF:-}" != "yes" ] && [ "${KB_MORNING_BRIEF:-}" != "no" ]; then
-  cat <<'ASK'
-   Hermes can write you a morning brief, the book's first example job: every
-   day at 06:00 it reads your profile files, writes a short brief for the day
-   into brief/ in your folder, and sends it to your Telegram bot.
-   Say no if you do not want it yet. You can add it later by running this one
-   line again.
+  BRIEF_ZONE="$(brief_zone)"
+  cat <<ASK
+
+   YOUR MORNING BRIEF
+   Every morning your assistant can send you a short message on Telegram
+   about your day: what is due, what is coming up, and anything it noticed
+   in what you have told it. This message is called your morning brief.
+
+   It arrives at 06:00 $BRIEF_ZONE time, the time zone this server is set to.
+   What goes into it is a short recipe you write with your assistant, in
+   plain words; Chapter 22 of the book walks you through it. Until you have
+   written it, the message tells you the recipe is still missing.
+
+   Say no if you do not want it yet. Nothing is sent, and you can switch it
+   on later by running this same install line again.
+
 ASK
-  if ask_yes "Put the morning brief on this server's clock" "n"; then
+  if ask_yes "Send you a morning brief every day at 06:00 $BRIEF_ZONE time" "n"; then
     KB_MORNING_BRIEF=yes
   else
     KB_MORNING_BRIEF=no
   fi
 fi
 export KB_MORNING_BRIEF
+
+# --- One line about the world, optional, only with a morning brief -------------
+# Observed State (observedstate.com, by Angel Cabrera) agreed on 2026-10-01 that Godspeed Mission
+# Control may offer its daily line, off unless the reader switches it on, credited and linked
+# every time, and never weighed into a score (mc-observed-state has the whole story).
+# KB_OBSERVED_STATE=yes|no skips the question. Unset with no terminal (a re-run from the image's
+# upgrade, a script) it stays unset, and install-hermes.sh keeps whatever the brief has now.
+if [ "$KB_MORNING_BRIEF" = "yes" ] && [ "${KB_OBSERVED_STATE:-}" != "yes" ] && [ "${KB_OBSERVED_STATE:-}" != "no" ] && have_tty; then
+  cat <<'ASK'
+
+   ONE LINE ABOUT THE WORLD (OPTIONAL)
+   Your morning brief can end with one line from Observed State, a free
+   website that checks air traffic at 30 airports, the internet in 52
+   countries and big earthquakes, each against its own normal:
+
+     The observed state of the world: nothing to flag today. https://observedstate.com/en/
+
+   On a day something is out of the ordinary, the line names it instead.
+   The link opens the whole overview. Nothing about you is sent anywhere.
+
+ASK
+  if ask_yes "Add that line to your morning brief" "n"; then
+    KB_OBSERVED_STATE=yes
+  else
+    KB_OBSERVED_STATE=no
+  fi
+fi
+export KB_OBSERVED_STATE="${KB_OBSERVED_STATE:-}"
 
 # --- The install count, asked once, default no ----------------------------------
 # THE INSTALL COUNT in kit-bootstrap's lib.sh: may this server tell Michael that the install
@@ -894,15 +948,16 @@ esac)
    gateway, and a second Hermes on your sign-in reads the logs four times a
    day. You hear from it on the same bot, only when something broke or was
    repaired, or when it cannot answer at all.
-$(if [ "$KB_MORNING_BRIEF" = "yes" ]; then cat <<'BRIEF'
+$(if [ "$KB_MORNING_BRIEF" = "yes" ]; then cat <<BRIEF
 
-   From the next 06:00 the morning brief arrives on your bot by itself. A
-   morning the gateway was down is caught up once, late, when it is back.
+   Your morning brief arrives on your bot every day at 06:00 $(brief_zone) time,
+   from the next 06:00 on. If the server was off at that time, it comes
+   once, late, when the server is back.
 BRIEF
 else cat <<'BRIEF'
 
-   Nothing is on this server's clock yet. When you want the morning brief
-   there, run this one line again and answer yes to that question.
+   You chose no morning brief, so nothing is sent each morning. When you
+   want one, run this same install line again and answer yes when it asks.
 BRIEF
 fi)
 

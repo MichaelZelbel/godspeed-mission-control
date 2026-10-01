@@ -1,6 +1,6 @@
 # tools
 
-Eighteen small programs. The installer puts them on your computer. **They are not
+Nineteen small programs. The installer puts them on your computer. **They are not
 part of your mission control folder, and that is deliberate.**
 
 Chapter 3 says your mission control is a folder of text files and that nothing in it needs a
@@ -142,9 +142,19 @@ mission control is made of.
   words and added nothing. When your assistant cannot be reached, lines to post
   are cut: an empty slot beats a line nobody judged.
 
+- **`observed-state.js`** (`mc-observed-state`) is optional, and adds one line about the world
+  at the very end of a brief, after both checks: "The observed state of the world: nothing to
+  flag today." with the link to https://observedstate.com/en/, or what is out of its normal range
+  that day. The facts are Observed State's, used with its author's permission, credited and
+  linked every time, and never weighed into a score. It reads one file rebuilt hourly for all
+  readers together, never the site itself, and says "not available right now" when that file is
+  missing or old. The installer asks whether you want it; `procedures/observed-state-setup.md`
+  has the rest. `mc-check-brief` lets this one line repeat its link every morning.
+
 ```
 mc-check-brief brief/2026-09-06.md       refuse or pass one brief
 mc-judge-brief brief/2026-09-06.md       judge it, and cut what fails (--dry only prints)
+mc-observed-state --append brief/2026-09-06.md   end it with the line about the world (optional)
 ```
 
 The next five are one job between them: **the day's decision.** They are the

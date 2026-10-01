@@ -87,6 +87,14 @@ expectFile('a brief older than 45 days does not count', '2026-09-24',
   'Still worth it.\nhttps://example.com/june\n', 0);
 expectFile('a brief is never compared with itself or a later one', '2026-09-22',
   'Anthropic news.\nhttps://www.anthropic.com/claude-opus-5-5\n', 0);
+// 2026-10-02: the Observed State line carries the same link every morning, on purpose.
+fs.writeFileSync(path.join(dir, '2026-09-25.md'),
+  'Quiet day.\n\nThe observed state of the world: nothing to flag today. https://observedstate.com/en/\n');
+expectFile('the Observed State line repeats its link every day and passes', '2026-09-26',
+  'Two calls today.\n\nThe observed state of the world: 1 thing to flag today. Air traffic, at Frankfurt. https://observedstate.com/en/\n', 0);
+expectFile('the same link anywhere else is still a repeat', '2026-09-24',
+  'Read this: https://www.anthropic.com/claude-opus-5-5\n\nThe observed state of the world: nothing to flag today. https://observedstate.com/en/\n', 1, 'brief of 2026-09-23');
+fs.unlinkSync(path.join(dir, '2026-09-25.md'));
 const H = 'h' + 'ub';  // the former name, in halves so no name check reads it here
 expect('the former name for the product is refused',
   'Your ' + H + ' finished the backup overnight.\n', 1, 'former name');

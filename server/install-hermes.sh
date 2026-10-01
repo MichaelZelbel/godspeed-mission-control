@@ -214,7 +214,7 @@ fi
 # run by hand, this script keeps its old behaviour and schedules the job.
 if [ "${KB_MORNING_BRIEF:-yes}" = "no" ]; then
   say "The morning brief"
-  ok "clock: not scheduled, as you asked. When you want the morning brief on this clock, run the one-line installer again and answer yes."
+  ok "morning brief: not set up, as you asked. When you want one, run the install line again and answer yes."
 else
 say "Scheduling the morning brief"
 
@@ -231,11 +231,30 @@ say "Scheduling the morning brief"
 # line you are handed to post, and cuts what fails. The author's own brief repeated old news and
 # offered lines that would have backfired until exactly these two ran on every morning.
 BRIEF_PROMPT="Run the recipe in skills/morning-brief/SKILL.md; on an older godspeed it lives at .claude/skills/morning-brief/SKILL.md. It writes today's brief into brief/. Then run mc-check-brief on that file and fix whatever it refuses, and run mc-judge-brief on it: it removes every line to post that fails its judge, and nothing it removed goes back in. When it is done, commit and push this folder, then reply with the brief's full text exactly as the file now holds it. If the recipe is missing or the brief cannot be written, say exactly that instead of staying quiet: a broken morning must never look like a quiet one."
+
+# ONE LINE ABOUT THE WORLD (2026-10-02), only when the reader said yes. It is added AFTER both
+# checks, by a program, so no recipe, check or judge ever rewords it: Observed State's author
+# allowed the line on the condition that it counts and names and is never weighed into a score.
+# mc-check-brief would also refuse its link as "already sent" from the second morning on, which
+# is the other reason it comes last. Unset (a re-run with no terminal, the image's upgrade)
+# keeps what the brief job has now.
+if [ -z "${KB_OBSERVED_STATE:-}" ]; then
+  KB_OBSERVED_STATE=no
+  for d in "${HERMES_HOME:-}" "$HOME/.hermes"; do
+    [ -n "$d" ] && [ -f "$d/cron/jobs.json" ] && grep -q "mc-observed-state" "$d/cron/jobs.json" 2>/dev/null && { KB_OBSERVED_STATE=yes; break; }
+  done
+fi
+if [ "$KB_OBSERVED_STATE" = "yes" ]; then
+  BRIEF_PROMPT="$BRIEF_PROMPT Last, after both checks and before you commit, run mc-observed-state --append on today's brief file: it adds one line about the world at the very end, written by the program. Never reword, shorten, move or remove that line, and never add a score, rating or ranking to it; copy it into your reply exactly as the file holds it, link included."
+fi
 kb_cron_job "$GODSPEED" "morning-brief" "0 6 * * *" "$BRIEF_PROMPT" "telegram" || true
 # An existing job keeps whatever prompt it was created with, so it is brought up to date here.
 BRIEF_JOB="$("$HERMES" cron list 2>/dev/null | awk '/^[[:space:]]*[0-9a-f]{8,}([[:space:]]|$)/ {id=$1} /Name:[[:space:]]*morning-brief[[:space:]]*$/ {print id; exit}')"
 if [ -n "$BRIEF_JOB" ] && "$HERMES" cron edit "$BRIEF_JOB" --prompt "$BRIEF_PROMPT" >/dev/null 2>&1; then
-  ok "clock: the morning brief now runs its two checks before it reaches you"
+  ok "morning brief: it runs its two checks before it reaches you"
+fi
+if [ "$KB_OBSERVED_STATE" = "yes" ]; then
+  ok "morning brief: it ends with one line about the world from Observed State (observedstate.com)"
 fi
 
 # YOUR ASSISTANT KNOWS WHAT IT SENT YOU (2026-09-24). Without this, the brief arrives on Telegram

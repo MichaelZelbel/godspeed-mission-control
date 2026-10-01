@@ -115,7 +115,7 @@ sys.exit(0)
 FAKE_SETUP = r'''
 import json, os, subprocess, sys, time
 d = os.environ["FAKE_DIR"]
-keys = ["KB_TELEGRAM_SKIP", "KB_SIGNIN_SKIP", "KB_MORNING_BRIEF", "GODSPEED_INSTALL_COUNT", "GODSPEED_REPO", "KB_REPO_NAME",
+keys = ["KB_TELEGRAM_SKIP", "KB_SIGNIN_SKIP", "KB_MORNING_BRIEF", "KB_OBSERVED_STATE", "GODSPEED_INSTALL_COUNT", "GODSPEED_REPO", "KB_REPO_NAME",
         "GODSPEED_TELEGRAM_TOKEN", "GODSPEED_TELEGRAM_OWNER"]
 runs = os.path.join(d, "setup-runs.json")
 seen = json.load(open(runs)) if os.path.exists(runs) else []
@@ -244,6 +244,7 @@ def test_happy():
             {"when": "already have a Mission Control", "do": [{"from": 111, "press": "repo:fresh"}]},
             {"when": "morning brief", "do": [{"from": 111, "press": "brief:yes"}]},
             {"when": "Whose 06:00", "do": [{"from": 111, "text": "Tokyo" if have_zones() else "UK"}]},
+            {"when": "one line about the world", "do": [{"from": 111, "press": "world:yes"}]},
             {"when": "Setting everything up now", "do": [{"from": 111, "text": "are you there?"}]},
         ]})
     to_anna, to_eve = r["to"](111), r["to"](999)
@@ -266,6 +267,7 @@ def test_happy():
     run = r["runs"][0] if r["runs"] else {}
     check("the installer ran once, with the answers and no token",
           len(r["runs"]) == 1 and run.get("KB_MORNING_BRIEF") == "yes" and run.get("GODSPEED_INSTALL_COUNT") == "no"
+          and run.get("KB_OBSERVED_STATE") == "yes"
           and run.get("KB_REPO_NAME") == "godspeed" and run.get("KB_TELEGRAM_SKIP") == "1"
           and run.get("KB_SIGNIN_SKIP") == "1"
           and not run.get("GODSPEED_REPO") and not run.get("GODSPEED_TELEGRAM_TOKEN"))
@@ -321,6 +323,8 @@ def test_snags():
           and not runs[1].get("KB_REPO_NAME"))
     check("the last message carries the address they gave", any_has(to_anna, "https://github.com/anna/mission.git"))
     check("no brief, no question about the clock", not any_has(to_anna, "Whose 06:00") and "timezone" not in r["hermes"])
+    check("no brief, no question about the world line, and it is off",
+          not any_has(to_anna, "one line about the world") and runs[1].get("KB_OBSERVED_STATE") == "no")
     check("setup is marked done", r["state"].get("done") is True)
 
 
@@ -336,6 +340,7 @@ def test_found_repo():
             {"when": "morning brief", "do": [{"from": 111, "press": "brief:yes"}]},
             {"when": "Whose 06:00", "do": [{"from": 111, "text": "Krefeld"}]},
             {"when": "do not know the clock of Krefeld", "do": [{"from": 111, "press": "tz:keep"}]},
+            {"when": "one line about the world", "do": [{"from": 111, "press": "world:no"}]},
         ]}, extra_env={"FAKE_GH_REPOS": "anna/godspeed,anna/godspeed-mission-control"})
     check("it asks whether that one is theirs", any_has(r["to"](111), "anna/godspeed</b> on your GitHub"))
     check("starting fresh picks a name that is free",

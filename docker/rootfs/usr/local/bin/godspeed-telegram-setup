@@ -727,12 +727,25 @@ def step_questions(chat):
         save_state(st)
     if "brief" not in st:
         st["brief"] = chat.ask(
-            "Would you like a morning brief? Every day at 06:00 I read your profile and send you "
-            "a short note for the day, here.",
+            "Would you like a morning brief? Every morning at 06:00 I send you a short message "
+            "here about your day: what is due, what is coming up, and anything I noticed in what "
+            "you have told me. You write its recipe with me once, in plain words (Chapter 22 of "
+            "the book); until then the message tells you the recipe is still missing.",
             [("brief:yes", "Yes please"), ("brief:no", "Not now")]) == "brief:yes"
         save_state(st)
     if st.get("brief") and "tz" not in st:
         st["tz"] = ask_zone(chat)
+        save_state(st)
+    # Observed State's line (2026-10-02): offered only with a brief, off unless chosen, credited
+    # and linked every time; its author's one condition is that it is never weighed into a score.
+    if st.get("brief") and "world" not in st:
+        st["world"] = chat.ask(
+            "Should your morning brief end with one line about the world? Observed State, a free "
+            "website, checks air traffic at 30 airports, the internet in 52 countries and big "
+            "earthquakes against their own normal. Most days the line reads:\n\n"
+            "The observed state of the world: nothing to flag today. https://observedstate.com/en/"
+            "\n\nOn other days it names what is unusual. Nothing about you is sent anywhere.",
+            [("world:yes", "Yes, add it"), ("world:no", "No thanks")]) == "world:yes"
         save_state(st)
 
 
@@ -782,6 +795,7 @@ def step_install(chat):
     # nothing), so it is answered no and nothing is sent.
     env.update(KB_TELEGRAM_SKIP="1", KB_SIGNIN_SKIP="1",
                KB_MORNING_BRIEF="yes" if st.get("brief") else "no",
+               KB_OBSERVED_STATE="yes" if st.get("brief") and st.get("world") else "no",
                GODSPEED_INSTALL_COUNT="no")
     if st.get("repo"):
         env["GODSPEED_REPO"] = "https://github.com/%s.git" % st["repo"]

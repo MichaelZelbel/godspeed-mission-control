@@ -18,3 +18,6 @@ jobs:
           for t in tools/test-install-count.sh tools/test-goals.sh tools/test-check-moves.sh tools/test-work.sh tools/test-work-run.sh tools/test-forecast.sh tools/test-check-written.sh tools/test-world-pull.sh; do
             echo "== $t"; bash "$t"
           done
+          for t in tools/test-observed-state.js tools/test-check-brief.js; do
+            echo "== $t"; node "$t"
+          done

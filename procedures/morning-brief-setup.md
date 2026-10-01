@@ -157,3 +157,11 @@ rules say so too. One glance to confirm.
   machine that runs it. That is why the register exists.
 - The brief is written by an AI. Chapter 20's habit applies to it like
   everything else.
+
+## Optional: one line about the world
+
+Your brief can end with one line from Observed State, a free site that checks air
+traffic, the internet and big earthquakes against their own normal: "The observed
+state of the world: nothing to flag today." with a link to the whole overview. The
+server setup asks whether you want it. `observed-state-setup.md`, next to this
+card, says where it comes from and how to switch it on or off.
