@@ -480,6 +480,29 @@ echo "$many" | grep -q "^ALREADY 0 1$" && ok "notes another computer already res
 echo "$many" | grep -q "^BEHIND 30$"   && ok "notes the notebook holds in the older form are still sent" || bad "the check stopped a real resend" "$many"
 echo "$many" | grep -q "^FEW 3 0$"     && ok "a few changed files are sent without asking first" || bad "an ordinary save asked the notebook first" "$many"
 
+# ---- the arrow down saves itself, on the one computer that keeps the facts --------------
+# A stand-in python records how the runner calls the two programs; nothing reaches a network.
+K="$W/keeper"; mkdir -p "$K/home/.godspeed" "$K/mc" "$K/stub"
+printf '#!/bin/sh\n[ "$1" = "-c" ] && exit 0\necho "$*" >> "$KEEP_LOG"\nexit 0\n' > "$K/stub/python3"
+chmod +x "$K/stub/python3"
+printf 'GODSPEED_DIR=%s\nGODSPEED_NOTEBOOK_MIRROR=1\n' "$K/mc" > "$K/home/.godspeed/device.env"
+HOME="$K/home" MENERIO_API_KEY=stand-in KEEP_LOG="$K/one.log" PATH="$K/stub:$PATH" \
+  sh "$HERE/mc-notebook-sync" >/dev/null 2>&1
+grep -q "world-pull.py --apply --commit" "$K/one.log" 2>/dev/null \
+  && ok "the computer that keeps the facts saves what the pull brought" \
+  || bad "the pull was not asked to save what it brought" "$(cat "$K/one.log" 2>/dev/null)"
+printf 'GODSPEED_WORLD_KEEPER=0\n' >> "$K/home/.godspeed/device.env"
+HOME="$K/home" MENERIO_API_KEY=stand-in KEEP_LOG="$K/two.log" PATH="$K/stub:$PATH" \
+  sh "$HERE/mc-notebook-sync" >/dev/null 2>&1
+if grep -q "notebook-sync.py" "$K/two.log" 2>/dev/null && ! grep -q "world-pull.py" "$K/two.log"; then
+  ok "every other computer still sends, and leaves the facts to the one that keeps them"
+else
+  bad "a computer told to leave the facts to another one pulled them anyway, or sent nothing" "$(cat "$K/two.log" 2>/dev/null)"
+fi
+grep -q "world pull: skipped, another computer keeps the facts" "$K/home/.godspeed/notebook-sync.log" 2>/dev/null \
+  && ok "and its log says why, in a line the sync watchdog reads as a healthy run" \
+  || bad "the skip left no world pull line in the log" "$(tail -3 "$K/home/.godspeed/notebook-sync.log" 2>/dev/null)"
+
 echo
 echo "  $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ] || exit 1

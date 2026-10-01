@@ -17,6 +17,7 @@ is worse than keeping a stale copy.
 Usage:
     python3 scripts/world_pull.py                      # dry run, prints the plan
     python3 scripts/world_pull.py --apply              # write the files
+    python3 scripts/world_pull.py --apply --commit     # write them and save them in git
     python3 scripts/world_pull.py --apply --self-slug michael
 """
 import argparse
@@ -26,6 +27,7 @@ import json
 import os
 import pathlib
 import re
+import subprocess
 import sys
 import urllib.error
 import urllib.request
@@ -724,7 +726,63 @@ def run_pull(world, root, client_label, apply_changes, self_slug="me",
               "silence.".format(len(removed), notice))
     plan["removed"] = removed
     plan["notice"] = notice
+    plan["touched"] = ([item.path for item in plan["write"]] + [path for path, _ in plan["duplicates"]]
+                       + [path for path, _ in removed] + ([notice] if notice else []))
     return plan
+
+
+# SAVED, OR IT IS NOT A SAFETY COPY (2026-10-01). Everything above writes files and
+# nothing ever committed them, so "the facts would still be in git" was true of no
+# computer: on the author's three, the same 490 changes sat unsaved on each, and an
+# unsaved change also stops the hourly freshness pull, which only pulls a clean folder.
+# With --commit the pull saves exactly the files it touched, in one commit of its own,
+# and nothing else: a file you are editing, or one you staged, stays as you left it.
+# It never pushes; pushing stays a decision. Only ONE computer should save the pull
+# (GODSPEED_WORLD_KEEPER in the runner), or two computers' snapshots of the same record
+# meet in git as a conflict.
+def save_to_history(root, plan):
+    """Commit the files this pull touched. True when a commit was made."""
+    touched = sorted(set(p.replace("\\", "/") for p in (plan.get("touched") or [])))
+    if not touched:
+        return False
+
+    def git(*args, data=None):
+        return subprocess.run(["git", "-C", str(root)] + list(args), input=data,
+                              stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=120)
+
+    try:
+        top = git("rev-parse", "--show-cdup")
+        if top.returncode != 0 or top.stdout.strip():
+            print("world pull: not saved, {} is not the top of a git repository".format(root))
+            return False
+        # Only paths git can name: one that exists now, or one it already tracks. A file
+        # an earlier, unsaved pull wrote and this one removed is neither, and naming it
+        # would fail the whole add.
+        tracked = set(git("ls-files", "-z", "--", "world").stdout.decode("utf-8", "replace").split("\0"))
+        paths = [p for p in touched if (pathlib.Path(root) / p).exists() or p in tracked]
+        if not paths:
+            return False
+        # Through stdin, never the command line: a big pull names hundreds of files,
+        # past what one Windows command line holds.
+        spec = "\0".join(paths).encode("utf-8")
+        add = git("add", "-A", "--pathspec-from-file=-", "--pathspec-file-nul", data=spec)
+        if add.returncode != 0:
+            print("world pull: not saved, git add said: {}".format(add.stderr.decode("utf-8", "replace").strip()[:200]))
+            return False
+        removed = len(plan.get("removed") or []) + len(plan.get("duplicates") or [])
+        message = "World pull: {} written, {} removed".format(len(plan.get("write") or []), removed)
+        done = git("commit", "-q", "-m", message, "--pathspec-from-file=-", "--pathspec-file-nul", data=spec)
+    except (OSError, subprocess.SubprocessError) as err:
+        print("world pull: not saved, git did not answer: {}".format(err))
+        return False
+    if done.returncode != 0:
+        said = (done.stdout + done.stderr).decode("utf-8", "replace").strip()
+        if "nothing to commit" in said or "no changes added" in said:
+            return False      # what it wrote was already saved, byte for byte
+        print("world pull: not saved, git commit said: {}".format(said[:200]))
+        return False
+    print("world pull: saved as \"{}\"".format(message))
+    return True
 
 
 def resolve_self_slug(root, explicit=None):
@@ -773,6 +831,9 @@ def main(argv=None):
     parser.add_argument("--allow-mass-removal", action="store_true",
                         help="let one run delete more than half of a folder's "
                              "Menerio-owned files. Unattended runs refuse that.")
+    parser.add_argument("--commit", action="store_true",
+                        help="with --apply, save exactly the files this pull touched in one "
+                             "commit of its own. Never pushes.")
     args = parser.parse_args(argv)
 
     api_key = os.environ.get("MENERIO_API_KEY")
@@ -805,13 +866,18 @@ def main(argv=None):
             for item in plan["write"]:
                 write_atomic(root / item.path, item.text)
                 print("  wrote  {}".format(item.path))
+            plan["touched"] = [item.path for item in plan["write"]]
+            if args.commit:
+                save_to_history(root, plan)
         else:
             for item in plan["write"]:
                 print("  would write  {}".format(item.path))
         return 0
 
-    run_pull(world, root, "world pull", args.apply, self_slug=args.self_slug,
-             allow_mass_removal=args.allow_mass_removal)
+    plan = run_pull(world, root, "world pull", args.apply, self_slug=args.self_slug,
+                    allow_mass_removal=args.allow_mass_removal)
+    if args.apply and args.commit:
+        save_to_history(root, plan)
     return 0
 
 

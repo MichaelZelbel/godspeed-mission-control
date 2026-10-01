@@ -5,6 +5,7 @@ Fixtures are invented.
 """
 import importlib.util
 import pathlib
+import subprocess
 import tempfile
 import unittest
 
@@ -110,6 +111,70 @@ class OneRecordOneFileTest(unittest.TestCase):
         world_pull.run_pull(world, root, "test", True, self_slug="me")
         self.assertEqual(sorted(p.name for p in (root / "world/entities").iterdir()),
                          ["sam-kim-2.md", "sam-kim.md"])
+
+
+class SavedToHistoryTest(unittest.TestCase):
+    """The facts come down as a safety copy, and a copy nobody saves is not one: until
+    2026-10-01 nothing committed what the pull wrote, so every computer carried the same
+    490 unsaved changes. With --commit the pull saves exactly what it touched, and only that."""
+
+    def git(self, *args):
+        out = subprocess.run(["git", "-C", str(self.root)] + list(args),
+                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+        return out.stdout.decode("utf-8")
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = pathlib.Path(self.tmp.name)
+        for folder in ("entities", "events", "claims"):
+            (self.root / "world" / folder).mkdir(parents=True)
+        (self.root / "notes.md").write_text("mine\n", encoding="utf-8")
+        (self.root / "world/claims/gone.md").write_text(
+            "---\nsubject: me\nattribute: city\nvalue: Oldtown\norigin: menerio\nmenerio_id: c9\n---\n",
+            encoding="utf-8")
+        self.git("init", "-q")
+        self.git("config", "user.email", "test@example.invalid")
+        self.git("config", "user.name", "Test")
+        self.git("config", "core.autocrlf", "false")
+        self.git("add", "-A")
+        self.git("commit", "-q", "-m", "start")
+        self.world = {"entities": [{"id": "e1", "slug": "sam-kim", "name": "Sam Kim"}],
+                      "events": [], "claims": [{"id": "c1", "attribute": "city", "value": "Testville"}]}
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def pull_and_save(self):
+        plan = world_pull.run_pull(self.world, self.root, "test", True, self_slug="me")
+        return world_pull.save_to_history(self.root, plan)
+
+    def test_saves_what_it_wrote_and_removed_and_nothing_else(self):
+        (self.root / "notes.md").write_text("mine, edited\n", encoding="utf-8")
+        (self.root / "draft.md").write_text("staged by someone\n", encoding="utf-8")
+        self.git("add", "draft.md")
+        self.assertTrue(self.pull_and_save())
+        self.assertEqual(self.git("log", "-1", "--format=%s").strip(), "World pull: 2 written, 1 removed")
+        saved = set(self.git("show", "--name-only", "--format=", "HEAD").split())
+        self.assertEqual(saved, {"world/claims/gone.md", "world/claims/me--city--undated.md",
+                                 "world/entities/sam-kim.md"})
+        status = self.git("status", "--porcelain").splitlines()
+        self.assertEqual(set(status), {"A  draft.md", " M notes.md"})
+
+    def test_a_pull_that_changes_nothing_saves_nothing(self):
+        self.pull_and_save()
+        head = self.git("rev-parse", "HEAD")
+        self.assertFalse(self.pull_and_save())
+        self.assertEqual(self.git("rev-parse", "HEAD"), head)
+
+    def test_outside_a_git_folder_it_writes_and_saves_nothing_else(self):
+        with tempfile.TemporaryDirectory() as plain:
+            root = pathlib.Path(plain)
+            for folder in ("entities", "events", "claims"):
+                (root / "world" / folder).mkdir(parents=True)
+            plan = world_pull.run_pull(self.world, root, "test", True, self_slug="me")
+            self.assertFalse(world_pull.save_to_history(root, plan))
+            self.assertTrue((root / "world/entities/sam-kim.md").exists())
+            self.assertFalse((root / ".git").exists())
 
 
 if __name__ == "__main__":

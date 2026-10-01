@@ -120,9 +120,16 @@ keeps, not your notes or their attachments; to take the notes themselves, ask yo
 for a separate export (Chapter 28). To look at what it would do, or to run it by hand:
 
 ```
-python3 ~/.local/bin/world-pull.py           # dry run, shows what it would write
-python3 ~/.local/bin/world-pull.py --apply   # write the files
+python3 ~/.local/bin/world-pull.py                    # dry run, shows what it would write
+python3 ~/.local/bin/world-pull.py --apply            # write the files
+python3 ~/.local/bin/world-pull.py --apply --commit   # write them and save them in the history
 ```
+
+The automatic import saves what it brought in your mission control's history, in a commit of its
+own, and nothing else; it never pushes. If you use Menerio on more than one computer, let one of
+them keep the facts: add `GODSPEED_WORLD_KEEPER=0` to `~/.godspeed/device.env` on every other
+one. They still send their changes up, and they get the facts through git like any other file.
+Two computers saving their own copy of the same fact would collide in git.
 
 To find a record, your assistant runs `mc-search <words>`. When your mission control is copied to
 Menerio, it asks Menerio first. When it is not, or when Menerio cannot be reached, it
