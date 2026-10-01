@@ -10,3 +10,8 @@ __pycache__/
 # The folder + README stay tracked so the convention persists; contents don't.
 dev/*
 !dev/README.md
+
+# The prompt harvest's lock: one harvest at a time on one machine. It holds a process id and
+# exists only while a harvest runs; the archive commit must never carry it, or every
+# computer's next archive commit collides on it.
+prompts/archive/.harvest.lock
