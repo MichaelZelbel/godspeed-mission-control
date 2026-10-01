@@ -156,10 +156,27 @@ say "sync exit $rc: $(printf '%s' "$out" | tail -3 | tr '\n' ' ')"
 # The arrow DOWN, in the same run: the notebook's facts, kept as files in world/, so
 # they survive without the notebook. It rides here rather than on its own schedule
 # because a second job would duplicate every guard above.
+#
+# AND IT SAVES WHAT IT BROUGHT, ON ONE COMPUTER (2026-10-01). Nothing ever committed the
+# files the pull wrote, so the facts were in no history at all, and every computer carried
+# the same pile of unsaved changes, which also stops the freshness pull above. The pull now
+# commits exactly what it touched (--commit; it never pushes). Two computers each saving
+# their own snapshot of the same record would meet in git as a conflict, so only one
+# computer keeps the facts: GODSPEED_WORLD_KEEPER=0 in ~/.godspeed/device.env on every
+# other one, and those get the facts through git like any other file. No line means this
+# computer keeps them, which is right for the reader with one computer.
+KEEPER="${GODSPEED_WORLD_KEEPER:-}"
+if [ -z "$KEEPER" ] && [ -r "$HOMEDIR/.godspeed/device.env" ]; then
+  KEEPER="$(sed -n 's/^[[:space:]]*GODSPEED_WORLD_KEEPER=//p' "$HOMEDIR/.godspeed/device.env" | tail -1 | tr -d '\r"')"
+fi
 if [ -f "$PULL" ]; then
-  wout="$("$PY" "$PULL" --apply --repo-root "$GODSPEED" 2>&1)"
-  wrc=$?
-  say "world pull exit $wrc: $(printf '%s' "$wout" | tail -3 | tr '\n' ' ')"
-  [ -n "$VERBOSE" ] && printf '%s\n' "$wout"
+  if [ "$KEEPER" = "0" ]; then
+    say "world pull: skipped, another computer keeps the facts and they arrive through git (GODSPEED_WORLD_KEEPER=0)"
+  else
+    wout="$("$PY" "$PULL" --apply --commit --repo-root "$GODSPEED" 2>&1)"
+    wrc=$?
+    say "world pull exit $wrc: $(printf '%s' "$wout" | tail -3 | tr '\n' ' ')"
+    [ -n "$VERBOSE" ] && printf '%s\n' "$wout"
+  fi
 fi
 exit 0
