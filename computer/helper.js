@@ -146,7 +146,14 @@ async function run() {
   // Not paired: nothing to do, and not an error (a login agent must not restart it for ever).
   if (!fs.existsSync(F('server.json'))) { say('This computer is not paired with a Godspeed server yet.'); return 0; }
 
-  const proxy = await startProxy({ onBlocked: (url, why) => { logLine('blocked', url, '-', why); recordPage('BLOCKED ' + url); } });
+  // The filter keeps the port it had, so a Godspeed Chrome that is already open (started by the
+  // helper before an update or a restart) keeps working and keeps its logins; a new port would mean
+  // restarting the browser, which drops the logins a site keeps only for the session.
+  const onBlocked = (url, why) => { logLine('blocked', url, '-', why); recordPage('BLOCKED ' + url); };
+  let previous = 0;
+  try { previous = Number(fs.readFileSync(path.join(PROFILE, 'godspeed-filter-port'), 'utf8')) || 0; } catch { /* first start */ }
+  let proxy;
+  try { proxy = await startProxy({ port: previous, onBlocked }); } catch { proxy = await startProxy({ onBlocked }); }
   let browser = null;          // { base, port, kind }
   let ws = null;
   let lastSeen = 0;

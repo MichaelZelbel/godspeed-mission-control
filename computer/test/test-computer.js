@@ -420,7 +420,7 @@ async function realRun(found, site) {
   await check('the helper pairs with the code the assistant would send', () => (pr.code === 0 && /Paired/.test(pr.out)) || pr);
   const bad = await runNode(['pair', C.encodePairLine({ host: '127.0.0.1', port: doorPort, fingerprint: 'AA'.repeat(32), code: 'x' })]);
   await check('the helper refuses a server whose key is not the one in the code', () => (bad.code === 4 && /not the one/.test(bad.out)) || bad);
-  const helper = spawn(process.execPath, [helperJs, 'run'], { env, stdio: 'ignore' });
+  let helper = spawn(process.execPath, [helperJs, 'run'], { env, stdio: 'ignore' });
   const stopAll = async () => { try { helper.kill(); } catch { /* */ } await runNode(['off']); await rr.close(); };
   try {
     const connected = await until(() => rr.status().connected, 15000, 200);
@@ -439,7 +439,7 @@ async function realRun(found, site) {
       return { ws, send };
     };
     const page = http.createServer((req, res) => {
-      if (req.url === '/login') { res.writeHead(200, { 'set-cookie': 'gs_login=yes; Max-Age=3600; Path=/', 'content-type': 'text/html' }); return res.end('<title>login</title>logged in'); }
+      if (req.url === '/login') { res.writeHead(200, { 'set-cookie': ['gs_login=yes; Max-Age=3600; Path=/', 'gs_session=yes; Path=/'], 'content-type': 'text/html' }); return res.end('<title>login</title>logged in'); }
       if (req.url === '/account') { res.writeHead(200, { 'content-type': 'text/html' }); return res.end('<title>account</title><p id=c>' + (req.headers.cookie || 'no cookie') + '</p><p id=w></p><script>document.getElementById("w").textContent="webdriver="+navigator.webdriver</script>'); }
       if (req.url === '/to-router') { res.writeHead(302, { location: 'http://10.1.2.3/' }); return res.end(); }
       if (req.url === '/file') { res.writeHead(200, { 'content-type': 'application/octet-stream', 'content-disposition': 'attachment; filename="godspeed-download-test.bin"' }); return res.end('x'); }
@@ -477,13 +477,24 @@ async function realRun(found, site) {
       const r = await runNode(['pages']);
       return (/\/account/.test(r.out) && /BLOCKED http:\/\/10\.1\.2\.3\//.test(r.out)) || r.out;
     });
+    c.ws.close();
+    helper.kill();
+    await until(() => !rr.status().connected, 5000, 100);
+    helper = spawn(process.execPath, [helperJs, 'run'], { env, stdio: 'ignore' });
+    await until(() => rr.status().connected, 15000, 200);
+    await check('a login a site keeps only for the session survives a restart of the helper (an update)', async () => {
+      c = await cdp();
+      const after = await tab(P + '/account');
+      return /gs_session=yes/.test(await evalIn(after.sid, 'document.getElementById("c").textContent')) || await evalIn(after.sid, 'document.getElementById("c").textContent');
+    });
     await c.send('Browser.close');
     c.ws.close();
     await sleep(1500);
-    await check('when the user closes Godspeed Chrome, the next job starts it again', async () => {
+    await check('when the user closes Godspeed Chrome, the next job starts it again, still logged in where the site remembers it', async () => {
       c = await cdp();
       const again = await tab(P + '/account');
-      return /gs_login=yes/.test(await evalIn(again.sid, 'document.getElementById("c").textContent')) || 'not restarted with the login';
+      const cookies = await evalIn(again.sid, 'document.getElementById("c").textContent');
+      return /gs_login=yes/.test(cookies) || cookies;
     });
     c.ws.close();
     await runNode(['pause']);

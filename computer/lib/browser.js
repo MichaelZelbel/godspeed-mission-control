@@ -109,6 +109,10 @@ async function ensureBrowser({ profileDir, proxyPort, headless = !!process.env.G
   const found = findBrowser();
   if (!found) throw new Error('Neither Chrome nor Edge was found on this computer');
   fs.mkdirSync(profileDir, { recursive: true });
+  // Not done: "continue where you left off" to keep the logins a site holds only for the session
+  // across a restart of the browser. Chrome with a control port ignores it (tested 2026-10-02, Chrome
+  // 153, with and without a start address). Such a login lasts until Godspeed Chrome closes; the
+  // helper keeps its filter port so that an update of the helper does not close it.
   const port = await freePort();
   fs.writeFileSync(path.join(profileDir, 'godspeed-port'), String(port));
   const args = [
