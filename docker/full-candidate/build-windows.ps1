@@ -11,5 +11,8 @@ if($LASTEXITCODE -ne 0){throw 'Source archive failed'}
 $unixArchive=(& wsl -d $Distribution -- wslpath -a $archive.Replace('\','/')).Trim()
 $unixCheckout=(& wsl -d $Distribution -- wslpath -a $checkout.Replace('\','/')).Trim()
 $script='set -e; candidate=/tmp/godspeed-build-'+$revision+'; mkdir -p "$candidate"; tar -xzf "'+$unixArchive+'" -C "$candidate"; cd "$candidate"; GODSPEED_BUILD_ROOT="$candidate" GODSPEED_BUILD_REVISION='+$revision+' GODSPEED_SOURCE_ARCHIVE="'+$unixArchive+'" bash docker/full-candidate/build.sh; cp notebook/dist/Godspeed-VPS-Full-Alpha-'+$revision+'.tar.gz "'+$unixCheckout+'/notebook/dist/"'
-& wsl -d $Distribution -- bash -lc $script
+$launcher=Join-Path $staging ('build-'+$revision+'.sh')
+[IO.File]::WriteAllText($launcher,$script.Replace("`r`n","`n"),[Text.UTF8Encoding]::new($false))
+$unixLauncher=(& wsl -d $Distribution -- wslpath -a $launcher.Replace('\','/')).Trim()
+& wsl -d $Distribution -- bash $unixLauncher
 if($LASTEXITCODE -ne 0){throw 'Candidate image build failed'}

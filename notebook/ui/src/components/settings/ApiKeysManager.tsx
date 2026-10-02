@@ -30,18 +30,16 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Loader2, Plus, Copy, Check, Key, Trash2, AlertTriangle } from "lucide-react";
 
-const MCP_URL = "https://mcp.menerio.com";
+const MCP_URL = location.origin + "/mcp";
 
 const ALL_SCOPES = [
   { value: "profile", label: "Profile", desc: "Profile categories, entries, agent instructions" },
   { value: "notes", label: "Notes", desc: "Read/write notes" },
   { value: "contacts", label: "Contacts", desc: "Contacts, groups and interactions" },
   { value: "actions", label: "Actions", desc: "Action items" },
-  { value: "graph", label: "Graph", desc: "Connections and graph data" },
   { value: "media", label: "Media", desc: "Media analysis results" },
   { value: "stats", label: "Stats", desc: "Read-only statistics" },
   { value: "world", label: "World", desc: "Entities, dated things and claims" },
-  { value: "lexicon", label: "Lexicon", desc: "Lexicon pages" },
   { value: "collections", label: "Collections", desc: "Collections and their items" },
 ];
 

@@ -40,3 +40,4 @@ export function clearChatState(userId: string | undefined, contextKey: string): 
 
 '''+text[end:];p.write_text(text,encoding='utf-8')
 print('Imported source-only UI with local adapters')
+p=target/'src/components/settings/ApiKeysManager.tsx';text=p.read_text(encoding='utf-8').replace('"https://mcp.menerio.com"','location.origin + "/mcp"');text=text.replace('{ value: "graph", label: "Graph", desc: "Connections and graph data" },','').replace('{ value: "lexicon", label: "Lexicon", desc: "Lexicon pages" },','');p.write_text(text,encoding='utf-8')
