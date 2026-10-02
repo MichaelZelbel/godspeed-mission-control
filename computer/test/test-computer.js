@@ -454,7 +454,12 @@ async function realRun(found, site) {
       await new Promise((r, j) => { ws.on('open', r); ws.on('error', j); });
       let id = 0; const wait = new Map();
       ws.on('message', m => { const x = JSON.parse(m.toString()); const w = wait.get(x.id); if (w) { wait.delete(x.id); w(x); } });
-      const send = (method, params = {}, sessionId) => new Promise(r => { const n = ++id; wait.set(n, r); ws.send(JSON.stringify({ id: n, method, params, ...(sessionId ? { sessionId } : {}) })); });
+      // Never waits for ever: a command on a connection that went away answers with an error.
+      const send = (method, params = {}, sessionId) => new Promise(r => {
+        const n = ++id; wait.set(n, r);
+        setTimeout(() => { if (wait.delete(n)) r({ error: { message: 'no answer within 20 s' } }); }, 20000);
+        try { ws.send(JSON.stringify({ id: n, method, params, ...(sessionId ? { sessionId } : {}) })); } catch (e) { wait.delete(n); r({ error: { message: e.message } }); }
+      });
       return { ws, send };
     };
     const page = http.createServer((req, res) => {

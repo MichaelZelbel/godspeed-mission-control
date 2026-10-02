@@ -143,7 +143,12 @@ function takeLock() {
 
 async function run() {
   fs.mkdirSync(HOME, { recursive: true });
-  if (!takeLock()) { say('The helper is already running.'); return 0; }
+  // A helper that is being stopped (an update, a restart) may still be finishing: give it a few
+  // seconds before deciding another one is running. On a Mac or Linux a stop is graceful, and a new
+  // helper that gave up at once left nothing running until the next login (found in CI, 2026-10-02).
+  let locked = takeLock();
+  for (let i = 0; i < 20 && !locked; i++) { await new Promise(r => setTimeout(r, 250)); locked = takeLock(); }
+  if (!locked) { say('The helper is already running.'); return 0; }
   // Not paired: nothing to do, and not an error (a login agent must not restart it for ever).
   if (!fs.existsSync(F('server.json'))) { say('This computer is not paired with a Godspeed server yet.'); return 0; }
 
@@ -154,7 +159,11 @@ async function run() {
   let previous = 0;
   try { previous = Number(fs.readFileSync(path.join(PROFILE, 'godspeed-filter-port'), 'utf8')) || 0; } catch { /* first start */ }
   let proxy;
-  try { proxy = await startProxy({ port: previous, onBlocked }); } catch { proxy = await startProxy({ onBlocked }); }
+  // The helper before this one may still be letting go of the port: try it for a few seconds.
+  for (let i = 0; previous && i < 12 && !proxy; i++) {
+    try { proxy = await startProxy({ port: previous, onBlocked }); } catch { await new Promise(r => setTimeout(r, 250)); }
+  }
+  if (!proxy) proxy = await startProxy({ onBlocked });
   let browser = null;          // { base, port, kind }
   let ws = null;
   let lastSeen = 0;
@@ -335,6 +344,8 @@ async function run() {
   async function shutdown(code) {
     if (shuttingDown) return;
     shuttingDown = true;
+    // Let go of the claim first, so a helper started to replace this one is not turned away.
+    try { if (readJson(F('run.lock'), {}).pid === process.pid) fs.rmSync(F('run.lock'), { force: true }); } catch { /* */ }
     clearInterval(watch); clearInterval(statusTimer);
     state = 'stopped'; writeStatus();
     try { if (ws) ws.terminate(); } catch { /* */ }
