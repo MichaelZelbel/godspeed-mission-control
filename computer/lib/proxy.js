@@ -50,7 +50,10 @@ function startProxy({ port = 0, onBlocked = () => {} } = {}) {
       host: r.address, port: u.port || 80, method: req.method, path: u.pathname + u.search, headers,
       setHost: false,
     }, upRes => { res.writeHead(upRes.statusCode, upRes.headers); upRes.pipe(res); });
-    up.on('error', () => { if (!res.headersSent) res.writeHead(502); res.end(); });
+    up.on('error', e => {
+      if (!res.headersSent) res.writeHead(502, { 'content-type': 'text/plain; charset=utf-8' });
+      res.end('Godspeed: ' + u.host + ' did not answer (' + (e.code || e.message) + ').');
+    });
     req.pipe(up);
   });
 
