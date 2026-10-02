@@ -1,3 +1,4 @@
+import {visibleRows} from '../core/visibility.mjs';
 const schema={type:'object',properties:{},additionalProperties:true};
 const definitions=[
   {name:'search_knowledge',description:'Search the rebuildable index of user records.',inputSchema:{type:'object',properties:{query:{type:'string'}},required:['query']}},
@@ -19,8 +20,8 @@ export async function mcp(input,{store,query,index,domains}){
     else if(input.method==='tools/list')result={tools:definitions};
     else if(input.method==='tools/call'){
       const {name,arguments:a={}}=input.params||{};let value;
-      if(name==='search_knowledge')value=index.search(a.query);
-      else if(name==='list_records')value=query.execute({table:a.type,filters:a.filters||[],limit:a.limit||100}).data;
+      if(name==='search_knowledge')value=index.search(a.query).filter(r=>r.type!=='workspace_file'&&visibleRows(query,r.type).some(v=>v.id===r.id));
+      else if(name==='list_records'){const allowed=new Set(visibleRows(query,a.type).map(r=>r.id));value=query.execute({table:a.type,filters:a.filters||[],limit:a.limit||100}).data.filter(r=>allowed.has(r.id));}
       else if(name==='save_record')value=query.execute({table:a.type,operation:a.value.id?'upsert':'insert',values:a.value,expected:a.value.id?{[a.value.id]:a.expected_hash}:{}}).data;
       else if(name==='capture_note')value=await domains.invoke('quick-capture',a);
       else if(name==='write_fact')value=domains.writeFact(a);

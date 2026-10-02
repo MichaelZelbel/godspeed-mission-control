@@ -1,4 +1,6 @@
-import { hash } from './records/store.mjs';
+import { hash,atomic,safe } from './records/store.mjs';
+import fs from 'node:fs';
+import path from 'node:path';
 export class Review {
   constructor(domains){this.domains=domains;this.store=domains.store;this.query=domains.query;}
   apply(item){
@@ -11,6 +13,11 @@ export class Review {
     if(['add_claim','add_profile_entry','unknown_profile_field','normalize_profile_entry'].includes(type)){
       const result=this.domains.writeFact({...p,label:p.canonical_label||p.label,origin:'review_queue'}),id=result.facts[0]?.claimId;
       if(id)targets.push({type:'claims',id,before:null,after_hash:this.store.get('claims',id)._hash,shared:result.facts[0].outcome!=='inserted'});
+    }else if(type==='media_conflict'){
+      const root=this.domains.mediaRoot;
+      for(const mapping of [p.local,p.remote])if(hash(fs.readFileSync(path.join(root,safe(mapping.file))))!==mapping.sha256)throw new Error('A retained media version needs repair before resolving');
+      const local={...p.local,path:p.local.path+'.conflict-'+p.local.sha256.slice(0,12)};
+      atomic(path.join(root,hash(local.path)+'.mapping.json'),JSON.stringify(local));atomic(path.join(root,hash(p.remote.path)+'.mapping.json'),JSON.stringify(p.remote));
     }else if(type==='add_contact')save('contacts',{name:p.name,aliases:p.aliases||[],notes:p.notes||null});
     else if(type==='add_alias'){
       const old=this.store.get('contacts',p.contact_id);if(!old)throw new Error('Person missing');save('contacts',{...old,aliases:[...new Set([...(old.aliases||[]),p.alias])].filter(Boolean)});

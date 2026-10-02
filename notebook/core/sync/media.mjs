@@ -26,10 +26,10 @@ export class MediaSync {
         if(fs.existsSync(path.join(this.root,safe(mapping.file)))){if(hash(fs.readFileSync(path.join(this.root,mapping.file)))!==mapping.sha256)throw new Error('Local media integrity mismatch');}
         else {const bytes=Buffer.from(await(await this.request('/api/media/blob/'+encodeURIComponent(mapping.file))).arrayBuffer());if(hash(bytes)!==mapping.sha256)throw new Error('Downloaded media integrity mismatch');atomic(path.join(this.root,safe(mapping.file)),bytes);downloaded++;}
         const prior=local.find(m=>m.path===mapping.path);
-        if(prior&&prior.sha256!==mapping.sha256){this.store.save('review_queue',{suggestion_type:'media_conflict',title:'Two media versions for '+mapping.path,payload:{local:prior,remote:mapping},status:'pending_review'});continue;}
+        if(prior&&prior.sha256!==mapping.sha256){const id='media-conflict-'+hash([mapping.path,prior.sha256,mapping.sha256]).slice(0,24);if(!this.store.get('review_queue',id))this.store.save('review_queue',{id,suggestion_type:'media_conflict',title:'Keep both media versions for '+mapping.path,payload:{local:prior,remote:mapping},status:'pending_review'});continue;}
         atomic(path.join(this.root,hash(mapping.path)+'.mapping.json'),JSON.stringify(mapping));
       }
-      for(const mapping of local.filter(m=>!m.removed_at&&!remote.data.some(r=>r.path===m.path&&r.sha256===m.sha256))){
+      for(const mapping of local.filter(m=>!m.removed_at&&!remote.data.some(r=>r.path===m.path))){
         const bytes=fs.readFileSync(path.join(this.root,safe(mapping.file)));if(hash(bytes)!==mapping.sha256)throw new Error('Upload integrity mismatch');
         await this.request('/api/media/transfer',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mapping,data:bytes.toString('base64')})});uploaded++;
       }
