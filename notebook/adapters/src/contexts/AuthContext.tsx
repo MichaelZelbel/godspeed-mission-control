@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { hydrateFileChats } from '@/local/file-chat';
+import {hydrateFilePreferences} from '@/local/file-preferences';
 export type AppRole = 'free' | 'premium' | 'premium_gift' | 'admin';
 const Context = createContext<any>(null);
 export function AuthProvider({children}: {children:React.ReactNode}) {
@@ -10,6 +11,7 @@ export function AuthProvider({children}: {children:React.ReactNode}) {
     let live=true;
     fetch('/api/session').then(r=>r.ok?r.json():Promise.reject(new Error('Authentication required'))).then(async data=>{
       await hydrateFileChats();
+      await hydrateFilePreferences();
       if(live) setState({loading:false,user:data.user,session:{user:data.user,access_token:'local-session'},profile:data.profile,role:'premium',roleLoading:false});
     }).catch(()=>{if(live)setState((s:any)=>({...s,loading:false}));});
     const timer=setInterval(()=>client.invalidateQueries(),5000);

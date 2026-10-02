@@ -11,6 +11,18 @@ import {SearchIndex} from '../core/index/search.mjs';
 import {ApiKeys,toolScope} from '../core/api-keys.mjs';
 import {backup,restore} from '../core/archives.mjs';
 const setup=()=>{const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-closure-'))),query=new QueryService(store);return {store,query};};
+test('model reviews tolerate a legacy gap string and inference validates before changing the source',async()=>{
+ const {store,query}=setup(),note=store.save('notes',{title:'Synthetic preferences',content:'Alex said "blue is my favorite".',metadata:{summary:'Owner summary'}});
+ store.save('weekly_reviews',{review_data:{gaps:'No additional sources were supplied.'}});assert.deepEqual(query.rows('weekly_reviews')[0].review_data.gaps,['No additional sources were supplied.']);
+ let invalid=false;
+ const domains=new Domains(query,{provider:async input=>{
+  if(input.kind==='classify-profile-fact')return {label:'Changed',value:'Changed',category_slug:'preferences'};
+  assert.equal(input.source.id,note.id);return {metadata:{summary:'Inferred summary',type:'personal'},tags:['synthetic'],suggestions:[{type:'add_claim',payload:{label:'Color',value:'Blue'},evidence_quote:invalid?'Invented evidence':'Alex said "blue is my favorite".'}]};
+ }});
+ const proposal=await domains.invoke('classify-profile-fact',{label:'Reading time',value:'Evening'});assert.equal(proposal.label,'Reading time');assert.equal(proposal.value,'Evening');assert.equal(query.rows('claims').length,0);
+ await domains.invoke('process-note',{note_id:note.id});assert.equal(store.get('notes',note.id).metadata.summary,'Owner summary');assert.equal(store.get('notes',note.id).metadata.type,'personal');assert.equal(query.rows('review_queue').length,1);
+ const before=store.get('notes',note.id)._hash;invalid=true;await assert.rejects(domains.invoke('process-note',{note_id:note.id}),/absent/);assert.equal(store.get('notes',note.id)._hash,before);
+});
 test('groups retain their domain type, route slug and membership references through restart and briefing',async()=>{
  const {store,query}=setup(),group=query.execute({table:'contact_groups',operation:'insert',values:{name:'Synthetic reading circle',type:'community',stages:[{id:'active',label:'Active'}]}}).data[0],person=store.save('contacts',{name:'Synthetic reader'});
  query.execute({table:'contact_group_memberships',operation:'insert',values:{group_id:group.id,contact_id:person.id,status:'active'}});

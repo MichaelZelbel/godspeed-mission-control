@@ -75,6 +75,7 @@ export class QueryService {
         cardinality:slot?.cardinality||r.cardinality,visibility_scope: category?.visibility_scope || 'all', show_to_agent: slot?.show_to_agent ?? false, is_pinned: slot?.is_pinned ?? false, has_conflict: (slot?.cardinality||r.cardinality)!=='many'&&list('claims').filter(c=>c.subject_type===r.subject_type&&c.subject_id===r.subject_id&&c.attribute===r.attribute&&(!c.valid_from||c.valid_from<=today)&&(!c.valid_to||c.valid_to>today)).length>1 };
     });
     if (table === 'v_ai_allowance_current') return [];
+    if(table==='weekly_reviews')return list(table).map(r=>({...r,review_data:{...r.review_data,gaps:typeof r.review_data?.gaps==='string'?[r.review_data.gaps]:r.review_data?.gaps||[]}}));
     if(table==='collection_items')return list(table).map(r=>{const collection=get('collections',r.collection_id),primary=collection?.field_schema?.find(f=>f.primary),title=primary?r.data?.[primary.key]:r.title;return {...defaults.collection_items,...r,title:title==null?'Untitled':String(title)};});
     return list(table).map(r => ({ ...(defaults[table] || {}), ...r,...table==='contact_groups'?{type:r.group_type||'custom'}:table==='contact_group_memberships'?{last_movement_at:r.last_movement_at||r.created_at}:{} }));
   }
