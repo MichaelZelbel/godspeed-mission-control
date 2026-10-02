@@ -11,6 +11,10 @@ import {SearchIndex} from '../core/index/search.mjs';
 import {ApiKeys,toolScope} from '../core/api-keys.mjs';
 import {backup,restore} from '../core/archives.mjs';
 const setup=()=>{const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-closure-'))),query=new QueryService(store);return {store,query};};
+test('activity survives restart and derives create, edit and removal from durable history',()=>{
+ const {store,query}=setup(),note=store.save('notes',{title:'Activity fixture',content:'Original'});store.save('notes',{id:note.id,content:'Changed'});store.structural('notes',note.id,'remove');
+ const activity=new QueryService(new Store(store.root)).rows('activity_events').filter(r=>r.item_id===note.id);assert.deepEqual(activity.map(r=>r.action).sort(),['create','delete','update']);assert.equal(new Set(activity.map(r=>r.id)).size,3);
+});
 test('model reviews tolerate a legacy gap string and inference validates before changing the source',async()=>{
  const {store,query}=setup(),note=store.save('notes',{title:'Synthetic preferences',content:'Alex said "blue is my favorite".',metadata:{summary:'Owner summary'}});
  store.save('weekly_reviews',{review_data:{gaps:'No additional sources were supplied.'}});assert.deepEqual(query.rows('weekly_reviews')[0].review_data.gaps,['No additional sources were supplied.']);
