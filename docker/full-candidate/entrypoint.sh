@@ -8,4 +8,7 @@ if [ "$(id -u)" = 0 ]; then
 fi
 export GODSPEED_COACH_GIT_SYNC=off GODSPEED_JOURNAL_GIT_SYNC=off
 node /opt/godspeed/kit/notebook/bin/godspeed.mjs init >/dev/null
+if [ ! -f "$GODSPEED_WORKSPACE/.godspeed/assistant.json" ]; then
+  node -e 'const fs=require("fs"),p=require("path");fs.writeFileSync(p.join(process.env.GODSPEED_WORKSPACE,".godspeed/assistant.json"),JSON.stringify({verified:true,executable:"/opt/hermes/bin/hermes",home:process.env.HERMES_HOME}),{mode:384})'
+fi
 exec node /opt/godspeed/kit/notebook/server/main.mjs

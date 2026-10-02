@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { Review } from './review.mjs';
 import { fileContext } from './context.mjs';
+import {Connectors} from './connectors.mjs';
 function json(result){return typeof result==='string'?JSON.parse(result.trim().replace(/^```(?:json)?\s*/,'').replace(/\s*```$/,'')):result;}
 export class Domains {
   constructor(query, { provider = null } = {}) { this.query = query; this.store = query.store; this.provider = provider; }
@@ -10,7 +11,7 @@ export class Domains {
     const subject_type = input.entity_id ? 'entity' : input.contact_id ? 'contact' : input.subject_type||'self', subject_id = input.entity_id || input.contact_id || input.subject_id || null;
     const attribute = input.attribute || slug(input.label).replaceAll('-', '_'), value = String(input.value || '').trim();
     if (!attribute || !value) throw new Error('A fact needs a label and value');
-    const suppressed = this.query.rows('ai_suggestion_suppressions').find(s => (s.subject_type === subject_type && s.subject_id === subject_id && s.attribute === attribute && s.value === value)||(s.suppression_key===`${subject_type}:${subject_id||'self'}:${attribute}`&&s.normalized_value===value.toLowerCase()));
+    const suppressed = this.query.rows('ai_suggestion_suppressions').find(s => (s.subject_type === subject_type && s.subject_id === subject_id && s.attribute === attribute && s.value === value)||s.suppression_key===`${subject_type}:${subject_id||''}:${attribute}:${value.toLowerCase()}`);
     if (suppressed) return { ok: true, facts: [{ attribute, outcome: 'suppressed', reason: 'Previously rejected by the user' }] };
     return this.store.withLock(() => {
       const claims = this.query.rows('claims').filter(r => r.subject_type === subject_type && r.subject_id === subject_id && r.attribute === attribute);
@@ -26,6 +27,7 @@ export class Domains {
     });
   }
   async invoke(name, input = {}) {
+    if(['gdrive-proxy','gdrive-sync','github-import-vault','github-people-sync','github-proxy','github-sync-export','github-sync-pull','send-patch','embed-document','delete-my-account'].includes(name))return new Connectors(this).invoke(name,input);
     if(['backfill-profile-extraction','backfill-moment-profile-extraction','backfill-metadata','backfill-media-analysis'].includes(name)){
       if(name==='backfill-media-analysis'){const results=[];for(const source of this.query.rows('note_attachments'))results.push(await this.invoke('analyze-media',{...source,note_id:source.note_id,storage_path:source.storage_path||source.file_path}));return {processed:results.length,results};}
       const sources=name==='backfill-moment-profile-extraction'?this.query.rows('moments'):this.query.rows('notes');const results=[];

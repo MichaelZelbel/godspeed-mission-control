@@ -83,6 +83,7 @@ export class QueryService {
       const target = value.subject_type === 'contact' ? 'contacts' : 'entities', record = this.store.get(target, value.subject_id);
       refs.push({ type: target, id: value.subject_id, ...(record ? { uid: record.uid } : {}), field: 'subject_id' });
     }
+    if(type==='claims'&&value.source_id&&['note','moment'].includes(value.source_type)){const target=value.source_type==='note'?'notes':'moments',record=this.store.get(target,value.source_id);refs.push({type:target,id:value.source_id,...record?{uid:record.uid}:{},field:'source_id'});}
     if(type==='contact_relationships')for(const end of ['source','target'])if(value[end+'_id']&&['contact','entity'].includes(value[end+'_type'])){
       const target=value[end+'_type']==='contact'?'contacts':'entities',id=value[end+'_id'],record=this.store.get(target,id);
       refs.push({type:target,id,...record?{uid:record.uid}:{},field:end+'_id'});
@@ -101,6 +102,8 @@ export class QueryService {
     if (!tables.has(table)) throw new Error('Unknown record domain ' + table);
     let rows = this.rows(table).filter(row => filters.every(f => condition(row, f)));
     if (operation !== 'select') {
+      const privateKeys=/^(access_token|refresh_token|api_key|secret|password|token_hash|encrypted_token|credentials)$/i;
+      const inspect=value=>{if(value&&typeof value==='object')for(const [key,next] of Object.entries(value)){if(privateKeys.test(key))throw new Error('Connector credentials belong in local device configuration, never synced records');inspect(next);}};inspect(values);
       if (views.has(table)) throw new Error('Derived views are read-only');
       rows = this.store.withLock(() => {
         const inputs = operation === 'insert' || operation === 'upsert' ? (Array.isArray(values) ? values : [values]) : rows;

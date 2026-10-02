@@ -81,10 +81,11 @@ export class Store {
     this.problems.push(...this.validateReferences([...records.values()])); return records;
   }
   validateReferences(records) {
-    const problems = [], uids = new Set(records.map(r => r.uid));
+    const problems = [], uids = new Map(records.map(r => [r.uid,r]));
     const keys = new Set(records.flatMap(r => [r.type + '/' + r.id, ...(r.aliases || []).map(a => r.type + '/' + a)]));
     for (const r of records) for (const ref of r.references || []) {
-      if (!(ref.uid ? uids.has(ref.uid) : keys.has(ref.type + '/' + ref.id))) problems.push({ record: r.id, error: 'Missing reference', reference: ref });
+      const target=ref.uid?uids.get(ref.uid):null;
+      if (!(ref.uid ? target&&target.type===ref.type&&[target.id,...target.aliases||[]].includes(ref.id) : keys.has(ref.type + '/' + ref.id))) problems.push({ record: r.id, error: 'Missing or inconsistent reference', reference: ref });
     }
     return problems;
   }
@@ -120,7 +121,7 @@ export class Store {
     this.scan();
     const history=[];
     for(const record of records){
-      const old=this.records.get(record.type+'/'+record.id);
+      const old=this.records.get(record.type+'/'+record.id)||removeKeys.map(k=>this.records.get(k)).find(r=>r?.uid===record.uid);
       if(old&&record.type!=='record_history'&&old._hash!==hash(encode(record))){
         const snapshot={...old};delete snapshot._hash;
         const id=old.uid+'-'+old.revision+'-'+old._hash.slice(0,12);

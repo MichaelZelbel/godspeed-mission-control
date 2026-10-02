@@ -15,6 +15,8 @@ import { importExport } from '../core/import.mjs';
 import { kinds } from '../core/jobs/scheduler.mjs';
 import { MediaSync } from '../core/sync/media.mjs';
 import { mcp } from './mcp.mjs';
+import { spawn } from 'node:child_process';
+import {ApiKeys,toolScope} from '../core/api-keys.mjs';
 
 export async function createService({ root, mediaRoot, host = '127.0.0.1', port = 47831, token, uiRoot, provider, device = 'local' } = {}) {
   const store = new Store(root,{device}), index = new SearchIndex(store), query = new QueryService(store), sync = new FileSync(store);
@@ -22,8 +24,9 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   if(!provider&&fs.existsSync(providerPath))provider=modelProvider(JSON.parse(fs.readFileSync(providerPath,'utf8')));
   provider ||= modelProvider({url:process.env.GODSPEED_MODEL_URL,key:process.env.GODSPEED_MODEL_KEY,model:process.env.GODSPEED_MODEL});
   const assistantPath=process.env.GODSPEED_ASSISTANT_CONFIG||path.join(store.state,'assistant.json');
-  if(!provider&&fs.existsSync(assistantPath)){const descriptor=JSON.parse(fs.readFileSync(assistantPath,'utf8'));if(descriptor.verified)provider=hermesProvider({executable:descriptor.executable,home:descriptor.home,cwd:store.root});}
+  if(!provider&&fs.existsSync(assistantPath)){const descriptor=JSON.parse(fs.readFileSync(assistantPath,'utf8').replace(/^\uFEFF/,''));if(descriptor.verified)provider=hermesProvider({executable:descriptor.executable,home:descriptor.home,cwd:store.root});}
   const domains=new Domains(query,{provider}),scheduler=new Scheduler(store,{device,executor:jobExecutor(provider,query)});
+  domains.sync=sync;
   mediaRoot = path.resolve(mediaRoot || path.join(store.state, 'media')); fs.mkdirSync(mediaRoot, { recursive: true });
   domains.mediaRoot=mediaRoot;
   const mediaSync=new MediaSync(store,mediaRoot),pairCodes=new Map(),pairKeysPath=path.join(store.state,'pair-clients.json');
@@ -32,7 +35,9 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   const remote = !['127.0.0.1', '::1', 'localhost'].includes(host);
   if (remote && !token) throw new Error('Remote access requires a candidate token');
   const sessions = new Map();
-  const authorized = req => !remote || pairKeys.includes(hash(String(req.headers['x-godspeed-pair-key']||''))) || (sessions.get((req.headers.cookie || '').match(/(?:^|; )godspeed_session=([^;]+)/)?.[1]) || 0) > Date.now();
+  const loginLinks=new Map();
+  const apiKeys=new ApiKeys(store);
+  const authorized = req => !remote || pairKeys.includes(hash(String(req.headers['x-godspeed-pair-key']||req.headers.authorization?.replace(/^Bearer /,'')||''))) || (sessions.get((req.headers.cookie || '').match(/(?:^|; )godspeed_session=([^;]+)/)?.[1]) || 0) > Date.now();
   function send(res, status, body, headers = {}) { res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', ...headers }); res.end(JSON.stringify(body)); }
   async function body(req, limit = 2 * 1024 * 1024) {
     let size = 0; const chunks = [];
@@ -46,6 +51,11 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       const hostName = (req.headers.host || '').split(':')[0];
       if (!remote && !['localhost', '127.0.0.1', '[', '::1'].includes(hostName)) return send(res, 403, { error: 'Unrecognized local host' });
       if (req.headers.origin && new URL(req.headers.origin).host !== req.headers.host) return send(res, 403, { error: 'Cross-site requests are refused' });
+      if(route.startsWith('/login/')){
+        const code=route.slice(7),expiry=loginLinks.get(code);if(!expiry||expiry<Date.now())return send(res,401,{error:'This login link expired or was already used'});
+        loginLinks.delete(code);const session=randomBytes(32).toString('hex');sessions.set(session,Date.now()+8*3600000);
+        res.writeHead(303,{'Location':'/','Cache-Control':'no-store','Referrer-Policy':'no-referrer','Set-Cookie':`godspeed_session=${session}; HttpOnly; SameSite=Strict; Path=/; Max-Age=28800${remote?'; Secure':''}`});return res.end();
+      }
       if (route === '/api/login' && req.method === 'POST') {
         const input = JSON.parse(await body(req)), a = Buffer.from(String(input.token || '')), b = Buffer.from(token || '');
         if (!token || a.length !== b.length || !timingSafeEqual(a, b)) return send(res, 401, { error: 'Access token was not accepted' });
@@ -62,10 +72,18 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       }
       if (route === '/health') return send(res, 200, { ok: true, format: 1, version: '0.1.0-alpha.1',instance });
       if (route.startsWith('/api/') && !authorized(req)) return send(res, 401, { error: 'Authentication required' });
+      if(route==='/api/login-link'&&req.method==='POST'){const code=randomBytes(32).toString('hex');loginLinks.set(code,Date.now()+300000);return send(res,200,{path:'/login/'+code,expires_minutes:5});}
+      if(route==='/api/assistant/open'&&req.method==='POST'){
+        if(remote||process.platform!=='win32')throw new Error('Open the assistant on your Windows computer');
+        const descriptor=JSON.parse(fs.readFileSync(assistantPath,'utf8').replace(/^\uFEFF/,''));if(!descriptor.verified||path.basename(descriptor.desktop)!=='Hermes.exe'||!fs.existsSync(descriptor.desktop))throw new Error('The candidate Hermes desktop is not available');
+        const child=spawn(descriptor.desktop,[],{cwd:store.root,detached:true,stdio:'ignore',windowsHide:false,env:{...process.env,HERMES_HOME:descriptor.home,HERMES_DESKTOP_USER_DATA_DIR:path.join(path.dirname(assistantPath),'hermes-desktop-data'),HERMES_DESKTOP_APP_NAME:'Godspeed Mission Control Full Alpha Assistant',HERMES_SOURCE_ROOT:descriptor.sourceRoot}});child.unref();return send(res,200,{opened:true});
+      }
       if(route==='/mcp'){
-        if(!authorized(req))return send(res,401,{error:'Authentication required'});
+        const accessKey=apiKeys.authenticate(String(req.headers.authorization||'').replace(/^Bearer /,''));
+        if(!authorized(req)&&!accessKey)return send(res,401,{error:'Authentication required'});
         if(req.method!=='POST'){res.writeHead(405,{'Allow':'POST'});return res.end();}
-        const response=await mcp(JSON.parse(await body(req)),{store,query,index,domains});if(response===null){res.writeHead(202);return res.end();}index.rebuild();return send(res,200,response);
+        const input=JSON.parse(await body(req));if(accessKey&&input.method==='tools/call'&&!accessKey.scopes.includes(toolScope(input.params.name,input.params.arguments||{})))return send(res,403,{error:'This API key does not grant that capability'});
+        const response=await mcp(input,{store,query,index,domains});if(response===null){res.writeHead(202);return res.end();}index.rebuild();return send(res,200,response);
       }
       if(route==='/api/pair/create'&&req.method==='POST'){if(device!=='vps')throw new Error('Create a pairing code on the candidate VPS');const code=randomBytes(16).toString('hex');pairCodes.set(code,Date.now()+300000);return send(res,200,{code,expires_minutes:5});}
       if(route==='/api/pair/connect'&&req.method==='POST'){const input=JSON.parse(await body(req));const result=await mediaSync.pair(input.origin,input.code);if(store.get('settings','installation'))scheduler.transfer('vps');return send(res,200,{...result,media:await mediaSync.reconcile()});}
@@ -139,7 +157,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         if(mapping.removed_at)return send(res,404,{error:'Media removed'});
         res.writeHead(200, { 'Content-Type': mapping.contentType || 'application/octet-stream', 'Content-Length': mapping.size, 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "default-src 'none'; sandbox" }); fs.createReadStream(path.join(mediaRoot, safe(mapping.file))).pipe(res); return;
       }
-      if (route.startsWith('/api/functions/') && req.method === 'POST') { const data=await domains.invoke(route.slice('/api/functions/'.length),JSON.parse(await body(req)));index.rebuild();return send(res,200,{data,error:null}); }
+      if (route.startsWith('/api/functions/') && req.method === 'POST') { const name=route.slice('/api/functions/'.length),input=JSON.parse(await body(req));const data=name.startsWith('mc-api-keys')?apiKeys.invoke(name,input):await domains.invoke(name,input);index.rebuild();return send(res,200,{data,error:null}); }
       if (route.startsWith('/api/')) return send(res, 404, { error: 'Unknown operation' });
       const requested = path.resolve(uiRoot, '.' + route); if (requested !== uiRoot && !requested.startsWith(uiRoot + path.sep)) return send(res, 403, { error: 'Invalid path' });
       const file = fs.existsSync(requested) && fs.statSync(requested).isFile() ? requested : path.join(uiRoot, 'index.html');
