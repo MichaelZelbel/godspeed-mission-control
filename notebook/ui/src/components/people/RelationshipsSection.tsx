@@ -1,0 +1,596 @@
+import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
+import { ChevronDown, ChevronRight, Plus, Pencil, Trash2, Users, Briefcase } from "lucide-react";
+import { ProfileRow } from "@/components/profile/ProfileRow";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+
+import {
+  isDuplicateRelationshipError,
+  useContactRelationships,
+  type ContactRelationship,
+} from "@/hooks/useContactRelationships";
+import { fetchAllPages } from "@/lib/postgrest";
+import { ALL_RELATIONSHIP_LABELS, getInverseLabel, impliedGenderFromLabel } from "@/lib/relationship-labels";
+import {
+  canonicalLabel,
+  describeRelationship,
+  genderFromFacts,
+  relationshipPairKey,
+  type Gender,
+} from "@/lib/relationship-canonical";
+
+import { relationshipWriteDecision } from "@/lib/profile-integrity";
+import { invokeWriteFact } from "@/hooks/useFacts";
+
+import { useAuth } from "@/contexts/AuthContext";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { showToast } from "@/lib/toast";
+
+export interface RelationshipMilestone {
+  id: string;
+  label: string;
+  value: string;
+}
+
+interface RelationshipsSectionProps {
+  /** null = viewing own profile ("self") */
+  contactId: string | null;
+  contactName: string;
+  /**
+   * Non-edge relational facts (Wedding date, Anniversary, How we met…). They
+   * render inside this card so a profile has exactly ONE relationship surface.
+   */
+  milestones?: RelationshipMilestone[];
+}
+
+export function RelationshipsSection({ contactId, contactName, milestones = [] }: RelationshipsSectionProps) {
+  const { user } = useAuth();
+  const qc = useQueryClient();
+  const { relationships, isLoading, upsertRelationship, deleteRelationship } =
+    useContactRelationships(contactId);
+
+  const [adding, setAdding] = useState(false);
+  const [expanded, setExpanded] = useState(true);
+  const [proExpanded, setProExpanded] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<{ id: string; name: string } | null>(null);
+  const [formLabel, setFormLabel] = useState("");
+  const [formCustomLabel, setFormCustomLabel] = useState("");
+  const [formTargetType, setFormTargetType] = useState<"contact" | "self">("contact");
+  const [formTargetId, setFormTargetId] = useState("");
+
+  // Fetch user's display name for "self" references
+  const { data: profile } = useQuery({
+    queryKey: ["my-profile-name"],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("profiles")
+        .select("display_name")
+        .eq("id", user!.id)
+        .single();
+      return data;
+    },
+    enabled: !!user,
+  });
+  const myName = profile?.display_name || "Me";
+
+  // Everyone the picker can offer. Keyed under "contacts" so adding, renaming,
+  // merging or deleting a person refreshes it (its own key was never
+  // invalidated: a person added a minute ago was missing), and read to the end
+  // (an unpaged read stopped at 1,000 people).
+  const { data: allContacts = [] } = useQuery({
+    queryKey: ["contacts", user?.id, "relationship-picker"],
+    queryFn: () =>
+      fetchAllPages<{ id: string; name: string }>((from, to) =>
+        supabase
+          .from("contacts")
+          .select("id, name")
+          .eq("user_id", user!.id)
+          .is("merged_into", null)
+          .order("name")
+          .order("id")
+          .range(from, to),
+      ),
+    enabled: !!user && adding,
+  });
+
+  // Gender / pronoun facts for everyone, so a role can be rendered in the
+  // other person's own gender ("Husband: Michael"). Keyed by contact id;
+  // the "self" key holds the owner's own facts. Never guessed from a name.
+  // Stored as a plain record, NOT a Map: the query cache is persisted, and a
+  // Map does not survive that round-trip (it rehydrates as a bare object,
+  // which used to blow up on `.get`).
+  const { data: genderByPerson } = useQuery({
+    queryKey: ["relationship-genders", user?.id],
+    enabled: !!user,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("profile_facts")
+        .select("subject_type, subject_id, attribute, value")
+        .eq("user_id", user!.id)
+        .in("subject_type", ["self", "contact"])
+        .in("attribute", ["gender", "pronouns"])
+        .eq("is_current", true);
+      const raw: Record<string, { gender?: string; pronouns?: string }> = {};
+      for (const row of (data || []) as Array<{ subject_type: string; subject_id: string | null; attribute: string; value: string }>) {
+        const key = row.subject_type === "contact" && row.subject_id ? row.subject_id : "self";
+        const bucket = raw[key] ?? {};
+        if (row.attribute === "gender") bucket.gender = row.value;
+        else bucket.pronouns = row.value;
+        raw[key] = bucket;
+      }
+      const out: Record<string, Gender> = {};
+      for (const [key, v] of Object.entries(raw)) out[key] = genderFromFacts(v.gender, v.pronouns);
+      return out;
+    },
+  });
+
+  /** Safe lookup that tolerates both a fresh object and a rehydrated one. */
+  const genderOf = (key: string): Gender | null =>
+    (genderByPerson as Record<string, Gender> | undefined)?.[key] ?? null;
+
+
+  const resetForm = () => {
+    setFormLabel("");
+    setFormCustomLabel("");
+    setFormTargetType("contact");
+    setFormTargetId("");
+    setAdding(false);
+    setEditingId(null);
+  };
+
+  /**
+   * Record the other person's gender when the user picked an explicitly
+   * gendered label ("girlfriend"). Storage canonicalizes the label itself
+   * (girlfriend → partner), so without this fact the row would render as the
+   * neutral "Partner". Never overwrites a gender that is already known.
+   */
+  const persistImpliedGender = async (pickedLabel: string, otherKey: string) => {
+    const gender = impliedGenderFromLabel(pickedLabel);
+    if (!gender) return;
+    if (genderOf(otherKey)) return;
+    try {
+      await invokeWriteFact({
+        contact_id: otherKey === "self" ? null : otherKey,
+        category_slug: "identity",
+        label: "Gender",
+        value: gender === "male" ? "Male" : "Female",
+      });
+    } catch {
+      // A missing gender fact only degrades wording, never correctness.
+    }
+    qc.invalidateQueries({ queryKey: ["relationship-genders", user?.id] });
+    qc.invalidateQueries({ queryKey: ["profile-facts"] });
+  };
+
+  const handleSave = () => {
+    if (!formLabel) {
+      showToast.error("Please select a relationship label");
+      return;
+    }
+    if (formTargetType === "contact" && !formTargetId) {
+      showToast.error("Please select a person");
+      return;
+    }
+
+    // Source is the entity whose profile we're viewing
+    const sourceType = contactId ? "contact" : "self";
+    const sourceId = contactId || null;
+    // The picker asks for the OTHER person's role ("Xihui is my wife"), while
+    // storage is "source is <label> of target". The viewed person is always
+    // the source here, so the stored label is the inverse of the pick.
+    const storedLabel = getInverseLabel(formLabel);
+    const decision = relationshipWriteDecision({
+      userId: user?.id || "",
+      sourceType,
+      sourceId,
+      targetType: formTargetType,
+      targetId: formTargetType === "contact" ? formTargetId : null,
+      label: storedLabel,
+    });
+    if (!decision.ok) {
+      const reason = "reason" in decision ? decision.reason : "";
+      showToast.error(
+        reason === "unrecognized_relationship_label"
+          ? "That is not a relationship. Pick a family, social or professional role."
+          : "This relationship cannot be saved",
+      );
+      return;
+    }
+
+    const pickedLabel = formLabel;
+    const otherKey = formTargetType === "contact" ? formTargetId : "self";
+
+    upsertRelationship.mutate(
+      {
+        id: editingId || undefined,
+        source_type: sourceType,
+        source_id: sourceId,
+        target_type: formTargetType,
+        target_id: formTargetType === "contact" ? formTargetId : null,
+        label: storedLabel,
+        custom_label: formCustomLabel.trim() || null,
+      },
+      {
+        onSuccess: () => {
+          void persistImpliedGender(pickedLabel, otherKey);
+          showToast.success("Relationship saved");
+          resetForm();
+        },
+        onError: (err: any) => {
+          // The hook's own duplicate check says "pair_key: ...", which reached
+          // the screen as it was.
+          if (isDuplicateRelationshipError(err)) {
+            showToast.error("This relationship already exists");
+          } else {
+            showToast.error(err.message || "Failed to save");
+          }
+        },
+      }
+    );
+  };
+
+  const startEdit = (rel: ContactRelationship) => {
+    setEditingId(rel.id);
+    setFormCustomLabel(rel.custom_label || "");
+
+    // Determine the "other" side of the relationship from the viewed profile's perspective
+    const viewingIsSource =
+      (contactId === null && rel.source_type === "self") ||
+      (contactId !== null && rel.source_type === "contact" && rel.source_id === contactId);
+
+    // The picker holds the other person's role, matching what the row shows.
+    setFormLabel(viewingIsSource ? getInverseLabel(rel.label) : rel.label);
+
+    if (viewingIsSource) {
+      setFormTargetType(rel.target_type as "contact" | "self");
+      setFormTargetId(rel.target_id || "");
+    } else {
+      setFormTargetType(rel.source_type as "contact" | "self");
+      setFormTargetId(rel.source_id || "");
+    }
+    setAdding(true);
+  };
+
+  const handleDelete = (id: string) => {
+    deleteRelationship.mutate(id, {
+      onSuccess: () => showToast.success("Relationship removed"),
+      onError: (err: any) => showToast.error(err.message || "Failed to delete"),
+    });
+  };
+
+  // Filter out current contact from the picker
+  const availableContacts = allContacts.filter((c) => c.id !== contactId);
+
+  // One row per (person, bond). Both stored directions of the same bond
+  // ("Jürgen is my stepfather" + "I am Jürgen's stepson") collapse into the
+  // single row that reads correctly from the viewed person's perspective.
+  const { personalRows, professionalRows } = useMemo(() => {
+    const described = relationships.map((rel) => {
+      const otherIsSelf =
+        contactId === null
+          ? false
+          : rel.source_id === contactId
+            ? rel.target_type === "self"
+            : rel.source_type === "self";
+      const otherContactId =
+        contactId === null
+          ? rel.source_type === "contact"
+            ? rel.source_id
+            : rel.target_type === "contact"
+              ? rel.target_id
+              : null
+          : rel.source_id === contactId
+            ? rel.target_id
+            : rel.source_id;
+      const otherKey = otherIsSelf ? "self" : otherContactId ?? "unknown";
+
+      const description = describeRelationship({
+        sourceType: rel.source_type,
+        sourceId: rel.source_id,
+        targetType: rel.target_type,
+        targetId: rel.target_id,
+        label: rel.label,
+        customLabel: rel.custom_label,
+        viewingContactId: contactId,
+        sourceName: rel.source_type === "self" ? myName : rel.source_contact?.name || "Unknown",
+        targetName: rel.target_type === "self" ? myName : rel.target_contact?.name || "Unknown",
+        otherGender: genderOf(otherKey),
+      });
+
+      const bondKey = rel.custom_label?.trim()
+        ? `${otherKey}|custom|${rel.custom_label.trim().toLowerCase()}`
+        : relationshipPairKey(
+            user?.id || "",
+            { type: rel.source_type as "contact" | "self", id: rel.source_id },
+            { type: rel.target_type as "contact" | "self", id: rel.target_id },
+            rel.label,
+          );
+
+      return { rel, description, otherKey, otherContactId, otherIsSelf, bondKey };
+    });
+
+    // Prefer the stored direction where the viewed person is the TARGET: its
+    // label already names the other person's role, so no inversion is needed.
+    const byBond = new Map<string, (typeof described)[number]>();
+    for (const row of described) {
+      const existing = byBond.get(row.bondKey);
+      if (!existing || (existing.description.viewingIsSource && !row.description.viewingIsSource)) {
+        byBond.set(row.bondKey, row);
+      }
+    }
+
+    const all = Array.from(byBond.values()).filter((r) => r.description.kind !== "other");
+    return {
+      personalRows: all.filter((r) => r.description.kind === "personal"),
+      professionalRows: all.filter((r) => r.description.kind === "professional"),
+    };
+  }, [relationships, contactId, myName, genderByPerson, user?.id]);
+
+  const rows = personalRows;
+  if (isLoading) return null;
+
+
+
+
+  return (
+    <>
+    <div className="rounded-lg border border-border bg-card">
+
+      {/* Header — same shape as every other profile section. */}
+      <div className="flex items-center gap-2 px-4 py-2.5 group">
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          className="shrink-0 text-muted-foreground hover:text-foreground"
+          aria-label={expanded ? "Collapse section" : "Expand section"}
+        >
+          {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+        </button>
+        <Users className="h-4 w-4 text-muted-foreground shrink-0" />
+        <span className="font-medium text-sm flex-1 truncate">Relationships</span>
+        <span className="text-xs text-muted-foreground shrink-0">
+          {rows.length === 1 ? "1 person" : `${rows.length} people`}
+        </span>
+
+        {!adding && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 shrink-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100 transition-opacity"
+            aria-label="Add relationship"
+            onClick={() => {
+              setAdding(true);
+              setExpanded(true);
+            }}
+          >
+            <Plus className="h-3.5 w-3.5" />
+          </Button>
+        )}
+      </div>
+
+      {/* Existing relationships — always "Role: Name", where Role is the role
+          the OTHER person holds toward {contactName}. */}
+      {expanded && rows.length > 0 && (
+        <div className="border-t border-border">
+          {rows.map(({ rel, description, otherContactId, otherIsSelf }) => (
+            <ProfileRow
+              key={rel.id}
+              label={description.role}
+              actions={
+                <>
+                  <Button aria-label="Edit relationship" variant="ghost" size="icon" className="h-7 w-7" onClick={() => startEdit(rel)}>
+                    <Pencil className="h-3.5 w-3.5" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 text-destructive"
+                    aria-label="Remove relationship"
+                      onClick={() => setPendingDelete({ id: rel.id, name: description.otherName })}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </>
+              }
+            >
+              {otherIsSelf ? (
+                <Link to="/dashboard/profile" className="text-sm hover:underline break-words">
+                  {description.otherName}
+                </Link>
+              ) : otherContactId ? (
+                <Link
+                  to={`/dashboard/people/${otherContactId}`}
+                  className="text-sm hover:underline break-words"
+                >
+                  {description.otherName}
+                </Link>
+              ) : (
+                <span className="text-sm break-words">{description.otherName}</span>
+              )}
+            </ProfileRow>
+          ))}
+        </div>
+      )}
+
+
+      {expanded && rows.length === 0 && !adding && (
+        <div className="flex items-center justify-between gap-2 px-4 py-3 border-t border-border">
+          <span className="text-sm text-muted-foreground">No relationships yet. Add one.</span>
+          <Button variant="ghost" size="sm" className="h-7 gap-1 shrink-0" onClick={() => setAdding(true)}>
+            <Plus className="h-3.5 w-3.5" /> Add
+          </Button>
+        </div>
+      )}
+
+
+
+      {/* Non-edge relational facts live in this same card — one surface. */}
+      {expanded && milestones.length > 0 && (
+        <div className="border-t border-border">
+          {milestones.map((m) => (
+            <ProfileRow key={m.id} label={m.label}>
+              <span className="text-sm break-words">{m.value}</span>
+            </ProfileRow>
+          ))}
+        </div>
+
+      )}
+
+
+
+      {/* Add/edit form */}
+      {adding && (
+        <div className="px-3 pb-3 space-y-2 border-t border-border pt-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <Select value={formLabel} onValueChange={setFormLabel}>
+              <SelectTrigger className="text-sm h-8">
+                <SelectValue placeholder="Select label…" />
+              </SelectTrigger>
+              <SelectContent>
+                {ALL_RELATIONSHIP_LABELS.map((l) => (
+                  <SelectItem key={l} value={l} className="capitalize">{l}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Input
+              placeholder="Custom label (optional)"
+              value={formCustomLabel}
+              onChange={(e) => setFormCustomLabel(e.target.value)}
+              className="text-sm h-8"
+            />
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <Select value={formTargetType} onValueChange={(v) => { setFormTargetType(v as "contact" | "self"); setFormTargetId(""); }}>
+              <SelectTrigger className="text-sm h-8">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="contact">A contact</SelectItem>
+                {contactId !== null && <SelectItem value="self">Me ({myName})</SelectItem>}
+              </SelectContent>
+            </Select>
+
+            {formTargetType === "contact" && (
+              <Select value={formTargetId} onValueChange={setFormTargetId}>
+                <SelectTrigger className="text-sm h-8">
+                  <SelectValue placeholder="Select person…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableContacts.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          </div>
+
+          <div className="flex gap-2 justify-end">
+            <Button variant="ghost" size="sm" className="h-7" onClick={resetForm}>Cancel</Button>
+            <Button size="sm" className="h-7" onClick={handleSave} disabled={upsertRelationship.isPending}>
+              {editingId ? "Update" : "Add"}
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+
+    {/* Professional and service roles are real, but they are NOT relationships.
+        They live in their own, separately collapsible card. */}
+    {professionalRows.length > 0 && (
+      <div className="rounded-lg border border-border bg-card">
+        <div className="flex items-center gap-2 px-4 py-2.5">
+          <button
+            type="button"
+            onClick={() => setProExpanded((v) => !v)}
+            className="shrink-0 text-muted-foreground hover:text-foreground"
+            aria-label={proExpanded ? "Collapse section" : "Expand section"}
+          >
+            {proExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+          </button>
+          <Briefcase className="h-4 w-4 text-muted-foreground shrink-0" />
+          <span className="font-medium text-sm flex-1 truncate">Professional &amp; service contacts</span>
+          <span className="text-xs text-muted-foreground shrink-0">{professionalRows.length}</span>
+        </div>
+
+        {proExpanded && (
+          <div className="border-t border-border">
+            {professionalRows.map(({ rel, description, otherContactId, otherIsSelf }) => (
+              <ProfileRow
+                key={rel.id}
+                label={description.role}
+                actions={
+                  <>
+                    <Button aria-label="Edit relationship" variant="ghost" size="icon" className="h-7 w-7" onClick={() => startEdit(rel)}>
+                      <Pencil className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 text-destructive"
+                      aria-label="Remove relationship"
+                      onClick={() => setPendingDelete({ id: rel.id, name: description.otherName })}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </>
+                }
+              >
+                {otherIsSelf ? (
+                  <Link to="/dashboard/profile" className="text-sm hover:underline break-words">
+                    {description.otherName}
+                  </Link>
+                ) : otherContactId ? (
+                  <Link to={`/dashboard/people/${otherContactId}`} className="text-sm hover:underline break-words">
+                    {description.otherName}
+                  </Link>
+                ) : (
+                  <span className="text-sm break-words">{description.otherName}</span>
+                )}
+              </ProfileRow>
+            ))}
+          </div>
+        )}
+      </div>
+    )}
+    <AlertDialog open={!!pendingDelete} onOpenChange={(open) => !open && setPendingDelete(null)}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Remove relationship?</AlertDialogTitle>
+          <AlertDialogDescription>
+            The relationship with "{pendingDelete?.name}" will be deleted. This cannot be undone.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={() => {
+              if (pendingDelete) handleDelete(pendingDelete.id);
+              setPendingDelete(null);
+            }}
+            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+          >
+            Remove
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
+  );
+}
+

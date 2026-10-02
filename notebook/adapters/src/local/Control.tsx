@@ -1,0 +1,17 @@
+import { useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+async function call(route:string,body?:any){const r=await fetch('/api/'+route,{method:body?'POST':'GET',headers:{'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});const data=await r.json();if(!r.ok)throw new Error(data.error);return data;}
+export default function Control(){
+  const qc=useQueryClient(),[goal,setGoal]=useState(''),[timezone,setTimezone]=useState(Intl.DateTimeFormat().resolvedOptions().timeZone),[error,setError]=useState(''),[search,setSearch]=useState('');
+  const {data}=useQuery({queryKey:['candidate-status'],queryFn:()=>call('status'),refetchInterval:5000});
+  const results=useQuery({queryKey:['candidate-search',search],queryFn:()=>call('search?q='+encodeURIComponent(search)),enabled:!!search});
+  const action=async(route:string,body:any)=>{try{setError('');await call(route,body);qc.invalidateQueries();}catch(e:any){setError(e.message);}};
+  return <div className="max-w-4xl space-y-6"><h1 className="text-2xl font-bold">Your control desk</h1><p>Knowledge stays in your files. This candidate uses a separate workspace.</p>
+    <p role="alert" className="text-red-400">{error}</p>
+    {!data?.configured&&<form className="space-y-3 border rounded p-4" onSubmit={e=>{e.preventDefault();action('setup',{goal,timezone,delivery:'notebook'});}}><h2>Start with one goal</h2><label className="block">What matters to you?<input className="block w-full bg-background border rounded p-2" value={goal} onChange={e=>setGoal(e.target.value)} required/></label><label className="block">Timezone<input className="block bg-background border rounded p-2" value={timezone} onChange={e=>setTimezone(e.target.value)} required/></label><button className="border rounded p-2">Start</button></form>}
+    <section><h2 className="text-xl">Find your knowledge</h2><input aria-label="Search all records" className="bg-background border rounded p-2" value={search} onChange={e=>setSearch(e.target.value)}/><ul>{results.data?.data.map((r:any)=><li key={r.uid}>{r.title} ({r.type})</li>)}</ul></section>
+    <section><h2 className="text-xl">Routines</h2><p>Schedule owner: {data?.owner||'Not configured'}. Provider: {data?.runtimeConfigured?'connected':'not connected'}.</p><button className="border p-2 rounded" onClick={()=>action('jobs/run',{})}>Run due routines</button><ul>{data?.schedules.map((j:any)=><li className="border-b py-3 flex flex-wrap gap-4" key={j.id}><span>{j.kind}: {j.state}. Next: {j.next_run}</span><button onClick={()=>action('jobs/update',{id:j.id,paused:!j.paused})}>{j.paused?'Resume':'Pause'}</button>{j.last_outcome&&<span>{j.last_outcome}</span>}</li>)}</ul></section>
+    <section><h2 className="text-xl">Recovery</h2><p>Last file scan: {data?.lastScan}. Last search rebuild: {data?.lastIndex}.</p><button className="border p-2 rounded" onClick={()=>action('index/rebuild',{})}>Rebuild search</button><button className="border p-2 rounded ml-3" onClick={()=>action('backup',{})}>Save a backup</button><ul>{data?.problems.map((p:any,i:number)=><li key={i}>{p.error}: {p.record||p.file}</li>)}</ul><p>Conflicts waiting for review: {data?.conflicts.length||0}</p></section>
+    <p className="text-sm text-muted-foreground">Lexicon and note graph are deferred. Provider-based analysis requires your chosen assistant. Outward actions wait for specific permission.</p>
+  </div>;
+}

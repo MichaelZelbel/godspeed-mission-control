@@ -1,0 +1,260 @@
+import { useState, useEffect, useCallback, useRef } from "react";
+import { useNavigate } from "react-router-dom";
+import { Search, FileText, Loader2, Sparkles, Image } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useIlikeSearch, useSemanticSearch, type SemanticSearchResult } from "@/hooks/useNotes";
+import { extractSearchTerms, isTitleHit } from "@/lib/search-terms";
+
+/**
+ * Merge incoming results into the existing list WITHOUT reordering.
+ * - Rows already present keep their exact position; only their data is enriched.
+ * - Genuinely new rows are appended at the end.
+ */
+function mergeStable(
+  current: SemanticSearchResult[],
+  incoming: SemanticSearchResult[],
+  max: number
+): SemanticSearchResult[] {
+  const byId = new Map(current.map((r) => [r.id, r]));
+  const merged = current.map((r) => {
+    const next = incoming.find((i) => i.id === r.id);
+    if (!next) return r;
+    return {
+      ...r,
+      ...next,
+      // Never let an enrichment blank out what is already rendered
+      title: next.title || r.title,
+      similarity: next.similarity ?? r.similarity,
+      match_source: next.match_source ?? r.match_source,
+    };
+  });
+  for (const item of incoming) {
+    if (!byId.has(item.id) && merged.length < max) merged.push(item);
+  }
+  return merged.slice(0, max);
+}
+
+/**
+ * A note whose TITLE is what the user typed must be visible, and first. Body
+ * matches — however recent or semantically similar — come after it.
+ */
+function pinTitleHits(
+  rows: SemanticSearchResult[],
+  query: string
+): SemanticSearchResult[] {
+  const q = query.trim().toLowerCase();
+  if (!q) return rows;
+  const terms = extractSearchTerms(query);
+  const titleHits = rows.filter((r) => isTitleHit(r, q, terms));
+  if (titleHits.length === 0 || titleHits.length === rows.length) return rows;
+  const rest = rows.filter((r) => !titleHits.includes(r));
+  return [...titleHits, ...rest];
+}
+
+const MAX_RESULTS = 8;
+
+
+type SearchStatus = "idle" | "pending" | "running" | "done" | "failed";
+
+export function DashboardSearch() {
+  const [query, setQuery] = useState("");
+  const [open, setOpen] = useState(false);
+  const [results, setResults] = useState<SemanticSearchResult[]>([]);
+  const [status, setStatus] = useState<SearchStatus>("idle");
+  const isSearching = status === "pending" || status === "running";
+  const containerRef = useRef<HTMLDivElement>(null);
+  const navigate = useNavigate();
+
+  // Freeze updates while the pointer is inside the dropdown so the row under
+  // the cursor can never change identity mid-click.
+  const isHoveringRef = useRef(false);
+  const resultsRef = useRef<SemanticSearchResult[]>([]);
+  const pendingRef = useRef<SemanticSearchResult[] | null>(null);
+  const requestIdRef = useRef(0);
+
+  const ilikeSearch = useIlikeSearch();
+  const semanticSearch = useSemanticSearch();
+
+  const setVisible = useCallback((next: SemanticSearchResult[]) => {
+    resultsRef.current = next;
+    pendingRef.current = null;
+    setResults(next);
+  }, []);
+
+  const commit = useCallback((updater: (prev: SemanticSearchResult[]) => SemanticSearchResult[]) => {
+    const base = pendingRef.current ?? resultsRef.current;
+    const next = updater(base);
+    // The dropdown can open underneath a stationary pointer. Do not freeze its
+    // initial empty state: the first completed pass must always become visible.
+    // Once rows are rendered, later enrichment remains frozen while hovering so
+    // the item under the pointer cannot change before a click.
+    if (isHoveringRef.current && resultsRef.current.length > 0) {
+      pendingRef.current = next; // keep the visible list frozen
+      return;
+    }
+    setVisible(next);
+  }, [setVisible]);
+
+  const flushPending = useCallback(() => {
+    isHoveringRef.current = false;
+    if (pendingRef.current) setVisible(pendingRef.current);
+  }, [setVisible]);
+
+  // The dropdown closes under the pointer when a result is clicked (or on
+  // Escape), and React fires no mouseleave for an element that is removed, so
+  // the hover flag stayed set: every later search then parked its semantic
+  // results in pendingRef and never showed them. A closed dropdown is never
+  // hovered.
+  const dropdownVisible = open && !!query.trim();
+  useEffect(() => {
+    if (!dropdownVisible) isHoveringRef.current = false;
+  }, [dropdownVisible]);
+
+
+  // Close on click outside
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  // Debounced search — both passes feed one stable, append-only list
+  useEffect(() => {
+    if (!query.trim()) {
+      requestIdRef.current += 1;
+      setVisible([]);
+      setStatus("idle");
+      return;
+    }
+
+    setStatus("pending");
+
+    const timer = setTimeout(async () => {
+      const reqId = ++requestIdRef.current;
+      setVisible([]);
+      setStatus("running");
+
+      // Either pass may fail on its own; only when both do is the empty list
+      // a failure rather than "No results found".
+      let failures = 0;
+      try {
+        const ilike = await ilikeSearch.mutateAsync(query);
+        if (requestIdRef.current !== reqId) return;
+        commit((prev) => pinTitleHits(mergeStable(prev, ilike, MAX_RESULTS), query));
+      } catch { failures += 1; }
+
+      try {
+        const res = await semanticSearch.mutateAsync({ query, limit: MAX_RESULTS, threshold: 0.25 });
+        if (requestIdRef.current !== reqId) return;
+        // Append-only: rows already rendered keep their exact position so a row
+        // can never jump out from under the user's cursor mid-click.
+        commit((prev) => mergeStable(prev, res.results, MAX_RESULTS));
+      } catch { failures += 1; }
+
+      if (requestIdRef.current === reqId) setStatus(failures === 2 ? "failed" : "done");
+    }, 150);
+
+    return () => clearTimeout(timer);
+  }, [query, commit, setVisible]);
+
+  const selectNote = useCallback((noteId: string) => {
+    setOpen(false);
+    setQuery("");
+    navigate(`/dashboard/notes/${noteId}`);
+  }, [navigate]);
+
+  // Cmd/Ctrl+K belongs to the command palette (CommandPalette.tsx), which is
+  // mounted on the same layout. Binding it here as well opened both at once,
+  // with the palette's focus trap fighting this input for the caret. This box
+  // only listens for Escape.
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, []);
+
+  const matchIcon = (source?: string) => {
+    if (source === "media") return <Image className="h-3.5 w-3.5 text-muted-foreground" />;
+    if (source === "both") return <Sparkles className="h-3.5 w-3.5 text-primary" />;
+    return <FileText className="h-3.5 w-3.5 text-muted-foreground" />;
+  };
+
+  return (
+    <div ref={containerRef} className="relative w-full max-w-md">
+      <div className="relative">
+        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Input aria-label="Search notes"
+          value={query}
+          onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
+          onFocus={() => { if (query.trim()) setOpen(true); }}
+          placeholder="Search notes…"
+          className="pl-9 pr-8 h-9 text-sm bg-muted/50 border-transparent focus-visible:border-input"
+        />
+        {isSearching && (
+          <Loader2 className="absolute right-2.5 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
+        )}
+      </div>
+
+      {open && query.trim() && (
+        <div
+          className="absolute top-full left-0 right-0 mt-1 z-50 rounded-lg border bg-popover shadow-lg overflow-hidden"
+          onMouseEnter={() => { isHoveringRef.current = true; }}
+          onMouseLeave={flushPending}
+        >
+          {results.length === 0 && status === "done" && (
+            <p className="text-sm text-muted-foreground text-center py-6">No results found</p>
+          )}
+          {results.length === 0 && status === "failed" && (
+            <p role="alert" className="text-sm text-destructive text-center py-6 px-3">
+              Search could not reach the server. Check your connection and try again.
+            </p>
+          )}
+          {results.length === 0 && isSearching && (
+            <div className="py-2">
+              <p className="flex items-center justify-center gap-2 px-3 pb-2 text-sm text-muted-foreground">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                Searching your notes…
+              </p>
+              <div className="space-y-2 px-3 pb-2">
+                {[0, 1, 2].map((i) => (
+                  <Skeleton key={i} className="h-4" style={{ width: `${80 - i * 15}%` }} />
+                ))}
+              </div>
+            </div>
+          )}
+          {results.length > 0 && (
+            <div className="max-h-[320px] overflow-y-auto">
+              {results.map((r) => (
+                <button
+                  key={r.id}
+                  onClick={() => selectNote(r.id)}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-left hover:bg-accent transition-colors"
+                >
+                  {matchIcon(r.match_source)}
+                  <span className="truncate flex-1 font-medium">{r.title || "Untitled"}</span>
+                  {r.similarity != null && (
+                    <span className="text-[10px] text-muted-foreground shrink-0">
+                      {Math.round(r.similarity * 100)}%
+                    </span>
+                  )}
+                </button>
+              ))}
+              {isSearching && (
+                <p className="px-3 py-1.5 text-[10px] text-muted-foreground border-t">
+                  Refining results…
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}

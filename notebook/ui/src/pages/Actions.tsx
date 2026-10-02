@@ -1,0 +1,535 @@
+import { useState, useCallback, useRef } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import type { Database } from "@/integrations/supabase/types";
+import { useAuth } from "@/contexts/AuthContext";
+import { showToast } from "@/lib/toast";
+import { isPastDay, parseDateOnly } from "@/lib/local-date";
+import { dbErrorMessage } from "@/lib/function-error";
+import { SEOHead } from "@/components/SEOHead";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Plus,
+  Loader2,
+  AlertTriangle,
+  CheckCircle2,
+  Circle,
+  Clock,
+  ArrowUpCircle,
+  GripVertical,
+  FileText,
+  User,
+  Filter,
+  Users,
+} from "lucide-react";
+import { Link } from "react-router-dom";
+
+// Group-linked action_items store metadata as: { group_membership_id: "uuid", group_id: "uuid", contact_id: "uuid" }.
+type ActionItem = Omit<Database["public"]["Tables"]["action_items"]["Row"], "metadata"> & {
+  metadata?: Record<string, string> | null;
+};
+
+const STATUS_COLS = [
+  { key: "open", label: "Open", icon: Circle, color: "text-blue-500" },
+  { key: "in_progress", label: "In Progress", icon: Clock, color: "text-yellow-500" },
+  { key: "done", label: "Done", icon: CheckCircle2, color: "text-green-500" },
+] as const;
+
+const PRIORITIES = ["low", "normal", "high", "urgent"] as const;
+
+const priorityIcon: Record<string, { color: string; label: string }> = {
+  low: { color: "text-muted-foreground", label: "Low" },
+  normal: { color: "text-foreground", label: "Normal" },
+  high: { color: "text-warning", label: "High" },
+  urgent: { color: "text-destructive", label: "Urgent" },
+};
+
+function daysSince(dateStr: string): number {
+  return Math.floor((Date.now() - new Date(dateStr).getTime()) / (1000 * 60 * 60 * 24));
+}
+
+export default function Actions() {
+  const { user } = useAuth();
+  const qc = useQueryClient();
+  const [createOpen, setCreateOpen] = useState(false);
+  const [filterPriority, setFilterPriority] = useState("all");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showFilters, setShowFilters] = useState(false);
+  const [dragItem, setDragItem] = useState<string | null>(null);
+
+  // Form
+  const [form, setForm] = useState({ content: "", priority: "normal", due_date: "" });
+
+  const { data: itemsData, isLoading, isError: itemsFailed, error: itemsError, refetch: refetchItems } = useQuery<ActionItem[]>({
+    queryKey: ["action_items", user?.id],
+    enabled: !!user,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("action_items")
+        .select("*")
+        .eq("user_id", user!.id)
+        .neq("status", "dismissed")
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return ((data || []) as unknown) as ActionItem[];
+    },
+  });
+  const items = itemsData ?? [];
+
+  // Contacts for display
+  const { data: contacts = [] } = useQuery({
+    queryKey: ["contacts_map", user?.id],
+    enabled: !!user,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("contacts" as any)
+        .select("id, name")
+        .eq("user_id", user!.id);
+      return (data as any[]) || [];
+    },
+  });
+
+  // Notes for display
+  const { data: notes = [] } = useQuery({
+    queryKey: ["notes_map", user?.id],
+    enabled: !!user,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("notes")
+        .select("id, title")
+        .eq("user_id", user!.id)
+        .eq("is_trashed", false);
+      return data || [];
+    },
+  });
+
+
+  const { data: groupContexts = [] } = useQuery({
+    queryKey: ["action_group_contexts", user?.id, items.map((item) => item.metadata?.group_id).filter(Boolean).join(",")],
+    enabled: !!user && items.some((item) => item.metadata?.group_id),
+    queryFn: async () => {
+      const groupIds = Array.from(new Set(items.map((item) => item.metadata?.group_id).filter(Boolean))) as string[];
+      if (groupIds.length === 0) return [];
+      const { data, error } = await supabase
+        .from("contact_groups")
+        .select("id, name, slug, icon, contact_group_memberships!inner(id, status)")
+        .eq("user_id", user!.id)
+        .in("id", groupIds);
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  const groupContextById = useCallback(
+    (id?: string) => groupContexts.find((group: any) => group.id === id),
+    [groupContexts],
+  );
+
+  const contactName = useCallback(
+    (id: string | null) => {
+      if (!id) return null;
+      return (contacts.find((c: any) => c.id === id) as any)?.name || null;
+    },
+    [contacts]
+  );
+
+  const noteTitle = useCallback(
+    (id: string | null) => {
+      if (!id) return null;
+      return notes.find((n) => n.id === id)?.title || null;
+    },
+    [notes]
+  );
+
+  const updateStatus = useMutation({
+    mutationFn: async ({ id, status }: { id: string; status: string }) => {
+      const item = items.find((candidate) => candidate.id === id);
+      const update: any = { status };
+      if (status === "done") update.completed_at = new Date().toISOString();
+      else update.completed_at = null;
+      const { error } = await supabase.from("action_items").update(update).eq("id", id);
+      if (error) throw error;
+      if (status === "done" && item?.metadata?.group_id && item.status !== "done") {
+        const { data: group, error: groupError } = await supabase.from("contact_groups").select("id, success_criteria").eq("id", item.metadata.group_id).maybeSingle();
+        if (groupError) throw groupError;
+        const criteria = Array.isArray(group?.success_criteria) ? group.success_criteria as any[] : [];
+        const nextCriteria = criteria.map((criterion) => criterion?.kind === "action_item_count" ? { ...criterion, current: Number(criterion.current || 0) + 1 } : criterion);
+        if (nextCriteria.some((criterion, index) => criterion.current !== criteria[index]?.current)) {
+          const { error: updateGroupError } = await supabase.from("contact_groups").update({ success_criteria: nextCriteria }).eq("id", item.metadata.group_id);
+          if (updateGroupError) throw updateGroupError;
+        }
+      }
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["action_items"] });
+      qc.invalidateQueries({ queryKey: ["contact_groups"] });
+    },
+    onError: (e) => showToast.error(dbErrorMessage(e, "The action item could not be updated. Try again.")),
+  });
+
+  const createItem = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.from("action_items").insert({
+        user_id: user!.id,
+        content: form.content.trim(),
+        priority: form.priority,
+        due_date: form.due_date || null,
+        status: "open",
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["action_items"] });
+      setCreateOpen(false);
+      setForm({ content: "", priority: "normal", due_date: "" });
+      showToast.success("Action item created");
+    },
+    onError: (e) => showToast.error(dbErrorMessage(e, "The action item could not be created. Try again.")),
+  });
+
+  const dismissItem = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("action_items").update({ status: "dismissed" }).eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["action_items"] });
+      showToast.success("Dismissed");
+    },
+    onError: (e) => showToast.error(dbErrorMessage(e, "The action item could not be dismissed. Try again.")),
+  });
+
+  // One change per item at a time. A second "Done" while the first was still
+  // saving read the item as not done yet and counted it twice toward a
+  // group's action_item_count goal. The ref blocks the second click even
+  // before the re-render that disables the button.
+  const busyRef = useRef(new Set<string>());
+  const [busyIds, setBusyIds] = useState<Set<string>>(() => new Set());
+  const runExclusive = (id: string, work: Promise<unknown>) => {
+    busyRef.current.add(id);
+    setBusyIds(new Set(busyRef.current));
+    work
+      .catch(() => {
+        /* reported by the mutation's onError */
+      })
+      .finally(() => {
+        busyRef.current.delete(id);
+        setBusyIds(new Set(busyRef.current));
+      });
+  };
+  const changeStatus = (id: string, status: string) => {
+    if (busyRef.current.has(id)) return;
+    runExclusive(id, updateStatus.mutateAsync({ id, status }));
+  };
+  const dismiss = (id: string) => {
+    if (busyRef.current.has(id)) return;
+    runExclusive(id, dismissItem.mutateAsync(id));
+  };
+
+  // Filter items
+  const filtered = items.filter((i) => {
+    if (filterPriority !== "all" && i.priority !== filterPriority) return false;
+    if (searchQuery && !i.content.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+    return true;
+  });
+
+  const byStatus = (status: string) => filtered.filter((i) => i.status === status);
+
+  // Stale items: open > 14 days, no status change
+  const staleItems = items.filter(
+    (i) => i.status === "open" && daysSince(i.updated_at) > 14
+  );
+
+  // Drag handlers
+  const handleDragStart = (id: string) => setDragItem(id);
+  const handleDragEnd = () => setDragItem(null);
+  const handleDrop = (status: string) => {
+    if (dragItem) {
+      changeStatus(dragItem, status);
+      setDragItem(null);
+    }
+  };
+
+  return (
+    <div className="max-w-5xl">
+      <SEOHead title="Actions — Menerio" noIndex />
+
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-display font-bold">Actions</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            {items.filter((i) => i.status !== "done").length} open · {items.filter((i) => i.status === "done").length} done
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => setShowFilters(!showFilters)}>
+            <Filter className="h-4 w-4 mr-1" /> Filters
+          </Button>
+          <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+            <DialogTrigger asChild>
+              <Button size="sm" className="gap-1.5"><Plus className="h-4 w-4" /> Add Action</Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>New Action Item</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label>What needs to be done?</Label>
+                  <Input
+                    value={form.content}
+                    onChange={(e) => setForm((p) => ({ ...p, content: e.target.value }))}
+                    placeholder="Follow up with Sarah about the proposal"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-2">
+                    <Label>Priority</Label>
+                    <Select value={form.priority} onValueChange={(v) => setForm((p) => ({ ...p, priority: v }))}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {PRIORITIES.map((p) => (
+                          <SelectItem key={p} value={p} className="capitalize">{p}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Due Date <span className="text-muted-foreground">(optional)</span></Label>
+                    <Input
+                      type="date"
+                      value={form.due_date}
+                      onChange={(e) => setForm((p) => ({ ...p, due_date: e.target.value }))}
+                    />
+                  </div>
+                </div>
+              </div>
+              <DialogFooter>
+                <Button onClick={() => createItem.mutate()} disabled={!form.content.trim() || createItem.isPending}>
+                  {createItem.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Create
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </div>
+      </div>
+
+      {/* Filters */}
+      {showFilters && (
+        <div className="flex items-center gap-3 mb-4">
+          <div className="relative flex-1">
+            <Input aria-label="Search actions"
+              placeholder="Search actions..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+          </div>
+          <Select value={filterPriority} onValueChange={setFilterPriority}>
+            <SelectTrigger className="w-[130px]">
+              <SelectValue placeholder="Priority" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All priorities</SelectItem>
+              {PRIORITIES.map((p) => (
+                <SelectItem key={p} value={p} className="capitalize">{p}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
+      {/* Stale items warning */}
+      {staleItems.length > 0 && (
+        <Card className="mb-6 border-warning/30">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-warning" />
+              {staleItems.length} stale item{staleItems.length > 1 ? "s" : ""} — open for 14+ days
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {staleItems.slice(0, 5).map((item) => (
+                <div key={item.id} className="flex items-center justify-between text-sm">
+                  <span className="truncate flex-1">{item.content}</span>
+                  <div className="flex items-center gap-2 shrink-0 ml-2">
+                    <span className="text-xs text-destructive">{daysSince(item.created_at)}d old</span>
+                    <Button variant="ghost" size="sm" className="h-7 text-xs" disabled={busyIds.has(item.id)} onClick={() => changeStatus(item.id, "in_progress")}>
+                      Start
+                    </Button>
+                    <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground" disabled={busyIds.has(item.id)} onClick={() => dismiss(item.id)}>
+                      Dismiss
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Kanban Board */}
+      {isLoading ? (
+        <div className="flex items-center justify-center py-16">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        </div>
+      ) : itemsFailed && !itemsData ? (
+        <div role="alert" className="text-center py-16 text-muted-foreground space-y-4">
+          <p className="text-lg font-medium text-foreground">Your action items could not be loaded</p>
+          <p className="text-sm">{dbErrorMessage(itemsError, "Something went wrong on our side. Try again.")}</p>
+          <Button variant="outline" size="sm" onClick={() => void refetchItems()}>Try again</Button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {STATUS_COLS.map((col) => {
+            const colItems = byStatus(col.key);
+            return (
+              <div
+                key={col.key}
+                className="rounded-xl border bg-muted/30 p-3"
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={() => handleDrop(col.key)}
+              >
+                <div className="flex items-center gap-2 mb-3 px-1">
+                  <col.icon className={`h-4 w-4 ${col.color}`} />
+                  <span className="text-sm font-medium">{col.label}</span>
+                  <Badge variant="secondary" className="text-[10px] ml-auto">{colItems.length}</Badge>
+                </div>
+                <div className="space-y-2 min-h-[100px]">
+                  {colItems.map((item) => {
+                    const pInfo = priorityIcon[item.priority] || priorityIcon.normal;
+                    const cName = contactName(item.contact_id);
+                    const nTitle = noteTitle(item.source_note_id);
+                    const isOverdue = isPastDay(item.due_date) && item.status !== "done";
+
+                    return (
+                      <div
+                        key={item.id}
+                        draggable
+                        onDragStart={() => handleDragStart(item.id)}
+                        onDragEnd={handleDragEnd}
+                        className={`rounded-lg border bg-background p-3 cursor-grab active:cursor-grabbing transition-shadow hover:shadow-sm ${
+                          dragItem === item.id ? "opacity-50" : ""
+                        } ${isOverdue ? "border-destructive/40" : ""}`}
+                      >
+                        <div className="flex items-start gap-2">
+                          <GripVertical className="h-4 w-4 text-muted-foreground/40 shrink-0 mt-0.5" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm leading-snug">{item.content}</p>
+                            <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                              <Badge variant="outline" className={`text-[10px] ${pInfo.color}`}>
+                                {pInfo.label}
+                              </Badge>
+                              {item.due_date && (
+                                <Badge
+                                  variant="outline"
+                                  className={`text-[10px] ${isOverdue ? "text-destructive border-destructive/30" : ""}`}
+                                >
+                                  {parseDateOnly(item.due_date)?.toLocaleDateString()}
+                                </Badge>
+                              )}
+                              {cName && (
+                                <Badge variant="secondary" className="text-[10px] gap-0.5">
+                                  <User className="h-2.5 w-2.5" /> {cName}
+                                </Badge>
+                              )}
+                              {nTitle && (
+                                <Badge variant="secondary" className="text-[10px] gap-0.5 max-w-[120px] truncate">
+                                  <FileText className="h-2.5 w-2.5 shrink-0" /> {nTitle}
+                                </Badge>
+                              )}
+                              {item.metadata?.group_membership_id && item.metadata?.group_id && groupContextById(item.metadata.group_id) && (() => {
+                                const group = groupContextById(item.metadata!.group_id);
+                                const stage = (group as any)?.contact_group_memberships?.find((membership: any) => membership.id === item.metadata?.group_membership_id)?.status;
+                                return (
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Link
+                                        to={`/dashboard/groups/${group?.slug}`}
+                                        onClick={(event) => event.stopPropagation()}
+                                        className="inline-flex max-w-[140px] items-center gap-0.5 truncate rounded-full border border-transparent bg-secondary px-2.5 py-0.5 text-[10px] font-semibold text-secondary-foreground transition-colors hover:bg-secondary/80"
+                                      >
+                                        <Users className="h-2.5 w-2.5 shrink-0" /> {group?.icon || null}{group?.name}
+                                      </Link>
+                                    </TooltipTrigger>
+                                    <TooltipContent>{stage || "No stage"}</TooltipContent>
+                                  </Tooltip>
+                                );
+                              })()}
+                            </div>
+                          </div>
+                        </div>
+                        {/* Quick status buttons */}
+                        <div className="flex items-center gap-1 mt-2 ml-6">
+                          {col.key !== "done" && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 text-[10px] text-green-600 hover:text-green-700"
+                              disabled={busyIds.has(item.id)}
+                              onClick={() => changeStatus(item.id, "done")}
+                            >
+                              <CheckCircle2 className="h-3 w-3 mr-0.5" /> Done
+                            </Button>
+                          )}
+                          {col.key === "open" && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 text-[10px]"
+                              disabled={busyIds.has(item.id)}
+                              onClick={() => changeStatus(item.id, "in_progress")}
+                            >
+                              <ArrowUpCircle className="h-3 w-3 mr-0.5" /> Start
+                            </Button>
+                          )}
+                          {col.key === "done" && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 text-[10px]"
+                              disabled={busyIds.has(item.id)}
+                              onClick={() => changeStatus(item.id, "open")}
+                            >
+                              <Circle className="h-3 w-3 mr-0.5" /> Reopen
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {colItems.length === 0 && (
+                    <p className="text-xs text-muted-foreground text-center py-8">
+                      {col.key === "done" ? "Nothing completed yet" : "No items"}
+                    </p>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}

@@ -1,0 +1,176 @@
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
+import { User } from "lucide-react";
+
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
+import { SEOHead } from "@/components/SEOHead";
+import { useProfile } from "@/hooks/useProfile";
+import { useFacts } from "@/hooks/useFacts";
+import { ProfileSections } from "@/components/profile/ProfileSections";
+import { AgentInstructionsTab } from "@/components/profile/AgentInstructionsTab";
+import { ExportTab } from "@/components/profile/ExportTab";
+import { ProfileSuggestions } from "@/components/profile/ProfileSuggestions";
+import { ProfileCompleteness } from "@/components/profile/ProfileCompleteness";
+import { SelfRecognitionSection } from "@/components/profile/SelfRecognitionSection";
+import { PageLoader } from "@/components/LoadingStates";
+import { RelationshipsSection } from "@/components/people/RelationshipsSection";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
+
+const SELF = { type: "self" } as const;
+
+export default function Profile() {
+  const {
+    categories,
+    instructions,
+    views,
+    isLoading: sectionsLoading,
+    seedDefaults,
+    upsertCategory,
+    deleteCategory,
+    upsertInstruction,
+    deleteInstruction,
+    upsertView,
+    deleteView,
+  } = useProfile();
+  const { facts, currentFacts, isLoading: factsLoading, actions, addFact } = useFacts(SELF);
+  const isLoading = sectionsLoading || factsLoading;
+
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+
+
+  const [seeded, setSeeded] = useState(false);
+  // Status of useProfile's categories query, read from the cache without a
+  // second observer. useProfile turns a failed read into an empty list, and an
+  // empty list is what triggers seeding, so without the status a failed read
+  // inserted a second copy of every default section.
+  const subscribeToCache = useCallback((onChange: () => void) => queryClient.getQueryCache().subscribe(onChange), [queryClient]);
+  const categoriesStatus = useSyncExternalStore(
+    subscribeToCache,
+    () => queryClient.getQueryState(["profile-categories", user?.id])?.status,
+  );
+  const categoriesFailed = categoriesStatus === "error" && categories.length === 0;
+
+
+  // Get note count for nudge logic
+  const { data: noteCount = 0 } = useQuery({
+    queryKey: ["note-count", user?.id],
+    queryFn: async () => {
+      const { count } = await supabase
+        .from("notes")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", user!.id)
+        .eq("is_trashed", false);
+      return count || 0;
+    },
+    enabled: !!user?.id,
+  });
+
+  // Seed defaults on first visit: only when the read succeeded and was empty.
+  const categoriesLoadedEmpty = categoriesStatus === "success" && categories.length === 0;
+  useEffect(() => {
+    if (!isLoading && categoriesLoadedEmpty && !seeded) {
+      setSeeded(true);
+      seedDefaults.mutate();
+    }
+  }, [isLoading, categoriesLoadedEmpty, seeded]);
+
+  if (isLoading) return <PageLoader />;
+
+  if (categoriesFailed) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] text-center px-4">
+        <h1 className="text-2xl font-semibold mb-2">Your profile could not be loaded</h1>
+        <p className="text-muted-foreground max-w-md mb-6">
+          Nothing was changed. Check your connection and try again.
+        </p>
+        <Button onClick={() => queryClient.invalidateQueries({ queryKey: ["profile-categories"] })}>
+          Try again
+        </Button>
+      </div>
+    );
+  }
+
+  // Welcome state while seeding
+  if (categories.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] text-center px-4">
+        <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
+          <User className="h-8 w-8 text-primary" />
+        </div>
+        <h1 className="text-2xl font-semibold mb-2">Build your personal profile</h1>
+        <p className="text-muted-foreground max-w-md mb-6">
+          Help AI agents understand who you are. Fill in what matters to you. Everything is optional, and you can add your own categories anytime.
+        </p>
+        <Button onClick={() => seedDefaults.mutate()} disabled={seedDefaults.isPending}>
+          Get Started
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <SEOHead title="My Profile — Menerio" description="Manage the personal profile AI agents use to understand you: your bio, preferences, goals, and context that powers personalized responses." noIndex />
+      <div className="max-w-3xl mx-auto p-4 sm:p-6 space-y-6">
+        <div>
+          <h1 className="text-2xl font-semibold">My Profile</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Your personal context layer for AI agents. Fill in what matters. Everything is optional.
+          </p>
+        </div>
+
+
+        <Tabs defaultValue="profile">
+          <TabsList>
+            <TabsTrigger value="profile">Profile</TabsTrigger>
+            <TabsTrigger value="instructions">Agent Instructions</TabsTrigger>
+            <TabsTrigger value="export">Export & Share</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="profile" className="space-y-3 mt-4">
+            <RelationshipsSection contactId={null} contactName="My" />
+            <SelfRecognitionSection />
+            <ProfileCompleteness categories={categories} facts={facts} />
+            <ProfileSuggestions
+              categories={categories}
+              factCount={currentFacts.length}
+              noteCount={noteCount}
+              onAccept={(data) => addFact.mutateAsync(data)}
+            />
+            <ProfileSections
+              categories={categories}
+              facts={facts}
+              actions={actions}
+              showScope
+              onUpdateCategory={(data) => upsertCategory.mutate(data)}
+              onDeleteCategory={(id) => deleteCategory.mutate(id)}
+              onAddCategory={(data) => upsertCategory.mutate(data)}
+            />
+          </TabsContent>
+
+          <TabsContent value="instructions" className="mt-4">
+            <AgentInstructionsTab
+              instructions={instructions}
+              onSave={(data) => upsertInstruction.mutate(data)}
+              onDelete={(id) => deleteInstruction.mutate(id)}
+            />
+          </TabsContent>
+
+          <TabsContent value="export" className="mt-4">
+            <ExportTab
+              categories={categories}
+              facts={facts}
+              instructions={instructions}
+              views={views}
+              onSaveView={(data) => upsertView.mutate(data)}
+              onDeleteView={(id) => deleteView.mutate(id)}
+            />
+          </TabsContent>
+        </Tabs>
+      </div>
+    </>
+  );
+}

@@ -1,0 +1,254 @@
+# Capability inventory
+
+This checklist is generated from current source dependencies. Passing a homepage is not parity.
+Every required item remains an acceptance obligation until its evidence is recorded.
+
+## Notebook screens
+
+- [ ] Notes: reused screen, file service integration and real UI verification required.
+- [ ] People: reused screen, file service integration and real UI verification required.
+- [ ] Profile: reused screen, file service integration and real UI verification required.
+- [ ] World: reused screen, file service integration and real UI verification required.
+- [ ] Collections: reused screen, file service integration and real UI verification required.
+- [ ] CollectionDetail: reused screen, file service integration and real UI verification required.
+- [ ] CollectionSchema: reused screen, file service integration and real UI verification required.
+- [ ] CollectionTemplates: reused screen, file service integration and real UI verification required.
+- [ ] TimelinePage: reused screen, file service integration and real UI verification required.
+- [ ] MediaLibrary: reused screen, file service integration and real UI verification required.
+- [ ] ReviewQueue: reused screen, file service integration and real UI verification required.
+- [ ] Groups: reused screen, file service integration and real UI verification required.
+- [ ] GroupDetail: reused screen, file service integration and real UI verification required.
+- [ ] WeeklyReview: reused screen, file service integration and real UI verification required.
+- [ ] Actions: reused screen, file service integration and real UI verification required.
+- [ ] ActivityPage: reused screen, file service integration and real UI verification required.
+- [ ] Dashboard: reused screen, file service integration and real UI verification required.
+- [ ] Settings: reused screen, file service integration and real UI verification required.
+
+## Record domains
+
+- [ ] `action_items`: read/write, references, restart, export and rebuild.
+- [ ] `activity_events`: read/write, references, restart, export and rebuild.
+- [ ] `agent_instructions`: read/write, references, restart, export and rebuild.
+- [ ] `ai_suggestion_preferences`: read/write, references, restart, export and rebuild.
+- [ ] `ai_suggestion_suppressions`: read/write, references, restart, export and rebuild.
+- [ ] `claims`: read/write, references, restart, export and rebuild.
+- [ ] `collection_item_folders`: read/write, references, restart, export and rebuild.
+- [ ] `collection_items`: read/write, references, restart, export and rebuild.
+- [ ] `collection_templates`: read/write, references, restart, export and rebuild.
+- [ ] `collections`: read/write, references, restart, export and rebuild.
+- [ ] `connected_apps`: read/write, references, restart, export and rebuild.
+- [ ] `contact_group_memberships`: read/write, references, restart, export and rebuild.
+- [ ] `contact_groups`: read/write, references, restart, export and rebuild.
+- [ ] `contact_interactions`: read/write, references, restart, export and rebuild.
+- [ ] `contact_relationships`: read/write, references, restart, export and rebuild.
+- [ ] `contact_topic_events`: read/write, references, restart, export and rebuild.
+- [ ] `contact_topics`: read/write, references, restart, export and rebuild.
+- [ ] `contacts`: read/write, references, restart, export and rebuild.
+- [ ] `conversation_messages`: read/write, references, restart, export and rebuild.
+- [ ] `discord_connections`: read/write, references, restart, export and rebuild.
+- [ ] `dismissed_suggestions`: read/write, references, restart, export and rebuild.
+- [ ] `entities`: read/write, references, restart, export and rebuild.
+- [ ] `fact_slots`: read/write, references, restart, export and rebuild.
+- [ ] `gdrive_connections`: read/write, references, restart, export and rebuild.
+- [ ] `gdrive_imports`: read/write, references, restart, export and rebuild.
+- [ ] `github_connections`: read/write, references, restart, export and rebuild.
+- [ ] `github_sync_log`: read/write, references, restart, export and rebuild.
+- [ ] `godspeed_connections`: read/write, references, restart, export and rebuild.
+- [ ] `group_briefings`: read/write, references, restart, export and rebuild.
+- [ ] `mcp_api_tokens`: read/write, references, restart, export and rebuild.
+- [ ] `mcp_preferences`: read/write, references, restart, export and rebuild.
+- [ ] `media_analysis`: read/write, references, restart, export and rebuild.
+- [ ] `moment_entities`: read/write, references, restart, export and rebuild.
+- [ ] `moment_participants`: read/write, references, restart, export and rebuild.
+- [ ] `moment_provenance`: read/write, references, restart, export and rebuild.
+- [ ] `moments`: read/write, references, restart, export and rebuild.
+- [ ] `note-attachments`: read/write, references, restart, export and rebuild.
+- [ ] `note_ai_jobs`: read/write, references, restart, export and rebuild.
+- [ ] `note_attachments`: read/write, references, restart, export and rebuild.
+- [ ] `note_connections`: read/write, references, restart, export and rebuild.
+- [ ] `note_folders`: read/write, references, restart, export and rebuild.
+- [ ] `notes`: read/write, references, restart, export and rebuild.
+- [ ] `notification_preferences`: read/write, references, restart, export and rebuild.
+- [ ] `person_documents`: read/write, references, restart, export and rebuild.
+- [ ] `profile_categories`: read/write, references, restart, export and rebuild.
+- [ ] `profile_facts`: read/write, references, restart, export and rebuild.
+- [ ] `profile_views`: read/write, references, restart, export and rebuild.
+- [ ] `profiles`: read/write, references, restart, export and rebuild.
+- [ ] `relationship_evidence`: read/write, references, restart, export and rebuild.
+- [ ] `relationship_rejections`: read/write, references, restart, export and rebuild.
+- [ ] `review_queue`: read/write, references, restart, export and rebuild.
+- [ ] `review_queue_bulk_jobs`: read/write, references, restart, export and rebuild.
+- [ ] `shared_notes`: read/write, references, restart, export and rebuild.
+- [ ] `telegram_connections`: read/write, references, restart, export and rebuild.
+- [ ] `user_mcp_servers`: read/write, references, restart, export and rebuild.
+- [ ] `user_roles`: read/write, references, restart, export and rebuild.
+- [ ] `user_self_aliases`: read/write, references, restart, export and rebuild.
+- [ ] `v_ai_allowance_current`: read/write, references, restart, export and rebuild.
+- [ ] `weekly_reviews`: read/write, references, restart, export and rebuild.
+- [ ] `wiki_page_sources`: read/write, references, restart, export and rebuild.
+- [ ] `wiki_pages`: read/write, references, restart, export and rebuild.
+- [ ] `wiki_revisions`: read/write, references, restart, export and rebuild.
+- [ ] `world_claims`: read/write, references, restart, export and rebuild.
+- [ ] `world_entities`: read/write, references, restart, export and rebuild.
+- [ ] `world_events`: read/write, references, restart, export and rebuild.
+
+## Processing functions
+
+- [ ] `analyze-media`: port processing, provider refusal and saved results.
+- [ ] `backfill-metadata`: port processing, provider refusal and saved results.
+- [ ] `backfill-moment-profile-extraction`: port processing, provider refusal and saved results.
+- [ ] `backfill-profile-extraction`: port processing, provider refusal and saved results.
+- [ ] `backfill-wikilinks`: port processing, provider refusal and saved results.
+- [ ] `classify-profile-fact`: port processing, provider refusal and saved results.
+- [ ] `collection-chat`: port processing, provider refusal and saved results.
+- [ ] `compute-connections`: port processing, provider refusal and saved results.
+- [ ] `conversation-chat`: port processing, provider refusal and saved results.
+- [ ] `delete-my-account`: port processing, provider refusal and saved results.
+- [ ] `draft-event`: port processing, provider refusal and saved results.
+- [ ] `embed-document`: port processing, provider refusal and saved results.
+- [ ] `enrich-people`: port processing, provider refusal and saved results.
+- [ ] `enrich-person-from-lexicon`: port processing, provider refusal and saved results.
+- [ ] `ensure-token-allowance`: port processing, provider refusal and saved results.
+- [ ] `extract-moment-profile`: port processing, provider refusal and saved results.
+- [ ] `find-connections`: port processing, provider refusal and saved results.
+- [ ] `gdrive-proxy`: port processing, provider refusal and saved results.
+- [ ] `gdrive-sync`: port processing, provider refusal and saved results.
+- [ ] `generate-profile-suggestions`: port processing, provider refusal and saved results.
+- [ ] `get-graph-data`: port processing, provider refusal and saved results.
+- [ ] `github-import-vault`: port processing, provider refusal and saved results.
+- [ ] `github-people-sync`: port processing, provider refusal and saved results.
+- [ ] `github-proxy`: port processing, provider refusal and saved results.
+- [ ] `github-sync-export`: port processing, provider refusal and saved results.
+- [ ] `github-sync-pull`: port processing, provider refusal and saved results.
+- [ ] `mc-api-keys`: port processing, provider refusal and saved results.
+- [ ] `mc-api-keys/generate`: port processing, provider refusal and saved results.
+- [ ] `merge-contacts`: port processing, provider refusal and saved results.
+- [ ] `moderate-content`: port processing, provider refusal and saved results.
+- [ ] `normalize-profile`: port processing, provider refusal and saved results.
+- [ ] `note-chat`: port processing, provider refusal and saved results.
+- [ ] `process-note`: port processing, provider refusal and saved results.
+- [ ] `profile-lint`: port processing, provider refusal and saved results.
+- [ ] `quick-capture`: port processing, provider refusal and saved results.
+- [ ] `review-queue-bulk`: port processing, provider refusal and saved results.
+- [ ] `search-notes-semantic`: port processing, provider refusal and saved results.
+- [ ] `send-patch`: port processing, provider refusal and saved results.
+- [ ] `suggest-connections`: port processing, provider refusal and saved results.
+- [ ] `weekly-review`: port processing, provider refusal and saved results.
+- [ ] `wiki-ingest`: port processing, provider refusal and saved results.
+
+## Personal procedures
+
+- [ ] `sync`: classify included, connector, superseded or separately owned with rationale.
+- [ ] `sync-bot`: classify included, connector, superseded or separately owned with rationale.
+- [ ] `browser-post`: classify included, connector, superseded or separately owned with rationale.
+- [ ] `kanbero-import`: classify included, connector, superseded or separately owned with rationale.
+- [ ] `spend-guard`: classify included, connector, superseded or separately owned with rationale.
+- [ ] `do-you-copy`: classify included, connector, superseded or separately owned with rationale.
+- [ ] `menerio-keepalive`: classify included, connector, superseded or separately owned with rationale.
+- [ ] `disk-watchdog`: classify included, connector, superseded or separately owned with rationale.
+- [ ] `paperclip-backup-prune`: classify included, connector, superseded or separately owned with rationale.
+- [ ] `domain-watch`: classify included, connector, superseded or separately owned with rationale.
+- [ ] `claude-upgrade`: classify included, connector, superseded or separately owned with rationale.
+- [ ] `health-table`: classify included, connector, superseded or separately owned with rationale.
+- [ ] `portfolio`: classify included, connector, superseded or separately owned with rationale.
+- [ ] `transcript-sync`: classify included, connector, superseded or separately owned with rationale.
+- [ ] `fresh-posts`: classify included, connector, superseded or separately owned with rationale.
+- [ ] `next-action`: classify included, connector, superseded or separately owned with rationale.
+- [ ] `prompt-harvest`: classify included, connector, superseded or separately owned with rationale.
+- [ ] `snapshot-for-ownward`: classify included, connector, superseded or separately owned with rationale.
+- [ ] `connections`: classify included, connector, superseded or separately owned with rationale.
+- [ ] `due-check`: classify included, connector, superseded or separately owned with rationale.
+- [ ] `topic-watch`: classify included, connector, superseded or separately owned with rationale.
+- [ ] `brief-judges`: classify included, connector, superseded or separately owned with rationale.
+- [ ] `ownward-handover`: classify included, connector, superseded or separately owned with rationale.
+- [ ] `selftest`: classify included, connector, superseded or separately owned with rationale.
+- [ ] `exa-monitor-test`: classify included, connector, superseded or separately owned with rationale.
+- [ ] `brief-morning`: classify included, connector, superseded or separately owned with rationale.
+- [ ] `devops-bridge`: classify included, connector, superseded or separately owned with rationale.
+- [ ] `bot-probe`: classify included, connector, superseded or separately owned with rationale.
+- [ ] `hermes-backup-prune`: classify included, connector, superseded or separately owned with rationale.
+- [ ] `job-check`: classify included, connector, superseded or separately owned with rationale.
+- [ ] `work`: classify included, connector, superseded or separately owned with rationale.
+- [ ] `watch`: classify included, connector, superseded or separately owned with rationale.
+- [ ] `attention-pull`: classify included, connector, superseded or separately owned with rationale.
+- [ ] `lead`: classify included, connector, superseded or separately owned with rationale.
+- [ ] `memory-daily`: classify included, connector, superseded or separately owned with rationale.
+- [ ] `brief-rehearsal`: classify included, connector, superseded or separately owned with rationale.
+- [ ] `radar`: classify included, connector, superseded or separately owned with rationale.
+- [ ] `memory-review`: classify included, connector, superseded or separately owned with rationale.
+- [ ] `audit`: classify included, connector, superseded or separately owned with rationale.
+- [ ] `outside-ai-check`: classify included, connector, superseded or separately owned with rationale.
+
+## Recipes
+
+- [ ] `audit`: reusable instructions or explicit ownership classification.
+- [ ] `book-title-creator`: reusable instructions or explicit ownership classification.
+- [ ] `book-title-strategist`: reusable instructions or explicit ownership classification.
+- [ ] `browser-post`: reusable instructions or explicit ownership classification.
+- [ ] `coach`: reusable instructions or explicit ownership classification.
+- [ ] `connect-email`: reusable instructions or explicit ownership classification.
+- [ ] `daily-brief`: reusable instructions or explicit ownership classification.
+- [ ] `due`: reusable instructions or explicit ownership classification.
+- [ ] `embedded-captions`: reusable instructions or explicit ownership classification.
+- [ ] `excalidraw-diagram`: reusable instructions or explicit ownership classification.
+- [ ] `excalidraw-visuals`: reusable instructions or explicit ownership classification.
+- [ ] `faceless-explainer`: reusable instructions or explicit ownership classification.
+- [ ] `figma`: reusable instructions or explicit ownership classification.
+- [ ] `found-company`: reusable instructions or explicit ownership classification.
+- [ ] `general-video`: reusable instructions or explicit ownership classification.
+- [ ] `grill-me`: reusable instructions or explicit ownership classification.
+- [ ] `gsap-core`: reusable instructions or explicit ownership classification.
+- [ ] `gsap-timeline`: reusable instructions or explicit ownership classification.
+- [ ] `headache-tracker`: reusable instructions or explicit ownership classification.
+- [ ] `hyperframes`: reusable instructions or explicit ownership classification.
+- [ ] `hyperframes-animation`: reusable instructions or explicit ownership classification.
+- [ ] `hyperframes-audio`: reusable instructions or explicit ownership classification.
+- [ ] `hyperframes-cli`: reusable instructions or explicit ownership classification.
+- [ ] `hyperframes-core`: reusable instructions or explicit ownership classification.
+- [ ] `hyperframes-creative`: reusable instructions or explicit ownership classification.
+- [ ] `hyperframes-keyframes`: reusable instructions or explicit ownership classification.
+- [ ] `hyperframes-registry`: reusable instructions or explicit ownership classification.
+- [ ] `interstitial-journal`: reusable instructions or explicit ownership classification.
+- [ ] `keep-a-note`: reusable instructions or explicit ownership classification.
+- [ ] `lead`: reusable instructions or explicit ownership classification.
+- [ ] `mc-brief-operations`: reusable instructions or explicit ownership classification.
+- [ ] `mc-radar`: reusable instructions or explicit ownership classification.
+- [ ] `media-use`: reusable instructions or explicit ownership classification.
+- [ ] `memory-audit`: reusable instructions or explicit ownership classification.
+- [ ] `morning-note`: reusable instructions or explicit ownership classification.
+- [ ] `motion-graphics`: reusable instructions or explicit ownership classification.
+- [ ] `move-godspeed`: reusable instructions or explicit ownership classification.
+- [ ] `music-to-video`: reusable instructions or explicit ownership classification.
+- [ ] `nano-banana-images`: reusable instructions or explicit ownership classification.
+- [ ] `next-action`: reusable instructions or explicit ownership classification.
+- [ ] `pattern1-build`: reusable instructions or explicit ownership classification.
+- [ ] `phone-errands`: reusable instructions or explicit ownership classification.
+- [ ] `pr-to-video`: reusable instructions or explicit ownership classification.
+- [ ] `product-launch-video`: reusable instructions or explicit ownership classification.
+- [ ] `remotion-to-hyperframes`: reusable instructions or explicit ownership classification.
+- [ ] `sap-ai-agent-low-code`: reusable instructions or explicit ownership classification.
+- [ ] `sap-ai-agent-pro-code`: reusable instructions or explicit ownership classification.
+- [ ] `sap-build-ai-patterns`: reusable instructions or explicit ownership classification.
+- [ ] `scroll-craft`: reusable instructions or explicit ownership classification.
+- [ ] `slideshow`: reusable instructions or explicit ownership classification.
+- [ ] `social-visuals`: reusable instructions or explicit ownership classification.
+- [ ] `strip-ai-tells`: reusable instructions or explicit ownership classification.
+- [ ] `subscription-review`: reusable instructions or explicit ownership classification.
+- [ ] `talk-about`: reusable instructions or explicit ownership classification.
+- [ ] `talking-head-recut`: reusable instructions or explicit ownership classification.
+- [ ] `video-captions`: reusable instructions or explicit ownership classification.
+- [ ] `video-finishing`: reusable instructions or explicit ownership classification.
+- [ ] `video-hooks`: reusable instructions or explicit ownership classification.
+- [ ] `watch`: reusable instructions or explicit ownership classification.
+- [ ] `web-design`: reusable instructions or explicit ownership classification.
+- [ ] `work-item`: reusable instructions or explicit ownership classification.
+
+## Permitted deferrals
+
+- Lexicon
+- Note graph
+
+## Release isolation
+
+- No personal records, account identifiers, credentials or company output in the candidate.
+- Mac remains outside this Windows/VPS build request; existing stable installer is untouched.

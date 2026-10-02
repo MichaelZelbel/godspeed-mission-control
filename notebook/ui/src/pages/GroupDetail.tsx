@@ -1,0 +1,214 @@
+import { useEffect, useMemo, useState } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { DndContext, type DragEndEvent } from "@dnd-kit/core";
+import { ArrowLeft, Archive, ArchiveRestore, CalendarDays, Check, Clapperboard, Compass, ExternalLink, Handshake, Landmark, Loader2, Podcast, Sparkles, Trash2, UserSearch, Users, UsersRound } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
+import { SEOHead } from "@/components/SEOHead";
+import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { supabase } from "@/integrations/supabase/client";
+import type { Database } from "@/integrations/supabase/types";
+import { useArchiveGroup, useGroup, useRestoreGroup, useTrashGroup, useUpdateGroup } from "@/hooks/useGroups";
+import { useGroupMemberships, useMoveMembershipStage } from "@/hooks/useGroupMemberships";
+import { toast } from "sonner";
+import { showToast } from "@/lib/toast";
+import { parseArray, pretty, relativeDate } from "@/lib/group-utils";
+import { AddMemberDialog } from "@/components/groups/AddMemberDialog";
+import { BriefingTab } from "@/components/groups/BriefingTab";
+import { GoalsTab } from "@/components/groups/GoalsTab";
+import { MembershipSheet } from "@/components/groups/MembershipSheet";
+import { PipelineColumn, type GroupStage } from "@/components/groups/PipelineColumn";
+import { SuggestMembersButton } from "@/components/groups/SuggestMembersButton";
+import { StagesEditor } from "@/components/groups/StagesEditor";
+import { LoadErrorState } from "@/components/collections/LoadErrorState";
+import { dbErrorMessage } from "@/lib/function-error";
+
+const GROUP_TYPES = ["outreach", "relationship_care", "sales", "investors", "hiring", "research", "community", "learning", "creators", "other"];
+const SENSITIVITIES = ["normal", "sensitive", "private"];
+const iconMap = { Sparkles, Landmark, Clapperboard, Handshake, Podcast, UserSearch, Compass, UsersRound, Users };
+const ICON_OPTIONS = Object.entries(iconMap);
+
+type ContactGroup = Database["public"]["Tables"]["contact_groups"]["Row"];
+type NoteSummary = Pick<Database["public"]["Tables"]["notes"]["Row"], "id" | "title">;
+type AboutForm = Pick<ContactGroup, "name" | "description" | "purpose" | "type" | "sensitivity" | "icon" | "color"> & { stages: GroupStage[] };
+
+function GroupIcon({ icon }: { icon?: string | null }) {
+  const Icon = icon && icon in iconMap ? iconMap[icon as keyof typeof iconMap] : Users;
+  return <Icon className="h-5 w-5" />;
+}
+
+export default function GroupDetail() {
+  const { slug } = useParams<{ slug: string }>();
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const { data: group, isLoading, isError, refetch } = useGroup(slug);
+  const { data: memberships = [] } = useGroupMemberships(group?.id);
+  const updateGroup = useUpdateGroup();
+  const archiveGroup = useArchiveGroup();
+  const trashGroup = useTrashGroup();
+  const restoreGroup = useRestoreGroup();
+  const moveMembership = useMoveMembershipStage();
+  const [selectedMembershipId, setSelectedMembershipId] = useState<string | null>(null);
+  const [aboutForm, setAboutForm] = useState<AboutForm | null>(null);
+  const [activeTab, setActiveTab] = useState(() => window.matchMedia("(max-width: 767px)").matches ? "list" : "pipeline");
+  const selectedMembership = memberships.find((m) => m.id === selectedMembershipId) || null;
+  const stages = parseArray<GroupStage>(group?.stages ?? []);
+  // A stage-less group has no pipeline board; hide the tab and fall back to the
+  // flat list. Gate on the LOADED group: while the query is resolving, `group`
+  // is undefined and stages parse to [], so flipping then would strand pipeline
+  // groups on the List tab before their stages ever arrive.
+  const hasPipeline = stages.length > 0;
+  // The route reuses this component when moving from one group to another, so
+  // an unsaved About draft or an open member sheet must not carry over (the
+  // draft would otherwise be saved onto the next group).
+  const groupId = group?.id;
+  useEffect(() => {
+    setAboutForm(null);
+    setSelectedMembershipId(null);
+  }, [groupId]);
+  useEffect(() => {
+    if (group && !hasPipeline && activeTab === "pipeline") setActiveTab("list");
+  }, [group, hasPipeline, activeTab]);
+  const existingPersonIds = useMemo(() => new Set(memberships.map((m) => m.contact_id)), [memberships]);
+  const membershipCounts = useMemo(() => memberships.reduce<Record<string, number>>((acc, m) => { const k = m.status || ""; acc[k] = (acc[k] || 0) + 1; return acc; }, {}), [memberships]);
+  const sourceNoteIds = selectedMembership?.source_note_ids || [];
+  const { data: sourceNotes = [] } = useQuery<NoteSummary[]>({
+    queryKey: ["membership_source_notes", user?.id, selectedMembershipId, sourceNoteIds],
+    enabled: !!user && sourceNoteIds.length > 0,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("notes")
+        .select("id, title")
+        .eq("user_id", user!.id)
+        .eq("is_trashed", false)
+        .in("id", sourceNoteIds);
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  if (isLoading) return <div className="flex max-w-5xl justify-center py-16"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>;
+  // A failed load is not a missing group: say so and offer Retry.
+  if (isError) return <div className="max-w-5xl"><SEOHead title="Groups - Menerio" noIndex /><Button variant="ghost" size="sm" onClick={() => navigate("/dashboard/groups")}><ArrowLeft className="mr-1 h-4 w-4" />Back to Groups</Button><LoadErrorState className="mt-8" title="This group could not be loaded." onRetry={() => refetch()} /></div>;
+  if (!group) return <div className="max-w-5xl"><SEOHead title="Group not found — Menerio" noIndex /><Button variant="ghost" size="sm" onClick={() => navigate("/dashboard/groups")}><ArrowLeft className="mr-1 h-4 w-4" />Back to Groups</Button><p className="mt-8 text-sm text-muted-foreground">Group not found.</p></div>;
+
+  const form: AboutForm = aboutForm || { name: group.name, description: group.description, purpose: group.purpose, type: group.type, sensitivity: group.sensitivity, icon: group.icon, color: group.color, stages };
+  const byStage = (stageId: string) => memberships.filter((membership) => membership.status === stageId);
+  const onDragEnd = (event: DragEndEvent) => {
+    const membershipId = String(event.active.id);
+    const newStatus = event.over?.id ? String(event.over.id) : null;
+    if (newStatus && memberships.find((m) => m.id === membershipId)?.status !== newStatus) moveMembership.mutate({ membershipId, newStatus });
+  };
+  const saveAbout = async () => {
+    const newStageIds = new Set(form.stages.map((s) => s.id));
+    const fallback = form.stages[0]?.id;
+    const orphaned = memberships.filter((m) => m.status && !newStageIds.has(m.status));
+    if (orphaned.length > 0 && fallback) {
+      const { error } = await supabase.from("contact_group_memberships").update({ status: fallback }).in("id", orphaned.map((m) => m.id));
+      if (error) { showToast.error(dbErrorMessage(error, "Could not move the members of the removed stages.")); return; }
+      // The moved members have a new stage. Without this the cached lists
+      // kept the old one, and the Pipeline showed no column for them for up
+      // to five minutes.
+      queryClient.invalidateQueries({ queryKey: ["contact_group_memberships", group.id] });
+      queryClient.invalidateQueries({ queryKey: ["contact_group_memberships", "all"] });
+      new Set(orphaned.map((m) => m.contact_id)).forEach((personId) => queryClient.invalidateQueries({ queryKey: ["person_groups", personId] }));
+    }
+    const { stages: nextStages, ...rest } = form;
+    updateGroup.mutate({ id: group.id, ...rest, stages: nextStages as unknown as Database["public"]["Tables"]["contact_groups"]["Update"]["stages"] }, { onSuccess: () => { setAboutForm(null); showToast.success("Group updated"); } });
+  };
+
+  return (
+    <div className="max-w-5xl">
+      <SEOHead title={`${group.name} — Groups — Menerio`} noIndex />
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <Button variant="ghost" size="sm" onClick={() => navigate("/dashboard/groups")} className="mb-3"><ArrowLeft className="mr-1 h-4 w-4" />Back to Groups</Button>
+          <div className="flex items-center gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-md bg-primary/10 text-primary"><GroupIcon icon={group.icon} /></div><h1 className="truncate text-2xl font-display font-bold">{group.name}</h1></div>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <AddMemberDialog group={group} existingPersonIds={existingPersonIds} />
+          <Button variant="outline" size="sm" onClick={() => setActiveTab("about")}>Edit</Button>
+          {group.archived_at ? (
+            <Button variant="outline" size="sm" disabled={restoreGroup.isPending} onClick={() => restoreGroup.mutate(group.id, { onSuccess: () => showToast.success("Group unarchived") })}><ArchiveRestore className="mr-1 h-4 w-4" />Unarchive</Button>
+          ) : (
+            <Button aria-label="Archive group" title="Archive group" variant="outline" size="icon" disabled={archiveGroup.isPending} onClick={() => archiveGroup.mutate(group.id, {
+              // Failures are toasted by the archive/restore hooks themselves.
+              onSuccess: () => toast.success("Group archived", { action: { label: "Undo", onClick: () => restoreGroup.mutate(group.id) } }),
+            })}><Archive className="h-4 w-4" /></Button>
+          )}
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="ghost" size="icon" className="text-destructive" aria-label="Move group to trash"><Trash2 className="h-4 w-4" /></Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Move "{group.name}" to trash?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  The group will be hidden from your groups. To keep it out of the way but still reachable, archive it instead.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={() => trashGroup.mutate(group.id, { onSuccess: () => { showToast.success("Group moved to trash"); navigate("/dashboard/groups"); } })}
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                >
+                  Move to trash
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </div>
+      </div>
+      <div className="mb-6 flex flex-wrap items-center gap-2 text-sm text-muted-foreground"><Badge variant="secondary">{pretty(group.type)}</Badge><span>{memberships.length} member{memberships.length === 1 ? "" : "s"}</span><span className="flex items-center gap-1"><CalendarDays className="h-3.5 w-3.5" />Created on {new Date(group.created_at).toLocaleDateString()}</span></div>
+
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+        <TabsList className="flex h-auto flex-wrap">{hasPipeline && <TabsTrigger value="pipeline">Pipeline</TabsTrigger>}<TabsTrigger value="briefing">Briefing</TabsTrigger><TabsTrigger value="list">List</TabsTrigger><TabsTrigger value="goals">Goals</TabsTrigger><TabsTrigger value="about">About</TabsTrigger></TabsList>
+        {hasPipeline && (
+        <TabsContent value="pipeline" className="mt-0">
+          <div className="mb-4 flex justify-end"><SuggestMembersButton groupId={group.id} /></div>
+          <DndContext onDragEnd={onDragEnd}>
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+              {stages.map((stage) => <PipelineColumn key={stage.id} stage={stage} memberships={byStage(stage.id)} onOpen={(membership) => setSelectedMembershipId(membership.id)} />)}
+            </div>
+          </DndContext>
+        </TabsContent>
+        )}
+        <TabsContent value="briefing" className="mt-0">
+          <BriefingTab groupId={group.id} />
+        </TabsContent>
+        <TabsContent value="list" className="mt-0">
+          <Card><Table><TableHeader><TableRow><TableHead>Name</TableHead><TableHead>Status</TableHead><TableHead>Priority</TableHead><TableHead>Joined</TableHead><TableHead>Last Movement</TableHead><TableHead>Reason</TableHead></TableRow></TableHeader><TableBody>{memberships.map((membership) => <TableRow key={membership.id} className="cursor-pointer" onClick={() => setSelectedMembershipId(membership.id)}><TableCell className="font-medium">{/* A button, so the row is reachable with Tab and opens with Enter. */}<button type="button" className="rounded-sm text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={(event) => { event.stopPropagation(); setSelectedMembershipId(membership.id); }}>{membership.contacts?.name || "Unknown"}</button></TableCell><TableCell>{stages.find((s) => s.id === membership.status)?.label || membership.status}</TableCell><TableCell><Badge variant="secondary" className="capitalize">{membership.priority}</Badge></TableCell><TableCell>{new Date(membership.joined_at).toLocaleDateString()}</TableCell><TableCell>{relativeDate(membership.last_movement_at)}</TableCell><TableCell className="max-w-48 truncate">{membership.reason || "—"}</TableCell></TableRow>)}</TableBody></Table></Card>
+        </TabsContent>
+        <TabsContent value="goals" className="mt-0">
+          <GoalsTab group={group} />
+        </TabsContent>
+        <TabsContent value="about" className="mt-0">
+          <Card><CardHeader><div className="flex items-center justify-between gap-3"><CardTitle className="text-base">About</CardTitle><Button asChild variant="outline" size="sm"><Link to={`/lexicon/group-${group.slug}`}><ExternalLink className="mr-2 h-4 w-4" />Open in Lexicon</Link></Button></div></CardHeader><CardContent className="space-y-4"><div className="grid gap-4 sm:grid-cols-2"><div className="space-y-2"><Label>Name</Label><Input value={form.name} onChange={(e) => setAboutForm({ ...form, name: e.target.value })} /></div><div className="space-y-2"><Label>Type</Label><Select value={form.type} onValueChange={(value) => setAboutForm({ ...form, type: value })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{GROUP_TYPES.map((type) => <SelectItem key={type} value={type}>{pretty(type)}</SelectItem>)}</SelectContent></Select></div></div><div className="space-y-2"><Label>Description</Label><Textarea value={form.description || ""} onChange={(e) => setAboutForm({ ...form, description: e.target.value || null })} /></div><div className="space-y-2"><Label>Purpose</Label><Textarea value={form.purpose || ""} onChange={(e) => setAboutForm({ ...form, purpose: e.target.value || null })} /></div><div className="grid gap-4 sm:grid-cols-3"><div className="space-y-2"><Label>Sensitivity</Label><Select value={form.sensitivity} onValueChange={(value) => setAboutForm({ ...form, sensitivity: value })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{SENSITIVITIES.map((value) => <SelectItem key={value} value={value}>{pretty(value)}</SelectItem>)}</SelectContent></Select></div><div className="space-y-2"><Label>Icon</Label><Select value={form.icon && form.icon in iconMap ? form.icon : "Users"} onValueChange={(value) => setAboutForm({ ...form, icon: value })}><SelectTrigger>{(() => { const Icon = iconMap[(form.icon && form.icon in iconMap ? form.icon : "Users") as keyof typeof iconMap]; return <span className="flex items-center gap-2"><Icon className="h-4 w-4" />{form.icon && form.icon in iconMap ? form.icon : "Users"}</span>; })()}</SelectTrigger><SelectContent>{ICON_OPTIONS.map(([name, Icon]) => <SelectItem key={name} value={name}><span className="flex items-center gap-2"><Icon className="h-4 w-4" />{name}</span></SelectItem>)}</SelectContent></Select></div><div className="space-y-2"><Label>Color</Label><Input value={form.color || ""} onChange={(e) => setAboutForm({ ...form, color: e.target.value || null })} /></div></div><StagesEditor stages={form.stages} onChange={(next) => setAboutForm({ ...form, stages: next })} membershipCounts={membershipCounts} /><Button onClick={saveAbout} disabled={updateGroup.isPending}>{updateGroup.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Check className="mr-2 h-4 w-4" />}Save changes</Button></CardContent></Card>
+        </TabsContent>
+      </Tabs>
+      {/* Keyed by membership so its unsaved text starts from that member. */}
+      <MembershipSheet key={selectedMembershipId ?? "closed"} group={group} membership={selectedMembership} notes={sourceNotes} open={!!selectedMembershipId} onOpenChange={(open) => !open && setSelectedMembershipId(null)} />
+    </div>
+  );
+}

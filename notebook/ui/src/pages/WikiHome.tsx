@@ -1,0 +1,271 @@
+import { useMemo, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import { formatDistanceToNow } from "date-fns";
+import { BookOpen, FileText, Search, Wand2 } from "lucide-react";
+import { toast } from "sonner";
+import { SEOHead } from "@/components/SEOHead";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
+import { supabase } from "@/integrations/supabase/client";
+import type { Database } from "@/integrations/supabase/types";
+import { dbErrorMessage } from "@/lib/function-error";
+
+// Only what the index shows: every page's full content and each revision's
+// before and after text used to be downloaded here and never displayed.
+type WikiPage = Pick<
+  Database["public"]["Tables"]["wiki_pages"]["Row"],
+  "id" | "slug" | "title" | "summary" | "page_type" | "source_count" | "updated_at"
+>;
+type WikiRevision = Pick<
+  Database["public"]["Tables"]["wiki_revisions"]["Row"],
+  "id" | "page_title" | "page_slug" | "change_type" | "change_summary" | "created_at"
+>;
+
+const revisionBadgeVariant: Record<string, "success" | "info" | "secondary" | "destructive"> = {
+  created: "success",
+  updated: "info",
+  manual_edit: "secondary",
+  restructured: "info",
+  rolled_back: "destructive",
+};
+
+const labelize = (value: string) =>
+  value
+    .replace(/[_-]+/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+
+const relativeTime = (date: string) => `${formatDistanceToNow(new Date(date), { addSuffix: true })}`;
+
+function WikiHomeSkeleton() {
+  return (
+    <div className="grid gap-6 lg:grid-cols-3">
+      <Card className="lg:col-span-2">
+        <CardHeader>
+          <Skeleton className="h-5 w-36" />
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {Array.from({ length: 4 }).map((_, index) => (
+            <div key={index} className="space-y-2 rounded-md border border-border p-4">
+              <Skeleton className="h-4 w-48" />
+              <Skeleton className="h-3 w-full" />
+              <Skeleton className="h-3 w-28" />
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
+          <Skeleton className="h-5 w-32" />
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {Array.from({ length: 5 }).map((_, index) => (
+            <div key={index} className="space-y-2">
+              <Skeleton className="h-4 w-24" />
+              <Skeleton className="h-3 w-full" />
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+export default function WikiHome() {
+  const navigate = useNavigate();
+  const [search, setSearch] = useState("");
+  const [restructuring, setRestructuring] = useState(false);
+
+  const { data: pagesData, isLoading: pagesLoading, isError: pagesFailed, error: pagesError, refetch: refetchPages } = useQuery<WikiPage[]>({
+    queryKey: ["wiki-pages"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("wiki_pages")
+        .select("id, slug, title, summary, page_type, source_count, updated_at")
+        .order("page_type", { ascending: true })
+        .order("title", { ascending: true });
+      if (error) throw error;
+      return (data || []) as WikiPage[];
+    },
+  });
+
+  const { data: revisions = [], isLoading: revisionsLoading } = useQuery<WikiRevision[]>({
+    queryKey: ["wiki-revisions", "recent"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("wiki_revisions")
+        .select("id, page_title, page_slug, change_type, change_summary, created_at")
+        .order("created_at", { ascending: false })
+        .limit(20);
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  const pages = useMemo(() => pagesData ?? [], [pagesData]);
+
+  const groupedPages = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    const filtered = pages.filter((page) => {
+      if (!query) return true;
+      return page.title.toLowerCase().includes(query) || page.slug.toLowerCase().includes(query);
+    });
+
+    return filtered.reduce<Record<string, WikiPage[]>>((groups, page) => {
+      const key = page.page_type || "other";
+      groups[key] = [...(groups[key] || []), page].sort((a, b) => a.title.localeCompare(b.title));
+      return groups;
+    }, {});
+  }, [pages, search]);
+
+  const groupEntries = Object.entries(groupedPages).sort(([a], [b]) => a.localeCompare(b));
+  const isLoading = pagesLoading || revisionsLoading;
+  // A failed read is not an empty Lexicon.
+  const loadFailed = pagesFailed && !pagesData;
+  const hasNoPages = !pagesLoading && !loadFailed && pages.length === 0;
+
+  return (
+    <div className="space-y-6">
+      <SEOHead title="Lexicon — Menerio" noIndex />
+
+      <div className="flex flex-col gap-3 border-b border-border pb-5 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h1 className="text-3xl font-display font-bold">Lexicon</h1>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
+            Your AI-generated knowledge lexicon, built automatically from your notes.
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          className="shrink-0"
+          disabled={restructuring}
+          onClick={async () => {
+            setRestructuring(true);
+            try {
+              const { data, error } = await supabase.functions.invoke("wiki-restructure", { body: {} });
+              if (error) throw error;
+              const total = (data as { total?: number } | null)?.total ?? 0;
+              toast.success(
+                total === 0
+                  ? "All Lexicon pages are already well structured."
+                  : `Reformatting ${total} page${total === 1 ? "" : "s"} in the background. Refresh in a few minutes.`,
+              );
+            } catch {
+              toast.error("Could not start the readability pass.");
+            } finally {
+              setRestructuring(false);
+            }
+          }}
+        >
+          <Wand2 className="h-4 w-4" />
+          {restructuring ? "Starting…" : "Improve readability"}
+        </Button>
+      </div>
+
+
+      <div className="relative max-w-xl">
+        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <Input aria-label="Search Lexicon pages"
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          placeholder="Search pages by title or slug"
+          className="pl-9"
+        />
+      </div>
+
+      {isLoading ? (
+        <WikiHomeSkeleton />
+      ) : loadFailed ? (
+        <div role="alert" className="text-center py-16 text-muted-foreground space-y-4">
+          <p className="text-lg font-medium text-foreground">Your Lexicon could not be loaded</p>
+          <p className="text-sm">{dbErrorMessage(pagesError, "Something went wrong on our side. Try again.")}</p>
+          <Button variant="outline" size="sm" onClick={() => void refetchPages()}>Try again</Button>
+        </div>
+      ) : hasNoPages ? (
+        <Card className="border-dashed">
+          <CardContent className="flex flex-col items-center justify-center py-16 text-center">
+            <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-xl bg-primary/10">
+              <BookOpen className="h-7 w-7 text-primary" />
+            </div>
+            <CardTitle className="mb-2 text-lg">Your Lexicon is empty.</CardTitle>
+            <CardDescription className="max-w-md">
+              The Lexicon grows automatically as you write notes. Write or open a note, and it will start building itself in the background.
+            </CardDescription>
+            <Button className="mt-6" onClick={() => navigate("/dashboard/notes?action=create")}>
+              <FileText className="h-4 w-4" />
+              Create a note
+            </Button>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid gap-8 xl:grid-cols-[minmax(0,1fr)_280px]">
+          <div className="min-w-0 space-y-8">
+            {groupEntries.length === 0 ? (
+              <div className="border-y border-border py-12 text-center text-sm text-muted-foreground">
+                  No Lexicon pages match your search.
+              </div>
+            ) : (
+              groupEntries.map(([pageType, groupPages]) => (
+                <section key={pageType} className="border-t border-border pt-5 first:border-t-0 first:pt-0">
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <h2 className="text-base font-semibold">{labelize(pageType)}</h2>
+                    <Badge variant="secondary">{groupPages.length}</Badge>
+                  </div>
+                  <div className="divide-y divide-border">
+                    {groupPages.map((page) => (
+                      <Link
+                        key={page.id}
+                        to={`/lexicon/${page.slug}`}
+                        className="block py-4 transition-colors hover:bg-accent/40 sm:px-3"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <h3 className="truncate text-sm font-semibold text-foreground">{page.title}</h3>
+                            <p className="mt-1 line-clamp-2 text-sm leading-6 text-muted-foreground">
+                              {page.summary || "No summary yet."}
+                            </p>
+                          </div>
+                          <Badge variant="outline" className="shrink-0">{page.source_count} sources</Badge>
+                        </div>
+                        <p className="mt-3 text-xs text-muted-foreground">Updated {relativeTime(page.updated_at)}</p>
+                      </Link>
+                    ))}
+                  </div>
+                </section>
+              ))
+            )}
+          </div>
+
+          <aside className="h-fit xl:sticky xl:top-20">
+            <div className="border-l border-border pl-5">
+              <h2 className="text-base font-semibold">Recent activity</h2>
+              <div className="mt-4 space-y-4">
+              {revisions.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No Lexicon activity yet.</p>
+              ) : (
+                revisions.map((revision) => (
+                  <div key={revision.id} className="space-y-1.5 border-b border-border pb-4 last:border-0 last:pb-0">
+                    <Badge variant={revisionBadgeVariant[revision.change_type] || "secondary"}>
+                      {labelize(revision.change_type)}
+                    </Badge>
+                    <Link to={`/lexicon/${revision.page_slug}`} className="block text-sm font-medium text-foreground hover:underline">
+                      {revision.page_title}
+                    </Link>
+                    <p className="text-sm text-muted-foreground">
+                      {revision.change_summary || "No summary provided."}
+                    </p>
+                    <p className="text-xs text-muted-foreground">{relativeTime(revision.created_at)}</p>
+                  </div>
+                ))
+              )}
+              </div>
+            </div>
+          </aside>
+        </div>
+      )}
+    </div>
+  );
+}

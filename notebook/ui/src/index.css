@@ -1,0 +1,885 @@
+/* Fonts are served from this site (Fontsource), never from Google: a Google Fonts request
+   sends every visitor's IP address to Google before any consent. */
+@import '@fontsource-variable/bricolage-grotesque';
+@import '@fontsource-variable/plus-jakarta-sans';
+@import '@fontsource-variable/jetbrains-mono';
+@import '@fontsource-variable/dm-sans';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --font-body: 'Plus Jakarta Sans Variable', 'Plus Jakarta Sans', system-ui, sans-serif;
+    --font-display: 'DM Sans Variable', 'DM Sans', system-ui, sans-serif;
+    --font-hero: 'Bricolage Grotesque Variable', 'Bricolage Grotesque', 'Plus Jakarta Sans Variable', 'Plus Jakarta Sans', system-ui, sans-serif;
+    --font-mono: 'JetBrains Mono Variable', 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+    /* Primary — Deep Sapphire Blue */
+    --primary: 220 70% 45%;
+    --primary-foreground: 0 0% 100%;
+    --primary-hover: 220 70% 38%;
+
+    /* Secondary — Warm Amber */
+    --secondary: 38 92% 50%;
+    --secondary-foreground: 38 92% 12%;
+
+    /* Backgrounds & Surfaces */
+    --background: 216 43% 97%;
+    --background-soft: 216 43% 95%;
+    --surface: 0 0% 100%;
+    --surface-2: 213 56% 98%;
+    --foreground: 225 62% 12%;
+    --card: 0 0% 100%;
+    --card-foreground: 225 62% 12%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 225 62% 12%;
+
+    /* Muted */
+    --muted: 220 14% 94%;
+    --muted-foreground: 220 10% 46%;
+
+    /* Accent */
+    --accent: 220 14% 94%;
+    --accent-foreground: 220 25% 12%;
+
+    /* Semantic */
+    --success: 152 60% 40%;
+    --success-foreground: 0 0% 100%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 38 92% 12%;
+    --error: 0 72% 51%;
+    --error-foreground: 0 0% 100%;
+    --info: 205 78% 50%;
+    --info-foreground: 0 0% 100%;
+
+    /* Landing page accent tokens */
+    --text: 225 62% 12%;
+    --text-2: 217 25% 32%;
+    --text-muted: 216 19% 50%;
+    --text-faint: 215 20% 67%;
+    --brand: 221 83% 53%;
+    --brand-soft: 219 100% 95%;
+    --brand-gradient: linear-gradient(180deg, hsl(221 100% 66%) 0%, hsl(221 83% 53%) 48%, hsl(224 76% 45%) 100%);
+    --accent-pink: 340 75% 55%;
+    --accent-pink-soft: 339 100% 95%;
+    --accent-pink-text: 340 73% 42%;
+    --accent-pink-gradient: linear-gradient(135deg, hsl(339 100% 74%), hsl(340 75% 55%));
+    --pill-bg: 220 75% 50%;
+    --pill-fg: 0 0% 100%;
+    --border-strong: 217 65% 17%;
+    --landing-page: 216 43% 97%;
+    --landing-panel: 0 0% 100%;
+    --landing-sky-white: 219 100% 95%;
+    --landing-sky-light: 219 100% 95%;
+    --landing-sky-highlight: 220 75% 50%;
+    --landing-sky-soft: 219 100% 95%;
+    --landing-sky-mid: 220 75% 50%;
+    --landing-sky-primary: 220 75% 50%;
+    --landing-sky-deep: 222 76% 43%;
+    --landing-card-deep: 0 0% 100%;
+    --landing-lavender: 219 100% 95%;
+    --landing-violet-deep: 220 75% 50%;
+    --landing-button-top: 220 75% 50%;
+    --landing-button-bottom: 220 75% 50%;
+    --landing-success: 153 82% 35%;
+    --landing-pink: 340 75% 55%;
+    --landing-pink-deep: 340 75% 55%;
+    --landing-pink-text: 340 73% 42%;
+    --landing-text: 225 62% 12%;
+    --landing-body: 217 25% 32%;
+    --landing-muted: 216 19% 50%;
+    --landing-faint: 215 20% 67%;
+    --landing-plain-white: 0 0% 100%;
+    --landing-ink: 220 33% 8%;
+    --landing-shadow: 207 68% 7%;
+    --mascot-sky-white: 207 80% 95%;
+    --mascot-sky-light: 205 100% 83%;
+    --mascot-sky-highlight: 191 100% 74%;
+    --mascot-sky-soft: 207 80% 79%;
+    --mascot-sky-primary: 203 70% 55%;
+    --mascot-plain-white: 0 0% 100%;
+    --mascot-ink: 220 33% 8%;
+    --mascot-shadow: 207 68% 7%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    /* Borders & Inputs */
+    --border: 217 65% 17%;
+    --input: 217 65% 17%;
+    --ring: 220 75% 50%;
+
+    --radius: 0.625rem;
+
+    /* Shadows */
+    --shadow-sm: 0 1px 2px 0 hsl(220 25% 12% / 0.05);
+    --shadow-md: 0 4px 6px -1px hsl(220 25% 12% / 0.07), 0 2px 4px -2px hsl(220 25% 12% / 0.05);
+    --shadow-lg: 0 10px 15px -3px hsl(220 25% 12% / 0.08), 0 4px 6px -4px hsl(220 25% 12% / 0.04);
+    --shadow-xl: 0 20px 25px -5px hsl(220 25% 12% / 0.1), 0 8px 10px -6px hsl(220 25% 12% / 0.06);
+
+    /* Sidebar */
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 220 10% 30%;
+    --sidebar-primary: 220 70% 45%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 220 14% 94%;
+    --sidebar-accent-foreground: 220 25% 12%;
+    --sidebar-border: 220 13% 89%;
+    --sidebar-ring: 220 70% 45%;
+  }
+
+  .dark {
+    --primary: 217 75% 58%;
+    --primary-foreground: 220 25% 6%;
+    --primary-hover: 217 75% 65%;
+
+    --secondary: 38 80% 55%;
+    --secondary-foreground: 38 80% 10%;
+
+    --background: 222 30% 8%;
+    --foreground: 220 15% 90%;
+    --card: 222 25% 11%;
+    --card-foreground: 220 15% 90%;
+    --popover: 222 25% 11%;
+    --popover-foreground: 220 15% 90%;
+
+    --muted: 220 15% 16%;
+    --muted-foreground: 220 10% 55%;
+
+    --accent: 220 15% 16%;
+    --accent-foreground: 220 15% 90%;
+
+    --success: 152 55% 45%;
+    --success-foreground: 0 0% 100%;
+    --warning: 38 80% 55%;
+    --warning-foreground: 38 80% 10%;
+    --error: 0 65% 55%;
+    --error-foreground: 0 0% 100%;
+    --info: 205 70% 55%;
+    --info-foreground: 0 0% 100%;
+
+    --landing-page: 224 50% 5%;
+    --landing-panel: 222 45% 12%;
+    --landing-sky-white: 207 80% 95%;
+    --landing-sky-light: 205 100% 83%;
+    --landing-sky-highlight: 191 100% 74%;
+    --landing-sky-soft: 207 80% 79%;
+    --landing-sky-mid: 207 80% 68%;
+    --landing-sky-primary: 203 70% 55%;
+    --landing-sky-deep: 206 74% 39%;
+    --landing-card-deep: 224 32% 9%;
+    --landing-lavender: 252 100% 83%;
+    --landing-violet-deep: 255 86% 62%;
+    --landing-button-top: 204 76% 61%;
+    --landing-button-bottom: 203 71% 46%;
+    --landing-success: 142 68% 53%;
+    --landing-pink: 333 100% 81%;
+    --landing-pink-deep: 339 75% 55%;
+    --landing-pink-text: 337 100% 89%;
+    --landing-text: 216 43% 95%;
+    --landing-body: 217 26% 82%;
+    --landing-muted: 225 13% 66%;
+    --landing-faint: 224 11% 48%;
+    --landing-plain-white: 0 0% 100%;
+    --landing-ink: 220 33% 8%;
+    --landing-shadow: 207 68% 7%;
+    --mascot-sky-white: 207 80% 95%;
+    --mascot-sky-light: 205 100% 83%;
+    --mascot-sky-highlight: 191 100% 74%;
+    --mascot-sky-soft: 207 80% 79%;
+    --mascot-sky-primary: 203 70% 55%;
+    --mascot-plain-white: 0 0% 100%;
+    --mascot-ink: 220 33% 8%;
+    --mascot-shadow: 207 68% 7%;
+
+    --destructive: 0 65% 55%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 220 15% 18%;
+    --input: 220 15% 18%;
+    --ring: 217 75% 58%;
+
+    --sidebar-background: 222 25% 10%;
+    --sidebar-foreground: 220 10% 75%;
+    --sidebar-primary: 217 75% 58%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 220 15% 16%;
+    --sidebar-accent-foreground: 220 15% 90%;
+    --sidebar-border: 220 15% 18%;
+    --sidebar-ring: 217 75% 58%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    transition: color 0.2s ease, background-color 0.2s ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: var(--font-body);
+    overflow-x: hidden;
+  }
+
+  /* Touch-friendly: ensure buttons have adequate tap targets on touch devices */
+  @media (pointer: coarse) {
+    .touch-target {
+      min-height: 44px;
+    }
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-display);
+    @apply font-bold tracking-tight text-foreground;
+  }
+
+  h1 { @apply text-4xl leading-tight md:text-5xl; }
+  h2 { @apply text-3xl leading-tight md:text-4xl; }
+  h3 { @apply text-2xl leading-snug; }
+  h4 { @apply text-xl leading-snug; }
+  h5 { @apply text-lg leading-normal; }
+  h6 { @apply text-base leading-normal font-semibold; }
+}
+
+@layer utilities {
+  @keyframes meni-bob {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-8px); }
+  }
+
+  @keyframes meni-blink {
+    0%, 92%, 100% { transform: scaleY(1); }
+    95% { transform: scaleY(.1); }
+  }
+
+  @keyframes meni-sparkle {
+    0%, 100% { opacity: .45; transform: scale(.82); }
+    50% { opacity: 1; transform: scale(1.18); }
+  }
+
+  @keyframes landing-aurora {
+    0% { transform: translate3d(-3%, 2%, 0) scale(1); }
+    100% { transform: translate3d(5%, -4%, 0) scale(1.08); }
+  }
+
+  @keyframes landing-particle {
+    0% { transform: translateY(20vh); }
+    100% { transform: translateY(-120vh); }
+  }
+
+  @keyframes capture-caret {
+    0%, 45% { opacity: 1; }
+    46%, 100% { opacity: 0; }
+  }
+
+  @keyframes capture-pill-in {
+    0% { opacity: 0; transform: translateY(4px) scale(.9); }
+    100% { opacity: 1; transform: translateY(0) scale(1); }
+  }
+
+  .meni-body { animation: meni-bob 4s ease-in-out infinite; transform-origin: center; }
+  .meni-eyes { animation: meni-blink 5s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+  .meni-sparkle { animation: meni-sparkle 2.4s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+  .landing-aurora-drift { animation: landing-aurora 24s ease-in-out infinite alternate; }
+  .landing-particle { animation-name: landing-particle; animation-timing-function: linear; animation-iteration-count: infinite; }
+  .capture-caret { animation: capture-caret .9s steps(1) infinite; }
+  .capture-pill-enter { animation: capture-pill-in .4s cubic-bezier(.2,.8,.2,1) both; }
+
+  .landing-headline {
+    font-family: var(--font-hero) !important;
+    font-synthesis: none;
+    font-optical-sizing: auto;
+    font-style: normal;
+    font-weight: 800;
+    line-height: 0.96;
+    letter-spacing: 0;
+    margin-bottom: 18px;
+  }
+}
+
+.hero-gradient-text {
+  display: inline-block;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  background-image: var(--brand-gradient);
+  background-clip: text;
+  -webkit-background-clip: text;
+}
+
+.dark .hero-gradient-text {
+  background-image: linear-gradient(180deg, hsl(var(--landing-sky-white)) 0%, hsl(var(--landing-sky-primary)) 50%, hsl(var(--landing-sky-deep)) 100%);
+  filter: drop-shadow(0 0 50px hsl(var(--landing-sky-primary) / .5));
+}
+
+.dark .landing-feature-card {
+  background: linear-gradient(180deg, hsl(222 45% 12% / .74), hsl(224 32% 9% / .82));
+  border-color: hsl(var(--landing-sky-primary) / .16);
+  box-shadow: 0 18px 50px hsl(var(--landing-ink) / .22);
+}
+
+.dark .landing-feature-card:hover {
+  border-color: hsl(var(--landing-sky-primary) / .35);
+  box-shadow: 0 22px 70px hsl(var(--landing-ink) / .34), 0 0 34px hsl(var(--landing-sky-primary) / .12);
+}
+
+/* TipTap Editor Styles */
+.tiptap-editor .tiptap {
+  outline: none;
+  min-height: calc(100vh - 400px);
+  font-size: 0.875rem;
+  line-height: 1.7;
+  color: hsl(var(--foreground));
+}
+
+.tiptap-editor .tiptap p {
+  margin-bottom: 0.5em;
+}
+
+.tiptap-editor .tiptap h1 {
+  font-size: 1.75rem;
+  margin-top: 1.5em;
+  margin-bottom: 0.5em;
+}
+
+.tiptap-editor .tiptap h2 {
+  font-size: 1.35rem;
+  margin-top: 1.25em;
+  margin-bottom: 0.4em;
+}
+
+.tiptap-editor .tiptap h3 {
+  font-size: 1.1rem;
+  margin-top: 1em;
+  margin-bottom: 0.3em;
+}
+
+.tiptap-editor .tiptap ul,
+.tiptap-editor .tiptap ol {
+  padding-left: 1.5em;
+  margin-bottom: 0.5em;
+}
+
+.tiptap-editor .tiptap ul {
+  list-style: disc;
+}
+
+.tiptap-editor .tiptap ol {
+  list-style: decimal;
+}
+
+.tiptap-editor .tiptap ul[data-type="taskList"] {
+  list-style: none;
+  padding-left: 0;
+}
+
+.tiptap-editor .tiptap ul[data-type="taskList"] li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5em;
+}
+
+.tiptap-editor .tiptap ul[data-type="taskList"] li label {
+  margin-top: 0.15em;
+}
+
+.tiptap-editor .tiptap ul[data-type="taskList"] li label input[type="checkbox"] {
+  accent-color: hsl(var(--primary));
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
+}
+
+.tiptap-editor .tiptap blockquote {
+  border-left: 3px solid hsl(var(--primary) / 0.4);
+  padding-left: 1em;
+  margin-left: 0;
+  margin-bottom: 0.5em;
+  color: hsl(var(--muted-foreground));
+  font-style: italic;
+}
+
+.tiptap-editor .tiptap code {
+  background: hsl(var(--muted));
+  border-radius: 4px;
+  padding: 0.15em 0.35em;
+  font-size: 0.85em;
+  font-family: ui-monospace, monospace;
+}
+
+.tiptap-editor .tiptap pre {
+  background: hsl(var(--muted));
+  border-radius: 8px;
+  padding: 0.75em 1em;
+  margin-bottom: 0.5em;
+  overflow-x: auto;
+}
+
+.tiptap-editor .tiptap pre code {
+  background: none;
+  padding: 0;
+  border-radius: 0;
+  font-size: 0.8em;
+}
+
+.tiptap-editor .tiptap hr {
+  border: none;
+  border-top: 1px solid hsl(var(--border));
+  margin: 1.5em 0;
+}
+
+.tiptap-editor .tiptap a {
+  color: hsl(var(--primary));
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.tiptap-editor .tiptap .wiki-link {
+  color: hsl(var(--primary));
+  text-decoration-line: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.tiptap-editor .tiptap .wiki-link:hover {
+  text-decoration-thickness: 2px;
+}
+
+.tiptap-editor .tiptap .wiki-link.wiki-link-stub {
+  color: hsl(var(--muted-foreground));
+  cursor: help;
+  text-decoration-style: dashed;
+}
+
+.tiptap-editor .tiptap mark {
+  background-color: hsl(45, 93%, 75%);
+  border-radius: 2px;
+  padding: 0.1em 0.15em;
+}
+
+.tiptap-editor .tiptap img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+  margin: 0.5em 0;
+}
+
+/* Embedded media — video, PDF, audio */
+.tiptap-editor .tiptap .embed-video-wrapper {
+  position: relative;
+  width: 100%;
+  padding-bottom: 56.25%; /* 16:9 */
+  margin: 0.75em 0;
+  border-radius: 8px;
+  overflow: hidden;
+  background: hsl(var(--muted));
+}
+
+.tiptap-editor .tiptap .embed-video-wrapper iframe,
+.tiptap-editor .tiptap .embed-video-wrapper video {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  border: none;
+  border-radius: 8px;
+}
+
+.tiptap-editor .tiptap .embed-pdf-wrapper {
+  width: 100%;
+  margin: 0.75em 0;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid hsl(var(--border));
+}
+
+.tiptap-editor .tiptap .embed-pdf-wrapper iframe {
+  width: 100%;
+  height: 500px;
+  border: none;
+}
+
+.tiptap-editor .tiptap .embed-audio-wrapper {
+  width: 100%;
+  margin: 0.75em 0;
+}
+
+.tiptap-editor .tiptap .embed-audio-wrapper audio {
+  width: 100%;
+  border-radius: 8px;
+}
+
+.tiptap-editor .tiptap table {
+  border-collapse: collapse;
+  width: 100%;
+  margin-bottom: 1em;
+}
+
+.tiptap-editor .tiptap table td,
+.tiptap-editor .tiptap table th {
+  border: 1px solid hsl(var(--border));
+  padding: 0.4em 0.6em;
+  min-width: 80px;
+  vertical-align: top;
+}
+
+.tiptap-editor .tiptap table th {
+  background: hsl(var(--muted));
+  font-weight: 600;
+}
+
+.tiptap-editor .tiptap .is-empty::before {
+  content: attr(data-placeholder);
+  color: hsl(var(--muted-foreground) / 0.4);
+  pointer-events: none;
+  float: left;
+  height: 0;
+}
+
+.wiki-article-editor {
+  overflow: visible;
+}
+
+.wiki-article-editor > div {
+  padding: 0;
+}
+
+.wiki-article-editor .tiptap {
+  min-height: 0;
+  max-width: 72ch;
+  font-size: 0.98rem;
+  line-height: 1.85;
+  color: hsl(var(--foreground));
+}
+
+.wiki-article-editor .tiptap p {
+  margin: 0 0 1.15rem;
+  color: hsl(var(--foreground) / 0.88);
+}
+
+.wiki-article-editor .tiptap h1,
+.wiki-article-editor .tiptap h2,
+.wiki-article-editor .tiptap h3 {
+  scroll-margin-top: 6rem;
+  letter-spacing: 0;
+}
+
+.wiki-article-editor .tiptap h1 {
+  margin: 2.25rem 0 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid hsl(var(--border));
+  font-size: 1.75rem;
+}
+
+.wiki-article-editor .tiptap h2 {
+  margin: 2rem 0 0.85rem;
+  padding-bottom: 0.35rem;
+  border-bottom: 1px solid hsl(var(--border) / 0.7);
+  font-size: 1.35rem;
+}
+
+.wiki-article-editor .tiptap h3 {
+  margin: 1.6rem 0 0.65rem;
+  font-size: 1.08rem;
+}
+
+.wiki-article-editor .tiptap a,
+.wiki-article-editor .tiptap .wiki-link {
+  color: hsl(var(--primary));
+  text-decoration-line: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+.wiki-article-editor .tiptap a:hover,
+.wiki-article-editor .tiptap .wiki-link:hover {
+  text-decoration-thickness: 2px;
+}
+
+.wiki-article-editor .tiptap ul,
+.wiki-article-editor .tiptap ol {
+  margin: 0 0 1.2rem;
+  padding-left: 1.35rem;
+}
+
+.wiki-article-editor .tiptap li {
+  margin: 0.35rem 0;
+  color: hsl(var(--foreground) / 0.88);
+}
+
+.wiki-article-editor .tiptap blockquote {
+  margin: 1.5rem 0;
+  border-left: 3px solid hsl(var(--primary));
+  background: hsl(var(--accent) / 0.45);
+  padding: 0.85rem 1rem;
+  color: hsl(var(--foreground) / 0.82);
+  font-style: normal;
+}
+
+.wiki-article-editor .tiptap table {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  margin: 1.5rem 0;
+  border: 1px solid hsl(var(--border));
+  border-radius: 8px;
+}
+
+.wiki-article-editor .tiptap table th {
+  background: hsl(var(--muted));
+  color: hsl(var(--foreground));
+}
+
+.wiki-article-editor .tiptap table td,
+.wiki-article-editor .tiptap table th {
+  padding: 0.7rem 0.85rem;
+  border-color: hsl(var(--border));
+}
+
+.wiki-article-editor .tiptap img {
+  margin: 1.5rem 0;
+  border: 1px solid hsl(var(--border));
+  border-radius: 8px;
+}
+
+.dark .tiptap-editor .tiptap mark {
+  background-color: hsl(45, 80%, 35%);
+  color: hsl(var(--foreground));
+}
+
+/* Wikilink node */
+.wikilink-node {
+  color: hsl(var(--primary));
+  background: hsl(var(--primary) / 0.08);
+  border-radius: 3px;
+  padding: 1px 3px;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background 150ms;
+  font-size: 0.95em;
+  user-select: none;
+}
+
+.wikilink-node:hover {
+  background: hsl(var(--primary) / 0.18);
+  text-decoration: underline;
+}
+
+.wikilink-broken {
+  color: hsl(var(--destructive));
+  background: hsl(var(--destructive) / 0.08);
+  border: 1px dashed hsl(var(--destructive) / 0.5);
+  border-radius: 3px;
+  padding: 0 3px;
+  font-size: 0.95em;
+  cursor: help;
+}
+
+/* Legacy wikilink decoration (for backwards compat) */
+.wikilink-decoration {
+  color: hsl(var(--primary));
+  background: hsl(var(--primary) / 0.08);
+  border-radius: 2px;
+  padding: 0 2px;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background 150ms;
+}
+
+.wikilink-decoration:hover {
+  background: hsl(var(--primary) / 0.18);
+  text-decoration: underline;
+}
+
+@keyframes gradient-shift {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+/* ============================================================
+   Cherishly brand skin (.brand-cherishly on <html>)
+   Activated by VITE_BRAND=cherishly builds — see docs/BRANDING.md.
+   Menerio builds never add this class, so nothing below applies there.
+   Palette: rose-pink primary, purple secondary, peach accents,
+   warm cream background, extra-round corners, soft/glow shadows.
+   ============================================================ */
+
+.brand-cherishly {
+  /* The original Cherishly app used the browser's default sans stack,
+     not Menerio's Google fonts — keep that for pixel fidelity. */
+  --font-body: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+  --font-display: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+  --font-hero: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+
+  /* Core tokens */
+  --primary: 340 75% 55%;
+  --primary-foreground: 0 0% 100%;
+  --primary-hover: 340 75% 48%;
+  --secondary: 280 60% 65%;
+  --secondary-foreground: 0 0% 100%;
+  --background: 20 40% 98%;
+  --background-soft: 340 25% 96%;
+  --surface: 0 0% 100%;
+  --surface-2: 20 40% 96%;
+  --foreground: 340 15% 25%;
+  --card: 0 0% 100%;
+  --card-foreground: 340 15% 25%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 340 15% 25%;
+  --muted: 20 30% 93%;
+  --muted-foreground: 340 10% 45%;
+  --accent: 25 85% 92%;
+  --accent-foreground: 340 15% 25%;
+  --border: 340 30% 88%;
+  --input: 340 30% 88%;
+  --ring: 340 75% 55%;
+  --radius: 1rem;
+
+  /* Landing/chrome tokens (Header, Footer, marketing surfaces) */
+  --text: 340 15% 25%;
+  --text-2: 340 12% 35%;
+  --text-muted: 340 10% 45%;
+  --text-faint: 340 12% 65%;
+  --brand: 340 75% 55%;
+  --brand-soft: 340 100% 95%;
+  --brand-gradient: linear-gradient(135deg, hsl(340 75% 55%), hsl(280 60% 65%));
+  --pill-bg: 340 75% 55%;
+  --landing-page: 20 40% 98%;
+  --landing-panel: 0 0% 100%;
+  --landing-sky-white: 340 100% 97%;
+  --landing-sky-light: 340 100% 92%;
+  --landing-sky-highlight: 340 75% 50%;
+  --landing-sky-soft: 340 80% 90%;
+  --landing-sky-mid: 340 75% 60%;
+  --landing-sky-primary: 340 75% 55%;
+  --landing-sky-deep: 340 75% 42%;
+  --landing-card-deep: 0 0% 100%;
+  --landing-lavender: 280 60% 92%;
+  --landing-violet-deep: 280 60% 55%;
+  --landing-button-top: 340 75% 60%;
+  --landing-button-bottom: 340 75% 50%;
+  --landing-text: 340 15% 25%;
+  --landing-body: 340 12% 35%;
+  --landing-muted: 340 10% 45%;
+  --landing-faint: 340 12% 65%;
+
+  /* Cherishly signature effects */
+  --gradient-primary: linear-gradient(135deg, hsl(340 75% 55%), hsl(280 60% 65%));
+  --gradient-soft: linear-gradient(180deg, hsl(20 40% 98%), hsl(340 20% 95%));
+  --shadow-soft: 0 4px 20px -2px hsl(340 30% 80% / 0.15);
+  --shadow-glow: 0 0 30px hsl(340 75% 55% / 0.2);
+
+  /* Sidebar */
+  --sidebar-background: 20 40% 97%;
+  --sidebar-foreground: 340 12% 35%;
+  --sidebar-primary: 340 75% 55%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 340 30% 93%;
+  --sidebar-accent-foreground: 340 15% 25%;
+  --sidebar-border: 340 25% 90%;
+  --sidebar-ring: 340 75% 55%;
+}
+
+.brand-cherishly.dark {
+  --primary: 340 75% 60%;
+  --primary-foreground: 0 0% 100%;
+  --primary-hover: 340 75% 67%;
+  --secondary: 280 60% 65%;
+  --secondary-foreground: 0 0% 100%;
+  --background: 340 20% 10%;
+  --background-soft: 340 20% 12%;
+  --surface: 340 20% 12%;
+  --surface-2: 340 20% 14%;
+  --foreground: 20 40% 95%;
+  --card: 340 20% 12%;
+  --card-foreground: 20 40% 95%;
+  --popover: 340 20% 12%;
+  --popover-foreground: 20 40% 95%;
+  --muted: 340 20% 18%;
+  --muted-foreground: 20 20% 65%;
+  --accent: 340 20% 18%;
+  --accent-foreground: 20 40% 95%;
+  --border: 340 20% 20%;
+  --input: 340 20% 20%;
+  --ring: 340 75% 55%;
+
+  --brand: 340 75% 60%;
+  --brand-soft: 340 40% 20%;
+  --brand-gradient: linear-gradient(135deg, hsl(340 75% 45%), hsl(280 60% 55%));
+  --landing-page: 340 22% 7%;
+  --landing-panel: 340 20% 12%;
+  --landing-sky-white: 340 60% 95%;
+  --landing-sky-light: 340 80% 85%;
+  --landing-sky-highlight: 340 90% 78%;
+  --landing-sky-soft: 340 50% 75%;
+  --landing-sky-mid: 340 70% 68%;
+  --landing-sky-primary: 340 75% 60%;
+  --landing-sky-deep: 340 70% 45%;
+  --landing-card-deep: 340 22% 9%;
+  --landing-lavender: 280 70% 83%;
+  --landing-violet-deep: 280 75% 62%;
+  --landing-button-top: 340 75% 62%;
+  --landing-button-bottom: 340 72% 48%;
+  --landing-pink: 333 100% 81%;
+  --landing-pink-deep: 339 75% 55%;
+  --landing-pink-text: 337 100% 89%;
+  --landing-text: 20 40% 95%;
+  --landing-body: 20 25% 82%;
+  --landing-muted: 340 10% 66%;
+  --landing-faint: 340 10% 48%;
+
+  --gradient-primary: linear-gradient(135deg, hsl(340 75% 45%), hsl(280 60% 55%));
+  --gradient-soft: linear-gradient(180deg, hsl(340 20% 10%), hsl(340 20% 15%));
+  --shadow-soft: 0 4px 20px -2px hsl(340 30% 10% / 0.4);
+  --shadow-glow: 0 0 30px hsl(340 75% 45% / 0.3);
+
+  --sidebar-background: 340 20% 9%;
+  --sidebar-foreground: 20 25% 75%;
+  --sidebar-primary: 340 75% 60%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 340 20% 16%;
+  --sidebar-accent-foreground: 20 40% 95%;
+  --sidebar-border: 340 20% 18%;
+  --sidebar-ring: 340 75% 60%;
+}
+
+/* Cherishly landing animations */
+@keyframes float-heart {
+  0% {
+    transform: translateY(0) rotate(0deg);
+    opacity: 0.3;
+  }
+  100% {
+    transform: translateY(-100vh) rotate(180deg);
+    opacity: 0.3;
+  }
+}
+
+@keyframes pulse-soft {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.8; }
+}
+
+/* Utility classes the original Cherishly homepage uses verbatim
+   (they were Tailwind config entries in the old repo). */
+.bg-gradient-primary {
+  background-image: var(--gradient-primary);
+}
+.bg-gradient-radial {
+  background-image: radial-gradient(circle, var(--tw-gradient-stops));
+}
+.shadow-glow {
+  box-shadow: var(--shadow-glow);
+}
+.animate-float-heart {
+  animation: float-heart 25s ease-in-out infinite;
+}

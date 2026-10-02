@@ -1,0 +1,2474 @@
+{
+  "version": 1,
+  "menerio_commit": "c0ba77e1d6b56e2f9c082259d479496a4ca96e0e",
+  "pages": [
+    "Notes",
+    "People",
+    "Profile",
+    "World",
+    "Collections",
+    "CollectionDetail",
+    "CollectionSchema",
+    "CollectionTemplates",
+    "TimelinePage",
+    "MediaLibrary",
+    "ReviewQueue",
+    "Groups",
+    "GroupDetail",
+    "WeeklyReview",
+    "Actions",
+    "ActivityPage",
+    "Dashboard",
+    "Settings"
+  ],
+  "dependencies": [
+    {
+      "source": "src/brands/cherishly.ts",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/brands/index.ts",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/brands/menerio.ts",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/brands/types.ts",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/activity/ActivityFeed.tsx",
+      "tables": [
+        "activity_events"
+      ],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/collections/AICollectionDialog.tsx",
+      "tables": [
+        "collections"
+      ],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/collections/CollectionChatPanel.tsx",
+      "tables": [],
+      "functions": [
+        "collection-chat"
+      ],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/collections/collectionItemData.ts",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/collections/CollectionItemsTree.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/collections/collectionItemsTreeBuild.ts",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/collections/LoadErrorState.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/collections/schemaFields.ts",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/common/AiFootprintDialog.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/common/AiVisibilityButton.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/common/ConfirmDialog.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/dashboard/DiscoveryFeed.tsx",
+      "tables": [
+        "dismissed_suggestions",
+        "note_connections"
+      ],
+      "functions": [
+        "suggest-connections"
+      ],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/dashboard/TodaysConnections.tsx",
+      "tables": [],
+      "functions": [
+        "find-connections"
+      ],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/dashboard/widgets/GettingStartedChecklist.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/dashboard/widgets/GroupPulseCard.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/dashboard/widgets/NotesStatsRow.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/dashboard/widgets/ProfileWidget.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/dashboard/widgets/RecentNotesCard.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/dashboard/widgets/RecentPeopleCard.tsx",
+      "tables": [
+        "contacts"
+      ],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/editor/WikiLinkMark.ts",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/facts/FactsPanel.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/graph/GraphAnalytics.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/graph/OrphanNotesDetector.tsx",
+      "tables": [],
+      "functions": [
+        "compute-connections"
+      ],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/groups/AddMemberDialog.tsx",
+      "tables": [
+        "contacts"
+      ],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/groups/BriefingTab.tsx",
+      "tables": [
+        "group_briefings"
+      ],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/groups/GoalsTab.tsx",
+      "tables": [
+        "contact_interactions"
+      ],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/groups/InitialMigrationCard.tsx",
+      "tables": [
+        "contacts"
+      ],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/groups/MembershipSheet.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/groups/NextStepsSection.tsx",
+      "tables": [
+        "action_items"
+      ],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/groups/PipelineColumn.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/groups/StagesEditor.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/groups/SuggestMembersButton.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/LoadingStates.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/media/MediaDetailDialog.tsx",
+      "tables": [
+        "note-attachments"
+      ],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/media/PdfThumbnail.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/moderation/ModerationBlockDialog.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/notes/BacklinksPanel.tsx",
+      "tables": [
+        "note_connections",
+        "notes"
+      ],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/notes/BulkActionBar.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/notes/CaptureEmptyState.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/notes/ConnectionsPanel.tsx",
+      "tables": [],
+      "functions": [
+        "find-connections"
+      ],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/notes/EditorBubbleMenu.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/notes/EditorToolbar.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/notes/EditorToolbarGroups.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/notes/EmbedToolbar.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/notes/extensions/AudioEmbed.ts",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/notes/extensions/FileUploadHandler.ts",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/notes/extensions/PdfEmbed.ts",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/notes/extensions/TaskListShortcut.ts",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/notes/extensions/VideoEmbed.ts",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/notes/extensions/WikilinkExtension.ts",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/notes/ExternalNotePanel.tsx",
+      "tables": [],
+      "functions": [
+        "send-patch"
+      ],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/notes/ForwardToAppDialog.tsx",
+      "tables": [
+        "connected_apps"
+      ],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/notes/LinkToNoteDialog.tsx",
+      "tables": [
+        "note_connections",
+        "notes"
+      ],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/notes/LocalGraphPanel.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/notes/MediaAnalysisOverlay.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/notes/MediaAnalysisPanel.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/notes/NoteAttachmentsPanel.tsx",
+      "tables": [
+        "note-attachments"
+      ],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/notes/NoteChatPanel.tsx",
+      "tables": [
+        "notes"
+      ],
+      "functions": [
+        "note-chat"
+      ],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/notes/NoteEditor.tsx",
+      "tables": [
+        "contact_group_memberships",
+        "contact_interactions",
+        "contacts",
+        "note_connections",
+        "notes"
+      ],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/notes/NoteList.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/notes/NoteMetadataEditor.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/notes/NoteTree.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/notes/OutgoingLinksPanel.tsx",
+      "tables": [
+        "note_connections",
+        "notes"
+      ],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/notes/SuggestedLinksPanel.tsx",
+      "tables": [
+        "dismissed_suggestions"
+      ],
+      "functions": [
+        "suggest-connections"
+      ],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/notes/toolbarLayout.ts",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/notes/useBulkSelect.ts",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/notes/VersionHistoryPanel.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/notes/VersionPreviewDialog.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/notes/WebClipPreview.tsx",
+      "tables": [
+        "note-attachments"
+      ],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/notes/WikilinkAutocomplete.tsx",
+      "tables": [
+        "notes"
+      ],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/onboarding/FirstCapturesWizard.tsx",
+      "tables": [
+        "notes"
+      ],
+      "functions": [
+        "quick-capture"
+      ],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/people/ContactProfileTab.tsx",
+      "tables": [
+        "review_queue"
+      ],
+      "functions": [
+        "backfill-moment-profile-extraction",
+        "backfill-profile-extraction",
+        "enrich-person-from-lexicon"
+      ],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/people/ContactTopicHistory.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/people/ContactTopicRow.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/people/ContactTopicsPanel.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/people/conversation/Chat.tsx",
+      "tables": [
+        "conversation_messages"
+      ],
+      "functions": [
+        "conversation-chat"
+      ],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/people/conversation/ChatInput.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/people/conversation/ChatMessages.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/people/ConversationTab.tsx",
+      "tables": [
+        "contacts"
+      ],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/people/DuplicateHints.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/people/LifeEventsStrip.tsx",
+      "tables": [
+        "moment_participants",
+        "moments"
+      ],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/people/MergePersonDialog.tsx",
+      "tables": [
+        "contact_topics"
+      ],
+      "functions": [
+        "merge-contacts"
+      ],
+      "rpcs": [
+        "reassign_contact_topics"
+      ]
+    },
+    {
+      "source": "src/components/people/PeopleBulkBar.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/people/PeopleTree.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/people/peopleTreeBuild.ts",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/people/PersonDetail.tsx",
+      "tables": [
+        "notes"
+      ],
+      "functions": [],
+      "rpcs": [
+        "notes_mentioning_people"
+      ]
+    },
+    {
+      "source": "src/components/people/PersonDocuments.tsx",
+      "tables": [
+        "person_documents"
+      ],
+      "functions": [
+        "embed-document"
+      ],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/people/PersonGroupsTab.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/people/PersonTimeline.tsx",
+      "tables": [
+        "moment_participants",
+        "moments"
+      ],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/people/profile/CompactCategorySection.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/people/profile/PinnedHighlights.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/people/profile/ProfileFieldFilter.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/people/profile/QuickAddFact.tsx",
+      "tables": [],
+      "functions": [
+        "classify-profile-fact"
+      ],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/people/ProfileHealthChip.tsx",
+      "tables": [],
+      "functions": [
+        "profile-lint"
+      ],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/people/RelationshipsSection.tsx",
+      "tables": [
+        "contacts",
+        "profile_facts",
+        "profiles"
+      ],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/profile/AgentInstructionsTab.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/profile/EntryForm.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/profile/ExportTab.tsx",
+      "tables": [
+        "notes"
+      ],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/profile/NoteSearchInput.tsx",
+      "tables": [
+        "notes"
+      ],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/profile/ProfileCompleteness.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/profile/ProfileIcon.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/profile/ProfileRow.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/profile/ProfileSections.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/profile/ProfileSuggestions.tsx",
+      "tables": [],
+      "functions": [
+        "generate-profile-suggestions"
+      ],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/profile/ProfileValue.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/profile/ScopeBadge.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/profile/SelfRecognitionSection.tsx",
+      "tables": [
+        "profiles",
+        "user_self_aliases"
+      ],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/RichTextEditor.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/SEOHead.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/settings/AISuggestionPreferences.tsx",
+      "tables": [
+        "ai_suggestion_preferences"
+      ],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/settings/AiVisibilitySettings.tsx",
+      "tables": [
+        "mcp_preferences"
+      ],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/settings/ApiKeysManager.tsx",
+      "tables": [],
+      "functions": [
+        "mc-api-keys",
+        "mc-api-keys/generate"
+      ],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/settings/AppIntegrations.tsx",
+      "tables": [
+        "connected_apps"
+      ],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/settings/ConnectedGodspeedsCard.tsx",
+      "tables": [
+        "godspeed_connections"
+      ],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/settings/CreditsDisplay.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/settings/DiscordIntegration.tsx",
+      "tables": [
+        "discord_connections"
+      ],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/settings/GitHubSyncSettings.tsx",
+      "tables": [
+        "github_connections",
+        "github_sync_log"
+      ],
+      "functions": [
+        "github-proxy",
+        "github-sync-pull"
+      ],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/settings/GoogleDriveScans.tsx",
+      "tables": [
+        "gdrive_imports"
+      ],
+      "functions": [
+        "gdrive-proxy",
+        "gdrive-sync"
+      ],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/settings/ImportMigrate.tsx",
+      "tables": [],
+      "functions": [
+        "backfill-moment-profile-extraction",
+        "backfill-profile-extraction",
+        "backfill-wikilinks",
+        "enrich-people",
+        "quick-capture"
+      ],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/settings/ImportVaultDialog.tsx",
+      "tables": [],
+      "functions": [
+        "github-import-vault"
+      ],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/settings/IntegrationsOverview.tsx",
+      "tables": [
+        "connected_apps",
+        "discord_connections",
+        "gdrive_connections",
+        "github_connections",
+        "mcp_api_tokens",
+        "telegram_connections"
+      ],
+      "functions": [
+        "mc-api-keys"
+      ],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/settings/LocalReplicaPanel.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/settings/MCPConnectionManager.tsx",
+      "tables": [
+        "mcp_api_tokens"
+      ],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/settings/NotificationPreferences.tsx",
+      "tables": [
+        "notification_preferences"
+      ],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/settings/SingleFileIntegration.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/settings/SlackIntegration.tsx",
+      "tables": [
+        "connected_apps"
+      ],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/settings/StaffAccessCard.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": [
+        "my_staff_access_log"
+      ]
+    },
+    {
+      "source": "src/components/settings/SyncConflictsPanel.tsx",
+      "tables": [
+        "github_sync_log"
+      ],
+      "functions": [
+        "github-people-sync",
+        "github-sync-pull"
+      ],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/settings/SyncDashboard.tsx",
+      "tables": [
+        "contact_groups",
+        "contacts",
+        "github_connections",
+        "github_sync_log",
+        "notes"
+      ],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/settings/TelegramIntegration.tsx",
+      "tables": [
+        "telegram_connections"
+      ],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/settings/UserMcpServersManager.tsx",
+      "tables": [
+        "user_mcp_servers"
+      ],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/timeline/AddEventDialog.tsx",
+      "tables": [
+        "contacts",
+        "moment_participants",
+        "moments"
+      ],
+      "functions": [
+        "draft-event",
+        "extract-moment-profile"
+      ],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/timeline/ImportanceSlider.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/timeline/PeopleMultiSelect.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/ui/accordion.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/ui/alert-dialog.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/ui/badge.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/ui/button.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/ui/calendar.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/ui/card.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/ui/checkbox.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/ui/collapsible.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/ui/command.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/ui/context-menu.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/ui/dialog.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/ui/dropdown-menu.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/ui/input.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/ui/label.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/ui/popover.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/ui/progress.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/ui/radio-group.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/ui/scroll-area.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/ui/select.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/ui/separator.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/ui/sheet.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/ui/skeleton.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/ui/slider.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/ui/smart-date-picker.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/ui/switch.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/ui/table.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/ui/tabs.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/ui/textarea.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/ui/toast.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/ui/toggle-group.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/ui/toggle.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/ui/tooltip.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/components/world/EntityDetail.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/contexts/AuthContext.tsx",
+      "tables": [
+        "profiles",
+        "user_roles"
+      ],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/hooks/use-mobile.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/hooks/use-toast.ts",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/hooks/useAICredits.ts",
+      "tables": [
+        "v_ai_allowance_current"
+      ],
+      "functions": [
+        "ensure-token-allowance"
+      ],
+      "rpcs": []
+    },
+    {
+      "source": "src/hooks/useAICreditsGate.ts",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/hooks/useAiFootprint.ts",
+      "tables": [
+        "contacts",
+        "entities",
+        "note_connections",
+        "profile_facts",
+        "wiki_page_sources"
+      ],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/hooks/useAiVisibility.ts",
+      "tables": [
+        "contacts"
+      ],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/hooks/useClaims.ts",
+      "tables": [
+        "claims"
+      ],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/hooks/useContactProfile.ts",
+      "tables": [
+        "profile_categories"
+      ],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/hooks/useContactRelationships.ts",
+      "tables": [
+        "contact_relationships",
+        "contacts",
+        "relationship_rejections"
+      ],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/hooks/useContactTopics.ts",
+      "tables": [
+        "contact_topic_events",
+        "contact_topics"
+      ],
+      "functions": [],
+      "rpcs": [
+        "apply_contact_topic_command"
+      ]
+    },
+    {
+      "source": "src/hooks/useElementWidth.ts",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/hooks/useEntities.ts",
+      "tables": [
+        "entities",
+        "moment_entities",
+        "moments",
+        "notes"
+      ],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/hooks/useFacts.ts",
+      "tables": [
+        "ai_suggestion_suppressions",
+        "claims",
+        "fact_slots",
+        "profile_facts",
+        "profiles"
+      ],
+      "functions": [
+        "normalize-profile"
+      ],
+      "rpcs": []
+    },
+    {
+      "source": "src/hooks/useGitHubSync.ts",
+      "tables": [
+        "github_connections",
+        "github_sync_log"
+      ],
+      "functions": [
+        "github-proxy",
+        "github-sync-export"
+      ],
+      "rpcs": []
+    },
+    {
+      "source": "src/hooks/useGraphData.ts",
+      "tables": [
+        "note_connections"
+      ],
+      "functions": [
+        "compute-connections",
+        "get-graph-data"
+      ],
+      "rpcs": []
+    },
+    {
+      "source": "src/hooks/useGroupMemberships.ts",
+      "tables": [
+        "contact_group_memberships",
+        "contact_groups"
+      ],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/hooks/useGroupPulse.ts",
+      "tables": [
+        "action_items",
+        "contact_group_memberships",
+        "contact_groups"
+      ],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/hooks/useGroups.ts",
+      "tables": [
+        "contact_groups",
+        "wiki_pages"
+      ],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/hooks/useLogActivity.ts",
+      "tables": [
+        "activity_events"
+      ],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/hooks/useMediaAnalysis.ts",
+      "tables": [
+        "media_analysis"
+      ],
+      "functions": [
+        "analyze-media"
+      ],
+      "rpcs": []
+    },
+    {
+      "source": "src/hooks/useNotes.ts",
+      "tables": [
+        "note_ai_jobs",
+        "notes"
+      ],
+      "functions": [
+        "process-note",
+        "search-notes-semantic"
+      ],
+      "rpcs": []
+    },
+    {
+      "source": "src/hooks/useNoteSharing.ts",
+      "tables": [
+        "shared_notes"
+      ],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/hooks/useOrphanNotes.ts",
+      "tables": [
+        "note_connections",
+        "notes"
+      ],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/hooks/usePeople.ts",
+      "tables": [
+        "contacts"
+      ],
+      "functions": [],
+      "rpcs": [
+        "search_contacts_page"
+      ]
+    },
+    {
+      "source": "src/hooks/usePeopleSync.ts",
+      "tables": [],
+      "functions": [
+        "github-people-sync"
+      ],
+      "rpcs": []
+    },
+    {
+      "source": "src/hooks/useProfile.ts",
+      "tables": [
+        "agent_instructions",
+        "profile_categories",
+        "profile_views"
+      ],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/hooks/useProfileSummary.ts",
+      "tables": [
+        "agent_instructions",
+        "profile_categories",
+        "profile_facts"
+      ],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/hooks/useReviewQueue.ts",
+      "tables": [
+        "review_queue",
+        "wiki_revisions"
+      ],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/hooks/useStickyPanelPreference.ts",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/hooks/useWorld.ts",
+      "tables": [
+        "world_claims",
+        "world_entities",
+        "world_events"
+      ],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/integrations/supabase/client.ts",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/integrations/supabase/previewAuthStorage.ts",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/integrations/supabase/types.ts",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/lib/account-query-client.ts",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/lib/brand-assets.ts",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/lib/brand.ts",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/lib/chat-history.ts",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/lib/chat-markdown.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/lib/chat-summary.ts",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/lib/claims.ts",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/lib/clipboard.ts",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/lib/consent.ts",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/lib/contact-topics.ts",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/lib/credits-events.ts",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/lib/duplicate-entity.ts",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/lib/flags.ts",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/lib/function-error.ts",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/lib/github-people-sync.ts",
+      "tables": [],
+      "functions": [
+        "github-people-sync"
+      ],
+      "rpcs": []
+    },
+    {
+      "source": "src/lib/group-templates.ts",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/lib/group-utils.ts",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/lib/linkify.ts",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/lib/local-date.ts",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/lib/mc-connect.ts",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/lib/mc-ranking.ts",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/lib/moderateContent.ts",
+      "tables": [],
+      "functions": [
+        "moderate-content"
+      ],
+      "rpcs": []
+    },
+    {
+      "source": "src/lib/note-ai-edit.ts",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/lib/note-ai-enrollment.ts",
+      "tables": [],
+      "functions": [
+        "wiki-ingest"
+      ],
+      "rpcs": [
+        "capture_note_with_lexicon"
+      ]
+    },
+    {
+      "source": "src/lib/note-content.ts",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/lib/postgrest.ts",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/lib/profile-canonical-schema.ts",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/lib/profile-field-filter.ts",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/lib/profile-integrity.ts",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/lib/profile-list-labels.ts",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/lib/profile-section-delete.ts",
+      "tables": [
+        "fact_slots",
+        "profile_categories"
+      ],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/lib/profile-suggestions.ts",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/lib/profile-taxonomy.ts",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/lib/profile-timezone.ts",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/lib/query-persister.ts",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/lib/query-sync.ts",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/lib/quick-add-fact.ts",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/lib/relationship-canonical.ts",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/lib/relationship-labels.ts",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/lib/return-to.ts",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/lib/review-fact-revert.ts",
+      "tables": [
+        "ai_suggestion_suppressions",
+        "claims"
+      ],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/lib/safe-url.ts",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/lib/search-terms.ts",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/lib/toast.ts",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/lib/upload-attachment.ts",
+      "tables": [
+        "note-attachments",
+        "note_attachments"
+      ],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/lib/utils.ts",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/lib/wikilink-resolver.ts",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/lib/world-claims.ts",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/pages/Actions.tsx",
+      "tables": [
+        "action_items",
+        "contact_groups",
+        "contacts",
+        "notes"
+      ],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/pages/ActivityPage.tsx",
+      "tables": [
+        "activity_events"
+      ],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/pages/CollectionDetail.tsx",
+      "tables": [
+        "collection_item_folders",
+        "collection_items",
+        "collections",
+        "contacts",
+        "notes"
+      ],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/pages/Collections.tsx",
+      "tables": [
+        "collection_items",
+        "collections"
+      ],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/pages/CollectionSchema.tsx",
+      "tables": [
+        "collections"
+      ],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/pages/CollectionTemplates.tsx",
+      "tables": [
+        "collection_templates",
+        "collections"
+      ],
+      "functions": [],
+      "rpcs": [
+        "increment_collection_template_usage"
+      ]
+    },
+    {
+      "source": "src/pages/Dashboard.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/pages/GroupDetail.tsx",
+      "tables": [
+        "contact_group_memberships",
+        "notes"
+      ],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/pages/Groups.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/pages/MediaLibrary.tsx",
+      "tables": [
+        "media_analysis",
+        "note-attachments",
+        "note_attachments",
+        "notes"
+      ],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/pages/Notes.tsx",
+      "tables": [
+        "note_folders",
+        "notes"
+      ],
+      "functions": [
+        "backfill-metadata"
+      ],
+      "rpcs": []
+    },
+    {
+      "source": "src/pages/People.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/pages/Profile.tsx",
+      "tables": [
+        "notes"
+      ],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/pages/ReviewQueue.tsx",
+      "tables": [
+        "ai_suggestion_suppressions",
+        "contact_group_memberships",
+        "contact_relationships",
+        "contacts",
+        "entities",
+        "moment_participants",
+        "moments",
+        "relationship_evidence",
+        "review_queue",
+        "review_queue_bulk_jobs",
+        "wiki_revisions"
+      ],
+      "functions": [
+        "merge-contacts",
+        "normalize-profile",
+        "review-queue-bulk"
+      ],
+      "rpcs": [
+        "wiki_rollback_revision"
+      ]
+    },
+    {
+      "source": "src/pages/Settings.tsx",
+      "tables": [
+        "profiles"
+      ],
+      "functions": [
+        "delete-my-account"
+      ],
+      "rpcs": []
+    },
+    {
+      "source": "src/pages/TimelinePage.tsx",
+      "tables": [
+        "contacts",
+        "moment_participants",
+        "moment_provenance",
+        "moments"
+      ],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/pages/WeeklyReview.tsx",
+      "tables": [
+        "weekly_reviews"
+      ],
+      "functions": [
+        "weekly-review"
+      ],
+      "rpcs": []
+    },
+    {
+      "source": "src/pages/World.tsx",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/sync/db.ts",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/sync/local-replica.ts",
+      "tables": [
+        "notes"
+      ],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/sync/notes-mapping.ts",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/sync/recovery.ts",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/sync/schema.ts",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/sync/sync-health.ts",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "src/utils/markdown-converter.ts",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    },
+    {
+      "source": "supabase/functions/_shared/profile-canonical-schema.ts",
+      "tables": [],
+      "functions": [],
+      "rpcs": []
+    }
+  ],
+  "skills": [
+    {
+      "name": "audit",
+      "source": "skills/audit/SKILL.md",
+      "bytes": 19106
+    },
+    {
+      "name": "book-title-creator",
+      "source": "skills/book-title-creator/SKILL.md",
+      "bytes": 22393
+    },
+    {
+      "name": "book-title-strategist",
+      "source": "skills/book-title-strategist/SKILL.md",
+      "bytes": 7315
+    },
+    {
+      "name": "browser-post",
+      "source": "skills/browser-post/SKILL.md",
+      "bytes": 2365
+    },
+    {
+      "name": "coach",
+      "source": "skills/coach/SKILL.md",
+      "bytes": 9847
+    },
+    {
+      "name": "connect-email",
+      "source": "skills/connect-email/SKILL.md",
+      "bytes": 6577
+    },
+    {
+      "name": "daily-brief",
+      "source": "skills/daily-brief/SKILL.md",
+      "bytes": 2381
+    },
+    {
+      "name": "due",
+      "source": "skills/due/SKILL.md",
+      "bytes": 16412
+    },
+    {
+      "name": "embedded-captions",
+      "source": "skills/embedded-captions/SKILL.md",
+      "bytes": 33662
+    },
+    {
+      "name": "excalidraw-diagram",
+      "source": "skills/excalidraw-diagram/SKILL.md",
+      "bytes": 7897
+    },
+    {
+      "name": "excalidraw-visuals",
+      "source": "skills/excalidraw-visuals/SKILL.md",
+      "bytes": 17635
+    },
+    {
+      "name": "faceless-explainer",
+      "source": "skills/faceless-explainer/SKILL.md",
+      "bytes": 30177
+    },
+    {
+      "name": "figma",
+      "source": "skills/figma/SKILL.md",
+      "bytes": 18547
+    },
+    {
+      "name": "found-company",
+      "source": "skills/found-company/SKILL.md",
+      "bytes": 6225
+    },
+    {
+      "name": "general-video",
+      "source": "skills/general-video/SKILL.md",
+      "bytes": 21378
+    },
+    {
+      "name": "grill-me",
+      "source": "skills/grill-me/SKILL.md",
+      "bytes": 3737
+    },
+    {
+      "name": "gsap-core",
+      "source": "skills/gsap-core/SKILL.md",
+      "bytes": 14792
+    },
+    {
+      "name": "gsap-timeline",
+      "source": "skills/gsap-timeline/SKILL.md",
+      "bytes": 4394
+    },
+    {
+      "name": "headache-tracker",
+      "source": "skills/headache-tracker/SKILL.md",
+      "bytes": 6178
+    },
+    {
+      "name": "hyperframes",
+      "source": "skills/hyperframes/SKILL.md",
+      "bytes": 16719
+    },
+    {
+      "name": "hyperframes-animation",
+      "source": "skills/hyperframes-animation/SKILL.md",
+      "bytes": 8286
+    },
+    {
+      "name": "hyperframes-audio",
+      "source": "skills/hyperframes-audio/SKILL.md",
+      "bytes": 26039
+    },
+    {
+      "name": "hyperframes-cli",
+      "source": "skills/hyperframes-cli/SKILL.md",
+      "bytes": 19597
+    },
+    {
+      "name": "hyperframes-core",
+      "source": "skills/hyperframes-core/SKILL.md",
+      "bytes": 11784
+    },
+    {
+      "name": "hyperframes-creative",
+      "source": "skills/hyperframes-creative/SKILL.md",
+      "bytes": 6850
+    },
+    {
+      "name": "hyperframes-keyframes",
+      "source": "skills/hyperframes-keyframes/SKILL.md",
+      "bytes": 16442
+    },
+    {
+      "name": "hyperframes-registry",
+      "source": "skills/hyperframes-registry/SKILL.md",
+      "bytes": 10184
+    },
+    {
+      "name": "interstitial-journal",
+      "source": "skills/interstitial-journal/SKILL.md",
+      "bytes": 10024
+    },
+    {
+      "name": "keep-a-note",
+      "source": "skills/keep-a-note/SKILL.md",
+      "bytes": 4038
+    },
+    {
+      "name": "lead",
+      "source": "skills/lead/SKILL.md",
+      "bytes": 22949
+    },
+    {
+      "name": "mc-brief-operations",
+      "source": "skills/mc-brief-operations/SKILL.md",
+      "bytes": 4524
+    },
+    {
+      "name": "mc-radar",
+      "source": "skills/mc-radar/SKILL.md",
+      "bytes": 8496
+    },
+    {
+      "name": "media-use",
+      "source": "skills/media-use/SKILL.md",
+      "bytes": 8478
+    },
+    {
+      "name": "memory-audit",
+      "source": "skills/memory-audit/SKILL.md",
+      "bytes": 9874
+    },
+    {
+      "name": "morning-note",
+      "source": "skills/morning-note/SKILL.md",
+      "bytes": 14663
+    },
+    {
+      "name": "motion-graphics",
+      "source": "skills/motion-graphics/SKILL.md",
+      "bytes": 16212
+    },
+    {
+      "name": "move-godspeed",
+      "source": "skills/move-godspeed/SKILL.md",
+      "bytes": 6319
+    },
+    {
+      "name": "music-to-video",
+      "source": "skills/music-to-video/SKILL.md",
+      "bytes": 18822
+    },
+    {
+      "name": "nano-banana-images",
+      "source": "skills/nano-banana-images/SKILL.md",
+      "bytes": 9862
+    },
+    {
+      "name": "next-action",
+      "source": "skills/next-action/SKILL.md",
+      "bytes": 32376
+    },
+    {
+      "name": "pattern1-build",
+      "source": "skills/pattern1-build/SKILL.md",
+      "bytes": 8553
+    },
+    {
+      "name": "phone-errands",
+      "source": "skills/phone-errands/SKILL.md",
+      "bytes": 3756
+    },
+    {
+      "name": "pr-to-video",
+      "source": "skills/pr-to-video/SKILL.md",
+      "bytes": 33398
+    },
+    {
+      "name": "product-launch-video",
+      "source": "skills/product-launch-video/SKILL.md",
+      "bytes": 33235
+    },
+    {
+      "name": "remotion-to-hyperframes",
+      "source": "skills/remotion-to-hyperframes/SKILL.md",
+      "bytes": 11183
+    },
+    {
+      "name": "sap-ai-agent-low-code",
+      "source": "skills/sap-ai-agent-low-code/SKILL.md",
+      "bytes": 9042
+    },
+    {
+      "name": "sap-ai-agent-pro-code",
+      "source": "skills/sap-ai-agent-pro-code/SKILL.md",
+      "bytes": 11486
+    },
+    {
+      "name": "sap-build-ai-patterns",
+      "source": "skills/sap-build-ai-patterns/SKILL.md",
+      "bytes": 18203
+    },
+    {
+      "name": "scroll-craft",
+      "source": "skills/scroll-craft/SKILL.md",
+      "bytes": 24908
+    },
+    {
+      "name": "slideshow",
+      "source": "skills/slideshow/SKILL.md",
+      "bytes": 34275
+    },
+    {
+      "name": "social-visuals",
+      "source": "skills/social-visuals/SKILL.md",
+      "bytes": 9040
+    },
+    {
+      "name": "strip-ai-tells",
+      "source": "skills/strip-ai-tells/SKILL.md",
+      "bytes": 16469
+    },
+    {
+      "name": "subscription-review",
+      "source": "skills/subscription-review/SKILL.md",
+      "bytes": 6784
+    },
+    {
+      "name": "talk-about",
+      "source": "skills/talk-about/SKILL.md",
+      "bytes": 5922
+    },
+    {
+      "name": "talking-head-recut",
+      "source": "skills/talking-head-recut/SKILL.md",
+      "bytes": 66388
+    },
+    {
+      "name": "video-captions",
+      "source": "skills/video-captions/SKILL.md",
+      "bytes": 4094
+    },
+    {
+      "name": "video-finishing",
+      "source": "skills/video-finishing/SKILL.md",
+      "bytes": 6723
+    },
+    {
+      "name": "video-hooks",
+      "source": "skills/video-hooks/SKILL.md",
+      "bytes": 7013
+    },
+    {
+      "name": "watch",
+      "source": "skills/watch/SKILL.md",
+      "bytes": 11902
+    },
+    {
+      "name": "web-design",
+      "source": "skills/web-design/SKILL.md",
+      "bytes": 13079
+    },
+    {
+      "name": "work-item",
+      "source": "skills/work-item/SKILL.md",
+      "bytes": 5367
+    }
+  ],
+  "job_ids": [
+    "sync",
+    "sync-bot",
+    "browser-post",
+    "kanbero-import",
+    "spend-guard",
+    "do-you-copy",
+    "menerio-keepalive",
+    "disk-watchdog",
+    "paperclip-backup-prune",
+    "domain-watch",
+    "claude-upgrade",
+    "health-table",
+    "portfolio",
+    "transcript-sync",
+    "fresh-posts",
+    "next-action",
+    "prompt-harvest",
+    "snapshot-for-ownward",
+    "connections",
+    "due-check",
+    "topic-watch",
+    "brief-judges",
+    "ownward-handover",
+    "selftest",
+    "exa-monitor-test",
+    "brief-morning",
+    "devops-bridge",
+    "bot-probe",
+    "hermes-backup-prune",
+    "job-check",
+    "work",
+    "watch",
+    "attention-pull",
+    "lead",
+    "memory-daily",
+    "brief-rehearsal",
+    "radar",
+    "memory-review",
+    "audit",
+    "outside-ai-check"
+  ],
+  "procedure_register": {
+    "source": "procedures.md",
+    "headings": [
+      "The clock: every scheduled Mission Control job (generated)",
+      "Always on",
+      "Daily",
+      "Weekly",
+      "Monthly",
+      "Hourly / continuous \u2014 company boards",
+      "Watchdogs (owned by the product kits; their alerts feed the brief's Warnings)",
+      "Always on (event-driven, systemd services on the VPS)",
+      "Always on \u2014 mc-mesh pollers (Windows machines, per-user scheduled tasks)",
+      "Manual rituals (no clock \u2014 Michael or an agent triggers them)",
+      "Always on \u2014 the world sync, both directions (up automated 2026-08-16, down automated 2026-08-18)",
+      "Every quarter hour \u2014 Mission Control's own Kanbero importers (installed 2026-09-16)",
+      "Always on: the Menerio connection keeps itself wired (candidate runtime, 2026-09-20, D-226)",
+      "Always on (Claude Code hooks, every mission control session on every machine)",
+      "On every push: the Docker image (new 2026-09-30, D-262)",
+      "On every pin move, and daily: the Windows installer (new 2026-09-30, D-274)",
+      "Hourly: the line about the world (new 2026-10-02)"
+    ],
+    "services": [
+      "asus-godspeed-pull.timer",
+      "chrome-agent-bridge-a.service",
+      "chrome-agent-bridge-d.service",
+      "hermes-dashboard.service",
+      "hermes-gateway-dispatch.service",
+      "hermes-gateway-godspeed.service",
+      "hermes-gateway-outletpress.service",
+      "hermes-gateway-ownward.service",
+      "hermes-gateway-patternlab.service",
+      "hermes-gateway-patternlabceo.service",
+      "hermes-gateway-socialdesk.service",
+      "hermes-gateway.service",
+      "hermes-ttyd.service",
+      "mc-devops-bridge.service",
+      "mc-exa-hook.service",
+      "mc-health-ingest.service",
+      "mc-install-signal.service",
+      "mc-keeper.timer",
+      "mc-mesh-agent-claude-asus.service",
+      "mc-monitor.timer",
+      "mc-phone.service",
+      "paperclip-cost-monitor.timer",
+      "paperclip-nightly-upgrade.timer",
+      "paperclip-watchdog.timer",
+      "paperclip.service"
+    ]
+  }
+}
