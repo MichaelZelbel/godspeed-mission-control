@@ -11,7 +11,7 @@ const PROTOCOL = 1;
 const VERSION = '1.0.0';
 const DOOR_PORT = 7443;          // inside the container; the host publishes GODSPEED_COMPUTER_PORT
 const CDP_PORT = 9223;           // the server's local stand-in for a Chrome, 127.0.0.1 only
-const PAIR_CODE_MINUTES = 10;
+const PAIR_CODE_MINUTES = 30;   // a fresh PC can spend a while installing Git and Node first
 const WAIT_HOURS = 24;
 
 // Timers can be shortened for tests; the defaults are the tested ones (5 s beat, 15 s silence).

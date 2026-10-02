@@ -115,9 +115,9 @@ function fakeHelper({ port, certPem, device, key, answerHb = true }) {
     const a = S.redeemPairCode(sdir, code, 'laptop'), b = S.redeemPairCode(sdir, code, 'laptop');
     return (a && a.key && !b && S.checkDevice(sdir, a.id, a.key) && !S.checkDevice(sdir, a.id, 'wrong')) || { a, b };
   });
-  await check('a connection code is dead after ten minutes', () => {
+  await check('a connection code is dead after half an hour', () => {
     const code = S.newPairCode(sdir);
-    process.env.GODSPEED_COMPUTER_NOW = String(Date.now() + 11 * 60000);
+    process.env.GODSPEED_COMPUTER_NOW = String(Date.now() + 31 * 60000);
     const r = S.redeemPairCode(sdir, code, 'late');
     delete process.env.GODSPEED_COMPUTER_NOW;
     return r === null || r;

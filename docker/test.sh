@@ -114,6 +114,9 @@ P() { docker exec -u hermes -e HOME=/opt/data godspeed timeout 300 /opt/hermes/.
 connected() { for _ in $(seq 1 "${1:-30}"); do x godspeed-computer status 2>/dev/null | grep -q '^Connected' && return 0; sleep 1; done; return 1; }
 check "the computer link runs, as the assistant's account" sh -c "docker exec godspeed ps -eo user,args | grep -q '^hermes .*computer/relay.js'"
 check "the assistant has the computer tools" sh -c "docker exec -u hermes -e HOME=/opt/data godspeed hermes mcp list | grep -q computer"
+# Hermes hands its tool programs only a short list of settings, so the test site's allowance goes
+# through the server's own entry (only here: a real server never allows its own 127.0.0.1).
+x hermes config set mcp_servers.computer.env '{"GODSPEED_COMPUTER_ALLOW_HOSTS": "127.0.0.1"}' >/dev/null 2>&1
 check "nothing answers on the computer port before a code was asked for" sh -c "! curl -sk --max-time 5 https://127.0.0.1:7443/v1/ping"
 OUT="$(P computer_browser_open '{"url":"https://example.org/"}')"
 check "before a computer is paired, the tools say how to set it up" has "$OUT" "NOT SET UP"

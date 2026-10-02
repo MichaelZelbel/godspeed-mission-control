@@ -9,6 +9,8 @@
 // Only a safe set of browser actions is offered: open, read, click, fill, press, scroll, back.
 // No scripts, no cookies, no files in or out.
 const http = require('http');
+const fs = require('fs');
+const path = require('path');
 const { spawn } = require('child_process');
 const WebSocket = require('./vendor/ws');
 const C = require('./lib/common');
@@ -34,7 +36,7 @@ const OPEN_RULES = 'Use these computer_browser tools (not your own browser) only
 
 const TOOLS = [
   { name: 'computer_status', description: 'Whether the user\'s own computer is connected and lending its browser (Godspeed Chrome), so their logged-in sites can be used.', inputSchema: { type: 'object', properties: {} } },
-  { name: 'computer_connect_code', description: 'Make a one-time connection code (valid 10 minutes) for when the user says "connect my computer" or the Godspeed installer on their computer asks for one. Send the user the code exactly as returned.', inputSchema: { type: 'object', properties: {} } },
+  { name: 'computer_connect_code', description: 'Make a one-time connection code (valid half an hour) for when the user says "connect my computer" or the Godspeed installer on their computer asks for one. Send the user the code exactly as returned.', inputSchema: { type: 'object', properties: {} } },
   { name: 'computer_switch', description: 'Switch the use of the user\'s computer off ("stop using my computer") or back on ("use my computer again").', inputSchema: { type: 'object', properties: { on: { type: 'boolean', description: 'true to switch on, false to switch off' } }, required: ['on'] } },
   { name: 'computer_browser_open', description: 'Open a web page in Godspeed Chrome on the user\'s own computer, where they are logged in to their own sites. ' + OPEN_RULES + ' Returns the page title and address.', inputSchema: { type: 'object', properties: { url: { type: 'string' } }, required: ['url'] } },
   { name: 'computer_browser_snapshot', description: 'The page open in Godspeed Chrome on the user\'s computer, as a list of its parts with refs like @e3 to click or fill.', inputSchema: { type: 'object', properties: {} } },
@@ -52,12 +54,26 @@ const TOOLS = [
 const text = (t, isError = false) => ({ content: [{ type: 'text', text: t }], ...(isError ? { isError: true } : {}) });
 const stripAnsi = s => String(s).replace(/\x1b\[[0-9;]*[A-Za-z]/g, '');
 
+// Hermes starts this program with a short list of settings (HOME, PATH, XDG_*), so the browser
+// engine may find no runtime folder it can write its socket to ("Failed to create socket
+// directory"). It gets one of its own, beside the link's other files.
+function engineEnv() {
+  const env = { ...process.env };
+  const writable = d => { try { fs.mkdirSync(d, { recursive: true, mode: 0o700 }); fs.accessSync(d, fs.constants.W_OK); return true; } catch { return false; } };
+  if (!env.XDG_RUNTIME_DIR || !writable(env.XDG_RUNTIME_DIR)) {
+    const d = path.join(C.serverDir(), 'run');
+    writable(d);
+    env.XDG_RUNTIME_DIR = d;
+  }
+  return env;
+}
+
 function agentBrowser(args, timeoutMs = 60000) {
   return new Promise(resolve => {
     let out = '', err = '';
     let p;
     const [bin, ...pre] = String(AB).match(/"[^"]*"|\S+/g).map(s => s.replace(/^"|"$/g, ''));
-    try { p = spawn(bin, [...pre, '--session', SESSION, '--cdp', String(CDP), ...args], { stdio: ['ignore', 'pipe', 'pipe'] }); } catch (e) { return resolve({ code: -1, out: '', err: e.message }); }
+    try { p = spawn(bin, [...pre, '--session', SESSION, '--cdp', String(CDP), ...args], { stdio: ['ignore', 'pipe', 'pipe'], env: engineEnv() }); } catch (e) { return resolve({ code: -1, out: '', err: e.message }); }
     const timer = setTimeout(() => { try { p.kill('SIGKILL'); } catch { /* */ } }, timeoutMs);
     p.stdout.on('data', d => { out += d; });
     p.stderr.on('data', d => { err += d; });
@@ -112,7 +128,7 @@ async function call(name, a = {}) {
     case 'computer_status': return text(await K.statusText(dir));
     case 'computer_connect_code': {
       const line = await K.pairLine(dir);
-      return text('Send the user this connection code exactly, on a line of its own, and say it works once, for 10 minutes. '
+      return text('Send the user this connection code exactly, on a line of its own, and say it works once, for half an hour. '
         + 'They paste it where the Godspeed installer on their computer asks for "connection code".\n\n' + line);
     }
     case 'computer_switch':

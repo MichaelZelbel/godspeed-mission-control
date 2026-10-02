@@ -2,7 +2,7 @@
 // The server half's files, all in one folder of the container's volume:
 //   server-key.pem, server-cert.pem   the door's own key, which every paired helper checks
 //   enabled                           the door listens only once a connection code was asked for
-//   pair-codes.json                   one-time codes (hashes only), ten minutes each
+//   pair-codes.json                   one-time codes (hashes only), half an hour each
 //   devices.json                      paired computers (hashes of their keys only)
 //   off                               "stop using my computer": the door turns every helper away
 //   pages.log                         every address the assistant opened on the computer

@@ -35,7 +35,7 @@ so in plain words.
 ## When they ask
 
 - **"Connect my computer"** (or the installer asks for a connection code): `computer_connect_code`,
-  then send the code exactly as it came, on its own line, and say it works once, for ten minutes.
+  then send the code exactly as it came, on its own line, and say it works once, for half an hour.
 - **The computer is off or asleep** (a tool answers NOT CONNECTED): one sentence, for example
   "Your computer is off or asleep, so I can't use your Amazon login right now. I'll do it as soon
   as it's back on." Then `computer_when_back` with the whole job written out so it stands on its

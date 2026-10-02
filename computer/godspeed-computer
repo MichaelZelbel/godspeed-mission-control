@@ -2,7 +2,7 @@
 'use strict';
 // godspeed-computer: the server's switches for "your computer lends its browser" (D-285).
 //
-//   godspeed-computer pair       a connection code for the installer (works once, ten minutes)
+//   godspeed-computer pair       a connection code for the installer (works once, half an hour)
 //   godspeed-computer status     is a computer connected?
 //   godspeed-computer off | on   "stop using my computer" / "use my computer again"
 //   godspeed-computer pages [n]  the last pages the assistant opened on the computer
