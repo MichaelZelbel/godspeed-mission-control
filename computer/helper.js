@@ -172,8 +172,21 @@ async function run() {
     await new Promise(resolve => {
       const g = new WebSocket(v.webSocketDebuggerUrl);
       guard = g;
-      g.on('open', () => g.send(JSON.stringify({ id: 1, method: 'Browser.setDownloadBehavior', params: { behavior: 'deny' } })));
-      g.on('message', () => resolve());
+      // It also writes down every address a page in Godspeed Chrome arrives at, however it got there.
+      const seen = new Map();
+      g.on('open', () => {
+        g.send(JSON.stringify({ id: 1, method: 'Browser.setDownloadBehavior', params: { behavior: 'deny' } }));
+        g.send(JSON.stringify({ id: 2, method: 'Target.setDiscoverTargets', params: { discover: true } }));
+      });
+      g.on('message', raw => {
+        resolve();
+        let m; try { m = JSON.parse(raw.toString()); } catch { return; }
+        const info = m.params && m.params.targetInfo;
+        if (!info || info.type !== 'page' || !/^https?:\/\//.test(info.url || '')) return;
+        if (seen.get(info.targetId) === info.url) return;
+        seen.set(info.targetId, info.url);
+        recordPage('shown ' + info.url);
+      });
       g.on('close', () => { if (guard === g) guard = null; resolve(); });
       g.on('error', () => resolve());
       setTimeout(resolve, 3000);
@@ -270,7 +283,7 @@ async function run() {
           try { sock.send(JSON.stringify({ t: 'd', ch: m.ch, data: JSON.stringify({ id: p.id, ...(p.sessionId ? { sessionId: p.sessionId } : {}), error: { code: -32000, message: 'Godspeed: this computer does not allow ' + p.method } }) })); } catch { /* */ }
           return;
         }
-        const url = p && (p.method === 'Page.navigate' || p.method === 'Target.createTarget') && p.params ? p.params.url : null;
+        const url = C.navTarget(p);
         if (url !== null && url !== undefined) {
           const why = C.refuseUrl(url);
           if (why) {

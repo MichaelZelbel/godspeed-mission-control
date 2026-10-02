@@ -100,6 +100,11 @@ function fakeHelper({ port, certPem, device, key, answerHb = true }) {
   await check('files, browser settings and home addresses are refused; web pages and about:blank are not', () =>
     !!C.refuseUrl('file:///C:/Users') && !!C.refuseUrl('chrome://settings/passwords') && !!C.refuseUrl('http://192.168.1.1/')
       && C.refuseUrl('https://www.amazon.de/') === null && C.refuseUrl('about:blank') === null || 'wrong');
+  await check('the way the tools open a page is recognised, so it is listed and checked like any other', () => {
+    const asked = C.navTarget({ method: 'Runtime.evaluate', params: { expression: `setTimeout(function () { location.href = ${JSON.stringify('https://shop.example/a?q="x"')}; }, 50); 'going'` } });
+    const home = C.navTarget({ method: 'Runtime.evaluate', params: { expression: 'setTimeout(function () { location.href = "http://192.168.178.1/"; }, 50)' } });
+    return (asked === 'https://shop.example/a?q="x"' && !!C.refuseUrl(home) && C.navTarget({ method: 'Runtime.evaluate', params: { expression: 'document.title' } }) === null) || { asked, home };
+  });
   const line = C.encodePairLine({ host: 'srv1.example.com', port: 7443, fingerprint: 'ab:cd:ef', code: 'xyz' });
   await check('a connection code pasted with quotes, spaces and line breaks around it still reads', () => {
     const d = C.decodePairLine('  "`' + line.slice(0, 20) + '\n' + line.slice(20) + '`"  ');

@@ -86,6 +86,19 @@ function refuseUrl(url) {
   return null;
 }
 
+// The address a browser command asks to open, or null: Page.navigate and Target.createTarget, and
+// the way the computer tools open a page (they ask the page itself to go there, see mcp.js openPage).
+const NAV_EVAL = /location\.href = ("(?:[^"\\]|\\.)*")/;
+function navTarget(msg) {
+  if (!msg || !msg.params) return null;
+  if (msg.method === 'Page.navigate' || msg.method === 'Target.createTarget') return msg.params.url === undefined ? null : msg.params.url;
+  if (msg.method === 'Runtime.evaluate' && typeof msg.params.expression === 'string') {
+    const m = msg.params.expression.match(NAV_EVAL);
+    if (m) { try { return JSON.parse(m[1]); } catch { return 'invalid'; } }
+  }
+  return null;
+}
+
 // --- The connection code ---------------------------------------------------------------------
 // One line the assistant sends in Telegram and the installer asks for. It carries where the
 // server is, the server's own key (so the helper never talks to anyone else) and a one-time code.
@@ -147,6 +160,6 @@ function serverDir() {
 
 module.exports = {
   PROTOCOL, VERSION, DOOR_PORT, CDP_PORT, PAIR_CODE_MINUTES, WAIT_HOURS, HEARTBEAT_MS, SILENCE_MS,
-  log, isHomeNetworkIp, isHomeNetworkHost, refuseUrl, encodePairLine, decodePairLine,
+  log, isHomeNetworkIp, isHomeNetworkHost, refuseUrl, navTarget, encodePairLine, decodePairLine,
   normFingerprint, fingerprintOfPem, sha256, sameSecret, randomCode, homeDir, serverDir,
 };

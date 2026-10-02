@@ -222,7 +222,7 @@ function startRelay(opts = {}) {
         const text = data.toString();
         let msg = null;
         try { msg = JSON.parse(text); } catch { /* pass it on as it is */ }
-        const url = msg && (msg.method === 'Page.navigate' || msg.method === 'Target.createTarget') && msg.params ? msg.params.url : null;
+        const url = C.navTarget(msg);
         if (url !== null && url !== undefined) {
           const why = C.refuseUrl(url);
           if (why) {
