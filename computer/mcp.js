@@ -90,9 +90,28 @@ async function gate() {
   return null;
 }
 
+// Wakes Godspeed Chrome on the user's computer and waits for it, so the browser engine (which gives
+// up on a browser after about 6 s) never meets a cold start. Null when it is ready, else why not.
+function warm() {
+  return new Promise(resolve => {
+    const req = http.get(`http://127.0.0.1:${CDP}/json/version`, { timeout: 50000 }, res => {
+      let b = '';
+      res.on('data', d => { b += d; });
+      res.on('end', () => {
+        let v = null; try { v = JSON.parse(b); } catch { /* */ }
+        resolve(v && v.webSocketDebuggerUrl ? null : "Godspeed Chrome did not start on the user's computer" + (v && v.error ? ': ' + v.error : '') + '.');
+      });
+    });
+    req.on('timeout', () => req.destroy(new Error('timed out')));
+    req.on('error', e => resolve("Godspeed Chrome did not answer on the user's computer (" + e.message + ').'));
+  });
+}
+
 async function browse(args, limit = 30000) {
   const stop = await gate();
   if (stop) return text(stop);
+  const cold = await warm();
+  if (cold) return text(cold, true);
   const r = await agentBrowser(args);
   const out = (r.out || r.err || '').slice(0, limit);
   if (r.code !== 0) {
@@ -140,6 +159,8 @@ async function call(name, a = {}) {
       if (why) return text('Not opened: ' + why + '. Godspeed never opens addresses inside the user\'s home network, nor files or browser settings.', true);
       const stop = await gate();
       if (stop) return text(stop);
+      const cold = await warm();
+      if (cold) return text(cold, true);
       const r = await agentBrowser(['open', String(a.url)], Number(process.env.GODSPEED_COMPUTER_OPEN_WAIT_MS || 15000));
       if (r.code === 0) return text(r.out || 'Opened.');
       // The engine (agent-browser 0.26.0) times out when the first page of a session redirects,

@@ -127,12 +127,12 @@ async function ensureBrowser({ profileDir, proxyPort, headless = !!process.env.G
   fs.writeFileSync(marker, String(proxyPort || ''));
   const p = spawn(found.exe, args, { detached: true, stdio: 'ignore', windowsHide: false });
   p.unref();
-  const end = Date.now() + 30000;
+  const end = Date.now() + 40000;   // a first start on a slow computer can take half a minute
   while (Date.now() < end) {
     if (await getJson(`http://127.0.0.1:${port}/json/version`)) return { base: `http://127.0.0.1:${port}`, port, kind: found.kind, pid: p.pid };
     await new Promise(r => setTimeout(r, 200));
   }
-  throw new Error(`${found.kind} did not start within 30 seconds`);
+  throw new Error(`${found.kind} did not start within 40 seconds`);
 }
 
 module.exports = { findBrowser, ensureBrowser, closeBrowser, getJson, activePort };

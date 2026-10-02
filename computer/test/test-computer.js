@@ -415,7 +415,9 @@ async function realRun(found, site) {
     if (!connected) return;
     const cdpBase = `http://127.0.0.1:${rr.cdpPort()}`;
     const cdp = async () => {
-      const v = (await getJson(cdpBase + '/json/version')).body;
+      let v = null;
+      for (let i = 0; i < 3 && !(v && v.webSocketDebuggerUrl); i++) v = (await getJson(cdpBase + '/json/version')).body; // a cold first start can be slow
+      if (!v || !v.webSocketDebuggerUrl) throw new Error('no browser through the relay: ' + JSON.stringify(v));
       const ws = new WebSocket(v.webSocketDebuggerUrl);
       await new Promise((r, j) => { ws.on('open', r); ws.on('error', j); });
       let id = 0; const wait = new Map();

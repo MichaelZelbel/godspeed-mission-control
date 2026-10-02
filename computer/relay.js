@@ -200,10 +200,11 @@ function startRelay(opts = {}) {
       return res.end(JSON.stringify({ error: S.isOff(dir) ? 'computer switched off by its owner' : 'home computer not connected' }));
     }
     const id = next++;
+    // Long enough for a first, cold start of Godspeed Chrome on a slow computer (the helper waits 40 s).
     const timer = setTimeout(() => {
       const w = httpWait.get(id); httpWait.delete(id);
       if (w) { w.res.writeHead(504); w.res.end('{"error":"the home computer did not answer"}'); }
-    }, 20000);
+    }, 45000);
     httpWait.set(id, { res, timer });
     try { helper.ws.send(JSON.stringify({ t: 'http', id, path: req.url })); } catch { /* the timer answers */ }
   });
