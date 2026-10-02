@@ -9,6 +9,7 @@ import { QueryService } from '../core/query.mjs';
 import { Domains } from '../core/domains.mjs';
 import { Scheduler } from '../core/jobs/scheduler.mjs';
 import { modelProvider, jobExecutor,hermesProvider } from '../core/runtime.mjs';
+import {assistantEnvironment} from '../core/assistant-files.mjs';
 import { FileSync } from '../core/sync/git.mjs';
 import { backup, restore } from '../core/archives.mjs';
 import { importExport } from '../core/import.mjs';
@@ -78,7 +79,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       if(route==='/api/assistant/open'&&req.method==='POST'){
         if(remote||process.platform!=='win32')throw new Error('Open the assistant on your Windows computer');
         const descriptor=JSON.parse(fs.readFileSync(assistantPath,'utf8').replace(/^\uFEFF/,''));if(!descriptor.verified||path.basename(descriptor.desktop)!=='Hermes.exe'||!fs.existsSync(descriptor.desktop))throw new Error('The candidate Hermes desktop is not available');
-        const child=spawn(descriptor.desktop,[],{cwd:store.root,detached:true,stdio:'ignore',windowsHide:false,env:{...process.env,HERMES_HOME:descriptor.home,HERMES_DESKTOP_USER_DATA_DIR:path.join(path.dirname(assistantPath),'hermes-desktop-data'),HERMES_DESKTOP_APP_NAME:'Godspeed Mission Control Full Alpha Assistant',HERMES_SOURCE_ROOT:descriptor.sourceRoot}});child.unref();return send(res,200,{opened:true});
+        const child=spawn(descriptor.desktop,[],{cwd:store.root,detached:true,stdio:'ignore',windowsHide:false,env:{...assistantEnvironment({home:descriptor.home,workspace:store.root}),HERMES_DESKTOP_USER_DATA_DIR:path.join(path.dirname(assistantPath),'hermes-desktop-data'),HERMES_DESKTOP_APP_NAME:'Godspeed Mission Control Full Alpha Assistant',HERMES_DESKTOP_HERMES_ROOT:descriptor.sourceRoot,HERMES_DESKTOP_CWD:store.root,PLAYWRIGHT_BROWSERS_PATH:path.join(path.dirname(assistantPath),'hermes-runtime','browser-cache')}});child.unref();return send(res,200,{opened:true});
       }
       if(route==='/mcp'){
         const accessKey=apiKeys.authenticate(String(req.headers.authorization||'').replace(/^Bearer /,''));

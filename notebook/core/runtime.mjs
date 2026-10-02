@@ -4,6 +4,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import {procedure,procedureKinds} from './procedures.mjs';
 import {visibleRows,knowledgeContext} from './visibility.mjs';
+import {assistantEnvironment} from './assistant-files.mjs';
 export function hermesProvider({executable='hermes',home,cwd,model,provider}={}){
   if(!['hermes','hermes.exe'].includes(path.basename(executable).toLowerCase()))throw new Error('Choose the verified Hermes runtime');
   return input=>new Promise((resolve,reject)=>{
@@ -15,7 +16,7 @@ export function hermesProvider({executable='hermes',home,cwd,model,provider}={})
       fs.mkdirSync(path.join(home,'pending'),{recursive:true});const file=path.join(home,'pending','godspeed-'+process.pid+'-'+Date.now()+'-'+i+'.png');fs.writeFileSync(file,Buffer.from(attachment.data,'base64'),{mode:0o600});temporary.push(file);args.push('--image',file);
     }
     const {attachments,...prompt}=input;
-    const child=spawn(executable,args,{cwd,windowsHide:true,shell:false,env:{...process.env,HERMES_HOME:home},stdio:['pipe','pipe','pipe']}),output=[];let bytes=0;
+    const child=spawn(executable,args,{cwd,windowsHide:true,shell:false,env:assistantEnvironment({home,workspace:cwd}),stdio:['pipe','pipe','pipe']}),output=[];let bytes=0;
     const cleanup=()=>{clearTimeout(timer);for(const file of temporary)try{fs.unlinkSync(file);}catch{}};
     const timer=setTimeout(()=>{child.kill();cleanup();reject(new Error('Hermes did not finish within two minutes'));},120000);
     child.on('error',()=>{cleanup();reject(new Error('The candidate Hermes runtime could not start'));});

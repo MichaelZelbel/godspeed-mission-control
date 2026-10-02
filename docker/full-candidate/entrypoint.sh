@@ -7,6 +7,9 @@ if [ "$(id -u)" = 0 ]; then
   exec /command/s6-setuidgid hermes "$0"
 fi
 export GODSPEED_COACH_GIT_SYNC=off GODSPEED_JOURNAL_GIT_SYNC=off
+export GODSPEED_FILE_HERMES=1 GODSPEED_NODE=/usr/local/bin/node
+export GODSPEED_ASSISTANT_PUBLISHER=/opt/godspeed/kit/notebook/scripts/save-assistant-state.mjs
+export PYTHONPATH=/opt/godspeed/kit/notebook/assistant-files${PYTHONPATH:+:$PYTHONPATH}
 node /opt/godspeed/kit/notebook/bin/godspeed.mjs init >/dev/null
 node /opt/godspeed/kit/notebook/scripts/wire-assistant.mjs "$HERMES_HOME" >/dev/null
 if [ ! -f "$GODSPEED_WORKSPACE/.godspeed/assistant.json" ]; then

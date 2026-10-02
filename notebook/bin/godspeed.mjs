@@ -10,6 +10,7 @@ import { backup,restore } from '../core/archives.mjs';
 import { importExport } from '../core/import.mjs';
 import { seed } from '../core/seeds.mjs';
 import { execFileSync } from 'node:child_process';
+import {assistantProfiles,selectAssistantProfile} from '../core/assistant-files.mjs';
 const args=process.argv.slice(2),root=process.env.GODSPEED_WORKSPACE;if(!root)throw new Error('Set GODSPEED_WORKSPACE to your candidate workspace');
 const store=new Store(root,{device:process.env.GODSPEED_DEVICE||'local'}),query=new QueryService(store),domains=new Domains(query),media=process.env.GODSPEED_MEDIA_ROOT||path.join(store.state,'media');
 const [command,verb,...rest]=args;let result;
@@ -31,7 +32,9 @@ if(command==='init'){
   const addon=command==='coach'?'godspeed-coach':'godspeed-journal';
   const executable=fileURLToPath(new URL('../../third-party/addons/'+addon+'/bin/'+addon+'.mjs',import.meta.url));
   process.stdout.write(execFileSync(process.execPath,[executable,verb,...rest,'--godspeed',root],{encoding:'utf8',windowsHide:true,env:{...process.env,GODSPEED_COACH_GIT_SYNC:'off',GODSPEED_JOURNAL_GIT_SYNC:'off'}}));process.exit(0);
-}else if(command==='record'){
+}else if(command==='assistant'&&verb==='profiles')result=assistantProfiles(store);
+else if(command==='assistant'&&verb==='select')result=selectAssistantProfile(store,rest[0]);
+else if(command==='record'){
   const [type,id]=rest;
   if(verb==='list')result=query.rows(type);
   else if(verb==='get')result=store.get(type,id);

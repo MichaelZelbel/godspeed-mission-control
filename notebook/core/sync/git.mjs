@@ -10,7 +10,7 @@ export class FileSync {
     if(!/^[\w/.-]+$/.test(branch)||branch.startsWith('-')||!/^\w+$/.test(remote))throw new Error('Invalid sync configuration');
     this.store=store;this.branch=branch;this.remote=remote;this.last=null;
   }
-  git(args,cwd=this.store.root){return execFileSync('git',args,{cwd,encoding:'utf8',windowsHide:true,stdio:['ignore','pipe','pipe']}).trim();}
+  git(args,cwd=this.store.root){return execFileSync('git',args,{cwd,encoding:'utf8',windowsHide:true,timeout:30000,env:{...process.env,GIT_TERMINAL_PROMPT:'0',GCM_INTERACTIVE:'Never'},stdio:['ignore','pipe','pipe']}).trim();}
   pendingConflicts(){const dir=path.join(this.store.root,'conflicts');return fs.existsSync(dir)?fs.readdirSync(dir).filter(n=>n.endsWith('.json')&&!JSON.parse(fs.readFileSync(path.join(dir,n),'utf8')).resolved_at):[];}
   async verifyRemote(remoteUrl){
     const match=String(remoteUrl).match(/^(?:https:\/\/github\.com\/|git@github\.com:)([\w.-]+)\/([\w.-]+?)(?:\.git)?\/?$/);if(!match)throw new Error('Use a GitHub repository address without embedded credentials');

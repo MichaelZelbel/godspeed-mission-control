@@ -64,6 +64,11 @@ try:
     post('media/transfer',{'mapping':{'path':'synthetic/acceptance.png','file':digest+'-acceptance.png','sha256':digest,'size':len(png),'contentType':'image/png'},'data':base64.b64encode(png).decode()})
     assert request('/api/media/file/synthetic/acceptance.png')[1]==png
     compose('restart','notebook');wait();login();assert retained()['uid']==note['uid'];checks.append('restart preserves exact identity and Unicode note')
+    native_create="from hermes_state import SessionDB;db=SessionDB();db.create_session('package-native-history','cli');mid=db.append_message('package-native-history','user','Synthetic native file history');assert mid==1;db.close()"
+    compose('exec','-T','-u','hermes','notebook','python','-c',native_create)
+    native_rebuild="import os;from pathlib import Path;home=Path(os.environ['HERMES_HOME']);(home/'state.db').unlink();from hermes_state import SessionDB;db=SessionDB();rows=db.get_messages('package-native-history');assert len(rows)==1 and rows[0]['id']==1 and rows[0]['content']=='Synthetic native file history';db.close()"
+    compose('exec','-T','-u','hermes','notebook','python','-c',native_rebuild)
+    checks.append('actual native assistant conversation and message identity recover from files after database deletion')
     compose('exec','-T','notebook','node','/opt/godspeed/kit/notebook/bin/godspeed.mjs','backup','/opt/data/full-candidate/backups/acceptance')
     compose('stop','notebook')
     compose('run','--rm','--no-deps','--entrypoint','sh','notebook','-c','rm -f "$GODSPEED_WORKSPACE/.godspeed/search.sqlite"')

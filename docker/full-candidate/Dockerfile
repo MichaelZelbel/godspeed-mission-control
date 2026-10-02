@@ -16,6 +16,9 @@ ENV GODSPEED_WORKSPACE=/opt/data/full-candidate/workspace \
     GODSPEED_MEDIA_ROOT=/opt/data/full-candidate/media \
     GODSPEED_BIND=0.0.0.0 GODSPEED_PORT=47831 GODSPEED_DEVICE=vps \
     HOME=/opt/data/full-candidate/hermes HERMES_HOME=/opt/data/full-candidate/hermes \
+    GODSPEED_FILE_HERMES=1 GODSPEED_NODE=/usr/local/bin/node \
+    GODSPEED_ASSISTANT_PUBLISHER=/opt/godspeed/kit/notebook/scripts/save-assistant-state.mjs \
+    PYTHONPATH=/opt/godspeed/kit/notebook/assistant-files \
     GODSPEED_COMPUTER=off GODSPEED_TELEGRAM=off
 EXPOSE 47831
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s CMD node -e "fetch('http://127.0.0.1:47831/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
