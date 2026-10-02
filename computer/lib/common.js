@@ -88,13 +88,13 @@ function refuseUrl(url) {
 
 // The address a browser command asks to open, or null: Page.navigate and Target.createTarget, and
 // the way the computer tools open a page (they ask the page itself to go there, see mcp.js openPage).
-const NAV_EVAL = /location\.href = ("(?:[^"\\]|\\.)*")/;
+const NAV_EVAL = /location(?:\.href)?\s*=\s*("(?:[^"\\]|\\.)*")|location\.(?:assign|replace)\(\s*("(?:[^"\\]|\\.)*")/;
 function navTarget(msg) {
   if (!msg || !msg.params) return null;
   if (msg.method === 'Page.navigate' || msg.method === 'Target.createTarget') return msg.params.url === undefined ? null : msg.params.url;
   if (msg.method === 'Runtime.evaluate' && typeof msg.params.expression === 'string') {
     const m = msg.params.expression.match(NAV_EVAL);
-    if (m) { try { return JSON.parse(m[1]); } catch { return 'invalid'; } }
+    if (m) { try { return JSON.parse(m[1] || m[2]); } catch { return 'invalid'; } }
   }
   return null;
 }

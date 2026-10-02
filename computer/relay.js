@@ -48,7 +48,11 @@ function startRelay(opts = {}) {
     door = https.createServer({ key: keyPem, cert: certPem }, onDoorRequest);
     door.on('upgrade', onDoorUpgrade);
     door.on('tlsClientError', () => {});
-    door.on('error', e => log('door: cannot listen on', doorPort, '-', e.message));
+    door.on('error', e => {
+      log('door: cannot listen on', doorPort, '-', e.message, '(trying again)');
+      const d = door; door = null; doorAddress = null;
+      try { d.close(); } catch { /* never listened */ }
+    });
     door.listen(doorPort, doorHost, () => { doorAddress = door.address(); log('door: open on port', doorAddress.port); });
   }
 
@@ -169,6 +173,7 @@ function startRelay(opts = {}) {
   }, Math.max(50, Math.min(1000, Math.floor(C.HEARTBEAT_MS / 5))));
 
   const expiry = setInterval(() => {
+    for (const [ip, times] of failures) if (!times.some(t => Date.now() - t < 600000)) failures.delete(ip);
     const dropped = S.expireWaiting(dir);
     for (const j of dropped) deliver(`I dropped a job that waited a whole day for your computer: "${short(j.task)}". Ask me again once your computer is on.`, log);
   }, 10 * 60000);

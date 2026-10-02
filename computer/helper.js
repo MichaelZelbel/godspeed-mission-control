@@ -52,6 +52,7 @@ const DENIED = new Set([
   'DOM.setFileInputFiles', 'Browser.setDownloadBehavior', 'Page.setDownloadBehavior',
   'Browser.grantPermissions', 'Browser.setPermission', 'Target.exposeDevToolsProtocol',
   'Browser.addPrivacySandboxEnrollmentOverride', 'SystemInfo.getProcessInfo',
+  'Network.loadNetworkResource', 'IO.read',
 ]);
 
 function pinCheck(fingerprint) {
@@ -189,6 +190,14 @@ async function run() {
         resolve();
         let m; try { m = JSON.parse(raw.toString()); } catch { return; }
         const info = m.params && m.params.targetInfo;
+        // A page showing a file of this computer is closed at once. Chrome itself keeps web pages and
+        // the server's scripts away from files (tested 2026-10-02); this is the second lock.
+        if (info && info.type === 'page' && /^file:/i.test(info.url || '')) {
+          logLine('closed a page that showed a file of this computer:', info.url);
+          recordPage('CLOSED ' + info.url);
+          try { g.send(JSON.stringify({ id: 3, method: 'Target.closeTarget', params: { targetId: info.targetId } })); } catch { /* */ }
+          return;
+        }
         if (!info || info.type !== 'page' || !/^https?:\/\//.test(info.url || '')) return;
         if (seen.get(info.targetId) === info.url) return;
         seen.set(info.targetId, info.url);
@@ -236,7 +245,7 @@ async function run() {
       logLine('connected to', server.host);
       let kind = null;
       try { kind = require('./lib/browser').findBrowser()?.kind || null; } catch { /* */ }
-      sock.send(JSON.stringify({ t: 'hello', protocol: C.PROTOCOL, version: C.VERSION, browser: kind, os: process.platform }));
+      try { sock.send(JSON.stringify({ t: 'hello', protocol: C.PROTOCOL, version: C.VERSION, browser: kind, os: process.platform })); } catch { /* closing; the reconnect follows */ }
     });
     sock.on('error', e => { if (state !== 'off' && state !== 'refused') logLine('connection problem:', e.code || e.message); });
     sock.on('close', () => {
@@ -337,6 +346,9 @@ async function run() {
   }
   process.on('SIGTERM', () => shutdown(0));
   process.on('SIGINT', () => shutdown(0));
+  // An unexpected error must not stop the helper: it starts again only at the next login.
+  process.on('unhandledRejection', e => logLine('unexpected:', (e && e.message) || String(e)));
+  process.on('uncaughtException', e => logLine('unexpected:', (e && e.message) || String(e)));
   connect();
   return new Promise(() => {});
 }

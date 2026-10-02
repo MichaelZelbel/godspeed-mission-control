@@ -105,6 +105,11 @@ function fakeHelper({ port, certPem, device, key, answerHb = true }) {
     const home = C.navTarget({ method: 'Runtime.evaluate', params: { expression: 'setTimeout(function () { location.href = "http://192.168.178.1/"; }, 50)' } });
     return (asked === 'https://shop.example/a?q="x"' && !!C.refuseUrl(home) && C.navTarget({ method: 'Runtime.evaluate', params: { expression: 'document.title' } }) === null) || { asked, home };
   });
+  await check('other spellings of sending a page somewhere are recognised too', () => {
+    const t = e => C.navTarget({ method: 'Runtime.evaluate', params: { expression: e } });
+    return (t('location.href="file:///etc/passwd"') === 'file:///etc/passwd' && t('location.assign("https://c.d/")') === 'https://c.d/'
+      && t('window.location = "http://192.168.1.1/"') === 'http://192.168.1.1/' && !!C.refuseUrl(t('location.href="file:///etc/passwd"'))) || 'missed one';
+  });
   const line = C.encodePairLine({ host: 'srv1.example.com', port: 7443, fingerprint: 'ab:cd:ef', code: 'xyz' });
   await check('a connection code pasted with quotes, spaces and line breaks around it still reads', () => {
     const d = C.decodePairLine('  "`' + line.slice(0, 20) + '\n' + line.slice(20) + '`"  ');
@@ -234,6 +239,20 @@ function fakeHelper({ port, certPem, device, key, answerHb = true }) {
     const ok = await until(() => h.open, 3000);
     await r2.close();
     return ok || 'did not reconnect';
+  });
+
+  await check('a door whose port is busy for a moment opens as soon as it is free', async () => {
+    const busyPort = await freePort();
+    const blocker = net.createServer(); await new Promise(r => blocker.listen(busyPort, '127.0.0.1', r));
+    const bdir = path.join(TMP, 'busy'); S.newPairCode(bdir);
+    const r3 = startRelay({ dir: bdir, doorPort: busyPort, cdpPort: 0, doorHost: '127.0.0.1', log: quietLog, runWaiting: () => {} });
+    await r3.ready;
+    await sleep(1200);
+    const whileBusy = r3.doorPort();
+    await new Promise(r => blocker.close(r));
+    const after = await until(() => r3.doorPort(), 5000, 100);
+    await r3.close();
+    return (whileBusy === null && after === busyPort) || { whileBusy, after };
   });
 
   // ---------------------------------------------------------------------------------------------
@@ -473,6 +492,17 @@ async function realRun(found, site) {
     await tab(P + '/file');
     await sleep(1500);
     await check('a download offered by a page never lands on the computer', () => (hadDl || !fs.existsSync(dl)) || 'downloaded');
+    await check('a page that shows a file of the computer is closed at once', async () => {
+      const gport = Number(fs.readFileSync(path.join(home, 'profile', 'godspeed-port'), 'utf8'));
+      const own = await getJson(`http://127.0.0.1:${gport}/json/version`);
+      const w = new WebSocket(own.body.webSocketDebuggerUrl);
+      await new Promise(r => w.on('open', r));
+      w.send(JSON.stringify({ id: 1, method: 'Target.createTarget', params: { url: 'file:///' } }));
+      await sleep(2500);
+      const left = (await getJson(`http://127.0.0.1:${gport}/json/list`)).body.filter(t => /^file:/.test(t.url));
+      w.close();
+      return left.length === 0 || left.map(t => t.url);
+    });
     await check('every page the assistant opened is listed on the computer', async () => {
       const r = await runNode(['pages']);
       return (/\/account/.test(r.out) && /BLOCKED http:\/\/10\.1\.2\.3\//.test(r.out)) || r.out;
