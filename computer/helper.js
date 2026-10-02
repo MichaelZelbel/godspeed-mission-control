@@ -3,6 +3,7 @@
 // The home half of "your computer lends its browser" (computer use layer 2, D-285).
 //
 //   node helper.js pair <connection code>   once, with the code the assistant sends in Telegram
+//   node helper.js connect [code]           the same, asking for the code, then starts the helper
 //   node helper.js run                      at login: keeps one connection out to the server
 //   node helper.js pause | resume           the Pause and Resume entries
 //   node helper.js off                      unpair this computer and stop
@@ -142,7 +143,8 @@ function takeLock() {
 async function run() {
   fs.mkdirSync(HOME, { recursive: true });
   if (!takeLock()) { say('The helper is already running.'); return 0; }
-  if (!fs.existsSync(F('server.json'))) { say('This computer is not paired with a Godspeed server yet.'); return 1; }
+  // Not paired: nothing to do, and not an error (a login agent must not restart it for ever).
+  if (!fs.existsSync(F('server.json'))) { say('This computer is not paired with a Godspeed server yet.'); return 0; }
 
   const proxy = await startProxy({ onBlocked: (url, why) => { logLine('blocked', url, '-', why); recordPage('BLOCKED ' + url); } });
   let browser = null;          // { base, port, kind }
@@ -194,7 +196,7 @@ async function run() {
     if (Date.now() < holdUntil) return setTimeout(connect, 1000);
     const server = readJson(F('server.json'), null);
     const key = server ? secret.load(HOME) : null;
-    if (!server || !key) { state = 'unpaired'; writeStatus(); logLine('not paired any more; stopping'); return shutdown(1); }
+    if (!server || !key) { state = 'unpaired'; writeStatus(); logLine('not paired any more; stopping'); return shutdown(0); }
     state = 'connecting'; writeStatus();
     const sock = new WebSocket(`wss://${server.host.includes(':') ? '[' + server.host + ']' : server.host}:${server.port}/v1/helper`, {
       ca: server.certPem, checkServerIdentity: pinCheck(server.fingerprint),
@@ -374,6 +376,23 @@ async function main(argv) {
       const code = rest.filter((_, k) => i < 0 || (k !== i && k !== i + 1)).join(' ') || (process.env.GODSPEED_COMPUTER_CODE || '');
       return pair(code, name);
     }
+    case 'connect': {
+      let code = rest.join(' ');
+      if (!code) {
+        process.stdout.write('Paste the connection code from your assistant (no code yet? write to it in Telegram: connect my computer): ');
+        code = await new Promise(r => {
+          let b = '';
+          process.stdin.setEncoding('utf8');
+          process.stdin.on('data', d => { b += d; if (b.includes('\n')) { process.stdin.pause(); r(b); } });
+          process.stdin.on('end', () => r(b));
+        });
+      }
+      const rc = await pair(code);
+      if (rc === 0) {
+        require('child_process').spawn(process.execPath, [__filename, 'run'], { detached: true, stdio: 'ignore', windowsHide: true }).unref();
+      }
+      return rc;
+    }
     case 'run': return run();
     case 'pause': fs.mkdirSync(HOME, { recursive: true }); fs.writeFileSync(F('paused'), new Date().toISOString()); say('Paused. Your assistant cannot use this computer until you press Resume.'); return 0;
     case 'resume': fs.rmSync(F('paused'), { force: true }); say('Resumed. Your assistant can use Godspeed Chrome on this computer again.'); return 0;
@@ -382,7 +401,7 @@ async function main(argv) {
     case 'pages': return pages(Number(rest[0]) || 30);
     case 'uninstall': return uninstall(rest.includes('--keep-profile'));
     default:
-      say('Usage: helper.js pair <code> | run | pause | resume | off | status | pages | uninstall [--keep-profile]');
+      say('Usage: helper.js connect [code] | pair <code> | run | pause | resume | off | status | pages | uninstall [--keep-profile]');
       return cmd ? 1 : 0;
   }
 }
