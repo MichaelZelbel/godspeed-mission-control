@@ -30,7 +30,7 @@ set -uo pipefail
 
 KB_TAG="door"
 export KB_TAG
-KB_PIN="v2.17"
+KB_PIN="v2.18"
 LIB_URL="https://raw.githubusercontent.com/MichaelZelbel/kit-bootstrap/$KB_PIN/lib.sh"
 AI_USER="${AI_USER:-ai}"
 PORT=9119
