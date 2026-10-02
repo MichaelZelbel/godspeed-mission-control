@@ -1,2 +1,3 @@
 *.log
 notebook/dist/
+__pycache__/
