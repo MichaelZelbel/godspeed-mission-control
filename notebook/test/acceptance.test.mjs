@@ -20,7 +20,7 @@ test('full world relationships, conflicting dated facts and cardinality preserve
  domains.writeFact({contact_id:a.id,label:'City',value:'New Example City',valid_from:'2026-01-01'});
  const fact=query.rows('claims').find(c=>!c.valid_to);query.execute({table:'claims',operation:'insert',values:{...fact,id:undefined,uid:undefined,value:'Conflicting Example City'}});
  assert.equal(query.rows('profile_facts').filter(f=>f.is_current&&f.has_conflict).length,2);
- const world=query.rows('world_claims');assert.equal(world.find(r=>r.source_table==='contact_relationship').object_id,b.id);assert.equal(world.find(r=>r.source_table==='claim').subject_kind,'contact');
+ const world=query.rows('world_claims');assert.equal(world.find(r=>r.source_table==='contact_relationship').confidence,'confirmed');assert.equal(world.find(r=>r.source_table==='contact_relationship').object_id,b.id);assert.equal(world.find(r=>r.source_table==='claim').subject_kind,'contact');
  query.execute({table:'fact_slots',operation:'update',values:{cardinality:'many'},filters:[['eq','attribute',fact.attribute]]});assert.ok(query.rows('profile_facts').every(f=>!f.has_conflict));
  assert.equal(query.rows('claims').find(c=>c.value==='Example City').valid_to,'2026-01-01');
 });

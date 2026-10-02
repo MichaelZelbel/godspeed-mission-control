@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import ReactMarkdown from 'react-markdown';
 import {ApiKeysManager} from '@/components/settings/ApiKeysManager';
 import {AISuggestionPreferences} from '@/components/settings/AISuggestionPreferences';
 import {AiVisibilitySettings} from '@/components/settings/AiVisibilitySettings';
@@ -11,10 +12,12 @@ export default function Control(){
   const conflicts=useQuery({queryKey:['saved-conflicts'],queryFn:()=>call('conflicts'),refetchInterval:5000});
   const [connector,setConnector]=useState('spend-guard'),[connectorUrl,setConnectorUrl]=useState(''),[connectorKey,setConnectorKey]=useState(''),[threshold,setThreshold]=useState('10'),[valuePath,setValuePath]=useState('balance'),[driveKey,setDriveKey]=useState(''),[driveFolder,setDriveFolder]=useState('');
   const {data}=useQuery({queryKey:['candidate-status'],queryFn:()=>call('status'),refetchInterval:5000});
+  const usefulWork=useQuery({queryKey:['latest-goal-work'],queryFn:()=>call('query',{table:'notes',filters:[['eq','source_app','scheduler'],['eq','job_id','goal-work']],orders:[['updated_at',{ascending:false}]],limit:1}),refetchInterval:5000});
   const results=useQuery({queryKey:['candidate-search',search],queryFn:()=>call('search?q='+encodeURIComponent(search)),enabled:!!search});
   const action=async(route:string,body:any)=>{try{setError('');await call(route,body);qc.invalidateQueries();}catch(e:any){setError(e.message);}};
   return <div className="max-w-4xl space-y-6"><h1 className="text-2xl font-bold">Your control desk</h1><p>Knowledge stays in your files. This candidate uses a separate workspace.</p>
     <p role="alert" className="text-red-400">{error}</p>
+    {usefulWork.data?.data[0]&&<section className="border rounded p-4"><h2 className="text-xl">Your latest useful work</h2><div className="prose dark:prose-invert max-w-none"><ReactMarkdown>{usefulWork.data.data[0].content}</ReactMarkdown></div><a className="underline" href={'/dashboard/notes/'+usefulWork.data.data[0].id}>Open the saved note</a></section>}
     <details className="border rounded p-4"><summary>Privacy, suggestions and notifications</summary><AiVisibilitySettings/><AISuggestionPreferences/><NotificationPreferences/></details>
     <details className="border rounded p-4"><summary>Connect other assistants</summary><ApiKeysManager/></details>
     <button className="border rounded p-2" onClick={()=>action('assistant/open',{})}>Open the Windows assistant</button>

@@ -123,7 +123,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         else {if(!['local','remote','merged'].includes(input.choice))throw new Error('Choose a retained version');const value=input.choice==='merged'?JSON.parse(input.text):conflict[input.choice];store.save(conflict.type,value,store.get(conflict.type,conflict.record_id)?._hash);conflict.resolved_at=new Date().toISOString();conflict.choice=input.choice;atomic(file,JSON.stringify(conflict,null,2));}
         return send(res,200,{ok:true});
       }
-      if(route==='/api/setup'&&req.method==='POST'){const input=JSON.parse(await body(req));return send(res,200,{...scheduler.configure({...input,owner:device}),results:await scheduler.tick()});}
+      if(route==='/api/setup'&&req.method==='POST'){const input=JSON.parse(await body(req));return send(res,200,{...scheduler.configure({...input,owner:mediaSync.config()?'vps':device}),results:await scheduler.tick()});}
       if(route==='/api/jobs/run'&&req.method==='POST')return send(res,200,{results:await scheduler.tick()});
       if(route==='/api/jobs/update'&&req.method==='POST'){const input=JSON.parse(await body(req));return send(res,200,{data:store.save('jobs',input)});}
       if(route==='/api/jobs/add'&&req.method==='POST'){const input=JSON.parse(await body(req));if(!kinds.includes(input.kind)||!Number.isFinite(input.interval_ms)||input.interval_ms<60000)throw new Error('Choose a supported routine and interval of at least a minute');return send(res,200,{data:store.save('jobs',{kind:input.kind,title:input.title||input.kind,owner:store.get('settings','installation')?.owner||device,next_run:new Date().toISOString(),interval_ms:input.interval_ms,state:'pending',paused:false})});}

@@ -60,7 +60,7 @@ export function jobExecutor(provider,query) {
     if(!provider)throw new Error('Connect a supported assistant or model provider to run this routine');
     const context={...fileContext(store),...knowledgeContext(query),goals:query.rows('goals'),notes:visibleRows(query,'notes'),facts:visibleRows(query,'profile_facts').filter(f=>f.is_current&&f.show_to_agent),health:query.rows('health_observations'),habits:query.rows('habits'),deadlines:query.rows('deadlines'),previous:query.rows('job_receipts').filter(r=>r.kind===job.kind&&r.state==='verified').slice(-3)};
     const instructions={
-      'goal-decision':'Choose one useful action toward the active goal. Give the reason and expected evidence. Do not send messages or spend money.',
+      'goal-decision':'Choose one useful action toward the active goal. Write three short plain paragraphs: the action, the reason and expected evidence. Do not use JSON. Do not send messages or spend money.',
       'goal-work':'Complete useful work for the active goal, such as a draft, research analysis of supplied sources, or a conversation preparation. Save the actual deliverable in your answer. Do not invent completed external work.',
       coaching:'Open a short coaching conversation using the previous check-in and recent facts. Ask one relevant question.',
       profiling:'Propose profile updates supported by source quotes. Output JSON suggestions. Do not replace confirmed facts.',
@@ -72,7 +72,8 @@ export function jobExecutor(provider,query) {
     };
     const text=await provider({kind:job.kind,context,contract:instructions[job.kind]||'Perform the configured routine using recorded context.'});
     if(!text||typeof text!=='string')throw new Error('Assistant produced no useful result');
-    const result=store.save(job.kind==='goal-decision'?'decisions':'notes',{title:job.title||job.kind,content:text,source_app:'scheduler',job_id:job.id});
+    const titles={'goal-work':'Useful work for your goal','goal-decision':'Your next useful step',coaching:'Your coaching conversation',review:'Your work review'};
+    const result=store.save(job.kind==='goal-decision'?'decisions':'notes',{title:job.title||titles[job.kind]||job.kind,content:text,source_app:'scheduler',job_id:job.id});
     return {verified:true,record_id:result.id,delivery:'notebook',verification:'Saved deliverable read back',content_hash:store.get(result.type,result.id)._hash};
   };
 }
