@@ -19,7 +19,7 @@ const Privacy = () => {
 
   return (
     <div className="container py-12 lg:py-16">
-      <SEOHead title="Privacy Policy — Menerio" description={`Learn how ${BRAND.name} collects, uses, and protects your personal data.`} />
+      <SEOHead title="Privacy Policy - Godspeed Mission Control" description={`Learn how ${BRAND.name} collects, uses, and protects your personal data.`} />
 
       <div className="flex flex-col lg:flex-row gap-12">
         {/* Table of Contents Sidebar */}
@@ -224,7 +224,7 @@ const Privacy = () => {
 
               <h3 className="text-xl font-medium text-foreground mt-6 mb-3">Transfer of Your Personal Data</h3>
               <p>
-                Your information, including Personal Data, is processed at the Company's operating offices and in any other places where the parties involved in the processing are located. It means that this information may be transferred to — and maintained on — computers located outside of Your state, province, country or other governmental jurisdiction where the data protection laws may differ than those from Your jurisdiction.
+                Your information, including Personal Data, is processed at the Company's operating offices and in any other places where the parties involved in the processing are located. It means that this information may be transferred to - and maintained on - computers located outside of Your state, province, country or other governmental jurisdiction where the data protection laws may differ than those from Your jurisdiction.
               </p>
               <p className="mt-2">
                 Your consent to this Privacy Policy followed by Your submission of such information represents Your agreement to that transfer.

@@ -330,7 +330,7 @@ export function AppIntegrations() {
                 {copied ? <Check className="h-4 w-4 text-success" /> : <Copy className="h-4 w-4" />}
               </Button>
             </div>
-            <p className="text-xs text-muted-foreground">Paste this key in Querino's settings under Menerio Connection.</p>
+            <p className="text-xs text-muted-foreground">Paste this key in Querino's settings under Godspeed Mission Control Connection.</p>
           </div>
           <DialogFooter>
             <Button onClick={handleCloseApiKeyDialog}>Done</Button>

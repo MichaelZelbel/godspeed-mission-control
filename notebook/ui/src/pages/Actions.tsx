@@ -272,7 +272,7 @@ export default function Actions() {
 
   return (
     <div className="max-w-5xl">
-      <SEOHead title="Actions — Menerio" noIndex />
+      <SEOHead title="Actions - Godspeed Mission Control" noIndex />
 
       <div className="flex items-center justify-between mb-6">
         <div>
@@ -365,7 +365,7 @@ export default function Actions() {
           <CardHeader className="pb-3">
             <CardTitle className="text-sm flex items-center gap-2">
               <AlertTriangle className="h-4 w-4 text-warning" />
-              {staleItems.length} stale item{staleItems.length > 1 ? "s" : ""} — open for 14+ days
+              {staleItems.length} stale item{staleItems.length > 1 ? "s" : ""} - open for 14+ days
             </CardTitle>
           </CardHeader>
           <CardContent>

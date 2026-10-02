@@ -109,8 +109,8 @@ export default function GroupDetail() {
 
   if (isLoading) return <div className="flex max-w-5xl justify-center py-16"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>;
   // A failed load is not a missing group: say so and offer Retry.
-  if (isError) return <div className="max-w-5xl"><SEOHead title="Groups - Menerio" noIndex /><Button variant="ghost" size="sm" onClick={() => navigate("/dashboard/groups")}><ArrowLeft className="mr-1 h-4 w-4" />Back to Groups</Button><LoadErrorState className="mt-8" title="This group could not be loaded." onRetry={() => refetch()} /></div>;
-  if (!group) return <div className="max-w-5xl"><SEOHead title="Group not found — Menerio" noIndex /><Button variant="ghost" size="sm" onClick={() => navigate("/dashboard/groups")}><ArrowLeft className="mr-1 h-4 w-4" />Back to Groups</Button><p className="mt-8 text-sm text-muted-foreground">Group not found.</p></div>;
+  if (isError) return <div className="max-w-5xl"><SEOHead title="Groups - Godspeed Mission Control" noIndex /><Button variant="ghost" size="sm" onClick={() => navigate("/dashboard/groups")}><ArrowLeft className="mr-1 h-4 w-4" />Back to Groups</Button><LoadErrorState className="mt-8" title="This group could not be loaded." onRetry={() => refetch()} /></div>;
+  if (!group) return <div className="max-w-5xl"><SEOHead title="Group not found - Godspeed Mission Control" noIndex /><Button variant="ghost" size="sm" onClick={() => navigate("/dashboard/groups")}><ArrowLeft className="mr-1 h-4 w-4" />Back to Groups</Button><p className="mt-8 text-sm text-muted-foreground">Group not found.</p></div>;
 
   const form: AboutForm = aboutForm || { name: group.name, description: group.description, purpose: group.purpose, type: group.type, sensitivity: group.sensitivity, icon: group.icon, color: group.color, stages };
   const byStage = (stageId: string) => memberships.filter((membership) => membership.status === stageId);
@@ -139,7 +139,7 @@ export default function GroupDetail() {
 
   return (
     <div className="max-w-5xl">
-      <SEOHead title={`${group.name} — Groups — Menerio`} noIndex />
+      <SEOHead title={`${group.name} - Groups - Godspeed Mission Control`} noIndex />
       <div className="mb-4 flex items-center justify-between gap-3">
         <div className="min-w-0">
           <Button variant="ghost" size="sm" onClick={() => navigate("/dashboard/groups")} className="mb-3"><ArrowLeft className="mr-1 h-4 w-4" />Back to Groups</Button>

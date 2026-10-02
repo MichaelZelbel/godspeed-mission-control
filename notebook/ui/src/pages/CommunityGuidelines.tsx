@@ -19,7 +19,7 @@ export default function CommunityGuidelines() {
   return (
     <LegalLayout title="Community Guidelines" lastUpdated="April 5, 2026" sections={sections}>
       <SEOHead
-        title="Community Guidelines — Menerio"
+        title="Community Guidelines - Godspeed Mission Control"
         description={`Guidelines for sharing content publicly on ${BRAND.name}. Learn what's allowed and how moderation works.`}
       />
 

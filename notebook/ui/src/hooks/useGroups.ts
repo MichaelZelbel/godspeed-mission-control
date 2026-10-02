@@ -12,7 +12,7 @@ type ContactGroupInsert = Database["public"]["Tables"]["contact_groups"]["Insert
 type ContactGroupUpdate = Database["public"]["Tables"]["contact_groups"]["Update"];
 
 // `parent_group_id` lives in the DB (Phase 1 migration) but not yet in the
-// generated types — surface it here so callers can nest groups.
+// generated types - surface it here so callers can nest groups.
 type CreateGroupFields = Omit<ContactGroupInsert, "user_id" | "slug"> & {
   slug?: string;
   parent_group_id?: string | null;
@@ -79,15 +79,14 @@ export function useGroup(idOrSlug: string | null | undefined) {
     queryFn: async () => {
       // A trashed group is not found. It used to open as if live, with its
       // pipeline, goals and members editable.
-      const query = supabase
+      const makeQuery = () => supabase
         .from("contact_groups")
         .select("*")
         .eq("user_id", user!.id)
         .eq("is_trashed", false);
 
-      const { data, error } = isUuid(idOrSlug!)
-        ? await query.eq("id", idOrSlug!).maybeSingle()
-        : await query.eq("slug", idOrSlug!).maybeSingle();
+      const byId = await makeQuery().eq("id", idOrSlug!).maybeSingle();
+      const { data, error } = byId.data ? byId : await makeQuery().eq("slug", idOrSlug!).maybeSingle();
       if (error) throw error;
       return (data as ContactGroupRow | null) || null;
     },

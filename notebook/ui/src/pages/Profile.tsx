@@ -113,7 +113,7 @@ export default function Profile() {
 
   return (
     <>
-      <SEOHead title="My Profile — Menerio" description="Manage the personal profile AI agents use to understand you: your bio, preferences, goals, and context that powers personalized responses." noIndex />
+      <SEOHead title="My Profile - Godspeed Mission Control" description="Manage the personal profile AI agents use to understand you: your bio, preferences, goals, and context that powers personalized responses." noIndex />
       <div className="max-w-3xl mx-auto p-4 sm:p-6 space-y-6">
         <div>
           <h1 className="text-2xl font-semibold">My Profile</h1>

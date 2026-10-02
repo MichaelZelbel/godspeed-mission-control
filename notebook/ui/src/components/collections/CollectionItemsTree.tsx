@@ -661,7 +661,7 @@ export function CollectionItemsTree({
         handlers={handlers}
       />
 
-      {/* All items — folders first, then loose items at depth 1. */}
+      {/* All items - folders first, then loose items at depth 1. */}
       <div>
         <button
           type="button"

@@ -350,7 +350,7 @@ export function RelationshipsSection({ contactId, contactName, milestones = [] }
     <>
     <div className="rounded-lg border border-border bg-card">
 
-      {/* Header — same shape as every other profile section. */}
+      {/* Header - same shape as every other profile section. */}
       <div className="flex items-center gap-2 px-4 py-2.5 group">
         <button
           type="button"
@@ -382,7 +382,7 @@ export function RelationshipsSection({ contactId, contactName, milestones = [] }
         )}
       </div>
 
-      {/* Existing relationships — always "Role: Name", where Role is the role
+      {/* Existing relationships - always "Role: Name", where Role is the role
           the OTHER person holds toward {contactName}. */}
       {expanded && rows.length > 0 && (
         <div className="border-t border-border">
@@ -438,7 +438,7 @@ export function RelationshipsSection({ contactId, contactName, milestones = [] }
 
 
 
-      {/* Non-edge relational facts live in this same card — one surface. */}
+      {/* Non-edge relational facts live in this same card - one surface. */}
       {expanded && milestones.length > 0 && (
         <div className="border-t border-border">
           {milestones.map((m) => (

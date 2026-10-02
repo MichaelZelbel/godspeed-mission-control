@@ -54,7 +54,7 @@ export function extractSearchTerms(query: string): string[] {
   rawTokens.forEach((token, index) => {
     const lower = normalizeForMatch(token);
     // A capitalised word that isn't the first word and isn't a stopword looks
-    // like a proper noun ("Nadia") — those are the highest-signal terms.
+    // like a proper noun ("Nadia") - those are the highest-signal terms.
     const isName = index > 0 && /^\p{Lu}/u.test(token) && !STOPWORDS.has(lower);
     if (!isName && STOPWORDS.has(lower)) return;
     if (!isName && lower.length < 3) return;

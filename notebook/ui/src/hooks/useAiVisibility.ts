@@ -15,7 +15,7 @@ export type AiKind = "notes" | "contacts" | "moments" | "collection_items" | "ac
  *  - It is not rendered as a node in the Knowledge Graph.
  *  - It is not used as context by the in-app AI chat or daily digest.
  *  - Embeddings ARE still generated so the user can find the note via local
- *    semantic / keyword search — only AI-facing surfaces filter it out.
+ *    semantic / keyword search - only AI-facing surfaces filter it out.
  */
 export function useToggleAiVisibility(kind: AiKind) {
   const qc = useQueryClient();
@@ -38,7 +38,7 @@ export function useToggleAiVisibility(kind: AiKind) {
       qc.invalidateQueries({ queryKey: ["ai_hidden_counts"] });
       showToast.success(
         visibility === "hidden"
-          ? "Hidden from AI — excluded from Lexicon, People, Graph, AI Chat & MCP"
+          ? "Hidden from AI - excluded from Lexicon, People, Graph, AI Chat & MCP"
           : "Visible to AI again"
       );
     },
@@ -71,8 +71,8 @@ export function useToggleSensitivePerson() {
       qc.invalidateQueries({ queryKey: ["ai_hidden_counts"] });
       showToast.success(
         isSensitive
-          ? "Marked sensitive — hidden from all AI features"
-          : "No longer sensitive — visible to AI again"
+          ? "Marked sensitive - hidden from all AI features"
+          : "No longer sensitive - visible to AI again"
       );
     },
     onError: (e: any) => {

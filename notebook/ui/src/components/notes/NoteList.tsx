@@ -111,7 +111,7 @@ const NoteRow = memo(function NoteRow({
           {(note as Note).ai_visibility === "hidden" && (
             <span
               className="shrink-0 text-[9px] uppercase tracking-wider text-muted-foreground border border-dashed border-border rounded px-1 py-0.5"
-              title="Hidden from AI — local search still finds it"
+              title="Hidden from AI - local search still finds it"
             >
               Hidden
             </span>

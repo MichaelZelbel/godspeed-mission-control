@@ -142,7 +142,7 @@ export function ImportVaultDialog() {
           </DialogDescription>
         </DialogHeader>
 
-        {/* Idle — start scan */}
+        {/* Idle - start scan */}
         {step === "idle" && (
           <div className="flex flex-col items-center gap-4 py-8">
             <FolderOpen className="h-12 w-12 text-muted-foreground" />

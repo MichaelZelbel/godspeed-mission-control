@@ -11,7 +11,7 @@ import { showToast } from "@/lib/toast";
  * Settings panel for the global "Visible to AI" model.
  *
  * Currently exposes:
- *  - `hide_sensitive_from_ai` — when a person is marked sensitive,
+ *  - `hide_sensitive_from_ai` - when a person is marked sensitive,
  *    automatically hide all linked notes/moments/action_items from AI
  *    features (Lexicon, People, Knowledge Graph, AI Chat, MCP).
  */
@@ -85,7 +85,7 @@ export function AiVisibilitySettings() {
               <p className="text-xs text-muted-foreground max-w-md">
                 When a person is marked as <em>sensitive</em>, all notes,
                 moments and action items that mention them are automatically
-                treated as hidden from AI — no per-item toggle needed.
+                treated as hidden from AI - no per-item toggle needed.
               </p>
             </div>
             <Switch

@@ -2,7 +2,7 @@
 //
 // Kept free of React and Supabase so it can be unit-tested directly. Folders
 // are strictly single-parent (each item has at most one folder_id, and each
-// folder has at most one parent_folder_id) — the intuitive folder model, and
+// folder has at most one parent_folder_id) - the intuitive folder model, and
 // the one that maps cleanly to a filesystem path for future Obsidian/Git
 // export.
 
@@ -73,7 +73,7 @@ export function buildCollectionItemsTree(input: {
     }
     const node = nodeById.get(item.folder_id);
     if (!node) {
-      // Folder was deleted (FK is set null) or filtered out — treat as loose.
+      // Folder was deleted (FK is set null) or filtered out - treat as loose.
       looseItems.push(item);
       return;
     }

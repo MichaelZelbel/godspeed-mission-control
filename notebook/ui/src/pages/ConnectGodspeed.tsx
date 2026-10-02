@@ -87,7 +87,7 @@ export default function ConnectGodspeed() {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4 py-12">
-      <SEOHead title="Connect your mission control - Menerio" noIndex />
+      <SEOHead title="Connect your mission control - Godspeed Mission Control" noIndex />
       <div className="w-full max-w-md">
         <div className="mb-8 text-center">
           <Link to="/" className="inline-flex items-center gap-2 mb-4">

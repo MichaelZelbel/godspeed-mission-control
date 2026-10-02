@@ -56,7 +56,7 @@ const byName = <T extends { name: string }>(a: T, b: T) =>
  * Assemble the group tree plus the ungrouped bucket.
  *
  * - Roots = active groups with no parent, or whose parent is missing/excluded
- *   (orphan guard — a nested group never disappears because its parent was
+ *   (orphan guard - a nested group never disappears because its parent was
  *   archived/trashed/deleted).
  * - Archived and trashed groups are dropped entirely, along with their members'
  *   contribution to any live ancestor's counts.
@@ -101,7 +101,7 @@ export function buildPeopleTree(input: {
   const groupedContactIds = new Set<string>();
   memberships.forEach(({ group_id, contact_id }) => {
     const node = nodeById.get(group_id);
-    if (!node) return; // membership to an excluded/missing group — ignore
+    if (!node) return; // membership to an excluded/missing group - ignore
     const person = peopleById.get(contact_id);
     // Ghost membership: the contact was merged or deleted, so its row was
     // cascaded/filtered out of `people` but the membership row itself is
@@ -114,7 +114,7 @@ export function buildPeopleTree(input: {
       set = new Set<string>();
       directIdsByGroup.set(group_id, set);
     }
-    if (set.has(contact_id)) return; // duplicate row — dedupe
+    if (set.has(contact_id)) return; // duplicate row - dedupe
     set.add(contact_id);
     node.people.push(person);
   });
@@ -157,7 +157,7 @@ export function buildPeopleTree(input: {
 /**
  * Client-side cycle guard for drag-to-reparent. Dropping `draggedId` onto
  * `targetId` would set dragged's parent to target; that creates a cycle iff
- * target is dragged itself or a descendant of dragged — i.e. dragged appears
+ * target is dragged itself or a descendant of dragged - i.e. dragged appears
  * in target's ancestor chain. Walks parents up from target with a visited
  * guard so pre-existing malformed data can't hang the UI. The DB trigger is
  * the authoritative backstop.

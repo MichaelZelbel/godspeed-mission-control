@@ -15,7 +15,7 @@ export interface OrphanNote {
  * Returns the user's notes that have NO entry in `note_connections`
  * (neither as source nor as target) AND are visible to AI.
  *
- * Notes hidden from AI are intentionally excluded — for those notes the user
+ * Notes hidden from AI are intentionally excluded - for those notes the user
  * has explicitly opted out of cross-linking, so surfacing them as "orphans
  * to connect" is noise.
  *

@@ -23,7 +23,7 @@ function decodeHtmlEntities(value: string): string {
  * one tight task list.
  *
  * Idempotent: already-tight task lists are returned unchanged.
- * Only triggers on `- [ ]` / `- [x]` lines — regular bullet lists are untouched.
+ * Only triggers on `- [ ]` / `- [x]` lines - regular bullet lists are untouched.
  */
 export function coalesceTaskList(md: string): string {
   if (!md || !md.includes("[")) return md;
@@ -37,7 +37,7 @@ export function coalesceTaskList(md: string): string {
   let i = 0;
   while (i < lines.length) {
     if (!isTask[i]) { i++; continue; }
-    // Found start of a task run — scan forward, marking blank separators that
+    // Found start of a task run - scan forward, marking blank separators that
     // sit between two task lines for removal.
     let j = i;
     while (j < lines.length) {
@@ -70,7 +70,7 @@ export function normalizeNoteContent(content: string | null | undefined): string
   const value = content ?? "";
   if (!value) return value;
 
-  // Legacy HTML with escaped entities — decode them
+  // Legacy HTML with escaped entities - decode them
   if (ESCAPED_HTML_TAG_PATTERN.test(value)) {
     const decoded = decodeHtmlEntities(value);
     const wrappedMatch = decoded.match(/^<p>([\s\S]*)<\/p>$/i);
@@ -80,12 +80,12 @@ export function normalizeNoteContent(content: string | null | undefined): string
     return decoded;
   }
 
-  // Markdown — coalesce Obsidian-style task lists with blank-line separators.
+  // Markdown - coalesce Obsidian-style task lists with blank-line separators.
   if (!looksLikeHtml(value)) {
     return coalesceTaskList(value);
   }
 
-  // Plain HTML — pass through as-is.
+  // Plain HTML - pass through as-is.
   return value;
 }
 

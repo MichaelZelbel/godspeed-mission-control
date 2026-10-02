@@ -358,7 +358,7 @@ export default function ReviewQueue() {
       });
 
       // The person is explicitly confirming this item, so it is exempt from
-      // the evidence gate — but when the suggestion carried a source quote we
+      // the evidence gate - but when the suggestion carried a source quote we
       // keep it, so the row can always be traced back to a note.
       const confirmedQuote = String((item.payload as any)?.evidence_quote || "").trim();
       let insertedId: string | null = dup?.id ?? null;
@@ -787,7 +787,7 @@ export default function ReviewQueue() {
 
   const handleKeep = (item: ReviewItem) => runOnce(item, async () => {
     // If the suggestion has not actually been applied yet (no target row written),
-    // run the real accept path. Status alone is not enough — historical Kept items
+    // run the real accept path. Status alone is not enough - historical Kept items
     // exist with status="kept" but null target_entity_id because earlier versions
     // of this page only flipped status without inserting.
     const alreadyApplied = !!item.target_entity_id && !!item.applied_at;
@@ -822,7 +822,7 @@ export default function ReviewQueue() {
   // Server-side bulk actions. The client fires ONE request; the review-queue-bulk
   // edge function processes every row in the background and writes progress into
   // review_queue_bulk_jobs, which we poll every 2 seconds. No per-item work runs
-  // in the browser — that was what froze the tab at 2k+ items.
+  // in the browser - that was what froze the tab at 2k+ items.
   const BULK_CONFIRM_THRESHOLD = 100;
   const [bulkJobId, setBulkJobId] = useState<string | null>(null);
   const [bulkConfirm, setBulkConfirm] = useState<null | {

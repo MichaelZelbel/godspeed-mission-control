@@ -26,7 +26,7 @@ export function useAICreditsGate() {
     // Fail-open while loading
     if (isLoading) return true;
 
-    // No credits data yet — allow
+    // No credits data yet - allow
     if (!credits) return true;
 
     // Zero-grant plans (free tier with 0 credits) and a spent balance both

@@ -235,7 +235,7 @@ function OverviewTab() {
         </CardHeader>
         <CardContent>
           <div className="flex items-center justify-center h-48 rounded-lg border border-dashed text-muted-foreground text-sm">
-            Charts placeholder — integrate with Recharts
+            Charts placeholder - integrate with Recharts
           </div>
         </CardContent>
       </Card>
@@ -334,7 +334,7 @@ function UsersTab() {
   };
 
   const openTokenModal = async (userId: string, userName: string) => {
-    // Fetch current allowance — tolerate stray duplicates by ordering + limit(1).
+    // Fetch current allowance - tolerate stray duplicates by ordering + limit(1).
     const { data: rows } = await supabase
       .from("v_ai_allowance_current" as any)
       .select("*")
@@ -963,7 +963,7 @@ function SystemTab() {
         </CardHeader>
         <CardContent>
           <div className="flex items-center justify-center h-32 rounded-lg border border-dashed text-muted-foreground text-sm">
-            <ToggleLeft className="h-5 w-5 mr-2" /> Feature flags — coming soon
+            <ToggleLeft className="h-5 w-5 mr-2" /> Feature flags - coming soon
           </div>
         </CardContent>
       </Card>

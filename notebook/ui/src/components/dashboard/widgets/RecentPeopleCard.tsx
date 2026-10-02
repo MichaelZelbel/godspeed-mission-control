@@ -41,7 +41,7 @@ export function RecentPeopleCard() {
             onClick={() => navigate("/dashboard/people")}
             className="w-full rounded-md px-2 py-3 text-left text-sm text-muted-foreground transition-colors hover:bg-accent"
           >
-            <Heart className="mb-1 inline h-4 w-4 text-primary" /> No one here yet — add your first
+            <Heart className="mb-1 inline h-4 w-4 text-primary" /> No one here yet - add your first
             person to start cherishing.
           </button>
         ) : (

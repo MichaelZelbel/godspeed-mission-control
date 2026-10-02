@@ -152,7 +152,7 @@ export default function WeeklyReview() {
 
   return (
     <div className="max-w-3xl">
-      <SEOHead title="Weekly Review — Menerio" noIndex />
+      <SEOHead title="Weekly Review - Godspeed Mission Control" noIndex />
 
       <div className="flex items-center justify-between mb-6">
         <div>

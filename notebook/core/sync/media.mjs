@@ -21,11 +21,12 @@ export class MediaSync {
       const config=this.config();if(!config)return {state:'unpaired'};
       const remote=await(await this.request('/api/media/manifest')).json(),local=this.manifest();let downloaded=0,uploaded=0;
       for(const mapping of remote.data){
-        if(mapping.removed_at)continue;
+        if(mapping.removed_at){const prior=local.find(m=>m.path===mapping.path);if(!prior||prior.sha256===mapping.sha256)atomic(path.join(this.root,hash(mapping.path)+'.mapping.json'),JSON.stringify(mapping));else this.store.save('review_queue',{id:'media-delete-conflict-'+hash([mapping.path,prior.sha256,mapping.sha256]).slice(0,24),suggestion_type:'media_conflict',title:'Review removed media with an offline edited version',payload:{local:prior,remote:mapping},status:'pending_review'});continue;}
         if(config.offline==='selected'&&!config.selected?.includes(mapping.path))continue;
         if(fs.existsSync(path.join(this.root,safe(mapping.file)))){if(hash(fs.readFileSync(path.join(this.root,mapping.file)))!==mapping.sha256)throw new Error('Local media integrity mismatch');}
         else {const bytes=Buffer.from(await(await this.request('/api/media/blob/'+encodeURIComponent(mapping.file))).arrayBuffer());if(hash(bytes)!==mapping.sha256)throw new Error('Downloaded media integrity mismatch');atomic(path.join(this.root,safe(mapping.file)),bytes);downloaded++;}
         const prior=local.find(m=>m.path===mapping.path);
+        if(prior?.removed_at&&prior.sha256===mapping.sha256){await this.request('/api/media/tombstone',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(prior)});continue;}
         if(prior&&prior.sha256!==mapping.sha256){const id='media-conflict-'+hash([mapping.path,prior.sha256,mapping.sha256]).slice(0,24);if(!this.store.get('review_queue',id))this.store.save('review_queue',{id,suggestion_type:'media_conflict',title:'Keep both media versions for '+mapping.path,payload:{local:prior,remote:mapping},status:'pending_review'});continue;}
         atomic(path.join(this.root,hash(mapping.path)+'.mapping.json'),JSON.stringify(mapping));
       }

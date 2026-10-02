@@ -112,7 +112,7 @@ export function MediaAnalysisPanel({ entries, noteId, onClose, storagePath }: Me
         </div>
       )}
 
-      {/* Extracted text — single image */}
+      {/* Extracted text - single image */}
       {!isPdf && (
         <ExtractedTextSection text={mainEntry.extracted_text} onCopy={copyText} />
       )}

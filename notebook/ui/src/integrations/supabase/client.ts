@@ -43,7 +43,8 @@ const storage=(bucket:string)=>({
   upload:async(name:string,file:Blob,options:any={})=>{const form=new FormData();form.append('file',file);form.append('path',name);const r=await fetch('/api/media/upload?bucket='+encodeURIComponent(bucket),{method:'POST',body:form});const data=await r.json();return r.ok?{data,error:null}:{data:null,error:{message:data.error}};},
   getPublicUrl:(name:string)=>({data:{publicUrl:'/api/media/file/'+encodeURIComponent(name)}}),
   createSignedUrl:async(name:string)=>({data:{signedUrl:'/api/media/file/'+encodeURIComponent(name)},error:null}),
-  remove:async(names:string[])=>request('media/remove',{names}),
+  createSignedUrls:async(names:string[])=>({data:names.map(name=>({path:name,signedUrl:'/api/media/file/'+encodeURIComponent(name),error:null})),error:null}),
+  remove:async(names:string[])=>request('media/remove',{paths:names}),
   download:async(name:string)=>{const r=await fetch('/api/media/file/'+encodeURIComponent(name));return r.ok?{data:await r.blob(),error:null}:{data:null,error:{message:'Media unavailable'}};}
 });
 export const supabase:any={

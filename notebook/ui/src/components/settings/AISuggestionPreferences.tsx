@@ -234,7 +234,7 @@ export function AISuggestionPreferences() {
         <div className="space-y-2">
           <Label htmlFor="ai-profile-language" className="text-sm font-semibold">Profile language</Label>
           <p className="text-xs text-muted-foreground">
-            Standardised profile facts — job title, nationality, languages, city and country names — are written in
+            Standardised profile facts - job title, nationality, languages, city and country names - are written in
             this language, even when the note was written in another one. Names, addresses and quotes are never translated.
           </p>
           <Select

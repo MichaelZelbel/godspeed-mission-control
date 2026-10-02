@@ -259,7 +259,7 @@ export default function KnowledgeGraph() {
     return TYPE_COLORS[node.type] || TYPE_COLORS.note;
   }, []);
 
-  // Node radius in SCREEN pixels — converted to world units via /globalScale in renderers
+  // Node radius in SCREEN pixels - converted to world units via /globalScale in renderers
   const getNodeScreenSize = useCallback(
     (node: ForceNode) => nodeScreenRadius(node.__importance || 0, filters.sizeMode === "uniform" ? "uniform" : "importance"),
     [filters.sizeMode]
@@ -302,7 +302,7 @@ export default function KnowledgeGraph() {
     [filters.labelMode]
   );
 
-  // Canvas node renderer — radius is constant in SCREEN pixels.
+  // Canvas node renderer - radius is constant in SCREEN pixels.
   const nodeCanvasObject = useCallback(
     (node: any, ctx: CanvasRenderingContext2D, globalScale: number) => {
       const sizePx = getNodeScreenSize(node);
@@ -365,7 +365,7 @@ export default function KnowledgeGraph() {
         h: totalH + pad,
       };
 
-      // Hovered / selected always win — no collision check
+      // Hovered / selected always win - no collision check
       const skipCollision = isHovered || isSelected || tier === 0;
       if (!skipCollision) {
         for (const existing of placedRectsRef.current) {
@@ -389,7 +389,7 @@ export default function KnowledgeGraph() {
     [hoveredNode, selectedNode, getNodeScreenSize, getNodeColor, bridgeNoteIds, isNeighbor, shouldDrawLabel]
   );
 
-  // Link canvas renderer — edge LOD: thin out weak edges when zoomed out.
+  // Link canvas renderer - edge LOD: thin out weak edges when zoomed out.
   const linkCanvasObject = useCallback(
     (link: any, ctx: CanvasRenderingContext2D, globalScale: number) => {
       const style = EDGE_STYLES[link.type] || EDGE_STYLES.semantic;
@@ -566,7 +566,7 @@ export default function KnowledgeGraph() {
 
   return (
     <div className={fullscreen ? "fixed inset-0 z-50 bg-background flex flex-col" : "flex flex-col h-full"}>
-      <SEOHead title="Note Graph — Menerio" noIndex />
+      <SEOHead title="Note Graph - Godspeed Mission Control" noIndex />
 
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-background shrink-0">

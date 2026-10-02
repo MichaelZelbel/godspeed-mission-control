@@ -221,7 +221,7 @@ export function FirstCapturesWizard({ onComplete }: { onComplete: () => void }) 
             exit="exit"
             transition={{ duration: 0.2 }}
           >
-            {/* Step 0 — Tools */}
+            {/* Step 0 - Tools */}
             {step === 0 && (
               <div className="space-y-4">
                 <div>
@@ -252,7 +252,7 @@ export function FirstCapturesWizard({ onComplete }: { onComplete: () => void }) 
               </div>
             )}
 
-            {/* Step 1 — Decisions */}
+            {/* Step 1 - Decisions */}
             {step === 1 && (
               <div className="space-y-4">
                 <div>
@@ -273,7 +273,7 @@ export function FirstCapturesWizard({ onComplete }: { onComplete: () => void }) 
               </div>
             )}
 
-            {/* Step 2 — Re-explaining */}
+            {/* Step 2 - Re-explaining */}
             {step === 2 && (
               <div className="space-y-4">
                 <div>
@@ -294,7 +294,7 @@ export function FirstCapturesWizard({ onComplete }: { onComplete: () => void }) 
               </div>
             )}
 
-            {/* Step 3 — People */}
+            {/* Step 3 - People */}
             {step === 3 && (
               <div className="space-y-4">
                 <div>
@@ -315,7 +315,7 @@ export function FirstCapturesWizard({ onComplete }: { onComplete: () => void }) 
               </div>
             )}
 
-            {/* Step 4 — Suggestions */}
+            {/* Step 4 - Suggestions */}
             {step === 4 && (
               <div className="space-y-4">
                 <div className="flex items-center justify-between">

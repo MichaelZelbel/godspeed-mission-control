@@ -55,7 +55,7 @@ export async function syncGroupWikiMembers(groupId: string) {
     .map((membership) => {
       const name = membership.contacts!.name!;
       const slug = personSlugByName.get(name) || slugify(name);
-      const status = membership.status ? ` — ${membership.status.replace(/_/g, " ")}` : "";
+      const status = membership.status ? ` - ${membership.status.replace(/_/g, " ")}` : "";
       return `- [[${slug}]]${status}`;
     });
 

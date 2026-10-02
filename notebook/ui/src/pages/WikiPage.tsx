@@ -417,7 +417,7 @@ export default function WikiPage() {
   if (!page && pageFailed) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
-        <SEOHead title="Lexicon — Menerio" noIndex />
+        <SEOHead title="Lexicon - Godspeed Mission Control" noIndex />
         <Card className="max-w-lg text-center">
           <CardContent role="alert" className="py-12">
             <CardTitle className="mb-2">This page could not be loaded</CardTitle>
@@ -435,7 +435,7 @@ export default function WikiPage() {
   if (!page) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
-        <SEOHead title="Lexicon page not found — Menerio" noIndex />
+        <SEOHead title="Lexicon page not found - Godspeed Mission Control" noIndex />
         <Card className="max-w-lg border-dashed text-center">
           <CardContent className="py-12">
             <CardTitle className="mb-2">This page doesn't exist yet.</CardTitle>
@@ -449,7 +449,7 @@ export default function WikiPage() {
 
   return (
     <div className="space-y-6">
-      <SEOHead title={`${page.title} — Lexicon — Menerio`} noIndex />
+      <SEOHead title={`${page.title} - Lexicon - Godspeed Mission Control`} noIndex />
       <div className="flex flex-col gap-3 border-b border-border pb-5 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0 space-y-3">
           <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">

@@ -29,7 +29,7 @@ const SERVER_OWNED_COLUMNS: Record<string, string[]> = {
  * A local value that can never be accepted upstream, however many times we try.
  *
  * isFatalError classifies by Postgres SQLSTATE, which a client-side parse
- * failure does not have — so an unparseable JSON column was rethrown as
+ * failure does not have - so an unparseable JSON column was rethrown as
  * retryable and PowerSync replayed the same transaction forever, with every
  * later edit stuck behind it. That is the exact permanent wedge FATAL_CODES
  * exists to prevent; it just could not see this class of error.

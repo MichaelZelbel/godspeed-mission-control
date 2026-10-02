@@ -12,6 +12,7 @@ export function importExport(query,exported){
       if(known[key]?.digest===digest)continue;
       if(old&&known[key]&&old._hash!==known[key].savedHash)throw new Error('An imported record was edited locally. Resolve before reimporting '+key);
       if(old&&!known[key])throw new Error('An existing record has the imported ID. Review '+key);
+      if(old&&row.type==='moments')throw new Error('A previously imported event changed. Preserve the original and apply an explicit event correction before reimporting '+key);
       const record=store.prepare(row.type,{...row,id:known[key]?.id||row.id,import_origin:'menerio'},old);
       prepared.push(record);entries[key]={id:record.id,uid:record.uid,digest};
     }

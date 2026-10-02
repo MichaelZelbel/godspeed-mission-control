@@ -47,8 +47,8 @@ const CherishlyLanding = () => {
   return (
     <>
     <SEOHead
-      title="Cherishly — Your Relationship Companion"
-      description="Cherishly helps you remember and celebrate your loved ones — start free or upgrade for premium features like reminders, AI guidance, and more."
+      title="Cherishly - Your Relationship Companion"
+      description="Cherishly helps you remember and celebrate your loved ones - start free or upgrade for premium features like reminders, AI guidance, and more."
     />
     <div className="min-h-screen flex flex-col bg-gradient-to-b from-[#FFD9E8] via-[#FFF0F5] to-[#FFF8F5]">
       {/* Header */}
@@ -130,7 +130,7 @@ const CherishlyLanding = () => {
 
               {/* Subheadline */}
               <p className="text-xl md:text-2xl text-gray-700/90 leading-relaxed max-w-2xl mx-auto font-light">
-                Start cherishing someone special — before the moment fades.
+                Start cherishing someone special - before the moment fades.
               </p>
 
               {/* CTA Button */}
@@ -174,7 +174,7 @@ const CherishlyLanding = () => {
                 </div>
                 <h3 className="text-2xl font-semibold text-gray-800">Remember</h3>
                 <p className="text-gray-600 leading-relaxed">
-                  Store the little details that make someone special — their likes, dreams, and moments that matter.
+                  Store the little details that make someone special - their likes, dreams, and moments that matter.
                 </p>
               </CardContent>
             </Card>
@@ -208,7 +208,7 @@ const CherishlyLanding = () => {
         </div>
       </section>
 
-      {/* Footer — ported from the old app's global Footer; the Pricing and
+      {/* Footer - ported from the old app's global Footer; the Pricing and
           Help & Guide links are intentionally dropped (no pricing anymore,
           no /help route in this codebase). */}
       <footer className="w-full border-t bg-background py-8 mt-auto">

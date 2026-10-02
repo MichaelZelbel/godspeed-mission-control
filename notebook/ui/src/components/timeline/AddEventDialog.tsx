@@ -300,7 +300,7 @@ export default function AddEventDialog({ people, onCreated, editEvent, open: con
             {aiLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
             Suggest title and other values
           </Button>
-          {suggestionApplied && <p className="text-xs text-muted-foreground">Suggestions applied — review and edit below.</p>}
+          {suggestionApplied && <p className="text-xs text-muted-foreground">Suggestions applied - review and edit below.</p>}
         </div>
         <div className="space-y-2"><Label>Title *</Label><Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Short title for this moment" /></div>
         <div className="grid grid-cols-2 gap-3">

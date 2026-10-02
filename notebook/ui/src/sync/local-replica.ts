@@ -158,7 +158,7 @@ export async function getReplicaDiagnostics(userId: string): Promise<ReplicaDiag
 
 /**
  * Pull every server note for the user and upsert it locally. Pending local
- * writes are untouched — this only fills gaps / refreshes downloaded state.
+ * writes are untouched - this only fills gaps / refreshes downloaded state.
  */
 export async function repairLocalReplica(userId: string): Promise<number> {
   const pageSize = 500;

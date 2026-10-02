@@ -1,3 +1,4 @@
 // Model costs belong to the user's provider; the local product has no credit plan.
+import {useQuery} from '@tanstack/react-query';
 export interface AICredits { tokensGranted:number;tokensUsed:number;remainingTokens:number;creditsGranted:number;creditsUsed:number;remainingCredits:number;periodStart:string;periodEnd:string;rolloverTokens:number;baseTokens:number;tokensPerCredit:number; }
-export function useAICredits(){return {credits:null as AICredits|null,isLoading:false,error:null,refetch:async()=>{}};}
+export function useAICredits(){const state=useQuery({queryKey:['provider-availability'],queryFn:async()=>{const response=await fetch('/api/status');if(!response.ok)throw new Error('Could not read assistant availability');return response.json();},refetchInterval:5000});return {credits:null as AICredits|null,providerConfigured:!!state.data?.runtimeConfigured,isLoading:state.isLoading,error:state.error,refetch:state.refetch};}

@@ -20,7 +20,7 @@ const Cookies = () => {
 
   return (
     <div className="container py-12 lg:py-16">
-      <SEOHead title="Cookies Policy — Menerio" description={`Learn how ${BRAND.name} uses cookies, what data they collect, and how to manage your cookie preferences in your browser.`} />
+      <SEOHead title="Cookies Policy - Godspeed Mission Control" description={`Learn how ${BRAND.name} uses cookies, what data they collect, and how to manage your cookie preferences in your browser.`} />
 
       <div className="flex flex-col lg:flex-row gap-12">
         {/* Table of Contents Sidebar */}

@@ -19,7 +19,7 @@ function buildHref(token: string) {
 
 /**
  * Splits text into React nodes, turning URLs and emails into clickable links.
- * Safe from XSS — output is React nodes, never raw HTML.
+ * Safe from XSS - output is React nodes, never raw HTML.
  */
 export function linkifyText(text: string): ReactNode {
   if (!text) return text;

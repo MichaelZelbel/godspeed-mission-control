@@ -2,7 +2,7 @@
  * Relationship label vocabulary for the picker, plus the single display
  * entry point. All directional/gender logic lives in
  * `@/lib/relationship-canonical` (`describeRelationship`) so every surface —
- * profile card, people tree, review queue, lexicon — renders the same
+ * profile card, people tree, review queue, lexicon - renders the same
  * "Role: Name" string.
  */
 import {

@@ -1,7 +1,7 @@
 // Brand configuration for white-label builds. See docs/BRANDING.md.
 //
-// IMPORTANT: files in src/brands/ must stay PURE DATA — no import.meta.env,
-// no asset imports, no browser APIs — because vite.config.ts imports them
+// IMPORTANT: files in src/brands/ must stay PURE DATA - no import.meta.env,
+// no asset imports, no browser APIs - because vite.config.ts imports them
 // under Node to brand the PWA manifest and index.html at build time.
 
 export interface BrandConfig {
@@ -18,7 +18,7 @@ export interface BrandConfig {
   metaDescription: string;
   /** <title> of the built index.html. */
   htmlTitle: string;
-  /** Appended to page titles by SEOHead, e.g. " — Menerio". */
+  /** Appended to page titles by SEOHead, e.g. " - Godspeed Mission Control". */
   titleSuffix: string;
   supportEmail: string;
   /** Absolute URL of the default Open Graph image. */
@@ -45,7 +45,7 @@ export interface BrandConfig {
   dashboardSubline: string;
   /** Marketing header nav links. */
   marketingNav: Array<{ label: string; to: string }>;
-  /** Whether the sidebar shows the Documentation link (docs prose is Menerio-branded). */
+  /** Whether the sidebar shows the Documentation link (docs prose is Godspeed Mission Control-branded). */
   showDocs: boolean;
   /** Hosts whose links the rich-text editor treats as internal (SPA navigation). */
   internalHosts: string[];

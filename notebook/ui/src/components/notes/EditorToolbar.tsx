@@ -146,7 +146,7 @@ export function EditorToolbar({ editor, quickActions, noteActions, onInsertWikil
                   </Button>
                 </PopoverTrigger>
                 {/* Commands run editor.chain().focus(), which moves focus to the
-                    editor — prevent focus-outside dismissal so the panel stays
+                    editor - prevent focus-outside dismissal so the panel stays
                     open for applying several formats. Outside click and Escape
                     still close it. */}
                 <PopoverContent

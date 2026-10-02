@@ -192,7 +192,7 @@ export function useAddMembership() {
     },
     onError: (error: Error) => {
       // A UNIQUE (group_id, contact_id) violation (Postgres 23505) surfaces as
-      // a "duplicate key" message — translate it to a friendly line, since the
+      // a "duplicate key" message - translate it to a friendly line, since the
       // person is simply already a member.
       const message = String(error?.message || "").toLowerCase();
       showToast.error(message.includes("duplicate") ? "Already a member" : dbErrorMessage(error, "Could not add the member."));
@@ -246,7 +246,7 @@ export function useRemoveMembership() {
     onSuccess: ({ groupId, personId }) => {
       invalidateMembershipQueries(qc, groupId, personId);
       // Hard delete leaves no updated_at trace for the sweep's dirty
-      // detection — force both affected pages.
+      // detection - force both affected pages.
       triggerPeopleSync({ people: [personId], groups: [groupId] });
     },
     onError: (error: Error) => showToast.error(dbErrorMessage(error, "Could not remove the member.")),

@@ -84,7 +84,7 @@ function isJobFinished(entries: AnalysisStatusLike[] | undefined, path: string, 
   if (rows.length === 0) return false;
 
   const hasFresh = rows.some((e) => {
-    // Use updated_at only — created_at stays old when rows are updated in place.
+    // Use updated_at only - created_at stays old when rows are updated in place.
     const ts = Date.parse(e.updated_at || "");
     return Number.isFinite(ts) && ts >= startedAt - 1500;
   });

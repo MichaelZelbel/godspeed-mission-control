@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { FileText, Loader2 } from "lucide-react";
 import * as pdfjsLib from "pdfjs-dist";
-// Vite worker import — bundles the worker as a module URL
+// Vite worker import - bundles the worker as a module URL
 // @ts-ignore - vite ?url import
 import pdfWorker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 

@@ -1,12 +1,12 @@
 /**
- * Dated facts ("claims") — pure helpers shared by the Facts panels.
+ * Dated facts ("claims") - pure helpers shared by the Facts panels.
  *
  * A claim is a fact believed about a subject (the user, a person, or an
  * entity) with a validity period. Facts are never deleted: when a new fact
  * replaces an old one, the old one gets a `valid_to` date. History is the
  * feature.
  *
- * Mirrors supabase/functions/_shared/claims.ts — keep the two in sync.
+ * Mirrors supabase/functions/_shared/claims.ts - keep the two in sync.
  */
 
 export type ClaimSubjectType = "self" | "contact" | "entity";
@@ -51,7 +51,7 @@ export function isCurrentClaim(claim: Pick<Claim, "valid_to">, today: string = t
 /**
  * Attributes owned by another surface and therefore never rendered in Facts.
  * Relationships live in `contact_relationships` with their own canonical
- * labels, inverse pairs and rejection ledger — duplicating them here would
+ * labels, inverse pairs and rejection ledger - duplicating them here would
  * fork the truth.
  */
 export const RESERVED_CLAIM_ATTRIBUTES = new Set(["relationship"]);

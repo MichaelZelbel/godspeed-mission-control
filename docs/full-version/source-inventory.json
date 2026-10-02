@@ -59,7 +59,9 @@
       "tables": [
         "collections"
       ],
-      "functions": [],
+      "functions": [
+        "generate_collection_schema"
+      ],
       "rpcs": []
     },
     {
@@ -244,7 +246,9 @@
       "tables": [
         "action_items"
       ],
-      "functions": [],
+      "functions": [
+        "suggest-group-next-step"
+      ],
       "rpcs": []
     },
     {
@@ -262,7 +266,9 @@
     {
       "source": "src/components/groups/SuggestMembersButton.tsx",
       "tables": [],
-      "functions": [],
+      "functions": [
+        "suggest-group-members"
+      ],
       "rpcs": []
     },
     {

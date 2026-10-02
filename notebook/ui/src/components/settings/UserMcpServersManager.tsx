@@ -33,9 +33,9 @@ import { dbErrorMessage } from "@/lib/function-error";
 
 /**
  * Connected AI tools (outbound MCP servers). Lets the user register third-party
- * Model Context Protocol servers that Menerio's chat agents (note-chat + Mira)
+ * Model Context Protocol servers that Godspeed Mission Control's chat agents (note-chat + Mira)
  * may call as tools. This is the outbound counterpart to the "MCP" tab, which
- * lets external clients into Menerio's own server.
+ * lets external clients into Godspeed Mission Control's own server.
  */
 
 type McpServer = {
@@ -139,7 +139,7 @@ export function UserMcpServersManager() {
               Give {BRAND.name}'s AI chat extra tools by connecting your own Model
               Context Protocol (MCP) servers. When enabled, the in-note chat and
               {BRAND.personaName} can call these servers' tools while helping you. Only add
-              servers you trust — their tools run on your behalf.
+              servers you trust - their tools run on your behalf.
             </CardDescription>
           </div>
           <Dialog open={addOpen} onOpenChange={setAddOpen}>

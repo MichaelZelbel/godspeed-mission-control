@@ -213,7 +213,7 @@ export default function WikiLintPlaceholder() {
 
   return (
     <div className="space-y-6">
-      <SEOHead title="Lexicon health check — Menerio" noIndex />
+      <SEOHead title="Lexicon health check - Godspeed Mission Control" noIndex />
 
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>

@@ -119,7 +119,7 @@ export function SyncConflictsPanel() {
     mutationFn: async (resolution: string) => {
       for (const conflict of conflicts) {
         // invoke() resolves with { error } instead of throwing, so a failed
-        // call must be surfaced explicitly — otherwise onSuccess reports "All
+        // call must be surfaced explicitly - otherwise onSuccess reports "All
         // conflicts resolved" while conflicts remain unresolved.
         const { error } = await supabase.functions.invoke("github-sync-pull", {
           body: { action: "resolve-conflict", note_id: conflict.note_id, resolution },
@@ -253,7 +253,7 @@ export function SyncConflictsPanel() {
                   <AlertTriangle className="h-4 w-4 text-warning shrink-0" />
                 </div>
 
-                {/* keep_both is not offered for people/groups — it would create a duplicate entity. */}
+                {/* keep_both is not offered for people/groups - it would create a duplicate entity. */}
                 <div className="flex flex-wrap gap-1.5">
                   <Button
                     size="sm"

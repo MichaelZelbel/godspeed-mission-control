@@ -17,7 +17,7 @@ export interface PersistedChatMessage {
     args: Record<string, unknown>;
     result: Record<string, unknown>;
   }>;
-  /** Set when this turn edited the open note — enables one-click undo. */
+  /** Set when this turn edited the open note - enables one-click undo. */
   noteEdit?: {
     noteId: string;
     previousContent: string | null;
@@ -153,7 +153,7 @@ export const NOTE_MODIFYING_TOOLS = [
 /** Note-creating tools. These add a note, they never change an existing one. */
 export const NOTE_CREATING_TOOLS = ["create_note"];
 
-/** Collection-modifying tools (create/update/delete items) — used by CollectionChatPanel. */
+/** Collection-modifying tools (create/update/delete items) - used by CollectionChatPanel. */
 export const COLLECTION_MODIFYING_TOOLS = [
   "create_collection_item",
   "update_collection_item",

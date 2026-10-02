@@ -7,8 +7,8 @@ import {hash} from '../records/store.mjs';
 export class SearchIndex {
   constructor(store) {
     this.store = store; this.file = path.join(store.state, 'search.sqlite');
-    this.db = new DatabaseSync(this.file);
-    this.db.exec('CREATE TABLE IF NOT EXISTS documents (uid TEXT PRIMARY KEY, type TEXT, id TEXT, title TEXT, body TEXT)');
+    const open=()=>{this.db = new DatabaseSync(this.file);this.db.exec('CREATE TABLE IF NOT EXISTS documents (uid TEXT PRIMARY KEY, type TEXT, id TEXT, title TEXT, body TEXT)');};
+    try{open();}catch(error){try{this.db?.close();}catch{}if(fs.existsSync(this.file))fs.renameSync(this.file,this.file+'.corrupt-'+Date.now());for(const suffix of ['-wal','-shm'])if(fs.existsSync(this.file+suffix))fs.renameSync(this.file+suffix,this.file+'.corrupt-'+Date.now()+suffix);open();this.recovered=true;}
     this.rebuild();
   }
   rebuild() {

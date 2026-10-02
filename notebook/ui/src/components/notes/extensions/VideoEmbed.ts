@@ -4,7 +4,7 @@ import { safeEmbedSrc } from "@/lib/safe-url";
 /**
  * Video embed node for TipTap.
  * Supports YouTube, Vimeo iframes and direct video URLs.
- * Markdown output: `![video](url)` — Obsidian-compatible.
+ * Markdown output: `![video](url)` - Obsidian-compatible.
  */
 export const VideoEmbed = Node.create({
   name: "videoEmbed",

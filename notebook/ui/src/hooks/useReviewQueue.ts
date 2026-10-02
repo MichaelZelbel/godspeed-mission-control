@@ -69,7 +69,7 @@ export function useReviewQueue(contactId: string | null = null) {
       return (data || []) as unknown as ReviewItem[];
     },
     enabled: !!user,
-    // No polling on the heavy list — the count badge below refreshes instead.
+    // No polling on the heavy list - the count badge below refreshes instead.
     staleTime: 30_000,
   });
 

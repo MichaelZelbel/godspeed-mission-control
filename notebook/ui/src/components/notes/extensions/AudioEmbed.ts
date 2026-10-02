@@ -4,7 +4,7 @@ import { safeEmbedSrc } from "@/lib/safe-url";
 /**
  * Audio embed node for TipTap.
  * Renders as an <audio> element with controls.
- * Markdown output: `![audio](url)` — Obsidian-compatible.
+ * Markdown output: `![audio](url)` - Obsidian-compatible.
  */
 export const AudioEmbed = Node.create({
   name: "audioEmbed",

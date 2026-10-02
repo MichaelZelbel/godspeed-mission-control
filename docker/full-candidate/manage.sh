@@ -7,6 +7,8 @@ case "${1:-status}" in
  restart) "${compose[@]}" restart notebook ;;
  backup) "${compose[@]}" exec -T notebook node /opt/godspeed/kit/notebook/bin/godspeed.mjs backup "/opt/data/full-candidate/backups/$(date -u +%Y%m%d-%H%M%S)" ;;
  stop) "${compose[@]}" stop ;;
+ computer-code) "${compose[@]}" exec -T notebook node /opt/godspeed/kit/computer/godspeed-computer pair ;;
+ computer-status) "${compose[@]}" exec -T notebook node /opt/godspeed/kit/computer/godspeed-computer status ;;
  login-link)
    token=$(sed -n 's/^GODSPEED_CANDIDATE_TOKEN=//p' candidate.env)
    "${compose[@]}" exec -T -e "CANDIDATE_TOKEN=$token" notebook node -e 'const origin="http://127.0.0.1:47831";const a=await fetch(origin+"/api/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({token:process.env.CANDIDATE_TOKEN})});if(!a.ok)throw new Error("Login failed");const b=await fetch(origin+"/api/login-link",{method:"POST",headers:{Cookie:a.headers.get("set-cookie").split(";")[0]}});console.log("https://localhost:48443"+(await b.json()).path)' ;;

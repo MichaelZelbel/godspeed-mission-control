@@ -681,7 +681,7 @@ export function PeopleTree({
 
   const toggleGroup = useCallback((groupId: string) => toggle(`group:${groupId}`), [toggle]);
 
-  // Unique person ids in render order — anchors shift-range bulk selection.
+  // Unique person ids in render order - anchors shift-range bulk selection.
   const visiblePersonIds = useMemo(() => {
     const seen = new Set<string>();
     const out: string[] = [];
@@ -743,7 +743,7 @@ export function PeopleTree({
         return;
       }
       // Dropping a person onto "All People" removes them from every group they
-      // currently belong to — the loose bucket lives directly under this root.
+      // currently belong to - the loose bucket lives directly under this root.
       const personId = event.dataTransfer.getData("application/x-person-id");
       if (personId) {
         memberships
@@ -878,7 +878,7 @@ export function PeopleTree({
               handlers={handlers}
             />
 
-            {/* "All People" root — container for root groups + drop target that
+            {/* "All People" root - container for root groups + drop target that
                 reparents a dragged group to the top level. */}
             <div>
               <ContextMenu>

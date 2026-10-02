@@ -66,7 +66,7 @@ export function AiFootprintDialog({ noteId, open, onOpenChange }: Props) {
           </div>
         ) : total === 0 ? (
           <div className="py-10 text-center text-sm text-muted-foreground">
-            Nothing to clean up — this note hasn’t contributed to Lexicon,
+            Nothing to clean up - this note hasn’t contributed to Lexicon,
             People profiles, or the Knowledge Graph yet.
           </div>
         ) : (

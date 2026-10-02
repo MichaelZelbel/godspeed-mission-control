@@ -17,7 +17,7 @@ import { BRAND } from "@/lib/brand";
 import { functionErrorMessage } from "@/lib/function-error";
 import { copyToClipboard, COPY_FAILED_MESSAGE } from "@/lib/clipboard";
 
-const AI_MEMORY_PROMPT = `I'm setting up a personal knowledge system called ${BRAND.name}. Please check your memory and conversation history for everything you know about me — my role, projects, preferences, key people, decisions, and recurring topics. Organize it into categories: People, Projects, Preferences, Decisions, Professional context, Personal context. Present each item as a clear standalone statement. I'll save these to my system.`;
+const AI_MEMORY_PROMPT = `I'm setting up a personal knowledge system called ${BRAND.name}. Please check your memory and conversation history for everything you know about me - my role, projects, preferences, key people, decisions, and recurring topics. Organize it into categories: People, Projects, Preferences, Decisions, Professional context, Personal context. Present each item as a clear standalone statement. I'll save these to my system.`;
 
 interface ImportResult {
   total: number;
@@ -102,7 +102,7 @@ export function ImportMigrate() {
     setPeopleResult(null);
     try {
       // People creation runs first and synchronously so the result can be
-      // reported precisely — it must never end in silence.
+      // reported precisely - it must never end in silence.
       const people = await supabase.functions.invoke("enrich-people", { body: { limit: 500 } });
       if (people.error) throw people.error;
       const message: string = people.data?.message ?? "People step returned no result.";
@@ -427,7 +427,7 @@ export function ImportMigrate() {
           Creates person records for the people named in your notes, links those
           notes to them, and re-analyzes your most recent ~200 notes and timeline
           moments to populate their profiles (job, city, life events,
-          relationships). Existing entries are preserved — duplicates are
+          relationships). Existing entries are preserved - duplicates are
           skipped automatically.
         </CardDescription>
 

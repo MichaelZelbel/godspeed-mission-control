@@ -26,7 +26,7 @@ for p in sorted(seen):
     text=p.read_text(encoding='utf-8')
     evidence.append({'source':str(p.relative_to(root.parent)).replace('\\','/'),
         'tables':sorted(set(re.findall(r'\.from\(["\']([^"\']+)',text))),
-        'functions':sorted(set(re.findall(r'\.invoke\(["\']([^"\']+)',text))),
+        'functions':sorted(set(re.findall(r'\.invoke(?:<[^;]+?>)?\(\s*["\']([^"\']+)',text))),
         'rpcs':sorted(set(re.findall(r'\.rpc\(["\']([^"\']+)',text)))})
 jobs=json.loads((source/'dev/godspeed-engine/scripts/config/jobs.json').read_text(encoding='utf-8'))['jobs']
 skills=[]

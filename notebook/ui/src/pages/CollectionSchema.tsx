@@ -488,7 +488,7 @@ export default function CollectionSchema() {
   if (loadFailure)
     return (
       <div className="w-full max-w-5xl">
-        <SEOHead title="Collection Schema - Menerio" noIndex />
+        <SEOHead title="Collection Schema - Godspeed Mission Control" noIndex />
         <LoadErrorState
           title={
             loadFailure === "missing"
@@ -514,7 +514,7 @@ export default function CollectionSchema() {
   return (
     <div className="w-full max-w-5xl space-y-6">
       <SEOHead
-        title={`${collection?.name ?? "Collection"} Schema — Menerio`}
+        title={`${collection?.name ?? "Collection"} Schema - Godspeed Mission Control`}
         noIndex
       />
       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
@@ -523,7 +523,7 @@ export default function CollectionSchema() {
             Collections / {collection?.name} / Schema
           </p>
           <h1 className="mt-2 text-2xl font-bold font-display">
-            {collection?.icon} {collection?.name} — Schema
+            {collection?.icon} {collection?.name} - Schema
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
             Define the fields this collection tracks. You can add, remove, or

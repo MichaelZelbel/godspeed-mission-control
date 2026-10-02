@@ -178,7 +178,7 @@ const PAGE_SIZE = 50;
 // paginated in the browser, so a sort or filter always sees every item, not
 // just the first page. FETCH_CHUNK is one PostgREST request; MAX_CLIENT_ROWS
 // caps how many rows are ever pulled so a runaway collection cannot exhaust
-// memory — past that the UI says so instead of silently hiding the rest.
+// memory - past that the UI says so instead of silently hiding the rest.
 const FETCH_CHUNK = 1000;
 const MAX_CLIENT_ROWS = 5000;
 // Every item column except search_vector, which nothing here reads and which
@@ -2516,7 +2516,7 @@ function CollectionDetailPage() {
   const [truncatedByLimit, setTruncatedByLimit] = useState(false);
   const [cursorStack, setCursorStack] = useState<Cursor[]>([]);
   // Tree data (full item set + folders for the collection) is loaded separately
-  // from the paged/filtered `items` used by the table view — the tree needs the
+  // from the paged/filtered `items` used by the table view - the tree needs the
   // full picture, and refreshing it independently avoids resetting pagination.
   const [treeItems, setTreeItems] = useState<ItemLite[]>([]);
   const [confirm, confirmDialog] = useConfirmDialog();
@@ -2530,7 +2530,7 @@ function CollectionDetailPage() {
     (item: { id: string }, targetSlug: string = slug ?? "") => {
       navigate(`/collections/${targetSlug}/${item.id}`);
       // Fire-and-forget last_viewed_at stamp so the tree's Recent section is
-      // populated. Silent failures are fine — this is a UX signal, not data.
+      // populated. Silent failures are fine - this is a UX signal, not data.
       if (item.id && item.id !== "new") {
         supabase
           .from("collection_items")
@@ -3183,7 +3183,7 @@ function CollectionDetailPage() {
 
   const handleToggleFavorite = useCallback(
     async (id: string, isFavorite: boolean) => {
-      // Optimistic — favorite is a fire-and-forget UX flag.
+      // Optimistic - favorite is a fire-and-forget UX flag.
       setTreeItems((prev) =>
         prev.map((row) => (row.id === id ? { ...row, is_favorite: isFavorite } : row)),
       );
@@ -3325,7 +3325,7 @@ function CollectionDetailPage() {
   if (!collection)
     return (
       <div className="w-full max-w-6xl">
-        <SEOHead title="Collection - Menerio" noIndex />
+        <SEOHead title="Collection - Godspeed Mission Control" noIndex />
         <LoadErrorState
           title={
             collectionLoadFailure === "missing"
@@ -3347,7 +3347,7 @@ function CollectionDetailPage() {
   return (
     <div className="flex h-[calc(100dvh-104px)] w-full flex-col overflow-hidden rounded-md border bg-background lg:flex-row">
       <SEOHead
-        title={`${collection?.name ?? "Collection"} — Menerio`}
+        title={`${collection?.name ?? "Collection"} - Godspeed Mission Control`}
         noIndex
       />
       <CollectionItemsTree
@@ -3865,7 +3865,7 @@ function CollectionDetailPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-      {/* Table-row delete confirmation — the tree and item sheet already
+      {/* Table-row delete confirmation - the tree and item sheet already
           confirm; the table row was the one hard-delete path that did not. */}
       <AlertDialog
         open={!!tableDeleteTarget}

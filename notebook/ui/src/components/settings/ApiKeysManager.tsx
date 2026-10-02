@@ -37,9 +37,11 @@ const ALL_SCOPES = [
   { value: "notes", label: "Notes", desc: "Read/write notes" },
   { value: "contacts", label: "Contacts", desc: "Contacts, groups and interactions" },
   { value: "actions", label: "Actions", desc: "Action items" },
+  
   { value: "media", label: "Media", desc: "Media analysis results" },
   { value: "stats", label: "Stats", desc: "Read-only statistics" },
   { value: "world", label: "World", desc: "Entities, dated things and claims" },
+  
   { value: "collections", label: "Collections", desc: "Collections and their items" },
 ];
 
@@ -107,7 +109,7 @@ export function ApiKeysManager() {
         return;
       }
       setGeneratedKey(res.data.api_key);
-      toast({ title: "API key generated", description: "Copy it now — you won't see it again." });
+      toast({ title: "API key generated", description: "Copy it now - you won't see it again." });
       fetchKeys();
     } catch {
       toast({ variant: "destructive", title: "Error", description: "Something went wrong." });
@@ -198,7 +200,7 @@ export function ApiKeysManager() {
                 <div className="rounded-lg border border-warning/50 bg-warning/10 p-4 space-y-2">
                   <div className="flex items-center gap-2 text-warning">
                     <AlertTriangle className="h-4 w-4" />
-                    <span className="text-sm font-medium">Copy this key now — you won't be able to see it again</span>
+                    <span className="text-sm font-medium">Copy this key now - you won't be able to see it again</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <code className="flex-1 text-xs bg-muted p-2 rounded font-mono break-all">

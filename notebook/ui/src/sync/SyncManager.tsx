@@ -24,8 +24,8 @@ function describe(error: unknown): string {
 }
 
 // Drives the PowerSync connection lifecycle from auth state. Local reads and
-// writes never depend on this — without a connection the local database simply
-// doesn't sync — but the app must be TOLD that, which is what sync-health is
+// writes never depend on this - without a connection the local database simply
+// doesn't sync - but the app must be TOLD that, which is what sync-health is
 // for. Until 2026-08-16 a failed connect was a single console.warn that the
 // production build deletes, tried once per page load and never again.
 export function SyncManager() {

@@ -606,7 +606,7 @@ export default function MediaLibrary() {
 
   return (
     <div className="flex flex-col h-[calc(100dvh-104px)]">
-      <SEOHead title="Media Library — Menerio" noIndex />
+      <SEOHead title="Media Library - Godspeed Mission Control" noIndex />
 
       {/* Header */}
       <div className="px-6 py-4 border-b border-border shrink-0 space-y-3">

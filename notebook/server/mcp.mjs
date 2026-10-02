@@ -1,4 +1,5 @@
 import {visibleRows} from '../core/visibility.mjs';
+import {toolScope} from '../core/api-keys.mjs';
 const schema={type:'object',properties:{},additionalProperties:true};
 const definitions=[
   {name:'search_knowledge',description:'Search the rebuildable index of user records.',inputSchema:{type:'object',properties:{query:{type:'string'}},required:['query']}},
@@ -11,7 +12,7 @@ const definitions=[
   {name:'review_suggestions',description:'Apply, reject, snooze or roll back user-reviewed suggestions. Never accept inferred personal facts without user approval.',inputSchema:schema},
   {name:'validate_knowledge',description:'Validate file identity and typed references without changing invalid files.',inputSchema:schema}
 ];
-export async function mcp(input,{store,query,index,domains}){
+export async function mcp(input,{store,query,index,domains,scopes}){
   const id=input.id??null;let result;
   try{
     if(input.method==='initialize')result={protocolVersion:'2025-03-26',capabilities:{tools:{}},serverInfo:{name:'godspeed-mission-control',version:'0.1.0-alpha.1'}};
@@ -20,13 +21,13 @@ export async function mcp(input,{store,query,index,domains}){
     else if(input.method==='tools/list')result={tools:definitions};
     else if(input.method==='tools/call'){
       const {name,arguments:a={}}=input.params||{};let value;
-      if(name==='search_knowledge')value=index.search(a.query).filter(r=>r.type!=='workspace_file'&&visibleRows(query,r.type).some(v=>v.id===r.id));
+      if(name==='search_knowledge')value=query.withSnapshot(()=>index.search(a.query).filter(r=>r.type!=='workspace_file'&&(!scopes||scopes.includes(toolScope('list_records',{type:r.type})))&&visibleRows(query,r.type).some(v=>v.id===r.id)));
       else if(name==='list_records'){const allowed=new Set(visibleRows(query,a.type).map(r=>r.id));value=query.execute({table:a.type,filters:a.filters||[],limit:a.limit||100}).data.filter(r=>allowed.has(r.id));}
       else if(name==='save_record')value=query.execute({table:a.type,operation:a.value.id?'upsert':'insert',values:a.value,expected:a.value.id?{[a.value.id]:a.expected_hash}:{}}).data;
       else if(name==='capture_note')value=await domains.invoke('quick-capture',a);
       else if(name==='write_fact')value=domains.writeFact(a);
       else if(name==='record_event')value=query.execute({table:'moments',operation:'insert',values:a}).data;
-      else if(name==='structural_change')value=store.structural(a.type,a.id,a.action,a.options);
+      else if(name==='structural_change')value=a.type==='moments'&&['remove','display-name'].includes(a.action)?query.execute({table:'moments',operation:a.action==='remove'?'delete':'update',values:{title:a.options?.name},filters:[['eq','id',a.id]]}).data:store.structural(a.type,a.id,a.action,a.options);
       else if(name==='review_suggestions')value=await domains.invoke('review-queue-bulk',a);
       else if(name==='validate_knowledge'){store.scan();value={problems:store.problems};}
       else throw new Error('Unknown tool');

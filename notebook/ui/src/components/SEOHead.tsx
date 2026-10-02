@@ -27,8 +27,8 @@ export function SEOHead({
   noIndex = false,
   jsonLd,
 }: SEOHeadProps) {
-  // Pages pass titles as "Page — Menerio"; applyBrandTitle swaps the suffix
-  // for the active brand (a no-op on the Menerio build).
+  // Pages pass titles as "Page - Godspeed Mission Control"; applyBrandTitle swaps the suffix
+  // for the active brand (a no-op on the Godspeed Mission Control build).
   const title = applyBrandTitle(rawTitle);
   useEffect(() => {
     // Title

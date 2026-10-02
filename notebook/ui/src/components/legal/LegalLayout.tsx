@@ -38,7 +38,7 @@ export function LegalLayout({ title, lastUpdated, sections, children }: LegalLay
         <p className="mt-2 text-sm text-muted-foreground">Last updated: {lastUpdated}</p>
       </div>
       <div className="flex gap-12">
-        {/* Sidebar TOC — desktop only */}
+        {/* Sidebar TOC - desktop only */}
         <aside className="hidden lg:block w-56 shrink-0">
           <nav className="sticky top-24 space-y-1">
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">On this page</p>

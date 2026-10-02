@@ -33,7 +33,7 @@ const norm = normalizeForMatch;
 function rankNotes(rows: NoteResult[], query: string): NoteResult[] {
   const q = query.trim().toLowerCase();
   const ranked = rankNotesByTerms(rows, q, extractSearchTerms(query));
-  // Never drop a row the query already fetched — unranked rows go last.
+  // Never drop a row the query already fetched - unranked rows go last.
   const inRanked = new Set(ranked.map((r) => r.id));
   return [...ranked, ...rows.filter((r) => !inRanked.has(r.id))];
 }

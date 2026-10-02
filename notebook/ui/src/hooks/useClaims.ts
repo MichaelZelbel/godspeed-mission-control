@@ -126,7 +126,7 @@ export function useUpdateClaim() {
   });
 }
 
-/** "No longer true" — closes the claim instead of deleting it. */
+/** "No longer true" - closes the claim instead of deleting it. */
 export function useEndClaim() {
   const qc = useQueryClient();
 

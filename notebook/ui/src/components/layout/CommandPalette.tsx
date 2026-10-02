@@ -98,7 +98,7 @@ export function CommandPalette() {
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      // Cmd/Ctrl+K (without Shift — Shift+K is reserved for AI chat)
+      // Cmd/Ctrl+K (without Shift - Shift+K is reserved for AI chat)
       if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === "k") {
         e.preventDefault();
         setOpen((v) => !v);

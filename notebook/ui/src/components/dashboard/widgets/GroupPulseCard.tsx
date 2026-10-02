@@ -16,7 +16,7 @@ export function GroupPulseCard() {
       <CardContent className="space-y-2">
         {groupPulse.length === 0 ? (
           <button onClick={() => navigate("/dashboard/groups")} className="w-full rounded-md px-2 py-3 text-left text-sm text-muted-foreground transition-colors hover:bg-accent">
-            No active groups yet — start one from the Groups page.
+            No active groups yet - start one from the Groups page.
           </button>
         ) : groupPulse.map((group) => (
           <button key={group.id} onClick={() => navigate(`/dashboard/groups/${group.slug}`)} className="w-full rounded-md px-2 py-2 text-left transition-colors hover:bg-accent">

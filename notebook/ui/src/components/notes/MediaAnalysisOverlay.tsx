@@ -90,7 +90,7 @@ export function MediaAnalysisOverlay({ noteId, editorContainerRef }: MediaAnalys
       }
     });
 
-    // Only update state when the set of media actually changed — otherwise we
+    // Only update state when the set of media actually changed - otherwise we
     // create a new array on every observer tick which feeds back into the
     // MutationObserver and pegs the main thread (breaking editor pointer events).
     setMediaElements((prev) => {

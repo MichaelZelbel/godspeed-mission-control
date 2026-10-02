@@ -38,7 +38,7 @@ async function readEdgeError(error: unknown): Promise<string | null> {
       }
     }
   } catch {
-    /* ignore — fall back to error.message */
+    /* ignore - fall back to error.message */
   }
   return null;
 }
@@ -78,7 +78,7 @@ export function QuickAddFact({ contactId, onCommit }: QuickAddFactProps) {
         body: buildClassifyBody(contactId, raw),
       });
       // supabase.functions.invoke surfaces non-2xx as a FunctionsHttpError whose
-      // `.context` is the Response — dig out the server's `{ error }` message.
+      // `.context` is the Response - dig out the server's `{ error }` message.
       if (error) {
         throw new Error((await readEdgeError(error)) || error.message || "Classification failed");
       }

@@ -1,4 +1,4 @@
-// PowerSync service endpoint (Menerio → Production instance, EU region,
+// PowerSync service endpoint (Godspeed Mission Control → Production instance, EU region,
 // provisioned 2026-07-10; dashboard: dashboard.powersync.com, Michael's
 // account). Hardcoded like the Supabase URL in integrations/supabase/client.ts.
 // Overridable per device for testing:

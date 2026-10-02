@@ -17,7 +17,7 @@ interface ProfileCompletenessProps {
    * Override the completeness denominator instead of using the number of
    * materialized category rows. The contact profile no longer auto-seeds
    * all 17 taxonomy categories on first visit (Phase 3), so a contact with
-   * one materialized category would otherwise show 100% complete — pass the
+   * one materialized category would otherwise show 100% complete - pass the
    * static taxonomy slot count (e.g. `PROFILE_TAXONOMY.length`) there. The
    * owner page omits this prop and keeps its original per-row denominator.
    */

@@ -9,7 +9,7 @@ import {
 
 /**
  * People & Groups GitHub mirror triggers. `triggerPeopleSync()` is safe to
- * call from any mutation's onSuccess — it no-ops unless a connection with
+ * call from any mutation's onSuccess - it no-ops unless a connection with
  * people sync enabled exists, and debounces into one sweep.
  */
 export function usePeopleSync() {

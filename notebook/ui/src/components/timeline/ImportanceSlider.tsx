@@ -20,7 +20,7 @@ export default function ImportanceSlider({ value, onChange }: ImportanceSliderPr
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-1.5">
-        <Label>Impact: {value} — {impactLabels[value]}</Label>
+        <Label>Impact: {value} - {impactLabels[value]}</Label>
         <Popover>
           <PopoverTrigger asChild>
             <Button aria-label="What importance means" type="button" variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-foreground">

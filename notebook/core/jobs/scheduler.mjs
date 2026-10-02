@@ -46,12 +46,13 @@ export class Scheduler {
           if (!this.executor) throw new Error('No assistant runtime configured');
           const result=await this.executor(job,{settings,store:this.store});
           if(!result?.verified)throw new Error('The executor returned no verified result');
+          if(settings.delivery==='telegram'&&!result.silent){if(!this.deliver)throw new Error('Configure the candidate Telegram connector before choosing chat delivery');await this.deliver(receipt.id,result);}
           this.store.save('job_receipts',{id:receipt.id,state:'verified',result,finished_at:new Date().toISOString()});
           this.store.save('jobs',{id:job.id,state:'pending',last_outcome:'verified',last_run:new Date(now).toISOString(),next_run:new Date(now+(job.interval_ms||86400000)).toISOString()});
           results.push({id:job.id,state:'verified'});
         } catch(e) {
           this.store.save('job_receipts',{id:receipt.id,state:'failed',error:e.message,finished_at:new Date().toISOString()});
-          this.store.save('jobs',{id:job.id,state:'failed',last_outcome:e.message,last_run:new Date(now).toISOString(),next_run:new Date(now+Math.min(job.interval_ms||86400000,3600000)).toISOString()});results.push({id:job.id,state:'failed',error:e.message});
+          this.store.save('jobs',{id:job.id,state:e.code==='OUTWARD_UNCERTAIN'?'needs_review':'failed',paused:e.code==='OUTWARD_UNCERTAIN'||job.paused,last_outcome:e.message,last_run:new Date(now).toISOString(),next_run:new Date(now+Math.min(job.interval_ms||86400000,3600000)).toISOString()});results.push({id:job.id,state:'failed',error:e.message});
         }
       }
       return results;

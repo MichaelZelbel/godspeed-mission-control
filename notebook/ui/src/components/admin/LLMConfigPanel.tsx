@@ -281,7 +281,7 @@ function EditDialog({
                 <SelectContent>
                   {(Object.keys(PROVIDER_LABELS) as Provider[]).map((p) => (
                     <SelectItem key={p} value={p} disabled={!availability[p]}>
-                      {PROVIDER_LABELS[p]}{!availability[p] && " — no API key"}
+                      {PROVIDER_LABELS[p]}{!availability[p] && " - no API key"}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -315,7 +315,7 @@ function EditDialog({
 
           {draft.is_chat === false ? (
             <div className="rounded-md border p-3 bg-muted/30 text-xs text-muted-foreground">
-              This endpoint is not a chat call — only provider and model apply. No system prompt.
+              This endpoint is not a chat call - only provider and model apply. No system prompt.
             </div>
           ) : (
             <div>

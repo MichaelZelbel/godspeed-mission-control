@@ -283,7 +283,7 @@ export function TelegramIntegration() {
                   Send <code className="bg-muted px-1.5 py-0.5 rounded text-xs">/newbot</code> and follow the prompts to name your bot
                 </li>
                 <li>Copy the <strong>bot token</strong> BotFather gives you and paste it below</li>
-                <li>Click <strong>Connect</strong> — {BRAND.name} will automatically register the webhook</li>
+                <li>Click <strong>Connect</strong> - {BRAND.name} will automatically register the webhook</li>
                 <li>
                   Open your new bot in Telegram and send the <strong>pairing code</strong> shown below
                 </li>

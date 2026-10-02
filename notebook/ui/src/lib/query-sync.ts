@@ -2,7 +2,7 @@ import type { QueryClient, QueryKey } from "@tanstack/react-query";
 
 // Cross-window cache sync. When a mutation invalidates a query in one browser
 // window (e.g. the main Notes view), other windows of the same app (e.g. a
-// popped-out note) must drop their stale cached copy and refetch — otherwise
+// popped-out note) must drop their stale cached copy and refetch - otherwise
 // they render the pre-edit version until React Query's staleTime elapses.
 
 const CHANNEL_NAME = "menerio-query-sync";
@@ -50,7 +50,7 @@ function postViaStorage(msg: InvalidateMessage) {
 
 /**
  * Broadcast a set of query-key invalidations to every other window of this
- * app. The current window is NOT affected — callers should invalidate their
+ * app. The current window is NOT affected - callers should invalidate their
  * own QueryClient separately (React Query mutation hooks already do this).
  */
 export function broadcastInvalidation(keys: QueryKey[]) {

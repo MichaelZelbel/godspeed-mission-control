@@ -2,17 +2,17 @@
  * Helpers for safely embedding user input into PostgREST filters.
  *
  * Two distinct hazards:
- *  1. LIKE/ILIKE wildcards — `%` and `_` in user text are pattern metacharacters.
+ *  1. LIKE/ILIKE wildcards - `%` and `_` in user text are pattern metacharacters.
  *     escapeLike() makes them match literally (PostgreSQL uses `\` as the LIKE
  *     escape char by default).
- *  2. The `.or()` / `.and()` filter *grammar* — `,` separates conditions and
+ *  2. The `.or()` / `.and()` filter *grammar* - `,` separates conditions and
  *     `(` `)` group them, so a value containing those breaks parsing (or worse,
  *     silently changes the query). pgOrValue() double-quotes the value so those
  *     characters are treated literally.
  *
  * The two compose correctly for an ILIKE inside an `.or()`: escapeLike() first
  * (adds `\` before wildcards), then pgOrValue() quotes and escapes the `\`
- * again — PostgREST unquotes one layer, then LIKE consumes the other.
+ * again - PostgREST unquotes one layer, then LIKE consumes the other.
  */
 
 /** Escape LIKE/ILIKE wildcards so user input matches literally within a pattern. */

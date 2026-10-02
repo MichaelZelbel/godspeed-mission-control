@@ -37,7 +37,7 @@ function mergeStable(
 
 /**
  * A note whose TITLE is what the user typed must be visible, and first. Body
- * matches — however recent or semantically similar — come after it.
+ * matches - however recent or semantically similar - come after it.
  */
 function pinTitleHits(
   rows: SemanticSearchResult[],
@@ -123,7 +123,7 @@ export function DashboardSearch() {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  // Debounced search — both passes feed one stable, append-only list
+  // Debounced search - both passes feed one stable, append-only list
   useEffect(() => {
     if (!query.trim()) {
       requestIdRef.current += 1;

@@ -4,7 +4,7 @@ import { AppSchema } from "./schema";
 let instance: PowerSyncDatabase | null = null;
 
 // Lazy singleton: constructing PowerSyncDatabase spins up the wa-sqlite wasm
-// worker, so it must only happen on OFFLINE_CORE sessions — callers are all
+// worker, so it must only happen on OFFLINE_CORE sessions - callers are all
 // behind that flag.
 export function getDb(): PowerSyncDatabase {
   if (!instance) {

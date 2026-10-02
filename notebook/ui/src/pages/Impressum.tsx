@@ -18,7 +18,7 @@ const h2 = "text-2xl font-semibold text-foreground mt-10 mb-4";
 
 const Impressum = () => (
   <div className="container py-12 lg:py-16">
-    <SEOHead title="Impressum — Menerio" description={`Legal notice (Impressum) for ${BRAND.name}: operator, address, company register and contact.`} />
+    <SEOHead title="Impressum - Godspeed Mission Control" description={`Legal notice (Impressum) for ${BRAND.name}: operator, address, company register and contact.`} />
 
     <div className="max-w-3xl">
       <h1 className="text-4xl font-bold text-foreground mb-2">Impressum</h1>

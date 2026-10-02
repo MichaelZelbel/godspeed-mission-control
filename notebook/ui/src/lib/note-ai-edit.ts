@@ -12,7 +12,7 @@
 
 /**
  * Stable content hash (FNV-1a, hex). Must stay byte-identical to
- * `hashNoteContent` in `supabase/functions/_shared/note-edit-tools.ts` — the
+ * `hashNoteContent` in `supabase/functions/_shared/note-edit-tools.ts` - the
  * AI edit guard compares the two to detect real content changes (as opposed to
  * background jobs bumping `updated_at`).
  */
@@ -113,7 +113,7 @@ interface AckDetail {
 
 /**
  * Dispatch one apply attempt and wait for the editor's acknowledgement.
- * Resolves `null` when no editor answered (note not open) — that is not a
+ * Resolves `null` when no editor answered (note not open) - that is not a
  * failure, there is simply nothing on screen to converge.
  */
 function dispatchApply(
@@ -159,7 +159,7 @@ function dispatchApply(
  *
  * A single fire-and-forget event was not enough: when the editor dropped the
  * update (stale prop race, silent throw) the chat still reported success while
- * the note looked unchanged — and the next keystroke could save the stale text
+ * the note looked unchanged - and the next keystroke could save the stale text
  * back over the AI's work. So we ask, check the answer, and on a mismatch make
  * the editor re-read the row from the database and force the content in.
  */

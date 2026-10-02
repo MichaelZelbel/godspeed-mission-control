@@ -48,7 +48,7 @@ const CONFIDENCE_LABELS: Record<ClaimConfidence, string> = {
 /**
  * Dated facts for a person, a place/thing, or the user. Facts are never
  * deleted on change: ending one keeps it in History with its date range.
- * Relationship facts are excluded — the Relationships section owns those.
+ * Relationship facts are excluded - the Relationships section owns those.
  */
 export function FactsPanel({ subjectType, subjectId, subjectLabel }: FactsPanelProps) {
   const { data: allClaims = [], isLoading } = useClaims(subjectType, subjectId);

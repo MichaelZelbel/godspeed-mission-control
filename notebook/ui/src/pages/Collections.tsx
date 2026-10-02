@@ -82,7 +82,7 @@ function EmptyCollectionsState({ onNewBlank, onCreateWithAI, onBrowseTemplates }
         </div>
         <h1 className="text-2xl font-bold font-display">No collections yet</h1>
         <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-muted-foreground">
-          Collections are structured trackers for anything you want to remember — household items, reading lists, contacts, job applications. Create one from a template or describe what you want to track.
+          Collections are structured trackers for anything you want to remember - household items, reading lists, contacts, job applications. Create one from a template or describe what you want to track.
         </p>
         <div className="mt-6 flex flex-col items-center justify-center gap-3 sm:flex-row">
           <Button variant="secondary" onClick={onBrowseTemplates}>Browse Templates</Button>
@@ -323,7 +323,7 @@ export default function Collections() {
 
   return (
     <div className="w-full max-w-6xl">
-      <SEOHead title="Collections — Menerio" noIndex />
+      <SEOHead title="Collections - Godspeed Mission Control" noIndex />
       {hasCollections && (
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <h1 className="text-2xl font-bold font-display">Collections</h1>

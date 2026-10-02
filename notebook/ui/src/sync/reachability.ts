@@ -7,7 +7,7 @@
  * about to come back: the promise resolves, nothing throws, and the app goes on
  * rendering a local database that will never receive another row.
  *
- * That is not hypothetical. Menerio's PowerSync Cloud instance was provisioned
+ * That is not hypothetical. Godspeed Mission Control's PowerSync Cloud instance was provisioned
  * on 2026-07-10 and later disappeared; its hostname now returns NXDOMAIN. Every
  * device on the local-first path silently froze at whatever it had last
  * downloaded, and kept looking perfectly healthy for weeks.

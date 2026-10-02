@@ -229,7 +229,7 @@ export function FolderMappingSettings() {
     await supabase
       .from("github_connections" as any)
       .update({
-        // Store in vault_path metadata — we use the connection's metadata convention
+        // Store in vault_path metadata - we use the connection's metadata convention
         // For now store in a separate convention via sync_direction prefix
       })
       .eq("user_id", user.id);
@@ -256,10 +256,10 @@ export function FolderMappingSettings() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="flat">Flat — all notes in root folder</SelectItem>
-              <SelectItem value="preserve">Preserve — keep Obsidian folder structure</SelectItem>
-              <SelectItem value="by_type">By type — organize by note type (meetings, daily, etc.)</SelectItem>
-              <SelectItem value="by_tag">By tag — first tag becomes folder name</SelectItem>
+              <SelectItem value="flat">Flat - all notes in root folder</SelectItem>
+              <SelectItem value="preserve">Preserve - keep Obsidian folder structure</SelectItem>
+              <SelectItem value="by_type">By type - organize by note type (meetings, daily, etc.)</SelectItem>
+              <SelectItem value="by_tag">By tag - first tag becomes folder name</SelectItem>
             </SelectContent>
           </Select>
           <p className="text-[10px] text-muted-foreground">

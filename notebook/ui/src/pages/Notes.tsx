@@ -719,7 +719,7 @@ export default function Notes() {
 
   // Self-heal: on the local-first path a note can be opened (via the server
   // single-row query or search) while the local SQLite replica is missing or
-  // behind on that row — which is why it could vanish from the tree's
+  // behind on that row - which is why it could vanish from the tree's
   // Favorites/Recent. Write the fresher server copy back into the replica.
   useEffect(() => {
     if (!OFFLINE_CORE || !selectedNoteRow) return;
@@ -826,7 +826,7 @@ export default function Notes() {
   return (
     <>
     <div className="flex h-[calc(100dvh-104px)] overflow-hidden">
-      <SEOHead title="Notes — Menerio" noIndex />
+      <SEOHead title="Notes - Godspeed Mission Control" noIndex />
 
 
       {/* Note list panel */}
@@ -1152,7 +1152,7 @@ export default function Notes() {
                 <TooltipContent side="bottom" className="text-xs">Keyword matching</TooltipContent>
               </Tooltip>
 
-              {/* Search scope — only visible in semantic mode */}
+              {/* Search scope - only visible in semantic mode */}
               {searchType === "semantic" && (
                 <>
                   <span className="text-muted-foreground/40 text-[10px]">|</span>
@@ -1278,7 +1278,7 @@ export default function Notes() {
         )}
       </div>
 
-      {/* Right panel — editor */}
+      {/* Right panel - editor */}
       <div className={cn(
         "flex-1 min-w-0 flex-col",
         isMobile && !selectedId ? "hidden" : "flex"

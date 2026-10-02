@@ -6,7 +6,12 @@ services:
     environment:
       GODSPEED_ACCESS_TOKEN: ${GODSPEED_CANDIDATE_TOKEN:?Generate a separate candidate access token}
       GODSPEED_DEVICE: vps
-      GODSPEED_COMPUTER: "off"
+      GODSPEED_COMPUTER: ${GODSPEED_CANDIDATE_COMPUTER:-off}
+      GODSPEED_COMPUTER_DIR: /opt/data/full-candidate/computer
+      GODSPEED_COMPUTER_DOOR_PORT: "7445"
+      GODSPEED_COMPUTER_CDP_PORT: "9225"
+      GODSPEED_COMPUTER_PORT: ${GODSPEED_CANDIDATE_COMPUTER_PORT:-47445}
+      GODSPEED_PUBLIC_HOST: ${GODSPEED_CANDIDATE_COMPUTER_HOST:-localhost}
       GODSPEED_TELEGRAM: ${GODSPEED_CANDIDATE_TELEGRAM:-off}
       GODSPEED_CANDIDATE_BOT_TOKEN: ${GODSPEED_CANDIDATE_BOT_TOKEN:-}
       GODSPEED_CANDIDATE_BOT_OWNER: ${GODSPEED_CANDIDATE_BOT_OWNER:-}
@@ -14,6 +19,7 @@ services:
       - candidate-data:/opt/data/full-candidate
     ports:
       - "127.0.0.1:${GODSPEED_CANDIDATE_LOCAL_PORT:-47832}:47831"
+      - "${GODSPEED_CANDIDATE_COMPUTER_BIND:-127.0.0.1}:${GODSPEED_CANDIDATE_COMPUTER_PORT:-47445}:7445"
     networks: [candidate]
   https:
     image: ${GODSPEED_CADDY_IMAGE:?Use the pinned Caddy image from the candidate manifest}

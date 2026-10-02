@@ -339,7 +339,7 @@ export function useUpdateNote() {
         });
         qc.setQueryData<Note[]>(key, next);
       }
-      // The open editor reads from ["note", id] — patch it directly.
+      // The open editor reads from ["note", id] - patch it directly.
       qc.setQueryData<Note | null>(["note", note.id], note);
       qc.invalidateQueries({ queryKey: ["note-ai-state"] });
 

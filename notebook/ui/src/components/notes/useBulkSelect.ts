@@ -66,7 +66,7 @@ export function useBulkSelect(orderedIds: string[]): UseBulkSelectResult {
         e.stopPropagation();
         const anchor = anchorRef.current;
         if (!anchor || anchor === id || !idIndex.has(anchor)) {
-          // No usable anchor — treat the clicked row as the anchor selection.
+          // No usable anchor - treat the clicked row as the anchor selection.
           setSelected((prev) => {
             const next = new Set(prev);
             next.add(id);
@@ -86,7 +86,7 @@ export function useBulkSelect(orderedIds: string[]): UseBulkSelectResult {
         return true;
       }
 
-      // Plain click — clear any selection, let caller handle navigation.
+      // Plain click - clear any selection, let caller handle navigation.
       if (selected.size > 0) setSelected(new Set());
       anchorRef.current = id;
       return false;

@@ -68,14 +68,14 @@ type EdgeResponse = {
 
 const placeholders = [
   "I want to track all the books I'm reading, with status and tags...",
-  "I want to log my workouts — date, type, duration, how I felt...",
+  "I want to log my workouts - date, type, duration, how I felt...",
   "I want to track potential clients I meet at conferences...",
   "I want to capture interesting wines I drink, where I had them, and what I thought...",
 ];
 
 const examples = [
   { label: "📚 Reading list", value: "I want to track all the books I'm reading, whether I want to read, am reading, or finished them, plus tags and notes." },
-  { label: "💪 Workouts", value: "I want to log my workouts — date, type, duration, intensity, and how I felt afterward." },
+  { label: "💪 Workouts", value: "I want to log my workouts - date, type, duration, intensity, and how I felt afterward." },
   { label: "🍷 Wine journal", value: "I want to capture interesting wines I drink, where I had them, grape or region, and what I thought." },
   { label: "🎯 Sales leads", value: "I want to track potential clients I meet at conferences, what they need, follow-up status, and next steps." },
 ];
@@ -450,7 +450,7 @@ export function AICollectionDialog({ open, onOpenChange, onCreated }: { open: bo
               <Input
                 value={refinement}
                 disabled={isRefining}
-                placeholder="Ask AI to refine — e.g. 'add a field for which language they spoke'"
+                placeholder="Ask AI to refine - e.g. 'add a field for which language they spoke'"
                 onChange={(event) => setRefinement(event.target.value)}
                 onKeyDown={(event) => { if ((event.metaKey || event.ctrlKey) && event.key === "Enter") sendRefinement(); }}
               />

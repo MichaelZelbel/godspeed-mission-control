@@ -9,6 +9,8 @@ for(const table of ['health_episodes','medications','health_observations','watch
 const views = new Set(['world_entities', 'world_events', 'world_claims', 'profile_facts', 'v_ai_allowance_current']);
 const defaults = {
   contacts: { notes: null, app_mappings: {}, merged_into: null, is_favorite: false, is_sensitive: false, last_viewed_at: null },
+  contact_groups:{is_archived:false,is_trashed:false,parent_group_id:null,sensitivity:'normal',group_type:'custom',stages:[],success_criteria:[],attributes_schema:{},status:'active'},
+  contact_group_memberships:{status:'new',position:0,attributes:{},notes:null},
   entities: { description: null, entity_type: 'other', ai_visibility: 'visible', is_sensitive: false },
   collections: { field_schema: [], visibility: 'personal', icon: null, description: null, agent_instructions: null, settings: {} },
   collection_items: { data: {}, is_favorite: false, folder_id: null, last_viewed_at: null },
@@ -52,8 +54,9 @@ function condition(row, [op, key, value]) {
 }
 export class QueryService {
   constructor(store) { this.store = store; }
+  withSnapshot(read){if(!this.snapshotDepth)this.store.scan();this.snapshotDepth=(this.snapshotDepth||0)+1;try{return read();}finally{this.snapshotDepth--;}}
   rows(table) {
-    this.store.scan();
+    if(!this.snapshotDepth)this.store.scan();
     const all=[...this.store.records.values()],list = type => {
       const values=all.filter(r=>r.type===type&&!r.removed_at);
       if(type!=='moments')return values;
@@ -73,7 +76,7 @@ export class QueryService {
     });
     if (table === 'v_ai_allowance_current') return [];
     if(table==='collection_items')return list(table).map(r=>{const collection=get('collections',r.collection_id),primary=collection?.field_schema?.find(f=>f.primary),title=primary?r.data?.[primary.key]:r.title;return {...defaults.collection_items,...r,title:title==null?'Untitled':String(title)};});
-    return list(table).map(r => ({ ...(defaults[table] || {}), ...r }));
+    return list(table).map(r => ({ ...(defaults[table] || {}), ...r,...table==='contact_groups'?{type:r.group_type||'custom'}:table==='contact_group_memberships'?{last_movement_at:r.last_movement_at||r.created_at}:{} }));
   }
   references(type, value) {
     const refs = [...(value.references || [])].filter(r => !r.field);
@@ -103,7 +106,7 @@ export class QueryService {
     if (!tables.has(table)) throw new Error('Unknown record domain ' + table);
     let rows = this.rows(table).filter(row => filters.every(f => condition(row, f)));
     if (operation !== 'select') {
-      const privateKeys=/^(access_token|refresh_token|api_key|secret|password|token_hash|encrypted_token|credentials)$/i;
+      const privateKeys=/^(access_token|refresh_token|api_key|secret|password|token|token_hash|encrypted_token|credentials)$/i;
       const inspect=value=>{if(value&&typeof value==='object')for(const [key,next] of Object.entries(value)){if(privateKeys.test(key))throw new Error('Connector credentials belong in local device configuration, never synced records');inspect(next);}};inspect(values);
       if (views.has(table)) throw new Error('Derived views are read-only');
       rows = this.store.withLock(() => {
@@ -122,7 +125,10 @@ export class QueryService {
             return correction;
           }
           const record = this.store.prepare(table, { ...(defaults[table] || {}), ...old, ...payload }, old);
-          if (table === 'collections' && !old) record.slug = slug(record.slug||record.name)+'-'+record.uid.slice(0,8);
+          if(table==='contact_groups'&&payload.type&&payload.type!=='contact_groups')record.group_type=payload.type;
+          if(table==='contact_group_memberships'&&!record.status_changed_at)record.status_changed_at=record.created_at;
+          if(table==='contact_group_memberships'&&(!record.last_movement_at||old&&payload.status&&old.status!==payload.status))record.last_movement_at=record.updated_at;
+          if (['collections','contact_groups'].includes(table) && !old) record.slug = slug(record.slug||record.name)+'-'+record.uid.slice(0,8);
           if(table==='collection_items'){
             const collection=this.store.get('collections',record.collection_id);if(!collection)throw new Error('Collection missing');
             const primary=collection.field_schema?.find(f=>f.primary);record.title=primary?String(record.data?.[primary.key]??'Untitled'):record.title||'Untitled';
@@ -143,6 +149,7 @@ export class QueryService {
       if (selection.includes('source_note:')) result.source_note = r.source_note_id ? this.store.get('notes', r.source_note_id) : null;
       if (selection.includes('notes(')) result.notes = r.note_id ? this.store.get('notes', r.note_id) : null;
       if (selection.includes('contacts(')) result.contacts = r.contact_id ? this.store.get('contacts', r.contact_id) : null;
+      for(const match of selection.matchAll(/(\w+):(\w+)(?:!\w+)?\(/g)){const [,alias,column]=match,target=links[column]||(tables.has(column)?column:null),foreign=links[column]?column:Object.keys(links).find(key=>links[key]===target&&r[key]);if(target&&foreign)result[alias]=r[foreign]?this.store.get(target,r[foreign]):null;}
       return result;
     });
     if (single && rows.length !== 1) throw new Error('Expected one record');

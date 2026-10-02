@@ -7,7 +7,7 @@ export const BRANDS: Record<string, BrandConfig> = {
   cherishly: CHERISHLY,
 };
 
-/** Resolve a brand id to its config; anything unknown falls back to Menerio. */
+/** Resolve a brand id to its config; anything unknown falls back to Godspeed Mission Control. */
 export function brandForId(id?: string | null): BrandConfig {
   return (id && BRANDS[id]) || MENERIO;
 }

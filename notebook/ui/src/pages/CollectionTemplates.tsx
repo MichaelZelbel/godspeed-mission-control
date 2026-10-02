@@ -247,7 +247,7 @@ export default function CollectionTemplates() {
 
   return (
     <div className="w-full max-w-6xl">
-      <SEOHead title="Collection Templates — Menerio" noIndex />
+      <SEOHead title="Collection Templates - Godspeed Mission Control" noIndex />
       <div className="mb-6 space-y-5">
         <div className="space-y-2">
           <button type="button" className="text-sm text-muted-foreground hover:text-foreground" onClick={() => navigate("/collections")}>Collections / Templates</button>

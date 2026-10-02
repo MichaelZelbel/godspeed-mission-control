@@ -72,6 +72,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         pairCodes.delete(input.code);const key=randomBytes(32).toString('hex');pairKeys.push(hash(key));atomic(pairKeysPath,JSON.stringify(pairKeys));fs.chmodSync(pairKeysPath,0o600);return send(res,200,{key});
       }
       if (route === '/health') return send(res, 200, { ok: true, format: 1, version: '0.1.0-alpha.1',instance });
+      if(route==='/api/shared-note'&&req.method==='GET'){const share=query.rows('shared_notes').find(s=>s.share_token===url.searchParams.get('token')&&s.is_active),note=share&&store.get('notes',share.note_id);if(!note||note.removed_at)return send(res,404,{error:'This share is unavailable'});return send(res,200,{title:note.title,content:note.content,tags:note.tags,entity_type:note.entity_type,created_at:note.created_at,updated_at:note.updated_at});}
       if (route.startsWith('/api/') && !authorized(req)) return send(res, 401, { error: 'Authentication required' });
       if(route==='/api/login-link'&&req.method==='POST'){const code=randomBytes(32).toString('hex');loginLinks.set(code,Date.now()+300000);return send(res,200,{path:'/login/'+code,expires_minutes:5});}
       if(route==='/api/assistant/open'&&req.method==='POST'){
@@ -84,13 +85,14 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         if(!authorized(req)&&!accessKey)return send(res,401,{error:'Authentication required'});
         if(req.method!=='POST'){res.writeHead(405,{'Allow':'POST'});return res.end();}
         const input=JSON.parse(await body(req));if(accessKey&&input.method==='tools/call'&&!accessKey.scopes.includes(toolScope(input.params.name,input.params.arguments||{})))return send(res,403,{error:'This API key does not grant that capability'});
-        const response=await mcp(input,{store,query,index,domains});if(response===null){res.writeHead(202);return res.end();}index.rebuild();return send(res,200,response);
+        const response=await mcp(input,{store,query,index,domains,scopes:accessKey?.scopes});if(response===null){res.writeHead(202);return res.end();}index.rebuild();return send(res,200,response);
       }
       if(route==='/api/pair/create'&&req.method==='POST'){if(device!=='vps')throw new Error('Create a pairing code on the candidate VPS');const code=randomBytes(16).toString('hex');pairCodes.set(code,Date.now()+300000);return send(res,200,{code,expires_minutes:5});}
       if(route==='/api/pair/connect'&&req.method==='POST'){const input=JSON.parse(await body(req));const result=await mediaSync.pair(input.origin,input.code);if(store.get('settings','installation'))scheduler.transfer('vps');return send(res,200,{...result,media:await mediaSync.reconcile()});}
       if(route==='/api/media/sync'&&req.method==='POST')return send(res,200,await mediaSync.reconcile());
       if(route==='/api/media/offline'&&req.method==='POST'){const input=JSON.parse(await body(req));if(!['all','selected'].includes(input.offline))throw new Error('Choose all or selected media');const config=mediaSync.config();if(!config)throw new Error('Pair this device first');atomic(mediaSync.configPath,JSON.stringify({...config,offline:input.offline,selected:input.selected||[]}));return send(res,200,{ok:true});}
       if(route==='/api/media/manifest')return send(res,200,{data:mediaSync.manifest()});
+      if(route==='/api/media/tombstone'&&req.method==='POST'){const input=JSON.parse(await body(req)),old=mediaSync.manifest().find(m=>m.path===input.path);if(!old||old.sha256!==input.sha256||!input.removed_at||!Number.isFinite(Date.parse(input.removed_at)))throw new Error('This removal does not match the saved media version');atomic(path.join(mediaRoot,hash(old.path)+'.mapping.json'),JSON.stringify({...old,removed_at:input.removed_at}));return send(res,200,{ok:true});}
       if(route.startsWith('/api/media/blob/')&&req.method==='GET'){const filename=safe(decodeURIComponent(route.slice('/api/media/blob/'.length)));if(!mediaSync.manifest().some(m=>m.file===filename&&!m.removed_at))throw new Error('Unknown media object');res.writeHead(200,{'Content-Type':'application/octet-stream','X-Content-Type-Options':'nosniff'});fs.createReadStream(path.join(mediaRoot,filename)).pipe(res);return;}
       if(route==='/api/media/transfer'&&req.method==='POST'){
         const input=JSON.parse(await body(req,140*1024*1024)),mapping=input.mapping,data=Buffer.from(input.data,'base64');
@@ -109,10 +111,11 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         return send(res,200,{connected:true});
       }
       if(route==='/api/sync/configure'&&req.method==='POST'){
-        const input=JSON.parse(await body(req));sync.initialize(input.url);atomic(path.join(store.state,'sync-config.json'),JSON.stringify({enabled:true}));return send(res,200,{status:sync.reconcile()});
+        const input=JSON.parse(await body(req));await sync.verifyRemote(input.url);sync.initialize(input.url);atomic(path.join(store.state,'sync-config.json'),JSON.stringify({enabled:true}));return send(res,200,{status:sync.reconcile()});
       }
       if(route==='/api/sync/run'&&req.method==='POST')return send(res,200,{status:sync.reconcile()});
       if(route==='/api/owner'&&req.method==='POST'){const input=JSON.parse(await body(req));if(!['local','vps'].includes(input.owner))throw new Error('Choose local or VPS owner');scheduler.transfer(input.owner);return send(res,200,{owner:input.owner});}
+      if(route==='/api/delivery'&&req.method==='POST'){const input=JSON.parse(await body(req));if(!['notebook','telegram'].includes(input.delivery)||input.delivery==='telegram'&&!scheduler.deliver)throw new Error('Configure the separate candidate Telegram bot before choosing chat delivery');const settings=store.get('settings','installation');if(!settings)throw new Error('Start with a goal first');store.save('settings',{id:settings.id,delivery:input.delivery});return send(res,200,{delivery:input.delivery});}
       if(route==='/api/conflicts'&&req.method==='GET')return send(res,200,{data:sync.pendingConflicts().map(name=>JSON.parse(fs.readFileSync(path.join(store.root,'conflicts',name),'utf8')))});
       if(route==='/api/conflicts/resolve'&&req.method==='POST'){
         const input=JSON.parse(await body(req));safe(input.id);const file=path.join(store.root,'conflicts',input.id+'.json'),conflict=JSON.parse(fs.readFileSync(file,'utf8'));
@@ -158,7 +161,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         if(mapping.removed_at)return send(res,404,{error:'Media removed'});
         res.writeHead(200, { 'Content-Type': mapping.contentType || 'application/octet-stream', 'Content-Length': mapping.size, 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "default-src 'none'; sandbox" }); fs.createReadStream(path.join(mediaRoot, safe(mapping.file))).pipe(res); return;
       }
-      if (route.startsWith('/api/functions/') && req.method === 'POST') { const name=route.slice('/api/functions/'.length),input=JSON.parse(await body(req));const data=name.startsWith('mc-api-keys')?apiKeys.invoke(name,input):await domains.invoke(name,input);index.rebuild();return send(res,200,{data,error:null}); }
+      if (route.startsWith('/api/functions/') && req.method === 'POST') { const name=route.slice('/api/functions/'.length),input=JSON.parse(await body(req));const data=name.startsWith('mc-api-keys')?apiKeys.invoke(name,input):await domains.invoke(name,input);index.rebuild();return send(res,200,name==='backfill-media-analysis'?data:{data,error:null}); }
       if (route.startsWith('/api/')) return send(res, 404, { error: 'Unknown operation' });
       const requested = path.resolve(uiRoot, '.' + route); if (requested !== uiRoot && !requested.startsWith(uiRoot + path.sep)) return send(res, 403, { error: 'Invalid path' });
       const file = fs.existsSync(requested) && fs.statSync(requested).isFile() ? requested : path.join(uiRoot, 'index.html');
@@ -169,14 +172,15 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   });
   await new Promise((resolve, reject) => { server.once('error', reject); server.listen(port, host, resolve); });
   let busy = false;
-  const interval = setInterval(() => { if (!busy) { busy = true; try { index.rebuild(); } catch {} finally { busy = false; } } }, 2000);
+  const interval = setInterval(() => { if (!busy) { busy = true; try { index.rebuild(); } catch {} finally { busy = false; } } }, 30000);
   const jobs=setInterval(()=>scheduler.tick().catch(()=>{}),30000);
   const syncTimer=setInterval(()=>{if(fs.existsSync(path.join(store.state,'sync-config.json')))sync.reconcile();},60000);
   const mediaTimer=setInterval(()=>mediaSync.reconcile(),60000);
   const telegram=process.env.GODSPEED_TELEGRAM==='on'&&process.env.GODSPEED_CANDIDATE_BOT_TOKEN&&process.env.GODSPEED_CANDIDATE_BOT_OWNER?new Telegram({store,domains,token:process.env.GODSPEED_CANDIDATE_BOT_TOKEN,owner:process.env.GODSPEED_CANDIDATE_BOT_OWNER}):null;
   const telegramTimer=telegram?setInterval(()=>telegram.tick().catch(()=>{}),3000):null;
-  let debounce;const watcher=fs.watch(store.root,{recursive:true},(event,name)=>{if(!name||!/^records\//.test(name.replaceAll('\\','/')))return;if(fs.existsSync(path.join(store.state,'sync-config.json'))){clearTimeout(debounce);debounce=setTimeout(()=>sync.reconcile(),5000);}});
-  return { server, store, index, query, domains, scheduler, sync, mediaSync,address: server.address(), close: async () => { watcher.close();clearTimeout(debounce);clearInterval(telegramTimer);clearInterval(interval);clearInterval(jobs);clearInterval(syncTimer);clearInterval(mediaTimer); await new Promise(resolve => server.close(resolve)); index.close(); } };
+  scheduler.deliver=telegram?(id,result)=>telegram.deliver(id,result):null;
+  let debounce,indexDebounce;const watcher=fs.watch(store.root,{recursive:true},(event,name)=>{if(!name||name.replaceAll('\\','/').startsWith('.'))return;clearTimeout(indexDebounce);indexDebounce=setTimeout(()=>{try{index.rebuild();}catch{}},750);if(fs.existsSync(path.join(store.state,'sync-config.json'))){clearTimeout(debounce);debounce=setTimeout(()=>sync.reconcile(),5000);}});
+  return { server, store, index, query, domains, scheduler, sync, mediaSync,address: server.address(), close: async () => { watcher.close();clearTimeout(debounce);clearTimeout(indexDebounce);clearInterval(telegramTimer);clearInterval(interval);clearInterval(jobs);clearInterval(syncTimer);clearInterval(mediaTimer); await new Promise(resolve => server.close(resolve)); index.close(); } };
 }
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const root = process.env.GODSPEED_WORKSPACE;

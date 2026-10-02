@@ -3,7 +3,7 @@
  * the server-side AI extraction pipeline (see
  * supabase/functions/_shared/profile-canonical-schema.ts and
  * profile-normalization.ts's `resolveCategoryId`). The pipeline files facts
- * into `profile_categories` rows by these exact slugs — an invalid slug is
+ * into `profile_categories` rows by these exact slugs - an invalid slug is
  * dropped there, so slugs must never be renamed or removed here.
  *
  * This module is presentation-only: it supplies stable display metadata
@@ -71,13 +71,13 @@ export function compareCategoriesForDisplay(
  *
  * - A category with at least one entry always renders (entries win).
  * - An empty category renders only when its slug is NOT one of the 17
- *   taxonomy slugs — i.e. it's a genuine user-created custom category.
+ *   taxonomy slugs - i.e. it's a genuine user-created custom category.
  *   Empty taxonomy categories stay hidden; QuickAddFact is how those first
  *   get an entry filed into them.
  *
  * Without this, "Add custom category" created a section that could never
  * render (empty + taxonomy-shaped filtering hid it) and had no path to file
- * an entry into it — a silent dead end.
+ * an entry into it - a silent dead end.
  */
 export function isCategorySectionVisible(
   category: { slug: string },

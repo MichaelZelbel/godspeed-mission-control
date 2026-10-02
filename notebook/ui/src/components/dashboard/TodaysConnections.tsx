@@ -47,7 +47,7 @@ export function TodaysConnections() {
         headers: { Authorization: `Bearer ${session.access_token}` },
       });
 
-      // Silently skip on insufficient-credits or any error — widget is optional
+      // Silently skip on insufficient-credits or any error - widget is optional
       if (res.error) {
         // Cache today's date so we don't retry on every dashboard mount
         localStorage.setItem(dateKey, today);

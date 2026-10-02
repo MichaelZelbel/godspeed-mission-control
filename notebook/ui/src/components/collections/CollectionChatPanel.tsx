@@ -24,7 +24,7 @@ import { chatMarkdownComponents, chatMarkdownPlugins } from "@/lib/chat-markdown
 export interface CollectionChatPanelProps {
   collectionId: string;
   collectionName: string;
-  /** Optional — when set, chat has "current item" context. */
+  /** Optional - when set, chat has "current item" context. */
   itemId?: string | null;
   onClose: () => void;
   onCollectionChanged: () => void;

@@ -29,18 +29,18 @@ export async function moderateContent(
     });
 
     if (error) {
-      console.warn("[Moderation] Edge function error — failing open:", error);
+      console.warn("[Moderation] Edge function error - failing open:", error);
       return { approved: true };
     }
 
     if (!data || typeof data.approved === "undefined") {
-      console.warn("[Moderation] Unexpected response — failing open:", data);
+      console.warn("[Moderation] Unexpected response - failing open:", data);
       return { approved: true };
     }
 
     return data as ModerationResult;
   } catch (err) {
-    console.warn("[Moderation] Network error — failing open:", err);
+    console.warn("[Moderation] Network error - failing open:", err);
     return { approved: true };
   }
 }

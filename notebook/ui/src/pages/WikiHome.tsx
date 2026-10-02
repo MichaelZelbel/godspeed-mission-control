@@ -129,7 +129,7 @@ export default function WikiHome() {
 
   return (
     <div className="space-y-6">
-      <SEOHead title="Lexicon — Menerio" noIndex />
+      <SEOHead title="Lexicon - Godspeed Mission Control" noIndex />
 
       <div className="flex flex-col gap-3 border-b border-border pb-5 sm:flex-row sm:items-start sm:justify-between">
         <div>

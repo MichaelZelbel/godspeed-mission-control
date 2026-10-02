@@ -4,7 +4,7 @@
  * The toolbar never wraps: when the formatting region is too narrow to show
  * every group, whole groups collapse (in COLLAPSE_ORDER) into a "more
  * formatting" popover. Group widths are static because every control is a
- * fixed-size 28px icon button — the one variable-width control (the block-type
+ * fixed-size 28px icon button - the one variable-width control (the block-type
  * trigger) is given a fixed width by the toolbar for exactly this reason.
  */
 
@@ -50,7 +50,7 @@ export const DISPLAY_ORDER: ToolbarGroupId[] = [
 /**
  * First-to-collapse → last-to-collapse. Lists and the block-type dropdown are
  * the most-used structural controls, so they survive the longest. Groups the
- * selection bubble menu also covers (marks, color) collapse early — on a
+ * selection bubble menu also covers (marks, color) collapse early - on a
  * narrow pane the static bar should prefer what the bubble menu CAN'T do
  * (lists, block formats, inserts).
  */

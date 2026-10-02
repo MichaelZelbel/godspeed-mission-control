@@ -102,7 +102,7 @@ export function DiscordIntegration() {
         if (error) throw error;
       }
 
-      // Reload (no bot_token in select — server hides it from clients)
+      // Reload (no bot_token in select - server hides it from clients)
       const { data: updated } = await supabase
         .from("discord_connections" as any)
         .select("id, user_id, discord_guild_id, discord_channel_id, application_id, public_key, is_active, created_at")

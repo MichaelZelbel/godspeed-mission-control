@@ -7,6 +7,24 @@ export class Connectors {
   save(name,value){const file=path.join(this.store.state,'connectors',safe(name)+'.json');atomic(file,JSON.stringify(value));fs.chmodSync(file,0o600);return {configured:true};}
   async request(config,route){const url=new URL(route,config.origin);if(url.origin!==new URL(config.origin).origin)throw new Error('Connector request left its configured service');const r=await fetch(url,{headers:{Authorization:'Bearer '+config.token},signal:AbortSignal.timeout(30000)});if(!r.ok)throw new Error('Connector failed with HTTP '+r.status);return r;}
   async invoke(name,input){
+    if(name==='configure-connector'){
+      if(!['spend-guard','board-export','browser-post'].includes(input.name))throw new Error('Choose a supported optional connector');
+      const url=new URL(input.url);if(url.protocol!=='https:'&&!['127.0.0.1','localhost'].includes(url.hostname))throw new Error('Connector transport requires HTTPS');if(url.username||url.password)throw new Error('Keep credentials in the separate token field');
+      if(!Number.isFinite(input.threshold??0))throw new Error('Choose a numeric balance threshold');
+      return this.save(input.name,{origin:url.origin,route:url.pathname+url.search,token:input.token||null,threshold:input.threshold||0,value_path:input.value_path||'balance'});
+    }
+    if(name==='run-connector'){
+      const config=this.config(input.name);if(!config)throw new Error('Configure this optional connector on its schedule owner first');
+      if(input.name==='browser-post'){
+        const intent=hash({name:input.name,payload:input.payload}),approval=this.store.get('approvals',input.approval_id);
+        if(!approval||approval.status!=='approved'||approval.intent_sha256!==intent||Date.parse(approval.expires_at)<Date.now())throw new Error('This exact outward payload needs a current approval');
+        this.store.save('approvals',{id:approval.id,status:'attempted',attempted_at:new Date().toISOString()});
+        try{const r=await fetch(new URL(config.route,config.origin),{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+config.token,'Idempotency-Key':approval.id},body:JSON.stringify(input.payload),signal:AbortSignal.timeout(30000)});if(!r.ok)throw new Error('Posting connector returned HTTP '+r.status);const receipt=await r.json();if(!receipt.id&&!receipt.url)throw new Error('Posting connector returned no receipt');this.store.save('approvals',{id:approval.id,status:'verified',receipt});return {receipt,verified:true};}catch(e){this.store.save('approvals',{id:approval.id,status:'needs_review',error:e.message});throw e;}
+      }
+      const result=await(await this.request(config,config.route)).json();
+      if(input.name==='board-export')return {records:result,observed_at:new Date().toISOString()};
+      const value=config.value_path.split('.').reduce((v,k)=>v?.[k],result);if(!Number.isFinite(value))throw new Error('Balance response does not contain the configured numeric value');return {balance:value,threshold:config.threshold,needs_attention:value<config.threshold,observed_at:new Date().toISOString()};
+    }
     if(name==='gdrive-proxy'){
       if(input.action==='configure'){if(!input.access_token)throw new Error('Supply a Google Drive read-only access token');await this.request({origin:'https://www.googleapis.com',token:input.access_token},'/drive/v3/about?fields=user');return this.save('gdrive',{origin:'https://www.googleapis.com',token:input.access_token,folder_id:input.folder_id||null,sync_enabled:false});}
       const config=this.config('gdrive');
@@ -14,23 +32,24 @@ export class Connectors {
       if(input.action==='disconnect'){if(config)this.save('gdrive',{...config,token:null,sync_enabled:false});return {disconnected:true};}
       if(!config?.token)throw new Error('Configure your chosen Drive read-only credential on this device');
       if(input.action==='save_settings')return this.save('gdrive',{...config,folder_id:input.folder_id||config.folder_id,sync_enabled:!!input.sync_enabled});
-      if(input.action==='list_folders')return await(await this.request(config,"/drive/v3/files?q="+encodeURIComponent("mimeType='application/vnd.google-apps.folder' and trashed=false")+'&fields=files(id,name),nextPageToken')).json();
-      if(input.action==='list_files')return await(await this.request(config,'/drive/v3/files?q='+encodeURIComponent("'"+String(config.folder_id||'root').replaceAll("'",'')+"' in parents and trashed=false")+'&fields=files(id,name,mimeType,modifiedTime,size),nextPageToken')).json();
+      if(['list_folders','list_files'].includes(input.action)){
+        const query=input.action==='list_folders'?"mimeType='application/vnd.google-apps.folder' and trashed=false":"'"+String(config.folder_id||'root').replaceAll("'",'')+"' in parents and trashed=false",files=[];let nextPageToken;
+        do{const page=await(await this.request(config,'/drive/v3/files?q='+encodeURIComponent(query)+'&fields=files(id,name,mimeType,modifiedTime,size),nextPageToken&pageSize=1000'+(nextPageToken?'&pageToken='+encodeURIComponent(nextPageToken):''))).json();files.push(...page.files||[]);nextPageToken=page.nextPageToken;}while(nextPageToken);return {files};
+      }
       throw new Error('Use a read-only token for the candidate Drive connector; account-wide OAuth registration remains with your provider');
     }
     if(name==='gdrive-sync'){
       const config=this.config('gdrive');if(!config?.token||!config.folder_id)throw new Error('Configure a Drive folder before importing');
       const response=await this.invoke('gdrive-proxy',{action:'list_files'}),results=[];
-      if(response.nextPageToken)throw new Error('This folder needs pagination before a complete import; choose a smaller folder');
       for(const file of response.files||[]){
         const id='drive-'+hash(file.id).slice(0,24),old=this.store.get('gdrive_imports',id);if(old?.modified_at===file.modifiedTime)continue;
         if(!['text/plain','text/markdown','application/pdf','image/png','image/jpeg'].includes(file.mimeType))continue;
         const bytes=Buffer.from(await(await this.request(config,'/drive/v3/files/'+encodeURIComponent(file.id)+'?alt=media')).arrayBuffer());
         if(bytes.length>100*1024*1024)throw new Error('Drive file exceeds the candidate media limit');
-        const noteId='drive-note-'+hash(file.id).slice(0,24);if(this.store.get('notes',noteId))throw new Error('Imported source changed. Review a new version rather than replacing local edits');
+        const originalId='drive-note-'+hash(file.id).slice(0,24),noteId=this.store.get('notes',originalId)?originalId+'-'+hash(file.modifiedTime).slice(0,8):originalId;
         const note=this.store.save('notes',{id:noteId,title:file.name,content:file.mimeType.startsWith('text/')?bytes.toString('utf8'):'Imported document: '+file.name,source_app:'gdrive'});
         if(!file.mimeType.startsWith('text/')){const sha256=hash(bytes),storage_path='drive/'+file.id+'/'+file.name,filename=sha256+'-'+safe(file.name.replace(/[^a-zA-Z0-9_.-]/g,'_'));atomic(path.join(this.domains.mediaRoot,filename),bytes);atomic(path.join(this.domains.mediaRoot,hash(storage_path)+'.mapping.json'),JSON.stringify({path:storage_path,file:filename,sha256,size:bytes.length,contentType:file.mimeType}));this.query.execute({table:'note_attachments',operation:'insert',values:{note_id:note.id,storage_path,filename:file.name,file_type:file.mimeType}});}
-        this.store.save('gdrive_imports',{id,source_id:file.id,note_id:note.id,modified_at:file.modifiedTime,sha256:hash(bytes)});results.push(note.id);
+        this.store.save('gdrive_imports',{id,source_id:file.id,note_id:note.id,modified_at:file.modifiedTime,sha256:hash(bytes)});if(old)this.store.save('review_queue',{suggestion_type:'source_version',title:'Review the new imported version of '+file.name,payload:{previous_note_id:old.note_id,new_note_id:note.id},status:'pending_review'});results.push(note.id);
       }return {imported:results.length,results};
     }
     if(name.startsWith('github-')){

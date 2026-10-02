@@ -1,254 +1,262 @@
 # Capability inventory
 
-This checklist is generated from current source dependencies. Passing a homepage is not parity.
-Every required item remains an acceptance obligation until its evidence is recorded.
+Every traced screen, domain, processing function, personal schedule and recipe has an explicit classification. Included means implemented in the candidate; optional means account/tool configuration is required. This matrix does not assert live-account verification. Lexicon and note graph are the only feature deferrals.
 
-## Notebook screens
+See verification.md for concrete evidence and the user-only trial boundary. Full source dependency evidence is source-inventory.json.
 
-- [ ] Notes: reused screen, file service integration and real UI verification required.
-- [ ] People: reused screen, file service integration and real UI verification required.
-- [ ] Profile: reused screen, file service integration and real UI verification required.
-- [ ] World: reused screen, file service integration and real UI verification required.
-- [ ] Collections: reused screen, file service integration and real UI verification required.
-- [ ] CollectionDetail: reused screen, file service integration and real UI verification required.
-- [ ] CollectionSchema: reused screen, file service integration and real UI verification required.
-- [ ] CollectionTemplates: reused screen, file service integration and real UI verification required.
-- [ ] TimelinePage: reused screen, file service integration and real UI verification required.
-- [ ] MediaLibrary: reused screen, file service integration and real UI verification required.
-- [ ] ReviewQueue: reused screen, file service integration and real UI verification required.
-- [ ] Groups: reused screen, file service integration and real UI verification required.
-- [ ] GroupDetail: reused screen, file service integration and real UI verification required.
-- [ ] WeeklyReview: reused screen, file service integration and real UI verification required.
-- [ ] Actions: reused screen, file service integration and real UI verification required.
-- [ ] ActivityPage: reused screen, file service integration and real UI verification required.
-- [ ] Dashboard: reused screen, file service integration and real UI verification required.
-- [ ] Settings: reused screen, file service integration and real UI verification required.
+## Screens
 
-## Record domains
+| Item | Classification | Implementation and reason |
+| --- | --- | --- |
+| Notes | included | Reused upstream screen connected to file-backed APIs. |
+| People | included | Reused upstream screen connected to file-backed APIs. |
+| Profile | included | Reused upstream screen connected to file-backed APIs. |
+| World | included | Reused upstream screen connected to file-backed APIs. |
+| Collections | included | Reused upstream screen connected to file-backed APIs. |
+| CollectionDetail | included | Reused upstream screen connected to file-backed APIs. |
+| CollectionSchema | included | Reused upstream screen connected to file-backed APIs. |
+| CollectionTemplates | included | Reused upstream screen connected to file-backed APIs. |
+| TimelinePage | included | Reused upstream screen connected to file-backed APIs. |
+| MediaLibrary | included | Reused upstream screen connected to file-backed APIs. |
+| ReviewQueue | included | Reused upstream screen connected to file-backed APIs. |
+| Groups | included | Reused upstream screen connected to file-backed APIs. |
+| GroupDetail | included | Reused upstream screen connected to file-backed APIs. |
+| WeeklyReview | included | Reused upstream screen connected to file-backed APIs. |
+| Actions | included | Reused upstream screen connected to file-backed APIs. |
+| ActivityPage | included | Reused upstream screen connected to file-backed APIs. |
+| Dashboard | superseded | Integrated control desk: own runtime, privacy, keys, schedules, optional connectors, sync, pairing and recovery. |
+| Settings | superseded | Integrated control desk: own runtime, privacy, keys, schedules, optional connectors, sync, pairing and recovery. |
 
-- [ ] `action_items`: read/write, references, restart, export and rebuild.
-- [ ] `activity_events`: read/write, references, restart, export and rebuild.
-- [ ] `agent_instructions`: read/write, references, restart, export and rebuild.
-- [ ] `ai_suggestion_preferences`: read/write, references, restart, export and rebuild.
-- [ ] `ai_suggestion_suppressions`: read/write, references, restart, export and rebuild.
-- [ ] `claims`: read/write, references, restart, export and rebuild.
-- [ ] `collection_item_folders`: read/write, references, restart, export and rebuild.
-- [ ] `collection_items`: read/write, references, restart, export and rebuild.
-- [ ] `collection_templates`: read/write, references, restart, export and rebuild.
-- [ ] `collections`: read/write, references, restart, export and rebuild.
-- [ ] `connected_apps`: read/write, references, restart, export and rebuild.
-- [ ] `contact_group_memberships`: read/write, references, restart, export and rebuild.
-- [ ] `contact_groups`: read/write, references, restart, export and rebuild.
-- [ ] `contact_interactions`: read/write, references, restart, export and rebuild.
-- [ ] `contact_relationships`: read/write, references, restart, export and rebuild.
-- [ ] `contact_topic_events`: read/write, references, restart, export and rebuild.
-- [ ] `contact_topics`: read/write, references, restart, export and rebuild.
-- [ ] `contacts`: read/write, references, restart, export and rebuild.
-- [ ] `conversation_messages`: read/write, references, restart, export and rebuild.
-- [ ] `discord_connections`: read/write, references, restart, export and rebuild.
-- [ ] `dismissed_suggestions`: read/write, references, restart, export and rebuild.
-- [ ] `entities`: read/write, references, restart, export and rebuild.
-- [ ] `fact_slots`: read/write, references, restart, export and rebuild.
-- [ ] `gdrive_connections`: read/write, references, restart, export and rebuild.
-- [ ] `gdrive_imports`: read/write, references, restart, export and rebuild.
-- [ ] `github_connections`: read/write, references, restart, export and rebuild.
-- [ ] `github_sync_log`: read/write, references, restart, export and rebuild.
-- [ ] `godspeed_connections`: read/write, references, restart, export and rebuild.
-- [ ] `group_briefings`: read/write, references, restart, export and rebuild.
-- [ ] `mcp_api_tokens`: read/write, references, restart, export and rebuild.
-- [ ] `mcp_preferences`: read/write, references, restart, export and rebuild.
-- [ ] `media_analysis`: read/write, references, restart, export and rebuild.
-- [ ] `moment_entities`: read/write, references, restart, export and rebuild.
-- [ ] `moment_participants`: read/write, references, restart, export and rebuild.
-- [ ] `moment_provenance`: read/write, references, restart, export and rebuild.
-- [ ] `moments`: read/write, references, restart, export and rebuild.
-- [ ] `note-attachments`: read/write, references, restart, export and rebuild.
-- [ ] `note_ai_jobs`: read/write, references, restart, export and rebuild.
-- [ ] `note_attachments`: read/write, references, restart, export and rebuild.
-- [ ] `note_connections`: read/write, references, restart, export and rebuild.
-- [ ] `note_folders`: read/write, references, restart, export and rebuild.
-- [ ] `notes`: read/write, references, restart, export and rebuild.
-- [ ] `notification_preferences`: read/write, references, restart, export and rebuild.
-- [ ] `person_documents`: read/write, references, restart, export and rebuild.
-- [ ] `profile_categories`: read/write, references, restart, export and rebuild.
-- [ ] `profile_facts`: read/write, references, restart, export and rebuild.
-- [ ] `profile_views`: read/write, references, restart, export and rebuild.
-- [ ] `profiles`: read/write, references, restart, export and rebuild.
-- [ ] `relationship_evidence`: read/write, references, restart, export and rebuild.
-- [ ] `relationship_rejections`: read/write, references, restart, export and rebuild.
-- [ ] `review_queue`: read/write, references, restart, export and rebuild.
-- [ ] `review_queue_bulk_jobs`: read/write, references, restart, export and rebuild.
-- [ ] `shared_notes`: read/write, references, restart, export and rebuild.
-- [ ] `telegram_connections`: read/write, references, restart, export and rebuild.
-- [ ] `user_mcp_servers`: read/write, references, restart, export and rebuild.
-- [ ] `user_roles`: read/write, references, restart, export and rebuild.
-- [ ] `user_self_aliases`: read/write, references, restart, export and rebuild.
-- [ ] `v_ai_allowance_current`: read/write, references, restart, export and rebuild.
-- [ ] `weekly_reviews`: read/write, references, restart, export and rebuild.
-- [ ] `wiki_page_sources`: read/write, references, restart, export and rebuild.
-- [ ] `wiki_pages`: read/write, references, restart, export and rebuild.
-- [ ] `wiki_revisions`: read/write, references, restart, export and rebuild.
-- [ ] `world_claims`: read/write, references, restart, export and rebuild.
-- [ ] `world_entities`: read/write, references, restart, export and rebuild.
-- [ ] `world_events`: read/write, references, restart, export and rebuild.
+## Domains
 
-## Processing functions
+| Item | Classification | Implementation and reason |
+| --- | --- | --- |
+| action_items | included | Structured files preserve full record values, stable IDs, typed references and prior revisions; Markdown note bodies remain readable. |
+| activity_events | included | Structured files preserve full record values, stable IDs, typed references and prior revisions; Markdown note bodies remain readable. |
+| agent_instructions | included | Structured files preserve full record values, stable IDs, typed references and prior revisions; Markdown note bodies remain readable. |
+| ai_suggestion_preferences | included | Structured files preserve full record values, stable IDs, typed references and prior revisions; Markdown note bodies remain readable. |
+| ai_suggestion_suppressions | included | Structured files preserve full record values, stable IDs, typed references and prior revisions; Markdown note bodies remain readable. |
+| claims | included | Structured files preserve full record values, stable IDs, typed references and prior revisions; Markdown note bodies remain readable. |
+| collection_item_folders | included | Structured files preserve full record values, stable IDs, typed references and prior revisions; Markdown note bodies remain readable. |
+| collection_items | included | Structured files preserve full record values, stable IDs, typed references and prior revisions; Markdown note bodies remain readable. |
+| collection_templates | included | Structured files preserve full record values, stable IDs, typed references and prior revisions; Markdown note bodies remain readable. |
+| collections | included | Structured files preserve full record values, stable IDs, typed references and prior revisions; Markdown note bodies remain readable. |
+| connected_apps | optional connector | Connection credentials and configuration belong to the device, outside synced user records. Connector source/setup is packaged; activate your own accounts. |
+| contact_group_memberships | included | Structured files preserve full record values, stable IDs, typed references and prior revisions; Markdown note bodies remain readable. |
+| contact_groups | included | Structured files preserve full record values, stable IDs, typed references and prior revisions; Markdown note bodies remain readable. |
+| contact_interactions | included | Structured files preserve full record values, stable IDs, typed references and prior revisions; Markdown note bodies remain readable. |
+| contact_relationships | included | Structured files preserve full record values, stable IDs, typed references and prior revisions; Markdown note bodies remain readable. |
+| contact_topic_events | included | Structured files preserve full record values, stable IDs, typed references and prior revisions; Markdown note bodies remain readable. |
+| contact_topics | included | Structured files preserve full record values, stable IDs, typed references and prior revisions; Markdown note bodies remain readable. |
+| contacts | included | Structured files preserve full record values, stable IDs, typed references and prior revisions; Markdown note bodies remain readable. |
+| conversation_messages | included | Structured files preserve full record values, stable IDs, typed references and prior revisions; Markdown note bodies remain readable. |
+| discord_connections | optional connector | Connection credentials and configuration belong to the device, outside synced user records. Connector source/setup is packaged; activate your own accounts. |
+| dismissed_suggestions | included | Structured files preserve full record values, stable IDs, typed references and prior revisions; Markdown note bodies remain readable. |
+| entities | included | Structured files preserve full record values, stable IDs, typed references and prior revisions; Markdown note bodies remain readable. |
+| fact_slots | included | Structured files preserve full record values, stable IDs, typed references and prior revisions; Markdown note bodies remain readable. |
+| gdrive_connections | optional connector | Connection credentials and configuration belong to the device, outside synced user records. Connector source/setup is packaged; activate your own accounts. |
+| gdrive_imports | included | Structured files preserve full record values, stable IDs, typed references and prior revisions; Markdown note bodies remain readable. |
+| github_connections | optional connector | Connection credentials and configuration belong to the device, outside synced user records. Connector source/setup is packaged; activate your own accounts. |
+| github_sync_log | included | Structured files preserve full record values, stable IDs, typed references and prior revisions; Markdown note bodies remain readable. |
+| godspeed_connections | optional connector | Connection credentials and configuration belong to the device, outside synced user records. Connector source/setup is packaged; activate your own accounts. |
+| group_briefings | included | Structured files preserve full record values, stable IDs, typed references and prior revisions; Markdown note bodies remain readable. |
+| mcp_api_tokens | superseded | Cloud roles and billing are unnecessary for a single owner; API keys are hash-only device files. |
+| mcp_preferences | included | Structured files preserve full record values, stable IDs, typed references and prior revisions; Markdown note bodies remain readable. |
+| media_analysis | included | Structured files preserve full record values, stable IDs, typed references and prior revisions; Markdown note bodies remain readable. |
+| moment_entities | included | Structured files preserve full record values, stable IDs, typed references and prior revisions; Markdown note bodies remain readable. |
+| moment_participants | included | Structured files preserve full record values, stable IDs, typed references and prior revisions; Markdown note bodies remain readable. |
+| moment_provenance | included | Structured files preserve full record values, stable IDs, typed references and prior revisions; Markdown note bodies remain readable. |
+| moments | included | Structured files preserve full record values, stable IDs, typed references and prior revisions; Markdown note bodies remain readable. |
+| note-attachments | superseded | Storage bucket is the SHA-checked local media service, not a record table. |
+| note_ai_jobs | included | Structured files preserve full record values, stable IDs, typed references and prior revisions; Markdown note bodies remain readable. |
+| note_attachments | included | Structured files preserve full record values, stable IDs, typed references and prior revisions; Markdown note bodies remain readable. |
+| note_connections | optional connector | Connection credentials and configuration belong to the device, outside synced user records. Connector source/setup is packaged; activate your own accounts. |
+| note_folders | included | Structured files preserve full record values, stable IDs, typed references and prior revisions; Markdown note bodies remain readable. |
+| notes | included | Structured files preserve full record values, stable IDs, typed references and prior revisions; Markdown note bodies remain readable. |
+| notification_preferences | included | Structured files preserve full record values, stable IDs, typed references and prior revisions; Markdown note bodies remain readable. |
+| person_documents | included | Structured files preserve full record values, stable IDs, typed references and prior revisions; Markdown note bodies remain readable. |
+| profile_categories | included | Structured files preserve full record values, stable IDs, typed references and prior revisions; Markdown note bodies remain readable. |
+| profile_facts | included | Derived directly from dated source claims, relationships, entities and append-only events; no second authoritative database. |
+| profile_views | included | Structured files preserve full record values, stable IDs, typed references and prior revisions; Markdown note bodies remain readable. |
+| profiles | included | Structured files preserve full record values, stable IDs, typed references and prior revisions; Markdown note bodies remain readable. |
+| relationship_evidence | included | Structured files preserve full record values, stable IDs, typed references and prior revisions; Markdown note bodies remain readable. |
+| relationship_rejections | included | Structured files preserve full record values, stable IDs, typed references and prior revisions; Markdown note bodies remain readable. |
+| review_queue | included | Structured files preserve full record values, stable IDs, typed references and prior revisions; Markdown note bodies remain readable. |
+| review_queue_bulk_jobs | included | Structured files preserve full record values, stable IDs, typed references and prior revisions; Markdown note bodies remain readable. |
+| shared_notes | included | Structured files preserve full record values, stable IDs, typed references and prior revisions; Markdown note bodies remain readable. |
+| telegram_connections | optional connector | Connection credentials and configuration belong to the device, outside synced user records. Connector source/setup is packaged; activate your own accounts. |
+| user_mcp_servers | optional connector | Connection credentials and configuration belong to the device, outside synced user records. Connector source/setup is packaged; activate your own accounts. |
+| user_roles | superseded | Cloud roles and billing are unnecessary for a single owner; API keys are hash-only device files. |
+| user_self_aliases | included | Structured files preserve full record values, stable IDs, typed references and prior revisions; Markdown note bodies remain readable. |
+| v_ai_allowance_current | superseded | Cloud roles and billing are unnecessary for a single owner; API keys are hash-only device files. |
+| weekly_reviews | included | Structured files preserve full record values, stable IDs, typed references and prior revisions; Markdown note bodies remain readable. |
+| wiki_page_sources | deferred | Permitted lexicon deferral; existing imported records remain preservable. |
+| wiki_pages | deferred | Permitted lexicon deferral; existing imported records remain preservable. |
+| wiki_revisions | deferred | Permitted lexicon deferral; existing imported records remain preservable. |
+| world_claims | included | Derived directly from dated source claims, relationships, entities and append-only events; no second authoritative database. |
+| world_entities | included | Derived directly from dated source claims, relationships, entities and append-only events; no second authoritative database. |
+| world_events | included | Derived directly from dated source claims, relationships, entities and append-only events; no second authoritative database. |
 
-- [ ] `analyze-media`: port processing, provider refusal and saved results.
-- [ ] `backfill-metadata`: port processing, provider refusal and saved results.
-- [ ] `backfill-moment-profile-extraction`: port processing, provider refusal and saved results.
-- [ ] `backfill-profile-extraction`: port processing, provider refusal and saved results.
-- [ ] `backfill-wikilinks`: port processing, provider refusal and saved results.
-- [ ] `classify-profile-fact`: port processing, provider refusal and saved results.
-- [ ] `collection-chat`: port processing, provider refusal and saved results.
-- [ ] `compute-connections`: port processing, provider refusal and saved results.
-- [ ] `conversation-chat`: port processing, provider refusal and saved results.
-- [ ] `delete-my-account`: port processing, provider refusal and saved results.
-- [ ] `draft-event`: port processing, provider refusal and saved results.
-- [ ] `embed-document`: port processing, provider refusal and saved results.
-- [ ] `enrich-people`: port processing, provider refusal and saved results.
-- [ ] `enrich-person-from-lexicon`: port processing, provider refusal and saved results.
-- [ ] `ensure-token-allowance`: port processing, provider refusal and saved results.
-- [ ] `extract-moment-profile`: port processing, provider refusal and saved results.
-- [ ] `find-connections`: port processing, provider refusal and saved results.
-- [ ] `gdrive-proxy`: port processing, provider refusal and saved results.
-- [ ] `gdrive-sync`: port processing, provider refusal and saved results.
-- [ ] `generate-profile-suggestions`: port processing, provider refusal and saved results.
-- [ ] `get-graph-data`: port processing, provider refusal and saved results.
-- [ ] `github-import-vault`: port processing, provider refusal and saved results.
-- [ ] `github-people-sync`: port processing, provider refusal and saved results.
-- [ ] `github-proxy`: port processing, provider refusal and saved results.
-- [ ] `github-sync-export`: port processing, provider refusal and saved results.
-- [ ] `github-sync-pull`: port processing, provider refusal and saved results.
-- [ ] `mc-api-keys`: port processing, provider refusal and saved results.
-- [ ] `mc-api-keys/generate`: port processing, provider refusal and saved results.
-- [ ] `merge-contacts`: port processing, provider refusal and saved results.
-- [ ] `moderate-content`: port processing, provider refusal and saved results.
-- [ ] `normalize-profile`: port processing, provider refusal and saved results.
-- [ ] `note-chat`: port processing, provider refusal and saved results.
-- [ ] `process-note`: port processing, provider refusal and saved results.
-- [ ] `profile-lint`: port processing, provider refusal and saved results.
-- [ ] `quick-capture`: port processing, provider refusal and saved results.
-- [ ] `review-queue-bulk`: port processing, provider refusal and saved results.
-- [ ] `search-notes-semantic`: port processing, provider refusal and saved results.
-- [ ] `send-patch`: port processing, provider refusal and saved results.
-- [ ] `suggest-connections`: port processing, provider refusal and saved results.
-- [ ] `weekly-review`: port processing, provider refusal and saved results.
-- [ ] `wiki-ingest`: port processing, provider refusal and saved results.
+## Functions
 
-## Personal procedures
+| Item | Classification | Implementation and reason |
+| --- | --- | --- |
+| analyze-media | included | File-backed processing saves actual results or review proposals; model errors remain visible and do not produce fabricated completion. |
+| backfill-metadata | included | File-backed processing saves actual results or review proposals; model errors remain visible and do not produce fabricated completion. |
+| backfill-moment-profile-extraction | included | File-backed processing saves actual results or review proposals; model errors remain visible and do not produce fabricated completion. |
+| backfill-profile-extraction | included | File-backed processing saves actual results or review proposals; model errors remain visible and do not produce fabricated completion. |
+| backfill-wikilinks | deferred | Permitted lexicon/note graph deferral. |
+| classify-profile-fact | included | File-backed processing saves actual results or review proposals; model errors remain visible and do not produce fabricated completion. |
+| collection-chat | included | File-backed processing saves actual results or review proposals; model errors remain visible and do not produce fabricated completion. |
+| compute-connections | included | File-backed processing saves actual results or review proposals; model errors remain visible and do not produce fabricated completion. |
+| conversation-chat | included | File-backed processing saves actual results or review proposals; model errors remain visible and do not produce fabricated completion. |
+| delete-my-account | superseded | Local owner and own-provider policy replaces cloud account deletion, credit allowance and platform moderation. |
+| draft-event | included | File-backed processing saves actual results or review proposals; model errors remain visible and do not produce fabricated completion. |
+| embed-document | included | File-backed processing saves actual results or review proposals; model errors remain visible and do not produce fabricated completion. |
+| enrich-people | included | File-backed processing saves actual results or review proposals; model errors remain visible and do not produce fabricated completion. |
+| enrich-person-from-lexicon | deferred | Permitted lexicon/note graph deferral. |
+| ensure-token-allowance | superseded | Local owner and own-provider policy replaces cloud account deletion, credit allowance and platform moderation. |
+| extract-moment-profile | included | File-backed processing saves actual results or review proposals; model errors remain visible and do not produce fabricated completion. |
+| find-connections | included | File-backed processing saves actual results or review proposals; model errors remain visible and do not produce fabricated completion. |
+| gdrive-proxy | optional connector | Private file reconciler or explicitly configured provider connector; no credential seeds and no automatic outward action. |
+| gdrive-sync | optional connector | Private file reconciler or explicitly configured provider connector; no credential seeds and no automatic outward action. |
+| generate-profile-suggestions | included | File-backed processing saves actual results or review proposals; model errors remain visible and do not produce fabricated completion. |
+| generate_collection_schema | included | File-backed processing saves actual results or review proposals; model errors remain visible and do not produce fabricated completion. |
+| get-graph-data | deferred | Permitted lexicon/note graph deferral. |
+| github-import-vault | optional connector | Private file reconciler or explicitly configured provider connector; no credential seeds and no automatic outward action. |
+| github-people-sync | optional connector | Private file reconciler or explicitly configured provider connector; no credential seeds and no automatic outward action. |
+| github-proxy | optional connector | Private file reconciler or explicitly configured provider connector; no credential seeds and no automatic outward action. |
+| github-sync-export | optional connector | Private file reconciler or explicitly configured provider connector; no credential seeds and no automatic outward action. |
+| github-sync-pull | optional connector | Private file reconciler or explicitly configured provider connector; no credential seeds and no automatic outward action. |
+| mc-api-keys | included | File-backed processing saves actual results or review proposals; model errors remain visible and do not produce fabricated completion. |
+| mc-api-keys/generate | included | File-backed processing saves actual results or review proposals; model errors remain visible and do not produce fabricated completion. |
+| merge-contacts | included | File-backed processing saves actual results or review proposals; model errors remain visible and do not produce fabricated completion. |
+| moderate-content | superseded | Local owner and own-provider policy replaces cloud account deletion, credit allowance and platform moderation. |
+| normalize-profile | included | File-backed processing saves actual results or review proposals; model errors remain visible and do not produce fabricated completion. |
+| note-chat | included | File-backed processing saves actual results or review proposals; model errors remain visible and do not produce fabricated completion. |
+| process-note | included | File-backed processing saves actual results or review proposals; model errors remain visible and do not produce fabricated completion. |
+| profile-lint | included | File-backed processing saves actual results or review proposals; model errors remain visible and do not produce fabricated completion. |
+| quick-capture | included | File-backed processing saves actual results or review proposals; model errors remain visible and do not produce fabricated completion. |
+| review-queue-bulk | included | File-backed processing saves actual results or review proposals; model errors remain visible and do not produce fabricated completion. |
+| search-notes-semantic | included | File-backed processing saves actual results or review proposals; model errors remain visible and do not produce fabricated completion. |
+| send-patch | optional connector | Private file reconciler or explicitly configured provider connector; no credential seeds and no automatic outward action. |
+| suggest-connections | included | File-backed processing saves actual results or review proposals; model errors remain visible and do not produce fabricated completion. |
+| suggest-group-members | included | File-backed processing saves actual results or review proposals; model errors remain visible and do not produce fabricated completion. |
+| suggest-group-next-step | included | File-backed processing saves actual results or review proposals; model errors remain visible and do not produce fabricated completion. |
+| weekly-review | included | File-backed processing saves actual results or review proposals; model errors remain visible and do not produce fabricated completion. |
+| wiki-ingest | deferred | Permitted lexicon/note graph deferral. |
 
-- [ ] `sync`: classify included, connector, superseded or separately owned with rationale.
-- [ ] `sync-bot`: classify included, connector, superseded or separately owned with rationale.
-- [ ] `browser-post`: classify included, connector, superseded or separately owned with rationale.
-- [ ] `kanbero-import`: classify included, connector, superseded or separately owned with rationale.
-- [ ] `spend-guard`: classify included, connector, superseded or separately owned with rationale.
-- [ ] `do-you-copy`: classify included, connector, superseded or separately owned with rationale.
-- [ ] `menerio-keepalive`: classify included, connector, superseded or separately owned with rationale.
-- [ ] `disk-watchdog`: classify included, connector, superseded or separately owned with rationale.
-- [ ] `paperclip-backup-prune`: classify included, connector, superseded or separately owned with rationale.
-- [ ] `domain-watch`: classify included, connector, superseded or separately owned with rationale.
-- [ ] `claude-upgrade`: classify included, connector, superseded or separately owned with rationale.
-- [ ] `health-table`: classify included, connector, superseded or separately owned with rationale.
-- [ ] `portfolio`: classify included, connector, superseded or separately owned with rationale.
-- [ ] `transcript-sync`: classify included, connector, superseded or separately owned with rationale.
-- [ ] `fresh-posts`: classify included, connector, superseded or separately owned with rationale.
-- [ ] `next-action`: classify included, connector, superseded or separately owned with rationale.
-- [ ] `prompt-harvest`: classify included, connector, superseded or separately owned with rationale.
-- [ ] `snapshot-for-ownward`: classify included, connector, superseded or separately owned with rationale.
-- [ ] `connections`: classify included, connector, superseded or separately owned with rationale.
-- [ ] `due-check`: classify included, connector, superseded or separately owned with rationale.
-- [ ] `topic-watch`: classify included, connector, superseded or separately owned with rationale.
-- [ ] `brief-judges`: classify included, connector, superseded or separately owned with rationale.
-- [ ] `ownward-handover`: classify included, connector, superseded or separately owned with rationale.
-- [ ] `selftest`: classify included, connector, superseded or separately owned with rationale.
-- [ ] `exa-monitor-test`: classify included, connector, superseded or separately owned with rationale.
-- [ ] `brief-morning`: classify included, connector, superseded or separately owned with rationale.
-- [ ] `devops-bridge`: classify included, connector, superseded or separately owned with rationale.
-- [ ] `bot-probe`: classify included, connector, superseded or separately owned with rationale.
-- [ ] `hermes-backup-prune`: classify included, connector, superseded or separately owned with rationale.
-- [ ] `job-check`: classify included, connector, superseded or separately owned with rationale.
-- [ ] `work`: classify included, connector, superseded or separately owned with rationale.
-- [ ] `watch`: classify included, connector, superseded or separately owned with rationale.
-- [ ] `attention-pull`: classify included, connector, superseded or separately owned with rationale.
-- [ ] `lead`: classify included, connector, superseded or separately owned with rationale.
-- [ ] `memory-daily`: classify included, connector, superseded or separately owned with rationale.
-- [ ] `brief-rehearsal`: classify included, connector, superseded or separately owned with rationale.
-- [ ] `radar`: classify included, connector, superseded or separately owned with rationale.
-- [ ] `memory-review`: classify included, connector, superseded or separately owned with rationale.
-- [ ] `audit`: classify included, connector, superseded or separately owned with rationale.
-- [ ] `outside-ai-check`: classify included, connector, superseded or separately owned with rationale.
+## Procedures
+
+| Item | Classification | Implementation and reason |
+| --- | --- | --- |
+| sync | superseded | One file reconciler, every minute and after saves; no database-row sync. |
+| sync-bot | superseded | Bot and notebook use the same workspace; no second private clone. |
+| browser-post | optional connector | Approved computer helper and explicit posting permission. |
+| kanbero-import | optional connector | A chosen task-board connector reads work and receipts; no company agents are installed. |
+| spend-guard | optional connector | Read a chosen provider balance; thresholds are configured by the owner. |
+| do-you-copy | included | One reminder for a pending approval, with durable deduplication. |
+| menerio-keepalive | superseded | The file runtime needs no PowerSync service. |
+| disk-watchdog | included | Read actual candidate filesystem free space without model usage. |
+| paperclip-backup-prune | separately owned | Paperclip is a separate company-agent system. |
+| domain-watch | optional connector | Read owner-selected authoritative domain registration endpoints; do not buy domains. |
+| claude-upgrade | superseded | Pinned candidate upgrades and rollback replace unpinned nightly runtime changes. |
+| health-table | included | Aggregate file-backed health observations, episodes and medication days. |
+| portfolio | included | Check owner-selected public links and save dated results. |
+| transcript-sync | superseded | Conversation state and immutable snapshots are already durable files. |
+| fresh-posts | optional connector | Read selected public sources or the explicitly paired browser; save observed posts, not invented ones. |
+| next-action | included | Compare action, alternative and status quo using goals and actual outcomes. |
+| prompt-harvest | included | Capture explicitly supplied transcripts with credential redaction; never sweep other accounts. |
+| snapshot-for-ownward | separately owned | Company handovers remain with the owning company. |
+| connections | included | Make a real read through each configured connector and save success or failure. |
+| due-check | superseded | Independent deadline reminder and file-backed recurrence. |
+| topic-watch | superseded | One owner-selected topic registry and source reader. |
+| brief-judges | included | Judge the saved brief against current sources and voice; preserve critique. |
+| ownward-handover | separately owned | Company output is produced by its owning system. |
+| selftest | included | Validate records, references, index and pending receipts. |
+| exa-monitor-test | optional connector | Optional search provider comparison uses dated source receipts. |
+| brief-morning | included | Write from current user data; delivery is an explicitly configured connector. |
+| devops-bridge | superseded | Local assistant and durable work queue replace the private headless bridge. |
+| bot-probe | included | Compare the last delivered message with its saved conversation record. |
+| hermes-backup-prune | superseded | Candidate upgrades retain verified backups; no private Hermes-home cleanup. |
+| job-check | included | Detect failed, interrupted, missing or overdue routine receipts. |
+| work | included | Complete useful authorized work and save the actual deliverable. |
+| watch | included | Read selected sources, save observations and surface meaningful change. |
+| attention-pull | included | Prioritize near deadlines and prepared user actions; silence is valid. |
+| lead | included | Prepare a grounded post or reply; never publish automatically. |
+| memory-daily | included | Source-quoted proposals go to the review queue. |
+| brief-rehearsal | included | Review saved source data without sending anything. |
+| radar | included | At most one evidence-based proposal from configured sources. |
+| memory-review | included | Propose stale or conflicting fact corrections without deleting knowledge. |
+| audit | included | Validate system state and goal outcomes, then prepare corrections. |
+| outside-ai-check | included | Import owner-supplied conversations from other assistants; no account scraping. |
 
 ## Recipes
 
-- [ ] `audit`: reusable instructions or explicit ownership classification.
-- [ ] `book-title-creator`: reusable instructions or explicit ownership classification.
-- [ ] `book-title-strategist`: reusable instructions or explicit ownership classification.
-- [ ] `browser-post`: reusable instructions or explicit ownership classification.
-- [ ] `coach`: reusable instructions or explicit ownership classification.
-- [ ] `connect-email`: reusable instructions or explicit ownership classification.
-- [ ] `daily-brief`: reusable instructions or explicit ownership classification.
-- [ ] `due`: reusable instructions or explicit ownership classification.
-- [ ] `embedded-captions`: reusable instructions or explicit ownership classification.
-- [ ] `excalidraw-diagram`: reusable instructions or explicit ownership classification.
-- [ ] `excalidraw-visuals`: reusable instructions or explicit ownership classification.
-- [ ] `faceless-explainer`: reusable instructions or explicit ownership classification.
-- [ ] `figma`: reusable instructions or explicit ownership classification.
-- [ ] `found-company`: reusable instructions or explicit ownership classification.
-- [ ] `general-video`: reusable instructions or explicit ownership classification.
-- [ ] `grill-me`: reusable instructions or explicit ownership classification.
-- [ ] `gsap-core`: reusable instructions or explicit ownership classification.
-- [ ] `gsap-timeline`: reusable instructions or explicit ownership classification.
-- [ ] `headache-tracker`: reusable instructions or explicit ownership classification.
-- [ ] `hyperframes`: reusable instructions or explicit ownership classification.
-- [ ] `hyperframes-animation`: reusable instructions or explicit ownership classification.
-- [ ] `hyperframes-audio`: reusable instructions or explicit ownership classification.
-- [ ] `hyperframes-cli`: reusable instructions or explicit ownership classification.
-- [ ] `hyperframes-core`: reusable instructions or explicit ownership classification.
-- [ ] `hyperframes-creative`: reusable instructions or explicit ownership classification.
-- [ ] `hyperframes-keyframes`: reusable instructions or explicit ownership classification.
-- [ ] `hyperframes-registry`: reusable instructions or explicit ownership classification.
-- [ ] `interstitial-journal`: reusable instructions or explicit ownership classification.
-- [ ] `keep-a-note`: reusable instructions or explicit ownership classification.
-- [ ] `lead`: reusable instructions or explicit ownership classification.
-- [ ] `mc-brief-operations`: reusable instructions or explicit ownership classification.
-- [ ] `mc-radar`: reusable instructions or explicit ownership classification.
-- [ ] `media-use`: reusable instructions or explicit ownership classification.
-- [ ] `memory-audit`: reusable instructions or explicit ownership classification.
-- [ ] `morning-note`: reusable instructions or explicit ownership classification.
-- [ ] `motion-graphics`: reusable instructions or explicit ownership classification.
-- [ ] `move-godspeed`: reusable instructions or explicit ownership classification.
-- [ ] `music-to-video`: reusable instructions or explicit ownership classification.
-- [ ] `nano-banana-images`: reusable instructions or explicit ownership classification.
-- [ ] `next-action`: reusable instructions or explicit ownership classification.
-- [ ] `pattern1-build`: reusable instructions or explicit ownership classification.
-- [ ] `phone-errands`: reusable instructions or explicit ownership classification.
-- [ ] `pr-to-video`: reusable instructions or explicit ownership classification.
-- [ ] `product-launch-video`: reusable instructions or explicit ownership classification.
-- [ ] `remotion-to-hyperframes`: reusable instructions or explicit ownership classification.
-- [ ] `sap-ai-agent-low-code`: reusable instructions or explicit ownership classification.
-- [ ] `sap-ai-agent-pro-code`: reusable instructions or explicit ownership classification.
-- [ ] `sap-build-ai-patterns`: reusable instructions or explicit ownership classification.
-- [ ] `scroll-craft`: reusable instructions or explicit ownership classification.
-- [ ] `slideshow`: reusable instructions or explicit ownership classification.
-- [ ] `social-visuals`: reusable instructions or explicit ownership classification.
-- [ ] `strip-ai-tells`: reusable instructions or explicit ownership classification.
-- [ ] `subscription-review`: reusable instructions or explicit ownership classification.
-- [ ] `talk-about`: reusable instructions or explicit ownership classification.
-- [ ] `talking-head-recut`: reusable instructions or explicit ownership classification.
-- [ ] `video-captions`: reusable instructions or explicit ownership classification.
-- [ ] `video-finishing`: reusable instructions or explicit ownership classification.
-- [ ] `video-hooks`: reusable instructions or explicit ownership classification.
-- [ ] `watch`: reusable instructions or explicit ownership classification.
-- [ ] `web-design`: reusable instructions or explicit ownership classification.
-- [ ] `work-item`: reusable instructions or explicit ownership classification.
+| Item | Classification | Implementation and reason |
+| --- | --- | --- |
+| audit | included | Portable recipe and shared record/runtime operations; no private incident prose or account details. |
+| book-title-creator | included | Portable recipe and shared record/runtime operations; no private incident prose or account details. |
+| book-title-strategist | included | Portable recipe and shared record/runtime operations; no private incident prose or account details. |
+| browser-post | optional connector | Portable recipe and shared record/runtime operations; no private incident prose or account details. |
+| coach | included | Portable recipe and shared record/runtime operations; no private incident prose or account details. |
+| connect-email | optional connector | Portable recipe and shared record/runtime operations; no private incident prose or account details. |
+| daily-brief | included | Portable recipe and shared record/runtime operations; no private incident prose or account details. |
+| due | included | Portable recipe and shared record/runtime operations; no private incident prose or account details. |
+| embedded-captions | optional connector | Portable recipe with local file contract; chosen media/service provider is configured separately. |
+| excalidraw-diagram | included | Portable recipe and shared record/runtime operations; no private incident prose or account details. |
+| excalidraw-visuals | included | Portable recipe and shared record/runtime operations; no private incident prose or account details. |
+| faceless-explainer | optional connector | Portable recipe with local file contract; chosen media/service provider is configured separately. |
+| figma | optional connector | Portable recipe with local file contract; chosen media/service provider is configured separately. |
+| found-company | separately owned | Company and specialist enterprise-agent systems remain separate from personal Mission Control. |
+| general-video | optional connector | Portable recipe with local file contract; chosen media/service provider is configured separately. |
+| grill-me | included | Portable recipe and shared record/runtime operations; no private incident prose or account details. |
+| gsap-core | optional connector | Portable recipe with local file contract; chosen media/service provider is configured separately. |
+| gsap-timeline | optional connector | Portable recipe with local file contract; chosen media/service provider is configured separately. |
+| headache-tracker | included | Portable recipe and shared record/runtime operations; no private incident prose or account details. |
+| hyperframes | optional connector | Portable recipe with local file contract; chosen media/service provider is configured separately. |
+| hyperframes-animation | optional connector | Portable recipe with local file contract; chosen media/service provider is configured separately. |
+| hyperframes-audio | optional connector | Portable recipe with local file contract; chosen media/service provider is configured separately. |
+| hyperframes-cli | optional connector | Portable recipe with local file contract; chosen media/service provider is configured separately. |
+| hyperframes-core | optional connector | Portable recipe with local file contract; chosen media/service provider is configured separately. |
+| hyperframes-creative | optional connector | Portable recipe with local file contract; chosen media/service provider is configured separately. |
+| hyperframes-keyframes | optional connector | Portable recipe with local file contract; chosen media/service provider is configured separately. |
+| hyperframes-registry | optional connector | Portable recipe with local file contract; chosen media/service provider is configured separately. |
+| interstitial-journal | included | Portable recipe and shared record/runtime operations; no private incident prose or account details. |
+| keep-a-note | included | Portable recipe and shared record/runtime operations; no private incident prose or account details. |
+| lead | included | Portable recipe and shared record/runtime operations; no private incident prose or account details. |
+| mc-brief-operations | included | Portable recipe and shared record/runtime operations; no private incident prose or account details. |
+| mc-radar | included | Portable recipe and shared record/runtime operations; no private incident prose or account details. |
+| media-use | optional connector | Portable recipe with local file contract; chosen media/service provider is configured separately. |
+| memory-audit | included | Portable recipe and shared record/runtime operations; no private incident prose or account details. |
+| morning-note | included | Portable recipe and shared record/runtime operations; no private incident prose or account details. |
+| motion-graphics | optional connector | Portable recipe with local file contract; chosen media/service provider is configured separately. |
+| move-godspeed | included | Portable recipe and shared record/runtime operations; no private incident prose or account details. |
+| music-to-video | optional connector | Portable recipe with local file contract; chosen media/service provider is configured separately. |
+| nano-banana-images | optional connector | Portable recipe with local file contract; chosen media/service provider is configured separately. |
+| next-action | included | Portable recipe and shared record/runtime operations; no private incident prose or account details. |
+| pattern1-build | separately owned | Company and specialist enterprise-agent systems remain separate from personal Mission Control. |
+| phone-errands | optional connector | Portable recipe and shared record/runtime operations; no private incident prose or account details. |
+| pr-to-video | optional connector | Portable recipe with local file contract; chosen media/service provider is configured separately. |
+| product-launch-video | optional connector | Portable recipe with local file contract; chosen media/service provider is configured separately. |
+| remotion-to-hyperframes | optional connector | Portable recipe with local file contract; chosen media/service provider is configured separately. |
+| sap-ai-agent-low-code | separately owned | Company and specialist enterprise-agent systems remain separate from personal Mission Control. |
+| sap-ai-agent-pro-code | separately owned | Company and specialist enterprise-agent systems remain separate from personal Mission Control. |
+| sap-build-ai-patterns | separately owned | Company and specialist enterprise-agent systems remain separate from personal Mission Control. |
+| scroll-craft | optional connector | Portable recipe with local file contract; chosen media/service provider is configured separately. |
+| slideshow | optional connector | Portable recipe with local file contract; chosen media/service provider is configured separately. |
+| social-visuals | included | Portable recipe and shared record/runtime operations; no private incident prose or account details. |
+| strip-ai-tells | included | Portable recipe and shared record/runtime operations; no private incident prose or account details. |
+| subscription-review | included | Portable recipe and shared record/runtime operations; no private incident prose or account details. |
+| talk-about | included | Portable recipe and shared record/runtime operations; no private incident prose or account details. |
+| talking-head-recut | optional connector | Portable recipe with local file contract; chosen media/service provider is configured separately. |
+| video-captions | optional connector | Portable recipe with local file contract; chosen media/service provider is configured separately. |
+| video-finishing | included | Portable recipe and shared record/runtime operations; no private incident prose or account details. |
+| video-hooks | included | Portable recipe and shared record/runtime operations; no private incident prose or account details. |
+| watch | included | Portable recipe and shared record/runtime operations; no private incident prose or account details. |
+| web-design | included | Portable recipe and shared record/runtime operations; no private incident prose or account details. |
+| work-item | included | Portable recipe and shared record/runtime operations; no private incident prose or account details. |
 
-## Permitted deferrals
+## Activation and boundaries
 
-- Lexicon
-- Note graph
-
-## Release isolation
-
-- No personal records, account identifiers, credentials or company output in the candidate.
-- Mac remains outside this Windows/VPS build request; existing stable installer is untouched.
+All knowledge is local files. Optional provider calls, read-only accounts, phone/video toolchains and browser posting require the owner's configuration. Company desks and specialist enterprise systems are separately owned. Starter procedures are portable versions, not copies of personal incident histories. Existing production, live data and stable channels are untouched.

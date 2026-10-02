@@ -133,10 +133,10 @@ export function htmlToMarkdown(html: string): string {
     return `${header}\n${sep}\n${body}\n\n`;
   });
 
-  // Images — preserve Obsidian wikilink embeds when an attachment marker is present
+  // Images - preserve Obsidian wikilink embeds when an attachment marker is present
   md = md.replace(/<img[^>]*data-attachment-name="([^"]+)"[^>]*\/?>/gi, (_, name) => `![[${decodeEntities(name)}]]`);
   md = md.replace(/<a[^>]*data-attachment-name="([^"]+)"[^>]*>[\s\S]*?<\/a>/gi, (_, name) => `![[${decodeEntities(name)}]]`);
-  // PDF iframes — Obsidian embed when attachment marker is present, otherwise ![pdf](url)
+  // PDF iframes - Obsidian embed when attachment marker is present, otherwise ![pdf](url)
   md = md.replace(/<iframe[^>]*data-type="pdf"[^>]*data-attachment-name="([^"]+)"[^>]*>(?:[\s\S]*?<\/iframe>)?/gi, (_, name) => `![[${decodeEntities(name)}]]`);
   md = md.replace(/<iframe[^>]*data-attachment-name="([^"]+)"[^>]*data-type="pdf"[^>]*>(?:[\s\S]*?<\/iframe>)?/gi, (_, name) => `![[${decodeEntities(name)}]]`);
   md = md.replace(/<iframe[^>]*data-type="pdf"[^>]*src="([^"]*)"[^>]*>(?:[\s\S]*?<\/iframe>)?/gi, (_, src) => `![pdf](${src})`);
@@ -395,7 +395,7 @@ function renderBlock(trimmed: string, ctx: RenderContext): string {
   // disappear from notes even though the Markdown was still stored correctly.
   if (isListBlock(trimmed)) return markdownListToHtml(trimmed);
 
-  // Regular paragraph — handle single newlines as hard breaks
+  // Regular paragraph - handle single newlines as hard breaks
   return `<p>${lines.map((l) => inlineMarkdown(l)).join("<br>")}</p>`;
 }
 
@@ -595,13 +595,13 @@ function markdownListToHtml(block: string): string {
       continue;
     }
     if (line.trim().length === 0) continue;
-    // Indented continuation of the previous item — keep it inside that item.
+    // Indented continuation of the previous item - keep it inside that item.
     if (pendingList.length > 0 && /^\s+/.test(line)) {
       const prev = pendingList[pendingList.length - 1];
       prev.content = `${prev.content}<br>${line.trim()}`;
       continue;
     }
-    // Non-indented prose (e.g. a `--` divider) — its own paragraph, never swallowed.
+    // Non-indented prose (e.g. a `--` divider) - its own paragraph, never swallowed.
     flushList();
     pendingText.push(line.trim());
   }
@@ -907,7 +907,7 @@ function inlineMarkdown(text: string): string {
   // A `<` that does not open a supported inline tag is literal text.
   r = r.replace(NOT_AN_INLINE_TAG, () => hold("<"));
 
-  // PDF embed via explicit `![pdf](url)` syntax — render as iframe.
+  // PDF embed via explicit `![pdf](url)` syntax - render as iframe.
   r = r.replace(PDF_EMBED, (_, src) => {
     return `<iframe data-type="pdf" src="${encodeAttribute(src)}" frameborder="0" title="PDF document"></iframe>`;
   });
@@ -1075,7 +1075,7 @@ export function appendWikilinkToContent(
 }
 
 /**
- * Convert Menerio internal note links (HTML anchors with special data
+ * Convert Godspeed Mission Control internal note links (HTML anchors with special data
  * attributes or known URL patterns) to Obsidian [[wikilinks]].
  */
 export function internalLinksToWikilinks(
@@ -1093,7 +1093,7 @@ export function internalLinksToWikilinks(
 }
 
 /**
- * Convert Obsidian [[wikilinks]] to Menerio internal note links.
+ * Convert Obsidian [[wikilinks]] to Godspeed Mission Control internal note links.
  */
 export function wikilinksToInternalLinks(
   md: string,
@@ -1105,7 +1105,7 @@ export function wikilinksToInternalLinks(
     if (noteId) {
       return `[${label}](/dashboard/notes/${noteId})`;
     }
-    // Unresolved wikilink — keep as plain text
+    // Unresolved wikilink - keep as plain text
     return label;
   });
 }
@@ -1113,7 +1113,7 @@ export function wikilinksToInternalLinks(
 // ─── Frontmatter ─────────────────────────────────────────────────────
 
 /**
- * Convert a Menerio note to Obsidian-compatible Markdown with YAML frontmatter.
+ * Convert a Godspeed Mission Control note to Obsidian-compatible Markdown with YAML frontmatter.
  */
 export function noteToMarkdown(
   note: NoteForExport,
@@ -1154,7 +1154,7 @@ export function noteToMarkdown(
     Object.assign(frontmatter, meta._obsidian_frontmatter as Record<string, unknown>);
   }
 
-  // Preserve full Menerio metadata as base64 JSON for lossless round-trip
+  // Preserve full Godspeed Mission Control metadata as base64 JSON for lossless round-trip
   if (Object.keys(meta).length > 0) {
     frontmatter.menerio_metadata = encodeBase64Utf8(JSON.stringify(meta));
   }
@@ -1174,7 +1174,7 @@ export function noteToMarkdown(
 }
 
 /**
- * Parse an Obsidian Markdown file into a Menerio note object.
+ * Parse an Obsidian Markdown file into a Godspeed Mission Control note object.
  */
 export function markdownToNote(
   markdownString: string,
@@ -1189,7 +1189,7 @@ export function markdownToNote(
     try {
       metadata = JSON.parse(decodeBase64Utf8(fm.menerio_metadata));
     } catch {
-      // corrupted base64 — fall back to frontmatter fields
+      // corrupted base64 - fall back to frontmatter fields
     }
   }
 

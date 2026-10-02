@@ -222,7 +222,7 @@ export default function Groups() {
 
   return (
     <div className="max-w-3xl">
-      <SEOHead title="Groups — Menerio" noIndex />
+      <SEOHead title="Groups - Godspeed Mission Control" noIndex />
       <div className="mb-6 flex items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-display font-bold">Groups</h1>

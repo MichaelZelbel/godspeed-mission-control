@@ -109,7 +109,7 @@ export default function World() {
   if (selected) {
     return (
       <>
-        <SEOHead title="World — Menerio" description="Everything in your life as entities, events and claims." />
+        <SEOHead title="World - Godspeed Mission Control" description="Everything in your life as entities, events and claims." />
         <EntityDetail key={selected.id} entity={selected} onDeleted={() => navigate("/dashboard/world")} />
       </>
     );
@@ -117,7 +117,7 @@ export default function World() {
 
   return (
     <>
-      <SEOHead title="World — Menerio" description="Everything in your life as entities, events and claims." />
+      <SEOHead title="World - Godspeed Mission Control" description="Everything in your life as entities, events and claims." />
 
       <div className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-2">

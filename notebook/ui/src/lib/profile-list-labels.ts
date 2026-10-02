@@ -1,6 +1,6 @@
 /**
  * Presentation-layer helpers for profile entries. These decide how a stored
- * (label, value) pair is *rendered* — they never rewrite what's saved in the
+ * (label, value) pair is *rendered* - they never rewrite what's saved in the
  * database. The edge-function normalizer still owns canonicalization at
  * write time; this file just makes existing rows and novel LLM-invented
  * labels display consistently.
@@ -61,7 +61,7 @@ const SINGLE_FACT_LABELS: ReadonlySet<string> = new Set(
 
 /**
  * Labels that should always render as a bulleted list, even when the value
- * currently holds a single item — keeps the visual language consistent for
+ * currently holds a single item - keeps the visual language consistent for
  * collection-style fields.
  */
 const ALWAYS_LIST_LABELS: ReadonlySet<string> = new Set(
@@ -112,7 +112,7 @@ export function shouldRenderAsList(label: string, value: string): boolean {
 }
 
 /**
- * Legacy alias — some callers still import `isListValuedLabel`. Prefer
+ * Legacy alias - some callers still import `isListValuedLabel`. Prefer
  * `shouldRenderAsList` since it accounts for the actual value shape.
  */
 export function isListValuedLabel(label: string): boolean {
@@ -168,7 +168,7 @@ const DISPLAY_LABEL_MAP: ReadonlyMap<string, string> = new Map(
     "also known as": "Nickname",
     "aka": "Nickname",
     "pet name": "Nickname",
-    // Localized birth names stay meaningful — they are NOT nicknames.
+    // Localized birth names stay meaningful - they are NOT nicknames.
     "japanese name": "Name (Japanese)",
     "brazilian name": "Name (Brazilian)",
     "chinese name": "Name (Chinese)",
@@ -178,14 +178,14 @@ const DISPLAY_LABEL_MAP: ReadonlyMap<string, string> = new Map(
     "nicknames liked": "Preferred nicknames",
     "favorite nicknames": "Preferred nicknames",
     "liked nicknames": "Preferred nicknames",
-    // Duplicate label pair — one canonical home for life-history facts.
+    // Duplicate label pair - one canonical home for life-history facts.
     "life history": "Life events",
   }),
 );
 
 /**
  * Split a stored (label, value) pair into the individual values the UI should
- * show. The one place that decides "is this one fact or several" — every
+ * show. The one place that decides "is this one fact or several" - every
  * profile surface must go through it so they cannot drift apart.
  */
 export function splitProfileValues(label: string, value: string): string[] {

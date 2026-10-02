@@ -1,0 +1,1681 @@
+{
+  "format": 1,
+  "items": [
+    {
+      "kind": "screen",
+      "name": "Notes",
+      "classification": "included",
+      "reason": "Reused upstream screen connected to file-backed APIs.",
+      "evidence": "UI walkthrough and HTTP/domain fixtures; candidate verification report states the tested actions."
+    },
+    {
+      "kind": "screen",
+      "name": "People",
+      "classification": "included",
+      "reason": "Reused upstream screen connected to file-backed APIs.",
+      "evidence": "UI walkthrough and HTTP/domain fixtures; candidate verification report states the tested actions."
+    },
+    {
+      "kind": "screen",
+      "name": "Profile",
+      "classification": "included",
+      "reason": "Reused upstream screen connected to file-backed APIs.",
+      "evidence": "UI walkthrough and HTTP/domain fixtures; candidate verification report states the tested actions."
+    },
+    {
+      "kind": "screen",
+      "name": "World",
+      "classification": "included",
+      "reason": "Reused upstream screen connected to file-backed APIs.",
+      "evidence": "UI walkthrough and HTTP/domain fixtures; candidate verification report states the tested actions."
+    },
+    {
+      "kind": "screen",
+      "name": "Collections",
+      "classification": "included",
+      "reason": "Reused upstream screen connected to file-backed APIs.",
+      "evidence": "UI walkthrough and HTTP/domain fixtures; candidate verification report states the tested actions."
+    },
+    {
+      "kind": "screen",
+      "name": "CollectionDetail",
+      "classification": "included",
+      "reason": "Reused upstream screen connected to file-backed APIs.",
+      "evidence": "UI walkthrough and HTTP/domain fixtures; candidate verification report states the tested actions."
+    },
+    {
+      "kind": "screen",
+      "name": "CollectionSchema",
+      "classification": "included",
+      "reason": "Reused upstream screen connected to file-backed APIs.",
+      "evidence": "UI walkthrough and HTTP/domain fixtures; candidate verification report states the tested actions."
+    },
+    {
+      "kind": "screen",
+      "name": "CollectionTemplates",
+      "classification": "included",
+      "reason": "Reused upstream screen connected to file-backed APIs.",
+      "evidence": "UI walkthrough and HTTP/domain fixtures; candidate verification report states the tested actions."
+    },
+    {
+      "kind": "screen",
+      "name": "TimelinePage",
+      "classification": "included",
+      "reason": "Reused upstream screen connected to file-backed APIs.",
+      "evidence": "UI walkthrough and HTTP/domain fixtures; candidate verification report states the tested actions."
+    },
+    {
+      "kind": "screen",
+      "name": "MediaLibrary",
+      "classification": "included",
+      "reason": "Reused upstream screen connected to file-backed APIs.",
+      "evidence": "UI walkthrough and HTTP/domain fixtures; candidate verification report states the tested actions."
+    },
+    {
+      "kind": "screen",
+      "name": "ReviewQueue",
+      "classification": "included",
+      "reason": "Reused upstream screen connected to file-backed APIs.",
+      "evidence": "UI walkthrough and HTTP/domain fixtures; candidate verification report states the tested actions."
+    },
+    {
+      "kind": "screen",
+      "name": "Groups",
+      "classification": "included",
+      "reason": "Reused upstream screen connected to file-backed APIs.",
+      "evidence": "UI walkthrough and HTTP/domain fixtures; candidate verification report states the tested actions."
+    },
+    {
+      "kind": "screen",
+      "name": "GroupDetail",
+      "classification": "included",
+      "reason": "Reused upstream screen connected to file-backed APIs.",
+      "evidence": "UI walkthrough and HTTP/domain fixtures; candidate verification report states the tested actions."
+    },
+    {
+      "kind": "screen",
+      "name": "WeeklyReview",
+      "classification": "included",
+      "reason": "Reused upstream screen connected to file-backed APIs.",
+      "evidence": "UI walkthrough and HTTP/domain fixtures; candidate verification report states the tested actions."
+    },
+    {
+      "kind": "screen",
+      "name": "Actions",
+      "classification": "included",
+      "reason": "Reused upstream screen connected to file-backed APIs.",
+      "evidence": "UI walkthrough and HTTP/domain fixtures; candidate verification report states the tested actions."
+    },
+    {
+      "kind": "screen",
+      "name": "ActivityPage",
+      "classification": "included",
+      "reason": "Reused upstream screen connected to file-backed APIs.",
+      "evidence": "UI walkthrough and HTTP/domain fixtures; candidate verification report states the tested actions."
+    },
+    {
+      "kind": "screen",
+      "name": "Dashboard",
+      "classification": "superseded",
+      "reason": "Integrated control desk: own runtime, privacy, keys, schedules, optional connectors, sync, pairing and recovery.",
+      "evidence": "UI walkthrough and HTTP/domain fixtures; candidate verification report states the tested actions."
+    },
+    {
+      "kind": "screen",
+      "name": "Settings",
+      "classification": "superseded",
+      "reason": "Integrated control desk: own runtime, privacy, keys, schedules, optional connectors, sync, pairing and recovery.",
+      "evidence": "UI walkthrough and HTTP/domain fixtures; candidate verification report states the tested actions."
+    },
+    {
+      "kind": "domain",
+      "name": "action_items",
+      "classification": "included",
+      "reason": "Structured files preserve full record values, stable IDs, typed references and prior revisions; Markdown note bodies remain readable.",
+      "evidence": "records, domains, parity, acceptance and closure fixtures; views are read-only."
+    },
+    {
+      "kind": "domain",
+      "name": "activity_events",
+      "classification": "included",
+      "reason": "Structured files preserve full record values, stable IDs, typed references and prior revisions; Markdown note bodies remain readable.",
+      "evidence": "records, domains, parity, acceptance and closure fixtures; views are read-only."
+    },
+    {
+      "kind": "domain",
+      "name": "agent_instructions",
+      "classification": "included",
+      "reason": "Structured files preserve full record values, stable IDs, typed references and prior revisions; Markdown note bodies remain readable.",
+      "evidence": "records, domains, parity, acceptance and closure fixtures; views are read-only."
+    },
+    {
+      "kind": "domain",
+      "name": "ai_suggestion_preferences",
+      "classification": "included",
+      "reason": "Structured files preserve full record values, stable IDs, typed references and prior revisions; Markdown note bodies remain readable.",
+      "evidence": "records, domains, parity, acceptance and closure fixtures; views are read-only."
+    },
+    {
+      "kind": "domain",
+      "name": "ai_suggestion_suppressions",
+      "classification": "included",
+      "reason": "Structured files preserve full record values, stable IDs, typed references and prior revisions; Markdown note bodies remain readable.",
+      "evidence": "records, domains, parity, acceptance and closure fixtures; views are read-only."
+    },
+    {
+      "kind": "domain",
+      "name": "claims",
+      "classification": "included",
+      "reason": "Structured files preserve full record values, stable IDs, typed references and prior revisions; Markdown note bodies remain readable.",
+      "evidence": "records, domains, parity, acceptance and closure fixtures; views are read-only."
+    },
+    {
+      "kind": "domain",
+      "name": "collection_item_folders",
+      "classification": "included",
+      "reason": "Structured files preserve full record values, stable IDs, typed references and prior revisions; Markdown note bodies remain readable.",
+      "evidence": "records, domains, parity, acceptance and closure fixtures; views are read-only."
+    },
+    {
+      "kind": "domain",
+      "name": "collection_items",
+      "classification": "included",
+      "reason": "Structured files preserve full record values, stable IDs, typed references and prior revisions; Markdown note bodies remain readable.",
+      "evidence": "records, domains, parity, acceptance and closure fixtures; views are read-only."
+    },
+    {
+      "kind": "domain",
+      "name": "collection_templates",
+      "classification": "included",
+      "reason": "Structured files preserve full record values, stable IDs, typed references and prior revisions; Markdown note bodies remain readable.",
+      "evidence": "records, domains, parity, acceptance and closure fixtures; views are read-only."
+    },
+    {
+      "kind": "domain",
+      "name": "collections",
+      "classification": "included",
+      "reason": "Structured files preserve full record values, stable IDs, typed references and prior revisions; Markdown note bodies remain readable.",
+      "evidence": "records, domains, parity, acceptance and closure fixtures; views are read-only."
+    },
+    {
+      "kind": "domain",
+      "name": "connected_apps",
+      "classification": "optional connector",
+      "reason": "Connection credentials and configuration belong to the device, outside synced user records. Connector source/setup is packaged; activate your own accounts.",
+      "evidence": "records, domains, parity, acceptance and closure fixtures; views are read-only."
+    },
+    {
+      "kind": "domain",
+      "name": "contact_group_memberships",
+      "classification": "included",
+      "reason": "Structured files preserve full record values, stable IDs, typed references and prior revisions; Markdown note bodies remain readable.",
+      "evidence": "records, domains, parity, acceptance and closure fixtures; views are read-only."
+    },
+    {
+      "kind": "domain",
+      "name": "contact_groups",
+      "classification": "included",
+      "reason": "Structured files preserve full record values, stable IDs, typed references and prior revisions; Markdown note bodies remain readable.",
+      "evidence": "records, domains, parity, acceptance and closure fixtures; views are read-only."
+    },
+    {
+      "kind": "domain",
+      "name": "contact_interactions",
+      "classification": "included",
+      "reason": "Structured files preserve full record values, stable IDs, typed references and prior revisions; Markdown note bodies remain readable.",
+      "evidence": "records, domains, parity, acceptance and closure fixtures; views are read-only."
+    },
+    {
+      "kind": "domain",
+      "name": "contact_relationships",
+      "classification": "included",
+      "reason": "Structured files preserve full record values, stable IDs, typed references and prior revisions; Markdown note bodies remain readable.",
+      "evidence": "records, domains, parity, acceptance and closure fixtures; views are read-only."
+    },
+    {
+      "kind": "domain",
+      "name": "contact_topic_events",
+      "classification": "included",
+      "reason": "Structured files preserve full record values, stable IDs, typed references and prior revisions; Markdown note bodies remain readable.",
+      "evidence": "records, domains, parity, acceptance and closure fixtures; views are read-only."
+    },
+    {
+      "kind": "domain",
+      "name": "contact_topics",
+      "classification": "included",
+      "reason": "Structured files preserve full record values, stable IDs, typed references and prior revisions; Markdown note bodies remain readable.",
+      "evidence": "records, domains, parity, acceptance and closure fixtures; views are read-only."
+    },
+    {
+      "kind": "domain",
+      "name": "contacts",
+      "classification": "included",
+      "reason": "Structured files preserve full record values, stable IDs, typed references and prior revisions; Markdown note bodies remain readable.",
+      "evidence": "records, domains, parity, acceptance and closure fixtures; views are read-only."
+    },
+    {
+      "kind": "domain",
+      "name": "conversation_messages",
+      "classification": "included",
+      "reason": "Structured files preserve full record values, stable IDs, typed references and prior revisions; Markdown note bodies remain readable.",
+      "evidence": "records, domains, parity, acceptance and closure fixtures; views are read-only."
+    },
+    {
+      "kind": "domain",
+      "name": "discord_connections",
+      "classification": "optional connector",
+      "reason": "Connection credentials and configuration belong to the device, outside synced user records. Connector source/setup is packaged; activate your own accounts.",
+      "evidence": "records, domains, parity, acceptance and closure fixtures; views are read-only."
+    },
+    {
+      "kind": "domain",
+      "name": "dismissed_suggestions",
+      "classification": "included",
+      "reason": "Structured files preserve full record values, stable IDs, typed references and prior revisions; Markdown note bodies remain readable.",
+      "evidence": "records, domains, parity, acceptance and closure fixtures; views are read-only."
+    },
+    {
+      "kind": "domain",
+      "name": "entities",
+      "classification": "included",
+      "reason": "Structured files preserve full record values, stable IDs, typed references and prior revisions; Markdown note bodies remain readable.",
+      "evidence": "records, domains, parity, acceptance and closure fixtures; views are read-only."
+    },
+    {
+      "kind": "domain",
+      "name": "fact_slots",
+      "classification": "included",
+      "reason": "Structured files preserve full record values, stable IDs, typed references and prior revisions; Markdown note bodies remain readable.",
+      "evidence": "records, domains, parity, acceptance and closure fixtures; views are read-only."
+    },
+    {
+      "kind": "domain",
+      "name": "gdrive_connections",
+      "classification": "optional connector",
+      "reason": "Connection credentials and configuration belong to the device, outside synced user records. Connector source/setup is packaged; activate your own accounts.",
+      "evidence": "records, domains, parity, acceptance and closure fixtures; views are read-only."
+    },
+    {
+      "kind": "domain",
+      "name": "gdrive_imports",
+      "classification": "included",
+      "reason": "Structured files preserve full record values, stable IDs, typed references and prior revisions; Markdown note bodies remain readable.",
+      "evidence": "records, domains, parity, acceptance and closure fixtures; views are read-only."
+    },
+    {
+      "kind": "domain",
+      "name": "github_connections",
+      "classification": "optional connector",
+      "reason": "Connection credentials and configuration belong to the device, outside synced user records. Connector source/setup is packaged; activate your own accounts.",
+      "evidence": "records, domains, parity, acceptance and closure fixtures; views are read-only."
+    },
+    {
+      "kind": "domain",
+      "name": "github_sync_log",
+      "classification": "included",
+      "reason": "Structured files preserve full record values, stable IDs, typed references and prior revisions; Markdown note bodies remain readable.",
+      "evidence": "records, domains, parity, acceptance and closure fixtures; views are read-only."
+    },
+    {
+      "kind": "domain",
+      "name": "godspeed_connections",
+      "classification": "optional connector",
+      "reason": "Connection credentials and configuration belong to the device, outside synced user records. Connector source/setup is packaged; activate your own accounts.",
+      "evidence": "records, domains, parity, acceptance and closure fixtures; views are read-only."
+    },
+    {
+      "kind": "domain",
+      "name": "group_briefings",
+      "classification": "included",
+      "reason": "Structured files preserve full record values, stable IDs, typed references and prior revisions; Markdown note bodies remain readable.",
+      "evidence": "records, domains, parity, acceptance and closure fixtures; views are read-only."
+    },
+    {
+      "kind": "domain",
+      "name": "mcp_api_tokens",
+      "classification": "superseded",
+      "reason": "Cloud roles and billing are unnecessary for a single owner; API keys are hash-only device files.",
+      "evidence": "records, domains, parity, acceptance and closure fixtures; views are read-only."
+    },
+    {
+      "kind": "domain",
+      "name": "mcp_preferences",
+      "classification": "included",
+      "reason": "Structured files preserve full record values, stable IDs, typed references and prior revisions; Markdown note bodies remain readable.",
+      "evidence": "records, domains, parity, acceptance and closure fixtures; views are read-only."
+    },
+    {
+      "kind": "domain",
+      "name": "media_analysis",
+      "classification": "included",
+      "reason": "Structured files preserve full record values, stable IDs, typed references and prior revisions; Markdown note bodies remain readable.",
+      "evidence": "records, domains, parity, acceptance and closure fixtures; views are read-only."
+    },
+    {
+      "kind": "domain",
+      "name": "moment_entities",
+      "classification": "included",
+      "reason": "Structured files preserve full record values, stable IDs, typed references and prior revisions; Markdown note bodies remain readable.",
+      "evidence": "records, domains, parity, acceptance and closure fixtures; views are read-only."
+    },
+    {
+      "kind": "domain",
+      "name": "moment_participants",
+      "classification": "included",
+      "reason": "Structured files preserve full record values, stable IDs, typed references and prior revisions; Markdown note bodies remain readable.",
+      "evidence": "records, domains, parity, acceptance and closure fixtures; views are read-only."
+    },
+    {
+      "kind": "domain",
+      "name": "moment_provenance",
+      "classification": "included",
+      "reason": "Structured files preserve full record values, stable IDs, typed references and prior revisions; Markdown note bodies remain readable.",
+      "evidence": "records, domains, parity, acceptance and closure fixtures; views are read-only."
+    },
+    {
+      "kind": "domain",
+      "name": "moments",
+      "classification": "included",
+      "reason": "Structured files preserve full record values, stable IDs, typed references and prior revisions; Markdown note bodies remain readable.",
+      "evidence": "records, domains, parity, acceptance and closure fixtures; views are read-only."
+    },
+    {
+      "kind": "domain",
+      "name": "note-attachments",
+      "classification": "superseded",
+      "reason": "Storage bucket is the SHA-checked local media service, not a record table.",
+      "evidence": "records, domains, parity, acceptance and closure fixtures; views are read-only."
+    },
+    {
+      "kind": "domain",
+      "name": "note_ai_jobs",
+      "classification": "included",
+      "reason": "Structured files preserve full record values, stable IDs, typed references and prior revisions; Markdown note bodies remain readable.",
+      "evidence": "records, domains, parity, acceptance and closure fixtures; views are read-only."
+    },
+    {
+      "kind": "domain",
+      "name": "note_attachments",
+      "classification": "included",
+      "reason": "Structured files preserve full record values, stable IDs, typed references and prior revisions; Markdown note bodies remain readable.",
+      "evidence": "records, domains, parity, acceptance and closure fixtures; views are read-only."
+    },
+    {
+      "kind": "domain",
+      "name": "note_connections",
+      "classification": "optional connector",
+      "reason": "Connection credentials and configuration belong to the device, outside synced user records. Connector source/setup is packaged; activate your own accounts.",
+      "evidence": "records, domains, parity, acceptance and closure fixtures; views are read-only."
+    },
+    {
+      "kind": "domain",
+      "name": "note_folders",
+      "classification": "included",
+      "reason": "Structured files preserve full record values, stable IDs, typed references and prior revisions; Markdown note bodies remain readable.",
+      "evidence": "records, domains, parity, acceptance and closure fixtures; views are read-only."
+    },
+    {
+      "kind": "domain",
+      "name": "notes",
+      "classification": "included",
+      "reason": "Structured files preserve full record values, stable IDs, typed references and prior revisions; Markdown note bodies remain readable.",
+      "evidence": "records, domains, parity, acceptance and closure fixtures; views are read-only."
+    },
+    {
+      "kind": "domain",
+      "name": "notification_preferences",
+      "classification": "included",
+      "reason": "Structured files preserve full record values, stable IDs, typed references and prior revisions; Markdown note bodies remain readable.",
+      "evidence": "records, domains, parity, acceptance and closure fixtures; views are read-only."
+    },
+    {
+      "kind": "domain",
+      "name": "person_documents",
+      "classification": "included",
+      "reason": "Structured files preserve full record values, stable IDs, typed references and prior revisions; Markdown note bodies remain readable.",
+      "evidence": "records, domains, parity, acceptance and closure fixtures; views are read-only."
+    },
+    {
+      "kind": "domain",
+      "name": "profile_categories",
+      "classification": "included",
+      "reason": "Structured files preserve full record values, stable IDs, typed references and prior revisions; Markdown note bodies remain readable.",
+      "evidence": "records, domains, parity, acceptance and closure fixtures; views are read-only."
+    },
+    {
+      "kind": "domain",
+      "name": "profile_facts",
+      "classification": "included",
+      "reason": "Derived directly from dated source claims, relationships, entities and append-only events; no second authoritative database.",
+      "evidence": "records, domains, parity, acceptance and closure fixtures; views are read-only."
+    },
+    {
+      "kind": "domain",
+      "name": "profile_views",
+      "classification": "included",
+      "reason": "Structured files preserve full record values, stable IDs, typed references and prior revisions; Markdown note bodies remain readable.",
+      "evidence": "records, domains, parity, acceptance and closure fixtures; views are read-only."
+    },
+    {
+      "kind": "domain",
+      "name": "profiles",
+      "classification": "included",
+      "reason": "Structured files preserve full record values, stable IDs, typed references and prior revisions; Markdown note bodies remain readable.",
+      "evidence": "records, domains, parity, acceptance and closure fixtures; views are read-only."
+    },
+    {
+      "kind": "domain",
+      "name": "relationship_evidence",
+      "classification": "included",
+      "reason": "Structured files preserve full record values, stable IDs, typed references and prior revisions; Markdown note bodies remain readable.",
+      "evidence": "records, domains, parity, acceptance and closure fixtures; views are read-only."
+    },
+    {
+      "kind": "domain",
+      "name": "relationship_rejections",
+      "classification": "included",
+      "reason": "Structured files preserve full record values, stable IDs, typed references and prior revisions; Markdown note bodies remain readable.",
+      "evidence": "records, domains, parity, acceptance and closure fixtures; views are read-only."
+    },
+    {
+      "kind": "domain",
+      "name": "review_queue",
+      "classification": "included",
+      "reason": "Structured files preserve full record values, stable IDs, typed references and prior revisions; Markdown note bodies remain readable.",
+      "evidence": "records, domains, parity, acceptance and closure fixtures; views are read-only."
+    },
+    {
+      "kind": "domain",
+      "name": "review_queue_bulk_jobs",
+      "classification": "included",
+      "reason": "Structured files preserve full record values, stable IDs, typed references and prior revisions; Markdown note bodies remain readable.",
+      "evidence": "records, domains, parity, acceptance and closure fixtures; views are read-only."
+    },
+    {
+      "kind": "domain",
+      "name": "shared_notes",
+      "classification": "included",
+      "reason": "Structured files preserve full record values, stable IDs, typed references and prior revisions; Markdown note bodies remain readable.",
+      "evidence": "records, domains, parity, acceptance and closure fixtures; views are read-only."
+    },
+    {
+      "kind": "domain",
+      "name": "telegram_connections",
+      "classification": "optional connector",
+      "reason": "Connection credentials and configuration belong to the device, outside synced user records. Connector source/setup is packaged; activate your own accounts.",
+      "evidence": "records, domains, parity, acceptance and closure fixtures; views are read-only."
+    },
+    {
+      "kind": "domain",
+      "name": "user_mcp_servers",
+      "classification": "optional connector",
+      "reason": "Connection credentials and configuration belong to the device, outside synced user records. Connector source/setup is packaged; activate your own accounts.",
+      "evidence": "records, domains, parity, acceptance and closure fixtures; views are read-only."
+    },
+    {
+      "kind": "domain",
+      "name": "user_roles",
+      "classification": "superseded",
+      "reason": "Cloud roles and billing are unnecessary for a single owner; API keys are hash-only device files.",
+      "evidence": "records, domains, parity, acceptance and closure fixtures; views are read-only."
+    },
+    {
+      "kind": "domain",
+      "name": "user_self_aliases",
+      "classification": "included",
+      "reason": "Structured files preserve full record values, stable IDs, typed references and prior revisions; Markdown note bodies remain readable.",
+      "evidence": "records, domains, parity, acceptance and closure fixtures; views are read-only."
+    },
+    {
+      "kind": "domain",
+      "name": "v_ai_allowance_current",
+      "classification": "superseded",
+      "reason": "Cloud roles and billing are unnecessary for a single owner; API keys are hash-only device files.",
+      "evidence": "records, domains, parity, acceptance and closure fixtures; views are read-only."
+    },
+    {
+      "kind": "domain",
+      "name": "weekly_reviews",
+      "classification": "included",
+      "reason": "Structured files preserve full record values, stable IDs, typed references and prior revisions; Markdown note bodies remain readable.",
+      "evidence": "records, domains, parity, acceptance and closure fixtures; views are read-only."
+    },
+    {
+      "kind": "domain",
+      "name": "wiki_page_sources",
+      "classification": "deferred",
+      "reason": "Permitted lexicon deferral; existing imported records remain preservable.",
+      "evidence": "records, domains, parity, acceptance and closure fixtures; views are read-only."
+    },
+    {
+      "kind": "domain",
+      "name": "wiki_pages",
+      "classification": "deferred",
+      "reason": "Permitted lexicon deferral; existing imported records remain preservable.",
+      "evidence": "records, domains, parity, acceptance and closure fixtures; views are read-only."
+    },
+    {
+      "kind": "domain",
+      "name": "wiki_revisions",
+      "classification": "deferred",
+      "reason": "Permitted lexicon deferral; existing imported records remain preservable.",
+      "evidence": "records, domains, parity, acceptance and closure fixtures; views are read-only."
+    },
+    {
+      "kind": "domain",
+      "name": "world_claims",
+      "classification": "included",
+      "reason": "Derived directly from dated source claims, relationships, entities and append-only events; no second authoritative database.",
+      "evidence": "records, domains, parity, acceptance and closure fixtures; views are read-only."
+    },
+    {
+      "kind": "domain",
+      "name": "world_entities",
+      "classification": "included",
+      "reason": "Derived directly from dated source claims, relationships, entities and append-only events; no second authoritative database.",
+      "evidence": "records, domains, parity, acceptance and closure fixtures; views are read-only."
+    },
+    {
+      "kind": "domain",
+      "name": "world_events",
+      "classification": "included",
+      "reason": "Derived directly from dated source claims, relationships, entities and append-only events; no second authoritative database.",
+      "evidence": "records, domains, parity, acceptance and closure fixtures; views are read-only."
+    },
+    {
+      "kind": "function",
+      "name": "analyze-media",
+      "classification": "included",
+      "reason": "File-backed processing saves actual results or review proposals; model errors remain visible and do not produce fabricated completion.",
+      "evidence": "core/domains.mjs, connectors.mjs, api-keys.mjs; domain/HTTP fixtures plus real model and image fixture."
+    },
+    {
+      "kind": "function",
+      "name": "backfill-metadata",
+      "classification": "included",
+      "reason": "File-backed processing saves actual results or review proposals; model errors remain visible and do not produce fabricated completion.",
+      "evidence": "core/domains.mjs, connectors.mjs, api-keys.mjs; domain/HTTP fixtures plus real model and image fixture."
+    },
+    {
+      "kind": "function",
+      "name": "backfill-moment-profile-extraction",
+      "classification": "included",
+      "reason": "File-backed processing saves actual results or review proposals; model errors remain visible and do not produce fabricated completion.",
+      "evidence": "core/domains.mjs, connectors.mjs, api-keys.mjs; domain/HTTP fixtures plus real model and image fixture."
+    },
+    {
+      "kind": "function",
+      "name": "backfill-profile-extraction",
+      "classification": "included",
+      "reason": "File-backed processing saves actual results or review proposals; model errors remain visible and do not produce fabricated completion.",
+      "evidence": "core/domains.mjs, connectors.mjs, api-keys.mjs; domain/HTTP fixtures plus real model and image fixture."
+    },
+    {
+      "kind": "function",
+      "name": "backfill-wikilinks",
+      "classification": "deferred",
+      "reason": "Permitted lexicon/note graph deferral.",
+      "evidence": "core/domains.mjs, connectors.mjs, api-keys.mjs; domain/HTTP fixtures plus real model and image fixture."
+    },
+    {
+      "kind": "function",
+      "name": "classify-profile-fact",
+      "classification": "included",
+      "reason": "File-backed processing saves actual results or review proposals; model errors remain visible and do not produce fabricated completion.",
+      "evidence": "core/domains.mjs, connectors.mjs, api-keys.mjs; domain/HTTP fixtures plus real model and image fixture."
+    },
+    {
+      "kind": "function",
+      "name": "collection-chat",
+      "classification": "included",
+      "reason": "File-backed processing saves actual results or review proposals; model errors remain visible and do not produce fabricated completion.",
+      "evidence": "core/domains.mjs, connectors.mjs, api-keys.mjs; domain/HTTP fixtures plus real model and image fixture."
+    },
+    {
+      "kind": "function",
+      "name": "compute-connections",
+      "classification": "included",
+      "reason": "File-backed processing saves actual results or review proposals; model errors remain visible and do not produce fabricated completion.",
+      "evidence": "core/domains.mjs, connectors.mjs, api-keys.mjs; domain/HTTP fixtures plus real model and image fixture."
+    },
+    {
+      "kind": "function",
+      "name": "conversation-chat",
+      "classification": "included",
+      "reason": "File-backed processing saves actual results or review proposals; model errors remain visible and do not produce fabricated completion.",
+      "evidence": "core/domains.mjs, connectors.mjs, api-keys.mjs; domain/HTTP fixtures plus real model and image fixture."
+    },
+    {
+      "kind": "function",
+      "name": "delete-my-account",
+      "classification": "superseded",
+      "reason": "Local owner and own-provider policy replaces cloud account deletion, credit allowance and platform moderation.",
+      "evidence": "core/domains.mjs, connectors.mjs, api-keys.mjs; domain/HTTP fixtures plus real model and image fixture."
+    },
+    {
+      "kind": "function",
+      "name": "draft-event",
+      "classification": "included",
+      "reason": "File-backed processing saves actual results or review proposals; model errors remain visible and do not produce fabricated completion.",
+      "evidence": "core/domains.mjs, connectors.mjs, api-keys.mjs; domain/HTTP fixtures plus real model and image fixture."
+    },
+    {
+      "kind": "function",
+      "name": "embed-document",
+      "classification": "included",
+      "reason": "File-backed processing saves actual results or review proposals; model errors remain visible and do not produce fabricated completion.",
+      "evidence": "core/domains.mjs, connectors.mjs, api-keys.mjs; domain/HTTP fixtures plus real model and image fixture."
+    },
+    {
+      "kind": "function",
+      "name": "enrich-people",
+      "classification": "included",
+      "reason": "File-backed processing saves actual results or review proposals; model errors remain visible and do not produce fabricated completion.",
+      "evidence": "core/domains.mjs, connectors.mjs, api-keys.mjs; domain/HTTP fixtures plus real model and image fixture."
+    },
+    {
+      "kind": "function",
+      "name": "enrich-person-from-lexicon",
+      "classification": "deferred",
+      "reason": "Permitted lexicon/note graph deferral.",
+      "evidence": "core/domains.mjs, connectors.mjs, api-keys.mjs; domain/HTTP fixtures plus real model and image fixture."
+    },
+    {
+      "kind": "function",
+      "name": "ensure-token-allowance",
+      "classification": "superseded",
+      "reason": "Local owner and own-provider policy replaces cloud account deletion, credit allowance and platform moderation.",
+      "evidence": "core/domains.mjs, connectors.mjs, api-keys.mjs; domain/HTTP fixtures plus real model and image fixture."
+    },
+    {
+      "kind": "function",
+      "name": "extract-moment-profile",
+      "classification": "included",
+      "reason": "File-backed processing saves actual results or review proposals; model errors remain visible and do not produce fabricated completion.",
+      "evidence": "core/domains.mjs, connectors.mjs, api-keys.mjs; domain/HTTP fixtures plus real model and image fixture."
+    },
+    {
+      "kind": "function",
+      "name": "find-connections",
+      "classification": "included",
+      "reason": "File-backed processing saves actual results or review proposals; model errors remain visible and do not produce fabricated completion.",
+      "evidence": "core/domains.mjs, connectors.mjs, api-keys.mjs; domain/HTTP fixtures plus real model and image fixture."
+    },
+    {
+      "kind": "function",
+      "name": "gdrive-proxy",
+      "classification": "optional connector",
+      "reason": "Private file reconciler or explicitly configured provider connector; no credential seeds and no automatic outward action.",
+      "evidence": "core/domains.mjs, connectors.mjs, api-keys.mjs; domain/HTTP fixtures plus real model and image fixture."
+    },
+    {
+      "kind": "function",
+      "name": "gdrive-sync",
+      "classification": "optional connector",
+      "reason": "Private file reconciler or explicitly configured provider connector; no credential seeds and no automatic outward action.",
+      "evidence": "core/domains.mjs, connectors.mjs, api-keys.mjs; domain/HTTP fixtures plus real model and image fixture."
+    },
+    {
+      "kind": "function",
+      "name": "generate-profile-suggestions",
+      "classification": "included",
+      "reason": "File-backed processing saves actual results or review proposals; model errors remain visible and do not produce fabricated completion.",
+      "evidence": "core/domains.mjs, connectors.mjs, api-keys.mjs; domain/HTTP fixtures plus real model and image fixture."
+    },
+    {
+      "kind": "function",
+      "name": "generate_collection_schema",
+      "classification": "included",
+      "reason": "File-backed processing saves actual results or review proposals; model errors remain visible and do not produce fabricated completion.",
+      "evidence": "core/domains.mjs, connectors.mjs, api-keys.mjs; domain/HTTP fixtures plus real model and image fixture."
+    },
+    {
+      "kind": "function",
+      "name": "get-graph-data",
+      "classification": "deferred",
+      "reason": "Permitted lexicon/note graph deferral.",
+      "evidence": "core/domains.mjs, connectors.mjs, api-keys.mjs; domain/HTTP fixtures plus real model and image fixture."
+    },
+    {
+      "kind": "function",
+      "name": "github-import-vault",
+      "classification": "optional connector",
+      "reason": "Private file reconciler or explicitly configured provider connector; no credential seeds and no automatic outward action.",
+      "evidence": "core/domains.mjs, connectors.mjs, api-keys.mjs; domain/HTTP fixtures plus real model and image fixture."
+    },
+    {
+      "kind": "function",
+      "name": "github-people-sync",
+      "classification": "optional connector",
+      "reason": "Private file reconciler or explicitly configured provider connector; no credential seeds and no automatic outward action.",
+      "evidence": "core/domains.mjs, connectors.mjs, api-keys.mjs; domain/HTTP fixtures plus real model and image fixture."
+    },
+    {
+      "kind": "function",
+      "name": "github-proxy",
+      "classification": "optional connector",
+      "reason": "Private file reconciler or explicitly configured provider connector; no credential seeds and no automatic outward action.",
+      "evidence": "core/domains.mjs, connectors.mjs, api-keys.mjs; domain/HTTP fixtures plus real model and image fixture."
+    },
+    {
+      "kind": "function",
+      "name": "github-sync-export",
+      "classification": "optional connector",
+      "reason": "Private file reconciler or explicitly configured provider connector; no credential seeds and no automatic outward action.",
+      "evidence": "core/domains.mjs, connectors.mjs, api-keys.mjs; domain/HTTP fixtures plus real model and image fixture."
+    },
+    {
+      "kind": "function",
+      "name": "github-sync-pull",
+      "classification": "optional connector",
+      "reason": "Private file reconciler or explicitly configured provider connector; no credential seeds and no automatic outward action.",
+      "evidence": "core/domains.mjs, connectors.mjs, api-keys.mjs; domain/HTTP fixtures plus real model and image fixture."
+    },
+    {
+      "kind": "function",
+      "name": "mc-api-keys",
+      "classification": "included",
+      "reason": "File-backed processing saves actual results or review proposals; model errors remain visible and do not produce fabricated completion.",
+      "evidence": "core/domains.mjs, connectors.mjs, api-keys.mjs; domain/HTTP fixtures plus real model and image fixture."
+    },
+    {
+      "kind": "function",
+      "name": "mc-api-keys/generate",
+      "classification": "included",
+      "reason": "File-backed processing saves actual results or review proposals; model errors remain visible and do not produce fabricated completion.",
+      "evidence": "core/domains.mjs, connectors.mjs, api-keys.mjs; domain/HTTP fixtures plus real model and image fixture."
+    },
+    {
+      "kind": "function",
+      "name": "merge-contacts",
+      "classification": "included",
+      "reason": "File-backed processing saves actual results or review proposals; model errors remain visible and do not produce fabricated completion.",
+      "evidence": "core/domains.mjs, connectors.mjs, api-keys.mjs; domain/HTTP fixtures plus real model and image fixture."
+    },
+    {
+      "kind": "function",
+      "name": "moderate-content",
+      "classification": "superseded",
+      "reason": "Local owner and own-provider policy replaces cloud account deletion, credit allowance and platform moderation.",
+      "evidence": "core/domains.mjs, connectors.mjs, api-keys.mjs; domain/HTTP fixtures plus real model and image fixture."
+    },
+    {
+      "kind": "function",
+      "name": "normalize-profile",
+      "classification": "included",
+      "reason": "File-backed processing saves actual results or review proposals; model errors remain visible and do not produce fabricated completion.",
+      "evidence": "core/domains.mjs, connectors.mjs, api-keys.mjs; domain/HTTP fixtures plus real model and image fixture."
+    },
+    {
+      "kind": "function",
+      "name": "note-chat",
+      "classification": "included",
+      "reason": "File-backed processing saves actual results or review proposals; model errors remain visible and do not produce fabricated completion.",
+      "evidence": "core/domains.mjs, connectors.mjs, api-keys.mjs; domain/HTTP fixtures plus real model and image fixture."
+    },
+    {
+      "kind": "function",
+      "name": "process-note",
+      "classification": "included",
+      "reason": "File-backed processing saves actual results or review proposals; model errors remain visible and do not produce fabricated completion.",
+      "evidence": "core/domains.mjs, connectors.mjs, api-keys.mjs; domain/HTTP fixtures plus real model and image fixture."
+    },
+    {
+      "kind": "function",
+      "name": "profile-lint",
+      "classification": "included",
+      "reason": "File-backed processing saves actual results or review proposals; model errors remain visible and do not produce fabricated completion.",
+      "evidence": "core/domains.mjs, connectors.mjs, api-keys.mjs; domain/HTTP fixtures plus real model and image fixture."
+    },
+    {
+      "kind": "function",
+      "name": "quick-capture",
+      "classification": "included",
+      "reason": "File-backed processing saves actual results or review proposals; model errors remain visible and do not produce fabricated completion.",
+      "evidence": "core/domains.mjs, connectors.mjs, api-keys.mjs; domain/HTTP fixtures plus real model and image fixture."
+    },
+    {
+      "kind": "function",
+      "name": "review-queue-bulk",
+      "classification": "included",
+      "reason": "File-backed processing saves actual results or review proposals; model errors remain visible and do not produce fabricated completion.",
+      "evidence": "core/domains.mjs, connectors.mjs, api-keys.mjs; domain/HTTP fixtures plus real model and image fixture."
+    },
+    {
+      "kind": "function",
+      "name": "search-notes-semantic",
+      "classification": "included",
+      "reason": "File-backed processing saves actual results or review proposals; model errors remain visible and do not produce fabricated completion.",
+      "evidence": "core/domains.mjs, connectors.mjs, api-keys.mjs; domain/HTTP fixtures plus real model and image fixture."
+    },
+    {
+      "kind": "function",
+      "name": "send-patch",
+      "classification": "optional connector",
+      "reason": "Private file reconciler or explicitly configured provider connector; no credential seeds and no automatic outward action.",
+      "evidence": "core/domains.mjs, connectors.mjs, api-keys.mjs; domain/HTTP fixtures plus real model and image fixture."
+    },
+    {
+      "kind": "function",
+      "name": "suggest-connections",
+      "classification": "included",
+      "reason": "File-backed processing saves actual results or review proposals; model errors remain visible and do not produce fabricated completion.",
+      "evidence": "core/domains.mjs, connectors.mjs, api-keys.mjs; domain/HTTP fixtures plus real model and image fixture."
+    },
+    {
+      "kind": "function",
+      "name": "suggest-group-members",
+      "classification": "included",
+      "reason": "File-backed processing saves actual results or review proposals; model errors remain visible and do not produce fabricated completion.",
+      "evidence": "core/domains.mjs, connectors.mjs, api-keys.mjs; domain/HTTP fixtures plus real model and image fixture."
+    },
+    {
+      "kind": "function",
+      "name": "suggest-group-next-step",
+      "classification": "included",
+      "reason": "File-backed processing saves actual results or review proposals; model errors remain visible and do not produce fabricated completion.",
+      "evidence": "core/domains.mjs, connectors.mjs, api-keys.mjs; domain/HTTP fixtures plus real model and image fixture."
+    },
+    {
+      "kind": "function",
+      "name": "weekly-review",
+      "classification": "included",
+      "reason": "File-backed processing saves actual results or review proposals; model errors remain visible and do not produce fabricated completion.",
+      "evidence": "core/domains.mjs, connectors.mjs, api-keys.mjs; domain/HTTP fixtures plus real model and image fixture."
+    },
+    {
+      "kind": "function",
+      "name": "wiki-ingest",
+      "classification": "deferred",
+      "reason": "Permitted lexicon/note graph deferral.",
+      "evidence": "core/domains.mjs, connectors.mjs, api-keys.mjs; domain/HTTP fixtures plus real model and image fixture."
+    },
+    {
+      "kind": "procedure",
+      "name": "sync",
+      "classification": "superseded",
+      "operation": "file-sync",
+      "reason": "One file reconciler, every minute and after saves; no database-row sync.",
+      "activation": "Owner enables a schedule; one declared runner; outward actions need a specific approval.",
+      "evidence": "Shared scheduler/receipts and packaged procedure dispatcher; actual health, disk, ownership, uncertain delivery and connector fixtures."
+    },
+    {
+      "kind": "procedure",
+      "name": "sync-bot",
+      "classification": "superseded",
+      "operation": "file-sync",
+      "reason": "Bot and notebook use the same workspace; no second private clone.",
+      "activation": "Owner enables a schedule; one declared runner; outward actions need a specific approval.",
+      "evidence": "Shared scheduler/receipts and packaged procedure dispatcher; actual health, disk, ownership, uncertain delivery and connector fixtures."
+    },
+    {
+      "kind": "procedure",
+      "name": "browser-post",
+      "classification": "optional connector",
+      "operation": "browser-post",
+      "reason": "Approved computer helper and explicit posting permission.",
+      "activation": "Owner enables a schedule; one declared runner; outward actions need a specific approval.",
+      "evidence": "Shared scheduler/receipts and packaged procedure dispatcher; actual health, disk, ownership, uncertain delivery and connector fixtures."
+    },
+    {
+      "kind": "procedure",
+      "name": "kanbero-import",
+      "classification": "optional connector",
+      "operation": "board-export",
+      "reason": "A chosen task-board connector reads work and receipts; no company agents are installed.",
+      "activation": "Owner enables a schedule; one declared runner; outward actions need a specific approval.",
+      "evidence": "Shared scheduler/receipts and packaged procedure dispatcher; actual health, disk, ownership, uncertain delivery and connector fixtures."
+    },
+    {
+      "kind": "procedure",
+      "name": "spend-guard",
+      "classification": "optional connector",
+      "operation": "spend-guard",
+      "reason": "Read a chosen provider balance; thresholds are configured by the owner.",
+      "activation": "Owner enables a schedule; one declared runner; outward actions need a specific approval.",
+      "evidence": "Shared scheduler/receipts and packaged procedure dispatcher; actual health, disk, ownership, uncertain delivery and connector fixtures."
+    },
+    {
+      "kind": "procedure",
+      "name": "do-you-copy",
+      "classification": "included",
+      "operation": "attention-review",
+      "reason": "One reminder for a pending approval, with durable deduplication.",
+      "activation": "Owner enables a schedule; one declared runner; outward actions need a specific approval.",
+      "evidence": "Shared scheduler/receipts and packaged procedure dispatcher; actual health, disk, ownership, uncertain delivery and connector fixtures."
+    },
+    {
+      "kind": "procedure",
+      "name": "menerio-keepalive",
+      "classification": "superseded",
+      "operation": "file-runtime",
+      "reason": "The file runtime needs no PowerSync service.",
+      "activation": "Owner enables a schedule; one declared runner; outward actions need a specific approval.",
+      "evidence": "Shared scheduler/receipts and packaged procedure dispatcher; actual health, disk, ownership, uncertain delivery and connector fixtures."
+    },
+    {
+      "kind": "procedure",
+      "name": "disk-watchdog",
+      "classification": "included",
+      "operation": "disk-check",
+      "reason": "Read actual candidate filesystem free space without model usage.",
+      "activation": "Owner enables a schedule; one declared runner; outward actions need a specific approval.",
+      "evidence": "Shared scheduler/receipts and packaged procedure dispatcher; actual health, disk, ownership, uncertain delivery and connector fixtures."
+    },
+    {
+      "kind": "procedure",
+      "name": "paperclip-backup-prune",
+      "classification": "separately owned",
+      "operation": "company",
+      "reason": "Paperclip is a separate company-agent system.",
+      "activation": "Owner enables a schedule; one declared runner; outward actions need a specific approval.",
+      "evidence": "Shared scheduler/receipts and packaged procedure dispatcher; actual health, disk, ownership, uncertain delivery and connector fixtures."
+    },
+    {
+      "kind": "procedure",
+      "name": "domain-watch",
+      "classification": "optional connector",
+      "operation": "domain-watch",
+      "reason": "Read owner-selected authoritative domain registration endpoints; do not buy domains.",
+      "activation": "Owner enables a schedule; one declared runner; outward actions need a specific approval.",
+      "evidence": "Shared scheduler/receipts and packaged procedure dispatcher; actual health, disk, ownership, uncertain delivery and connector fixtures."
+    },
+    {
+      "kind": "procedure",
+      "name": "claude-upgrade",
+      "classification": "superseded",
+      "operation": "candidate-update",
+      "reason": "Pinned candidate upgrades and rollback replace unpinned nightly runtime changes.",
+      "activation": "Owner enables a schedule; one declared runner; outward actions need a specific approval.",
+      "evidence": "Shared scheduler/receipts and packaged procedure dispatcher; actual health, disk, ownership, uncertain delivery and connector fixtures."
+    },
+    {
+      "kind": "procedure",
+      "name": "health-table",
+      "classification": "included",
+      "operation": "health-summary",
+      "reason": "Aggregate file-backed health observations, episodes and medication days.",
+      "activation": "Owner enables a schedule; one declared runner; outward actions need a specific approval.",
+      "evidence": "Shared scheduler/receipts and packaged procedure dispatcher; actual health, disk, ownership, uncertain delivery and connector fixtures."
+    },
+    {
+      "kind": "procedure",
+      "name": "portfolio",
+      "classification": "included",
+      "operation": "portfolio",
+      "reason": "Check owner-selected public links and save dated results.",
+      "activation": "Owner enables a schedule; one declared runner; outward actions need a specific approval.",
+      "evidence": "Shared scheduler/receipts and packaged procedure dispatcher; actual health, disk, ownership, uncertain delivery and connector fixtures."
+    },
+    {
+      "kind": "procedure",
+      "name": "transcript-sync",
+      "classification": "superseded",
+      "operation": "file-conversations",
+      "reason": "Conversation state and immutable snapshots are already durable files.",
+      "activation": "Owner enables a schedule; one declared runner; outward actions need a specific approval.",
+      "evidence": "Shared scheduler/receipts and packaged procedure dispatcher; actual health, disk, ownership, uncertain delivery and connector fixtures."
+    },
+    {
+      "kind": "procedure",
+      "name": "fresh-posts",
+      "classification": "optional connector",
+      "operation": "lead",
+      "reason": "Read selected public sources or the explicitly paired browser; save observed posts, not invented ones.",
+      "activation": "Owner enables a schedule; one declared runner; outward actions need a specific approval.",
+      "evidence": "Shared scheduler/receipts and packaged procedure dispatcher; actual health, disk, ownership, uncertain delivery and connector fixtures."
+    },
+    {
+      "kind": "procedure",
+      "name": "next-action",
+      "classification": "included",
+      "operation": "goal-decision",
+      "reason": "Compare action, alternative and status quo using goals and actual outcomes.",
+      "activation": "Owner enables a schedule; one declared runner; outward actions need a specific approval.",
+      "evidence": "Shared scheduler/receipts and packaged procedure dispatcher; actual health, disk, ownership, uncertain delivery and connector fixtures."
+    },
+    {
+      "kind": "procedure",
+      "name": "prompt-harvest",
+      "classification": "included",
+      "operation": "memory-capture",
+      "reason": "Capture explicitly supplied transcripts with credential redaction; never sweep other accounts.",
+      "activation": "Owner enables a schedule; one declared runner; outward actions need a specific approval.",
+      "evidence": "Shared scheduler/receipts and packaged procedure dispatcher; actual health, disk, ownership, uncertain delivery and connector fixtures."
+    },
+    {
+      "kind": "procedure",
+      "name": "snapshot-for-ownward",
+      "classification": "separately owned",
+      "operation": "company",
+      "reason": "Company handovers remain with the owning company.",
+      "activation": "Owner enables a schedule; one declared runner; outward actions need a specific approval.",
+      "evidence": "Shared scheduler/receipts and packaged procedure dispatcher; actual health, disk, ownership, uncertain delivery and connector fixtures."
+    },
+    {
+      "kind": "procedure",
+      "name": "connections",
+      "classification": "included",
+      "operation": "connection-check",
+      "reason": "Make a real read through each configured connector and save success or failure.",
+      "activation": "Owner enables a schedule; one declared runner; outward actions need a specific approval.",
+      "evidence": "Shared scheduler/receipts and packaged procedure dispatcher; actual health, disk, ownership, uncertain delivery and connector fixtures."
+    },
+    {
+      "kind": "procedure",
+      "name": "due-check",
+      "classification": "superseded",
+      "operation": "deadline-reminder",
+      "reason": "Independent deadline reminder and file-backed recurrence.",
+      "activation": "Owner enables a schedule; one declared runner; outward actions need a specific approval.",
+      "evidence": "Shared scheduler/receipts and packaged procedure dispatcher; actual health, disk, ownership, uncertain delivery and connector fixtures."
+    },
+    {
+      "kind": "procedure",
+      "name": "topic-watch",
+      "classification": "superseded",
+      "operation": "watch",
+      "reason": "One owner-selected topic registry and source reader.",
+      "activation": "Owner enables a schedule; one declared runner; outward actions need a specific approval.",
+      "evidence": "Shared scheduler/receipts and packaged procedure dispatcher; actual health, disk, ownership, uncertain delivery and connector fixtures."
+    },
+    {
+      "kind": "procedure",
+      "name": "brief-judges",
+      "classification": "included",
+      "operation": "brief-review",
+      "reason": "Judge the saved brief against current sources and voice; preserve critique.",
+      "activation": "Owner enables a schedule; one declared runner; outward actions need a specific approval.",
+      "evidence": "Shared scheduler/receipts and packaged procedure dispatcher; actual health, disk, ownership, uncertain delivery and connector fixtures."
+    },
+    {
+      "kind": "procedure",
+      "name": "ownward-handover",
+      "classification": "separately owned",
+      "operation": "company",
+      "reason": "Company output is produced by its owning system.",
+      "activation": "Owner enables a schedule; one declared runner; outward actions need a specific approval.",
+      "evidence": "Shared scheduler/receipts and packaged procedure dispatcher; actual health, disk, ownership, uncertain delivery and connector fixtures."
+    },
+    {
+      "kind": "procedure",
+      "name": "selftest",
+      "classification": "included",
+      "operation": "selftest",
+      "reason": "Validate records, references, index and pending receipts.",
+      "activation": "Owner enables a schedule; one declared runner; outward actions need a specific approval.",
+      "evidence": "Shared scheduler/receipts and packaged procedure dispatcher; actual health, disk, ownership, uncertain delivery and connector fixtures."
+    },
+    {
+      "kind": "procedure",
+      "name": "exa-monitor-test",
+      "classification": "optional connector",
+      "operation": "watch",
+      "reason": "Optional search provider comparison uses dated source receipts.",
+      "activation": "Owner enables a schedule; one declared runner; outward actions need a specific approval.",
+      "evidence": "Shared scheduler/receipts and packaged procedure dispatcher; actual health, disk, ownership, uncertain delivery and connector fixtures."
+    },
+    {
+      "kind": "procedure",
+      "name": "brief-morning",
+      "classification": "included",
+      "operation": "morning-brief",
+      "reason": "Write from current user data; delivery is an explicitly configured connector.",
+      "activation": "Owner enables a schedule; one declared runner; outward actions need a specific approval.",
+      "evidence": "Shared scheduler/receipts and packaged procedure dispatcher; actual health, disk, ownership, uncertain delivery and connector fixtures."
+    },
+    {
+      "kind": "procedure",
+      "name": "devops-bridge",
+      "classification": "superseded",
+      "operation": "goal-work",
+      "reason": "Local assistant and durable work queue replace the private headless bridge.",
+      "activation": "Owner enables a schedule; one declared runner; outward actions need a specific approval.",
+      "evidence": "Shared scheduler/receipts and packaged procedure dispatcher; actual health, disk, ownership, uncertain delivery and connector fixtures."
+    },
+    {
+      "kind": "procedure",
+      "name": "bot-probe",
+      "classification": "included",
+      "operation": "conversation-review",
+      "reason": "Compare the last delivered message with its saved conversation record.",
+      "activation": "Owner enables a schedule; one declared runner; outward actions need a specific approval.",
+      "evidence": "Shared scheduler/receipts and packaged procedure dispatcher; actual health, disk, ownership, uncertain delivery and connector fixtures."
+    },
+    {
+      "kind": "procedure",
+      "name": "hermes-backup-prune",
+      "classification": "superseded",
+      "operation": "candidate-backup",
+      "reason": "Candidate upgrades retain verified backups; no private Hermes-home cleanup.",
+      "activation": "Owner enables a schedule; one declared runner; outward actions need a specific approval.",
+      "evidence": "Shared scheduler/receipts and packaged procedure dispatcher; actual health, disk, ownership, uncertain delivery and connector fixtures."
+    },
+    {
+      "kind": "procedure",
+      "name": "job-check",
+      "classification": "included",
+      "operation": "job-check",
+      "reason": "Detect failed, interrupted, missing or overdue routine receipts.",
+      "activation": "Owner enables a schedule; one declared runner; outward actions need a specific approval.",
+      "evidence": "Shared scheduler/receipts and packaged procedure dispatcher; actual health, disk, ownership, uncertain delivery and connector fixtures."
+    },
+    {
+      "kind": "procedure",
+      "name": "work",
+      "classification": "included",
+      "operation": "goal-work",
+      "reason": "Complete useful authorized work and save the actual deliverable.",
+      "activation": "Owner enables a schedule; one declared runner; outward actions need a specific approval.",
+      "evidence": "Shared scheduler/receipts and packaged procedure dispatcher; actual health, disk, ownership, uncertain delivery and connector fixtures."
+    },
+    {
+      "kind": "procedure",
+      "name": "watch",
+      "classification": "included",
+      "operation": "watch",
+      "reason": "Read selected sources, save observations and surface meaningful change.",
+      "activation": "Owner enables a schedule; one declared runner; outward actions need a specific approval.",
+      "evidence": "Shared scheduler/receipts and packaged procedure dispatcher; actual health, disk, ownership, uncertain delivery and connector fixtures."
+    },
+    {
+      "kind": "procedure",
+      "name": "attention-pull",
+      "classification": "included",
+      "operation": "attention-review",
+      "reason": "Prioritize near deadlines and prepared user actions; silence is valid.",
+      "activation": "Owner enables a schedule; one declared runner; outward actions need a specific approval.",
+      "evidence": "Shared scheduler/receipts and packaged procedure dispatcher; actual health, disk, ownership, uncertain delivery and connector fixtures."
+    },
+    {
+      "kind": "procedure",
+      "name": "lead",
+      "classification": "included",
+      "operation": "lead",
+      "reason": "Prepare a grounded post or reply; never publish automatically.",
+      "activation": "Owner enables a schedule; one declared runner; outward actions need a specific approval.",
+      "evidence": "Shared scheduler/receipts and packaged procedure dispatcher; actual health, disk, ownership, uncertain delivery and connector fixtures."
+    },
+    {
+      "kind": "procedure",
+      "name": "memory-daily",
+      "classification": "included",
+      "operation": "profiling",
+      "reason": "Source-quoted proposals go to the review queue.",
+      "activation": "Owner enables a schedule; one declared runner; outward actions need a specific approval.",
+      "evidence": "Shared scheduler/receipts and packaged procedure dispatcher; actual health, disk, ownership, uncertain delivery and connector fixtures."
+    },
+    {
+      "kind": "procedure",
+      "name": "brief-rehearsal",
+      "classification": "included",
+      "operation": "brief-review",
+      "reason": "Review saved source data without sending anything.",
+      "activation": "Owner enables a schedule; one declared runner; outward actions need a specific approval.",
+      "evidence": "Shared scheduler/receipts and packaged procedure dispatcher; actual health, disk, ownership, uncertain delivery and connector fixtures."
+    },
+    {
+      "kind": "procedure",
+      "name": "radar",
+      "classification": "included",
+      "operation": "radar",
+      "reason": "At most one evidence-based proposal from configured sources.",
+      "activation": "Owner enables a schedule; one declared runner; outward actions need a specific approval.",
+      "evidence": "Shared scheduler/receipts and packaged procedure dispatcher; actual health, disk, ownership, uncertain delivery and connector fixtures."
+    },
+    {
+      "kind": "procedure",
+      "name": "memory-review",
+      "classification": "included",
+      "operation": "memory-review",
+      "reason": "Propose stale or conflicting fact corrections without deleting knowledge.",
+      "activation": "Owner enables a schedule; one declared runner; outward actions need a specific approval.",
+      "evidence": "Shared scheduler/receipts and packaged procedure dispatcher; actual health, disk, ownership, uncertain delivery and connector fixtures."
+    },
+    {
+      "kind": "procedure",
+      "name": "audit",
+      "classification": "included",
+      "operation": "audit",
+      "reason": "Validate system state and goal outcomes, then prepare corrections.",
+      "activation": "Owner enables a schedule; one declared runner; outward actions need a specific approval.",
+      "evidence": "Shared scheduler/receipts and packaged procedure dispatcher; actual health, disk, ownership, uncertain delivery and connector fixtures."
+    },
+    {
+      "kind": "procedure",
+      "name": "outside-ai-check",
+      "classification": "included",
+      "operation": "memory-capture",
+      "reason": "Import owner-supplied conversations from other assistants; no account scraping.",
+      "activation": "Owner enables a schedule; one declared runner; outward actions need a specific approval.",
+      "evidence": "Shared scheduler/receipts and packaged procedure dispatcher; actual health, disk, ownership, uncertain delivery and connector fixtures."
+    },
+    {
+      "kind": "recipe",
+      "name": "audit",
+      "classification": "included",
+      "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details.",
+      "evidence": "Portable SKILL.md; concrete public coach, journal, phone and video sources under third-party/addons."
+    },
+    {
+      "kind": "recipe",
+      "name": "book-title-creator",
+      "classification": "included",
+      "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details.",
+      "evidence": "Portable SKILL.md; concrete public coach, journal, phone and video sources under third-party/addons."
+    },
+    {
+      "kind": "recipe",
+      "name": "book-title-strategist",
+      "classification": "included",
+      "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details.",
+      "evidence": "Portable SKILL.md; concrete public coach, journal, phone and video sources under third-party/addons."
+    },
+    {
+      "kind": "recipe",
+      "name": "browser-post",
+      "classification": "optional connector",
+      "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details.",
+      "evidence": "Portable SKILL.md; concrete public coach, journal, phone and video sources under third-party/addons."
+    },
+    {
+      "kind": "recipe",
+      "name": "coach",
+      "classification": "included",
+      "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details.",
+      "evidence": "Portable SKILL.md; concrete public coach, journal, phone and video sources under third-party/addons."
+    },
+    {
+      "kind": "recipe",
+      "name": "connect-email",
+      "classification": "optional connector",
+      "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details.",
+      "evidence": "Portable SKILL.md; concrete public coach, journal, phone and video sources under third-party/addons."
+    },
+    {
+      "kind": "recipe",
+      "name": "daily-brief",
+      "classification": "included",
+      "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details.",
+      "evidence": "Portable SKILL.md; concrete public coach, journal, phone and video sources under third-party/addons."
+    },
+    {
+      "kind": "recipe",
+      "name": "due",
+      "classification": "included",
+      "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details.",
+      "evidence": "Portable SKILL.md; concrete public coach, journal, phone and video sources under third-party/addons."
+    },
+    {
+      "kind": "recipe",
+      "name": "embedded-captions",
+      "classification": "optional connector",
+      "reason": "Portable recipe with local file contract; chosen media/service provider is configured separately.",
+      "evidence": "Portable SKILL.md; concrete public coach, journal, phone and video sources under third-party/addons."
+    },
+    {
+      "kind": "recipe",
+      "name": "excalidraw-diagram",
+      "classification": "included",
+      "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details.",
+      "evidence": "Portable SKILL.md; concrete public coach, journal, phone and video sources under third-party/addons."
+    },
+    {
+      "kind": "recipe",
+      "name": "excalidraw-visuals",
+      "classification": "included",
+      "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details.",
+      "evidence": "Portable SKILL.md; concrete public coach, journal, phone and video sources under third-party/addons."
+    },
+    {
+      "kind": "recipe",
+      "name": "faceless-explainer",
+      "classification": "optional connector",
+      "reason": "Portable recipe with local file contract; chosen media/service provider is configured separately.",
+      "evidence": "Portable SKILL.md; concrete public coach, journal, phone and video sources under third-party/addons."
+    },
+    {
+      "kind": "recipe",
+      "name": "figma",
+      "classification": "optional connector",
+      "reason": "Portable recipe with local file contract; chosen media/service provider is configured separately.",
+      "evidence": "Portable SKILL.md; concrete public coach, journal, phone and video sources under third-party/addons."
+    },
+    {
+      "kind": "recipe",
+      "name": "found-company",
+      "classification": "separately owned",
+      "reason": "Company and specialist enterprise-agent systems remain separate from personal Mission Control.",
+      "evidence": "Portable SKILL.md; concrete public coach, journal, phone and video sources under third-party/addons."
+    },
+    {
+      "kind": "recipe",
+      "name": "general-video",
+      "classification": "optional connector",
+      "reason": "Portable recipe with local file contract; chosen media/service provider is configured separately.",
+      "evidence": "Portable SKILL.md; concrete public coach, journal, phone and video sources under third-party/addons."
+    },
+    {
+      "kind": "recipe",
+      "name": "grill-me",
+      "classification": "included",
+      "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details.",
+      "evidence": "Portable SKILL.md; concrete public coach, journal, phone and video sources under third-party/addons."
+    },
+    {
+      "kind": "recipe",
+      "name": "gsap-core",
+      "classification": "optional connector",
+      "reason": "Portable recipe with local file contract; chosen media/service provider is configured separately.",
+      "evidence": "Portable SKILL.md; concrete public coach, journal, phone and video sources under third-party/addons."
+    },
+    {
+      "kind": "recipe",
+      "name": "gsap-timeline",
+      "classification": "optional connector",
+      "reason": "Portable recipe with local file contract; chosen media/service provider is configured separately.",
+      "evidence": "Portable SKILL.md; concrete public coach, journal, phone and video sources under third-party/addons."
+    },
+    {
+      "kind": "recipe",
+      "name": "headache-tracker",
+      "classification": "included",
+      "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details.",
+      "evidence": "Portable SKILL.md; concrete public coach, journal, phone and video sources under third-party/addons."
+    },
+    {
+      "kind": "recipe",
+      "name": "hyperframes",
+      "classification": "optional connector",
+      "reason": "Portable recipe with local file contract; chosen media/service provider is configured separately.",
+      "evidence": "Portable SKILL.md; concrete public coach, journal, phone and video sources under third-party/addons."
+    },
+    {
+      "kind": "recipe",
+      "name": "hyperframes-animation",
+      "classification": "optional connector",
+      "reason": "Portable recipe with local file contract; chosen media/service provider is configured separately.",
+      "evidence": "Portable SKILL.md; concrete public coach, journal, phone and video sources under third-party/addons."
+    },
+    {
+      "kind": "recipe",
+      "name": "hyperframes-audio",
+      "classification": "optional connector",
+      "reason": "Portable recipe with local file contract; chosen media/service provider is configured separately.",
+      "evidence": "Portable SKILL.md; concrete public coach, journal, phone and video sources under third-party/addons."
+    },
+    {
+      "kind": "recipe",
+      "name": "hyperframes-cli",
+      "classification": "optional connector",
+      "reason": "Portable recipe with local file contract; chosen media/service provider is configured separately.",
+      "evidence": "Portable SKILL.md; concrete public coach, journal, phone and video sources under third-party/addons."
+    },
+    {
+      "kind": "recipe",
+      "name": "hyperframes-core",
+      "classification": "optional connector",
+      "reason": "Portable recipe with local file contract; chosen media/service provider is configured separately.",
+      "evidence": "Portable SKILL.md; concrete public coach, journal, phone and video sources under third-party/addons."
+    },
+    {
+      "kind": "recipe",
+      "name": "hyperframes-creative",
+      "classification": "optional connector",
+      "reason": "Portable recipe with local file contract; chosen media/service provider is configured separately.",
+      "evidence": "Portable SKILL.md; concrete public coach, journal, phone and video sources under third-party/addons."
+    },
+    {
+      "kind": "recipe",
+      "name": "hyperframes-keyframes",
+      "classification": "optional connector",
+      "reason": "Portable recipe with local file contract; chosen media/service provider is configured separately.",
+      "evidence": "Portable SKILL.md; concrete public coach, journal, phone and video sources under third-party/addons."
+    },
+    {
+      "kind": "recipe",
+      "name": "hyperframes-registry",
+      "classification": "optional connector",
+      "reason": "Portable recipe with local file contract; chosen media/service provider is configured separately.",
+      "evidence": "Portable SKILL.md; concrete public coach, journal, phone and video sources under third-party/addons."
+    },
+    {
+      "kind": "recipe",
+      "name": "interstitial-journal",
+      "classification": "included",
+      "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details.",
+      "evidence": "Portable SKILL.md; concrete public coach, journal, phone and video sources under third-party/addons."
+    },
+    {
+      "kind": "recipe",
+      "name": "keep-a-note",
+      "classification": "included",
+      "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details.",
+      "evidence": "Portable SKILL.md; concrete public coach, journal, phone and video sources under third-party/addons."
+    },
+    {
+      "kind": "recipe",
+      "name": "lead",
+      "classification": "included",
+      "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details.",
+      "evidence": "Portable SKILL.md; concrete public coach, journal, phone and video sources under third-party/addons."
+    },
+    {
+      "kind": "recipe",
+      "name": "mc-brief-operations",
+      "classification": "included",
+      "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details.",
+      "evidence": "Portable SKILL.md; concrete public coach, journal, phone and video sources under third-party/addons."
+    },
+    {
+      "kind": "recipe",
+      "name": "mc-radar",
+      "classification": "included",
+      "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details.",
+      "evidence": "Portable SKILL.md; concrete public coach, journal, phone and video sources under third-party/addons."
+    },
+    {
+      "kind": "recipe",
+      "name": "media-use",
+      "classification": "optional connector",
+      "reason": "Portable recipe with local file contract; chosen media/service provider is configured separately.",
+      "evidence": "Portable SKILL.md; concrete public coach, journal, phone and video sources under third-party/addons."
+    },
+    {
+      "kind": "recipe",
+      "name": "memory-audit",
+      "classification": "included",
+      "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details.",
+      "evidence": "Portable SKILL.md; concrete public coach, journal, phone and video sources under third-party/addons."
+    },
+    {
+      "kind": "recipe",
+      "name": "morning-note",
+      "classification": "included",
+      "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details.",
+      "evidence": "Portable SKILL.md; concrete public coach, journal, phone and video sources under third-party/addons."
+    },
+    {
+      "kind": "recipe",
+      "name": "motion-graphics",
+      "classification": "optional connector",
+      "reason": "Portable recipe with local file contract; chosen media/service provider is configured separately.",
+      "evidence": "Portable SKILL.md; concrete public coach, journal, phone and video sources under third-party/addons."
+    },
+    {
+      "kind": "recipe",
+      "name": "move-godspeed",
+      "classification": "included",
+      "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details.",
+      "evidence": "Portable SKILL.md; concrete public coach, journal, phone and video sources under third-party/addons."
+    },
+    {
+      "kind": "recipe",
+      "name": "music-to-video",
+      "classification": "optional connector",
+      "reason": "Portable recipe with local file contract; chosen media/service provider is configured separately.",
+      "evidence": "Portable SKILL.md; concrete public coach, journal, phone and video sources under third-party/addons."
+    },
+    {
+      "kind": "recipe",
+      "name": "nano-banana-images",
+      "classification": "optional connector",
+      "reason": "Portable recipe with local file contract; chosen media/service provider is configured separately.",
+      "evidence": "Portable SKILL.md; concrete public coach, journal, phone and video sources under third-party/addons."
+    },
+    {
+      "kind": "recipe",
+      "name": "next-action",
+      "classification": "included",
+      "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details.",
+      "evidence": "Portable SKILL.md; concrete public coach, journal, phone and video sources under third-party/addons."
+    },
+    {
+      "kind": "recipe",
+      "name": "pattern1-build",
+      "classification": "separately owned",
+      "reason": "Company and specialist enterprise-agent systems remain separate from personal Mission Control.",
+      "evidence": "Portable SKILL.md; concrete public coach, journal, phone and video sources under third-party/addons."
+    },
+    {
+      "kind": "recipe",
+      "name": "phone-errands",
+      "classification": "optional connector",
+      "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details.",
+      "evidence": "Portable SKILL.md; concrete public coach, journal, phone and video sources under third-party/addons."
+    },
+    {
+      "kind": "recipe",
+      "name": "pr-to-video",
+      "classification": "optional connector",
+      "reason": "Portable recipe with local file contract; chosen media/service provider is configured separately.",
+      "evidence": "Portable SKILL.md; concrete public coach, journal, phone and video sources under third-party/addons."
+    },
+    {
+      "kind": "recipe",
+      "name": "product-launch-video",
+      "classification": "optional connector",
+      "reason": "Portable recipe with local file contract; chosen media/service provider is configured separately.",
+      "evidence": "Portable SKILL.md; concrete public coach, journal, phone and video sources under third-party/addons."
+    },
+    {
+      "kind": "recipe",
+      "name": "remotion-to-hyperframes",
+      "classification": "optional connector",
+      "reason": "Portable recipe with local file contract; chosen media/service provider is configured separately.",
+      "evidence": "Portable SKILL.md; concrete public coach, journal, phone and video sources under third-party/addons."
+    },
+    {
+      "kind": "recipe",
+      "name": "sap-ai-agent-low-code",
+      "classification": "separately owned",
+      "reason": "Company and specialist enterprise-agent systems remain separate from personal Mission Control.",
+      "evidence": "Portable SKILL.md; concrete public coach, journal, phone and video sources under third-party/addons."
+    },
+    {
+      "kind": "recipe",
+      "name": "sap-ai-agent-pro-code",
+      "classification": "separately owned",
+      "reason": "Company and specialist enterprise-agent systems remain separate from personal Mission Control.",
+      "evidence": "Portable SKILL.md; concrete public coach, journal, phone and video sources under third-party/addons."
+    },
+    {
+      "kind": "recipe",
+      "name": "sap-build-ai-patterns",
+      "classification": "separately owned",
+      "reason": "Company and specialist enterprise-agent systems remain separate from personal Mission Control.",
+      "evidence": "Portable SKILL.md; concrete public coach, journal, phone and video sources under third-party/addons."
+    },
+    {
+      "kind": "recipe",
+      "name": "scroll-craft",
+      "classification": "optional connector",
+      "reason": "Portable recipe with local file contract; chosen media/service provider is configured separately.",
+      "evidence": "Portable SKILL.md; concrete public coach, journal, phone and video sources under third-party/addons."
+    },
+    {
+      "kind": "recipe",
+      "name": "slideshow",
+      "classification": "optional connector",
+      "reason": "Portable recipe with local file contract; chosen media/service provider is configured separately.",
+      "evidence": "Portable SKILL.md; concrete public coach, journal, phone and video sources under third-party/addons."
+    },
+    {
+      "kind": "recipe",
+      "name": "social-visuals",
+      "classification": "included",
+      "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details.",
+      "evidence": "Portable SKILL.md; concrete public coach, journal, phone and video sources under third-party/addons."
+    },
+    {
+      "kind": "recipe",
+      "name": "strip-ai-tells",
+      "classification": "included",
+      "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details.",
+      "evidence": "Portable SKILL.md; concrete public coach, journal, phone and video sources under third-party/addons."
+    },
+    {
+      "kind": "recipe",
+      "name": "subscription-review",
+      "classification": "included",
+      "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details.",
+      "evidence": "Portable SKILL.md; concrete public coach, journal, phone and video sources under third-party/addons."
+    },
+    {
+      "kind": "recipe",
+      "name": "talk-about",
+      "classification": "included",
+      "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details.",
+      "evidence": "Portable SKILL.md; concrete public coach, journal, phone and video sources under third-party/addons."
+    },
+    {
+      "kind": "recipe",
+      "name": "talking-head-recut",
+      "classification": "optional connector",
+      "reason": "Portable recipe with local file contract; chosen media/service provider is configured separately.",
+      "evidence": "Portable SKILL.md; concrete public coach, journal, phone and video sources under third-party/addons."
+    },
+    {
+      "kind": "recipe",
+      "name": "video-captions",
+      "classification": "optional connector",
+      "reason": "Portable recipe with local file contract; chosen media/service provider is configured separately.",
+      "evidence": "Portable SKILL.md; concrete public coach, journal, phone and video sources under third-party/addons."
+    },
+    {
+      "kind": "recipe",
+      "name": "video-finishing",
+      "classification": "included",
+      "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details.",
+      "evidence": "Portable SKILL.md; concrete public coach, journal, phone and video sources under third-party/addons."
+    },
+    {
+      "kind": "recipe",
+      "name": "video-hooks",
+      "classification": "included",
+      "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details.",
+      "evidence": "Portable SKILL.md; concrete public coach, journal, phone and video sources under third-party/addons."
+    },
+    {
+      "kind": "recipe",
+      "name": "watch",
+      "classification": "included",
+      "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details.",
+      "evidence": "Portable SKILL.md; concrete public coach, journal, phone and video sources under third-party/addons."
+    },
+    {
+      "kind": "recipe",
+      "name": "web-design",
+      "classification": "included",
+      "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details.",
+      "evidence": "Portable SKILL.md; concrete public coach, journal, phone and video sources under third-party/addons."
+    },
+    {
+      "kind": "recipe",
+      "name": "work-item",
+      "classification": "included",
+      "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details.",
+      "evidence": "Portable SKILL.md; concrete public coach, journal, phone and video sources under third-party/addons."
+    }
+  ]
+}

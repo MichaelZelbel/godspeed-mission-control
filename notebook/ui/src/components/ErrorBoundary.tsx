@@ -69,7 +69,7 @@ export class ErrorBoundary extends Component<Props, State> {
   };
 
   // mailto: links silently do nothing on systems without a mail handler, so
-  // the report goes to the clipboard instead — reliable everywhere, and the
+  // the report goes to the clipboard instead - reliable everywhere, and the
   // user gets the full details to paste into an email or chat.
   private handleReport = async () => {
     const { error, componentStack } = this.state;
@@ -90,7 +90,7 @@ export class ErrorBoundary extends Component<Props, State> {
     try {
       await navigator.clipboard.writeText(report);
     } catch {
-      // Clipboard access denied — show the report so it can be copied by hand.
+      // Clipboard access denied - show the report so it can be copied by hand.
       window.prompt("Copy the report below:", report);
     }
     this.setState({ copied: true });

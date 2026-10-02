@@ -99,7 +99,7 @@ export function SingleFileIntegration() {
               </li>
               <li>Paste the values below.</li>
               <li>
-                Save the options and use SingleFile as usual — every captured
+                Save the options and use SingleFile as usual - every captured
                 page becomes a new note in <code className="bg-muted px-1 rounded">Web Clips</code>.
               </li>
             </ol>
@@ -133,7 +133,7 @@ export function SingleFileIntegration() {
                 (note the trailing space). Replace{" "}
                 <code className="bg-muted px-1 rounded">mnr_YOUR_API_KEY_HERE</code> with
                 a key generated in the <Link to="/dashboard/settings?tab=apikeys" className="text-primary hover:underline">API Keys tab</Link>{" "}
-                — it needs the <code className="bg-muted px-1 rounded">notes</code> scope.
+                - it needs the <code className="bg-muted px-1 rounded">notes</code> scope.
               </p>
             </div>
 
@@ -159,7 +159,7 @@ export function SingleFileIntegration() {
               <Label className="text-xs text-muted-foreground">secret key</Label>
               <p className="text-xs text-muted-foreground">
                 Leave empty. {BRAND.name} doesn't use SingleFile's shared-secret
-                signing — your API key in the authorization token already
+                signing - your API key in the authorization token already
                 authenticates requests.
               </p>
             </div>
@@ -175,9 +175,9 @@ export function SingleFileIntegration() {
               All are optional:
             </p>
             <ul className="text-xs text-muted-foreground space-y-1 list-disc list-inside ml-2">
-              <li><code className="bg-muted px-1 rounded">title</code> — overrides the page title (defaults to the page's <code className="bg-muted px-1 rounded">&lt;title&gt;</code>)</li>
-              <li><code className="bg-muted px-1 rounded">tags</code> — comma-separated, e.g. <code className="bg-muted px-1 rounded">research,inspiration</code> (defaults to <code className="bg-muted px-1 rounded">web-clip</code>)</li>
-              <li><code className="bg-muted px-1 rounded">folder</code> — folder path for the new note (defaults to <code className="bg-muted px-1 rounded">Web Clips</code>)</li>
+              <li><code className="bg-muted px-1 rounded">title</code> - overrides the page title (defaults to the page's <code className="bg-muted px-1 rounded">&lt;title&gt;</code>)</li>
+              <li><code className="bg-muted px-1 rounded">tags</code> - comma-separated, e.g. <code className="bg-muted px-1 rounded">research,inspiration</code> (defaults to <code className="bg-muted px-1 rounded">web-clip</code>)</li>
+              <li><code className="bg-muted px-1 rounded">folder</code> - folder path for the new note (defaults to <code className="bg-muted px-1 rounded">Web Clips</code>)</li>
             </ul>
           </div>
 

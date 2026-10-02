@@ -45,7 +45,7 @@ const coreFeatures = [
     icon: Brain,
     title: "AI-Powered Memory",
     description:
-      "Every note you capture is automatically embedded and classified using AI. Your knowledge base understands your thoughts by meaning — not just keywords.",
+      "Every note you capture is automatically embedded and classified using AI. Your knowledge base understands your thoughts by meaning - not just keywords.",
     highlights: ["Auto-classification", "Semantic embeddings", "Smart tagging"],
   },
   {
@@ -59,7 +59,7 @@ const coreFeatures = [
     icon: Plug,
     title: "MCP Integration",
     description:
-      "Connect any AI tool — Claude, ChatGPT, Cursor — to your brain via the Model Context Protocol. One knowledge base, accessible from every AI you use.",
+      "Connect any AI tool - Claude, ChatGPT, Cursor - to your brain via the Model Context Protocol. One knowledge base, accessible from every AI you use.",
     highlights: ["Claude & ChatGPT", "Cursor integration", "Universal protocol"],
   },
   {
@@ -80,7 +80,7 @@ const coreFeatures = [
     icon: Shield,
     title: "Private & Secure",
     description:
-      "Row-level security ensures only you can access your data. Your knowledge belongs to you — always encrypted, never shared, fully exportable.",
+      "Row-level security ensures only you can access your data. Your knowledge belongs to you - always encrypted, never shared, fully exportable.",
     highlights: ["Row-level security", "End-to-end privacy", "Full data export"],
   },
 ];
@@ -98,7 +98,7 @@ const aiFeatures = [
   { icon: Sparkles, label: "Auto-Embedding", desc: "Every note is vectorized for semantic understanding" },
   { icon: Tags, label: "Smart Tags", desc: "AI suggests and applies relevant tags automatically" },
   { icon: Link2, label: "Suggested Links", desc: "Discover connections between notes you didn't see" },
-  { icon: Bot, label: "Note Chat", desc: "Chat with your notes — ask questions, get answers" },
+  { icon: Bot, label: "Note Chat", desc: "Chat with your notes - ask questions, get answers" },
   { icon: BarChart3, label: "Media Analysis", desc: "AI analyzes images, PDFs, and documents" },
   { icon: Workflow, label: "Action Extraction", desc: "Automatically extract tasks and follow-ups" },
 ];
@@ -107,7 +107,7 @@ const organizationFeatures = [
   { icon: Layers, title: "Notebooks & Tags", description: "Organize with flexible tagging, pinning, and favorites. Filter and find notes your way." },
   { icon: History, title: "Version History", description: "Track every change. Browse and restore previous versions of any note at any time." },
   { icon: Share2, title: "Secure Sharing", description: "Share individual notes via secure, revocable links. Control access with one click." },
-  { icon: BookOpen, title: "Profile System", description: "Build a structured knowledge profile — preferences, expertise, context — that AI agents can reference." },
+  { icon: BookOpen, title: "Profile System", description: "Build a structured knowledge profile - preferences, expertise, context - that AI agents can reference." },
   { icon: BarChart3, title: "Weekly Reviews", description: "AI-generated weekly summaries of your knowledge activity, new connections, and growth insights." },
   { icon: Zap, title: "Quick Capture", description: "Instantly capture a thought from anywhere in the app. Ideas don't wait, and neither should you." },
 ];
@@ -118,8 +118,8 @@ const Features = () => {
   return (
     <div className="overflow-hidden">
       <SEOHead
-        title="Features — Menerio"
-        description="Explore Menerio's AI-powered knowledge features: semantic search, embeddings, MCP integration, knowledge graph, and more."
+        title="Features - Godspeed Mission Control"
+        description="Explore Godspeed Mission Control's AI-powered knowledge features: semantic search, embeddings, MCP integration, knowledge graph, and more."
       />
 
       {/* Hero */}
@@ -150,8 +150,8 @@ const Features = () => {
               custom={2}
               className="mx-auto mt-6 max-w-2xl text-lg text-muted-foreground leading-relaxed"
             >
-              Not just another notes app. Menerio is a database-backed knowledge system built for the
-              age of AI agents — where every thought is embedded, connected, and accessible.
+              Not just another notes app. Godspeed Mission Control is a database-backed knowledge system built for the
+              age of AI agents - where every thought is embedded, connected, and accessible.
             </motion.p>
           </motion.div>
         </div>
@@ -174,7 +174,7 @@ const Features = () => {
               Built for how you think
             </motion.h2>
             <motion.p variants={fadeUp} custom={2} className="mt-4 text-lg text-muted-foreground max-w-2xl mx-auto">
-              Six pillars that make Menerio the most AI-native knowledge system available.
+              Six pillars that make Godspeed Mission Control the most AI-native knowledge system available.
             </motion.p>
           </motion.div>
 
@@ -224,7 +224,7 @@ const Features = () => {
               <Badge variant="secondary" className="mb-4">Capture Anywhere</Badge>
             </motion.div>
             <motion.h2 variants={fadeUp} custom={1} className="text-3xl font-bold font-display sm:text-4xl">
-              Thoughts don't wait — neither should capture
+              Thoughts don't wait - neither should capture
             </motion.h2>
             <motion.p variants={fadeUp} custom={2} className="mt-4 text-lg text-muted-foreground max-w-2xl mx-auto">
               Send notes from wherever you work. Every channel feeds into the same AI-powered brain.
@@ -272,7 +272,7 @@ const Features = () => {
               AI that works while you think
             </motion.h2>
             <motion.p variants={fadeUp} custom={2} className="mt-4 text-lg text-muted-foreground max-w-2xl mx-auto">
-              Every note triggers a pipeline of AI processing — embedding, tagging, linking, and analysis happen automatically in the background.
+              Every note triggers a pipeline of AI processing - embedding, tagging, linking, and analysis happen automatically in the background.
             </motion.p>
           </motion.div>
 
@@ -364,8 +364,8 @@ const Features = () => {
               Your brain, your rules
             </motion.h2>
             <motion.p variants={fadeUp} custom={2} className="mt-4 text-lg text-muted-foreground max-w-xl mx-auto">
-              Menerio is open source under AGPL-3.0. No vendor lock-in, no hidden data usage.
-              Your knowledge stays yours — inspect the code, self-host, or export anytime.
+              Godspeed Mission Control is open source under AGPL-3.0. No vendor lock-in, no hidden data usage.
+              Your knowledge stays yours - inspect the code, self-host, or export anytime.
             </motion.p>
             <motion.div variants={fadeUp} custom={3} className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
               <Button size="xl" onClick={() => navigate("/auth?tab=signup")} className="gap-2 text-base px-8 shadow-lg shadow-primary/25">

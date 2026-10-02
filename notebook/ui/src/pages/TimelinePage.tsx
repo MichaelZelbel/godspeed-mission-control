@@ -226,7 +226,7 @@ export default function TimelinePage() {
   };
 
   // Unified "Make a copy": same date and details, suffixed title, participants
-  // carried over. Provenance is deliberately NOT copied — it belongs to the
+  // carried over. Provenance is deliberately NOT copied - it belongs to the
   // original extraction, so a copy reads as user-authored.
   const duplicateMoment = async (moment: TimelineMoment) => {
     if (!user) return;
@@ -276,7 +276,7 @@ export default function TimelinePage() {
 
   return (
     <div className="space-y-6">
-      <SEOHead title="Timeline — Menerio" noIndex />
+      <SEOHead title="Timeline - Godspeed Mission Control" noIndex />
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div><h1 className="text-2xl font-display font-bold">Timeline</h1><p className="text-sm text-muted-foreground">{filteredMoments.length} moment{filteredMoments.length !== 1 ? "s" : ""} shown</p></div>
         <div className="flex gap-2 items-center flex-wrap">
@@ -310,7 +310,7 @@ export default function TimelinePage() {
         <CollapsibleContent>
           <Card><CardContent className="pt-4 space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="space-y-2"><Label className="text-xs">Min Impact: {minImpact} — {impactLabels[minImpact]}</Label><Slider value={[minImpact]} onValueChange={([v]) => setMinImpact(v)} min={1} max={4} step={1} /></div>
+              <div className="space-y-2"><Label className="text-xs">Min Impact: {minImpact} - {impactLabels[minImpact]}</Label><Slider value={[minImpact]} onValueChange={([v]) => setMinImpact(v)} min={1} max={4} step={1} /></div>
               <div className="space-y-2"><Label className="text-xs">Min Confidence (Truth): {minConfTruth}</Label><Slider value={[minConfTruth]} onValueChange={([v]) => setMinConfTruth(v)} min={0} max={10} step={1} /></div>
               <div className="space-y-2"><Label className="text-xs">Min Confidence (Date): {minConfDate}</Label><Slider value={[minConfDate]} onValueChange={([v]) => setMinConfDate(v)} min={0} max={10} step={1} /></div>
             </div>

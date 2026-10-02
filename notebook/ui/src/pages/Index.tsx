@@ -160,7 +160,7 @@ const Index = () => {
 
   return (
     <div className="min-h-screen overflow-hidden bg-[hsl(var(--background))] text-[hsl(var(--landing-text))] dark:bg-[hsl(var(--landing-page))]">
-      <SEOHead title="Menerio | One Brain. Every AI." description="Capture every thought, organize it by meaning, and make it available to any AI through Menerio." jsonLd={{ "@context": "https://schema.org", "@type": "WebApplication", name: "Menerio", applicationCategory: "ProductivityApplication" }} />
+      <SEOHead title="Godspeed Mission Control | One Brain. Every AI." description="Capture every thought, organize it by meaning, and make it available to any AI through Godspeed Mission Control." jsonLd={{ "@context": "https://schema.org", "@type": "WebApplication", name: "Godspeed Mission Control", applicationCategory: "ProductivityApplication" }} />
       <main className="relative overflow-hidden">
         <div className="absolute inset-0">
           <div className="absolute -left-[160px] -top-[120px] h-[520px] w-[820px] bg-[radial-gradient(ellipse,hsl(var(--brand)/.07),transparent_70%)] blur-3xl dark:landing-aurora-drift dark:-left-[200px] dark:-top-[150px] dark:h-[700px] dark:w-[1100px] dark:bg-[radial-gradient(ellipse,hsl(var(--landing-sky-deep)/.45),transparent_70%)]" />
@@ -188,7 +188,7 @@ const Index = () => {
                 One Brain.<br />
                 <span className="hero-gradient-text">Every AI.</span>
               </h1>
-              <p className="mx-auto mt-[18px] max-w-[600px] text-lg leading-relaxed text-[hsl(var(--landing-body))] md:mx-0">Capture every thought. Menerio organizes it by meaning and makes it available to any AI you talk to.</p>
+              <p className="mx-auto mt-[18px] max-w-[600px] text-lg leading-relaxed text-[hsl(var(--landing-body))] md:mx-0">Capture every thought. Godspeed Mission Control organizes it by meaning and makes it available to any AI you talk to.</p>
             </div>
           </div>
 

@@ -179,7 +179,7 @@ export default function People() {
   };
 
   // Deleting a person is a hard delete that cascades their notes links,
-  // interactions, relationships and group memberships, with no undo — so the
+  // interactions, relationships and group memberships, with no undo - so the
   // tree's menu item asks first instead of firing the mutation directly.
   const handleDeletePerson = (personId: string) => setDeleteTargetId(personId);
 
@@ -210,9 +210,9 @@ export default function People() {
 
   return (
     <div className="flex h-[calc(100dvh-104px)] overflow-hidden">
-      <SEOHead title="People — Menerio" noIndex />
+      <SEOHead title="People - Godspeed Mission Control" noIndex />
 
-      {/* Left panel — tree + search */}
+      {/* Left panel - tree + search */}
       <div
         className={cn(
           "shrink-0 flex-col border-r border-border bg-background min-w-0",
@@ -295,7 +295,7 @@ export default function People() {
         </div>
       </div>
 
-      {/* Right panel — detail */}
+      {/* Right panel - detail */}
       <div className={cn("min-w-0 flex-1 flex-col", isMobile && !selectedPersonId ? "hidden" : "flex")}>
         {selectedPersonId && selectedQuery.isPending ? (
           <p role="status" className="p-8">Loading person...</p>
@@ -364,7 +364,7 @@ export default function People() {
         />
       )}
 
-      {/* Delete confirmation — hard delete, cascades, no undo */}
+      {/* Delete confirmation - hard delete, cascades, no undo */}
       <AlertDialog open={!!deleteTargetId} onOpenChange={(open) => { if (!open) setDeleteTargetId(null); }}>
         <AlertDialogContent>
           <AlertDialogHeader>

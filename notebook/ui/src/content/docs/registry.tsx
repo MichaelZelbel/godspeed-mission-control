@@ -6,10 +6,10 @@ import type { DocPage, DocCategory } from "./types";
 const quickStart: DocPage = {
   slug: "quick-start",
   title: "Quick Start",
-  description: "Get up and running with Menerio in five minutes.",
+  description: "Get up and running with Godspeed Mission Control in five minutes.",
   category: "Getting Started",
   headings: [
-    { id: "what-is-menerio", title: "What is Menerio?" },
+    { id: "what-is-menerio", title: "What is Godspeed Mission Control?" },
     { id: "sign-up", title: "Sign Up" },
     { id: "capture-first-thought", title: "Capture Your First Thought" },
     { id: "explore-your-dashboard", title: "Explore Your Dashboard" },
@@ -17,27 +17,27 @@ const quickStart: DocPage = {
   searchText: "quick start getting started sign up first note capture thought dashboard overview",
   content: () => (
     <>
-      <h2 id="what-is-menerio">What is Menerio?</h2>
-      <p>Menerio is your AI-powered personal knowledge system — a single place for every thought, meeting note, decision, and idea. Write naturally, and Menerio's AI automatically tags, connects, and enriches your notes so you never lose context again.</p>
-      <Callout type="tip" title="One Brain. Every AI.">Menerio follows the Open Brain philosophy: your knowledge stays yours, portable, and connected across every tool you use.</Callout>
+      <h2 id="what-is-menerio">What is Godspeed Mission Control?</h2>
+      <p>Godspeed Mission Control is your AI-powered personal knowledge system - a single place for every thought, meeting note, decision, and idea. Write naturally, and Godspeed Mission Control's AI automatically tags, connects, and enriches your notes so you never lose context again.</p>
+      <Callout type="tip" title="One Brain. Every AI.">Godspeed Mission Control follows the Open Brain philosophy: your knowledge stays yours, portable, and connected across every tool you use.</Callout>
 
       <h2 id="sign-up">Sign Up</h2>
-      <p>Head to <strong>menerio.com/auth</strong> and create a free account with your email — or sign in instantly with Google or GitHub. No credit card required.</p>
+      <p>Head to <strong>menerio.com/auth</strong> and create a free account with your email - or sign in instantly with Google or GitHub. No credit card required.</p>
 
       <h2 id="capture-first-thought">Capture Your First Thought</h2>
       <p>Once signed in, there are two ways to jot something down:</p>
       <ul>
-        <li><strong>Quick Capture</strong> — press <code>⌘⇧K</code> (or <code>Ctrl+Shift+K</code>) anywhere in the app. A floating card appears. Type your thought and hit <code>⌘↵</code> to save. The AI processes it in the background.</li>
-        <li><strong>Notes page</strong> — click <strong>Notes</strong> in the sidebar, then <strong>"+ New Note"</strong>. You'll get a full rich-text editor with file uploads, wikilinks, and more.</li>
+        <li><strong>Quick Capture</strong> - press <code>⌘⇧K</code> (or <code>Ctrl+Shift+K</code>) anywhere in the app. A floating card appears. Type your thought and hit <code>⌘↵</code> to save. The AI processes it in the background.</li>
+        <li><strong>Notes page</strong> - click <strong>Notes</strong> in the sidebar, then <strong>"+ New Note"</strong>. You'll get a full rich-text editor with file uploads, wikilinks, and more.</li>
       </ul>
-      <Callout type="info">Every note you create is automatically processed by AI — it extracts tags, topics, people, and action items for you.</Callout>
+      <Callout type="info">Every note you create is automatically processed by AI - it extracts tags, topics, people, and action items for you.</Callout>
 
       <h2 id="explore-your-dashboard">Explore Your Dashboard</h2>
       <p>Your Dashboard is the home screen. It shows:</p>
       <ul>
-        <li><strong>Today's Connections</strong> — notes the AI recently linked together</li>
-        <li><strong>Discovery Feed</strong> — resurfaced older notes you might want to revisit</li>
-        <li><strong>Quick stats</strong> — total notes, contacts, actions, and pending follow-ups</li>
+        <li><strong>Today's Connections</strong> - notes the AI recently linked together</li>
+        <li><strong>Discovery Feed</strong> - resurfaced older notes you might want to revisit</li>
+        <li><strong>Quick stats</strong> - total notes, contacts, actions, and pending follow-ups</li>
       </ul>
       <p>From here, you can jump into any section using the sidebar on the left.</p>
     </>
@@ -65,18 +65,18 @@ const noteTaking: DocPage = {
       <h2 id="rich-text-editor">Rich Text Editor</h2>
       <p>The editor supports all the formatting you'd expect:</p>
       <ul>
-        <li><strong>Text formatting</strong> — bold, italic, underline, strikethrough, code</li>
-        <li><strong>Structure</strong> — headings (H1–H3), bullet lists, numbered lists, blockquotes</li>
-        <li><strong>Embeds</strong> — images, videos, audio files, and PDFs inline</li>
+        <li><strong>Text formatting</strong> - bold, italic, underline, strikethrough, code</li>
+        <li><strong>Structure</strong> - headings (H1–H3), bullet lists, numbered lists, blockquotes</li>
+        <li><strong>Embeds</strong> - images, videos, audio files, and PDFs inline</li>
       </ul>
-      <Callout type="tip" title="Keyboard shortcuts">Use <code>⌘B</code> for bold, <code>⌘I</code> for italic, <code>⌘⇧7</code> for numbered lists, and more — just like any word processor.</Callout>
+      <Callout type="tip" title="Keyboard shortcuts">Use <code>⌘B</code> for bold, <code>⌘I</code> for italic, <code>⌘⇧7</code> for numbered lists, and more - just like any word processor.</Callout>
 
       <h2 id="file-attachments">File Attachments</h2>
-      <p>Drag and drop images, PDFs, audio, or video files directly into the editor. They're uploaded to secure cloud storage and embedded inline. Menerio's AI automatically analyses media — it extracts text from PDFs, describes images, and transcribes audio.</p>
+      <p>Drag and drop images, PDFs, audio, or video files directly into the editor. They're uploaded to secure cloud storage and embedded inline. Godspeed Mission Control's AI automatically analyses media - it extracts text from PDFs, describes images, and transcribes audio.</p>
 
       <h2 id="internal-links">Internal links</h2>
       <p>Type <code>[[</code> to create a link to another note. An autocomplete menu appears so you can find and link notes instantly. Internal links create visible connections in your Note Graph and show up in the Backlinks panel.</p>
-      <Callout type="info">Internal links are bidirectional — if Note A links to Note B, Note B automatically shows Note A in its backlinks.</Callout>
+      <Callout type="info">Internal links are bidirectional - if Note A links to Note B, Note B automatically shows Note A in its backlinks.</Callout>
 
       <h2 id="quick-capture">Quick Capture</h2>
       <p>Press <code>⌘⇧K</code> from anywhere in the app to open a floating capture card. Type your thought, press <code>⌘↵</code>, and it's saved as a new note with full AI processing. Perfect for fleeting ideas you don't want to lose.</p>
@@ -105,14 +105,14 @@ const searchAndOrganise: DocPage = {
 
       <h2 id="smart-search">Smart Search (Semantic)</h2>
       <p>Toggle <strong>"Smart Search"</strong> to switch from keyword matching to AI-powered semantic search. Instead of exact words, it finds notes by meaning. For example, searching "meeting outcomes" will surface notes about decisions made in meetings, even if those exact words don't appear.</p>
-      <Callout type="tip">Smart Search uses the same vector embeddings that power your Note Graph — every note is automatically vectorised when created or updated.</Callout>
+      <Callout type="tip">Smart Search uses the same vector embeddings that power your Note Graph - every note is automatically vectorised when created or updated.</Callout>
 
       <h2 id="filters">Filters & Sorting</h2>
       <p>Use the filter and sort controls to narrow results:</p>
       <ul>
-        <li><strong>Sort by</strong> — newest, oldest, recently updated, or alphabetical</li>
-        <li><strong>Filter by tags</strong> — click a tag to show only matching notes</li>
-        <li><strong>External vs. local</strong> — external notes from connected apps show an orange badge</li>
+        <li><strong>Sort by</strong> - newest, oldest, recently updated, or alphabetical</li>
+        <li><strong>Filter by tags</strong> - click a tag to show only matching notes</li>
+        <li><strong>External vs. local</strong> - external notes from connected apps show an orange badge</li>
       </ul>
 
       <h2 id="favourites-pins">Favourites & Pins</h2>
@@ -124,11 +124,11 @@ const searchAndOrganise: DocPage = {
       <h2 id="vault-cleanup">Vault Cleanup</h2>
       <p>Open the <strong>Vault Insights</strong> popover (the <code>#</code> hash icon in the Notes toolbar) for one-click maintenance actions across your whole vault:</p>
       <ul>
-        <li><strong>Classify unclassified notes</strong> — runs AI classification on every note still missing a type.</li>
-        <li><strong>Trash empty notes</strong> — moves all notes that have no title <em>and</em> no real content to the Trash in a single step. Perfect after accidental "+ New Note" clicks or when an import left behind blank scaffolding.</li>
+        <li><strong>Classify unclassified notes</strong> - runs AI classification on every note still missing a type.</li>
+        <li><strong>Trash empty notes</strong> - moves all notes that have no title <em>and</em> no real content to the Trash in a single step. Perfect after accidental "+ New Note" clicks or when an import left behind blank scaffolding.</li>
       </ul>
       <Callout type="info">"Empty" means the title is blank or "Untitled" <strong>and</strong> the body has no text once HTML, Markdown markers, and whitespace are stripped. Notes with attachments, images, or any real text are never touched.</Callout>
-      <Callout type="tip">Both buttons only appear when there's something to do — if your vault is already clean, you won't see them.</Callout>
+      <Callout type="tip">Both buttons only appear when there's something to do - if your vault is already clean, you won't see them.</Callout>
     </>
   ),
 };
@@ -138,7 +138,7 @@ const searchAndOrganise: DocPage = {
 const aiProcessing: DocPage = {
   slug: "ai-processing",
   title: "AI Processing",
-  description: "How Menerio's AI automatically enriches every note you write.",
+  description: "How Godspeed Mission Control's AI automatically enriches every note you write.",
   category: "AI Features",
   headings: [
     { id: "what-happens", title: "What Happens Automatically" },
@@ -150,26 +150,26 @@ const aiProcessing: DocPage = {
   content: () => (
     <>
       <h2 id="what-happens">What Happens Automatically</h2>
-      <p>Every time you save a note, Menerio's AI runs in the background to:</p>
+      <p>Every time you save a note, Godspeed Mission Control's AI runs in the background to:</p>
       <ul>
-        <li><strong>Classify</strong> — assigns a type (Observation, Idea, Decision, Task, Meeting, etc.)</li>
-        <li><strong>Extract topics</strong> — identifies the main subjects</li>
-        <li><strong>Detect people</strong> — recognises names mentioned in the text</li>
-        <li><strong>Pull out action items</strong> — finds things you need to do</li>
-        <li><strong>Generate a summary</strong> — creates a one-line overview</li>
-        <li><strong>Create an embedding</strong> — vectorises the note for Smart Search and connection discovery</li>
+        <li><strong>Classify</strong> - assigns a type (Observation, Idea, Decision, Task, Meeting, etc.)</li>
+        <li><strong>Extract topics</strong> - identifies the main subjects</li>
+        <li><strong>Detect people</strong> - recognises names mentioned in the text</li>
+        <li><strong>Pull out action items</strong> - finds things you need to do</li>
+        <li><strong>Generate a summary</strong> - creates a one-line overview</li>
+        <li><strong>Create an embedding</strong> - vectorises the note for Smart Search and connection discovery</li>
       </ul>
       <Callout type="info">AI processing is handled via GDPR-compliant services. Your data is transmitted securely over HTTPS and processed in accordance with our Privacy Policy.</Callout>
 
       <h2 id="smart-tags">Smart Tags Panel</h2>
       <p>Open a note and look for the <strong>Smart Tags</strong> panel in the sidebar. It shows:</p>
       <ul>
-        <li>The detected <strong>Type</strong> — which you can change via a dropdown</li>
-        <li><strong>Topics</strong> — removable pills you can edit</li>
-        <li><strong>People</strong> — names extracted from the note</li>
-        <li><strong>Summary</strong> and <strong>Action Items</strong> — read-only AI output</li>
+        <li>The detected <strong>Type</strong> - which you can change via a dropdown</li>
+        <li><strong>Topics</strong> - removable pills you can edit</li>
+        <li><strong>People</strong> - names extracted from the note</li>
+        <li><strong>Summary</strong> and <strong>Action Items</strong> - read-only AI output</li>
       </ul>
-      <p>You're always in control — adjust any tag the AI assigned.</p>
+      <p>You're always in control - adjust any tag the AI assigned.</p>
 
       <h2 id="note-chat">Chat with Your Note</h2>
       <p>Open the <strong>Chat</strong> panel in the note sidebar to ask questions about your note's content. The AI uses your note plus relevant context from your vault to answer. Great for brainstorming, rewriting, or exploring ideas.</p>
@@ -204,9 +204,9 @@ const knowledgeGraph: DocPage = {
       <h2 id="connection-types">Connection Types</h2>
       <p>Connections are created in three ways:</p>
       <ul>
-        <li><strong>Semantic</strong> — the AI detects similar meaning between two notes</li>
-        <li><strong>Metadata</strong> — shared tags, topics, or people</li>
-        <li><strong>Manual</strong> — you link notes with <code>[[wikilinks]]</code> or via the suggested links panel</li>
+        <li><strong>Semantic</strong> - the AI detects similar meaning between two notes</li>
+        <li><strong>Metadata</strong> - shared tags, topics, or people</li>
+        <li><strong>Manual</strong> - you link notes with <code>[[wikilinks]]</code> or via the suggested links panel</li>
       </ul>
 
       <h2 id="local-graph">Local Graph</h2>
@@ -215,9 +215,9 @@ const knowledgeGraph: DocPage = {
       <h2 id="analytics">Graph Analytics</h2>
       <p>The analytics panel surfaces insights about your knowledge base:</p>
       <ul>
-        <li><strong>Topic clusters</strong> — groups of notes that form natural communities</li>
-        <li><strong>Bridge notes</strong> — notes that connect otherwise separate clusters</li>
-        <li><strong>Orphan notes</strong> — notes with no connections (you can link them or mark as standalone)</li>
+        <li><strong>Topic clusters</strong> - groups of notes that form natural communities</li>
+        <li><strong>Bridge notes</strong> - notes that connect otherwise separate clusters</li>
+        <li><strong>Orphan notes</strong> - notes with no connections (you can link them or mark as standalone)</li>
       </ul>
 
       <h2 id="export-graph">Export</h2>
@@ -242,20 +242,20 @@ const mediaAnalysis: DocPage = {
       <h2 id="supported-formats">Supported Formats</h2>
       <p>Drop files directly into the note editor to embed them inline:</p>
       <ul>
-        <li><strong>Images</strong> — JPG, PNG, GIF, WebP, SVG</li>
-        <li><strong>Documents</strong> — PDF (multi-page supported)</li>
-        <li><strong>Audio</strong> — MP3, WAV, OGG, M4A</li>
-        <li><strong>Video</strong> — MP4, WebM</li>
+        <li><strong>Images</strong> - JPG, PNG, GIF, WebP, SVG</li>
+        <li><strong>Documents</strong> - PDF (multi-page supported)</li>
+        <li><strong>Audio</strong> - MP3, WAV, OGG, M4A</li>
+        <li><strong>Video</strong> - MP4, WebM</li>
       </ul>
 
       <h2 id="ai-analysis">AI Analysis</h2>
       <p>Once uploaded, the AI automatically analyses each attachment:</p>
       <ul>
-        <li><strong>Images</strong> — generates a description and extracts any visible text (OCR)</li>
-        <li><strong>PDFs</strong> — extracts text from every page and summarises the document</li>
-        <li><strong>Audio/Video</strong> — transcribes spoken content</li>
+        <li><strong>Images</strong> - generates a description and extracts any visible text (OCR)</li>
+        <li><strong>PDFs</strong> - extracts text from every page and summarises the document</li>
+        <li><strong>Audio/Video</strong> - transcribes spoken content</li>
       </ul>
-      <p>Extracted content is searchable via Smart Search — so you can find a note by what's inside an attached PDF or image.</p>
+      <p>Extracted content is searchable via Smart Search - so you can find a note by what's inside an attached PDF or image.</p>
       <Callout type="info">Analysis results appear in the <strong>Media Analysis</strong> panel in the sidebar. You can view descriptions, extracted text, and detected topics.</Callout>
 
       <h2 id="media-library">Media Library</h2>
@@ -269,7 +269,7 @@ const mediaAnalysis: DocPage = {
 const contacts: DocPage = {
   slug: "contacts-crm",
   title: "People & Contacts",
-  description: "Keep track of the people in your life with Menerio's built-in CRM.",
+  description: "Keep track of the people in your life with Godspeed Mission Control's built-in CRM.",
   category: "People & Actions",
   headings: [
     { id: "contact-list", title: "Contact List" },
@@ -287,10 +287,10 @@ const contacts: DocPage = {
       <p>When the AI processes a note, it detects people mentioned in the text. These are surfaced in the Smart Tags panel so you can quickly link them to existing contacts or create new ones.</p>
 
       <h2 id="interactions">Interaction Tracking</h2>
-      <p>Each contact has an interaction log — a timeline of meetings, messages, and shared notes. Interactions are created automatically when a note is linked to a contact, or you can add them manually.</p>
+      <p>Each contact has an interaction log - a timeline of meetings, messages, and shared notes. Interactions are created automatically when a note is linked to a contact, or you can add them manually.</p>
 
       <h2 id="follow-ups">Follow-Up Reminders</h2>
-      <p>Set a <strong>contact frequency</strong> (e.g., every 14 days) and Menerio will remind you when it's been too long since your last interaction. These reminders appear in your Dashboard and in the Daily Digest email.</p>
+      <p>Set a <strong>contact frequency</strong> (e.g., every 14 days) and Godspeed Mission Control will remind you when it's been too long since your last interaction. These reminders appear in your Dashboard and in the Daily Digest email.</p>
       <Callout type="tip">The "Today's Connections" widget on your Dashboard highlights contacts who are due for a follow-up.</Callout>
     </>
   ),
@@ -315,10 +315,10 @@ const actionItems: DocPage = {
       <h2 id="managing-actions">Managing Actions</h2>
       <p>Each action has:</p>
       <ul>
-        <li><strong>Status</strong> — open, in progress, or completed</li>
-        <li><strong>Priority</strong> — low, medium, high, or urgent</li>
-        <li><strong>Due date</strong> — set automatically or manually</li>
-        <li><strong>Source note</strong> — the note it was extracted from</li>
+        <li><strong>Status</strong> - open, in progress, or completed</li>
+        <li><strong>Priority</strong> - low, medium, high, or urgent</li>
+        <li><strong>Due date</strong> - set automatically or manually</li>
+        <li><strong>Source note</strong> - the note it was extracted from</li>
       </ul>
       <p>Click an action to edit it or jump to the source note for context.</p>
 
@@ -342,21 +342,21 @@ const reviewQueue: DocPage = {
   content: () => (
     <>
       <h2 id="what-is-the-review-queue">What is the Review Queue?</h2>
-      <p>Every time you save a note, the AI scans it for actionable patterns — new contacts, aliases, profile facts, relationships, and note links. Instead of acting silently, it places <strong>suggestions</strong> into your Review Queue so you stay in control.</p>
-      <Callout type="tip" title="No extra credits">Suggestions are generated from metadata the AI already extracted — no additional LLM calls, no extra credits.</Callout>
+      <p>Every time you save a note, the AI scans it for actionable patterns - new contacts, aliases, profile facts, relationships, and note links. Instead of acting silently, it places <strong>suggestions</strong> into your Review Queue so you stay in control.</p>
+      <Callout type="tip" title="No extra credits">Suggestions are generated from metadata the AI already extracted - no additional LLM calls, no extra credits.</Callout>
 
       <h2 id="suggestion-types">Suggestion Types</h2>
       <ul>
-        <li><strong>Add to People</strong> — a person was mentioned who isn't in your contacts yet. Accepting takes you to the People page with the name pre-filled.</li>
-        <li><strong>Profile Fact</strong> — a stable fact about you or a contact was detected and can be saved to the relevant profile.</li>
-        <li><strong>Relationship</strong> — a connection between people was detected and can be reviewed before saving.</li>
+        <li><strong>Add to People</strong> - a person was mentioned who isn't in your contacts yet. Accepting takes you to the People page with the name pre-filled.</li>
+        <li><strong>Profile Fact</strong> - a stable fact about you or a contact was detected and can be saved to the relevant profile.</li>
+        <li><strong>Relationship</strong> - a connection between people was detected and can be reviewed before saving.</li>
       </ul>
 
       <h2 id="accepting-and-dismissing">Accepting & Dismissing</h2>
       <p>Each suggestion card has two buttons:</p>
       <ul>
-        <li><strong>Accept</strong> — opens the appropriate dialog or navigates to the right page with data pre-filled.</li>
-        <li><strong>Dismiss</strong> — hides the suggestion permanently. You can always create the event or contact manually later.</li>
+        <li><strong>Accept</strong> - opens the appropriate dialog or navigates to the right page with data pre-filled.</li>
+        <li><strong>Dismiss</strong> - hides the suggestion permanently. You can always create the event or contact manually later.</li>
       </ul>
       <p>The pending count badge in the sidebar lets you know at a glance how many suggestions are waiting.</p>
     </>
@@ -384,7 +384,7 @@ const groups: DocPage = {
       <p>The same person can belong to multiple Groups with different statuses, priorities, notes, and reasons. Use stages to track where each member sits in that specific Group workflow.</p>
 
       <h2 id="ai-match-members">AI Match Members</h2>
-      <p>Use <strong>AI Match Members</strong> to let Menerio analyse your notes and suggest or add relevant people to a Group. Depending on your Review Queue settings, high-confidence matches can be added automatically while still staying reviewable.</p>
+      <p>Use <strong>AI Match Members</strong> to let Godspeed Mission Control analyse your notes and suggest or add relevant people to a Group. Depending on your Review Queue settings, high-confidence matches can be added automatically while still staying reviewable.</p>
 
       <h2 id="briefings">Briefings & Next Steps</h2>
       <p>Groups can generate AI briefings from recent interactions, members, goals, and open actions. You can also ask AI for a concrete next step for a specific Group member.</p>
@@ -397,37 +397,37 @@ const groups: DocPage = {
 const appIntegrations: DocPage = {
   slug: "app-integrations",
   title: "App Integrations",
-  description: "Connect Querino to sync research artefacts into Menerio.",
+  description: "Connect Querino to sync research artefacts into Godspeed Mission Control.",
   category: "Integrations",
   headings: [
     { id: "how-it-works", title: "How It Works" },
     { id: "connected-apps", title: "Connected Apps" },
     { id: "external-notes", title: "External Notes" },
     { id: "open-in-app", title: "Open in Source App" },
-    { id: "duplicate-local", title: "Duplicate to Menerio" },
+    { id: "duplicate-local", title: "Duplicate to Godspeed Mission Control" },
   ],
   searchText: "integrations apps external Querino sync bridge API connected open duplicate",
   content: () => (
     <>
       <h2 id="how-it-works">How It Works</h2>
-      <p>Menerio acts as a central knowledge base. External apps push their content (ideas, documents, posts) into your Menerio vault as read-only notes. This gives you one searchable place for everything without losing ownership in the original app.</p>
-      <Callout type="info">The sync is one-way: from each app into Menerio. Your locally created notes are never sent out unless you explicitly choose to.</Callout>
+      <p>Godspeed Mission Control acts as a central knowledge base. External apps push their content (ideas, documents, posts) into your Godspeed Mission Control vault as read-only notes. This gives you one searchable place for everything without losing ownership in the original app.</p>
+      <Callout type="info">The sync is one-way: from each app into Godspeed Mission Control. Your locally created notes are never sent out unless you explicitly choose to.</Callout>
 
       <h2 id="connected-apps">Connected Apps</h2>
-      <p>Go to <strong>Settings → Apps</strong> to see which apps are connected. Menerio currently supports:</p>
+      <p>Go to <strong>Settings → Apps</strong> to see which apps are connected. Godspeed Mission Control currently supports:</p>
       <ul>
-        <li><strong>Querino</strong> — research artefacts and bookmarks</li>
+        <li><strong>Querino</strong> - research artefacts and bookmarks</li>
       </ul>
       <p>Each connection uses a secure bridge key and auto-activates once verified.</p>
 
       <h2 id="external-notes">External Notes</h2>
-      <p>Notes from external apps appear in your note list with an <strong>orange "External" badge</strong>. They're read-only — you can view them, search them, and connect them to other notes, but you can't edit the content directly.</p>
+      <p>Notes from external apps appear in your note list with an <strong>orange "External" badge</strong>. They're read-only - you can view them, search them, and connect them to other notes, but you can't edit the content directly.</p>
 
       <h2 id="open-in-app">Open in Source App</h2>
-      <p>Each external note has an <strong>"Open in [App Name]"</strong> button in the action bar. Click it to jump straight to the original app and edit the content there. Changes sync back to Menerio automatically.</p>
+      <p>Each external note has an <strong>"Open in [App Name]"</strong> button in the action bar. Click it to jump straight to the original app and edit the content there. Changes sync back to Godspeed Mission Control automatically.</p>
 
-      <h2 id="duplicate-local">Duplicate to Menerio</h2>
-      <p>Want an editable copy? Click <strong>"Duplicate to Menerio"</strong> to create a local, fully editable version of the note. The original external note stays unchanged.</p>
+      <h2 id="duplicate-local">Duplicate to Godspeed Mission Control</h2>
+      <p>Want an editable copy? Click <strong>"Duplicate to Godspeed Mission Control"</strong> to create a local, fully editable version of the note. The original external note stays unchanged.</p>
     </>
   ),
 };
@@ -446,14 +446,14 @@ const messagingIntegrations: DocPage = {
   content: () => (
     <>
       <h2 id="telegram">Telegram</h2>
-      <p>Connect a Telegram bot to capture messages directly into Menerio as notes. Set up your bot token in <strong>Settings → Telegram</strong>, pair it with a code, and start forwarding messages.</p>
+      <p>Connect a Telegram bot to capture messages directly into Godspeed Mission Control as notes. Set up your bot token in <strong>Settings → Telegram</strong>, pair it with a code, and start forwarding messages.</p>
 
       <h2 id="slack">Slack</h2>
-      <p>Send messages to a Slack channel and have them appear as notes in Menerio. Configure your Slack workspace connection in <strong>Settings → Slack</strong>.</p>
+      <p>Send messages to a Slack channel and have them appear as notes in Godspeed Mission Control. Configure your Slack workspace connection in <strong>Settings → Slack</strong>.</p>
 
       <h2 id="discord">Discord</h2>
       <p>Set up a Discord bot to capture messages from a specific channel. Configure it in <strong>Settings → Discord</strong> with your bot token, application ID, public key and server (guild) ID.</p>
-      <Callout type="tip">All captured messages go through AI processing — so they get tagged, connected, and searchable just like any other note.</Callout>
+      <Callout type="tip">All captured messages go through AI processing - so they get tagged, connected, and searchable just like any other note.</Callout>
     </>
   ),
 };
@@ -476,15 +476,15 @@ const githubSync: DocPage = {
       <p>Go to <strong>Settings → GitHub</strong> and enter your GitHub personal access token, repository owner, and repo name. Choose a branch and vault path.</p>
 
       <h2 id="how-sync-works">How Sync Works</h2>
-      <p>When enabled, Menerio exports your notes as Markdown files to your GitHub repository. You can configure the sync direction (push only, pull only, or both) and it runs automatically or on-demand.</p>
+      <p>When enabled, Godspeed Mission Control exports your notes as Markdown files to your GitHub repository. You can configure the sync direction (push only, pull only, or both) and it runs automatically or on-demand.</p>
       <p>Notes mirrored from a mission control folder (shown as synced from <code>godspeed</code>) are not exported: they already live as Markdown files in Mission Control's own repository. If an earlier export pushed files under <code>godspeed/</code>, they stay in your vault until you remove them yourself.</p>
       <Callout type="info">This is perfect for keeping a Markdown backup or for interoperability with tools like Obsidian.</Callout>
 
       <h2 id="import-vault">Import an Existing Vault</h2>
-      <p>Have an existing Obsidian vault or Markdown collection on GitHub? Use <strong>"Import Vault"</strong> to pull all files into Menerio as notes. Internal links and frontmatter are preserved.</p>
+      <p>Have an existing Obsidian vault or Markdown collection on GitHub? Use <strong>"Import Vault"</strong> to pull all files into Godspeed Mission Control as notes. Internal links and frontmatter are preserved.</p>
 
       <h2 id="conflict-resolution">Conflict Resolution</h2>
-      <p>If a note has been changed in both Menerio and GitHub, the Sync Conflicts panel shows you both versions so you can choose which to keep.</p>
+      <p>If a note has been changed in both Godspeed Mission Control and GitHub, the Sync Conflicts panel shows you both versions so you can choose which to keep.</p>
     </>
   ),
 };
@@ -504,7 +504,7 @@ const lexicon: DocPage = {
   content: () => (
     <>
       <h2 id="what-it-is">What It Is</h2>
-      <p>The Lexicon is where Menerio turns scattered notes into durable knowledge pages for concepts, people, projects, sources, and synthesis pages.</p>
+      <p>The Lexicon is where Godspeed Mission Control turns scattered notes into durable knowledge pages for concepts, people, projects, sources, and synthesis pages.</p>
 
       <h2 id="pages-and-sources">Pages & Sources</h2>
       <p>Lexicon pages can cite the notes they were built from, so you can move from a clean summary back to the original evidence whenever needed.</p>
@@ -536,7 +536,7 @@ const profilePage: DocPage = {
   content: () => (
     <>
       <h2 id="what-is-profile">What It Is</h2>
-      <p>Your Profile is more than a settings page — it's a structured overview of who you are, what you care about, and what context the AI should use when processing your notes. Think of it as your brain's "about me" page.</p>
+      <p>Your Profile is more than a settings page - it's a structured overview of who you are, what you care about, and what context the AI should use when processing your notes. Think of it as your brain's "about me" page.</p>
 
       <h2 id="categories">Categories & Entries</h2>
       <p>Your profile is organised into categories (e.g., "Work", "Health", "Interests") each containing key-value entries. You can add custom categories and entries, and optionally link any entry to a note for deeper context.</p>
@@ -544,9 +544,9 @@ const profilePage: DocPage = {
       <h2 id="scopes">Visibility Scopes</h2>
       <p>Each category has a visibility scope that decides which AI agents may read it:</p>
       <ul>
-        <li><strong>All agents</strong> — always included when an agent reads your profile</li>
-        <li><strong>Professional only</strong>, <strong>Personal only</strong>, <strong>Health only</strong> — included when an agent reads your whole profile, left out when it asks for a different part only</li>
-        <li><strong>Private</strong> — never shared, only visible to you</li>
+        <li><strong>All agents</strong> - always included when an agent reads your profile</li>
+        <li><strong>Professional only</strong>, <strong>Personal only</strong>, <strong>Health only</strong> - included when an agent reads your whole profile, left out when it asks for a different part only</li>
+        <li><strong>Private</strong> - never shared, only visible to you</li>
       </ul>
 
       <h2 id="completeness">Profile Completeness</h2>
@@ -554,7 +554,7 @@ const profilePage: DocPage = {
 
       <h2 id="agent-instructions">Agent Instructions</h2>
       <p>In the <strong>Agent Instructions</strong> tab, write custom instructions for the AI. For example: "Always address me informally" or "Focus on action items related to my startup". They reach the note, conversation and collection chats, and every AI assistant you connect over MCP, which receives them with your profile. Automatic note processing does not use them.</p>
-      <Callout type="tip">Agent Instructions are a powerful way to make Menerio truly yours — experiment with different instructions to shape how the AI works for you.</Callout>
+      <Callout type="tip">Agent Instructions are a powerful way to make Godspeed Mission Control truly yours - experiment with different instructions to shape how the AI works for you.</Callout>
     </>
   ),
 };
@@ -564,7 +564,7 @@ const profilePage: DocPage = {
 const dailyWorkflow: DocPage = {
   slug: "daily-workflow",
   title: "Daily Workflow",
-  description: "A typical day using Menerio for personal knowledge management.",
+  description: "A typical day using Godspeed Mission Control for personal knowledge management.",
   category: "Workflows",
   headings: [
     { id: "morning", title: "Morning: Review & Plan" },
@@ -577,23 +577,23 @@ const dailyWorkflow: DocPage = {
       <h2 id="morning">Morning: Review & Plan</h2>
       <p>Start your day on the <strong>Dashboard</strong>. Check your:</p>
       <ul>
-        <li><strong>Daily Digest</strong> — a summary email of yesterday's activity (if enabled)</li>
-        <li><strong>Action Items</strong> — outstanding tasks from yesterday</li>
-        <li><strong>Follow-up reminders</strong> — contacts you should reach out to</li>
-        <li><strong>Discovery Feed</strong> — old notes the AI resurfaced that might be relevant today</li>
+        <li><strong>Daily Digest</strong> - a summary email of yesterday's activity (if enabled)</li>
+        <li><strong>Action Items</strong> - outstanding tasks from yesterday</li>
+        <li><strong>Follow-up reminders</strong> - contacts you should reach out to</li>
+        <li><strong>Discovery Feed</strong> - old notes the AI resurfaced that might be relevant today</li>
       </ul>
 
       <h2 id="throughout-day">Throughout the Day: Capture</h2>
       <p>As thoughts come to you, capture them fast:</p>
       <ul>
-        <li><strong>Quick Capture (⌘⇧K)</strong> — one-sentence thoughts, fleeting ideas</li>
-        <li><strong>Full notes</strong> — meeting notes, research, decisions</li>
-        <li><strong>Messaging bots</strong> — forward Telegram/Slack messages to your vault</li>
+        <li><strong>Quick Capture (⌘⇧K)</strong> - one-sentence thoughts, fleeting ideas</li>
+        <li><strong>Full notes</strong> - meeting notes, research, decisions</li>
+        <li><strong>Messaging bots</strong> - forward Telegram/Slack messages to your vault</li>
       </ul>
-      <p>Don't worry about organising — the AI tags and connects everything for you.</p>
+      <p>Don't worry about organising - the AI tags and connects everything for you.</p>
 
       <h2 id="evening">Evening: Reflect</h2>
-      <p>Browse your Note Graph to see how today's notes connect to older ones. Use the <strong>Weekly Review</strong> for a deeper retrospective on patterns, themes, and progress — it can run automatically on the weekly rhythm or be created manually at any time.</p>
+      <p>Browse your Note Graph to see how today's notes connect to older ones. Use the <strong>Weekly Review</strong> for a deeper retrospective on patterns, themes, and progress - it can run automatically on the weekly rhythm or be created manually at any time.</p>
     </>
   ),
 };
@@ -612,19 +612,19 @@ const weeklyReview: DocPage = {
   content: () => (
     <>
       <h2 id="what-it-includes">What It Includes</h2>
-      <p>Every week, Menerio can generate a review of your activity. You can also create one manually whenever you want a fresh retrospective:</p>
+      <p>Every week, Godspeed Mission Control can generate a review of your activity. You can also create one manually whenever you want a fresh retrospective:</p>
       <ul>
-        <li><strong>Notes created</strong> — a count and summary of what you wrote</li>
-        <li><strong>Themes & patterns</strong> — recurring topics the AI noticed</li>
-        <li><strong>Connections made</strong> — new links between notes</li>
-        <li><strong>Open actions</strong> — tasks still pending</li>
+        <li><strong>Notes created</strong> - a count and summary of what you wrote</li>
+        <li><strong>Themes & patterns</strong> - recurring topics the AI noticed</li>
+        <li><strong>Connections made</strong> - new links between notes</li>
+        <li><strong>Open actions</strong> - tasks still pending</li>
       </ul>
 
       <h2 id="how-to-access">How to Access</h2>
       <p>Navigate to the <strong>Weekly Review</strong> page from the sidebar. Use <strong>Create Review</strong> to generate it immediately for the selected period. Past reviews are stored so you can look back over weeks or months.</p>
 
       <h2 id="making-the-most">Making the Most of It</h2>
-      <p>Use the weekly review as a reflection tool. Ask yourself: What surprised me? What patterns am I noticing? Are there action items I keep postponing? This practice turns Menerio from a note-taking app into a genuine thinking partner.</p>
+      <p>Use the weekly review as a reflection tool. Ask yourself: What surprised me? What patterns am I noticing? Are there action items I keep postponing? This practice turns Godspeed Mission Control from a note-taking app into a genuine thinking partner.</p>
       <Callout type="tip">Capture what you learn from each review as a note, so the next one, and every assistant you connect, can find it.</Callout>
     </>
   ),
@@ -654,15 +654,15 @@ const settingsAccount: DocPage = {
       <h2 id="notifications">Notifications</h2>
       <p>Configure what notifications you receive:</p>
       <ul>
-        <li><strong>Daily Digest</strong> — an email summary of your activity</li>
-        <li><strong>Contact follow-ups</strong> — reminders when contacts are overdue</li>
-        <li><strong>Stale actions</strong> — alerts for long-open tasks</li>
-        <li><strong>Pattern detection</strong> — when the AI spots emerging themes</li>
-        <li><strong>Weekly Review</strong> — notification when your review is ready</li>
+        <li><strong>Daily Digest</strong> - an email summary of your activity</li>
+        <li><strong>Contact follow-ups</strong> - reminders when contacts are overdue</li>
+        <li><strong>Stale actions</strong> - alerts for long-open tasks</li>
+        <li><strong>Pattern detection</strong> - when the AI spots emerging themes</li>
+        <li><strong>Weekly Review</strong> - notification when your review is ready</li>
       </ul>
 
       <h2 id="api-keys">API Keys</h2>
-      <p>Generate API keys in <strong>Settings → API Keys</strong> to access Menerio's Mission Control API. Each key has configurable scopes (profile, notes, contacts, actions, graph, media, stats, world, lexicon, collections) and can be revoked at any time.</p>
+      <p>Generate API keys in <strong>Settings → API Keys</strong> to access Godspeed Mission Control's Mission Control API. Each key has configurable scopes (profile, notes, contacts, actions, graph, media, stats, world, lexicon, collections) and can be revoked at any time.</p>
       <CodeBlock code={`curl -H "Authorization: Bearer mnr_abc123..." \\\n  https://your-project.supabase.co/functions/v1/mc-api-notes`} language="bash" title="Using Mission Control API" />
       <p><code>GET /mc-api-notes/search?q=…</code> searches by meaning and by text at once. Add <code>source_app=godspeed</code> or <code>source_app=native</code> to narrow it and <code>limit</code> (up to 50) to size it. The response says <code>mode: "semantic+text"</code>, or <code>"text_only"</code> when no AI credits are left.</p>
       <p>The same keys connect AI assistants over MCP: copy the server address from <strong>Settings → MCP</strong> exactly as shown (Streamable HTTP, nothing appended) and send the key as <code>Authorization: Bearer mnr_…</code>; clients that cannot set headers can add <code>?key=mnr_…</code> to the address instead. The same tab has a setup prompt and the tool list. An assistant can call <code>list_note_folders</code> to see your folders, then <code>capture_note</code> with a title, folder and tags to file a note where it belongs; <code>[[Exact Title]]</code> in the text links it to another note. Notes mirrored from a mission control folder rank below your own notes in every search and are marked as godspeed files in MCP results.</p>
@@ -685,7 +685,7 @@ const settingsAccount: DocPage = {
 const faq: DocPage = {
   slug: "faq",
   title: "Frequently Asked Questions",
-  description: "Answers to common questions about Menerio.",
+  description: "Answers to common questions about Godspeed Mission Control.",
   category: "FAQ",
   headings: [
     { id: "general", title: "General" },
@@ -696,12 +696,12 @@ const faq: DocPage = {
   content: () => (
     <>
       <h2 id="general">General</h2>
-      <h3>What is Menerio?</h3>
-      <p>Menerio is an open-source, AI-powered personal knowledge system. It's a single place for your thoughts, notes, contacts, and actions — with AI that connects everything automatically.</p>
-      <h3>Is Menerio open source?</h3>
-      <p>Yes. Menerio is licensed under AGPL-3.0. You can inspect the source code, contribute, or self-host.</p>
+      <h3>What is Godspeed Mission Control?</h3>
+      <p>Godspeed Mission Control is an open-source, AI-powered personal knowledge system. It's a single place for your thoughts, notes, contacts, and actions - with AI that connects everything automatically.</p>
+      <h3>Is Godspeed Mission Control open source?</h3>
+      <p>Yes. Godspeed Mission Control is licensed under AGPL-3.0. You can inspect the source code, contribute, or self-host.</p>
       <h3>Can I use it on mobile?</h3>
-      <p>Menerio is a responsive web app that works in any mobile browser. A native mobile app is on the roadmap.</p>
+      <p>Godspeed Mission Control is a responsive web app that works in any mobile browser. A native mobile app is on the roadmap.</p>
 
       <h2 id="ai-privacy">AI & Privacy</h2>
       <h3>Is my data used to train AI models?</h3>
@@ -724,7 +724,7 @@ const faq: DocPage = {
 const collections: DocPage = {
   slug: "collections",
   title: "Collections",
-  description: "Build structured lists — books, recipes, gadgets, anything — with custom fields, categories, and linked notes.",
+  description: "Build structured lists - books, recipes, gadgets, anything - with custom fields, categories, and linked notes.",
   category: "Knowledge",
   headings: [
     { id: "what-are-collections", title: "What are Collections?" },
@@ -737,7 +737,7 @@ const collections: DocPage = {
   content: () => (
     <>
       <h2 id="what-are-collections">What are Collections?</h2>
-      <p>Collections are structured lists alongside your free-form notes. Use them whenever you want consistent fields across many items — a book library, recipe box, gadget inventory, wine cellar, household knowledge base, and so on. Each Collection has its own <strong>schema</strong> (fields), <strong>categories</strong>, and <strong>items</strong>.</p>
+      <p>Collections are structured lists alongside your free-form notes. Use them whenever you want consistent fields across many items - a book library, recipe box, gadget inventory, wine cellar, household knowledge base, and so on. Each Collection has its own <strong>schema</strong> (fields), <strong>categories</strong>, and <strong>items</strong>.</p>
       <Callout type="tip" title="Notes vs. Collections">Reach for a Note when the content is unstructured prose. Reach for a Collection when you'll be repeating the same fields over and over.</Callout>
 
       <h2 id="creating-a-collection">Creating a Collection</h2>
@@ -747,21 +747,21 @@ const collections: DocPage = {
       <p>Inside any Collection, click <strong>"+ Add item"</strong> to open the item drawer. Fill in the fields defined by the schema and save. Items appear in the table view and can be filtered by category, sorted, and searched.</p>
 
       <h2 id="customizing-schema">Customizing Fields & Categories</h2>
-      <p>Schemas aren't fixed — you can change them at any time as your needs evolve.</p>
+      <p>Schemas aren't fixed - you can change them at any time as your needs evolve.</p>
       <ul>
-        <li><strong>Customize button</strong> — at the top of any Collection, click <strong>"Customize"</strong> to edit the schema: rename fields, change field types, add or remove fields, and reorder them.</li>
-        <li><strong>⋯ menu</strong> — the overflow menu on each Collection lets you edit <strong>categories</strong> (the high-level grouping for items) and <strong>options</strong> (for select / multi-select fields). Add, rename, or remove entries without touching existing items.</li>
+        <li><strong>Customize button</strong> - at the top of any Collection, click <strong>"Customize"</strong> to edit the schema: rename fields, change field types, add or remove fields, and reorder them.</li>
+        <li><strong>⋯ menu</strong> - the overflow menu on each Collection lets you edit <strong>categories</strong> (the high-level grouping for items) and <strong>options</strong> (for select / multi-select fields). Add, rename, or remove entries without touching existing items.</li>
       </ul>
       <Callout type="info">Renaming a field or category updates it everywhere instantly. Removing a field hides it from the editor but doesn't delete data already stored on items.</Callout>
 
       <h2 id="linking-notes">Linking Notes to Items</h2>
-      <p>Each Collection item has a <strong>Notes</strong> section in its drawer for unstructured context — meeting prep for a contact, tasting notes for a wine, repair history for a gadget. Notes use the full Notes editor (TipTap, attachments, wikilinks, AI), not a stripped-down textarea.</p>
+      <p>Each Collection item has a <strong>Notes</strong> section in its drawer for unstructured context - meeting prep for a contact, tasting notes for a wine, repair history for a gadget. Notes use the full Notes editor (TipTap, attachments, wikilinks, AI), not a stripped-down textarea.</p>
       <ul>
-        <li><strong>+ New note</strong> — creates a fresh note pre-tagged to the item and opens it in the full Notes editor.</li>
-        <li><strong>Link existing note</strong> — search your vault and attach any existing note to the item.</li>
-        <li><strong>⋯ menu on a linked note</strong> — open in the Notes app, unlink from the item (the note stays in your vault), or delete (move to trash).</li>
+        <li><strong>+ New note</strong> - creates a fresh note pre-tagged to the item and opens it in the full Notes editor.</li>
+        <li><strong>Link existing note</strong> - search your vault and attach any existing note to the item.</li>
+        <li><strong>⋯ menu on a linked note</strong> - open in the Notes app, unlink from the item (the note stays in your vault), or delete (move to trash).</li>
       </ul>
-      <Callout type="tip">Linked notes show up in both places — the item drawer and the regular Notes app — so you can keep working however you prefer.</Callout>
+      <Callout type="tip">Linked notes show up in both places - the item drawer and the regular Notes app - so you can keep working however you prefer.</Callout>
     </>
   ),
 };

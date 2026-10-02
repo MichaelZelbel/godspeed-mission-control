@@ -53,7 +53,7 @@ export function useProcessingSweep() {
           queryClient.invalidateQueries({ queryKey: ["note-ai-state"] });
         }
       } catch {
-        // Non-critical background maintenance — stay silent.
+        // Non-critical background maintenance - stay silent.
       }
     };
 

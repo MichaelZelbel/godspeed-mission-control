@@ -82,17 +82,17 @@ export default function Docs() {
   return (
     <div className="container py-8 lg:py-12">
       <SEOHead
-        title="Documentation — Menerio"
-        description="Learn how to use Menerio with step-by-step guides, an API reference, integration tutorials, and best practices for building your knowledge system."
+        title="Documentation - Godspeed Mission Control"
+        description="Learn how to use Godspeed Mission Control with step-by-step guides, an API reference, integration tutorials, and best practices for building your knowledge system."
         jsonLd={{
           "@context": "https://schema.org",
           "@type": "TechArticle",
-          headline: "Menerio Documentation",
-          description: "Guides, API reference, and tutorials for Menerio — an AI-powered knowledge system.",
+          headline: "Godspeed Mission Control Documentation",
+          description: "Guides, API reference, and tutorials for Godspeed Mission Control - an AI-powered knowledge system.",
           inLanguage: "en",
           publisher: {
             "@type": "Organization",
-            name: "Menerio",
+            name: "Godspeed Mission Control",
             url: "https://menerio.com",
           },
           mainEntityOfPage: "https://menerio.com/docs",
@@ -236,7 +236,7 @@ export default function Docs() {
           </div>
         </article>
 
-        {/* Right sidebar — TOC */}
+        {/* Right sidebar - TOC */}
         <aside className="hidden xl:block w-48 shrink-0">
           <nav className="sticky top-24">
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">On this page</p>

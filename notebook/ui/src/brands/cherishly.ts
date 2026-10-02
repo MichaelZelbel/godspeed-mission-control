@@ -1,6 +1,6 @@
 import type { BrandConfig } from "./types";
 
-// Cherishly — the people-first skin. Same app, same backend, same accounts;
+// Cherishly - the people-first skin. Same app, same backend, same accounts;
 // served from its own domain with a warm rose/purple look.
 export const CHERISHLY: BrandConfig = {
   id: "cherishly",
@@ -9,9 +9,9 @@ export const CHERISHLY: BrandConfig = {
   url: "https://cherishly.ai",
   tagline: "Your little memory companion.",
   metaDescription:
-    "Cherishly helps you remember what matters about the people you love — favorites, love languages, important dates, and the little moments in between.",
-  htmlTitle: "Cherishly — Your little memory companion",
-  titleSuffix: " — Cherishly",
+    "Cherishly helps you remember what matters about the people you love - favorites, love languages, important dates, and the little moments in between.",
+  htmlTitle: "Cherishly - Your little memory companion",
+  titleSuffix: " - Cherishly",
   supportEmail: "support@cherishly.ai",
   ogImage: "https://cherishly.ai/og-image.png",
   personaName: "Claire",
@@ -19,10 +19,10 @@ export const CHERISHLY: BrandConfig = {
   defaultTheme: "light",
   htmlThemeColor: "#fcf9f8",
   pwa: {
-    name: "Cherishly — Your little memory companion",
+    name: "Cherishly - Your little memory companion",
     shortName: "Cherishly",
     description:
-      "Remember what matters about the people you love — favorites, love languages, important dates, and little moments.",
+      "Remember what matters about the people you love - favorites, love languages, important dates, and little moments.",
     themeColor: "#e23670",
     backgroundColor: "#fcf9f8",
   },

@@ -11,8 +11,8 @@ import { RecoveryNotice } from "@/sync/RecoveryNotice";
  *
  * - Offline: the device has no network. Expected, temporary, nothing to do.
  * - Not syncing: the device is online but the sync service did not answer. That
- *   one used to be completely silent — a failed connect was a console.warn that
- *   the production build strips — so a deleted sync service looked exactly like
+ *   one used to be completely silent - a failed connect was a console.warn that
+ *   the production build strips - so a deleted sync service looked exactly like
  *   a healthy app, for weeks. Reads now fall back to the server, so the list is
  *   current again, but anything written on this device while it was frozen is
  *   still only on this device, which is what `pendingUploads` is saying.

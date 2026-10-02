@@ -19,10 +19,11 @@ if(command==='init'){
   for(const name of ['AGENTS.md','CLAUDE.md','profile','rules','skills','procedures.md'])if(!fs.existsSync(path.join(root,name)))fs.cpSync(path.join(starter,name),path.join(root,name),{recursive:true});
   const addons=fileURLToPath(new URL('../../third-party/addons/',import.meta.url));
   const recipes=fileURLToPath(new URL('../recipes/',import.meta.url));
-  if(fs.existsSync(recipes))for(const name of fs.readdirSync(recipes))if(!fs.existsSync(path.join(root,'skills',name)))fs.cpSync(path.join(recipes,name),path.join(root,'skills',name),{recursive:true});
   for(const [name,recipe] of [['godspeed-coach','coach'],['godspeed-journal','interstitial-journal'],['mc-phone','phone-errands'],['mc-video','video-finishing']]){
     const source=path.join(addons,name,'skill',recipe);if(fs.existsSync(source)&&!fs.existsSync(path.join(root,'skills',recipe)))fs.cpSync(source,path.join(root,'skills',recipe),{recursive:true});
   }
+  if(fs.existsSync(recipes))for(const name of fs.readdirSync(recipes))if(!fs.existsSync(path.join(root,'skills',name)))fs.cpSync(path.join(recipes,name),path.join(root,'skills',name),{recursive:true});
+  const contract=path.join(root,'FULL-ALPHA.md');if(!fs.existsSync(contract))atomic(contract,'# File runtime\n\nUser records live in records/. SQLite is disposable. Use the notebook or local MCP tools for structured edits, facts and events. File sync uses the conflict-preserving reconciler; never run git pull --rebase on a connected workspace. Use the notebook control desk for schedules, owner, search, backups and connector configuration. This contract overrides older starter instructions referring to cloud storage or legacy world commands. Credentials stay in .godspeed local device configuration, outside private Git sync.\n');
   const spec=fs.readFileSync(fileURLToPath(new URL('../../docs/full-version/file-format.md',import.meta.url)),'utf8');
   if(!fs.existsSync(path.join(root,'README.md')))atomic(path.join(root,'README.md'),'# Godspeed Mission Control\n\n'+spec);
   result={initialized:true,preservedExisting:true};
@@ -35,7 +36,7 @@ if(command==='init'){
   if(verb==='list')result=query.rows(type);
   else if(verb==='get')result=store.get(type,id);
   else if(verb==='save')result=store.save(type,JSON.parse(fs.readFileSync(id,'utf8')));
-  else if(['merge','remove','display-name','rename'].includes(verb))result=store.structural(type,id,verb,verb==='merge'?{target:rest[2]}:verb==='rename'?{id:rest[2]}:{name:rest[2]});
+  else if(['merge','remove','display-name','rename'].includes(verb))result=type==='moments'&&['remove','display-name'].includes(verb)?query.execute({table:type,operation:verb==='remove'?'delete':'update',values:{title:rest[2]},filters:[['eq','id',id]]}).data:store.structural(type,id,verb,verb==='merge'?{target:rest[2]}:verb==='rename'?{id:rest[2]}:{name:rest[2]});
   else throw new Error('Unknown record command');
 }else if(command==='memory'&&verb==='search'){
   const index=new SearchIndex(store);result=index.search(rest.join(' '));index.close();

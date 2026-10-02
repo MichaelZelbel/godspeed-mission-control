@@ -38,7 +38,7 @@ export default function SharedNote() {
   useEffect(() => {
     if (!token) return;
 
-    const url = `${SUPABASE_URL}/functions/v1/get-shared-note?token=${encodeURIComponent(token)}`;
+    const url = `${location.origin}/api/shared-note?token=${encodeURIComponent(token)}`;
     fetch(url, {
       headers: {
         apikey: SUPABASE_PUBLISHABLE_KEY,
@@ -74,9 +74,9 @@ export default function SharedNote() {
     return (
       <>
         {notFound ? (
-          <SEOHead title="Note not found — Menerio" description="This shared note does not exist or sharing has been disabled." noIndex />
+          <SEOHead title="Note not found - Godspeed Mission Control" description="This shared note does not exist or sharing has been disabled." noIndex />
         ) : (
-          <SEOHead title="Note could not be loaded — Menerio" description="This shared note could not be loaded." noIndex />
+          <SEOHead title="Note could not be loaded - Godspeed Mission Control" description="This shared note could not be loaded." noIndex />
         )}
         <div className="max-w-3xl mx-auto px-4 py-24 text-center">
           <h1 className="text-2xl font-bold mb-2">{notFound ? "Note not found" : "This note could not be loaded"}</h1>
@@ -104,7 +104,7 @@ export default function SharedNote() {
 
   return (
     <>
-      <SEOHead title={`${displayTitle} — Menerio`} description={`Shared note: ${displayTitle}`} />
+      <SEOHead title={`${displayTitle} - Godspeed Mission Control`} description={`Shared note: ${displayTitle}`} />
       <article className="max-w-3xl mx-auto px-4 py-12">
         <header className="mb-8">
           <h1 className="text-3xl font-bold mb-2">{displayTitle}</h1>

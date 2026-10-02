@@ -6,7 +6,7 @@ import { ilikeContains } from "@/lib/postgrest";
 
 /**
  * Non-person things in a user's life: places, organizations, projects,
- * objects, pets. People stay in `contacts` — this never replaces them.
+ * objects, pets. People stay in `contacts` - this never replaces them.
  * `entity_type` is open vocabulary: the suggestions below are a starting
  * point for the combobox, never a closed list, and the filter chips in the
  * UI are derived from the types that actually exist in the user's data.

@@ -18,6 +18,8 @@ export class Review {
       for(const mapping of [p.local,p.remote])if(hash(fs.readFileSync(path.join(root,safe(mapping.file))))!==mapping.sha256)throw new Error('A retained media version needs repair before resolving');
       const local={...p.local,path:p.local.path+'.conflict-'+p.local.sha256.slice(0,12)};
       atomic(path.join(root,hash(local.path)+'.mapping.json'),JSON.stringify(local));atomic(path.join(root,hash(p.remote.path)+'.mapping.json'),JSON.stringify(p.remote));
+    }else if(type==='source_version'){
+      if(!this.store.get('notes',p.previous_note_id)||!this.store.get('notes',p.new_note_id))throw new Error('An imported source version is missing');
     }else if(type==='add_contact')save('contacts',{name:p.name,aliases:p.aliases||[],notes:p.notes||null});
     else if(type==='add_alias'){
       const old=this.store.get('contacts',p.contact_id);if(!old)throw new Error('Person missing');save('contacts',{...old,aliases:[...new Set([...(old.aliases||[]),p.alias])].filter(Boolean)});

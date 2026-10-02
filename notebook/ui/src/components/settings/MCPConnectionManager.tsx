@@ -341,7 +341,7 @@ export function MCPConnectionManager() {
             </div>
           ) : tokens.length === 0 ? (
             <p className="text-sm text-muted-foreground rounded-md border p-4 text-center">
-              No older MCP tokens. Nothing to do here — make a key under API Keys instead.
+              No older MCP tokens. Nothing to do here - make a key under API Keys instead.
             </p>
           ) : (
             <div className="space-y-3">
@@ -439,7 +439,7 @@ export function MCPConnectionManager() {
             </span>
           </div>
           <p className="text-xs text-muted-foreground">
-            Keep the endpoint exactly as shown — don't append <code className="font-mono">/mcp</code>, <code className="font-mono">/sse</code>, or any other path.
+            Keep the endpoint exactly as shown - don't append <code className="font-mono">/mcp</code>, <code className="font-mono">/sse</code>, or any other path.
             The key must start with <code className="font-mono">mnr_</code>; the boxes it carries decide which tools answer.
           </p>
         </CardContent>
@@ -496,7 +496,7 @@ export function MCPConnectionManager() {
             </div>
           ))}
           <p className="text-xs text-muted-foreground">
-            The authoritative list always comes from <code className="font-mono">tools/list</code> on the live MCP server — new tools may be available before this page reflects them.
+            The authoritative list always comes from <code className="font-mono">tools/list</code> on the live MCP server - new tools may be available before this page reflects them.
           </p>
         </CardContent>
       </Card>

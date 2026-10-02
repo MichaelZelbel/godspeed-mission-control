@@ -14,6 +14,7 @@ const Timeline=lazy(()=>import('./pages/TimelinePage')),Media=lazy(()=>import('.
 const Groups=lazy(()=>import('./pages/Groups')),GroupDetail=lazy(()=>import('./pages/GroupDetail')),Actions=lazy(()=>import('./pages/Actions'));
 const Activity=lazy(()=>import('./pages/ActivityPage')),WeeklyReview=lazy(()=>import('./pages/WeeklyReview'));
 const Control=lazy(()=>import('./local/Control'));
+const SharedNote=lazy(()=>import('./pages/SharedNote'));
 function Layout(){
   const {user,loading,signIn}=useAuth();const [token,setToken]=useState(''),[error,setError]=useState('');
   if(loading)return <p className="p-8">Opening your notebook...</p>;
@@ -21,7 +22,7 @@ function Layout(){
   const links=[['Control','/dashboard/control'],['Notes','/dashboard/notes'],['People','/dashboard/people'],['About me','/dashboard/profile'],['World','/dashboard/world'],['Collections','/collections'],['Timeline','/dashboard/timeline'],['Media','/dashboard/media'],['Review queue','/dashboard/review-queue'],['Groups','/dashboard/groups'],['Actions','/dashboard/actions'],['Activity','/dashboard/activity'],['Weekly review','/dashboard/review']];
   return <div className="min-h-screen bg-background text-foreground"><header className="border-b p-4"><Link to="/dashboard/control" className="font-bold">Godspeed Mission Control</Link><span className="ml-4 text-sm text-muted-foreground">Full alpha candidate</span></header><nav aria-label="Notebook" className="flex flex-wrap gap-4 p-4 border-b">{links.map(([name,url])=><Link key={url} to={url}>{name}</Link>)}</nav><main className="p-6"><RouteErrorBoundary><Suspense fallback={<p>Opening...</p>}><Outlet/></Suspense></RouteErrorBoundary></main></div>;
 }
-export default function App(){return <ThemeProvider attribute="class" defaultTheme="dark"><TooltipProvider><Toaster/><Sonner/><BrowserRouter><AuthProvider><Routes><Route element={<Layout/>}>
+export default function App(){return <ThemeProvider attribute="class" defaultTheme="dark"><TooltipProvider><Toaster/><Sonner/><BrowserRouter><AuthProvider><Routes><Route path="/shared/:token" element={<Suspense fallback={<p>Opening...</p>}><SharedNote/></Suspense>}/><Route element={<Layout/>}>
   <Route path="/" element={<Navigate to="/dashboard/control" replace/>}/><Route path="/dashboard" element={<Navigate to="/dashboard/control" replace/>}/>
   <Route path="/dashboard/control" element={<Control/>}/><Route path="/dashboard/notes/*" element={<><Notes/><NoteComments/></>}/>
   <Route path="/dashboard/settings" element={<Control/>}/><Route path="/settings" element={<Control/>}/>

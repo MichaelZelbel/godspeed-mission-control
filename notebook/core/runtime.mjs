@@ -3,7 +3,7 @@ import { fileContext } from './context.mjs';
 import path from 'node:path';
 import fs from 'node:fs';
 import {procedure,procedureKinds} from './procedures.mjs';
-import {visibleRows} from './visibility.mjs';
+import {visibleRows,knowledgeContext} from './visibility.mjs';
 export function hermesProvider({executable='hermes',home,cwd,model,provider}={}){
   if(!['hermes','hermes.exe'].includes(path.basename(executable).toLowerCase()))throw new Error('Choose the verified Hermes runtime');
   return input=>new Promise((resolve,reject)=>{
@@ -58,7 +58,7 @@ export function jobExecutor(provider,query) {
       return {verified:true,record_id:result.id,delivery:'notebook'};
     }
     if(!provider)throw new Error('Connect a supported assistant or model provider to run this routine');
-    const context={...fileContext(store),goals:query.rows('goals'),notes:visibleRows(query,'notes'),facts:visibleRows(query,'profile_facts').filter(f=>f.is_current&&f.show_to_agent),health:query.rows('health_observations'),habits:query.rows('habits'),deadlines:query.rows('deadlines'),previous:query.rows('job_receipts').filter(r=>r.kind===job.kind&&r.state==='verified').slice(-3)};
+    const context={...fileContext(store),...knowledgeContext(query),goals:query.rows('goals'),notes:visibleRows(query,'notes'),facts:visibleRows(query,'profile_facts').filter(f=>f.is_current&&f.show_to_agent),health:query.rows('health_observations'),habits:query.rows('habits'),deadlines:query.rows('deadlines'),previous:query.rows('job_receipts').filter(r=>r.kind===job.kind&&r.state==='verified').slice(-3)};
     const instructions={
       'goal-decision':'Choose one useful action toward the active goal. Give the reason and expected evidence. Do not send messages or spend money.',
       'goal-work':'Complete useful work for the active goal, such as a draft, research analysis of supplied sources, or a conversation preparation. Save the actual deliverable in your answer. Do not invent completed external work.',

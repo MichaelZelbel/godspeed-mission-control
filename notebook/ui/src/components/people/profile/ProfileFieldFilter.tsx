@@ -10,7 +10,7 @@ interface ProfileFieldFilterProps {
 /**
  * Live filter box for the compact fact list. Pressing "/" anywhere on the
  * page focuses this input, unless focus is already in an editable element
- * (input/textarea/contentEditable) or a dialog is open — so it never
+ * (input/textarea/contentEditable) or a dialog is open - so it never
  * hijacks "/" while the user is typing elsewhere or a modal is up. Esc
  * inside the input clears the query and blurs.
  */
@@ -27,7 +27,7 @@ export function ProfileFieldFilter({ value, onChange }: ProfileFieldFilterProps)
       if (isEditableTarget) return;
 
       // Radix Dialog renders role="dialog", but AlertDialog (e.g. the
-      // delete-category confirmation) renders role="alertdialog" — guard both.
+      // delete-category confirmation) renders role="alertdialog" - guard both.
       if (document.querySelector('[role="dialog"], [role="alertdialog"]')) return;
 
       e.preventDefault();

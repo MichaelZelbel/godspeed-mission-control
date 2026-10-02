@@ -103,7 +103,7 @@ export function GlobalAIChatFAB() {
   }, [location.pathname]);
 
   const collectionItemId = useMemo(() => {
-    // /collections/:slug/:itemId — but skip reserved subroutes like /schema
+    // /collections/:slug/:itemId - but skip reserved subroutes like /schema
     const match = location.pathname.match(/^\/collections\/[^/]+\/([^/]+)$/);
     if (!match) return null;
     const seg = match[1];
@@ -187,7 +187,7 @@ export function GlobalAIChatFAB() {
   }, [open]);
 
   // Auto-scroll to the newest message. Runs on new messages, while loading,
-  // AND when the panel is (re)opened or resized — reopening remounts the
+  // AND when the panel is (re)opened or resized - reopening remounts the
   // scroll container at the top, so without `open`/`effectiveMode` here you'd
   // land on the first message and have to scroll down manually. The rAF waits
   // for layout (and markdown/images) to settle before pinning to the bottom.
@@ -388,7 +388,7 @@ export function GlobalAIChatFAB() {
   const handleKeyDown = (e: React.KeyboardEvent) => {
     // Enter sends; Shift+Enter inserts a newline. This matches the in-note and
     // Mira chats and the usual convention (ChatGPT/Claude/etc.). Cmd/Ctrl+Enter
-    // still sends too, since it has no Shift — so the old shortcut keeps working.
+    // still sends too, since it has no Shift - so the old shortcut keeps working.
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       sendMessage();

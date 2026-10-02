@@ -214,7 +214,7 @@ export default function Wizard() {
           })}
         </div>
         <p className="text-xs text-muted-foreground text-center mt-1">
-          Step {step + 1} of {STEPS.length} — {STEPS[step].label}
+          Step {step + 1} of {STEPS.length} - {STEPS[step].label}
         </p>
       </div>
 
@@ -231,7 +231,7 @@ export default function Wizard() {
               exit="exit"
               transition={{ duration: 0.25, ease: "easeInOut" }}
             >
-              {/* Step 0 — Welcome */}
+              {/* Step 0 - Welcome */}
               {step === 0 && (
                 <div className="text-center space-y-6">
                   <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-2xl bg-primary/10">
@@ -249,7 +249,7 @@ export default function Wizard() {
                 </div>
               )}
 
-              {/* Step 1 — Profile */}
+              {/* Step 1 - Profile */}
               {step === 1 && (
                 <div className="space-y-6 max-w-md mx-auto">
                   <div className="text-center">
@@ -272,7 +272,7 @@ export default function Wizard() {
                 </div>
               )}
 
-              {/* Step 2 — Focus */}
+              {/* Step 2 - Focus */}
               {step === 2 && (
                 <div className="space-y-6">
                   <div className="text-center">
@@ -316,7 +316,7 @@ export default function Wizard() {
                 </div>
               )}
 
-              {/* Step 3 — Tour */}
+              {/* Step 3 - Tour */}
               {step === 3 && (
                 <div className="space-y-6">
                   <div className="text-center">
@@ -349,7 +349,7 @@ export default function Wizard() {
                 </div>
               )}
 
-              {/* Step 4 — Ready */}
+              {/* Step 4 - Ready */}
               {step === 4 && (
                 <div className="text-center space-y-6">
                   <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-2xl bg-success/10">

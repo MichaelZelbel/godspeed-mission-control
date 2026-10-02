@@ -209,7 +209,7 @@ function visibleTextOfMarkdown(md: string): string {
  * re-serialization of the parsed document, so it legitimately differs from the
  * HTML we fed in (autolink marks, attribute order, empty paragraphs, the async
  * attachment resolver rewriting image srcs) even when the document is exactly
- * right. Comparing the canonical Markdown — the form we actually persist —
+ * right. Comparing the canonical Markdown - the form we actually persist —
  * avoids those false negatives, with a visible-text fallback for round-trip
  * formatting drift.
  */
@@ -545,8 +545,8 @@ export function NoteEditor({ note, onNoteDeleted, showLocalGraph: showLocalGraph
   // Serialized content autosave.
   //
   // Every content save funnels through here so that (a) only one write per
-  // note is ever in flight — fast typing queues the latest payload instead of
-  // racing several PATCHes — and (b) we remember the newest server
+  // note is ever in flight - fast typing queues the latest payload instead of
+  // racing several PATCHes - and (b) we remember the newest server
   // `updated_at` we produced, which lets the sync effect below ignore any
   // late-arriving, older copy of the note (that race silently reverted edits).
   // ---------------------------------------------------------------------
@@ -898,7 +898,7 @@ export function NoteEditor({ note, onNoteDeleted, showLocalGraph: showLocalGraph
     // Staleness guard: a notes-list refetch that started *before* the last
     // autosave can resolve *after* it. Applying that older row would push the
     // pre-edit text back into the editor, and the next autosave would then
-    // persist it — silently losing the user's work. Ignore anything older than
+    // persist it - silently losing the user's work. Ignore anything older than
     // the newest version this editor successfully wrote.
     const incomingTs = note.updated_at ? new Date(note.updated_at).getTime() : 0;
     if (noteChanged) {
@@ -999,7 +999,7 @@ export function NoteEditor({ note, onNoteDeleted, showLocalGraph: showLocalGraph
   // the editor live so the user sees the agent's edits without reloading.
   //
   // The chat passes the exact resulting content, so we apply it directly rather
-  // than refetching — and we apply it even when the editor is focused, because
+  // than refetching - and we apply it even when the editor is focused, because
   // otherwise the next autosave would push our stale copy back over the AI's
   // edit (that is how AI edits used to disappear).
   useEffect(() => {
@@ -1035,7 +1035,7 @@ export function NoteEditor({ note, onNoteDeleted, showLocalGraph: showLocalGraph
         if (!alreadyShowing || detail.force) {
           const wasFocused = editor.isFocused;
           const caret = editor.state.selection.from;
-          // Drop any queued autosave of the pre-edit text — it is stale now.
+          // Drop any queued autosave of the pre-edit text - it is stale now.
           if (contentSaveTimer.current) {
             clearTimeout(contentSaveTimer.current);
             contentSaveTimer.current = null;
@@ -1056,7 +1056,7 @@ export function NoteEditor({ note, onNoteDeleted, showLocalGraph: showLocalGraph
           setSaveStatus("saved");
           setLastSavedAt(Date.now());
         }
-        // Verify what the editor is actually showing now — the whole point of
+        // Verify what the editor is actually showing now - the whole point of
         // the acknowledgement is that "we called setContent" is not proof.
         applied = editorShowsContent(editor, content);
         if (!applied) {
@@ -1451,7 +1451,7 @@ export function NoteEditor({ note, onNoteDeleted, showLocalGraph: showLocalGraph
   return (
     <div className="flex h-full">
     <div className="flex flex-col h-full flex-1 min-w-0">
-      {/* Action toolbar — only for trashed/source-mode/external notes; for normal notes, actions are merged into the formatting toolbar below */}
+      {/* Action toolbar - only for trashed/source-mode/external notes; for normal notes, actions are merged into the formatting toolbar below */}
       {(note.is_trashed || sourceMode || note.is_external) && (
         <div className="flex items-center gap-1 px-4 py-2 border-b border-border bg-background shrink-0">
           {sharedNote?.is_active && (
@@ -1527,7 +1527,7 @@ export function NoteEditor({ note, onNoteDeleted, showLocalGraph: showLocalGraph
       )}
 
 
-      {/* Rich text formatting toolbar — hidden for external read-only notes */}
+      {/* Rich text formatting toolbar - hidden for external read-only notes */}
       {!note.is_trashed && !sourceMode && !note.is_external && (
         <EditorToolbar
           editor={editor}
@@ -1675,7 +1675,7 @@ export function NoteEditor({ note, onNoteDeleted, showLocalGraph: showLocalGraph
           <Lock className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
           <div className="flex-1 min-w-0">
             <p className="text-xs text-foreground">
-              Synced from <span className="font-medium">{note.source_app || "external app"}</span> — duplicate to edit
+              Synced from <span className="font-medium">{note.source_app || "external app"}</span> - duplicate to edit
             </p>
             <p className="text-[11px] text-muted-foreground mt-0.5">
               Changes here would be overwritten on the next sync. Create a local copy to make edits in {BRAND.name}.
@@ -1718,7 +1718,7 @@ export function NoteEditor({ note, onNoteDeleted, showLocalGraph: showLocalGraph
         </div>
       )}
 
-      {/* Note Metadata editor — moved below text, rendered before Vault Insights */}
+      {/* Note Metadata editor - moved below text, rendered before Vault Insights */}
 
       {/* Editor */}
       <div
@@ -1773,7 +1773,7 @@ export function NoteEditor({ note, onNoteDeleted, showLocalGraph: showLocalGraph
             )}
           </div>
         </div>
-        {/* Web clip snapshot — render at the top so it's the first thing the user sees */}
+        {/* Web clip snapshot - render at the top so it's the first thing the user sees */}
         {note.source_app === "singlefile" &&
           metadata &&
           typeof (metadata as Record<string, unknown>).web_clip === "object" &&
@@ -1846,7 +1846,7 @@ export function NoteEditor({ note, onNoteDeleted, showLocalGraph: showLocalGraph
         </div>
       )}
 
-      {/* External note panel — collapsed by default */}
+      {/* External note panel - collapsed by default */}
       {note.is_external && (
         <details className="shrink-0 border-t border-border bg-muted/20 group">
           <summary className="px-4 py-2 cursor-pointer text-xs font-semibold text-muted-foreground hover:text-foreground select-none flex items-center gap-1.5">

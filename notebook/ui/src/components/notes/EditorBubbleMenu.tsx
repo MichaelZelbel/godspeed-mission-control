@@ -21,7 +21,7 @@ import { TEXT_COLORS, ToolbarButton } from "./EditorToolbarGroups";
 
 /**
  * Notion-style floating menu shown over a text selection. Everything renders
- * inline inside the menu element — deliberately NO portaled dropdowns or
+ * inline inside the menu element - deliberately NO portaled dropdowns or
  * popovers in here, because the bubble-menu plugin hides on focus/pointer
  * activity outside its element and portaled content lives in document.body.
  * Link editing and color picking are inline "modes" of the same row instead.

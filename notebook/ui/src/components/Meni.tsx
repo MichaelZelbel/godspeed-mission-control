@@ -24,7 +24,7 @@ export function Meni({ size = 220, className }: MeniProps) {
       viewBox="0 0 240 240"
       className={cn("meni-mascot", className)}
       role="img"
-      aria-label="Meni, the Menerio mascot"
+      aria-label="Meni, the Godspeed Mission Control mascot"
     >
       <defs>
         <radialGradient id="meni-body" cx=".4" cy=".3" r=".75">

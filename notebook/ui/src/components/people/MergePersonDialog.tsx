@@ -130,7 +130,7 @@ export function MergePersonDialog({
       // The merge moved the source's facts and slots.
       invalidateFactViews(qc);
       // merge-contacts doesn't touch contact_group_memberships rows for the
-      // merged-away source person — invalidate the aggregate membership
+      // merged-away source person - invalidate the aggregate membership
       // query (and the source's own group list) so the People tree's group
       // badges stop counting a now-merged contact as a ghost member.
       qc.invalidateQueries({ queryKey: ["contact_group_memberships"] });

@@ -39,7 +39,7 @@ const LABEL_CANONICAL: Record<string, string> = {
   ehefrau: "wife",
   ehemann: "husband",
   ehepartner: "spouse",
-  // Romantic but not married — every flavour folds into one edge
+  // Romantic but not married - every flavour folds into one edge
   partner: "partner",
   girlfriend: "partner",
   boyfriend: "partner",
@@ -205,7 +205,7 @@ const LABEL_CANONICAL: Record<string, string> = {
   student: "student",
   client: "client",
   provider: "provider",
-  // Professional service roles — real, but NOT personal relationships. They
+  // Professional service roles - real, but NOT personal relationships. They
   // render in their own section, never mixed into family/friends.
   "financial advisor": "financial advisor",
   advisor: "advisor",
@@ -387,7 +387,7 @@ const PROFESSIONAL_LABELS = new Set<string>([
 export type RelationshipKind = "personal" | "professional" | "other";
 
 /**
- * Classify a label. Anything outside the two closed lists is "other" — junk
+ * Classify a label. Anything outside the two closed lists is "other" - junk
  * like "author", "admirer" or "subject of notes" that must never be stored
  * as a relationship.
  */
@@ -512,7 +512,7 @@ export function relationshipStrength(label: string): number {
 
 /**
  * The set of labels that describe one romantic/social bond between two people.
- * Only these compete with each other for collapsing — a "friend" edge never
+ * Only these compete with each other for collapsing - a "friend" edge never
  * suppresses an unrelated "employer" edge.
  */
 const ROMANTIC_SOCIAL_BOND = new Set<string>([
@@ -531,7 +531,7 @@ export type Gender = "male" | "female" | null;
 
 /**
  * Derive a gender from a person's own profile facts. Never guesses from a
- * name — an unrecognised value yields null and the neutral role is shown.
+ * name - an unrecognised value yields null and the neutral role is shown.
  */
 export function genderFromFacts(
   gender?: string | null,
@@ -573,7 +573,7 @@ const NEUTRAL_ROLE_TEXT: Record<string, string> = {
   nibling: "niece or nephew",
 };
 
-/** Roles that already carry a gender — no lookup needed. */
+/** Roles that already carry a gender - no lookup needed. */
 const INHERENTLY_GENDERED: Record<string, Gender> = {
   husband: "male", wife: "female",
   father: "male", mother: "female",

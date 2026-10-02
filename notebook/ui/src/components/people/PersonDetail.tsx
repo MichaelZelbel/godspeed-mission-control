@@ -169,7 +169,7 @@ export function PersonDetail({ person, people, onClose }: PersonDetailProps) {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <SEOHead title={`${person.name} — People — Menerio`} noIndex />
+      <SEOHead title={`${person.name} - People - Godspeed Mission Control`} noIndex />
 
       {isMobile && (
         <div className="flex items-center gap-1 border-b border-border px-2 py-1.5 shrink-0">
@@ -186,7 +186,7 @@ export function PersonDetail({ person, people, onClose }: PersonDetailProps) {
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto max-w-3xl p-4 sm:p-6">
-          {/* Persistent person header — visible across all tabs */}
+          {/* Persistent person header - visible across all tabs */}
           <div className="sticky top-0 z-10 mb-4 space-y-4 bg-background pb-2">
             <Card>
               <CardHeader>

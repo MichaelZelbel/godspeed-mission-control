@@ -181,6 +181,7 @@ export class Store {
   structural(type, id, action, options = {}) {
     return this.withLock(() => {
       const old = this.get(type, id); if (!old) throw new Error('Record not found');
+      if(type==='moments'&&action!=='rename')throw new Error('Events are append-only; use an explicit event correction');
       if (action === 'display-name') { const next = this.prepare(type, { name: options.name }, old); this.commit([next]); return next; }
       if(action==='rename'){
         const nextId=safe(options.id);if(nextId.toLowerCase()===old.id.toLowerCase())throw new Error('A path rename must change its spelling beyond case');

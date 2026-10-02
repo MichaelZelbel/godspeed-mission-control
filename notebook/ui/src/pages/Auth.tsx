@@ -66,7 +66,7 @@ export default function Auth() {
   };
 
   if (session) {
-    // Declarative redirect — calling navigate() during render triggers React's
+    // Declarative redirect - calling navigate() during render triggers React's
     // "cannot update a component while rendering" warning.
     return <Navigate to={redirectTo} replace />;
   }

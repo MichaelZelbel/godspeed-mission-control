@@ -84,7 +84,7 @@ export function useShareNote() {
     // The clipboard write lives here, NOT in mutationFn: if it lived alongside
     // the DB upsert, a clipboard rejection (Safari's same-gesture rule, lost
     // focus, denied permission) would reject the whole mutation and show
-    // "Failed to share note" — even though the note is already publicly shared.
+    // "Failed to share note" - even though the note is already publicly shared.
     onSuccess: async (result, { noteId }) => {
       if (result.blocked) return;
       qc.invalidateQueries({ queryKey: ["shared-note", noteId] });

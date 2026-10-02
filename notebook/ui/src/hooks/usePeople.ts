@@ -21,7 +21,7 @@ export interface Person {
 }
 
 // `is_sensitive` is selected (and used elsewhere via a cast) but not part of
-// the formal Person shape yet — preserved as-is from the pre-extraction query.
+// the formal Person shape yet - preserved as-is from the pre-extraction query.
 const PEOPLE_COLUMNS =
   "id, user_id, name, notes, tags, aliases, app_mappings, metadata, merged_into, created_at, updated_at, is_sensitive, is_favorite, last_viewed_at";
 
@@ -41,7 +41,7 @@ export function shouldTouchViewed(lastViewedAt: string | null, now: Date): boole
 
 /**
  * Full touch decision including the loaded-row gate: a row that isn't in the
- * cache yet is NOT "never viewed" — on a fresh page load the contacts query
+ * cache yet is NOT "never viewed" - on a fresh page load the contacts query
  * hasn't resolved, and touching blind would bypass the 5-minute throttle on
  * every reload. Only a genuinely loaded row may be touched.
  */
@@ -215,7 +215,7 @@ export function useDeletePerson() {
       // (as this once did) orphaned the mirror whenever the DB delete threw.
       const { error } = await supabase.from("contacts").delete().eq("id", id);
       if (error) throw error;
-      // Now retire the mirrored vault file — the sync log still knows its
+      // Now retire the mirrored vault file - the sync log still knows its
       // path. Best-effort; the sweep's retire pass is the backstop.
       const affectedGroupIds = await deleteEntityFile("person", id);
       return affectedGroupIds;
@@ -227,7 +227,7 @@ export function useDeletePerson() {
       triggerPeopleSync({ groups: affectedGroupIds });
       // The DB cascades this person's contact_group_memberships rows, but
       // the aggregate membership query that powers the People tree's group
-      // counts never hears about it on its own — with a 5-minute staleTime,
+      // counts never hears about it on its own - with a 5-minute staleTime,
       // no focus refetch, and a 24h persister, stale counts would otherwise
       // linger for the rest of the session.
       qc.invalidateQueries({ queryKey: ["contact_group_memberships"] });

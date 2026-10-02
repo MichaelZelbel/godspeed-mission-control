@@ -4,12 +4,12 @@ import { taxonomyBySlug, taxonomyOrder } from "@/lib/profile-taxonomy";
 /**
  * Resolve (or create) a `profile_categories` row for (userId, contactId,
  * slug), returning its id. Client-side mirror of `resolveCategoryId` in
- * `supabase/functions/_shared/profile-normalization.ts` — same
+ * `supabase/functions/_shared/profile-normalization.ts` - same
  * select-then-insert-then-reselect-on-23505 race pattern, but seeded from
  * the local taxonomy's name/icon/order (falling back to a slug-derived
  * name for a non-taxonomy slug) instead of a generic "folder" fallback.
  *
- * Not yet called from any UI in this phase — CompactCategorySection only
+ * Not yet called from any UI in this phase - CompactCategorySection only
  * renders for categories that already have entries (and therefore already
  * exist as rows), so there is no manual-add path that needs it today. It is
  * prepared here for Phase 4's AI quick-add box, which will create entries in
