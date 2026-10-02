@@ -11,9 +11,9 @@ on:
   push:
     branches: [main]
     tags: ["v*"]
-    paths: ["docker/**", "server/**", ".github/workflows/docker.yml", ".dockerignore"]
+    paths: ["docker/**", "server/**", "computer/**", ".github/workflows/docker.yml", ".dockerignore"]
   pull_request:
-    paths: ["docker/**", "server/**", ".github/workflows/docker.yml", ".dockerignore"]
+    paths: ["docker/**", "server/**", "computer/**", ".github/workflows/docker.yml", ".dockerignore"]
   workflow_dispatch:
 
 permissions:
