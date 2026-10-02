@@ -1,0 +1,307 @@
+[
+  {
+    "name": "audit",
+    "classification": "included",
+    "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details."
+  },
+  {
+    "name": "book-title-creator",
+    "classification": "included",
+    "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details."
+  },
+  {
+    "name": "book-title-strategist",
+    "classification": "included",
+    "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details."
+  },
+  {
+    "name": "browser-post",
+    "classification": "optional connector",
+    "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details."
+  },
+  {
+    "name": "coach",
+    "classification": "included",
+    "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details."
+  },
+  {
+    "name": "connect-email",
+    "classification": "optional connector",
+    "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details."
+  },
+  {
+    "name": "daily-brief",
+    "classification": "included",
+    "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details."
+  },
+  {
+    "name": "due",
+    "classification": "included",
+    "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details."
+  },
+  {
+    "name": "embedded-captions",
+    "classification": "optional connector",
+    "reason": "Portable recipe with local file contract; chosen media/service provider is configured separately."
+  },
+  {
+    "name": "excalidraw-diagram",
+    "classification": "included",
+    "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details."
+  },
+  {
+    "name": "excalidraw-visuals",
+    "classification": "included",
+    "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details."
+  },
+  {
+    "name": "faceless-explainer",
+    "classification": "optional connector",
+    "reason": "Portable recipe with local file contract; chosen media/service provider is configured separately."
+  },
+  {
+    "name": "figma",
+    "classification": "optional connector",
+    "reason": "Portable recipe with local file contract; chosen media/service provider is configured separately."
+  },
+  {
+    "name": "found-company",
+    "classification": "separately owned",
+    "reason": "Company and specialist enterprise-agent systems remain separate from personal Mission Control."
+  },
+  {
+    "name": "general-video",
+    "classification": "optional connector",
+    "reason": "Portable recipe with local file contract; chosen media/service provider is configured separately."
+  },
+  {
+    "name": "grill-me",
+    "classification": "included",
+    "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details."
+  },
+  {
+    "name": "gsap-core",
+    "classification": "optional connector",
+    "reason": "Portable recipe with local file contract; chosen media/service provider is configured separately."
+  },
+  {
+    "name": "gsap-timeline",
+    "classification": "optional connector",
+    "reason": "Portable recipe with local file contract; chosen media/service provider is configured separately."
+  },
+  {
+    "name": "headache-tracker",
+    "classification": "included",
+    "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details."
+  },
+  {
+    "name": "hyperframes",
+    "classification": "optional connector",
+    "reason": "Portable recipe with local file contract; chosen media/service provider is configured separately."
+  },
+  {
+    "name": "hyperframes-animation",
+    "classification": "optional connector",
+    "reason": "Portable recipe with local file contract; chosen media/service provider is configured separately."
+  },
+  {
+    "name": "hyperframes-audio",
+    "classification": "optional connector",
+    "reason": "Portable recipe with local file contract; chosen media/service provider is configured separately."
+  },
+  {
+    "name": "hyperframes-cli",
+    "classification": "optional connector",
+    "reason": "Portable recipe with local file contract; chosen media/service provider is configured separately."
+  },
+  {
+    "name": "hyperframes-core",
+    "classification": "optional connector",
+    "reason": "Portable recipe with local file contract; chosen media/service provider is configured separately."
+  },
+  {
+    "name": "hyperframes-creative",
+    "classification": "optional connector",
+    "reason": "Portable recipe with local file contract; chosen media/service provider is configured separately."
+  },
+  {
+    "name": "hyperframes-keyframes",
+    "classification": "optional connector",
+    "reason": "Portable recipe with local file contract; chosen media/service provider is configured separately."
+  },
+  {
+    "name": "hyperframes-registry",
+    "classification": "optional connector",
+    "reason": "Portable recipe with local file contract; chosen media/service provider is configured separately."
+  },
+  {
+    "name": "interstitial-journal",
+    "classification": "included",
+    "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details."
+  },
+  {
+    "name": "keep-a-note",
+    "classification": "included",
+    "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details."
+  },
+  {
+    "name": "lead",
+    "classification": "included",
+    "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details."
+  },
+  {
+    "name": "mc-brief-operations",
+    "classification": "included",
+    "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details."
+  },
+  {
+    "name": "mc-radar",
+    "classification": "included",
+    "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details."
+  },
+  {
+    "name": "media-use",
+    "classification": "optional connector",
+    "reason": "Portable recipe with local file contract; chosen media/service provider is configured separately."
+  },
+  {
+    "name": "memory-audit",
+    "classification": "included",
+    "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details."
+  },
+  {
+    "name": "morning-note",
+    "classification": "included",
+    "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details."
+  },
+  {
+    "name": "motion-graphics",
+    "classification": "optional connector",
+    "reason": "Portable recipe with local file contract; chosen media/service provider is configured separately."
+  },
+  {
+    "name": "move-godspeed",
+    "classification": "included",
+    "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details."
+  },
+  {
+    "name": "music-to-video",
+    "classification": "optional connector",
+    "reason": "Portable recipe with local file contract; chosen media/service provider is configured separately."
+  },
+  {
+    "name": "nano-banana-images",
+    "classification": "optional connector",
+    "reason": "Portable recipe with local file contract; chosen media/service provider is configured separately."
+  },
+  {
+    "name": "next-action",
+    "classification": "included",
+    "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details."
+  },
+  {
+    "name": "pattern1-build",
+    "classification": "separately owned",
+    "reason": "Company and specialist enterprise-agent systems remain separate from personal Mission Control."
+  },
+  {
+    "name": "phone-errands",
+    "classification": "optional connector",
+    "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details."
+  },
+  {
+    "name": "pr-to-video",
+    "classification": "optional connector",
+    "reason": "Portable recipe with local file contract; chosen media/service provider is configured separately."
+  },
+  {
+    "name": "product-launch-video",
+    "classification": "optional connector",
+    "reason": "Portable recipe with local file contract; chosen media/service provider is configured separately."
+  },
+  {
+    "name": "remotion-to-hyperframes",
+    "classification": "optional connector",
+    "reason": "Portable recipe with local file contract; chosen media/service provider is configured separately."
+  },
+  {
+    "name": "sap-ai-agent-low-code",
+    "classification": "separately owned",
+    "reason": "Company and specialist enterprise-agent systems remain separate from personal Mission Control."
+  },
+  {
+    "name": "sap-ai-agent-pro-code",
+    "classification": "separately owned",
+    "reason": "Company and specialist enterprise-agent systems remain separate from personal Mission Control."
+  },
+  {
+    "name": "sap-build-ai-patterns",
+    "classification": "separately owned",
+    "reason": "Company and specialist enterprise-agent systems remain separate from personal Mission Control."
+  },
+  {
+    "name": "scroll-craft",
+    "classification": "optional connector",
+    "reason": "Portable recipe with local file contract; chosen media/service provider is configured separately."
+  },
+  {
+    "name": "slideshow",
+    "classification": "optional connector",
+    "reason": "Portable recipe with local file contract; chosen media/service provider is configured separately."
+  },
+  {
+    "name": "social-visuals",
+    "classification": "included",
+    "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details."
+  },
+  {
+    "name": "strip-ai-tells",
+    "classification": "included",
+    "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details."
+  },
+  {
+    "name": "subscription-review",
+    "classification": "included",
+    "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details."
+  },
+  {
+    "name": "talk-about",
+    "classification": "included",
+    "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details."
+  },
+  {
+    "name": "talking-head-recut",
+    "classification": "optional connector",
+    "reason": "Portable recipe with local file contract; chosen media/service provider is configured separately."
+  },
+  {
+    "name": "video-captions",
+    "classification": "optional connector",
+    "reason": "Portable recipe with local file contract; chosen media/service provider is configured separately."
+  },
+  {
+    "name": "video-finishing",
+    "classification": "included",
+    "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details."
+  },
+  {
+    "name": "video-hooks",
+    "classification": "included",
+    "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details."
+  },
+  {
+    "name": "watch",
+    "classification": "included",
+    "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details."
+  },
+  {
+    "name": "web-design",
+    "classification": "included",
+    "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details."
+  },
+  {
+    "name": "work-item",
+    "classification": "included",
+    "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details."
+  }
+]

@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import { fileContext } from './context.mjs';
 import path from 'node:path';
 import fs from 'node:fs';
+import {procedure,procedureKinds} from './procedures.mjs';
 export function hermesProvider({executable='hermes',home,cwd,model,provider}={}){
   if(!['hermes','hermes.exe'].includes(path.basename(executable).toLowerCase()))throw new Error('Choose the verified Hermes runtime');
   return input=>new Promise((resolve,reject)=>{
@@ -49,6 +50,7 @@ export function commandProvider({ command, args = [], cwd, timeoutMs = 120000 } 
 }
 export function jobExecutor(provider,query) {
   return async (job,{settings,store})=>{
+    if(procedureKinds.includes(job.kind)||['profiling','watch'].includes(job.kind))return procedure(job,{store,query,provider});
     if(job.kind==='deadline-reminder') {
       const due=query.rows('deadlines').filter(d=>d.status!=='closed' && d.due_at && Date.parse(d.due_at)-Date.now()<3*86400000);
       const result=store.save('notes',{title:'Deadlines needing attention',content:due.length?due.map(d=>`${d.title}: ${d.due_at}`).join('\n'):'No open deadlines are due within three days.',source_app:'deadline-reminder'});

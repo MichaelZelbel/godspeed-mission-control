@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
-export const kinds = ['goal-decision', 'goal-work', 'coaching', 'deadline-reminder', 'profiling', 'review', 'morning-brief', 'audit', 'memory-review', 'watch'];
+import {procedureKinds} from '../procedures.mjs';
+export const kinds = ['goal-decision', 'goal-work', 'coaching', 'deadline-reminder', 'profiling', 'review', 'morning-brief', 'audit', 'memory-review', 'watch',...procedureKinds];
 export class Scheduler {
   constructor(store, { device = store.device, executor = null } = {}) { this.store = store; this.device = device; this.executor = executor; this.running = false; }
   configure({ owner = this.device, timezone = 'UTC', goal, delivery = 'notebook', permissions = [] }) {

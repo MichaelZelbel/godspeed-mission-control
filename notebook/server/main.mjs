@@ -17,6 +17,7 @@ import { MediaSync } from '../core/sync/media.mjs';
 import { mcp } from './mcp.mjs';
 import { spawn } from 'node:child_process';
 import {ApiKeys,toolScope} from '../core/api-keys.mjs';
+import {Telegram} from '../core/telegram.mjs';
 
 export async function createService({ root, mediaRoot, host = '127.0.0.1', port = 47831, token, uiRoot, provider, device = 'local' } = {}) {
   const store = new Store(root,{device}), index = new SearchIndex(store), query = new QueryService(store), sync = new FileSync(store);
@@ -172,7 +173,10 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   const jobs=setInterval(()=>scheduler.tick().catch(()=>{}),30000);
   const syncTimer=setInterval(()=>{if(fs.existsSync(path.join(store.state,'sync-config.json')))sync.reconcile();},60000);
   const mediaTimer=setInterval(()=>mediaSync.reconcile(),60000);
-  return { server, store, index, query, domains, scheduler, sync, mediaSync,address: server.address(), close: async () => { clearInterval(interval);clearInterval(jobs);clearInterval(syncTimer);clearInterval(mediaTimer); await new Promise(resolve => server.close(resolve)); index.close(); } };
+  const telegram=process.env.GODSPEED_TELEGRAM==='on'&&process.env.GODSPEED_CANDIDATE_BOT_TOKEN&&process.env.GODSPEED_CANDIDATE_BOT_OWNER?new Telegram({store,domains,token:process.env.GODSPEED_CANDIDATE_BOT_TOKEN,owner:process.env.GODSPEED_CANDIDATE_BOT_OWNER}):null;
+  const telegramTimer=telegram?setInterval(()=>telegram.tick().catch(()=>{}),3000):null;
+  let debounce;const watcher=fs.watch(store.root,{recursive:true},(event,name)=>{if(!name||!/^records\//.test(name.replaceAll('\\','/')))return;if(fs.existsSync(path.join(store.state,'sync-config.json'))){clearTimeout(debounce);debounce=setTimeout(()=>sync.reconcile(),5000);}});
+  return { server, store, index, query, domains, scheduler, sync, mediaSync,address: server.address(), close: async () => { watcher.close();clearTimeout(debounce);clearInterval(telegramTimer);clearInterval(interval);clearInterval(jobs);clearInterval(syncTimer);clearInterval(mediaTimer); await new Promise(resolve => server.close(resolve)); index.close(); } };
 }
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const root = process.env.GODSPEED_WORKSPACE;

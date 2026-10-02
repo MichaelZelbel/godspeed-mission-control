@@ -7,7 +7,9 @@ services:
       GODSPEED_ACCESS_TOKEN: ${GODSPEED_CANDIDATE_TOKEN:?Generate a separate candidate access token}
       GODSPEED_DEVICE: vps
       GODSPEED_COMPUTER: "off"
-      GODSPEED_TELEGRAM: "off"
+      GODSPEED_TELEGRAM: ${GODSPEED_CANDIDATE_TELEGRAM:-off}
+      GODSPEED_CANDIDATE_BOT_TOKEN: ${GODSPEED_CANDIDATE_BOT_TOKEN:-}
+      GODSPEED_CANDIDATE_BOT_OWNER: ${GODSPEED_CANDIDATE_BOT_OWNER:-}
     volumes:
       - candidate-data:/opt/data/full-candidate
     ports:

@@ -18,6 +18,8 @@ if(command==='init'){
   const starter=fileURLToPath(new URL('../../starter-godspeed/',import.meta.url));
   for(const name of ['AGENTS.md','CLAUDE.md','profile','rules','skills','procedures.md'])if(!fs.existsSync(path.join(root,name)))fs.cpSync(path.join(starter,name),path.join(root,name),{recursive:true});
   const addons=fileURLToPath(new URL('../../third-party/addons/',import.meta.url));
+  const recipes=fileURLToPath(new URL('../recipes/',import.meta.url));
+  if(fs.existsSync(recipes))for(const name of fs.readdirSync(recipes))if(!fs.existsSync(path.join(root,'skills',name)))fs.cpSync(path.join(recipes,name),path.join(root,'skills',name),{recursive:true});
   for(const [name,recipe] of [['godspeed-coach','coach'],['godspeed-journal','interstitial-journal'],['mc-phone','phone-errands'],['mc-video','video-finishing']]){
     const source=path.join(addons,name,'skill',recipe);if(fs.existsSync(source)&&!fs.existsSync(path.join(root,'skills',recipe)))fs.cpSync(source,path.join(root,'skills',recipe),{recursive:true});
   }

@@ -75,7 +75,12 @@ export class Domains {
     }
     if (name === 'quick-capture') return { note: this.store.save('notes', { title: input.title || 'Captured note', content: input.content || input.text || '', source_app: input.source_app || 'capture' }) };
     if (name === 'merge-contacts') {
-      if (input.merge_into_self) throw new Error('Merge into self needs explicit fact remapping');
+      if (input.merge_into_self) return this.store.withLock(()=>{
+        const source=this.store.get('contacts',input.source_contact_id);if(!source)throw new Error('Person missing');
+        const changes=['claims','fact_slots'].flatMap(type=>this.query.rows(type).filter(r=>r.subject_type==='contact'&&r.subject_id===source.id).map(r=>{const next=this.store.prepare(type,{subject_type:'self',subject_id:null,contact_id:null,merged_from_contact_id:source.id},r);next.references=this.query.references(type,next);return next;}));
+        const aliases=[source.name,...source.aliases||[]].map(alias=>this.store.prepare('user_self_aliases',{alias,source_contact_id:source.id}));
+        this.store.commit([...changes,...aliases,this.store.prepare('contacts',{merged_into:'self',removed_at:new Date().toISOString()},source)]);return {success:true,merged_into_self:true};
+      });
       const target = this.store.structural('contacts', input.source_contact_id, 'merge', { target: input.target_contact_id }); return { success: true, target_contact_id: target.id };
     }
     if (name === 'profile-lint') {
