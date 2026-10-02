@@ -77,8 +77,13 @@ function agentBrowser(args, timeoutMs = 60000) {
     const timer = setTimeout(() => { try { p.kill('SIGKILL'); } catch { /* */ } }, timeoutMs);
     p.stdout.on('data', d => { out += d; });
     p.stderr.on('data', d => { err += d; });
-    p.on('error', e => { clearTimeout(timer); resolve({ code: -1, out, err: e.message }); });
-    p.on('close', code => { clearTimeout(timer); resolve({ code, out: stripAnsi(out).trim(), err: stripAnsi(err).trim() }); });
+    let done = false;
+    const finish = code => { if (done) return; done = true; clearTimeout(timer); resolve({ code, out: stripAnsi(out).trim(), err: stripAnsi(err).trim() }); };
+    p.on('error', e => { err += e.message; finish(-1); });
+    p.on('close', code => finish(code));
+    // The engine's background process can inherit the output pipes and keep them open (seen on
+    // Windows), so 'close' may never come: the program's own exit, plus a moment to read, is enough.
+    p.on('exit', code => setTimeout(() => finish(code), 150));
   });
 }
 
@@ -122,6 +127,46 @@ async function browse(args, limit = 30000) {
   return text(out || 'Done.');
 }
 
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const unquote = s => String(s || '').trim().replace(/^"|"$/g, '');
+
+// Opens a page and calls it open once its address has changed and its text is there. The engine's
+// own "open" waits for every last script and image and then times out (25 s) on a page with one slow
+// part, after which its next commands wait behind it (tested 2026-10-02 on the-internet.herokuapp.com,
+// which stays blank for about 25 s on a first visit in any Chrome). So the page is asked to go there,
+// a moment later so the answer to that request is not cut off by the navigation, and is watched.
+async function openPage(url) {
+  const before = unquote((await agentBrowser(['get', 'url'], 15000)).out);
+  const nav = await agentBrowser(['eval', `setTimeout(function () { location.href = ${JSON.stringify(url)}; }, 50); 'going'`], 15000);
+  if (nav.code !== 0) {
+    // No page to ask (a browser error page, a PDF): the engine's own way, with its own wait.
+    const r = await agentBrowser(['open', url], 45000);
+    return r.code === 0 ? text(r.out || 'Opened.') : text('The browser on the user\'s computer did not open that: ' + (r.out || r.err || 'no answer'), true);
+  }
+  const started = Date.now();
+  const limit = Number(process.env.GODSPEED_COMPUTER_OPEN_WAIT_MS || 25000);
+  let state = '', href = '', ready = '', length = 0;
+  await sleep(500);
+  while (Date.now() - started < limit) {
+    const s = await agentBrowser(['eval', '[document.readyState, document.body ? document.body.innerText.length : 0, location.href].join(" ")'], 10000);
+    if (s.code === 0) {
+      state = unquote(s.out);
+      const m = state.match(/^(\S+) (\d+) (.*)$/);
+      if (m) {
+        [ready, length, href] = [m[1], Number(m[2]), m[3]];
+        const moved = href !== before || Date.now() - started > 2500 || before === 'about:blank';
+        if (/^https?:\/\//.test(href) && moved && (ready === 'complete' || (ready === 'interactive' && length > 0) || length > 200)) break;
+      }
+    }
+    await sleep(400);
+  }
+  if (!/^https?:\/\//.test(href)) return text('The browser on the user\'s computer did not open that' + (state ? ' (it shows: ' + state.slice(0, 120) + ')' : '') + '.', true);
+  const t = await agentBrowser(['get', 'title'], 15000);
+  const note = ready === 'complete' ? '' : length > 0 ? '\n(Still loading a few parts; its text is readable.)'
+    : '\n(The site is slow: nothing readable yet. Read it again in a little while.)';
+  return text(`✓ ${unquote(t.out)}\n  ${href}` + note);
+}
+
 function cdpCall(steps) {
   return new Promise((resolve, reject) => {
     http.get(`http://127.0.0.1:${CDP}/json/version`, { timeout: 10000 }, res => {
@@ -161,20 +206,7 @@ async function call(name, a = {}) {
       if (stop) return text(stop);
       const cold = await warm();
       if (cold) return text(cold, true);
-      const r = await agentBrowser(['open', String(a.url)], Number(process.env.GODSPEED_COMPUTER_OPEN_WAIT_MS || 15000));
-      if (r.code === 0) return text(r.out || 'Opened.');
-      // The engine (agent-browser 0.26.0) times out when the first page of a session redirects,
-      // although the page has opened (tested 2026-10-02, with and without the relay). So: where is
-      // the tab now? A web page there is an opened page.
-      const again = await gate();
-      if (again) return text(again);
-      const u = await agentBrowser(['get', 'url'], 15000);
-      const url = (u.out || '').trim();
-      if (u.code === 0 && /^https?:\/\//.test(url)) {
-        const t = await agentBrowser(['get', 'title'], 15000);
-        return text(`✓ ${(t.out || '').trim()}\n  ${url}\n(The page took long to finish loading; read it to see what it shows.)`);
-      }
-      return text('The browser on the user\'s computer did not open that: ' + (r.out || r.err || 'no answer'), true);
+      return openPage(String(a.url));
     }
     case 'computer_browser_snapshot': return browse(['snapshot', '-i']);
     case 'computer_browser_read': return browse(['get', 'text', 'body']);
@@ -254,4 +286,4 @@ if (require.main === module) {
   process.stdin.on('end', () => process.exit(0));
 }
 
-module.exports = { TOOLS, call, handle };
+module.exports = { TOOLS, call, handle, openPage };

@@ -259,8 +259,20 @@ if(a[0]==='-z')process.stdout.write('Your computer is back, so I checked: 2 parc
   // ---------------------------------------------------------------------------------------------
   console.log('== the assistant\'s tools');
   const mdir = path.join(TMP, 'mcp');
+  // A stand-in for the browser engine: one tab with an address, a loading state and text, kept in a
+  // file between calls, plus a log of every call. FAKE_AB_SLOW makes the page never finish loading
+  // (one slow script) while its text is already there.
   const fakeAb = path.join(TMP, 'fake-ab.js');
-  fs.writeFileSync(fakeAb, `process.stdout.write('AB ' + process.argv.slice(2).join(' '));`);
+  const abState = path.join(TMP, 'fake-ab-state.json');
+  fs.writeFileSync(fakeAb, `const fs = require('fs'); const a = process.argv.slice(2); const cmd = a.slice(4);
+const f = ${JSON.stringify(abState)}; let st = { url: 'about:blank' }; try { st = JSON.parse(fs.readFileSync(f, 'utf8')); } catch {}
+fs.appendFileSync(f + '.log', a.join(' ') + '\\n');
+if (cmd[0] === 'eval' && cmd[1].includes('location.href = ')) { const i = cmd[1].indexOf('location.href = ') + 16; st.url = JSON.parse(cmd[1].slice(i, cmd[1].indexOf(';', i))); st.at = Date.now(); fs.writeFileSync(f, JSON.stringify(st)); process.stdout.write('"going"'); }
+else if (cmd[0] === 'eval') { const slow = !!process.env.FAKE_AB_SLOW; const ready = slow ? 'loading' : (Date.now() - (st.at || 0) > 300 ? 'complete' : 'loading');
+  const shown = st.url.endsWith('/secure') ? st.url.replace('/secure', '/login') : st.url; process.stdout.write('"' + ready + ' 512 ' + shown + '"'); }
+else if (cmd.join(' ') === 'get url') process.stdout.write(st.url);
+else if (cmd.join(' ') === 'get title') process.stdout.write(st.url.includes('login') || st.url.endsWith('/secure') ? 'Log in' : 'Example Domain');
+else process.stdout.write('AB ' + a.join(' '));`);
   const mrelay = startRelay({ dir: mdir, doorPort: 0, cdpPort: 0, doorHost: '127.0.0.1', log: quietLog, runWaiting: () => {} });
   await mrelay.ready;
   const mcp = spawn(process.execPath, [path.join(ROOT, 'mcp.js')], {
@@ -301,16 +313,12 @@ if(a[0]==='-z')process.stdout.write('Your computer is back, so I checked: 2 parc
   await until(() => mh.open, 3000);
   await check('with the computer on, "open" drives the browser through the server\'s local endpoint', async () => {
     const t = await tool('computer_browser_open', { url: 'https://example.org/' });
-    return t === `AB --session godspeed-computer --cdp ${mrelay.cdpPort()} open https://example.org/` || t;
+    const calls = fs.readFileSync(abState + '.log', 'utf8');
+    return (t === '✓ Example Domain\n  https://example.org/' && calls.includes(`--session godspeed-computer --cdp ${mrelay.cdpPort()} eval setTimeout(function () { location.href = "https://example.org/"; }, 50)`)) || t;
   });
-  await check('a page that opened while the engine timed out (a redirect) is reported as opened', async () => {
-    const fakeSlow = path.join(TMP, 'fake-ab-slow.js');
-    fs.writeFileSync(fakeSlow, `const a = process.argv.slice(2); const cmd = a.slice(4).join(' ');
-if (cmd.startsWith('open')) { process.stdout.write('Operation timed out. The page may still be loading'); process.exit(1); }
-if (cmd === 'get url') process.stdout.write('https://example.org/login');
-if (cmd === 'get title') process.stdout.write('Log in');`);
+  await check('a page with one slow script is open once its text is there, redirect and all', async () => {
     const m2 = spawn(process.execPath, [path.join(ROOT, 'mcp.js')], {
-      env: { ...process.env, GODSPEED_COMPUTER_DIR: mdir, GODSPEED_COMPUTER_CDP_PORT: String(mrelay.cdpPort()), GODSPEED_COMPUTER_AGENT_BROWSER: `"${process.execPath}" "${fakeSlow}"` },
+      env: { ...process.env, FAKE_AB_SLOW: '1', GODSPEED_COMPUTER_DIR: mdir, GODSPEED_COMPUTER_CDP_PORT: String(mrelay.cdpPort()), GODSPEED_COMPUTER_AGENT_BROWSER: `"${process.execPath}" "${fakeAb}"` },
       stdio: ['pipe', 'pipe', 'inherit'],
     });
     const answer = await new Promise(r => {
@@ -319,7 +327,7 @@ if (cmd === 'get title') process.stdout.write('Log in');`);
     });
     m2.stdin.end();
     const t = answer.result.content[0].text;
-    return (/Log in/.test(t) && /example\.org\/login/.test(t) && !answer.result.isError) || t;
+    return (/Log in/.test(t) && /example\.org\/login/.test(t) && /Still loading/.test(t) && !answer.result.isError) || t;
   });
   await check('"stop using my computer" and "use my computer again"', async () => {
     await tool('computer_switch', { on: false });
