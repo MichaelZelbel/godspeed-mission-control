@@ -313,6 +313,11 @@ async function runWaitingJobs({ dir, log = C.log }) {
 }
 
 if (require.main === module) {
+  // What the connection code must name, from the container's settings, for the tools Hermes starts
+  // (they may not see the container's environment).
+  S.writeJson(require('path').join(C.serverDir(), 'door.json'), {
+    port: Number(process.env.GODSPEED_COMPUTER_PORT || C.DOOR_PORT), host: (process.env.GODSPEED_PUBLIC_HOST || '').trim(),
+  });
   const relay = startRelay();
   relay.ready.catch(e => { C.log('cannot start:', e.message); process.exit(1); });
   const stop = () => relay.close().then(() => process.exit(0));

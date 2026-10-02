@@ -96,7 +96,16 @@ COPY docker/rootfs/ /
 RUN chmod 755 /usr/local/bin/godspeed-setup /usr/local/bin/godspeed-patrol /usr/local/bin/crontab \
               /usr/local/bin/godspeed-telegram-setup \
               /etc/s6-overlay/s6-rc.d/godspeed-patrol/run /etc/s6-overlay/s6-rc.d/godspeed-cron/run \
-              /etc/s6-overlay/s6-rc.d/godspeed-upgrade/run /etc/s6-overlay/s6-rc.d/godspeed-telegram-setup/run
+              /etc/s6-overlay/s6-rc.d/godspeed-upgrade/run /etc/s6-overlay/s6-rc.d/godspeed-telegram-setup/run \
+              /etc/s6-overlay/s6-rc.d/godspeed-computer/run \
+              /opt/godspeed/kit/computer/godspeed-computer /opt/godspeed/kit/computer/relay.js \
+              /opt/godspeed/kit/computer/mcp.js /opt/godspeed/kit/computer/helper.js; \
+    ln -sf /opt/godspeed/kit/computer/godspeed-computer /usr/local/bin/godspeed-computer
+
+# The computer link (computer use layer 2, D-285): the user's own computer connects OUT to this
+# one port and lends Godspeed Chrome to the assistant. Nothing answers on it until the assistant
+# was asked for a connection code; GODSPEED_COMPUTER=off keeps it closed (compose.yaml).
+EXPOSE 7443
 
 # Which image this is, so a new one knows to run the update path once on an old volume.
 ARG VERSION=dev

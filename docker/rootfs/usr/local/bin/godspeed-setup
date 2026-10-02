@@ -29,6 +29,14 @@ if [ -z "$(hermes config get browser.backend 2>/dev/null)" ]; then
   hermes config set browser.backend off >/dev/null 2>&1 || true
 fi
 
+# Your own computer's browser (computer use layer 2, D-285): the assistant's "your computer's
+# browser" tools, beside its own browser. Before any computer is paired, or while it is off, they
+# answer in plain words, so they are wired for everyone; a choice already made is kept.
+if [ "${GODSPEED_COMPUTER:-on}" != off ] && [ -z "$(hermes config get mcp_servers.computer.command 2>/dev/null)" ]; then
+  hermes config set mcp_servers.computer.command node >/dev/null 2>&1 || true
+  hermes config set mcp_servers.computer.args '["/opt/godspeed/kit/computer/mcp.js"]' >/dev/null 2>&1 || true
+fi
+
 bash "${KB_KIT_DIR:-/opt/godspeed/kit}/server/install.sh" "$@"
 rc=$?
 # Recorded so the next start of THIS image does not run the update path again

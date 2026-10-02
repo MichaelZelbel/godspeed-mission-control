@@ -10,8 +10,10 @@ const S = require('./state');
 
 // The address the user's computer dials: GODSPEED_PUBLIC_HOST when set (a name or an address),
 // else the server's public address as the internet sees it, asked once and kept.
+const door = dir => S.readJson(path.join(dir, 'door.json'), {});
+
 function publicHost(dir) {
-  const set = (process.env.GODSPEED_PUBLIC_HOST || '').trim();
+  const set = (process.env.GODSPEED_PUBLIC_HOST || '').trim() || door(dir).host;
   if (set) return Promise.resolve(set);
   const cache = path.join(dir, 'public-host');
   try { const h = fs.readFileSync(cache, 'utf8').trim(); if (h) return Promise.resolve(h); } catch { /* ask */ }
@@ -35,7 +37,7 @@ function publicHost(dir) {
 async function pairLine(dir = C.serverDir()) {
   const host = await publicHost(dir);
   const { fingerprint } = S.serverCert(dir);
-  const port = Number(process.env.GODSPEED_COMPUTER_PORT || C.DOOR_PORT);
+  const port = Number(process.env.GODSPEED_COMPUTER_PORT || door(dir).port || C.DOOR_PORT);
   const code = S.newPairCode(dir);
   return C.encodePairLine({ host, port, fingerprint, code });
 }

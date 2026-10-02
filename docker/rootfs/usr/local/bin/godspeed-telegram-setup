@@ -885,7 +885,10 @@ def step_hand_over(chat):
             "Want me on your computer too? Same folder, same memory.\n\n"
             "<b>Windows:</b> download and run %s\nWhere it asks for \"Address of a mission control you "
             "already have\", paste:\n<code>%s</code>\nIf it asks you to sign in to GitHub, use the same "
-            "account.\n\n<b>Mac or Linux:</b> paste this into a terminal:\n<code>curl -fsSL %s | bash -s -- --repo %s</code>"
+            "account.\n\n<b>Mac or Linux:</b> paste this into a terminal:\n<code>curl -fsSL %s | bash -s -- --repo %s</code>\n\n"
+            "When it asks whether I may use a browser on your computer, a yes lets me use the sites you log "
+            "into there, like your orders or your bank. It then asks for a connection code: write me "
+            "\"connect my computer\" and I send you one."
             % (WINDOWS_EXE, esc(url), ONE_LINER, esc(url)))
 
 

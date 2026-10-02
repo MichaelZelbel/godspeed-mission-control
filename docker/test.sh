@@ -21,7 +21,7 @@ health() { docker inspect -f '{{.State.Health.Status}}' godspeed 2>/dev/null; }
 wait_healthy() { for _ in $(seq 1 60); do [ "$(health)" = healthy ] && return 0; sleep 3; done; return 1; }
 build() { docker build -q --build-arg VERSION="$1" --build-arg REVISION="$(git rev-parse --short HEAD 2>/dev/null || echo local)" \
             -f docker/Dockerfile -t "$IMG" . >/dev/null; }
-cleanup() { (cd "$WORK" && docker compose down -v >/dev/null 2>&1); rm -rf "$WORK"; }
+cleanup() { docker rm -f gs-home >/dev/null 2>&1; (cd "$WORK" && docker compose down -v >/dev/null 2>&1); rm -rf "$WORK"; }
 trap cleanup EXIT
 
 cp docker/compose.yaml "$WORK/compose.yaml"
@@ -33,6 +33,12 @@ services:
     volumes:
       - $ROOT/docker/test/fake-gh:/usr/local/bin/gh:ro
       - $ROOT/docker/test/probe-browser.py:/opt/test/probe-browser.py:ro
+      - $ROOT/docker/test/probe-computer.py:/opt/test/probe-computer.py:ro
+    environment:
+      # The computer link's test round: the stand-in computer reaches the server by its name on
+      # the compose network, and its test site lives on its own 127.0.0.1.
+      GODSPEED_PUBLIC_HOST: godspeed
+      GODSPEED_COMPUTER_ALLOW_HOSTS: 127.0.0.1
 EOF
 cd "$WORK"
 
@@ -78,7 +84,7 @@ check "the image version is recorded" sh -c "docker exec godspeed grep -q '^v1+'
 check "healthy after setup restarted the gateway" wait_healthy
 check "nothing in the volume belongs to root" sh -c "[ -z \"\$(docker exec godspeed find /opt/data -user root -print -quit)\" ]"
 check "no Docker socket inside" sh -c "! docker exec godspeed test -e /var/run/docker.sock"
-check "no port is published" sh -c "[ -z \"\$(docker port godspeed)\" ]"
+check "only the computer door is published" sh -c "docker port godspeed | grep -q '^7443/tcp' && [ -z \"\$(docker port godspeed | grep -v '^7443/tcp')\" ]"
 check "the CPU limit is in force" sh -c "docker exec godspeed cat /sys/fs/cgroup/cpu.max | grep -q '^100000 100000'"
 check "no new privileges" sh -c "docker exec godspeed grep -q '^NoNewPrivs:[[:space:]]*1' /proc/1/status"
 
@@ -98,6 +104,56 @@ fi
 check "the browser needed nothing downloaded on first use" sh -c \
   "[ -z \"\$(docker exec godspeed find /opt/data -path '*/_npx/*' -name agent-browser -print -quit)\" ]"
 
+# Your computer lends its browser (computer use layer 2, D-285). A second container from the same
+# image plays the user's computer: it pairs with the code the assistant would send and runs the
+# helper with the image's headless Chrome. The assistant's tools are called the way a model's tool
+# call calls them, through Hermes (docker/test/probe-computer.py).
+echo "== your computer lends its browser"
+has() { printf '%s' "$1" | grep -q -- "$2"; }
+P() { docker exec -u hermes -e HOME=/opt/data godspeed timeout 300 /opt/hermes/.venv/bin/python3 /opt/test/probe-computer.py call "$@" 2>/dev/null | tail -1; }
+connected() { for _ in $(seq 1 "${1:-30}"); do x godspeed-computer status 2>/dev/null | grep -q '^Connected' && return 0; sleep 1; done; return 1; }
+check "the computer link runs, as the assistant's account" sh -c "docker exec godspeed ps -eo user,args | grep -q '^hermes .*computer/relay.js'"
+check "the assistant has the computer tools" sh -c "docker exec -u hermes -e HOME=/opt/data godspeed hermes mcp list | grep -q computer"
+check "nothing answers on the computer port before a code was asked for" sh -c "! curl -sk --max-time 5 https://127.0.0.1:7443/v1/ping"
+OUT="$(P computer_browser_open '{"url":"https://example.org/"}')"
+check "before a computer is paired, the tools say how to set it up" has "$OUT" "NOT SET UP"
+LINE="$(x godspeed-computer pair | tail -1)"
+check "\"connect my computer\" makes a connection code" has "$LINE" "^godspeed1\."
+check "the door answers once a code was asked for" sh -c "for i in 1 2 3 4 5 6 7 8 9 10; do curl -sk --max-time 5 https://127.0.0.1:7443/v1/ping | grep -q computer && exit 0; sleep 1; done; exit 1"
+NET="$(docker inspect -f '{{range $k, $v := .NetworkSettings.Networks}}{{$k}}{{end}}' godspeed)"
+docker run -d --name gs-home --network "$NET" -u hermes --entrypoint sh \
+  -e GODSPEED_COMPUTER_HOME=/tmp/home -e GODSPEED_COMPUTER_SECRET=file -e GODSPEED_COMPUTER_HEADLESS=1 \
+  -e GODSPEED_COMPUTER_NO_SANDBOX=1 -e GODSPEED_COMPUTER_BROWSER=/opt/godspeed/chrome-headless-shell \
+  -e GODSPEED_COMPUTER_ALLOW_HOSTS=127.0.0.1 -e GODSPEED_COMPUTER_OFF_RETRY_MS=3000 -e LINE="$LINE" \
+  -v "$ROOT/docker/test/home-site.js:/opt/test/home-site.js:ro" "$IMG" -c \
+  'node /opt/test/home-site.js & node /opt/godspeed/kit/computer/helper.js pair "$LINE" --name "test computer" && exec node /opt/godspeed/kit/computer/helper.js run' >/dev/null
+check "the computer pairs with the code and connects out to the server" connected 40
+check "the same code does not work a second time" sh -c "docker exec gs-home node /opt/godspeed/kit/computer/helper.js pair '$LINE' | grep -q 'not valid any more'"
+check "a Telegram chat is offered the computer tools" x timeout 300 /opt/hermes/.venv/bin/python3 /opt/test/probe-computer.py offered
+P computer_browser_open '{"url":"http://127.0.0.1:8099/login"}' >/dev/null
+P computer_browser_open '{"url":"http://127.0.0.1:8099/account"}' >/dev/null
+OUT="$(P computer_browser_read)"
+check "the assistant reads a page behind the login made on the computer" has "$OUT" "gs_login=yes"
+OUT="$(P computer_browser_open '{"url":"http://192.168.1.1/"}')"
+check "the tools never open the home network" has "$OUT" "Not opened"
+check "every page the assistant opened is listed on the computer" sh -c "docker exec gs-home node /opt/godspeed/kit/computer/helper.js pages | grep -q '8099/account'"
+docker pause gs-home >/dev/null
+sleep 20
+OUT="$(P computer_browser_open '{"url":"http://127.0.0.1:8099/account"}')"
+check "a computer that falls asleep is noticed, and the assistant is told in plain words" has "$OUT" "NOT CONNECTED"
+P computer_when_back '{"task":"read the account page on my computer"}' >/dev/null
+check "a job can wait for the computer" sh -c "docker exec -u hermes -e HOME=/opt/data godspeed godspeed-computer waiting | grep -q 'account page'"
+docker unpause gs-home >/dev/null
+check "the computer is back by itself after waking" connected 40
+check "the waiting job is picked up when the computer is back" sh -c \
+  "for i in \$(seq 1 30); do docker exec -u hermes -e HOME=/opt/data godspeed godspeed-computer waiting | grep -q 'Nothing is waiting' && docker logs godspeed 2>&1 | grep -q 'running a job that waited' && exit 0; sleep 1; done; exit 1"
+x godspeed-computer off >/dev/null
+check "\"stop using my computer\" disconnects it" sh -c "sleep 5; ! docker exec -u hermes -e HOME=/opt/data godspeed godspeed-computer status | grep -q '^Connected'"
+OUT="$(P computer_browser_read)"
+check "while switched off, the tools refuse in plain words" has "$OUT" "SWITCHED OFF"
+x godspeed-computer on >/dev/null
+check "\"use my computer again\" brings it back" connected 40
+
 echo "== a runaway command"
 docker exec -u hermes -d godspeed sh -c 'nohup sh -c "while :; do :; done" >/dev/null 2>&1 &'
 sleep 3
@@ -116,6 +172,8 @@ for _ in $(seq 1 200); do docker exec godspeed grep -q '^v2+' /opt/data/.godspee
 check "the new image ran the update path once" sh -c "docker exec godspeed grep -q '^v2+' /opt/data/.godspeed/image-version"
 check "the folder survived the upgrade" x grep -q 'remember me' /opt/data/godspeed/volume-probe.txt
 check "healthy after the upgrade" wait_healthy
+check "after the upgrade the computer reconnects by itself, with no new code" connected 60
+check "after the upgrade the assistant still has the computer tools" sh -c "docker exec -u hermes -e HOME=/opt/data godspeed hermes mcp list | grep -q computer"
 check "without a bot token the chat setup stays out of the way" sh -c \
   "! docker exec godspeed pgrep -f 'bin/godspeed-telegram-setup'"
 

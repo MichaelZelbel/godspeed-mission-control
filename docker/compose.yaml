@@ -16,8 +16,14 @@ services:
     volumes:
       - godspeed-data:/opt/data
 
-    # No ports. Telegram is reached by asking Telegram for new messages, an outgoing
-    # connection, so nothing on the internet ever connects in.
+    # Telegram is reached by asking Telegram for new messages, an outgoing connection.
+    # One port, for your own computer and nothing else (docker/README.md, "Lend your computer's
+    # browser"): the Godspeed helper on your Windows or Mac computer connects OUT to it and lends
+    # the assistant a browser window where you are logged in. It is locked with a key that only a
+    # connection code from your assistant gives, and nothing answers on it until you ask your
+    # assistant for one. GODSPEED_COMPUTER=off keeps it closed.
+    ports:
+      - "${GODSPEED_COMPUTER_PORT:-7443}:7443"
 
     environment:
       TZ: ${TZ:-Europe/Berlin}
@@ -30,6 +36,12 @@ services:
       # Optional: only this Telegram @username (or numeric id) may take the bot. Empty
       # means the first person to write to it, which is you if you write first.
       GODSPEED_TELEGRAM_OWNER: ${GODSPEED_TELEGRAM_OWNER:-}
+      # Your computer's browser (see ports above). on | off
+      GODSPEED_COMPUTER: ${GODSPEED_COMPUTER:-on}
+      # The port your computer dials, as published above, and this server's address on the
+      # internet. Empty means the address the internet sees, found by itself.
+      GODSPEED_COMPUTER_PORT: ${GODSPEED_COMPUTER_PORT:-7443}
+      GODSPEED_PUBLIC_HOST: ${GODSPEED_PUBLIC_HOST:-}
 
     # THE WALLS. Whatever the assistant starts, the container as a whole never gets more
     # than this. One core by default, which leaves the rest of the server to everything
