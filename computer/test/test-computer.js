@@ -537,8 +537,14 @@ async function realRun(found, site) {
     await runNode(['resume']);
     await check('Resume connects it again', async () => (await until(() => rr.status().connected, 10000, 100)) || 'not back');
     page.close();
-    // leave Godspeed Chrome closed
-    try { const k = await cdp(); await k.send('Browser.close'); k.ws.close(); } catch { /* */ }
+    await check('uninstalling while Godspeed Chrome is open closes it and removes its profile with the logins', async () => {
+      const k = await cdp(); await k.send('Target.createTarget', { url: 'about:blank' }); k.ws.close();
+      const gport = Number(fs.readFileSync(path.join(home, 'profile', 'godspeed-port'), 'utf8'));
+      helper.kill();
+      const un = await runNode(['uninstall']);
+      const stillOpen = await getJson(`http://127.0.0.1:${gport}/json/version`);
+      return (un.code === 0 && !fs.existsSync(path.join(home, 'profile')) && stillOpen.status === 0) || { out: un.out, profile: fs.existsSync(path.join(home, 'profile')), open: stillOpen.status };
+    });
   } finally {
     await stopAll();
   }

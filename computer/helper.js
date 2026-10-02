@@ -20,7 +20,7 @@ const https = require('https');
 const WebSocket = require('./vendor/ws');
 const C = require('./lib/common');
 const secret = require('./lib/secret');
-const { ensureBrowser, getJson } = require('./lib/browser');
+const { ensureBrowser, getJson, closeBrowser, activePort } = require('./lib/browser');
 const { startProxy } = require('./lib/proxy');
 
 const HOME = C.homeDir();
@@ -402,9 +402,16 @@ function pages(n = 30) {
   return 0;
 }
 
-function uninstall(keepProfile) {
+async function uninstall(keepProfile) {
   off();
-  if (!keepProfile) fs.rmSync(PROFILE, { recursive: true, force: true });
+  // Godspeed Chrome holds its profile open: close it first, or its folder cannot be removed.
+  const port = activePort(PROFILE);
+  if (port) { try { await closeBrowser(port); } catch { /* not running */ } }
+  if (!keepProfile) {
+    for (let i = 0; i < 10; i++) {
+      try { fs.rmSync(PROFILE, { recursive: true, force: true }); break; } catch { await new Promise(r => setTimeout(r, 500)); }
+    }
+  }
   for (const f of ['status.json', 'pages.log', 'helper.log', 'helper.log.old']) fs.rmSync(F(f), { force: true });
   say(keepProfile ? 'Removed. Godspeed Chrome\'s profile with your logins was kept.' : 'Removed, together with Godspeed Chrome\'s profile and the logins in it.');
   return 0;
