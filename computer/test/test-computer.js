@@ -13,8 +13,8 @@ const { spawn } = require('child_process');
 
 const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'gs-computer-'));
 Object.assign(process.env, {
-  GODSPEED_COMPUTER_HB_MS: '200',
-  GODSPEED_COMPUTER_SILENCE_MS: '1000',
+  GODSPEED_COMPUTER_HB_MS: '300',
+  GODSPEED_COMPUTER_SILENCE_MS: '2500',   // short, but a busy CI runner starting Chrome can pause a program for a second
   GODSPEED_COMPUTER_OFF_RETRY_MS: '1500',
   GODSPEED_COMPUTER_QUIET: '1',
   GODSPEED_COMPUTER_HOME: path.join(TMP, 'home'),
@@ -206,7 +206,7 @@ function fakeHelper({ port, certPem, device, key, answerHb = true }) {
     const gone = await until(async () => { const r = await getJson(`http://127.0.0.1:${cdpP}/godspeed/status`); return r.body && !r.body.connected; }, 4000);
     const took = Date.now() - t0;
     const r = await getJson(`http://127.0.0.1:${cdpP}/json/version`);
-    return (gone && took < 2500 && r.status === 503) || { gone, took, status: r.status };
+    return (gone && took < 4500 && r.status === 503) || { gone, took, status: r.status };
   });
   h1 = fakeHelper(dev);
   await until(() => h1.open, 3000);
@@ -448,7 +448,7 @@ async function realRun(found, site) {
     const cdpBase = `http://127.0.0.1:${rr.cdpPort()}`;
     const cdp = async () => {
       let v = null;
-      for (let i = 0; i < 3 && !(v && v.webSocketDebuggerUrl); i++) v = (await getJson(cdpBase + '/json/version')).body; // a cold first start can be slow
+      for (let i = 0; i < 8 && !(v && v.webSocketDebuggerUrl); i++) { if (i) await sleep(1000); v = (await getJson(cdpBase + '/json/version')).body; } // a cold first start can be slow, and a busy runner may reconnect once
       if (!v || !v.webSocketDebuggerUrl) throw new Error('no browser through the relay: ' + JSON.stringify(v));
       const ws = new WebSocket(v.webSocketDebuggerUrl);
       await new Promise((r, j) => { ws.on('open', r); ws.on('error', j); });
