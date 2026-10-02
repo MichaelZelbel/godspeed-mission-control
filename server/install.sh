@@ -657,9 +657,9 @@ if [ "${KB_MORNING_BRIEF:-}" != "yes" ] && [ "${KB_MORNING_BRIEF:-}" != "no" ]; 
    in what you have told it. This message is called your morning brief.
 
    It arrives at 06:00 $BRIEF_ZONE time, the time zone this server is set to.
-   What goes into it is a short recipe you write with your assistant, in
-   plain words; Chapter 22 of the book walks you through it. Until you have
-   written it, the message tells you the recipe is still missing.
+   At first it is short, because your assistant knows little about you yet;
+   it grows with what you tell it. You can change what goes into it at any
+   time just by telling your assistant (Chapter 22 of the book shows how).
 
    Say no if you do not want it yet. Nothing is sent, and you can switch it
    on later by running this same install line again.

@@ -6,6 +6,11 @@ clock on it.
 
 ## Half one: the recipe (do this first, always)
 
+Your mission control already carries a starter version at
+`skills/morning-brief/SKILL.md`, so a brief you switched on during setup has
+something real to send from the first morning. The prompt below replaces that
+starter with your own.
+
 First tell your assistant which time zone to use, such as Europe/London.
 Then, in a session in Hermes, paste this:
 
