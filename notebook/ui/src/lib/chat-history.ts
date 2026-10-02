@@ -1,3 +1,4 @@
+import { loadFileChat, saveFileChat, clearFileChat } from '@/local/file-chat';
 /**
  * Persistent chat history helpers.
  *
@@ -59,68 +60,14 @@ export function chatStorageKey(userId: string | undefined, contextKey: string): 
   return `${STORAGE_PREFIX}:${userId || "anon"}:${contextKey}`;
 }
 
-export function loadChatState(
-  userId: string | undefined,
-  contextKey: string,
-): PersistedChatState {
-  if (typeof window === "undefined") {
-    return { messages: [], summary: "", summarizedUpTo: 0 };
-  }
-  try {
-    const raw = window.localStorage.getItem(chatStorageKey(userId, contextKey));
-    if (!raw) return { messages: [], summary: "", summarizedUpTo: 0 };
-    const parsed = JSON.parse(raw);
-    return {
-      messages: Array.isArray(parsed.messages) ? parsed.messages : [],
-      summary: typeof parsed.summary === "string" ? parsed.summary : "",
-      summarizedUpTo:
-        typeof parsed.summarizedUpTo === "number" ? parsed.summarizedUpTo : 0,
-    };
-  } catch {
-    return { messages: [], summary: "", summarizedUpTo: 0 };
-  }
+export function loadChatState(userId: string | undefined, contextKey: string): PersistedChatState {
+  return loadFileChat(contextKey);
 }
-
-export function saveChatState(
-  userId: string | undefined,
-  contextKey: string,
-  state: PersistedChatState,
-): void {
-  if (typeof window === "undefined") return;
-  try {
-    // Cap total stored messages so localStorage stays healthy.
-    const trimmed: PersistedChatState = {
-      ...state,
-      messages: state.messages.slice(-MAX_STORED_MESSAGES),
-      // summarizedUpTo is an index from the start of the messages array. When
-      // we drop the oldest `dropped` messages, that index must shift down by
-      // the same amount, or already-summarized offsets would point at newer,
-      // never-summarized turns (which the summarizer would then skip and lose).
-      summarizedUpTo: Math.max(
-        0,
-        state.summarizedUpTo -
-          Math.max(0, state.messages.length - MAX_STORED_MESSAGES),
-      ),
-    };
-    window.localStorage.setItem(
-      chatStorageKey(userId, contextKey),
-      JSON.stringify(trimmed),
-    );
-  } catch {
-    // localStorage might be full — silently ignore.
-  }
+export function saveChatState(userId: string | undefined, contextKey: string, state: PersistedChatState): void {
+  saveFileChat(contextKey, state);
 }
-
-export function clearChatState(
-  userId: string | undefined,
-  contextKey: string,
-): void {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.removeItem(chatStorageKey(userId, contextKey));
-  } catch {
-    // ignore
-  }
+export function clearChatState(userId: string | undefined, contextKey: string): void {
+  clearFileChat(contextKey);
 }
 
 /**

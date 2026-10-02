@@ -3,6 +3,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { Store, atomic, decode, hash } from '../records/store.mjs';
+import { durable,durableRoots,durableFiles } from '../file-policy.mjs';
 
 export class FileSync {
   constructor(store,{branch='main',remote='origin'}={}) {
@@ -14,21 +15,27 @@ export class FileSync {
   initialize(remoteUrl) {
     if(!remoteUrl||!/^(https:\/\/github\.com\/|git@github\.com:)/.test(remoteUrl))throw new Error('Use a private GitHub repository URL');
     if(!fs.existsSync(path.join(this.store.root,'.git'))){this.git(['init','-b',this.branch]);this.git(['config','user.name','Godspeed Mission Control']);this.git(['config','user.email','godspeed@localhost']);}
-    atomic(path.join(this.store.root,'.gitignore'),'*\n!records/\n!records/**\n!.gitignore\n');
+    atomic(path.join(this.store.root,'.gitignore'),'*\n'+durableRoots.map(r=>'!'+r+'/\n!'+r+'/**\n').join('')+durableFiles.map(r=>'!'+r+'\n').join('')+'!.gitignore\n**/.env\n**/.env.*\n**/secrets/\n**/node_modules/\n**/*.sqlite*\n**/*.png\n**/*.jpg\n**/*.mp4\n**/*.mp3\n**/*.pdf\n');
     try {this.git(['remote','get-url',this.remote]);}catch{this.git(['remote','add',this.remote,remoteUrl]);}
   }
   validate(){this.store.scan();if(this.store.problems.length)throw new Error('Resolve record validation problems before syncing');if(this.pendingConflicts().length)throw new Error('Resolve saved conflicts before syncing');}
   commitLocal(){
     this.validate();
     const staged=this.git(['diff','--cached','--name-only']);
-    if(staged.split('\n').some(n=>n&&!n.startsWith('records/')&&n!=='.gitignore'))throw new Error('Sync repository contains staged files outside records');
-    this.git(['add','--','records','.gitignore']);
+    if(staged.split('\n').some(n=>n&&!durable(n)&&n!=='.gitignore'))throw new Error('Sync repository contains staged files outside durable state');
+    this.git(['add','--',...durableRoots.filter(r=>fs.existsSync(path.join(this.store.root,r))),...durableFiles.filter(r=>fs.existsSync(path.join(this.store.root,r))),'.gitignore']);
+    if(this.git(['diff','--cached','--name-only']).split('\n').some(n=>n&&!durable(n)&&n!=='.gitignore'))throw new Error('A private path was staged; sync stopped');
     if(this.git(['diff','--cached','--name-only']))this.git(['commit','-m','Save Godspeed Mission Control records']);
   }
   reconcile(){
     return this.store.withLock(()=>{
       try{
-        this.commitLocal();this.git(['fetch',this.remote,this.branch]);
+        this.commitLocal();
+        try{this.git(['fetch',this.remote,this.branch]);}catch(error){
+          if(this.git(['ls-remote','--heads',this.remote,this.branch]))throw error;
+          this.git(['push',this.remote,'HEAD:refs/heads/'+this.branch]);
+          this.last={state:'synced',at:new Date().toISOString(),pending:0};atomic(path.join(this.store.state,'sync-status.json'),JSON.stringify(this.last));return this.last;
+        }
         const remoteRef=this.remote+'/'+this.branch,head=this.git(['rev-parse','HEAD']),remoteHead=this.git(['rev-parse',remoteRef]);
         if(head!==remoteHead)this.integrate(remoteRef);
         this.validate();this.git(['push',this.remote,'HEAD:refs/heads/'+this.branch]);
@@ -42,7 +49,7 @@ export class FileSync {
     if(!path.resolve(dir).startsWith(path.resolve(integrationRoot)+path.sep))throw new Error('Unsafe sync staging path');
     this.git(['worktree','add','--detach',dir,'HEAD']);
     try {
-      try { this.git(['merge','--no-edit','--no-ff',remoteRef],dir); }
+      try { this.git(['merge','--no-edit','--no-ff','--allow-unrelated-histories',remoteRef],dir); }
       catch(e) {
         const conflicted=this.git(['diff','--name-only','--diff-filter=U'],dir).split('\n').filter(Boolean);
         if(!conflicted.length)throw e;
@@ -53,7 +60,7 @@ export class FileSync {
           const previous=fs.existsSync(saved)?JSON.parse(fs.readFileSync(saved,'utf8')):null;
           if(previous?.resolved_at&&previous.remote_commit===remoteCommit){
             const live=path.resolve(this.store.root,name),target=path.resolve(dir,name);
-            if(!live.startsWith(this.store.recordsRoot+path.sep)||!target.startsWith(dir+path.sep+'records'+path.sep))throw new Error('Invalid conflict path');
+            if(!durable(name)||!live.startsWith(this.store.root+path.sep)||!target.startsWith(dir+path.sep))throw new Error('Invalid conflict path');
             atomic(target,fs.readFileSync(live,'utf8'));this.git(['add','--',name],dir);continue;
           }
           const conflict={id,path:name,kind:'git',base:read(1),local:read(2),remote:read(3),remote_commit:remoteCommit,at:new Date().toISOString()};
@@ -66,9 +73,11 @@ export class FileSync {
       const merged=new Store(dir);
       if(merged.problems.length)throw new Error('The merged reference graph needs review');
       const removed=[...this.store.records.keys()].filter(key=>!merged.records.has(key));
-      if(removed.length)throw new Error('Remote removal without a tombstone needs review');
+      if(removed.some(key=>![...merged.records.values()].some(r=>r.uid===this.store.records.get(key).uid&&(r.aliases||[]).includes(this.store.records.get(key).id))))throw new Error('Remote removal without a tombstone or proven rename needs review');
       const batch=[...merged.records.values()].filter(r=>this.store.records.get(r.type+'/'+r.id)?._hash!==r._hash).map(r=>{const value={...r};delete value._hash;return value;});
-      if(batch.length)this.store.commit(batch);
+      if(batch.length||removed.length)this.store.commit(batch,{removeKeys:removed});
+      const documents=this.git(['ls-files'],dir).split('\n').filter(n=>durable(n)&&!n.startsWith('records/')).map(file=>({file,text:fs.readFileSync(path.join(dir,file),'utf8')})).filter(item=>!fs.existsSync(path.join(this.store.root,item.file))||fs.readFileSync(path.join(this.store.root,item.file),'utf8')!==item.text);
+      if(documents.length)this.store.publishFiles(documents);
       const commit=this.git(['rev-parse','HEAD'],dir);
       // Files are already published through the recoverable transaction. Move only Git's head/index.
       this.git(['reset','--mixed',commit]);
@@ -80,8 +89,7 @@ export class FileSync {
     if(conflict.kind!=='git')throw new Error('Use the record editor to resolve a stale-write conflict');
     const text=choice==='merged'?mergedText:choice==='local'?conflict.local:choice==='remote'?conflict.remote:null;
     if(text===null)throw new Error('Choose a retained version or write a merged record');
-    const target=path.resolve(this.store.root,conflict.path);if(!target.startsWith(this.store.recordsRoot+path.sep))throw new Error('Conflict target is not a record');
-    const record=decode(text,target);
-    this.store.withLock(()=>this.store.commit([record]));conflict.resolved_at=new Date().toISOString();conflict.choice=choice;atomic(file,JSON.stringify(conflict,null,2));return conflict;
+    const target=path.resolve(this.store.root,conflict.path);if(!durable(conflict.path)||!target.startsWith(this.store.root+path.sep))throw new Error('Conflict target is not durable state');
+    this.store.withLock(()=>{if(conflict.path.startsWith('records/'))this.store.commit([decode(text,target)]);else this.store.publishFiles([{file:conflict.path,text}]);});conflict.resolved_at=new Date().toISOString();conflict.choice=choice;atomic(file,JSON.stringify(conflict,null,2));return conflict;
   }
 }

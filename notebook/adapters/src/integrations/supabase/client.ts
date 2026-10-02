@@ -2,6 +2,7 @@
 export const SUPABASE_URL = location.origin;
 export const SUPABASE_PUBLISHABLE_KEY = '';
 const versions = new Map<string,string>();
+const snapshots = new Map<string,any>();
 async function request(route:string,body?:any) {
   try {
     const response=await fetch('/api/'+route,{method:body===undefined?'GET':'POST',headers:{'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});
@@ -12,7 +13,7 @@ async function request(route:string,body?:any) {
 }
 class Query implements PromiseLike<any> {
   state:any; signal?:AbortSignal;
-  constructor(table?:string,rpc?:string,args?:any){this.state={table,rpc,args,filters:[],orders:[],expected:{}};}
+  constructor(table?:string,rpc?:string,args?:any){this.state={table,rpc,args,filters:[],orders:[],expected:{},baselines:{}};}
   select(selection='*',options={}){this.state.selection=selection;this.state.options={...this.state.options,...options};return this;}
   insert(values:any){this.state.operation='insert';this.state.values=values;return this;}
   upsert(values:any,options={}){this.state.operation='upsert';this.state.values=values;this.state.options=options;return this;}
@@ -31,9 +32,9 @@ class Query implements PromiseLike<any> {
   single(){this.state.single=true;return this;} maybeSingle(){this.state.maybeSingle=true;return this;}
   abortSignal(signal:AbortSignal){this.signal=signal;return this;} setHeader(){return this;}
   async run(){
-    if(this.state.operation==='update'||this.state.operation==='delete') for(const [key,value] of versions) if(key.startsWith(this.state.table+'/'))this.state.expected[key.slice(this.state.table.length+1)]=value;
+    if(this.state.operation==='update'||this.state.operation==='delete') for(const [key,value] of versions) if(key.startsWith(this.state.table+'/')){const id=key.slice(this.state.table.length+1);this.state.expected[id]=value;this.state.baselines[id]=snapshots.get(key);}
     const result=await request(this.state.rpc?'rpc':'query',this.state);
-    for(const r of Array.isArray(result.data)?result.data:result.data?[result.data]:[]) if(r.id&&r._hash)versions.set(this.state.table+'/'+r.id,r._hash);
+    for(const r of Array.isArray(result.data)?result.data:result.data?[result.data]:[]) if(r.id&&r._hash){const key=this.state.table+'/'+r.id;versions.set(key,r._hash);snapshots.set(key,r);}
     return result;
   }
   then<TResult1=any,TResult2=never>(onfulfilled?:((value:any)=>TResult1|PromiseLike<TResult1>)|null,onrejected?:((reason:any)=>TResult2|PromiseLike<TResult2>)|null):PromiseLike<TResult1|TResult2>{return this.run().then(onfulfilled,onrejected);}
@@ -42,7 +43,7 @@ const storage=(bucket:string)=>({
   upload:async(name:string,file:Blob,options:any={})=>{const form=new FormData();form.append('file',file);form.append('path',name);const r=await fetch('/api/media/upload?bucket='+encodeURIComponent(bucket),{method:'POST',body:form});const data=await r.json();return r.ok?{data,error:null}:{data:null,error:{message:data.error}};},
   getPublicUrl:(name:string)=>({data:{publicUrl:'/api/media/file/'+encodeURIComponent(name)}}),
   createSignedUrl:async(name:string)=>({data:{signedUrl:'/api/media/file/'+encodeURIComponent(name)},error:null}),
-  remove:async(names:string[])=>request('media/remove',{names}),
+  remove:async(names:string[])=>request('media/remove',{paths:names}),
   download:async(name:string)=>{const r=await fetch('/api/media/file/'+encodeURIComponent(name));return r.ok?{data:await r.blob(),error:null}:{data:null,error:{message:'Media unavailable'}};}
 });
 export const supabase:any={

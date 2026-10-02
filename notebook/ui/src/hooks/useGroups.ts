@@ -30,7 +30,7 @@ const slugify = (value: string) =>
     .replace(/^-+|-+$/g, "") || "group";
 
 const isUuid = (value: string) =>
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+  /^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,180}$/.test(value);
 
 const groupWikiSkeleton = (group: Pick<ContactGroupRow, "name" | "purpose">) => `# ${group.name}
 

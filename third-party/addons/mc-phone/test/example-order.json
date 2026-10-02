@@ -1,0 +1,13 @@
+{
+  "job_id": "restaurant-rehearsal-20991231",
+  "mode": "rehearsal",
+  "contact": "Sam's Bistro (rehearsal with yourself)",
+  "to_number": "+4917212345678",
+  "name": "Sam Example",
+  "goal": "Reserve a table for four.",
+  "date": "2099-12-31",
+  "time": "19:00",
+  "party_size": 4,
+  "allowed_changes": "No other day or time. No fees or deposits.",
+  "opening": "Hello, this is the AI assistant of Sam Example. I'd like to reserve a table."
+}

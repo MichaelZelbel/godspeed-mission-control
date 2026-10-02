@@ -13,7 +13,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 
-const SUPABASE_URL = "https://tjeapelvjlmbxafsmjef.supabase.co";
+const SUPABASE_URL = location.origin;
 
 export function GlobalCreateButton() {
   const navigate = useNavigate();
@@ -43,7 +43,7 @@ export function GlobalCreateButton() {
 
   const handleNewQuerino = () => {
     if (!querinoApp?.webhook_url) return;
-    const callbackUrl = `${SUPABASE_URL}/functions/v1/link-note`;
+    const callbackUrl = `${SUPABASE_URL}/api/functions/link-note`;
     const url = `${querinoApp.webhook_url}/create-from-menerio?title=&body=&entity_type=prompt&menerio_callback=${encodeURIComponent(callbackUrl)}`;
     window.open(url, "_blank");
   };

@@ -1,0 +1,12 @@
+[Unit]
+Description=mc-phone RPC socket (group-owned, so the assistant's sandboxed account can reach it without sudo)
+
+[Socket]
+ListenStream=/run/mc-phone-rpc.sock
+SocketUser=root
+SocketGroup=mc-phone
+SocketMode=0660
+Accept=yes
+
+[Install]
+WantedBy=sockets.target

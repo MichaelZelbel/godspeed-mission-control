@@ -19,4 +19,24 @@ adapters=pathlib.Path(__file__).resolve().parents[1]/'adapters'
 for p in adapters.rglob('*'):
     if p.is_file():
         dest=target/p.relative_to(adapters);dest.parent.mkdir(parents=True,exist_ok=True);shutil.copyfile(p,dest)
+# These transformations are explicit compatibility fixes, not silent feature removal.
+p=target/'src/hooks/useContactRelationships.ts';text=p.read_text(encoding='utf-8').replace('/^[0-9a-f-]{36}$/i','/^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,180}$/');p.write_text(text,encoding='utf-8')
+p=target/'src/hooks/useGroups.ts';text=p.read_text(encoding='utf-8').replace('/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i','/^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,180}$/');p.write_text(text,encoding='utf-8')
+p=target/'src/hooks/useContactTopics.ts';text=p.read_text(encoding='utf-8').replace('navigator.onLine','true');p.write_text(text,encoding='utf-8')
+p=target/'src/components/notes/MediaAnalysisOverlay.tsx';text=p.read_text(encoding='utf-8').replace('const match = path.match(/\\/note-attachments\\/(.+)$/);','const match = path.match(/\\/(?:note-attachments|api\\/media\\/file)\\/(.+)$/);');p.write_text(text,encoding='utf-8')
+p=target/'src/pages/MediaLibrary.tsx';text=p.read_text(encoding='utf-8').replace('import.meta.env.VITE_SUPABASE_URL','location.origin').replace('/functions/v1/backfill-media-analysis','/api/functions/backfill-media-analysis');p.write_text(text,encoding='utf-8')
+p=target/'src/components/layout/GlobalCreateButton.tsx';text=p.read_text(encoding='utf-8').replace('"https://tjeapelvjlmbxafsmjef.supabase.co"','location.origin').replace('/functions/v1/link-note','/api/functions/link-note');p.write_text(text,encoding='utf-8')
+p=target/'src/lib/chat-history.ts';text=p.read_text(encoding='utf-8');text="import { loadFileChat, saveFileChat, clearFileChat } from '@/local/file-chat';\n"+text
+start=text.index('export function loadChatState(');end=text.index('/**\n * Build the API payload',start)
+text=text[:start]+'''export function loadChatState(userId: string | undefined, contextKey: string): PersistedChatState {
+  return loadFileChat(contextKey);
+}
+export function saveChatState(userId: string | undefined, contextKey: string, state: PersistedChatState): void {
+  saveFileChat(contextKey, state);
+}
+export function clearChatState(userId: string | undefined, contextKey: string): void {
+  clearFileChat(contextKey);
+}
+
+'''+text[end:];p.write_text(text,encoding='utf-8')
 print('Imported source-only UI with local adapters')

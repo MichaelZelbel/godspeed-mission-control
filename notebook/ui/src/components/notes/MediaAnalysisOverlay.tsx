@@ -34,7 +34,7 @@ function extractStoragePath(url: string): string | null {
     } catch {
       path = url.split(/[?#]/)[0];
     }
-    const match = path.match(/\/note-attachments\/(.+)$/);
+    const match = path.match(/\/(?:note-attachments|api\/media\/file)\/(.+)$/);
     return match ? decodeURIComponent(match[1]) : null;
   } catch {
     return null;

@@ -6,6 +6,7 @@ import { TooltipProvider } from '@/components/ui/tooltip';
 import { Toaster } from '@/components/ui/toaster';
 import { Toaster as Sonner } from '@/components/ui/sonner';
 import { RouteErrorBoundary } from '@/components/ErrorBoundary';
+import NoteComments from '@/local/NoteComments';
 const Notes=lazy(()=>import('./pages/Notes')),People=lazy(()=>import('./pages/People')),World=lazy(()=>import('./pages/World'));
 const Profile=lazy(()=>import('./pages/Profile')),Collections=lazy(()=>import('./pages/Collections')),CollectionDetail=lazy(()=>import('./pages/CollectionDetail'));
 const CollectionSchema=lazy(()=>import('./pages/CollectionSchema')),CollectionTemplates=lazy(()=>import('./pages/CollectionTemplates'));
@@ -22,7 +23,8 @@ function Layout(){
 }
 export default function App(){return <ThemeProvider attribute="class" defaultTheme="dark"><TooltipProvider><Toaster/><Sonner/><BrowserRouter><AuthProvider><Routes><Route element={<Layout/>}>
   <Route path="/" element={<Navigate to="/dashboard/control" replace/>}/><Route path="/dashboard" element={<Navigate to="/dashboard/control" replace/>}/>
-  <Route path="/dashboard/control" element={<Control/>}/><Route path="/dashboard/notes/*" element={<Notes/>}/>
+  <Route path="/dashboard/control" element={<Control/>}/><Route path="/dashboard/notes/*" element={<><Notes/><NoteComments/></>}/>
+  <Route path="/dashboard/settings" element={<Control/>}/><Route path="/settings" element={<Control/>}/>
   <Route path="/dashboard/people" element={<People/>}/><Route path="/dashboard/people/:id" element={<People/>}/>
   <Route path="/dashboard/world" element={<World/>}/><Route path="/dashboard/world/:id" element={<World/>}/>
   <Route path="/dashboard/profile" element={<Profile/>}/><Route path="/dashboard/timeline" element={<Timeline/>}/>

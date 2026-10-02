@@ -1,0 +1,31 @@
+name: godspeed-full-candidate
+services:
+  notebook:
+    image: ${GODSPEED_CANDIDATE_IMAGE:?Use the immutable candidate image from the package manifest}
+    restart: unless-stopped
+    environment:
+      GODSPEED_ACCESS_TOKEN: ${GODSPEED_CANDIDATE_TOKEN:?Generate a separate candidate access token}
+      GODSPEED_DEVICE: vps
+      GODSPEED_COMPUTER: "off"
+      GODSPEED_TELEGRAM: "off"
+    volumes:
+      - candidate-data:/opt/data/full-candidate
+    ports:
+      - "127.0.0.1:${GODSPEED_CANDIDATE_LOCAL_PORT:-47832}:47831"
+    networks: [candidate]
+  https:
+    image: ${GODSPEED_CADDY_IMAGE:?Use the pinned Caddy image from the candidate manifest}
+    restart: unless-stopped
+    environment:
+      GODSPEED_CANDIDATE_HOST: ${GODSPEED_CANDIDATE_HOST:-localhost}
+    ports:
+      - "${GODSPEED_CANDIDATE_BIND:-127.0.0.1}:${GODSPEED_CANDIDATE_HTTPS_PORT:-48443}:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - candidate-tls:/data
+    networks: [candidate]
+networks:
+  candidate: {}
+volumes:
+  candidate-data: {}
+  candidate-tls: {}

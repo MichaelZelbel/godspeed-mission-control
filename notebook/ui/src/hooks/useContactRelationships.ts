@@ -48,7 +48,7 @@ export function useContactRelationships(contactId: string | null) {
     queryFn: async () => {
       if (!user) return [];
       // The id goes into a filter string: only ever a uuid.
-      if (contactId !== null && !/^[0-9a-f-]{36}$/i.test(contactId)) return [];
+      if (contactId !== null && !/^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,180}$/.test(contactId)) return [];
 
       // Only the rows that involve this person (or the owner), read to the
       // end. Reading every relationship of the account stopped at PostgREST's

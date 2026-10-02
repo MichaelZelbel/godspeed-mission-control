@@ -1,10 +1,10 @@
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { slug } from './records/store.mjs';
+import { slug, hash } from './records/store.mjs';
 
 const inventory = JSON.parse(fs.readFileSync(fileURLToPath(new URL('../../docs/full-version/source-inventory.json', import.meta.url)), 'utf8'));
 export const tables = new Set(inventory.dependencies.flatMap(d => d.tables).filter(t => t !== 'note-attachments'));
-for (const table of ['goals', 'jobs', 'job_receipts', 'settings', 'permissions', 'decisions', 'habits', 'journal', 'deadlines', 'comments', 'note_conversations', 'import_mappings']) tables.add(table);
+for (const table of ['goals', 'jobs', 'job_receipts', 'settings', 'permissions', 'decisions', 'habits', 'journal', 'deadlines', 'comments', 'note_conversations', 'import_mappings','record_history','event_corrections','embeddings']) tables.add(table);
 const views = new Set(['world_entities', 'world_events', 'world_claims', 'profile_facts', 'v_ai_allowance_current']);
 const defaults = {
   contacts: { notes: null, app_mappings: {}, merged_into: null, is_favorite: false, is_sensitive: false, last_viewed_at: null },
@@ -21,7 +21,15 @@ const defaults = {
 };
 const links = { contact_id: 'contacts', person_id: 'contacts', note_id: 'notes', source_note_id: 'notes', linked_note_id: 'notes',
   collection_id: 'collections', folder_id: 'collection_item_folders', moment_id: 'moments', entity_id: 'entities',
-  from_contact_id: 'contacts', to_contact_id: 'contacts', parent_folder_id: 'collection_item_folders', claim_id: 'claims', slot_id: 'fact_slots', category_id: 'profile_categories', group_id: 'contact_groups' };
+  from_contact_id: 'contacts', to_contact_id: 'contacts', parent_folder_id: 'collection_item_folders', claim_id: 'claims', slot_id: 'fact_slots', category_id: 'profile_categories', group_id: 'contact_groups',parent_group_id:'contact_groups',target_note_id:'notes',evidence_note_id:'notes',document_id:'notes',topic_id:'contact_topics' };
+function splitFilters(text){let depth=0,quoted=false,part='',items=[];for(const c of text){if(c==='"')quoted=!quoted;if(!quoted&&c==='(')depth++;if(!quoted&&c===')')depth--;if(c===','&&!depth&&!quoted){items.push(part);part='';}else part+=c;}if(part)items.push(part);return items;}
+function filterExpression(row,text){
+  for(const op of ['and','or'])if(text.startsWith(op+'(')&&text.endsWith(')')){const results=splitFilters(text.slice(op.length+1,-1)).map(p=>filterExpression(row,p));return op==='and'?results.every(Boolean):results.some(Boolean);}
+  const match=text.match(/^(.+?)\.(not\.)?(eq|neq|is|in|like|ilike|gt|gte|lt|lte)\.([\s\S]*)$/);if(!match)throw new Error('Invalid filter expression');
+  let value=match[4];if(value.startsWith('"')&&value.endsWith('"'))value=value.slice(1,-1).replaceAll('\\"','"');else if(value==='null')value=null;else if(value==='true'||value==='false')value=value==='true';
+  if(match[3]==='in')value=splitFilters(String(value).replace(/^\(|\)$/g,''));
+  const result=condition(row,[match[3],match[1],value]);return match[2]?!result:result;
+}
 function getValue(row, key) { return key.replaceAll('->>', '.').replaceAll('->', '.').split('.').reduce((v, k) => v?.[k], row); }
 function contains(a, b) { return Array.isArray(b) ? b.every(v => (a || []).includes(v)) : b && typeof b === 'object' ? Object.entries(b).every(([k, v]) => contains(a?.[k], v)) : a === b; }
 function condition(row, [op, key, value]) {
@@ -37,33 +45,33 @@ function condition(row, [op, key, value]) {
       return new RegExp('^' + expression + '$', op === 'ilike' ? 'i' : '').test(String(a ?? ''));
     }
     case 'not': return !condition(row, [value[0], key, value[1]]);
-    case 'or': return String(value).split(/,(?![^()]*\))/).some(part => {
-      const [field, operator, ...tail] = part.split('.'); let val = tail.join('.');
-      if (val === 'null') val = null; else if (val === 'true' || val === 'false') val = val === 'true';
-      return condition(row, [operator, field, val]);
-    });
+    case 'or': return splitFilters(String(value)).some(part=>filterExpression(row,part));
     default: throw new Error('Unsupported filter ' + op);
   }
 }
 export class QueryService {
   constructor(store) { this.store = store; }
   rows(table) {
-    const list = type => this.store.list(type);
+    this.store.scan();
+    const all=[...this.store.records.values()],list = type => {
+      const values=all.filter(r=>r.type===type&&!r.removed_at);
+      if(type!=='moments')return values;
+      return values.map(original=>{const corrections=all.filter(r=>r.type==='event_corrections'&&r.moment_id===original.id).sort((a,b)=>a.sequence-b.sequence||a.id.localeCompare(b.id));return corrections.reduce((r,c)=>({...r,...c.patch,_hash:c._hash}),original);}).filter(r=>!r.removed_at);
+    };
+    const get=(type,id)=>this.store.records.get(type+'/'+id)||all.find(r=>r.type===type&&(r.aliases||[]).includes(id));
     if (table === 'world_entities') return [...list('contacts').map(r => ({ ...r, source_table: 'contact', kind: 'person', description: r.notes || null, ai_visibility: r.ai_visibility || 'visible' })), ...list('entities').map(r => ({ ...r, source_table: 'entity', kind: r.entity_type }))];
     if (table === 'world_events') return list('moments').map(r => ({ ...r, source_table: 'moment' }));
-    if (table === 'world_claims') return list('claims').map(r => {
-      const subject = r.subject_type === 'contact' ? this.store.get('contacts', r.subject_id) : r.subject_type === 'entity' ? this.store.get('entities', r.subject_id) : null;
-      return { ...r, subject_name: subject?.name || 'Me', subject_kind: r.subject_type === 'contact' ? 'person' : subject?.entity_type || 'self' };
-    });
+    if (table === 'world_claims') return [...this.rows('profile_facts').filter(r=>r.visibility_scope!=='private').map(r=>({...r,id:r.claim_id,source_table:'claim',subject_kind:r.subject_type,category:r.category_slug||'other',object_id:null,source_kind:r.source_type,source_ref:r.source_id})),...list('contact_relationships').map(r=>({...r,source_table:'contact_relationship',subject_kind:r.source_type,subject_id:r.source_id,category:'relationship',attribute:'relationship',value:r.custom_label||r.label,object_id:r.target_id,cardinality:'many',confidence:'likely'}))];
     if (table === 'profile_facts') return list('claims').map(r => {
       const slot = list('fact_slots').find(s => s.subject_type === r.subject_type && s.subject_id === r.subject_id && s.attribute === r.attribute);
       const category = list('profile_categories').find(s => s.slug === slot?.category_slug && (s.contact_id || null) === (r.subject_type === 'contact' ? r.subject_id : null));
       const today = new Intl.DateTimeFormat('en-CA', { timeZone: list('profiles')[0]?.timezone || 'UTC' }).format(new Date());
       return { ...r, claim_id: r.id, contact_id: r.subject_type === 'contact' ? r.subject_id : null, is_current: (!r.valid_to || r.valid_to > today) && (!r.valid_from || r.valid_from <= today),
         slot_id: slot?.id || null, label: slot?.label || r.attribute, category_slug: slot?.category_slug || null, category_name: category?.name || null,
-        visibility_scope: category?.visibility_scope || 'personal', show_to_agent: slot?.show_to_agent ?? true, is_pinned: slot?.is_pinned ?? false, has_conflict: false };
+        cardinality:slot?.cardinality||r.cardinality,visibility_scope: category?.visibility_scope || 'all', show_to_agent: slot?.show_to_agent ?? false, is_pinned: slot?.is_pinned ?? false, has_conflict: (slot?.cardinality||r.cardinality)!=='many'&&list('claims').filter(c=>c.subject_type===r.subject_type&&c.subject_id===r.subject_id&&c.attribute===r.attribute&&(!c.valid_from||c.valid_from<=today)&&(!c.valid_to||c.valid_to>today)).length>1 };
     });
     if (table === 'v_ai_allowance_current') return [];
+    if(table==='collection_items')return list(table).map(r=>{const collection=get('collections',r.collection_id),primary=collection?.field_schema?.find(f=>f.primary),title=primary?r.data?.[primary.key]:r.title;return {...defaults.collection_items,...r,title:title==null?'Untitled':String(title)};});
     return list(table).map(r => ({ ...(defaults[table] || {}), ...r }));
   }
   references(type, value) {
@@ -75,10 +83,21 @@ export class QueryService {
       const target = value.subject_type === 'contact' ? 'contacts' : 'entities', record = this.store.get(target, value.subject_id);
       refs.push({ type: target, id: value.subject_id, ...(record ? { uid: record.uid } : {}), field: 'subject_id' });
     }
+    if(type==='contact_relationships')for(const end of ['source','target'])if(value[end+'_id']&&['contact','entity'].includes(value[end+'_type'])){
+      const target=value[end+'_type']==='contact'?'contacts':'entities',id=value[end+'_id'],record=this.store.get(target,id);
+      refs.push({type:target,id,...record?{uid:record.uid}:{},field:end+'_id'});
+    }
+    if(type==='collection_items'&&value.collection_id){
+      const collection=this.store.get('collections',value.collection_id);
+      for(const field of collection?.field_schema||[]){
+        const target={link_note:'notes',link_person:'contacts',link_collection_item:'collection_items'}[field.type];
+        if(target)for(const id of Array.isArray(value.data?.[field.key])?value.data[field.key]:value.data?.[field.key]?[value.data[field.key]]:[]){const record=this.store.get(target,String(id));refs.push({type:target,id:String(id),...record?{uid:record.uid}:{},field:'data.'+field.key});}
+      }
+    }
     return [...new Map(refs.map(r => [(r.field || '') + '/' + r.type + '/' + r.id, r])).values()];
   }
   execute(request) {
-    const { table, operation = 'select', values, filters = [], orders = [], selection = '*', options = {}, single = false, maybeSingle = false, expected = {} } = request;
+    const { table, operation = 'select', values, filters = [], orders = [], selection = '*', options = {}, single = false, maybeSingle = false, expected = {}, baselines = {} } = request;
     if (!tables.has(table)) throw new Error('Unknown record domain ' + table);
     let rows = this.rows(table).filter(row => filters.every(f => condition(row, f)));
     if (operation !== 'select') {
@@ -86,16 +105,28 @@ export class QueryService {
       rows = this.store.withLock(() => {
         const inputs = operation === 'insert' || operation === 'upsert' ? (Array.isArray(values) ? values : [values]) : rows;
         const changed = inputs.map(value => {
-          const old = operation === 'insert' ? null : operation === 'upsert' ? (value.id ? this.store.get(table, value.id) : this.rows(table).find(r => options.onConflict && options.onConflict.split(',').every(k => r[k] === value[k]))) : this.store.get(table, value.id);
+          const old = operation === 'insert' ? null : operation === 'upsert' ? (value.id ? this.store.get(table, value.id) : this.rows(table).find(r => options.onConflict && options.onConflict.split(',').every(k => r[k] === value[k]))) : table==='moments'?value:this.store.get(table, value.id);
           if (operation === 'insert' && value.id && this.store.get(table, value.id)) throw new Error('Record already exists');
-          if (old && expected[old.id] && expected[old.id] !== old._hash) { const error = new Error('Record changed; reload before saving'); error.code = 'CONFLICT'; throw error; }
-          if (table === 'moments' && old && operation !== 'delete') throw new Error('Timeline events are append-only; add a correction');
+          if (old && expected[old.id] && expected[old.id] !== old._hash) {
+            const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b),base=baselines[old.id];
+            const patch=operation==='update'?values:value;
+            if(operation==='delete'||Object.entries(patch).some(([key,next])=>!same(old[key],next)&&(!base||!same(old[key],base[key]))))this.store.conflict(table,patch,old,base);
+          }
           const payload = operation === 'delete' ? { removed_at: new Date().toISOString() } : operation === 'update' ? values : value;
+          if(table==='moments'&&old){
+            const correction=this.store.prepare('event_corrections',{moment_id:old.id,patch:payload,sequence:this.store.list('event_corrections').filter(c=>c.moment_id===old.id).length+1,references:[{type:'moments',id:old.id,uid:old.uid}]});
+            return correction;
+          }
           const record = this.store.prepare(table, { ...(defaults[table] || {}), ...old, ...payload }, old);
-          if (table === 'collections' && !record.slug) record.slug = slug(record.name);
+          if (table === 'collections' && !old) record.slug = slug(record.slug||record.name)+'-'+record.uid.slice(0,8);
+          if(table==='collection_items'){
+            const collection=this.store.get('collections',record.collection_id);if(!collection)throw new Error('Collection missing');
+            const primary=collection.field_schema?.find(f=>f.primary);record.title=primary?String(record.data?.[primary.key]??'Untitled'):record.title||'Untitled';
+            for(const field of collection.field_schema||[]){const value=record.data?.[field.key];if(value==null||value==='')continue;if(['number','currency'].includes(field.type)&&!Number.isFinite(Number(value)))throw new Error('Expected a number for '+field.label);if(field.type==='boolean'&&typeof value!=='boolean')throw new Error('Expected true or false for '+field.label);if(field.type==='select'&&field.options?.length&&!field.options.includes(value))throw new Error('Unknown choice for '+field.label);}
+          }
           record.references = this.references(table, record); return record;
         });
-        this.store.commit(changed); return changed;
+        this.store.commit(changed); return table==='moments'?this.rows(table).filter(r=>changed.some(c=>c.id===r.id||c.moment_id===r.id)):changed;
       });
     }
     const count = rows.length;
@@ -104,7 +135,7 @@ export class QueryService {
     if (request.limit !== undefined) rows = rows.slice(0, request.limit);
     // Preserve observed joined shapes without a second source of truth.
     rows = rows.map(r => {
-      const result = { ...r, _hash: this.store.get(table, r.id)?._hash || r._hash };
+      const result = { ...r, _hash: r._hash || this.store.records.get(table+'/'+r.id)?._hash };
       if (selection.includes('source_note:')) result.source_note = r.source_note_id ? this.store.get('notes', r.source_note_id) : null;
       if (selection.includes('notes(')) result.notes = r.note_id ? this.store.get('notes', r.note_id) : null;
       if (selection.includes('contacts(')) result.contacts = r.contact_id ? this.store.get('contacts', r.contact_id) : null;
@@ -122,6 +153,32 @@ export class QueryService {
       const rows = after.slice(0, args.page_size || 50), last = rows.at(-1); return { rows, total: all.length, next: after.length > rows.length ? { name: last.name, id: last.id } : null };
     }
     if (name === 'notes_mentioning_people') return this.rows('notes').filter(r => (args.names || args.p_names || []).some(n => (r.content || '').toLowerCase().includes(n.toLowerCase())));
+    if(name==='increment_collection_template_usage'){
+      const old=this.store.get('collection_templates',args.template_id||args.p_template_id);if(!old)throw new Error('Template missing');return this.store.save('collection_templates',{id:old.id,usage_count:(old.usage_count||0)+1});
+    }
+    if(name==='reassign_contact_topics')return this.store.withLock(()=>{const topics=this.rows('contact_topics').filter(t=>t.contact_id===args.p_source_contact_id).map(t=>this.store.prepare('contact_topics',{contact_id:args.p_target_contact_id,version:(t.version||0)+1},t));for(const t of topics)t.references=this.references(t.type,t);this.store.commit(topics);return {moved:topics.length};});
+    if(name==='apply_contact_topic_command')return this.topicCommand(args.p_request_id,args.p_command);
+    if(name==='my_staff_access_log')return [];
     throw new Error('Unimplemented RPC: ' + name);
+  }
+  topicCommand(requestId,command){
+    if(!requestId||!command?.action)throw new Error('Invalid topic command');
+    return this.store.withLock(()=>{
+      const requestHash=hash(command),previous=this.rows('contact_topic_events').find(e=>e.request_id===requestId);
+      if(previous){if(previous.request_hash!==requestHash)throw new Error('Command id reused with another request');return {topic:previous.after_state,event_id:previous.id,replayed:true};}
+      const old=command.topic_id?this.store.get('contact_topics',command.topic_id):null;
+      if(command.action!=='create'&&(!old||old.version!==command.expected_version)){const error=new Error('The topic changed. Reload before applying this action.');error.code='CONFLICT';throw error;}
+      let patch={};const now=new Date().toISOString();
+      if(command.action==='create'){if(!command.title?.trim())throw new Error('A topic needs a title');patch={contact_id:command.contact_id,title:command.title.trim(),mode:command.mode||'one_off',priority:command.priority||'normal',status:'active',last_discussed_at:null,completed_at:null,archived_at:null};}
+      else if(command.action==='update'){if(Object.keys(command.patch||{}).some(k=>!['title','mode','priority'].includes(k)))throw new Error('Unsupported topic field');patch=command.patch;}
+      else if(command.action==='discuss')patch={last_discussed_at:command.discussed_at||now,...command.close_after||old.mode==='one_off'?{status:'completed',completed_at:now}:{}};
+      else if(command.action==='archive')patch={status:'archived',archived_at:now};
+      else if(command.action==='reopen')patch={status:'active',completed_at:null,archived_at:null};
+      else if(command.action==='undo'){const event=this.store.get('contact_topic_events',command.event_id);if(!event||event.topic_id!==old.id||event.after_state.version!==old.version)throw new Error('This event cannot be undone after a newer change');patch=event.before_state||{status:'archived',archived_at:now};}
+      else throw new Error('Unsupported topic operation');
+      const topic=this.store.prepare('contact_topics',{...patch,version:(old?.version||0)+1},old);topic.references=this.references(topic.type,topic);
+      const event=this.store.prepare('contact_topic_events',{topic_id:topic.id,request_id:requestId,request_hash:requestHash,action:command.action,before_state:old,after_state:topic,happened_at:now,reverses_event_id:command.action==='undo'?command.event_id:null});
+      this.store.commit([topic,event]);return {topic,event_id:event.id,replayed:false};
+    });
   }
 }

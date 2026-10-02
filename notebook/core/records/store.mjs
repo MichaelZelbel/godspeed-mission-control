@@ -1,8 +1,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID, createHash } from 'node:crypto';
+import { durable,durableRoots,durableFiles } from '../file-policy.mjs';
 
-export const hash = value => createHash('sha256').update(typeof value === 'string' ? value : JSON.stringify(value)).digest('hex');
+export const hash = value => createHash('sha256').update(Buffer.isBuffer(value) || typeof value === 'string' ? value : JSON.stringify(value)).digest('hex');
 export const slug = value => String(value).normalize('NFKD').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 80) || 'record';
 export function safe(value) {
   if (!/^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,180}$/.test(value) || value.includes('..')) throw new Error('Invalid record path');
@@ -104,21 +105,41 @@ export class Store {
     return this.withLock(() => {
       const old = value.id ? this.get(type, value.id) : null;
       if (expectedHash !== undefined && expectedHash !== (old?._hash || null)) {
-        const conflict = { id: randomUUID(), type, record_id: value.id, local: value, remote: old, at: new Date().toISOString() };
-        atomic(path.join(this.root, 'conflicts', conflict.id + '.json'), JSON.stringify(conflict, null, 2));
-        const error = new Error('This record changed. Both versions were saved for review.'); error.code = 'CONFLICT'; throw error;
+        this.conflict(type,value,old);
       }
       if (type === 'moments' && old) throw new Error('Events are append-only; add a correction event');
       const record = this.prepare(type, value, old); this.commit([record]); return record;
     });
   }
-  commit(records) {
+  conflict(type,value,old,base=null){
+    const conflict = { id: randomUUID(), type, record_id: old?.id||value.id, kind:'stale-write',base,local:{...old,...value}, remote: old, at: new Date().toISOString() };
+    atomic(path.join(this.root, 'conflicts', conflict.id + '.json'), JSON.stringify(conflict, null, 2));
+    const error = new Error('This record changed. Both versions were saved for review.'); error.code = 'CONFLICT'; throw error;
+  }
+  commit(records,{removeKeys=[]}={}) {
     this.scan();
+    const history=[];
+    for(const record of records){
+      const old=this.records.get(record.type+'/'+record.id);
+      if(old&&record.type!=='record_history'&&old._hash!==hash(encode(record))){
+        const snapshot={...old};delete snapshot._hash;
+        const id=old.uid+'-'+old.revision+'-'+old._hash.slice(0,12);
+        if(!this.records.has('record_history/'+id)&&!records.some(r=>r.type==='record_history'&&r.id===id)){
+          const digest=hash(id),uid=digest.slice(0,8)+'-'+digest.slice(8,12)+'-5'+digest.slice(13,16)+'-a'+digest.slice(17,20)+'-'+digest.slice(20,32);
+          history.push({format:1,type:'record_history',id,uid,revision:1,device:'history',created_at:old.updated_at,updated_at:old.updated_at,recorded_at:old.updated_at,source_uid:old.uid,source_type:old.type,source_id:old.id,snapshot,references:[],aliases:[]});
+        }
+      }
+    }
+    records=[...records,...history];
     const proposed = new Map(this.records);
+    for(const key of removeKeys)proposed.delete(key);
     for (const record of records) proposed.set(record.type + '/' + record.id, record);
     const errors = this.validateReferences([...proposed.values()]);
-    const ids = new Set();
-    for (const r of proposed.values()) { if (ids.has(r.uid)) errors.push({ error: 'Duplicate UUID' }); ids.add(r.uid); }
+    const ids = new Set(),aliases=new Map();
+    for (const r of proposed.values()) {
+      if (ids.has(r.uid)) errors.push({ error: 'Duplicate UUID' }); ids.add(r.uid);
+      if(!r.removed_at)for(const alias of [r.id,...r.aliases||[]]){const key=r.type+'/'+alias.toLowerCase();if(aliases.has(key)&&aliases.get(key)!==r.uid)errors.push({error:'Ambiguous case-insensitive identity or alias',alias});aliases.set(key,r.uid);}
+    }
     if (errors.length) throw new Error('Reference validation failed: ' + JSON.stringify(errors));
     const tx = randomUUID(), dir = path.join(this.state, 'transactions', tx); fs.mkdirSync(dir, { recursive: true });
     const manifest = records.map((record, i) => {
@@ -127,6 +148,7 @@ export class Store {
       if (fs.existsSync(file)) atomic(path.join(dir, i + '.before'), fs.readFileSync(file, 'utf8'));
       return { file: relative, staged: i + '.after', hash: hash(encode(record)) };
     });
+    for(const key of removeKeys){const old=this.records.get(key);if(!old)continue;const file=this.file(old);atomic(path.join(dir,manifest.length+'.before'),fs.readFileSync(file,'utf8'));manifest.push({file:path.relative(this.root,file).replaceAll('\\','/'),delete:true});}
     atomic(path.join(dir, 'manifest.json'), JSON.stringify(manifest));
     atomic(path.join(dir, 'prepared'), tx);
     this.applyTransaction(dir, manifest); this.scan();
@@ -134,7 +156,8 @@ export class Store {
   applyTransaction(dir, manifest) {
     for (let i = 0; i < manifest.length; i++) {
       const item = manifest[i], file = path.resolve(this.root, item.file);
-      if (!file.startsWith(this.recordsRoot + path.sep)) throw new Error('Invalid transaction target');
+      if (!file.startsWith(this.root + path.sep)||!(durable(item.file.replaceAll('\\','/'))||/^conflicts\/[\w-]+\.json$/.test(item.file))) throw new Error('Invalid transaction target');
+      if(item.delete){if(fs.existsSync(file))fs.unlinkSync(file);continue;}
       const text = fs.readFileSync(path.join(dir, item.staged), 'utf8');
       if (hash(text) !== item.hash) throw new Error('Corrupt transaction stage');
       atomic(file, text);
@@ -149,17 +172,35 @@ export class Store {
       if (fs.existsSync(path.join(dir, 'prepared')) && !fs.existsSync(path.join(dir, 'completed'))) this.applyTransaction(dir, JSON.parse(fs.readFileSync(path.join(dir, 'manifest.json'), 'utf8')));
     }
   }
+  publishFiles(items){
+    const dir=path.join(this.state,'transactions',randomUUID());fs.mkdirSync(dir,{recursive:true});
+    const manifest=items.map((item,i)=>{if(!durable(item.file)&&!/^conflicts\/[\w-]+\.json$/.test(item.file))throw new Error('File is outside durable state');atomic(path.join(dir,i+'.after'),item.text);return {file:item.file,staged:i+'.after',hash:hash(item.text)};});
+    atomic(path.join(dir,'manifest.json'),JSON.stringify(manifest));atomic(path.join(dir,'prepared'),'prepared');this.applyTransaction(dir,manifest);
+  }
   structural(type, id, action, options = {}) {
     return this.withLock(() => {
       const old = this.get(type, id); if (!old) throw new Error('Record not found');
       if (action === 'display-name') { const next = this.prepare(type, { name: options.name }, old); this.commit([next]); return next; }
+      if(action==='rename'){
+        const nextId=safe(options.id);if(nextId.toLowerCase()===old.id.toLowerCase())throw new Error('A path rename must change its spelling beyond case');
+        const next={...this.prepare(type,{aliases:[...new Set([...(old.aliases||[]),old.id])]},old),id:nextId};
+        const changed=[...this.records.values()].filter(r=>r.uid!==old.uid&&(r.references||[]).some(ref=>ref.uid===old.uid||ref.type===type&&ref.id===old.id)).map(r=>{
+          const patch=structuredClone(r);for(const ref of patch.references)if(ref.uid===old.uid||ref.type===type&&ref.id===old.id){ref.uid=old.uid;ref.id=nextId;if(ref.field){const keys=ref.field.split('.');let object=patch;for(const key of keys.slice(0,-1))object=object[key]??={};const key=keys.at(-1);object[key]=Array.isArray(object[key])?object[key].map(v=>v===old.id?nextId:v):nextId;}}
+          return this.prepare(r.type,patch,r);
+        });
+        this.commit([next,...changed],{removeKeys:[type+'/'+old.id]});return next;
+      }
       if (action === 'remove') { const next = this.prepare(type, { removed_at: new Date().toISOString() }, old); this.commit([next]); return next; }
       if (action === 'merge') {
         const target = this.get(type, options.target); if (!target || old.uid === target.uid) throw new Error('Invalid merge target');
         const changed = [...this.records.values()].filter(r => (r.references || []).some(ref => ref.uid === old.uid || (ref.type === type && ref.id === id)))
           .map(r => {
-            const patch = {};
-            for (const ref of r.references) if (ref.field && (ref.uid === old.uid || (ref.type === type && ref.id === id))) patch[ref.field] = target.id;
+            const patch = structuredClone(r);
+            for (const ref of r.references) if (ref.field && (ref.uid === old.uid || (ref.type === type && ref.id === id))) {
+              const keys=ref.field.split('.');let object=patch;
+              for(const key of keys.slice(0,-1))object=object[key]??=( {} );
+              const key=keys.at(-1);object[key]=Array.isArray(object[key])?[...new Set(object[key].map(v=>v===old.id?target.id:v))]:target.id;
+            }
             return this.prepare(r.type, { ...patch, references: r.references.map(ref => ref.uid === old.uid || (ref.type === type && ref.id === id) ? { ...ref, uid: target.uid, id: target.id } : ref) }, r);
           });
         const tombstone = this.prepare(type, { removed_at: new Date().toISOString(), merged_into: target.uid }, old);
@@ -174,17 +215,24 @@ export class Store {
     if (fs.existsSync(destination)) throw new Error('Backup destination already exists');
     return this.withLock(() => {
       this.recover(); fs.mkdirSync(destination, { recursive: true });
-      for (const root of ['records', 'conflicts']) if (fs.existsSync(path.join(this.root, root))) fs.cpSync(path.join(this.root, root), path.join(destination, root), { recursive: true });
+      for (const root of [...durableRoots,...durableFiles,'conflicts']) if (fs.existsSync(path.join(this.root, root))) fs.cpSync(path.join(this.root, root), path.join(destination, root), { recursive: true });
       atomic(path.join(destination, 'backup.json'), JSON.stringify({ format: 1, at: new Date().toISOString(), records: this.scan().size }));
       return destination;
     });
   }
   restore(source) {
     if (this.scan().size) throw new Error('Restore requires an empty workspace');
+    for(const name of [...durableRoots.filter(r=>r!=='records'),...durableFiles])if(fs.existsSync(path.join(this.root,name)))throw new Error('Restore requires empty durable state');
     const manifest = JSON.parse(fs.readFileSync(path.join(source, 'backup.json'), 'utf8')); if (manifest.format !== 1) throw new Error('Unsupported backup format');
     return this.withLock(() => {
-      fs.cpSync(path.join(source, 'records'), this.recordsRoot, { recursive: true });
-      if (fs.existsSync(path.join(source, 'conflicts'))) fs.cpSync(path.join(source, 'conflicts'), path.join(this.root, 'conflicts'), { recursive: true });
+      const checked=new Store(source);if(checked.problems.length)throw new Error('Backup records need review');
+      const items=[];const visit=(relative)=>{
+        const target=path.join(source,relative),info=fs.lstatSync(target);if(info.isSymbolicLink())throw new Error('Restore cannot follow symbolic links');
+        if(info.isDirectory())for(const name of fs.readdirSync(target))visit(path.posix.join(relative,name));
+        else if(durable(relative)||/^conflicts\/[\w-]+\.json$/.test(relative))items.push({file:relative,text:fs.readFileSync(target,'utf8')});
+      };
+      for(const name of [...durableRoots,...durableFiles,'conflicts'])if(fs.existsSync(path.join(source,name)))visit(name);
+      this.publishFiles(items);
       this.scan(); if (this.problems.length) throw new Error('Restored records need review'); return this.records.size;
     });
   }

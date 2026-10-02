@@ -14,7 +14,8 @@ export class Scheduler {
         this.store.prepare('goals', { title: goal, status: 'active', areas: ['health','work-money','relationships'], progress: [] }),
         this.store.prepare('jobs', { id: 'goal-decision', kind: 'goal-decision', owner, paused: false, next_run: at, interval_ms: 86400000, state: 'pending' }),
         this.store.prepare('jobs', { id: 'goal-work', kind: 'goal-work', owner, paused: false, next_run: at, interval_ms: 86400000, state: 'pending' }),
-        this.store.prepare('jobs', { id: 'deadline-reminder', kind: 'deadline-reminder', owner, paused: false, next_run: at, interval_ms: 3600000, state: 'pending' })];
+        this.store.prepare('jobs', { id: 'deadline-reminder', kind: 'deadline-reminder', owner, paused: false, next_run: at, interval_ms: 3600000, state: 'pending' }),
+        ...[['coaching',604800000],['profiling',86400000],['review',604800000]].map(([kind,interval_ms])=>this.store.prepare('jobs',{id:kind,kind,owner,paused:false,next_run:new Date(Date.parse(at)+interval_ms).toISOString(),interval_ms,state:'pending'}))];
       this.store.commit(records); return { configured: true, firstWorkPending: true };
     });
   }

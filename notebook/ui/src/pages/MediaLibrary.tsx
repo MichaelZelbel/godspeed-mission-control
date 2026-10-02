@@ -155,7 +155,7 @@ const CONTENT_TYPES = [
 // Average tokens per image analysis (~500 prompt + ~200 completion)
 const AVG_TOKENS_PER_IMAGE = 700;
 const TOKENS_PER_CREDIT = 200;
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_URL = location.origin;
 
 const MEDIA_COLUMNS =
   "id, note_id, storage_path, media_type, page_number, original_filename, description, extracted_text, topics, raw_analysis, analysis_status, created_at, updated_at";
@@ -214,7 +214,7 @@ function BatchAnalysisPanel() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error("Not authenticated");
 
-      const resp = await fetch(`${SUPABASE_URL}/functions/v1/backfill-media-analysis`, {
+      const resp = await fetch(`${SUPABASE_URL}/api/functions/backfill-media-analysis`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${session.access_token}`,
@@ -242,7 +242,7 @@ function BatchAnalysisPanel() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error("Not authenticated");
 
-      const resp = await fetch(`${SUPABASE_URL}/functions/v1/backfill-media-analysis`, {
+      const resp = await fetch(`${SUPABASE_URL}/api/functions/backfill-media-analysis`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${session.access_token}`,

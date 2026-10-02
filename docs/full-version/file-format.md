@@ -1,0 +1,11 @@
+# User files
+
+Format 1 records live in `records/<type>/<id>.json`. Notes use `.md`, JSON frontmatter between `---` delimiters and a Markdown body. IDs and UUIDs never change during ordinary edits. Aliases retain earlier names; UUID references identify the actual target. New readable IDs include eight UUID characters so offline same-name creations remain separate.
+
+Every record carries `format`, `type`, `id`, `uid`, `revision`, `device`, `created_at`, `updated_at`, `aliases` and typed `references`. Collection schemas, row values, favorites, comments, review decisions, schedules and receipts are records. Profile claims close earlier validity; timeline edits append correction records. Earlier record contents are immutable snapshots under `record_history`.
+
+The notebook validates complete reference graphs before publishing grouped edits. `.godspeed/transactions` stages durable writes and startup completes prepared transactions. Invalid external files remain untouched and are reported. A workspace lock prevents concurrent process writes. Edit content directly; use the record command for merges, names and removals. Remove creates a tombstone, preserving old references.
+
+Coaching, journal, profile instructions, rules, goals, work, deadlines and recipes also use their existing readable files. Git sync includes these explicitly. Credentials, runtime settings, media binaries, SQLite and transient transaction files stay outside Git. User media is transferred separately with SHA-256 verification.
+
+Use `node notebook/bin/godspeed.mjs` with `GODSPEED_WORKSPACE` set. `record merge <type> <source> <target>` rewrites typed references and retains provenance. `record display-name <type> <id> <name>` leaves identity unchanged. `record remove <type> <id>` retains a tombstone. `validate` reports broken references and ambiguous aliases. Backup and restore include integrity manifests; restoration requires an empty destination.

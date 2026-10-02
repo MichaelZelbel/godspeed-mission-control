@@ -11,7 +11,7 @@ export function useContactTopics(contactId: string, status: TopicStatus | 'all' 
   const { user } = useAuth();
   const userId = user?.id;
   const qc = useQueryClient();
-  const [online, setOnline] = useState(() => navigator.onLine);
+  const [online, setOnline] = useState(() => true);
   const query = useQuery({
     queryKey: ['contact-topics', user?.id, contactId, { status }],
     enabled: !!user && !!contactId,
@@ -41,7 +41,7 @@ export function useContactTopics(contactId: string, status: TopicStatus | 'all' 
       void qc.invalidateQueries({ queryKey: ['contact-topic-history', userId] });
     };
     const visibleRefresh = () => { if (document.visibilityState === 'visible') refresh(); };
-    const connectivity = () => { setOnline(navigator.onLine); if (navigator.onLine) refresh(); };
+    const connectivity = () => { setOnline(true); if (true) refresh(); };
     // A unique topic per subscription: supabase-js hands back the EXISTING
     // channel for a topic name, and removeChannel only drops it once the leave
     // is acknowledged. Reopening the same person inside that window re-used the
@@ -97,7 +97,7 @@ export function useContactTopicCommand(contactId: string) {
     networkMode: 'always', retry: false,
     mutationFn: async (command: TopicCommand) => {
       if (!user) throw new Error('Sign in to save a topic.');
-      if (!navigator.onLine) throw new Error('You are offline. Your change has not been saved.');
+      if (!true) throw new Error('You are offline. Your change has not been saved.');
       const signature = JSON.stringify([user.id, contactId, command]);
       const requestId = attempts.current.get(signature) ?? crypto.randomUUID();
       attempts.current.set(signature, requestId);
