@@ -303,6 +303,24 @@ if(a[0]==='-z')process.stdout.write('Your computer is back, so I checked: 2 parc
     const t = await tool('computer_browser_open', { url: 'https://example.org/' });
     return t === `AB --session godspeed-computer --cdp ${mrelay.cdpPort()} open https://example.org/` || t;
   });
+  await check('a page that opened while the engine timed out (a redirect) is reported as opened', async () => {
+    const fakeSlow = path.join(TMP, 'fake-ab-slow.js');
+    fs.writeFileSync(fakeSlow, `const a = process.argv.slice(2); const cmd = a.slice(4).join(' ');
+if (cmd.startsWith('open')) { process.stdout.write('Operation timed out. The page may still be loading'); process.exit(1); }
+if (cmd === 'get url') process.stdout.write('https://example.org/login');
+if (cmd === 'get title') process.stdout.write('Log in');`);
+    const m2 = spawn(process.execPath, [path.join(ROOT, 'mcp.js')], {
+      env: { ...process.env, GODSPEED_COMPUTER_DIR: mdir, GODSPEED_COMPUTER_CDP_PORT: String(mrelay.cdpPort()), GODSPEED_COMPUTER_AGENT_BROWSER: `"${process.execPath}" "${fakeSlow}"` },
+      stdio: ['pipe', 'pipe', 'inherit'],
+    });
+    const answer = await new Promise(r => {
+      let b = ''; m2.stdout.on('data', d => { b += d; const i = b.indexOf('\n'); if (i >= 0) r(JSON.parse(b.slice(0, i))); });
+      m2.stdin.write(JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'computer_browser_open', arguments: { url: 'https://example.org/secure' } } }) + '\n');
+    });
+    m2.stdin.end();
+    const t = answer.result.content[0].text;
+    return (/Log in/.test(t) && /example\.org\/login/.test(t) && !answer.result.isError) || t;
+  });
   await check('"stop using my computer" and "use my computer again"', async () => {
     await tool('computer_switch', { on: false });
     const off = /SWITCHED OFF/.test(await tool('computer_browser_read')) && S.isOff(mdir);

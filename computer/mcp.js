@@ -138,7 +138,22 @@ async function call(name, a = {}) {
     case 'computer_browser_open': {
       const why = C.refuseUrl(a.url);
       if (why) return text('Not opened: ' + why + '. Godspeed never opens addresses inside the user\'s home network, nor files or browser settings.', true);
-      return browse(['open', String(a.url)]);
+      const stop = await gate();
+      if (stop) return text(stop);
+      const r = await agentBrowser(['open', String(a.url)], Number(process.env.GODSPEED_COMPUTER_OPEN_WAIT_MS || 15000));
+      if (r.code === 0) return text(r.out || 'Opened.');
+      // The engine (agent-browser 0.26.0) times out when the first page of a session redirects,
+      // although the page has opened (tested 2026-10-02, with and without the relay). So: where is
+      // the tab now? A web page there is an opened page.
+      const again = await gate();
+      if (again) return text(again);
+      const u = await agentBrowser(['get', 'url'], 15000);
+      const url = (u.out || '').trim();
+      if (u.code === 0 && /^https?:\/\//.test(url)) {
+        const t = await agentBrowser(['get', 'title'], 15000);
+        return text(`✓ ${(t.out || '').trim()}\n  ${url}\n(The page took long to finish loading; read it to see what it shows.)`);
+      }
+      return text('The browser on the user\'s computer did not open that: ' + (r.out || r.err || 'no answer'), true);
     }
     case 'computer_browser_snapshot': return browse(['snapshot', '-i']);
     case 'computer_browser_read': return browse(['get', 'text', 'body']);
