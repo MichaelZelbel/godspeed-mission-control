@@ -96,7 +96,15 @@ async function pair(line, name) {
   const p = C.decodePairLine(line);
   if (!p) { say('That is not a connection code from your assistant. Ask it in Telegram: "connect my computer", and copy the whole code it sends.'); return 2; }
   let certPem;
-  try { certPem = await fetchCert(p.host, p.port); } catch (e) {
+  try {
+    // The door opens a moment after the code is made, and a home line can drop a packet: try a few times.
+    for (let attempt = 1; ; attempt++) {
+      try { certPem = await fetchCert(p.host, p.port); break; } catch (e) {
+        if (attempt >= 4) throw e;
+        await new Promise(r => setTimeout(r, 2000));
+      }
+    }
+  } catch (e) {
     say(`This computer cannot reach your Godspeed server at ${p.host} (port ${p.port}): ${e.message}. Check the internet connection and try again in a minute.`);
     return 3;
   }

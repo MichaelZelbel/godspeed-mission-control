@@ -385,7 +385,7 @@ async function realRun(found, site) {
     let out = ''; p.stdout.on('data', d => { out += d; }); p.stderr.on('data', d => { out += d; });
     p.on('close', code => resolve({ code, out }));
   });
-  const pr = await runNode(['pair', lineReal, '--name', 'real test']);
+  const pr = await runNode(['pair', lineReal, '--name', 'real test']); // pairs even though the door opens a moment later
   await check('the helper pairs with the code the assistant would send', () => (pr.code === 0 && /Paired/.test(pr.out)) || pr);
   const bad = await runNode(['pair', C.encodePairLine({ host: '127.0.0.1', port: doorPort, fingerprint: 'AA'.repeat(32), code: 'x' })]);
   await check('the helper refuses a server whose key is not the one in the code', () => (bad.code === 4 && /not the one/.test(bad.out)) || bad);

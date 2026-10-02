@@ -120,6 +120,8 @@ async function ensureBrowser({ profileDir, proxyPort, headless = !!process.env.G
   ];
   if (proxyPort) args.push(`--proxy-server=http://127.0.0.1:${proxyPort}`, '--proxy-bypass-list=<-loopback>');
   if (headless) args.push('--headless=new');
+  // Only for the Linux test stand-in inside a container, which has no user namespaces; never on a user's computer.
+  if (process.env.GODSPEED_COMPUTER_NO_SANDBOX === '1') args.push('--no-sandbox');
   else if (minimized) args.push('--start-minimized');
   args.push('about:blank');
   fs.writeFileSync(marker, String(proxyPort || ''));
