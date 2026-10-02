@@ -1,0 +1,33 @@
+#!/usr/bin/env node
+'use strict';
+// godspeed-computer: the server's switches for "your computer lends its browser" (D-285).
+//
+//   godspeed-computer pair       a connection code for the installer (works once, ten minutes)
+//   godspeed-computer status     is a computer connected?
+//   godspeed-computer off | on   "stop using my computer" / "use my computer again"
+//   godspeed-computer pages [n]  the last pages the assistant opened on the computer
+//   godspeed-computer waiting    jobs waiting for the computer to come back
+const C = require('./lib/common');
+const S = require('./lib/state');
+const K = require('./lib/control');
+
+async function main([cmd, arg]) {
+  const dir = C.serverDir();
+  switch (cmd) {
+    case 'pair': {
+      const line = await K.pairLine(dir);
+      console.log(`Connection code (works once, for ${C.PAIR_CODE_MINUTES} minutes):\n${line}`);
+      return 0;
+    }
+    case 'status': console.log(await K.statusText(dir)); return 0;
+    case 'off': S.setOff(dir, true); console.log('Switched off. The computer is disconnected within seconds and stays off until "on".'); return 0;
+    case 'on': S.setOff(dir, false); console.log('Switched on. The computer reconnects within a minute when it is on.'); return 0;
+    case 'pages': { const p = S.readPages(dir, Number(arg) || 30); console.log(p.length ? p.join('\n') : 'No page opened on the computer yet.'); return 0; }
+    case 'waiting': { const w = S.listWaiting(dir); console.log(w.length ? w.map(j => `${new Date(j.created).toISOString()}  ${j.task}`).join('\n') : 'Nothing is waiting for the computer.'); return 0; }
+    default:
+      console.log('Usage: godspeed-computer pair | status | off | on | pages [n] | waiting');
+      return cmd ? 1 : 0;
+  }
+}
+
+main(process.argv.slice(2)).then(code => process.exit(code), e => { console.error('godspeed-computer: ' + e.message); process.exit(1); });
