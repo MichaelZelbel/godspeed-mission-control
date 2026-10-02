@@ -50,6 +50,36 @@ RUN set -eu; \
     echo "$sha  /usr/local/bin/supercronic" | sha256sum -c -; \
     chmod 755 /usr/local/bin/supercronic
 
+# The browser the assistant reads web pages with (D-283). Hermes' browser tools drive the
+# headless Chrome the base image already carries, through agent-browser, which the base image
+# does NOT carry: Hermes would fetch it from npm on first use, unpinned, and it would then not
+# find that Chrome by itself ("Chrome not found"; found 2026-10-02). So: agent-browser at the
+# version Hermes asks for (AGENT_BROWSER_NPX_SPEC in tools/browser_tool.py), checked against the
+# npm registry's SHA-512, its native program for this processor linked onto the PATH where
+# Hermes looks first, and the bundled Chrome named at a path that survives a base image bump.
+ARG AGENT_BROWSER_VERSION=0.26.0
+ARG AGENT_BROWSER_SHA512=a5da927e3c1b152a7eaa7c256f6836ddef705ef78839f322d7dc693c0f716546f3100529e96e180598fa61b8fccf833b5a471b1830d873ea032070edf51dc40d
+RUN set -eu; \
+    case "${TARGETARCH:-amd64}" in \
+      amd64) arch=x64 ;; \
+      arm64) arch=arm64 ;; \
+      *) echo "no agent-browser for ${TARGETARCH}" >&2; exit 1 ;; \
+    esac; \
+    curl -fsSL -o /tmp/agent-browser.tgz \
+      "https://registry.npmjs.org/agent-browser/-/agent-browser-${AGENT_BROWSER_VERSION}.tgz"; \
+    echo "$AGENT_BROWSER_SHA512  /tmp/agent-browser.tgz" | sha512sum -c -; \
+    mkdir -p /opt/godspeed/agent-browser; \
+    tar -xzf /tmp/agent-browser.tgz -C /opt/godspeed/agent-browser --strip-components=1 --no-same-owner; \
+    rm /tmp/agent-browser.tgz; \
+    find /opt/godspeed/agent-browser/bin -type f ! -name "agent-browser-linux-$arch" -delete; \
+    chmod 755 "/opt/godspeed/agent-browser/bin/agent-browser-linux-$arch"; \
+    ln -sf "/opt/godspeed/agent-browser/bin/agent-browser-linux-$arch" /usr/local/bin/agent-browser; \
+    agent-browser --version | grep -qx "agent-browser ${AGENT_BROWSER_VERSION}"; \
+    chrome="$(ls -d "$PLAYWRIGHT_BROWSERS_PATH"/chromium_headless_shell-*/chrome-headless-shell-linux*/chrome-headless-shell | head -1)"; \
+    test -x "$chrome"; \
+    ln -sf "$chrome" /opt/godspeed/chrome-headless-shell
+ENV AGENT_BROWSER_EXECUTABLE_PATH=/opt/godspeed/chrome-headless-shell
+
 # The kit: this repository at the commit being built.
 COPY . /opt/godspeed/kit
 

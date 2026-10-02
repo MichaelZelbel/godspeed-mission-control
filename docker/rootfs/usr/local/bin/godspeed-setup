@@ -20,6 +20,15 @@ cd "$HOME" || exit 1
 # shellcheck disable=SC1091
 . /opt/hermes/.venv/bin/activate 2>/dev/null || true
 
+# Web pages: the assistant reads them with Hermes' own browser tools (browser_navigate and the
+# rest), which drive the headless Chrome this image carries (D-283). Left unset, Hermes offers
+# browser_exec instead, which downloads the Browser Use program and about a hundred Python
+# packages, unpinned, the first time it is used. Set before the installer restarts the gateway,
+# so the gateway starts with it; a choice already made in Hermes' settings is kept.
+if [ -z "$(hermes config get browser.backend 2>/dev/null)" ]; then
+  hermes config set browser.backend off >/dev/null 2>&1 || true
+fi
+
 bash "${KB_KIT_DIR:-/opt/godspeed/kit}/server/install.sh" "$@"
 rc=$?
 # Recorded so the next start of THIS image does not run the update path again

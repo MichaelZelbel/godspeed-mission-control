@@ -85,6 +85,19 @@ It can use every account you connect to it. If you connect your Gmail, it can re
 Gmail. The container protects your server, not your accounts, so connect only what you
 want your assistant to act on.
 
+## Browsing
+
+Your assistant can open and read public web pages with its own browser, a Chrome without
+a window that runs inside the container. Ask it to look something up on a site or read an
+article, and it reads the page the way a visitor would. There is nothing to set up.
+
+Two kinds of page do not work yet. Some sites turn away visitors that come from a server,
+and show the assistant a block page or a puzzle instead. Anything behind a login, like your
+bank or a shop account, is not supported yet.
+
+Planned next: your own Windows PC or Mac lends the assistant its browser, with the sign-ins
+you already have there, for the pages a server cannot open.
+
 ## The limits
 
 Set in `compose.yaml`, or in a `.env` file beside it:
@@ -107,3 +120,6 @@ own daily jobs, the one-time update on a new image, and the setup from Telegram
 (`godspeed-telegram-setup`, which collects the answers in the chat and then runs the same
 setup command with them). `docker/test/test-telegram-setup.py` tests that chat against a
 stand-in Telegram on any computer; `docker/test.sh` runs it again inside the image.
+The browser is the Chrome the Hermes image already carries, driven by `agent-browser` at a
+pinned version. On every test run, `docker/test/probe-browser.py` has the assistant's own
+browser tools read two pages, as the assistant's account.

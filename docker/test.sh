@@ -32,6 +32,7 @@ services:
     pull_policy: never
     volumes:
       - $ROOT/docker/test/fake-gh:/usr/local/bin/gh:ro
+      - $ROOT/docker/test/probe-browser.py:/opt/test/probe-browser.py:ro
 EOF
 cd "$WORK"
 
@@ -80,6 +81,22 @@ check "no Docker socket inside" sh -c "! docker exec godspeed test -e /var/run/d
 check "no port is published" sh -c "[ -z \"\$(docker port godspeed)\" ]"
 check "the CPU limit is in force" sh -c "docker exec godspeed cat /sys/fs/cgroup/cpu.max | grep -q '^100000 100000'"
 check "no new privileges" sh -c "docker exec godspeed grep -q '^NoNewPrivs:[[:space:]]*1' /proc/1/status"
+
+# Web pages (D-283): the assistant's own browser tools, called the way a model's tool call
+# calls them (docker/test/probe-browser.py), as the assistant's account, inside the walls above.
+# A page served inside the container must come back word for word; the public page is this
+# repository's own page on GitHub, not example.com, which asks not to be used for testing and
+# monitoring. GitHub is where CI runs and where the image comes from, so it is up when CI is.
+echo "== the assistant reads web pages"
+BROWSE="$(docker exec -u hermes -e HOME=/opt/data godspeed timeout 300 /opt/hermes/.venv/bin/python3 \
+  /opt/test/probe-browser.py https://github.com/MichaelZelbel/godspeed-mission-control godspeed-mission-control 2>&1)"
+printf '%s\n' "$BROWSE" | grep -E '^(PASS|FAIL)  '
+FAILS=$((FAILS + $(printf '%s\n' "$BROWSE" | grep -c '^FAIL  ')))
+if [ "$(printf '%s\n' "$BROWSE" | grep -c '^PASS  ')" -ne 3 ] && ! printf '%s\n' "$BROWSE" | grep -q '^FAIL  '; then
+  printf 'FAIL  the browser check did not finish: %s\n' "$(printf '%s' "$BROWSE" | tail -5 | tr '\n' ' ')"; FAILS=$((FAILS+1))
+fi
+check "the browser needed nothing downloaded on first use" sh -c \
+  "[ -z \"\$(docker exec godspeed find /opt/data -path '*/_npx/*' -name agent-browser -print -quit)\" ]"
 
 echo "== a runaway command"
 docker exec -u hermes -d godspeed sh -c 'nohup sh -c "while :; do :; done" >/dev/null 2>&1 &'
