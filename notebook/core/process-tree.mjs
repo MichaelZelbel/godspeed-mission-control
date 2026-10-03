@@ -9,5 +9,6 @@ export function terminateOwnedTree(child){
  const rows=fs.readdirSync('/proc').filter(n=>/^\d+$/.test(n)).map(identity).filter(Boolean),owned=[root];
  for(let i=0;i<owned.length;i++)for(const row of rows)if(row.parent===owned[i].pid&&!owned.some(p=>p.pid===row.pid))owned.push(row);
  const stop=signal=>{for(const row of [...owned].reverse()){const current=identity(row.pid);if(current?.start===row.start)try{process.kill(row.pid,signal);}catch{}}};
- stop('SIGTERM');const timer=setTimeout(()=>stop('SIGKILL'),5000);timer.unref();
+ // Keep the supervisor alive for bounded escalation even if its direct child exits.
+ stop('SIGTERM');setTimeout(()=>stop('SIGKILL'),5000);
 }
