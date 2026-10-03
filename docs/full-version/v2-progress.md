@@ -69,3 +69,13 @@ Follow-through, subscriptions and monitoring corrections, 3 October 2026, 21:03-
 - Windows 3ad0ba9 package pins bootstrap 0829644 and is retained separately, but has not been installed; native executable upgrade must still diagnose the original backup failure. Current source/UI are newer. Exact matching final packages are still required.
 - Additional verified snapshots/restorations and lossless old VPS build archives remain retained. No production installation, live Menerio or other session build was changed.
 - Remaining mandatory full recipes, Menerio parity, provider tool behavior, paired delivery/sync/recovery, exact packaged installation and fresh whole-branch review remain open. Mac and the real two-week trial are unverified. No feature-complete claim is made.
+# VPS host correction, 3 October 2026
+
+Michael confirmed the authorized development VPS is **srv1069233.hstgr.cloud**. The old pasted test URL and `mc-vps-ts` SSH alias pointed to **srv1328602.hstgr.cloud**, the production VPS. This execution failed to verify the physical hostname before using that alias. Earlier VPS installation acceptance therefore concerns an isolated installation on the wrong physical server; it is not acceptance on the authorized development VPS.
+
+Live checks established production had approximately 150 MB free on a 96 GB filesystem, while development had 125 GB free on a 193 GB filesystem. Both owned `godspeed-full-candidate` test containers on production were stopped. No further builds, source tests, scheduled tests, upgrades or new test data may run there. The personal Mission Control and company services remained active when checked; this does not prove production suffered no resource impact.
+
+The stopped test volume and every retained backup/restoration copy are being preserved with complete content verification before any removal of the original test storage. Development has an existing, separate `godspeed-4c302c2c2ce9` installation at product revision `50fa3e7`; preserve it and concurrent work. Further VPS build and deployment helpers must assert the actual hostname equals `srv1069233.hstgr.cloud` before mutations. Use a separately owned test project for this execution.
+
+The bc71 Windows native installer still failed during backup-directory creation through the retained backup junction. Verified independent backups/restorations preceded it, and both isolated Windows services were relaunched. Native upgrade acceptance remains open.
+
