@@ -207,12 +207,12 @@ Never leave color choice to the model. Always specify.
 **Always include the style reference image.** This is mandatory.
 
 ```bash
-node dev/godspeed-engine/scripts/excalidraw-visuals/generate-visual.js "<FULL_PROMPT>" "work/visuals/diagrams/[YYYY-MM-DD]-[slug].png" "[ASPECT_RATIO]" --input "skills/excalidraw-visuals/excalidraw-style-reference.png"
+node skills/excalidraw-visuals/scripts/generate-visual.cjs "<FULL_PROMPT>" "work/visuals/diagrams/[YYYY-MM-DD]-[slug].png" "[ASPECT_RATIO]" --input "skills/excalidraw-visuals/excalidraw-style-reference.png"
 ```
 
 With brand assets (when the visual mentions Claude or Claude Code):
 ```bash
-node dev/godspeed-engine/scripts/excalidraw-visuals/generate-visual.js "<FULL_PROMPT>" "work/visuals/diagrams/[YYYY-MM-DD]-[slug].png" "[ASPECT_RATIO]" --input "skills/excalidraw-visuals/excalidraw-style-reference.png" "skills/excalidraw-visuals/Claude.png"
+node skills/excalidraw-visuals/scripts/generate-visual.cjs "<FULL_PROMPT>" "work/visuals/diagrams/[YYYY-MM-DD]-[slug].png" "[ASPECT_RATIO]" --input "skills/excalidraw-visuals/excalidraw-style-reference.png" "skills/excalidraw-visuals/Claude.png"
 ```
 
 Aspect ratios: `16:9` (default), `1:1`, `4:5`, `9:16`, `3:2`, `2:3`, `3:4`, `4:3`, `5:4`, `21:9`
@@ -237,7 +237,7 @@ When a visual mentions Claude or Claude Code, pass the brand asset via `--input`
 |-------|-------|------|
 | Claude / Claude Code | `skills/excalidraw-visuals/Claude.png` | `--input "skills/excalidraw-visuals/Claude.png"` |
 
-The `--input` flag resolves local file paths to URLs via `.env` mappings. For example, `skills/excalidraw-visuals/Claude.png` resolves to the `CLAUDE_URL` env var. The naming convention is: strip the extension, uppercase, replace non-alphanumeric with `_`, append `_URL`.
+The `--input` flag uploads local reference files to the configured Kie account. Use only assets authorized for that provider.
 
 ### Claude Logo Prompt Rules
 
@@ -264,16 +264,16 @@ Inside: a wobbly-drawn computer monitor sketch. On the monitor screen, display t
 
 | What | Path |
 |------|------|
-| Style guide | `.claude/skills/excalidraw-visuals/style-guide.md` |
-| Script | `dev/godspeed-engine/scripts/excalidraw-visuals/generate-visual.js` |
+| Style guide | `skills/excalidraw-visuals/style-guide.md` |
+| Script | `skills/excalidraw-visuals/scripts/generate-visual.cjs` |
 | Style reference | `skills/excalidraw-visuals/excalidraw-style-reference.png` |
 | Output | `work/visuals/diagrams/` (the script creates it) |
-| API key | `.env` at the repo root (`KIE_API_KEY`, written by the secrets layer) |
+| API key | Device-private process environment (`KIE_API_KEY`) |
 
 ## Notes
 
 - Uses Nano Banana 2 API via kie.ai (better text generation than original Nano Banana)
 - The style prefix is locked. Only the diagram description changes per-request.
 - The style reference image is the #1 consistency lever. Always include it.
-- If generation fails, check `.env` at the repo root for `KIE_API_KEY` — load the secrets layer first (`dev/godspeed-engine/scripts/secrets.ps1` / `dev/godspeed-engine/scripts/secrets.sh`); as of 2026-08-20 the key is in no store yet, so a missing key means Michael has to add it, and the script says so plainly
+- If generation fails, check the device-private provider environment for KIE_API_KEY. Never save credentials in the workspace or templates. The installed helper has no dependency on a private engine.
 - When in doubt, fewer words and more icons

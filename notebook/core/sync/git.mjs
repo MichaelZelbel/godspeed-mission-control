@@ -48,7 +48,13 @@ export class FileSync {
         this.commitLocal();
         if(!networkError&&remoteExists){
         const remoteRef=this.remote+'/'+this.branch,head=this.git(['rev-parse','HEAD']),remoteHead=this.git(['rev-parse',remoteRef]);
-        if(head!==remoteHead)this.integrate(remoteRef);
+        if(head!==remoteHead){
+          this.integrate(remoteRef);
+          // Transactions publish the canonical record representation. Older
+          // clones can contain CRLF blobs, so commit that local integration
+          // before upload rather than leave a false pending edit behind.
+          this.commitLocal();
+        }
         }
         this.validate();
         });

@@ -48,7 +48,8 @@ test('an assistant save overlapping background sync keeps the notebook service a
   const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-chat-sync-lock-')),s=await createService({root,port:0}),lock=path.join(s.store.state,'workspace.lock');
   try{
     fs.writeFileSync(path.join(s.store.state,'sync-config.json'),'{}');s.store.save('notes',{title:'Background synchronization check',content:'Synthetic'});
-    fs.writeFileSync(lock,JSON.stringify({pid:process.pid,at:new Date().toISOString()}));await new Promise(r=>setTimeout(r,6200));
+    fs.writeFileSync(lock,JSON.stringify({pid:process.pid,at:new Date().toISOString()}));
+    const until=Date.now()+20000;while(!s.sync.last&&Date.now()<until)await new Promise(r=>setTimeout(r,50));assert.ok(s.sync.last,'Background synchronization must report an outcome');
     assert.equal((await fetch('http://127.0.0.1:'+s.address.port+'/health')).status,200);assert.equal(s.sync.last.state,'pending');assert.equal(s.sync.last.detail,'The assistant is saving its state.');
   }finally{if(fs.existsSync(lock))fs.unlinkSync(lock);await s.close();}
 });

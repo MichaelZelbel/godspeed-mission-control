@@ -188,7 +188,14 @@ export class Domains {
       const {signal,files,...safeInput}=input;
       const result = await this.provider({ kind: name, input:safeInput, context, attachments:attached.images, signal, contract: (contracts[name]||'Answer using the user context. Do not perform outward actions. Explicitly distinguish assumptions from recorded facts.')+' Use plain, concise language. Do not use em dashes. Only the retrieved records are available; never claim to have searched an entire database.' });
       signal?.throwIfAborted();
-      const structured=contracts[name]?json(result):typeof result==='object'?result:{reply:result};
+      let structured=contracts[name]?json(result):typeof result==='object'?result:{reply:result};
+      if(name==='conversation-chat'&&Array.isArray(structured.operations)&&structured.operations.some(op=>typeof op.source_quote!=='string'||!op.source_quote.trim())){
+        // Some providers omit a required field despite the contract. Repair the
+        // response once, before executing any operation; authorization still
+        // checks the original user request, never the repaired explanation.
+        const repaired=await this.provider({kind:name,input:safeInput,context,attachments:attached.images,signal,contract:operationContract+' Your previous response omitted source_quote in an operation. Nothing has been changed. Return the complete JSON again, with source_quote equal to the exact current input.message in every operation. Do not add new actions.'});
+        signal?.throwIfAborted();structured=json(repaired);
+      }
       const requested=String(input.message||input.messages?.filter(m=>m.role==='user').at(-1)?.content||'');
       const refusal=/\b(?:do not|don.t|never|must not|should not|nicht|niemals)\s+(?:create|make|save|keep|write|capture|add|erstell\w*|speicher\w*)\b/i.test(requested),hypothetical=/\b(?:if I|suppose|hypothetically|for example|someone said|quoted|wenn ich|beispielsweise)\b/i.test(requested);
       const directAction=/^(?:(?:please|bitte)\s+|(?:can|could|would)\s+you\s+(?:please\s+)?)?(?:create|make|save|keep|write|capture|add|revise|edit|update|rewrite|erstell\w*|speicher\w*|ändere|bearbeite)\b/i.test(requested.trim());

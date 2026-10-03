@@ -16,7 +16,7 @@ journal-add {content}; journal-switch {enabled}; health-add {metric,value,unit,o
 memory-confirm {label,value,evidence_quote}; memory-propose {label,value,evidence_quote};
 routine-change {id,paused?,calendar?:{time:HH:MM,weekdays?:[0..6]}}; forecast-settle {id,observed,evidence}.
 work-allow-local {id,note_id}: allow the selected work to edit exactly this local note, preserving its current revision as the precondition.
-Use supplied IDs; ask to resolve ambiguity. ISO dates must include timezone. No outward actions or credentials. Never claim a change persisted until the operation succeeds.`;
+Every operation MUST contain source_quote. Copy the entire current user message exactly into that field, including the request verb. Without it, no operation can run. Use supplied IDs; ask to resolve ambiguity. ISO dates must include timezone. No outward actions or credentials. Never claim a change persisted until the operation succeeds.`;
 const required=(value,label)=>{if(typeof value!=='string'||!value.trim())throw Error(label+' is required');return value.trim();};
 const date=(value,label)=>{required(value,label);if(!Number.isFinite(Date.parse(value))||!/(Z|[+-]\d\d:\d\d)$/.test(value))throw Error(label+' needs an ISO date with timezone');return new Date(value).toISOString();};
 export function personalOperation(domains,input){
