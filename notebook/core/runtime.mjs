@@ -64,8 +64,16 @@ export function commandProvider({ command, args = [], cwd, timeoutMs = 120000 } 
     child.stdin.end(JSON.stringify(input)+'\n');
   });
 }
-export function jobExecutor(provider,query) {
+export function jobExecutor(configuredProvider,query) {
   return async (job,{settings,store})=>{
+    let provider=configuredProvider;
+    if(configuredProvider?.options){
+      let choice;
+      provider=async input=>{
+        if(!choice)choice=configuredProvider.options().then(options=>{const model=options.models.find(m=>m.id===options.current),effort=settings.scheduled_effort||'low';return model?.efforts?.includes(effort)?effort:null;}).catch(()=>null);
+        const effort=await choice;return configuredProvider({...input,...(!input.effort&&effort?{effort}:{})});
+      };
+    }
     const loop={store,query,provider,settings};
     if(job.kind==='habit-check'){
       const habit=visibleRows(query,'habits').find(h=>h.id===job.habit_id&&h.status==='active');if(!habit)return {verified:true,silent:true};

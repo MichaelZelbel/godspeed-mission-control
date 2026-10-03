@@ -4,6 +4,39 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { createService } from '../server/main.mjs';
+
+test('latest work excludes failed drafts and reports a changed checked result',async()=>{
+ const s=await createService({root:fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-work-display-')),port:0}),base='http://127.0.0.1:'+s.address.port;
+ try{
+  const accepted=s.store.save('notes',{title:'Fictional checked result',content:'Checked rain rule',source_app:'goal-work'});
+  s.store.save('work_items',{title:'Fictional checked task',state:'verified',result_id:accepted.id,verification:{content_hash:s.store.get('notes',accepted.id)._hash,evidence:'Checked against the task'}});
+  s.store.save('notes',{title:'Fictional failed draft',content:'Unchecked draft',source_app:'goal-work'});
+  let response=await fetch(base+'/api/latest-work');assert.equal(response.status,200);let result=await response.json();assert.equal(result.data[0].id,accepted.id);assert.equal(result.verification_current,true);
+  s.store.save('notes',{id:accepted.id,content:'Changed after the check'});result=await(await fetch(base+'/api/latest-work')).json();assert.equal(result.verification_current,false);
+ }finally{await s.close();}
+});
+
+test('enabling a routine repeatedly updates its one schedule and preserves other pauses',async()=>{
+ const service=await createService({root:fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-routine-choice-')),port:0}),base='http://127.0.0.1:'+service.address.port;
+ const post=async(route,input)=>{const r=await fetch(base+'/api/'+route,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(input)});assert.equal(r.status,200);return r.json();};
+ try{
+  service.scheduler.configure({goal:'Fictional schedule acceptance',timezone:'Europe/Berlin'});service.store.save('jobs',{id:'coaching',paused:true});
+  for(let i=0;i<3;i++)await post('jobs/add',{kind:'goal-decision',interval_ms:60000});
+  assert.equal(service.store.list('jobs').filter(j=>j.kind==='goal-decision').length,1);assert.equal(service.store.get('jobs','goal-decision').interval_ms,60000);assert.equal(service.store.get('jobs','coaching').paused,true);
+ }finally{await service.close();}
+});
+
+test('installed recovery restores a separate empty copy and verifies bytes without replacing the active workspace',async()=>{
+ const service=await createService({root:fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-recovery-controls-')),port:0}),base='http://127.0.0.1:'+service.address.port;
+ const post=async(route,input)=>{const r=await fetch(base+'/api/'+route,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(input)});assert.equal(r.status,200,await r.clone().text());return r.json();};
+ try{
+  const original=service.store.save('notes',{title:'Fictional recovery',content:'Exact fictional rain rule'});
+  const saved=await post('backup',{}),id=path.basename(saved.path);service.store.save('notes',{id:original.id,content:'Later fictional edit'});
+  const result=await post('restore-copy',{backup_id:id});assert.equal(result.verified,true);assert.ok(result.compared_files>0);
+  assert.equal(service.store.get('notes',original.id).content,'Later fictional edit');assert.match(fs.readFileSync(path.join(result.workspace,'records/notes',original.id+'.md'),'utf8'),/Exact fictional rain rule/);
+  const refused=await fetch(base+'/api/restore-copy',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({backup_id:'../outside'})});assert.equal(refused.status,400);
+ }finally{await service.close();}
+});
 test('actual HTTP notebook CRUD, media preview, profile review, backup and restart',async()=>{
   const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-service-test-'));
   let service=await createService({root,port:0,provider:async()=> 'A concrete conversation draft.'});

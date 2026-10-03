@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {randomUUID} from 'node:crypto';
+import {gzipSync} from 'node:zlib';
 import {Store,hash} from '../core/records/store.mjs';
 const input=JSON.parse(fs.readFileSync(0,'utf8'));
 if(!/^assistant-state\/[a-f0-9-]{36}\/[a-f0-9]{16}\.json$/.test(input.file))throw new Error('Invalid assistant profile file');
@@ -12,7 +13,9 @@ const publish=()=>{const store=new Store(process.env.GODSPEED_WORKSPACE);return 
     throw new Error('Assistant state changed concurrently; resolve the retained conflict and restart the assistant');
   }
   if(old===input.text)return;
-  store.publishFiles([{file:input.file,text:input.text},...(old===null?[]:[{file:'assistant-state/history/'+path.basename(path.dirname(input.file))+'/'+path.basename(input.file,'.json')+'/'+current+'.json',text:old}])]);
+  const archived=old===null?null:Buffer.byteLength(old)>16384?gzipSync(Buffer.from(old,'utf8')):old;
+  const compressed=Buffer.isBuffer(archived);
+  store.publishFiles([{file:input.file,text:input.text},...(old===null?[]:[{file:'assistant-state/history/'+path.basename(path.dirname(input.file))+'/'+path.basename(input.file,'.json')+'/'+current+(compressed?'.json.gz':'.json'),text:archived}])]);
 });};
 const deadline=Date.now()+10000;
 for(;;){try{publish();break;}catch(error){if(Date.now()>=deadline||!['Workspace is being written by another process','Workspace lock requires recovery'].includes(error.message))throw error;await new Promise(resolve=>setTimeout(resolve,50));}}

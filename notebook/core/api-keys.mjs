@@ -16,7 +16,7 @@ export class ApiKeys {
 export function toolScope(name,args){
   if(name==='personal_operation')return 'actions';
   if(['search_knowledge','validate_knowledge'].includes(name))return 'stats';
-  if(['capture_note'].includes(name))return 'notes';
+  if(['capture_note','list_note_folders','search_notes','get_note','update_note'].includes(name))return 'notes';
   if(['write_fact','record_event'].includes(name))return 'world';
   if(name==='review_suggestions')return 'profile';
   const type=args.type||'';return /^(contacts|contact_|person_)/.test(type)?'contacts':/^(claims|entities|moments|moment_|world_)/.test(type)?'world':/^(profile|fact_|agent_|review_|ai_suggestion)/.test(type)?'profile':/^collection/.test(type)?'collections':/^media|attachment/.test(type)?'media':/^action/.test(type)?'actions':/^note|comments|conversation/.test(type)?'notes':null;

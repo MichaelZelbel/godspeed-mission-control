@@ -81,6 +81,11 @@ export class QueryService {
       });
     }
     if (table === 'v_ai_allowance_current') return [];
+    if(table==='notifications')return list(table).map(r=>{
+      const note=r.record_id?this.store.get('notes',r.record_id):null;
+      return {...r,title:r.title||note?.title||'Godspeed needs your attention',body:r.body||r.message||r.reason||note?.content||null,link:r.link||(note&&!note.is_trashed?'/dashboard/notes/'+note.id:'/dashboard/settings'),is_read:r.is_read??r.status==='resolved'};
+    });
+    if(table==='conversation_messages')return list(table).map(r=>({...r,person_id:r.person_id||r.contact_id||null}));
     if(table==='activity_events'){
       const tracked=new Set(['notes','contacts','claims','entities','collections','collection_items','moments','contact_groups','contact_group_memberships','action_items','contact_topics','profile_categories','fact_slots']);
       const label={notes:'note',contacts:'person',claims:'fact',entities:'world entity',collections:'collection',collection_items:'collection item',moments:'event',contact_groups:'group',contact_group_memberships:'group membership',action_items:'action',contact_topics:'discussion topic',profile_categories:'profile category',fact_slots:'fact setting'};
@@ -140,7 +145,9 @@ export class QueryService {
           if (old && expected[old.id] && expected[old.id] !== old._hash) {
             const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b),base=baselines[old.id];
             const patch=operation==='update'?values:value;
-            if(operation==='delete'||Object.entries(patch).some(([key,next])=>!same(old[key],next)&&(!base||!same(old[key],base[key]))))this.store.conflict(table,patch,old,base);
+            // Concurrent autosaves of different conversation fields can both
+            // advance this display timestamp. It is not authored content.
+            if(operation==='delete'||Object.entries(patch).some(([key,next])=>!(table==='contacts'&&key==='conversation_updated_at')&&!same(old[key],next)&&(!base||!same(old[key],base[key]))))this.store.conflict(table,patch,old,base);
           }
           const payload = operation === 'delete' ? { removed_at: new Date().toISOString() } : operation === 'update' ? values : value;
           if(table==='moments'&&old){

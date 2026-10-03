@@ -1,5 +1,7 @@
 """Exercise real SQLite, independent Python processes and the notebook publisher."""
 import json
+import gzip
+import hashlib
 import os
 from pathlib import Path
 import shutil
@@ -16,6 +18,7 @@ class AssistantFiles(unittest.TestCase):
         self.workspace = self.temp / 'workspace'
         notebook = Path(__file__).resolve().parent.parent
         self.env = dict(os.environ, HERMES_HOME=str(self.home), GODSPEED_WORKSPACE=str(self.workspace), GODSPEED_FILE_HERMES='1', GODSPEED_NODE=os.environ['GODSPEED_TEST_NODE'], GODSPEED_ASSISTANT_PUBLISHER=str(notebook / 'scripts/save-assistant-state.mjs'), PYTHONPATH=str(notebook / 'assistant-files'))
+        self.env.pop('GODSPEED_MEDIA_ROOT', None)
 
     def tearDown(self):
         shutil.rmtree(self.temp)
@@ -33,6 +36,20 @@ class AssistantFiles(unittest.TestCase):
         result = self.run_python('import sqlite3,os; from pathlib import Path; p=str(Path(os.environ["HERMES_HOME"])/"state.db"); a=sqlite3.connect(p,isolation_level=None); b=sqlite3.connect(p,isolation_level=None); assert a.execute("SELECT * FROM messages").fetchone()==(1,"Exact ü text",b"\\x00\\xff"); assert a.execute("PRAGMA user_version").fetchone()[0]==7; a.execute("INSERT INTO messages(text) VALUES (?)",("second",)); b.execute("INSERT INTO messages(text) VALUES (?)",("third",)); assert b.execute("SELECT id FROM messages ORDER BY id").fetchall()==[(1,),(2,),(3,)]; a.close(); b.close()')
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertTrue(list((self.workspace / 'assistant-state/history').rglob('*.json')))
+
+    def test_large_history_is_losslessly_compressed_and_current_state_stays_plain_json(self):
+        self.initialize()
+        result=self.run_python('import sqlite3,os; from pathlib import Path; c=sqlite3.connect(str(Path(os.environ["HERMES_HOME"])/"state.db"),isolation_level=None); c.execute("INSERT INTO messages(text) VALUES (?)",("Fictional repeated test text. "*10000,)); c.execute("INSERT INTO messages(text) VALUES (?)",("later",)); c.close()')
+        self.assertEqual(result.returncode,0,result.stderr)
+        histories=list((self.workspace/'assistant-state/history').rglob('*.json.gz'))
+        self.assertTrue(histories)
+        for archive in histories:
+            content=gzip.decompress(archive.read_bytes())
+            self.assertEqual(hashlib.sha256(content).hexdigest(),archive.name.split('.')[0])
+            self.assertLess(archive.stat().st_size,len(content)//4)
+            self.assertEqual(json.loads(content)['format'],1)
+        snapshot=next((self.workspace/'assistant-state').glob('*/*.json'))
+        self.assertEqual(json.loads(snapshot.read_text())['format'],1)
 
     def test_synced_crlf_snapshot_remains_writable(self):
         self.initialize()

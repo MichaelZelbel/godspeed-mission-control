@@ -9,6 +9,42 @@ import {Scheduler} from '../core/jobs/scheduler.mjs';
 import {jobExecutor} from '../core/runtime.mjs';
 import {Domains} from '../core/domains.mjs';
 const fixture=()=>{const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-v2-')));return {store,query:new QueryService(store)};};
+
+test('routine notices expose readable text and a result link in the notebook notification view',()=>{
+ const {store,query}=fixture();const note=store.save('notes',{title:'Fictional overdue inspection',content:'Inspect the fictional garden robot: overdue.'});
+ store.save('notifications',{record_id:note.id,status:'ready'});
+ const notice=query.rows('notifications')[0];assert.equal(notice.title,note.title);assert.equal(notice.body,note.content);assert.equal(notice.link,'/dashboard/notes/'+note.id);assert.equal(notice.is_read,false);
+});
+
+test('a newly selected decision wakes its enabled worker and preserves deliberately paused work',async()=>{
+ const {store,query}=fixture(),provider=async input=>input.kind==='goal-decision'?{action:'Prepare a fictional checklist',kind:'draft',check:'Includes the rain rule'}:input.kind==='work-verification'?{passed:true,evidence:'Contains the rain rule'}:{deliverable:'Rain rule: stop watering when wet.'};
+ const scheduler=new Scheduler(store,{executor:jobExecutor(provider,query)});scheduler.configure({goal:'Fictional checklist'});
+ store.save('jobs',{id:'goal-work',next_run:new Date(Date.now()+86400000).toISOString()});
+ await scheduler.tick();await scheduler.tick();assert.equal(store.list('work_items')[0].state,'verified');
+ const goal=store.list('goals')[0];store.save('goals',{id:goal.id,progress:[]});
+ store.save('jobs',{id:'goal-work',paused:true});store.save('jobs',{id:'goal-decision',next_run:new Date().toISOString()});
+ await scheduler.tick();assert.equal(store.get('jobs','goal-work').paused,true);
+});
+
+test('scheduled subscription work uses supported low effort and wakes a due failed draft retry',async()=>{
+ const {store,query}=fixture();let fail=true;const requests=[];
+ const provider=Object.assign(async input=>{requests.push(input);if(input.kind==='goal-decision')return {action:'Fictional retry checklist',kind:'draft',check:'Contains rain rule'};if(input.kind==='work-verification'){if(fail)throw Error('Fictional timeout');return {passed:true,evidence:'Rain rule is present'};}return {deliverable:'Rain rule: stop when wet.'};},{options:async()=>({current:'fictional-subscription',models:[{id:'fictional-subscription',efforts:['low','high']}]})});
+ const scheduler=new Scheduler(store,{executor:jobExecutor(provider,query)});scheduler.configure({goal:'Fictional retry'});await scheduler.tick();const item=store.list('work_items')[0];assert.equal(item.state,'failed');
+ assert.equal(requests.every(r=>r.effort==='low'),true);fail=false;store.save('work_items',{id:item.id,retry_after:new Date(Date.now()-1000).toISOString()});store.save('jobs',{id:'goal-work',state:'pending',next_run:new Date(Date.now()+86400000).toISOString()});
+ await scheduler.tick();assert.equal(store.get('work_items',item.id).state,'verified');assert.equal(store.get('work_items',item.id).attempts,2);assert.equal(store.list('notes').filter(n=>n.work_id===item.id).length,1,'A draft retry keeps one result with retained revisions');
+});
+
+test('an explicit draft retry releases interrupted work but refuses applied work and live attempts',async()=>{
+ const {store,query}=fixture(),domains=new Domains(query);new Scheduler(store).configure({goal:'Fictional repair'});const goal=store.list('goals')[0];
+ const decision=store.save('decisions',{goal_id:goal.id,state:'selected'}),draft=store.save('work_items',{goal_id:goal.id,decision_id:decision.id,kind:'draft',allowed_action:'save-draft',state:'attempted',attempts:3,max_attempts:3});
+ store.save('jobs',{id:'goal-work',paused:true,state:'needs_review'});
+ const receipt=store.save('job_receipts',{kind:'goal-work',state:'attempted',pid:process.pid,started_at:new Date().toISOString()});
+ await assert.rejects(domains.invoke('personal-operation',{type:'work-retry-draft',id:draft.id}),/still running/i);
+ store.save('job_receipts',{id:receipt.id,state:'failed'});
+ await domains.invoke('personal-operation',{type:'work-retry-draft',id:draft.id});
+ const retried=store.get('work_items',draft.id);assert.equal(retried.state,'pending');assert.equal(retried.attempts,3);assert.equal(retried.max_attempts,4);assert.equal(retried.retry_reviews.length,1);assert.equal(store.get('jobs','goal-work').paused,false);
+ const applied=store.save('work_items',{kind:'local-note',state:'needs_review'});await assert.rejects(domains.invoke('personal-operation',{type:'work-retry-draft',id:applied.id}),/draft/i);
+});
 test('paired provisioning does not hide first goal and reconciliation preserves pauses',()=>{
  const {store}=fixture();store.save('settings',{id:'installation',owner:'vps',timezone:'Europe/Berlin',permissions:[]});
  store.save('jobs',{id:'coaching',kind:'coaching',owner:'vps',paused:true});

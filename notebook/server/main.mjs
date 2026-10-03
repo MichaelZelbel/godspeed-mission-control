@@ -12,7 +12,7 @@ import { modelProvider, jobExecutor,hermesProvider } from '../core/runtime.mjs';
 import {assistantEnvironment} from '../core/assistant-files.mjs';
 import { FileSync } from '../core/sync/git.mjs';
 import { SyncRunner } from '../core/sync/runner.mjs';
-import { backup, restore } from '../core/archives.mjs';
+import { backup, restore,restoreSeparateCopy } from '../core/archives.mjs';
 import { importExport } from '../core/import.mjs';
 import { kinds } from '../core/jobs/scheduler.mjs';
 import { MediaSync } from '../core/sync/media.mjs';
@@ -25,6 +25,7 @@ import {transcribeRecording} from '../core/dictation.mjs';
 import {durableRoots,durableFiles} from '../core/file-policy.mjs';
 import { WebAuth, safeReturn } from './web-auth.mjs';
 import { MenerioImport } from './menerio-import.mjs';
+import {visibleRows} from '../core/visibility.mjs';
 
 export async function createService({ root, mediaRoot, host = '127.0.0.1', port = 47831, token, uiRoot, provider, device = 'local', authNow } = {}) {
   const store = new Store(root,{device}), index = new SearchIndex(store), query = new QueryService(store), sync = new FileSync(store);
@@ -90,6 +91,11 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         return send(res,405,{error:'Use GET or POST'});
       }
       if(menerioImport.mutating&&(route==='/mcp'||route.startsWith('/api/'))&&!['/api/session','/api/status','/api/chat/options'].includes(route))return send(res,423,{error:'Your Menerio content is being copied. Wait for the import to finish.'});
+      if(req.method==='POST'&&route.startsWith('/api/')&&route!=='/api/chat/stop')await store.waitForWriter();
+      if(route==='/api/latest-work'&&req.method==='GET'){
+        const notes=visibleRows(query,'notes').filter(n=>!n.is_trashed),work=visibleRows(query,'work_items').filter(w=>w.state==='verified'&&w.verification&&notes.some(n=>n.id===w.result_id)).sort((a,b)=>b.updated_at.localeCompare(a.updated_at))[0],note=work&&notes.find(n=>n.id===work.result_id);
+        return send(res,200,{data:note?[note]:[],verification_current:!!note&&work.verification.content_hash===note._hash,evidence:work?.verification.evidence||null});
+      }
       if(route==='/chat'&&req.method==='GET'){
         res.writeHead(303,{'Location':'/dashboard/chat'+url.search,'Cache-Control':'no-store'});return res.end();
       }
@@ -103,7 +109,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
           if(previous){if(previous.request_hash!==requestHash)throw Error('Chat retry differs from the retained request');if(previous.state==='verified')return send(res,200,previous.result);throw Error('This interrupted chat request needs review before replay');}
           if(receiptId)store.save('command_receipts',{id:receiptId,state:'attempted',request_hash:requestHash});
           const sourceId=input.request_id?'browser-message-'+hash([conversation,input.request_id]):undefined;if(!sourceId||!store.get('conversation_messages',sourceId))store.save('conversation_messages',{id:sourceId,role:'user',content:input.message,conversation_id:conversation,source_app:'browser-chat'});
-          try{const result=await domains.invoke('conversation-chat',{message:input.message,conversation_id:conversation,request_id:input.request_id,talk_id:talk?.id}),saved={reply:result.reply};if(receiptId)store.save('command_receipts',{id:receiptId,state:'verified',result:saved});index.rebuild();return send(res,200,saved);}catch(error){if(receiptId)store.save('command_receipts',{id:receiptId,state:'needs_review',error:error.message});throw error;}
+          try{const result=await domains.invoke('conversation-chat',{message:input.message,conversation_id:conversation,request_id:input.request_id,talk_id:talk?.id}),saved={reply:result.reply};await store.waitForWriter();if(receiptId)store.save('command_receipts',{id:receiptId,state:'verified',result:saved});index.rebuild();return send(res,200,saved);}catch(error){await store.waitForWriter();if(receiptId)store.save('command_receipts',{id:receiptId,state:'needs_review',error:error.message});throw error;}
         }
         return send(res,405,{error:'Use GET or POST'});
       }
@@ -166,9 +172,16 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       if(route==='/api/setup'&&req.method==='POST'){const input=JSON.parse(await body(req));return send(res,200,{...scheduler.configure({...input,owner:mediaSync.config()?'vps':device}),results:await scheduler.tick()});}
       if(route==='/api/jobs/run'&&req.method==='POST')return send(res,200,{results:await scheduler.tick()});
       if(route==='/api/jobs/update'&&req.method==='POST'){const input=JSON.parse(await body(req));return send(res,200,{data:store.save('jobs',input)});}
-      if(route==='/api/jobs/add'&&req.method==='POST'){const input=JSON.parse(await body(req));if(!kinds.includes(input.kind)||!Number.isFinite(input.interval_ms)||input.interval_ms<60000)throw new Error('Choose a supported routine and interval of at least a minute');return send(res,200,{data:store.save('jobs',{kind:input.kind,title:input.title||input.kind,owner:store.get('settings','installation')?.owner||device,next_run:new Date().toISOString(),interval_ms:input.interval_ms,state:'pending',paused:false})});}
+      if(route==='/api/jobs/add'&&req.method==='POST'){const input=JSON.parse(await body(req));if(!kinds.includes(input.kind)||!Number.isFinite(input.interval_ms)||input.interval_ms<60000)throw new Error('Choose a supported routine and interval of at least a minute');return send(res,200,{data:store.save('jobs',{id:input.kind,kind:input.kind,title:input.title||input.kind,owner:store.get('settings','installation')?.owner||device,next_run:new Date().toISOString(),interval_ms:input.interval_ms,state:'pending',paused:false})});}
       if(route==='/api/index/rebuild'&&req.method==='POST'){index.rebuild();return send(res,200,{ok:true});}
       if(route==='/api/backup'&&req.method==='POST'){const destination=path.join(store.state,'backups',Date.now().toString());return send(res,200,{path:backup(store,mediaRoot,destination)});}
+      if(route==='/api/backups'&&req.method==='GET'){
+        const folder=path.join(store.state,'backups'),data=fs.existsSync(folder)?fs.readdirSync(folder).filter(id=>/^\d+$/.test(id)).flatMap(id=>{try{const manifest=JSON.parse(fs.readFileSync(path.join(folder,id,'backup.json'),'utf8'));return [{id,at:manifest.at,records:manifest.records}];}catch{return [];}}).sort((a,b)=>b.id.localeCompare(a.id)):[];return send(res,200,{data});
+      }
+      if(route==='/api/restore-copy'&&req.method==='POST'){
+        const input=JSON.parse(await body(req));if(!/^\d+$/.test(input.backup_id||''))throw Error('Choose one saved backup');
+        const result=restoreSeparateCopy(store,path.join(store.state,'backups',input.backup_id)),rebuilt=new Store(result.workspace),search=new SearchIndex(rebuilt);try{search.rebuild();}finally{search.close();}return send(res,200,result);
+      }
       if(route==='/api/import'&&req.method==='POST')return send(res,200,importExport(query,JSON.parse(await body(req,100*1024*1024))));
       if(route==='/api/export')return send(res,200,{format:1,records:[...store.scan().values()].map(r=>{const copy={...r};delete copy._hash;return copy;})});
       if (route === '/api/search') return send(res, 200, { data: index.search(url.searchParams.get('q') || ''), error: null });
@@ -215,10 +228,10 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         if(isChat&&id&&(!/^[a-f0-9-]{36}$/.test(id)||chatRequests.has(id)))throw new Error('Invalid chat request');
         const receiptId=isChat&&id?'chat-request-'+id:null,requestHash=hash({name,input}),previous=receiptId?store.get('command_receipts',receiptId):null;
         if(previous){if(previous.request_hash!==requestHash)throw Error('Chat retry differs from the retained request');if(previous.state==='verified')return send(res,200,{data:previous.result,error:null});throw Error('This interrupted chat request needs review before replay');}
-        if(isChat){input.message||=input.messages?.filter(m=>m.role==='user').at(-1)?.content||'';input.conversation_id||='notebook:'+(input.note_id?'note:'+input.note_id:input.collection_id?'collection:'+input.collection_id:'general');const sourceId=id?'chat-input-'+id:undefined;if(!sourceId||!store.get('conversation_messages',sourceId))store.save('conversation_messages',{id:sourceId,role:'user',content:input.message,conversation_id:input.conversation_id,note_id:input.note_id||null,contact_id:input.person_id||null,source_app:'notebook-chat'});}
+        if(isChat){const person=input.contact_id||input.person_id||input.personId;if(person){input.contact_id=person;input.person_id=person;input.conversation_id='notebook:person:'+person;}input.message||=input.messages?.filter(m=>m.role==='user').at(-1)?.content||'';input.conversation_id||='notebook:'+(input.note_id?'note:'+input.note_id:input.collection_id?'collection:'+input.collection_id:'general');const sourceId=id?'chat-input-'+id:undefined;if(!sourceId||!store.get('conversation_messages',sourceId))store.save('conversation_messages',{id:sourceId,role:'user',content:input.message,conversation_id:input.conversation_id,note_id:input.note_id||null,contact_id:input.person_id||null,source_app:'notebook-chat'});}
         const controller=new AbortController();if(isChat&&id)chatRequests.set(id,controller);
         if(receiptId)store.save('command_receipts',{id:receiptId,state:'attempted',request_hash:requestHash});
-        try{const data=name.startsWith('mc-api-keys')?apiKeys.invoke(name,input):await domains.invoke(name,{...input,...(isChat?{signal:controller.signal}:{})});if(receiptId)store.save('command_receipts',{id:receiptId,state:'verified',result:data});index.rebuild();return send(res,200,name==='backfill-media-analysis'?data:{data,error:null});}catch(error){if(receiptId&&store.get('command_receipts',receiptId)?.state==='attempted')store.save('command_receipts',{id:receiptId,state:'needs_review',error:error.message});throw error;}finally{if(isChat&&id)chatRequests.delete(id);}
+        try{const data=name.startsWith('mc-api-keys')?apiKeys.invoke(name,input):await domains.invoke(name,{...input,...(isChat?{signal:controller.signal}:{})});await store.waitForWriter();if(receiptId)store.save('command_receipts',{id:receiptId,state:'verified',result:data});index.rebuild();return send(res,200,name==='backfill-media-analysis'?data:{data,error:null});}catch(error){await store.waitForWriter();if(receiptId&&store.get('command_receipts',receiptId)?.state==='attempted')store.save('command_receipts',{id:receiptId,state:'needs_review',error:error.message,...(error.code==='UNAUTHORIZED_OPERATION'?{rejected_operation_type:error.operation_type,source_quote_matches:error.source_quote_matches}:{})});throw error;}finally{if(isChat&&id)chatRequests.delete(id);}
       }
       if (route.startsWith('/api/')) return send(res, 404, { error: 'Unknown operation' });
       const requested = path.resolve(uiRoot, '.' + route); if (requested !== uiRoot && !requested.startsWith(uiRoot + path.sep)) return send(res, 403, { error: 'Invalid path' });

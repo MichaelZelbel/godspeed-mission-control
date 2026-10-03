@@ -1,17 +1,73 @@
 {
   "behavior:first-goal": {
-    "status": "installed check partial",
-    "evidence": ["Windows notebook settings, 2026-10-03: authenticated after upgrade; Start with one goal remains visible with existing pairing, VPS ownership and a paused selftest. Submission and subsequent scheduled cycles still need installed acceptance."],
-    "target_test": "Adopt a fictional goal through this existing configured notebook, restart, and observe useful decision/work/outcome cycles without duplicate schedules."
+    "status": "partial",
+    "evidence": [
+      "Fresh fictional Windows notebook setup adopted the gardening-robot goal, scheduled decision/work, saved a checked outline and opened its note. Existing Windows pairing, VPS ownership and paused selftest survived upgrade. VPS adopted its fictional checklist goal; selected work waited for the following daily slot. The ready-worker correction passes a source regression; installed acceptance is pending."
+    ],
+    "target_test": "Repeat fresh Windows/VPS setup from final committed packages. Ready authorized work runs on the next enabled cycle; deliberate pauses remain intact."
+  },
+  "behavior:goal-loop": {
+    "status": "partial",
+    "evidence": [
+      "Installed endpoint chat recorded the observed deficiency in the outline's rain-sensor section. Subsequent unattended decision selected that section and work saved a revised, independently checked outline. Further proposed observations wait for review; a draft is not a measured outcome."
+    ],
+    "target_test": "Exercise failed decisions/checks, changed direction, delayed exact local approval and restart through final installed notebooks."
+  },
+  "behavior:coaching": {
+    "status": "partial",
+    "evidence": [
+      "Installed fictional chat opened a native health talk, retained the volunteer's reply, recorded an explicitly agreed daily screen break and recorded a skipped-break observation as no. The notebook displayed the talk and habit."
+    ],
+    "target_test": "Scheduled later check-in must use actual replies and no observation; verify close/reopen and separate area histories."
+  },
+  "behavior:journal": {
+    "status": "partial",
+    "evidence": [
+      "Installed /journal note retained the quoted fictional skipped-break observation; the native entry appeared in notebook journal controls."
+    ],
+    "target_test": "Exercise define, finish, reopen, switches and evidence checks; restart and synchronize native files."
+  },
+  "behavior:memory": {
+    "status": "partial",
+    "evidence": [
+      "Installed chat saved/retrieved the fictional rain-sensor rule. Person chat omitted topics and mixed histories; the corrected installed path produced one future-facing listening question and retained its own exchange after reload. Model-free search leaked hidden notes; visibility and bounded meaning-expanded ranking now pass regressions. Read-only Menerio queries collected; common-corpus retrieval equivalence remains unproven."
+    ],
+    "target_test": "Compare corrections, hidden/superseded facts, dates, ambiguity and synonyms after restart against a common Menerio corpus."
+  },
+  "behavior:briefing": {
+    "status": "partial",
+    "evidence": [
+      "Normal notebook recorded fictional energy 7 and enabled briefing with a selected watch source. Drafts containing the banned em dash failed delivery. Writing contract now explicitly forbids it; accepted fresh-health delivery remains pending."
+    ],
+    "target_test": "Inspect an accepted installed briefing with exact fresh measurement, supported action and changed source; failed gates prevent delivery and unchanged advice stays quiet."
+  },
+  "behavior:repairs": {
+    "status": "partial",
+    "evidence": [
+      "Normal notebook configured a fictional localhost connector. HTTP 401 caused one Reconnect spend-guard obligation. After HTTP 200 returned, unattended checking closed that same obligation with completion evidence."
+    ],
+    "target_test": "Accept automatic recoverable connector and failed local-job repair, bounded retries, checked closure and quiet repeat cycles."
   },
   "behavior:recovery": {
-    "status": "recovery check partial",
-    "evidence": ["Both original pre-upgrade backups restored into empty storage and matched their content manifests.", "Post-upgrade restoration detected binary font corruption. Fixed raw-byte transactions/restoration; source-assisted empty restoration then matched Windows 820 records / 2283 files and VPS 838 records / 2375 files. Failed restoration copies retained. Installed recovery UI, fresh setup, offline/reconnect and conflicts still require acceptance."],
-    "target_test": "Repeat restoration through the corrected installed notebook, rebuild indexes, verify links and choices, then exercise offline edits and retained conflicts through both installed interfaces."
+    "status": "partial",
+    "evidence": [
+      "Retained Windows/VPS/fixture backups restored into empty copies with matching knowledge/media digests. Normal fixture notebook Save a backup and Restore a separate copy checked 229 records and 1246 durable files, reported six rebuildable exclusions, retained the copy and rebuilt search without overwriting active records."
+    ],
+    "target_test": "Repeat recovery/link checks on final matching Windows/VPS packages; accept offline edits, reconnection, retained conflicts and preserved choices/pauses."
   },
   "behavior:providers": {
-    "status": "installed failure under repair",
-    "evidence": ["Windows normal chat displayed Model choices could not be loaded after the first upgrade. A direct isolated-helper diagnostic succeeded; the service repeatedly became unresponsive during synchronous Git work. Correction isolates shared automatic/manual/connector synchronization in one worker. Normal installed subscription and endpoint interactions still need verification."],
-    "target_test": "Send fictional requests through normal installed chat with each supported provider, observe actual controlled tool use and retained verified results over scheduled cycles."
+    "status": "partial",
+    "evidence": [
+      "Normal installed Windows subscription chat loaded choices and saved Fictional subscription check after writer-wait correction. VPS subscription chat saved Fictional VPS subscription check. Fresh endpoint generated/checked drafts and recorded goal feedback, coaching, habits, journal and person-specific conversation."
+    ],
+    "target_test": "Inspect actual controlled read/search tool receipts with each claimed provider path, slow sync, restart, retry and cancellation."
+  },
+  "procedure:topic-watch": {
+    "status": "partial",
+    "criterion": "Compare the newest dated baseline against owner criteria, retain a verbatim current-source quote and one follow-up; unchanged repeats stay quiet and a failed comparison is not verified.",
+    "evidence": [
+      "Normal one-minute fictional watch recorded quiet unchanged Monday baselines. Changing its source to Thursday exposed a paraphrased evidence quote. Added one pre-write correction attempt, chronological baseline selection and failed-result propagation; focused regression passes. Installed change/repeat acceptance pending."
+    ],
+    "target_test": "Observe one actual Thursday change through corrected installed routines, then quiet unchanged scheduled cycles."
   }
 }

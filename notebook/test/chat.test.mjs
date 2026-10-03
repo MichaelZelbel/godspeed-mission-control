@@ -10,6 +10,51 @@ import {Store} from '../core/records/store.mjs';
 import {QueryService} from '../core/query.mjs';
 import {Domains} from '../core/domains.mjs';
 
+test('concurrent person context fields merge while conflicting edits remain reviewable',()=>{
+ const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-context-save-'))),query=new QueryService(store),person=store.save('contacts',{name:'Fictional conversation',conversation_context:'Original',conversation_intent:'Listen',conversation_updated_at:'2026-10-03T10:00:00Z'});
+ person._hash=store.get('contacts',person.id)._hash; const write=values=>query.execute({table:'contacts',operation:'update',filters:[['eq','id',person.id]],values,expected:{[person.id]:person._hash},baselines:{[person.id]:person}});
+ write({conversation_context:'Changed',conversation_updated_at:'2026-10-03T10:01:00Z'});
+ assert.doesNotThrow(()=>write({conversation_intent:'Ask one question',conversation_updated_at:'2026-10-03T10:01:01Z'}));
+ assert.equal(store.get('contacts',person.id).conversation_context,'Changed');assert.equal(store.get('contacts',person.id).conversation_intent,'Ask one question');
+ assert.throws(()=>write({conversation_context:'Conflicting'}),error=>error.code==='CONFLICT');
+});
+
+test('person chat retains separate history and supplies current visible topics and facts',async()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-person-chat-'));let received;
+ const s=await createService({root,port:0,provider:async input=>{received=input;return {reply:'What would make Thursday testing easier?'};}}),base='http://127.0.0.1:'+s.address.port;
+ try{
+  const person=s.store.save('contacts',{name:'Fictional Alex Garden'}),other=s.store.save('contacts',{name:'Fictional Other'});
+  s.store.save('contact_topics',{contact_id:person.id,title:'Thursday testing is planned for the future',status:'active'});
+  s.store.save('contact_topics',{contact_id:other.id,title:'Unrelated private topic',status:'active'});
+  s.domains.writeFact({contact_id:person.id,label:'Preference',value:'Listen before advice'});
+  s.store.save('conversation_messages',{conversation_id:'notebook:general',role:'assistant',content:'Unrelated general history'});
+  const input={message:'Prepare one listening question.',personId:person.id,request_id:'01234567-1234-4234-8234-012345678905',conversationContext:{context:'Fictional context',intent:'Listen'},attachments:[{name:'fictional.txt',content:'Thursday remains a planned test.'}]};
+  const post=()=>fetch(base+'/api/functions/conversation-chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(input)});
+  const response=await post();assert.equal(response.status,200);assert.equal(received.context.person.id,person.id);
+  assert.equal(received.context.person_topics.length,1);assert.match(received.context.person_topics[0].title,/future/);
+  assert.equal(received.context.person_facts[0].value,'Listen before advice');assert.equal(received.context.messages.some(m=>m.content==='Unrelated general history'),false);
+  assert.equal(received.context.documents[0].content,'Thursday remains a planned test.');
+  const history=s.query.rows('conversation_messages').filter(m=>m.person_id===person.id);
+  assert.equal(history.length,2);assert.equal(history.every(m=>m.conversation_id==='notebook:person:'+person.id),true);
+  assert.equal((await post()).status,200);assert.equal(s.query.rows('conversation_messages').filter(m=>m.person_id===person.id).length,2);
+ }finally{await s.close();}
+});
+
+test('chat waits for local integration before saving without repeating the provider or blocking health',async()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-chat-write-wait-'));let calls=0;
+ let lock;
+ const s=await createService({root,port:0,provider:async()=>{calls++;fs.writeFileSync(lock,JSON.stringify({pid:process.pid,at:new Date().toISOString()}));setTimeout(()=>fs.unlinkSync(lock),120);return {reply:'Fictional check retained.'};}}),base='http://127.0.0.1:'+s.address.port;lock=path.join(s.store.state,'workspace.lock');
+ const input={message:'Read the fictional check.',request_id:'01234567-1234-4234-8234-012345678901'};
+ try{
+  fs.writeFileSync(lock,JSON.stringify({pid:process.pid,at:new Date().toISOString()}));
+  const pending=fetch(base+'/api/functions/conversation-chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(input)});
+  assert.equal((await fetch(base+'/health')).status,200);await new Promise(r=>setTimeout(r,120));assert.equal(calls,0);fs.unlinkSync(lock);
+  assert.equal((await pending).status,200);
+  const repeated=await fetch(base+'/api/functions/conversation-chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(input)});
+  assert.equal(repeated.status,200);assert.equal(calls,1);assert.equal(s.store.list('conversation_messages').filter(m=>m.role==='assistant').length,1);
+ }finally{if(fs.existsSync(lock))fs.unlinkSync(lock);await s.close();}
+});
+
 test('chat retrieves relevant records without sending a thousand notes or hidden people',()=>{
   const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-chat-context-'));
   const rows={notes:Array.from({length:1300},(_,i)=>({id:String(i),title:i===900?'Lighthouse project':'Other project',content:'x'.repeat(10000)})),contacts:[{id:'secret',name:'Lighthouse secret',ai_visibility:'hidden'}],mcp_preferences:[]};

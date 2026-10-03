@@ -7,6 +7,12 @@ import {Store} from '../core/records/store.mjs';
 import {QueryService} from '../core/query.mjs';
 import {Domains} from '../core/domains.mjs';
  const fixture=provider=>{const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-personal-'))),query=new QueryService(store);return {store,query,domains:new Domains(query,{provider})};};
+
+test('a note request repairs an unrequested personal action before any write',async()=>{
+ let calls=0;const message='Save a note titled Fictional checklist with this content: inspection pending.';
+ const {store,domains}=fixture(async()=>{calls++;assert.equal(store.list('deadlines').length,0);assert.equal(store.list('notes').length,0);return calls===1?{reply:'Reminder saved.',operations:[{type:'obligation-add',title:'Unrequested inspection',due_at:'2026-10-04T09:00:00Z',source_quote:message}]}:{reply:'Note saved.',notes_created:[{title:'Fictional checklist',content:'inspection pending.'}]};});
+ await domains.invoke('conversation-chat',{message,conversation_id:'fictional-notes'});assert.equal(calls,2);assert.equal(store.list('notes').length,1);assert.equal(store.list('deadlines').length,0);
+});
 test('an omitted operation source quote is repaired before any write, then the outcome persists once',async()=>{
  let calls=0,goal;
  const message='Record this outcome for my fictional goal: the draft needs a rain sensor section.';
@@ -22,6 +28,11 @@ test('ordinary conversation creates an adopted goal only from an explicit source
  assert.equal(store.list('goals')[0]?.status,'adopted');assert.ok(store.get('jobs','goal-work'));
  await domains.invoke('conversation-chat',{message:'My goal is a fictional workshop',conversation_id:'test'});assert.equal(store.list('goals').length,1);
  await assert.rejects(domains.invoke('conversation-chat',{message:'Hello',conversation_id:'other'}),/source|explicit/i);
+});
+test('a new obligation retains its completion note baseline so old completion text is not new evidence',async()=>{
+ const {store,domains}=fixture();const note=store.save('notes',{title:'Fictional inspection',content:'Inspection complete.'});
+ const obligation=await domains.invoke('personal-operation',{type:'obligation-add',title:'New inspection',due_at:'2026-10-04T09:00:00Z',completion_check:{type:'note-contains',note_id:note.id,text:'Inspection complete.'}});
+ assert.equal(obligation.completion_baseline_hash,store.get('notes',note.id)._hash);
 });
 test('recurrence completion requires evidence, rolls once and retains completed occurrence',async()=>{
  const {store,domains}=fixture();const d=store.save('deadlines',{title:'Fictional practice',due_at:'2026-10-01T09:00:00Z',status:'open',recurrence:{days:7}});

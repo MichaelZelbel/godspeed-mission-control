@@ -22,7 +22,13 @@ export function chatContext(query,input){
   }
   if(input.note_id){const note=visibleRows(query,'notes').find(r=>r.id===input.note_id&&!r.removed_at&&!r.is_trashed);if(!note)throw new Error('This note is hidden from the assistant');context.notes=[compact(note,24000)];}
   const personId=input.contact_id||input.person_id||input.personId;
-  if(personId){context.person=visibleRows(query,'contacts').find(r=>r.id===personId);if(!context.person)throw new Error('This person is hidden from the assistant');context.person=compact(context.person,12000);}
+  if(personId){
+    context.person=visibleRows(query,'contacts').find(r=>r.id===personId);if(!context.person)throw new Error('This person is hidden from the assistant');context.person=compact(context.person,12000);
+    context.person_topics=visibleRows(query,'contact_topics').filter(r=>r.contact_id===personId&&!r.archived_at&&r.status!=='completed').slice(-20).map(r=>compact(r,1500));
+    context.person_facts=visibleRows(query,'profile_facts').filter(r=>r.contact_id===personId&&r.is_current&&r.show_to_agent).slice(-20).map(r=>compact(r,1500));
+    context.person_conversation=input.conversationContext||null;
+    context.person_evidence_policy='Use only recorded facts and topics about this person. A planned future event is not an event that has happened. Do not invent past conversations or outcomes. Follow the requested number of questions and the saved listening intent.';
+  }
   if(input.collection_id){context.collection=visibleRows(query,'collections').find(r=>r.id===input.collection_id);if(!context.collection)throw new Error('This collection is hidden from the assistant');context.items=visibleRows(query,'collection_items').filter(r=>r.collection_id===input.collection_id).slice(0,20).map(r=>compact(r,1500));}
   context.messages=input.conversation_id?query.rows('conversation_messages').filter(m=>m.conversation_id===input.conversation_id).sort((a,b)=>a.created_at.localeCompare(b.created_at)).slice(-12).map(({role,content})=>({role,content:String(content).slice(0,8000)})):[];
   return context;

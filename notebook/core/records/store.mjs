@@ -62,6 +62,17 @@ export class Store {
     try { fs.writeFileSync(fd, JSON.stringify({ pid: process.pid, at: new Date().toISOString() })); fs.fsyncSync(fd); return fn(); }
     finally { fs.closeSync(fd); fs.unlinkSync(lock); }
   }
+  async waitForWriter({signal,timeoutMs=30000}={}) {
+    const lock=path.join(this.state,'workspace.lock'),until=Date.now()+timeoutMs;
+    while(fs.existsSync(lock)){
+      signal?.throwIfAborted();
+      let owner;try{owner=JSON.parse(fs.readFileSync(lock,'utf8'));}catch(error){if(error.code==='ENOENT')continue;}
+      if(owner?.pid)try{process.kill(owner.pid,0);}catch(error){if(error.code==='ESRCH')return;throw error;}
+      if(Date.now()>=until)throw Error('Workspace is still being written. Your request has not been repeated.');
+      await new Promise(resolve=>setTimeout(resolve,25));
+    }
+    signal?.throwIfAborted();
+  }
   file(record) { return path.join(this.recordsRoot, safe(record.type), safe(record.id) + (record.type === 'notes' ? '.md' : '.json')); }
   scan() {
     const records = new Map(), problems = [], uids = new Map(), aliases = new Map();

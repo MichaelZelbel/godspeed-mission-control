@@ -44,7 +44,8 @@ export async function work(job,{store,query,provider}){
   const content=await controlledWorker({provider,store,query,goal,decision,item,target});
   if(typeof content!=='string'||!content.trim())throw Error('Worker returned no deliverable');
   const latest=store.get('goals',goal.id);if(!adopted(latest)||latest.revision!==goal.revision)throw Error('Goal changed during execution; result is not accepted');
-  const record=store.save('notes',{title:item.title,content,source_app:'goal-work',goal_id:goal.id,work_id:item.id});
+  const previousDraft=query.rows('notes').filter(n=>n.work_id===item.id&&n.source_app==='goal-work'&&!n.is_trashed).sort((a,b)=>b.updated_at.localeCompare(a.updated_at))[0];
+  const record=store.save('notes',{id:previousDraft?.id,title:item.title,content,source_app:'goal-work',goal_id:goal.id,work_id:item.id},previousDraft?._hash);
   const checked=store.get('notes',record.id);if(checked.content!==content||hash(checked.content)!==hash(content))throw Error('Saved draft did not match its output');
   // Read-back establishes persistence only. Semantic completion is checked separately.
   const verdict=structured(await provider({kind:'work-verification',context:{item,deliverable:checked.content},contract:'Check the actual deliverable against item.check. Return JSON {passed:boolean,evidence:string}. Fail an empty, unrelated or incomplete deliverable. This is a draft check, not evidence of an external outcome.'}));

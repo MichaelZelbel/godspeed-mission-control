@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { atomic, hash, Store } from './records/store.mjs';
+import {durable} from './file-policy.mjs';
 function files(root,prefix=''){
   return fs.readdirSync(path.join(root,prefix),{withFileTypes:true}).flatMap(e=>{
     if(e.isSymbolicLink())throw new Error('Archive cannot follow symbolic links');
@@ -29,4 +30,16 @@ export function restore(store,mediaRoot,source,{deviceConfig=false}={}){
   if(fs.existsSync(path.join(source,'media')))fs.cpSync(path.join(source,'media'),mediaRoot,{recursive:true});
   if(deviceConfig&&fs.existsSync(path.join(source,'device-config')))for(const name of fs.readdirSync(path.join(source,'device-config')))fs.cpSync(path.join(source,'device-config',name),path.join(store.state,name),{recursive:true});
   return count;
+}
+export function restoreSeparateCopy(store,source){
+  const destination=path.join(store.state,'restored-copies',Date.now()+'-'+hash(source+Math.random()).slice(0,12)),workspace=path.join(destination,'workspace'),media=path.join(destination,'media');
+  const target=new Store(workspace,{device:store.device}),records=restore(target,media,source),manifest=JSON.parse(fs.readFileSync(path.join(source,'backup.json'),'utf8'));
+  let compared=0;const excluded=[];
+  for(const entry of manifest.files){
+    if(!entry.path.startsWith('media/')&&!durable(entry.path)&&!/^conflicts\/[\w-]+\.json$/.test(entry.path)){excluded.push(entry.path);continue;}
+    const file=entry.path.startsWith('media/')?path.join(media,entry.path.slice(6)):path.join(workspace,entry.path);
+    if(hash(fs.readFileSync(file))!==entry.sha256)throw Error('Restored copy differs from the verified backup');compared++;
+  }
+  const result={verified:true,workspace,media,records,compared_files:compared,excluded_files:excluded,source,at:new Date().toISOString()};
+  atomic(path.join(destination,'verification.json'),JSON.stringify(result,null,2));return result;
 }

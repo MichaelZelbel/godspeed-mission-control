@@ -35,6 +35,13 @@ export class Scheduler {
     try {
       let settings = this.store.get('settings','installation');
       if (!settings || settings.owner !== this.device) return [];
+      // A decision may finish after the worker's daily slot. Ready authorized
+      // work gets the next tick; pauses and uncertain attempts remain intact.
+      const worker=this.store.get('jobs','goal-work');
+      if(worker&&!worker.paused&&worker.state==='pending'&&worker.owner===this.device&&Date.parse(worker.next_run)>now){
+        const ready=this.store.list('work_items').some(w=>(w.state==='pending'||w.state==='failed'&&w.kind==='draft'&&w.attempts<(w.max_attempts||3)&&Date.parse(w.retry_after)<=now)&&((w.kind==='draft'&&w.allowed_action==='save-draft')||(w.kind==='local-note'&&w.allowed_action==='write-local-note'))&&['adopted','active'].includes(this.store.get('goals',w.goal_id)?.status)&&this.store.get('decisions',w.decision_id)?.state==='selected'&&(w.dependencies||[]).every(id=>this.store.get('work_items',id)?.state==='verified'));
+        if(ready){await this.store.waitForWriter();this.store.withLock(()=>{const current=this.store.get('jobs',worker.id);if(current?._hash===worker._hash)this.store.commit([this.store.prepare('jobs',{next_run:new Date(now).toISOString()},current)]);});}
+      }
       for (const snapshot of this.store.list('jobs')) {
         settings=this.store.get('settings','installation');
         if(!settings||settings.owner!==this.device)break;

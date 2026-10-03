@@ -16,6 +16,7 @@ journal-add {content}; journal-switch {enabled}; health-add {metric,value,unit,o
 memory-confirm {label,value,evidence_quote}; memory-propose {label,value,evidence_quote};
 routine-change {id,paused?,calendar?:{time:HH:MM,weekdays?:[0..6]}}; forecast-settle {id,observed,evidence}.
 work-allow-local {id,note_id}: allow the selected work to edit exactly this local note, preserving its current revision as the precondition.
+work-retry-draft {id}: explicitly retry a failed or interrupted local draft, preserving all prior attempts and versions. Never retry an applied or outward action.
 Every operation MUST contain source_quote. Copy the entire current user message exactly into that field, including the request verb. Without it, no operation can run. Use supplied IDs; ask to resolve ambiguity. ISO dates must include timezone. No outward actions or credentials. Never claim a change persisted until the operation succeeds.`;
 const required=(value,label)=>{if(typeof value!=='string'||!value.trim())throw Error(label+' is required');return value.trim();};
 const date=(value,label)=>{required(value,label);if(!Number.isFinite(Date.parse(value))||!/(Z|[+-]\d\d:\d\d)$/.test(value))throw Error(label+' needs an ISO date with timezone');return new Date(value).toISOString();};
@@ -54,6 +55,23 @@ export function personalOperation(domains,input){
   return result;
  }
  const old=table=>{const r=store.get(table,required(input.id,'Record ID'));if(!r||r.removed_at)throw Error('Record does not exist');if(input.expected&&input.expected!==r._hash)store.conflict(table,input,r);return r;};
+ if(type==='work-retry-draft'){
+  const item=old('work_items');
+  if(item.kind!=='draft'||item.allowed_action!=='save-draft'||!['failed','needs_review','attempted'].includes(item.state))throw Error('Only a failed or interrupted local draft can be retried');
+  const goal=store.get('goals',item.goal_id),decision=store.get('decisions',item.decision_id);
+  if(!['adopted','active'].includes(goal?.status)||decision?.state!=='selected')throw Error('The draft goal or decision is no longer active');
+  const running=query.rows('job_receipts').some(receipt=>{
+   if(receipt.kind!=='goal-work'||receipt.state!=='attempted'||!receipt.pid)return false;
+   try{process.kill(receipt.pid,0);return true;}catch(error){return error.code!=='ESRCH';}
+  });
+  if(running)throw Error('Draft work is still running; wait before retrying');
+  return store.withLock(()=>{
+   const current=store.get('work_items',item.id);if(current._hash!==item._hash)throw Error('Draft changed; reload before retrying');
+   const now=new Date().toISOString(),job=store.get('jobs','goal-work');
+   store.commit([store.prepare('work_items',{state:'pending',error:null,retry_after:now,max_attempts:Math.max(item.max_attempts||3,(item.attempts||0)+1),retry_reviews:[...(item.retry_reviews||[]),{at:now,previous_state:item.state,previous_error:item.error||null}]},current),...(job?[store.prepare('jobs',{paused:false,state:'pending',next_run:now,retry_count:0},job)]:[])]);
+   return store.get('work_items',item.id);
+  });
+ }
  if(type==='goal-add'){
   const title=required(input.title,'Goal'),status=input.status||'adopted';if(!['adopted','provisional'].includes(status))throw Error('Choose adopted or provisional');
   const existing=query.rows('goals').find(g=>g.title===title&&!g.removed_at);if(existing)return existing;
@@ -75,7 +93,7 @@ export function personalOperation(domains,input){
   if(input.recurrence&&(!Number.isInteger(input.recurrence.days)||input.recurrence.days<1||input.recurrence.days>366))throw Error('Recurrence needs 1 to 366 days');
   if(!input.due_at&&!input.target_at)throw Error('An obligation needs a target or a deadline');
   if(input.completion_check&&(!['note-contains'].includes(input.completion_check.type)||!store.get('notes',input.completion_check.note_id)||!input.completion_check.text?.trim()))throw Error('Choose a local note and exact completion text');
-  return store.save('deadlines',{title:required(input.title,'Obligation'),due_at:input.due_at?date(input.due_at,'Deadline'):null,target_at:input.target_at?date(input.target_at,'Target'):null,start_at:input.start_at?date(input.start_at,'Start'):new Date().toISOString(),timezone:store.get('settings','installation')?.timezone||'UTC',status:'open',recurrence:input.recurrence||null,completion_check:input.completion_check||null});
+  return store.save('deadlines',{title:required(input.title,'Obligation'),due_at:input.due_at?date(input.due_at,'Deadline'):null,target_at:input.target_at?date(input.target_at,'Target'):null,start_at:input.start_at?date(input.start_at,'Start'):new Date().toISOString(),timezone:store.get('settings','installation')?.timezone||'UTC',status:'open',recurrence:input.recurrence||null,completion_check:input.completion_check||null,completion_baseline_hash:input.completion_check?.note_id?store.get('notes',input.completion_check.note_id)?._hash:null});
  }
  if(type==='obligation-complete'){
   const d=old('deadlines');required(input.evidence,'Completion evidence');if(d.status==='closed')return {id:d.id,next_id:d.next_id,already_closed:true};
@@ -114,14 +132,9 @@ export function personalOperation(domains,input){
  }
  throw Error('Unsupported personal operation: '+type);
 }
-export function conversationOperations(domains,input,operations){
+export function validateConversationOperations(domains,input,operations){
  if(!Array.isArray(operations)||operations.length>10)throw Error('Invalid conversation operations');
  const message=String(input.message||input.messages?.filter(m=>m.role==='user').at(-1)?.content||'');
- const source=domains.query.rows('conversation_messages').filter(m=>m.role==='user'&&m.conversation_id===input.conversation_id&&m.content===message).at(-1);
- const requestId=input.request_id||source?.id||hash([input.conversation_id,message]);
- const planId='personal-plan-'+hash([input.conversation_id,requestId]);
- const digest=hash(operations),plan=domains.store.get('command_receipts',planId);
- if(plan&&plan.plan_hash!==digest)throw Error('Request retry conflicts with its saved operation plan; reload the original result');
  // Authorization is checked independently of the model's explanation.
  const intents={
   'goal-add':/\b(?:my goal is|adopt|set|add|remember|create|mein ziel|lege|speichere)\b[\s\S]*(?:goal|ziel)|\b(?:my goal is|mein ziel ist)\b/i,
@@ -142,18 +155,29 @@ export function conversationOperations(domains,input,operations){
   'memory-propose':/\b(?:remember|save this fact|merke|speichere)\b/i,
   'routine-change':/\b(?:pause|resume|schedule|change|stop|start|pausiere|ändere)\b/i,
   'forecast-settle':/\b(?:settle|record|resolve|log|notiere)\b[\s\S]*(?:forecast|prediction|prognose)/i,
-  'work-allow-local':/\b(?:allow|approve|authori[sz]e|erlaube|genehmige)\b[\s\S]*(?:edit|change|update|write|note|ändern|notiz)/i
+  'work-allow-local':/\b(?:allow|approve|authori[sz]e|erlaube|genehmige)\b[\s\S]*(?:edit|change|update|write|note|ändern|notiz)/i,
+  'work-retry-draft':/\b(?:retry|try again|wiederhole|erneut)\b[\s\S]*(?:draft|work|entwurf|aufgabe)/i
  };
  for(const operation of operations){
   const quote=operation.source_quote;
   // A provider-selected substring cannot turn a refusal or hypothetical into permission.
-  if(!quote||!message.includes(quote)||!intents[operation.type]?.test(quote)||!intents[operation.type]?.test(message)||/\b(?:do not|don.t|never|must not|should not|nicht|niemals)\s+(?:remember|save|add|create|allow|approve|authori[sz]e|edit|change|write|speichere|erlaube)/i.test(message)||/\b(?:if I|suppose|hypothetically|for example|someone said|quoted|wenn ich|beispielsweise)\b/i.test(message))throw Error('Operation lacks an explicit authorized request');
+  if(!quote||!message.includes(quote)||!intents[operation.type]?.test(quote)||!intents[operation.type]?.test(message)||/\b(?:do not|don.t|never|must not|should not|nicht|niemals)\s+(?:remember|save|add|create|allow|approve|authori[sz]e|edit|change|write|speichere|erlaube)/i.test(message)||/\b(?:if I|suppose|hypothetically|for example|someone said|quoted|wenn ich|beispielsweise)\b/i.test(message))throw Object.assign(Error('A proposed change needs your explicit request.'),{code:'UNAUTHORIZED_OPERATION',operation_type:operation.type,source_quote_matches:typeof quote==='string'&&message.includes(quote)});
   if(operation.type==='work-allow-local'){
    const note=domains.store.get('notes',operation.note_id),item=domains.store.get('work_items',operation.id);
    if(!note||!item||![note.id,note.title].filter(Boolean).some(name=>message.includes(name))||![item.id,item.title].filter(Boolean).some(name=>message.includes(name)))throw Error('Approval must identify the exact task and target note');
   }
   if(operation.type==='habit-observe'&&operation.answer==='done'&&/\b(?:did not|didn.t|haven.t|have not|not done|skipped|nicht|nein)\b/i.test(message))throw Error('Habit completion contradicts the actual user reply');
  }
+}
+export function conversationOperations(domains,input,operations){
+ if(!Array.isArray(operations)||operations.length>10)throw Error('Invalid conversation operations');
+ const message=String(input.message||input.messages?.filter(m=>m.role==='user').at(-1)?.content||'');
+ const source=domains.query.rows('conversation_messages').filter(m=>m.role==='user'&&m.conversation_id===input.conversation_id&&m.content===message).at(-1);
+ const requestId=input.request_id||source?.id||hash([input.conversation_id,message]);
+ const planId='personal-plan-'+hash([input.conversation_id,requestId]);
+ const digest=hash(operations),plan=domains.store.get('command_receipts',planId);
+ if(plan&&plan.plan_hash!==digest)throw Error('Request retry conflicts with its saved operation plan; reload the original result');
+ validateConversationOperations(domains,input,operations);
  if(!plan)domains.store.save('command_receipts',{id:planId,state:'attempted',source_id:source?.id||requestId,plan_hash:digest,operations});
  const results=[];
  for(const [i,operation] of operations.entries()){

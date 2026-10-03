@@ -1,6 +1,6 @@
 {
   "format": 2,
-  "checked_at": "2026-10-03T17:39:03.287Z",
+  "checked_at": "2026-10-03T19:21:01.226Z",
   "complete": false,
   "items": [
     {
@@ -2365,11 +2365,13 @@
       "activation": "Explicit user choice; inspect installed schedules and settings",
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
-      "criterion": "One owner-selected topic registry and source reader. Verify the watch result across a failed run, restart and an unchanged repeat; report an observation rather than implying execution.",
-      "status": "source only",
-      "evidence": [],
+      "criterion": "Compare the newest dated baseline against owner criteria, retain a verbatim current-source quote and one follow-up; unchanged repeats stay quiet and a failed comparison is not verified.",
+      "status": "partial",
+      "evidence": [
+        "Normal one-minute fictional watch recorded quiet unchanged Monday baselines. Changing its source to Thursday exposed a paraphrased evidence quote. Added one pre-write correction attempt, chronological baseline selection and failed-result propagation; focused regression passes. Installed change/repeat acceptance pending."
+      ],
       "required": true,
-      "target_test": "Exercise topic-watch through its installed entry point and check actual results after restart"
+      "target_test": "Observe one actual Thursday change through corrected installed routines, then quiet unchanged scheduled cycles."
     },
     {
       "key": "procedure:brief-judges",
@@ -2845,7 +2847,7 @@
       "activation": "Explicit user choice; inspect installed schedules and settings",
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
-      "criterion": "Use when someone asks for a hand-drawn visual, PNG image, rendered diagram, visual explanation, visualization, or says \"make a visual\" or \"draw a visual\". This generates PNG images, not editable files. Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation.",
+      "criterion": "Use when someone asks for a hand-drawn visual, PNG image, rendered diagram, visual explanation, visualization, or says \"make a visual\" or \"draw a visual\". This generates PNG images, not editable files.\r Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation.",
       "status": "source only",
       "evidence": [],
       "required": true,
@@ -3662,12 +3664,12 @@
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
       "criterion": "Missing goal setup stays visible; preserve paused routines",
-      "status": "installed check partial",
+      "status": "partial",
       "evidence": [
-        "Windows notebook settings, 2026-10-03: authenticated after upgrade; Start with one goal remains visible with existing pairing, VPS ownership and a paused selftest. Submission and subsequent scheduled cycles still need installed acceptance."
+        "Fresh fictional Windows notebook setup adopted the gardening-robot goal, scheduled decision/work, saved a checked outline and opened its note. Existing Windows pairing, VPS ownership and paused selftest survived upgrade. VPS adopted its fictional checklist goal; selected work waited for the following daily slot. The ready-worker correction passes a source regression; installed acceptance is pending."
       ],
       "required": true,
-      "target_test": "Adopt a fictional goal through this existing configured notebook, restart, and observe useful decision/work/outcome cycles without duplicate schedules."
+      "target_test": "Repeat fresh Windows/VPS setup from final committed packages. Ready authorized work runs on the next enabled cycle; deliberate pauses remain intact."
     },
     {
       "key": "behavior:goal-loop",
@@ -3680,10 +3682,12 @@
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
       "criterion": "Selected work executes once, passes actual check and feeds the next choice",
-      "status": "source only",
-      "evidence": [],
+      "status": "partial",
+      "evidence": [
+        "Installed endpoint chat recorded the observed deficiency in the outline's rain-sensor section. Subsequent unattended decision selected that section and work saved a revised, independently checked outline. Further proposed observations wait for review; a draft is not a measured outcome."
+      ],
       "required": true,
-      "target_test": "Exercise goal-loop through its installed entry point and check actual results after restart"
+      "target_test": "Exercise failed decisions/checks, changed direction, delayed exact local approval and restart through final installed notebooks."
     },
     {
       "key": "behavior:local-action",
@@ -3728,10 +3732,12 @@
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
       "criterion": "Native commands share history with chat/notebook; later check-in uses replies",
-      "status": "source only",
-      "evidence": [],
+      "status": "partial",
+      "evidence": [
+        "Installed fictional chat opened a native health talk, retained the volunteer's reply, recorded an explicitly agreed daily screen break and recorded a skipped-break observation as no. The notebook displayed the talk and habit."
+      ],
       "required": true,
-      "target_test": "Exercise coaching through its installed entry point and check actual results after restart"
+      "target_test": "Scheduled later check-in must use actual replies and no observation; verify close/reopen and separate area histories."
     },
     {
       "key": "behavior:journal",
@@ -3744,10 +3750,12 @@
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
       "criterion": "Native journal checks agreed completion against evidence and retains corrections",
-      "status": "source only",
-      "evidence": [],
+      "status": "partial",
+      "evidence": [
+        "Installed /journal note retained the quoted fictional skipped-break observation; the native entry appeared in notebook journal controls."
+      ],
       "required": true,
-      "target_test": "Exercise journal through its installed entry point and check actual results after restart"
+      "target_test": "Exercise define, finish, reopen, switches and evidence checks; restart and synchronize native files."
     },
     {
       "key": "behavior:memory",
@@ -3760,10 +3768,12 @@
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
       "criterion": "Source-linked corrections survive restart; hidden/superseded facts excluded; synonym comparison with Menerio",
-      "status": "source only",
-      "evidence": [],
+      "status": "partial",
+      "evidence": [
+        "Installed chat saved/retrieved the fictional rain-sensor rule. Person chat omitted topics and mixed histories; the corrected installed path produced one future-facing listening question and retained its own exchange after reload. Model-free search leaked hidden notes; visibility and bounded meaning-expanded ranking now pass regressions. Read-only Menerio queries collected; common-corpus retrieval equivalence remains unproven."
+      ],
       "required": true,
-      "target_test": "Exercise memory through its installed entry point and check actual results after restart"
+      "target_test": "Compare corrections, hidden/superseded facts, dates, ambiguity and synonyms after restart against a common Menerio corpus."
     },
     {
       "key": "behavior:briefing",
@@ -3776,10 +3786,12 @@
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
       "criterion": "Collect/check sources; failed gate prevents delivery; useful fresh health line",
-      "status": "source only",
-      "evidence": [],
+      "status": "partial",
+      "evidence": [
+        "Normal notebook recorded fictional energy 7 and enabled briefing with a selected watch source. Drafts containing the banned em dash failed delivery. Writing contract now explicitly forbids it; accepted fresh-health delivery remains pending."
+      ],
       "required": true,
-      "target_test": "Exercise briefing through its installed entry point and check actual results after restart"
+      "target_test": "Inspect an accepted installed briefing with exact fresh measurement, supported action and changed source; failed gates prevent delivery and unchanged advice stays quiet."
     },
     {
       "key": "behavior:repairs",
@@ -3792,10 +3804,12 @@
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
       "criterion": "One repair/login item; supported automatic recovery; closure after recheck",
-      "status": "source only",
-      "evidence": [],
+      "status": "partial",
+      "evidence": [
+        "Normal notebook configured a fictional localhost connector. HTTP 401 caused one Reconnect spend-guard obligation. After HTTP 200 returned, unattended checking closed that same obligation with completion evidence."
+      ],
       "required": true,
-      "target_test": "Exercise repairs through its installed entry point and check actual results after restart"
+      "target_test": "Accept automatic recoverable connector and failed local-job repair, bounded retries, checked closure and quiet repeat cycles."
     },
     {
       "key": "behavior:single-owner",
@@ -3824,13 +3838,12 @@
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
       "criterion": "Content/links match after rebuild and empty restore; user choices retained",
-      "status": "recovery check partial",
+      "status": "partial",
       "evidence": [
-        "Both original pre-upgrade backups restored into empty storage and matched their content manifests.",
-        "Post-upgrade restoration detected binary font corruption. Fixed raw-byte transactions/restoration; source-assisted empty restoration then matched Windows 820 records / 2283 files and VPS 838 records / 2375 files. Failed restoration copies retained. Installed recovery UI, fresh setup, offline/reconnect and conflicts still require acceptance."
+        "Retained Windows/VPS/fixture backups restored into empty copies with matching knowledge/media digests. Normal fixture notebook Save a backup and Restore a separate copy checked 229 records and 1246 durable files, reported six rebuildable exclusions, retained the copy and rebuilt search without overwriting active records."
       ],
       "required": true,
-      "target_test": "Repeat restoration through the corrected installed notebook, rebuild indexes, verify links and choices, then exercise offline edits and retained conflicts through both installed interfaces."
+      "target_test": "Repeat recovery/link checks on final matching Windows/VPS packages; accept offline edits, reconnection, retained conflicts and preserved choices/pauses."
     },
     {
       "key": "behavior:providers",
@@ -3843,12 +3856,12 @@
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
       "criterion": "Configured providers produce useful work through installed interfaces",
-      "status": "installed failure under repair",
+      "status": "partial",
       "evidence": [
-        "Windows normal chat displayed Model choices could not be loaded after the first upgrade. A direct isolated-helper diagnostic succeeded; the service repeatedly became unresponsive during synchronous Git work. Correction isolates shared automatic/manual/connector synchronization in one worker. Normal installed subscription and endpoint interactions still need verification."
+        "Normal installed Windows subscription chat loaded choices and saved Fictional subscription check after writer-wait correction. VPS subscription chat saved Fictional VPS subscription check. Fresh endpoint generated/checked drafts and recorded goal feedback, coaching, habits, journal and person-specific conversation."
       ],
       "required": true,
-      "target_test": "Send fictional requests through normal installed chat with each supported provider, observe actual controlled tool use and retained verified results over scheduled cycles."
+      "target_test": "Inspect actual controlled read/search tool receipts with each claimed provider path, slow sync, restart, retry and cancellation."
     },
     {
       "key": "behavior:trial",
