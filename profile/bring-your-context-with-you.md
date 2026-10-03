@@ -57,9 +57,9 @@ When I tried the earlier version of this prompt in my ChatGPT account, all five 
 
 I'd never sat down to write a job description for an assistant, yet here was one assembled from my requests and corrections. It was an oddly useful record of my impatience.
 
-That first run also included something I had forgotten giving an AI. Months earlier, I had supplied my credit card details for a last-minute gift for my wife. The gift arrived, and I forgot about the errand. The card details made an unexpected return in the briefing I was about to copy between machines.
+That first run also included something I had forgotten giving an AI. Months earlier, I had given an AI my credit card details for an experiment: I wanted to see whether it could order from an online shop. The experiment failed miserably, and maybe that's a good thing, because it failed on the security checks that are normal for German credit cards. You confirm an online payment not only with the code on the back of the card, but also in a special banking app on your phone, which in turn wants your OK and your face.
 
-I had asked for a useful account of myself and received rather too useful an account of my payment method. I now read the briefing before handing it to another tool.
+So the experiment ended really fast, and I forgot about it. The card details made an unexpected return in the briefing I was about to copy between machines. I had asked for a useful account of myself and received rather too useful an account of my payment method. I now read the briefing before handing it to another tool.
 
 Ask the chatbot to remove anything you don't want to share in this briefing. Keep passwords, access keys and full card numbers in a password manager. Removing them from the briefing prevents another copy; it does not erase the earlier chat or the provider's records. For other personal details, let the intended help guide you. “We keep Thursday evening free” can be enough for a work plan without the private story behind it.
 
