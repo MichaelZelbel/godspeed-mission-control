@@ -70,6 +70,9 @@ test('backup restores records, history and conflicts into an empty workspace', (
   const restored = new Store(temp()); assert.equal(restored.restore(backup), 2); assert.equal(restored.list('claims').filter(c => c.valid_to).length, 1);
   assert.throws(() => restored.restore(backup), /empty workspace/);
 });
+test('backup restoration preserves non-UTF8 personal skill assets byte for byte',()=>{
+ const store=new Store(temp()),file='skills/fictional/assets/font.bin',bytes=Buffer.from([0,255,254,195,128,1]);atomic(path.join(store.root,file),bytes);const saved=path.join(temp(),'backup');store.backup(saved);const restored=new Store(temp());restored.restore(saved);assert.deepEqual(fs.readFileSync(path.join(restored.root,file)),bytes);
+});
 test('missing references refuse publication and incomplete direct edits remain untouched', () => {
   const store = new Store(temp()); assert.throws(() => store.save('notes', { title: 'Bad', references: [{ type: 'contacts', id: 'missing' }] }), /validation failed/);
   const file = path.join(store.recordsRoot, 'notes', 'broken.md'); atomic(file, 'unfinished'); store.scan();

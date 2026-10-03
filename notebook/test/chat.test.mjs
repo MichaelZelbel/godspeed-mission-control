@@ -25,9 +25,10 @@ test('uploaded document contents require a valid saved binary and supported type
   fs.writeFileSync(path.join(root,mapping.file),'changed');assert.throws(()=>chatAttachments(root,[{path:'chat/document.txt'}]),/integrity/);
 });
 test('a question about a note cannot turn a model-supplied edit into a saved change',async()=>{
-  const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-chat-read-only-')),store=new Store(root),note=store.save('notes',{title:'Original',content:'Keep this exact content'}),domains=new Domains(new QueryService(store),{provider:async()=>JSON.stringify({reply:'The note contains the original text.',note_content:'Unexpected edit',note_changes:{title:'Changed'},trash_note:true})});
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-chat-read-only-')),store=new Store(root),note=store.save('notes',{title:'Original',content:'Keep this exact content'}),domains=new Domains(new QueryService(store),{provider:async()=>JSON.stringify({reply:'The note contains the original text.',note_content:'Unexpected edit',note_changes:{title:'Changed'},trash_note:true,notes_created:[{title:'Unrequested',content:'Unrequested'}]})});
   const response=await domains.invoke('note-chat',{note_id:note.id,messages:[{role:'user',content:'What does the current note say?'}]});
   assert.equal(store.get('notes',note.id).content,'Keep this exact content');assert.equal(store.get('notes',note.id).title,'Original');assert.equal(store.get('notes',note.id).updated_at,note.updated_at);assert.equal(response.note_edit,undefined);assert.equal(response.tool_results.length,0);
+  assert.equal(store.list('notes').length,1);
 });
 test('stop aborts the running provider and prevents an assistant write',async()=>{
   const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-chat-stop-'));let running,started;const ready=new Promise(r=>started=r);
@@ -35,6 +36,13 @@ test('stop aborts the running provider and prevents an assistant write',async()=
   const s=await createService({root,port:0,provider}),base='http://127.0.0.1:'+s.address.port,id='aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
   const post=(route,body)=>fetch(base+route,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
   try{const response=post('/api/functions/note-chat',{message:'hi',request_id:id});await ready;assert.equal((await post('/api/chat/stop',{id})).status,200);assert.equal((await response).status,400);assert.equal(running.aborted,true);assert.equal(s.query.rows('conversation_messages').filter(m=>m.role==='assistant').length,0);assert.equal(s.query.rows('conversation_messages').find(m=>m.role==='user').content,'hi');}finally{await s.close();}
+});
+test('reading a collection cannot cause a provider to add rows',async()=>{
+ const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-collection-read-'))),collection=store.save('collections',{name:'Fictional reading list',field_schema:[{key:'title',type:'text'}]}),domains=new Domains(new QueryService(store),{provider:async()=>({reply:'An empty fictional reading list.',items_created:[{data:{title:'Unrequested'}}]})});
+ const result=await domains.invoke('collection-chat',{collection_id:collection.id,message:'What is in this collection?'});assert.equal(store.list('collection_items').length,0);assert.equal(result.tool_results.length,0);
+});
+test('asking how to create a note cannot authorize model-supplied new notes',async()=>{
+ const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-note-instructions-'))),domains=new Domains(new QueryService(store),{provider:async()=>({reply:'Use New Note.',notes_created:[{title:'Unrequested',content:'Unrequested'}]})});await domains.invoke('conversation-chat',{message:'How do I create a note?'});assert.equal(store.list('notes').length,0);
 });
 test('an assistant save overlapping background sync keeps the notebook service alive',async()=>{
   const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-chat-sync-lock-')),s=await createService({root,port:0}),lock=path.join(s.store.state,'workspace.lock');

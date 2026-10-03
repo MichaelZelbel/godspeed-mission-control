@@ -1,5 +1,13 @@
 # Procedures: everything that runs on its own
 
+## Notebook service and private file synchronization
+
+The installer can start a separate notebook service at sign-in on Windows or through the isolated Docker Compose project on a server. Its supervisor checks the notebook identity and scheduler progress, restarts only its own unhealthy notebook process, and stops retrying after five failed restarts. The installed stop command or stopping the separate Compose project turns it off.
+
+Once private file synchronization is explicitly configured, the notebook checks it once a minute and after a durable file change. Automatic, manual and notebook connector requests share one synchronization worker. Slow Git network requests run in that worker so the notebook can keep answering requests. Stopping the notebook terminates the synchronization process tree. File conflicts keep the original and both edited versions; a binary file retains exact bytes and can be resolved by choosing a saved version.
+
+These are installation mechanisms, not adopted personal goals. Personal routines become scheduled only through the saved goal setup and routine controls; their owner, next run and pause state remain visible there. No routine is claimed tested merely because this description is packaged.
+
 <!--
 The register (Chapter 21). One block per procedure.
 

@@ -67,3 +67,8 @@ test('invalid assistant snapshots stay local instead of entering Git',()=>{
   assert.equal(sync.reconcile().state,'pending');
   assert.doesNotMatch(git(a.root,'ls-files'),/state.json/);
 });
+test('binary skill edits keep both exact versions through conflict resolution and reconnect',()=>{
+ const {a,b}=fixture(),file='skills/fictional/assets/font.bin',base=Buffer.alloc(1100000,255),local=Buffer.alloc(1100000,254),remote=Buffer.alloc(1100000,253),sa=new FileSync(a),sb=new FileSync(b);base[0]=local[0]=remote[0]=0;
+ sa.initialize('https://github.com/synthetic/private.git');sb.initialize('https://github.com/synthetic/private.git');atomic(path.join(a.root,file),base);assert.equal(sa.reconcile().state,'synced');assert.equal(sb.reconcile().state,'synced');assert.deepEqual(fs.readFileSync(path.join(b.root,file)),base);
+ atomic(path.join(a.root,file),remote);atomic(path.join(b.root,file),local);assert.equal(sa.reconcile().state,'synced');assert.equal(sb.reconcile().state,'conflict');const conflict=JSON.parse(fs.readFileSync(path.join(b.root,'conflicts',sb.pendingConflicts()[0])));assert.equal(conflict.encoding,'base64');assert.deepEqual(Buffer.from(conflict.local,'base64'),local);assert.deepEqual(Buffer.from(conflict.remote,'base64'),remote);sb.resolve(conflict.id,'local');assert.equal(sb.reconcile().state,'synced');assert.equal(sa.reconcile().state,'synced');assert.deepEqual(fs.readFileSync(path.join(a.root,file)),local);
+});

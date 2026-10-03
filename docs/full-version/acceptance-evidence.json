@@ -1,0 +1,17 @@
+{
+  "behavior:first-goal": {
+    "status": "installed check partial",
+    "evidence": ["Windows notebook settings, 2026-10-03: authenticated after upgrade; Start with one goal remains visible with existing pairing, VPS ownership and a paused selftest. Submission and subsequent scheduled cycles still need installed acceptance."],
+    "target_test": "Adopt a fictional goal through this existing configured notebook, restart, and observe useful decision/work/outcome cycles without duplicate schedules."
+  },
+  "behavior:recovery": {
+    "status": "recovery check partial",
+    "evidence": ["Both original pre-upgrade backups restored into empty storage and matched their content manifests.", "Post-upgrade restoration detected binary font corruption. Fixed raw-byte transactions/restoration; source-assisted empty restoration then matched Windows 820 records / 2283 files and VPS 838 records / 2375 files. Failed restoration copies retained. Installed recovery UI, fresh setup, offline/reconnect and conflicts still require acceptance."],
+    "target_test": "Repeat restoration through the corrected installed notebook, rebuild indexes, verify links and choices, then exercise offline edits and retained conflicts through both installed interfaces."
+  },
+  "behavior:providers": {
+    "status": "installed failure under repair",
+    "evidence": ["Windows normal chat displayed Model choices could not be loaded after the first upgrade. A direct isolated-helper diagnostic succeeded; the service repeatedly became unresponsive during synchronous Git work. Correction isolates shared automatic/manual/connector synchronization in one worker. Normal installed subscription and endpoint interactions still need verification."],
+    "target_test": "Send fictional requests through normal installed chat with each supported provider, observe actual controlled tool use and retained verified results over scheduled cycles."
+  }
+}

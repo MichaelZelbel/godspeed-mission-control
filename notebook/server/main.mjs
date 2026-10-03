@@ -11,6 +11,7 @@ import { Scheduler } from '../core/jobs/scheduler.mjs';
 import { modelProvider, jobExecutor,hermesProvider } from '../core/runtime.mjs';
 import {assistantEnvironment} from '../core/assistant-files.mjs';
 import { FileSync } from '../core/sync/git.mjs';
+import { SyncRunner } from '../core/sync/runner.mjs';
 import { backup, restore } from '../core/archives.mjs';
 import { importExport } from '../core/import.mjs';
 import { kinds } from '../core/jobs/scheduler.mjs';
@@ -27,6 +28,7 @@ import { MenerioImport } from './menerio-import.mjs';
 
 export async function createService({ root, mediaRoot, host = '127.0.0.1', port = 47831, token, uiRoot, provider, device = 'local', authNow } = {}) {
   const store = new Store(root,{device}), index = new SearchIndex(store), query = new QueryService(store), sync = new FileSync(store);
+  const syncRunner=new SyncRunner(root,{onResult:result=>{sync.last=result;atomic(path.join(store.state,'sync-status.json'),JSON.stringify(result));}});
   const providerPath=path.join(store.state,'provider.json');
   if(!provider&&fs.existsSync(providerPath))provider=modelProvider(JSON.parse(fs.readFileSync(providerPath,'utf8')));
   provider ||= modelProvider({url:process.env.GODSPEED_MODEL_URL,key:process.env.GODSPEED_MODEL_KEY,model:process.env.GODSPEED_MODEL});
@@ -35,7 +37,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   let schedulerHeartbeat=new Date().toISOString();
   if(provider){const connected=provider;provider=Object.assign(async input=>{schedulerHeartbeat=new Date().toISOString();try{return await connected(input);}finally{schedulerHeartbeat=new Date().toISOString();}},connected);}
   const domains=new Domains(query,{provider}),scheduler=new Scheduler(store,{device,executor:jobExecutor(provider,query)});scheduler.onProgress=()=>{schedulerHeartbeat=new Date().toISOString();};
-  domains.sync=sync;
+  domains.sync={reconcile:()=>syncRunner.run(),pendingConflicts:()=>sync.pendingConflicts()};
   mediaRoot = path.resolve(mediaRoot || path.join(store.state, 'media')); fs.mkdirSync(mediaRoot, { recursive: true });
   domains.mediaRoot=mediaRoot;
   const mediaSync=new MediaSync(store,mediaRoot),pairCodes=new Map(),pairKeysPath=path.join(store.state,'pair-clients.json');
@@ -143,9 +145,9 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         return send(res,200,{connected:true});
       }
       if(route==='/api/sync/configure'&&req.method==='POST'){
-        const input=JSON.parse(await body(req));await sync.verifyRemote(input.url);sync.initialize(input.url);atomic(path.join(store.state,'sync-config.json'),JSON.stringify({enabled:true}));return send(res,200,{status:sync.reconcile()});
+        const input=JSON.parse(await body(req));return send(res,200,{status:await syncRunner.configure(input.url)});
       }
-      if(route==='/api/sync/run'&&req.method==='POST')return send(res,200,{status:sync.reconcile()});
+      if(route==='/api/sync/run'&&req.method==='POST')return send(res,200,{status:await syncRunner.run()});
       if(route==='/api/owner'&&req.method==='POST'){const input=JSON.parse(await body(req));if(!['local','vps'].includes(input.owner))throw new Error('Choose local or VPS owner');scheduler.transfer(input.owner);return send(res,200,{owner:input.owner});}
       if(route==='/api/delivery'&&req.method==='POST'){const input=JSON.parse(await body(req));if(!['notebook','telegram'].includes(input.delivery)||input.delivery==='telegram'&&!scheduler.deliver)throw new Error('Configure the separate candidate Telegram bot before choosing chat delivery');const settings=store.get('settings','installation');if(!settings)throw new Error('Start with a goal first');store.save('settings',{id:settings.id,delivery:input.delivery});return send(res,200,{delivery:input.delivery});}
       if(route==='/api/conflicts'&&req.method==='GET')return send(res,200,{data:sync.pendingConflicts().map(name=>JSON.parse(fs.readFileSync(path.join(store.root,'conflicts',name),'utf8')))});
@@ -230,18 +232,18 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   let busy = false;
   const interval = setInterval(() => { if (!busy&&!menerioImport.mutating) { busy = true; try { index.rebuild(); } catch {} finally { busy = false; } } }, 30000);
   const jobs=setInterval(()=>{if(!menerioImport.mutating)scheduler.tick().catch(()=>{});},30000);
-  const syncTimer=setInterval(()=>{if(!menerioImport.mutating&&fs.existsSync(path.join(store.state,'sync-config.json')))sync.reconcile();},60000);
+  const syncTimer=setInterval(()=>{if(!menerioImport.mutating&&fs.existsSync(path.join(store.state,'sync-config.json')))void syncRunner.run();},60000);
   const mediaTimer=setInterval(()=>{if(!menerioImport.mutating)mediaSync.reconcile();},60000);
   const telegram=process.env.GODSPEED_TELEGRAM==='on'&&process.env.GODSPEED_CANDIDATE_BOT_TOKEN&&process.env.GODSPEED_CANDIDATE_BOT_OWNER?new Telegram({store,domains,token:process.env.GODSPEED_CANDIDATE_BOT_TOKEN,owner:process.env.GODSPEED_CANDIDATE_BOT_OWNER,loginLink:process.env.GODSPEED_BROWSER_ORIGIN?destination=>{const code=randomBytes(32).toString('hex');loginLinks.set(code,Date.now()+300000);return process.env.GODSPEED_BROWSER_ORIGIN+'/login/'+code+'?next='+encodeURIComponent(destination);}:undefined}):null;
   const telegramTimer=telegram?setInterval(()=>{if(!menerioImport.mutating)telegram.tick().catch(()=>{});},3000):null;
   scheduler.deliver=telegram?(id,result)=>telegram.deliver(id,result):null;
   let debounce,indexDebounce;const watchers=new Map();
-  const changed=(event,name)=>{if(menerioImport.mutating||!name||name.replaceAll('\\','/').startsWith('.')||name.endsWith('.tmp'))return;clearTimeout(indexDebounce);indexDebounce=setTimeout(()=>{if(menerioImport.mutating)return;try{index.rebuild();}catch{}},750);if(fs.existsSync(path.join(store.state,'sync-config.json'))){clearTimeout(debounce);debounce=setTimeout(()=>{if(!menerioImport.mutating)sync.reconcile();},5000);}};
+  const changed=(event,name)=>{if(menerioImport.mutating||!name||name.replaceAll('\\','/').startsWith('.')||name.endsWith('.tmp'))return;clearTimeout(indexDebounce);indexDebounce=setTimeout(()=>{if(menerioImport.mutating)return;try{index.rebuild();}catch{}},750);if(fs.existsSync(path.join(store.state,'sync-config.json'))){clearTimeout(debounce);debounce=setTimeout(()=>{if(!menerioImport.mutating)void syncRunner.run();},5000);}};
   // Private backups and Git merge workspaces are outside the watched knowledge.
   const watchRoot=name=>{const folder=path.join(store.root,name);if(!watchers.has(name)&&fs.existsSync(folder))watchers.set(name,fs.watch(folder,{recursive:true},changed));};
   for(const name of durableRoots)watchRoot(name);
   const rootWatcher=fs.watch(store.root,(event,name)=>{if(durableRoots.includes(name)){watchRoot(name);changed(event,name);}else if(durableFiles.includes(name))changed(event,name);});
-  return { server, store, index, query, domains, scheduler, sync, mediaSync,address: server.address(), close: async () => { await menerioImport.close();rootWatcher.close();for(const watcher of watchers.values())watcher.close();clearTimeout(debounce);clearTimeout(indexDebounce);clearInterval(telegramTimer);clearInterval(interval);clearInterval(jobs);clearInterval(syncTimer);clearInterval(mediaTimer); await new Promise(resolve => server.close(resolve)); index.close(); } };
+  return { server, store, index, query, domains, scheduler, sync, mediaSync,address: server.address(), close: async () => { await syncRunner.close();await menerioImport.close();rootWatcher.close();for(const watcher of watchers.values())watcher.close();clearTimeout(debounce);clearTimeout(indexDebounce);clearInterval(telegramTimer);clearInterval(interval);clearInterval(jobs);clearInterval(syncTimer);clearInterval(mediaTimer); await new Promise(resolve => server.close(resolve)); index.close(); } };
 }
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const root = process.env.GODSPEED_WORKSPACE;

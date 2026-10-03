@@ -165,7 +165,7 @@ export class Store {
       const item = manifest[i], file = path.resolve(this.root, item.file);
       if (!file.startsWith(this.root + path.sep)||!(durable(item.file.replaceAll('\\','/'))||/^conflicts\/[\w-]+\.json$/.test(item.file))) throw new Error('Invalid transaction target');
       if(item.delete){if(fs.existsSync(file))fs.unlinkSync(file);continue;}
-      const text = fs.readFileSync(path.join(dir, item.staged), 'utf8');
+      const text = fs.readFileSync(path.join(dir, item.staged));
       if (hash(text) !== item.hash) throw new Error('Corrupt transaction stage');
       atomic(file, text);
       if (this.failAfter === i + 1) throw new Error('Injected crash');
@@ -248,7 +248,7 @@ export class Store {
       const items=[];const visit=(relative)=>{
         const target=path.join(source,relative),info=fs.lstatSync(target);if(info.isSymbolicLink())throw new Error('Restore cannot follow symbolic links');
         if(info.isDirectory())for(const name of fs.readdirSync(target))visit(path.posix.join(relative,name));
-        else if(durable(relative)||/^conflicts\/[\w-]+\.json$/.test(relative))items.push({file:relative,text:fs.readFileSync(target,'utf8')});
+        else if(durable(relative)||/^conflicts\/[\w-]+\.json$/.test(relative))items.push({file:relative,text:fs.readFileSync(target)});
       };
       for(const name of [...durableRoots,...durableFiles,'conflicts'])if(fs.existsSync(path.join(source,name)))visit(name);
       this.publishFiles(items);

@@ -62,9 +62,9 @@ export class Connectors {
     if(name.startsWith('github-')){
       if(name==='github-proxy'&&input.action==='version_history'){return {commits:this.query.rows('record_history').filter(h=>h.source_type==='notes'&&h.source_id===input.note_id).map(h=>({sha:h.id,commit:{message:'Saved note revision '+h.snapshot.revision,author:{date:h.recorded_at}}}))};}
       if(name==='github-proxy'&&input.action==='file_at_commit'){const history=this.store.get('record_history',input.commit_sha);if(!history?.snapshot?.content)throw new Error('Saved note revision missing');return {content:history.snapshot.content};}
-      if(name==='github-import-vault'){if(!fs.existsSync(path.join(this.store.root,'.git')))throw new Error('Connect private file sync first');return {status:this.domains.sync.reconcile()};}
+      if(name==='github-import-vault'){if(!fs.existsSync(path.join(this.store.root,'.git')))throw new Error('Connect private file sync first');return {status:await this.domains.sync.reconcile()};}
       if(name==='github-people-sync'&&input.action==='conflicts')return {conflicts:this.domains.sync.pendingConflicts()};
-      if(!this.domains.sync)throw new Error('Private file sync is unavailable');return {status:this.domains.sync.reconcile(),integrated_file_sync:true};
+      if(!this.domains.sync)throw new Error('Private file sync is unavailable');return {status:await this.domains.sync.reconcile(),integrated_file_sync:true};
     }
     if(name==='send-patch'){const note=this.store.get('notes',input.note_id);if(!note)throw new Error('Note missing');const pending=this.store.save('review_queue',{suggestion_type:'outward_patch',title:'Review proposed patch',payload:input,status:'pending_review',requires_approval:true});return {proposed:true,review_id:pending.id};}
     if(name==='embed-document'){const record=this.store.get(input.record_type||'notes',input.note_id||input.id);if(!record)throw new Error('Record missing');return {indexed:true,mode:'rebuildable-text-index',semantic_search:'provider-ranked-on-request'};}

@@ -152,6 +152,7 @@ export function conversationOperations(domains,input,operations){
    const note=domains.store.get('notes',operation.note_id),item=domains.store.get('work_items',operation.id);
    if(!note||!item||![note.id,note.title].filter(Boolean).some(name=>message.includes(name))||![item.id,item.title].filter(Boolean).some(name=>message.includes(name)))throw Error('Approval must identify the exact task and target note');
   }
+  if(operation.type==='habit-observe'&&operation.answer==='done'&&/\b(?:did not|didn.t|haven.t|have not|not done|skipped|nicht|nein)\b/i.test(message))throw Error('Habit completion contradicts the actual user reply');
  }
  if(!plan)domains.store.save('command_receipts',{id:planId,state:'attempted',source_id:source?.id||requestId,plan_hash:digest,operations});
  const results=[];
