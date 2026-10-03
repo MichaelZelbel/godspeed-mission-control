@@ -42,8 +42,3 @@ A dated obligation with an explicit deadline or an explicit notification request
 ## Evaluation
 
 `evals.json` contains synthetic fixtures, never permission to write Michael's personal data. Run each input with the fixture's mocked search/tool replies and compare the requested command, clarification, and side effects. Include failure and timeout replies. A static schema check alone is not evidence that natural-language routing passed.
-
-
-## Installed personal workspace
-
-Use the current user workspace and its configured providers. Keep original workflow, command contracts, scripts and verification criteria. Read the workspace authorization rules before sends, sign-ins, payments or publishing. Search existing device-private credentials before asking for configuration. Saved output and a passing screen are not evidence that the full requested result happened.

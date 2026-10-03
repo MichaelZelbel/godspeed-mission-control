@@ -208,6 +208,11 @@ export class QueryService {
   }
   topicCommand(requestId,command){
     if(!requestId||!command?.action)throw new Error('Invalid topic command');
+    const changed=command.action==='update'?command.patch||{}:command;
+    if(changed.title!==undefined&&(typeof changed.title!=='string'||!changed.title.trim()||changed.title.trim().length>300))throw new Error('A topic title needs 1 to 300 characters');
+    if(changed.mode!==undefined&&!['one_off','recurring'].includes(changed.mode))throw new Error('Choose one-off or recurring');
+    if(changed.priority!==undefined&&!['high','normal','low'].includes(changed.priority))throw new Error('Choose high, normal or low priority');
+    if(command.discussed_at!==undefined&&(!/(Z|[+-]\d\d:\d\d)$/.test(command.discussed_at)||!Number.isFinite(Date.parse(command.discussed_at))||Date.parse(command.discussed_at)>Date.now()))throw new Error('A discussion date needs a timezone and cannot be in the future');
     return this.store.withLock(()=>{
       const requestHash=hash(command),previous=this.rows('contact_topic_events').find(e=>e.request_id===requestId);
       if(previous){if(previous.request_hash!==requestHash)throw new Error('Command id reused with another request');return {topic:previous.after_state,event_id:previous.id,replayed:true};}

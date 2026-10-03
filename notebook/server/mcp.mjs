@@ -1,7 +1,9 @@
 import {visibleRows} from '../core/visibility.mjs';
 import {toolScope} from '../core/api-keys.mjs';
+import {topicDefinitions,topicToolNames,topicTool} from './topic-tools.mjs';
 const schema={type:'object',properties:{},additionalProperties:true};
 const definitions=[
+  ...topicDefinitions,
   {name:'list_note_folders',description:'List visible notebook folders and their note counts before filing a note.',inputSchema:schema},
   {name:'search_notes',description:'Find visible, untrashed notes by words. Return their IDs, titles, folders and current revision hashes. source native excludes mirrored external files.',inputSchema:{type:'object',properties:{query:{type:'string'},source:{enum:['native','all']},limit:{type:'integer'}},required:['query']}},
   {name:'get_note',description:'Read one visible, untrashed note including its current hash before editing.',inputSchema:{type:'object',properties:{id:{type:'string'}},required:['id']}},
@@ -26,7 +28,8 @@ export async function mcp(input,{store,query,index,domains,scopes}){
     else if(input.method==='tools/list')result={tools:definitions};
     else if(input.method==='tools/call'){
       const {name,arguments:a={}}=input.params||{};let value;
-      if(name==='list_note_folders')value=query.withSnapshot(()=>{
+      if(topicToolNames.includes(name))value=topicTool(name,a,{store,query});
+      else if(name==='list_note_folders')value=query.withSnapshot(()=>{
         const notes=visibleRows(query,'notes').filter(n=>!n.is_trashed),folders=new Map(visibleRows(query,'note_folders').map(f=>[f.folder_path||f.path||'',0]));
         for(const note of notes){const folder=note.folder_path||'';folders.set(folder,(folders.get(folder)||0)+1);}
         return [...folders].map(([folder_path,note_count])=>({folder_path,note_count})).sort((a,b)=>a.folder_path.localeCompare(b.folder_path));

@@ -14,6 +14,7 @@ export class ApiKeys {
   }
 }
 export function toolScope(name,args){
+  if(['list_contact_topics','get_contact_topic_history','create_contact_topic','update_contact_topic','discuss_contact_topic','archive_contact_topic','reopen_contact_topic','undo_contact_topic_event'].includes(name))return 'contacts';
   if(name==='personal_operation')return 'actions';
   if(['search_knowledge','validate_knowledge'].includes(name))return 'stats';
   if(['capture_note','list_note_folders','search_notes','get_note','update_note'].includes(name))return 'notes';

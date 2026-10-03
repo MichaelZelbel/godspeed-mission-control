@@ -183,8 +183,3 @@ the thing.
 3. Is the narration about what the book is about to do gone?
 4. Did the technical meaning survive intact?
 5. Was genuinely good writing left alone?
-
-
-## Installed personal workspace
-
-Use the current user workspace and its configured providers. Keep original workflow, command contracts, scripts and verification criteria. Read the workspace authorization rules before sends, sign-ins, payments or publishing. Search existing device-private credentials before asking for configuration. Saved output and a passing screen are not evidence that the full requested result happened.

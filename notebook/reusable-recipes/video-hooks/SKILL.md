@@ -97,8 +97,3 @@ Write the survivors into the script file's hook section. Rejected candidates sta
    the first sentence give the viewer a stake before it says anything about the user?"), and add
    it to the judge's run for this video.
 4. Run steps 2 to 4 again, whole. Do not patch the old set.
-
-
-## Installed personal workspace
-
-Use the current user workspace and its configured providers. Keep original workflow, command contracts, scripts and verification criteria. Read the workspace authorization rules before sends, sign-ins, payments or publishing. Search existing device-private credentials before asking for configuration. Saved output and a passing screen are not evidence that the full requested result happened.
