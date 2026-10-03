@@ -93,4 +93,3 @@ test('chat cannot acknowledge a memory correction without a corresponding operat
  await f.domains.invoke('conversation-chat',{message,conversation_id:'fictional-ack',request_id:'real-correction'});
  assert.equal(calls,2);assert.ok(f.store.get('claims',previous.id).valid_to);
 });
-
