@@ -1,6 +1,6 @@
 {
   "format": 2,
-  "checked_at": "2026-10-03T23:02:34.371614+00:00",
+  "checked_at": "2026-10-03T23:23:38.509746+00:00",
   "complete": false,
   "items": [
     {
@@ -3578,13 +3578,17 @@
       "name": "video-captions",
       "trigger": "Installed skill video-captions",
       "durable_state": "Skill-specific files and receipts",
-      "execution": "skills/video-captions/SKILL.md",
+      "execution": "notebook/recipes/video-captions/scripts/burn.py",
       "activation": "Explicit user choice; inspect installed schedules and settings",
       "permissions": "Authenticated owner; outward changes require exact approval",
-      "dependencies": [],
-      "criterion": "Prepare video captions using the supplied content and licensed source assets.\r Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation.",
-      "status": "source only",
-      "evidence": [],
+      "dependencies": [
+        "Python, Pillow, a real FFmpeg, selected licensed font; faster-whisper for new transcription; optional CUDA acceleration"
+      ],
+      "criterion": "Preserve fixed word-timed caption style, phrase wrapping, vertical-only emphasis, retained transcript and original video, licensed font handling, safe rendered glyph bounds and original audio; inspect the actual output through the installed tool.",
+      "status": "partial",
+      "evidence": [
+        "Full maintained portable workflow, original caption generator and adapted burn tool are generated into the recipe. The generated entry point rendered a synthetic 1080x1920 fixture with a supplied transcript; two renders matched exactly, caption glyphs were within x269..801 and audio packet SHA-256 was preserved. Logs and fictional-video-captions-verification.json retain proof. New speech transcription, Linux font override and packaged installation acceptance remain required."
+      ],
       "required": true,
       "target_test": "Exercise video-captions through its installed entry point and check actual results after restart"
     },
@@ -3713,7 +3717,9 @@
         "Normal fictional notebook saved a reported failed internal review, score 2/5, into the exact selected observation task. The next unattended decision requested concrete rain-sensor calibration steps. An interrupted draft was retried through the notebook and saved a checked result. The reported score remains failed; a model draft check is not a measured improvement. The notebook goal editor saved a new one-page-checklist direction and progress measure. Installed follow-up exposed original own_words left unchanged; the source now updates them, cancels pending decisions and retains cancellation after a late provider result. Repeat changed-direction acceptance with this correction remains required. Retained UI captures: installed-reported-check-and-retried-draft.txt and installed-changed-goal-direction.txt.",
         "Normal installed endpoint notebook changed current direction, cancelling the old observation task. A later scheduled local-note decision waited over several cycles for exact approval. Normal notebook selection approved fictional-approved-target-checklist-ffcaa8ae; work replace-one-existing-local-checklist-note-with-a-new-one-page-practical-wet-rain-468adcd8 replaced that target at 2026-10-03T21:08:39.538Z and the actual 256-word checklist opened in its note editor. This establishes a delayed approved local edit, not an actual volunteer rating. The actual read_note receipt read an unrelated briefing rather than the requested rain-rule source, and the next decision requested substantially the same edit again. Both are retained acceptance failures. New source gives semantic verification the actual goal, source records and tool results, mechanically requires read_note for explicit required source IDs, and supports a quiet waiting decision until fresh outcome evidence. Installed acceptance of these later corrections is pending.",
         "Normal endpoint controlled execution read both the approved local target and the actual explicitly named source, with verified tool receipts. However it saved approval narration and extra instructions, then proposed the same edit again. This installed attempt fails complete loop acceptance; endpoint-exact-source-tool-receipts.json and endpoint-exact-source-applied-note.txt retain the evidence.",
-        "worker-source-freshness.test.mjs checks required-source context excludes unrelated notes, permits one clean-deliverable correction before any target write, and refuses a repeated approval request without changing the target. goal-outcome-wait-policy.test.mjs checks explicit waiting after verified local work, quiet unrelated changes, actual later reports and changed direction. Installed acceptance of the corrections remains required."
+        "worker-source-freshness.test.mjs checks required-source context excludes unrelated notes, permits one clean-deliverable correction before any target write, and refuses a repeated approval request without changing the target. goal-outcome-wait-policy.test.mjs checks explicit waiting after verified local work, quiet unrelated changes, actual later reports and changed direction. Installed acceptance of the corrections remains required.",
+        "Installed explicit waiting policy saved one silent wait tied to the actual applied task and cancelled stale duplicate work. A later normal goal outcome saved the actual fictional 2/5 defect and selected a correction. The endpoint correction was refused before writing because it skipped the required actual source read; the approved target remained unchanged. Native development read the actual source and target, then repeated those reads until the tool budget failed without applying. Both failed attempts are retained, not full-loop acceptance.",
+        "New source provides one correction for missing actual reads, explicit read/finish phases derived from current tool receipts, and an optional finite numeric goal outcome control. Eight worker and nine personal-operation checks pass; new installed acceptance is required."
       ],
       "required": true,
       "target_test": "Exercise failed decisions/checks, changed direction, delayed exact local approval and restart through final installed notebooks."
@@ -3800,7 +3806,9 @@
       "status": "partial",
       "evidence": [
         "Installed chat saved/retrieved the fictional rain-sensor rule. Person chat omitted topics and mixed histories; the corrected installed path produced one future-facing listening question and retained its own exchange after reload. Model-free search leaked hidden notes; visibility and bounded meaning-expanded ranking now pass regressions. Read-only Menerio queries collected; common-corpus retrieval equivalence remains unproven.",
-        "memory-subject.test.mjs verifies actual person subjects, correction history, distinct proposal fingerprints, hidden/invented/inconsistent subject refusal, and repairing omitted conversation subjects before writes. Installed real-provider memory acceptance remains required."
+        "memory-subject.test.mjs verifies actual person subjects, correction history, distinct proposal fingerprints, hidden/invented/inconsistent subject refusal, and repairing omitted conversation subjects before writes. Installed real-provider memory acceptance remains required.",
+        "Normal endpoint chat stored Fictional Alex Garden\u2019s preference with the actual contact subject. A requested correction then used a new label and left two current claims, despite its acknowledgement. Canonical correction source now requires the actual previous claim ID, exposes its attribute and subject in bounded chat context, retains closure evidence, and refuses hidden, historical or other-person targets. Sixteen memory/personal checks pass; actual installed correction/retrieval/restart remains required.",
+        "Malformed ordinary outcome JSON with trailing narration failed installed chat before a write. New source uses one combined syntax/permission correction budget before any operation, rejects repeated malformed output and retains actual numeric outcomes once; source regressions pass. Installed chat acceptance remains required."
       ],
       "required": true,
       "target_test": "Compare corrections, hidden/superseded facts, dates, ambiguity and synonyms after restart against a common Menerio corpus."

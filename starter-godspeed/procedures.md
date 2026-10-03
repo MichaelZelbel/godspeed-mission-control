@@ -14,7 +14,7 @@ Does: consumes adopted goals, saved decisions, exact local approvals and checked
 Rhythm: not scheduled by this template; the saved routine controls determine cadence, time zone, owner and pause state.
 Lands: goal decisions, work results, tool evidence and forecasts in the notebook.
 Lives: the notebook scheduler in the selected installation.
-May: read visible knowledge and change only the approved local target. An approved worker must deliver the result without requesting the same approval again.
+May: read visible knowledge and change only the approved local target. An approved worker must deliver the result without requesting the same approval again. Each attempt distinguishes required source reads from producing the result. A premature result gets one missing-read correction; repeated failures retain their receipts and stop before changing the target.
 Off-switch: pause Goal decision and Goal work in routine controls, or pause the goal.
 Last checked: 2026-10-04, source regressions check required source selection, bounded correction and waiting for a separate report. Installed acceptance remains required.
 

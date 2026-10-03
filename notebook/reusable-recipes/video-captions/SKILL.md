@@ -40,8 +40,3 @@ Open the actual captioned video, listen to its original audio and inspect repres
 The generated caption-style receipt records configuration, not visual acceptance. Retain the transcript, ASS, receipt and original, and save the frame/audio checks with the finished result. Output may not replace the input. Existing generated output requires explicit `--overwrite`; an uncertain render should be inspected before re-running.
 
 Known limits: grouping uses punctuation, pauses longer than 350 ms, seven-word phrases and width rather than meaning; long clauses can split awkwardly. The fixed position does not fit every shot. Highlighting follows whole-word timings, not sub-word karaoke. Fix real observed defects without pretending an intermediate file is the final deliverable. Publishing requires separate authorization.
-
-
-## Installed personal workspace
-
-Use the current user workspace and its configured providers. Keep original workflow, command contracts, scripts and verification criteria. Read the workspace authorization rules before sends, sign-ins, payments or publishing. Search existing device-private credentials before asking for configuration. Saved output and a passing screen are not evidence that the full requested result happened.

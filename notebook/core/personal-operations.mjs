@@ -17,8 +17,9 @@ When the user explicitly asks to wait for their separate report after an applied
 obligation-add {title,due_at,target_at?,recurrence?:{days}}; obligation-complete {id,evidence}; obligation-snooze {id,until};
 coach-open {area:health|work-money|relationships,question}; coach-reply {id,content}; coach-close {id}; habit-agree {talk_id,title,agreement,check_at}; habit-observe {id,observation,answer:done|no|skip};
 journal-add {content}; journal-switch {enabled}; health-add {metric,value,unit,observed_at};
-memory-confirm {label,value,evidence_quote,subject_type:self|contact|entity,subject_id?:actual supplied ID}; memory-propose {label,value,evidence_quote,subject_type:self|contact|entity,subject_id?:actual supplied ID};
+memory-confirm {label,value,evidence_quote,subject_type:self|contact|entity,subject_id?:actual supplied ID,replaces_claim_id?:actual supplied current claim ID}; memory-propose {label,value,evidence_quote,subject_type:self|contact|entity,subject_id?:actual supplied ID};
 Memory must identify whose fact it is. Use self only for the user's own fact, contact for a supplied person, and entity for a supplied thing. Never save another person's fact as self. Ask when the person or thing is ambiguous or missing; never invent an ID.
+When correcting an existing remembered fact, memory-confirm MUST include replaces_claim_id from the supplied current claims. Preserve its actual attribute even if the user calls it something different. A new label does not correct an existing fact. Ask which fact when it is ambiguous; do not claim a correction without identifying the old claim.
 routine-change {id,paused?,calendar?:{time:HH:MM,weekdays?:[0..6]}}; forecast-settle {id,observed,evidence}.
 work-allow-local {id,note_id}: allow the selected work to edit exactly this local note, preserving its current revision as the precondition.
 work-retry-draft {id}: explicitly retry a failed or interrupted local draft, preserving all prior attempts and versions. Never retry an applied or outward action.
@@ -35,6 +36,13 @@ function memorySubject(domains,input){
  const id=required(ids[0],'Memory subject ID'),row=visibleRows(domains.query,type==='contact'?'contacts':'entities').find(r=>r.id===id&&!r.removed_at&&!r.is_trashed&&!r.merged_into);
  if(!row)throw Error('Choose an existing visible person or thing before saving their fact');
  return {subject_type:type,subject_id:id,...(type==='contact'?{contact_id:id}:{entity_id:id})};
+}
+function memoryCorrection(domains,input,subject){
+ if(!input.replaces_claim_id)return {};
+ const fact=visibleRows(domains.query,'profile_facts').find(r=>r.claim_id===input.replaces_claim_id&&r.is_current&&r.show_to_agent);
+ if(!fact||fact.subject_type!==subject.subject_type||(fact.subject_id||null)!==(subject.subject_id||null))throw Error('Choose an existing visible current claim belonging to this same memory subject');
+ const claim=domains.store.get('claims',fact.claim_id);
+ return {attribute:fact.attribute,label:fact.label||input.label,replaces_claim_id:claim.id,replaces_claim_hash:claim._hash};
 }
 export function personalOperation(domains,input){
  const {store,query}=domains,type=input.type;
@@ -124,7 +132,7 @@ export function personalOperation(domains,input){
    const decisions=query.rows('decisions').filter(d=>d.goal_id===g.id&&d.state==='selected'&&pending.some(w=>w.decision_id===d.id)).map(d=>store.prepare('decisions',{state:'cancelled',reason:'Goal changed: '+input.reason},d));
    const forecasts=query.rows('forecasts').filter(f=>f.goal_id===g.id&&f.status==='open').map(f=>store.prepare('forecasts',{status:'needs_review',reason:input.reason},f));store.commit([next,...pending,...decisions,...forecasts]);return store.get('goals',g.id);});
  }
- if(type==='goal-outcome'){const g=old('goals');required(input.evidence,'Outcome evidence');return store.save('goals',{id:g.id,progress:[...(g.progress||[]),{kind:'observed',evidence:input.evidence,value:input.value??null,outcome:input.outcome||'observed',at:new Date().toISOString()}]},g._hash);}
+ if(type==='goal-outcome'){const g=old('goals');required(input.evidence,'Outcome evidence');if(input.value!==undefined&&input.value!==null&&!Number.isFinite(input.value))throw Error('A measured outcome value must be a finite number');return store.save('goals',{id:g.id,progress:[...(g.progress||[]),{kind:'observed',evidence:input.evidence,value:input.value??null,outcome:input.outcome||'observed',at:new Date().toISOString()}]},g._hash);}
  if(type==='goal-evidence'){
   const g=old('goals');if(!['playbook','diagnosis'].includes(input.kind))throw Error('Choose playbook or diagnosis');const content=required(input.content,'Evidence document'),relative='goals/'+(input.kind==='playbook'?'playbooks/':'diagnoses/')+safe(g.id)+(input.kind==='playbook'?'':'-current')+'.md',file=path.join(store.root,relative);
   return store.withLock(()=>{localPath(store.root,relative);const current=store.get('goals',g.id);if(current._hash!==g._hash)store.conflict('goals',input,current);const previous=fs.existsSync(file)?fs.readFileSync(file,'utf8'):null;if(input.file_hash!==undefined&&input.file_hash!==(previous?hash(previous):null))throw Error('Goal evidence changed; reload before saving');const next=store.prepare('goals',{[input.kind]:content,legacy_log:[...(g.legacy_log||[]),{date:new Date().toISOString().slice(0,10),event:input.kind==='playbook'?'PLAYBOOK':'DIAGNOSIS',rest:relative}]},current);store.commit([next],{files:[...(previous?[{file:'goals/history/'+safe(g.id)+'-'+hash(previous)+'.md',text:previous}]:[]),{file:relative,text:content}]});return store.get('goals',g.id);});
@@ -160,7 +168,7 @@ export function personalOperation(domains,input){
  if(['memory-confirm','memory-propose'].includes(type)){
   required(input.evidence_quote,'Source quote');
   const subject=memorySubject(domains,input);
-  if(type==='memory-confirm')return domains.writeFact({...subject,label:required(input.label,'Fact label'),value:required(input.value,'Fact value'),source_type:'conversation',source_id:input.source_id,evidence_quote:input.evidence_quote});
+   if(type==='memory-confirm')return domains.writeFact({...subject,label:required(input.label,'Fact label'),...memoryCorrection(domains,input,subject),value:required(input.value,'Fact value'),source_type:'conversation',source_id:input.source_id,evidence_quote:input.evidence_quote});
   const fingerprint=hash([input.source_id,subject.subject_type,subject.subject_id,input.label,input.value]);const existing=query.rows('review_queue').find(r=>r.fingerprint===fingerprint);if(existing)return existing;
   return store.save('review_queue',{title:'Remember '+required(input.label,'Fact label'),suggestion_type:'add_claim',payload:{...subject,label:input.label,value:required(input.value,'Fact value'),source_type:'conversation',source_id:input.source_id,evidence_quote:input.evidence_quote},description:input.evidence_quote,status:'pending_review',fingerprint,origin:'conversation'});
  }
@@ -214,6 +222,10 @@ export function validateConversationOperations(domains,input,operations){
    if(!operation.subject_type)throw Error('Memory must explicitly identify whose fact this is');
    if(!operation.evidence_quote||!message.includes(operation.evidence_quote))throw Error('Memory evidence must occur in the user message');
    const subject=memorySubject(domains,operation);
+     if(operation.type==='memory-confirm'){
+      memoryCorrection(domains,operation,subject);
+      if(/\b(?:correct|correction|replace[sd]?|supersede[sd]?|korrigiere|korrektur|ersetze)\b/i.test(message)&&!operation.replaces_claim_id&&visibleRows(domains.query,'profile_facts').some(f=>f.is_current&&f.show_to_agent&&f.subject_type===subject.subject_type&&(f.subject_id||null)===(subject.subject_id||null)))throw Error('An existing memory correction must identify replaces_claim_id; a new label does not replace the old claim');
+     }
    if(subject.subject_type!=='self'){
     const row=domains.store.get(subject.subject_type==='contact'?'contacts':'entities',subject.subject_id);
     if(![row.id,row.name,row.title,...(row.aliases||[])].filter(Boolean).some(name=>message.toLocaleLowerCase().includes(name.toLocaleLowerCase())))throw Error('The request must identify the person or thing whose fact is being saved');

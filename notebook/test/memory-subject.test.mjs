@@ -35,3 +35,38 @@ test('conversation repairs an omitted memory subject before saving a named perso
  await domains.invoke('conversation-chat',{message,conversation_id:'fictional',request_id:'named-person'});
  assert.equal(calls,2);assert.equal(query.rows('claims').length,1);assert.equal(query.rows('claims')[0].subject_id,person.id);assert.equal(query.rows('claims')[0].subject_type,'contact');
 });
+
+test('a correction with a different label replaces the actual canonical claim and retains history',async()=>{
+ const {store,query,domains}=fixture(),person=store.save('contacts',{name:'Fictional Alex'});
+ await domains.invoke('personal-operation',{type:'memory-confirm',subject_type:'contact',subject_id:person.id,label:'Preferred communication style',value:'One question first',evidence_quote:'Fictional Alex prefers one question.'});
+ const previous=query.rows('claims')[0];
+ await domains.invoke('personal-operation',{type:'memory-confirm',subject_type:'contact',subject_id:person.id,label:'Listening preference',value:'Two questions first',evidence_quote:'Fictional Alex now prefers two questions.',replaces_claim_id:previous.id});
+ const claims=query.rows('claims'),old=store.get('claims',previous.id),current=claims.find(c=>!c.valid_to);
+ assert.equal(claims.length,2);assert.equal(current.attribute,previous.attribute);assert.equal(query.rows('fact_slots').length,1);assert.ok(old.valid_to);assert.equal(old.closure_evidence.quote,'Fictional Alex now prefers two questions.');assert.equal(current.subject_id,person.id);
+});
+
+test('an ordinary correction repairs a missing old-claim reference before making any change',async()=>{
+ const f=fixture(),person=f.store.save('contacts',{name:'Fictional Alex'}),message='Correct Fictional Alex’s listening preference: two questions now replace one question.';
+ await f.domains.invoke('personal-operation',{type:'memory-confirm',subject_type:'contact',subject_id:person.id,label:'Preferred communication style',value:'One question first',evidence_quote:'Fictional Alex prefers one question.'});
+ const previous=f.query.rows('claims')[0];let calls=0;
+ f.domains.provider=async input=>{calls++;assert.equal(f.query.rows('claims').length,1);assert.ok(input.context.world_claims.some(c=>c.id===previous.id&&c.attribute===previous.attribute&&c.subject_id===person.id));return {reply:'Corrected.',operations:[{type:'memory-confirm',subject_type:'contact',subject_id:person.id,label:'Listening preference',value:'Two questions first',source_quote:message,evidence_quote:message,...(calls>1?{replaces_claim_id:previous.id}:{})}]};};
+ await f.domains.invoke('conversation-chat',{message,conversation_id:'fictional-correction',request_id:'canonical-correction'});
+ assert.equal(calls,2);assert.equal(f.query.rows('claims').filter(c=>!c.valid_to).length,1);assert.ok(f.store.get('claims',previous.id).valid_to);
+});
+
+test('a correction refuses another person, a hidden slot or a historical claim',async()=>{
+ const f=fixture(),alex=f.store.save('contacts',{name:'Fictional Alex'}),bea=f.store.save('contacts',{name:'Fictional Bea'});
+ await f.domains.invoke('personal-operation',{type:'memory-confirm',subject_type:'contact',subject_id:alex.id,label:'Preference',value:'Blue',evidence_quote:'Fictional Alex prefers blue.'});const previous=f.query.rows('claims')[0],input={type:'memory-confirm',subject_type:'contact',subject_id:bea.id,label:'Preference',value:'Red',evidence_quote:'Fictional Bea prefers red.',replaces_claim_id:previous.id};
+ await assert.rejects(f.domains.invoke('personal-operation',input),/same memory subject/);
+ const slot=f.query.rows('fact_slots')[0];f.store.save('fact_slots',{id:slot.id,show_to_agent:false});await assert.rejects(f.domains.invoke('personal-operation',{...input,subject_id:alex.id}),/visible current/);
+ f.store.save('fact_slots',{id:slot.id,show_to_agent:true});await f.domains.invoke('personal-operation',{...input,subject_id:alex.id});await assert.rejects(f.domains.invoke('personal-operation',{...input,subject_id:alex.id,value:'Green'}),/visible current/);
+ assert.equal(f.query.rows('claims').filter(c=>!c.valid_to).length,1);
+});
+
+test('correcting one of many facts to an already current value still closes the old fact',async()=>{
+ const f=fixture(),person=f.store.save('contacts',{name:'Fictional Alex'}),base={subject_type:'contact',subject_id:person.id,label:'Interests',attribute:'interests',cardinality:'many',evidence_quote:'Fictional interests.'};
+ f.domains.writeFact({...base,value:'Gardening'});f.domains.writeFact({...base,value:'Reading'});
+ const previous=f.query.rows('claims').find(c=>c.value==='Gardening');
+ await f.domains.invoke('personal-operation',{type:'memory-confirm',...base,value:'Reading',replaces_claim_id:previous.id,evidence_quote:'Reading replaces gardening.'});
+ assert.equal(f.query.rows('claims').length,2);assert.ok(f.store.get('claims',previous.id).valid_to);assert.equal(f.query.rows('claims').filter(c=>!c.valid_to).length,1);
+});

@@ -22,12 +22,19 @@ export class Domains {
     if (suppressed) return { ok: true, facts: [{ attribute, outcome: 'suppressed', reason: 'Previously rejected by the user' }] };
     return this.store.withLock(() => {
       const claims = this.query.rows('claims').filter(r => r.subject_type === subject_type && r.subject_id === subject_id && r.attribute === attribute);
-      const existing = claims.find(r => r.value.toLowerCase() === value.toLowerCase());
-      if (existing&&(!existing.valid_to||input.origin==='review_queue')) return { ok: true, facts: [{ attribute, outcome: existing.valid_to ? 'history_not_revived' : 'already_recorded', claimId: existing.id }] };
+      const valid_from = input.valid_from || new Intl.DateTimeFormat('en-CA', { timeZone: this.query.rows('profiles')[0]?.timezone || 'UTC' }).format(new Date());
+      const current=c=>c.valid_from<=valid_from&&(!c.valid_to||c.valid_to>valid_from),closure_evidence={source_type:input.source_type||'manual',source_id:input.source_id||null,quote:input.evidence_quote||null};
+      const target=input.replaces_claim_id?claims.find(c=>c.id===input.replaces_claim_id):null;
+      if(input.replaces_claim_id&&(!target||!current(target)||target._hash!==input.replaces_claim_hash))throw Error('The fact selected for correction changed; reload before replacing it');
+      const sameValue=claims.filter(r=>r.value.toLowerCase()===value.toLowerCase()),existing=sameValue.find(current)||sameValue[0];
+      if (existing&&(current(existing)||input.origin==='review_queue')) {
+        const changed=target&&target.id!==existing.id&&current(existing)?[this.store.prepare('claims',{valid_to:valid_from,closure_evidence},target)]:[];
+        if(changed.length)this.store.commit(changed);
+        return { ok: true, facts: [{ attribute, outcome: current(existing) ? 'already_recorded' : 'history_not_revived', claimId: existing.id,closed:changed.length }] };
+      }
       const oldSlot = this.query.rows('fact_slots').find(s => s.subject_type === subject_type && s.subject_id === subject_id && s.attribute === attribute);
       const slot = this.store.prepare('fact_slots', { subject_type, subject_id, contact_id: input.contact_id || null, attribute, label: input.label, category_slug: input.category_slug || null, cardinality: oldSlot?.cardinality || input.cardinality || 'one', show_to_agent: true, is_pinned: input.is_pinned || false }, oldSlot);
-      const valid_from = input.valid_from || new Intl.DateTimeFormat('en-CA', { timeZone: this.query.rows('profiles')[0]?.timezone || 'UTC' }).format(new Date());
-      const changed = slot.cardinality === 'many' ? [] : claims.filter(c => !c.valid_to && c.valid_from <= valid_from).map(c => this.store.prepare('claims', { valid_to: valid_from }, c));
+      const changed = claims.filter(c => current(c) && (slot.cardinality!=='many'||c.id===input.replaces_claim_id)).map(c => this.store.prepare('claims', { valid_to: valid_from,closure_evidence }, c));
       const claim = this.store.prepare('claims', { subject_type, subject_id, attribute, value, valid_from, valid_to: null, confidence: 'confirmed', cardinality: slot.cardinality, source_type: input.source_type || 'manual', source_id: input.source_id || null, evidence_quote: input.evidence_quote || null, origin: input.origin || 'user_manual' });
       for (const r of [slot, claim]) r.references = this.query.references(r.type, r);
       this.store.commit([...changed, slot, claim]); return { ok: true, facts: [{ attribute, outcome: 'inserted', claimId: claim.id, closed: changed.length }] };
@@ -210,15 +217,23 @@ export class Domains {
       const {signal,files,...safeInput}=input;
       const result = await this.provider({ kind: name, input:safeInput, context, attachments:attached.images, signal, contract: (contracts[name]||'Answer using the user context. Do not perform outward actions. Explicitly distinguish assumptions from recorded facts.')+' Use plain, concise language. Do not use em dashes. Only the retrieved records are available; never claim to have searched an entire database.' });
       signal?.throwIfAborted();
-      let structured=contracts[name]?json(result):typeof result==='object'?result:{reply:result};
-      if(name==='conversation-chat'&&structured.operations?.length){
-        // Some providers omit a required field despite the contract. Repair the
-        // response once, before executing any operation; authorization still
-        // checks the original user request, never the repaired explanation.
-        const executable=value=>value.operations.filter(op=>!(input.retained_coach_reply&&op.type==='coach-reply'&&op.id===input.talk_id));
-        try{validateConversationOperations(this,input,executable(structured));}catch{
-          const repaired=await this.provider({kind:name,input:safeInput,context,attachments:attached.images,signal,contract:operationContract+' The previous response proposed an operation that failed independent permission or source-quote checks. No proposed operation has run. Return complete corrected JSON. Include only the exact requested actions, with source_quote equal to current input.message. When the user asks to save a note, use notes_created, without unrelated goals, reminders, health or memory operations. Do not add new actions.'});
-          signal?.throwIfAborted();structured=json(repaired);if(structured.operations?.length)validateConversationOperations(this,input,executable(structured));
+      let structured,response=result;
+      // One repair budget covers syntax and operation checks together. No write
+      // or provider/network retry is hidden in parsing, and authorization always
+      // uses the original user message rather than the repaired explanation.
+      for(let attempt=0;attempt<2;attempt++){
+        try{
+          structured=contracts[name]?json(response):typeof response==='object'?response:{reply:response};
+          if(!structured||typeof structured!=='object'||Array.isArray(structured))throw Error('Return one complete JSON object');
+          if(name==='conversation-chat'&&structured.operations!==undefined){
+            if(!Array.isArray(structured.operations))throw Error('operations must be a list');
+            validateConversationOperations(this,input,structured.operations.filter(op=>!(input.retained_coach_reply&&op.type==='coach-reply'&&op.id===input.talk_id)));
+          }
+          break;
+        }catch(error){
+          if(attempt===1||!contracts[name])throw error;
+          response=await this.provider({kind:name,input:safeInput,context,attachments:attached.images,signal,contract:contracts[name]+' The previous response failed parsing or independent operation checks: '+error.message+'. No proposed operation has run. Return exactly one complete corrected JSON object, with no text before or after it. Include only the exact requested actions. For conversation operations, source_quote must equal current input.message. When the user asks to save a note, use notes_created without unrelated goals, reminders, health or memory operations. Do not add new actions.'});
+          signal?.throwIfAborted();
         }
       }
       const requested=String(input.message||input.messages?.filter(m=>m.role==='user').at(-1)?.content||'');

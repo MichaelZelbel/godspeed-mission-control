@@ -45,7 +45,7 @@ export async function retrievedContext(query,input,provider){
  if(candidates.length>1&&!input.contact_id&&!input.person_id)context.ambiguities={people:candidates.slice(0,10).map(c=>({id:c.id,name:c.name})),instruction:'Ask which person the user means; do not guess'};
  return context;
 }
-function compact(record,max){const result={};let remaining=max;for(const key of ['id','title','name','content','value','description','notes','email','phone','bio','summary','metadata','tags','field_schema','data','valid_from','valid_to','created_at']){if(record[key]==null)continue;const text=typeof record[key]==='string'?record[key]:JSON.stringify(record[key]);if(text.length>remaining){result[key]=text.slice(0,remaining);result.context_truncated=true;break;}result[key]=record[key];remaining-=text.length;}return result;}
+function compact(record,max){const result={};let remaining=max;for(const key of ['id','claim_id','subject_type','subject_kind','subject_id','contact_id','attribute','label','title','name','value','valid_from','valid_to','confidence','source_type','source_id','evidence_quote','content','description','notes','email','phone','bio','summary','metadata','tags','field_schema','data','created_at']){if(record[key]==null)continue;const text=typeof record[key]==='string'?record[key]:JSON.stringify(record[key]);if(text.length>remaining){result[key]=text.slice(0,remaining);result.context_truncated=true;break;}result[key]=record[key];remaining-=text.length;}return result;}
 export function chatAttachments(mediaRoot,files=[]){
   if(!Array.isArray(files)||files.length>10)throw new Error('Attach up to 10 files per message');
   const images=[],documents=[];let bytes=0;

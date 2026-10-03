@@ -22,6 +22,26 @@ test('an omitted operation source quote is repaired before any write, then the o
  assert.equal(calls,2);assert.equal(store.get('goals',goal.id).progress.length,1);
  assert.equal(result.operation_results.length,1);
 });
+
+test('a malformed conversation response is repaired once before an actual numeric outcome is saved',async()=>{
+ let calls=0,goal;const message='Record the fictional review outcome: clarity is 2 out of 5.';
+ const {store,domains}=fixture(async()=>{calls++;assert.equal(store.get('goals',goal.id).progress.length,0);const response=JSON.stringify({reply:'Recorded.',operations:[{type:'goal-outcome',id:goal.id,evidence:message,value:2,outcome:'Needs correction',source_quote:message}]});return calls===1?response+' Extra model narration':response;});
+ goal=store.save('goals',{title:'Fictional checklist',status:'adopted',progress:[]});
+ const result=await domains.invoke('conversation-chat',{message,conversation_id:'fictional-json',request_id:'fictional-numeric-review'});
+ assert.equal(calls,2);assert.equal(result.operation_results.length,1);assert.equal(store.get('goals',goal.id).progress.length,1);assert.equal(store.get('goals',goal.id).progress[0].value,2);
+});
+
+test('repeated malformed JSON is refused without executing its embedded operation',async()=>{
+ let calls=0;const message='My goal is a fictional review';const {store,domains}=fixture(async()=>{calls++;return JSON.stringify({reply:'Saved.',operations:[{type:'goal-add',title:'Fictional review',measure:'A recorded result',source_quote:message}]})+' Extra narration';});
+ await assert.rejects(domains.invoke('conversation-chat',{message,conversation_id:'fictional-bad-json'}),/JSON|non-whitespace/);assert.equal(calls,2);assert.equal(store.list('goals').length,0);assert.equal(store.list('notes').length,0);
+});
+
+test('reported numeric outcomes reject strings and nonfinite values without corrupting the goal history',async()=>{
+ const {store,domains}=fixture(),goal=store.save('goals',{title:'Fictional measured review',status:'adopted',progress:[]});
+ for(const value of ['2',Infinity,NaN])await assert.rejects(domains.invoke('personal-operation',{type:'goal-outcome',id:goal.id,evidence:'Fictional measured review',value}),/finite number/);
+ assert.equal(store.get('goals',goal.id).progress.length,0);
+ await domains.invoke('personal-operation',{type:'goal-outcome',id:goal.id,evidence:'Fictional clarity is 2 out of 5',value:2});assert.equal(store.get('goals',goal.id).progress[0].value,2);
+});
 test('ordinary conversation creates an adopted goal only from an explicit sourced operation',async()=>{
  const {store,domains}=fixture(async()=>JSON.stringify({reply:'Saved.',operations:[{type:'goal-add',source_quote:'My goal is a fictional workshop',title:'Fictional workshop',measure:'Ten fictional participants'}]}));
  await domains.invoke('conversation-chat',{message:'My goal is a fictional workshop',conversation_id:'test'});
