@@ -231,8 +231,3 @@ run. For the owner's sites, publishing is a separate step: see house.md.
 - Trusting a green script run. It cannot see composition. Look.
 - Calling a push "published". Pushing, publishing and verifying live are
   three steps.
-
-
-## Installed personal workspace
-
-Use the current user workspace and its configured providers. Keep original workflow, command contracts, scripts and verification criteria. Read the workspace authorization rules before sends, sign-ins, payments or publishing. Search existing device-private credentials before asking for configuration. Saved output and a passing screen are not evidence that the full requested result happened.
