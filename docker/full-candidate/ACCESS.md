@@ -14,6 +14,6 @@ The test installation already has its installation proof. Its owner receives a p
 
 ## Sessions
 
-Normal sign-in lasts eight hours; optional remember-me lasts seven days. Sessions survive application and Docker restarts, expire on the server, and are removed on logout. Cookies are HttpOnly, Secure for VPS use, SameSite=Lax so saved external links work, and scoped to this server. Authentication failures return to the sign-in form at the original URL. Recovery revokes all existing browser sessions.
+Normal sign-in lasts eight hours; optional remember-me lasts 30 days. Sessions survive application and Docker restarts, expire on the server, and are removed on logout. Cookies are HttpOnly, Secure for VPS use, SameSite=Lax so saved external links work, and scoped to this server. Authentication failures return to the sign-in form at the original URL. Recovery revokes all existing browser sessions.
 
 If both the password and recovery code are lost, there is no email reset. Restoration requires control of the hosting account. Do not expose a public reset endpoint, print permanent credentials into container logs, or enable unrestricted first-visitor registration.

@@ -48,7 +48,7 @@ export class WebAuth {
   session(req) { return this.read().sessions[digest(this.cookie(req))]; }
   sessionCookie(value, seconds) { return `godspeed_session=${value}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${seconds}${this.remote ? '; Secure' : ''}`; }
   startSession(data, remember = false) {
-    const key = randomBytes(32).toString('hex'), seconds = remember ? 7 * 86400 : 8 * 3600;
+    const key = randomBytes(32).toString('hex'), seconds = remember ? 30 * 86400 : 8 * 3600;
     const now = this.now();
     data.sessions = Object.fromEntries(Object.entries(data.sessions).filter(([, s]) => s.expires > now));
     // Bound private session state even for repeated successful sign-ins.

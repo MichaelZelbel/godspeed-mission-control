@@ -36,9 +36,11 @@ test('public setup ownership, password login, durable sessions, expiry, recovery
     const expired=await request('/api/session',undefined,cookie);assert.equal(expired.status,401);assert.equal(expired.data.code,'SESSION_EXPIRED');
     assert.equal((await request('/api/login',{...credentials,password:'wrong password'})).status,401);
     assert.equal((await request('/api/login',{token:options.token})).status,401);
-    const login=await request('/api/login',{...credentials,remember:true});assert.equal(login.status,200);assert.match(login.cookie,/Max-Age=604800/);
-    const remembered=login.cookie.split(';')[0];now+=6*86400000;
+    const login=await request('/api/login',{...credentials,remember:true});assert.equal(login.status,200);assert.match(login.cookie,/Max-Age=2592000/);
+    const remembered=login.cookie.split(';')[0];now+=29*86400000;
     assert.equal((await request('/api/session',undefined,remembered)).status,200);
+    now+=86400000+1;
+    assert.equal((await request('/api/session',undefined,remembered)).status,401);
     assert.equal((await request('/api/auth/recover',{...credentials,recovery_code:'wrong'})).status,401);
     const recovered=await request('/api/auth/recover',{username:'new-owner',password:'a different sufficiently long password',recovery_code:setup.data.recovery_code});
     assert.equal(recovered.status,200);assert.notEqual(recovered.data.recovery_code,setup.data.recovery_code);

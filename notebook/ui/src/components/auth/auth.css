@@ -9,6 +9,11 @@
 .auth-label{display:block;font-size:15px;font-weight:600;margin:20px 0 8px;}
 .auth-input{width:100%;min-height:48px;font:inherit;font-size:16px;line-height:1.4;padding:12px 14px;border:1px solid hsl(var(--input));border-radius:10px;background:hsl(var(--background));color:hsl(var(--foreground));caret-color:hsl(var(--primary));}
 .auth-password{position:relative;}
+.auth-password-progress{margin-top:12px;}
+.auth-password-track{height:4px;border-radius:4px;overflow:hidden;background:hsl(var(--muted));}
+.auth-password-track span{display:block;height:100%;border-radius:inherit;background:hsl(var(--primary));}
+.auth-password-progress[data-complete="true"] .auth-password-track span{background:hsl(var(--success));}
+.auth-password-progress[data-complete="true"] .auth-help{color:hsl(var(--success));}
 .auth-password .auth-input{padding-right:56px;}
 .auth-reveal{position:absolute;right:4px;top:2px;min-width:44px;min-height:44px;display:grid;place-items:center;border-radius:8px;color:hsl(var(--muted-foreground));}
 .auth-help{font-size:14px;line-height:1.6;color:hsl(var(--muted-foreground));margin:10px 0 16px;}
