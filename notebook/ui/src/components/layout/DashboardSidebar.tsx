@@ -214,7 +214,7 @@ export function DashboardSidebar() {
           variant="ghost"
           size={collapsed ? "icon" : "sm"}
           className="w-full justify-start text-muted-foreground hover:text-destructive"
-          onClick={async () => { await signOut(); navigate("/"); }}
+          onClick={async () => { if(await signOut()) navigate("/"); }}
           title="Sign Out"
         >
           <LogOut className="h-4 w-4" />

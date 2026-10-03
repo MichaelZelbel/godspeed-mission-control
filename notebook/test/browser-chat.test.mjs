@@ -18,7 +18,7 @@ test('browser chat authenticates, saves messages and recalls history after resta
     const page=await fetch(base+'/chat',{redirect:'manual'});assert.equal(page.status,303);assert.equal(page.headers.get('location'),'/dashboard/chat');
     let cookie=await login();assert.equal((await post('/api/browser-chat',{message:'Remember lighthouse'},cookie)).status,200);
     await service.close();service=await createService({root,host:'0.0.0.0',port:0,token:'synthetic-token',provider});base='http://127.0.0.1:'+service.address.port;
-    assert.equal((await fetch(base+'/api/browser-chat',{headers:{Cookie:cookie}})).status,401);
+    assert.equal((await fetch(base+'/api/browser-chat',{headers:{Cookie:cookie}})).status,200);
     cookie=await login();const result=await(await post('/api/browser-chat',{message:'What word?'},cookie)).json();assert.equal(result.reply,'lighthouse');
     const history=await(await fetch(base+'/api/browser-chat',{headers:{Cookie:cookie}})).json();assert.equal(history.messages.filter(m=>m.role==='user').length,2);assert.equal(history.messages.filter(m=>m.role==='assistant').length,2);
   }finally{await service.close();}

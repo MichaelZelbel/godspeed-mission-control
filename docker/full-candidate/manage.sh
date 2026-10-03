@@ -9,8 +9,9 @@ case "${1:-status}" in
  stop) "${compose[@]}" stop ;;
  computer-code) "${compose[@]}" exec -T notebook node /opt/godspeed/kit/computer/godspeed-computer pair ;;
  computer-status) "${compose[@]}" exec -T notebook node /opt/godspeed/kit/computer/godspeed-computer status ;;
- login-link)
+ setup-link|login-link)
    token=$(sed -n 's/^GODSPEED_CANDIDATE_TOKEN=//p' candidate.env)
-   "${compose[@]}" exec -T -e "CANDIDATE_TOKEN=$token" notebook node -e 'const origin="http://127.0.0.1:47831";const a=await fetch(origin+"/api/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({token:process.env.CANDIDATE_TOKEN})});if(!a.ok)throw new Error("Login failed");const b=await fetch(origin+"/api/login-link",{method:"POST",headers:{Cookie:a.headers.get("set-cookie").split(";")[0]}});console.log("https://localhost:48443"+(await b.json()).path)' ;;
- *) echo 'Commands: status, restart, backup, stop, login-link. Updating requires a verified new bundle, backup first, and retaining the prior bundle for rollback.' >&2; exit 1 ;;
+   setup=${GODSPEED_SETUP_CODE:-$(sed -n 's/^GODSPEED_SETUP_CODE=//p' candidate.env)}
+   "${compose[@]}" exec -T -e "SETUP_CODE=${setup:-$token}" notebook node --input-type=module -e 'const origin="http://127.0.0.1:47831";const response=await fetch(origin+"/api/auth/bootstrap",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({token:process.env.SETUP_CODE})});const data=await response.json();if(!response.ok)throw new Error(data.error);console.log(data.path)' ;;
+ *) echo 'Commands: status, restart, backup, stop, setup-link. Setup links expire after 24 hours and can only create the first account. After setup, sign in with your username and password. Updating requires a verified new bundle, backup first, and retaining the prior bundle for rollback.' >&2; exit 1 ;;
 esac

@@ -4,7 +4,7 @@ services:
     image: ${GODSPEED_CANDIDATE_IMAGE:?Use the immutable candidate image from the package manifest}
     restart: unless-stopped
     environment:
-      GODSPEED_ACCESS_TOKEN: ${GODSPEED_CANDIDATE_TOKEN:?Generate a separate candidate access token}
+      GODSPEED_ACCESS_TOKEN: ${GODSPEED_SETUP_CODE:-${GODSPEED_CANDIDATE_TOKEN:?Choose a private setup code before deploying}}
       GODSPEED_DEVICE: vps
       GODSPEED_COMPUTER: ${GODSPEED_CANDIDATE_COMPUTER:-off}
       GODSPEED_COMPUTER_DIR: /opt/data/full-candidate/computer

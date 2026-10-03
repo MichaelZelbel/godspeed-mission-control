@@ -13,4 +13,20 @@ if [ ! -f candidate.env ]; then
 fi
 docker load -i image.tar.gz
 docker compose --env-file candidate.env -f compose.yaml up -d
-printf 'Candidate installed separately. Open https://localhost:48443 through your test host or an SSH tunnel.\nThe access token is saved in candidate.env.\n'
+for attempt in $(seq 1 30); do
+  if docker compose --env-file candidate.env -f compose.yaml exec -T notebook node --input-type=module -e 'const r=await fetch("http://127.0.0.1:47831/health");process.exit(r.ok?0:1)' >/dev/null 2>&1; then break; fi
+  sleep 2
+done
+if path=$(bash ./manage.sh setup-link); then
+  public_host=${GODSPEED_CANDIDATE_HOST:-$(sed -n 's/^GODSPEED_CANDIDATE_HOST=//p' candidate.env)}
+  public_port=${GODSPEED_CANDIDATE_HTTPS_PORT:-$(sed -n 's/^GODSPEED_CANDIDATE_HTTPS_PORT=//p' candidate.env)}
+  origin="${GODSPEED_BROWSER_ORIGIN:-https://${public_host:-localhost}:${public_port:-48443}}"
+  printf '\nGodspeed Mission Control is ready.\nOpen this private link to choose your username and password:\n%s%s\nSave the recovery code offered during setup. Keep this link private; it expires in 24 hours.\n' "$origin" "$path"
+else
+  if docker compose --env-file candidate.env -f compose.yaml exec -T notebook node --input-type=module -e 'const r=await fetch("http://127.0.0.1:47831/api/auth/status");process.exit((await r.json()).configured?0:1)' >/dev/null 2>&1; then
+    printf 'Godspeed Mission Control is installed. Open its address and sign in with your existing username and password.\n'
+  else
+    printf 'The server has not completed its access setup. Run this installer again after checking the connection. No account has been created.\n' >&2
+    exit 1
+  fi
+fi

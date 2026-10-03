@@ -7,6 +7,7 @@ import { Toaster } from '@/components/ui/toaster';
 import { Toaster as Sonner } from '@/components/ui/sonner';
 import { RouteErrorBoundary } from '@/components/ErrorBoundary';
 import {GlobalAIChatFAB} from '@/components/chat/GlobalAIChatFAB';
+import { AuthScreen, AuthShell } from '@/components/auth/AuthScreen';
 
 import {DashboardLayout} from '@/components/layout/DashboardLayout';
 const Notes=lazy(()=>import('./pages/Notes')),People=lazy(()=>import('./pages/People')),World=lazy(()=>import('./pages/World'));
@@ -19,12 +20,13 @@ const Control=lazy(()=>import('./local/Control'));
 const Home=lazy(()=>import('./local/Home'));
 const SharedNote=lazy(()=>import('./pages/SharedNote'));
 function Layout(){
-  const {user,loading,signIn}=useAuth();const [token,setToken]=useState(''),[error,setError]=useState('');
-  if(loading)return <p className="p-8">Opening your notebook...</p>;
-  if(!user)return <form className="p-8 max-w-lg" onSubmit={e=>{e.preventDefault();signIn('',token).catch((e:any)=>setError(e.message));}}><h1>Godspeed Mission Control</h1><label>Access token<input className="block border p-2 text-black" type="password" value={token} onChange={e=>setToken(e.target.value)}/></label><button className="border p-2" type="submit">Open notebook</button><p role="alert">{error}</p></form>;
+  const {user,loading,authError,refreshSession}=useAuth();
+  if(loading)return <AuthShell><h2>Opening Godspeed Mission Control</h2><p role="status">Checking your sign-in…</p></AuthShell>;
+  if(!user&&authError)return <AuthShell><h2>Let’s reconnect</h2><p className="auth-intro" role="alert">{authError}</p><button className="auth-primary" onClick={refreshSession}>Try again</button></AuthShell>;
+  if(!user)return <AuthScreen/>;
   return <DashboardLayout/>;
 }
-export default function App(){return <ThemeProvider attribute="class" defaultTheme="dark"><TooltipProvider><Toaster/><Sonner/><BrowserRouter><AuthProvider><Routes><Route path="/shared/:token" element={<Suspense fallback={<p>Opening...</p>}><SharedNote/></Suspense>}/><Route element={<Layout/>}>
+export default function App(){return <ThemeProvider attribute="class" defaultTheme="dark"><TooltipProvider><Toaster/><Sonner/><BrowserRouter><AuthProvider><Routes><Route path="/setup" element={<AuthScreen/>}/><Route path="/shared/:token" element={<Suspense fallback={<p>Opening...</p>}><SharedNote/></Suspense>}/><Route element={<Layout/>}>
   <Route path="/" element={<Navigate to="/dashboard" replace/>}/><Route path="/dashboard" element={<Home/>}/>
   <Route path="/dashboard/chat" element={<GlobalAIChatFAB page/>}/><Route path="/chat" element={<Navigate to="/dashboard/chat" replace/>}/><Route path="/dashboard/control" element={<Navigate to="/dashboard" replace/>}/><Route path="/dashboard/notes/*" element={<Notes/>}/>
   <Route path="/dashboard/settings" element={<Control/>}/><Route path="/settings" element={<Control/>}/>

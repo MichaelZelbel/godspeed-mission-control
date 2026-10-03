@@ -2,7 +2,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { randomBytes, timingSafeEqual } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
 import { Store, atomic, safe, hash } from '../core/records/store.mjs';
 import { SearchIndex } from '../core/index/search.mjs';
 import { QueryService } from '../core/query.mjs';
@@ -22,8 +22,9 @@ import {Telegram} from '../core/telegram.mjs';
 import {browserChat} from './browser-chat.mjs';
 import {transcribeRecording} from '../core/dictation.mjs';
 import {durableRoots,durableFiles} from '../core/file-policy.mjs';
+import { WebAuth, safeReturn } from './web-auth.mjs';
 
-export async function createService({ root, mediaRoot, host = '127.0.0.1', port = 47831, token, uiRoot, provider, device = 'local' } = {}) {
+export async function createService({ root, mediaRoot, host = '127.0.0.1', port = 47831, token, uiRoot, provider, device = 'local', authNow } = {}) {
   const store = new Store(root,{device}), index = new SearchIndex(store), query = new QueryService(store), sync = new FileSync(store);
   const providerPath=path.join(store.state,'provider.json');
   if(!provider&&fs.existsSync(providerPath))provider=modelProvider(JSON.parse(fs.readFileSync(providerPath,'utf8')));
@@ -39,10 +40,11 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   const instance=hash(store.root).slice(0,24);
   const remote = !['127.0.0.1', '::1', 'localhost'].includes(host);
   if (remote && !token) throw new Error('Remote access requires a candidate token');
-  const sessions = new Map();const chatRequests=new Map();let dictationBusy=false;
+  const auth = new WebAuth(store.state, { token, remote, now: authNow });
+  const chatRequests=new Map();let dictationBusy=false;
   const loginLinks=new Map();
   const apiKeys=new ApiKeys(store);
-  const authorized = req => !remote || pairKeys.includes(hash(String(req.headers['x-godspeed-pair-key']||req.headers.authorization?.replace(/^Bearer /,'')||''))) || (sessions.get((req.headers.cookie || '').match(/(?:^|; )godspeed_session=([^;]+)/)?.[1]) || 0) > Date.now();
+  const authorized = req => auth.authorized(req) || pairKeys.includes(hash(String(req.headers['x-godspeed-pair-key']||req.headers.authorization?.replace(/^Bearer /,'')||'')));
   function send(res, status, body, headers = {}) { res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', ...headers }); res.end(JSON.stringify(body)); }
   async function body(req, limit = 2 * 1024 * 1024) {
     let size = 0; const chunks = [];
@@ -58,19 +60,15 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       if (req.headers.origin && new URL(req.headers.origin).host !== req.headers.host) return send(res, 403, { error: 'Cross-site requests are refused' });
       if(route.startsWith('/login/')){
         const code=route.slice(7),expiry=loginLinks.get(code);if(!expiry||expiry<Date.now())return send(res,401,{error:'This login link expired or was already used'});
-        loginLinks.delete(code);const session=randomBytes(32).toString('hex');sessions.set(session,Date.now()+8*3600000);
-        const destination=url.searchParams.get('next')==='/chat'?'/chat':'/';
-        res.writeHead(303,{'Location':destination,'Cache-Control':'no-store','Referrer-Policy':'no-referrer','Set-Cookie':`godspeed_session=${session}; HttpOnly; SameSite=Strict; Path=/; Max-Age=28800${remote?'; Secure':''}`});return res.end();
+        loginLinks.delete(code);
+        if(!auth.configured()) { res.writeHead(303,{'Location':auth.invite().path,'Cache-Control':'no-store','Referrer-Policy':'no-referrer'});return res.end(); }
+        const destination=safeReturn(url.searchParams.get('next')||'/dashboard');
+        res.writeHead(303,{'Location':destination,'Cache-Control':'no-store','Referrer-Policy':'no-referrer','Set-Cookie':auth.startSession(auth.read())});return res.end();
       }
-      if (route === '/api/login' && req.method === 'POST') {
-        const input = JSON.parse(await body(req)), a = Buffer.from(String(input.token || '')), b = Buffer.from(token || '');
-        if (!token || a.length !== b.length || !timingSafeEqual(a, b)) return send(res, 401, { error: 'Access token was not accepted' });
-        const session = randomBytes(32).toString('hex'); sessions.set(session, Date.now() + 8 * 3600_000);
-        return send(res, 200, { ok: true }, { 'Set-Cookie': `godspeed_session=${session}; HttpOnly; SameSite=Strict; Path=/; Max-Age=28800${remote ? '; Secure' : ''}` });
-      }
-      if (route === '/api/logout') {
-        const session = (req.headers.cookie || '').match(/godspeed_session=([^;]+)/)?.[1]; sessions.delete(session);
-        return send(res, 200, { ok: true }, { 'Set-Cookie': 'godspeed_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0' });
+      if (route.startsWith('/api/auth/') || route === '/api/login' || route === '/api/logout') {
+        const input = req.method === 'POST' ? JSON.parse(await body(req, 8192)) : {};
+        const result = await auth.handle(route,req,input), cookie = result.cookie;delete result.cookie;
+        return send(res,200,result,cookie?{'Set-Cookie':cookie}:{});
       }
       if(route==='/api/pair/claim'&&req.method==='POST'){
         const input=JSON.parse(await body(req)),expires=pairCodes.get(input.code);if(!expires||expires<Date.now())return send(res,401,{error:'Pairing code expired or was already used'});
@@ -78,7 +76,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       }
       if (route === '/health') return send(res, 200, { ok: true, format: 1, version: '0.1.0-alpha.1',instance });
       if(route==='/api/shared-note'&&req.method==='GET'){const share=query.rows('shared_notes').find(s=>s.share_token===url.searchParams.get('token')&&s.is_active),note=share&&store.get('notes',share.note_id);if(!note||note.removed_at)return send(res,404,{error:'This share is unavailable'});return send(res,200,{title:note.title,content:note.content,tags:note.tags,entity_type:note.entity_type,created_at:note.created_at,updated_at:note.updated_at});}
-      if (route.startsWith('/api/') && !authorized(req)) return send(res, 401, { error: 'Authentication required' });
+      if (route.startsWith('/api/') && !authorized(req)) return send(res, 401, { error: 'Sign in to continue.', code: auth.cookie(req)?'SESSION_EXPIRED':'SIGN_IN_REQUIRED' });
       if(route==='/chat'&&req.method==='GET'){
         res.writeHead(303,{'Location':'/dashboard/chat','Cache-Control':'no-store'});return res.end();
       }
@@ -92,7 +90,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         }
         return send(res,405,{error:'Use GET or POST'});
       }
-      if(route==='/api/login-link'&&req.method==='POST'){const code=randomBytes(32).toString('hex');loginLinks.set(code,Date.now()+300000);return send(res,200,{path:'/login/'+code,expires_minutes:5});}
+      if(route==='/api/login-link'&&req.method==='POST'){if(!auth.configured())return send(res,200,auth.invite());const code=randomBytes(32).toString('hex');loginLinks.set(code,Date.now()+300000);return send(res,200,{path:'/login/'+code,expires_minutes:5});}
       if(route==='/api/assistant/open'&&req.method==='POST'){
         if(remote||process.platform!=='win32')throw new Error('Open the assistant on your Windows computer');
         const descriptor=JSON.parse(fs.readFileSync(assistantPath,'utf8').replace(/^\uFEFF/,''));if(!descriptor.verified||path.basename(descriptor.desktop)!=='Hermes.exe'||!fs.existsSync(descriptor.desktop))throw new Error('The candidate Hermes desktop is not available');
@@ -119,7 +117,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         const old=mediaSync.manifest().find(m=>m.path===mapping.path);if(old&&old.sha256!==mapping.sha256)throw new Error('A different media version exists. Resolve it before transfer');
         atomic(path.join(mediaRoot,mapping.file),data);atomic(path.join(mediaRoot,hash(mapping.path)+'.mapping.json'),JSON.stringify(mapping));return send(res,200,{ok:true});
       }
-      if (route === '/api/session') return send(res, 200, { user: { id: 'owner' }, profile: query.rows('profiles')[0] || { id: 'owner', display_name: 'Owner' } });
+      if (route === '/api/session') return send(res, 200, { user: { id: 'owner' }, profile: query.rows('profiles')[0] || { id: 'owner', display_name: auth.read().owner?.username || 'Owner' }, expires_at:auth.session(req)?.expires || null });
       if (route === '/api/status') return send(res, 200, { configured:!!store.get('settings','installation'),owner:store.get('settings','installation')?.owner,device,runtimeConfigured:!!domains.provider,sync:sync.last,mediaSync:mediaSync.last,kinds,problems: store.problems, lastScan: store.lastScan, lastIndex: index.lastRebuild, records: store.records.size, schedules: query.rows('jobs'), conflicts: sync.pendingConflicts().map(name=>{const c=JSON.parse(fs.readFileSync(path.join(store.root,'conflicts',name),'utf8'));return {id:c.id,kind:c.kind,path:c.path||c.type+'/'+c.record_id};}) });
       if(route==='/api/provider'&&req.method==='POST'){
         const input=JSON.parse(await body(req)),config={url:input.url,key:input.key,model:input.model};
@@ -200,7 +198,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       if (!fs.existsSync(file)) return send(res, 503, { error: 'Build the notebook frontend first' });
       const mime = { '.html':'text/html; charset=utf-8','.js':'text/javascript','.css':'text/css','.svg':'image/svg+xml','.png':'image/png','.woff2':'font/woff2' }[path.extname(file)] || 'application/octet-stream';
       res.writeHead(200, { 'Content-Type': mime, 'X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer' }); fs.createReadStream(file).pipe(res);
-    } catch (e) { send(res, e.code === 'CONFLICT' ? 409 : 400, { error: e.message, code: e.code }); }
+    } catch (e) { send(res, e.status || (e.code === 'CONFLICT' ? 409 : 400), { error: e.message, code: e.code }); }
   });
   await new Promise((resolve, reject) => { server.once('error', reject); server.listen(port, host, resolve); });
   let busy = false;
