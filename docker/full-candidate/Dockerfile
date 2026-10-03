@@ -8,6 +8,7 @@ RUN npm run build
 # Includes the approved computer-use layer. The digest is immutable.
 FROM ghcr.io/michaelzelbel/godspeed-mission-control@sha256:358bf1b87b22898c0bd1a173226004558e41a3d16fc39214ecedab7fb550de20
 USER root
+RUN uv pip install --python /opt/hermes/.venv/bin/python3 --no-cache faster-whisper==1.2.1
 COPY --from=frontend /usr/local/bin/node /usr/local/bin/node
 COPY . /opt/godspeed/kit/
 COPY --from=frontend /build/dist /opt/godspeed/kit/notebook/ui/dist
