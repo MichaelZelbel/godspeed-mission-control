@@ -37,5 +37,18 @@ Use the compact brand and form composition above. Show the server hostname as a 
 
 ## Claims to confirm
 
+## Note chat and Menerio import
+
+Reading this as: existing server app changes for a person opening a note or bringing their old account across, in Operate mode. Vibe: familiar, clear, calm.
+
+Brief: keep Godspeed chat left and note right, but move its trigger to the top-left of the note. Provide an import screen with preview before copying and preserve existing content and the AI connection.
+
+Plan v1: a visible labelled chat toggle above the note formatting toolbar, left arrow on desktop. Hide the competing floating trigger on note pages. A dedicated settings import page reuses the application's card, button, input, success and muted tokens. The copy preview shows four real counts, existing items retained and archived unsupported data. Explicit add-content checkbox before import. Progress reports work without a fabricated percentage.
+
+Review and Plan v2: the left arrow reflects the actual desktop destination and is omitted on mobile, where chat is above the note. The import page uses a single card and no new palette or decorative hero because this is an application task. A saved verified copy avoids asking Michael for credentials. A separate account connection form can prepare other source accounts. Keys are transient, password fields and never saved in knowledge. Existing-item matching preserves current edits. Completion gives one link to open notes.
+
+Desktop: back to settings, modest heading, one import card with generous spacing; preview counts in four columns. Phone390: same order, 16px or larger gutters, counts in two columns, wrapped labels and 44px action targets. No horizontal scrolling or hidden primary action.
+
 Follow-up: optional remembered sessions last 30 days. Setup and recovery show a 4px password-length bar directly below the password field. It fills against the 12-character minimum, uses the existing primary colour while incomplete and the success colour at 12 characters. Text states progress without implying password strength; deleting characters reverses the bar. The ordinary sign-in form has no length indicator.
+Fresh-eyes review: compact the empty embedded phone chat so the note remains reachable below it, and hide the global floating action on the import screen so it cannot cover preview or confirmation. Both applied. Final live desktop, 390px and 360px phone, and reduced-motion screenshots inspected; automated layout and contrast checks report zero failures. Import confirmation remains readable when disabled.
 Hostinger's generic deployment supports environment-variable inputs, but a custom copy-key button and completion-link integration have not been verified. Do not claim they exist. The template asks the owner to choose a setup code before deployment, avoiding terminal retrieval. Catalog-native generation remains an integration requirement.

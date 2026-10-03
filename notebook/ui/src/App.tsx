@@ -17,6 +17,7 @@ const Timeline=lazy(()=>import('./pages/TimelinePage')),Media=lazy(()=>import('.
 const Groups=lazy(()=>import('./pages/Groups')),GroupDetail=lazy(()=>import('./pages/GroupDetail')),Actions=lazy(()=>import('./pages/Actions'));
 const Activity=lazy(()=>import('./pages/ActivityPage')),WeeklyReview=lazy(()=>import('./pages/WeeklyReview'));
 const Control=lazy(()=>import('./local/Control'));
+const ImportMenerio=lazy(()=>import('./local/ImportMenerio'));
 const Home=lazy(()=>import('./local/Home'));
 const SharedNote=lazy(()=>import('./pages/SharedNote'));
 function Layout(){
@@ -30,6 +31,7 @@ export default function App(){return <ThemeProvider attribute="class" defaultThe
   <Route path="/" element={<Navigate to="/dashboard" replace/>}/><Route path="/dashboard" element={<Home/>}/>
   <Route path="/dashboard/chat" element={<GlobalAIChatFAB page/>}/><Route path="/chat" element={<Navigate to="/dashboard/chat" replace/>}/><Route path="/dashboard/control" element={<Navigate to="/dashboard" replace/>}/><Route path="/dashboard/notes/*" element={<Notes/>}/>
   <Route path="/dashboard/settings" element={<Control/>}/><Route path="/settings" element={<Control/>}/>
+  <Route path="/dashboard/settings/import" element={<ImportMenerio/>}/>
   <Route path="/dashboard/people" element={<People/>}/><Route path="/dashboard/people/:id" element={<People/>}/>
   <Route path="/dashboard/world" element={<World/>}/><Route path="/dashboard/world/:id" element={<World/>}/>
   <Route path="/dashboard/profile" element={<Profile/>}/><Route path="/dashboard/timeline" element={<Timeline/>}/>

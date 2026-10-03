@@ -5,6 +5,9 @@ import {ApiKeysManager} from '@/components/settings/ApiKeysManager';
 import {AISuggestionPreferences} from '@/components/settings/AISuggestionPreferences';
 import {AiVisibilitySettings} from '@/components/settings/AiVisibilitySettings';
 import {NotificationPreferences} from '@/components/settings/NotificationPreferences';
+import {Link} from 'react-router-dom';
+import {Button} from '@/components/ui/button';
+import {Download} from 'lucide-react';
 async function call(route:string,body?:any){const r=await fetch('/api/'+route,{method:body?'POST':'GET',headers:{'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});const data=await r.json();if(!r.ok)throw new Error(data.error);return data;}
 export default function Control(){
   const qc=useQueryClient(),[goal,setGoal]=useState(''),[timezone,setTimezone]=useState(Intl.DateTimeFormat().resolvedOptions().timeZone),[error,setError]=useState(''),[search,setSearch]=useState('');
@@ -17,6 +20,7 @@ export default function Control(){
   const action=async(route:string,body:any)=>{try{setError('');await call(route,body);qc.invalidateQueries();}catch(e:any){setError(e.message);}};
   return <div className="max-w-4xl space-y-6"><h1 className="text-2xl font-bold">Settings</h1><p>Manage your notebook, assistant and connected devices.</p>
     <p role="alert" className="text-red-400">{error}</p>
+    <Button asChild className="min-h-11 gap-2"><Link to="/dashboard/settings/import"><Download className="h-4 w-4" aria-hidden="true"/>Import from Menerio</Link></Button>
     {usefulWork.data?.data[0]&&<section className="border rounded p-4"><h2 className="text-xl">Your latest useful work</h2><div className="prose dark:prose-invert max-w-none"><ReactMarkdown>{usefulWork.data.data[0].content}</ReactMarkdown></div><a className="underline" href={'/dashboard/notes/'+usefulWork.data.data[0].id}>Open the saved note</a></section>}
     <details className="border rounded p-4"><summary>Privacy, suggestions and notifications</summary><AiVisibilitySettings/><AISuggestionPreferences/><NotificationPreferences/></details>
     <details className="border rounded p-4"><summary>Connect other assistants</summary><ApiKeysManager/></details>

@@ -92,7 +92,7 @@ export function verifyBundle(root){
   return manifest;
 }
 function stableId(table,row,key){return row.id||'source-'+createHash('sha256').update(table+'/'+JSON.stringify(key.map(k=>row[k]))).digest('hex').slice(0,32);}
-export function stageAccount(bundle,destination){
+export function stageAccount(bundle,destination,{disposable=false}={}){
   const manifest=verifyBundle(bundle);if(fs.existsSync(destination))throw new Error('Stage requires new empty storage; existing notes are never overwritten');
   const store=new Store(destination),query=new QueryService(store),records=[],archived=[];
   for(const table of manifest.tables){
@@ -120,7 +120,12 @@ export function stageAccount(bundle,destination){
     const tombstone=store.prepare('contacts',{id:ref.id,uid,removed_at:manifest.verifiedAt,ai_visibility:'hidden',metadata:{migration_unavailable_source:true,source_id:ref.id},references:[]});records.push(tombstone);identities.set('contacts/'+ref.id,tombstone);unavailable.push({type:'contacts',id:ref.id});
   }
   for(const record of records)for(const ref of record.references){const target=identities.get(ref.type+'/'+ref.id);if(target)ref.uid=target.uid;}
-  store.withLock(()=>store.commit(records));store.scan();if(store.problems.length)throw new Error('Migrated references need review; the staged copy was retained');
+  if(disposable){
+    // A preview can be rebuilt from the verified source. Avoid thousands of
+    // synchronous journal flushes for this private, noncanonical staging copy.
+    for(const record of records){const file=store.file(record);fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,encode(record));}
+  }else store.withLock(()=>store.commit(records));
+  store.scan();if(store.problems.length)throw new Error('Migrated references need review; the staged copy was retained');
   // Complete sanitized source archive lives outside synced knowledge and model context.
   const archive=path.join(store.state,'migration-source');fs.mkdirSync(archive,{recursive:true,mode:0o700});for(const entry of manifest.files){const target=safeDestination(archive,entry.path);fs.mkdirSync(path.dirname(target),{recursive:true});fs.copyFileSync(safeDestination(bundle,entry.path),target);}atomic(path.join(archive,'migration.json'),JSON.stringify(manifest,null,2));
   const mediaRoot=path.join(store.state,'media');fs.mkdirSync(mediaRoot,{recursive:true});

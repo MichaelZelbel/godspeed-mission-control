@@ -57,23 +57,27 @@ export class QueryService {
   withSnapshot(read){if(!this.snapshotDepth)this.store.scan();this.snapshotDepth=(this.snapshotDepth||0)+1;try{return read();}finally{this.snapshotDepth--;}}
   rows(table) {
     if(!this.snapshotDepth)this.store.scan();
-    const all=[...this.store.records.values()],list = type => {
+    const all=[...this.store.records.values()],memo=new Map(),list = type => {
+      if(memo.has(type))return memo.get(type);
       const values=all.filter(r=>r.type===type&&!r.removed_at);
-      if(type!=='moments')return values;
-      return values.map(original=>{const corrections=all.filter(r=>r.type==='event_corrections'&&r.moment_id===original.id).sort((a,b)=>a.sequence-b.sequence||a.id.localeCompare(b.id));return corrections.reduce((r,c)=>({...r,...c.patch,_hash:c._hash}),original);}).filter(r=>!r.removed_at);
+      if(type!=='moments'){memo.set(type,values);return values;}
+      const corrected=values.map(original=>{const corrections=all.filter(r=>r.type==='event_corrections'&&r.moment_id===original.id).sort((a,b)=>a.sequence-b.sequence||a.id.localeCompare(b.id));return corrections.reduce((r,c)=>({...r,...c.patch,_hash:c._hash}),original);}).filter(r=>!r.removed_at);
+      memo.set(type,corrected);return corrected;
     };
     const get=(type,id)=>this.store.records.get(type+'/'+id)||all.find(r=>r.type===type&&(r.aliases||[]).includes(id));
     if (table === 'world_entities') return [...list('contacts').map(r => ({ ...r, source_table: 'contact', kind: 'person', description: r.notes || null, ai_visibility: r.ai_visibility || 'visible' })), ...list('entities').map(r => ({ ...r, source_table: 'entity', kind: r.entity_type }))];
     if (table === 'world_events') return list('moments').map(r => ({ ...r, source_table: 'moment' }));
     if (table === 'world_claims') return [...this.rows('profile_facts').filter(r=>r.visibility_scope!=='private').map(r=>({...r,id:r.claim_id,source_table:'claim',subject_kind:r.subject_type,category:r.category_slug||'other',object_id:null,source_kind:r.source_type,source_ref:r.source_id})),...list('contact_relationships').map(r=>({...r,source_table:'contact_relationship',subject_kind:r.source_type,subject_id:r.source_id,category:'relationship',attribute:'relationship',value:r.custom_label||r.label,object_id:r.target_id,cardinality:'many',confidence:r.confidence||'likely'}))];
-    if (table === 'profile_facts') return list('claims').map(r => {
+    if (table === 'profile_facts') {
+      const today = new Intl.DateTimeFormat('en-CA', { timeZone: list('profiles')[0]?.timezone || 'UTC' }).format(new Date());
+      return list('claims').map(r => {
       const slot = list('fact_slots').find(s => s.subject_type === r.subject_type && s.subject_id === r.subject_id && s.attribute === r.attribute);
       const category = list('profile_categories').find(s => s.slug === slot?.category_slug && (s.contact_id || null) === (r.subject_type === 'contact' ? r.subject_id : null));
-      const today = new Intl.DateTimeFormat('en-CA', { timeZone: list('profiles')[0]?.timezone || 'UTC' }).format(new Date());
       return { ...r, claim_id: r.id, contact_id: r.subject_type === 'contact' ? r.subject_id : null, is_current: (!r.valid_to || r.valid_to > today) && (!r.valid_from || r.valid_from <= today),
         slot_id: slot?.id || null, label: slot?.label || r.attribute, category_slug: slot?.category_slug || null, category_name: category?.name || null,
         cardinality:slot?.cardinality||r.cardinality,visibility_scope: category?.visibility_scope || 'all', show_to_agent: slot?.show_to_agent ?? false, is_pinned: slot?.is_pinned ?? false, has_conflict: (slot?.cardinality||r.cardinality)!=='many'&&list('claims').filter(c=>c.subject_type===r.subject_type&&c.subject_id===r.subject_id&&c.attribute===r.attribute&&(!c.valid_from||c.valid_from<=today)&&(!c.valid_to||c.valid_to>today)).length>1 };
-    });
+      });
+    }
     if (table === 'v_ai_allowance_current') return [];
     if(table==='activity_events'){
       const tracked=new Set(['notes','contacts','claims','entities','collections','collection_items','moments','contact_groups','contact_group_memberships','action_items','contact_topics','profile_categories','fact_slots']);
@@ -161,12 +165,16 @@ export class QueryService {
     if (request.range) rows = rows.slice(request.range[0], request.range[1] + 1);
     if (request.limit !== undefined) rows = rows.slice(0, request.limit);
     // Preserve observed joined shapes without a second source of truth.
+    // rows() already read a consistent snapshot. Resolve joins from that same
+    // snapshot instead of rescanning the whole vault once per joined item.
+    const identities=new Map();for(const record of this.store.records.values())for(const id of [record.id,...record.aliases||[]])identities.set(record.type+'/'+id,record);
+    const joined=(type,id)=>identities.get(type+'/'+id)||null;
     rows = rows.map(r => {
       const result = { ...r, _hash: r._hash || this.store.records.get(table+'/'+r.id)?._hash };
-      if (selection.includes('source_note:')) result.source_note = r.source_note_id ? this.store.get('notes', r.source_note_id) : null;
-      if (selection.includes('notes(')) result.notes = r.note_id ? this.store.get('notes', r.note_id) : null;
-      if (selection.includes('contacts(')) result.contacts = r.contact_id ? this.store.get('contacts', r.contact_id) : null;
-      for(const match of selection.matchAll(/(\w+):(\w+)(?:!\w+)?\(/g)){const [,alias,column]=match,target=links[column]||(tables.has(column)?column:null),foreign=links[column]?column:Object.keys(links).find(key=>links[key]===target&&r[key]);if(target&&foreign)result[alias]=r[foreign]?this.store.get(target,r[foreign]):null;}
+      if (selection.includes('source_note:')) result.source_note = r.source_note_id ? joined('notes', r.source_note_id) : null;
+      if (selection.includes('notes(')) result.notes = r.note_id ? joined('notes', r.note_id) : null;
+      if (selection.includes('contacts(')) result.contacts = r.contact_id ? joined('contacts', r.contact_id) : null;
+      for(const match of selection.matchAll(/(\w+):(\w+)(?:!\w+)?\(/g)){const [,alias,column]=match,target=links[column]||(tables.has(column)?column:null),foreign=links[column]?column:Object.keys(links).find(key=>links[key]===target&&r[key]);if(target&&foreign)result[alias]=r[foreign]?joined(target,r[foreign]):null;}
       return result;
     });
     if (single && rows.length !== 1) throw new Error('Expected one record');

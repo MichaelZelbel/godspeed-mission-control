@@ -23,6 +23,7 @@ import {browserChat} from './browser-chat.mjs';
 import {transcribeRecording} from '../core/dictation.mjs';
 import {durableRoots,durableFiles} from '../core/file-policy.mjs';
 import { WebAuth, safeReturn } from './web-auth.mjs';
+import { MenerioImport } from './menerio-import.mjs';
 
 export async function createService({ root, mediaRoot, host = '127.0.0.1', port = 47831, token, uiRoot, provider, device = 'local', authNow } = {}) {
   const store = new Store(root,{device}), index = new SearchIndex(store), query = new QueryService(store), sync = new FileSync(store);
@@ -41,6 +42,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   const remote = !['127.0.0.1', '::1', 'localhost'].includes(host);
   if (remote && !token) throw new Error('Remote access requires a candidate token');
   const auth = new WebAuth(store.state, { token, remote, now: authNow });
+  const menerioImport=new MenerioImport(store,mediaRoot,()=>index.rebuild());
   const chatRequests=new Map();let dictationBusy=false;
   const loginLinks=new Map();
   const apiKeys=new ApiKeys(store);
@@ -77,6 +79,13 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       if (route === '/health') return send(res, 200, { ok: true, format: 1, version: '0.1.0-alpha.1',instance });
       if(route==='/api/shared-note'&&req.method==='GET'){const share=query.rows('shared_notes').find(s=>s.share_token===url.searchParams.get('token')&&s.is_active),note=share&&store.get('notes',share.note_id);if(!note||note.removed_at)return send(res,404,{error:'This share is unavailable'});return send(res,200,{title:note.title,content:note.content,tags:note.tags,entity_type:note.entity_type,created_at:note.created_at,updated_at:note.updated_at});}
       if (route.startsWith('/api/') && !authorized(req)) return send(res, 401, { error: 'Sign in to continue.', code: auth.cookie(req)?'SESSION_EXPIRED':'SIGN_IN_REQUIRED' });
+      if(route==='/api/menerio/import'){
+        if(!auth.authorized(req))return send(res,403,{error:'Sign in as the server owner to import.'});
+        if(req.method==='GET')return send(res,200,menerioImport.status());
+        if(req.method==='POST')return send(res,202,{job:await menerioImport.start(JSON.parse(await body(req,16384)))});
+        return send(res,405,{error:'Use GET or POST'});
+      }
+      if(menerioImport.mutating&&(route==='/mcp'||route.startsWith('/api/'))&&!['/api/session','/api/status','/api/chat/options'].includes(route))return send(res,423,{error:'Your Menerio content is being copied. Wait for the import to finish.'});
       if(route==='/chat'&&req.method==='GET'){
         res.writeHead(303,{'Location':'/dashboard/chat','Cache-Control':'no-store'});return res.end();
       }
@@ -202,20 +211,20 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   });
   await new Promise((resolve, reject) => { server.once('error', reject); server.listen(port, host, resolve); });
   let busy = false;
-  const interval = setInterval(() => { if (!busy) { busy = true; try { index.rebuild(); } catch {} finally { busy = false; } } }, 30000);
-  const jobs=setInterval(()=>scheduler.tick().catch(()=>{}),30000);
-  const syncTimer=setInterval(()=>{if(fs.existsSync(path.join(store.state,'sync-config.json')))sync.reconcile();},60000);
-  const mediaTimer=setInterval(()=>mediaSync.reconcile(),60000);
+  const interval = setInterval(() => { if (!busy&&!menerioImport.mutating) { busy = true; try { index.rebuild(); } catch {} finally { busy = false; } } }, 30000);
+  const jobs=setInterval(()=>{if(!menerioImport.mutating)scheduler.tick().catch(()=>{});},30000);
+  const syncTimer=setInterval(()=>{if(!menerioImport.mutating&&fs.existsSync(path.join(store.state,'sync-config.json')))sync.reconcile();},60000);
+  const mediaTimer=setInterval(()=>{if(!menerioImport.mutating)mediaSync.reconcile();},60000);
   const telegram=process.env.GODSPEED_TELEGRAM==='on'&&process.env.GODSPEED_CANDIDATE_BOT_TOKEN&&process.env.GODSPEED_CANDIDATE_BOT_OWNER?new Telegram({store,domains,token:process.env.GODSPEED_CANDIDATE_BOT_TOKEN,owner:process.env.GODSPEED_CANDIDATE_BOT_OWNER,loginLink:process.env.GODSPEED_BROWSER_ORIGIN?destination=>{const code=randomBytes(32).toString('hex');loginLinks.set(code,Date.now()+300000);return process.env.GODSPEED_BROWSER_ORIGIN+'/login/'+code+'?next='+encodeURIComponent(destination);}:undefined}):null;
-  const telegramTimer=telegram?setInterval(()=>telegram.tick().catch(()=>{}),3000):null;
+  const telegramTimer=telegram?setInterval(()=>{if(!menerioImport.mutating)telegram.tick().catch(()=>{});},3000):null;
   scheduler.deliver=telegram?(id,result)=>telegram.deliver(id,result):null;
   let debounce,indexDebounce;const watchers=new Map();
-  const changed=(event,name)=>{if(!name||name.replaceAll('\\','/').startsWith('.')||name.endsWith('.tmp'))return;clearTimeout(indexDebounce);indexDebounce=setTimeout(()=>{try{index.rebuild();}catch{}},750);if(fs.existsSync(path.join(store.state,'sync-config.json'))){clearTimeout(debounce);debounce=setTimeout(()=>sync.reconcile(),5000);}};
+  const changed=(event,name)=>{if(menerioImport.mutating||!name||name.replaceAll('\\','/').startsWith('.')||name.endsWith('.tmp'))return;clearTimeout(indexDebounce);indexDebounce=setTimeout(()=>{if(menerioImport.mutating)return;try{index.rebuild();}catch{}},750);if(fs.existsSync(path.join(store.state,'sync-config.json'))){clearTimeout(debounce);debounce=setTimeout(()=>{if(!menerioImport.mutating)sync.reconcile();},5000);}};
   // Private backups and Git merge workspaces are outside the watched knowledge.
   const watchRoot=name=>{const folder=path.join(store.root,name);if(!watchers.has(name)&&fs.existsSync(folder))watchers.set(name,fs.watch(folder,{recursive:true},changed));};
   for(const name of durableRoots)watchRoot(name);
   const rootWatcher=fs.watch(store.root,(event,name)=>{if(durableRoots.includes(name)){watchRoot(name);changed(event,name);}else if(durableFiles.includes(name))changed(event,name);});
-  return { server, store, index, query, domains, scheduler, sync, mediaSync,address: server.address(), close: async () => { rootWatcher.close();for(const watcher of watchers.values())watcher.close();clearTimeout(debounce);clearTimeout(indexDebounce);clearInterval(telegramTimer);clearInterval(interval);clearInterval(jobs);clearInterval(syncTimer);clearInterval(mediaTimer); await new Promise(resolve => server.close(resolve)); index.close(); } };
+  return { server, store, index, query, domains, scheduler, sync, mediaSync,address: server.address(), close: async () => { await menerioImport.close();rootWatcher.close();for(const watcher of watchers.values())watcher.close();clearTimeout(debounce);clearTimeout(indexDebounce);clearInterval(telegramTimer);clearInterval(interval);clearInterval(jobs);clearInterval(syncTimer);clearInterval(mediaTimer); await new Promise(resolve => server.close(resolve)); index.close(); } };
 }
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const root = process.env.GODSPEED_WORKSPACE;

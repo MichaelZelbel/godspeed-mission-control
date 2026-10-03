@@ -46,5 +46,8 @@ p=target/'src/pages/SharedNote.tsx';text=p.read_text(encoding='utf-8').replace('
 p=target/'src/pages/ReviewQueue.tsx';text=p.read_text(encoding='utf-8').replace('Menerio automatically added these insights from your notes. Keep what looks right, remove what does not, or block things you never want added again.','Review suggestions supported by your notes. Keep what looks right, reject what does not, or block suggestions you never want added.');p.write_text(text,encoding='utf-8')
 for p in (target/'src').rglob('*'):
     if p.suffix in ['.tsx','.ts']:
+        # Local adapters already use the application brand. Keep source names
+        # such as ImportMenerio intact when describing a migration source.
+        if (adapters/p.relative_to(target)).is_file(): continue
         text=p.read_text(encoding='utf-8').replace('Menerio','Godspeed Mission Control').replace(' — ',' - ');p.write_text(text,encoding='utf-8')
 p=target/'src/components/settings/ApiKeysManager.tsx';text=p.read_text(encoding='utf-8').replace('"https://mcp.menerio.com"','location.origin + "/mcp"');text=text.replace('{ value: "graph", label: "Graph", desc: "Connections and graph data" },','').replace('{ value: "lexicon", label: "Lexicon", desc: "Lexicon pages" },','');p.write_text(text,encoding='utf-8')
