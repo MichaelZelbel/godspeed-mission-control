@@ -34,3 +34,13 @@ Checked in the installed notebook: opening AI chat collapses navigation, the tre
 The screenshot checker was adapted locally to clip line boxes to scrolling ancestors: offscreen transcript and editor text had been incorrectly reported as overlapping their headers. Physical-phone testing remains unverified.
 
 Screen check completion: the final desktop confirmation reports no failures. Both phone layouts passed after the minimum-height repair, and reduced motion remained complete. The earlier count-contrast finding was repaired and verified in the desktop confirmation. Existing editor tap-size, app heading and private-page metadata warnings remain outside this layout change.
+
+## Composer controls and dictation
+
+Keep attachments, model, effort, microphone, playback and send on a single row. Model and effort selectors shrink within their column; action buttons retain 44px targets. Automatic effort is labeled Auto to preserve room. The speaker shows its enabled icon while reading and its muted icon when stopped.
+
+Dictation records up to one minute with MediaRecorder, then inserts the transcript into the existing draft without sending it. A visible listening/transcribing status and permission errors explain what is happening. Hermes's installed local faster-whisper backend handles speech; no paid audio provider or browser SpeechRecognition service is used. Temporary recordings are deleted after transcription. Audio requests use the existing authenticated, same-origin API, with an 8MB limit and one transcription at a time.
+
+Both installed HTTP services correctly transcribed the same synthesized spoken sentence. A separate Chrome check uses a synthetic microphone recording to exercise actual MediaRecorder upload and preserve the typed draft. Physical microphone and speaker hardware are not verified. The independent screenshot reviewer found no new toolbar usability defects.
+
+Deployment: the server's optional faster-whisper 1.2.1 dependencies live in the persistent installation volume at /opt/data/full-candidate/stt-deps, installed with uv pip --target. The model cache lives inside the isolated Hermes home under stt-cache. Windows uses its existing Hermes dependency. The deployed helper and route are mounted alongside the other installation repairs.

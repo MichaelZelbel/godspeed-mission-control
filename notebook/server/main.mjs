@@ -20,6 +20,7 @@ import { spawn } from 'node:child_process';
 import {ApiKeys,toolScope} from '../core/api-keys.mjs';
 import {Telegram} from '../core/telegram.mjs';
 import {browserChat} from './browser-chat.mjs';
+import {transcribeRecording} from '../core/dictation.mjs';
 import {durableRoots,durableFiles} from '../core/file-policy.mjs';
 
 export async function createService({ root, mediaRoot, host = '127.0.0.1', port = 47831, token, uiRoot, provider, device = 'local' } = {}) {
@@ -38,7 +39,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   const instance=hash(store.root).slice(0,24);
   const remote = !['127.0.0.1', '::1', 'localhost'].includes(host);
   if (remote && !token) throw new Error('Remote access requires a candidate token');
-  const sessions = new Map();const chatRequests=new Map();
+  const sessions = new Map();const chatRequests=new Map();let dictationBusy=false;
   const loginLinks=new Map();
   const apiKeys=new ApiKeys(store);
   const authorized = req => !remote || pairKeys.includes(hash(String(req.headers['x-godspeed-pair-key']||req.headers.authorization?.replace(/^Bearer /,'')||''))) || (sessions.get((req.headers.cookie || '').match(/(?:^|; )godspeed_session=([^;]+)/)?.[1]) || 0) > Date.now();
@@ -178,6 +179,11 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         const mapping = JSON.parse(fs.readFileSync(path.join(mediaRoot, hash(original) + '.mapping.json'), 'utf8'));
         if(mapping.removed_at)return send(res,404,{error:'Media removed'});
         res.writeHead(200, { 'Content-Type': mapping.contentType || 'application/octet-stream', 'Content-Length': mapping.size, 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "default-src 'none'; sandbox" }); fs.createReadStream(path.join(mediaRoot, safe(mapping.file))).pipe(res); return;
+      }
+      if(route==='/api/chat/transcribe'&&req.method==='POST'){
+        if(dictationBusy)return send(res,429,{error:'Another recording is being transcribed. Please try again shortly.'});
+        dictationBusy=true;
+        try{const descriptor=fs.existsSync(assistantPath)?JSON.parse(fs.readFileSync(assistantPath,'utf8').replace(/^\uFEFF/,'')):null;return send(res,200,await transcribeRecording(descriptor,store.root,await body(req,8*1024*1024),String(req.headers['content-type']||'')));}finally{dictationBusy=false;}
       }
       if(route==='/api/chat/options'&&req.method==='GET')return send(res,200,provider?.options?await provider.options():{current:'Connected model',models:[{id:'',efforts:[]}]});
       if(route==='/api/chat/stop'&&req.method==='POST'){const input=JSON.parse(await body(req));chatRequests.get(input.id)?.abort();return send(res,200,{ok:true});}
