@@ -62,7 +62,7 @@ export class FileSync {
     try {
       // Independently created profiles can look like renames to Git. Their paths
       // are durable identities, so merging must never infer a move from content.
-      try { this.git(['merge','--no-edit','--no-ff','-Xno-renames','--allow-unrelated-histories',remoteRef],dir); }
+      try { this.git(['merge','--no-edit','--no-ff','--strategy=resolve','--allow-unrelated-histories',remoteRef],dir); }
       catch(e) {
         const conflicted=this.git(['diff','--name-only','--diff-filter=U'],dir).split('\n').filter(Boolean);
         if(!conflicted.length)throw e;

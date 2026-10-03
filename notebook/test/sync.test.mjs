@@ -56,7 +56,7 @@ test('similar independent assistant profiles keep their paths when syncing',()=>
   atomic(path.join(a.root,first),JSON.stringify({format:1,database:'state.db',profile:first.split('/')[1],tables:['new message'],padding:'same '.repeat(100)}));
   const outcome=sa.reconcile();assert.equal(outcome.state,'conflict');
   const conflicts=sa.pendingConflicts().map(n=>JSON.parse(fs.readFileSync(path.join(a.root,'conflicts',n))));
-  assert.ok(conflicts.every(c=>c.path===first));assert.ok(conflicts.every(c=>!c.local||JSON.parse(c.local).profile===first.split('/')[1]));
+  assert.ok(conflicts.every(c=>c.path===first),JSON.stringify(conflicts.map(c=>c.path)));assert.ok(conflicts.every(c=>!c.local||JSON.parse(c.local).profile===first.split('/')[1]));
 });
 
 test('invalid assistant snapshots stay local instead of entering Git',()=>{
