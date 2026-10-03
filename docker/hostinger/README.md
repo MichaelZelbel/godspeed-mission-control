@@ -8,6 +8,17 @@ Hostinger's supported purchase link is:
 
 `https://www.hostinger.com/docker-hosting?compose_url=PUBLIC_RAW_COMPOSE_URL`
 
+Current purchase and install link, including Michael's saved Hostinger referral:
+
+[Install Godspeed Mission Control on Hostinger](https://www.hostinger.com/docker-hosting?compose_url=https%3A%2F%2Fraw.githubusercontent.com%2FMichaelZelbel%2Fgodspeed-mission-control%2Fa759dc8%2Fdocker%2Fhostinger%2Fcompose.yaml&REFERRALCODE=GHNMICHAEJC8#pricing)
+
+The `#pricing` anchor opens the plan selection section, where Hostinger displays
+the project name `godspeed-mission-control` and a `Referral code applied` badge.
+Both were verified in the actual browser on 3 October 2026. Hostinger still owns
+the generic main heading; this is not a fully branded Godspeed purchase page.
+For a public launch, use a Godspeed installation page explaining what happens
+after purchase, with this referral-aware link as its deployment button.
+
 Use the public raw URL of `compose.yaml` at the release commit. The file pins the
 complete tested image by digest, so unrelated changes to `latest` cannot replace it.
 
