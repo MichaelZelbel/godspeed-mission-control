@@ -14,6 +14,7 @@ export class ApiKeys {
   }
 }
 export function toolScope(name,args){
+  if(name==='personal_operation')return 'actions';
   if(['search_knowledge','validate_knowledge'].includes(name))return 'stats';
   if(['capture_note'].includes(name))return 'notes';
   if(['write_fact','record_event'].includes(name))return 'world';

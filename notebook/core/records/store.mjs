@@ -122,7 +122,7 @@ export class Store {
     atomic(path.join(this.root, 'conflicts', conflict.id + '.json'), JSON.stringify(conflict, null, 2));
     const error = new Error('This record changed. Both versions were saved for review.'); error.code = 'CONFLICT'; throw error;
   }
-  commit(records,{removeKeys=[]}={}) {
+  commit(records,{removeKeys=[],files=[]}={}) {
     this.scan();
     const history=[];
     for(const record of records){
@@ -154,6 +154,7 @@ export class Store {
       if (fs.existsSync(file)) atomic(path.join(dir, i + '.before'), fs.readFileSync(file, 'utf8'));
       return { file: relative, staged: i + '.after', hash: hash(encode(record)) };
     });
+    for(const item of files){if(!durable(item.file))throw Error('File is outside durable state');const staged=manifest.length+'.after';atomic(path.join(dir,staged),item.text);manifest.push({file:item.file,staged,hash:hash(item.text)});}
     for(const key of removeKeys){const old=this.records.get(key);if(!old)continue;const file=this.file(old);atomic(path.join(dir,manifest.length+'.before'),fs.readFileSync(file,'utf8'));manifest.push({file:path.relative(this.root,file).replaceAll('\\','/'),delete:true});}
     atomic(path.join(dir, 'manifest.json'), JSON.stringify(manifest));
     atomic(path.join(dir, 'prepared'), tx);

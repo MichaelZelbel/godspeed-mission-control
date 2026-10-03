@@ -24,6 +24,7 @@ export function nodeMajor(version = process.versions.node) {
 export function findGodspeed({ arg, cwd = process.cwd(), userHome = os.homedir() } = {}) {
   const looksLikeGodspeed = (d) => d && fs.existsSync(path.join(d, "AGENTS.md"));
   if (arg) return looksLikeGodspeed(path.resolve(arg)) ? path.resolve(arg) : null;
+  if(process.env.GODSPEED_WORKSPACE&&looksLikeGodspeed(process.env.GODSPEED_WORKSPACE))return path.resolve(process.env.GODSPEED_WORKSPACE);
   const envFile = path.join(userHome, ".godspeed", "device.env");
   if (fs.existsSync(envFile)) {
     const m = fs.readFileSync(envFile, "utf8").match(/^\s*GODSPEED_DIR=(.+)$/m);

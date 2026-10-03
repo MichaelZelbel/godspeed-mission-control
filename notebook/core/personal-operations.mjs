@@ -1,0 +1,168 @@
+import fs from 'node:fs';import path from 'node:path';
+import {hash,atomic,safe} from './records/store.mjs';
+import {Scheduler} from './jobs/scheduler.mjs';
+import {nativeOperation,addonCommand,ensureNativeSchedules} from './native-personal.mjs';
+import {cardCommand,importCardFiles} from './card-commands.mjs';
+import {dueCommand,dueRows} from './native-due.mjs';
+import {localParts,addDays,zonedToUtc} from '../../third-party/addons/godspeed-coach/lib/clock.mjs';
+import {nextCalendarRun} from './jobs/calendar.mjs';
+import {readTable} from '../../third-party/addons/godspeed-coach/lib/auto.mjs';
+import {localPath} from './local-path.mjs';
+export const operationContract=`Return JSON {reply,notes_created?:[{title,content}],operations?:[{type,source_quote,...fields}]}. Use an operation only when the user's current message explicitly requests that change. source_quote must be exact user words requesting it, never a note quote. Supported operations:
+goal-add {title,measure,status?:adopted|provisional}; goal-change {id,title?,measure?,status?:adopted|provisional|paused|achieved|retired,reason}; goal-outcome {id,evidence,value?,outcome};
+obligation-add {title,due_at,target_at?,recurrence?:{days}}; obligation-complete {id,evidence}; obligation-snooze {id,until};
+coach-open {area:health|work-money|relationships,question}; coach-reply {id,content}; coach-close {id}; habit-agree {talk_id,title,agreement,check_at}; habit-observe {id,observation,answer:done|no|skip};
+journal-add {content}; journal-switch {enabled}; health-add {metric,value,unit,observed_at};
+memory-confirm {label,value,evidence_quote}; memory-propose {label,value,evidence_quote};
+routine-change {id,paused?,calendar?:{time:HH:MM,weekdays?:[0..6]}}; forecast-settle {id,observed,evidence}.
+work-allow-local {id,note_id}: allow the selected work to edit exactly this local note, preserving its current revision as the precondition.
+Use supplied IDs; ask to resolve ambiguity. ISO dates must include timezone. No outward actions or credentials. Never claim a change persisted until the operation succeeds.`;
+const required=(value,label)=>{if(typeof value!=='string'||!value.trim())throw Error(label+' is required');return value.trim();};
+const date=(value,label)=>{required(value,label);if(!Number.isFinite(Date.parse(value))||!/(Z|[+-]\d\d:\d\d)$/.test(value))throw Error(label+' needs an ISO date with timezone');return new Date(value).toISOString();};
+export function personalOperation(domains,input){
+ const {store,query}=domains,type=input.type;
+ if(type==='addon-command'){const result=addonCommand(store,input);if(input.addon!=='headache')ensureNativeSchedules(store,input.addon);return result;}
+ if(type==='card-command')return cardCommand(store,input);
+ if(type==='due-command')return dueCommand(store,input.args);
+ if(['obligation-complete','obligation-snooze'].includes(type)){
+  const native=dueRows(store).find(d=>d.id===input.id);if(native){if(input.expected&&input.expected!==native._hash)throw Error('Obligation changed; reload before saving');
+   if(type==='obligation-complete'){required(input.evidence,'Completion evidence');return dueCommand(store,['done',native.native_slug,'--evidence',input.evidence]);}
+   return dueCommand(store,['target',native.native_slug,date(input.until,'New target').slice(0,10)]);
+  }
+ }
+ if(type==='import-card-files')return importCardFiles(store,input.card);
+ if(type==='health-import-csv'){
+  const content=required(input.content,'CSV health data');if(content.length>1000000)throw Error('Health CSV exceeds one megabyte');const file=path.join(store.root,'observations/health-inputs',hash(content)+'.csv');atomic(file,content);const table=readTable(file),rows=[];
+  for(const [day,values] of Object.entries(table))for(const [metric,raw] of Object.entries(values)){if(metric==='date'||!raw||!Number.isFinite(Number(raw)))continue;if(!/^[a-zA-Z][a-zA-Z0-9_ -]{0,79}$/.test(metric))throw Error('Health column needs a clear measurement name');const id='health-feed-'+hash([input.source||'selected-csv',day,metric]),previous=store.get('health_observations',id);if(previous?.value===Number(raw))continue;rows.push(store.prepare('health_observations',{id,metric,value:Number(raw),source:input.source||'Selected CSV',source_file:path.relative(store.root,file).replaceAll('\\','/'),observed_at:zonedToUtc(day,'12:00',store.get('settings','installation')?.timezone||'UTC').toISOString()},previous));}
+  if(!Object.keys(table).length)throw Error('CSV needs a date column with YYYY-MM-DD dates and numeric measurement columns');store.withLock(()=>store.commit(rows));return {imported:rows.length,source_file:path.relative(store.root,file)};
+ }
+ if(type==='watch-add'){
+  const title=required(input.title,'Watch topic'),url=new URL(required(input.url,'Source address'));if(url.protocol!=='https:'&&!(url.protocol==='http:'&&['localhost','127.0.0.1'].includes(url.hostname)))throw Error('Use an HTTPS source or an isolated local test source');
+  if(!Number.isInteger(input.minutes)||input.minutes<1||input.minutes>525600)throw Error('Choose the number of minutes between checks');required(input.criteria,'Meaningful change criteria');
+  return store.withLock(()=>{const topic=store.prepare('watch_topics',{title,urls:[url.href],criteria:input.criteria,cadence_minutes:input.minutes,include_in_brief:input.include_in_brief===true,paused:false}),owner=store.get('settings','installation')?.owner||store.device,job=store.prepare('jobs',{id:'watch-'+topic.id,kind:'watch',topic_ids:[topic.id],owner,paused:false,next_run:new Date().toISOString(),interval_ms:input.minutes*60000,state:'pending'});store.commit([topic,job]);return topic;});
+ }
+ if(type==='watch-change'){const topic=store.get('watch_topics',required(input.id,'Watch ID'));if(!topic)throw Error('Watch topic missing');if(typeof input.paused!=='boolean')throw Error('Choose pause or resume');return store.withLock(()=>{const job=store.get('jobs','watch-'+topic.id);store.commit([store.prepare('watch_topics',{paused:input.paused},topic),...(job?[store.prepare('jobs',{paused:input.paused},job)]:[])]);return store.get('watch_topics',topic.id);});}
+ if(['coach-open','coach-reply','coach-close','habit-agree','habit-observe','journal-add','journal-switch'].includes(type)){
+  if(type==='coach-open'){if(!['health','work-money','relationships'].includes(input.area))throw Error('Choose a supported coaching area');required(input.question,'Coaching question');}
+  if(type==='coach-reply')required(input.content,'Reply');
+  if(type==='habit-agree'){required(input.title,'Habit');required(input.agreement,'Explicit agreement');date(input.check_at,'Next check-in');}
+  if(type==='habit-observe')required(input.observation,'Observation');
+  if(type==='journal-add')required(input.content,'Journal entry');
+  if(type==='journal-switch'&&typeof input.enabled!=='boolean')throw Error('Choose enabled or disabled');
+  const result=store.withLock(()=>nativeOperation(store,input));ensureNativeSchedules(store,type.startsWith('journal')?'journal':'coach');
+  if(type==='habit-agree')store.save('jobs',{id:'habit-check-'+result.id,kind:'habit-check',habit_id:result.id,owner:store.get('settings','installation')?.owner||store.device,paused:false,next_run:date(input.check_at,'Next check-in'),interval_ms:7*86400000,state:'pending'});
+  return result;
+ }
+ const old=table=>{const r=store.get(table,required(input.id,'Record ID'));if(!r||r.removed_at)throw Error('Record does not exist');if(input.expected&&input.expected!==r._hash)store.conflict(table,input,r);return r;};
+ if(type==='goal-add'){
+  const title=required(input.title,'Goal'),status=input.status||'adopted';if(!['adopted','provisional'].includes(status))throw Error('Choose adopted or provisional');
+  const existing=query.rows('goals').find(g=>g.title===title&&!g.removed_at);if(existing)return existing;
+  new Scheduler(store).configure({goal:title});const goal=query.rows('goals').find(g=>g.title===title);return store.save('goals',{id:goal.id,status,measure:input.measure||null,progress:goal.progress||[]});
+ }
+ if(type==='goal-change'){
+  const g=old('goals');required(input.reason,'Reason for change');if(input.status&&!['adopted','provisional','paused','achieved','retired'].includes(input.status))throw Error('Unsupported goal status');
+  const changes=Object.fromEntries(['title','measure','status'].filter(k=>input[k]!==undefined).map(k=>[k,input[k]]));
+  return store.withLock(()=>{const next=store.prepare('goals',{...changes,changes:[...(g.changes||[]),{reason:input.reason,at:new Date().toISOString(),before:{title:g.title,measure:g.measure,status:g.status}}]},g);
+   const pending=query.rows('work_items').filter(w=>w.goal_id===g.id&&!['verified','cancelled'].includes(w.state)).map(w=>store.prepare('work_items',{state:'cancelled',reason:'Goal changed: '+input.reason},w));
+   const forecasts=query.rows('forecasts').filter(f=>f.goal_id===g.id&&f.status==='open').map(f=>store.prepare('forecasts',{status:'needs_review',reason:input.reason},f));store.commit([next,...pending,...forecasts]);return store.get('goals',g.id);});
+ }
+ if(type==='goal-outcome'){const g=old('goals');required(input.evidence,'Outcome evidence');return store.save('goals',{id:g.id,progress:[...(g.progress||[]),{kind:'observed',evidence:input.evidence,value:input.value??null,outcome:input.outcome||'observed',at:new Date().toISOString()}]},g._hash);}
+ if(type==='goal-evidence'){
+  const g=old('goals');if(!['playbook','diagnosis'].includes(input.kind))throw Error('Choose playbook or diagnosis');const content=required(input.content,'Evidence document'),relative='goals/'+(input.kind==='playbook'?'playbooks/':'diagnoses/')+safe(g.id)+(input.kind==='playbook'?'':'-current')+'.md',file=path.join(store.root,relative);
+  return store.withLock(()=>{localPath(store.root,relative);const current=store.get('goals',g.id);if(current._hash!==g._hash)store.conflict('goals',input,current);const previous=fs.existsSync(file)?fs.readFileSync(file,'utf8'):null;if(input.file_hash!==undefined&&input.file_hash!==(previous?hash(previous):null))throw Error('Goal evidence changed; reload before saving');const next=store.prepare('goals',{[input.kind]:content,legacy_log:[...(g.legacy_log||[]),{date:new Date().toISOString().slice(0,10),event:input.kind==='playbook'?'PLAYBOOK':'DIAGNOSIS',rest:relative}]},current);store.commit([next],{files:[...(previous?[{file:'goals/history/'+safe(g.id)+'-'+hash(previous)+'.md',text:previous}]:[]),{file:relative,text:content}]});return store.get('goals',g.id);});
+ }
+ if(type==='obligation-add'){
+  if(input.recurrence&&(!Number.isInteger(input.recurrence.days)||input.recurrence.days<1||input.recurrence.days>366))throw Error('Recurrence needs 1 to 366 days');
+  if(!input.due_at&&!input.target_at)throw Error('An obligation needs a target or a deadline');
+  if(input.completion_check&&(!['note-contains'].includes(input.completion_check.type)||!store.get('notes',input.completion_check.note_id)||!input.completion_check.text?.trim()))throw Error('Choose a local note and exact completion text');
+  return store.save('deadlines',{title:required(input.title,'Obligation'),due_at:input.due_at?date(input.due_at,'Deadline'):null,target_at:input.target_at?date(input.target_at,'Target'):null,start_at:input.start_at?date(input.start_at,'Start'):new Date().toISOString(),timezone:store.get('settings','installation')?.timezone||'UTC',status:'open',recurrence:input.recurrence||null,completion_check:input.completion_check||null});
+ }
+ if(type==='obligation-complete'){
+  const d=old('deadlines');required(input.evidence,'Completion evidence');if(d.status==='closed')return {id:d.id,next_id:d.next_id,already_closed:true};
+  return store.withLock(()=>{const timezone=d.timezone||store.get('settings','installation')?.timezone||'UTC',shift=value=>{if(!value)return null;const local=localParts(new Date(value),timezone);return zonedToUtc(addDays(local.date,d.recurrence.days),local.hm,timezone).toISOString();};
+   const next=d.recurrence?store.prepare('deadlines',{title:d.title,status:'open',timezone,due_at:shift(d.due_at),target_at:shift(d.target_at),start_at:shift(d.start_at),recurrence:d.recurrence,previous_id:d.id,completion_check:d.completion_check,completion_baseline_hash:d.completion_check?.note_id?store.get('notes',d.completion_check.note_id)?._hash:null}):null;
+   store.commit([store.prepare('deadlines',{status:'closed',closed_at:new Date().toISOString(),completion_evidence:input.evidence,next_id:next?.id||null},d),...(next?[next]:[])]);return {id:d.id,next_id:next?.id};});
+ }
+ if(type==='obligation-snooze'){const d=old('deadlines');return store.save('deadlines',{id:d.id,snoozed_until:date(input.until,'Snooze date')},d._hash);}
+ if(type==='coach-open'){
+  if(!['health','work-money','relationships'].includes(input.area))throw Error('Choose a supported coaching area');
+  const open=query.rows('coach_talks').find(t=>t.area===input.area&&t.status==='open');if(open)return open;
+  return store.save('coach_talks',{area:input.area,question:required(input.question,'Coaching question'),status:'open',replies:[],sources:input.sources||[],previous_id:query.rows('coach_talks').filter(t=>t.area===input.area).at(-1)?.id||null});
+ }
+ if(type==='coach-reply'){const talk=old('coach_talks');if(talk.status!=='open')throw Error('Coaching talk is closed');return store.save('coach_talks',{id:talk.id,replies:[...(talk.replies||[]),{content:required(input.content,'Reply'),at:new Date().toISOString(),source_id:input.source_id||null}]},talk._hash);}
+ if(type==='coach-close'){const talk=old('coach_talks');return store.save('coach_talks',{id:talk.id,status:'closed',closed_at:new Date().toISOString()},talk._hash);}
+ if(type==='habit-agree'){
+  const talk=store.get('coach_talks',required(input.talk_id,'Talk ID'));if(!talk)throw Error('Coaching talk missing');
+  return store.save('habits',{title:required(input.title,'Habit'),agreement:required(input.agreement,'Explicit agreement'),talk_id:talk.id,area:talk.area,status:'agreed',check_at:date(input.check_at,'Next check-in'),observations:[]});
+ }
+ if(type==='habit-observe'){const h=old('habits');return store.save('habits',{id:h.id,observations:[...(h.observations||[]),{content:required(input.observation,'Observation'),at:new Date().toISOString()}]},h._hash);}
+ if(type==='journal-add'){if(store.get('settings','journal')?.enabled===false)throw Error('Journaling is switched off');return store.save('journal',{content:required(input.content,'Journal entry'),source_id:input.source_id||null,at:new Date().toISOString()});}
+ if(type==='journal-switch'){if(typeof input.enabled!=='boolean')throw Error('Choose enabled or disabled');return store.save('settings',{id:'journal',enabled:input.enabled});}
+ if(type==='health-add'){if(input.value===undefined||input.value===null)throw Error('Health observation value is required');return store.save('health_observations',{metric:required(input.metric,'Health metric'),value:input.value,unit:input.unit||null,observed_at:date(input.observed_at,'Observation time'),source_id:input.source_id||null});}
+ if(['memory-confirm','memory-propose'].includes(type)){
+  required(input.evidence_quote,'Source quote');
+  if(type==='memory-confirm')return domains.writeFact({label:required(input.label,'Fact label'),value:required(input.value,'Fact value'),source_type:'conversation',source_id:input.source_id,evidence_quote:input.evidence_quote});
+  const fingerprint=hash([input.source_id,input.label,input.value]);const existing=query.rows('review_queue').find(r=>r.fingerprint===fingerprint);if(existing)return existing;
+  return store.save('review_queue',{title:'Remember '+required(input.label,'Fact label'),suggestion_type:'add_claim',payload:{label:input.label,value:required(input.value,'Fact value'),source_type:'conversation',source_id:input.source_id,evidence_quote:input.evidence_quote},description:input.evidence_quote,status:'pending_review',fingerprint,origin:'conversation'});
+ }
+ if(type==='routine-change'){const j=old('jobs');if(input.paused!==undefined&&typeof input.paused!=='boolean')throw Error('Pause must be true or false');if(input.calendar&&(!/^([01]\d|2[0-3]):[0-5]\d$/.test(input.calendar.time)||input.calendar.weekdays?.some(d=>!Number.isInteger(d)||d<0||d>6)))throw Error('Calendar needs a valid local time and weekdays');return store.save('jobs',{id:j.id,...(input.paused!==undefined?{paused:input.paused}:{}),...(input.calendar?{calendar:input.calendar,next_run:nextCalendarRun({...j,calendar:input.calendar},store.get('settings','installation')?.timezone||'UTC')}:{})},j._hash);}
+ if(type==='forecast-settle'){const f=old('forecasts');required(input.evidence,'Forecast evidence');if(typeof input.observed!=='boolean')throw Error('Forecast observation must be true or false');if(f.status==='settled')return f;return store.save('forecasts',{id:f.id,status:'settled',observed:input.observed,evidence:input.evidence,brier_score:(f.probability-Number(input.observed))**2,settled_at:new Date().toISOString()},f._hash);}
+ if(type==='work-allow-local'){
+  const item=old('work_items'),note=store.get('notes',required(input.note_id,'Target note ID'));
+  if(item.kind!=='local-note'||!note||note.is_trashed||!['awaiting_approval','failed'].includes(item.state))throw Error('Choose a pending local-note task and an existing note');
+  return store.save('work_items',{id:item.id,state:'pending',allowed_action:'write-local-note',target_id:note.id,target_hash:note._hash,authorised_at:new Date().toISOString()},item._hash);
+ }
+ throw Error('Unsupported personal operation: '+type);
+}
+export function conversationOperations(domains,input,operations){
+ if(!Array.isArray(operations)||operations.length>10)throw Error('Invalid conversation operations');
+ const message=String(input.message||input.messages?.filter(m=>m.role==='user').at(-1)?.content||'');
+ const source=domains.query.rows('conversation_messages').filter(m=>m.role==='user'&&m.conversation_id===input.conversation_id&&m.content===message).at(-1);
+ const requestId=input.request_id||source?.id||hash([input.conversation_id,message]);
+ const planId='personal-plan-'+hash([input.conversation_id,requestId]);
+ const digest=hash(operations),plan=domains.store.get('command_receipts',planId);
+ if(plan&&plan.plan_hash!==digest)throw Error('Request retry conflicts with its saved operation plan; reload the original result');
+ // Authorization is checked independently of the model's explanation.
+ const intents={
+  'goal-add':/\b(?:my goal is|adopt|set|add|remember|create|mein ziel|lege|speichere)\b[\s\S]*(?:goal|ziel)|\b(?:my goal is|mein ziel ist)\b/i,
+  'goal-change':/\b(?:change|pause|resume|retire|close|complete|update|ändere|pausiere|beende)\b[\s\S]*(?:goal|ziel)/i,
+  'goal-outcome':/\b(?:record|save|log|update|speichere|notiere)\b[\s\S]*(?:outcome|result|progress|ergebnis|fortschritt)/i,
+  'obligation-add':/\b(?:remind me|reminder|add an? obligation|add an? deadline|create an? reminder|erinnere mich|erinnerung)\b/i,
+  'obligation-complete':/\b(?:complete|completed|close|done|finished|erledigt|abgeschlossen)\b/i,
+  'obligation-snooze':/\b(?:snooze|postpone|move|verschiebe)\b/i,
+  'coach-open':/\b(?:start|open|begin|starte|beginne)\b[\s\S]*(?:coach|talk|conversation|gespräch)/i,
+  'coach-reply':/\b(?:reply|answer|tell|record|said|antwort|notiere)\b/i,
+  'coach-close':/\b(?:close|finish|end|beende)\b[\s\S]*(?:talk|coach|conversation|gespräch)/i,
+  'habit-agree':/\b(?:i agree|i will|let.s try|agree to|ich stimme|ich werde)\b/i,
+  'habit-observe':/\b(?:record|log|track|did|didn.t|did not|skipped|notiere|erledigt|nicht)\b/i,
+  'journal-add':/\b(?:journal|diary|notiere|tagebuch)\b/i,
+  'journal-switch':/\b(?:enable|disable|turn on|turn off|start|stop|switch|aktiviere|deaktiviere)\b[\s\S]*(?:journal|diary|tagebuch)/i,
+  'health-add':/\b(?:record|log|save|notiere|speichere)\b/i,
+  'memory-confirm':/\b(?:remember|save this fact|correct|update my|merke|speichere|korrigiere)\b/i,
+  'memory-propose':/\b(?:remember|save this fact|merke|speichere)\b/i,
+  'routine-change':/\b(?:pause|resume|schedule|change|stop|start|pausiere|ändere)\b/i,
+  'forecast-settle':/\b(?:settle|record|resolve|log|notiere)\b[\s\S]*(?:forecast|prediction|prognose)/i,
+  'work-allow-local':/\b(?:allow|approve|authori[sz]e|erlaube|genehmige)\b[\s\S]*(?:edit|change|update|write|note|ändern|notiz)/i
+ };
+ for(const operation of operations){
+  const quote=operation.source_quote;
+  // A provider-selected substring cannot turn a refusal or hypothetical into permission.
+  if(!quote||!message.includes(quote)||!intents[operation.type]?.test(quote)||!intents[operation.type]?.test(message)||/\b(?:do not|don.t|never|must not|should not|nicht|niemals)\s+(?:remember|save|add|create|allow|approve|authori[sz]e|edit|change|write|speichere|erlaube)/i.test(message)||/\b(?:if I|suppose|hypothetically|for example|someone said|quoted|wenn ich|beispielsweise)\b/i.test(message))throw Error('Operation lacks an explicit authorized request');
+  if(operation.type==='work-allow-local'){
+   const note=domains.store.get('notes',operation.note_id),item=domains.store.get('work_items',operation.id);
+   if(!note||!item||![note.id,note.title].filter(Boolean).some(name=>message.includes(name))||![item.id,item.title].filter(Boolean).some(name=>message.includes(name)))throw Error('Approval must identify the exact task and target note');
+  }
+ }
+ if(!plan)domains.store.save('command_receipts',{id:planId,state:'attempted',source_id:source?.id||requestId,plan_hash:digest,operations});
+ const results=[];
+ for(const [i,operation] of operations.entries()){
+  if(!operation.source_quote||!message.includes(operation.source_quote))throw Error('Operation needs an exact source quote from the explicit user request');
+  if(operation.evidence_quote&&!message.includes(operation.evidence_quote))throw Error('Memory evidence must occur in the user message');
+  const id='personal-'+hash([input.conversation_id,requestId,i]);const previous=domains.store.get('command_receipts',id);if(previous){if(previous.state!=='verified')throw Error('Previous operation needs review');results.push(previous.result);continue;}
+  domains.store.save('command_receipts',{id,state:'attempted',source_id:source?.id||requestId,operation:operation.type});
+  const result=personalOperation(domains,{...operation,source_id:source?.id||requestId});
+  domains.store.save('command_receipts',{id,state:'verified',source_id:source?.id||requestId,operation:operation.type,result});results.push(result);
+ }
+ domains.store.save('command_receipts',{id:planId,state:'verified',results});
+ return results;
+}

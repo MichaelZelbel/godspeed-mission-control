@@ -32,7 +32,9 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   provider ||= modelProvider({url:process.env.GODSPEED_MODEL_URL,key:process.env.GODSPEED_MODEL_KEY,model:process.env.GODSPEED_MODEL});
   const assistantPath=process.env.GODSPEED_ASSISTANT_CONFIG||path.join(store.state,'assistant.json');
   if(!provider&&fs.existsSync(assistantPath)){const descriptor=JSON.parse(fs.readFileSync(assistantPath,'utf8').replace(/^\uFEFF/,''));if(descriptor.verified)provider=hermesProvider({executable:descriptor.executable,home:descriptor.home,cwd:store.root,sourceRoot:descriptor.sourceRoot});}
-  const domains=new Domains(query,{provider}),scheduler=new Scheduler(store,{device,executor:jobExecutor(provider,query)});
+  let schedulerHeartbeat=new Date().toISOString();
+  if(provider){const connected=provider;provider=Object.assign(async input=>{schedulerHeartbeat=new Date().toISOString();try{return await connected(input);}finally{schedulerHeartbeat=new Date().toISOString();}},connected);}
+  const domains=new Domains(query,{provider}),scheduler=new Scheduler(store,{device,executor:jobExecutor(provider,query)});scheduler.onProgress=()=>{schedulerHeartbeat=new Date().toISOString();};
   domains.sync=sync;
   mediaRoot = path.resolve(mediaRoot || path.join(store.state, 'media')); fs.mkdirSync(mediaRoot, { recursive: true });
   domains.mediaRoot=mediaRoot;
@@ -76,7 +78,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         const input=JSON.parse(await body(req)),expires=pairCodes.get(input.code);if(!expires||expires<Date.now())return send(res,401,{error:'Pairing code expired or was already used'});
         pairCodes.delete(input.code);const key=randomBytes(32).toString('hex');pairKeys.push(hash(key));atomic(pairKeysPath,JSON.stringify(pairKeys));fs.chmodSync(pairKeysPath,0o600);return send(res,200,{key});
       }
-      if (route === '/health') return send(res, 200, { ok: true, format: 1, version: '0.1.0-alpha.1',instance });
+      if (route === '/health') return send(res, 200, { ok: true, format: 1, version: '2.0.0-alpha.1',instance,scheduler_heartbeat:schedulerHeartbeat });
       if(route==='/api/shared-note'&&req.method==='GET'){const share=query.rows('shared_notes').find(s=>s.share_token===url.searchParams.get('token')&&s.is_active),note=share&&store.get('notes',share.note_id);if(!note||note.removed_at)return send(res,404,{error:'This share is unavailable'});return send(res,200,{title:note.title,content:note.content,tags:note.tags,entity_type:note.entity_type,created_at:note.created_at,updated_at:note.updated_at});}
       if (route.startsWith('/api/') && !authorized(req)) return send(res, 401, { error: 'Sign in to continue.', code: auth.cookie(req)?'SESSION_EXPIRED':'SIGN_IN_REQUIRED' });
       if(route==='/api/menerio/import'){
@@ -87,15 +89,19 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       }
       if(menerioImport.mutating&&(route==='/mcp'||route.startsWith('/api/'))&&!['/api/session','/api/status','/api/chat/options'].includes(route))return send(res,423,{error:'Your Menerio content is being copied. Wait for the import to finish.'});
       if(route==='/chat'&&req.method==='GET'){
-        res.writeHead(303,{'Location':'/dashboard/chat','Cache-Control':'no-store'});return res.end();
+        res.writeHead(303,{'Location':'/dashboard/chat'+url.search,'Cache-Control':'no-store'});return res.end();
       }
       if(route==='/api/browser-chat'){
-        const conversation='browser-owner';
-        if(req.method==='GET')return send(res,200,{messages:query.rows('conversation_messages').filter(m=>m.conversation_id===conversation).sort((a,b)=>a.created_at.localeCompare(b.created_at))});
+        const input=req.method==='POST'?JSON.parse(await body(req)):{},talkId=input.talk_id||url.searchParams.get('talk'),talk=talkId?query.rows('coach_talks').find(t=>t.id===talkId):null;if(talkId&&!talk)throw Error('Coaching conversation missing');
+        const conversation=talk?'browser-owner-'+talk.id:'browser-owner';
+        if(req.method==='GET')return send(res,200,{talk,messages:query.rows('conversation_messages').filter(m=>m.conversation_id===conversation).sort((a,b)=>a.created_at.localeCompare(b.created_at))});
         if(req.method==='POST'){
-          const input=JSON.parse(await body(req));if(typeof input.message!=='string'||!input.message.trim()||input.message.length>20000)throw new Error('Write a message of at most 20000 characters');
-          store.save('conversation_messages',{role:'user',content:input.message,conversation_id:conversation,source_app:'browser-chat'});
-          const result=await domains.invoke('conversation-chat',{message:input.message,conversation_id:conversation});index.rebuild();return send(res,200,{reply:result.reply});
+          if(typeof input.message!=='string'||!input.message.trim()||input.message.length>20000)throw new Error('Write a message of at most 20000 characters');
+          const receiptId=input.request_id?'browser-request-'+hash([conversation,input.request_id]):null,requestHash=hash({conversation,input}),previous=receiptId?store.get('command_receipts',receiptId):null;
+          if(previous){if(previous.request_hash!==requestHash)throw Error('Chat retry differs from the retained request');if(previous.state==='verified')return send(res,200,previous.result);throw Error('This interrupted chat request needs review before replay');}
+          if(receiptId)store.save('command_receipts',{id:receiptId,state:'attempted',request_hash:requestHash});
+          const sourceId=input.request_id?'browser-message-'+hash([conversation,input.request_id]):undefined;if(!sourceId||!store.get('conversation_messages',sourceId))store.save('conversation_messages',{id:sourceId,role:'user',content:input.message,conversation_id:conversation,source_app:'browser-chat'});
+          try{const result=await domains.invoke('conversation-chat',{message:input.message,conversation_id:conversation,request_id:input.request_id,talk_id:talk?.id}),saved={reply:result.reply};if(receiptId)store.save('command_receipts',{id:receiptId,state:'verified',result:saved});index.rebuild();return send(res,200,saved);}catch(error){if(receiptId)store.save('command_receipts',{id:receiptId,state:'needs_review',error:error.message});throw error;}
         }
         return send(res,405,{error:'Use GET or POST'});
       }
@@ -127,7 +133,8 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         atomic(path.join(mediaRoot,mapping.file),data);atomic(path.join(mediaRoot,hash(mapping.path)+'.mapping.json'),JSON.stringify(mapping));return send(res,200,{ok:true});
       }
       if (route === '/api/session') return send(res, 200, { user: { id: 'owner' }, profile: query.rows('profiles')[0] || { id: 'owner', display_name: auth.read().owner?.username || 'Owner' }, expires_at:auth.session(req)?.expires || null });
-      if (route === '/api/status') return send(res, 200, { configured:!!store.get('settings','installation'),owner:store.get('settings','installation')?.owner,device,runtimeConfigured:!!domains.provider,sync:sync.last,mediaSync:mediaSync.last,kinds,problems: store.problems, lastScan: store.lastScan, lastIndex: index.lastRebuild, records: store.records.size, schedules: query.rows('jobs'), conflicts: sync.pendingConflicts().map(name=>{const c=JSON.parse(fs.readFileSync(path.join(store.root,'conflicts',name),'utf8'));return {id:c.id,kind:c.kind,path:c.path||c.type+'/'+c.record_id};}) });
+      if (route === '/api/status') return send(res, 200, { configured:!!store.get('settings','installation'),goalSetupComplete:query.rows('goals').some(g=>['active','adopted','paused','achieved','completed'].includes(g.status)),goals:query.rows('goals'),work:query.rows('work_items'),decisions:query.rows('decisions'),owner:store.get('settings','installation')?.owner,device,runtimeConfigured:!!domains.provider,sync:sync.last,mediaSync:mediaSync.last,kinds,problems: store.problems, lastScan: store.lastScan, lastIndex: index.lastRebuild, records: store.records.size, schedules: query.rows('jobs'), conflicts: sync.pendingConflicts().map(name=>{const c=JSON.parse(fs.readFileSync(path.join(store.root,'conflicts',name),'utf8'));return {id:c.id,kind:c.kind,path:c.path||c.type+'/'+c.record_id};}) });
+      if(route==='/api/personal')return send(res,200,{goals:query.rows('goals'),work:query.rows('work_items'),deadlines:query.rows('deadlines'),talks:query.rows('coach_talks'),habits:query.rows('habits'),journal:query.rows('journal'),health:query.rows('health_observations'),forecasts:query.rows('forecasts'),watch:query.rows('watch_topics'),jobs:query.rows('jobs')});
       if(route==='/api/provider'&&req.method==='POST'){
         const input=JSON.parse(await body(req)),config={url:input.url,key:input.key,model:input.model};
         const chosen=modelProvider(config);if(!chosen)throw new Error('Provide a model endpoint, key and model name');
@@ -145,6 +152,12 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       if(route==='/api/conflicts/resolve'&&req.method==='POST'){
         const input=JSON.parse(await body(req));safe(input.id);const file=path.join(store.root,'conflicts',input.id+'.json'),conflict=JSON.parse(fs.readFileSync(file,'utf8'));
         if(conflict.kind==='git')sync.resolve(input.id,input.choice,input.text);
+        else if(conflict.kind==='assistant-skill'){
+          const descriptor=JSON.parse(fs.readFileSync(assistantPath,'utf8').replace(/^\uFEFF/,'')),allowed=path.resolve(descriptor.home,'skills')+path.sep,target=path.resolve(conflict.target),text=input.choice==='merged'?input.text:conflict[input.choice];
+          if(!['local','remote','merged'].includes(input.choice)||typeof text!=='string'||!target.startsWith(allowed)||fs.lstatSync(target).isSymbolicLink())throw Error('Choose a retained isolated assistant skill version');
+          if(fs.readFileSync(target,'utf8')!==conflict.local)throw Error('Assistant skill changed again; retain the current version for review');
+          atomic(path.join(store.root,'skills/package-history',hash(target),hash(conflict.local)+'.txt'),conflict.local);atomic(target,text);conflict.resolved_at=new Date().toISOString();conflict.choice=input.choice;atomic(file,JSON.stringify(conflict,null,2));
+        }
         else {if(!['local','remote','merged'].includes(input.choice))throw new Error('Choose a retained version');const value=input.choice==='merged'?JSON.parse(input.text):conflict[input.choice];store.save(conflict.type,value,store.get(conflict.type,conflict.record_id)?._hash);conflict.resolved_at=new Date().toISOString();conflict.choice=input.choice;atomic(file,JSON.stringify(conflict,null,2));}
         return send(res,200,{ok:true});
       }
@@ -198,8 +211,12 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         const name=route.slice('/api/functions/'.length),input=JSON.parse(await body(req));
         const isChat=['note-chat','collection-chat','conversation-chat'].includes(name),id=input.request_id;
         if(isChat&&id&&(!/^[a-f0-9-]{36}$/.test(id)||chatRequests.has(id)))throw new Error('Invalid chat request');
+        const receiptId=isChat&&id?'chat-request-'+id:null,requestHash=hash({name,input}),previous=receiptId?store.get('command_receipts',receiptId):null;
+        if(previous){if(previous.request_hash!==requestHash)throw Error('Chat retry differs from the retained request');if(previous.state==='verified')return send(res,200,{data:previous.result,error:null});throw Error('This interrupted chat request needs review before replay');}
+        if(isChat){input.message||=input.messages?.filter(m=>m.role==='user').at(-1)?.content||'';input.conversation_id||='notebook:'+(input.note_id?'note:'+input.note_id:input.collection_id?'collection:'+input.collection_id:'general');const sourceId=id?'chat-input-'+id:undefined;if(!sourceId||!store.get('conversation_messages',sourceId))store.save('conversation_messages',{id:sourceId,role:'user',content:input.message,conversation_id:input.conversation_id,note_id:input.note_id||null,contact_id:input.person_id||null,source_app:'notebook-chat'});}
         const controller=new AbortController();if(isChat&&id)chatRequests.set(id,controller);
-        try{const data=name.startsWith('mc-api-keys')?apiKeys.invoke(name,input):await domains.invoke(name,{...input,...(isChat?{signal:controller.signal}:{})});index.rebuild();return send(res,200,name==='backfill-media-analysis'?data:{data,error:null});}finally{if(isChat&&id)chatRequests.delete(id);}
+        if(receiptId)store.save('command_receipts',{id:receiptId,state:'attempted',request_hash:requestHash});
+        try{const data=name.startsWith('mc-api-keys')?apiKeys.invoke(name,input):await domains.invoke(name,{...input,...(isChat?{signal:controller.signal}:{})});if(receiptId)store.save('command_receipts',{id:receiptId,state:'verified',result:data});index.rebuild();return send(res,200,name==='backfill-media-analysis'?data:{data,error:null});}catch(error){if(receiptId&&store.get('command_receipts',receiptId)?.state==='attempted')store.save('command_receipts',{id:receiptId,state:'needs_review',error:error.message});throw error;}finally{if(isChat&&id)chatRequests.delete(id);}
       }
       if (route.startsWith('/api/')) return send(res, 404, { error: 'Unknown operation' });
       const requested = path.resolve(uiRoot, '.' + route); if (requested !== uiRoot && !requested.startsWith(uiRoot + path.sep)) return send(res, 403, { error: 'Invalid path' });

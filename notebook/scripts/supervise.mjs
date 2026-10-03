@@ -1,0 +1,11 @@
+import fs from 'node:fs';import path from 'node:path';import {spawn} from 'node:child_process';import {fileURLToPath} from 'node:url';import {hash,atomic} from '../core/records/store.mjs';
+// Separate from the notebook process: a stopped or unresponsive service cannot
+// perform its own missing-run check. This process owns only its direct child.
+const root=process.env.GODSPEED_WORKSPACE;if(!root)throw Error('Choose the isolated workspace');
+const server=fileURLToPath(new URL('../server/main.mjs',import.meta.url)),port=Number(process.env.GODSPEED_PORT||47831),instance=hash(path.resolve(root)).slice(0,24),state=path.join(root,'.godspeed','supervisor.json');
+let child,stopping=false,restarts=0,started=0,checking=false;
+function status(value){atomic(state,JSON.stringify({pid:process.pid,child_pid:child?.pid,at:new Date().toISOString(),restarts,...value}));}
+function launch(){if(stopping)return;started=Date.now();child=spawn(process.execPath,[server],{env:process.env,windowsHide:true,shell:false,stdio:'inherit'});status({state:'starting'});child.on('error',()=>status({state:'failed',reason:'Notebook process could not start'}));child.on('exit',()=>{if(stopping)return;restarts++;status({state:'recovering',reason:'Notebook stopped'});if(restarts<=5)setTimeout(launch,Math.min(1000*2**restarts,30000));else {status({state:'needs_review',reason:'Five automatic restarts failed'});clearInterval(timer);process.exitCode=1;}});}
+const timer=setInterval(async()=>{if(stopping||checking||!child||Date.now()-started<90000)return;checking=true;try{const response=await fetch('http://127.0.0.1:'+port+'/health',{signal:AbortSignal.timeout(5000)}),health=await response.json();if(!response.ok||health.instance!==instance)throw Error('Workspace health check failed');if(health.scheduler_heartbeat&&Date.now()-Date.parse(health.scheduler_heartbeat)>180000)throw Error('Scheduler heartbeat stopped');restarts=0;status({state:'healthy'});}catch{status({state:'recovering',reason:'Notebook health or scheduler heartbeat failed'});const unhealthy=child;unhealthy.kill('SIGTERM');setTimeout(()=>{if(unhealthy.exitCode===null)unhealthy.kill('SIGKILL');},5000);}finally{checking=false;}},30000);
+for(const signal of ['SIGINT','SIGTERM'])process.on(signal,()=>{stopping=true;clearInterval(timer);child?.kill(signal);status({state:'stopped'});});
+launch();

@@ -34,7 +34,7 @@ test('stop aborts the running provider and prevents an assistant write',async()=
   const provider=input=>new Promise((resolve,reject)=>{running=input.signal;started();input.signal.addEventListener('abort',()=>reject(new Error('Reply stopped')),{once:true});});
   const s=await createService({root,port:0,provider}),base='http://127.0.0.1:'+s.address.port,id='aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
   const post=(route,body)=>fetch(base+route,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-  try{const response=post('/api/functions/note-chat',{message:'hi',request_id:id});await ready;assert.equal((await post('/api/chat/stop',{id})).status,200);assert.equal((await response).status,400);assert.equal(running.aborted,true);assert.equal(s.query.rows('conversation_messages').length,0);}finally{await s.close();}
+  try{const response=post('/api/functions/note-chat',{message:'hi',request_id:id});await ready;assert.equal((await post('/api/chat/stop',{id})).status,200);assert.equal((await response).status,400);assert.equal(running.aborted,true);assert.equal(s.query.rows('conversation_messages').filter(m=>m.role==='assistant').length,0);assert.equal(s.query.rows('conversation_messages').find(m=>m.role==='user').content,'hi');}finally{await s.close();}
 });
 test('an assistant save overlapping background sync keeps the notebook service alive',async()=>{
   const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-chat-sync-lock-')),s=await createService({root,port:0}),lock=path.join(s.store.state,'workspace.lock');

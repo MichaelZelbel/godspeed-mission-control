@@ -247,8 +247,8 @@
   {
     "name": "brief-rehearsal",
     "classification": "included",
-    "operation": "brief-review",
-    "reason": "Review saved source data without sending anything.",
+    "operation": "brief-rehearsal",
+    "reason": "Run actual source preparation, drafting, factual and delivery gates without delivery.",
     "activation": "Owner enables a schedule; one declared runner; outward actions need a specific approval."
   },
   {

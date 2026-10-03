@@ -2,6 +2,7 @@ import {visibleRows} from '../core/visibility.mjs';
 import {toolScope} from '../core/api-keys.mjs';
 const schema={type:'object',properties:{},additionalProperties:true};
 const definitions=[
+  {name:'personal_operation',description:'Apply an explicitly requested goal, obligation, coach, habit, journal, health, memory, forecast or routine operation. Read current IDs first. Never approve an outward action.',inputSchema:schema},
   {name:'search_knowledge',description:'Search the rebuildable index of user records.',inputSchema:{type:'object',properties:{query:{type:'string'}},required:['query']}},
   {name:'list_records',description:'Read file-backed notes, contacts, profile facts, world views, collections, timeline, media metadata, reviews, comments, goals or work.',inputSchema:{type:'object',properties:{type:{type:'string'},filters:{type:'array'},limit:{type:'integer'}},required:['type']}},
   {name:'save_record',description:'Save one user record with optimistic conflict detection. Preserve its id and hash for edits. Use review suggestions for AI-inferred facts.',inputSchema:{type:'object',properties:{type:{type:'string'},value:{type:'object'},expected_hash:{type:'string'}},required:['type','value']}},
@@ -25,6 +26,7 @@ export async function mcp(input,{store,query,index,domains,scopes}){
       else if(name==='list_records'){const allowed=new Set(visibleRows(query,a.type).map(r=>r.id));value=query.execute({table:a.type,filters:a.filters||[],limit:a.limit||100}).data.filter(r=>allowed.has(r.id));}
       else if(name==='save_record')value=query.execute({table:a.type,operation:a.value.id?'upsert':'insert',values:a.value,expected:a.value.id?{[a.value.id]:a.expected_hash}:{}}).data;
       else if(name==='capture_note')value=await domains.invoke('quick-capture',a);
+      else if(name==='personal_operation')value=await domains.invoke('personal-operation',a);
       else if(name==='write_fact')value=domains.writeFact(a);
       else if(name==='record_event')value=query.execute({table:'moments',operation:'insert',values:a}).data;
       else if(name==='structural_change')value=a.type==='moments'&&['remove','display-name'].includes(a.action)?query.execute({table:'moments',operation:a.action==='remove'?'delete':'update',values:{title:a.options?.name},filters:[['eq','id',a.id]]}).data:store.structural(a.type,a.id,a.action,a.options);

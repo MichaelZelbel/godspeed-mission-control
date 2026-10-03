@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import {atomic} from './records/store.mjs';
 const notebook=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 export function assistantEnvironment({home,workspace,env=process.env}={}){
-  return {...env,HERMES_HOME:home,GODSPEED_WORKSPACE:workspace,GODSPEED_FILE_HERMES:'1',GODSPEED_NODE:process.execPath,GODSPEED_ASSISTANT_PUBLISHER:path.join(notebook,'scripts','save-assistant-state.mjs'),PYTHONPATH:[path.join(notebook,'assistant-files'),env.PYTHONPATH].filter(Boolean).join(path.delimiter)};
+  return {...env,HERMES_HOME:home,GODSPEED_DIR:workspace,GODSPEED_ROOT:workspace,GODSPEED_VIDEO_HOME:path.join(workspace,".godspeed","video"),GODSPEED_MAIL_HOME:path.join(workspace,".godspeed","device-home"),GODSPEED_WORKSPACE:workspace,GODSPEED_FILE_HERMES:'1',GODSPEED_NODE:process.execPath,GODSPEED_HEADACHE_DIR:workspace,GODSPEED_HEADACHE_SCRIPT:path.resolve(notebook,'../third-party/addons/godspeed-headache/bin/godspeed-headache.mjs'),GODSPEED_HEADACHE_GIT_SYNC:'off',GODSPEED_COACH_DIR:workspace,GODSPEED_JOURNAL_DIR:workspace,GODSPEED_COACH_SCRIPT:path.resolve(notebook,'../third-party/addons/godspeed-coach/bin/godspeed-coach.mjs'),GODSPEED_JOURNAL_SCRIPT:path.resolve(notebook,'../third-party/addons/godspeed-journal/bin/godspeed-journal.mjs'),GODSPEED_COACH_GIT_SYNC:'off',GODSPEED_JOURNAL_GIT_SYNC:'off',PATH:[path.join(home,'bin'),env.PATH].filter(Boolean).join(path.delimiter),GODSPEED_ASSISTANT_PUBLISHER:path.join(notebook,'scripts','save-assistant-state.mjs'),PYTHONPATH:[path.join(notebook,'assistant-files'),env.PYTHONPATH].filter(Boolean).join(path.delimiter)};
 }
 export function assistantProfiles(store){
   const directory=path.join(store.root,'assistant-state');if(!fs.existsSync(directory))return [];

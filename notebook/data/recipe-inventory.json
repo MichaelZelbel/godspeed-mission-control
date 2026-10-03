@@ -1,17 +1,17 @@
 [
   {
     "name": "audit",
-    "classification": "included",
+    "classification": "source only",
     "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details."
   },
   {
     "name": "book-title-creator",
-    "classification": "included",
+    "classification": "source only",
     "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details."
   },
   {
     "name": "book-title-strategist",
-    "classification": "included",
+    "classification": "source only",
     "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details."
   },
   {
@@ -21,7 +21,7 @@
   },
   {
     "name": "coach",
-    "classification": "included",
+    "classification": "source only",
     "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details."
   },
   {
@@ -31,12 +31,12 @@
   },
   {
     "name": "daily-brief",
-    "classification": "included",
+    "classification": "source only",
     "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details."
   },
   {
     "name": "due",
-    "classification": "included",
+    "classification": "source only",
     "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details."
   },
   {
@@ -46,12 +46,12 @@
   },
   {
     "name": "excalidraw-diagram",
-    "classification": "included",
+    "classification": "source only",
     "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details."
   },
   {
     "name": "excalidraw-visuals",
-    "classification": "included",
+    "classification": "source only",
     "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details."
   },
   {
@@ -76,7 +76,7 @@
   },
   {
     "name": "grill-me",
-    "classification": "included",
+    "classification": "source only",
     "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details."
   },
   {
@@ -91,7 +91,7 @@
   },
   {
     "name": "headache-tracker",
-    "classification": "included",
+    "classification": "source only",
     "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details."
   },
   {
@@ -136,27 +136,27 @@
   },
   {
     "name": "interstitial-journal",
-    "classification": "included",
+    "classification": "source only",
     "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details."
   },
   {
     "name": "keep-a-note",
-    "classification": "included",
+    "classification": "source only",
     "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details."
   },
   {
     "name": "lead",
-    "classification": "included",
+    "classification": "source only",
     "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details."
   },
   {
     "name": "mc-brief-operations",
-    "classification": "included",
+    "classification": "source only",
     "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details."
   },
   {
     "name": "mc-radar",
-    "classification": "included",
+    "classification": "source only",
     "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details."
   },
   {
@@ -166,12 +166,12 @@
   },
   {
     "name": "memory-audit",
-    "classification": "included",
+    "classification": "source only",
     "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details."
   },
   {
     "name": "morning-note",
-    "classification": "included",
+    "classification": "source only",
     "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details."
   },
   {
@@ -181,7 +181,7 @@
   },
   {
     "name": "move-godspeed",
-    "classification": "included",
+    "classification": "source only",
     "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details."
   },
   {
@@ -196,7 +196,7 @@
   },
   {
     "name": "next-action",
-    "classification": "included",
+    "classification": "source only",
     "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details."
   },
   {
@@ -251,22 +251,22 @@
   },
   {
     "name": "social-visuals",
-    "classification": "included",
+    "classification": "source only",
     "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details."
   },
   {
     "name": "strip-ai-tells",
-    "classification": "included",
+    "classification": "source only",
     "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details."
   },
   {
     "name": "subscription-review",
-    "classification": "included",
+    "classification": "source only",
     "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details."
   },
   {
     "name": "talk-about",
-    "classification": "included",
+    "classification": "source only",
     "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details."
   },
   {
@@ -281,27 +281,27 @@
   },
   {
     "name": "video-finishing",
-    "classification": "included",
+    "classification": "source only",
     "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details."
   },
   {
     "name": "video-hooks",
-    "classification": "included",
+    "classification": "source only",
     "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details."
   },
   {
     "name": "watch",
-    "classification": "included",
+    "classification": "source only",
     "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details."
   },
   {
     "name": "web-design",
-    "classification": "included",
+    "classification": "source only",
     "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details."
   },
   {
     "name": "work-item",
-    "classification": "included",
+    "classification": "source only",
     "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details."
   }
 ]

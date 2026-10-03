@@ -10,11 +10,13 @@ export function chatContext(query,input){
   const stopWords=new Set('the and for with about what which when where have does this that tell show notes note people person please your mein meine meine notizen eine was wie wer wann und mit das die der'.split(' '));
   const terms=[...new Set(question.toLowerCase().match(/[\p{L}\p{N}]{3,}/gu)||[])].filter(t=>!stopWords.has(t));
   const pick=(type,limit=6)=>{
-    const rows=visibleRows(query,type).filter(r=>!r.removed_at&&!r.is_trashed&&(type!=='profile_facts'||(r.is_current&&r.show_to_agent)));
+    const today=new Date().toISOString().slice(0,10);
+    const rows=visibleRows(query,type).filter(r=>!r.removed_at&&!r.is_trashed&&(type!=='profile_facts'||(r.is_current&&r.show_to_agent))&&(type!=='world_claims'||((!r.valid_to||r.valid_to>today)&&(!r.valid_from||r.valid_from<=today))));
     const ranked=rows.map(r=>({r,score:terms.reduce((n,t)=>n+(String(r.title||r.name||'').toLowerCase().includes(t)?4:0)+(JSON.stringify(r).toLowerCase().includes(t)?1:0),0)})).filter(x=>x.score).sort((a,b)=>b.score-a.score);
     return {rows:ranked.slice(0,limit).map(({r})=>compact(r,5000)),total:rows.length};
   };
   const context={...fileContext(query.store,10000),retrieval:{method:'keyword selection; only supplied records are available',counts:{}}};
+  context.personal={goals:visibleRows(query,'goals').slice(-20),work:visibleRows(query,'work_items').slice(-20),deadlines:visibleRows(query,'deadlines').filter(d=>d.status!=='closed').slice(-20),talks:visibleRows(query,'coach_talks').slice(-5),habits:visibleRows(query,'habits').slice(-10),journal:visibleRows(query,'journal').slice(-5),health:visibleRows(query,'health_observations').filter(h=>Date.parse(h.observed_at)>=Date.now()-7*86400000).slice(-10),forecasts:visibleRows(query,'forecasts').slice(-10),jobs:query.rows('jobs')};
   for(const type of ['notes','contacts','entities','world_claims','moments','profile_facts','goals','media_analysis']){
     const selected=pick(type,type==='notes'?8:4);context[type]=selected.rows;context.retrieval.counts[type]=selected.total;
   }
@@ -24,6 +26,18 @@ export function chatContext(query,input){
   if(input.collection_id){context.collection=visibleRows(query,'collections').find(r=>r.id===input.collection_id);if(!context.collection)throw new Error('This collection is hidden from the assistant');context.items=visibleRows(query,'collection_items').filter(r=>r.collection_id===input.collection_id).slice(0,20).map(r=>compact(r,1500));}
   context.messages=input.conversation_id?query.rows('conversation_messages').filter(m=>m.conversation_id===input.conversation_id).sort((a,b)=>a.created_at.localeCompare(b.created_at)).slice(-12).map(({role,content})=>({role,content:String(content).slice(0,8000)})):[];
   return context;
+}
+export async function retrievedContext(query,input,provider){
+ const question=String(input.message||input.messages?.at(-1)?.content||'');let context=chatContext(query,input);
+ if(!provider||question.length<8||!/(find|remember|recall|search|where|what|who|prepare|erinner|finde|wer|was|suche)/i.test(question))return context;
+ try{
+  const raw=await provider({kind:'retrieval-expansion',query:question,signal:input.signal,contract:'Return JSON {terms:[string]} with at most 12 useful synonyms and related concepts for retrieving the user question. Include both languages where useful. Do not answer the question, invent facts or request changes. No personal records are supplied.'});
+  const parsed=typeof raw==='string'?JSON.parse(raw.replace(/^```(?:json)?\s*|\s*```$/g,'')):raw;
+  if(Array.isArray(parsed.terms)&&parsed.terms.length){const terms=parsed.terms.filter(t=>typeof t==='string'&&t.length<=60).slice(0,12);context=chatContext(query,{...input,message:question+' '+terms.join(' ')});context.retrieval.method='keyword and meaning-expanded selection';context.retrieval.expanded_terms=terms;}
+ }catch{context.retrieval.meaning_expansion='unavailable; keyword results retained';}
+ const candidates=visibleRows(query,'contacts').filter(c=>{const first=String(c.name||'').toLowerCase().split(' ')[0];return first.length>=3&&new RegExp('\\b'+first.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'\\b','i').test(question);});
+ if(candidates.length>1&&!input.contact_id&&!input.person_id)context.ambiguities={people:candidates.slice(0,10).map(c=>({id:c.id,name:c.name})),instruction:'Ask which person the user means; do not guess'};
+ return context;
 }
 function compact(record,max){const result={};let remaining=max;for(const key of ['id','title','name','content','value','description','notes','email','phone','bio','summary','metadata','tags','field_schema','data','valid_from','valid_to','created_at']){if(record[key]==null)continue;const text=typeof record[key]==='string'?record[key]:JSON.stringify(record[key]);if(text.length>remaining){result[key]=text.slice(0,remaining);result.context_truncated=true;break;}result[key]=record[key];remaining-=text.length;}return result;}
 export function chatAttachments(mediaRoot,files=[]){

@@ -11,6 +11,7 @@ import { importExport } from '../core/import.mjs';
 import { seed } from '../core/seeds.mjs';
 import { execFileSync } from 'node:child_process';
 import {assistantProfiles,selectAssistantProfile} from '../core/assistant-files.mjs';
+import {installSkillTree} from '../core/packaged-skills.mjs';
 const args=process.argv.slice(2),root=process.env.GODSPEED_WORKSPACE;if(!root)throw new Error('Set GODSPEED_WORKSPACE to your candidate workspace');
 const store=new Store(root,{device:process.env.GODSPEED_DEVICE||'local'}),query=new QueryService(store),domains=new Domains(query),media=process.env.GODSPEED_MEDIA_ROOT||path.join(store.state,'media');
 const [command,verb,...rest]=args;let result;
@@ -23,7 +24,7 @@ if(command==='init'){
   for(const [name,recipe] of [['godspeed-coach','coach'],['godspeed-journal','interstitial-journal'],['mc-phone','phone-errands'],['mc-video','video-finishing']]){
     const source=path.join(addons,name,'skill',recipe);if(fs.existsSync(source)&&!fs.existsSync(path.join(root,'skills',recipe)))fs.cpSync(source,path.join(root,'skills',recipe),{recursive:true});
   }
-  if(fs.existsSync(recipes))for(const name of fs.readdirSync(recipes))if(!fs.existsSync(path.join(root,'skills',name)))fs.cpSync(path.join(recipes,name),path.join(root,'skills',name),{recursive:true});
+  if(fs.existsSync(recipes))for(const name of fs.readdirSync(recipes))installSkillTree(store,path.join(recipes,name),path.join(root,'skills',name));
   const contract=path.join(root,'FULL-ALPHA.md');if(!fs.existsSync(contract))atomic(contract,'# File runtime\n\nUser records live in records/. SQLite is disposable. Use the notebook or local MCP tools for structured edits, facts and events. File sync uses the conflict-preserving reconciler; never run git pull --rebase on a connected workspace. Use the notebook control desk for schedules, owner, search, backups and connector configuration. This contract overrides older starter instructions referring to cloud storage or legacy world commands. Credentials stay in .godspeed local device configuration, outside private Git sync.\n');
   const spec=fs.readFileSync(fileURLToPath(new URL('../../docs/full-version/file-format.md',import.meta.url)),'utf8');
   if(!fs.existsSync(path.join(root,'README.md')))atomic(path.join(root,'README.md'),'# Godspeed Mission Control\n\n'+spec);

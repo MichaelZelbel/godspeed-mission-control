@@ -29,7 +29,8 @@ def _bin():
 
 def on_pre_llm_call(**kwargs):
     try:
-        args = [_bin(), "context"]
+        script = os.environ.get("GODSPEED_COACH_SCRIPT")
+        args = [os.environ["GODSPEED_NODE"], script, "context"] if script else [_bin(), "context"]
         mc_dir = _mission_control()
         if mc_dir:
             args += ["--godspeed", mc_dir]

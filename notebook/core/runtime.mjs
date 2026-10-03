@@ -6,6 +6,10 @@ import {fileURLToPath} from 'node:url';
 import {procedure,procedureKinds} from './procedures.mjs';
 import {visibleRows,knowledgeContext} from './visibility.mjs';
 import {assistantEnvironment} from './assistant-files.mjs';
+import {decide,work,remind} from './goal-loop.mjs';
+import {personalOperation} from './personal-operations.mjs';
+import {nativeCoachContext,nativeTick,dueCoachAreas,retainHabitReview} from './native-personal.mjs';
+import {briefing} from './briefing.mjs';
 export function hermesProvider({executable='hermes',home,cwd,model,provider,sourceRoot}={}){
   if(!['hermes','hermes.exe'].includes(path.basename(executable).toLowerCase()))throw new Error('Choose the verified Hermes runtime');
   const run=input=>new Promise(async (resolve,reject)=>{
@@ -62,7 +66,39 @@ export function commandProvider({ command, args = [], cwd, timeoutMs = 120000 } 
 }
 export function jobExecutor(provider,query) {
   return async (job,{settings,store})=>{
-    if(procedureKinds.includes(job.kind)||['profiling','watch'].includes(job.kind))return procedure(job,{store,query,provider});
+    const loop={store,query,provider,settings};
+    if(job.kind==='habit-check'){
+      const habit=visibleRows(query,'habits').find(h=>h.id===job.habit_id&&h.status==='active');if(!habit)return {verified:true,silent:true};
+      if(!provider)throw Error('Connect an assistant before reviewing a habit');
+      const sources={agreement:habit.agreement,observations:habit.observations,previous:visibleRows(query,'coach_talks').filter(t=>t.area===habit.area).slice(-3)};
+      const question=await provider({kind:'habit-review',context:sources,contract:'Ask one short question about this agreed habit using its actual observations. Missing observations mean unknown. Do not invent success, change the agreement, or diagnose.'});
+      if(typeof question!=='string'||!question.trim())throw Error('Habit review returned no question');
+      const note=retainHabitReview(store,habit,question,sources);return {verified:true,record_id:note.id,delivery:'notebook'};
+    }
+    if(['coach-tick','journal-tick'].includes(job.kind))return nativeTick(store,job.kind.split('-')[0],new Date(),query);
+    if(job.kind==='coach-cycle'){
+      const area=dueCoachAreas(store)[0];if(!area)return {verified:true,silent:true};
+      return jobExecutor(provider,query)({...job,kind:'coaching',area},{settings,store});
+    }
+    if(job.kind==='goal-decision')return decide(job,loop);
+    if(job.kind==='goal-work')return work(job,loop);
+    if(job.kind==='deadline-reminder')return remind(job,loop);
+    if(job.kind==='morning-brief')return briefing(job,loop);
+    if(job.kind==='brief-rehearsal')return briefing({...job,rehearsal:true},loop);
+    if(job.kind==='coaching'){
+      const area=job.area||'health',open=query.rows('coach_talks').find(t=>t.area===area&&t.status==='open');
+      if(open)return {verified:true,silent:true,talk_id:open.id};
+      if(!provider)throw Error('Connect an assistant before opening a coaching talk');
+      const prior=visibleRows(query,'coach_talks').filter(t=>t.area===area);
+      const today=new Intl.DateTimeFormat('en-CA',{timeZone:settings.timezone||'UTC',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+      if(prior.some(t=>t.id.endsWith(today)&&t.status==='closed'))return {verified:true,silent:true,reason:'Today\'s coaching conversation is already closed'};
+      const sources={preparation:nativeCoachContext(store,area),previous:prior.slice(-3),habits:visibleRows(query,'habits').filter(h=>h.area===area),health:visibleRows(query,'health_observations').filter(h=>Date.parse(h.observed_at)>=Date.now()-7*86400000),journal:visibleRows(query,'journal').slice(-7)};
+      const question=await provider({kind:'coaching',context:{area,...sources},contract:'Open one short coaching question using prior words and actual habit observations. Respect the configured area boundaries. Missing health observations are missing; do not diagnose. Never invent agreement.'});
+      const talk=personalOperation({store,query},{type:'coach-open',area,question,sources});
+      const note=store.save('notes',{title:'Your '+area+' coaching conversation',content:question,talk_id:talk.id,source_app:'coaching'});
+      return {verified:true,record_id:note.id,talk_id:talk.id,delivery:'notebook'};
+    }
+    if(procedureKinds.includes(job.kind)||['audit','profiling','watch','review','memory-review'].includes(job.kind))return procedure(job,{store,query,provider});
     if(job.kind==='deadline-reminder') {
       const due=query.rows('deadlines').filter(d=>d.status!=='closed' && d.due_at && Date.parse(d.due_at)-Date.now()<3*86400000);
       const result=store.save('notes',{title:'Deadlines needing attention',content:due.length?due.map(d=>`${d.title}: ${d.due_at}`).join('\n'):'No open deadlines are due within three days.',source_app:'deadline-reminder'});

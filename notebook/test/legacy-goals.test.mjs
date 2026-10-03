@@ -1,0 +1,7 @@
+import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';
+import {Store,atomic} from '../core/records/store.mjs';import {QueryService} from '../core/query.mjs';import {importGoalFiles} from '../core/legacy-goals.mjs';import {goalContracts} from '../core/goal-contracts.mjs';
+test('legacy adopted goals retain policy and source; competing edits become explicit conflicts',()=>{
+ const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-goals-import-'))),query=new QueryService(store),file=path.join(store.root,'goals','fictional.md');
+ atomic(file,'ID: fictional\nKIND: outcome\nSTATUS: adopted\nAREA: work-money\nTITLE: Fictional workshop\nOWN WORDS: I want to teach a workshop\nMEASURE: Ten fictional participants\nIMPORTANCE: core\n');assert.equal(importGoalFiles(store).imported,1);assert.equal(importGoalFiles(store).imported,0);assert.equal(store.get('goals','fictional').own_words,'I want to teach a workshop');assert.ok(goalContracts(store,query).plan('2026-10-03',3).active.some(g=>g.id==='fictional'));
+ store.save('goals',{id:'fictional',title:'Changed in notebook'});atomic(file,fs.readFileSync(file,'utf8').replace('Fictional workshop','Changed in file'));assert.throws(()=>importGoalFiles(store),/Both versions were saved/);assert.equal(store.get('goals','fictional').title,'Changed in notebook');assert.ok(fs.readFileSync(file,'utf8').includes('Changed in file'));
+});

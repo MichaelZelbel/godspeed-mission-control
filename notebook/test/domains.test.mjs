@@ -37,12 +37,12 @@ test('AI inference creates review entries and cannot silently replace confirmed 
 });
 test('onboarding produces saved useful work, repeated setup preserves choices, paired client does not run jobs',async()=>{
   const {store,query}=setup();let calls=0;
-  const provider=async()=>{calls++;return 'Conversation preparation: explain the shared goal, ask what matters most, and agree one concrete commitment.';};
+  const provider=async input=>{calls++;if(input.kind==='goal-decision')return JSON.stringify({action:'Prepare the conversation',kind:'draft',check:'Explain the shared goal and ask a question',reason:'Clarify the next step'});if(input.kind==='work-verification')return JSON.stringify({passed:true,evidence:'Draft explains the shared goal and asks what matters most'});return 'Conversation preparation: explain the shared goal, ask what matters most, and agree one concrete commitment.';};
   const owner=new Scheduler(store,{device:'local',executor:jobExecutor(provider,query)});
   owner.configure({goal:'Prepare a difficult conversation',timezone:'Europe/Berlin'});await owner.tick();
-  assert.equal(calls,2);assert.ok(query.rows('notes').some(n=>n.content.includes('Conversation preparation')));
+  assert.equal(calls,3);assert.ok(query.rows('notes').some(n=>n.content.includes('Conversation preparation')));
   owner.configure({goal:'Overwrite',timezone:'UTC'});assert.equal(query.rows('settings')[0].timezone,'Europe/Berlin');
-  owner.transfer('vps');const client=new Scheduler(store,{device:'local',executor:jobExecutor(provider,query)});await client.tick(Date.now()+86400000);assert.equal(calls,2);
+  owner.transfer('vps');const client=new Scheduler(store,{device:'local',executor:jobExecutor(provider,query)});await client.tick(Date.now()+86400000);assert.equal(calls,3);
 });
 test('outward routine waits for permission and interrupted attempted receipt never replays',async()=>{
   const {store}=setup();let calls=0;const workCalls=[];const scheduler=new Scheduler(store,{executor:async job=>{calls++;workCalls.push(job.id);return {verified:true};}});

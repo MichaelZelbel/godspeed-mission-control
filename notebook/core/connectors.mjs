@@ -5,6 +5,13 @@ export class Connectors {
   constructor(domains){this.domains=domains;this.store=domains.store;this.query=domains.query;}
   config(name){const file=path.join(this.store.state,'connectors',safe(name)+'.json');return fs.existsSync(file)?JSON.parse(fs.readFileSync(file,'utf8')):null;}
   save(name,value){const file=path.join(this.store.state,'connectors',safe(name)+'.json');atomic(file,JSON.stringify(value));fs.chmodSync(file,0o600);return {configured:true};}
+  async health(name,config,url){
+    const check=()=>fetch(url,{headers:config.token?{Authorization:'Bearer '+config.token}:{},signal:AbortSignal.timeout(15000)});let response=await check();
+    if(response.status===401&&name==='gdrive'&&config.refresh_token&&config.client_id){
+      const refreshed=await fetch('https://oauth2.googleapis.com/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({grant_type:'refresh_token',refresh_token:config.refresh_token,client_id:config.client_id,...config.client_secret?{client_secret:config.client_secret}:{}}),signal:AbortSignal.timeout(15000)});
+      if(refreshed.ok){const data=await refreshed.json();if(typeof data.access_token==='string'&&data.access_token){config={...config,token:data.access_token};this.save(name,config);response=await check();}}
+    }return response;
+  }
   async request(config,route){const url=new URL(route,config.origin);if(url.origin!==new URL(config.origin).origin)throw new Error('Connector request left its configured service');const r=await fetch(url,{headers:{Authorization:'Bearer '+config.token},signal:AbortSignal.timeout(30000)});if(!r.ok)throw new Error('Connector failed with HTTP '+r.status);return r;}
   async invoke(name,input){
     if(name==='configure-connector'){
@@ -26,7 +33,7 @@ export class Connectors {
       const value=config.value_path.split('.').reduce((v,k)=>v?.[k],result);if(!Number.isFinite(value))throw new Error('Balance response does not contain the configured numeric value');return {balance:value,threshold:config.threshold,needs_attention:value<config.threshold,observed_at:new Date().toISOString()};
     }
     if(name==='gdrive-proxy'){
-      if(input.action==='configure'){if(!input.access_token)throw new Error('Supply a Google Drive read-only access token');await this.request({origin:'https://www.googleapis.com',token:input.access_token},'/drive/v3/about?fields=user');return this.save('gdrive',{origin:'https://www.googleapis.com',token:input.access_token,folder_id:input.folder_id||null,sync_enabled:false});}
+      if(input.action==='configure'){if(!input.access_token)throw new Error('Supply a Google Drive read-only access token');await this.request({origin:'https://www.googleapis.com',token:input.access_token},'/drive/v3/about?fields=user');return this.save('gdrive',{origin:'https://www.googleapis.com',token:input.access_token,refresh_token:input.refresh_token||null,client_id:input.client_id||null,client_secret:input.client_secret||null,folder_id:input.folder_id||null,sync_enabled:false});}
       const config=this.config('gdrive');
       if(input.action==='status')return {connected:!!config,settings:config?{folder_id:config.folder_id,sync_enabled:config.sync_enabled}:null};
       if(input.action==='disconnect'){if(config)this.save('gdrive',{...config,token:null,sync_enabled:false});return {disconnected:true};}

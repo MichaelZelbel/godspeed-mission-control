@@ -62,6 +62,7 @@ function loadSizeMode(): SizeMode {
 export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChange}:{page?:boolean;embedded?:boolean;noteTitle?:string;onOpenChange?:(open:boolean)=>void}) {
   const { user, session } = useAuth();
   const location = useLocation();
+  const talkId=page?new URLSearchParams(location.search).get('talk'):null;
   const queryClient = useQueryClient();
   const isMobile = useIsMobile();
   const [open, setOpen] = useState(page);
@@ -146,7 +147,7 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
     };
   }, [collectionSlug, user?.id]);
 
-  const contextKey = collectionId
+  const contextKey = talkId?'coach:'+talkId:collectionId
     ? `collection:${collectionId}`
     : noteId
       ? `note:${noteId}`
@@ -281,7 +282,7 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
 
     try {
       const apiMessages = buildApiMessages(nextState);
-      const chatFn = collectionId ? "collection-chat" : "note-chat";
+      const chatFn = collectionId ? "collection-chat" : noteId ? "note-chat" : "conversation-chat";
       // Flush the open editor's pending autosave so the agent edits on top of
       // the user's newest text (and knows which version it is based on).
       const flushed =
@@ -307,7 +308,7 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
 
 
       const { data, error: fnErr } = await supabase.functions.invoke(chatFn, {
-        body: {...invokeBody,files:files.length?files:state.messages.slice().reverse().find(m=>m.attachments?.length)?.attachments||[],model:model||undefined,effort:effort||undefined,request_id:requestRef.current},
+        body: {...invokeBody,message:userMsg.content,conversation_id:'notebook:'+contextKey,talk_id:talkId||undefined,files:files.length?files:state.messages.slice().reverse().find(m=>m.attachments?.length)?.attachments||[],model:model||undefined,effort:effort||undefined,request_id:requestRef.current},
       });
 
       // A non-2xx answer (out of credits is a 402) arrives as fnErr with
@@ -402,7 +403,7 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
     } finally {
       setIsLoading(false);requestRef.current=null;
     }
-  }, [input, files, model, effort, isLoading, session, state, noteId, personId, collectionId, collectionItemId, queryClient, chatKey, contextKey, user?.id, deliver, summarizeLater]);
+  }, [input, files, model, effort, isLoading, session, state, noteId, personId,talkId, collectionId, collectionItemId, queryClient, chatKey, contextKey, user?.id, deliver, summarizeLater]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     // Enter sends; Shift+Enter inserts a newline. This matches the in-note and

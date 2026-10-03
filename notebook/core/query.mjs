@@ -1,12 +1,14 @@
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { slug, hash } from './records/store.mjs';
+import {nativeRows} from './native-personal.mjs';
+import {dueRows} from './native-due.mjs';
 
 const inventory = JSON.parse(fs.readFileSync(fileURLToPath(new URL('../../docs/full-version/source-inventory.json', import.meta.url)), 'utf8'));
 export const tables = new Set(inventory.dependencies.flatMap(d => d.tables).filter(t => t !== 'note-attachments'));
 for (const table of ['goals', 'jobs', 'job_receipts', 'settings', 'permissions', 'decisions', 'habits', 'journal', 'deadlines', 'comments', 'notifications', 'note_conversations', 'import_mappings','record_history','event_corrections','embeddings']) tables.add(table);
-for(const table of ['health_episodes','medications','health_observations','watch_topics','watch_observations','outside_numbers','subscriptions','forecasts','work_items','connector_status','approvals','command_receipts'])tables.add(table);
-const views = new Set(['world_entities', 'world_events', 'world_claims', 'profile_facts', 'v_ai_allowance_current']);
+for(const table of ['health_episodes','medications','health_observations','watch_topics','watch_observations','outside_numbers','subscriptions','forecasts','work_items','coach_talks','connector_status','work_tool_receipts','approvals','command_receipts'])tables.add(table);
+const views = new Set(['world_entities', 'world_events', 'world_claims', 'profile_facts', 'v_ai_allowance_current','coach_talks','habits','journal']);
 const defaults = {
   contacts: { notes: null, app_mappings: {}, merged_into: null, is_favorite: false, is_sensitive: false, last_viewed_at: null },
   contact_groups:{is_archived:false,is_trashed:false,parent_group_id:null,sensitivity:'normal',group_type:'custom',stages:[],success_criteria:[],attributes_schema:{},status:'active'},
@@ -59,7 +61,7 @@ export class QueryService {
     if(!this.snapshotDepth)this.store.scan();
     const all=[...this.store.records.values()],memo=new Map(),list = type => {
       if(memo.has(type))return memo.get(type);
-      const values=all.filter(r=>r.type===type&&!r.removed_at);
+      const values=all.filter(r=>r.type===type&&!r.removed_at);if(type==='deadlines')values.push(...dueRows(this.store));
       if(type!=='moments'){memo.set(type,values);return values;}
       const corrected=values.map(original=>{const corrections=all.filter(r=>r.type==='event_corrections'&&r.moment_id===original.id).sort((a,b)=>a.sequence-b.sequence||a.id.localeCompare(b.id));return corrections.reduce((r,c)=>({...r,...c.patch,_hash:c._hash}),original);}).filter(r=>!r.removed_at);
       memo.set(type,corrected);return corrected;
@@ -89,7 +91,7 @@ export class QueryService {
     }
     if(table==='weekly_reviews')return list(table).map(r=>({...r,review_data:{...r.review_data,gaps:typeof r.review_data?.gaps==='string'?[r.review_data.gaps]:r.review_data?.gaps||[]}}));
     if(table==='collection_items')return list(table).map(r=>{const collection=get('collections',r.collection_id),primary=collection?.field_schema?.find(f=>f.primary),title=primary?r.data?.[primary.key]:r.title;return {...defaults.collection_items,...r,title:title==null?'Untitled':String(title)};});
-    return list(table).map(r => ({ ...(defaults[table] || {}), ...r,...table==='contact_groups'?{type:r.group_type||'custom'}:table==='contact_group_memberships'?{last_movement_at:r.last_movement_at||r.created_at}:{} }));
+    return [...list(table),...(['coach_talks','habits','journal','health_episodes','medications'].includes(table)?nativeRows(this.store,table):[])].map(r => ({ ...(defaults[table] || {}), ...r,...table==='contact_groups'?{type:r.group_type||'custom'}:table==='contact_group_memberships'?{last_movement_at:r.last_movement_at||r.created_at}:{} }));
   }
   references(type, value) {
     const refs = [...(value.references || [])].filter(r => !r.field);
@@ -129,7 +131,7 @@ export class QueryService {
     if (operation !== 'select') {
       const privateKeys=/^(access_token|refresh_token|api_key|secret|password|token|token_hash|encrypted_token|credentials)$/i;
       const inspect=value=>{if(value&&typeof value==='object')for(const [key,next] of Object.entries(value)){if(privateKeys.test(key))throw new Error('Connector credentials belong in local device configuration, never synced records');inspect(next);}};inspect(values);
-      if (views.has(table)) throw new Error('Derived views are read-only');
+      if (views.has(table)||rows.some(r=>r.native_file&&table==='deadlines')) throw new Error('Derived views are read-only; use the personal obligation operation');
       rows = this.store.withLock(() => {
         const inputs = operation === 'insert' || operation === 'upsert' ? (Array.isArray(values) ? values : [values]) : rows;
         const changed = inputs.map(value => {

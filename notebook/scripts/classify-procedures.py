@@ -33,7 +33,7 @@ mapping={
 'attention-pull':('included','attention-review','Prioritize near deadlines and prepared user actions; silence is valid.'),
 'lead':('included','lead','Prepare a grounded post or reply; never publish automatically.'),
 'memory-daily':('included','profiling','Source-quoted proposals go to the review queue.'),
-'brief-rehearsal':('included','brief-review','Review saved source data without sending anything.'),
+'brief-rehearsal':('included','brief-rehearsal','Run actual source preparation, drafting, factual and delivery gates without delivery.'),
 'radar':('included','radar','At most one evidence-based proposal from configured sources.'),
 'memory-review':('included','memory-review','Propose stale or conflicting fact corrections without deleting knowledge.'),
 'audit':('included','audit','Validate system state and goal outcomes, then prepare corrections.'),

@@ -1,0 +1,33 @@
+import fs from 'node:fs';import path from 'node:path';import {fileURLToPath} from 'node:url';
+const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..'),out=path.join(root,'docs/full-version');
+const read=p=>JSON.parse(fs.readFileSync(path.join(root,p))),inventory=read('docs/full-version/source-inventory.json'),procedures=read('notebook/data/procedure-inventory.json'),recipes=read('notebook/data/recipe-inventory.json');
+const proofFile=path.join(out,'acceptance-evidence.json'),proof=fs.existsSync(proofFile)?JSON.parse(fs.readFileSync(proofFile)):{};
+const functionCriteria=read('notebook/data/function-acceptance.json');
+const items=[];
+function add(kind,name,trigger,durable,execution,criterion,excluded){const key=kind+':'+name,e=proof[key];items.push({key,kind,name,trigger,durable_state:durable,execution,activation:'Explicit user choice; inspect installed schedules and settings',permissions:'Authenticated owner; outward changes require exact approval',dependencies:[],criterion,status:excluded||e?.status||'source only',evidence:e?.evidence||[],required:!excluded,target_test:e?.target_test||`Exercise ${name} through its installed entry point and check actual results after restart`});}
+for(const p of inventory.pages)add('screen',p,'Open notebook '+p,'records and media','notebook/ui/src/pages/'+p+'.tsx','Complete each control exposed by '+p+' against persisted state',/Lexicon|Graph/.test(p)?'explicitly deferred':null);
+for(const t of [...new Set(inventory.dependencies.flatMap(d=>d.tables))].sort())add('domain',t,'Read/write '+t,'records/'+t,'notebook/core/query.mjs','Preserve '+t+' fields, references, filtering and history through edits, conflict, rebuild and restoration',t.startsWith('wiki_')?'explicitly deferred':null);
+for(const f of [...new Set(inventory.dependencies.flatMap(d=>d.functions))].sort()){const deferred=['get-graph-data','backfill-wikilinks','enrich-person-from-lexicon','wiki-ingest'].includes(f);if(!deferred&&!functionCriteria[f])throw Error('Missing function-specific acceptance: '+f);add('function',f,'Invoke '+f+' from its notebook control','Records affected by '+f,'notebook/core/domains.mjs',functionCriteria[f]||'Deferred graph/lexicon behavior',deferred?'explicitly deferred':null);}
+for(const p of procedures)add('procedure',p.name,'Selected schedule or command '+p.name,'Schedule, receipts and affected files','notebook/core/procedures.mjs / runtime.mjs',p.reason+' Verify the '+p.operation+' result across a failed run, restart and an unchanged repeat; report an observation rather than implying execution.',p.classification==='separately owned'?'intentionally separate':null);
+for(const r of recipes){const file=path.join(root,'notebook/recipes',r.name,'SKILL.md'),text=fs.existsSync(file)?fs.readFileSync(file,'utf8'):'',description=text.match(/description:\s*([^\n]+)/)?.[1]||r.reason;add('recipe',r.name,'Installed skill '+r.name,'Skill-specific files and receipts','skills/'+r.name+'/SKILL.md',description+' Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation.',r.classification==='separately owned'?'intentionally separate':null);}
+const behaviors={
+ 'first-goal':['Configured and paired setup','settings, goals, jobs','Missing goal setup stays visible; preserve paused routines'],
+ 'goal-loop':['Adopt goal; scheduled decision and work','goals, decisions, work_items, forecasts','Selected work executes once, passes actual check and feeds the next choice'],
+ 'local-action':['Approve exact safe local change','work_items, approvals, target note','Apply exact allowed payload; fail changed preconditions; live read-back'],
+ 'reminders':['Deadline and recurrence; independent schedule','deadlines, notifications','No empty reminder; one delivery per stage; evidence closes one occurrence and advances once'],
+ 'coaching':['Scheduled talk, reply and agreement','coach, habits','Native commands share history with chat/notebook; later check-in uses replies'],
+ 'journal':['Start, define, finish, reopen and switches','routines/journal','Native journal checks agreed completion against evidence and retains corrections'],
+ 'memory':['Remember, infer, correct and retrieve','conversation_messages, claims, review_queue','Source-linked corrections survive restart; hidden/superseded facts excluded; synonym comparison with Menerio'],
+ 'briefing':['Selected morning brief','Sources, health, checks and delivery','Collect/check sources; failed gate prevents delivery; useful fresh health line'],
+ 'repairs':['Break connection or job','work_items, obligations, receipts','One repair/login item; supported automatic recovery; closure after recheck'],
+ 'single-owner':['Pair, disconnect and restart','settings, jobs, receipts','No takeover or duplicates; capped calendar catch-up and bounded retries'],
+ 'recovery':['Fresh, upgrade, offline, reconnect and restore','User files and retained conflicts','Content/links match after rebuild and empty restore; user choices retained'],
+ 'providers':['Subscription and endpoint chat/tools','Device-private provider configuration','Configured providers produce useful work through installed interfaces'],
+ 'trial':['Two-week external-user trial','Dated observations/support log','Fourteen real days demonstrate useful continuing progress'],
+ 'mac':['Independent Mac installation','User workspace','Real Mac fresh/upgrade/restart verification']};
+for(const [name,[trigger,durable,criterion]] of Object.entries(behaviors))add('behavior',name,trigger,durable,'Installed chat, notebook and scheduler',criterion);
+const matrix={format:2,checked_at:new Date().toISOString(),complete:items.filter(i=>i.required).every(i=>i.status==='verified working'&&i.evidence.length),items};
+for(const name of ['acceptance-matrix.json','capability-matrix.json'])fs.writeFileSync(path.join(out,name),JSON.stringify(matrix,null,2)+'\n');
+fs.writeFileSync(path.join(out,'capabilities.md'),'# Capability acceptance\n\nNotebook integration is available. Complete follow-through has not passed the release gate.\n\nEvery behavior and upstream item is tracked in acceptance-matrix.json. Source inclusion, a saved response and a working screen do not establish completion. Evidence is attached only after actual behavior checks. Missing implementation remains a product gap even when an account is optional. Company systems remain separate; lexicon and note graph are deferred. Mac and the two-week trial remain unverified.\n');
+console.log(JSON.stringify({items:items.length,required:items.filter(i=>i.required).length,complete:matrix.complete}));
+if(process.argv.includes('--gate')&&!matrix.complete)process.exitCode=1;
