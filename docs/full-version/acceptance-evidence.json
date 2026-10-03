@@ -11,7 +11,8 @@
     "status": "partial",
     "evidence": [
       "Installed endpoint chat recorded the observed deficiency in the outline's rain-sensor section. Subsequent unattended decision selected that section and work saved a revised, independently checked outline. Further proposed observations wait for review; a draft is not a measured outcome.",
-      "Normal fictional notebook saved a reported failed internal review, score 2/5, into the exact selected observation task. The next unattended decision requested concrete rain-sensor calibration steps. An interrupted draft was retried through the notebook and saved a checked result. The reported score remains failed; a model draft check is not a measured improvement. The notebook goal editor saved a new one-page-checklist direction and progress measure. Installed follow-up exposed original own_words left unchanged; the source now updates them, cancels pending decisions and retains cancellation after a late provider result. Repeat changed-direction acceptance with this correction remains required. Retained UI captures: installed-reported-check-and-retried-draft.txt and installed-changed-goal-direction.txt."
+      "Normal fictional notebook saved a reported failed internal review, score 2/5, into the exact selected observation task. The next unattended decision requested concrete rain-sensor calibration steps. An interrupted draft was retried through the notebook and saved a checked result. The reported score remains failed; a model draft check is not a measured improvement. The notebook goal editor saved a new one-page-checklist direction and progress measure. Installed follow-up exposed original own_words left unchanged; the source now updates them, cancels pending decisions and retains cancellation after a late provider result. Repeat changed-direction acceptance with this correction remains required. Retained UI captures: installed-reported-check-and-retried-draft.txt and installed-changed-goal-direction.txt.",
+      "Normal installed endpoint notebook changed current direction, cancelling the old observation task. A later scheduled local-note decision waited over several cycles for exact approval. Normal notebook selection approved fictional-approved-target-checklist-ffcaa8ae; work replace-one-existing-local-checklist-note-with-a-new-one-page-practical-wet-rain-468adcd8 replaced that target at 2026-10-03T21:08:39.538Z and the actual 256-word checklist opened in its note editor. This establishes a delayed approved local edit, not an actual volunteer rating. The actual read_note receipt read an unrelated briefing rather than the requested rain-rule source, and the next decision requested substantially the same edit again. Both are retained acceptance failures. New source gives semantic verification the actual goal, source records and tool results, mechanically requires read_note for explicit required source IDs, and supports a quiet waiting decision until fresh outcome evidence. Installed acceptance of these later corrections is pending."
     ],
     "target_test": "Exercise failed decisions/checks, changed direction, delayed exact local approval and restart through final installed notebooks."
   },
@@ -47,7 +48,8 @@
   "behavior:repairs": {
     "status": "partial",
     "evidence": [
-      "Normal notebook configured a fictional localhost connector. HTTP 401 caused one Reconnect spend-guard obligation. After HTTP 200 returned, unattended checking closed that same obligation with completion evidence."
+      "Normal notebook configured a fictional localhost connector. HTTP 401 caused one Reconnect spend-guard obligation. After HTTP 200 returned, unattended checking closed that same obligation with completion evidence.",
+      "New bounded restart recovery reclaims an interrupted scheduled read only for an explicit read-only routine allowlist, retains its prior attempt and one repair item, verifies that repair from the same completed receipt, and leaves an uncertain outward attempt paused. Meaningful stopped-read/outward regressions pass. Existing interrupted jobs without safe pause provenance remain untouched; actual installed repair acceptance is pending."
     ],
     "target_test": "Accept automatic recoverable connector and failed local-job repair, bounded retries, checked closure and quiet repeat cycles."
   },
@@ -55,14 +57,16 @@
     "status": "partial",
     "evidence": [
       "Retained Windows/VPS/fixture backups restored into empty copies with matching knowledge/media digests. Normal fixture notebook Save a backup and Restore a separate copy checked 229 records and 1246 durable files, reported six rebuildable exclusions, retained the copy and rebuilt search without overwriting active records.",
-      "A real backup race was reproduced: the captured files preceded a concurrent save, but the manifest counted later live records. The source now retains the actual snapshot count. Verified empty retained restorations before source-assisted corrections: Windows 849 records/2325 durable comparisons and fictional endpoint 1623/2641, each with six rebuildable exclusions. Reports: verified-source-assisted-recovery-corrections.log. The isolated installer backups were relocated to private E storage with verified manifest hashes and an original-path junction; every recovery path remains. Native Inno upgrade failed during backup with incomplete PowerShell 5.1 stderr. Packaged setup succeeded on a second PowerShell 7 approach; normal native-installer acceptance remains pending. A new native helper retains complete stderr and checks exit status, tested on native PowerShell 5.1."
+      "A real backup race was reproduced: the captured files preceded a concurrent save, but the manifest counted later live records. The source now retains the actual snapshot count. Verified empty retained restorations before source-assisted corrections: Windows 849 records/2325 durable comparisons and fictional endpoint 1623/2641, each with six rebuildable exclusions. Reports: verified-source-assisted-recovery-corrections.log. The isolated installer backups were relocated to private E storage with verified manifest hashes and an original-path junction; every recovery path remains. Native Inno upgrade failed during backup with incomplete PowerShell 5.1 stderr. Packaged setup succeeded on a second PowerShell 7 approach; normal native-installer acceptance remains pending. A new native helper retains complete stderr and checks exit status, tested on native PowerShell 5.1.",
+      "Additional source-assisted Windows backups retained and verified empty restorations: Windows 851 records and 2327 durable-file comparisons, endpoint 1670 and 2688, verified-changed-direction-corrections.log. Fresh corrected supervisor observed over fourteen minutes of ordinary UI polling and endpoint tool work with zero restarts and no health failure history at 21:18 UTC. This is bounded stability evidence, not a two-week trial or final packaged recovery acceptance. Three obsolete source-build directories on the VPS were losslessly archived, every file and downloaded archive checked before their directories were removed; remote and E copies remain, another session build and all recovery copies were preserved."
     ],
     "target_test": "Repeat recovery/link checks on final matching Windows/VPS packages; accept offline edits, reconnection, retained conflicts and preserved choices/pauses."
   },
   "behavior:providers": {
     "status": "partial",
     "evidence": [
-      "Normal installed Windows subscription chat loaded choices and saved Fictional subscription check after writer-wait correction. VPS subscription chat saved Fictional VPS subscription check. Fresh endpoint generated/checked drafts and recorded goal feedback, coaching, habits, journal and person-specific conversation."
+      "Normal installed Windows subscription chat loaded choices and saved Fictional subscription check after writer-wait correction. VPS subscription chat saved Fictional VPS subscription check. Fresh endpoint generated/checked drafts and recorded goal feedback, coaching, habits, journal and person-specific conversation.",
+      "The normal endpoint-backed worker actually executed read_note and applied its exact approved target, with a retained tool receipt. It read an unrelated briefing and its semantic check accepted that mistake; source-aware and explicit-source mechanical checks now reject this failure in regressions. Correct required-source reading through both installed supported provider paths remains mandatory."
     ],
     "target_test": "Inspect actual controlled read/search tool receipts with each claimed provider path, slow sync, restart, retry and cancellation."
   },
@@ -82,5 +86,21 @@
       "Maintained full obligation workflow and room reference are now bundled. Native tool now exposes help and local marker needed/set/clear/stale; changing a target invalidates its previous marker and recurrence resets per-window bookkeeping. A real shared-command regression covers setup, marker update, target move, closure, stale future marker and path/newline refusal. Installed recipe result and paired delivery remain unverified."
     ],
     "target_test": "Run complete due recipe through the final isolated native assistant and normal notebook commands; inspect actual plan and event history, quiet reminders and one paired delivery."
+  },
+  "recipe:watch": {
+    "status": "source only",
+    "evidence": [
+      "Maintained full portable workflow preserves four saved setup answers, comparison/source-watch shapes, cheap and deep passes, per-fact evidence grades, verdict expiries, one shared sweeper, a scored common queue with brief/notebook caps, every-run evidence and a three-blind-run notice. New shared command /watch and native mc-watch wiring use canonical notebook records rather than private-engine files. Source regressions verify two topics/one sweeper, graded candidates, queue caps, quiet runs, one third-failure notice and successful recovery. Actual installed command, source changes and restart acceptance from a matching package remain pending."
+    ],
+    "criterion": "Through installed normal chat add two fictional topics with all four answers and one common sweeper; retain a requirement-linked graded candidate and expiry; sample unchanged and criterion-relevant changes; quote the actual current source; cap and deduplicate the shared queue; observe one notice after three blind scheduled checks and its verified recovery; retain every run after restart.",
+    "target_test": "Repeat complete watch command and scheduled change/failure/recovery scenarios on final matched Windows/VPS packages."
+  },
+  "recipe:subscription-review": {
+    "status": "source only",
+    "evidence": [
+      "Complete portable monthly workflow and receipt/register references are maintained. mc-subs and /subs use explicitly selected device-private receipt sources, archived optimistic register edits and source-preserving dashboards. Empty or damaged transcripts are unavailable, never zero; unpriced use remains unknown monetary value; actual cumulative spend is counted. A monthly calendar retains its chosen day over short months and DST. One scheduled review samples its measurement and report together, retains changed evidence once, and stays quiet for unchanged evidence. Source regressions pass; installed native command and monthly scheduled review acceptance remain pending."
+    ],
+    "criterion": "Through installed normal /subs and native mc-subs use fictional selected receipt ledgers, distinguish missing/damaged/unpriced/measured zero and actual spend, preserve exact learned register answers with prior versions, produce the full review and one question, explicitly activate monthly timing, observe a changed and an unchanged cycle, and retain all state after restart without payments or account changes.",
+    "target_test": "Install the committed command and complete fictional meter/register/monthly review acceptance through normal Windows/VPS interfaces."
   }
 }

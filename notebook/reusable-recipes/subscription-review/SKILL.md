@@ -72,8 +72,3 @@ Answer from the user's actual work in three parts:
 - Keep selected receipt paths and credentials device-private. Receipt configuration contains paths, not API keys. The public price lookup sends no receipt text or credentials.
 - Label cached price sources with their date, failed reads with their actual limitation, and a proposed switch with an unfilled user verdict.
 - Confirm the saved dashboard, register answer and selected monthly schedule from real state. Recipe inclusion is not proof those actions happened.
-
-
-## Installed personal workspace
-
-Use the current user workspace and its configured providers. Keep original workflow, command contracts, scripts and verification criteria. Read the workspace authorization rules before sends, sign-ins, payments or publishing. Search existing device-private credentials before asking for configuration. Saved output and a passing screen are not evidence that the full requested result happened.

@@ -2,12 +2,14 @@ import {visibleRows} from './visibility.mjs';
 import {hash} from './records/store.mjs';
 import {procedure} from './procedures.mjs';
 import {remind} from './goal-loop.mjs';
+import {watchCommand} from './watch-commands.mjs';
 export async function briefing(job,{store,query,provider}){
  if(!provider)throw Error('Connect an assistant before writing a briefing');
  remind({},{store,query});
  const watch=visibleRows(query,'watch_topics').filter(t=>!t.paused&&t.include_in_brief);
  if(watch.length)await procedure({id:job.id+'-sources',kind:'watch',topic_ids:watch.map(t=>t.id)},{store,query,provider});
  const context={goals:visibleRows(query,'goals').filter(g=>['active','adopted'].includes(g.status)),decisions:visibleRows(query,'decisions').slice(-10),work:visibleRows(query,'work_items').slice(-20),deadlines:visibleRows(query,'deadlines').filter(d=>d.status!=='closed'),health:visibleRows(query,'health_observations').filter(h=>Date.parse(h.observed_at)>=Date.now()-7*86400000),episodes:visibleRows(query,'health_episodes').filter(h=>Date.parse(h.onset_at)>=Date.now()-30*86400000),medications:visibleRows(query,'medications').filter(h=>Date.parse(h.taken_at)>=Date.now()-30*86400000),source_receipts:visibleRows(query,'watch_observations').filter(o=>Date.parse(o.observed_at)>=Date.now()-48*3600000),previous:visibleRows(query,'notes').filter(n=>n.source_app==='morning-brief').slice(-3)};
+ context.watch_findings=JSON.parse(watchCommand({store,query},['pull','--channel','brief','--dry-run']).result);
  const draft=await provider({kind:'morning-brief',context,contract:'Write a short useful briefing from these actual sources. Use plain concise language, without em dashes. Include one factual health line using only fresh recorded inputs, or state that fresh inputs are missing. Include one useful action and its goal. Retain uncertainty. Do not repeat unchanged prior advice or assert that a draft caused real-world progress. No unsupported figures or medical diagnosis.'});
  if(typeof draft!=='string'||!draft.trim())throw Error('Briefing produced no text');
  const raw=await provider({kind:'brief-verification',context:{sources:context,draft},contract:'Check this exact draft against its actual sources and prior deliveries. Return JSON {passed:boolean,reason:string}. Fail unsupported claims, stale health claims, invented outcomes, missing health line or empty/unchanged advice. A criticism must prevent delivery.'});
@@ -20,7 +22,8 @@ export async function briefing(job,{store,query,provider}){
  const deliveryCheck=store.save('job_receipts',{kind:'brief-delivery-verification',job_id:job.id,state:style.passed===true?'verified':'failed',source_hash:hash(context),draft_hash:hash(draft),verdict:style,finished_at:new Date().toISOString()});if(style.passed!==true)throw Error('Briefing delivery check failed: '+(style.reason||'No accepted evidence'));
  if(job.rehearsal)return {verified:true,silent:true,rehearsal:true,source_hash:hash(context),draft_hash:hash(draft),verification_ids:[check.id,deliveryCheck.id]};
  const key='brief-'+hash(draft);if(store.get('notifications',key))return {verified:true,silent:true};
- const note=store.save('notes',{title:'Your morning briefing',content:draft,source_app:'morning-brief',verification_id:check.id,delivery_verification_id:deliveryCheck.id,sources:context.source_receipts.map(s=>s.id)});
- store.save('notifications',{id:key,record_id:note.id,verification_id:check.id,status:'ready'});
+ const note=store.prepare('notes',{title:'Your morning briefing',content:draft,source_app:'morning-brief',verification_id:check.id,delivery_verification_id:deliveryCheck.id,sources:context.source_receipts.map(s=>s.id),evidence:context});
+ await store.waitForWriter();
+ store.withLock(()=>{const findings=context.watch_findings.filter(f=>draft.includes(f.what)&&draft.includes(f.link)).map(f=>store.get('watch_findings',f.id)).filter(f=>f?.status==='pending');store.commit([note,store.prepare('notifications',{id:key,record_id:note.id,verification_id:check.id,status:'ready'}),...findings.map(f=>store.prepare('watch_findings',{status:'shown',shown_at:new Date().toISOString(),channel:'brief',delivery_note_id:note.id},f))]);});
  return {verified:true,record_id:note.id,content_hash:store.get('notes',note.id)._hash,delivery:'notebook'};
 }

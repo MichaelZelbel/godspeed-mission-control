@@ -3,6 +3,7 @@ import {procedureKinds} from './kinds.mjs';
 import {nextCalendarRun} from './calendar.mjs';
 import {hash} from '../records/store.mjs';
 export const kinds = ['goal-decision', 'goal-work', 'habit-check', 'coaching', 'deadline-reminder', 'profiling', 'review', 'morning-brief', 'audit', 'memory-review', 'watch',...procedureKinds];
+const restartableReads=new Set(['disk-check','health-summary','watch','domain-watch','portfolio','connection-check','audit','selftest','job-check']);
 export class Scheduler {
   constructor(store, { device = store.device, executor = null } = {}) { this.store = store; this.device = device; this.executor = executor; this.running = false; }
   configure({ owner = this.device, timezone, goal, delivery = 'notebook', permissions = [] }) {
@@ -48,11 +49,12 @@ export class Scheduler {
         const job=this.store.get('jobs',snapshot.id);if(!job)continue;
         if (job.owner !== this.device || job.paused || Date.parse(job.next_run) > now || job.state === 'awaiting_approval') continue;
         const receiptId = job.id + '-' + String(Date.parse(job.next_run));
-        const previous = this.store.get('job_receipts', receiptId);
+        let previous = this.store.get('job_receipts', receiptId),recovery=null;
         if (previous) {
           // Never replay an uncertain side effect. An interrupted attempt stays visible.
           if(previous.state==='attempted'&&previous.pid&&Date.parse(previous.started_at)>Date.now()-600000){try{process.kill(previous.pid,0);continue;}catch{}}
-          this.store.save('jobs',{id:job.id,state:previous.state==='verified'?'pending':'needs_review',paused:previous.state!=='verified',next_run:nextCalendarRun(job,settings.timezone,now)}); continue;
+          if(previous.state==='attempted'&&!job.outward&&restartableReads.has(job.kind)&&(previous.interruptions||[]).length<(job.max_retries||3))recovery=previous;
+          else{this.store.save('jobs',{id:job.id,state:previous.state==='verified'?'pending':'needs_review',paused:previous.state!=='verified',next_run:nextCalendarRun(job,settings.timezone,now)}); continue;}
         }
         const approval=job.approval_id?this.store.get('approvals',job.approval_id):null;
         if (job.outward && (!approval||approval.status!=='approved'||approval.payload_hash!==hash(job.payload)||approval.job_id!==job.id)) {
@@ -60,10 +62,12 @@ export class Scheduler {
         }
         const receipt=this.store.withLock(()=>{
           const current=this.store.get('jobs',job.id),owner=this.store.get('settings','installation');
-          if(!current||owner?.owner!==this.device||current.owner!==this.device||current.paused||current._hash!==job._hash||this.store.get('job_receipts',receiptId))return null;
+          const retained=this.store.get('job_receipts',receiptId);
+          if(!current||owner?.owner!==this.device||current.owner!==this.device||current.paused||current._hash!==job._hash||(recovery?retained?._hash!==recovery._hash:!!retained))return null;
           const permission=current.approval_id?this.store.get('approvals',current.approval_id):null;
           if(current.outward&&(!permission||permission.status!=='approved'||permission.payload_hash!==hash(current.payload)||permission.job_id!==current.id))return null;
-          const r=this.store.prepare('job_receipts',{id:receiptId,job_id:job.id,kind:job.kind,state:'attempted',pid:process.pid,started_at:new Date(now).toISOString(),attempt_id:randomUUID()});this.store.commit([r]);return r;
+          const r=this.store.prepare('job_receipts',{id:receiptId,job_id:job.id,kind:job.kind,state:'attempted',pid:process.pid,started_at:new Date(now).toISOString(),attempt_id:randomUUID(),...(recovery?{interruptions:[...(recovery.interruptions||[]),{attempt_id:recovery.attempt_id,started_at:recovery.started_at,recovered_at:new Date(now).toISOString(),reason:'Stopped read-only routine; no outward action is replayed'}]}:{})},recovery);
+          const records=[r];if(recovery)records.push(this.store.prepare('work_items',{id:'routine-recovery-'+hash(receiptId),kind:'repair',job_id:job.id,failure_id:receiptId,state:'attempted',title:'Resume interrupted '+job.kind,allowed_action:'retry-read-only-routine',check:'The same scheduled read completes with a verified receipt'}));this.store.commit(records);return r;
         });
         if(!receipt)continue;this.onProgress?.();
         try {
@@ -72,10 +76,12 @@ export class Scheduler {
           if(!result?.verified)throw new Error('The executor returned no verified result');
           if(settings.delivery==='telegram'&&!result.silent){if(!this.deliver)throw new Error('Configure the candidate Telegram connector before choosing chat delivery');await this.deliver(receipt.id,result);}
           this.store.save('job_receipts',{id:receipt.id,state:'verified',result,finished_at:new Date().toISOString()});
+          if(recovery)this.store.save('work_items',{id:'routine-recovery-'+hash(receiptId),state:'verified',evidence:receipt.id});
           this.store.withLock(()=>{const current=this.store.get('jobs',job.id);if(current) this.store.commit([this.store.prepare('jobs',{state:'pending',last_outcome:'verified',last_run:new Date(now).toISOString(),retry_count:0,...(current._hash===job._hash?{next_run:nextCalendarRun(current,settings.timezone,now)}:{})},current)]);});
           results.push({id:job.id,state:'verified'});
         } catch(e) {
           this.store.save('job_receipts',{id:receipt.id,state:'failed',error:e.message,finished_at:new Date().toISOString()});
+          if(recovery)this.store.save('work_items',{id:'routine-recovery-'+hash(receiptId),state:'needs_review',error:e.message});
           const retry=(job.retry_count||0)+1,needsReview=e.code==='OUTWARD_UNCERTAIN'||retry>=(job.max_retries||3);
           this.store.withLock(()=>{const current=this.store.get('jobs',job.id);if(current)this.store.commit([this.store.prepare('jobs',{state:needsReview?'needs_review':'failed',paused:needsReview||current.paused,retry_count:retry,last_outcome:e.message,last_run:new Date(now).toISOString(),...(current._hash===job._hash?{next_run:new Date(now+Math.min(60000*2**retry,3600000)).toISOString()}:{})},current)]);});results.push({id:job.id,state:'failed',error:e.message});
         }

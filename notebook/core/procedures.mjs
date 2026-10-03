@@ -4,9 +4,20 @@ import {fileContext} from './context.mjs';
 import {Domains} from './domains.mjs';
 import {visibleRows} from './visibility.mjs';
 import {Connectors} from './connectors.mjs';
+import {subscriptionCommand} from './subscriptions.mjs';
 export {procedureKinds} from './jobs/kinds.mjs';
 export async function procedure(job,{store,query,provider}){
   const kind=job.kind;let result;
+  if(kind==='subscription-review'){
+    const {measurement:meter,content:dashboard}=JSON.parse((await subscriptionCommand(store,['review',...(job.no_network?['--no-network']:[])])).result);
+    if(!meter.rows.length)return {verified:true,silent:true,reason:'No subscription register has been selected'};
+    const fingerprint=hash(meter),id='subscription-review-'+fingerprint;
+    await store.waitForWriter();
+    if(store.get('notifications',id))return {verified:true,silent:true,reason:'Subscription evidence is unchanged'};
+    const note=store.prepare('notes',{title:'What your AI subscriptions carried',content:dashboard,source_app:kind,measurement:meter});
+    store.withLock(()=>store.commit([note,store.prepare('notifications',{id,record_id:note.id,status:'ready'})]));
+    return {verified:true,record_id:note.id,content_hash:store.get('notes',note.id)._hash,delivery:'notebook'};
+  }
   if(kind==='audit'){
     store.scan();const goals=visibleRows(query,'goals'),work=visibleRows(query,'work_items'),receipts=visibleRows(query,'job_receipts');
     const findings=[...store.problems.map(p=>({kind:'file-validation',evidence:p})),...goals.filter(g=>['adopted','active'].includes(g.status)&&!(g.measure||g.legacy_fields?.MEASURE)).map(g=>({kind:'missing-progress-measure',goal_id:g.id,evidence:'An adopted goal has no agreed progress measure'})),...work.filter(w=>w.state==='verified'&&!w.verification&&w.kind!=='repair').map(w=>({kind:'unsubstantiated-work',work_id:w.id,evidence:'Work was marked verified without a retained completion check'}))];
@@ -49,7 +60,10 @@ export async function procedure(job,{store,query,provider}){
   }
   else if(kind==='portfolio'||kind==='watch'||kind==='domain-watch'){
     const topics=kind==='portfolio'?visibleRows(query,'collections').filter(c=>c.name==='Links').flatMap(c=>visibleRows(query,'collection_items').filter(i=>i.collection_id===c.id).map(i=>({id:i.id,url:i.data.url}))):visibleRows(query,'watch_topics').filter(t=>!t.paused&&(!job.topic_ids||job.topic_ids.includes(t.id)));result=[];
-    for(const topic of topics)for(const raw of topic.urls||topic.url?[...(topic.urls||[topic.url])]:[]){
+    for(const topic of topics){
+     if(kind!=='portfolio'&&topic.next_run_at&&Date.parse(topic.next_run_at)>Date.now()&&!job.force_sources)continue;
+     const firstResult=result.length;
+     for(const raw of topic.urls||topic.url?[...(topic.urls||[topic.url])]:[]){
       const url=new URL(raw);if(url.protocol!=='https:'&&!(url.protocol==='http:'&&['localhost','127.0.0.1'].includes(url.hostname)))throw new Error('Public sources need HTTPS');
       const old=query.rows('watch_observations').filter(o=>o.topic_id===topic.id&&o.url===raw).sort((a,b)=>String(a.observed_at||a.created_at).localeCompare(String(b.observed_at||b.created_at))).at(-1);
       try{
@@ -63,9 +77,19 @@ export async function procedure(job,{store,query,provider}){
           if(!valid(comparison))throw Error('Watch comparison needs a valid exact quote from the current source');changed=comparison.meaningful;
         }
         await store.waitForWriter();
-        const observation=store.save('watch_observations',{topic_id:topic.id,url:raw,status:response.status,content:text,observed_at:new Date().toISOString(),sha256:digest,changed,comparison});result.push({id:observation.id,url:raw,ok:response.ok,changed,evidence:comparison?.evidence,follow_up:comparison?.follow_up,attention:changed||!response.ok&&old?.status!==response.status});
+        const observation=store.save('watch_observations',{topic_id:topic.id,url:raw,status:response.status,content:text,observed_at:new Date().toISOString(),sha256:digest,changed,comparison});result.push({id:observation.id,topic_id:topic.id,url:raw,ok:response.ok,changed,evidence:comparison?.evidence,follow_up:comparison?.follow_up,attention:changed});
         for(const failure of query.rows('notifications').filter(n=>n.watch_topic_id===topic.id&&n.url===raw&&n.status==='pending'))store.save('notifications',{id:failure.id,status:'resolved',resolved_at:new Date().toISOString(),evidence_id:observation.id});
-      }catch(e){await store.waitForWriter();const key='watch-failure-'+hash([topic.id,raw,e.message]);const seen=store.get('notifications',key);if(!seen)store.save('notifications',{id:key,status:'pending',watch_topic_id:topic.id,url:raw,error:e.message});result.push({url:raw,ok:false,attention:!seen,error:e.message,verification_error:/Watch comparison/.test(e.message)});}
+      }catch(e){await store.waitForWriter();result.push({topic_id:topic.id,url:raw,ok:false,attention:false,error:e.message,verification_error:/Watch comparison/.test(e.message)});}
+     }
+     if(kind!=='portfolio'){
+      const sampled=result.slice(firstResult),blind=sampled.length>0&&sampled.every(r=>!r.ok),blindRuns=blind?(topic.blind_runs||0)+1:0,at=new Date().toISOString();
+      await store.waitForWriter();
+      const current=store.get('watch_topics',topic.id),log=store.prepare('watch_runs',{topic_id:topic.id,observed_at:at,content:blind?'Sources could not be read':sampled.some(r=>r.changed)?'Meaningful source change checked':'Quiet: no meaningful source change',observations:sampled});
+      store.withLock(()=>store.commit([log,store.prepare('watch_topics',{blind_runs:blindRuns,last_run_at:at,next_run_at:new Date(Date.now()+(current.cadence_minutes||1440)*60000).toISOString()},current)]));
+      if(blindRuns===3){const key='watch-blind-'+hash(topic.id),existing=store.get('notifications',key);if(!existing||existing.status==='resolved')store.save('notifications',{id:key,status:'pending',watch_topic_id:topic.id,body:'The sources for '+topic.title+' could not be read on three consecutive checks.',error:sampled.map(r=>r.error||'HTTP source failure').join('; ')});}
+      if(!blind)for(const notice of query.rows('notifications').filter(n=>n.watch_topic_id===topic.id&&n.status==='pending'))store.save('notifications',{id:notice.id,status:'resolved',resolved_at:at,evidence_id:log.id});
+      const changed=sampled.find(r=>r.changed);if(changed){const key='watch-finding-'+hash([topic.id,changed.evidence,changed.url]);if(!store.get('watch_findings',key))store.save('watch_findings',{id:key,topic_id:topic.id,score:50,what:changed.evidence,consequence:topic.criteria,next:changed.follow_up||'Review the source change',link:changed.url,expires:new Date(Date.now()+7*86400000).toISOString(),status:'pending',verdict:null,source_observation_id:changed.id});}
+     }
     }
     if(result.some(r=>r.verification_error))throw Error(result.find(r=>r.verification_error).error);
   }else if(kind==='profiling'){

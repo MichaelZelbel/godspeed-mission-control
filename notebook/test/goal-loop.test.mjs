@@ -9,6 +9,15 @@ import {Scheduler} from '../core/jobs/scheduler.mjs';
 import {jobExecutor} from '../core/runtime.mjs';
 import {Domains} from '../core/domains.mjs';
 const fixture=()=>{const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-v2-')));return {store,query:new QueryService(store)};};
+test('a completed deliverable can wait for a real outcome quietly and new evidence wakes the decision',async()=>{
+ const {store,query}=fixture();const goal=store.save('goals',{title:'Fictional volunteer checklist',own_words:'Fictional volunteer checklist',measure:'An actual volunteered clarity rating',status:'adopted',progress:[{kind:'applied-local-note',evidence:'The checklist was replaced and read back'}]});
+ let calls=0;const run=jobExecutor(async()=>{calls++;return {kind:'wait',reason:'The checklist exists; wait for a real volunteered rating',check_at:new Date(Date.now()+3600000).toISOString()};},query);
+ const job={kind:'goal-decision',id:'fictional-decision'},context={store,settings:{}};
+ assert.equal((await run(job,context)).silent,true);assert.equal(store.list('work_items').length,0);assert.equal(store.list('decisions')[0].state,'waiting');
+ await run(job,context);assert.equal(calls,1);
+ store.save('goals',{id:goal.id,progress:[...goal.progress,{kind:'reported-observation',value:2,evidence:'Fictional volunteer rated clarity 2/5'}]});
+ await run(job,context);assert.equal(calls,2);
+});
 
 test('changed direction cancels stale approved work even when its provider returns later',async()=>{
  const {store,query}=fixture(),domains=new Domains(query),goal=store.save('goals',{title:'Fictional old direction',own_words:'Fictional old direction',status:'adopted',progress:[]}),note=store.save('notes',{title:'Fictional target',content:'Keep this original'}),decision=store.save('decisions',{goal_id:goal.id,state:'selected'}),item=store.save('work_items',{title:'Old authorized edit',goal_id:goal.id,decision_id:decision.id,kind:'local-note',state:'awaiting_approval',check:'Old edit exists',attempts:0});
@@ -119,6 +128,18 @@ test('controlled local worker applies only its approved target and rejects a cha
 });
 test('controlled worker executes visible read tools and retains real tool receipts',async()=>{
  const {store,query}=fixture(),goal=store.save('goals',{title:'Fictional workshop',status:'adopted'}),note=store.save('notes',{title:'Fictional plan',content:'Preparation needs a listening question'}),decision=store.save('decisions',{goal_id:goal.id,state:'selected'}),item=store.save('work_items',{title:'Prepare fictional agenda',goal_id:goal.id,decision_id:decision.id,kind:'draft',allowed_action:'save-draft',check:'Use the recorded preparation requirement',state:'pending'});
- const provider=async i=>{if(i.kind==='work-verification')return {passed:true,evidence:'Uses the saved requirement'};if(!i.context.tool_results.length)return {tool_calls:[{name:'read_note',id:note.id}]};assert.equal(i.context.tool_results[0].result.content,note.content);return {deliverable:'Agenda: '+i.context.tool_results[0].result.content};};
+ const provider=async i=>{if(i.kind==='work-verification'){assert.equal(i.context.goal.id,goal.id);assert.equal(i.context.tool_results[0].result.content,note.content);assert.equal(i.context.source_notes.some(n=>n.id===note.id),true);return {passed:true,evidence:'Uses the saved requirement'};}if(!i.context.tool_results.length)return {tool_calls:[{name:'read_note',id:note.id}]};assert.equal(i.context.tool_results[0].result.content,note.content);return {deliverable:'Agenda: '+i.context.tool_results[0].result.content};};
  await jobExecutor(provider,query)({kind:'goal-work'},{store,settings:{}});assert.equal(store.get('work_items',item.id).state,'verified');assert.equal(store.list('work_tool_receipts')[0].tool,'read_note');
+});
+test('a checked local edit is refused when its actual read tools missed the required source',async()=>{
+ const {store,query}=fixture(),domains=new Domains(query),source=store.save('notes',{title:'Required fictional rain rule',content:'Stop watering when the sensor is wet.'}),other=store.save('notes',{title:'Different fictional source',content:'This is an unrelated briefing.'}),target=store.save('notes',{title:'Fictional approved target',content:'Keep original target'}),goal=store.save('goals',{title:'Read the required rain rule with read_note and edit the approved target only',status:'adopted'}),decision=store.save('decisions',{goal_id:goal.id,state:'selected'}),item=store.save('work_items',{goal_id:goal.id,decision_id:decision.id,kind:'local-note',state:'awaiting_approval',check:'The actual read_note tool reads '+source.id+' and the replacement quotes its rule',attempts:0});
+ await domains.invoke('personal-operation',{type:'work-allow-local',id:item.id,note_id:target.id});
+ const provider=async request=>{
+  if(request.kind==='work-verification')return {passed:true,evidence:'I wrongly claim that the source was read.'};
+  return request.context.tool_results.length?{deliverable:'I claim to have read the required source.'}:{tool_calls:[{name:'read_note',id:other.id}]};
+ };
+ await assert.rejects(jobExecutor(provider,query)({kind:'goal-work'},{store,settings:{}}),/Completion check failed/);
+ assert.equal(store.get('notes',target.id).content,'Keep original target');
+ assert.equal(store.get('work_items',item.id).state,'needs_review');
+ assert.equal(store.get('goals',goal.id).progress?.length||0,0);
 });

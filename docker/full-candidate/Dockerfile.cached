@@ -1,8 +1,8 @@
 ARG BASE_IMAGE
 FROM ${BASE_IMAGE}
 USER root
-COPY . /opt/godspeed/kit/
-RUN test "$(node --version)" = "v22.19.0" && chmod 755 /opt/godspeed/kit/docker/full-candidate/entrypoint.sh && chown -R hermes:hermes /opt/godspeed/kit
+COPY --chown=hermes:hermes . /opt/godspeed/kit/
+RUN test "$(node --version)" = "v22.19.0" && chmod 755 /opt/godspeed/kit/docker/full-candidate/entrypoint.sh
 ARG REVISION
 ARG BASE_IMAGE
 ARG VERIFIED_BASE

@@ -79,8 +79,3 @@ Do not mistake a broken source for no change. Preserve exact HTTP or comparison 
 All topics, candidates, findings, observations and runs are canonical notebook records and travel through the notebook's history, sync and verified user-state backup. There is no private engine directory, hidden per-topic cron or second authoritative queue.
 
 Verify through the installed interface: add two fictional topics, observe one sweeper; retain four answers; store a graded candidate and expiry; sample an unchanged source quietly; change one criterion-relevant line and verify its exact quote; cap the common queue; fail the source on three due cycles and see one notice; restore the source and see that notice resolve. Read the retained records after restart. A saved recipe file alone proves none of those behaviors.
-
-
-## Installed personal workspace
-
-Use the current user workspace and its configured providers. Keep original workflow, command contracts, scripts and verification criteria. Read the workspace authorization rules before sends, sign-ins, payments or publishing. Search existing device-private credentials before asking for configuration. Saved output and a passing screen are not evidence that the full requested result happened.
