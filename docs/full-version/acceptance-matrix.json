@@ -1,6 +1,6 @@
 {
   "format": 2,
-  "checked_at": "2026-10-03T21:34:40.711Z",
+  "checked_at": "2026-10-03T22:38:03.708175+00:00",
   "complete": false,
   "items": [
     {
@@ -2684,13 +2684,15 @@
       "name": "audit",
       "trigger": "Installed skill audit",
       "durable_state": "Skill-specific files and receipts",
-      "execution": "skills/audit/SKILL.md",
+      "execution": "notebook/reusable-recipes/audit/SKILL.md",
       "activation": "Explicit user choice; inspect installed schedules and settings",
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
-      "criterion": "Inspect file validation, unresolved conflicts, schedule receipts, backups and progress toward current goals.\r Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation.",
+      "criterion": "Four 25-point evidence-led structural layers, three impact-ranked corrections, rules review, loaded shared-memory checks, message-readability review and weekly comparator rotation; no structural score implies behavioral completion.",
       "status": "source only",
-      "evidence": [],
+      "evidence": [
+        "Full maintained portable workflow: notebook/reusable-recipes/audit/SKILL.md; generated installed copy matches the maintained source plus workspace adapter. Actual installed audit deliverable remains required."
+      ],
       "required": true,
       "target_test": "Exercise audit through its installed entry point and check actual results after restart"
     },
@@ -3214,13 +3216,15 @@
       "name": "memory-audit",
       "trigger": "Installed skill memory-audit",
       "durable_state": "Skill-specific files and receipts",
-      "execution": "skills/memory-audit/SKILL.md",
+      "execution": "notebook/reusable-recipes/memory-audit/SKILL.md",
       "activation": "Explicit user choice; inspect installed schedules and settings",
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
-      "criterion": "Search records and readable workspace files.\r Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation.",
+      "criterion": "Read every actual loaded surface completely; check structured current claims and dependencies, classify dated evidence, preserve subject/history while correcting authorized mistakes, and verify fresh ordinary-chat retrieval including synonyms and hidden exclusions.",
       "status": "source only",
-      "evidence": [],
+      "evidence": [
+        "Full maintained portable workflow: notebook/reusable-recipes/memory-audit/SKILL.md; documented installed file/MCP adapters replace personal-engine commands and private incidents. Actual installed audit/correction/retrieval remains required."
+      ],
       "required": true,
       "target_test": "Exercise memory-audit through its installed entry point and check actual results after restart"
     },
@@ -3787,7 +3791,8 @@
       "criterion": "Source-linked corrections survive restart; hidden/superseded facts excluded; synonym comparison with Menerio",
       "status": "partial",
       "evidence": [
-        "Installed chat saved/retrieved the fictional rain-sensor rule. Person chat omitted topics and mixed histories; the corrected installed path produced one future-facing listening question and retained its own exchange after reload. Model-free search leaked hidden notes; visibility and bounded meaning-expanded ranking now pass regressions. Read-only Menerio queries collected; common-corpus retrieval equivalence remains unproven."
+        "Installed chat saved/retrieved the fictional rain-sensor rule. Person chat omitted topics and mixed histories; the corrected installed path produced one future-facing listening question and retained its own exchange after reload. Model-free search leaked hidden notes; visibility and bounded meaning-expanded ranking now pass regressions. Read-only Menerio queries collected; common-corpus retrieval equivalence remains unproven.",
+        "memory-subject.test.mjs verifies actual person subjects, correction history, distinct proposal fingerprints, hidden/invented/inconsistent subject refusal, and repairing omitted conversation subjects before writes. Installed real-provider memory acceptance remains required."
       ],
       "required": true,
       "target_test": "Compare corrections, hidden/superseded facts, dates, ambiguity and synonyms after restart against a common Menerio corpus."
@@ -3861,7 +3866,8 @@
       "evidence": [
         "Retained Windows/VPS/fixture backups restored into empty copies with matching knowledge/media digests. Normal fixture notebook Save a backup and Restore a separate copy checked 229 records and 1246 durable files, reported six rebuildable exclusions, retained the copy and rebuilt search without overwriting active records.",
         "A real backup race was reproduced: the captured files preceded a concurrent save, but the manifest counted later live records. The source now retains the actual snapshot count. Verified empty retained restorations before source-assisted corrections: Windows 849 records/2325 durable comparisons and fictional endpoint 1623/2641, each with six rebuildable exclusions. Reports: verified-source-assisted-recovery-corrections.log. The isolated installer backups were relocated to private E storage with verified manifest hashes and an original-path junction; every recovery path remains. Native Inno upgrade failed during backup with incomplete PowerShell 5.1 stderr. Packaged setup succeeded on a second PowerShell 7 approach; normal native-installer acceptance remains pending. A new native helper retains complete stderr and checks exit status, tested on native PowerShell 5.1.",
-        "Additional source-assisted Windows backups retained and verified empty restorations: Windows 851 records and 2327 durable-file comparisons, endpoint 1670 and 2688, verified-changed-direction-corrections.log. Fresh corrected supervisor observed over fourteen minutes of ordinary UI polling and endpoint tool work with zero restarts and no health failure history at 21:18 UTC. This is bounded stability evidence, not a two-week trial or final packaged recovery acceptance. Three obsolete source-build directories on the VPS were losslessly archived, every file and downloaded archive checked before their directories were removed; remote and E copies remain, another session build and all recovery copies were preserved."
+        "Additional source-assisted Windows backups retained and verified empty restorations: Windows 851 records and 2327 durable-file comparisons, endpoint 1670 and 2688, verified-changed-direction-corrections.log. Fresh corrected supervisor observed over fourteen minutes of ordinary UI polling and endpoint tool work with zero restarts and no health failure history at 21:18 UTC. This is bounded stability evidence, not a two-week trial or final packaged recovery acceptance. Three obsolete source-build directories on the VPS were losslessly archived, every file and downloaded archive checked before their directories were removed; remote and E copies remain, another session build and all recovery copies were preserved.",
+        "Authorized development normal Settings recovery verified 943 records and 2586 files, rebuilt search and retained separate restoration storage; development-normal-backup-restore.txt. Windows native 2d57982 upgrade completed after two independently verified snapshots/restorations; Windows fixture health and normal UI reopened. Additional offline/conflict/media recovery acceptance remains required."
       ],
       "required": true,
       "target_test": "Repeat recovery/link checks on final matching Windows/VPS packages; accept offline edits, reconnection, retained conflicts and preserved choices/pauses."

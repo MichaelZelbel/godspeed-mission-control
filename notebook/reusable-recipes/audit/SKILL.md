@@ -113,8 +113,3 @@ Include one to three evidenced strengths, the ranked gaps with lost points/multi
 When saving is authorized, retain one dated notebook audit note and open/read it back. Compare to the previous baseline without replacing it. Scheduled runs already authorized to save do so; a read-only manual review asks only when saving falls outside its authorization. Publishing, sending or changing external accounts always keeps its actual approval boundary.
 
 The user gets a short explanation of the practical result and any action only they can take. No internal machinery tour, blanket completeness claim or worksheet.
-
-
-## Installed personal workspace
-
-Use the current user workspace and its configured providers. Keep original workflow, command contracts, scripts and verification criteria. Read the workspace authorization rules before sends, sign-ins, payments or publishing. Search existing device-private credentials before asking for configuration. Saved output and a passing screen are not evidence that the full requested result happened.

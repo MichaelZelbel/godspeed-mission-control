@@ -77,8 +77,3 @@ Save one dated audit note in the selected notebook when saving is authorized. Co
 Include the number of complete surfaces reviewed, which connected sources could not be read, and facts the audit cannot see because they were never recorded. A small findings list is not proof of complete knowledge.
 
 The user-facing result is one short explanation and one notebook link when useful. Ask at most one specific user-only question after exhausting available evidence. Never hand over blanks, forms or checks the assistant can do. Do not publish or send the report outward without separate approval.
-
-
-## Installed personal workspace
-
-Use the current user workspace and its configured providers. Keep original workflow, command contracts, scripts and verification criteria. Read the workspace authorization rules before sends, sign-ins, payments or publishing. Search existing device-private credentials before asking for configuration. Saved output and a passing screen are not evidence that the full requested result happened.
