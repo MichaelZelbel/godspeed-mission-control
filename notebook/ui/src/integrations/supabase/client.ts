@@ -6,8 +6,8 @@ const snapshots = new Map<string,any>();
 async function request(route:string,body?:any) {
   try {
     const response=await fetch('/api/'+route,{method:body===undefined?'GET':'POST',headers:{'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});
-    const result=await response.json();
-    if(!response.ok)return {data:null,error:{message:result.error||'Request failed',code:result.code,context:response}};
+    const context=response.clone();const result=await response.json();
+    if(!response.ok)return {data:null,error:{message:result.error||'Request failed',code:result.code,context}};
     return result;
   }catch(e:any){return {data:null,error:{message:e.message}};}
 }

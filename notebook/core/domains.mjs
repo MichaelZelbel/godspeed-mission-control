@@ -5,6 +5,7 @@ import { Review } from './review.mjs';
 import { fileContext } from './context.mjs';
 import {Connectors} from './connectors.mjs';
 import {visibleRows,knowledgeContext} from './visibility.mjs';
+import {chatContext,chatAttachments} from './chat-context.mjs';
 function json(result){return typeof result==='string'?JSON.parse(result.trim().replace(/^```(?:json)?\s*/,'').replace(/\s*```$/,'')):result;}
 function cites(source,quote){return typeof source==='string'?source.includes(quote):source&&typeof source==='object'?Object.values(source).some(value=>cites(value,quote)):false;}
 function reviewData(value){const result={...value};for(const field of ['themes','open_loops','connections','gaps','people_summary']){if(typeof result[field]==='string'&&field==='gaps')result[field]=[result[field]];if(result[field]==null)result[field]=[];if(!Array.isArray(result[field]))throw new Error('The review returned an invalid '+field+' list');}return result;}
@@ -150,13 +151,8 @@ export class Domains {
     }
     if (['note-chat','collection-chat','conversation-chat','draft-event','weekly-review','generate_collection_schema'].includes(name)) {
       if (!this.provider) throw new Error('Choose and configure a model provider before asking Godspeed');
-      const notes = input.note_id ? visibleRows(this.query,'notes').filter(r=>r.id===input.note_id) : visibleRows(this.query,'notes');
-      if(input.note_id&&!notes.length)throw new Error('This note is hidden from the assistant');
-      const context = { ...fileContext(this.store),...knowledgeContext(this.query),notes, facts: visibleRows(this.query,'profile_facts').filter(f=>f.is_current&&f.show_to_agent), goals: this.query.rows('goals') };
-      context.collection=input.collection_id?this.store.get('collections',input.collection_id):null;context.items=input.collection_id?this.query.rows('collection_items').filter(i=>i.collection_id===input.collection_id):[];
-      context.messages=input.conversation_id?this.query.rows('conversation_messages').filter(m=>m.conversation_id===input.conversation_id).sort((a,b)=>a.created_at.localeCompare(b.created_at)).slice(-40).map(({role,content})=>({role,content})):[];
-      context.person=(input.contact_id||input.personId)?visibleRows(this.query,'contacts').find(r=>r.id===(input.contact_id||input.personId)):null;
-      if((input.contact_id||input.personId)&&!context.person)throw new Error('This person is hidden from the assistant');
+      const context=chatContext(this.query,input),notes=context.notes;
+      const attached=chatAttachments(this.mediaRoot,input.files||[]);context.documents=attached.documents;
       const contracts={
         generate_collection_schema:'Return JSON {collection:{name,icon,description,visibility:"personal"},field_schema:[{key,label,type,primary,indexable,options}],agent_instructions}. Allowed field types: text,longtext,number,currency,date,datetime,boolean,select,multiselect,url,email,phone,link_note,link_person,link_collection_item.',
         'draft-event':'Return JSON {draft:{title,description,happened_at,happened_end,status,impact_level,confidence_date,confidence_truth,people}} from user text. Do not save until the user confirms.',
@@ -164,14 +160,23 @@ export class Domains {
         'collection-chat':'Return JSON {reply,items_created?:[{data}],item_updates?:[{id,data}]}. Change rows only when the user explicitly asked. Use field_schema keys and supplied row IDs.',
         'conversation-chat':'Return JSON {reply,notes_created?:[{title,content}]} using the person context. Create notes only when asked.'
       };
-      const result = await this.provider({ kind: name, input, context, contract: contracts[name]||'Answer using the user context. Do not perform outward actions. Explicitly distinguish assumptions from recorded facts.' });
+      const {signal,files,...safeInput}=input;
+      const result = await this.provider({ kind: name, input:safeInput, context, attachments:attached.images, signal, contract: (contracts[name]||'Answer using the user context. Do not perform outward actions. Explicitly distinguish assumptions from recorded facts.')+' Use plain, concise language. Do not use em dashes. Only the retrieved records are available; never claim to have searched an entire database.' });
+      signal?.throwIfAborted();
       const structured=contracts[name]?json(result):typeof result==='object'?result:{reply:result};
+      if(name==='note-chat'){
+        const request=String(input.message||input.messages?.filter(m=>m.role==='user').at(-1)?.content||'').trim();
+        const edit=/^(?:(?:please|bitte)\s+|(?:can|could|would)\s+you\s+(?:please\s+)?)?(?:edit|revise|change|update|rewrite|replace|correct|fix|translate|append|insert|add|rename|mark|delete|remove|trash|schreibe|ändere|bearbeite|korrigiere|ergänze|lösche)\b/i.test(request);
+        if(!input.note_id||!edit){delete structured.note_content;delete structured.note_changes;delete structured.trash_note;}
+        else if(structured.note_content===this.store.get('notes',input.note_id)?.content)delete structured.note_content;
+      }
       if(['generate_collection_schema','draft-event'].includes(name))return structured;
       const content=structured.reply||JSON.stringify(structured),tool_results=[],notes_created=[];
       if(name==='note-chat'&&typeof structured.note_content==='string'){
-        const original=notes[0];if(input.base_updated_at&&original.updated_at!==input.base_updated_at)this.store.conflict('notes',{id:original.id,content:structured.note_content},original);
+        const original=this.store.get('notes',input.note_id);if(!original)throw new Error('Choose a current note before editing it');if(input.base_updated_at&&original.updated_at!==input.base_updated_at)this.store.conflict('notes',{id:original.id,content:structured.note_content},original);
         const updated=this.store.save('notes',{id:original.id,content:structured.note_content},original._hash);structured.note_edit={previous_content:original.content,content:updated.content,updated_at:updated.updated_at};tool_results.push({tool:'update_note',success:true});
       }
+      if(name==='note-chat'&&(structured.note_changes||structured.trash_note)&&!input.note_id)throw new Error('Choose a current note before changing it');
       if(name==='note-chat'&&structured.note_changes){const original=this.store.get('notes',notes[0]?.id);if(!original)throw new Error('Current note missing');if(Object.keys(structured.note_changes).some(k=>!['title','tags','metadata','is_favorite'].includes(k)))throw new Error('Unknown note field');this.store.save('notes',{id:original.id,...structured.note_changes},original._hash);tool_results.push({tool:'update_note_metadata',success:true});}
       if(name==='note-chat'&&structured.trash_note){if(!notes[0])throw new Error('Current note missing');this.store.structural('notes',notes[0].id,'remove');tool_results.push({tool:'trash_note',success:true});}
       for(const note of structured.notes_created||[])if(note.title&&typeof note.content==='string')notes_created.push(this.store.save('notes',{title:note.title,content:note.content,source_app:name}));

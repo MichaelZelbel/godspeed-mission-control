@@ -41,11 +41,13 @@ import {
   Minimize2,
   Expand,
   Shrink,
+  ExternalLink,
 } from "lucide-react";
 // Lazy: this component is in DashboardLayout, so a static import put the
 // Markdown stack into the main chunk. See ChatMarkdown.tsx.
 const ChatMarkdown = lazy(() => import("./ChatMarkdown"));
 
+import ChatComposer, {type ChatFile} from "./ChatComposer";
 type ChatMessage = PersistedChatMessage;
 type SizeMode = "docked" | "expanded" | "fullscreen";
 
@@ -57,19 +59,24 @@ function loadSizeMode(): SizeMode {
   return v === "expanded" || v === "fullscreen" ? v : "docked";
 }
 
-export function GlobalAIChatFAB() {
+export function GlobalAIChatFAB({page=false}:{page?:boolean}) {
   const { user, session } = useAuth();
   const location = useLocation();
   const queryClient = useQueryClient();
   const isMobile = useIsMobile();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(page);
   const [confirm, confirmDialog] = useConfirmDialog();
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sizeMode, setSizeModeState] = useState<SizeMode>(() => loadSizeMode());
   const scrollRef = useRef<HTMLDivElement>(null);
+  const followRef=useRef(true);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [contextTitle,setContextTitle]=useState("");
+  const [files,setFiles]=useState<ChatFile[]>([]),[model,setModel]=useState(''),[effort,setEffort]=useState('');
+  const requestRef=useRef<string|null>(null),stoppedRef=useRef(false);
+  const stopReply=async()=>{if(requestRef.current){stoppedRef.current=true;await fetch('/api/chat/stop',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:requestRef.current})});}};
 
   const setSizeMode = useCallback((m: SizeMode) => {
     setSizeModeState(m);
@@ -86,15 +93,15 @@ export function GlobalAIChatFAB() {
   // Detect note context from the current route
   const noteId = useMemo(() => {
     const match = location.pathname.match(/^\/dashboard\/notes\/([^/]+)$/);
-    return match ? match[1] : null;
-  }, [location.pathname]);
+    return match ? match[1] : page?new URLSearchParams(location.search).get("note"):null;
+  }, [location.pathname,location.search,page]);
 
   // Detect person context (People profile page) so the assistant knows whose
   // profile the user is looking at
   const personId = useMemo(() => {
     const match = location.pathname.match(/^\/dashboard\/people\/([^/]+)$/);
-    return match ? match[1] : null;
-  }, [location.pathname]);
+    return match ? match[1] : page?new URLSearchParams(location.search).get("person"):null;
+  }, [location.pathname,location.search,page]);
 
   // Detect collection context from /collections/:slug and optional /:itemId
   const collectionSlug = useMemo(() => {
@@ -141,6 +148,8 @@ export function GlobalAIChatFAB() {
         ? `person:${personId}`
         : "general";
 
+  useEffect(()=>{setContextTitle('');if(noteId)supabase.from('notes').select('title').eq('id',noteId).single().then(({data}:any)=>setContextTitle(data?.title||'Untitled note'));else if(personId)supabase.from('contacts').select('name').eq('id',personId).single().then(({data}:any)=>setContextTitle(data?.name||'Current person'));},[noteId,personId]);
+
   // Persisted chat state for the current context
   const [state, setState] = useState<PersistedChatState>(() =>
     loadChatState(user?.id, contextKey),
@@ -160,6 +169,7 @@ export function GlobalAIChatFAB() {
   // Keyboard shortcut: Cmd/Ctrl+Shift+K; Escape steps size down before closing
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      if(page)return;
       if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === "K") {
         e.preventDefault();
         setOpen((prev) => !prev);
@@ -177,7 +187,9 @@ export function GlobalAIChatFAB() {
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [open, effectiveMode, isMobile, setSizeMode]);
+  }, [page, open, effectiveMode, isMobile, setSizeMode]);
+
+  useEffect(()=>{if(open)setState(loadChatState(user?.id,contextKey));},[open]);
 
   // Focus textarea when opened
   useEffect(() => {
@@ -192,7 +204,7 @@ export function GlobalAIChatFAB() {
   // land on the first message and have to scroll down manually. The rAF waits
   // for layout (and markdown/images) to settle before pinning to the bottom.
   useEffect(() => {
-    if (!open) return;
+    if (!open||!followRef.current) return;
     const pinToBottom = () => {
       if (scrollRef.current) {
         scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -246,20 +258,20 @@ export function GlobalAIChatFAB() {
 
   const sendMessage = useCallback(async () => {
     const text = input.trim();
-    if (!text || isLoading || !session) return;
+    if ((!text&&!files.length) || isLoading || requestRef.current || !session) return;
 
     setError(null);
     const sentKey = chatKey;
     const sentUserId = user?.id;
     const sentContext = contextKey;
-    const userMsg: ChatMessage = { role: "user", content: text };
+    const userMsg: ChatMessage = { role: "user", content: text||"Please describe the attached files.", attachments:files };
     const nextState: PersistedChatState = {
       ...state,
       messages: [...state.messages, userMsg],
     };
-    setState(nextState);
+    followRef.current=true;setState(nextState);
     setInput("");
-    setIsLoading(true);
+    setIsLoading(true);stoppedRef.current=false;requestRef.current=crypto.randomUUID();
 
     try {
       const apiMessages = buildApiMessages(nextState);
@@ -289,7 +301,7 @@ export function GlobalAIChatFAB() {
 
 
       const { data, error: fnErr } = await supabase.functions.invoke(chatFn, {
-        body: invokeBody,
+        body: {...invokeBody,files:files.length?files:state.messages.slice().reverse().find(m=>m.attachments?.length)?.attachments||[],model:model||undefined,effort:effort||undefined,request_id:requestRef.current},
       });
 
       // A non-2xx answer (out of credits is a 402) arrives as fnErr with
@@ -373,17 +385,18 @@ export function GlobalAIChatFAB() {
         );
       }
 
+      setFiles([]);
       deliver(sentKey, sentUserId, sentContext, updated);
       summarizeLater(chatFn, sentKey, sentUserId, sentContext, updated);
 
       triggerCreditsRefresh();
     } catch (err: any) {
       // The error belongs to the conversation that asked; do not show it in another.
-      if (chatKeyRef.current === sentKey) setError(err.message || "Something went wrong");
+      if (chatKeyRef.current === sentKey){setError(stoppedRef.current?"Reply stopped.":err.message || "Something went wrong");if(!stoppedRef.current)setInput(prev=>prev||text);}
     } finally {
-      setIsLoading(false);
+      setIsLoading(false);requestRef.current=null;
     }
-  }, [input, isLoading, session, state, noteId, personId, collectionId, collectionItemId, queryClient, chatKey, contextKey, user?.id, deliver, summarizeLater]);
+  }, [input, files, model, effort, isLoading, session, state, noteId, personId, collectionId, collectionItemId, queryClient, chatKey, contextKey, user?.id, deliver, summarizeLater]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     // Enter sends; Shift+Enter inserts a newline. This matches the in-note and
@@ -413,9 +426,9 @@ export function GlobalAIChatFAB() {
       : "Ask me anything about your notes, people, and media.";
 
   // Dimensions per mode
-  const isLarge = effectiveMode !== "docked";
+  const isLarge = page || effectiveMode !== "docked";
   const panelStyle: React.CSSProperties =
-    effectiveMode === "fullscreen"
+    page ? {height:"calc(100dvh - 104px)",minHeight:400,width:"100%"} : effectiveMode === "fullscreen"
       ? {
           top: 16,
           right: 16,
@@ -441,7 +454,7 @@ export function GlobalAIChatFAB() {
   return (
     <>
       {/* FAB button */}
-      {!open && (
+      {!page && !open && (
         <button
           onClick={() => setOpen(true)}
           className={cn(
@@ -450,7 +463,7 @@ export function GlobalAIChatFAB() {
             "hover:bg-primary/90 transition-all hover:scale-105 active:scale-95",
             "focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background",
           )}
-          title="Chat with Godspeed (⌘⇧K)"
+          title="Chat with Godspeed (Ctrl+Shift+K)"
           aria-label="Chat with Godspeed"
         >
           <Bot className="h-6 w-6" />
@@ -458,7 +471,7 @@ export function GlobalAIChatFAB() {
       )}
 
       {/* Optional backdrop in fullscreen for focus */}
-      {open && effectiveMode === "fullscreen" && (
+      {!page && open && effectiveMode === "fullscreen" && (
         <div
           className="fixed inset-0 z-40 bg-background/40 backdrop-blur-sm animate-in fade-in duration-150"
           onClick={() => setSizeMode(isMobile ? "docked" : "expanded")}
@@ -468,25 +481,27 @@ export function GlobalAIChatFAB() {
       {/* Docked / expanded / fullscreen panel */}
       {open && (
         <div
-          className="fixed z-50 animate-in fade-in slide-in-from-bottom-2 duration-200"
+          className={page ? "relative mx-auto max-w-5xl" : "fixed z-50 animate-in fade-in slide-in-from-bottom-2 duration-200"}
           style={panelStyle}
         >
-          <div className="bg-card border border-border rounded-xl shadow-2xl overflow-hidden flex flex-col h-full w-full">
+          <div className={page?"overflow-hidden flex flex-col h-full w-full":"bg-card border border-border rounded-2xl shadow-2xl overflow-hidden flex flex-col h-full w-full"}>
             {/* Header */}
             <div className="flex items-center justify-between px-4 py-2.5 border-b border-border shrink-0">
               <div className="flex items-center gap-2 min-w-0">
                 <Bot className="h-4 w-4 text-primary shrink-0" />
                 <span className="text-sm font-semibold truncate">
-                  {noteId ? "Godspeed · Current note" : "Godspeed"}
+                  {noteId ? "Godspeed  /  Current note" : "Godspeed"}
                 </span>
                 {state.messages.length > 0 && (
                   <span className="text-[10px] text-muted-foreground shrink-0">
-                    · {state.messages.length} msgs{state.summary ? " · summary" : ""}
+                     /  {state.messages.length} msgs{state.summary ? "  /  summary" : ""}
                   </span>
                 )}
               </div>
-              <div className="flex items-center gap-1">
-                <span className="text-[10px] text-muted-foreground hidden sm:inline mr-1">⌘⇧K</span>
+              {page&&<Button variant="ghost" className="h-11" onClick={handleClear} disabled={isLoading}>Clear conversation</Button>}
+              {!page&&<div className="flex items-center gap-1">
+                <a className="inline-flex h-10 w-10 items-center justify-center rounded hover:bg-muted" href={'/dashboard/chat'+(noteId?'?note='+encodeURIComponent(noteId):personId?'?person='+encodeURIComponent(personId):'')} target="_blank" rel="noreferrer" aria-label="Open chat in a new window" title="Open chat in a new window"><ExternalLink className="h-4 w-4"/></a>
+                <span className="text-[10px] text-muted-foreground hidden sm:inline mr-1">Ctrl+Shift+K</span>
                 {state.messages.length > 0 && (
                   <Button
                     variant="ghost"
@@ -533,24 +548,24 @@ export function GlobalAIChatFAB() {
                 <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setOpen(false)} title="Close">
                   <X className="h-3.5 w-3.5" />
                 </Button>
-              </div>
+              </div>}
             </div>
 
             {/* Messages */}
             <div
               ref={scrollRef}
+              onScroll={()=>{const el=scrollRef.current;if(el)followRef.current=el.scrollHeight-el.scrollTop-el.clientHeight<80;}}
               className={cn(
-                "flex-1 overflow-y-auto min-h-0 space-y-3",
+                "flex-1 overflow-y-auto min-h-0 space-y-6",
                 isLarge ? "px-5 py-4" : "p-3",
               )}
             >
               {state.messages.length === 0 && (
-                <div className="text-center text-muted-foreground text-xs py-8 space-y-2">
+                <div className="text-center text-muted-foreground text-sm py-12 space-y-3">
                   <Bot className="h-8 w-8 mx-auto opacity-40" />
-                  <p>{emptyText}</p>
+                  <h2 className="text-xl font-semibold text-foreground">What would you like to work on?</h2><p>{emptyText}</p>
                   <p className="text-[10px]">
-                    I can search your notes and media, look up people's profiles, read a
-                    web page you link to, and create new notes.
+                    Attach a document or image, or ask about a note. Your conversations are saved here.
                   </p>
                 </div>
               )}
@@ -564,16 +579,16 @@ export function GlobalAIChatFAB() {
                     className={cn(
                       "rounded-lg px-3 py-2 text-sm",
                       msg.role === "user"
-                        ? "bg-primary text-primary-foreground max-w-[85%]"
+                        ? "bg-muted text-foreground max-w-[85%]"
                         : cn(
-                            "bg-muted",
+                            "bg-transparent",
                             isLarge ? "max-w-[85%] md:max-w-[75ch]" : "max-w-[85%]",
                           ),
                     )}
                   >
                     {msg.role === "assistant" ? (
                       <div className="prose prose-sm dark:prose-invert max-w-none">
-                        <Suspense fallback={<p className="whitespace-pre-wrap">{msg.content}</p>}>
+                        <Suspense fallback={<div><p className="whitespace-pre-wrap">{msg.content}</p>{msg.attachments?.map(file=><a key={file.path} className="block text-xs underline mt-2" href={"/api/media/file/"+encodeURIComponent(file.path)} target="_blank" rel="noreferrer">{file.name}</a>)}</div>}>
                           <ChatMarkdown>{msg.content}</ChatMarkdown>
                         </Suspense>
                       </div>
@@ -593,7 +608,7 @@ export function GlobalAIChatFAB() {
                               {tr.tool.replace(/_/g, " ")}
                             </span>
                             {(tr.result as any)?.success && (
-                              <span className="text-primary">✓</span>
+                              <span className="text-primary">Saved</span>
                             )}
                           </div>
                         ))}
@@ -612,7 +627,7 @@ export function GlobalAIChatFAB() {
                             <FilePlus2 className="h-3.5 w-3.5 shrink-0" />
                             <span className="truncate">
                               {n.title || "Untitled"}
-                              {n.folder_path ? ` · ${n.folder_path}` : ""}
+                              {n.folder_path ? `  /  ${n.folder_path}` : ""}
                             </span>
                           </Link>
                         ))}
@@ -642,32 +657,9 @@ export function GlobalAIChatFAB() {
               )}
             </div>
 
-            {/* Input */}
-            <div className={cn("border-t border-border shrink-0", isLarge ? "p-4" : "p-3")}>
-              <div className="flex gap-2">
-                <Textarea aria-label="Message"
-                  ref={textareaRef}
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  placeholder="Ask something…"
-                  className={cn(
-                    "min-h-[40px] resize-none text-sm",
-                    isLarge ? "max-h-[200px]" : "max-h-[120px]",
-                  )}
-                  rows={1}
-                  disabled={isLoading}
-                />
-                <Button aria-label="Send message"
-                  size="icon"
-                  className="h-10 w-10 shrink-0"
-                  onClick={sendMessage}
-                  disabled={!input.trim() || isLoading}
-                >
-                  <Send className="h-4 w-4" />
-                </Button>
-              </div>
-              <p className="text-[10px] text-muted-foreground mt-1.5">⌘↵ to send · history saved</p>
+            <div className="shrink-0 pt-3 pb-1 px-1">
+              <ChatComposer value={input} onChange={setInput} onSend={sendMessage} onStop={stopReply} busy={isLoading} files={files} onFiles={setFiles} model={model} effort={effort} onModel={setModel} onEffort={setEffort} reply={state.messages.filter(m=>m.role==='assistant').at(-1)?.content||''} context={noteId?'Current note: '+(contextTitle||'Loading...'):personId?'Current person: '+(contextTitle||'Loading...'):collectionId?'Current collection':'Your notebook / Relevant notes and people'} onError={setError}/>
+              <p className="text-[11px] text-muted-foreground text-center pt-2">Enter to send · Shift+Enter for a new line</p>
             </div>
           </div>
         </div>

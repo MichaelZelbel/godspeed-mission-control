@@ -1,3 +1,4 @@
+import ChatComposer, {type ChatFile} from "@/components/chat/ChatComposer";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -48,6 +49,9 @@ export function CollectionChatPanel({
   const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [files,setFiles]=useState<ChatFile[]>([]),[model,setModel]=useState(''),[effort,setEffort]=useState('');
+  const requestRef=useRef<string|null>(null);
+  const stopReply=async()=>{if(requestRef.current)await fetch('/api/chat/stop',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:requestRef.current})});};
 
   useEffect(() => {
     setState(loadChatState(user?.id, contextKey));
@@ -99,21 +103,22 @@ export function CollectionChatPanel({
 
   const sendMessage = useCallback(async () => {
     const text = input.trim();
-    if (!text || isLoading || !session) return;
+    if ((!text&&!files.length)||isLoading||requestRef.current||!session) return;
     setError(null);
     const sentKey = chatKey;
     const sentUserId = user?.id;
     const sentContext = contextKey;
-    const userMsg: PersistedChatMessage = { role: "user", content: text };
+    const userMsg: PersistedChatMessage = { role: "user", content: text||"Please describe the attached files.", attachments:files };
     const nextState: PersistedChatState = { ...state, messages: [...state.messages, userMsg] };
     setState(nextState);
     setInput("");
-    setIsLoading(true);
+    setIsLoading(true);requestRef.current=crypto.randomUUID();
 
     try {
       const apiMessages = buildApiMessages(nextState);
       const { data, error: fnErr } = await supabase.functions.invoke("collection-chat", {
         body: {
+          files:files.length?files:state.messages.slice().reverse().find(m=>m.attachments?.length)?.attachments||[],model:model||undefined,effort:effort||undefined,request_id:requestRef.current,
           collection_id: collectionId,
           item_id: itemId ?? null,
           messages: apiMessages,
@@ -148,15 +153,17 @@ export function CollectionChatPanel({
         onCollectionChanged();
       }
 
+      setFiles([]);
       deliver(sentKey, sentUserId, sentContext, updated);
       summarizeLater(sentKey, sentUserId, sentContext, updated);
       triggerCreditsRefresh();
     } catch (err) {
       if (chatKeyRef.current === sentKey) setError((err as Error).message || "Something went wrong");
     } finally {
+      requestRef.current=null;
       setIsLoading(false);
     }
-  }, [input, isLoading, session, state, collectionId, itemId, onCollectionChanged, chatKey, contextKey, user?.id, deliver, summarizeLater]);
+  }, [input, files,model,effort,isLoading, session, state, collectionId, itemId, onCollectionChanged, chatKey, contextKey, user?.id, deliver, summarizeLater]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -257,22 +264,8 @@ export function CollectionChatPanel({
         )}
       </div>
 
-      <div className="p-3 pb-20 border-t border-border shrink-0">
-        <div className="flex gap-2">
-          <Textarea aria-label="Message"
-            ref={textareaRef}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder={itemId ? "Ask about this item…" : "Ask about this collection…"}
-            className="min-h-[40px] max-h-[120px] resize-none text-sm"
-            rows={1}
-            disabled={isLoading}
-          />
-          <Button aria-label="Send message" size="icon" className="h-10 w-10 shrink-0" onClick={sendMessage} disabled={!input.trim() || isLoading}>
-            <Send className="h-4 w-4" />
-          </Button>
-        </div>
+      <div className="p-3 border-t border-border shrink-0">
+        <ChatComposer value={input} onChange={setInput} onSend={sendMessage} onStop={stopReply} busy={isLoading} files={files} onFiles={setFiles} model={model} effort={effort} onModel={setModel} onEffort={setEffort} reply={state.messages.filter(m=>m.role==='assistant').slice(-1)[0]?.content||''} context={'Current collection: '+collectionName} onError={setError}/>
       </div>
       {confirmDialog}
     </div>

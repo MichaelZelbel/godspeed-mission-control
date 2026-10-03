@@ -105,7 +105,15 @@ export class QueryService {
       const collection=this.store.get('collections',value.collection_id);
       for(const field of collection?.field_schema||[]){
         const target={link_note:'notes',link_person:'contacts',link_collection_item:'collection_items'}[field.type];
-        if(target)for(const id of Array.isArray(value.data?.[field.key])?value.data[field.key]:value.data?.[field.key]?[value.data[field.key]]:[]){const record=this.store.get(target,String(id));refs.push({type:target,id:String(id),...record?{uid:record.uid}:{},field:'data.'+field.key});}
+        if(target){
+          const raw=value.data?.[field.key],many=Array.isArray(raw),values=many?raw:raw?[raw]:[];
+          for(const [i,link] of values.entries()){
+            const object=link&&typeof link==='object',id=object?link.id:link;
+            if(typeof id!=='string'||!id)throw new Error('A linked collection value needs a record identifier');
+            const record=this.store.get(target,id),key='data.'+field.key+(object?(many?'.'+i:'')+'.id':'');
+            refs.push({type:target,id,...record?{uid:record.uid}:{},field:key});
+          }
+        }
       }
     }
     return [...new Map(refs.map(r => [(r.field || '') + '/' + r.type + '/' + r.id, r])).values()];

@@ -28,7 +28,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   if(!provider&&fs.existsSync(providerPath))provider=modelProvider(JSON.parse(fs.readFileSync(providerPath,'utf8')));
   provider ||= modelProvider({url:process.env.GODSPEED_MODEL_URL,key:process.env.GODSPEED_MODEL_KEY,model:process.env.GODSPEED_MODEL});
   const assistantPath=process.env.GODSPEED_ASSISTANT_CONFIG||path.join(store.state,'assistant.json');
-  if(!provider&&fs.existsSync(assistantPath)){const descriptor=JSON.parse(fs.readFileSync(assistantPath,'utf8').replace(/^\uFEFF/,''));if(descriptor.verified)provider=hermesProvider({executable:descriptor.executable,home:descriptor.home,cwd:store.root});}
+  if(!provider&&fs.existsSync(assistantPath)){const descriptor=JSON.parse(fs.readFileSync(assistantPath,'utf8').replace(/^\uFEFF/,''));if(descriptor.verified)provider=hermesProvider({executable:descriptor.executable,home:descriptor.home,cwd:store.root,sourceRoot:descriptor.sourceRoot});}
   const domains=new Domains(query,{provider}),scheduler=new Scheduler(store,{device,executor:jobExecutor(provider,query)});
   domains.sync=sync;
   mediaRoot = path.resolve(mediaRoot || path.join(store.state, 'media')); fs.mkdirSync(mediaRoot, { recursive: true });
@@ -38,7 +38,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   const instance=hash(store.root).slice(0,24);
   const remote = !['127.0.0.1', '::1', 'localhost'].includes(host);
   if (remote && !token) throw new Error('Remote access requires a candidate token');
-  const sessions = new Map();
+  const sessions = new Map();const chatRequests=new Map();
   const loginLinks=new Map();
   const apiKeys=new ApiKeys(store);
   const authorized = req => !remote || pairKeys.includes(hash(String(req.headers['x-godspeed-pair-key']||req.headers.authorization?.replace(/^Bearer /,'')||''))) || (sessions.get((req.headers.cookie || '').match(/(?:^|; )godspeed_session=([^;]+)/)?.[1]) || 0) > Date.now();
@@ -79,7 +79,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       if(route==='/api/shared-note'&&req.method==='GET'){const share=query.rows('shared_notes').find(s=>s.share_token===url.searchParams.get('token')&&s.is_active),note=share&&store.get('notes',share.note_id);if(!note||note.removed_at)return send(res,404,{error:'This share is unavailable'});return send(res,200,{title:note.title,content:note.content,tags:note.tags,entity_type:note.entity_type,created_at:note.created_at,updated_at:note.updated_at});}
       if (route.startsWith('/api/') && !authorized(req)) return send(res, 401, { error: 'Authentication required' });
       if(route==='/chat'&&req.method==='GET'){
-        res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','Referrer-Policy':'no-referrer','X-Content-Type-Options':'nosniff'});return res.end(browserChat);
+        res.writeHead(303,{'Location':'/dashboard/chat','Cache-Control':'no-store'});return res.end();
       }
       if(route==='/api/browser-chat'){
         const conversation='browser-owner';
@@ -162,11 +162,12 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         const bytes = await body(req, 100 * 1024 * 1024), form = await new Request('http://localhost/', { method: 'POST', headers: { 'content-type': req.headers['content-type'] }, body: bytes }).formData();
         const file = form.get('file'); if (!(file instanceof Blob)) throw new Error('Missing media file');
         const original = String(form.get('path') || file.name || 'media'), data = Buffer.from(await file.arrayBuffer()), digest = hash(data);
+        const extractedText=form.get('extracted_text');if(extractedText!=null&&(typeof extractedText!=='string'||extractedText.length>60000||file.type!=='application/pdf'))throw new Error('Invalid extracted PDF text');
         const target = digest + '-' + safe(path.basename(original).replace(/[^a-zA-Z0-9_.-]/g, '_') || 'media');
         atomic(path.join(mediaRoot, target), data);
         const previousFile=path.join(mediaRoot,hash(original)+'.mapping.json');
         if(fs.existsSync(previousFile)){const previous=JSON.parse(fs.readFileSync(previousFile,'utf8'));if(!previous.removed_at&&previous.sha256!==digest)throw new Error('This media path already has different content. Choose a new path; both binaries were retained.');}
-        atomic(path.join(mediaRoot, hash(original) + '.mapping.json'), JSON.stringify({ path: original, file: target, sha256: digest, size: data.length, contentType: file.type }));
+        atomic(path.join(mediaRoot, hash(original) + '.mapping.json'), JSON.stringify({ path: original, file: target, sha256: digest, size: data.length, contentType: file.type,...(extractedText?{extractedText}:{}) }));
         return send(res, 200, { data: { path: original, fullPath: original, id: digest }, error: null });
       }
       if(route==='/api/media/remove'&&req.method==='POST'){
@@ -178,7 +179,15 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         if(mapping.removed_at)return send(res,404,{error:'Media removed'});
         res.writeHead(200, { 'Content-Type': mapping.contentType || 'application/octet-stream', 'Content-Length': mapping.size, 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "default-src 'none'; sandbox" }); fs.createReadStream(path.join(mediaRoot, safe(mapping.file))).pipe(res); return;
       }
-      if (route.startsWith('/api/functions/') && req.method === 'POST') { const name=route.slice('/api/functions/'.length),input=JSON.parse(await body(req));const data=name.startsWith('mc-api-keys')?apiKeys.invoke(name,input):await domains.invoke(name,input);index.rebuild();return send(res,200,name==='backfill-media-analysis'?data:{data,error:null}); }
+      if(route==='/api/chat/options'&&req.method==='GET')return send(res,200,provider?.options?await provider.options():{current:'Connected model',models:[{id:'',efforts:[]}]});
+      if(route==='/api/chat/stop'&&req.method==='POST'){const input=JSON.parse(await body(req));chatRequests.get(input.id)?.abort();return send(res,200,{ok:true});}
+      if (route.startsWith('/api/functions/') && req.method === 'POST') {
+        const name=route.slice('/api/functions/'.length),input=JSON.parse(await body(req));
+        const isChat=['note-chat','collection-chat','conversation-chat'].includes(name),id=input.request_id;
+        if(isChat&&id&&(!/^[a-f0-9-]{36}$/.test(id)||chatRequests.has(id)))throw new Error('Invalid chat request');
+        const controller=new AbortController();if(isChat&&id)chatRequests.set(id,controller);
+        try{const data=name.startsWith('mc-api-keys')?apiKeys.invoke(name,input):await domains.invoke(name,{...input,...(isChat?{signal:controller.signal}:{})});index.rebuild();return send(res,200,name==='backfill-media-analysis'?data:{data,error:null});}finally{if(isChat&&id)chatRequests.delete(id);}
+      }
       if (route.startsWith('/api/')) return send(res, 404, { error: 'Unknown operation' });
       const requested = path.resolve(uiRoot, '.' + route); if (requested !== uiRoot && !requested.startsWith(uiRoot + path.sep)) return send(res, 403, { error: 'Invalid path' });
       const file = fs.existsSync(requested) && fs.statSync(requested).isFile() ? requested : path.join(uiRoot, 'index.html');

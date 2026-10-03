@@ -36,7 +36,7 @@ export class FileSync {
     if(this.git(['diff','--cached','--name-only']))this.git(['commit','-m','Save Godspeed Mission Control records']);
   }
   reconcile(){
-    return this.store.withLock(()=>{
+    try{return this.store.withLock(()=>{
       try{
         this.commitLocal();
         try{this.git(['fetch',this.remote,this.branch]);}catch(error){
@@ -50,7 +50,10 @@ export class FileSync {
         this.last={state:'synced',at:new Date().toISOString(),pending:0};
       }catch(e){this.last={state:this.pendingConflicts().length?'conflict':'pending',at:new Date().toISOString(),error:'Sync did not complete; local files remain available',detail: String(e.message).split('\n')[0]};}
       atomic(path.join(this.store.state,'sync-status.json'),JSON.stringify(this.last,null,2));return this.last;
-    });
+    });}catch(error){
+      this.last={state:'pending',at:new Date().toISOString(),error:'Sync will retry; local files remain available',detail:error.message==='Workspace is being written by another process'?'The assistant is saving its state.': 'The workspace needs a successful synchronization retry.'};
+      atomic(path.join(this.store.state,'sync-status.json'),JSON.stringify(this.last,null,2));return this.last;
+    }
   }
   integrate(remoteRef){
     const integrationRoot=path.join(this.store.state,'sync-worktrees'),dir=path.join(integrationRoot,randomUUID());fs.mkdirSync(integrationRoot,{recursive:true});

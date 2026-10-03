@@ -15,7 +15,7 @@ test('browser chat authenticates, saves messages and recalls history after resta
   const login=async()=>{const response=await post('/api/login',{token:'synthetic-token'});assert.equal(response.status,200);return response.headers.get('set-cookie').split(';')[0];};
   try{
     assert.equal((await fetch(base+'/api/browser-chat')).status,401);
-    assert.match(await(await fetch(base+'/chat')).text(),/Godspeed Mission Control chat/);
+    const page=await fetch(base+'/chat',{redirect:'manual'});assert.equal(page.status,303);assert.equal(page.headers.get('location'),'/dashboard/chat');
     let cookie=await login();assert.equal((await post('/api/browser-chat',{message:'Remember lighthouse'},cookie)).status,200);
     await service.close();service=await createService({root,host:'0.0.0.0',port:0,token:'synthetic-token',provider});base='http://127.0.0.1:'+service.address.port;
     assert.equal((await fetch(base+'/api/browser-chat',{headers:{Cookie:cookie}})).status,401);

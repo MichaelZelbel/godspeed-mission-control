@@ -12,6 +12,7 @@ import { loadFileChat, saveFileChat, clearFileChat } from '@/local/file-chat';
 export interface PersistedChatMessage {
   role: "user" | "assistant";
   content: string;
+  attachments?: Array<{path:string;name:string;type:string;text?:string}>;
   toolResults?: Array<{
     tool: string;
     args: Record<string, unknown>;

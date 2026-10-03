@@ -1,3 +1,4 @@
+import ChatComposer, {type ChatFile} from "@/components/chat/ChatComposer";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -64,6 +65,9 @@ export function NoteChatPanel({ note, onClose, onNoteChanged }: NoteChatPanelPro
   const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [files,setFiles]=useState<ChatFile[]>([]),[model,setModel]=useState(''),[effort,setEffort]=useState('');
+  const requestRef=useRef<string|null>(null);
+  const stopReply=async()=>{if(requestRef.current)await fetch('/api/chat/stop',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:requestRef.current})});};
 
   // Hydrate from localStorage when the note (context) changes
   useEffect(() => {
@@ -120,19 +124,19 @@ export function NoteChatPanel({ note, onClose, onNoteChanged }: NoteChatPanelPro
 
   const sendMessage = useCallback(async () => {
     const text = input.trim();
-    if (!text || isLoading || !session) return;
+    if ((!text&&!files.length)||isLoading||requestRef.current||!session) return;
 
     setError(null);
     const sentUserId = user?.id;
     const sentContext = contextKey;
-    const userMsg: ChatMessage = { role: "user", content: text };
+    const userMsg: ChatMessage = { role: "user", content: text||"Please describe the attached files.", attachments:files };
     const nextState: PersistedChatState = {
       ...state,
       messages: [...state.messages, userMsg],
     };
     setState(nextState);
     setInput("");
-    setIsLoading(true);
+    setIsLoading(true);requestRef.current=crypto.randomUUID();
 
     try {
       const apiMessages = buildApiMessages(nextState);
@@ -142,6 +146,7 @@ export function NoteChatPanel({ note, onClose, onNoteChanged }: NoteChatPanelPro
       const flushed = await flushNoteSave(note.id);
       const { data, error: fnErr } = await supabase.functions.invoke("note-chat", {
         body: {
+          files:files.length?files:state.messages.slice().reverse().find(m=>m.attachments?.length)?.attachments||[],model:model||undefined,effort:effort||undefined,request_id:requestRef.current,
           note_id: note.id,
           base_updated_at: flushed.updatedAt,
           base_content_hash: hashNoteContent(flushed.content ?? note.content ?? ""),
@@ -219,6 +224,7 @@ export function NoteChatPanel({ note, onClose, onNoteChanged }: NoteChatPanelPro
         onNoteChanged();
       }
 
+      setFiles([]);
       deliver(sentUserId, sentContext, updated);
       // Roll the summary forward when needed, after the reply is on screen.
       summarizeLater(sentUserId, sentContext, updated);
@@ -227,9 +233,10 @@ export function NoteChatPanel({ note, onClose, onNoteChanged }: NoteChatPanelPro
     } catch (err: any) {
       if (mountedRef.current) setError(err.message || "Something went wrong");
     } finally {
+      requestRef.current=null;
       if (mountedRef.current) setIsLoading(false);
     }
-  }, [input, isLoading, session, state, note.id, note.content, onNoteChanged, user?.id, contextKey, deliver, summarizeLater]);
+  }, [input, files,model,effort,isLoading, session, state, note.id, note.content, onNoteChanged, user?.id, contextKey, deliver, summarizeLater]);
 
   /** Restore the note to the version from before an AI edit. */
   const undoNoteEdit = useCallback(
@@ -409,27 +416,8 @@ export function NoteChatPanel({ note, onClose, onNoteChanged }: NoteChatPanelPro
       </div>
 
       {/* Input */}
-      <div className="p-3 pb-20 border-t border-border shrink-0">
-        <div className="flex gap-2">
-          <Textarea aria-label="Message"
-            ref={textareaRef}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Ask about this note…"
-            className="min-h-[40px] max-h-[120px] resize-none text-sm"
-            rows={1}
-            disabled={isLoading}
-          />
-          <Button aria-label="Send message"
-            size="icon"
-            className="h-10 w-10 shrink-0"
-            onClick={sendMessage}
-            disabled={!input.trim() || isLoading}
-          >
-            <Send className="h-4 w-4" />
-          </Button>
-        </div>
+      <div className="p-3 border-t border-border shrink-0">
+        <ChatComposer value={input} onChange={setInput} onSend={sendMessage} onStop={stopReply} busy={isLoading} files={files} onFiles={setFiles} model={model} effort={effort} onModel={setModel} onEffort={setEffort} reply={state.messages.filter(m=>m.role==='assistant').slice(-1)[0]?.content||''} context={'Current note: '+(note.title||'Untitled')} onError={setError}/>
       </div>
       {confirmDialog}
     </div>

@@ -1,5 +1,5 @@
 import { Suspense } from "react";
-import { Outlet } from "react-router-dom";
+import { Outlet, useLocation } from "react-router-dom";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { DashboardSidebar } from "./DashboardSidebar";
 import { DashboardSearch } from "./DashboardSearch";
@@ -16,6 +16,7 @@ import { PageLoader } from "@/components/LoadingStates";
 
 
 export function DashboardLayout() {
+  const isChat=useLocation().pathname==="/dashboard/chat";
 
   return (
     <SidebarProvider>
@@ -45,7 +46,7 @@ export function DashboardLayout() {
             </RouteErrorBoundary>
           </main>
         </div>
-        <GlobalAIChatFAB />
+        {!isChat&&<GlobalAIChatFAB />}
         <CommandPalette />
       </div>
     </SidebarProvider>
