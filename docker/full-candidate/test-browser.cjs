@@ -4,7 +4,7 @@ const fs=require('node:fs');
 const path=require('node:path');
 const assert=require('node:assert/strict');
 const [name,evidence,mode]=process.argv.slice(2);
-const origin='https://localhost:48443';
+const origin=process.env.GODSPEED_VERIFY_ORIGIN||'https://localhost:48443';
 (async()=>{
  const browser=await chromium.launch({headless:true});
  const context=await browser.newContext({ignoreHTTPSErrors:true,viewport:{width:1440,height:1000},...(mode==='resumed'?{storageState:path.join(evidence,'session.json')}:{})});

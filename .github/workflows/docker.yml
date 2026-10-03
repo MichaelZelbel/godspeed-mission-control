@@ -19,7 +19,7 @@ on:
       edition:
         description: Image to build and publish
         type: choice
-        options: [full, telegram]
+        options: [full, telegram, hostinger]
         default: full
 
 permissions:
@@ -30,7 +30,7 @@ env:
 
 jobs:
   test:
-    if: github.event_name != 'workflow_dispatch' || inputs.edition != 'full'
+    if: github.event_name != 'workflow_dispatch' || inputs.edition == 'telegram'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -133,4 +133,23 @@ jobs:
         with:
           name: full-image-verification
           path: docker/full-candidate/evidence/
+          retention-days: 14
+
+  hostinger:
+    if: github.event_name == 'workflow_dispatch' && inputs.edition == 'hostinger'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22.19.0'
+      - name: Verify the public Hostinger deployment without using the existing VPS
+        run: bash docker/hostinger/test.sh
+      - name: Save verification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hostinger-install-verification
+          path: docker/hostinger/evidence/
           retention-days: 14
