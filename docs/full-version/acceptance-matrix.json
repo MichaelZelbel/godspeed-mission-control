@@ -1,6 +1,6 @@
 {
   "format": 2,
-  "checked_at": "2026-10-03T22:38:03.708175+00:00",
+  "checked_at": "2026-10-03T23:02:34.371614+00:00",
   "complete": false,
   "items": [
     {
@@ -2782,13 +2782,15 @@
       "name": "daily-brief",
       "trigger": "Installed skill daily-brief",
       "durable_state": "Skill-specific files and receipts",
-      "execution": "skills/daily-brief/SKILL.md",
+      "execution": "notebook/reusable-recipes/daily-brief/SKILL.md",
       "activation": "Explicit user choice; inspect installed schedules and settings",
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
-      "criterion": "Read current goals, decisions, deadlines, recent conversations, health observations and configured source receipts.\r Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation.",
+      "criterion": "Preserve the complete collection, fact preparation, writing, checks, one rewrite, final cuts, social insertion and acknowledged delivery sequence; rehearsal must not mutate live state.",
       "status": "source only",
-      "evidence": [],
+      "evidence": [
+        "Complete maintained method and generated installed copy; recipe-context.test.mjs checks the actual provider receives the complete selected method and its references. Installed complete workflow and delivery acceptance remain required."
+      ],
       "required": true,
       "target_test": "Exercise daily-brief through its installed entry point and check actual results after restart"
     },
@@ -3168,13 +3170,15 @@
       "name": "mc-brief-operations",
       "trigger": "Installed skill mc-brief-operations",
       "durable_state": "Skill-specific files and receipts",
-      "execution": "skills/mc-brief-operations/SKILL.md",
+      "execution": "notebook/reusable-recipes/mc-brief-operations/SKILL.md",
       "activation": "Explicit user choice; inspect installed schedules and settings",
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
-      "criterion": "Read current goals, decisions, deadlines, recent conversations, health observations and configured source receipts.\r Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation.",
+      "criterion": "Execute the full briefing sequence with retained dated evidence, exact payload checks and bounded promise recovery; do not treat a saved critique as accepted delivery.",
       "status": "source only",
-      "evidence": [],
+      "evidence": [
+        "Complete maintained method and generated installed copy; recipe-context.test.mjs checks the actual provider receives the complete selected method and its references. Installed complete workflow and delivery acceptance remain required."
+      ],
       "required": true,
       "target_test": "Exercise mc-brief-operations through its installed entry point and check actual results after restart"
     },
@@ -3234,13 +3238,15 @@
       "name": "morning-note",
       "trigger": "Installed skill morning-note",
       "durable_state": "Skill-specific files and receipts",
-      "execution": "skills/morning-note/SKILL.md",
+      "execution": "notebook/reusable-recipes/morning-note/SKILL.md",
       "activation": "Explicit user choice; inspect installed schedules and settings",
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
-      "criterion": "Use the daily-brief recipe.\r Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation.",
+      "criterion": "Write from current goals, verified work, obligations and real health records; preserve exact approval artifacts, figures and links, apply all selected checks and deliver only the checked bytes.",
       "status": "source only",
-      "evidence": [],
+      "evidence": [
+        "Complete maintained method and generated installed copy; recipe-context.test.mjs checks the actual provider receives the complete selected method and its references. Installed complete workflow and delivery acceptance remain required."
+      ],
       "required": true,
       "target_test": "Exercise morning-note through its installed entry point and check actual results after restart"
     },
@@ -3705,7 +3711,9 @@
       "evidence": [
         "Installed endpoint chat recorded the observed deficiency in the outline's rain-sensor section. Subsequent unattended decision selected that section and work saved a revised, independently checked outline. Further proposed observations wait for review; a draft is not a measured outcome.",
         "Normal fictional notebook saved a reported failed internal review, score 2/5, into the exact selected observation task. The next unattended decision requested concrete rain-sensor calibration steps. An interrupted draft was retried through the notebook and saved a checked result. The reported score remains failed; a model draft check is not a measured improvement. The notebook goal editor saved a new one-page-checklist direction and progress measure. Installed follow-up exposed original own_words left unchanged; the source now updates them, cancels pending decisions and retains cancellation after a late provider result. Repeat changed-direction acceptance with this correction remains required. Retained UI captures: installed-reported-check-and-retried-draft.txt and installed-changed-goal-direction.txt.",
-        "Normal installed endpoint notebook changed current direction, cancelling the old observation task. A later scheduled local-note decision waited over several cycles for exact approval. Normal notebook selection approved fictional-approved-target-checklist-ffcaa8ae; work replace-one-existing-local-checklist-note-with-a-new-one-page-practical-wet-rain-468adcd8 replaced that target at 2026-10-03T21:08:39.538Z and the actual 256-word checklist opened in its note editor. This establishes a delayed approved local edit, not an actual volunteer rating. The actual read_note receipt read an unrelated briefing rather than the requested rain-rule source, and the next decision requested substantially the same edit again. Both are retained acceptance failures. New source gives semantic verification the actual goal, source records and tool results, mechanically requires read_note for explicit required source IDs, and supports a quiet waiting decision until fresh outcome evidence. Installed acceptance of these later corrections is pending."
+        "Normal installed endpoint notebook changed current direction, cancelling the old observation task. A later scheduled local-note decision waited over several cycles for exact approval. Normal notebook selection approved fictional-approved-target-checklist-ffcaa8ae; work replace-one-existing-local-checklist-note-with-a-new-one-page-practical-wet-rain-468adcd8 replaced that target at 2026-10-03T21:08:39.538Z and the actual 256-word checklist opened in its note editor. This establishes a delayed approved local edit, not an actual volunteer rating. The actual read_note receipt read an unrelated briefing rather than the requested rain-rule source, and the next decision requested substantially the same edit again. Both are retained acceptance failures. New source gives semantic verification the actual goal, source records and tool results, mechanically requires read_note for explicit required source IDs, and supports a quiet waiting decision until fresh outcome evidence. Installed acceptance of these later corrections is pending.",
+        "Normal endpoint controlled execution read both the approved local target and the actual explicitly named source, with verified tool receipts. However it saved approval narration and extra instructions, then proposed the same edit again. This installed attempt fails complete loop acceptance; endpoint-exact-source-tool-receipts.json and endpoint-exact-source-applied-note.txt retain the evidence.",
+        "worker-source-freshness.test.mjs checks required-source context excludes unrelated notes, permits one clean-deliverable correction before any target write, and refuses a repeated approval request without changing the target. goal-outcome-wait-policy.test.mjs checks explicit waiting after verified local work, quiet unrelated changes, actual later reports and changed direction. Installed acceptance of the corrections remains required."
       ],
       "required": true,
       "target_test": "Exercise failed decisions/checks, changed direction, delayed exact local approval and restart through final installed notebooks."
@@ -3811,7 +3819,8 @@
       "status": "partial",
       "evidence": [
         "Normal notebook recorded fictional energy 7 and enabled briefing with a selected watch source. Drafts containing the banned em dash failed delivery. Writing contract now explicitly forbids it; accepted fresh-health delivery remains pending.",
-        "Normal fictional selected briefing saved Your morning briefing (your-morning-briefing-36f5e3de), including the recorded energy value 7, Friday watch change and pending outline review. Earlier failed punctuation checks remain. Selected routines later paused during interrupted runs; lasting unattended reliability remains incomplete."
+        "Normal fictional selected briefing saved Your morning briefing (your-morning-briefing-36f5e3de), including the recorded energy value 7, Friday watch change and pending outline review. Earlier failed punctuation checks remain. Selected routines later paused during interrupted runs; lasting unattended reliability remains incomplete.",
+        "brief-gate.test.mjs checks one evidence-led rewrite, retained failed checks, nonrecursive prior context and retained separate rehearsals. Native obligation checks preserve live records, notification state, native text and timestamps; file-newer dependencies reproduce only existence and timestamp without copying unrelated or credential contents. Full collector, numeric/link/card gates, final cuts, social insertion and acknowledged delivery remain incomplete."
       ],
       "required": true,
       "target_test": "Inspect an accepted installed briefing with exact fresh measurement, supported action and changed source; failed gates prevent delivery and unchanged advice stays quiet."
@@ -3867,7 +3876,8 @@
         "Retained Windows/VPS/fixture backups restored into empty copies with matching knowledge/media digests. Normal fixture notebook Save a backup and Restore a separate copy checked 229 records and 1246 durable files, reported six rebuildable exclusions, retained the copy and rebuilt search without overwriting active records.",
         "A real backup race was reproduced: the captured files preceded a concurrent save, but the manifest counted later live records. The source now retains the actual snapshot count. Verified empty retained restorations before source-assisted corrections: Windows 849 records/2325 durable comparisons and fictional endpoint 1623/2641, each with six rebuildable exclusions. Reports: verified-source-assisted-recovery-corrections.log. The isolated installer backups were relocated to private E storage with verified manifest hashes and an original-path junction; every recovery path remains. Native Inno upgrade failed during backup with incomplete PowerShell 5.1 stderr. Packaged setup succeeded on a second PowerShell 7 approach; normal native-installer acceptance remains pending. A new native helper retains complete stderr and checks exit status, tested on native PowerShell 5.1.",
         "Additional source-assisted Windows backups retained and verified empty restorations: Windows 851 records and 2327 durable-file comparisons, endpoint 1670 and 2688, verified-changed-direction-corrections.log. Fresh corrected supervisor observed over fourteen minutes of ordinary UI polling and endpoint tool work with zero restarts and no health failure history at 21:18 UTC. This is bounded stability evidence, not a two-week trial or final packaged recovery acceptance. Three obsolete source-build directories on the VPS were losslessly archived, every file and downloaded archive checked before their directories were removed; remote and E copies remain, another session build and all recovery copies were preserved.",
-        "Authorized development normal Settings recovery verified 943 records and 2586 files, rebuilt search and retained separate restoration storage; development-normal-backup-restore.txt. Windows native 2d57982 upgrade completed after two independently verified snapshots/restorations; Windows fixture health and normal UI reopened. Additional offline/conflict/media recovery acceptance remains required."
+        "Authorized development normal Settings recovery verified 943 records and 2586 files, rebuilt search and retained separate restoration storage; development-normal-backup-restore.txt. Windows native 2d57982 upgrade completed after two independently verified snapshots/restorations; Windows fixture health and normal UI reopened. Additional offline/conflict/media recovery acceptance remains required.",
+        "Authorized development intermediate 2d57982 image was built on physical srv1069233.hstgr.cloud; its 1565 frontend files matched the Windows manifest and Linux source checks passed 150 with one platform skip. Normal recovery verified 943 records/2586 files before only the owned notebook upgrade; matching 2d Windows native upgrade succeeded. Later source changes require new matching packages and new verified backups."
       ],
       "required": true,
       "target_test": "Repeat recovery/link checks on final matching Windows/VPS packages; accept offline edits, reconnection, retained conflicts and preserved choices/pauses."

@@ -41,8 +41,3 @@ Locate the actually delivered version from its delivery receipt, then read its s
 ## Acceptance
 
 Exercise a thin news pool, missing calendar, new health evidence, a numbered approval list, a failed check repaired once, an unrepaired failure, an unchanged repeat, a delayed acknowledgement and restart. Check ordinary notebook controls and actual retained state. A source test or a saved note alone does not establish readable receipt, reliable scheduling or completed delivery.
-
-
-## Installed personal workspace
-
-Use the current user workspace and its configured providers. Keep original workflow, command contracts, scripts and verification criteria. Read the workspace authorization rules before sends, sign-ins, payments or publishing. Search existing device-private credentials before asking for configuration. Saved output and a passing screen are not evidence that the full requested result happened.

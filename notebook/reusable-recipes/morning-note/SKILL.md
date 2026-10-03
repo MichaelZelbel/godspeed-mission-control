@@ -69,8 +69,3 @@ Save the dated per-goal choices, opened sources, used card IDs, exact final note
 Save before sending. Mark shown only what actually reached the chosen channel. An uncertain send is never retried blindly. Preserve the original delivered version and any later correction separately. A follow-up answer reads that exact version's evidence; a newer preview is not what the user saw.
 
 When asked to return the morning note itself, return the exact saved final text, with no preamble, summary or report of the work. A missing facts/goal surface produces one honest useful sentence about the consequence and only what can actually be supported; never an empty reply or an inventory of checks.
-
-
-## Installed personal workspace
-
-Use the current user workspace and its configured providers. Keep original workflow, command contracts, scripts and verification criteria. Read the workspace authorization rules before sends, sign-ins, payments or publishing. Search existing device-private credentials before asking for configuration. Saved output and a passing screen are not evidence that the full requested result happened.

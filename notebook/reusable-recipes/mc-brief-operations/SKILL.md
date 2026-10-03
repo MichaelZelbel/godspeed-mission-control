@@ -38,8 +38,3 @@ Target dates are desired dates; deadlines carry a consequence. Do not call a mis
 First find the saved evidence for the exact note/version the user saw. Read its facts, source records and checks, then answer directly in first person. If a claim cannot be reconstructed, say that plainly and verify it again; do not guess or disown the earlier note.
 
 When a claim was wrong, preserve the original delivery and save a dated correction with the evidence and actual repair. A later preview never replaces the received version. Confirm a completed action only after reading back its actual saved result or acknowledgement.
-
-
-## Installed personal workspace
-
-Use the current user workspace and its configured providers. Keep original workflow, command contracts, scripts and verification criteria. Read the workspace authorization rules before sends, sign-ins, payments or publishing. Search existing device-private credentials before asking for configuration. Saved output and a passing screen are not evidence that the full requested result happened.

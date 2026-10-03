@@ -12,7 +12,8 @@ import {readTable} from '../../third-party/addons/godspeed-coach/lib/auto.mjs';
 import {localPath} from './local-path.mjs';
 import {visibleRows} from './visibility.mjs';
 export const operationContract=`Return JSON {reply,notes_created?:[{title,content}],operations?:[{type,source_quote,...fields}]}. Use an operation only when the user's current message explicitly requests that change. source_quote must be exact user words requesting it, never a note quote. Supported operations:
-goal-add {title,measure,status?:adopted|provisional}; goal-change {id,title?,measure?,status?:adopted|provisional|paused|achieved|retired,reason}; goal-outcome {id,evidence,value?,outcome};
+goal-add {title,measure,status?:adopted|provisional,wait_for_report?:boolean}; goal-change {id,title?,measure?,status?:adopted|provisional|paused|achieved|retired,wait_for_report?:boolean,reason}; goal-outcome {id,evidence,value?,outcome};
+When the user explicitly asks to wait for their separate report after an applied change, persist wait_for_report:true in that goal. Do not enable it without that request.
 obligation-add {title,due_at,target_at?,recurrence?:{days}}; obligation-complete {id,evidence}; obligation-snooze {id,until};
 coach-open {area:health|work-money|relationships,question}; coach-reply {id,content}; coach-close {id}; habit-agree {talk_id,title,agreement,check_at}; habit-observe {id,observation,answer:done|no|skip};
 journal-add {content}; journal-switch {enabled}; health-add {metric,value,unit,observed_at};
@@ -108,13 +109,15 @@ export function personalOperation(domains,input){
  }
  if(type==='goal-add'){
   const title=required(input.title,'Goal'),status=input.status||'adopted';if(!['adopted','provisional'].includes(status))throw Error('Choose adopted or provisional');
+  if(input.wait_for_report!==undefined&&typeof input.wait_for_report!=='boolean')throw Error('Choose whether to wait for your separate outcome report');
   const existing=query.rows('goals').find(g=>g.title===title&&!g.removed_at);if(existing)return existing;
-  new Scheduler(store).configure({goal:title});const goal=query.rows('goals').find(g=>g.title===title);return store.save('goals',{id:goal.id,status,measure:input.measure||null,progress:goal.progress||[]});
+  new Scheduler(store).configure({goal:title});const goal=query.rows('goals').find(g=>g.title===title);return store.save('goals',{id:goal.id,status,measure:input.measure||null,wait_for_report:input.wait_for_report===true,progress:goal.progress||[]});
  }
  if(type==='goal-change'){
   const g=old('goals');required(input.reason,'Reason for change');if(input.status&&!['adopted','provisional','paused','achieved','retired'].includes(input.status))throw Error('Unsupported goal status');
   if(input.title!==undefined)required(input.title,'Goal');if(input.measure!==undefined)required(input.measure,'Progress measure');
-  const changes=Object.fromEntries(['title','measure','status'].filter(k=>input[k]!==undefined).map(k=>[k,input[k]]));
+  if(input.wait_for_report!==undefined&&typeof input.wait_for_report!=='boolean')throw Error('Choose whether to wait for your separate outcome report');
+  const changes=Object.fromEntries(['title','measure','status','wait_for_report'].filter(k=>input[k]!==undefined).map(k=>[k,input[k]]));
   if(input.title!==undefined)changes.own_words=input.title;
   return store.withLock(()=>{const next=store.prepare('goals',{...changes,changes:[...(g.changes||[]),{reason:input.reason,at:new Date().toISOString(),before:{title:g.title,measure:g.measure,status:g.status}}]},g);
    const pending=query.rows('work_items').filter(w=>w.goal_id===g.id&&!['verified','cancelled'].includes(w.state)).map(w=>store.prepare('work_items',{state:'cancelled',reason:'Goal changed: '+input.reason},w));
@@ -206,6 +209,7 @@ export function validateConversationOperations(domains,input,operations){
    if(!note||!item||![note.id,note.title].filter(Boolean).some(name=>message.includes(name))||![item.id,item.title].filter(Boolean).some(name=>message.includes(name)))throw Error('Approval must identify the exact task and target note');
   }
   if(operation.type==='habit-observe'&&operation.answer==='done'&&/\b(?:did not|didn.t|haven.t|have not|not done|skipped|nicht|nein)\b/i.test(message))throw Error('Habit completion contradicts the actual user reply');
+  if(['goal-add','goal-change'].includes(operation.type)&&operation.wait_for_report===true&&(!/\b(?:wait|warten|warte)\b[\s\S]*\b(?:report|review|rating|observation|bericht|bewertung|rückmeldung)\b/i.test(message)||/\b(?:do not|don.t|never|stop|nicht)\s+(?:wait|waiting|warten)\b/i.test(message)))throw Error('Waiting for an outcome report needs your explicit request');
   if(['memory-confirm','memory-propose'].includes(operation.type)){
    if(!operation.subject_type)throw Error('Memory must explicitly identify whose fact this is');
    if(!operation.evidence_quote||!message.includes(operation.evidence_quote))throw Error('Memory evidence must occur in the user message');

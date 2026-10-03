@@ -8,6 +8,26 @@ Once private file synchronization is explicitly configured, the notebook checks 
 
 These are installation mechanisms, not adopted personal goals. Personal routines become scheduled only through the saved goal setup and routine controls; their owner, next run and pause state remain visible there. No routine is claimed tested merely because this description is packaged.
 
+## Goal decisions and approved local work
+
+Does: consumes adopted goals, saved decisions, exact local approvals and checked results. When the user selects waiting for a separate report, a verified local change remains waiting until an actual later report or a changed goal direction is saved.
+Rhythm: not scheduled by this template; the saved routine controls determine cadence, time zone, owner and pause state.
+Lands: goal decisions, work results, tool evidence and forecasts in the notebook.
+Lives: the notebook scheduler in the selected installation.
+May: read visible knowledge and change only the approved local target. An approved worker must deliver the result without requesting the same approval again.
+Off-switch: pause Goal decision and Goal work in routine controls, or pause the goal.
+Last checked: 2026-10-04, source regressions check required source selection, bounded correction and waiting for a separate report. Installed acceptance remains required.
+
+## Morning briefing and rehearsal
+
+Does: collects selected obligations, watch observations and health records, reads the complete morning note method, checks the written note, and allows one correction before delivery. A rehearsal uses a retained separate copy, including file date evidence for native obligation checks.
+Rhythm: not scheduled by this template; enable only through the saved routine controls.
+Lands: checked notes and check receipts; rehearsal copies remain in the installation's private runtime folder.
+Lives: the notebook scheduler in the selected installation.
+May: collect enabled sources, save a checked notebook note and mark included watch findings shown. Rehearsals may change their own copies and send nothing.
+Off-switch: pause Morning brief or Brief rehearsal in routine controls.
+Last checked: 2026-10-04, source regressions check one rewrite, retained failed checks and rehearsal isolation. Complete collector, final cut and delivery acceptance remains unfinished.
+
 <!--
 The register (Chapter 21). One block per procedure.
 

@@ -5,6 +5,7 @@ import {Domains} from './domains.mjs';
 import {visibleRows} from './visibility.mjs';
 import {Connectors} from './connectors.mjs';
 import {subscriptionCommand} from './subscriptions.mjs';
+import {recipeContext} from './recipe-context.mjs';
 export {procedureKinds} from './jobs/kinds.mjs';
 export async function procedure(job,{store,query,provider}){
   const kind=job.kind;let result;
@@ -122,7 +123,7 @@ export async function procedure(job,{store,query,provider}){
   else{
     if(!provider)throw new Error('Configure an assistant for this routine');
     const contracts={'brief-review':'Critique the most recent saved brief against its actual sources, voice rules and prior deliveries. Return concrete unsupported claims or a clear pass. Do not send a replacement.','conversation-review':'Check whether the most recent saved delivered message is present in conversation history. Quote only actual saved text.','lead':'Prepare one clear relatable post or reply using recent original work and verified source observations. Never invent personal experiences. Do not publish. If none is ready, save the reason.','radar':'Compare the newest recorded source observations with the goals. Prepare at most one proposal with evidence, cost and reversible trial.','memory-capture':'Review explicitly supplied conversations and propose source-quoted lasting facts for review. Never sweep unrelated account files.'};
-    result=await provider({kind,context:{...fileContext(store),sources:query.rows('watch_observations').slice(-20),notes:visibleRows(query,'notes'),goals:query.rows('goals')},contract:contracts[kind]||'Use the supplied records and preserve uncertainty. No outward actions.'});
+    result=await provider({kind,context:{...fileContext(store),...(kind==='lead'||kind==='radar'?{workflow:recipeContext(store,kind==='radar'?'mc-radar':'lead')}:{ }),sources:query.rows('watch_observations').slice(-20),notes:visibleRows(query,'notes'),goals:query.rows('goals')},contract:contracts[kind]||'Use the supplied records and preserve uncertainty. No outward actions.'});
   }
   const silent=['portfolio','watch','domain-watch'].includes(kind)&&Array.isArray(result)&&!result.some(r=>r.attention);
   if(silent)return {verified:true,silent:true,observations:result};
