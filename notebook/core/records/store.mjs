@@ -170,11 +170,22 @@ export class Store {
       if (this.failAfter === i + 1) throw new Error('Injected crash');
     }
     atomic(path.join(dir, 'completed'), new Date().toISOString());
+    this.discardCompletedTransaction(dir);
+  }
+  discardCompletedTransaction(dir) {
+    const root=path.resolve(this.state,'transactions'),name=path.basename(dir);
+    if(path.dirname(path.resolve(dir))!==root||! /^(?:\.completed-)?[a-f0-9-]{36}$/.test(name))throw new Error('Invalid transaction cleanup path');
+    if(!name.startsWith('.completed-')&&!fs.existsSync(path.join(dir,'completed')))return;
+    // Rename out of the recovery namespace before deleting any payload. A crash
+    // during cleanup can then never replay partially deleted staging files.
+    const discarded=name.startsWith('.completed-')?dir:path.join(root,'.completed-'+name);
+    try{if(discarded!==dir)fs.renameSync(dir,discarded);fs.rmSync(discarded,{recursive:true});}catch{}
   }
   recover() {
     const root = path.join(this.state, 'transactions'); if (!fs.existsSync(root)) return;
     for (const name of fs.readdirSync(root)) {
       const dir = path.join(root, name);
+      if(name.startsWith('.completed-')||fs.existsSync(path.join(dir,'completed'))){this.discardCompletedTransaction(dir);continue;}
       if (fs.existsSync(path.join(dir, 'prepared')) && !fs.existsSync(path.join(dir, 'completed'))) this.applyTransaction(dir, JSON.parse(fs.readFileSync(path.join(dir, 'manifest.json'), 'utf8')));
     }
   }

@@ -7,6 +7,28 @@ import { Store, encode, atomic } from '../core/records/store.mjs';
 import { SearchIndex } from '../core/index/search.mjs';
 const temp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'godspeed-alpha-test-'));
 
+test('completed staging is discarded without deleting saved history or replaying interrupted cleanup',()=>{
+  const root=temp(),store=new Store(root),transactions=path.join(store.state,'transactions');
+  store.discardCompletedTransaction=()=>{}; // Simulate older installations retaining staging.
+  const note=store.save('notes',{title:'Keep history',content:'Original content'});
+  store.save('notes',{id:note.id,content:'Current content'});
+  const completed=fs.readdirSync(transactions);
+  assert.equal(completed.length,2);
+  const interrupted=path.join(transactions,'.completed-'+completed[0]);
+  fs.renameSync(path.join(transactions,completed[0]),interrupted);
+  fs.unlinkSync(path.join(interrupted,'completed'));
+  fs.unlinkSync(path.join(interrupted,'0.after'));
+  const unfinished=path.join(transactions,'00000000-0000-4000-8000-000000000000');fs.mkdirSync(unfinished);
+  atomic(path.join(unfinished,'0.after'),'Unprepared staging remains available');
+  const recovered=new Store(root);
+  assert.equal(recovered.get('notes',note.id).content,'Current content');
+  assert.ok(recovered.list('record_history').some(r=>r.snapshot.content==='Original content'));
+  assert.deepEqual(fs.readdirSync(transactions),[path.basename(unfinished)]);
+  recovered.save('contacts',{name:'A synthetic person'});
+  assert.deepEqual(fs.readdirSync(transactions),[path.basename(unfinished)]);
+  assert.throws(()=>recovered.discardCompletedTransaction(root),/Invalid transaction cleanup path/);
+});
+
 test('fresh store, Unicode direct file edits, restart and index loss preserve data', () => {
   const root = temp(), store = new Store(root), note = store.save('notes', { title: 'Grüße 日本語', content: 'Original' });
   let index = new SearchIndex(store); assert.equal(index.search('Grüße').length, 1); index.close();
