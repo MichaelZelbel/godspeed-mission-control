@@ -22,10 +22,16 @@ const origin=process.env.GODSPEED_VERIFY_ORIGIN||'https://localhost:48443';
    console.log('Fresh image: owner/session survive Docker restart; logout revokes access.');
    return;
   }
-  await page.goto(origin+'/dashboard/settings/import');
-  await page.getByRole('heading',{name:'Your first visit'}).waitFor();
-  await page.getByLabel('Setup code',{exact:true}).fill(process.env.GODSPEED_VERIFY_SETUP_CODE);
-  await page.getByRole('button',{name:'Start setup'}).click();
+  if(process.env.GODSPEED_VERIFY_INVITATION_URL){
+   const invitation=new URL(process.env.GODSPEED_VERIFY_INVITATION_URL);invitation.searchParams.set('next','/dashboard/settings/import');
+   await page.goto(invitation.href);await page.getByRole('heading',{name:'Make it yours'}).waitFor();
+   assert.equal(await page.getByLabel('Setup code',{exact:true}).count(),0);
+  }else{
+   await page.goto(origin+'/dashboard/settings/import');
+   await page.getByRole('heading',{name:'Your first visit'}).waitFor();
+   await page.getByLabel('Setup code',{exact:true}).fill(process.env.GODSPEED_VERIFY_SETUP_CODE);
+   await page.getByRole('button',{name:'Start setup'}).click();
+  }
   await page.getByLabel('Username',{exact:true}).fill('image-test-owner');
   await page.getByLabel('Password',{exact:true}).fill('short');
   await page.getByText('5 of 12 characters').waitFor();

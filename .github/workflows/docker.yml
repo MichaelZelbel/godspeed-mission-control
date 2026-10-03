@@ -19,7 +19,7 @@ on:
       edition:
         description: Image to build and publish
         type: choice
-        options: [full, telegram, hostinger]
+        options: [full, telegram, hostinger, hostinger-automatic]
         default: full
 
 permissions:
@@ -136,7 +136,7 @@ jobs:
           retention-days: 14
 
   hostinger:
-    if: github.event_name == 'workflow_dispatch' && inputs.edition == 'hostinger'
+    if: github.event_name == 'workflow_dispatch' && (inputs.edition == 'hostinger' || inputs.edition == 'hostinger-automatic')
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -145,7 +145,12 @@ jobs:
         with:
           node-version: '22.19.0'
       - name: Verify the public Hostinger deployment without using the existing VPS
-        run: bash docker/hostinger/test.sh
+        run: |
+          if [ '${{ inputs.edition }}' = 'hostinger-automatic' ]; then
+            bash docker/hostinger/test-automatic.sh
+          else
+            bash docker/hostinger/test.sh
+          fi
       - name: Save verification evidence
         if: always()
         uses: actions/upload-artifact@v4
