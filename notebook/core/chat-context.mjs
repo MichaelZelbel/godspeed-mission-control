@@ -10,7 +10,7 @@ export function chatContext(query,input){
   const stopWords=new Set('the and for with about what which when where have does this that tell show notes note people person please your mein meine meine notizen eine was wie wer wann und mit das die der'.split(' '));
   const terms=[...new Set(question.toLowerCase().match(/[\p{L}\p{N}]{3,}/gu)||[])].filter(t=>!stopWords.has(t));
   const pick=(type,limit=6)=>{
-    const today=new Date().toISOString().slice(0,10);
+    const today=new Intl.DateTimeFormat('en-CA',{timeZone:query.rows('profiles')[0]?.timezone||'UTC'}).format(new Date());
     const rows=visibleRows(query,type).filter(r=>!r.removed_at&&!r.is_trashed&&(type!=='profile_facts'||(r.is_current&&r.show_to_agent))&&(type!=='world_claims'||((!r.valid_to||r.valid_to>today)&&(!r.valid_from||r.valid_from<=today))));
     const ranked=rows.map(r=>({r,score:terms.reduce((n,t)=>n+(String(r.title||r.name||'').toLowerCase().includes(t)?4:0)+(JSON.stringify(r).toLowerCase().includes(t)?1:0),0)})).filter(x=>x.score).sort((a,b)=>b.score-a.score);
     return {rows:ranked.slice(0,limit).map(({r})=>compact(r,5000)),total:rows.length};
@@ -41,7 +41,9 @@ export async function retrievedContext(query,input,provider){
   const parsed=typeof raw==='string'?JSON.parse(raw.replace(/^```(?:json)?\s*|\s*```$/g,'')):raw;
   if(Array.isArray(parsed.terms)&&parsed.terms.length){const terms=parsed.terms.filter(t=>typeof t==='string'&&t.length<=60).slice(0,12);context=chatContext(query,{...input,message:question+' '+terms.join(' ')});context.retrieval.method='keyword and meaning-expanded selection';context.retrieval.expanded_terms=terms;}
  }catch{context.retrieval.meaning_expansion='unavailable; keyword results retained';}
- const candidates=visibleRows(query,'contacts').filter(c=>{const first=String(c.name||'').toLowerCase().split(' ')[0];return first.length>=3&&new RegExp('\\b'+first.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'\\b','i').test(question);});
+ const people=visibleRows(query,'contacts'),fullMatches=people.filter(c=>[c.name,...(c.aliases||[])].filter(n=>typeof n==='string'&&n.trim()).some(n=>question.toLocaleLowerCase().includes(n.toLocaleLowerCase())));
+ const longest=Math.max(0,...fullMatches.map(c=>String(c.name||'').length));
+ const candidates=fullMatches.length?fullMatches.filter(c=>String(c.name||'').length===longest):people.filter(c=>{const first=String(c.name||'').toLowerCase().split(' ')[0];return first.length>=3&&new RegExp('\\b'+first.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'\\b','i').test(question);});
  if(candidates.length>1&&!input.contact_id&&!input.person_id)context.ambiguities={people:candidates.slice(0,10).map(c=>({id:c.id,name:c.name})),instruction:'Ask which person the user means; do not guess'};
  return context;
 }

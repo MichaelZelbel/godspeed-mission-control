@@ -6,6 +6,7 @@ import path from 'node:path';
 import {Store} from '../core/records/store.mjs';
 import {QueryService} from '../core/query.mjs';
 import {Domains} from '../core/domains.mjs';
+import {chatContext,retrievedContext} from '../core/chat-context.mjs';
 const fixture=provider=>{const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-memory-subject-'))),query=new QueryService(store);return {store,query,domains:new Domains(query,{provider})};};
 
 test('another person’s confirmed memory and correction retain that subject and their history',async()=>{
@@ -70,3 +71,26 @@ test('correcting one of many facts to an already current value still closes the 
  await f.domains.invoke('personal-operation',{type:'memory-confirm',...base,value:'Reading',replaces_claim_id:previous.id,evidence_quote:'Reading replaces gardening.'});
  assert.equal(f.query.rows('claims').length,2);assert.ok(f.store.get('claims',previous.id).valid_to);assert.equal(f.query.rows('claims').filter(c=>!c.valid_to).length,1);
 });
+
+test('world memory uses the profile day across midnight instead of dropping locally current facts',()=>{
+ const f=fixture();f.store.save('profiles',{timezone:'Pacific/Kiritimati'});
+ const today=new Intl.DateTimeFormat('en-CA',{timeZone:'Pacific/Kiritimati'}).format(new Date());
+ f.domains.writeFact({label:'Fictional midnight preference',value:'Fictional blue',valid_from:today});
+ assert.equal(chatContext(f.query,{message:'Fictional midnight preference'}).world_claims.length,1);
+});
+
+test('an exact full person name resolves other people sharing that first word',async()=>{
+ const f=fixture(),alex=f.store.save('contacts',{name:'Fictional Alex Garden'});f.store.save('contacts',{name:'Fictional Bea Garden'});
+ const context=await retrievedContext(f.query,{message:'Remember Fictional Alex Garden prefers listening.'},async()=>({terms:[]}));
+ assert.equal(context.ambiguities,undefined);assert.ok(context.contacts.some(c=>c.id===alex.id));
+});
+
+test('chat cannot acknowledge a memory correction without a corresponding operation',async()=>{
+ const f=fixture(),person=f.store.save('contacts',{name:'Fictional Alex Garden'}),message='Correct the remembered one-question preference for Fictional Alex Garden: two questions now.';
+ await f.domains.invoke('personal-operation',{type:'memory-confirm',subject_type:'contact',subject_id:person.id,label:'Listening preference',value:'One question',evidence_quote:'One question.'});
+ const previous=f.query.rows('claims')[0];let calls=0;
+ f.domains.provider=async input=>{if(input.kind==='retrieval-expansion')return {terms:[]};calls++;return {reply:'The remembered preference has been corrected. This is not about you.',...(calls>1?{operations:[{type:'memory-confirm',subject_type:'contact',subject_id:person.id,label:'Preference',value:'Two questions',evidence_quote:message,source_quote:message,replaces_claim_id:previous.id}]}:{})};};
+ await f.domains.invoke('conversation-chat',{message,conversation_id:'fictional-ack',request_id:'real-correction'});
+ assert.equal(calls,2);assert.ok(f.store.get('claims',previous.id).valid_to);
+});
+

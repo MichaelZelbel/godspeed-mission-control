@@ -225,6 +225,13 @@ export class Domains {
         try{
           structured=contracts[name]?json(response):typeof response==='object'?response:{reply:response};
           if(!structured||typeof structured!=='object'||Array.isArray(structured))throw Error('Return one complete JSON object');
+          if(name==='conversation-chat'){
+            const requested=String(input.message||''),reply=String(structured.reply||'');
+            const memoryRequest=/^(?:(?:please|bitte)\s+)?(?:remember\b|(?:correct|update|replace)\b[\s\S]*\b(?:remembered|memory|preference|fact)\b|(?:merke|korrigiere)\b)/i.test(requested);
+            const denies=/\b(?:not|never|cannot|could not|unable to|nicht)\s+(?:(?:been|be|have|yet|actually|successfully|to)\s+)*(?:save[sd]?|remember(?:ed)?|correct(?:ed)?|replace[sd]?|update[sd]?|change[sd]?|persist(?:ed)?|apply|applied|speichern|gespeichert|gemerkt|korrigiert)\b/i.test(reply);
+            const acknowledges=/\b(?:remembered|saved|corrected|replaced|updated|noted|gespeichert|gemerkt|korrigiert)\b/i.test(reply)&&!denies;
+            if(memoryRequest&&acknowledges&&!structured.operations?.some(op=>['memory-confirm','memory-propose'].includes(op.type)))throw Error('A memory change acknowledgement needs its actual memory operation; otherwise ask a clarification or explain that nothing was saved');
+          }
           if(name==='conversation-chat'&&structured.operations!==undefined){
             if(!Array.isArray(structured.operations))throw Error('operations must be a list');
             validateConversationOperations(this,input,structured.operations.filter(op=>!(input.retained_coach_reply&&op.type==='coach-reply'&&op.id===input.talk_id)));
