@@ -34,3 +34,36 @@ test('network loss leaves offline edits available and secrets and index never en
   const result=new FileSync(a).reconcile();assert.equal(result.state,'pending');assert.ok(a.list('notes').some(r=>r.title==='Offline'));
   const tracked=git(a.root,'ls-files');assert.doesNotMatch(tracked,/private-token|sqlite|\.godspeed/);
 });
+
+test('packaged hidden skill markers never enter synced files',()=>{
+  const {a}=fixture(),sync=new FileSync(a);
+  sync.initialize('https://github.com/synthetic/private.git');
+  fs.mkdirSync(path.join(a.root,'skills','example'),{recursive:true});
+  atomic(path.join(a.root,'skills','example','SKILL.md'),'Synthetic skill');
+  atomic(path.join(a.root,'skills','example','.shipped-sha256'),'packaging marker');
+  sync.commitLocal();const tracked=git(a.root,'ls-files');
+  assert.match(tracked,/skills\/example\/SKILL.md/);assert.doesNotMatch(tracked,/shipped-sha256/);
+});
+
+test('similar independent assistant profiles keep their paths when syncing',()=>{
+  const {a,b}=fixture();const sa=new FileSync(a),sb=new FileSync(b);
+  sa.initialize('https://github.com/synthetic/private.git');sb.initialize('https://github.com/synthetic/private.git');
+  const first='assistant-state/00000000-0000-4000-8000-000000000001/database.json',second='assistant-state/00000000-0000-4000-8000-000000000002/database.json';
+  atomic(path.join(a.root,first),JSON.stringify({format:1,database:'state.db',profile:first.split('/')[1],tables:[],padding:'same '.repeat(100)}));
+  assert.equal(sa.reconcile().state,'synced');assert.equal(sb.reconcile().state,'synced');
+  fs.unlinkSync(path.join(b.root,first));atomic(path.join(b.root,second),JSON.stringify({format:1,database:'state.db',profile:second.split('/')[1],tables:[],padding:'same '.repeat(100)}));
+  assert.equal(sb.reconcile().state,'synced');
+  atomic(path.join(a.root,first),JSON.stringify({format:1,database:'state.db',profile:first.split('/')[1],tables:['new message'],padding:'same '.repeat(100)}));
+  const outcome=sa.reconcile();assert.equal(outcome.state,'conflict');
+  const conflicts=sa.pendingConflicts().map(n=>JSON.parse(fs.readFileSync(path.join(a.root,'conflicts',n))));
+  assert.ok(conflicts.every(c=>c.path===first));assert.ok(conflicts.every(c=>!c.local||JSON.parse(c.local).profile===first.split('/')[1]));
+});
+
+test('invalid assistant snapshots stay local instead of entering Git',()=>{
+  const {a}=fixture(),sync=new FileSync(a);
+  sync.initialize('https://github.com/synthetic/private.git');
+  const name='assistant-state/00000000-0000-4000-8000-000000000001/state.json';
+  atomic(path.join(a.root,name),'<<<<<<< unresolved merge');
+  assert.equal(sync.reconcile().state,'pending');
+  assert.doesNotMatch(git(a.root,'ls-files'),/state.json/);
+});

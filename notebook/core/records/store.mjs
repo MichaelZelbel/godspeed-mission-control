@@ -14,7 +14,12 @@ export function atomic(file, text) {
   const tmp = file + '.' + randomUUID() + '.tmp';
   const fd = fs.openSync(tmp, 'wx');
   try { fs.writeFileSync(fd, text); fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
-  fs.renameSync(tmp, file);
+  const deadline=Date.now()+1500;
+  for(;;){try{fs.renameSync(tmp,file);break;}catch(error){
+    if(process.platform!=='win32'||!['EPERM','EACCES','EBUSY'].includes(error.code)||Date.now()>=deadline)throw error;
+    // Windows scanners can briefly hold the destination during an atomic swap.
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,25);
+  }}
 }
 export function encode(record) {
   if (record.type === 'notes') {

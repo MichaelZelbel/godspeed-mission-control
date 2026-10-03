@@ -7,6 +7,7 @@ import { Toaster } from '@/components/ui/toaster';
 import { Toaster as Sonner } from '@/components/ui/sonner';
 import { RouteErrorBoundary } from '@/components/ErrorBoundary';
 import NoteComments from '@/local/NoteComments';
+import {DashboardLayout} from '@/components/layout/DashboardLayout';
 const Notes=lazy(()=>import('./pages/Notes')),People=lazy(()=>import('./pages/People')),World=lazy(()=>import('./pages/World'));
 const Profile=lazy(()=>import('./pages/Profile')),Collections=lazy(()=>import('./pages/Collections')),CollectionDetail=lazy(()=>import('./pages/CollectionDetail'));
 const CollectionSchema=lazy(()=>import('./pages/CollectionSchema')),CollectionTemplates=lazy(()=>import('./pages/CollectionTemplates'));
@@ -14,17 +15,17 @@ const Timeline=lazy(()=>import('./pages/TimelinePage')),Media=lazy(()=>import('.
 const Groups=lazy(()=>import('./pages/Groups')),GroupDetail=lazy(()=>import('./pages/GroupDetail')),Actions=lazy(()=>import('./pages/Actions'));
 const Activity=lazy(()=>import('./pages/ActivityPage')),WeeklyReview=lazy(()=>import('./pages/WeeklyReview'));
 const Control=lazy(()=>import('./local/Control'));
+const Home=lazy(()=>import('./local/Home'));
 const SharedNote=lazy(()=>import('./pages/SharedNote'));
 function Layout(){
   const {user,loading,signIn}=useAuth();const [token,setToken]=useState(''),[error,setError]=useState('');
   if(loading)return <p className="p-8">Opening your notebook...</p>;
-  if(!user)return <form className="p-8 max-w-lg" onSubmit={e=>{e.preventDefault();signIn('',token).catch((e:any)=>setError(e.message));}}><h1>Godspeed Mission Control</h1><label>Candidate access token<input className="block border p-2 text-black" type="password" value={token} onChange={e=>setToken(e.target.value)}/></label><button className="border p-2" type="submit">Open notebook</button><p role="alert">{error}</p></form>;
-  const links=[['Control','/dashboard/control'],['Notes','/dashboard/notes'],['People','/dashboard/people'],['About me','/dashboard/profile'],['World','/dashboard/world'],['Collections','/collections'],['Timeline','/dashboard/timeline'],['Media','/dashboard/media'],['Review queue','/dashboard/review-queue'],['Groups','/dashboard/groups'],['Actions','/dashboard/actions'],['Activity','/dashboard/activity'],['Weekly review','/dashboard/review']];
-  return <div className="min-h-screen bg-background text-foreground"><header className="border-b p-4"><Link to="/dashboard/control" className="font-bold">Godspeed Mission Control</Link><span className="ml-4 text-sm text-muted-foreground">Full alpha candidate</span></header><nav aria-label="Notebook" className="flex flex-wrap gap-4 p-4 border-b">{links.map(([name,url])=><Link key={url} to={url}>{name}</Link>)}</nav><main className="p-6"><RouteErrorBoundary><Suspense fallback={<p>Opening...</p>}><Outlet/></Suspense></RouteErrorBoundary></main></div>;
+  if(!user)return <form className="p-8 max-w-lg" onSubmit={e=>{e.preventDefault();signIn('',token).catch((e:any)=>setError(e.message));}}><h1>Godspeed Mission Control</h1><label>Access token<input className="block border p-2 text-black" type="password" value={token} onChange={e=>setToken(e.target.value)}/></label><button className="border p-2" type="submit">Open notebook</button><p role="alert">{error}</p></form>;
+  return <DashboardLayout/>;
 }
 export default function App(){return <ThemeProvider attribute="class" defaultTheme="dark"><TooltipProvider><Toaster/><Sonner/><BrowserRouter><AuthProvider><Routes><Route path="/shared/:token" element={<Suspense fallback={<p>Opening...</p>}><SharedNote/></Suspense>}/><Route element={<Layout/>}>
-  <Route path="/" element={<Navigate to="/dashboard/control" replace/>}/><Route path="/dashboard" element={<Navigate to="/dashboard/control" replace/>}/>
-  <Route path="/dashboard/control" element={<Control/>}/><Route path="/dashboard/notes/*" element={<><Notes/><NoteComments/></>}/>
+  <Route path="/" element={<Navigate to="/dashboard" replace/>}/><Route path="/dashboard" element={<Home/>}/>
+  <Route path="/dashboard/control" element={<Navigate to="/dashboard" replace/>}/><Route path="/dashboard/notes/*" element={<><Notes/><NoteComments/></>}/>
   <Route path="/dashboard/settings" element={<Control/>}/><Route path="/settings" element={<Control/>}/>
   <Route path="/dashboard/people" element={<People/>}/><Route path="/dashboard/people/:id" element={<People/>}/>
   <Route path="/dashboard/world" element={<World/>}/><Route path="/dashboard/world/:id" element={<World/>}/>
@@ -34,6 +35,6 @@ export default function App(){return <ThemeProvider attribute="class" defaultThe
   <Route path="/dashboard/actions" element={<Actions/>}/><Route path="/dashboard/activity" element={<Activity/>}/><Route path="/dashboard/review" element={<WeeklyReview/>}/>
   <Route path="/collections" element={<Collections/>}/><Route path="/collections/templates" element={<CollectionTemplates/>}/>
   <Route path="/collections/:slug/schema" element={<CollectionSchema/>}/><Route path="/collections/:slug/:itemId" element={<CollectionDetail/>}/><Route path="/collections/:slug" element={<CollectionDetail/>}/>
-  <Route path="/lexicon/*" element={<p>Lexicon is deferred in this candidate.</p>}/><Route path="/dashboard/graph" element={<p>Note graph is deferred in this candidate.</p>}/>
-  <Route path="*" element={<p>This page is unavailable in the candidate.</p>}/>
+  <Route path="/lexicon/*" element={<p>Lexicon is not available in this test installation yet.</p>}/><Route path="/dashboard/graph" element={<p>Note graph is not available in this test installation yet.</p>}/>
+  <Route path="*" element={<p>This page is unavailable in this test installation.</p>}/>
 </Route></Routes></AuthProvider></BrowserRouter></TooltipProvider></ThemeProvider>;}

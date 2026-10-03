@@ -10,9 +10,7 @@ function files(root,prefix=''){
 export function backup(store,mediaRoot,destination){
   store.backup(destination);
   if(fs.existsSync(mediaRoot))fs.cpSync(mediaRoot,path.join(destination,'media'),{recursive:true});
-  const device=path.join(destination,'device-config');fs.mkdirSync(device,{recursive:true,mode:0o700});
-  for(const name of ['provider.json','assistant.json','assistant-mcp.json','api-keys.json','pair.json','pair-clients.json','sync-config.json','connectors']){const source=path.join(store.state,name);if(fs.existsSync(source))fs.cpSync(source,path.join(device,name),{recursive:true});}
-  for(const name of files(device))fs.chmodSync(path.join(device,name),0o600);
+  // User-state archives carry knowledge and media, never device credentials.
   const entries=files(destination).filter(n=>n!=='backup.json').map(name=>({path:name,sha256:hash(fs.readFileSync(path.join(destination,name)))}));
   atomic(path.join(destination,'backup.json'),JSON.stringify({format:1,records:store.scan().size,at:new Date().toISOString(),files:entries},null,2));
   return destination;

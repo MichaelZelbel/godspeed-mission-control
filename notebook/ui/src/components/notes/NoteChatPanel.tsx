@@ -273,7 +273,7 @@ export function NoteChatPanel({ note, onClose, onNoteChanged }: NoteChatPanelPro
       <div className="flex items-center justify-between px-3 py-2.5 border-b border-border bg-muted/30 shrink-0">
         <div className="flex items-center gap-2">
           <Bot className="h-4 w-4 text-primary" />
-          <span className="text-sm font-medium">AI Chat</span>
+          <span className="text-sm font-medium">Godspeed · Current note</span>
           {state.messages.length > 0 && (
             <span className="text-[10px] text-muted-foreground">
               {state.messages.length} msgs{state.summary ? " · summary" : ""}

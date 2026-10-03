@@ -46,9 +46,10 @@ test('optional account readers verify numeric balances and exact outward approva
   const approval=store.save('approvals',{title:'Synthetic delivery',status:'approved',intent_sha256:hash({name:'browser-post',payload}),expires_at:new Date(Date.now()+60000).toISOString()});assert.ok((await domains.invoke('run-connector',{name:'browser-post',payload,approval_id:approval.id})).verified);await assert.rejects(domains.invoke('run-connector',{name:'browser-post',payload,approval_id:approval.id}),/approval/);assert.equal(posts,1);
  }finally{await new Promise(r=>server.close(r));}
 });
-test('secret-bearing device backups are checked and restored only by explicit device recovery',()=>{
+test('user-state backups exclude device credentials even when recovery asks for device settings',()=>{
  const {store}=setup(),media=path.join(store.state,'media');fs.mkdirSync(media);store.save('notes',{content:'Synthetic recovery fixture'});atomic(path.join(store.state,'provider.json'),JSON.stringify({key:'synthetic-credential'}));const destination=path.join(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-backup-')),'backup');backup(store,media,destination);
  const normal=setup().store;restore(normal,path.join(normal.state,'media'),destination);assert.ok(!fs.existsSync(path.join(normal.state,'provider.json')));
- const device=setup().store;restore(device,path.join(device.state,'media'),destination,{deviceConfig:true});assert.equal(JSON.parse(fs.readFileSync(path.join(device.state,'provider.json'))).key,'synthetic-credential');
+ assert.ok(!fs.existsSync(path.join(destination,'device-config')));
+ const device=setup().store;restore(device,path.join(device.state,'media'),destination,{deviceConfig:true});assert.ok(!fs.existsSync(path.join(device.state,'provider.json')));assert.equal(device.list('notes')[0].content,'Synthetic recovery fixture');
  assert.equal(toolScope('save_record',{type:'settings'}),null);assert.equal(toolScope('save_record',{type:'api_keys'}),null);
 });

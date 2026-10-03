@@ -4,6 +4,7 @@ import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { Store, atomic, decode, hash } from '../records/store.mjs';
 import { durable,durableRoots,durableFiles } from '../file-policy.mjs';
+import {validateAssistantFiles} from '../assistant-files.mjs';
 
 export class FileSync {
   constructor(store,{branch='main',remote='origin'}={}) {
@@ -21,10 +22,11 @@ export class FileSync {
   initialize(remoteUrl) {
     if(!remoteUrl||!/^(https:\/\/github\.com\/|git@github\.com:)/.test(remoteUrl))throw new Error('Use a private GitHub repository URL');
     if(!fs.existsSync(path.join(this.store.root,'.git'))){this.git(['init','-b',this.branch]);this.git(['config','user.name','Godspeed Mission Control']);this.git(['config','user.email','godspeed@localhost']);}
-    atomic(path.join(this.store.root,'.gitignore'),'*\n'+durableRoots.map(r=>'!'+r+'/\n!'+r+'/**\n').join('')+durableFiles.map(r=>'!'+r+'\n').join('')+'!.gitignore\n**/.env\n**/.env.*\n**/secrets/\n**/node_modules/\n**/*.sqlite*\n**/*.png\n**/*.jpg\n**/*.mp4\n**/*.mp3\n**/*.pdf\n');
+    this.git(['config','core.autocrlf','false']);this.git(['config','core.eol','lf']);if(process.platform==='win32')this.git(['config','core.longpaths','true']);
+    atomic(path.join(this.store.root,'.gitignore'),'*\n'+durableRoots.map(r=>'!'+r+'/\n!'+r+'/**\n').join('')+durableFiles.map(r=>'!'+r+'\n').join('')+'**/.*\n!.gitignore\n**/secrets/\n**/node_modules/\n**/*.sqlite*\n**/*.png\n**/*.jpg\n**/*.mp4\n**/*.mp3\n**/*.pdf\n');
     try {this.git(['remote','get-url',this.remote]);}catch{this.git(['remote','add',this.remote,remoteUrl]);}
   }
-  validate(){this.store.scan();if(this.store.problems.length)throw new Error('Resolve record validation problems before syncing');if(this.pendingConflicts().length)throw new Error('Resolve saved conflicts before syncing');}
+  validate(){this.store.scan();if(this.store.problems.length)throw new Error('Resolve record validation problems before syncing');validateAssistantFiles(this.store.root);if(this.pendingConflicts().length)throw new Error('Resolve saved conflicts before syncing');}
   commitLocal(){
     this.validate();
     const staged=this.git(['diff','--cached','--name-only']);
@@ -55,7 +57,9 @@ export class FileSync {
     if(!path.resolve(dir).startsWith(path.resolve(integrationRoot)+path.sep))throw new Error('Unsafe sync staging path');
     this.git(['worktree','add','--detach',dir,'HEAD']);
     try {
-      try { this.git(['merge','--no-edit','--no-ff','--allow-unrelated-histories',remoteRef],dir); }
+      // Independently created profiles can look like renames to Git. Their paths
+      // are durable identities, so merging must never infer a move from content.
+      try { this.git(['merge','--no-edit','--no-ff','-Xno-renames','--allow-unrelated-histories',remoteRef],dir); }
       catch(e) {
         const conflicted=this.git(['diff','--name-only','--diff-filter=U'],dir).split('\n').filter(Boolean);
         if(!conflicted.length)throw e;
@@ -77,9 +81,10 @@ export class FileSync {
         this.git(['commit','--no-edit'],dir);
       }
       const merged=new Store(dir);
+      validateAssistantFiles(dir);
       if(merged.problems.length)throw new Error('The merged reference graph needs review');
       const removed=[...this.store.records.keys()].filter(key=>!merged.records.has(key));
-      if(removed.some(key=>![...merged.records.values()].some(r=>r.uid===this.store.records.get(key).uid&&(r.aliases||[]).includes(this.store.records.get(key).id))))throw new Error('Remote removal without a tombstone or proven rename needs review');
+      if(removed.some(key=>![...merged.records.values()].some(r=>r.uid===this.store.records.get(key).uid&&(r.aliases||[]).includes(this.store.records.get(key).id))))throw new Error('Remote removal without a tombstone or proven rename needs review: '+removed.join(', '));
       const batch=[...merged.records.values()].filter(r=>this.store.records.get(r.type+'/'+r.id)?._hash!==r._hash).map(r=>{const value={...r};delete value._hash;return value;});
       if(batch.length||removed.length)this.store.commit(batch,{removeKeys:removed});
       const documents=this.git(['ls-files'],dir).split('\n').filter(n=>durable(n)&&!n.startsWith('records/')).map(file=>({file,text:fs.readFileSync(path.join(dir,file),'utf8')})).filter(item=>!fs.existsSync(path.join(this.store.root,item.file))||fs.readFileSync(path.join(this.store.root,item.file),'utf8')!==item.text);

@@ -19,6 +19,8 @@ import { mcp } from './mcp.mjs';
 import { spawn } from 'node:child_process';
 import {ApiKeys,toolScope} from '../core/api-keys.mjs';
 import {Telegram} from '../core/telegram.mjs';
+import {browserChat} from './browser-chat.mjs';
+import {durableRoots,durableFiles} from '../core/file-policy.mjs';
 
 export async function createService({ root, mediaRoot, host = '127.0.0.1', port = 47831, token, uiRoot, provider, device = 'local' } = {}) {
   const store = new Store(root,{device}), index = new SearchIndex(store), query = new QueryService(store), sync = new FileSync(store);
@@ -56,7 +58,8 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       if(route.startsWith('/login/')){
         const code=route.slice(7),expiry=loginLinks.get(code);if(!expiry||expiry<Date.now())return send(res,401,{error:'This login link expired or was already used'});
         loginLinks.delete(code);const session=randomBytes(32).toString('hex');sessions.set(session,Date.now()+8*3600000);
-        res.writeHead(303,{'Location':'/','Cache-Control':'no-store','Referrer-Policy':'no-referrer','Set-Cookie':`godspeed_session=${session}; HttpOnly; SameSite=Strict; Path=/; Max-Age=28800${remote?'; Secure':''}`});return res.end();
+        const destination=url.searchParams.get('next')==='/chat'?'/chat':'/';
+        res.writeHead(303,{'Location':destination,'Cache-Control':'no-store','Referrer-Policy':'no-referrer','Set-Cookie':`godspeed_session=${session}; HttpOnly; SameSite=Strict; Path=/; Max-Age=28800${remote?'; Secure':''}`});return res.end();
       }
       if (route === '/api/login' && req.method === 'POST') {
         const input = JSON.parse(await body(req)), a = Buffer.from(String(input.token || '')), b = Buffer.from(token || '');
@@ -75,6 +78,19 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       if (route === '/health') return send(res, 200, { ok: true, format: 1, version: '0.1.0-alpha.1',instance });
       if(route==='/api/shared-note'&&req.method==='GET'){const share=query.rows('shared_notes').find(s=>s.share_token===url.searchParams.get('token')&&s.is_active),note=share&&store.get('notes',share.note_id);if(!note||note.removed_at)return send(res,404,{error:'This share is unavailable'});return send(res,200,{title:note.title,content:note.content,tags:note.tags,entity_type:note.entity_type,created_at:note.created_at,updated_at:note.updated_at});}
       if (route.startsWith('/api/') && !authorized(req)) return send(res, 401, { error: 'Authentication required' });
+      if(route==='/chat'&&req.method==='GET'){
+        res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','Referrer-Policy':'no-referrer','X-Content-Type-Options':'nosniff'});return res.end(browserChat);
+      }
+      if(route==='/api/browser-chat'){
+        const conversation='browser-owner';
+        if(req.method==='GET')return send(res,200,{messages:query.rows('conversation_messages').filter(m=>m.conversation_id===conversation).sort((a,b)=>a.created_at.localeCompare(b.created_at))});
+        if(req.method==='POST'){
+          const input=JSON.parse(await body(req));if(typeof input.message!=='string'||!input.message.trim()||input.message.length>20000)throw new Error('Write a message of at most 20000 characters');
+          store.save('conversation_messages',{role:'user',content:input.message,conversation_id:conversation,source_app:'browser-chat'});
+          const result=await domains.invoke('conversation-chat',{message:input.message,conversation_id:conversation});index.rebuild();return send(res,200,{reply:result.reply});
+        }
+        return send(res,405,{error:'Use GET or POST'});
+      }
       if(route==='/api/login-link'&&req.method==='POST'){const code=randomBytes(32).toString('hex');loginLinks.set(code,Date.now()+300000);return send(res,200,{path:'/login/'+code,expires_minutes:5});}
       if(route==='/api/assistant/open'&&req.method==='POST'){
         if(remote||process.platform!=='win32')throw new Error('Open the assistant on your Windows computer');
@@ -177,11 +193,16 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   const jobs=setInterval(()=>scheduler.tick().catch(()=>{}),30000);
   const syncTimer=setInterval(()=>{if(fs.existsSync(path.join(store.state,'sync-config.json')))sync.reconcile();},60000);
   const mediaTimer=setInterval(()=>mediaSync.reconcile(),60000);
-  const telegram=process.env.GODSPEED_TELEGRAM==='on'&&process.env.GODSPEED_CANDIDATE_BOT_TOKEN&&process.env.GODSPEED_CANDIDATE_BOT_OWNER?new Telegram({store,domains,token:process.env.GODSPEED_CANDIDATE_BOT_TOKEN,owner:process.env.GODSPEED_CANDIDATE_BOT_OWNER}):null;
+  const telegram=process.env.GODSPEED_TELEGRAM==='on'&&process.env.GODSPEED_CANDIDATE_BOT_TOKEN&&process.env.GODSPEED_CANDIDATE_BOT_OWNER?new Telegram({store,domains,token:process.env.GODSPEED_CANDIDATE_BOT_TOKEN,owner:process.env.GODSPEED_CANDIDATE_BOT_OWNER,loginLink:process.env.GODSPEED_BROWSER_ORIGIN?destination=>{const code=randomBytes(32).toString('hex');loginLinks.set(code,Date.now()+300000);return process.env.GODSPEED_BROWSER_ORIGIN+'/login/'+code+'?next='+encodeURIComponent(destination);}:undefined}):null;
   const telegramTimer=telegram?setInterval(()=>telegram.tick().catch(()=>{}),3000):null;
   scheduler.deliver=telegram?(id,result)=>telegram.deliver(id,result):null;
-  let debounce,indexDebounce;const watcher=fs.watch(store.root,{recursive:true},(event,name)=>{if(!name||name.replaceAll('\\','/').startsWith('.'))return;clearTimeout(indexDebounce);indexDebounce=setTimeout(()=>{try{index.rebuild();}catch{}},750);if(fs.existsSync(path.join(store.state,'sync-config.json'))){clearTimeout(debounce);debounce=setTimeout(()=>sync.reconcile(),5000);}});
-  return { server, store, index, query, domains, scheduler, sync, mediaSync,address: server.address(), close: async () => { watcher.close();clearTimeout(debounce);clearTimeout(indexDebounce);clearInterval(telegramTimer);clearInterval(interval);clearInterval(jobs);clearInterval(syncTimer);clearInterval(mediaTimer); await new Promise(resolve => server.close(resolve)); index.close(); } };
+  let debounce,indexDebounce;const watchers=new Map();
+  const changed=(event,name)=>{if(!name||name.replaceAll('\\','/').startsWith('.')||name.endsWith('.tmp'))return;clearTimeout(indexDebounce);indexDebounce=setTimeout(()=>{try{index.rebuild();}catch{}},750);if(fs.existsSync(path.join(store.state,'sync-config.json'))){clearTimeout(debounce);debounce=setTimeout(()=>sync.reconcile(),5000);}};
+  // Private backups and Git merge workspaces are outside the watched knowledge.
+  const watchRoot=name=>{const folder=path.join(store.root,name);if(!watchers.has(name)&&fs.existsSync(folder))watchers.set(name,fs.watch(folder,{recursive:true},changed));};
+  for(const name of durableRoots)watchRoot(name);
+  const rootWatcher=fs.watch(store.root,(event,name)=>{if(durableRoots.includes(name)){watchRoot(name);changed(event,name);}else if(durableFiles.includes(name))changed(event,name);});
+  return { server, store, index, query, domains, scheduler, sync, mediaSync,address: server.address(), close: async () => { rootWatcher.close();for(const watcher of watchers.values())watcher.close();clearTimeout(debounce);clearTimeout(indexDebounce);clearInterval(telegramTimer);clearInterval(interval);clearInterval(jobs);clearInterval(syncTimer);clearInterval(mediaTimer); await new Promise(resolve => server.close(resolve)); index.close(); } };
 }
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const root = process.env.GODSPEED_WORKSPACE;

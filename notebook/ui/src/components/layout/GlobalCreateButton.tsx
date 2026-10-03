@@ -53,6 +53,7 @@ export function GlobalCreateButton() {
       <div className="flex items-center">
         <Button
           onClick={handleNewNote}
+          aria-label="New note"
           size="sm"
           className="rounded-r-none gap-1.5"
         >
@@ -63,6 +64,7 @@ export function GlobalCreateButton() {
           <DropdownMenuTrigger asChild>
             <Button
               size="sm"
+              aria-label="Create another item"
               className="rounded-l-none border-l border-primary-foreground/20 px-1.5"
             >
               <ChevronDown className="h-3.5 w-3.5" />

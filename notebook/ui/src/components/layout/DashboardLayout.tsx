@@ -16,13 +16,12 @@ import { PageLoader } from "@/components/LoadingStates";
 
 
 export function DashboardLayout() {
-  useProcessingSweep();
 
   return (
     <SidebarProvider>
       <div className="min-h-screen flex w-full">
         <DashboardSidebar />
-        <div className="flex-1 flex flex-col">
+        <div className="flex-1 min-w-0 flex flex-col">
           <header className="h-14 flex items-center gap-4 border-b bg-background px-4">
             <SidebarTrigger />
             <DashboardSearch />
@@ -32,7 +31,6 @@ export function DashboardLayout() {
               <ThemeToggle />
             </div>
           </header>
-          <LowBalanceBanner />
 
 
           

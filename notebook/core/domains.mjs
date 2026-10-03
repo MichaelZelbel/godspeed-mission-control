@@ -154,6 +154,7 @@ export class Domains {
       if(input.note_id&&!notes.length)throw new Error('This note is hidden from the assistant');
       const context = { ...fileContext(this.store),...knowledgeContext(this.query),notes, facts: visibleRows(this.query,'profile_facts').filter(f=>f.is_current&&f.show_to_agent), goals: this.query.rows('goals') };
       context.collection=input.collection_id?this.store.get('collections',input.collection_id):null;context.items=input.collection_id?this.query.rows('collection_items').filter(i=>i.collection_id===input.collection_id):[];
+      context.messages=input.conversation_id?this.query.rows('conversation_messages').filter(m=>m.conversation_id===input.conversation_id).sort((a,b)=>a.created_at.localeCompare(b.created_at)).slice(-40).map(({role,content})=>({role,content})):[];
       context.person=(input.contact_id||input.personId)?visibleRows(this.query,'contacts').find(r=>r.id===(input.contact_id||input.personId)):null;
       if((input.contact_id||input.personId)&&!context.person)throw new Error('This person is hidden from the assistant');
       const contracts={

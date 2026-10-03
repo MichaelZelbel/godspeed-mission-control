@@ -10,6 +10,15 @@ export function assistantProfiles(store){
   const directory=path.join(store.root,'assistant-state');if(!fs.existsSync(directory))return [];
   return fs.readdirSync(directory).filter(id=>/^[a-f0-9-]{36}$/.test(id)&&fs.statSync(path.join(directory,id)).isDirectory()).map(id=>({id,databases:fs.readdirSync(path.join(directory,id)).filter(n=>n.endsWith('.json')).map(name=>JSON.parse(fs.readFileSync(path.join(directory,id,name),'utf8')).database)}));
 }
+export function validateAssistantFiles(root){
+  const directory=path.join(root,'assistant-state');if(!fs.existsSync(directory))return;
+  for(const id of fs.readdirSync(directory).filter(id=>/^[a-f0-9-]{36}$/.test(id))){
+    for(const name of fs.readdirSync(path.join(directory,id)).filter(name=>name.endsWith('.json'))){
+      const snapshot=JSON.parse(fs.readFileSync(path.join(directory,id,name),'utf8'));
+      if(snapshot.format!==1||snapshot.profile!==id||typeof snapshot.database!=='string'||!Array.isArray(snapshot.tables))throw new Error('Assistant state identity needs review: '+id+'/'+name);
+    }
+  }
+}
 export function selectAssistantProfile(store,id){
   if(!assistantProfiles(store).some(profile=>profile.id===id))throw new Error('The restored assistant profile was not found');
   const descriptor=JSON.parse(fs.readFileSync(path.join(store.state,'assistant.json'),'utf8').replace(/^\uFEFF/,'')),home=path.resolve(descriptor.home);

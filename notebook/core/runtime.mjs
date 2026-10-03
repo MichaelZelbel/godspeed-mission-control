@@ -21,9 +21,12 @@ export function hermesProvider({executable='hermes',home,cwd,model,provider}={})
     const timer=setTimeout(()=>{child.kill();cleanup();reject(new Error('Hermes did not finish within two minutes'));},120000);
     child.on('error',()=>{cleanup();reject(new Error('The candidate Hermes runtime could not start'));});
     child.stdout.on('data',chunk=>{bytes+=chunk.length;if(bytes>1024*1024){child.kill();cleanup();reject(new Error('Assistant output exceeded its limit'));}else output.push(chunk);});
-    child.stderr.resume();child.on('close',code=>{cleanup();const text=Buffer.concat(output).toString('utf8').trim();code===0&&text?resolve(text):reject(new Error('Open the candidate Hermes assistant and configure its account or model before running routines'));});
+    child.stderr.resume();child.on('close',code=>{cleanup();const text=hermesResponse(Buffer.concat(output).toString('utf8'));code===0&&text?resolve(text):reject(new Error('Open the candidate Hermes assistant and configure its account or model before running routines'));});
     child.stdin.end(JSON.stringify(prompt));
   });
+}
+export function hermesResponse(output){
+  return output.replace(/\x1b\[[0-9;]*m/g,'').replace(/^Warning: Unknown toolsets: none\r?\n\s*/,'').replace(/^\s*⚠ tirith security scanner enabled but not available[^\n]*\r?\n\s*/,'').trim();
 }
 export function modelProvider({ url, key, model, maxTokens = 4096 } = {}) {
   if(!url || !key || !model)return null;

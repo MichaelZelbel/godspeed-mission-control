@@ -120,6 +120,7 @@ export function DashboardSidebar() {
   const systemItems = [
     { title: "My Profile", url: "/dashboard/profile", icon: User },
     { title: "Settings", url: "/dashboard/settings", icon: Settings },
+    { title: "Godspeed chat", url: "/chat", icon: Plug },
     { title: "Connect AI", url: "/dashboard/settings?tab=mcp", icon: Plug },
     ...(BRAND.showDocs ? [{ title: "Documentation", url: "/docs", icon: BookOpen }] : []),
   ];
@@ -206,7 +207,7 @@ export function DashboardSidebar() {
         {!collapsed && (
           <>
             <SidebarSeparator />
-            <CreditsDisplay compact />
+            <span className="px-2 text-xs text-muted-foreground">Test installation</span>
           </>
         )}
         <Button

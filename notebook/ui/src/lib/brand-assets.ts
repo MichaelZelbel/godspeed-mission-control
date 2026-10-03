@@ -1,10 +1,12 @@
 import menerioLogo from "@/assets/logo.png";
+import godspeedLogo from "@/assets/godspeed-logo.png";
 import cherishlyLogo from "@/assets/brands/cherishly/cherishly-logo.png";
 import { BRAND } from "@/lib/brand";
 
 // Image assets keyed by brand. Kept separate from src/brands/* because those
 // files must stay importable by vite.config.ts (no Vite asset imports there).
 const logos: Record<string, string> = {
+  godspeed: godspeedLogo,
   menerio: menerioLogo,
   cherishly: cherishlyLogo,
 };

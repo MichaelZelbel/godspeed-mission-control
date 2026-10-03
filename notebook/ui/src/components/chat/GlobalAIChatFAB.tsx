@@ -450,7 +450,8 @@ export function GlobalAIChatFAB() {
             "hover:bg-primary/90 transition-all hover:scale-105 active:scale-95",
             "focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background",
           )}
-          title="AI Chat (⌘⇧K)"
+          title="Chat with Godspeed (⌘⇧K)"
+          aria-label="Chat with Godspeed"
         >
           <Bot className="h-6 w-6" />
         </button>
@@ -476,7 +477,7 @@ export function GlobalAIChatFAB() {
               <div className="flex items-center gap-2 min-w-0">
                 <Bot className="h-4 w-4 text-primary shrink-0" />
                 <span className="text-sm font-semibold truncate">
-                  {noteId ? "Editing current note" : "AI Assistant"}
+                  {noteId ? "Godspeed · Current note" : "Godspeed"}
                 </span>
                 {state.messages.length > 0 && (
                   <span className="text-[10px] text-muted-foreground shrink-0">

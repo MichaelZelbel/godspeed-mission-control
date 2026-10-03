@@ -34,6 +34,13 @@ class AssistantFiles(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertTrue(list((self.workspace / 'assistant-state/history').rglob('*.json')))
 
+    def test_synced_crlf_snapshot_remains_writable(self):
+        self.initialize()
+        snapshot=next((self.workspace/'assistant-state').glob('*/*.json'))
+        snapshot.write_bytes(snapshot.read_bytes().replace(b'\r\n',b'\n').replace(b'\n',b'\r\n'))
+        result=self.run_python('import sqlite3,os; from pathlib import Path; c=sqlite3.connect(str(Path(os.environ["HERMES_HOME"])/"state.db"),isolation_level=None); c.execute("INSERT INTO messages(text) VALUES (?)",("after sync",)); assert c.execute("SELECT COUNT(*) FROM messages").fetchone()[0]==2; c.close()')
+        self.assertEqual(result.returncode,0,result.stderr)
+
     def test_publication_failure_rolls_back(self):
         self.initialize()
         result = self.run_python('import sqlite3,os; from pathlib import Path; c=sqlite3.connect(str(Path(os.environ["HERMES_HOME"])/"state.db"),isolation_level=None); c.execute("INSERT INTO messages(text) VALUES (?)",("must roll back",))', GODSPEED_ASSISTANT_PUBLISHER=str(self.temp / 'missing-publisher.mjs'))

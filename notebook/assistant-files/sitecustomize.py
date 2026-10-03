@@ -127,7 +127,9 @@ def activate():
             return self.cursor().executescript(sql)
 
         def _refresh(self):
-            text = self._file.read_text(encoding='utf-8') if self._file.exists() else None
+            # Publication compares exact bytes. Universal newline translation on
+            # Windows made a synced CRLF file look like an unrelated write.
+            text = self._file.read_bytes().decode('utf-8') if self._file.exists() else None
             current = digest(text) if text is not None else None
             try:
                 cached = self._raw('SELECT hash FROM _godspeed_file_version LIMIT 1').fetchone()
