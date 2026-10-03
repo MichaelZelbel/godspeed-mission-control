@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "build": "vite build",
-    "dev": "vite --host 127.0.0.1"
+    "dev": "vite --host 127.0.0.1",
+    "test:editor": "vitest run --config vitest.editor.config.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
