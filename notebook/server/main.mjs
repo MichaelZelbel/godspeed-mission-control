@@ -149,7 +149,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       if(route==='/api/import'&&req.method==='POST')return send(res,200,importExport(query,JSON.parse(await body(req,100*1024*1024))));
       if(route==='/api/export')return send(res,200,{format:1,records:[...store.scan().values()].map(r=>{const copy={...r};delete copy._hash;return copy;})});
       if (route === '/api/search') return send(res, 200, { data: index.search(url.searchParams.get('q') || ''), error: null });
-      if (route === '/api/query' && req.method === 'POST') { const result = query.execute(JSON.parse(await body(req))); index.rebuild(); return send(res, 200, result); }
+      if (route === '/api/query' && req.method === 'POST') { const input=JSON.parse(await body(req)),result=query.execute(input); if(input.operation&&input.operation!=='select')index.rebuild(); return send(res, 200, result); }
       if(route==='/api/chat-state'&&req.method==='POST'){
         const input=JSON.parse(await body(req));if(typeof input.context_key!=='string'||!Array.isArray(input.state?.messages))throw new Error('Invalid conversation state');
         const id='chat-'+hash(input.context_key).slice(0,24),old=store.get('note_conversations',id);

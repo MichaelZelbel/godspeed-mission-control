@@ -14,7 +14,7 @@ export function AuthProvider({children}: {children:React.ReactNode}) {
       await hydrateFilePreferences();
       if(live) setState({loading:false,user:data.user,session:{user:data.user,access_token:'local-session'},profile:data.profile,role:'premium',roleLoading:false});
     }).catch(()=>{if(live)setState((s:any)=>({...s,loading:false}));});
-    const timer=setInterval(()=>client.invalidateQueries(),5000);
+    const timer=setInterval(()=>client.invalidateQueries(),30000);
     return ()=>{live=false;clearInterval(timer);};
   },[client]);
   const unsupported=async()=>{throw new Error('Use your candidate access token to sign in');};
