@@ -17,6 +17,7 @@ memory-confirm {label,value,evidence_quote}; memory-propose {label,value,evidenc
 routine-change {id,paused?,calendar?:{time:HH:MM,weekdays?:[0..6]}}; forecast-settle {id,observed,evidence}.
 work-allow-local {id,note_id}: allow the selected work to edit exactly this local note, preserving its current revision as the precondition.
 work-retry-draft {id}: explicitly retry a failed or interrupted local draft, preserving all prior attempts and versions. Never retry an applied or outward action.
+work-record-observation {id,evidence,passed:boolean,value?:number}: record the user's actual reported check for the exact selected observation task. Failed checks are evidence, not successful outcomes. Never invent a value or infer completion from a draft.
 Every operation MUST contain source_quote. Copy the entire current user message exactly into that field, including the request verb. Without it, no operation can run. Use supplied IDs; ask to resolve ambiguity. ISO dates must include timezone. No outward actions or credentials. Never claim a change persisted until the operation succeeds.`;
 const required=(value,label)=>{if(typeof value!=='string'||!value.trim())throw Error(label+' is required');return value.trim();};
 const date=(value,label)=>{required(value,label);if(!Number.isFinite(Date.parse(value))||!/(Z|[+-]\d\d:\d\d)$/.test(value))throw Error(label+' needs an ISO date with timezone');return new Date(value).toISOString();};
@@ -55,6 +56,23 @@ export function personalOperation(domains,input){
   return result;
  }
  const old=table=>{const r=store.get(table,required(input.id,'Record ID'));if(!r||r.removed_at)throw Error('Record does not exist');if(input.expected&&input.expected!==r._hash)store.conflict(table,input,r);return r;};
+ if(type==='work-record-observation'){
+  const item=old('work_items'),evidence=required(input.evidence,'Reported check evidence');
+  if(item.kind!=='observation')throw Error('Choose the exact selected observation task');
+  if(typeof input.passed!=='boolean')throw Error('Report whether the agreed check passed or failed');
+  if(input.value!==undefined&&!Number.isFinite(input.value))throw Error('A measurement must be a finite reported number');
+  const digest=hash({evidence,passed:input.passed,value:input.value??null});
+  if(item.state==='verified'){if(item.verification?.report_hash===digest)return item;throw Error('This check is already recorded; retain corrections as a new goal observation');}
+  const goal=store.get('goals',item.goal_id),decision=store.get('decisions',item.decision_id);
+  if(!['adopted','active'].includes(goal?.status)||decision?.state!=='selected'||item.state!=='awaiting_approval')throw Error('The observation goal or decision is no longer active');
+  return store.withLock(()=>{
+   const current=store.get('work_items',item.id),currentGoal=store.get('goals',goal.id);if(current._hash!==item._hash||currentGoal._hash!==goal._hash)throw Error('Observation work changed; reload before saving');
+   const result=store.prepare('notes',{title:'Reported check: '+item.title,content:'Agreed check: '+item.check+'\nReported result: '+(input.passed?'passed':'failed')+(input.value!==undefined?'\nReported measurement: '+input.value:'')+'\nUser evidence: '+evidence+'\nSource: user-reported observation; the software verified saving this report, not the underlying real-world event.',source_app:'goal-observation',goal_id:goal.id,work_id:item.id});
+   const verification={kind:'reported-observation',work_id:item.id,result_id:result.id,passed:input.passed,value:input.value??null,outcome:input.passed?'check passed':'check failed',evidence,report_hash:digest,at:new Date().toISOString()};
+   store.commit([result,store.prepare('work_items',{state:'verified',result_id:result.id,verification},current),store.prepare('goals',{progress:[...(currentGoal.progress||[]),verification]},currentGoal)]);
+   return store.get('work_items',item.id);
+  });
+ }
  if(type==='work-retry-draft'){
   const item=old('work_items');
   if(item.kind!=='draft'||item.allowed_action!=='save-draft'||!['failed','needs_review','attempted'].includes(item.state))throw Error('Only a failed or interrupted local draft can be retried');
@@ -156,7 +174,8 @@ export function validateConversationOperations(domains,input,operations){
   'routine-change':/\b(?:pause|resume|schedule|change|stop|start|pausiere|ändere)\b/i,
   'forecast-settle':/\b(?:settle|record|resolve|log|notiere)\b[\s\S]*(?:forecast|prediction|prognose)/i,
   'work-allow-local':/\b(?:allow|approve|authori[sz]e|erlaube|genehmige)\b[\s\S]*(?:edit|change|update|write|note|ändern|notiz)/i,
-  'work-retry-draft':/\b(?:retry|try again|wiederhole|erneut)\b[\s\S]*(?:draft|work|entwurf|aufgabe)/i
+  'work-retry-draft':/\b(?:retry|try again|wiederhole|erneut)\b[\s\S]*(?:draft|work|entwurf|aufgabe)/i,
+  'work-record-observation':/\b(?:record|log|save|notiere|speichere)\b[\s\S]*(?:check|review|observation|result|prüfung|ergebnis)/i
  };
  for(const operation of operations){
   const quote=operation.source_quote;
@@ -167,6 +186,11 @@ export function validateConversationOperations(domains,input,operations){
    if(!note||!item||![note.id,note.title].filter(Boolean).some(name=>message.includes(name))||![item.id,item.title].filter(Boolean).some(name=>message.includes(name)))throw Error('Approval must identify the exact task and target note');
   }
   if(operation.type==='habit-observe'&&operation.answer==='done'&&/\b(?:did not|didn.t|haven.t|have not|not done|skipped|nicht|nein)\b/i.test(message))throw Error('Habit completion contradicts the actual user reply');
+  if(operation.type==='work-record-observation'){
+   const item=domains.store.get('work_items',operation.id);
+   if(!item||![item.id,item.title].filter(Boolean).some(name=>message.includes(name))||!message.includes(operation.evidence)||operation.value!==undefined&&!message.includes(String(operation.value)))throw Error('A reported check must identify its exact task and supplied evidence');
+   if(operation.passed===true&&/\b(?:failed|did not pass|didn.t pass|not passed|nicht bestanden)\b/i.test(message))throw Error('Check success contradicts the actual user report');
+  }
  }
 }
 export function conversationOperations(domains,input,operations){
