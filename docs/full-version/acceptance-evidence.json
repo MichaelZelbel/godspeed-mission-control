@@ -2,14 +2,16 @@
   "behavior:first-goal": {
     "status": "partial",
     "evidence": [
-      "Fresh fictional Windows notebook setup adopted the gardening-robot goal, scheduled decision/work, saved a checked outline and opened its note. Existing Windows pairing, VPS ownership and paused selftest survived upgrade. VPS adopted its fictional checklist goal; selected work waited for the following daily slot. The ready-worker correction passes a source regression; installed acceptance is pending."
+      "Fresh fictional Windows notebook setup adopted the gardening-robot goal, scheduled decision/work, saved a checked outline and opened its note. Existing Windows pairing, VPS ownership and paused selftest survived upgrade. VPS adopted its fictional checklist goal; selected work waited for the following daily slot. The ready-worker correction passes a source regression; installed acceptance is pending.",
+      "Normal VPS retry at product 4afade247 produced and checked the fictional local safety checklist, quoting the supplied fictional source rule. The original failed result is retained. Final package and first-setup acceptance are still required."
     ],
     "target_test": "Repeat fresh Windows/VPS setup from final committed packages. Ready authorized work runs on the next enabled cycle; deliberate pauses remain intact."
   },
   "behavior:goal-loop": {
     "status": "partial",
     "evidence": [
-      "Installed endpoint chat recorded the observed deficiency in the outline's rain-sensor section. Subsequent unattended decision selected that section and work saved a revised, independently checked outline. Further proposed observations wait for review; a draft is not a measured outcome."
+      "Installed endpoint chat recorded the observed deficiency in the outline's rain-sensor section. Subsequent unattended decision selected that section and work saved a revised, independently checked outline. Further proposed observations wait for review; a draft is not a measured outcome.",
+      "Normal fictional notebook saved a reported failed internal review, score 2/5, into the exact selected observation task. The next unattended decision requested concrete rain-sensor calibration steps. An interrupted draft was retried through the notebook and saved a checked result. The reported score remains failed; a model draft check is not a measured improvement. The notebook goal editor saved a new one-page-checklist direction and progress measure. Installed follow-up exposed original own_words left unchanged; the source now updates them, cancels pending decisions and retains cancellation after a late provider result. Repeat changed-direction acceptance with this correction remains required. Retained UI captures: installed-reported-check-and-retried-draft.txt and installed-changed-goal-direction.txt."
     ],
     "target_test": "Exercise failed decisions/checks, changed direction, delayed exact local approval and restart through final installed notebooks."
   },
@@ -37,7 +39,8 @@
   "behavior:briefing": {
     "status": "partial",
     "evidence": [
-      "Normal notebook recorded fictional energy 7 and enabled briefing with a selected watch source. Drafts containing the banned em dash failed delivery. Writing contract now explicitly forbids it; accepted fresh-health delivery remains pending."
+      "Normal notebook recorded fictional energy 7 and enabled briefing with a selected watch source. Drafts containing the banned em dash failed delivery. Writing contract now explicitly forbids it; accepted fresh-health delivery remains pending.",
+      "Normal fictional selected briefing saved Your morning briefing (your-morning-briefing-36f5e3de), including the recorded energy value 7, Friday watch change and pending outline review. Earlier failed punctuation checks remain. Selected routines later paused during interrupted runs; lasting unattended reliability remains incomplete."
     ],
     "target_test": "Inspect an accepted installed briefing with exact fresh measurement, supported action and changed source; failed gates prevent delivery and unchanged advice stays quiet."
   },
@@ -51,7 +54,8 @@
   "behavior:recovery": {
     "status": "partial",
     "evidence": [
-      "Retained Windows/VPS/fixture backups restored into empty copies with matching knowledge/media digests. Normal fixture notebook Save a backup and Restore a separate copy checked 229 records and 1246 durable files, reported six rebuildable exclusions, retained the copy and rebuilt search without overwriting active records."
+      "Retained Windows/VPS/fixture backups restored into empty copies with matching knowledge/media digests. Normal fixture notebook Save a backup and Restore a separate copy checked 229 records and 1246 durable files, reported six rebuildable exclusions, retained the copy and rebuilt search without overwriting active records.",
+      "A real backup race was reproduced: the captured files preceded a concurrent save, but the manifest counted later live records. The source now retains the actual snapshot count. Verified empty retained restorations before source-assisted corrections: Windows 849 records/2325 durable comparisons and fictional endpoint 1623/2641, each with six rebuildable exclusions. Reports: verified-source-assisted-recovery-corrections.log. The isolated installer backups were relocated to private E storage with verified manifest hashes and an original-path junction; every recovery path remains. Native Inno upgrade failed during backup with incomplete PowerShell 5.1 stderr. Packaged setup succeeded on a second PowerShell 7 approach; normal native-installer acceptance remains pending. A new native helper retains complete stderr and checks exit status, tested on native PowerShell 5.1."
     ],
     "target_test": "Repeat recovery/link checks on final matching Windows/VPS packages; accept offline edits, reconnection, retained conflicts and preserved choices/pauses."
   },
@@ -66,8 +70,17 @@
     "status": "partial",
     "criterion": "Compare the newest dated baseline against owner criteria, retain a verbatim current-source quote and one follow-up; unchanged repeats stay quiet and a failed comparison is not verified.",
     "evidence": [
-      "Normal one-minute fictional watch recorded quiet unchanged Monday baselines. Changing its source to Thursday exposed a paraphrased evidence quote. Added one pre-write correction attempt, chronological baseline selection and failed-result propagation; focused regression passes. Installed change/repeat acceptance pending."
+      "Normal one-minute fictional watch recorded quiet unchanged Monday baselines. Changing its source to Thursday exposed a paraphrased evidence quote. Added one pre-write correction attempt, chronological baseline selection and failed-result propagation; focused regression passes. Installed change/repeat acceptance pending.",
+      "Changing the actual fictional source from Thursday to Friday produced watch-1f29fae6. Subsequent unchanged scheduled cycles produced no extra change note. Exact final-package watch evidence and the full portable comparison/source-watch workflow still require acceptance."
     ],
     "target_test": "Observe one actual Thursday change through corrected installed routines, then quiet unchanged scheduled cycles."
+  },
+  "recipe:due": {
+    "status": "source only",
+    "criterion": "Through installed chat or native mc-due, create a target/deadline obligation from the user answers once, inspect its canonical plan, self-check and evidence closure, rollover exactly once, move a target, retain past calendar markers and identify a stale future marker without accessing a calendar. No second obligation or private engine dependency. Calendar writes need exact approval; actual paired delivery and quiet caps must pass.",
+    "evidence": [
+      "Maintained full obligation workflow and room reference are now bundled. Native tool now exposes help and local marker needed/set/clear/stale; changing a target invalidates its previous marker and recurrence resets per-window bookkeeping. A real shared-command regression covers setup, marker update, target move, closure, stale future marker and path/newline refusal. Installed recipe result and paired delivery remain unverified."
+    ],
+    "target_test": "Run complete due recipe through the final isolated native assistant and normal notebook commands; inspect actual plan and event history, quiet reminders and one paired delivery."
   }
 }

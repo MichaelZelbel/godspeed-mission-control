@@ -82,7 +82,7 @@ export class QueryService {
     }
     if (table === 'v_ai_allowance_current') return [];
     if(table==='notifications')return list(table).map(r=>{
-      const note=r.record_id?this.store.get('notes',r.record_id):null;
+      const note=r.record_id?get('notes',r.record_id):null;
       return {...r,title:r.title||note?.title||'Godspeed needs your attention',body:r.body||r.message||r.reason||note?.content||null,link:r.link||(note&&!note.is_trashed?'/dashboard/notes/'+note.id:'/dashboard/settings'),is_read:r.is_read??r.status==='resolved'};
     });
     if(table==='conversation_messages')return list(table).map(r=>({...r,person_id:r.person_id||r.contact_id||null}));

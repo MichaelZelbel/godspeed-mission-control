@@ -7,7 +7,10 @@ export function dueRows(store,now=new Date()){
  return createDueCommands({root:store.root,commandArgs:[],date:day}).stateRows().map(r=>({id:'due-'+r.slug,type:'deadlines',uid:hash('due/'+r.slug).slice(0,32),title:r.title,native_file:'due/'+r.slug+'.md',native_slug:r.slug,status:['closed','dropped'].includes(r.state)?'closed':r.state,start_at:r.firstDay?r.firstDay+'T00:00:00Z':null,due_at:r.lastDay?r.lastDay+'T23:59:59Z':null,target_at:r.targetDay?r.targetDay+'T23:59:59Z':null,completion_check:r.doneWhen,completion_evidence:r.closedBy,closed_at:r.closedOn,band:r.band,attention:r.attention,sentence:r.sentence,_hash:hash(r),created_at:(r.firstDay||day)+'T00:00:00Z'}));
 }
 export function dueCommand(store,args){
- if(!Array.isArray(args)||!['add','done','target','drop','check','state','list','today'].includes(args[0])||args.some(a=>typeof a!=='string'||a.length>20000)||args.includes('--godspeed'))throw Error('Unsupported obligation command');
+ if(!Array.isArray(args)||!['add','done','target','drop','check','state','list','today','help','--help','-h','marker'].includes(args[0])||args.some(a=>typeof a!=='string'||a.length>20000)||args.some(a=>a==='--godspeed'||a.startsWith('--godspeed=')))throw Error('Unsupported obligation command');
+ if(args[0]==='help')args=['--help',...args.slice(1)];
+ if(['add','done','target','drop','marker'].includes(args[0])&&!(args[0]==='marker'&&['--needed','--stale'].includes(args[1]))&&!/^[a-z0-9][a-z0-9-]{0,59}$/.test(args[1]||''))throw Error('Choose an obligation slug inside the isolated workspace');
+ const marker=args.indexOf('--set');if(marker>=0&&(!args[marker+1]||/[\r\n\t]/.test(args[marker+1])))throw Error('Calendar event identity must be a single line');
  const selfCheck=args.indexOf('--self-check-arg');if(selfCheck>=0)localPath(store.root,args[selfCheck+1]||'');
  // Historical self-check paths are never allowed to inspect another installation.
  if(args[0]==='check'&&fs.existsSync(path.join(store.root,'due')))for(const file of fs.readdirSync(path.join(store.root,'due')).filter(f=>f.endsWith('.md'))){const match=fs.readFileSync(localPath(store.root,'due/'+file),'utf8').match(/^SELF-CHECK-ARG:\s*(.+)$/m);if(match)localPath(store.root,match[1]);}

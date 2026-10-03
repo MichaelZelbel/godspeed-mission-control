@@ -1,5 +1,5 @@
 import fs from 'node:fs';import path from 'node:path';
-import {hash,atomic,safe} from './records/store.mjs';
+import {hash,atomic,safe,encode} from './records/store.mjs';
 import {Scheduler} from './jobs/scheduler.mjs';
 import {nativeOperation,addonCommand,ensureNativeSchedules} from './native-personal.mjs';
 import {cardCommand,importCardFiles} from './card-commands.mjs';
@@ -68,7 +68,7 @@ export function personalOperation(domains,input){
   return store.withLock(()=>{
    const current=store.get('work_items',item.id),currentGoal=store.get('goals',goal.id);if(current._hash!==item._hash||currentGoal._hash!==goal._hash)throw Error('Observation work changed; reload before saving');
    const result=store.prepare('notes',{title:'Reported check: '+item.title,content:'Agreed check: '+item.check+'\nReported result: '+(input.passed?'passed':'failed')+(input.value!==undefined?'\nReported measurement: '+input.value:'')+'\nUser evidence: '+evidence+'\nSource: user-reported observation; the software verified saving this report, not the underlying real-world event.',source_app:'goal-observation',goal_id:goal.id,work_id:item.id});
-   const verification={kind:'reported-observation',work_id:item.id,result_id:result.id,passed:input.passed,value:input.value??null,outcome:input.passed?'check passed':'check failed',evidence,report_hash:digest,at:new Date().toISOString()};
+   const verification={kind:'reported-observation',work_id:item.id,result_id:result.id,content_hash:hash(encode(result)),passed:input.passed,value:input.value??null,outcome:input.passed?'check passed':'check failed',evidence,report_hash:digest,at:new Date().toISOString()};
    store.commit([result,store.prepare('work_items',{state:'verified',result_id:result.id,verification},current),store.prepare('goals',{progress:[...(currentGoal.progress||[]),verification]},currentGoal)]);
    return store.get('work_items',item.id);
   });
@@ -97,10 +97,13 @@ export function personalOperation(domains,input){
  }
  if(type==='goal-change'){
   const g=old('goals');required(input.reason,'Reason for change');if(input.status&&!['adopted','provisional','paused','achieved','retired'].includes(input.status))throw Error('Unsupported goal status');
+  if(input.title!==undefined)required(input.title,'Goal');if(input.measure!==undefined)required(input.measure,'Progress measure');
   const changes=Object.fromEntries(['title','measure','status'].filter(k=>input[k]!==undefined).map(k=>[k,input[k]]));
+  if(input.title!==undefined)changes.own_words=input.title;
   return store.withLock(()=>{const next=store.prepare('goals',{...changes,changes:[...(g.changes||[]),{reason:input.reason,at:new Date().toISOString(),before:{title:g.title,measure:g.measure,status:g.status}}]},g);
    const pending=query.rows('work_items').filter(w=>w.goal_id===g.id&&!['verified','cancelled'].includes(w.state)).map(w=>store.prepare('work_items',{state:'cancelled',reason:'Goal changed: '+input.reason},w));
-   const forecasts=query.rows('forecasts').filter(f=>f.goal_id===g.id&&f.status==='open').map(f=>store.prepare('forecasts',{status:'needs_review',reason:input.reason},f));store.commit([next,...pending,...forecasts]);return store.get('goals',g.id);});
+   const decisions=query.rows('decisions').filter(d=>d.goal_id===g.id&&d.state==='selected'&&pending.some(w=>w.decision_id===d.id)).map(d=>store.prepare('decisions',{state:'cancelled',reason:'Goal changed: '+input.reason},d));
+   const forecasts=query.rows('forecasts').filter(f=>f.goal_id===g.id&&f.status==='open').map(f=>store.prepare('forecasts',{status:'needs_review',reason:input.reason},f));store.commit([next,...pending,...decisions,...forecasts]);return store.get('goals',g.id);});
  }
  if(type==='goal-outcome'){const g=old('goals');required(input.evidence,'Outcome evidence');return store.save('goals',{id:g.id,progress:[...(g.progress||[]),{kind:'observed',evidence:input.evidence,value:input.value??null,outcome:input.outcome||'observed',at:new Date().toISOString()}]},g._hash);}
  if(type==='goal-evidence'){

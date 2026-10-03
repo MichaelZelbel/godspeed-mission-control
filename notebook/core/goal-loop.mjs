@@ -62,7 +62,7 @@ export async function work(job,{store,query,provider}){
    store.commit([store.prepare('work_items',{state:'verified',result_id:evidence.result_id,verification:evidence},store.get('work_items',item.id)),store.prepare('goals',{progress:[...(current.progress||[]),evidence]},current)]);
    return {verified:true,record_id:record.id,work_id:item.id,verification:'Draft completion check and durable read-back',content_hash:checked._hash,delivery:'notebook'};
   });
- }catch(error){store.save('work_items',{id:item.id,state:applied?'needs_review':'failed',error:error.message,retry_after:new Date(Date.now()+60000*2**((item.attempts||0)+1)).toISOString()});throw error;}
+ }catch(error){store.withLock(()=>{const current=store.get('work_items',item.id);if(current?.state==='cancelled')return;store.commit([store.prepare('work_items',{state:applied?'needs_review':'failed',error:error.message,retry_after:new Date(Date.now()+60000*2**((item.attempts||0)+1)).toISOString()},current)]);});throw error;}
 }
 export function remind(job,{store,query},now=Date.now()){
  if(query.rows('deadlines').some(d=>d.native_file))dueCommand(store,['check']);

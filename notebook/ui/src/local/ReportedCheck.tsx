@@ -1,4 +1,4 @@
-export function ReportedCheck({work,operation}:{work:any,operation:(input:any)=>Promise<void>}){
+export function ReportedCheck({work,operation}:{work:any,operation:(input:any)=>Promise<boolean>}){
  if(work.kind!=='observation'||work.state!=='awaiting_approval')return null;
  return <form className="space-y-2" onSubmit={e=>{
   e.preventDefault();const fields=new FormData(e.currentTarget),measurement=String(fields.get('measurement')||'').trim();

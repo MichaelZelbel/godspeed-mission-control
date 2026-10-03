@@ -10,13 +10,28 @@ import {jobExecutor} from '../core/runtime.mjs';
 import {Domains} from '../core/domains.mjs';
 const fixture=()=>{const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-v2-')));return {store,query:new QueryService(store)};};
 
+test('changed direction cancels stale approved work even when its provider returns later',async()=>{
+ const {store,query}=fixture(),domains=new Domains(query),goal=store.save('goals',{title:'Fictional old direction',own_words:'Fictional old direction',status:'adopted',progress:[]}),note=store.save('notes',{title:'Fictional target',content:'Keep this original'}),decision=store.save('decisions',{goal_id:goal.id,state:'selected'}),item=store.save('work_items',{title:'Old authorized edit',goal_id:goal.id,decision_id:decision.id,kind:'local-note',state:'awaiting_approval',check:'Old edit exists',attempts:0});
+ await domains.invoke('personal-operation',{type:'work-allow-local',id:item.id,note_id:note.id});
+ const run=jobExecutor(async()=>{await domains.invoke('personal-operation',{type:'goal-change',id:goal.id,title:'Fictional changed direction',measure:'An actual volunteered observation',reason:'Changed my mind'});return {deliverable:'The old content must never be applied'};},query);
+ await assert.rejects(run({kind:'goal-work'},{store,settings:{}}),/Goal changed/);
+ assert.equal(store.get('work_items',item.id).state,'cancelled');
+ assert.equal(store.get('notes',note.id).content,'Keep this original');
+ assert.equal(store.get('decisions',decision.id).state,'cancelled');
+ assert.equal(store.get('goals',goal.id).own_words,'Fictional changed direction');
+ assert.equal(store.get('goals',goal.id).changes.at(-1).before.title,'Fictional old direction');
+ await assert.rejects(domains.invoke('personal-operation',{type:'work-allow-local',id:item.id,note_id:note.id}),/pending|await|cancel|active/i);
+ await assert.rejects(domains.invoke('personal-operation',{type:'goal-change',id:goal.id,title:' ',reason:'Fictional empty title'}),/Goal/);
+ await assert.rejects(domains.invoke('personal-operation',{type:'goal-change',id:goal.id,measure:' ',reason:'Fictional empty measure'}),/Progress measure/);
+});
+
 test('reported checks finish selected observation work once and inform the next decision without inventing success',async()=>{
  const {store,query}=fixture(),domains=new Domains(query);new Scheduler(store).configure({goal:'Fictional outline quality'});const goal=store.list('goals')[0];
  const decision=store.save('decisions',{goal_id:goal.id,state:'selected'}),item=store.save('work_items',{title:'Rate the fictional outline',goal_id:goal.id,decision_id:decision.id,kind:'observation',state:'awaiting_approval',check:'The reviewer rates clarity at least 4 out of 5'});
  const input={type:'work-record-observation',id:item.id,evidence:'Fictional internal review: clarity scored 2 out of 5; the setup section is unclear.',value:2,passed:false};
  await domains.invoke('personal-operation',input);const completed=store.get('work_items',item.id),progress=store.get('goals',goal.id).progress;
  assert.equal(completed.state,'verified');assert.equal(completed.verification.kind,'reported-observation');assert.equal(completed.verification.passed,false);assert.equal(progress.at(-1).value,2);assert.equal(progress.at(-1).outcome,'check failed');
- assert.equal(store.get('notes',completed.result_id).content.includes(input.evidence),true);
+ assert.equal(store.get('notes',completed.result_id).content.includes(input.evidence),true);assert.equal(completed.verification.content_hash,store.get('notes',completed.result_id)._hash);
  await domains.invoke('personal-operation',input);assert.equal(store.get('goals',goal.id).progress.length,progress.length);
  await assert.rejects(domains.invoke('personal-operation',{...input,evidence:'A competing report'}),/already recorded/i);
  let sawFailedCheck=false;const provider=async request=>{if(request.kind==='goal-decision'){sawFailedCheck=request.context.goal.progress.some(p=>p.outcome==='check failed'&&p.value===2);return {kind:'draft',action:'Clarify the fictional setup section',check:'Contains clear setup steps'};}return {deliverable:'Fictional setup steps'};};

@@ -255,8 +255,3 @@ The quiet-spacing rules come from the native band arithmetic, not a model's opin
 - **Never build a second nagging mechanism** for a kind of obligation that feels special. That is
   what D-165 exists to prevent, and credentials were the first thing that felt special.
 
-
-
-## Installed personal workspace
-
-Use the current user workspace and its configured providers. Keep original workflow, command contracts, scripts and verification criteria. Read the workspace authorization rules before sends, sign-ins, payments or publishing. Search existing device-private credentials before asking for configuration. Saved output and a passing screen are not evidence that the full requested result happened.
