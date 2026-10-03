@@ -267,7 +267,9 @@ const FolderRow = memo(function FolderRow({
           >
             <span
               role="button"
-              tabIndex={-1}
+              aria-label={(isOpen ? "Collapse " : "Expand ") + (isRoot ? "All Notes" : node.name)}
+              tabIndex={0}
+              onKeyDown={(event)=>{if(event.key==="Enter"||event.key===" "){event.preventDefault();event.stopPropagation();onToggleFolder(node.path);}}}
               onClick={(event) => {
                 event.stopPropagation();
                 onToggleFolder(node.path);
@@ -278,7 +280,7 @@ const FolderRow = memo(function FolderRow({
             </span>
             {isOpen ? <FolderOpen className="h-4 w-4 shrink-0 text-muted-foreground" /> : <Folder className="h-4 w-4 shrink-0 text-muted-foreground" />}
             <span className="min-w-0 flex-1 truncate">{isRoot ? "All Notes" : node.name}</span>
-            <span className="text-[10px] text-muted-foreground">{node.noteCount}</span>
+            <span className="text-[10px] text-foreground/80">{node.noteCount}</span>
           </button>
         </ContextMenuTrigger>
         <ContextMenuContent className="w-52">

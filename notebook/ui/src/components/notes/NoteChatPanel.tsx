@@ -280,7 +280,7 @@ export function NoteChatPanel({ note, onClose, onNoteChanged }: NoteChatPanelPro
       <div className="flex items-center justify-between px-3 py-2.5 border-b border-border bg-muted/30 shrink-0">
         <div className="flex items-center gap-2">
           <Bot className="h-4 w-4 text-primary" />
-          <span className="text-sm font-medium">Godspeed · Current note</span>
+          <span className="text-sm font-medium">Godspeed / {note.title || "Current note"}</span>
           {state.messages.length > 0 && (
             <span className="text-[10px] text-muted-foreground">
               {state.messages.length} msgs{state.summary ? " · summary" : ""}
@@ -325,9 +325,7 @@ export function NoteChatPanel({ note, onClose, onNoteChanged }: NoteChatPanelPro
 
         {state.messages.map((msg, i) => (
           <div key={i} className={`flex gap-2 ${msg.role === "user" ? "justify-end" : ""}`}>
-            {msg.role === "assistant" && (
-              <Bot className="h-5 w-5 text-primary shrink-0 mt-0.5" />
-            )}
+
             <div
               className={`rounded-lg px-3 py-2 text-sm max-w-[85%] ${
                 msg.role === "user"
@@ -392,15 +390,13 @@ export function NoteChatPanel({ note, onClose, onNoteChanged }: NoteChatPanelPro
               )}
 
             </div>
-            {msg.role === "user" && (
-              <User className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" />
-            )}
+
           </div>
         ))}
 
         {isLoading && (
           <div className="flex items-center gap-2">
-            <Bot className="h-5 w-5 text-primary shrink-0" />
+
             <div className="bg-muted rounded-lg px-3 py-2">
               <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
             </div>
@@ -417,7 +413,7 @@ export function NoteChatPanel({ note, onClose, onNoteChanged }: NoteChatPanelPro
 
       {/* Input */}
       <div className="p-3 border-t border-border shrink-0">
-        <ChatComposer value={input} onChange={setInput} onSend={sendMessage} onStop={stopReply} busy={isLoading} files={files} onFiles={setFiles} model={model} effort={effort} onModel={setModel} onEffort={setEffort} reply={state.messages.filter(m=>m.role==='assistant').slice(-1)[0]?.content||''} context={'Current note: '+(note.title||'Untitled')} onError={setError}/>
+        <ChatComposer value={input} onChange={setInput} onSend={sendMessage} onStop={stopReply} busy={isLoading} files={files} onFiles={setFiles} model={model} effort={effort} onModel={setModel} onEffort={setEffort} reply={state.messages.filter(m=>m.role==='assistant').slice(-1)[0]?.content||''}  onError={setError}/>
       </div>
       {confirmDialog}
     </div>

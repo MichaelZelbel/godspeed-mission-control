@@ -4,7 +4,7 @@ import { slug, hash } from './records/store.mjs';
 
 const inventory = JSON.parse(fs.readFileSync(fileURLToPath(new URL('../../docs/full-version/source-inventory.json', import.meta.url)), 'utf8'));
 export const tables = new Set(inventory.dependencies.flatMap(d => d.tables).filter(t => t !== 'note-attachments'));
-for (const table of ['goals', 'jobs', 'job_receipts', 'settings', 'permissions', 'decisions', 'habits', 'journal', 'deadlines', 'comments', 'note_conversations', 'import_mappings','record_history','event_corrections','embeddings']) tables.add(table);
+for (const table of ['goals', 'jobs', 'job_receipts', 'settings', 'permissions', 'decisions', 'habits', 'journal', 'deadlines', 'comments', 'notifications', 'note_conversations', 'import_mappings','record_history','event_corrections','embeddings']) tables.add(table);
 for(const table of ['health_episodes','medications','health_observations','watch_topics','watch_observations','outside_numbers','subscriptions','forecasts','work_items','connector_status','approvals','command_receipts'])tables.add(table);
 const views = new Set(['world_entities', 'world_events', 'world_claims', 'profile_facts', 'v_ai_allowance_current']);
 const defaults = {

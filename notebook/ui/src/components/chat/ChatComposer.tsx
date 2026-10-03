@@ -4,7 +4,7 @@ import {Button} from '@/components/ui/button';
 import {Textarea} from '@/components/ui/textarea';
 
 export type ChatFile={path:string;name:string;type:string;text?:string};
-type Props={value:string;onChange:(text:string)=>void;onSend:()=>void;onStop:()=>void;busy:boolean;files:ChatFile[];onFiles:(files:ChatFile[])=>void;model:string;effort:string;onModel:(v:string)=>void;onEffort:(v:string)=>void;reply:string;context:string;onError:(message:string)=>void};
+type Props={value:string;onChange:(text:string)=>void;onSend:()=>void;onStop:()=>void;busy:boolean;files:ChatFile[];onFiles:(files:ChatFile[])=>void;model:string;effort:string;onModel:(v:string)=>void;onEffort:(v:string)=>void;reply:string;context?:string;compact?:boolean;onError:(message:string)=>void};
 export default function ChatComposer(p:Props){
   const picker=useRef<HTMLInputElement>(null),recognition=useRef<any>(null);
   const [uploading,setUploading]=useState(false),[listening,setListening]=useState(false),[speaking,setSpeaking]=useState(false),[dragging,setDragging]=useState(false);
@@ -37,9 +37,9 @@ export default function ChatComposer(p:Props){
   };
   const playback=()=>{if(speaking){speechSynthesis.cancel();setSpeaking(false);return;}const utterance=new SpeechSynthesisUtterance(p.reply.replace(/[#*`]/g,''));utterance.onend=()=>setSpeaking(false);utterance.onerror=()=>setSpeaking(false);speechSynthesis.speak(utterance);setSpeaking(true);};
   return <div className={'rounded-2xl border bg-background shadow-sm '+(dragging?'ring-2 ring-primary':'')} onDragOver={e=>{e.preventDefault();setDragging(true);}} onDragLeave={()=>setDragging(false)} onDrop={e=>{e.preventDefault();setDragging(false);if(!p.busy)void addFiles(e.dataTransfer.files);}}>
-    <div className="border-b px-4 py-2 text-xs text-muted-foreground truncate" title={p.context}>{p.context}</div>
+    {p.context&&<div className="border-b px-4 py-2 text-xs text-muted-foreground truncate" title={p.context}>{p.context}</div>}
     {p.files.length>0&&<div className="flex flex-wrap gap-2 px-3 pt-3">{p.files.map((file,i)=><div key={file.path} className="flex items-center gap-2 rounded-lg border px-2 py-1 text-xs max-w-full">{file.type.startsWith('image/')?<img alt="" className="h-8 w-8 rounded object-cover" src={'/api/media/file/'+encodeURIComponent(file.path)}/>:<FileText className="h-4 w-4 shrink-0"/>}<span className="truncate max-w-40">{file.name}</span><Button variant="ghost" size="icon" className="h-10 w-10" aria-label={'Remove '+file.name} disabled={p.busy} onClick={()=>p.onFiles(p.files.filter((_,n)=>n!==i))}><X className="h-4 w-4"/></Button></div>)}</div>}
-    <Textarea aria-label="Message" placeholder="Ask Godspeed..." value={p.value} onChange={e=>p.onChange(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.nativeEvent.isComposing){e.preventDefault();if(!p.busy&&!uploading)p.onSend();}}} rows={2} className="min-h-20 max-h-48 resize-none border-0 bg-transparent shadow-none focus-visible:ring-0 px-4 py-3"/>
+    <Textarea aria-label="Message" placeholder="Ask Godspeed..." value={p.value} onChange={e=>p.onChange(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.nativeEvent.isComposing){e.preventDefault();if(!p.busy&&!uploading)p.onSend();}}} rows={p.compact?1:2} className={(p.compact?"min-h-14 ":"min-h-20 ")+"max-h-48 resize-none border-0 bg-transparent shadow-none focus-visible:ring-0 px-4 py-3"}/>
     <div className="flex items-center flex-wrap gap-1 px-2 pb-2">
       <input ref={picker} type="file" multiple className="hidden" accept="image/png,image/jpeg,image/webp,image/gif,application/pdf,.txt,.md,.csv,.json,.log,.xml,.html,.yaml,.yml" aria-label="Choose attachments" onChange={e=>{if(e.target.files)void addFiles(e.target.files);}}/>
       <Button variant="ghost" size="icon" className="h-11 w-11" aria-label="Add files" title="Add images, PDFs, or text files" disabled={p.busy||uploading} onClick={()=>picker.current?.click()}>{uploading?<Loader2 className="h-5 w-5 animate-spin"/>:<Plus className="h-5 w-5"/>}</Button>

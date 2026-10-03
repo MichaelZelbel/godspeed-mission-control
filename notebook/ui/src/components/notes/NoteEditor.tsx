@@ -47,7 +47,7 @@ import { LocalGraphPanel } from "./LocalGraphPanel";
 import { NoteMetadataEditor } from "./NoteMetadataEditor";
 import { AiVisibilityButton } from "@/components/common/AiVisibilityButton";
 import { LinkToNoteDialog } from "./LinkToNoteDialog";
-import { NoteChatPanel } from "./NoteChatPanel";
+
 import { supabase } from "@/integrations/supabase/client";
 import { useAICreditsGate, creditsBlockedMessage } from "@/hooks/useAICreditsGate";
 import type { AICredits } from "@/hooks/useAICredits";
@@ -136,6 +136,7 @@ import { BRAND } from "@/lib/brand";
 
 
 interface NoteEditorProps {
+  chatOpen?: boolean;
   note: Note;
   onNoteDeleted?: () => void;
   showLocalGraph?: boolean;
@@ -417,7 +418,7 @@ function insertWikilinkSafely(editor: any, attrs: { noteId: string; noteTitle: s
   }
 }
 
-export function NoteEditor({ note, onNoteDeleted, showLocalGraph: showLocalGraphProp, onToggleLocalGraph, onNoteSelect }: NoteEditorProps) {
+export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showLocalGraph: showLocalGraphProp, onToggleLocalGraph, onNoteSelect }: NoteEditorProps) {
   const isMobile = useIsMobile();
   const updateNote = useUpdateNote();
   const deleteNote = useDeleteNote();
@@ -481,7 +482,7 @@ export function NoteEditor({ note, onNoteDeleted, showLocalGraph: showLocalGraph
   const [showLinkToNote, setShowLinkToNote] = useState(false);
   const [sourceMode, setSourceMode] = useState(false);
   const [sourceText, setSourceText] = useState("");
-  const [showChat, setShowChat] = useState(false);
+
   const [moderationBlock, setModerationBlock] = useState<ModerationResult | null>(null);
   const [duplicateTarget, setDuplicateTarget] = useState<Note | null>(null);
   const [pendingDuplicateTitle, setPendingDuplicateTitle] = useState("");
@@ -1481,7 +1482,7 @@ export function NoteEditor({ note, onNoteDeleted, showLocalGraph: showLocalGraph
                   <Code2 className="h-4 w-4" />
                 </Button>
               )}
-              <Button variant="ghost" size="icon" className={cn("h-8 w-8", showChat && "bg-accent text-accent-foreground")} onClick={() => setShowChat(!showChat)} title="AI Chat">
+              <Button variant="ghost" size="icon" className={cn("h-8 w-8", showChat && "bg-accent text-accent-foreground")} onClick={() => window.dispatchEvent(new Event("godspeed:toggle-note-chat"))} title="AI Chat">
                 <MessageSquare className="h-4 w-4" />
               </Button>
             </>
@@ -1547,7 +1548,7 @@ export function NoteEditor({ note, onNoteDeleted, showLocalGraph: showLocalGraph
                 variant="ghost"
                 size="icon"
                 className={cn("h-7 w-7", showChat && "bg-accent text-accent-foreground")}
-                onClick={() => setShowChat(!showChat)}
+                onClick={() => window.dispatchEvent(new Event("godspeed:toggle-note-chat"))}
                 title="AI Chat"
               >
                 <MessageSquare className="h-3.5 w-3.5" />
@@ -2031,15 +2032,6 @@ export function NoteEditor({ note, onNoteDeleted, showLocalGraph: showLocalGraph
         </DialogFooter>
       </DialogContent>
     </Dialog>
-    {showChat && (
-      <NoteChatPanel
-        note={note}
-        onClose={() => setShowChat(false)}
-        onNoteChanged={() => {
-          queryClient.invalidateQueries({ queryKey: ["notes"] });
-        }}
-      />
-    )}
     <ModerationBlockDialog
       isOpen={!!moderationBlock}
       onClose={() => setModerationBlock(null)}

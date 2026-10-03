@@ -16,6 +16,8 @@ import {
 } from "@/hooks/useNotes";
 import { NoteList } from "@/components/notes/NoteList";
 import { NoteTree } from "@/components/notes/NoteTree";
+import { GlobalAIChatFAB } from "@/components/chat/GlobalAIChatFAB";
+import { useSidebar } from "@/components/ui/sidebar";
 import { NoteEditor } from "@/components/notes/NoteEditor";
 
 
@@ -120,6 +122,11 @@ export default function Notes() {
   const location = useLocation();
   const queryClient = useQueryClient();
   const isMobile = useIsMobile();
+  const {setOpen:setMenuOpen}=useSidebar();
+  const [chatOpen,setChatOpen]=useState(false);
+  const [treeCollapsed,setTreeCollapsed]=useState(()=>window.localStorage.getItem("godspeed:notes-tree-collapsed")==="true");
+  const toggleTree=()=>setTreeCollapsed(v=>{window.localStorage.setItem("godspeed:notes-tree-collapsed",String(!v));return !v;});
+  const chatVisibility=useCallback((open:boolean)=>{setChatOpen(open);if(open){setMenuOpen(false);if(window.innerWidth<1200)setTreeCollapsed(true);}},[setMenuOpen]);
 
   
   const [selectedId, setSelectedId] = useState<string | null>(urlNoteId || null);
@@ -825,25 +832,27 @@ export default function Notes() {
 
   return (
     <>
-    <div className="flex h-[calc(100dvh-104px)] overflow-hidden">
+    <div className={cn("flex h-[calc(100dvh-104px)]",isMobile&&chatOpen?"flex-col overflow-y-auto":"overflow-hidden")}>
       <SEOHead title="Notes - Godspeed Mission Control" noIndex />
 
 
+      {!isMobile&&treeCollapsed&&<div className="w-11 shrink-0 border-r border-border"><Button variant="ghost" size="icon" className="h-11 w-11" aria-label="Expand notes tree" title="Expand notes tree" onClick={toggleTree}><ChevronRight className="h-4 w-4"/></Button></div>}
       {/* Note list panel */}
       <div className={cn(
         "shrink-0 border-r border-border flex-col bg-background min-w-0",
         isMobile ? "w-full" : "w-72",
-        isMobile && selectedId ? "hidden" : "flex"
+        (isMobile && (selectedId||chatOpen)) || (!isMobile&&treeCollapsed) ? "hidden" : "flex"
       )}>
 
         {/* Header */}
-        <div className="flex items-center gap-1 px-3 py-2 border-b border-border shrink-0">
+        <div className="flex flex-wrap items-center gap-1 px-3 py-2 border-b border-border shrink-0">
+          {!isMobile&&<Button variant="ghost" size="icon" className="h-11 w-11 shrink-0" aria-label="Collapse notes tree" title="Collapse notes tree" onClick={toggleTree}><ChevronLeft className="h-4 w-4"/></Button>}
           <div className="flex flex-col text-sm font-semibold h-8 px-2 leading-tight">
             <div className="flex items-center gap-1.5">
               <FileText className="h-4 w-4" />
               {searchMode ? "Search" : "Notes"}
             </div>
-            <span className="text-[10px] text-muted-foreground font-normal">
+            <span className="text-[10px] text-foreground/80 font-normal">
               {!searchMode && counts.all}
             </span>
           </div>
@@ -881,7 +890,7 @@ export default function Notes() {
                 title="Sort notes"
               >
                 <ArrowUpDown className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">{sortLabels[sortField]}</span>
+                {!chatOpen&&<span className="hidden sm:inline">{sortLabels[sortField]}</span>}
                 {sortField !== "manual" && (
                   sortDirection === "asc"
                     ? <ArrowUp className="h-3 w-3" />
@@ -1278,9 +1287,11 @@ export default function Notes() {
         )}
       </div>
 
+      <GlobalAIChatFAB embedded noteTitle={selectedNote?.title||undefined} onOpenChange={chatVisibility}/>
       {/* Right panel - editor */}
       <div className={cn(
-        "flex-1 min-w-0 flex-col",
+        "flex-1 min-h-0 min-w-0 flex-col",
+        isMobile&&chatOpen&&"min-h-[360px] shrink-0",
         isMobile && !selectedId ? "hidden" : "flex"
       )}>
         {selectedNote ? (
@@ -1302,6 +1313,7 @@ export default function Notes() {
               <NoteEditor
                 key={selectedNote.id}
                 note={selectedNote}
+                chatOpen={chatOpen}
                 onNoteDeleted={() => selectNote(null)}
                 showLocalGraph={showLocalGraph}
                 onToggleLocalGraph={() => setShowLocalGraph(prev => !prev)}

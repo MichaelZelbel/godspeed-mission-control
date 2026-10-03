@@ -44,3 +44,9 @@ The native notebook now uses one shared chat composer for the full chat page, fl
 Chat context now selects bounded relevant records rather than sending the entire database to Hermes. Windows file synchronization also waits and retries when Hermes is saving files, preventing the previously observed service crash.
 
 A separate full source-account migration copy and startup rehearsal are complete: 1,719 notes including 417 trashed notes, 294 active contacts and 40 media objects. All original note contents, IDs and media hashes matched, and the staged notebook reported no broken references. This copy has not replaced either running installation. Source-only graph links and chunks remain in its private archive. See `menerio-migration.md` for the migration command and scope.
+
+## Follow-up: notes, chat and comments layout
+
+Both installations now show the Godspeed note conversation between the collapsible notes tree and the active editor. Opening chat collapses the main navigation, and a narrower screen also collapses the tree. The note title is supplied from the selected note and appears once in the chat header. Message avatars and the repeated current-note composer strip are removed. The existing separate-window link retains the current note context. The comments section is hidden without deleting comments.
+
+Desktop and narrow-screen layouts, manual panel toggles, note switching and the separate chat window were checked. A short phone screen uses minimum pane heights and workspace scrolling so neither the conversation nor the document body disappears. The migration copy remains staged separately and has not replaced the live notes.

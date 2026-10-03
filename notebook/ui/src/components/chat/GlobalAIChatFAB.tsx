@@ -59,17 +59,20 @@ function loadSizeMode(): SizeMode {
   return v === "expanded" || v === "fullscreen" ? v : "docked";
 }
 
-export function GlobalAIChatFAB({page=false}:{page?:boolean}) {
+export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChange}:{page?:boolean;embedded?:boolean;noteTitle?:string;onOpenChange?:(open:boolean)=>void}) {
   const { user, session } = useAuth();
   const location = useLocation();
   const queryClient = useQueryClient();
   const isMobile = useIsMobile();
   const [open, setOpen] = useState(page);
+  const openChangeRef=useRef(onOpenChange);openChangeRef.current=onOpenChange;
+  useEffect(()=>{openChangeRef.current?.(open);},[open]);
+  useEffect(()=>{if(!embedded)return;const toggle=()=>setOpen(v=>!v);window.addEventListener("godspeed:toggle-note-chat",toggle);return()=>window.removeEventListener("godspeed:toggle-note-chat",toggle);},[embedded]);
   const [confirm, confirmDialog] = useConfirmDialog();
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [sizeMode, setSizeModeState] = useState<SizeMode>(() => loadSizeMode());
+  const [sizeMode, setSizeModeState] = useState<SizeMode>(() => embedded ? "docked" : loadSizeMode());
   const scrollRef = useRef<HTMLDivElement>(null);
   const followRef=useRef(true);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -95,6 +98,9 @@ export function GlobalAIChatFAB({page=false}:{page?:boolean}) {
     const match = location.pathname.match(/^\/dashboard\/notes\/([^/]+)$/);
     return match ? match[1] : page?new URLSearchParams(location.search).get("note"):null;
   }, [location.pathname,location.search,page]);
+
+  // Returning to the note list on a phone must reveal the tree again.
+  useEffect(()=>{if(embedded&&isMobile&&!noteId)setOpen(false);},[embedded,isMobile,noteId]);
 
   // Detect person context (People profile page) so the assistant knows whose
   // profile the user is looking at
@@ -148,7 +154,7 @@ export function GlobalAIChatFAB({page=false}:{page?:boolean}) {
         ? `person:${personId}`
         : "general";
 
-  useEffect(()=>{setContextTitle('');if(noteId)supabase.from('notes').select('title').eq('id',noteId).single().then(({data}:any)=>setContextTitle(data?.title||'Untitled note'));else if(personId)supabase.from('contacts').select('name').eq('id',personId).single().then(({data}:any)=>setContextTitle(data?.name||'Current person'));},[noteId,personId]);
+  useEffect(()=>{let active=true;setContextTitle(noteTitle||'');if(noteId&&noteTitle===undefined)supabase.from('notes').select('*').eq('id',noteId).single().then(({data}:any)=>{if(active&&data)setContextTitle(data.title||'Untitled note');});else if(personId)supabase.from('contacts').select('*').eq('id',personId).single().then(({data}:any)=>{if(active&&data)setContextTitle(data.name||'Current person');});return()=>{active=false;};},[noteId,personId,noteTitle]);
 
   // Persisted chat state for the current context
   const [state, setState] = useState<PersistedChatState>(() =>
@@ -426,9 +432,9 @@ export function GlobalAIChatFAB({page=false}:{page?:boolean}) {
       : "Ask me anything about your notes, people, and media.";
 
   // Dimensions per mode
-  const isLarge = page || effectiveMode !== "docked";
+  const isLarge = page || embedded || effectiveMode !== "docked";
   const panelStyle: React.CSSProperties =
-    page ? {height:"calc(100dvh - 104px)",minHeight:400,width:"100%"} : effectiveMode === "fullscreen"
+    embedded ? {height:isMobile?"max(360px, 42dvh)":"100%",width:isMobile?"100%":effectiveMode==="docked"?"clamp(320px, 35vw, 480px)":"clamp(360px, 42vw, 620px)",maxWidth:isMobile?"100%":"50%",flexShrink:0} : page ? {height:"calc(100dvh - 104px)",minHeight:400,width:"100%"} : effectiveMode === "fullscreen"
       ? {
           top: 16,
           right: 16,
@@ -471,7 +477,7 @@ export function GlobalAIChatFAB({page=false}:{page?:boolean}) {
       )}
 
       {/* Optional backdrop in fullscreen for focus */}
-      {!page && open && effectiveMode === "fullscreen" && (
+      {!page && !embedded && open && effectiveMode === "fullscreen" && (
         <div
           className="fixed inset-0 z-40 bg-background/40 backdrop-blur-sm animate-in fade-in duration-150"
           onClick={() => setSizeMode(isMobile ? "docked" : "expanded")}
@@ -481,18 +487,18 @@ export function GlobalAIChatFAB({page=false}:{page?:boolean}) {
       {/* Docked / expanded / fullscreen panel */}
       {open && (
         <div
-          className={page ? "relative mx-auto max-w-5xl" : "fixed z-50 animate-in fade-in slide-in-from-bottom-2 duration-200"}
+          className={embedded ? "relative min-w-0 border-r border-border" : page ? "relative mx-auto max-w-5xl" : "fixed z-50 animate-in fade-in slide-in-from-bottom-2 duration-200"}
           style={panelStyle}
         >
-          <div className={page?"overflow-hidden flex flex-col h-full w-full":"bg-card border border-border rounded-2xl shadow-2xl overflow-hidden flex flex-col h-full w-full"}>
+          <div className={page||embedded?"bg-background overflow-hidden flex flex-col h-full w-full":"bg-card border border-border rounded-2xl shadow-2xl overflow-hidden flex flex-col h-full w-full"}>
             {/* Header */}
             <div className="flex items-center justify-between px-4 py-2.5 border-b border-border shrink-0">
               <div className="flex items-center gap-2 min-w-0">
                 <Bot className="h-4 w-4 text-primary shrink-0" />
-                <span className="text-sm font-semibold truncate">
-                  {noteId ? "Godspeed  /  Current note" : "Godspeed"}
+                <span className="text-sm font-semibold truncate" title={noteTitle||contextTitle||"Godspeed"}>
+                  {noteId ? "Godspeed / "+(noteTitle||contextTitle||"Current note") : "Godspeed"}
                 </span>
-                {state.messages.length > 0 && (
+                {!embedded && state.messages.length > 0 && (
                   <span className="text-[10px] text-muted-foreground shrink-0">
                      /  {state.messages.length} msgs{state.summary ? "  /  summary" : ""}
                   </span>
@@ -500,13 +506,13 @@ export function GlobalAIChatFAB({page=false}:{page?:boolean}) {
               </div>
               {page&&<Button variant="ghost" className="h-11" onClick={handleClear} disabled={isLoading}>Clear conversation</Button>}
               {!page&&<div className="flex items-center gap-1">
-                <a className="inline-flex h-10 w-10 items-center justify-center rounded hover:bg-muted" href={'/dashboard/chat'+(noteId?'?note='+encodeURIComponent(noteId):personId?'?person='+encodeURIComponent(personId):'')} target="_blank" rel="noreferrer" aria-label="Open chat in a new window" title="Open chat in a new window"><ExternalLink className="h-4 w-4"/></a>
-                <span className="text-[10px] text-muted-foreground hidden sm:inline mr-1">Ctrl+Shift+K</span>
+                <a className="inline-flex h-11 w-11 sm:h-10 sm:w-10 items-center justify-center rounded hover:bg-muted" href={'/dashboard/chat'+(noteId?'?note='+encodeURIComponent(noteId):personId?'?person='+encodeURIComponent(personId):'')} target="_blank" rel="noreferrer" aria-label="Open chat in a new window" title="Open chat in a new window"><ExternalLink className="h-4 w-4"/></a>
+                {!embedded&&<span className="text-[10px] text-muted-foreground hidden xl:inline mr-1">Ctrl+Shift+K</span>}
                 {state.messages.length > 0 && (
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-7 w-7"
+                    className="h-11 w-11 sm:h-7 sm:w-7"
                     onClick={handleClear}
                     title="Clear conversation"
                   >
@@ -517,7 +523,7 @@ export function GlobalAIChatFAB({page=false}:{page?:boolean}) {
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-7 w-7"
+                    className="h-11 w-11 sm:h-7 sm:w-7"
                     onClick={() => setSizeMode(effectiveMode === "docked" ? "expanded" : "docked")}
                     title={effectiveMode === "docked" ? "Expand" : "Collapse"}
                   >
@@ -528,10 +534,11 @@ export function GlobalAIChatFAB({page=false}:{page?:boolean}) {
                     )}
                   </Button>
                 )}
+                {!embedded&&<>
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-7 w-7"
+                  className="h-11 w-11 sm:h-7 sm:w-7"
                   onClick={() =>
                     setSizeMode(
                       effectiveMode === "fullscreen" ? (isMobile ? "docked" : "expanded") : "fullscreen",
@@ -545,7 +552,8 @@ export function GlobalAIChatFAB({page=false}:{page?:boolean}) {
                     <Expand className="h-3.5 w-3.5" />
                   )}
                 </Button>
-                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setOpen(false)} title="Close">
+                </>}
+                <Button variant="ghost" size="icon" className="h-11 w-11 sm:h-7 sm:w-7" onClick={() => setOpen(false)} title="Close">
                   <X className="h-3.5 w-3.5" />
                 </Button>
               </div>}
@@ -556,7 +564,7 @@ export function GlobalAIChatFAB({page=false}:{page?:boolean}) {
               ref={scrollRef}
               onScroll={()=>{const el=scrollRef.current;if(el)followRef.current=el.scrollHeight-el.scrollTop-el.clientHeight<80;}}
               className={cn(
-                "flex-1 overflow-y-auto min-h-0 space-y-6",
+                "flex-1 overflow-y-auto min-h-0 space-y-4",
                 isLarge ? "px-5 py-4" : "p-3",
               )}
             >
@@ -572,17 +580,15 @@ export function GlobalAIChatFAB({page=false}:{page?:boolean}) {
 
               {state.messages.map((msg, i) => (
                 <div key={i} className={`flex gap-2 ${msg.role === "user" ? "justify-end" : ""}`}>
-                  {msg.role === "assistant" && (
-                    <Bot className="h-5 w-5 text-primary shrink-0 mt-0.5" />
-                  )}
+
                   <div
                     className={cn(
                       "rounded-lg px-3 py-2 text-sm",
                       msg.role === "user"
                         ? "bg-muted text-foreground max-w-[85%]"
                         : cn(
-                            "bg-transparent",
-                            isLarge ? "max-w-[85%] md:max-w-[75ch]" : "max-w-[85%]",
+                            "bg-transparent px-0",
+                            isLarge ? "max-w-full md:max-w-[75ch]" : "max-w-full",
                           ),
                     )}
                   >
@@ -634,15 +640,13 @@ export function GlobalAIChatFAB({page=false}:{page?:boolean}) {
                       </div>
                     )}
                   </div>
-                  {msg.role === "user" && (
-                    <User className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" />
-                  )}
+
                 </div>
               ))}
 
               {isLoading && (
                 <div className="flex items-center gap-2">
-                  <Bot className="h-5 w-5 text-primary shrink-0" />
+
                   <div className="bg-muted rounded-lg px-3 py-2">
                     <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                   </div>
@@ -658,7 +662,7 @@ export function GlobalAIChatFAB({page=false}:{page?:boolean}) {
             </div>
 
             <div className="shrink-0 pt-3 pb-1 px-1">
-              <ChatComposer value={input} onChange={setInput} onSend={sendMessage} onStop={stopReply} busy={isLoading} files={files} onFiles={setFiles} model={model} effort={effort} onModel={setModel} onEffort={setEffort} reply={state.messages.filter(m=>m.role==='assistant').at(-1)?.content||''} context={noteId?'Current note: '+(contextTitle||'Loading...'):personId?'Current person: '+(contextTitle||'Loading...'):collectionId?'Current collection':'Your notebook / Relevant notes and people'} onError={setError}/>
+              <ChatComposer compact={embedded} value={input} onChange={setInput} onSend={sendMessage} onStop={stopReply} busy={isLoading} files={files} onFiles={setFiles} model={model} effort={effort} onModel={setModel} onEffort={setEffort} reply={state.messages.filter(m=>m.role==='assistant').at(-1)?.content||''} context={noteId?undefined:personId?'Current person: '+(contextTitle||'Loading...'):collectionId?'Current collection':'Your notebook / Relevant notes and people'} onError={setError}/>
               <p className="text-[11px] text-muted-foreground text-center pt-2">Enter to send · Shift+Enter for a new line</p>
             </div>
           </div>
