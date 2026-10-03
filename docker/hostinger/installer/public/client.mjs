@@ -1,5 +1,5 @@
 const storage = 'godspeed-hostinger-installation';
-const endpoint = 'https://srv1328602.hstgr.cloud/godspeed-install';
+const endpoint = 'https://srv1069233.hstgr.cloud/godspeed-install';
 let poll;
 export function installationClient({ onState, onError, onReady, base = endpoint }) {
   let job;
@@ -9,7 +9,7 @@ export function installationClient({ onState, onError, onReady, base = endpoint 
     try {
       const response = await fetch(`${base}/api/status/${job.id}`, { headers: { authorization: 'Bearer ' + job.key } });
       const data = await response.json();
-      if (!response.ok) { if (response.status === 401) { clearInterval(poll); sessionStorage.removeItem(storage); job = null; } throw Error(data.error); }
+      if (!response.ok) { if (response.status === 401) { clearInterval(poll); sessionStorage.removeItem(storage); job = null; onState('idle'); } throw Error(data.error); }
       onState(data.state, job.checkout);
       if (data.url) { clearInterval(poll); sessionStorage.removeItem(storage); onReady(data.url); }
     } catch (error) { onError(error.message || 'Connection interrupted. We will try again.'); }
