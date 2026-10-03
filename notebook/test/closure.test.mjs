@@ -53,3 +53,14 @@ test('user-state backups exclude device credentials even when recovery asks for 
  const device=setup().store;restore(device,path.join(device.state,'media'),destination,{deviceConfig:true});assert.ok(!fs.existsSync(path.join(device.state,'provider.json')));assert.equal(device.list('notes')[0].content,'Synthetic recovery fixture');
  assert.equal(toolScope('save_record',{type:'settings'}),null);assert.equal(toolScope('save_record',{type:'api_keys'}),null);
 });
+test('a backup counts its captured records rather than later scheduled writes',()=>{
+ const {store}=setup(),media=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-snapshot-media-'));
+ store.save('notes',{title:'Snapshot source',content:'Before the snapshot'});
+ const destination=path.join(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-snapshot-')),'backup'),copy=fs.cpSync;
+ fs.cpSync=(source,target,options)=>{const result=copy(source,target,options);if(source===media)store.save('notes',{title:'Later scheduled result',content:'After the captured records'});return result;};
+ try{backup(store,media,destination);}finally{fs.cpSync=copy;}
+ const manifest=JSON.parse(fs.readFileSync(path.join(destination,'backup.json'))),snapshot=new Store(destination);
+ assert.equal(manifest.records,snapshot.records.size);assert.ok(store.records.size>snapshot.records.size);
+ const restored=setup().store;restore(restored,path.join(restored.state,'media'),destination);
+ assert.equal(restored.list('notes').length,1);assert.equal(restored.list('notes')[0].content,'Before the snapshot');
+});
