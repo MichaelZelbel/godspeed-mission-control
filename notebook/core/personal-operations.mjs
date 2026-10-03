@@ -10,12 +10,14 @@ import {localParts,addDays,zonedToUtc} from '../../third-party/addons/godspeed-c
 import {nextCalendarRun} from './jobs/calendar.mjs';
 import {readTable} from '../../third-party/addons/godspeed-coach/lib/auto.mjs';
 import {localPath} from './local-path.mjs';
+import {visibleRows} from './visibility.mjs';
 export const operationContract=`Return JSON {reply,notes_created?:[{title,content}],operations?:[{type,source_quote,...fields}]}. Use an operation only when the user's current message explicitly requests that change. source_quote must be exact user words requesting it, never a note quote. Supported operations:
 goal-add {title,measure,status?:adopted|provisional}; goal-change {id,title?,measure?,status?:adopted|provisional|paused|achieved|retired,reason}; goal-outcome {id,evidence,value?,outcome};
 obligation-add {title,due_at,target_at?,recurrence?:{days}}; obligation-complete {id,evidence}; obligation-snooze {id,until};
 coach-open {area:health|work-money|relationships,question}; coach-reply {id,content}; coach-close {id}; habit-agree {talk_id,title,agreement,check_at}; habit-observe {id,observation,answer:done|no|skip};
 journal-add {content}; journal-switch {enabled}; health-add {metric,value,unit,observed_at};
-memory-confirm {label,value,evidence_quote}; memory-propose {label,value,evidence_quote};
+memory-confirm {label,value,evidence_quote,subject_type:self|contact|entity,subject_id?:actual supplied ID}; memory-propose {label,value,evidence_quote,subject_type:self|contact|entity,subject_id?:actual supplied ID};
+Memory must identify whose fact it is. Use self only for the user's own fact, contact for a supplied person, and entity for a supplied thing. Never save another person's fact as self. Ask when the person or thing is ambiguous or missing; never invent an ID.
 routine-change {id,paused?,calendar?:{time:HH:MM,weekdays?:[0..6]}}; forecast-settle {id,observed,evidence}.
 work-allow-local {id,note_id}: allow the selected work to edit exactly this local note, preserving its current revision as the precondition.
 work-retry-draft {id}: explicitly retry a failed or interrupted local draft, preserving all prior attempts and versions. Never retry an applied or outward action.
@@ -23,6 +25,16 @@ work-record-observation {id,evidence,passed:boolean,value?:number}: record the u
 Every operation MUST contain source_quote. Copy the entire current user message exactly into that field, including the request verb. Without it, no operation can run. Use supplied IDs; ask to resolve ambiguity. ISO dates must include timezone. No outward actions or credentials. Never claim a change persisted until the operation succeeds.`;
 const required=(value,label)=>{if(typeof value!=='string'||!value.trim())throw Error(label+' is required');return value.trim();};
 const date=(value,label)=>{required(value,label);if(!Number.isFinite(Date.parse(value))||!/(Z|[+-]\d\d:\d\d)$/.test(value))throw Error(label+' needs an ISO date with timezone');return new Date(value).toISOString();};
+function memorySubject(domains,input){
+ const type=input.subject_type||(input.contact_id?'contact':input.entity_id?'entity':'self');
+ if(!['self','contact','entity'].includes(type))throw Error('Choose whose fact this is: yourself, a person or a thing');
+ const ids=[input.subject_id,input.contact_id,input.entity_id].filter(Boolean);
+ if(new Set(ids).size>1||input.contact_id&&type!=='contact'||input.entity_id&&type!=='entity'||type==='self'&&ids.length)throw Error('The memory subject is inconsistent');
+ if(type==='self')return {subject_type:'self',subject_id:null};
+ const id=required(ids[0],'Memory subject ID'),row=visibleRows(domains.query,type==='contact'?'contacts':'entities').find(r=>r.id===id&&!r.removed_at&&!r.is_trashed&&!r.merged_into);
+ if(!row)throw Error('Choose an existing visible person or thing before saving their fact');
+ return {subject_type:type,subject_id:id,...(type==='contact'?{contact_id:id}:{entity_id:id})};
+}
 export function personalOperation(domains,input){
  const {store,query}=domains,type=input.type;
  if(type==='addon-command'){const result=addonCommand(store,input);if(input.addon!=='headache')ensureNativeSchedules(store,input.addon);return result;}
@@ -144,9 +156,10 @@ export function personalOperation(domains,input){
  if(type==='health-add'){if(input.value===undefined||input.value===null)throw Error('Health observation value is required');return store.save('health_observations',{metric:required(input.metric,'Health metric'),value:input.value,unit:input.unit||null,observed_at:date(input.observed_at,'Observation time'),source_id:input.source_id||null});}
  if(['memory-confirm','memory-propose'].includes(type)){
   required(input.evidence_quote,'Source quote');
-  if(type==='memory-confirm')return domains.writeFact({label:required(input.label,'Fact label'),value:required(input.value,'Fact value'),source_type:'conversation',source_id:input.source_id,evidence_quote:input.evidence_quote});
-  const fingerprint=hash([input.source_id,input.label,input.value]);const existing=query.rows('review_queue').find(r=>r.fingerprint===fingerprint);if(existing)return existing;
-  return store.save('review_queue',{title:'Remember '+required(input.label,'Fact label'),suggestion_type:'add_claim',payload:{label:input.label,value:required(input.value,'Fact value'),source_type:'conversation',source_id:input.source_id,evidence_quote:input.evidence_quote},description:input.evidence_quote,status:'pending_review',fingerprint,origin:'conversation'});
+  const subject=memorySubject(domains,input);
+  if(type==='memory-confirm')return domains.writeFact({...subject,label:required(input.label,'Fact label'),value:required(input.value,'Fact value'),source_type:'conversation',source_id:input.source_id,evidence_quote:input.evidence_quote});
+  const fingerprint=hash([input.source_id,subject.subject_type,subject.subject_id,input.label,input.value]);const existing=query.rows('review_queue').find(r=>r.fingerprint===fingerprint);if(existing)return existing;
+  return store.save('review_queue',{title:'Remember '+required(input.label,'Fact label'),suggestion_type:'add_claim',payload:{...subject,label:input.label,value:required(input.value,'Fact value'),source_type:'conversation',source_id:input.source_id,evidence_quote:input.evidence_quote},description:input.evidence_quote,status:'pending_review',fingerprint,origin:'conversation'});
  }
  if(type==='routine-change'){const j=old('jobs');if(input.paused!==undefined&&typeof input.paused!=='boolean')throw Error('Pause must be true or false');if(input.calendar&&(!/^([01]\d|2[0-3]):[0-5]\d$/.test(input.calendar.time)||input.calendar.weekdays?.some(d=>!Number.isInteger(d)||d<0||d>6)))throw Error('Calendar needs a valid local time and weekdays');return store.save('jobs',{id:j.id,...(input.paused!==undefined?{paused:input.paused}:{}),...(input.calendar?{calendar:input.calendar,next_run:nextCalendarRun({...j,calendar:input.calendar},store.get('settings','installation')?.timezone||'UTC')}:{})},j._hash);}
  if(type==='forecast-settle'){const f=old('forecasts');required(input.evidence,'Forecast evidence');if(typeof input.observed!=='boolean')throw Error('Forecast observation must be true or false');if(f.status==='settled')return f;return store.save('forecasts',{id:f.id,status:'settled',observed:input.observed,evidence:input.evidence,brier_score:(f.probability-Number(input.observed))**2,settled_at:new Date().toISOString()},f._hash);}
@@ -193,6 +206,15 @@ export function validateConversationOperations(domains,input,operations){
    if(!note||!item||![note.id,note.title].filter(Boolean).some(name=>message.includes(name))||![item.id,item.title].filter(Boolean).some(name=>message.includes(name)))throw Error('Approval must identify the exact task and target note');
   }
   if(operation.type==='habit-observe'&&operation.answer==='done'&&/\b(?:did not|didn.t|haven.t|have not|not done|skipped|nicht|nein)\b/i.test(message))throw Error('Habit completion contradicts the actual user reply');
+  if(['memory-confirm','memory-propose'].includes(operation.type)){
+   if(!operation.subject_type)throw Error('Memory must explicitly identify whose fact this is');
+   if(!operation.evidence_quote||!message.includes(operation.evidence_quote))throw Error('Memory evidence must occur in the user message');
+   const subject=memorySubject(domains,operation);
+   if(subject.subject_type!=='self'){
+    const row=domains.store.get(subject.subject_type==='contact'?'contacts':'entities',subject.subject_id);
+    if(![row.id,row.name,row.title,...(row.aliases||[])].filter(Boolean).some(name=>message.toLocaleLowerCase().includes(name.toLocaleLowerCase())))throw Error('The request must identify the person or thing whose fact is being saved');
+   }
+  }
   if(operation.type==='work-record-observation'){
    const item=domains.store.get('work_items',operation.id);
    if(!item||![item.id,item.title].filter(Boolean).some(name=>message.includes(name))||!message.includes(operation.evidence)||operation.value!==undefined&&!message.includes(String(operation.value)))throw Error('A reported check must identify its exact task and supplied evidence');
