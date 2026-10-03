@@ -1,0 +1,27 @@
+[Unit]
+Description=Godspeed Mission Control installation coordinator
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+DynamicUser=yes
+WorkingDirectory=/opt/godspeed-hostinger-installer
+ExecStart=/usr/bin/node /opt/godspeed-hostinger-installer/server.mjs
+Environment=GODSPEED_INSTALL_STATE=/var/lib/godspeed-installer
+Environment=GODSPEED_INSTALL_ORIGIN=https://srv1069233.hstgr.cloud/godspeed-install
+Environment=GODSPEED_INSTALL_BIND=10.0.0.1
+Environment=GODSPEED_INSTALL_PROXY=host.docker.internal:8794
+StateDirectory=godspeed-installer
+StateDirectoryMode=0700
+Restart=on-failure
+RestartSec=3
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+NoNewPrivileges=yes
+MemoryMax=96M
+TasksMax=32
+
+[Install]
+WantedBy=multi-user.target

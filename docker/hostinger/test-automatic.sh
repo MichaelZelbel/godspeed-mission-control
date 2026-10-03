@@ -21,7 +21,7 @@ done
 node docker/hostinger/installer/prepare-test.mjs
 "${compose[@]}" config --quiet
 # No user environment fields are allowed in the generated deployment.
-test -z "$("${compose[@]}" config --variables)"
+"${compose[@]}" config --variables --format json | node -e 'let s="";process.stdin.on("data",c=>s+=c);process.stdin.on("end",()=>{const names=Object.keys(JSON.parse(s)||{});if(names.length){console.error("Unexpected installation fields:",names.join(", "));process.exit(1);}})'
 "${compose[@]}" up -d --wait --wait-timeout 240
 name=$("${compose[@]}" ps -q godspeed)
 for attempt in $(seq 1 90); do

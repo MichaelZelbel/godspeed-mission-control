@@ -1,6 +1,7 @@
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
+
 import { fileURLToPath } from 'node:url';
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { composeFor } from './compose.mjs';
@@ -12,7 +13,7 @@ const BASE = '/godspeed-install';
 const assets = fileURLToPath(new URL('./public/', import.meta.url));
 const TTL = 24 * 3600000;
 
-export function createInstaller({ directory, origin, fetcher = fetch, now = Date.now, testing = false, hostnameFile, allowedOrigins = [] }) {
+export function createInstaller({ directory, origin, fetcher = fetch, now = Date.now, testing = false, hostnameFile, coordinatorProxy, allowedOrigins = [] }) {
   if (!testing && !origin.startsWith('https://')) throw new Error('HTTPS required');
   fs.mkdirSync(directory, { recursive: true, mode: 0o700 }); fs.chmodSync(directory, 0o700);
   const apiOrigin = new URL(origin).origin;
@@ -90,7 +91,7 @@ export function createInstaller({ directory, origin, fetcher = fetch, now = Date
         const job = jobs.get(config[1]);
         if (!job || job.created + TTL < now() || !equal(job.composeHash, digest(config[2]))) return send(res, 404, { error: 'Installation link has expired.' });
         job.state = job.hostname ? job.state : 'prepared'; write(job);
-        return send(res, 200, composeFor(job, { origin, testing, hostnameFile }), 'text/yaml');
+        return send(res, 200, composeFor(job, { origin, testing, hostnameFile, coordinatorProxy }), 'text/yaml');
       }
       const ready = route.match(/^\/godspeed-install\/api\/ready\/([a-f0-9]{64})$/);
       if (ready && req.method === 'POST') {
@@ -119,6 +120,8 @@ export function createInstaller({ directory, origin, fetcher = fetch, now = Date
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const installer = createInstaller({ directory: process.env.GODSPEED_INSTALL_STATE || '/var/lib/godspeed-installer', origin: process.env.GODSPEED_INSTALL_ORIGIN || 'https://srv1328602.hstgr.cloud/godspeed-install' });
-  installer.server.listen(Number(process.env.GODSPEED_INSTALL_PORT || 8794), '127.0.0.1');
+  const installer = createInstaller({ directory: process.env.GODSPEED_INSTALL_STATE || '/var/lib/godspeed-installer', origin: process.env.GODSPEED_INSTALL_ORIGIN || 'https://srv1069233.hstgr.cloud/godspeed-install', coordinatorProxy: process.env.GODSPEED_INSTALL_PROXY });
+  const bind = process.env.GODSPEED_INSTALL_BIND || '127.0.0.1';
+  if (!bind) throw new Error('Docker network address could not be detected');
+  installer.server.listen(Number(process.env.GODSPEED_INSTALL_PORT || 8794), bind);
 }
