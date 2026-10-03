@@ -62,9 +62,9 @@ import {
   Plus,
   Search,
   X,
-  
+
   FileText,
-  
+
   Trash2,
   ChevronDown,
   ChevronRight,
@@ -128,7 +128,7 @@ export default function Notes() {
   const toggleTree=()=>setTreeCollapsed(v=>{window.localStorage.setItem("godspeed:notes-tree-collapsed",String(!v));return !v;});
   const chatVisibility=useCallback((open:boolean)=>{setChatOpen(open);if(open){setMenuOpen(false);if(window.innerWidth<1200)setTreeCollapsed(true);}},[setMenuOpen]);
 
-  
+
   const [selectedId, setSelectedId] = useState<string | null>(urlNoteId || null);
   const [searchMode, setSearchMode] = useState(false);
   const [showLocalGraph, setShowLocalGraph] = useState(false);
@@ -152,7 +152,7 @@ export default function Notes() {
   const [metaTypeFilter, setMetaTypeFilter] = useState<string | null>(null);
   const [activeFolderPath, setActiveFolderPath] = useState<string | null>("");
   const [newFolderPath, setNewFolderPath] = useState("");
-  
+
   const [sortField, setSortField] = useState<SortField>(() => {
     try {
       const raw = localStorage.getItem(SORT_STORAGE_KEY);
@@ -749,7 +749,7 @@ export default function Notes() {
 
 
 
-  
+
 
   const exitSearch = () => {
     setSearchMode(false);

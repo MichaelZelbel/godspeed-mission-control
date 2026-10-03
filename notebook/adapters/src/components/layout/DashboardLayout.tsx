@@ -35,7 +35,7 @@ export function DashboardLayout() {
           </header>
 
 
-          
+
           <main className="flex-1 overflow-auto p-6">
             {/* A crashing page no longer takes the sidebar with it, and the
                 boundary clears on the next navigation. Loading a page's code

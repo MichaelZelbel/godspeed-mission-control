@@ -2036,4 +2036,3 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
     </div>
   );
 }
-
