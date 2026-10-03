@@ -73,6 +73,7 @@ export class Scheduler {
         try {
           if (!this.executor) throw new Error('No assistant runtime configured');
           const result=await this.executor(job,{settings,store:this.store});
+          await this.store.waitForWriter();
           if(!result?.verified)throw new Error('The executor returned no verified result');
           if(settings.delivery==='telegram'&&!result.silent){if(!this.deliver)throw new Error('Configure the candidate Telegram connector before choosing chat delivery');await this.deliver(receipt.id,result);}
           this.store.save('job_receipts',{id:receipt.id,state:'verified',result,finished_at:new Date().toISOString()});
@@ -80,6 +81,7 @@ export class Scheduler {
           this.store.withLock(()=>{const current=this.store.get('jobs',job.id);if(current) this.store.commit([this.store.prepare('jobs',{state:'pending',last_outcome:'verified',last_run:new Date(now).toISOString(),retry_count:0,...(current._hash===job._hash?{next_run:nextCalendarRun(current,settings.timezone,now)}:{})},current)]);});
           results.push({id:job.id,state:'verified'});
         } catch(e) {
+          await this.store.waitForWriter();
           this.store.save('job_receipts',{id:receipt.id,state:'failed',error:e.message,finished_at:new Date().toISOString()});
           if(recovery)this.store.save('work_items',{id:'routine-recovery-'+hash(receiptId),state:'needs_review',error:e.message});
           const retry=(job.retry_count||0)+1,needsReview=e.code==='OUTWARD_UNCERTAIN'||retry>=(job.max_retries||3);

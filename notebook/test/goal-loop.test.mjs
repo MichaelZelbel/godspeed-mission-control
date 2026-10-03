@@ -143,3 +143,19 @@ test('a checked local edit is refused when its actual read tools missed the requ
  assert.equal(store.get('work_items',item.id).state,'needs_review');
  assert.equal(store.get('goals',goal.id).progress?.length||0,0);
 });
+
+test('a brief concurrent writer after a model reply does not lose the work result or failure',async()=>{
+ for(const fail of [false,true]){
+  const {store,query}=fixture(),goal=store.save('goals',{title:'Fictional listening agenda',status:'adopted'}),decision=store.save('decisions',{goal_id:goal.id,state:'selected'}),item=store.save('work_items',{title:'Prepare a fictional agenda',goal_id:goal.id,decision_id:decision.id,kind:'draft',allowed_action:'save-draft',state:'pending',check:'A listening agenda exists',attempts:0});
+  const lock=path.join(store.state,'workspace.lock');let held=false;
+  const provider=async input=>{
+   if(input.kind==='work-verification')return {passed:true,evidence:'The listening agenda exists.'};
+   if(!held){held=true;fs.writeFileSync(lock,JSON.stringify({pid:process.pid,at:new Date().toISOString()}));setTimeout(()=>fs.rmSync(lock,{force:true}),75);}
+   if(fail)throw Error('Fictional model failed before writing');
+   return {deliverable:'Fictional agenda: ask one listening question.'};
+  };
+  const run=jobExecutor(provider,query)({kind:'goal-work'},{store,settings:{}});
+  if(fail){await assert.rejects(run,/Fictional model failed/);assert.equal(store.get('work_items',item.id).state,'failed');assert.match(store.get('work_items',item.id).error,/Fictional model failed/);}
+  else{await run;assert.equal(store.get('work_items',item.id).state,'verified');}
+ }
+});
