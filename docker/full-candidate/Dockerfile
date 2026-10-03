@@ -1,9 +1,12 @@
 FROM node:22.19.0-bookworm-slim@sha256:4a4884e8a44826194dff92ba316264f392056cbe243dcc9fd3551e71cea02b90 AS frontend
+ARG REVISION=unknown
+ARG USE_VERIFIED_FRONTEND=0
 WORKDIR /build
 COPY notebook/ui/package*.json ./
 RUN npm ci --no-audit --no-fund
 COPY notebook/ui/ ./
-RUN npm run build
+COPY notebook/scripts/verify-prebuilt-frontend.mjs /verify-prebuilt-frontend.mjs
+RUN if [ "$USE_VERIFIED_FRONTEND" = 1 ]; then node /verify-prebuilt-frontend.mjs /build "$REVISION"; else npm run build; fi
 
 # Includes the approved computer-use layer. The digest is immutable.
 FROM ghcr.io/michaelzelbel/godspeed-mission-control@sha256:358bf1b87b22898c0bd1a173226004558e41a3d16fc39214ecedab7fb550de20

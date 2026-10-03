@@ -4,7 +4,6 @@ tools/.tmp-*
 **/__pycache__
 *.pyc
 **/node_modules
-notebook/ui/dist
 notebook/candidate-workspace
 notebook/dist
 **/*.log

@@ -1,3 +1,4 @@
 *.log
 notebook/dist/
 __pycache__/
+notebook/ui/godspeed-prebuilt-frontend.json
