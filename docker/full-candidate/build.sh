@@ -11,7 +11,10 @@ if [ -n "${GODSPEED_BUILD_CACHED_BASE:-}" ]; then
   [[ "$GODSPEED_BUILD_CACHED_BASE" =~ ^sha256:[a-f0-9]{64}$ ]] || { echo 'Cached base must be an immutable inspected image ID.' >&2; exit 1; }
   test -f notebook/ui/dist/index.html || { echo 'Build the matching frontend first.' >&2; exit 1; }
   docker image inspect "$GODSPEED_BUILD_CACHED_BASE" >/dev/null
-  docker build --build-arg "BASE_IMAGE=$GODSPEED_BUILD_CACHED_BASE" --build-arg "REVISION=$revision" -f docker/full-candidate/Dockerfile.cached -t "$image" . > "$output/build.log" 2>&1
+  base_tag="godspeed-build-base:${GODSPEED_BUILD_CACHED_BASE#sha256:}"
+  docker tag "$GODSPEED_BUILD_CACHED_BASE" "$base_tag"
+  test "$(docker image inspect "$base_tag" --format '{{.Id}}')" = "$GODSPEED_BUILD_CACHED_BASE"
+  docker build --build-arg "BASE_IMAGE=$base_tag" --build-arg "VERIFIED_BASE=$GODSPEED_BUILD_CACHED_BASE" --build-arg "REVISION=$revision" -f docker/full-candidate/Dockerfile.cached -t "$image" . > "$output/build.log" 2>&1
 else
   docker build --build-arg "REVISION=$revision" -f docker/full-candidate/Dockerfile -t "$image" . > "$output/build.log" 2>&1
 fi
