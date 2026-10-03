@@ -29,3 +29,10 @@ Installed URLs:
 - Test bot: https://t.me/ClaudeTestOpsDoggy3Bot
 
 Server browser sessions expire after eight hours and after a server restart. The test bot's `/notebook` and `/chat` commands create fresh five-minute, single-use login links for the owner.
+
+
+## Follow-up: real-data trial and Windows performance
+
+At Michael's request, the prepared private GitHub copy was imported into the separate server workspace after a server backup: 274 distinct notes, 271 contacts and three groups. Stable IDs, UIDs and note contents were checked against the prepared source. Ten duplicate source files were retained as separate versions locally and in private server storage. File sync then brought the records to Windows. The original GitHub repository and live Menerio account were not changed. This copies the GitHub export, not all live Menerio media or database-only relationships.
+
+The Windows slowdown came from rebuilding the search index on every query, including reads, while the UI refreshed all queries every five seconds. Read requests now leave the index alone; mutations still rebuild it. The fallback refresh runs every 30 seconds, and unchanged browser preferences no longer trigger disk writes. Installed health and status requests improved from roughly three seconds to 0.001 and 0.037 seconds respectively before importing the real-data copy. The production UI build and eight browser/acceptance checks passed. Dashboard counts were checked in both running notebooks.
