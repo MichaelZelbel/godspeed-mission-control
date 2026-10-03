@@ -37,24 +37,31 @@ export class FileSync {
     if(this.git(['diff','--cached','--name-only']))this.git(['commit','-m','Save Godspeed Mission Control records']);
   }
   reconcile(){
-    try{return this.store.withLock(()=>{
-      try{
-        this.commitLocal();
+    try{
+        // Fetch and upload can wait on a disconnected network or credential
+        // helper. Local edits must remain available during those waits.
+        let remoteExists=true,networkError=null;
         try{this.git(['fetch',this.remote,this.branch]);}catch(error){
-          if(this.git(['ls-remote','--heads',this.remote,this.branch]))throw error;
-          this.git(['push',this.remote,'HEAD:refs/heads/'+this.branch]);
-          this.last={state:'synced',at:new Date().toISOString(),pending:0};atomic(path.join(this.store.state,'sync-status.json'),JSON.stringify(this.last));return this.last;
+          try{if(this.git(['ls-remote','--heads',this.remote,this.branch]))networkError=error;else remoteExists=false;}catch{networkError=error;}
         }
+        this.store.withLock(()=>{
+        this.commitLocal();
+        if(!networkError&&remoteExists){
         const remoteRef=this.remote+'/'+this.branch,head=this.git(['rev-parse','HEAD']),remoteHead=this.git(['rev-parse',remoteRef]);
         if(head!==remoteHead)this.integrate(remoteRef);
-        this.validate();this.git(['push',this.remote,'HEAD:refs/heads/'+this.branch]);
-        this.last={state:'synced',at:new Date().toISOString(),pending:0};
-      }catch(e){this.last={state:this.pendingConflicts().length?'conflict':'pending',at:new Date().toISOString(),error:'Sync did not complete; local files remain available',detail: String(e.message).split('\n')[0]};}
-      atomic(path.join(this.store.state,'sync-status.json'),JSON.stringify(this.last,null,2));return this.last;
-    });}catch(error){
-      this.last={state:'pending',at:new Date().toISOString(),error:'Sync will retry; local files remain available',detail:error.message==='Workspace is being written by another process'?'The assistant is saving its state.': 'The workspace needs a successful synchronization retry.'};
-      atomic(path.join(this.store.state,'sync-status.json'),JSON.stringify(this.last,null,2));return this.last;
-    }
+        }
+        this.validate();
+        });
+        if(networkError)throw networkError;
+        this.git(['push',this.remote,'HEAD:refs/heads/'+this.branch]);
+        const pending=this.store.withLock(()=>new Set([
+          ...this.gitBytes(['diff','--name-only','-z']).toString('utf8').split('\0'),
+          ...this.gitBytes(['diff','--cached','--name-only','-z']).toString('utf8').split('\0'),
+          ...this.gitBytes(['ls-files','--others','--exclude-standard','-z']).toString('utf8').split('\0')
+        ].filter(name=>name&&(durable(name)||name==='.gitignore'))).size);
+        this.last={state:pending?'pending':'synced',at:new Date().toISOString(),pending,...(pending?{detail:'New local edits will upload on the next synchronization cycle.'}:{})};
+    }catch(error){this.last={state:this.pendingConflicts().length?'conflict':'pending',at:new Date().toISOString(),error:'Sync did not complete; local files remain available',detail:error.message==='Workspace is being written by another process'?'The assistant is saving its state.':String(error.message).split('\n')[0]};}
+    atomic(path.join(this.store.state,'sync-status.json'),JSON.stringify(this.last,null,2));return this.last;
   }
   integrate(remoteRef){
     const integrationRoot=path.join(this.store.state,'sync-worktrees'),dir=path.join(integrationRoot,randomUUID());fs.mkdirSync(integrationRoot,{recursive:true});

@@ -35,6 +35,40 @@ test('network loss leaves offline edits available and secrets and index never en
   const tracked=git(a.root,'ls-files');assert.doesNotMatch(tracked,/private-token|sqlite|\.godspeed/);
 });
 
+test('network waits permit local saves and include edits made during fetch',()=>{
+  const {a,b}=fixture(),sync=new FileSync(a),original=sync.git.bind(sync);
+  b.save('notes',{title:'Remote before fetch',content:'Remote change'});
+  assert.equal(new FileSync(b).reconcile().state,'synced');
+  const observed=[];
+  sync.git=(args,cwd)=>{
+    if(['fetch','push','ls-remote'].includes(args[0])){
+      assert.equal(fs.existsSync(path.join(a.state,'workspace.lock')),false,'Network access must not hold the local writer lock');
+      observed.push(args[0]);
+      if(args[0]==='fetch')a.save('notes',{title:'Saved while fetching',content:'Local change'});
+    }
+    return original(args,cwd);
+  };
+  assert.equal(sync.reconcile().state,'synced');
+  assert.deepEqual(observed,['fetch','push']);
+  assert.ok(a.list('notes').some(r=>r.title==='Remote before fetch'));
+  assert.ok(a.list('notes').some(r=>r.title==='Saved while fetching'));
+  assert.equal(new FileSync(b).reconcile().state,'synced');
+  assert.ok(b.list('notes').some(r=>r.title==='Saved while fetching'));
+});
+
+test('a local save during upload remains available and is reported pending until uploaded',()=>{
+  const {a,b}=fixture(),sync=new FileSync(a),original=sync.git.bind(sync);
+  let edited=false;
+  sync.git=(args,cwd)=>{
+    if(args[0]==='push'&&!edited){edited=true;a.save('notes',{title:'Saved during upload',content:'Retain and upload next cycle'});}
+    return original(args,cwd);
+  };
+  const first=sync.reconcile();assert.equal(first.state,'pending');assert.equal(first.pending,1);
+  assert.ok(a.list('notes').some(r=>r.title==='Saved during upload'));
+  assert.equal(sync.reconcile().state,'synced');assert.equal(new FileSync(b).reconcile().state,'synced');
+  assert.ok(b.list('notes').some(r=>r.title==='Saved during upload'));
+});
+
 test('packaged hidden skill markers never enter synced files',()=>{
   const {a}=fixture(),sync=new FileSync(a);
   sync.initialize('https://github.com/synthetic/private.git');
