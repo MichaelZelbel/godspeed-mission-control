@@ -1,6 +1,6 @@
 {
   "format": 2,
-  "checked_at": "2026-10-04T00:27:01.029813+00:00",
+  "checked_at": "2026-10-04T00:45:15.344104+00:00",
   "complete": false,
   "items": [
     {
@@ -2659,7 +2659,8 @@
       "criterion": "Validate system state and goal outcomes, then prepare corrections. Verify the audit result across a failed run, restart and an unchanged repeat; report an observation rather than implying execution.",
       "status": "partial",
       "evidence": [
-        "Scheduled source implementation now scores four evidenced structural layers, ranks gaps with concrete corrections and verification, preserves unresolved failed routines and prior baselines, excludes connector credentials and quotes actual visible messages/rules before accepting semantic findings. Fabricated findings exhaust one bounded correction without an accepted report. Installed entry-point, actual loaded-memory, configured-limit and peer/comparator coverage remain partial."
+        "Scheduled source implementation now scores four evidenced structural layers, ranks gaps with concrete corrections and verification, preserves unresolved failed routines and prior baselines, excludes connector credentials and quotes actual visible messages/rules before accepting semantic findings. Fabricated findings exhaust one bounded correction without an accepted report. Installed entry-point, actual loaded-memory, configured-limit and peer/comparator coverage remain partial.",
+        "Normal development routine controls ran the installed full audit, and normal Notes opened/read its retained four-layer report. It incorrectly awarded user-customization points to unchanged shipped morning-brief and use-my-computer methods; direct actual-byte comparison proves the defect. The report is retained as failed scoring acceptance. Source now excludes shipped starters and known shipped revisions, and ignores advancing healthy receipt counts when deduplicating unchanged structure. Two meaningful regressions failed before correction and pass after it. Corrected installed scoring/repeat acceptance remains required."
       ],
       "required": true,
       "target_test": "Exercise audit through its installed entry point and check actual results after restart"
@@ -3162,8 +3163,10 @@
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
       "criterion": "Read the user's stated public lane, current authoritative sources and recent original work.\r Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation.",
-      "status": "source only",
-      "evidence": [],
+      "status": "partial",
+      "evidence": [
+        "Full portable original method is maintained/generated: actual fourteen-day outcomes, refusal/exemplar learning, backlog/redraft and blocked-shape rules, due research priority, rotating contact/market reads, reader/voice/attribution checks, one-entry cap, optional adopted weekly/monthly duties and retained run logs. User-specific data is configuration. Full automated queue/delivery and installed deliverable remain open."
+      ],
       "required": true,
       "target_test": "Exercise lead through its installed entry point and check actual results after restart"
     },
@@ -3196,8 +3199,10 @@
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
       "criterion": "Compare current public primary sources against the user's goals.\r Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation.",
-      "status": "source only",
-      "evidence": [],
+      "status": "partial",
+      "evidence": [
+        "Full portable method is maintained/generated. New scheduled source code fetches configured visible radar topics in the actual run, retains source bytes and trace, requires a matching exact quote, novelty and empty user verdict, permits one bounded correction, logs quiet/failure, deduplicates unchanged proposal sources, and warns once after three blind runs. Five regressions pass using actual local HTTP bytes and credential-redaction fixtures. Native installed runtime, verdict lifecycle and reversible trial execution remain open."
+      ],
       "required": true,
       "target_test": "Exercise mc-radar through its installed entry point and check actual results after restart"
     },
@@ -3725,7 +3730,8 @@
         "New source provides one correction for missing actual reads, explicit read/finish phases derived from current tool receipts, and an optional finite numeric goal outcome control. Eight worker and nine personal-operation checks pass; new installed acceptance is required.",
         "Normal f0d1719 development goal change retained the failed old attempt, revoked its old approval and saved fresh exact target permission. The new native task executed source and target reads once but remains attempted without verified completion. Do not count it as accepted.",
         "Actual f0d1719 endpoint tool work 5ac684eb saved the clean source-only checklist, verified it, and mechanically waited for a separate report. Normal outcome controls saved the actual internal software review and numeric value 4. The next decision repeated the identical previous edit and old defect; it was not approved. Current source supplies ordered latest report/current deliverable and one bounded identical-edit repair. Two meaningful regressions pass; final full suite 182 passes/one skip, zero failures. New installed decision acceptance remains required.",
-        "Actual installed 1b885b0 development work 102db9cf read the named source and approved target once, saved exactly four source-backed items, and verified target SHA-256 ca5b555f87de462b051c2825e6654cf670d838d24e825429d34f0aecafd30420. The normal outcome form saved an actual internal software review with measured value 5, not a real garden outcome. The next decision waited correctly, but later checks reused an older waiting decision because filesystem order was mistaken for chronology. The source now selects the newest waiting decision by date; the regression reproduced repeated model calls before the fix and stays quiet after it. Installed sustained-quiet acceptance remains required."
+        "Actual installed 1b885b0 development work 102db9cf read the named source and approved target once, saved exactly four source-backed items, and verified target SHA-256 ca5b555f87de462b051c2825e6654cf670d838d24e825429d34f0aecafd30420. The normal outcome form saved an actual internal software review with measured value 5, not a real garden outcome. The next decision waited correctly, but later checks reused an older waiting decision because filesystem order was mistaken for chronology. The source now selects the newest waiting decision by date; the regression reproduced repeated model calls before the fix and stays quiet after it. Installed sustained-quiet acceptance remains required.",
+        "Installed d22ce05 development scheduled checks at 00:37:37, 00:40:38 and 00:41:38 UTC completed silently in about 1.5 seconds, retained the same 14 decisions and created no additional work. The real applied target and measured review remain retained. Evidence: development-d22ce05-quiet-wait-before/second/third/fourth.json. This establishes unchanged-wait behavior in this installed native case; endpoint later-decision and other goal-loop branches remain required."
       ],
       "required": true,
       "target_test": "Exercise failed decisions/checks, changed direction, delayed exact local approval and restart through final installed notebooks."
@@ -3897,7 +3903,8 @@
         "Authorized development intermediate 2d57982 image was built on physical srv1069233.hstgr.cloud; its 1565 frontend files matched the Windows manifest and Linux source checks passed 150 with one platform skip. Normal recovery verified 943 records/2586 files before only the owned notebook upgrade; matching 2d Windows native upgrade succeeded. Later source changes require new matching packages and new verified backups.",
         "Matching f0d1719 Windows native and authorized development upgrades passed after retained empty restorations (Windows main 863/2363; endpoint 2429/3475; normal development 1061/2793). All 1565 built Linux image browser files match the Windows manifest byte-for-byte. Broader paired reliability and final completion remain required.",
         "Matching 1b885b0 installed on Windows and authorized development after retained empty restorations: main 865/2369, endpoint 2600/3650, development 1156/2947. All 1565 development image UI files equal the Windows manifest. Both health endpoints have fresh scheduler heartbeats. Windows/Linux source suites each 180 pass/one skip. Not final completeness.",
-        "Normal development Settings saved a new backup and restored 1250 records/3086 files into retained empty storage at .godspeed/restored-copies/1791073154341-c2c158e5bec0/workspace. No upgrade follows from this evidence yet. Matching fab179a intermediate Windows/development packages were built and retained, not installed; their source suites passed 182 tests plus one platform skip on both platforms."
+        "Normal development Settings saved a new backup and restored 1250 records/3086 files into retained empty storage at .godspeed/restored-copies/1791073154341-c2c158e5bec0/workspace. No upgrade follows from this evidence yet. Matching fab179a intermediate Windows/development packages were built and retained, not installed; their source suites passed 182 tests plus one platform skip on both platforms.",
+        "Matching d22ce059a9d5fb065f95f454ef1718f2e9ceafe2 Windows/development packages installed after verified separate restorations: main 867/2371, endpoint 2828/3878, development 1327/3262. Windows installer 969dd8dd697bab7d9b4ac3139384b662f87a4b3f9863ba3dc81b098d7802945c; development image sha256:6fd220d8df81805bceb59355157bb19928608a488fa76dbf94167e48e2624157. Direct built-image comparison matches all 1565 Windows browser files. Windows installer completed and both health endpoints returned fresh heartbeats. Both source suites passed 188 checks plus one skip. Intermediate installation only."
       ],
       "required": true,
       "target_test": "Repeat recovery/link checks on final matching Windows/VPS packages; accept offline edits, reconnection, retained conflicts and preserved choices/pauses."

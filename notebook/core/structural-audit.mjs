@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import {fileURLToPath} from 'node:url';
 import {hash} from './records/store.mjs';
 import {visibleRows} from './visibility.mjs';
 import {localPath} from './local-path.mjs';
@@ -23,7 +24,12 @@ export async function structuralAudit(job,{store,query,provider}){
  const reached=new Set(connections.filter(c=>c.ok&&recent(c.last_success,30,now)&&recent(c.checked_at,3,now)).map(c=>c.domain).filter(Boolean)),withoutGuide=connections.filter(c=>!c.guide).length,unfresh=connections.filter(c=>!c.ok||!recent(c.last_success,30,now)).length+connections.filter(c=>!recent(c.checked_at,3,now)).length;
  const connectionCriteria=[criterion('universal-domains',10,Math.min(10,Math.round(reached.size*1.4*2)/2),'Fresh observed universal domains: '+[...reached].join(', ')),criterion('connection-guides',5,connections.length?Math.max(0,5-withoutGuide):0,'Connected mechanisms without a readable guide: '+withoutGuide),criterion('freshness',5,connections.length?Math.max(0,5-unfresh):0,'Only retained successful receipts establish freshness; missing checks remain unknown'),criterion('connection-registry',3,connections.length?(connections.every(c=>c.registry)?3:connections.some(c=>c.registry)?2:1):0,'Configured mechanism metadata is '+(connections.every(c=>c.registry)&&connections.length?'complete':'incomplete or absent')),criterion('read-write',2,connections.some(c=>c.ok&&c.write_capable&&recent(c.last_success,30,now))?2:0,'Write capability is configured; no outward write is performed by this review')];
  const skills=fileNames('skills').filter(e=>e.directory).map(e=>({name:e.name,text:read('skills/'+e.name+'/SKILL.md')})).filter(e=>e.text&&/^---\r?\n/.test(e.text)&&/^name:\s*\S+/m.test(e.text)&&/^description:\s*\S+/m.test(e.text));
- const customised=skills.filter(s=>{try{const bundled=recipeContext({root:path.join(store.state,'audit-no-installed-skills')},s.name);return bundled.sources[0].content!==s.text;}catch(error){return /selected workflow is not installed/.test(error.message);}});
+ const revisionFile=fileURLToPath(new URL('../data/recipe-revisions.json',import.meta.url)),shippedRevisions=JSON.parse(fs.readFileSync(revisionFile,'utf8'));
+ const customised=skills.filter(s=>{
+  const normalized=s.text.replaceAll('\r','');if((shippedRevisions[s.name+'/SKILL.md']||[]).includes(hash(normalized)))return false;
+  const starter=fileURLToPath(new URL('../../starter-godspeed/skills/'+s.name+'/SKILL.md',import.meta.url));if(fs.existsSync(starter)&&fs.readFileSync(starter,'utf8').replaceAll('\r','')===normalized)return false;
+  try{const bundled=recipeContext({root:path.join(store.state,'audit-no-installed-skills')},s.name);return bundled.sources[0].content.replaceAll('\r','')!==normalized;}catch(error){return /selected workflow is not installed/.test(error.message);}
+ });
  scopeGaps.push('Peer reachability is unverified');
  const capabilityCriteria=[criterion('installed-skills',10,skills.length>=3?10:0,'Installed skill frontmatter: '+skills.length+'; this does not prove successful deliverables'),criterion('customised-skill',10,customised.length?10:0,'Maintained methods different from bundled examples: '+customised.length),criterion('reachable-peer',5,0,'No current authorized peer reachability receipt was established')];
  const prompts=fileNames('prompts').filter(e=>!e.directory&&/\.(md|txt|json)$/.test(e.name)&&read('prompts/'+e.name));
@@ -43,7 +49,10 @@ export async function structuralAudit(job,{store,query,provider}){
  scopeGaps.push('Loaded assistant memory and independent write stores are unverified','Semantic readability review is unverified','Comparable capability judgment is unverified');
  const strengths=layers.flatMap(l=>l.criteria.filter(c=>c.earned===c.points).map(c=>({layer:l.name,...c}))).sort((a,b)=>b.points-a.points).slice(0,3);
  const audit={structural_only:true,score,stage:score<40?'foundation':score<70?'built':score<90?'compounding':'autonomous structure',layers,strengths,gaps,connections,integrity,rules:ruleReview,shared_memory:{finding:'Notebook visible records reviewed; actual loaded assistant memories were not inspected'},messages:messageReview,comparison,scope_gaps:scopeGaps};
- const fingerprint=hash(audit),notificationId='audit-'+fingerprint;await store.waitForWriter();if(store.get('notifications',notificationId))return {verified:true,silent:true,score};
+ // Healthy receipt counts and last-check timestamps can advance without any
+ // structural finding changing. Keep the actual counts in the report, but do
+ // not notify again solely because the audit itself completed successfully.
+ const fingerprint=hash({criteria:layers.map(l=>[l.name,l.criteria.map(c=>[c.key,c.earned])]),skills:skills.map(s=>[s.name,hash(s.text.replaceAll('\r',''))]),manual:hash(manual||''),voice:hash(voice||''),rules:rules.map(r=>[r.name,hash(r.content)]),integrity:integrity.map(i=>({kind:i.kind,job_id:i.job_id,goal_id:i.goal_id,work_id:i.work_id,evidence:i.evidence})),messages:messages.map(m=>[m.id,m.role,m.content]),comparator:selected?.id||null,comparator_content:selected?rows('watch_observations').filter(o=>comparison.sources.includes(o.id)).map(o=>hash(o.content||'')):[],scope:scopeGaps}),notificationId='audit-'+fingerprint;await store.waitForWriter();if(store.get('notifications',notificationId))return {verified:true,silent:true,score};
  if(provider){
   const observations=selected?rows('watch_observations').filter(o=>comparison.sources.includes(o.id)).map(o=>({id:o.id,content:o.content,url:o.url,observed_at:o.observed_at})):[];
   const reviewSources={messages:messages.map(m=>({id:m.id,role:m.role,content:m.content,created_at:m.created_at})),rules:rules.map(r=>({id:r.name,content:r.content})),observations},workflow=recipeContext(store,'audit');

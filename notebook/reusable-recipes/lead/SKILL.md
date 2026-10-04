@@ -54,8 +54,3 @@ On the first configured monthly run, remeasure the user's adopted progress rungs
 ## Verify the actual result
 
 Read back the saved entry, source quotes, run log and actual current state. Check the daily cap, blocked shapes, backlog/redraft rule, author attribution, links, voice, intended reader and usable delivery destination. Later actual acceptance/refusal/posting feeds the next run. No claim that the user posted or a rung moved without its actual evidence.
-
-
-## Installed personal workspace
-
-Use the current user workspace and its configured providers. Keep original workflow, command contracts, scripts and verification criteria. Read the workspace authorization rules before sends, sign-ins, payments or publishing. Search existing device-private credentials before asking for configuration. Saved output and a passing screen are not evidence that the full requested result happened.

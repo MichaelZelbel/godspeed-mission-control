@@ -45,8 +45,3 @@ Read the proposal back and check quote equality, source date/fetch, novelty, nam
 Adopt or Trial records the actual agreed decision and reason and queues separately authorized implementation. Trial retains its end date and measurable check. Caution retains the date/reason in the no-list and suppresses repeated proposals. Assess stays pending; after three completed radar runs without a changed verdict, archive it while preserving its content, source and history. Do not delete retained evidence or require a new review meeting for expiry.
 
 Use stable source/item identities and request IDs so retries do not duplicate proposals or decisions. Later results, not a model's self-score, determine whether the trial succeeded. Unavailable source adapters or missing lifecycle controls remain explicit implementation gaps; the skill file alone does not prove this workflow runs.
-
-
-## Installed personal workspace
-
-Use the current user workspace and its configured providers. Keep original workflow, command contracts, scripts and verification criteria. Read the workspace authorization rules before sends, sign-ins, payments or publishing. Search existing device-private credentials before asking for configuration. Saved output and a passing screen are not evidence that the full requested result happened.

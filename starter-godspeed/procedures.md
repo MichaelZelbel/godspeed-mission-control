@@ -36,7 +36,17 @@ Lands: a dated notebook review, source-check failures and retained previous repo
 Lives: the notebook scheduler in the selected installation.
 May: inspect this workspace, visible records and configured connection metadata. Credentials never enter the report. It changes no rules, accounts, other assistant stores or paused routines. An unsupported finding gets one correction before the review fails.
 Off-switch: pause Audit in routine controls.
-Last checked: 2026-10-04, source tests check four layers, observed connection freshness, retained baselines, credential exclusion and quoted findings. Installed acceptance and broader system-review scope remain required.
+Last checked: 2026-10-04, source tests check four layers, observed connection freshness, retained baselines, credential exclusion, quoted findings, shipped-default exclusion and quiet repeats despite healthy receipt advances. The installed review exposed false default-method credit; corrected installed acceptance and broader system-review scope remain required.
+
+## Personal AI radar
+
+Does: fetches the selected visible watch topics marked radar, checks exact current source quotes and novelty, and retains at most one proposal with an empty user verdict. A quiet run retains its reason. Three wholly unreadable runs produce one warning; later successful reading resolves it.
+Rhythm: not scheduled by this template; enable Radar through normal controls and configure the intended source topics.
+Lands: source observations, radar run logs and a checked notebook proposal.
+Lives: the notebook scheduler in the selected installation.
+May: perform read-only public source requests and save local evidence. Credentials in source URLs are rejected and redacted. It never publishes, chooses a verdict or implements its proposed change. One unsupported response gets one correction before failure is retained.
+Off-switch: pause Radar in routine controls.
+Last checked: 2026-10-04, source regressions use actual local HTTP bytes and check quote rejection, novelty, blind-run warnings and credential exclusion. Installed execution, verdict lifecycle and separate trial implementation remain required.
 
 <!--
 The register (Chapter 21). One block per procedure.

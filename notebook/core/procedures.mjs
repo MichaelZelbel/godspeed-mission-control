@@ -7,6 +7,7 @@ import {Connectors} from './connectors.mjs';
 import {subscriptionCommand} from './subscriptions.mjs';
 import {recipeContext} from './recipe-context.mjs';
 import {structuralAudit} from './structural-audit.mjs';
+import {radar} from './radar.mjs';
 export {procedureKinds} from './jobs/kinds.mjs';
 export async function procedure(job,{store,query,provider}){
   const kind=job.kind;let result;
@@ -21,6 +22,7 @@ export async function procedure(job,{store,query,provider}){
     return {verified:true,record_id:note.id,content_hash:store.get('notes',note.id)._hash,delivery:'notebook'};
   }
   if(kind==='audit')return structuralAudit(job,{store,query,provider});
+  if(kind==='radar')return radar(job,{store,query,provider});
   if(['review','memory-review'].includes(kind)){
     if(!provider)throw Error('Connect an assistant before reviewing memory');
     const domains=new Domains(query,{provider});let proposed=0;

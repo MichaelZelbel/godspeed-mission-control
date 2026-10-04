@@ -3966,5 +3966,25 @@
         "sha256": "c3a03a345e45bc954cd48c43f11572891f5dca7a5d99348d5bc14753a728618c"
       }
     ]
+  },
+  {
+    "name": "lead",
+    "source": "Full portable method reviewed from the original workflow, 2026-10-04; account-specific data remains user configuration",
+    "files": [
+      {
+        "path": "SKILL.md",
+        "sha256": "0c2c985185dedf7337dbf8e2b7962c075dbd0af8830a1920d3391a24d9901100"
+      }
+    ]
+  },
+  {
+    "name": "mc-radar",
+    "source": "Full portable method reviewed from the original workflow, 2026-10-04; account-specific data remains user configuration",
+    "files": [
+      {
+        "path": "SKILL.md",
+        "sha256": "875d9d99aa2904679355c4dcfd7168540da8350025adc80d64fb05475b2991a6"
+      }
+    ]
   }
 ]
