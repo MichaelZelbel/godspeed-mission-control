@@ -76,13 +76,14 @@ test('after the first join, edits travel both ways and concurrent ones are kept 
   assert.equal(read(owner.root,'AGENTS.md'),'Owner edit\n');
 });
 
-test('a starter never adds example rules or profile pages to an existing mission control',()=>{
+test('a starter never adds example rules, profile pages or recipes to an existing mission control',()=>{
   const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-starter-test-')),starter=path.join(root,'starter'),existing=path.join(root,'existing'),fresh=path.join(root,'fresh');
   for(const [file,text] of [['AGENTS.md','Starter manual'],['rules/example.md','Example rule'],['profile/people.md','Template'],['skills/demo/SKILL.md','Skill']])atomic(path.join(starter,file),text);
   atomic(path.join(existing,'AGENTS.md'),'Owner manual');atomic(path.join(existing,'rules','own.md'),'Owner rule');fs.mkdirSync(fresh);
   installStarter(existing,starter);installStarter(fresh,starter);
   assert.equal(read(existing,'AGENTS.md'),'Owner manual');assert.equal(fs.existsSync(path.join(existing,'rules','example.md')),false);
-  assert.equal(fs.existsSync(path.join(existing,'profile','people.md')),false);assert.equal(read(existing,'skills','demo','SKILL.md'),'Skill');
+  assert.equal(fs.existsSync(path.join(existing,'profile','people.md')),false);assert.equal(fs.existsSync(path.join(existing,'skills','demo')),false);
+  assert.equal(read(fresh,'skills','demo','SKILL.md'),'Skill');
   assert.equal(read(fresh,'rules','example.md'),'Example rule');assert.equal(read(fresh,'profile','people.md'),'Template');
   fs.unlinkSync(path.join(fresh,'profile','people.md'));installStarter(fresh,starter);
   assert.equal(read(fresh,'profile','people.md'),'Template','A starter-made folder still gets a deleted starter file back');

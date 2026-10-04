@@ -16,9 +16,13 @@ export function adoptedMissionControl(root, starter=defaultStarter) {
 export function installStarter(root, starter=defaultStarter) {
   // Rules and profile are what the owner told their mission control. In an
   // adopted one the starter's example rules would join the owner's own and be
-  // compiled into every session, so those two folders are left alone. A
-  // starter-made folder still gets a deleted starter file back.
-  const owned=adoptedMissionControl(root,starter)?new Set(['rules','profile'].map(n=>path.join(starter,n))):new Set();
+  // compiled into every session, so those folders are left alone, and so are
+  // its skills: the owner's own recipes are what the starter's were made from,
+  // and a starter recipe they replaced (the starter morning brief) would sit
+  // beside theirs and answer the same requests. Packaged recipes still add
+  // skills the owner does not have. A starter-made folder still gets a deleted
+  // starter file back.
+  const owned=adoptedMissionControl(root,starter)?new Set(['rules','profile','skills'].map(n=>path.join(starter,n))):new Set();
   const copyMissing=(source,destination)=>{
     if(owned.has(source))return;
     const stat=fs.lstatSync(source);
