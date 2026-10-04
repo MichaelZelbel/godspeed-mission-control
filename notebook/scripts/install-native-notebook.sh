@@ -16,7 +16,19 @@ npm --prefix "$state/source/notebook/ui" ci --no-audit --no-fund
 npm --prefix "$state/source/notebook/ui" run build
 export GODSPEED_WORKSPACE="$root" GODSPEED_ORIGINAL_RUNTIME=on
 export GODSPEED_PORT=${GODSPEED_PORT:-47831} GODSPEED_BIND=127.0.0.1
-export HERMES_HOME=${HERMES_HOME:-$HOME/.hermes}
+original_home=${HERMES_HOME:-$HOME/.hermes}
+export HERMES_HOME="$original_home"
+if [ "${GODSPEED_INTEGRATED_BESIDE:-}" = 1 ]; then
+  export HERMES_HOME="$state/hermes"
+  mkdir -p "$HERMES_HOME"
+  # Existing credentials may be reused; the original profile is never edited.
+  for name in auth.json .env; do
+    if [ -f "$original_home/$name" ] && [ ! -e "$HERMES_HOME/$name" ]; then
+      cp -p "$original_home/$name" "$HERMES_HOME/$name"
+      chmod 600 "$HERMES_HOME/$name"
+    fi
+  done
+fi
 assistant=$(command -v hermes || true)
 [ -n "$assistant" ] || { echo 'The original installer has not installed Hermes yet.' >&2; exit 1; }
 node "$state/source/notebook/bin/godspeed.mjs" init

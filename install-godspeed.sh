@@ -8,6 +8,7 @@ export KB_BRANCH
 root=${GODSPEED_V2_INSTALL_DIR:-$HOME/godspeed-v2}
 args=("$@")
 for ((i=0;i<$#;i++)); do
+  if [ "${args[i]}" = --beside ]; then export GODSPEED_INTEGRATED_BESIDE=1; fi
   if [ "${args[i]}" = --godspeed ]; then root=${args[i+1]:?Name the Godspeed folder}; fi
 done
 SCRIPT=$(curl -fsSL "$ENGINE")
