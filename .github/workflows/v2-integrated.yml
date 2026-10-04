@@ -2,7 +2,7 @@ name: Integrated Godspeed v2
 on:
   push:
     branches: [codex/godspeed-v2-completeness]
-    paths: [.github/workflows/v2-integrated.yml]
+    paths: [.github/workflows/v2-integrated.yml, 'notebook/ui/**']
   workflow_dispatch:
 permissions:
   contents: read

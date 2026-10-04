@@ -747,11 +747,11 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
     })(),
     editable: !note.is_trashed && !note.is_external,
     onUpdate: ({ editor: e, transaction }) => {
-      // Hydration and background link/image resolution are not authored edits.
-      // Toolbar commands focus the editor before changing the document.
-      if (!transaction.docChanged || !e.isFocused) return;
+      if (!transaction.docChanged) return;
       const md = editorToMarkdown(e);
-      if (md === lastLocalContentRef.current) return;
+      // Loading Markdown may normalize its final newline without changing the
+      // note. Compare the saved form, and allow toolbar edits while focus moves.
+      if (normalizeSavedMarkdown(md) === normalizeSavedMarkdown(lastLocalContentRef.current)) return;
       // Note: previously we skipped non-focused updates that appeared to remove links,
       // but that silently dropped legitimate user edits (e.g. continuation lines under
       // list items). Always persist what the editor produced.
