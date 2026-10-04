@@ -1,7 +1,7 @@
 {
   "channel": "full-alpha",
   "version": "2.0.0-alpha.1",
-  "kitCommit": "581693b49e7a983f7253b619100d026203f2ec7f",
+  "kitCommit": "1555e804fdadc59a8e4febba74ff33648dde8177",
   "bootstrapCommit": "0d10f08a02599c79d1c86b27f0cd03f64d72c731",
   "nodeVersion": "22.19.0",
   "nodeArchiveSha256": "ea3fad0e67a991d8477d8c01344b56e69c676ccb733f065b22436994b1253f86",
@@ -29,7 +29,7 @@
     },
     {
       "path": "kit/README.md",
-      "sha256": "8a585ad3f783e338a15c59ee3022487f7f79425c84e4abef5650b5e3e34401f9"
+      "sha256": "0df9deb30221273c55e64d719575cdb12ebcc8ba372ef90fea08a6868fcad19d"
     },
     {
       "path": "kit/.github/workflows/computer-test.yml",
@@ -45,7 +45,7 @@
     },
     {
       "path": "kit/.github/workflows/v2-integrated.yml",
-      "sha256": "4c75abe54969e7f6503ff0d3e99958c5a1c5f9d244e69f43252fdcadb035ad5f"
+      "sha256": "fad41c257932d4085cc985fc46cc7d8b1ee4e161bcf658d8a04465f99cb31bac"
     },
     {
       "path": "kit/.github/workflows/windows-installer.yml",
@@ -269,7 +269,7 @@
     },
     {
       "path": "kit/docker/hostinger/compose.yaml",
-      "sha256": "e91753bf33b0fc754b116cee984de7eab72a0c238a1a8ded3868c999edb5b796"
+      "sha256": "9b517e0fa704fa668ef45df09955dc566dba5413d8f997cab33148ae8d7456dd"
     },
     {
       "path": "kit/docker/hostinger/README.md",
@@ -285,7 +285,7 @@
     },
     {
       "path": "kit/docker/hostinger/installer/compose.mjs",
-      "sha256": "0119cbea7f289d9d162ffb3066d4fd52f086cd44b752abf88152812ae7d2c850"
+      "sha256": "d128201385e81fc56f01cfb260d7abd924bc01e81592caa25e09a4fd8d23a520"
     },
     {
       "path": "kit/docker/hostinger/installer/DESIGN.md",
@@ -10217,7 +10217,7 @@
     },
     {
       "path": "kit/notebook/scripts/wire-assistant.mjs",
-      "sha256": "e42b2a191f0765ae8c8380da52f37333dcd42ee8b9dd1f3b4713ffbb99078aa9"
+      "sha256": "6447c50d045f84145ffb9c8f2625242523c6c1e2204a0ca7c95111bcea46916a"
     },
     {
       "path": "kit/notebook/server/browser-chat.mjs",
@@ -10262,6 +10262,10 @@
     {
       "path": "kit/notebook/test/assistant-files.test.mjs",
       "sha256": "79582461761282cb35e2590ac29beae341c654c9d055e43985629c29a3630289"
+    },
+    {
+      "path": "kit/notebook/test/assistant-starter-wiring.test.mjs",
+      "sha256": "07cd0e7b9adaa0a0f4702882eeb29bffbd22a31aa4bce69ee7ce774685267988"
     },
     {
       "path": "kit/notebook/test/background-index.test.mjs",
