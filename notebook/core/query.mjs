@@ -10,7 +10,7 @@ for (const table of ['goals', 'jobs', 'job_receipts', 'settings', 'permissions',
 for(const table of ['health_episodes','medications','health_observations','watch_topics','watch_observations','outside_numbers','subscriptions','forecasts','work_items','coach_talks','connector_status','work_tool_receipts','approvals','command_receipts'])tables.add(table);
 const views = new Set(['world_entities', 'world_events', 'world_claims', 'profile_facts', 'v_ai_allowance_current','coach_talks','habits','journal']);
 for(const table of ['watch_candidates','watch_runs','watch_findings'])tables.add(table);
-for(const table of ['lead_entries','lead_runs','lead_examples','lead_positions','lead_contacts','radar_decisions','radar_trials','radar_trial_results'])tables.add(table);
+for(const table of ['lead_entries','lead_runs','lead_examples','lead_positions','lead_contacts','lead_market','radar_decisions','radar_trials','radar_trial_results'])tables.add(table);
 const defaults = {
   contacts: { notes: null, app_mappings: {}, merged_into: null, is_favorite: false, is_sensitive: false, last_viewed_at: null },
   contact_groups:{is_archived:false,is_trashed:false,parent_group_id:null,sensitivity:'normal',group_type:'custom',stages:[],success_criteria:[],attributes_schema:{},status:'active'},

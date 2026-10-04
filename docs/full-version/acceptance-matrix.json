@@ -1,6 +1,6 @@
 {
   "format": 2,
-  "checked_at": "2026-10-04T04:40:00Z",
+  "checked_at": "2026-10-04T05:40:22.390936+00:00",
   "complete": false,
   "items": [
     {
@@ -2339,8 +2339,10 @@
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
       "criterion": "Make a real read through each configured connector and save success or failure. Verify the connection-check result across a failed run, restart and an unchanged repeat; report an observation rather than implying execution.",
-      "status": "source only",
-      "evidence": [],
+      "status": "partial",
+      "evidence": [
+        "Normal installed 0e0d3a6 Settings configured a loopback fictional connector. Actual HTTP 503 responses followed saved backoff through attempts 1/2/3 and needs_review. Explicit 401 recheck created one sign-in obligation; explicit 200 recheck closed the same obligation and verified repair. Normal screen shows Connected (HTTP 200). Real-account adapters, later automatic quiet and cap quiet remain open."
+      ],
       "required": true,
       "target_test": "Exercise connections through its installed entry point and check actual results after restart"
     },
@@ -2422,8 +2424,10 @@
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
       "criterion": "Validate records, references, index and pending receipts. Verify the selftest result across a failed run, restart and an unchanged repeat; report an observation rather than implying execution.",
-      "status": "source only",
-      "evidence": [],
+      "status": "partial",
+      "evidence": [
+        "Independent supervisor missing-run detection reads exact owner/due receipts without a Store or action replay; due-specific repair tracking closes only on the original verified receipt. Missing-run/recovery source regressions pass. Installed 0e0d3a6 supervisor records empty missing_runs and no check error. Nonempty installed missing-run and arbitrary repair execution remain unverified."
+      ],
       "required": true,
       "target_test": "Exercise selftest through its installed entry point and check actual results after restart"
     },
@@ -2520,8 +2524,10 @@
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
       "criterion": "Detect failed, interrupted, missing or overdue routine receipts. Verify the job-check result across a failed run, restart and an unchanged repeat; report an observation rather than implying execution.",
-      "status": "source only",
-      "evidence": [],
+      "status": "partial",
+      "evidence": [
+        "Source exact-due missing-run repairs and retained failed receipts are verified by missing-runs.test.mjs and missing-run-repair.test.mjs; interrupted/outward actions are not replayed. Matching 0e0d3a6 is installed, but complete normal missing-run repair acceptance remains open."
+      ],
       "required": true,
       "target_test": "Exercise job-check through its installed entry point and check actual results after restart"
     },
@@ -2587,7 +2593,8 @@
       "status": "partial",
       "evidence": [
         "Source: notebook/core/lead.mjs and lead-commands.mjs implement the checked local contribution pipeline; notebook/test/lead.test.mjs and lead-commands.test.mjs exercise actual local HTTP reads, correction failure, retained redraft, daily overlap cap, research priority, exact explicit-command text, hidden-source refusal and publication readback. Normal installed execution and optional full-method duties remain open.",
-        "Source now requires the public position own adopted visible goal and rechecks goal/position state before delivery; unrelated or paused goals stay quiet. Sixteen lead/command regressions pass. New source not yet installed; complete optional workflow duties remain open."
+        "Source now requires the public position own adopted visible goal and rechecks goal/position state before delivery; unrelated or paused goals stay quiet. Sixteen lead/command regressions pass. New source not yet installed; complete optional workflow duties remain open.",
+        "Source now reads independent fifteen-source daily market slices and validates one named contact draft against recent dated primary bytes, useful original-work offer and separate claim check, preserving personal relationship evidence and the one-entry daily cap. Twenty focused tests and full 280-pass/one-skip suite pass. New source is not installed; video/weekly/monthly and broad installed contribution acceptance remain open."
       ],
       "required": true,
       "target_test": "Exercise lead through its installed entry point and check actual results after restart"
@@ -2639,7 +2646,8 @@
       "evidence": [
         "Dedicated source lifecycle records only actual user verdicts, pending separate implementation approval and quote-linked reported trial outcomes. Assess archives after three completed runs, Caution retains the no-list, and overlapping source runs cannot duplicate a local-change proposal. Source suite and 21 focused checks pass; installed lifecycle and broad discovery remain unverified.",
         "Source controlled workflow draft/exact approval/application/read-back/retained rollback has seventeen passing focused checks. Full maintained method includes actual contracts. SDK/tool installation, installed real-provider experiment and actual trial benefit remain unverified.",
-        "Bounded opt-in public discovery now rotates agent/memory/retrieval queries and fetches maintainer release/README evidence without local data in searches. Actual public search and four source reads passed; source suite 268 pass/one platform skip. Matching installed discovery and lifecycle acceptance remain open."
+        "Bounded opt-in public discovery now rotates agent/memory/retrieval queries and fetches maintainer release/README evidence without local data in searches. Actual public search and four source reads passed; source suite 268 pass/one platform skip. Matching installed discovery and lifecycle acceptance remain open.",
+        "Actual 0e0d3a6 connected-provider radar verified quiet at 05:29:14 UTC, then a source-quoted local proposal at 05:32:19 UTC after normal fictional memory-goal adoption. Primary quote and full canonical source digest match. Normal Trial selection, full-method read and exact-hash preparation queued separately gated work; only actual read_workflow is verified so far. Application, rollback and measured benefit remain open."
       ],
       "required": true,
       "target_test": "Exercise radar through its installed entry point and check actual results after restart"
@@ -3184,7 +3192,8 @@
       "status": "partial",
       "evidence": [
         "Full portable original method is maintained/generated: actual fourteen-day outcomes, refusal/exemplar learning, backlog/redraft and blocked-shape rules, due research priority, rotating contact/market reads, reader/voice/attribution checks, one-entry cap, optional adopted weekly/monthly duties and retained run logs. User-specific data is configuration. Full automated queue/delivery and installed deliverable remain open.",
-        "Maintained full portable method now has a dedicated runtime and /lead local configuration/outcome entry points. Complete installed deliverable, optional reach/video/weekly/monthly duties and market rotation remain unverified."
+        "Maintained full portable method now has a dedicated runtime and /lead local configuration/outcome entry points. Complete installed deliverable, optional reach/video/weekly/monthly duties and market rotation remain unverified.",
+        "Maintained full method now documents executable market selection, separate daily cursors and source-checked named drafts. Actual local HTTP regression evidence is retained in lead-market-reach-targeted.log; source suite has 280 passes and one platform skip. New source still needs matching installation; video, adopted weekly comparison and monthly evidence duties remain incomplete."
       ],
       "required": true,
       "target_test": "Exercise lead through its installed entry point and check actual results after restart"
@@ -3223,7 +3232,8 @@
         "Full portable method is maintained/generated. New scheduled source code fetches configured visible radar topics in the actual run, retains source bytes and trace, requires a matching exact quote, novelty and empty user verdict, permits one bounded correction, logs quiet/failure, deduplicates unchanged proposal sources, and warns once after three blind runs. Five regressions pass using actual local HTTP bytes and credential-redaction fixtures. Native installed runtime, verdict lifecycle and reversible trial execution remain open.",
         "Complete maintained portable method now documents installed source selection and native verdict/result contracts, retained expiry and reported-versus-verified outcomes. Latest source is not installed; full workflow acceptance remains required.",
         "Source controlled workflow draft/exact approval/application/read-back/retained rollback has seventeen passing focused checks. Full maintained method includes actual contracts. SDK/tool installation, installed real-provider experiment and actual trial benefit remain unverified.",
-        "The complete portable method now documents actual bounded public discovery, retained query and source evidence, unchanged restricted-topic scope and explicit activation. Actual public discovery reads pass; installed full-method result remains open."
+        "The complete portable method now documents actual bounded public discovery, retained query and source evidence, unchanged restricted-topic scope and explicit activation. Actual public discovery reads pass; installed full-method result remains open.",
+        "Matching bounded full-method context is installed. Actual public reads and connected-provider quiet/proposal results, normal verdict and exact-hash preparation are retained; preparation/application/rollback and actual two-week trial benefit remain unverified."
       ],
       "required": true,
       "target_test": "Exercise mc-radar through its installed entry point and check actual results after restart"
@@ -3310,7 +3320,8 @@
       "status": "partial",
       "evidence": [
         "2026-10-04: complete owned-installation physical move/undo method, explicit installation pointer, immutable dry run, verified retained backup and separate restoration, exact private byte copies, original and destination aliases, current-data-preserving undo, installed CLI fixture; source-suite-workspace-move.log: 263 pass and one platform skip; installed launcher and assistant move acceptance remain open",
-        "Actual installed b5391fc CLI verified pre-move empty restoration and full copied bytes, retained original, old-path alias and explicit endpoint installation pointer; selected launcher restarted at the moved root and normal Windows Settings/Notes opened. A later note is being saved through normal UI; undo and subsequent assistant acceptance remain open."
+        "Actual installed b5391fc CLI verified pre-move empty restoration and full copied bytes, retained original, old-path alias and explicit endpoint installation pointer; selected launcher restarted at the moved root and normal Windows Settings/Notes opened. A later note is being saved through normal UI; undo and subsequent assistant acceptance remain open.",
+        "Actual physical endpoint undo completed with 4141 records after verified restoration, preserved exact later note/conversation and both retained copies, restored the original pointer/alias and restarted only the selected launcher. After 0e0d3a6 upgrade the same note opened normally and both Windows health endpoints passed. Opening its conversation still fails CDP mouse dispatch; full normal assistant acceptance remains open."
       ],
       "required": true,
       "target_test": "Exercise move-godspeed through its installed entry point and check actual results after restart"
@@ -3897,7 +3908,8 @@
       "status": "partial",
       "evidence": [
         "Normal notebook configured a fictional localhost connector. HTTP 401 caused one Reconnect spend-guard obligation. After HTTP 200 returned, unattended checking closed that same obligation with completion evidence.",
-        "New bounded restart recovery reclaims an interrupted scheduled read only for an explicit read-only routine allowlist, retains its prior attempt and one repair item, verifies that repair from the same completed receipt, and leaves an uncertain outward attempt paused. Meaningful stopped-read/outward regressions pass. Existing interrupted jobs without safe pause provenance remain untouched; actual installed repair acceptance is pending."
+        "New bounded restart recovery reclaims an interrupted scheduled read only for an explicit read-only routine allowlist, retains its prior attempt and one repair item, verifies that repair from the same completed receipt, and leaves an uncertain outward attempt paused. Meaningful stopped-read/outward regressions pass. Existing interrupted jobs without safe pause provenance remain untouched; actual installed repair acceptance is pending.",
+        "Installed independent supervisor and normal loopback connector recovery evidence: installed-connector-bounded-cap-verification.json, installed-connector-login-obligation-actual.json and installed-connector-normal-200-recovery.json, retained privately. These establish exact retry/sign-in/verified closure, not arbitrary self-repair or full uninterrupted health. A 05:30:17 UTC supervisor timeout remains retained without restart."
       ],
       "required": true,
       "target_test": "Accept automatic recoverable connector and failed local-job repair, bounded retries, checked closure and quiet repeat cycles."
