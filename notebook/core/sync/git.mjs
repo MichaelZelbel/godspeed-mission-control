@@ -127,6 +127,7 @@ export class FileSync {
   integrate(remoteRef,{fastForward=false}={}){
     const integrationRoot=path.join(this.store.state,'sync-worktrees'),dir=path.join(integrationRoot,randomUUID());fs.mkdirSync(integrationRoot,{recursive:true});
     if(!path.resolve(dir).startsWith(path.resolve(integrationRoot)+path.sep))throw new Error('Unsafe sync staging path');
+    const localHead=this.git(['rev-parse','HEAD']);
     this.git(['worktree','add','--detach',dir,'HEAD']);
     try {
       // Independently created profiles can look like renames to Git. Their paths
@@ -175,7 +176,16 @@ export class FileSync {
       const batch=[...merged.records.values()].filter(r=>this.store.records.get(r.type+'/'+r.id)?._hash!==r._hash).map(r=>{const value={...r};delete value._hash;return value;});
       if(batch.length||removed.length)this.store.commit(batch,{removeKeys:removed});
       const documents=this.git(['ls-files'],dir).split('\n').filter(n=>shared(n)&&!n.startsWith('records/')).map(file=>({file,text:fs.readFileSync(path.join(dir,file))})).filter(item=>!fs.existsSync(path.join(this.store.root,item.file))||!fs.readFileSync(path.join(this.store.root,item.file)).equals(item.text));
-      if(documents.length)this.store.publishFiles(documents);
+      // A document another machine deleted is deleted here too, when this
+      // machine still holds exactly the version both last agreed on. Before,
+      // only records carried removals: a deleted rule or skill stayed on every
+      // other machine, and the next upload from any of them put it back. A
+      // file changed here meanwhile is a modify/delete conflict above instead.
+      const gone=this.git(['diff','--name-only','--no-renames','--diff-filter=D',localHead,'HEAD'],dir).split('\n').filter(n=>n&&shared(n)&&!n.startsWith('records/')&&fs.existsSync(path.join(this.store.root,n)))
+        .filter(n=>this.git(['hash-object','--',n])===this.git(['rev-parse',localHead+':'+n]));
+      const tracked=this.git(['ls-files'],dir).split('\n').filter(n=>shared(n)&&!n.startsWith('records/')).length;
+      if(gone.length>25&&gone.length*5>tracked+gone.length)throw new Error('Remote removal of '+gone.length+' files needs review');
+      if(documents.length||gone.length)this.store.publishFiles([...documents,...gone.map(file=>({file,delete:true}))]);
       const commit=this.git(['rev-parse','HEAD'],dir);
       // Files are already published through the recoverable transaction. Move only Git's head/index.
       this.git(['reset','--mixed',commit]);

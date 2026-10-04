@@ -278,7 +278,7 @@ export class Store {
   }
   publishFiles(items){
     const dir=path.join(this.state,'transactions',randomUUID());fs.mkdirSync(dir,{recursive:true});
-    const manifest=items.map((item,i)=>{if(!durable(item.file)&&!/^conflicts\/[\w-]+\.json$/.test(item.file))throw new Error('File is outside durable state');atomic(path.join(dir,i+'.after'),item.text);return {file:item.file,staged:i+'.after',hash:hash(item.text)};});
+    const manifest=items.map((item,i)=>{if(!durable(item.file)&&!/^conflicts\/[\w-]+\.json$/.test(item.file))throw new Error('File is outside durable state');if(item.delete)return {file:item.file,delete:true};atomic(path.join(dir,i+'.after'),item.text);return {file:item.file,staged:i+'.after',hash:hash(item.text)};});
     atomic(path.join(dir,'manifest.json'),JSON.stringify(manifest));atomic(path.join(dir,'prepared'),'prepared');this.applyTransaction(dir,manifest);
   }
   structural(type, id, action, options = {}) {
