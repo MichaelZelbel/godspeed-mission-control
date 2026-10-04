@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import {spawn} from 'node:child_process';
 import {Store,atomic,hash} from '../core/records/store.mjs';
 import {QueryService} from '../core/query.mjs';
 import {radarCommand} from '../core/radar-lifecycle.mjs';
@@ -107,4 +108,15 @@ test('changed drafts and exhausted preparation jobs can be reviewed again withou
  const job=f.store.get('jobs','radar-prepare-'+task.id);
  f.store.save('jobs',{id:job.id,owner:'other-device'});
  await assert.rejects(prepareRadarWork(job,{...f,provider:async()=>{throw Error('A wrong owner must not call a provider');}}),/owned by this installation/);
+});
+
+
+test('radar preparation survives an actual writer arriving after verification without replaying the draft',async()=>{
+ const f=fixture(),wait=f.store.waitForWriter.bind(f.store);let waits=0,other,closed;
+ f.store.waitForWriter=async options=>{await wait(options);if(++waits===2){
+  other=spawn(process.execPath,['-e',"const fs=require('fs'),path=require('path'),file=path.join(process.argv[1],'.godspeed','workspace.lock');fs.writeFileSync(file,JSON.stringify({pid:process.pid}),{flag:'wx'});process.stdout.write('held');setTimeout(()=>fs.unlinkSync(file),200);",f.store.root],{windowsHide:true,stdio:['ignore','pipe','pipe']});
+  closed=new Promise((resolve,reject)=>{other.on('error',reject);other.on('close',code=>code===0?resolve():reject(Error('Fictional writer failed '+code)));});
+  await new Promise((resolve,reject)=>{other.stdout.once('data',resolve);other.stderr.once('data',data=>reject(Error(String(data))));other.once('error',reject);});
+ }};
+ try{const {draft}=await checkedDraft(f);assert.ok(other);await closed;assert.equal(f.store.get('notes',draft.id).revision,1);assert.equal(f.store.list('notes').filter(n=>n.source_app==='radar-implementation-draft').length,1);assert.equal(f.store.list('work_tool_receipts').filter(r=>r.tool==='read_workflow').length,1);assert.equal(fs.readFileSync(f.file,'utf8'),original);}finally{if(closed)await closed;}
 });
