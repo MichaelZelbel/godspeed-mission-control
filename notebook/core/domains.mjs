@@ -251,6 +251,7 @@ export class Domains {
       const requested=String(input.message||input.messages?.filter(m=>m.role==='user').at(-1)?.content||'');
       await this.store.waitForWriter({signal});
       const hypothetical=/\b(?:if I|suppose|hypothetically|for example|someone said|quoted|wenn ich|beispielsweise)\b/i.test(requested);
+      const attemptedNoteCapture=Array.isArray(structured.notes_created)&&structured.notes_created.length>0;
       if(!explicitNoteCapture(requested))delete structured.notes_created;
       if(name==='collection-chat'&&(hypothetical||/\b(?:do not|don.t|never|must not|should not|nicht|niemals)\s+(?:add|create|change|edit|update|remove|delete)\b/i.test(requested)||! /^(?:(?:please|bitte)\s+|(?:can|could|would)\s+you\s+(?:please\s+)?)?(?:add|create|change|edit|update|remove|delete|erstell\w*|ändere|bearbeite|ergänze|lösche)\b/i.test(requested.trim()))){delete structured.items_created;delete structured.item_updates;}
       if(name==='conversation-chat'&&structured.operations?.length)structured.operation_results=conversationOperations(this,input,structured.operations.filter(op=>!(input.retained_coach_reply&&op.type==='coach-reply'&&op.id===input.talk_id)));
@@ -261,7 +262,7 @@ export class Domains {
         else if(structured.note_content===this.store.get('notes',input.note_id)?.content)delete structured.note_content;
       }
       if(['generate_collection_schema','draft-event'].includes(name))return structured;
-      const content=structured.reply||JSON.stringify(structured),tool_results=[],notes_created=[];
+      let content=structured.reply||JSON.stringify(structured);const tool_results=[],notes_created=[];
       if(name==='note-chat'&&typeof structured.note_content==='string'){
         const original=this.store.get('notes',input.note_id);if(!original)throw new Error('Choose a current note before editing it');if(input.base_updated_at&&original.updated_at!==input.base_updated_at)this.store.conflict('notes',{id:original.id,content:structured.note_content},original);
         const updated=await this.store.saveAsync('notes',{id:original.id,content:structured.note_content},original._hash,{signal});structured.note_edit={previous_content:original.content,content:updated.content,updated_at:updated.updated_at};tool_results.push({tool:'update_note',success:true});
@@ -270,6 +271,10 @@ export class Domains {
       if(name==='note-chat'&&structured.note_changes){const original=this.store.get('notes',notes[0]?.id);if(!original)throw new Error('Current note missing');if(Object.keys(structured.note_changes).some(k=>!['title','tags','metadata','is_favorite'].includes(k)))throw new Error('Unknown note field');await this.store.saveAsync('notes',{id:original.id,...structured.note_changes},original._hash,{signal});tool_results.push({tool:'update_note_metadata',success:true});}
       if(name==='note-chat'&&structured.trash_note){if(!notes[0])throw new Error('Current note missing');this.store.structural('notes',notes[0].id,'remove');tool_results.push({tool:'trash_note',success:true});}
       for(const note of structured.notes_created||[])if(note.title&&typeof note.content==='string')notes_created.push(await this.store.saveAsync('notes',{title:note.title,content:note.content,source_app:name},undefined,{signal}));
+      if(['conversation-chat','note-chat'].includes(name)&&(explicitNoteCapture(requested)||attemptedNoteCapture)){
+        if(!notes_created.length)content='I could not save the requested note. No note was created.';
+        else for(const note of notes_created)tool_results.push({tool:'create_note',success:true,note_id:note.id});
+      }
       if(name==='collection-chat')for(const change of [...(structured.items_created||[]),...(structured.item_updates||[])]){
         const old=change.id?context.items.find(i=>i.id===change.id):null;if(change.id&&!old)throw new Error('Assistant requested a row outside this collection');
         const validKeys=new Set((context.collection?.field_schema||[]).map(f=>f.key));if(Object.keys(change.data||{}).some(k=>!validKeys.has(k)))throw new Error('Assistant requested an unknown collection field');
