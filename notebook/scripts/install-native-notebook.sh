@@ -6,11 +6,12 @@ root=${1:?The original installer must supply its Godspeed folder}
 root=$(cd "$root" && pwd -P)
 state="$root/.godspeed/integrated-runtime"
 mkdir -p "$state"
+revision=${GODSPEED_PRODUCT_REF:-codex/godspeed-v2-completeness}
 if [ ! -d "$state/source/.git" ]; then
-  git clone --branch codex/godspeed-v2-completeness --single-branch https://github.com/MichaelZelbel/godspeed-mission-control.git "$state/source"
-else
-  git -C "$state/source" pull --ff-only
+  git clone --no-checkout https://github.com/MichaelZelbel/godspeed-mission-control.git "$state/source"
 fi
+git -C "$state/source" fetch origin "$revision"
+git -C "$state/source" checkout --detach FETCH_HEAD
 npm --prefix "$state/source/notebook/ui" ci --no-audit --no-fund
 npm --prefix "$state/source/notebook/ui" run build
 export GODSPEED_WORKSPACE="$root" GODSPEED_ORIGINAL_RUNTIME=on
