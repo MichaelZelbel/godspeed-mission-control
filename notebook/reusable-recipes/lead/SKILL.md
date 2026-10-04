@@ -9,6 +9,8 @@ Read the user's adopted public-lane plan, current strategy, positions, voice and
 
 One reusable method, one recurring trigger, many position/person data records and one output gate. Adding a position or contact never creates another skill or schedule. At most one actionable queue entry reaches the user per local day; zero is a logged result. The user publishes and sends. A draft, a checked draft and an actual posted result are different states.
 
+The installed `/lead position` command links each adopted public position to its actual adopted goal using `goal_id`. Select the existing goal and position IDs from the notebook or command results; never guess them. An unrelated adopted goal does not activate public work. Pausing the linked goal stops drafting, and changing that goal or position during a draft prevents delivery until it is reviewed again. `/lead help` gives the installed configuration and outcome arguments. In Settings, Sources to watch, select sources for contributions explicitly and enable the Lead routine separately.
+
 ## Read actual outcomes before drafting
 
 Read the last fourteen days of actual shown, answered, refused, ignored and posted contributions, grouped by kind, position and shape. Retain the denominator, dates and evidence. Do not infer a post from a draft or read a missing counter as zero. Quote the outcome summary in the run log.

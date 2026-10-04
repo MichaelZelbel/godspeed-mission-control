@@ -2,7 +2,7 @@
   "format": 1,
   "origin": "Reviewed reusable workflow sources and portable starter workflows",
   "files": {
-    "manifest.json": "bc3facbaffe2366eadfff237f76bd1ad2145ecb56957acc18814a2204786a643",
+    "manifest.json": "d94a386d80dac0f9143fe2f1fdcdf1e8443be625d6cf1dc320e663d8bf8f1a12",
     "book-title-creator/SKILL.md": "34f60c7f8081b9d0778026e69c9254f2239c4a72f95fa686903e57592ab274b8",
     "book-title-strategist/SKILL.md": "1d858bcd7b360202dbb5939090213e5d7ce7024b7c1d24dcfc6020936d3a5530",
     "connect-email/.shipped-sha256": "b4e692ca873c8ca46bdaa9209461bc8dd6c7e9f65d4ba86980bad1be965c1771",
@@ -996,7 +996,7 @@
     "book-title-strategist/references/07-worked-examples.md": "5dcd03a680910f95a9b65b5844997887f42e7cdab985eecac93b980b2533b4ec",
     "book-title-strategist/references/08-sources.md": "3d997d2a97b3a4cefed89a988ba90d3dd779d2c41972a7123bf63807821fc113",
     "book-title-strategist/scripts/rank_candidates.py": "1f22eead28a420c50124e836e2a40146b3523dfc40c9c643e53ff7fb04907d9b",
-    "lead/SKILL.md": "0c2c985185dedf7337dbf8e2b7962c075dbd0af8830a1920d3391a24d9901100",
-    "mc-radar/SKILL.md": "875d9d99aa2904679355c4dcfd7168540da8350025adc80d64fb05475b2991a6"
+    "lead/SKILL.md": "fb98cc9cd18f0e342bda3dbe318fe8ed7c074df160768b05653297badcf9a554",
+    "mc-radar/SKILL.md": "d02b7cb288135735928921b729b467349e2e99fa2ca5e9db0501c0ff75f5fe87"
   }
 }

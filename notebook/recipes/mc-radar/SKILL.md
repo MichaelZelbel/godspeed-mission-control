@@ -46,6 +46,16 @@ Adopt or Trial records the actual agreed decision and reason and queues separate
 
 Use stable source/item identities and request IDs so retries do not duplicate proposals or decisions. Later results, not a model's self-score, determine whether the trial succeeded. Unavailable source adapters or missing lifecycle controls remain explicit implementation gaps; the skill file alone does not prove this workflow runs.
 
+## Installed commands and source selection
+
+Select a source in Settings, Sources to watch, and explicitly choose its radar checkbox. Enable the Radar routine separately; source selection does not authorize implementation. `/radar help` shows the actual installed command contract. `/radar queue`, `/radar history` and `/radar trials` show retained proposals, user decisions and trial records.
+
+`/radar verdict PROPOSAL_ID JSON` accepts the user's actual verdict and reason. Read the actual proposal ID and current hash from the queue; never invent either. Repeating the same decision does not queue another action. Adopt and Trial retain a separate work item awaiting execution approval, with no allowed action. A verdict does not execute code, install a tool or authorize publishing. Changing a verdict cancels its unexecuted approval task and retains the original trial and decision history.
+
+Assess expires after three completed radar runs following its unchanged decision. Its source, quote, user reason and older versions remain saved. Caution remains in the retained proposal history and prevents a renamed repeat of the same local change.
+
+`/radar result PROPOSAL_ID JSON` records an actual user-reported trial result, including failure, with an exact quote from a separate visible evidence note and an observation time with timezone. Reported evidence does not become automatic verification of an experiment. Work still awaiting execution approval is not claimed to have run. Complete implementation and independent trial verification remain separate steps.
+
 
 ## Installed personal workspace
 

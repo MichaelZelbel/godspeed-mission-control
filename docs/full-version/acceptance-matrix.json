@@ -1,6 +1,6 @@
 {
   "format": 2,
-  "checked_at": "2026-10-04T01:34:25.200376+00:00",
+  "checked_at": "2026-10-04T01:52:54.430982+00:00",
   "complete": false,
   "items": [
     {
@@ -2628,8 +2628,10 @@
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
       "criterion": "At most one evidence-based proposal from configured sources. Verify the radar result across a failed run, restart and an unchanged repeat; report an observation rather than implying execution.",
-      "status": "source only",
-      "evidence": [],
+      "status": "partial",
+      "evidence": [
+        "Dedicated source lifecycle records only actual user verdicts, pending separate implementation approval and quote-linked reported trial outcomes. Assess archives after three completed runs, Caution retains the no-list, and overlapping source runs cannot duplicate a local-change proposal. Source suite and 21 focused checks pass; installed lifecycle and broad discovery remain unverified."
+      ],
       "required": true,
       "target_test": "Exercise radar through its installed entry point and check actual results after restart"
     },
@@ -3205,7 +3207,8 @@
       "criterion": "Compare current public primary sources against the user's goals.\r Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation.",
       "status": "partial",
       "evidence": [
-        "Full portable method is maintained/generated. New scheduled source code fetches configured visible radar topics in the actual run, retains source bytes and trace, requires a matching exact quote, novelty and empty user verdict, permits one bounded correction, logs quiet/failure, deduplicates unchanged proposal sources, and warns once after three blind runs. Five regressions pass using actual local HTTP bytes and credential-redaction fixtures. Native installed runtime, verdict lifecycle and reversible trial execution remain open."
+        "Full portable method is maintained/generated. New scheduled source code fetches configured visible radar topics in the actual run, retains source bytes and trace, requires a matching exact quote, novelty and empty user verdict, permits one bounded correction, logs quiet/failure, deduplicates unchanged proposal sources, and warns once after three blind runs. Five regressions pass using actual local HTTP bytes and credential-redaction fixtures. Native installed runtime, verdict lifecycle and reversible trial execution remain open.",
+        "Complete maintained portable method now documents installed source selection and native verdict/result contracts, retained expiry and reported-versus-verified outcomes. Latest source is not installed; full workflow acceptance remains required."
       ],
       "required": true,
       "target_test": "Exercise mc-radar through its installed entry point and check actual results after restart"
@@ -3767,8 +3770,10 @@
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
       "criterion": "No empty reminder; one delivery per stage; evidence closes one occurrence and advances once",
-      "status": "source only",
-      "evidence": [],
+      "status": "partial",
+      "evidence": [
+        "Normal development fictional recurring obligation closed with actual software-check evidence and created the next deadline seven days later. Evidence: development-a372e3c-fictional-recurring-obligation-ui.txt. Wider reminder/escalation/restart acceptance remains open."
+      ],
       "required": true,
       "target_test": "Exercise reminders through its installed entry point and check actual results after restart"
     },
@@ -3912,7 +3917,8 @@
         "Matching 1b885b0 installed on Windows and authorized development after retained empty restorations: main 865/2369, endpoint 2600/3650, development 1156/2947. All 1565 development image UI files equal the Windows manifest. Both health endpoints have fresh scheduler heartbeats. Windows/Linux source suites each 180 pass/one skip. Not final completeness.",
         "Normal development Settings saved a new backup and restored 1250 records/3086 files into retained empty storage at .godspeed/restored-copies/1791073154341-c2c158e5bec0/workspace. No upgrade follows from this evidence yet. Matching fab179a intermediate Windows/development packages were built and retained, not installed; their source suites passed 182 tests plus one platform skip on both platforms.",
         "Matching d22ce059a9d5fb065f95f454ef1718f2e9ceafe2 Windows/development packages installed after verified separate restorations: main 867/2371, endpoint 2828/3878, development 1327/3262. Windows installer 969dd8dd697bab7d9b4ac3139384b662f87a4b3f9863ba3dc81b098d7802945c; development image sha256:6fd220d8df81805bceb59355157bb19928608a488fa76dbf94167e48e2624157. Direct built-image comparison matches all 1565 Windows browser files. Windows installer completed and both health endpoints returned fresh heartbeats. Both source suites passed 188 checks plus one skip. Intermediate installation only.",
-        "Matching b6ed312 upgrades followed normal verified empty restorations on Windows main/endpoint and physical development. New conflict source protects current saved bytes and retains all older copies; actual installed resolution remains open."
+        "Matching b6ed312 upgrades followed normal verified empty restorations on Windows main/endpoint and physical development. New conflict source protects current saved bytes and retains all older copies; actual installed resolution remains open.",
+        "Normal installed a372e3c conflict controls retained current bytes and both older copies; actual SHA readback confirms no rollback of the 5/5 goal outcome. Fresh retained empty restorations preceded matching Windows/development upgrades. Broader paired conflict/reconnect acceptance remains open."
       ],
       "required": true,
       "target_test": "Repeat recovery/link checks on final matching Windows/VPS packages; accept offline edits, reconnection, retained conflicts and preserved choices/pauses."

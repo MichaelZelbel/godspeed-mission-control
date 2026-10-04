@@ -1,10 +1,11 @@
 import {hash} from './records/store.mjs';
 import {visibleRows} from './visibility.mjs';
 import {recipeContext} from './recipe-context.mjs';
+import {advanceRadarAssessments} from './radar-lifecycle.mjs';
 
 export async function radar(job,{store,query,provider}){
  const at=new Date().toISOString(),topics=visibleRows(query,'watch_topics').filter(t=>t.radar===true&&!t.paused&&(!job.topic_ids||job.topic_ids.includes(t.id))),sources=[],checks=[];
- const log=async fields=>{await store.waitForWriter();return store.save('watch_runs',{kind:'radar',job_id:job.id,observed_at:at,...fields});};
+ const log=async fields=>{await store.waitForWriter();const run=store.save('watch_runs',{kind:'radar',job_id:job.id,observed_at:at,...fields});if(run.state==='verified')advanceRadarAssessments(store,query);return run;};
  try{
   const urls=topics.flatMap(t=>(t.urls||[t.url]).filter(Boolean).map(url=>({topic:t,url})));if(urls.length>20)throw Error('Radar has more than twenty configured sources; select a bounded topic set');
   for(const {topic,url:raw} of urls){
@@ -32,9 +33,13 @@ export async function radar(job,{store,query,provider}){
    }catch(error){feedback=error.message;await store.waitForWriter();store.save('job_receipts',{kind:'radar-source-check',job_id:job.id,state:'failed',attempt,error:feedback,finished_at:new Date().toISOString()});if(attempt===1)throw Error('Radar source check failed after one correction: '+feedback);}
   }
   if(result.kind==='quiet'){const run=await log({state:'verified',blind_runs:0,checks,source_hash:sourceHash,content:'Quiet: '+result.reason});return {verified:true,silent:true,run_id:run.id};}
-  const source=sources.find(s=>s.id===result.source_id),content=[result.title,'Source: '+source.url,'Fetched: '+source.fetched_at,'Publication date: '+(source.publication_date||'UNVERIFIED'),'Quote: '+result.quote,'What changes: '+result.change,'Expected benefit: '+result.benefit,'Cost: '+result.cost,'Reversible experiment: '+result.experiment,'Completion check: '+result.check,'End date: '+result.end_date,'Rollback: '+result.rollback,'Verdict: awaiting your decision'].join('\n\n');
-  await store.waitForWriter();const note=store.prepare('notes',{title:result.title,content,source_app:'radar',job_id:job.id,radar:{...result,source_hash:sourceHash,source_observation_id:source.id,source_url:source.url,fetched_at:source.fetched_at},research_trace:checks}),run=store.prepare('watch_runs',{kind:'radar',job_id:job.id,observed_at:at,state:'verified',blind_runs:0,checks,source_hash:sourceHash,proposal_id:note.id,content:'One new source-checked proposal retained'});
-  store.withLock(()=>store.commit([note,run,store.prepare('notifications',{id:'radar-proposal-'+hash([job.id,result.change]),record_id:note.id,status:'ready'})]));if(store.get('notes',note.id).content!==content)throw Error('Radar proposal readback failed');return {verified:true,record_id:note.id,content_hash:store.get('notes',note.id)._hash,delivery:'notebook'};
+  const itemId='radar-item-'+hash(result.change.trim().replace(/\s+/g,' ').toLowerCase());
+ const source=sources.find(s=>s.id===result.source_id),content=[result.title,'Source: '+source.url,'Fetched: '+source.fetched_at,'Publication date: '+(source.publication_date||'UNVERIFIED'),'Quote: '+result.quote,'What changes: '+result.change,'Expected benefit: '+result.benefit,'Cost: '+result.cost,'Reversible experiment: '+result.experiment,'Completion check: '+result.check,'End date: '+result.end_date,'Rollback: '+result.rollback,'Verdict: awaiting your decision'].join('\n\n');
+  await store.waitForWriter();const note=store.prepare('notes',{title:result.title,content,source_app:'radar',job_id:job.id,radar:{...result,item_id:itemId,source_hash:sourceHash,source_observation_id:source.id,source_url:source.url,fetched_at:source.fetched_at},research_trace:checks}),run=store.prepare('watch_runs',{kind:'radar',job_id:job.id,observed_at:at,state:'verified',blind_runs:0,checks,source_hash:sourceHash,proposal_id:note.id,content:'One new source-checked proposal retained'});
+  let duplicateAtSave=false;store.withLock(()=>{
+   if(store.list('notes').some(n=>n.source_app==='radar'&&n.radar&&(n.radar.item_id===itemId||typeof n.radar.change==='string'&&'radar-item-'+hash(n.radar.change.trim().replace(/\s+/g,' ').toLowerCase())===itemId))){duplicateAtSave=true;run.proposal_id=null;run.content='Quiet: another run already retained this exact local change';store.commit([run]);return;}
+   store.commit([note,run,store.prepare('notifications',{id:'radar-proposal-'+itemId,record_id:note.id,status:'ready'})]);
+  });advanceRadarAssessments(store,query);if(duplicateAtSave)return {verified:true,silent:true,run_id:run.id};if(store.get('notes',note.id).content!==content)throw Error('Radar proposal readback failed');return {verified:true,record_id:note.id,content_hash:store.get('notes',note.id)._hash,delivery:'notebook'};
  }catch(error){await log({state:'failed',checks,content:'Radar failed: '+error.message,error:error.message});throw error;}
 }
 function redactedURL(raw){try{const url=new URL(raw);url.username='';url.password='';for(const key of url.searchParams.keys())if(/^(?:token|key|api[_-]?key|access[_-]?token|password|secret)$/i.test(key))url.searchParams.set(key,'REDACTED');return url.href;}catch{return 'Invalid configured source URL';}}

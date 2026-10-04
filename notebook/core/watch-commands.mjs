@@ -9,7 +9,7 @@ export function watchCommand({store,query},args){
  const [command='help',...tail]=args,{positional,flags}=argumentsFor(tail),rows=visibleRows(query,'watch_topics'),now=Date.now();
  const find=()=>{const id=safe(positional[0]||''),topic=rows.find(t=>t.id===id||t.slug===id);if(!topic)throw Error('Watch topic missing');return topic;};
  const result=value=>({result:typeof value==='string'?value:JSON.stringify(value,null,2)});
- if(['help','-h','--help'].includes(command))return result('mc-watch add SLUG --title TITLE --shape comparison|source-watch --cadence daily|weekly|monthly|quarterly|yearly --better ANSWER --authority ANSWER --tell-me-when ANSWER --url HTTPS\nmc-watch list|due|show SLUG|log SLUG WORDS\nmc-watch candidate SLUG --name NAME --json JSON\nmc-watch file SLUG --score 40..100 --what WORDS --if-ignored WORDS --next WORDS --link HTTPS --expires DATE\nmc-watch queue|pull --channel brief|notebook --limit 1|2 [--dry-run]|expire|check');
+ if(['help','-h','--help'].includes(command))return result('mc-watch add SLUG --title TITLE --shape comparison|source-watch --cadence daily|weekly|monthly|quarterly|yearly --better ANSWER --authority ANSWER --tell-me-when ANSWER --url HTTPS [--radar] [--lead]\nmc-watch list|due|show SLUG|log SLUG WORDS\nmc-watch candidate SLUG --name NAME --json JSON\nmc-watch file SLUG --score 40..100 --what WORDS --if-ignored WORDS --next WORDS --link HTTPS --expires DATE\nmc-watch queue|pull --channel brief|notebook --limit 1|2 [--dry-run]|expire|check');
  if(command==='list')return result(rows);
  if(command==='due')return result(rows.filter(t=>!t.paused&&(!t.next_run_at||Date.parse(t.next_run_at)<=now)).map(t=>t.slug||t.id).join('\n'));
  if(command==='show'){const topic=find();return result({...topic,candidates:visibleRows(query,'watch_candidates').filter(c=>c.topic_id===topic.id),runs:visibleRows(query,'watch_runs').filter(r=>r.topic_id===topic.id).slice(-10)});}
@@ -18,7 +18,8 @@ export function watchCommand({store,query},args){
   const shape=flags.shape;if(!['comparison','source-watch'].includes(shape))throw Error('Choose comparison or source-watch');
   const minutes=cadence[flags.cadence];if(!minutes)throw Error('Choose a supported cadence');
   const url=new URL(line(flags.url,'Source address'));if(url.protocol!=='https:'&&!(url.protocol==='http:'&&['127.0.0.1','localhost'].includes(url.hostname)))throw Error('Use an HTTPS source or an isolated local test source');
-  const data={slug,title:line(flags.title,'Title'),shape,better:line(flags.better,'Better means'),authority:line(flags.authority,'Authority'),criteria:line(flags['tell-me-when'],'Tell me when'),cadence_minutes:minutes,urls:[url.href],paused:false};
+  if(url.username||url.password||[...url.searchParams.keys()].some(k=>/^(?:token|key|api[_-]?key|access[_-]?token|password|secret)$/i.test(k)))throw Error('Use a public source address without credentials');
+  const data={slug,title:line(flags.title,'Title'),shape,better:line(flags.better,'Better means'),authority:line(flags.authority,'Authority'),criteria:line(flags['tell-me-when'],'Tell me when'),cadence_minutes:minutes,urls:[url.href],radar:flags.radar===true,lead:flags.lead===true,paused:false};
   return result(addWatchTopic(store,data));
  }
  if(command==='log'){const topic=find(),text=line(positional.slice(1).join(' '),'Run evidence'),at=new Date().toISOString();return result(store.withLock(()=>{const run=store.prepare('watch_runs',{topic_id:topic.id,content:text,observed_at:at}),current=store.get('watch_topics',topic.id);store.commit([run,store.prepare('watch_topics',{last_run_at:at,next_run_at:new Date(now+current.cadence_minutes*60000).toISOString()},current)]);return run;}));}

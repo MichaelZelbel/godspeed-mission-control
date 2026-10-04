@@ -7,6 +7,7 @@ import {dueCommand,dueRows} from './native-due.mjs';
 import {subscriptionCommand} from './subscriptions.mjs';
 import {watchCommand,addWatchTopic} from './watch-commands.mjs';
 import {leadCommand} from './lead-commands.mjs';
+import {radarCommand} from './radar-lifecycle.mjs';
 import {localParts,addDays,zonedToUtc} from '../../third-party/addons/godspeed-coach/lib/clock.mjs';
 import {nextCalendarRun} from './jobs/calendar.mjs';
 import {readTable} from '../../third-party/addons/godspeed-coach/lib/auto.mjs';
@@ -53,6 +54,7 @@ export function personalOperation(domains,input){
  if(type==='subscription-command')return subscriptionCommand(store,input.args);
  if(type==='watch-command')return watchCommand(domains,input.args);
  if(type==='lead-command')return leadCommand(domains,input.args);
+ if(type==='radar-command')return radarCommand(domains,input.args);
  if(['obligation-complete','obligation-snooze'].includes(type)){
   const native=dueRows(store).find(d=>d.id===input.id);if(native){if(input.expected&&input.expected!==native._hash)throw Error('Obligation changed; reload before saving');
    if(type==='obligation-complete'){required(input.evidence,'Completion evidence');return dueCommand(store,['done',native.native_slug,'--evidence',input.evidence]);}
@@ -67,8 +69,9 @@ export function personalOperation(domains,input){
  }
  if(type==='watch-add'){
   const title=required(input.title,'Watch topic'),url=new URL(required(input.url,'Source address'));if(url.protocol!=='https:'&&!(url.protocol==='http:'&&['localhost','127.0.0.1'].includes(url.hostname)))throw Error('Use an HTTPS source or an isolated local test source');
+  if(url.username||url.password||[...url.searchParams.keys()].some(k=>/^(?:token|key|api[_-]?key|access[_-]?token|password|secret)$/i.test(k)))throw Error('Use a public source address without credentials');
   if(!Number.isInteger(input.minutes)||input.minutes<1||input.minutes>525600)throw Error('Choose the number of minutes between checks');required(input.criteria,'Meaningful change criteria');
-  return addWatchTopic(store,{title,urls:[url.href],criteria:input.criteria,cadence_minutes:input.minutes,include_in_brief:input.include_in_brief===true,paused:false});
+  return addWatchTopic(store,{title,urls:[url.href],criteria:input.criteria,cadence_minutes:input.minutes,include_in_brief:input.include_in_brief===true,radar:input.radar===true,lead:input.lead===true,paused:false});
  }
  if(type==='watch-change'){const topic=store.get('watch_topics',required(input.id,'Watch ID'));if(!topic)throw Error('Watch topic missing');if(typeof input.paused!=='boolean')throw Error('Choose pause or resume');return store.withLock(()=>{const job=store.get('jobs','watch-'+topic.id);store.commit([store.prepare('watch_topics',{paused:input.paused},topic),...(job?[store.prepare('jobs',{paused:input.paused},job)]:[])]);return store.get('watch_topics',topic.id);});}
  if(['coach-open','coach-reply','coach-close','habit-agree','habit-observe','journal-add','journal-switch'].includes(type)){
