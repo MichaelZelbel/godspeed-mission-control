@@ -11,6 +11,7 @@ import { Scheduler } from '../core/jobs/scheduler.mjs';
 import { modelProvider, jobExecutor,hermesProvider } from '../core/runtime.mjs';
 import {assistantEnvironment} from '../core/assistant-files.mjs';
 import { FileSync } from '../core/sync/git.mjs';
+import {conflictView,resolveSavedConflict} from '../core/conflicts.mjs';
 import { SyncRunner } from '../core/sync/runner.mjs';
 import { backup, restore,restoreSeparateCopy } from '../core/archives.mjs';
 import { importExport } from '../core/import.mjs';
@@ -156,17 +157,9 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       if(route==='/api/sync/run'&&req.method==='POST')return send(res,200,{status:await syncRunner.run()});
       if(route==='/api/owner'&&req.method==='POST'){const input=JSON.parse(await body(req));if(!['local','vps'].includes(input.owner))throw new Error('Choose local or VPS owner');scheduler.transfer(input.owner);return send(res,200,{owner:input.owner});}
       if(route==='/api/delivery'&&req.method==='POST'){const input=JSON.parse(await body(req));if(!['notebook','telegram'].includes(input.delivery)||input.delivery==='telegram'&&!scheduler.deliver)throw new Error('Configure the separate candidate Telegram bot before choosing chat delivery');const settings=store.get('settings','installation');if(!settings)throw new Error('Start with a goal first');store.save('settings',{id:settings.id,delivery:input.delivery});return send(res,200,{delivery:input.delivery});}
-      if(route==='/api/conflicts'&&req.method==='GET')return send(res,200,{data:sync.pendingConflicts().map(name=>JSON.parse(fs.readFileSync(path.join(store.root,'conflicts',name),'utf8')))});
+      if(route==='/api/conflicts'&&req.method==='GET')return send(res,200,{data:sync.pendingConflicts().map(name=>conflictView(store,name.replace(/\.json$/,''),{assistantPath}))});
       if(route==='/api/conflicts/resolve'&&req.method==='POST'){
-        const input=JSON.parse(await body(req));safe(input.id);const file=path.join(store.root,'conflicts',input.id+'.json'),conflict=JSON.parse(fs.readFileSync(file,'utf8'));
-        if(conflict.kind==='git')sync.resolve(input.id,input.choice,input.text);
-        else if(conflict.kind==='assistant-skill'){
-          const descriptor=JSON.parse(fs.readFileSync(assistantPath,'utf8').replace(/^\uFEFF/,'')),allowed=path.resolve(descriptor.home,'skills')+path.sep,target=path.resolve(conflict.target),text=input.choice==='merged'?input.text:conflict[input.choice];
-          if(!['local','remote','merged'].includes(input.choice)||typeof text!=='string'||!target.startsWith(allowed)||fs.lstatSync(target).isSymbolicLink())throw Error('Choose a retained isolated assistant skill version');
-          if(fs.readFileSync(target,'utf8')!==conflict.local)throw Error('Assistant skill changed again; retain the current version for review');
-          atomic(path.join(store.root,'skills/package-history',hash(target),hash(conflict.local)+'.txt'),conflict.local);atomic(target,text);conflict.resolved_at=new Date().toISOString();conflict.choice=input.choice;atomic(file,JSON.stringify(conflict,null,2));
-        }
-        else {if(!['local','remote','merged'].includes(input.choice))throw new Error('Choose a retained version');const value=input.choice==='merged'?JSON.parse(input.text):conflict[input.choice];store.save(conflict.type,value,store.get(conflict.type,conflict.record_id)?._hash);conflict.resolved_at=new Date().toISOString();conflict.choice=input.choice;atomic(file,JSON.stringify(conflict,null,2));}
+        const input=JSON.parse(await body(req));resolveSavedConflict(store,input,{assistantPath});
         return send(res,200,{ok:true});
       }
       if(route==='/api/setup'&&req.method==='POST'){const input=JSON.parse(await body(req));return send(res,200,{...scheduler.configure({...input,owner:mediaSync.config()?'vps':device}),results:await scheduler.tick()});}

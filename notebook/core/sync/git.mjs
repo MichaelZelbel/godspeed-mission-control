@@ -5,6 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { Store, atomic, decode, hash } from '../records/store.mjs';
 import { durable,durableRoots,durableFiles } from '../file-policy.mjs';
 import {validateAssistantFiles} from '../assistant-files.mjs';
+import {resolveSavedConflict} from '../conflicts.mjs';
 
 export class FileSync {
   constructor(store,{branch='main',remote='origin'}={}) {
@@ -113,15 +114,7 @@ export class FileSync {
       this.git(['reset','--mixed',commit]);
     } finally {this.git(['worktree','remove','--force',dir]);}
   }
-  resolve(id,choice,mergedText=null){
-    const file=path.join(this.store.root,'conflicts',id+'.json');if(!/^[\w-]+$/.test(id))throw new Error('Invalid conflict id');
-    const conflict=JSON.parse(fs.readFileSync(file,'utf8'));if(conflict.resolved_at)return conflict;
-    if(conflict.kind!=='git')throw new Error('Use the record editor to resolve a stale-write conflict');
-    if(conflict.encoding==='base64'&&choice==='merged')throw new Error('Choose a retained binary version; text merging is unavailable for binary files');
-    let text=choice==='merged'?mergedText:choice==='local'?conflict.local:choice==='remote'?conflict.remote:null;
-    if(text===null)throw new Error('Choose a retained version or write a merged record');
-    if(conflict.encoding==='base64'){text=Buffer.from(text,'base64');if(hash(text)!==conflict.digests?.[choice])throw Error('Retained binary conflict version failed its integrity check');}
-    const target=path.resolve(this.store.root,conflict.path);if(!durable(conflict.path)||!target.startsWith(this.store.root+path.sep))throw new Error('Conflict target is not durable state');
-    this.store.withLock(()=>{if(conflict.path.startsWith('records/'))this.store.commit([decode(text,target)]);else this.store.publishFiles([{file:conflict.path,text}]);});conflict.resolved_at=new Date().toISOString();conflict.choice=choice;atomic(file,JSON.stringify(conflict,null,2));return conflict;
+  resolve(id,choice,mergedText=null,expectedHash){
+    return resolveSavedConflict(this.store,{id,choice,text:mergedText,expected_hash:expectedHash},{legacyLocalCheck:true});
   }
 }

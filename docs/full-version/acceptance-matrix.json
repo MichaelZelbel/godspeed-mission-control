@@ -1,6 +1,6 @@
 {
   "format": 2,
-  "checked_at": "2026-10-04T01:08:34.010077+00:00",
+  "checked_at": "2026-10-04T01:34:25.200376+00:00",
   "complete": false,
   "items": [
     {
@@ -2579,7 +2579,8 @@
       "criterion": "Prepare a grounded post or reply; never publish automatically. Verify the lead result across a failed run, restart and an unchanged repeat; report an observation rather than implying execution.",
       "status": "partial",
       "evidence": [
-        "Source: notebook/core/lead.mjs and lead-commands.mjs implement the checked local contribution pipeline; notebook/test/lead.test.mjs and lead-commands.test.mjs exercise actual local HTTP reads, correction failure, retained redraft, daily overlap cap, research priority, exact explicit-command text, hidden-source refusal and publication readback. Normal installed execution and optional full-method duties remain open."
+        "Source: notebook/core/lead.mjs and lead-commands.mjs implement the checked local contribution pipeline; notebook/test/lead.test.mjs and lead-commands.test.mjs exercise actual local HTTP reads, correction failure, retained redraft, daily overlap cap, research priority, exact explicit-command text, hidden-source refusal and publication readback. Normal installed execution and optional full-method duties remain open.",
+        "Source now requires the public position own adopted visible goal and rechecks goal/position state before delivery; unrelated or paused goals stay quiet. Sixteen lead/command regressions pass. New source not yet installed; complete optional workflow duties remain open."
       ],
       "required": true,
       "target_test": "Exercise lead through its installed entry point and check actual results after restart"
@@ -3784,7 +3785,8 @@
       "criterion": "Native commands share history with chat/notebook; later check-in uses replies",
       "status": "partial",
       "evidence": [
-        "Installed fictional chat opened a native health talk, retained the volunteer's reply, recorded an explicitly agreed daily screen break and recorded a skipped-break observation as no. The notebook displayed the talk and habit."
+        "Installed fictional chat opened a native health talk, retained the volunteer's reply, recorded an explicitly agreed daily screen break and recorded a skipped-break observation as no. The notebook displayed the talk and habit.",
+        "Normal development fictional agreement and no observation remain linked to the saved conversation; scheduled native follow-up asked about switching before finishing the source. Evidence: development-b6ed312-fictional-habit-followup-ui.txt and development-b6ed312-fictional-coaching-records.json. Broader installed coaching/restart/health acceptance remains required."
       ],
       "required": true,
       "target_test": "Scheduled later check-in must use actual replies and no observation; verify close/reopen and separate area histories."
@@ -3909,7 +3911,8 @@
         "Matching f0d1719 Windows native and authorized development upgrades passed after retained empty restorations (Windows main 863/2363; endpoint 2429/3475; normal development 1061/2793). All 1565 built Linux image browser files match the Windows manifest byte-for-byte. Broader paired reliability and final completion remain required.",
         "Matching 1b885b0 installed on Windows and authorized development after retained empty restorations: main 865/2369, endpoint 2600/3650, development 1156/2947. All 1565 development image UI files equal the Windows manifest. Both health endpoints have fresh scheduler heartbeats. Windows/Linux source suites each 180 pass/one skip. Not final completeness.",
         "Normal development Settings saved a new backup and restored 1250 records/3086 files into retained empty storage at .godspeed/restored-copies/1791073154341-c2c158e5bec0/workspace. No upgrade follows from this evidence yet. Matching fab179a intermediate Windows/development packages were built and retained, not installed; their source suites passed 182 tests plus one platform skip on both platforms.",
-        "Matching d22ce059a9d5fb065f95f454ef1718f2e9ceafe2 Windows/development packages installed after verified separate restorations: main 867/2371, endpoint 2828/3878, development 1327/3262. Windows installer 969dd8dd697bab7d9b4ac3139384b662f87a4b3f9863ba3dc81b098d7802945c; development image sha256:6fd220d8df81805bceb59355157bb19928608a488fa76dbf94167e48e2624157. Direct built-image comparison matches all 1565 Windows browser files. Windows installer completed and both health endpoints returned fresh heartbeats. Both source suites passed 188 checks plus one skip. Intermediate installation only."
+        "Matching d22ce059a9d5fb065f95f454ef1718f2e9ceafe2 Windows/development packages installed after verified separate restorations: main 867/2371, endpoint 2828/3878, development 1327/3262. Windows installer 969dd8dd697bab7d9b4ac3139384b662f87a4b3f9863ba3dc81b098d7802945c; development image sha256:6fd220d8df81805bceb59355157bb19928608a488fa76dbf94167e48e2624157. Direct built-image comparison matches all 1565 Windows browser files. Windows installer completed and both health endpoints returned fresh heartbeats. Both source suites passed 188 checks plus one skip. Intermediate installation only.",
+        "Matching b6ed312 upgrades followed normal verified empty restorations on Windows main/endpoint and physical development. New conflict source protects current saved bytes and retains all older copies; actual installed resolution remains open."
       ],
       "required": true,
       "target_test": "Repeat recovery/link checks on final matching Windows/VPS packages; accept offline edits, reconnection, retained conflicts and preserved choices/pauses."

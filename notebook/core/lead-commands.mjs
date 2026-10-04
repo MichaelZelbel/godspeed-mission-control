@@ -7,7 +7,7 @@ function json(words){let value;try{value=JSON.parse(words.join(' '));}catch{thro
 export function leadCommand({store,query},args){
  if(!Array.isArray(args)||args.some(a=>typeof a!=='string'||a.length>20000))throw Error('Choose a supported lead command');
  const [command='help',...words]=args;
- if(['help','-h','--help'].includes(command))return result('/lead queue|runs|examples|positions|contacts\n/lead example JSON {content,status:approved|refused,position_id?,shape?}\n/lead position JSON {id?,title,status:adopted|paused,research_due_at?,research_action?}\n/lead contact JSON {id?,name,url,hot?}\n/lead configure JSON {profile_urls:[HTTPS]}\n/lead source NOTE_ID on|off\n/lead outcome ENTRY_ID JSON {status:shown|refused|ignored|posted,feedback?,posted_url?,posted_at?}\nThese commands prepare local drafts and retain your reported outcomes. They never publish. Posted links require separate verification before being treated as observed publication. Enable the Lead routine in Settings only when you want it to run.');
+ if(['help','-h','--help'].includes(command))return result('/lead queue|runs|examples|positions|contacts\n/lead example JSON {content,status:approved|refused,position_id?,shape?}\n/lead position JSON {id?,title,status:adopted|paused,goal_id,research_due_at?,research_action?}\n/lead contact JSON {id?,name,url,hot?}\n/lead configure JSON {profile_urls:[HTTPS]}\n/lead source NOTE_ID on|off\n/lead outcome ENTRY_ID JSON {status:shown|refused|ignored|posted,feedback?,posted_url?,posted_at?}\nThese commands prepare local drafts and retain your reported outcomes. They never publish. Posted links require separate verification before being treated as observed publication. Enable the Lead routine in Settings only when you want it to run.');
  const tables={queue:'lead_entries',runs:'lead_runs',examples:'lead_examples',positions:'lead_positions',contacts:'lead_contacts'};
  if(tables[command])return result(visibleRows(query,tables[command]));
  if(command==='source'){const id=safe(words[0]||''),note=visibleRows(query,'notes').find(n=>n.id===id);if(!note)throw Error('Select an existing assistant-visible note');if(!['on','off'].includes(words[1]))throw Error('Choose source on or off');return result(store.save('notes',{id,lead_evidence:words[1]==='on'},note._hash));}
@@ -20,7 +20,17 @@ export function leadCommand({store,query},args){
  }
  const input=json(words);if(input.id)safe(input.id);
  if(command==='example'){if(!['approved','refused'].includes(input.status))throw Error('Choose approved or refused');return result(store.save('lead_examples',{content:nonempty(input.content,'Example'),status:input.status,...(input.position_id?{position_id:safe(input.position_id)}:{}),...(input.shape?{shape:input.shape}:{})}));}
- if(command==='position'){if(!['adopted','paused'].includes(input.status))throw Error('Choose adopted or paused');if(input.research_due_at&&!Number.isFinite(Date.parse(input.research_due_at)))throw Error('Supply an actual research date');return result(store.save('lead_positions',{...(input.id?{id:input.id}:{}),title:nonempty(input.title,'Position'),status:input.status,research_due_at:input.research_due_at||null,research_action:input.research_action?nonempty(input.research_action,'Research step'):null}));}
+ if(command==='position'){
+  if(!['adopted','paused'].includes(input.status))throw Error('Choose adopted or paused');
+  if(input.research_due_at&&!Number.isFinite(Date.parse(input.research_due_at)))throw Error('Supply an actual research date');
+  const previous=input.id?visibleRows(query,'lead_positions').find(p=>p.id===input.id):null;
+  if(input.id&&!previous)throw Error('Select an existing visible public position');
+  const requested=input.goal_id===undefined?previous?.goal_id:input.goal_id;
+  const goal=requested?visibleRows(query,'goals').find(g=>g.id===safe(requested)):null;
+  if(input.status==='adopted'&&(!goal||!['adopted','active'].includes(goal.status)))throw Error('Link the public position to an existing adopted goal');
+  if(requested&&!goal)throw Error('Select an existing assistant-visible goal');
+  return result(store.save('lead_positions',{...(input.id?{id:input.id}:{}),title:nonempty(input.title,'Position'),status:input.status,goal_id:goal?.id||null,research_due_at:input.research_due_at||null,research_action:input.research_action?nonempty(input.research_action,'Research step'):null},previous?._hash));
+ }
  if(command==='contact')return result(store.save('lead_contacts',{...(input.id?{id:input.id}:{}),name:nonempty(input.name,'Name'),url:publicURL(input.url),hot:input.hot===true,status:'selected'}));
  if(command==='configure'){if(!Array.isArray(input.profile_urls)||input.profile_urls.length>10)throw Error('Select at most ten public profile URLs');return result(store.save('settings',{id:'lead',profile_urls:input.profile_urls.map(publicURL)}));}
  throw Error('Choose a supported lead command; use /lead help');
