@@ -7,6 +7,7 @@ import { execFileSync } from 'node:child_process';
 import { Store, atomic } from '../core/records/store.mjs';
 import { FileSync } from '../core/sync/git.mjs';
 import { installStarter } from '../core/starter-workspace.mjs';
+import { installSkillTree } from '../core/packaged-skills.mjs';
 const git=(cwd,...args)=>execFileSync('git',args,{cwd,encoding:'utf8',windowsHide:true,stdio:['ignore','pipe','pipe']}).trim();
 const read=(...parts)=>fs.readFileSync(path.join(...parts),'utf8');
 const identity=dir=>{git(dir,'config','user.name','Candidate Test');git(dir,'config','user.email','test@localhost');};
@@ -85,4 +86,19 @@ test('a starter never adds example rules or profile pages to an existing mission
   assert.equal(read(fresh,'rules','example.md'),'Example rule');assert.equal(read(fresh,'profile','people.md'),'Template');
   fs.unlinkSync(path.join(fresh,'profile','people.md'));installStarter(fresh,starter);
   assert.equal(read(fresh,'profile','people.md'),'Template','A starter-made folder still gets a deleted starter file back');
+});
+
+test('packaged recipes keep the owner skills of an adopted mission control and never stop sync over them',()=>{
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-recipes-test-')),recipes=path.join(root,'recipes'),owner=path.join(root,'owner'),store=new Store(owner);
+  for(const [file,text] of [['own/SKILL.md','Packaged copy of the owner skill'],['own/extra.md','Reader-kit helper'],['fresh/SKILL.md','New packaged skill v1']])atomic(path.join(recipes,file),text);
+  atomic(path.join(owner,'skills','own','SKILL.md'),'The owner original');
+  const install=name=>installSkillTree(store,path.join(recipes,name),path.join(owner,'skills',name),{adopted:true});
+  install('own');install('fresh');
+  assert.equal(read(owner,'skills','own','SKILL.md'),'The owner original');assert.equal(fs.existsSync(path.join(owner,'skills','own','extra.md')),false);
+  assert.equal(read(owner,'skills','fresh','SKILL.md'),'New packaged skill v1');
+  atomic(path.join(owner,'skills','fresh','SKILL.md'),'Edited by the owner');atomic(path.join(recipes,'fresh','SKILL.md'),'New packaged skill v2');install('fresh');
+  assert.equal(read(owner,'skills','fresh','SKILL.md'),'Edited by the owner');
+  assert.equal(fs.existsSync(path.join(owner,'conflicts')),false,'No conflict stops synchronization');
+  atomic(path.join(recipes,'later','SKILL.md'),'Later skill v1');install('later');atomic(path.join(recipes,'later','SKILL.md'),'Later skill v2');install('later');
+  assert.equal(read(owner,'skills','later','SKILL.md'),'Later skill v2','An unedited packaged skill is still updated');
 });
