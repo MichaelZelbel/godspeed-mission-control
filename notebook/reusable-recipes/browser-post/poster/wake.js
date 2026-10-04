@@ -232,9 +232,13 @@ async function checkin(cfg, deps = {}) {
   return { bridgeOk, poster: res && res.poster };
 }
 
+// The poster's own package.json sits beside this file, not a level above it, so
+// this read could only ever fail and the version reported at check-in was always
+// blank. It still is until that file carries a version, but the path it names is
+// now a path that exists.
 function safeVersion() {
   try {
-    return require(path.join(HERE, '..', 'package.json')).version || '';
+    return require(path.join(HERE, 'package.json')).version || '';
   } catch (_) {
     return '';
   }
