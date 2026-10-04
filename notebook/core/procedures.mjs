@@ -9,6 +9,7 @@ import {recipeContext} from './recipe-context.mjs';
 import {structuralAudit} from './structural-audit.mjs';
 import {radar} from './radar.mjs';
 import {lead} from './lead.mjs';
+import {currentHealth} from './health-inputs.mjs';
 export {procedureKinds} from './jobs/kinds.mjs';
 export async function procedure(job,{store,query,provider}){
   const kind=job.kind;let result;
@@ -45,7 +46,7 @@ export async function procedure(job,{store,query,provider}){
     return {verified:true,silent:true,review_items:processed};
   }
   if(kind==='health-summary'){
-    const recent=visibleRows(query,'health_observations').filter(r=>Date.parse(r.observed_at||r.created_at)>=Date.now()-7*86400000),episodes=visibleRows(query,'health_episodes').filter(r=>Date.parse(r.onset_at||r.created_at)>=Date.now()-30*86400000),medication=visibleRows(query,'medications').filter(r=>Date.parse(r.taken_at||r.created_at)>=Date.now()-30*86400000);
+    const health=currentHealth(query),recent=health.observations,episodes=visibleRows(query,'health_episodes').filter(r=>Date.parse(r.onset_at||r.created_at)>=Date.now()-30*86400000&&Date.parse(r.onset_at||r.created_at)<=Date.now()),medication=visibleRows(query,'medications').filter(r=>Date.parse(r.taken_at||r.created_at)>=Date.now()-30*86400000&&Date.parse(r.taken_at||r.created_at)<=Date.now());
     const timezone=query.rows('profiles')[0]?.timezone||'UTC',day=d=>new Intl.DateTimeFormat('en-CA',{timeZone:timezone}).format(new Date(d));result={observations:recent,headaches_last_30_days:episodes.filter(e=>!e.cancelled_at).length,medication_days_last_30_days:new Set(medication.map(m=>day(m.taken_at||m.created_at))).size,no_recent_measurements:!recent.length};
   }else if(kind==='disk-check'){const stat=fs.statfsSync(store.root);result={free_bytes:Number(stat.bavail)*Number(stat.bsize),total_bytes:Number(stat.blocks)*Number(stat.bsize),needs_attention:Number(stat.bavail)/Number(stat.blocks)<0.2};}
   else if(['selftest','job-check'].includes(kind)){

@@ -10,6 +10,7 @@ import {decide,work,remind} from './goal-loop.mjs';
 import {personalOperation} from './personal-operations.mjs';
 import {nativeCoachContext,nativeTick,dueCoachAreas,retainHabitReview} from './native-personal.mjs';
 import {briefing} from './briefing.mjs';
+import {currentHealth} from './health-inputs.mjs';
 export function hermesProvider({executable='hermes',home,cwd,model,provider,sourceRoot}={}){
   if(!['hermes','hermes.exe'].includes(path.basename(executable).toLowerCase()))throw new Error('Choose the verified Hermes runtime');
   const run=input=>new Promise(async (resolve,reject)=>{
@@ -100,7 +101,7 @@ export function jobExecutor(configuredProvider,query) {
       const prior=visibleRows(query,'coach_talks').filter(t=>t.area===area);
       const today=new Intl.DateTimeFormat('en-CA',{timeZone:settings.timezone||'UTC',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
       if(prior.some(t=>t.id.endsWith(today)&&t.status==='closed'))return {verified:true,silent:true,reason:'Today\'s coaching conversation is already closed'};
-      const sources={preparation:nativeCoachContext(store,area),previous:prior.slice(-3),habits:visibleRows(query,'habits').filter(h=>h.area===area),health:visibleRows(query,'health_observations').filter(h=>Date.parse(h.observed_at)>=Date.now()-7*86400000),journal:visibleRows(query,'journal').slice(-7)};
+      const health=currentHealth(query),sources={preparation:nativeCoachContext(store,area),previous:prior.slice(-3),habits:visibleRows(query,'habits').filter(h=>h.area===area),health:health.observations,health_freshness:health,journal:visibleRows(query,'journal').slice(-7)};
       const question=await provider({kind:'coaching',context:{area,...sources},contract:'Open one short coaching question using prior words and actual habit observations. Respect the configured area boundaries. Missing health observations are missing; do not diagnose. Never invent agreement.'});
       const talk=personalOperation({store,query},{type:'coach-open',area,question,sources});
       const note=store.save('notes',{title:'Your '+area+' coaching conversation',content:question,talk_id:talk.id,source_app:'coaching'});

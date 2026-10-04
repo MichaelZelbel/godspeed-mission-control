@@ -63,9 +63,13 @@ export function personalOperation(domains,input){
  }
  if(type==='import-card-files')return importCardFiles(store,input.card);
  if(type==='health-import-csv'){
-  const content=required(input.content,'CSV health data');if(content.length>1000000)throw Error('Health CSV exceeds one megabyte');const file=path.join(store.root,'observations/health-inputs',hash(content)+'.csv');atomic(file,content);const table=readTable(file),rows=[];
-  for(const [day,values] of Object.entries(table))for(const [metric,raw] of Object.entries(values)){if(metric==='date'||!raw||!Number.isFinite(Number(raw)))continue;if(!/^[a-zA-Z][a-zA-Z0-9_ -]{0,79}$/.test(metric))throw Error('Health column needs a clear measurement name');const id='health-feed-'+hash([input.source||'selected-csv',day,metric]),previous=store.get('health_observations',id);if(previous?.value===Number(raw))continue;rows.push(store.prepare('health_observations',{id,metric,value:Number(raw),source:input.source||'Selected CSV',source_file:path.relative(store.root,file).replaceAll('\\','/'),observed_at:zonedToUtc(day,'12:00',store.get('settings','installation')?.timezone||'UTC').toISOString()},previous));}
-  if(!Object.keys(table).length)throw Error('CSV needs a date column with YYYY-MM-DD dates and numeric measurement columns');store.withLock(()=>store.commit(rows));return {imported:rows.length,source_file:path.relative(store.root,file)};
+  required(input.content,'CSV health data');const content=input.content;if(content.length>1000000)throw Error('Health CSV exceeds one megabyte');const file=path.join(store.root,'observations/health-inputs',hash(content)+'.csv');atomic(file,content);const table=readTable(file),rows=[];
+  const timezone=store.get('settings','installation')?.timezone||'UTC',today=localParts(new Date(),timezone).date;let measurements=0;
+  for(const [day,values] of Object.entries(table)){
+   const parsed=Date.parse(day+'T00:00:00Z');if(!Number.isFinite(parsed)||new Date(parsed).toISOString().slice(0,10)!==day||day>today)throw Error('Health CSV needs actual current or earlier calendar dates');
+   for(const [metric,raw] of Object.entries(values)){if(metric==='date'||!raw||!Number.isFinite(Number(raw)))continue;if(!/^[a-zA-Z][a-zA-Z0-9_ -]{0,79}$/.test(metric))throw Error('Health column needs a clear measurement name');measurements++;const id='health-feed-'+hash([input.source||'selected-csv',day,metric]),previous=store.get('health_observations',id);if(previous?.value===Number(raw)&&previous?.date_precision==='day')continue;rows.push(store.prepare('health_observations',{id,metric,value:Number(raw),source:input.source||'Selected CSV',source_file:path.relative(store.root,file).replaceAll('\\','/'),observed_on:day,date_precision:'day',observed_at:zonedToUtc(day,'00:00',timezone).toISOString()},previous));}
+  }
+  if(!Object.keys(table).length||!measurements)throw Error('CSV needs a date column with YYYY-MM-DD dates and numeric measurement columns');store.withLock(()=>store.commit(rows));return {imported:rows.length,source_file:path.relative(store.root,file)};
  }
  if(type==='watch-add'){
   const title=required(input.title,'Watch topic'),url=new URL(required(input.url,'Source address'));if(url.protocol!=='https:'&&!(url.protocol==='http:'&&['localhost','127.0.0.1'].includes(url.hostname)))throw Error('Use an HTTPS source or an isolated local test source');

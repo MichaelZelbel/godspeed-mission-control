@@ -12,6 +12,7 @@ import {checkVoice} from './voice-check.mjs';
 import {recipeContext} from './recipe-context.mjs';
 import {fileContext} from './context.mjs';
 import {localPath} from './local-path.mjs';
+import {currentHealth} from './health-inputs.mjs';
 export async function briefing(job,{store,query,provider}){
  if(job.rehearsal){
   const copy=path.join(store.state,'brief-rehearsals',randomUUID());fs.mkdirSync(copy,{recursive:true,mode:0o700});
@@ -46,6 +47,8 @@ async function runBriefing(job,{store,query,provider}){
  const watch=visibleRows(query,'watch_topics').filter(t=>!t.paused&&t.include_in_brief);
  if(watch.length)await procedure({id:job.id+'-sources',kind:'watch',topic_ids:watch.map(t=>t.id)},{store,query,provider});
  const context={goals:visibleRows(query,'goals').filter(g=>['active','adopted'].includes(g.status)),decisions:visibleRows(query,'decisions').slice(-10),work:visibleRows(query,'work_items').slice(-20),deadlines:visibleRows(query,'deadlines').filter(d=>d.status!=='closed'),health:visibleRows(query,'health_observations').filter(h=>Date.parse(h.observed_at)>=Date.now()-7*86400000),episodes:visibleRows(query,'health_episodes').filter(h=>Date.parse(h.onset_at)>=Date.now()-30*86400000),medications:visibleRows(query,'medications').filter(h=>Date.parse(h.taken_at)>=Date.now()-30*86400000),source_receipts:visibleRows(query,'watch_observations').filter(o=>Date.parse(o.observed_at)>=Date.now()-48*3600000),previous:visibleRows(query,'notes').filter(n=>n.source_app==='morning-brief').slice(-3).map(n=>({id:n.id,title:n.title,content:n.content,created_at:n.created_at,verification_id:n.verification_id,delivery_verification_id:n.delivery_verification_id})),rehearsals:visibleRows(query,'job_receipts').filter(r=>r.kind==='brief-rehearsal').slice(-2).map(r=>({id:r.id,state:r.state,error:r.error,result:r.result,finished_at:r.finished_at}))};
+ const health=currentHealth(query);context.health=health.observations;context.health_freshness=health;
+ context.episodes=context.episodes.filter(row=>Date.parse(row.onset_at)<=Date.now());context.medications=context.medications.filter(row=>Date.parse(row.taken_at)<=Date.now());
  context.watch_findings=JSON.parse(watchCommand({store,query},['pull','--channel','brief','--dry-run']).result);
  const contribution=visibleRows(query,'lead_entries').filter(e=>e.status==='ready'&&e.note_id&&e.content).sort((a,b)=>String(b.delivery_day).localeCompare(String(a.delivery_day))).find(e=>visibleRows(query,'notes').some(n=>n.id===e.note_id&&n.content===e.content));
  context.contribution=contribution?{id:contribution.id,title:contribution.title,content:contribution.content,link:'/dashboard/notes/'+encodeURIComponent(contribution.note_id),state:'draft',source_ids:contribution.evidence?.map(e=>e.source_id)||[]}:null;

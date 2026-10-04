@@ -1,6 +1,6 @@
 {
   "format": 2,
-  "checked_at": "2026-10-04T02:59:54.451488+00:00",
+  "checked_at": "2026-10-04T03:14:34.452789+00:00",
   "complete": false,
   "items": [
     {
@@ -34,7 +34,8 @@
       "evidence": [
         "Normal fictional-person history retains an ended duplicate slot while its canonical corrected preference remains current. Actual closed record and normal history are retained in endpoint-a372e3c-duplicate-claim-history-ui.txt. Other People controls and broad parity remain required.",
         "Independent fictional note chat after restart retrieved the corrected two-question preference using actual endpoint output. Reopened reply persistence failed and is retained in endpoint-0a009b3-reopened-reply-missing-ui.txt. New durable-reply source must be installed and retested. Broader People and memory parity remains required.",
-        "Actual installed 0103579 endpoint independent-note chat retrieved the current two-question preference. Reopened history acceptance remains unverified due intermittent loading failure. Earlier closed claim and correction history retained. Broader People controls and memory parity remain required."
+        "Actual installed 0103579 endpoint independent-note chat retrieved the current two-question preference. Reopened history acceptance remains unverified due intermittent loading failure. Earlier closed claim and correction history retained. Broader People controls and memory parity remain required.",
+        "Installed 0103579 endpoint independently recalled the corrected fictional-person preference, and normal keyboard activation reopened its retained reply after full navigation (endpoint-0103579-reply-after-navigation-ui.txt). Current 0dbae11 broader UI acceptance awaits a visible browser viewport. Broader People actions and memory comparison remain required."
       ],
       "required": true,
       "target_test": "Exercise People through its installed entry point and check actual results after restart"
@@ -3796,7 +3797,8 @@
       "status": "partial",
       "evidence": [
         "Installed fictional chat opened a native health talk, retained the volunteer's reply, recorded an explicitly agreed daily screen break and recorded a skipped-break observation as no. The notebook displayed the talk and habit.",
-        "Normal development fictional agreement and no observation remain linked to the saved conversation; scheduled native follow-up asked about switching before finishing the source. Evidence: development-b6ed312-fictional-habit-followup-ui.txt and development-b6ed312-fictional-coaching-records.json. Broader installed coaching/restart/health acceptance remains required."
+        "Normal development fictional agreement and no observation remain linked to the saved conversation; scheduled native follow-up asked about switching before finishing the source. Evidence: development-b6ed312-fictional-habit-followup-ui.txt and development-b6ed312-fictional-coaching-records.json. Broader installed coaching/restart/health acceptance remains required.",
+        "Selected-health source now preserves day precision and original CSV bytes, retains corrected history, rejects impossible/future dates and excludes stale/future/hidden inputs from coaching and automatic habits. Nineteen focused regressions pass, including actual native coaching source preparation. This is source-only until new matching packages and the full normal health talk/habit/later-observation workflow pass."
       ],
       "required": true,
       "target_test": "Scheduled later check-in must use actual replies and no observation; verify close/reopen and separate area histories."
