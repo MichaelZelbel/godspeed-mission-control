@@ -60,7 +60,8 @@ export async function mcp(input,{store,query,index,domains,scopes}){
         }
       }
       else if(name==='retrieve_memory')value=await domains.invoke('retrieve-memory',a);
-      else if(name==='search_knowledge')value=query.withSnapshot(()=>index.search(a.query).filter(r=>r.type!=='workspace_file'&&(!scopes||scopes.includes(toolScope('list_records',{type:r.type})))&&visibleRows(query,r.type).some(v=>v.id===r.id)));
+      // Same as the dashboard's search: wait for a refresh a write armed.
+      else if(name==='search_knowledge'){await index.settled();value=query.withSnapshot(()=>index.search(a.query).filter(r=>r.type!=='workspace_file'&&(!scopes||scopes.includes(toolScope('list_records',{type:r.type})))&&visibleRows(query,r.type).some(v=>v.id===r.id)));}
       else if(name==='list_records'){const allowed=new Set(visibleRows(query,a.type).map(r=>r.id));value=query.execute({table:a.type,filters:a.filters||[],limit:a.limit||100}).data.filter(r=>allowed.has(r.id));}
       else if(name==='save_record')value=query.execute({table:a.type,operation:a.value.id?'upsert':'insert',values:a.value,expected:a.value.id?{[a.value.id]:a.expected_hash}:{},assistant:true}).data;
       else if(name==='capture_note')value=await domains.invoke('quick-capture',a);

@@ -50,8 +50,36 @@ export class SearchIndex {
     })().finally(()=>{this.pending=null;});
     return this.pending;
   }
+  // Wait for a refresh that is already collecting files, so a search run right
+  // after a save still sees it. rebuildBackground() repeats its read whenever
+  // another write arrived while it was reading, which is why awaiting the
+  // pending refresh is enough and a search never has to rebuild anything.
+  // Capped, because that repeat means continuous typing would otherwise keep a
+  // search waiting for a refresh that never gets to finish; a search that
+  // answers from a second-old index beats one that never answers.
+  async settled(timeoutMs = 3000) {
+    if (!this.pending) return;
+    let timer;
+    try { await Promise.race([this.pending.catch(() => {}), new Promise(resolve => { timer = setTimeout(resolve, timeoutMs); })]); }
+    finally { clearTimeout(timer); }
+  }
+  // Every file is read in one step that cannot be interrupted, and the loop
+  // then hands the event loop back. A read that spans an await keeps the file
+  // open, and on Windows an open record file makes the atomic rename behind a
+  // note save fail: the save waits for a handle that only this same thread
+  // could close, so it waited out its whole deadline and refused the edit.
+  // Pausing between files is what keeps the server answering during the read.
+  async breathe() {
+    if (++this.readsSinceBreath < 25) return;
+    this.readsSinceBreath = 0;
+    await new Promise(resolve => setImmediate(resolve));
+  }
+  readText(file) {
+    try { return fs.readFileSync(file, 'utf8'); } catch (error) { if (error.code === 'ENOENT') return null; throw error; }
+  }
   async readBackground() {
     const documents=[],records=new Map(),io=fs.promises;
+    this.readsSinceBreath=0;
     const entries=async folder=>{try{return await io.readdir(folder,{withFileTypes:true});}catch(error){if(error.code==='ENOENT')return [];throw error;}};
     for(const dir of await entries(this.store.recordsRoot)){
       if(!dir.isDirectory()||dir.isSymbolicLink())continue;
@@ -59,7 +87,8 @@ export class SearchIndex {
         if(this.closed)return [];
         if(!entry.isFile()||!/\.(json|md)$/.test(entry.name))continue;
         const file=path.join(this.store.recordsRoot,dir.name,entry.name);
-        try{const record=decode(await io.readFile(file,'utf8'),file);record._hash=hash(encode(record));records.set(record.type+'/'+record.id,record);}catch{/* Invalid records are excluded just as in Store.scan. */}
+        await this.breathe();
+        try{const text=this.readText(file);if(text===null)continue;const record=decode(text,file);record._hash=hash(encode(record));records.set(record.type+'/'+record.id,record);}catch{/* Invalid records are excluded just as in Store.scan. */}
       }
     }
     for(const r of records.values())if(!r.removed_at)documents.push([r.uid,r.type,r.id,r.title||r.name||r.id,JSON.stringify(r)]);
@@ -70,7 +99,9 @@ export class SearchIndex {
       if(stat.isSymbolicLink())return;
       if(stat.isDirectory()){for(const entry of await entries(absolute))if(shared(relative+'/'+entry.name))await visit(relative+'/'+entry.name);}
       else if(stat.size<=512*1024&&/\.(md|json|jsonl|txt)$/.test(relative)){
-        try{documents.push(['file-'+hash(relative),'workspace_file',relative,relative,await io.readFile(absolute,'utf8')]);}catch(error){if(error.code!=='ENOENT')throw error;}
+        await this.breathe();
+        const text=this.readText(absolute);
+        if(text!==null)documents.push(['file-'+hash(relative),'workspace_file',relative,relative,text]);
       }
     };
     for(const name of [...durableRoots.filter(r=>r!=='records'),...durableFiles])await visit(name);

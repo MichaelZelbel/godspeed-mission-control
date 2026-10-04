@@ -88,7 +88,21 @@ export class Store {
     }
   }
   file(record) { return path.join(this.recordsRoot, safe(record.type), safe(record.id) + (record.type === 'notes' ? '.md' : '.json')); }
-  scan() {
+  // One read of the vault serves every step inside. A note save read all of it
+  // four times - once to find the record, once per get, twice in the commit -
+  // and on a real workspace that was almost the whole cost of saving. Nothing
+  // else can write while the caller holds the workspace lock, so re-reading
+  // between those steps could not learn anything new. A write still refreshes
+  // the view itself, through scan(true), before anyone reads what it wrote.
+  snapshot(fn) {
+    if (this.snapshotDepth) return fn();
+    this.scan(); this.snapshotDepth = 1;
+    try { return fn(); } finally { this.snapshotDepth = 0; }
+  }
+  scan(force = false) {
+    if (this.snapshotDepth && !force && this.records) return this.records;
+    // How often the vault was actually read, which is what a save costs.
+    this.reads = (this.reads || 0) + 1;
     const records = new Map(), problems = [], uids = new Map(), aliases = new Map();
     const priorCache=this.decodedCache||new Map(),nextCache=new Map();let cachedBytes=0;
     for (const dir of fs.readdirSync(this.recordsRoot, { withFileTypes: true })) {
@@ -207,7 +221,7 @@ export class Store {
     for(const key of removeKeys){const old=this.records.get(key);if(!old)continue;const file=this.file(old);atomic(path.join(dir,manifest.length+'.before'),fs.readFileSync(file,'utf8'));manifest.push({file:path.relative(this.root,file).replaceAll('\\','/'),delete:true});}
     atomic(path.join(dir, 'manifest.json'), JSON.stringify(manifest));
     atomic(path.join(dir, 'prepared'), tx);
-    this.applyTransaction(dir, manifest); this.scan();
+    this.applyTransaction(dir, manifest); this.scan(true);
   }
   applyTransaction(dir, manifest) {
     for (let i = 0; i < manifest.length; i++) {

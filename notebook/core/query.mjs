@@ -150,7 +150,7 @@ export class QueryService {
       // worker, the assistant) owns the workspace. executeAsync takes the lock
       // one level up and retries only its acquisition, so a held workspace
       // delays an edit instead of refusing it. See executeAsync below.
-      const holding = request.holdingLock ? run => run() : run => this.store.withLock(run);
+      const holding = request.holdingLock ? run => this.store.snapshot(run) : run => this.store.withLock(() => this.store.snapshot(run));
       rows = holding(() => {
         const inputs = operation === 'insert' || operation === 'upsert' ? (Array.isArray(values) ? values : [values]) : rows;
         const changed = inputs.map(value => {
@@ -215,7 +215,9 @@ export class QueryService {
   // replayed, so a half-applied transaction can still never repeat.
   async executeAsync(request, { timeoutMs = 30000, signal } = {}) {
     if ((request.operation || 'select') === 'select') return this.execute(request);
-    return await this.store.withLockAsync(() => this.execute({ ...request, holdingLock: true }), { timeoutMs, signal });
+    // The snapshot starts inside the lock, so the rows this write is about are
+    // read once and the steps that follow reuse that read.
+    return await this.store.withLockAsync(() => this.store.snapshot(() => this.execute({ ...request, holdingLock: true })), { timeoutMs, signal });
   }
   rpc(name, args = {}) {
     if (name === 'capture_note_with_lexicon') return this.store.save('notes', { ...args._note, user_id: 'owner' });
