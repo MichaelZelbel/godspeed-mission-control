@@ -5,7 +5,7 @@ import {promisify} from 'node:util';
 import {fileURLToPath} from 'node:url';
 import {hash} from './records/store.mjs';
 import {assistantEnvironment} from './assistant-files.mjs';
-import {importGoalFiles} from './legacy-goals.mjs';
+import {nativeCardRows} from './card-commands.mjs';
 const execute=promisify(execFile);
 const skills={'goal-decision':'next-action','goal-work':'work-item','morning-brief':'morning-brief',coaching:'coach','habit-check':'coach',journal:'interstitial-journal',headache:'headache-tracker'};
 export function nativeJobs(home,device='local'){
@@ -22,10 +22,9 @@ export class NativeScheduler{
   const old=this.store.get('settings','installation');
   if(!old&&!goal?.trim())throw Error('Name one goal to start');
   await this.store.saveAsync('settings',{id:'installation',owner,timezone,delivery,...old});
-  if(goal?.trim()&&!this.store.list('goals').some(g=>g.title===goal.trim())){
+  if(goal?.trim()&&!nativeCardRows(this.store,'goals').some(g=>g.title===goal.trim())){
    const script=new URL('../../tools/goals.js',import.meta.url);
    await this.run(process.execPath,[fileURLToPath(script),'file','--kind','outcome','--status','adopted','--title',goal.trim(),'--source','Notebook setup, '+new Date().toISOString(),'--godspeed',this.store.root],{cwd:this.store.root,windowsHide:true,env:assistantEnvironment({home:this.home,workspace:this.store.root})});
-   await this.store.waitForWriter();importGoalFiles(this.store);
   }
   return {configured:true,preserved:!!old,firstWorkPending:false,scheduler:'hermes'};
  }

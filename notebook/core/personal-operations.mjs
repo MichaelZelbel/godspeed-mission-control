@@ -48,6 +48,7 @@ function memoryCorrection(domains,input,subject){
 }
 export function personalOperation(domains,input){
  const {store,query}=domains,type=input.type;
+ if(type==='routine-change'&&domains.nativeScheduler)return domains.nativeScheduler.control(input);
  if(process.env.GODSPEED_ORIGINAL_RUNTIME==='on'&&['goal-add','goal-change','goal-outcome','forecast-settle'].includes(type)){
   let card='goals',args;
   if(type==='goal-add')args=['file','--kind','outcome','--status',input.status||'adopted','--title',required(input.title,'Goal'),'--measure',input.measure||'','--source','Notebook request, '+new Date().toISOString()];

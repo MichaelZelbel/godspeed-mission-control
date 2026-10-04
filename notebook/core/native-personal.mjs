@@ -79,6 +79,7 @@ export function addonCommand(store,{addon,args}){
 export function nativeCoachContext(store,area){const a=findArea(store.root,area);if(!a)return null;return brief(store.root,coachSettings(store.root),a,localParts(new Date(),coachSettings(store.root).timezone).date);}
 export function dueCoachAreas(store,now=new Date()){return listAreas(store.root).filter(a=>talkDue(a,now,store.get('settings','installation')?.timezone||'UTC')).map(a=>a.slug);}
 export function ensureNativeSchedules(store,addon){
+ if(process.env.GODSPEED_ORIGINAL_RUNTIME==='on')return; // Main's Hermes jobs own these routines.
  const owner=store.get('settings','installation')?.owner||store.device;
  for(const kind of addon==='coach'?['coach-tick','coach-cycle']:['journal-tick'])if(!store.get('jobs',kind))store.save('jobs',{id:kind,kind,owner,paused:false,next_run:new Date().toISOString(),interval_ms:900000,state:'pending'});
 }

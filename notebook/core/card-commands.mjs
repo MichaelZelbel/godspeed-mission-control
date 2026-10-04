@@ -51,6 +51,8 @@ export function nativeCardRows(store,type){
 export function cardCommand(store,{card,args}){
  if(process.env.GODSPEED_ORIGINAL_RUNTIME==='on'){
   if(!table[card]||!Array.isArray(args)||args.some(a=>typeof a!=='string'||a==='--godspeed'||a.startsWith('--godspeed=')))throw Error('Choose an original Godspeed card command');
+  boundedArguments(args);
+  if(!fs.existsSync(path.join(store.root,'rules')))throw Error('The original Godspeed starter must be installed first');
   const script=fileURLToPath(new URL('../../tools/'+card+'.js',import.meta.url));
   const run=spawnSync(process.execPath,[script,...args,'--godspeed',store.root],{cwd:store.root,encoding:'utf8',windowsHide:true,shell:false,timeout:15000,env:{...process.env,GODSPEED_ROOT:store.root}});
   if(run.status!==0)throw Error(String(run.stderr||run.stdout||'Godspeed command failed').slice(0,600));
