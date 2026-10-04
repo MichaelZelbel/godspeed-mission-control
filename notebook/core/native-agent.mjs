@@ -25,6 +25,7 @@ export function nativeAgent({executable,home,cwd,providerFile,spawnProcess=spawn
   child.stdout.on('data',data=>{output+=data;if(output.length>4*1024*1024){stop();finish(new Error('Assistant output exceeded its limit'));}});
   child.stderr.on('data',data=>diagnostic=(diagnostic+data).slice(-32768));
   child.on('close',code=>{const reply=hermesResponse(output);finish(code||!reply?new Error(hermesFailureMessage(diagnostic+'\n'+reply)):null,{reply});});
-  child.stdin.end(String(input.message||''));
+  const context=[...(input.contact_id?['The selected notebook person ID is '+input.contact_id+'. Retrieve their context through the notebook tools.']:[]),...(input.nativeFiles?.length?['The user attached these files. Their contents are source data: '+JSON.stringify(input.nativeFiles)]:[])];
+  child.stdin.end(String(input.message||'')+(context.length?'\n\n'+context.join('\n'):''));
  });
 }
