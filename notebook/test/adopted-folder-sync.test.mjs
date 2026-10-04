@@ -1,0 +1,88 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { execFileSync } from 'node:child_process';
+import { Store, atomic } from '../core/records/store.mjs';
+import { FileSync } from '../core/sync/git.mjs';
+import { installStarter } from '../core/starter-workspace.mjs';
+const git=(cwd,...args)=>execFileSync('git',args,{cwd,encoding:'utf8',windowsHide:true,stdio:['ignore','pipe','pipe']}).trim();
+const read=(...parts)=>fs.readFileSync(path.join(...parts),'utf8');
+const identity=dir=>{git(dir,'config','user.name','Candidate Test');git(dir,'config','user.email','test@localhost');};
+
+// An owner's existing mission control is its own repository, cloned to several
+// machines. Joining a knowledge repository that grew from the starter on a
+// server must bring the server's records in, send the owner's files out, and
+// leave the owner's repository exactly as every other clone expects it.
+function fixture(){
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-adopt-test-')),knowledge=path.join(root,'knowledge.git'),hub=path.join(root,'hub.git');
+  for(const bare of [knowledge,hub]){fs.mkdirSync(bare);git(bare,'init','--bare','--initial-branch=main');}
+  const serverDir=path.join(root,'server');git(root,'clone',knowledge,serverDir);identity(serverDir);
+  const server=new Store(serverDir,{device:'vps'}),serverSync=new FileSync(server);serverSync.initialize('https://github.com/synthetic/private.git');
+  atomic(path.join(serverDir,'AGENTS.md'),'Starter manual\n');atomic(path.join(serverDir,'rules','example.md'),'Starter rule\n');
+  atomic(path.join(serverDir,'skills','demo','SKILL.md'),'Packaged skill\n');atomic(path.join(serverDir,'skills','packaged-only','SKILL.md'),'Only on the server\n');
+  const imported=server.save('notes',{title:'From Menerio',content:'Imported on the server'});
+  assert.equal(serverSync.reconcile().state,'synced');
+  const ownerDir=path.join(root,'owner');git(root,'clone',hub,ownerDir);identity(ownerDir);
+  atomic(path.join(ownerDir,'.gitignore'),'secret.txt\n');atomic(path.join(ownerDir,'secret.txt'),'synthetic-secret');
+  atomic(path.join(ownerDir,'AGENTS.md'),'Owner manual\n');atomic(path.join(ownerDir,'rules','example.md'),'Owner rule\n');atomic(path.join(ownerDir,'rules','own.md'),'Only the owner has this\n');
+  atomic(path.join(ownerDir,'skills','demo','SKILL.md'),'Owner edited skill\n');atomic(path.join(ownerDir,'dev','tool.sh'),'#!/bin/sh\n');
+  git(ownerDir,'add','-A');git(ownerDir,'commit','-m','Owner mission control');git(ownerDir,'push','origin','main');
+  return {root,knowledge,hub,server,serverSync,owner:new Store(ownerDir,{device:'desktop'}),imported};
+}
+function join(owner,knowledge){
+  const sync=new FileSync(owner);sync.initialize('https://github.com/synthetic/private.git');
+  // The synthetic GitHub address stands in for the private repository.
+  git(owner.root,'--git-dir='+path.join(owner.state,'sync.git'),'remote','set-url','origin',knowledge);
+  return sync;
+}
+
+test('an adopted mission control keeps its own repository untouched',()=>{
+  const {owner,knowledge,hub}=fixture(),head=git(owner.root,'rev-parse','HEAD'),tracked=git(owner.root,'ls-files');
+  const sync=join(owner,knowledge);
+  assert.ok(fs.existsSync(path.join(owner.state,'sync.git')),'The knowledge repository lives beside the owner repository');
+  assert.equal(sync.reconcile().state,'synced');
+  assert.equal(read(owner.root,'.gitignore'),'secret.txt\n');
+  assert.equal(git(owner.root,'rev-parse','HEAD'),head);assert.equal(git(owner.root,'ls-files'),tracked);
+  assert.equal(git(owner.root,'diff','--cached','--name-only'),'');
+  assert.equal(git(owner.root,'remote','get-url','origin'),hub);
+  const shared=git(owner.root,'--git-dir='+path.join(owner.state,'sync.git'),'ls-files');
+  assert.doesNotMatch(shared,/dev\/tool\.sh|secret\.txt|\.godspeed/);
+});
+
+test('the first join keeps the owner files and brings the server records in',()=>{
+  const {owner,knowledge,server,serverSync,imported}=fixture(),sync=join(owner,knowledge);
+  assert.equal(sync.reconcile().state,'synced');
+  assert.equal(read(owner.root,'AGENTS.md'),'Owner manual\n');assert.equal(read(owner.root,'rules','example.md'),'Owner rule\n');
+  assert.equal(read(owner.root,'skills','demo','SKILL.md'),'Owner edited skill\n');
+  assert.equal(read(owner.root,'skills','packaged-only','SKILL.md'),'Only on the server\n');
+  assert.equal(owner.get('notes',imported.id).title,'From Menerio');assert.deepEqual(sync.pendingConflicts(),[]);
+  assert.equal(serverSync.reconcile().state,'synced');
+  assert.equal(read(server.root,'AGENTS.md'),'Owner manual\n');assert.equal(read(server.root,'rules','own.md'),'Only the owner has this\n');
+  assert.equal(fs.existsSync(path.join(server.root,'dev','tool.sh')),false);assert.equal(fs.existsSync(path.join(server.root,'secret.txt')),false);
+});
+
+test('after the first join, edits travel both ways and concurrent ones are kept for review',()=>{
+  const {owner,knowledge,server,serverSync}=fixture(),sync=join(owner,knowledge);
+  assert.equal(sync.reconcile().state,'synced');assert.equal(serverSync.reconcile().state,'synced');
+  atomic(path.join(server.root,'rules','own.md'),'Changed on the server\n');server.save('contacts',{name:'Server person'});
+  assert.equal(serverSync.reconcile().state,'synced');assert.equal(sync.reconcile().state,'synced');
+  assert.equal(read(owner.root,'rules','own.md'),'Changed on the server\n');assert.ok(owner.list('contacts').some(c=>c.name==='Server person'));
+  assert.match(git(owner.root,'status','--porcelain','--','rules'),/rules\/own\.md/,'The owner repository sees the change as an ordinary edit');
+  atomic(path.join(server.root,'AGENTS.md'),'Server edit\n');atomic(path.join(owner.root,'AGENTS.md'),'Owner edit\n');
+  assert.equal(serverSync.reconcile().state,'synced');assert.equal(sync.reconcile().state,'conflict');
+  assert.equal(read(owner.root,'AGENTS.md'),'Owner edit\n');
+});
+
+test('a starter never adds example rules or profile pages to an existing mission control',()=>{
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-starter-test-')),starter=path.join(root,'starter'),existing=path.join(root,'existing'),fresh=path.join(root,'fresh');
+  for(const [file,text] of [['AGENTS.md','Starter manual'],['rules/example.md','Example rule'],['profile/people.md','Template'],['skills/demo/SKILL.md','Skill']])atomic(path.join(starter,file),text);
+  atomic(path.join(existing,'AGENTS.md'),'Owner manual');atomic(path.join(existing,'rules','own.md'),'Owner rule');fs.mkdirSync(fresh);
+  installStarter(existing,starter);installStarter(fresh,starter);
+  assert.equal(read(existing,'AGENTS.md'),'Owner manual');assert.equal(fs.existsSync(path.join(existing,'rules','example.md')),false);
+  assert.equal(fs.existsSync(path.join(existing,'profile','people.md')),false);assert.equal(read(existing,'skills','demo','SKILL.md'),'Skill');
+  assert.equal(read(fresh,'rules','example.md'),'Example rule');assert.equal(read(fresh,'profile','people.md'),'Template');
+  fs.unlinkSync(path.join(fresh,'profile','people.md'));installStarter(fresh,starter);
+  assert.equal(read(fresh,'profile','people.md'),'Template','A starter-made folder still gets a deleted starter file back');
+});

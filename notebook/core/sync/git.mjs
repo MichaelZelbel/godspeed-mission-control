@@ -11,8 +11,14 @@ export class FileSync {
   constructor(store,{branch='main',remote='origin'}={}) {
     if(!/^[\w/.-]+$/.test(branch)||branch.startsWith('-')||!/^\w+$/.test(remote))throw new Error('Invalid sync configuration');
     this.store=store;this.branch=branch;this.remote=remote;this.last=null;
+    // A folder that already belongs to its own repository (an existing mission
+    // control shared across machines) keeps that repository untouched. The
+    // knowledge repository then lives beside it in the private state folder,
+    // with this folder as its work tree, so the ignore file, the index and the
+    // remotes of the owner's repository are never rewritten.
+    const own=path.join(store.state,'sync.git');this.gitDir=fs.existsSync(own)?own:null;
   }
-  gitBytes(args,cwd=this.store.root){return execFileSync('git',args,{cwd,windowsHide:true,timeout:30000,maxBuffer:256*1024*1024,env:{...process.env,GIT_TERMINAL_PROMPT:'0',GCM_INTERACTIVE:'Never'},stdio:['ignore','pipe','pipe']});}
+  gitBytes(args,cwd=this.store.root){if(this.gitDir&&cwd===this.store.root)args=['--git-dir='+this.gitDir,'--work-tree='+this.store.root,...args];return execFileSync('git',args,{cwd,windowsHide:true,timeout:30000,maxBuffer:256*1024*1024,env:{...process.env,GIT_TERMINAL_PROMPT:'0',GCM_INTERACTIVE:'Never'},stdio:['ignore','pipe','pipe']});}
   git(args,cwd=this.store.root){return this.gitBytes(args,cwd).toString('utf8').trim();}
   pendingConflicts(){const dir=path.join(this.store.root,'conflicts');return fs.existsSync(dir)?fs.readdirSync(dir).filter(n=>n.endsWith('.json')&&!JSON.parse(fs.readFileSync(path.join(dir,n),'utf8')).resolved_at):[];}
   async verifyRemote(remoteUrl){
@@ -23,10 +29,22 @@ export class FileSync {
   }
   initialize(remoteUrl) {
     if(!remoteUrl||!/^(https:\/\/github\.com\/|git@github\.com:)/.test(remoteUrl))throw new Error('Use a private GitHub repository URL');
-    if(!fs.existsSync(path.join(this.store.root,'.git'))){this.git(['init','-b',this.branch]);this.git(['config','user.name','Godspeed Mission Control']);this.git(['config','user.email','godspeed@localhost']);}
+    if(!this.gitDir&&this.foreignRepository()){
+      const dir=path.join(this.store.state,'sync.git');fs.mkdirSync(this.store.state,{recursive:true});
+      this.git(['init','--bare','--initial-branch='+this.branch,dir],this.store.state);this.git(['config','core.bare','false'],dir);this.gitDir=dir;
+      this.git(['config','user.name','Godspeed Mission Control']);this.git(['config','user.email','godspeed@localhost']);
+    }
+    if(!this.gitDir&&!fs.existsSync(path.join(this.store.root,'.git'))){this.git(['init','-b',this.branch]);this.git(['config','user.name','Godspeed Mission Control']);this.git(['config','user.email','godspeed@localhost']);}
     this.git(['config','core.autocrlf','false']);this.git(['config','core.eol','lf']);if(process.platform==='win32')this.git(['config','core.longpaths','true']);
     this.writeIgnoreFile();
     try {this.git(['remote','get-url',this.remote]);}catch{this.git(['remote','add',this.remote,remoteUrl]);}
+  }
+  // The folder's repository is someone else's when it tracks files that sync
+  // would untrack (programs, settings, hooks). Adopting it would rewrite its
+  // ignore file and untrack those files for every other clone that pulls it.
+  foreignRepository(){
+    if(!fs.existsSync(path.join(this.store.root,'.git')))return false;
+    return this.gitBytes(['ls-files','-z']).toString('utf8').split('\0').some(name=>name&&name!=='.gitignore'&&!shared(name));
   }
   // The ignore file is derived from the policy, so it is rewritten whenever the
   // policy has moved on rather than only when sync is first configured. An
@@ -39,7 +57,9 @@ export class FileSync {
   // only lets Git descend; the leading "*" still ignores its other children.
   ignoreText(){return '*\n'+[...new Set(durableRoots.flatMap(r=>r.split('/').map((_,i,parts)=>parts.slice(0,i+1).join('/'))))].map(r=>'!'+r+'/\n').join('')+durableRoots.map(r=>'!'+r+'/**\n').join('')+durableFiles.map(r=>'!'+r+'\n').join('')+devicePrivatePaths.map(r=>r+'/\n').join('')+'**/.*\n!.gitignore\n**/secrets/\n**/node_modules/\n**/*.sqlite*\n**/*.png\n**/*.jpg\n**/*.mp4\n**/*.mp3\n**/*.pdf\n';}
   writeIgnoreFile(){
-    const file=path.join(this.store.root,'.gitignore'),text=this.ignoreText();
+    // Beside an owner's repository the policy goes into the knowledge
+    // repository's own exclude file; the folder's .gitignore is the owner's.
+    const file=this.gitDir?path.join(this.gitDir,'info','exclude'):path.join(this.store.root,'.gitignore'),text=this.ignoreText();
     if(!fs.existsSync(file)||fs.readFileSync(file,'utf8')!==text)atomic(file,text);
   }
   validate(){this.store.scan();if(this.store.problems.length)throw new Error('Resolve record validation problems before syncing');validateAssistantFiles(this.store.root);if(this.pendingConflicts().length)throw new Error('Resolve saved conflicts before syncing');}
@@ -61,7 +81,7 @@ export class FileSync {
     // correct, and the guard must not read it as an attempt to sync one.
     const staged=this.git(['diff','--cached','--name-only','--diff-filter=d']);
     if(staged.split('\n').some(n=>n&&!shared(n)&&n!=='.gitignore'))throw new Error('Sync repository contains staged files outside durable state');
-    this.git(['add','--',...durableRoots.filter(r=>fs.existsSync(path.join(this.store.root,r))),...durableFiles.filter(r=>fs.existsSync(path.join(this.store.root,r))),'.gitignore']);
+    this.git(['add','--',...durableRoots.filter(r=>fs.existsSync(path.join(this.store.root,r))),...durableFiles.filter(r=>fs.existsSync(path.join(this.store.root,r))),...(this.gitDir?[]:['.gitignore'])]);
     if(this.git(['diff','--cached','--name-only','--diff-filter=d']).split('\n').some(n=>n&&!shared(n)&&n!=='.gitignore'))throw new Error('A private path was staged; sync stopped');
     if(this.git(['diff','--cached','--name-only']))this.git(['commit','-m','Save Godspeed Mission Control records']);
   }
@@ -93,7 +113,7 @@ export class FileSync {
           ...this.gitBytes(['diff','--name-only','-z']).toString('utf8').split('\0'),
           ...this.gitBytes(['diff','--cached','--name-only','-z']).toString('utf8').split('\0'),
           ...this.gitBytes(['ls-files','--others','--exclude-standard','-z']).toString('utf8').split('\0')
-        ].filter(name=>name&&(shared(name)||name==='.gitignore'))).size);
+        ].filter(name=>name&&(shared(name)||(name==='.gitignore'&&!this.gitDir)))).size);
         this.last={state:pending?'pending':'synced',at:new Date().toISOString(),pending,...(pending?{detail:'New local edits will upload on the next synchronization cycle.'}:{})};
     }catch(error){this.last={state:this.pendingConflicts().length?'conflict':'pending',at:new Date().toISOString(),error:'Sync did not complete; local files remain available',detail:error.message==='Workspace is being written by another process'?'The assistant is saving its state.':String(error.message).split('\n')[0]};}
     atomic(path.join(this.store.state,'sync-status.json'),JSON.stringify(this.last,null,2));return this.last;
@@ -105,7 +125,13 @@ export class FileSync {
     try {
       // Independently created profiles can look like renames to Git. Their paths
       // are durable identities, so merging must never infer a move from content.
-      try { this.git(['merge','--no-edit','--no-ff','--strategy=resolve','--allow-unrelated-histories',remoteRef],dir); }
+      // The first join of an adopted mission control meets a knowledge
+      // repository that grew from the starter, with no history in common. Its
+      // same-named files are the starter's templates, and the owner's folder is
+      // the reason it was adopted, so the folder's version wins once. After
+      // this merge both sides share a base and every later edit is reviewed.
+      let firstJoin=false;if(this.gitDir){try{this.git(['merge-base','HEAD',remoteRef],dir);}catch{firstJoin=true;}}
+      try { this.git(['merge','--no-edit','--no-ff',...(firstJoin?['--strategy=ort','-X','ours','-X','no-renames']:['--strategy=resolve']),'--allow-unrelated-histories',remoteRef],dir); }
       catch(e) {
         const conflicted=this.git(['diff','--name-only','--diff-filter=U'],dir).split('\n').filter(Boolean);
         if(!conflicted.length)throw e;
