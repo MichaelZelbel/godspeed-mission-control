@@ -64,3 +64,22 @@ test('an installation that already synced the archive untracks it on the next co
   assert.deepEqual(git(dir,'ls-files').split('\n').filter(n=>n.startsWith('assistant-state/history/')),[],'the archive must be untracked');
   assert.ok(fs.existsSync(path.join(dir,archived)),'the archive file itself must stay on disk');
 });
+
+// The ignore file is only written when sync is first configured. An
+// installation that was configured before the archive became private still
+// carries the old ignore file, and `git add` on the durable roots happily put
+// the archive straight back after it had just been untracked.
+test('an older ignore file cannot put the archive back',()=>{
+  const {store,sync,dir}=workspace();
+  const profile='00000000-0000-4000-8000-0000000012ab';
+  const archived=path.join('assistant-state','history',profile,'0123456789abcdef','old.json');
+  fs.mkdirSync(path.join(dir,path.dirname(archived)),{recursive:true});
+  fs.writeFileSync(path.join(dir,archived),JSON.stringify({format:1,profile,database:'main',tables:[]}));
+  // Exactly the ignore file the older version generated: no archive line.
+  fs.writeFileSync(path.join(dir,'.gitignore'),'*\n!records/\n!records/**\n!assistant-state/\n!assistant-state/**\n**/.*\n!.gitignore\n');
+  store.save('notes',{title:'Note after the upgrade',content:'Still synced'});
+  sync.commitLocal();
+  const tracked=sync.gitBytes(['ls-files','-z']).toString('utf8').split('\0').filter(Boolean);
+  assert.deepEqual(tracked.filter(n=>n.startsWith('assistant-state/history/')),[],'the archive must stay out whatever the ignore file says');
+  assert.ok(tracked.some(n=>n.startsWith('records/notes/')),'real records must still be synced');
+});

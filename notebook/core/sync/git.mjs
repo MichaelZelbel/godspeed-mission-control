@@ -25,8 +25,17 @@ export class FileSync {
     if(!remoteUrl||!/^(https:\/\/github\.com\/|git@github\.com:)/.test(remoteUrl))throw new Error('Use a private GitHub repository URL');
     if(!fs.existsSync(path.join(this.store.root,'.git'))){this.git(['init','-b',this.branch]);this.git(['config','user.name','Godspeed Mission Control']);this.git(['config','user.email','godspeed@localhost']);}
     this.git(['config','core.autocrlf','false']);this.git(['config','core.eol','lf']);if(process.platform==='win32')this.git(['config','core.longpaths','true']);
-    atomic(path.join(this.store.root,'.gitignore'),'*\n'+durableRoots.map(r=>'!'+r+'/\n!'+r+'/**\n').join('')+durableFiles.map(r=>'!'+r+'\n').join('')+devicePrivatePaths.map(r=>r+'/\n').join('')+'**/.*\n!.gitignore\n**/secrets/\n**/node_modules/\n**/*.sqlite*\n**/*.png\n**/*.jpg\n**/*.mp4\n**/*.mp3\n**/*.pdf\n');
+    this.writeIgnoreFile();
     try {this.git(['remote','get-url',this.remote]);}catch{this.git(['remote','add',this.remote,remoteUrl]);}
+  }
+  // The ignore file is derived from the policy, so it is rewritten whenever the
+  // policy has moved on rather than only when sync is first configured. An
+  // installation configured before a path became private carried an ignore file
+  // that let `git add` put it straight back.
+  ignoreText(){return '*\n'+durableRoots.map(r=>'!'+r+'/\n!'+r+'/**\n').join('')+durableFiles.map(r=>'!'+r+'\n').join('')+devicePrivatePaths.map(r=>r+'/\n').join('')+'**/.*\n!.gitignore\n**/secrets/\n**/node_modules/\n**/*.sqlite*\n**/*.png\n**/*.jpg\n**/*.mp4\n**/*.mp3\n**/*.pdf\n';}
+  writeIgnoreFile(){
+    const file=path.join(this.store.root,'.gitignore'),text=this.ignoreText();
+    if(!fs.existsSync(file)||fs.readFileSync(file,'utf8')!==text)atomic(file,text);
   }
   validate(){this.store.scan();if(this.store.problems.length)throw new Error('Resolve record validation problems before syncing');validateAssistantFiles(this.store.root);if(this.pendingConflicts().length)throw new Error('Resolve saved conflicts before syncing');}
   // A path that was synced before it became device-private stays in the index
@@ -40,6 +49,7 @@ export class FileSync {
   }
   commitLocal(){
     this.validate();
+    this.writeIgnoreFile();
     this.untrackPrivate();
     // --diff-filter=d leaves out removals: untracking a path that became
     // device-private is the one staged change about a private path that is
