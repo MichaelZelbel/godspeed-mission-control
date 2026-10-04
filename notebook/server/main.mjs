@@ -251,8 +251,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
     } catch (e) { send(res, e.status || (e.code === 'CONFLICT' ? 409 : 400), { error: e.message, code: e.code }); }
   });
   await new Promise((resolve, reject) => { server.once('error', reject); server.listen(port, host, resolve); });
-  let busy = false;
-  const interval = setInterval(() => { if (!busy&&!menerioImport.mutating) { busy = true; try { index.rebuild(); } catch {} finally { busy = false; } } }, 30000);
+  const interval = setInterval(() => { if (!menerioImport.mutating) void index.rebuildBackground().catch(()=>{}); }, 30000);
   const jobs=setInterval(()=>{if(!menerioImport.mutating)scheduler.tick().catch(()=>{});},30000);
   const syncTimer=setInterval(()=>{if(!menerioImport.mutating&&fs.existsSync(path.join(store.state,'sync-config.json')))void syncRunner.run();},60000);
   const mediaTimer=setInterval(()=>{if(!menerioImport.mutating)mediaSync.reconcile();},60000);
@@ -260,7 +259,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   const telegramTimer=telegram?setInterval(()=>{if(!menerioImport.mutating)telegram.tick().catch(()=>{});},3000):null;
   scheduler.deliver=telegram?(id,result)=>telegram.deliver(id,result):null;
   let debounce,indexDebounce;const watchers=new Map();
-  const changed=(event,name)=>{if(menerioImport.mutating||!name||name.replaceAll('\\','/').startsWith('.')||name.endsWith('.tmp'))return;clearTimeout(indexDebounce);indexDebounce=setTimeout(()=>{if(menerioImport.mutating)return;try{index.rebuild();}catch{}},750);if(fs.existsSync(path.join(store.state,'sync-config.json'))){clearTimeout(debounce);debounce=setTimeout(()=>{if(!menerioImport.mutating)void syncRunner.run();},5000);}};
+  const changed=(event,name)=>{if(menerioImport.mutating||!name||name.replaceAll('\\','/').startsWith('.')||name.endsWith('.tmp'))return;clearTimeout(indexDebounce);indexDebounce=setTimeout(()=>{if(menerioImport.mutating)return;void index.rebuildBackground().catch(()=>{});},750);if(fs.existsSync(path.join(store.state,'sync-config.json'))){clearTimeout(debounce);debounce=setTimeout(()=>{if(!menerioImport.mutating)void syncRunner.run();},5000);}};
   // Private backups and Git merge workspaces are outside the watched knowledge.
   const watchRoot=name=>{const folder=path.join(store.root,name);if(!watchers.has(name)&&fs.existsSync(folder))watchers.set(name,fs.watch(folder,{recursive:true},changed));};
   for(const name of durableRoots)watchRoot(name);
