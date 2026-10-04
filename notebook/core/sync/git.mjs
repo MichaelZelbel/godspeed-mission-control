@@ -97,8 +97,12 @@ export class FileSync {
         this.commitLocal();
         if(!networkError&&remoteExists){
         const remoteRef=this.remote+'/'+this.branch,head=this.git(['rev-parse','HEAD']),remoteHead=this.git(['rev-parse',remoteRef]);
-        if(head!==remoteHead){
-          this.integrate(remoteRef);
+        // When the remote already holds everything here there is nothing to
+        // merge, and when this side is only behind it takes the remote commit
+        // as it is. A merge commit in either case gave the other device a new
+        // head to merge in turn, and two devices kept doing that forever.
+        if(head!==remoteHead&&!this.contains(remoteHead,head)){
+          this.integrate(remoteRef,{fastForward:this.contains(head,remoteHead)});
           // Transactions publish the canonical record representation. Older
           // clones can contain CRLF blobs, so commit that local integration
           // before upload rather than leave a false pending edit behind.
@@ -118,7 +122,9 @@ export class FileSync {
     }catch(error){this.last={state:this.pendingConflicts().length?'conflict':'pending',at:new Date().toISOString(),error:'Sync did not complete; local files remain available',detail:error.message==='Workspace is being written by another process'?'The assistant is saving its state.':String(error.message).split('\n')[0]};}
     atomic(path.join(this.store.state,'sync-status.json'),JSON.stringify(this.last,null,2));return this.last;
   }
-  integrate(remoteRef){
+  // Whether commit `ancestor` is already part of the history of `descendant`.
+  contains(ancestor,descendant){try{this.git(['merge-base','--is-ancestor',ancestor,descendant]);return true;}catch{return false;}}
+  integrate(remoteRef,{fastForward=false}={}){
     const integrationRoot=path.join(this.store.state,'sync-worktrees'),dir=path.join(integrationRoot,randomUUID());fs.mkdirSync(integrationRoot,{recursive:true});
     if(!path.resolve(dir).startsWith(path.resolve(integrationRoot)+path.sep))throw new Error('Unsafe sync staging path');
     this.git(['worktree','add','--detach',dir,'HEAD']);
@@ -131,7 +137,7 @@ export class FileSync {
       // the reason it was adopted, so the folder's version wins once. After
       // this merge both sides share a base and every later edit is reviewed.
       let firstJoin=false;if(this.gitDir){try{this.git(['merge-base','HEAD',remoteRef],dir);}catch{firstJoin=true;}}
-      try { this.git(['merge','--no-edit','--no-ff',...(firstJoin?['--strategy=ort','-X','ours','-X','no-renames']:['--strategy=resolve']),'--allow-unrelated-histories',remoteRef],dir); }
+      try { this.git(fastForward?['merge','--ff-only',remoteRef]:['merge','--no-edit','--no-ff',...(firstJoin?['--strategy=ort','-X','ours','-X','no-renames']:['--strategy=resolve']),'--allow-unrelated-histories',remoteRef],dir); }
       catch(e) {
         const conflicted=this.git(['diff','--name-only','--diff-filter=U'],dir).split('\n').filter(Boolean);
         if(!conflicted.length)throw e;

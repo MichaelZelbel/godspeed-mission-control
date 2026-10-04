@@ -106,3 +106,29 @@ test('binary skill edits keep both exact versions through conflict resolution an
  sa.initialize('https://github.com/synthetic/private.git');sb.initialize('https://github.com/synthetic/private.git');atomic(path.join(a.root,file),base);assert.equal(sa.reconcile().state,'synced');assert.equal(sb.reconcile().state,'synced');assert.deepEqual(fs.readFileSync(path.join(b.root,file)),base);
  atomic(path.join(a.root,file),remote);atomic(path.join(b.root,file),local);assert.equal(sa.reconcile().state,'synced');assert.equal(sb.reconcile().state,'conflict');const conflict=JSON.parse(fs.readFileSync(path.join(b.root,'conflicts',sb.pendingConflicts()[0])));assert.equal(conflict.encoding,'base64');assert.deepEqual(Buffer.from(conflict.local,'base64'),local);assert.deepEqual(Buffer.from(conflict.remote,'base64'),remote);sb.resolve(conflict.id,'local');assert.equal(sb.reconcile().state,'synced');assert.equal(sa.reconcile().state,'synced');assert.deepEqual(fs.readFileSync(path.join(a.root,file)),local);
 });
+
+// On the test server two devices merged each other's merge commits every
+// minute for hours: 46 of 70 merges in three hours changed nothing. Each one
+// made the other side merge again, and each merge re-read the whole vault
+// while holding the workspace, so a note save waited behind it.
+test('two devices with nothing new stop creating merge commits',()=>{
+  const {a,b,remote}=fixture(),A=new FileSync(a),B=new FileSync(b);
+  a.save('notes',{title:'Desktop note',content:'A'});b.save('contacts',{name:'Laptop person'});
+  A.reconcile();B.reconcile();A.reconcile();
+  const commits=()=>Number(git(remote,'rev-list','--count','main')),settled=commits();
+  let merges=0;for(const sync of [A,B]){const integrate=sync.integrate.bind(sync);sync.integrate=(...args)=>{merges++;return integrate(...args);};}
+  for(let round=0;round<3;round++){assert.equal(A.reconcile().state,'synced');assert.equal(B.reconcile().state,'synced');}
+  assert.equal(commits()-settled,0,'idle devices added '+(commits()-settled)+' commits that change nothing');
+  assert.equal(merges,0,'idle devices merged '+merges+' times');
+  assert.equal(a.list('contacts').length,1);assert.equal(b.list('notes').length,2);
+});
+
+test('a device that only needs to catch up takes the other side as it is',()=>{
+  const {a,b,remote}=fixture(),A=new FileSync(a),B=new FileSync(b);
+  a.save('notes',{title:'Only on the desktop',content:'A'});A.reconcile();
+  const before=git(remote,'rev-parse','main');
+  assert.equal(B.reconcile().state,'synced');
+  assert.equal(git(b.root,'rev-parse','HEAD'),before,'catching up must not add a merge commit of its own');
+  assert.equal(git(remote,'rev-parse','main'),before);
+  assert.ok(b.list('notes').some(n=>n.title==='Only on the desktop'));
+});
