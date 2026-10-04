@@ -3986,5 +3986,79 @@
         "sha256": "b318934c5409d6796b2d0c7c99d41eb7cf1969b755d615dc9e7ae5e85d45b04f"
       }
     ]
+  },
+  {
+    "name": "browser-post",
+    "source": "Full MIT-licensed Chrome Agent Bridge posting workflow and helpers, adapted to explicit isolated installation configuration; private narrative excluded",
+    "files": [
+      {
+        "path": "LICENSE",
+        "sha256": "5cd8a19f6d65b5d5766e118b223e06374ef41091b8db1f6f51e2bc58012338db"
+      },
+      {
+        "path": "poster/install-waker-linux.sh",
+        "sha256": "db200466b2f5d7b6ece09b99e0888dd239b09ab44da2ae3b900fb31ed0d2fd39"
+      },
+      {
+        "path": "poster/install-waker-macos.sh",
+        "sha256": "5f0c1cb1bde8c79900b4390cba57fbd00c3ff10b200fa5017ec9066e2f05573a"
+      },
+      {
+        "path": "poster/install-waker-windows.ps1",
+        "sha256": "050c5a016d78ae0ca58ff2bf3813192f5a2dae56115d35f3bcc989f99defd93e"
+      },
+      {
+        "path": "poster/package.json",
+        "sha256": "a51bff776fdd53226e2e67d8f654d17dadfe3decc8bf8bf869cba3aff9813826"
+      },
+      {
+        "path": "poster/playbooks/README.md",
+        "sha256": "b0f74c2fa15eb4189344eaaa76c7749d2c02eb09e8c9e707ecbdec9c07c162b4"
+      },
+      {
+        "path": "poster/playbooks/snapchat.md",
+        "sha256": "89a61a36bba658fe194eafc3d93a1bac6dc8ed79693082b1b3579197e78ca11f"
+      },
+      {
+        "path": "poster/playbooks/substack.md",
+        "sha256": "e542f2e4dde513fa0aa489ae94295b059cdcda7f9cc669163d116d1c6da1ef52"
+      },
+      {
+        "path": "poster/poster.env.example",
+        "sha256": "41b8654a8a268da087800326b31f2deb85c54fe895c4abb496864382edc931c9"
+      },
+      {
+        "path": "poster/README.md",
+        "sha256": "448bce9ebd462acc27309d10b9818648fb20887fc838594756b3b8a7d149d57b"
+      },
+      {
+        "path": "poster/runners/claude.cmd",
+        "sha256": "9c3db22267dac6091019bd8787e58553a1861d28280c023d58a64c74d0b40157"
+      },
+      {
+        "path": "poster/runners/claude.sh",
+        "sha256": "ea6a97078c3134a5c7121e48b82441f45ebcecbd0dcde4337597dfe61bea2256"
+      },
+      {
+        "path": "poster/runners/hermes.sh",
+        "sha256": "3c252ffa978f6f824a0748efcbfbbbd014b462a92fcdbb45456b31d5c68a5fe4"
+      },
+      {
+        "path": "poster/skill/SKILL.md",
+        "sha256": "a9e5e9aca3fbfb80548f674d3ae24b6bc6f2952a4b6f26eccdf0b5a1354c5610"
+      },
+      {
+        "path": "poster/test/wake.test.mjs",
+        "sha256": "350c06335764abc076cb523198a80850700d2b0a023cadc0af9555e6e8de8f20"
+      },
+      {
+        "path": "poster/wake.js",
+        "sha256": "89b800c46ca701db870f2e41b2bae6ba86973f7bfef5934ceee8dc53a4718803"
+      },
+      {
+        "path": "SKILL.md",
+        "sha256": "a9e5e9aca3fbfb80548f674d3ae24b6bc6f2952a4b6f26eccdf0b5a1354c5610"
+      }
+    ]
   }
 ]

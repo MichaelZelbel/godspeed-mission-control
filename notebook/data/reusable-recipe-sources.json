@@ -2,7 +2,7 @@
   "format": 1,
   "origin": "Reviewed reusable workflow sources and portable starter workflows",
   "files": {
-    "manifest.json": "70f8bbfae04ce0a3f1f74bb8da9fd23474e0037c682365944f45804266b71c24",
+    "manifest.json": "dcb0e46262ca212a92a521f0d9e34e5076b688adc4d3ae4adb5eb54b5b076751",
     "book-title-creator/SKILL.md": "34f60c7f8081b9d0778026e69c9254f2239c4a72f95fa686903e57592ab274b8",
     "book-title-strategist/SKILL.md": "1d858bcd7b360202dbb5939090213e5d7ce7024b7c1d24dcfc6020936d3a5530",
     "connect-email/.shipped-sha256": "b4e692ca873c8ca46bdaa9209461bc8dd6c7e9f65d4ba86980bad1be965c1771",
@@ -997,6 +997,23 @@
     "book-title-strategist/references/08-sources.md": "3d997d2a97b3a4cefed89a988ba90d3dd779d2c41972a7123bf63807821fc113",
     "book-title-strategist/scripts/rank_candidates.py": "1f22eead28a420c50124e836e2a40146b3523dfc40c9c643e53ff7fb04907d9b",
     "lead/SKILL.md": "fb98cc9cd18f0e342bda3dbe318fe8ed7c074df160768b05653297badcf9a554",
-    "mc-radar/SKILL.md": "b318934c5409d6796b2d0c7c99d41eb7cf1969b755d615dc9e7ae5e85d45b04f"
+    "mc-radar/SKILL.md": "b318934c5409d6796b2d0c7c99d41eb7cf1969b755d615dc9e7ae5e85d45b04f",
+    "browser-post/LICENSE": "5cd8a19f6d65b5d5766e118b223e06374ef41091b8db1f6f51e2bc58012338db",
+    "browser-post/SKILL.md": "a9e5e9aca3fbfb80548f674d3ae24b6bc6f2952a4b6f26eccdf0b5a1354c5610",
+    "browser-post/poster/install-waker-linux.sh": "db200466b2f5d7b6ece09b99e0888dd239b09ab44da2ae3b900fb31ed0d2fd39",
+    "browser-post/poster/install-waker-macos.sh": "5f0c1cb1bde8c79900b4390cba57fbd00c3ff10b200fa5017ec9066e2f05573a",
+    "browser-post/poster/install-waker-windows.ps1": "050c5a016d78ae0ca58ff2bf3813192f5a2dae56115d35f3bcc989f99defd93e",
+    "browser-post/poster/package.json": "a51bff776fdd53226e2e67d8f654d17dadfe3decc8bf8bf869cba3aff9813826",
+    "browser-post/poster/poster.env.example": "41b8654a8a268da087800326b31f2deb85c54fe895c4abb496864382edc931c9",
+    "browser-post/poster/README.md": "448bce9ebd462acc27309d10b9818648fb20887fc838594756b3b8a7d149d57b",
+    "browser-post/poster/wake.js": "89b800c46ca701db870f2e41b2bae6ba86973f7bfef5934ceee8dc53a4718803",
+    "browser-post/poster/playbooks/README.md": "b0f74c2fa15eb4189344eaaa76c7749d2c02eb09e8c9e707ecbdec9c07c162b4",
+    "browser-post/poster/playbooks/snapchat.md": "89a61a36bba658fe194eafc3d93a1bac6dc8ed79693082b1b3579197e78ca11f",
+    "browser-post/poster/playbooks/substack.md": "e542f2e4dde513fa0aa489ae94295b059cdcda7f9cc669163d116d1c6da1ef52",
+    "browser-post/poster/runners/claude.cmd": "9c3db22267dac6091019bd8787e58553a1861d28280c023d58a64c74d0b40157",
+    "browser-post/poster/runners/claude.sh": "ea6a97078c3134a5c7121e48b82441f45ebcecbd0dcde4337597dfe61bea2256",
+    "browser-post/poster/runners/hermes.sh": "3c252ffa978f6f824a0748efcbfbbbd014b462a92fcdbb45456b31d5c68a5fe4",
+    "browser-post/poster/skill/SKILL.md": "a9e5e9aca3fbfb80548f674d3ae24b6bc6f2952a4b6f26eccdf0b5a1354c5610",
+    "browser-post/poster/test/wake.test.mjs": "350c06335764abc076cb523198a80850700d2b0a023cadc0af9555e6e8de8f20"
   }
 }

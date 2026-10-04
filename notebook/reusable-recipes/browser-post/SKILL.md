@@ -91,8 +91,3 @@ Set GODSPEED_WORKSPACE to this isolated workspace. Keep poster.env in its .godsp
 Run node skills/browser-post/poster/wake.js --once for one configured peek, --checkin for actual health, or without a flag for the owned optional recurring waker. Its scheduled activation remains an explicit separate user choice. A peek/check-in is not a claim, post or proof of authorization. No queued job means no assistant cost and no notification. Fake API/runner tests validate the helper; an actual approved posted result requires a live URL, screenshot and retained job receipt through the full playbook.
 
 Service installers derive a separate name from this exact helper path and refuse an existing different target. They affect only that selected installation. Windows/Linux installation and real browser posting require their own installed acceptance; the retained macOS helper is unverified and makes no tested Mac-support claim. Never run a historical global waker or use another browser session to work around an approval refusal.
-
-
-## Installed personal workspace
-
-Use the current user workspace and its configured providers. Keep original workflow, command contracts, scripts and verification criteria. Read the workspace authorization rules before sends, sign-ins, payments or publishing. Search existing device-private credentials before asking for configuration. Saved output and a passing screen are not evidence that the full requested result happened.

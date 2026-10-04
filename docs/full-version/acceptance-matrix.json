@@ -1,6 +1,6 @@
 {
   "format": 2,
-  "checked_at": "2026-10-04T03:28:49.882888+00:00",
+  "checked_at": "2026-10-04T03:35:58.757646+00:00",
   "complete": false,
   "items": [
     {
@@ -2756,8 +2756,10 @@
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
       "criterion": "Use the approved computer helper only for a posting request the user explicitly authorized.\r Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation.",
-      "status": "source only",
-      "evidence": [],
+      "status": "partial",
+      "evidence": [
+        "Complete maintained/generated licensed workflow, playbooks and portable helpers now replace the condensed recipe. Eleven source checks include actual fictional HTTP and one-shot Node helper. Selected-account configuration and an explicitly approved installed real posting result remain open; no post was performed."
+      ],
       "required": true,
       "target_test": "Exercise browser-post through its installed entry point and check actual results after restart"
     },
