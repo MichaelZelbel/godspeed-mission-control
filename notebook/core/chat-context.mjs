@@ -5,6 +5,9 @@ import {visibleRows} from './visibility.mjs';
 import {fileContext} from './context.mjs';
 import {retrieveNoteWindows} from './retrieval-windows.mjs';
 import {explicitNoteCapture} from './chat-intent.mjs';
+// Full write baselines stay outside the enumerable prompt object.
+const writeSnapshots=new WeakMap();
+export const collectionWriteSnapshot=context=>writeSnapshots.get(context)||[];
 
 // Retrieve a bounded selection instead of sending the entire personal database.
 export function chatContext(query,input){
@@ -37,7 +40,7 @@ function buildChatContext(query,input){
     context.person_conversation=input.conversationContext||null;
     context.person_evidence_policy='Use only recorded facts and topics about this person. A planned future event is not an event that has happened. Do not invent past conversations or outcomes. Follow the requested number of questions and the saved listening intent.';
   }
-  if(input.collection_id){context.collection=visibleRows(query,'collections').find(r=>r.id===input.collection_id);if(!context.collection)throw new Error('This collection is hidden from the assistant');context.items=visibleRows(query,'collection_items').filter(r=>r.collection_id===input.collection_id).slice(0,20).map(r=>compact(r,1500));}
+  if(input.collection_id){context.collection=visibleRows(query,'collections').find(r=>r.id===input.collection_id);if(!context.collection)throw new Error('This collection is hidden from the assistant');const rows=visibleRows(query,'collection_items').filter(r=>r.collection_id===input.collection_id).slice(0,20);writeSnapshots.set(context,structuredClone(rows));context.items=rows.map(r=>compact(r,1500));}
   context.messages=input.conversation_id?query.rows('conversation_messages').filter(m=>m.conversation_id===input.conversation_id).sort((a,b)=>a.created_at.localeCompare(b.created_at)).slice(-12).map(({role,content})=>({role,content:String(content).slice(0,8000)})):[];
   return context;
 }

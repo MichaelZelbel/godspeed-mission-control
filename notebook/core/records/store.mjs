@@ -144,6 +144,20 @@ export class Store {
   saveAsync(type,value,expectedHash,options) {
     return this.withLockAsync(()=>this.saveUnderLock(type,value,expectedHash),options);
   }
+  // Stage a complete record operation under one writer lock and publish once.
+  // Reads through the staged view see earlier changes, without nested locks.
+  transaction(work) {
+    return this.withLock(()=>{
+      this.scan();const before=new Map(this.records),changed=new Map(),files=new Map(),view=Object.create(this);
+      view.records=new Map(before);view.scan=()=>view.records;view.withLock=fn=>fn();
+      view.get=(type,id)=>view.records.get(type+'/'+id)||[...view.records.values()].find(r=>r.type===type&&(r.aliases||[]).includes(id))||null;
+      view.list=(type,{removed=false}={})=>[...view.records.values()].filter(r=>r.type===type&&(removed||!r.removed_at));
+      view.commit=(records,options={})=>{for(const item of options.files||[])files.set(item.file,item);for(const raw of records){const record={...raw};delete record._hash;const key=record.type+'/'+record.id;changed.set(key,record);view.records.set(key,{...record,_hash:hash(encode(record))});}};
+      const result=work(view,changed,before,files);
+      if(result&&typeof result.then==='function')throw Error('Record transactions must finish synchronously');
+      this.commit([...changed.values()],{files:[...files.values()]});return result;
+    });
+  }
   saveUnderLock(type,value,expectedHash) {
       const old = value.id ? this.get(type, value.id) : null;
       if (expectedHash !== undefined && expectedHash !== (old?._hash || null)) {

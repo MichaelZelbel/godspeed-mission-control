@@ -61,7 +61,7 @@ export function useReviewQueue(contactId: string | null = null) {
       let query = supabase
         .from("review_queue" as any)
         .select("id,user_id,suggestion_type,target_entity_id,target_entity_type,applied_at,source_note_id,suppression_key,extracted_value,is_sensitive,title,description,payload,status,created_at,reviewed_at,confidence_score,blocked_at, source_note:notes!review_queue_source_note_id_fkey(title)")
-        .in("status", ["pending", "pending_review", "auto_applied_unreviewed"])
+        .in("status", ["pending", "pending_review", "auto_applied_unreviewed", "kept"])
         .or(`snoozed_until.is.null,snoozed_until.lte.${new Date().toISOString()}`);
       if (contactId) query = query.contains("payload", { contact_id: contactId });
       const { data, error } = await query.order("created_at", { ascending: false }).range(0, 499);

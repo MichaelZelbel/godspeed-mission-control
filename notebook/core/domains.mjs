@@ -2,10 +2,11 @@ import { slug, hash } from './records/store.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { Review } from './review.mjs';
+import {assertAssistantRecord} from './assistant-mutations.mjs';
 import { fileContext } from './context.mjs';
 import {Connectors} from './connectors.mjs';
 import {visibleRows,knowledgeContext} from './visibility.mjs';
-import {chatContext,chatAttachments,retrievedContext} from './chat-context.mjs';
+import {chatContext,chatAttachments,retrievedContext,collectionWriteSnapshot} from './chat-context.mjs';
 import {personalOperation,conversationOperations,validateConversationOperations,operationContract} from './personal-operations.mjs';
 import {explicitNoteCapture} from './chat-intent.mjs';
 import {importGoalFiles} from './legacy-goals.mjs';
@@ -26,6 +27,7 @@ export class Domains {
     if (suppressed) return { ok: true, facts: [{ attribute, outcome: 'suppressed', reason: 'Previously rejected by the user' }] };
     return this.store.withLock(() => {
       const claims = this.query.rows('claims').filter(r => r.subject_type === subject_type && r.subject_id === subject_id && r.attribute === attribute);
+      if(this.assistant)for(const claim of claims)assertAssistantRecord(this.query,'claims',claim.id);
       const valid_from = input.valid_from || new Intl.DateTimeFormat('en-CA', { timeZone: this.query.rows('profiles')[0]?.timezone || 'UTC' }).format(new Date());
       const current=c=>c.valid_from<=valid_from&&(!c.valid_to||c.valid_to>valid_from),closure_evidence={source_type:input.source_type||'manual',source_id:input.source_id||null,quote:input.evidence_quote||null};
       const target=input.replaces_claim_id?claims.find(c=>c.id===input.replaces_claim_id):null;
@@ -131,8 +133,7 @@ export class Domains {
       if (['write_fact', 'write_profile_entry'].includes(input.action)) return this.writeFact(input);
       if (input.action === 'accept_profile_entry') {
         const review = this.store.get('review_queue', input.review_id); if (!review) throw new Error('Review item missing');
-        const result = this.writeFact({ ...review.payload, origin: 'review_queue' });
-        this.store.save('review_queue', { id: review.id, status: 'kept', applied_at: new Date().toISOString() }); return result;
+        const kept=new Review(this).apply(review);return {ok:true,review:kept};
       }
       throw new Error('Unsupported profile operation');
     }
@@ -276,9 +277,9 @@ export class Domains {
         else for(const note of notes_created)tool_results.push({tool:'create_note',success:true,note_id:note.id});
       }
       if(name==='collection-chat')for(const change of [...(structured.items_created||[]),...(structured.item_updates||[])]){
-        const old=change.id?context.items.find(i=>i.id===change.id):null;if(change.id&&!old)throw new Error('Assistant requested a row outside this collection');
+        const old=change.id?collectionWriteSnapshot(context).find(i=>i.id===change.id):null;if(change.id&&!old)throw new Error('Assistant requested a row outside this collection');
         const validKeys=new Set((context.collection?.field_schema||[]).map(f=>f.key));if(Object.keys(change.data||{}).some(k=>!validKeys.has(k)))throw new Error('Assistant requested an unknown collection field');
-        this.query.execute({table:'collection_items',operation:old?'update':'insert',values:{...(old?{}:{collection_id:input.collection_id}),data:{...old?.data,...change.data}},filters:old?[['eq','id',old.id]]:[],expected:old?{[old.id]:old._hash}:{}});tool_results.push({tool:old?'update_collection_item':'create_collection_item',success:true});
+        this.query.execute({table:'collection_items',operation:old?'update':'insert',values:{...(old?{}:{collection_id:input.collection_id}),data:{...old?.data,...change.data}},filters:old?[['eq','id',old.id]]:[],expected:old?{[old.id]:old._hash}:{},assistant:true});tool_results.push({tool:old?'update_collection_item':'create_collection_item',success:true});
       }
       const opened=structured.operation_results?.find(r=>r.type==='coach_talks'&&r.status==='open');
       const saved = await this.store.saveAsync('conversation_messages', { content, role: 'assistant', talk_id:opened?.id||input.talk_id||null,note_id: input.note_id || null, contact_id: input.contact_id || null, person_id:input.contact_id||null, conversation_id: input.conversation_id || null },undefined,{signal});

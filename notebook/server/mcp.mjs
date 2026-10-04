@@ -1,6 +1,7 @@
 import {visibleRows} from '../core/visibility.mjs';
 import {toolScope} from '../core/api-keys.mjs';
 import {topicDefinitions,topicToolNames,topicTool} from './topic-tools.mjs';
+import {assistantMutationContext} from '../core/assistant-mutations.mjs';
 const schema={type:'object',properties:{},additionalProperties:true};
 const definitions=[
   ...topicDefinitions,
@@ -16,7 +17,7 @@ const definitions=[
   {name:'capture_note',description:'Capture the user\'s note once in a durable Markdown file, preserving the chosen folder, tags and related-note links.',inputSchema:{type:'object',properties:{title:{type:'string'},content:{type:'string'},folder_path:{type:'string'},tags:{type:'array',items:{type:'string'}},related:{type:'array',items:{type:'string'}}},required:['content']}},
   {name:'write_fact',description:'Record a confirmed fact and close earlier single-valued claims. AI inference must instead create a pending review_queue record.',inputSchema:schema},
   {name:'record_event',description:'Append a timeline event. Earlier events are never replaced.',inputSchema:schema},
-  {name:'structural_change',description:'Rename a file with stable UUID and retained alias, edit a display name, merge records or tombstone a removal. Use only for changes the user requested.',inputSchema:{type:'object',properties:{type:{type:'string'},id:{type:'string'},action:{enum:['display-name','rename','merge','remove']},options:{type:'object'}},required:['type','id','action']}},
+  {name:'structural_change',description:'Rename, change a name, merge or remove a user-requested record. Read every affected record first. Supply expected_hash for the source and expected keyed by type/id for every other changed record, including incoming links and a merge target.',inputSchema:{type:'object',properties:{type:{type:'string'},id:{type:'string'},action:{enum:['display-name','rename','merge','remove']},expected_hash:{type:'string'},expected:{type:'object'},options:{type:'object'}},required:['type','id','action','expected_hash']}},
   {name:'review_suggestions',description:'Apply, reject, snooze or roll back user-reviewed suggestions. Never accept inferred personal facts without user approval.',inputSchema:schema},
   {name:'validate_knowledge',description:'Validate file identity and typed references without changing invalid files.',inputSchema:schema}
 ];
@@ -29,6 +30,10 @@ export async function mcp(input,{store,query,index,domains,scopes}){
     else if(input.method==='tools/list')result={tools:definitions};
     else if(input.method==='tools/call'){
       const {name,arguments:a={}}=input.params||{};let value;
+      if(['save_record','update_note','capture_note','personal_operation','write_fact','record_event','structural_change','review_suggestions',...topicToolNames.filter(n=>!n.startsWith('list_')&&!n.startsWith('get_'))].includes(name)){
+        domains=Object.assign(Object.create(Object.getPrototypeOf(domains)),domains,{toolScope:type=>toolScope('save_record',{type})});
+        ({store,query,domains}=assistantMutationContext({store,query,domains,scopes},a));
+      }
       if(topicToolNames.includes(name))value=topicTool(name,a,{store,query});
       else if(name==='list_note_folders')value=query.withSnapshot(()=>{
         const notes=visibleRows(query,'notes').filter(n=>!n.is_trashed),folders=new Map(visibleRows(query,'note_folders').map(f=>[f.folder_path||f.path||'',0]));
@@ -57,12 +62,12 @@ export async function mcp(input,{store,query,index,domains,scopes}){
       else if(name==='retrieve_memory')value=await domains.invoke('retrieve-memory',a);
       else if(name==='search_knowledge')value=query.withSnapshot(()=>index.search(a.query).filter(r=>r.type!=='workspace_file'&&(!scopes||scopes.includes(toolScope('list_records',{type:r.type})))&&visibleRows(query,r.type).some(v=>v.id===r.id)));
       else if(name==='list_records'){const allowed=new Set(visibleRows(query,a.type).map(r=>r.id));value=query.execute({table:a.type,filters:a.filters||[],limit:a.limit||100}).data.filter(r=>allowed.has(r.id));}
-      else if(name==='save_record')value=query.execute({table:a.type,operation:a.value.id?'upsert':'insert',values:a.value,expected:a.value.id?{[a.value.id]:a.expected_hash}:{}}).data;
+      else if(name==='save_record')value=query.execute({table:a.type,operation:a.value.id?'upsert':'insert',values:a.value,expected:a.value.id?{[a.value.id]:a.expected_hash}:{},assistant:true}).data;
       else if(name==='capture_note')value=await domains.invoke('quick-capture',a);
       else if(name==='personal_operation')value=await domains.invoke('personal-operation',a);
       else if(name==='write_fact')value=domains.writeFact(a);
       else if(name==='record_event')value=query.execute({table:'moments',operation:'insert',values:a}).data;
-      else if(name==='structural_change')value=a.type==='moments'&&['remove','display-name'].includes(a.action)?query.execute({table:'moments',operation:a.action==='remove'?'delete':'update',values:{title:a.options?.name},filters:[['eq','id',a.id]]}).data:store.structural(a.type,a.id,a.action,a.options);
+      else if(name==='structural_change')value=a.type==='moments'&&['remove','display-name'].includes(a.action)?query.execute({table:'moments',operation:a.action==='remove'?'delete':'update',values:{title:a.options?.name},filters:[['eq','id',a.id]],expected:{[a.id]:a.expected_hash},assistant:true}).data:store.structural(a.type,a.id,a.action,{...a.options,target:a.options?.target||a.options?.target_id});
       else if(name==='review_suggestions')value=await domains.invoke('review-queue-bulk',a);
       else if(name==='validate_knowledge'){store.scan();value={problems:store.problems};}
       else throw new Error('Unknown tool');

@@ -25,6 +25,7 @@ import { relationshipWriteDecision } from "@/lib/profile-integrity";
 import { useAddClaim } from "@/hooks/useClaims";
 import { invalidateFactViews } from "@/hooks/useFacts";
 import { factRevertBlockReason, revertFactItem } from "@/lib/review-fact-revert";
+import {runReviewOperation,reviewJobCounts} from "@/lib/review-operation.mjs";
 import { normalizeAttribute, isReservedAttribute } from "@/lib/claims";
 import {
   UserPlus,
@@ -786,23 +787,13 @@ export default function ReviewQueue() {
   };
 
   const handleKeep = (item: ReviewItem) => runOnce(item, async () => {
-    // If the suggestion has not actually been applied yet (no target row written),
-    // run the real accept path. Status alone is not enough - historical Kept items
-    // exist with status="kept" but null target_entity_id because earlier versions
-    // of this page only flipped status without inserting.
-    const alreadyApplied = !!item.target_entity_id && !!item.applied_at;
-    if (!alreadyApplied) return handleAccept(item);
-    updateStatus.mutate({ id: item.id, status: "kept" }, {
-      onSuccess: () => showToast.success("Change kept"),
-      onError: (error) => showToast.error("Could not keep change: " + (error.message || "Unknown error")),
-    });
+    try {const data=await runReviewOperation(supabase,"keep",[item.id]);setBulkJobId(data.job_id);}
+    catch(err:any){showToast.error("Could not keep change: "+err.message);}
   });
 
   const handleRemove = (item: ReviewItem) => runOnce(item, async () => {
     try {
-      await revertAppliedChange(item);
-      updateStatus.mutate({ id: item.id, status: "removed" });
-      showToast.info("Change removed");
+      const data=await runReviewOperation(supabase,"rollback",[item.id]);setBulkJobId(data.job_id);
     } catch (err: any) {
       showToast.error("Could not remove change: " + (err.message || "Unknown error"));
     }
@@ -810,10 +801,7 @@ export default function ReviewQueue() {
 
   const handleBlock = (item: ReviewItem) => runOnce(item, async () => {
     try {
-      await revertAppliedChange(item);
-      await createSuppression(item);
-      updateStatus.mutate({ id: item.id, status: "blocked", extra: { blocked_at: new Date().toISOString() } });
-      showToast.info("Blocked from future automatic additions");
+      const data=await runReviewOperation(supabase,"never_again",[item.id]);setBulkJobId(data.job_id);
     } catch (err: any) {
       showToast.error("Could not block change: " + (err.message || "Unknown error"));
     }
@@ -843,7 +831,7 @@ export default function ReviewQueue() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("review_queue_bulk_jobs" as any)
-        .select("id,status,total,done,failed,last_error,action")
+        .select("id,status,total,processed,succeeded,failed,errors,action")
         .eq("id", bulkJobId!)
         .maybeSingle();
       if (error) throw error;
@@ -866,8 +854,7 @@ export default function ReviewQueue() {
       showToast.error(`Bulk action failed: ${j.last_error || "Unknown error"}`);
     } else {
       const verb = j.action === "keep" ? "kept" : j.action === "rollback" ? "rolled back" : "blocked";
-      const okCount = Math.max(0, Number(j.done) || 0);
-      const failCount = Math.max(0, Number(j.failed) || 0);
+      const {succeeded:okCount,failed:failCount}=reviewJobCounts(j);
       const outcomeParts = String(j.last_error || "").split("; ").filter(Boolean);
       const alreadyPresent = Number(outcomeParts.find((part) => part.endsWith(" already_present"))?.split(" ")[0] || 0);
       const skippedPart = outcomeParts.find((part) => part.includes(" skipped"));
@@ -883,7 +870,7 @@ export default function ReviewQueue() {
       } else if (failCount === 0) {
         showToast.success(`${okCount.toLocaleString()} changes ${verb}`);
       } else {
-        showToast.error(`Bulk action failed before all changes could be processed${j.last_error ? `: ${j.last_error}` : ""}`);
+        showToast.error(`${okCount.toLocaleString()} changes ${verb}; ${failCount.toLocaleString()} failed${j.errors?.[0]?.error ? `: ${j.errors[0].error}` : ""}`);
       }
 
     }
@@ -891,14 +878,8 @@ export default function ReviewQueue() {
   }, [bulkJob]);
 
   const invokeBulk = async (action: "keep" | "rollback" | "never_again") => {
-    const { data, error } = await supabase.functions.invoke("review-queue-bulk", {
-      body: { action, scope: "all" },
-    });
-    if (error || !data?.job_id) {
-      showToast.error("Could not start bulk action: " + (error?.message || "Unknown error"));
-      return;
-    }
-    setBulkJobId(data.job_id);
+    try{const data=await runReviewOperation(supabase,action);setBulkJobId(data.job_id);}
+    catch(error:any){showToast.error("Could not start bulk action: "+error.message);}
   };
 
   const confirmIfLarge = (
@@ -1009,7 +990,7 @@ export default function ReviewQueue() {
           {isBulkRunning && (
             <span className="text-xs text-muted-foreground ml-2">
               {bulkJob && (bulkJob as any).total > 0
-                ? `Processing ${Number((bulkJob as any).done).toLocaleString()} / ${Number((bulkJob as any).total).toLocaleString()}…`
+                ? `Processing ${reviewJobCounts(bulkJob).processed.toLocaleString()} / ${reviewJobCounts(bulkJob).total.toLocaleString()}…`
                 : "Starting…"}
             </span>
           )}
@@ -1092,7 +1073,7 @@ export default function ReviewQueue() {
                           Back. Tracked as a backend follow-up (lock a page from AI edits). */}
                       <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => setRollbackWikiRevision(revision)}>
                         <RotateCcw className="h-4 w-4 mr-1" />
-                        Roll Back
+                        Undo
                       </Button>
                       <Button size="sm" onClick={() => handleWikiLooksGood(revision)}>
                         <Check className="h-4 w-4 mr-1" />
@@ -1296,7 +1277,7 @@ export default function ReviewQueue() {
                       <Button
                         size="sm"
                         onClick={() => handleKeep(item)}
-                        disabled={updateStatus.isPending || isBulkRunning || inFlight.has(item.id)}
+                        disabled={item.status === "kept" || updateStatus.isPending || isBulkRunning || inFlight.has(item.id)}
                       >
                         <Check className="h-4 w-4 mr-1" />
                         Keep

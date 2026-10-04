@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { slug, hash } from './records/store.mjs';
 import {nativeRows} from './native-personal.mjs';
 import {dueRows} from './native-due.mjs';
+import {assertAssistantRecord,assertAssistantLinks} from './assistant-mutations.mjs';
 
 const inventory = JSON.parse(fs.readFileSync(fileURLToPath(new URL('../../docs/full-version/source-inventory.json', import.meta.url)), 'utf8'));
 export const tables = new Set(inventory.dependencies.flatMap(d => d.tables).filter(t => t !== 'note-attachments'));
@@ -146,6 +147,10 @@ export class QueryService {
         const changed = inputs.map(value => {
           const old = operation === 'insert' ? null : operation === 'upsert' ? (value.id ? this.store.get(table, value.id) : this.rows(table).find(r => options.onConflict && options.onConflict.split(',').every(k => r[k] === value[k]))) : table==='moments'?value:this.store.get(table, value.id);
           if (operation === 'insert' && value.id && this.store.get(table, value.id)) throw new Error('Record already exists');
+          if(request.assistant){
+            if(old){assertAssistantRecord(this,table,old.id);if(typeof expected[old.id]!=='string'||!expected[old.id].trim())throw Error('Read the current record hash before editing');if(expected[old.id]!==old._hash)this.store.conflict(table,operation==='update'?values:value,old,baselines[old.id]);}
+            assertAssistantLinks(this,table,{...old,...(operation==='update'?values:value)});
+          }
           if (old && expected[old.id] && expected[old.id] !== old._hash) {
             const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b),base=baselines[old.id];
             const patch=operation==='update'?values:value;
