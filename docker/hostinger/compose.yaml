@@ -7,7 +7,7 @@
 name: godspeed-mission-control
 services:
   godspeed:
-    image: ghcr.io/michaelzelbel/godspeed-mission-control@sha256:fcc2b5814e0cdcb9a012dde244bdf7f4a5b64b8762f974740bc849d06ac17a41
+    image: ghcr.io/michaelzelbel/godspeed-mission-control@sha256:a4dd5556bfc434a4884851a49b5f97cd0a7709e7604da29727feab62a250cd58
     restart: unless-stopped
     environment:
       GODSPEED_ACCESS_TOKEN: ${GODSPEED_SETUP_CODE:?Choose and save a private setup code}

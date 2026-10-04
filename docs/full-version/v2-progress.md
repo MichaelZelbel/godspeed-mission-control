@@ -1,6 +1,6 @@
 # Execution ledger: 2026-10-03-godspeed-v2-completeness
 
-Current trial status, 4 October 2026: ready for Michael's bounded core trial on Windows and development VPS srv1069233.hstgr.cloud. Both installations run product 576f0da18908e54e317cc88780bfa4018d20fd67 and bootstrap 0d10f08a02599c79d1c86b27f0cd03f64d72c731. Normal chat capture, recovery and corrected review controls passed. The requested single whole-branch review and its single scoped fix review are complete; the latter is clean. Read trial-handoff.md and trial-scope.md for evidence and limits. Older pending statements below describe their historical checkpoints. The comprehensive release matrices remain incomplete; Mac support and actual two-week outcomes are unverified.
+Current correction status, 4 October 2026: the earlier notebook-only installer and bounded-core handoff are superseded. The complete main Godspeed starter, operating manual and commands now accompany the integrated notebook, original skills use the notebook connection, and the unwanted note save and toolbar formatting regression are corrected. Runtime edb7e046e856a86ac32a28d2fb3b38bcd9246b46 is packaged for Windows and Linux and installed on the isolated Windows trial and development VPS. See trial-handoff.md for current paths, URLs and evidence. Historical checkpoints below remain retained; exhaustive release matrices and Mac acceptance remain incomplete.
 
 Plan: C:/godspeed/work/plans/2026-10-03-godspeed-v2-completeness.md
 
