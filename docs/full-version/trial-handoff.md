@@ -7,13 +7,23 @@
 - Open this folder in VS Code or Codex: `C:/godspeed/work/trials/godspeed-v2`.
 - Windows notebook: http://127.0.0.1:49175/dashboard
 - Development VPS notebook: https://srv1069233.hstgr.cloud:48443/dashboard
-- Windows download: https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-04-4/GodspeedSetup.exe
-- Linux download: https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-04-4/install-godspeed.sh
-- Source, manifests and checksums: https://github.com/MichaelZelbel/godspeed-mission-control/releases/tag/godspeed-v2-integrated-2026-10-04-4
+- Windows download: https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-04-5/GodspeedSetup.exe
+- Linux download: https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-04-5/install-godspeed.sh
+- Source, manifests and checksums: https://github.com/MichaelZelbel/godspeed-mission-control/releases/tag/godspeed-v2-integrated-2026-10-04-5
 - One-click Hostinger installation: https://srv1069233.hstgr.cloud/godspeed-install
 - Separate branch: https://github.com/MichaelZelbel/godspeed-mission-control/tree/codex/godspeed-v2-completeness
 
 The previous Windows notebook on port 49171 is retained but is superseded. The new folder contains the complete original starter layout, AGENTS.md and CLAUDE.md, original tools, and skills discoverable by Claude and Codex. Its original operating manual is preserved. The integrated memory connection is named notebook, as required by the original Keep a Note skill. VS Code terminal settings point to the separate assistant installation. The fresh Windows notebook still needs a model account connected in Settings for its own web chat; opening it in Codex uses Codex's account.
+
+## Original runtime restored
+
+Godspeed conversations now use the original Hermes agent loop, tools, named sessions and conversation storage. Telegram runs through the original Hermes gateway, replacing the notebook's custom poller. Native conversation storage also removes the write collision reproduced in the earlier replacement storage; prior history files remain retained.
+
+The notebook reads and controls Hermes cron directly. Goals, work and forecasts use the original commands and their original Markdown files. The replacement notebook planner and scheduler do not run in the shipped installation. Menerio's notes, collections, people, knowledge, timeline, media and review remain connected through the notebook and its MCP tools.
+
+The Windows executable uses the original setup wizard and shared setup script, followed by the notebook connection. Linux uses the original shared native installer followed by the notebook service, with a separate assistant profile for a beside installation. Hostinger remains a separate one-click deployment using the checked integrated image.
+
+The live original agent captured a fictional Menerio note, independently verified exactly once on disk. The installed notebook transport then found that note through the original agent's notebook search tool. Actual Hermes cron creation and pause succeeded in a separate retained fixture; it remains paused. On Windows, opening a formatted note still caused no save, and an authored edit survived reload. Both old installation payloads and configuration backups remain retained.
 
 ## What changed and was verified
 
@@ -21,7 +31,7 @@ The prior installer used a short allowlist that omitted many Godspeed starter fo
 
 The note editor previously saved on opening because its Markdown serialization removed a final newline. Comparison now ignores that normalization while preserving actual document changes. Opening a formatted note caused zero writes; typing saved successfully and survived reload. Toolbar formatting was reproduced failing with the first fix, corrected, and then saved successfully. Fictional test notes are confined to the isolated Windows trial.
 
-The development runtime and newest Windows/Linux packages use product 285682a1442625ca1968d9bda9f86c9452d96671, bootstrap 0d10f08a02599c79d1c86b27f0cd03f64d72c731. The server image is ghcr.io/michaelzelbel/godspeed-mission-control@sha256:fb4298da94ea8c340a19afb03d6c5897f55d40ad245ffe14cb36f57fdc0096b3. The exact image passed fresh installation, source checks and browser checks in GitHub run 37205678679. Hostinger uses that same immutable image. Documentation and package commits after the runtime pin do not change installed application code.
+The development and Windows runtime use product a2d4ca92d4223626f65de0897b4464e1fd224e02, bootstrap 180321af33ca98e7afbc572f993320290eb7466a. The native Linux notebook installer hook is pinned to 14736aa38648896707a9a30b146f530e3494e577. The server image is ghcr.io/michaelzelbel/godspeed-mission-control@sha256:f6435b3b93277c988de6e0b9a47abd12540f5db963f8bb7cac5297312e59e7a2. The exact image passed fresh installation, source checks and browser checks in GitHub run 37208120565. Hostinger uses that same immutable image. Documentation and package commits after the runtime pin do not change installed application code.
 
 The development host was verified as srv1069233, reached at 100.73.52.50. Only its owned integrated notebook and installer coordinator were updated. Existing data and media volumes, prior images, installers, configuration copies and recovery copies were retained. A fresh protected backup verified all 5,960 record files and 8,789 backup files before correction; the same protected record bytes remained intact before the subsequent image update. The local trial and all new artifacts are under C:/godspeed. No work on E or access to production was performed in this correction session.
 

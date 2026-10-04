@@ -6,31 +6,31 @@ The current edition stays on `main`. These installers set up version 2 separatel
 
 ## Windows
 
-[Download GodspeedSetup.exe](https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-04-4/GodspeedSetup.exe), then run it.
+[Download GodspeedSetup.exe](https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-04-5/GodspeedSetup.exe), then run it.
 
-This is the complete Windows installer, including the integrated notebook and its Node runtime. It sets up its own workspace and assistant profile. Its installation screens currently call this edition "Full Alpha". The notebook opens at [http://127.0.0.1:47831/dashboard](http://127.0.0.1:47831/dashboard). Connect your own model account in Settings to use the assistant. The installer is unsigned, so Windows may ask you to confirm that you want to run it.
+This uses Godspeed's original setup wizard and shared installer, then connects the integrated notebook. On a PC that already has Godspeed, the wizard selects a separate installation by default. The notebook opens at [http://127.0.0.1:47831/dashboard](http://127.0.0.1:47831/dashboard). Connect your own model account in Settings to use the assistant. The installer is unsigned.
 
-The executable is also [committed on this branch](installers/GodspeedSetup.exe). The [download page](https://github.com/MichaelZelbel/godspeed-mission-control/releases/tag/godspeed-v2-integrated-2026-10-04-4) lists the same file and its checksums.
+The executable is also [committed on this branch](installers/GodspeedSetup.exe). The [download page](https://github.com/MichaelZelbel/godspeed-mission-control/releases/tag/godspeed-v2-integrated-2026-10-04-5) lists the same file and its checksums.
 
-## Linux VPS or Mac with Docker
+## Linux or Mac
 
-This edition uses Docker with Compose on Linux and Mac. Install and start Docker first. Mac acceptance is still unverified; this is not a tested native Mac installer.
+This uses main's shared native installer for Git, Node.js, Hermes and the original Godspeed folders, then adds the notebook. Docker is not required for this route. Mac installation remains unverified.
 
-[Download install-godspeed.sh](https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-04-4/install-godspeed.sh), or run:
+[Download install-godspeed.sh](https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-04-5/install-godspeed.sh), or run:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/MichaelZelbel/godspeed-mission-control/codex/godspeed-v2-completeness/install-godspeed.sh | bash
 ```
 
-For a fresh VPS, supply its hostname to enable HTTPS. Ports 80 and 443 must be free and reachable, and the hostname must point to that server:
+On a computer that already has Godspeed, use the original installer's separate-folder option:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/MichaelZelbel/godspeed-mission-control/codex/godspeed-v2-completeness/install-godspeed.sh | GODSPEED_HOST=srv123456.hstgr.cloud bash
+curl -fsSL https://raw.githubusercontent.com/MichaelZelbel/godspeed-mission-control/codex/godspeed-v2-completeness/install-godspeed.sh | bash -s -- --beside --godspeed "$HOME/godspeed-v2"
 ```
 
-The installer downloads the checked source and notebook interface, verifies their checksum, builds the integrated image, and starts its own Docker project and data volume. It prints a private setup link to create your account. Model sign-in happens in Settings. On a local computer it opens at `http://127.0.0.1:47831`; on a VPS it uses the hostname you supplied.
+The notebook opens locally at `http://127.0.0.1:47831/dashboard`. On Linux it starts through systemd. Use the Hostinger installation below for a deployment with HTTPS.
 
-The default installation folder is `~/GodspeedMissionControl-v2`. Set `GODSPEED_V2_INSTALL_DIR` to use another empty folder. Re-running the same installer retains your account and data. This download is pinned to the trial version and does not silently follow `main`.
+The default folder is `~/godspeed-v2`. The original installer also accepts `--godspeed` and `--repo`. The downloadable installer pins its notebook source separately from main.
 
 ## One-click Hostinger installation
 
