@@ -13,7 +13,8 @@ import {assistantEnvironment} from '../core/assistant-files.mjs';
 import { FileSync } from '../core/sync/git.mjs';
 import {conflictView,resolveSavedConflict} from '../core/conflicts.mjs';
 import { SyncRunner } from '../core/sync/runner.mjs';
-import { backup, restore,restoreSeparateCopy } from '../core/archives.mjs';
+import { backup, restore } from '../core/archives.mjs';
+import {RecoveryRunner} from '../core/recovery-runner.mjs';
 import { importExport } from '../core/import.mjs';
 import { kinds } from '../core/jobs/scheduler.mjs';
 import { MediaSync } from '../core/sync/media.mjs';
@@ -49,7 +50,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   if (remote && !token) throw new Error('Remote access requires a candidate token');
   const auth = new WebAuth(store.state, { token, remote, now: authNow });
   const menerioImport=new MenerioImport(store,mediaRoot,()=>index.rebuild());
-  const chatRequests=new Map();let dictationBusy=false;
+  const chatRequests=new Map(),recoveryRunner=new RecoveryRunner(store);let dictationBusy=false;
   const loginLinks=new Map();
   const apiKeys=new ApiKeys(store);
   const authorized = req => auth.authorized(req) || pairKeys.includes(hash(String(req.headers['x-godspeed-pair-key']||req.headers.authorization?.replace(/^Bearer /,'')||'')));
@@ -173,7 +174,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       }
       if(route==='/api/restore-copy'&&req.method==='POST'){
         const input=JSON.parse(await body(req));if(!/^\d+$/.test(input.backup_id||''))throw Error('Choose one saved backup');
-        const result=restoreSeparateCopy(store,path.join(store.state,'backups',input.backup_id)),rebuilt=new Store(result.workspace),search=new SearchIndex(rebuilt);try{search.rebuild();}finally{search.close();}return send(res,200,result);
+        const result=await recoveryRunner.run(path.join(store.state,'backups',input.backup_id));return send(res,200,result);
       }
       if(route==='/api/import'&&req.method==='POST')return send(res,200,importExport(query,JSON.parse(await body(req,100*1024*1024))));
       if(route==='/api/export')return send(res,200,{format:1,records:[...store.scan().values()].map(r=>{const copy={...r};delete copy._hash;return copy;})});

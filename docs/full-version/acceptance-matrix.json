@@ -1,6 +1,6 @@
 {
   "format": 2,
-  "checked_at": "2026-10-04T01:52:54.430982+00:00",
+  "checked_at": "2026-10-04T02:10:41.574922+00:00",
   "complete": false,
   "items": [
     {
@@ -30,8 +30,10 @@
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
       "criterion": "Complete each control exposed by People against persisted state",
-      "status": "source only",
-      "evidence": [],
+      "status": "partial",
+      "evidence": [
+        "Normal fictional-person history retains an ended duplicate slot while its canonical corrected preference remains current. Actual closed record and normal history are retained in endpoint-a372e3c-duplicate-claim-history-ui.txt. Other People controls and broad parity remain required."
+      ],
       "required": true,
       "target_test": "Exercise People through its installed entry point and check actual results after restart"
     },
@@ -3918,7 +3920,8 @@
         "Normal development Settings saved a new backup and restored 1250 records/3086 files into retained empty storage at .godspeed/restored-copies/1791073154341-c2c158e5bec0/workspace. No upgrade follows from this evidence yet. Matching fab179a intermediate Windows/development packages were built and retained, not installed; their source suites passed 182 tests plus one platform skip on both platforms.",
         "Matching d22ce059a9d5fb065f95f454ef1718f2e9ceafe2 Windows/development packages installed after verified separate restorations: main 867/2371, endpoint 2828/3878, development 1327/3262. Windows installer 969dd8dd697bab7d9b4ac3139384b662f87a4b3f9863ba3dc81b098d7802945c; development image sha256:6fd220d8df81805bceb59355157bb19928608a488fa76dbf94167e48e2624157. Direct built-image comparison matches all 1565 Windows browser files. Windows installer completed and both health endpoints returned fresh heartbeats. Both source suites passed 188 checks plus one skip. Intermediate installation only.",
         "Matching b6ed312 upgrades followed normal verified empty restorations on Windows main/endpoint and physical development. New conflict source protects current saved bytes and retains all older copies; actual installed resolution remains open.",
-        "Normal installed a372e3c conflict controls retained current bytes and both older copies; actual SHA readback confirms no rollback of the 5/5 goal outcome. Fresh retained empty restorations preceded matching Windows/development upgrades. Broader paired conflict/reconnect acceptance remains open."
+        "Normal installed a372e3c conflict controls retained current bytes and both older copies; actual SHA readback confirms no rollback of the 5/5 goal outcome. Fresh retained empty restorations preceded matching Windows/development upgrades. Broader paired conflict/reconnect acceptance remains open.",
+        "Normal Windows empty restoration verified main 877/2383 and endpoint 3318/4370. Development synchronous restoration failed after three actual supervisor health timeouts and one restart; partial copy retained. Worker source preserves responsive timers, exact binary bytes and one concurrent result, with seven passing worker/server checks. Normal installed worker recovery remains required."
       ],
       "required": true,
       "target_test": "Repeat recovery/link checks on final matching Windows/VPS packages; accept offline edits, reconnection, retained conflicts and preserved choices/pauses."

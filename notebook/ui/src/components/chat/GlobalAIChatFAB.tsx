@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo, lazy, Suspense } from "react";
 import { flushNoteSave, applyNoteEdit, applyNoteEditVerified, hashNoteContent } from "@/lib/note-ai-edit";
 import { toast } from "sonner";
+import { readScopedChat, updateScopedChat, persistScopedChat } from "@/local/scoped-chat-state.mjs";
 
 
 import { Link, useLocation } from "react-router-dom";
@@ -158,9 +159,14 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
   useEffect(()=>{let active=true;setContextTitle(noteTitle||'');if(noteId&&noteTitle===undefined)supabase.from('notes').select('*').eq('id',noteId).single().then(({data}:any)=>{if(active&&data)setContextTitle(data.title||'Untitled note');});else if(personId)supabase.from('contacts').select('*').eq('id',personId).single().then(({data}:any)=>{if(active&&data)setContextTitle(data.name||'Current person');});return()=>{active=false;};},[noteId,personId,noteTitle]);
 
   // Persisted chat state for the current context
-  const [state, setState] = useState<PersistedChatState>(() =>
-    loadChatState(user?.id, contextKey),
+  const chatKey = `${user?.id ?? "anon"}|${contextKey}`;
+  const [chatBinding,setChatBinding] = useState<{key:string;state:PersistedChatState}>(() =>
+    ({key:chatKey,state:loadChatState(user?.id,contextKey)}),
   );
+  const state:PersistedChatState=readScopedChat(chatBinding,chatKey,()=>loadChatState(user?.id,contextKey));
+  const setState=useCallback((update:PersistedChatState|((previous:PersistedChatState)=>PersistedChatState))=>{
+    setChatBinding(previous=>updateScopedChat(previous,chatKey,update,()=>loadChatState(user?.id,contextKey)));
+  },[chatKey,user?.id,contextKey]);
 
   // Re-hydrate when context (note or general) changes
   useEffect(() => {
@@ -170,8 +176,8 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
 
   // Persist on every change
   useEffect(() => {
-    saveChatState(user?.id, contextKey, state);
-  }, [state, contextKey, user?.id]);
+    persistScopedChat(chatBinding,chatKey,(saved:PersistedChatState)=>saveChatState(user?.id,contextKey,saved));
+  }, [chatBinding,chatKey,contextKey,user?.id]);
 
   // Keyboard shortcut: Cmd/Ctrl+Shift+K; Escape steps size down before closing
   useEffect(() => {
@@ -226,7 +232,6 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
   // moves between notes, and a reply takes 10 to 30 seconds: applying it to
   // whatever conversation is open by then replaced that one's saved history
   // with the other's, and the conversation that asked never got its answer.
-  const chatKey = `${user?.id ?? "anon"}|${contextKey}`;
   const chatKeyRef = useRef(chatKey);
   useEffect(() => {
     chatKeyRef.current = chatKey;
@@ -239,7 +244,7 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
       if (chatKeyRef.current === key) setState(next);
       else saveChatState(userId, ctx, next);
     },
-    [],
+    [setState],
   );
 
   /** Fold older turns into the summary after the reply is shown, without holding it back. */
@@ -260,7 +265,7 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
           summarizingRef.current = false;
         });
     },
-    [],
+    [setState],
   );
 
   const sendMessage = useCallback(async () => {
