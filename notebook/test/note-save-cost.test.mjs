@@ -24,8 +24,9 @@ test('saving a note reads the workspace once, not once per step of the write',as
     const result=await response.json();
     assert.equal(response.status,200,'the save must succeed: '+JSON.stringify(result));
     // A full read of the vault is the whole cost of a save on a real
-    // workspace. One to see the records, one to pick up what was written.
-    assert.ok(counts.reads<=2,'a save read the whole workspace '+counts.reads+' times; at most 2 are needed');
+    // workspace. One read to see the records is enough: the save knows what it
+    // wrote, so reading everything again to pick that up doubled the cost.
+    assert.equal(counts.reads,1,'a save read the whole workspace '+counts.reads+' times; once is enough');
     // The search index is rebuilt from every record and every workspace file.
     // Waiting for that before answering made a save cost half a second more
     // than the save itself, and making the next search wait for it instead

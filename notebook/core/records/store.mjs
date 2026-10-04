@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID, createHash } from 'node:crypto';
 import { durable,durableRoots,durableFiles } from '../file-policy.mjs';
+const CACHE_BYTES = 1024 * 1024 * 1024;
 
 export const hash = value => createHash('sha256').update(Buffer.isBuffer(value) || typeof value === 'string' ? value : JSON.stringify(value)).digest('hex');
 export const slug = value => String(value).normalize('NFKD').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 80) || 'record';
@@ -116,7 +117,12 @@ export class Store {
           const text=fs.readFileSync(file,'utf8'),cached=priorCache.get(file),same=cached?.text===text;
           const record=same?structuredClone(cached.record):decode(text,file),key=record.type+'/'+record.id;
           if(!same)record._hash=hash(encode(record));
-          const bytes=text.length*2;if(cachedBytes+bytes<=16*1024*1024&&nextCache.size<10000){nextCache.set(file,same?cached:{text,record:structuredClone(record)});cachedBytes+=bytes;}
+          // A record left out of the cache is decoded, re-encoded and hashed on
+          // every read. At 16 MB a real imported vault (15,900 records, 63 MB)
+          // kept a third of itself cached and spent a second per request on the
+          // rest, so the cache holds the whole vault up to a size no personal
+          // workspace reaches.
+          const bytes=text.length*2;if(cachedBytes+bytes<=CACHE_BYTES){nextCache.set(file,same?cached:{text,record:structuredClone(record)});cachedBytes+=bytes;}
           if (uids.has(record.uid)) problems.push({ file, error: 'Duplicate UUID', other: uids.get(record.uid) });
           uids.set(record.uid, key); records.set(key, record);
           for (const alias of record.removed_at ? [] : [record.id, ...(record.aliases || [])]) {
@@ -221,7 +227,24 @@ export class Store {
     for(const key of removeKeys){const old=this.records.get(key);if(!old)continue;const file=this.file(old);atomic(path.join(dir,manifest.length+'.before'),fs.readFileSync(file,'utf8'));manifest.push({file:path.relative(this.root,file).replaceAll('\\','/'),delete:true});}
     atomic(path.join(dir, 'manifest.json'), JSON.stringify(manifest));
     atomic(path.join(dir, 'prepared'), tx);
-    this.applyTransaction(dir, manifest); this.scan(true);
+    this.applyTransaction(dir, manifest); this.refreshView(records, removeKeys);
+  }
+  // The commit wrote exactly these files under the writer lock, so the view is
+  // brought up to date from them instead of reading the whole vault again,
+  // which doubled the cost of every save. Each record is decoded from the very
+  // text that went to disk, so the view holds what a fresh read would find.
+  refreshView(records, removeKeys = []) {
+    if (!this.records) return this.scan(true);
+    const view = new Map(this.records), written = new Set();
+    for (const key of removeKeys) view.delete(key);
+    for (const record of records) {
+      const file = this.file(record), text = encode(record), fresh = decode(text, file);
+      fresh._hash = hash(encode(fresh)); view.set(fresh.type + '/' + fresh.id, fresh); written.add(file);
+      this.decodedCache?.set(file, { text, record: structuredClone(fresh) });
+    }
+    // The commit validated every reference of the new state before writing.
+    this.problems = (this.problems || []).filter(p => p.file && !written.has(p.file) && p.error !== 'Missing or inconsistent reference');
+    this.records = view; this.lastScan = new Date().toISOString(); return view;
   }
   applyTransaction(dir, manifest) {
     for (let i = 0; i < manifest.length; i++) {
