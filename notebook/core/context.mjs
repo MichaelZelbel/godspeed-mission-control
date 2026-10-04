@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { durable } from './file-policy.mjs';
+import { shared } from './file-policy.mjs';
 function privateFile(relative,text){
   // Blind comparison keys remain available to their owner and recovery, but
   // must never reveal the side assignment in ordinary assistant context.
@@ -15,7 +15,7 @@ export function fileContext(store,limit=40000){
     const target=path.join(store.root,relative);if(!fs.existsSync(target))return;
     const info=fs.lstatSync(target);if(info.isSymbolicLink())return;
     if(info.isDirectory()){for(const name of fs.readdirSync(target))if(remaining>0)walk(path.posix.join(relative,name));}
-    else if(remaining>0&&durable(relative)&&/\.(md|json|jsonl|csv|txt)$/.test(relative)){
+    else if(remaining>0&&shared(relative)&&/\.(md|json|jsonl|csv|txt)$/.test(relative)){
       const full=fs.readFileSync(target,'utf8');if(privateFile(relative,full))return;
       const text=full.slice(0,remaining);result.push({path:relative,content:text});remaining-=text.length;
     }

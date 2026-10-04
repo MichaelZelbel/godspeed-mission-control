@@ -6,7 +6,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { Store } from '../core/records/store.mjs';
 import { FileSync } from '../core/sync/git.mjs';
-import { durable } from '../core/file-policy.mjs';
+import { durable, shared } from '../core/file-policy.mjs';
 const git=(cwd,...args)=>execFileSync('git',args,{cwd,encoding:'utf8',windowsHide:true,stdio:['ignore','pipe','pipe']}).trim();
 
 function workspace(){
@@ -39,8 +39,11 @@ test('the assistant state archive is never staged for the knowledge repository',
   assert.ok(tracked.some(name=>name.startsWith('records/notes/')),'notes must still be synced: '+tracked.join(' '));
   assert.ok(tracked.includes(current.replaceAll(path.sep,'/')),'the current assistant snapshot must still be synced');
   assert.deepEqual(tracked.filter(name=>name.startsWith('assistant-state/history/')),[],'the history archive must not be synced');
-  assert.equal(durable('assistant-state/history/'+profile+'/x/y.json'),false,'history is not durable shared state');
-  assert.equal(durable(current.replaceAll(path.sep,'/')),true,'the current snapshot stays durable shared state');
+  // The archive is still written and still backed up on this machine; what it
+  // stops being is something that leaves the machine.
+  assert.equal(durable('assistant-state/history/'+profile+'/x/y.json'),true,'the assistant must still be able to write its archive');
+  assert.equal(shared('assistant-state/history/'+profile+'/x/y.json'),false,'the archive must not leave this machine');
+  assert.equal(shared(current.replaceAll(path.sep,'/')),true,'the current snapshot stays shared state');
 });
 
 // Michael's server had already committed the archive before it became private.

@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import {durableRoots,durableFiles,durable} from '../file-policy.mjs';
+import {durableRoots,durableFiles,shared} from '../file-policy.mjs';
 import {hash,decode,encode} from '../records/store.mjs';
 
 export class SearchIndex {
@@ -15,7 +15,7 @@ export class SearchIndex {
     this.generation=(this.generation||0)+1;
     this.store.scan(); const documents=[];
     for (const r of this.store.records.values()) if (!r.removed_at) documents.push([r.uid,r.type,r.id,r.title||r.name||r.id,JSON.stringify(r)]);
-    const visit=relative=>{const absolute=path.join(this.store.root,relative);if(!fs.existsSync(absolute))return;const stat=fs.lstatSync(absolute);if(stat.isSymbolicLink())return;if(stat.isDirectory()){for(const name of fs.readdirSync(absolute))if(durable(relative+'/'+name))visit(relative+'/'+name);}else if(stat.size<=512*1024&&/\.(md|json|jsonl|txt)$/.test(relative))documents.push(['file-'+hash(relative),'workspace_file',relative,relative,fs.readFileSync(absolute,'utf8')]);};
+    const visit=relative=>{const absolute=path.join(this.store.root,relative);if(!fs.existsSync(absolute))return;const stat=fs.lstatSync(absolute);if(stat.isSymbolicLink())return;if(stat.isDirectory()){for(const name of fs.readdirSync(absolute))if(shared(relative+'/'+name))visit(relative+'/'+name);}else if(stat.size<=512*1024&&/\.(md|json|jsonl|txt)$/.test(relative))documents.push(['file-'+hash(relative),'workspace_file',relative,relative,fs.readFileSync(absolute,'utf8')]);};
     for(const name of [...durableRoots.filter(r=>r!=='records'),...durableFiles])visit(name);
     return this.replace(documents);
   }
@@ -68,7 +68,7 @@ export class SearchIndex {
       const absolute=path.join(this.store.root,relative);let stat;
       try{stat=await io.lstat(absolute);}catch(error){if(error.code==='ENOENT')return;throw error;}
       if(stat.isSymbolicLink())return;
-      if(stat.isDirectory()){for(const entry of await entries(absolute))if(durable(relative+'/'+entry.name))await visit(relative+'/'+entry.name);}
+      if(stat.isDirectory()){for(const entry of await entries(absolute))if(shared(relative+'/'+entry.name))await visit(relative+'/'+entry.name);}
       else if(stat.size<=512*1024&&/\.(md|json|jsonl|txt)$/.test(relative)){
         try{documents.push(['file-'+hash(relative),'workspace_file',relative,relative,await io.readFile(absolute,'utf8')]);}catch(error){if(error.code!=='ENOENT')throw error;}
       }

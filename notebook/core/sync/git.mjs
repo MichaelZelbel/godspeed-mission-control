@@ -3,7 +3,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { Store, atomic, decode, hash } from '../records/store.mjs';
-import { durable,durableRoots,durableFiles,devicePrivatePaths } from '../file-policy.mjs';
+import { shared,durableRoots,durableFiles,devicePrivatePaths } from '../file-policy.mjs';
 import {validateAssistantFiles} from '../assistant-files.mjs';
 import {resolveSavedConflict} from '../conflicts.mjs';
 
@@ -34,7 +34,7 @@ export class FileSync {
   // leaving the file itself on disk, so an existing installation gets the same
   // fast commit as a new one.
   untrackPrivate(){
-    const tracked=this.gitBytes(['ls-files','-z']).toString('utf8').split('\0').filter(name=>name&&name!=='.gitignore'&&!durable(name));
+    const tracked=this.gitBytes(['ls-files','-z']).toString('utf8').split('\0').filter(name=>name&&name!=='.gitignore'&&!shared(name));
     for(let i=0;i<tracked.length;i+=200)this.git(['rm','--cached','--quiet','-r','--',...tracked.slice(i,i+200)]);
     return tracked.length;
   }
@@ -45,9 +45,9 @@ export class FileSync {
     // device-private is the one staged change about a private path that is
     // correct, and the guard must not read it as an attempt to sync one.
     const staged=this.git(['diff','--cached','--name-only','--diff-filter=d']);
-    if(staged.split('\n').some(n=>n&&!durable(n)&&n!=='.gitignore'))throw new Error('Sync repository contains staged files outside durable state');
+    if(staged.split('\n').some(n=>n&&!shared(n)&&n!=='.gitignore'))throw new Error('Sync repository contains staged files outside durable state');
     this.git(['add','--',...durableRoots.filter(r=>fs.existsSync(path.join(this.store.root,r))),...durableFiles.filter(r=>fs.existsSync(path.join(this.store.root,r))),'.gitignore']);
-    if(this.git(['diff','--cached','--name-only','--diff-filter=d']).split('\n').some(n=>n&&!durable(n)&&n!=='.gitignore'))throw new Error('A private path was staged; sync stopped');
+    if(this.git(['diff','--cached','--name-only','--diff-filter=d']).split('\n').some(n=>n&&!shared(n)&&n!=='.gitignore'))throw new Error('A private path was staged; sync stopped');
     if(this.git(['diff','--cached','--name-only']))this.git(['commit','-m','Save Godspeed Mission Control records']);
   }
   reconcile(){
@@ -78,7 +78,7 @@ export class FileSync {
           ...this.gitBytes(['diff','--name-only','-z']).toString('utf8').split('\0'),
           ...this.gitBytes(['diff','--cached','--name-only','-z']).toString('utf8').split('\0'),
           ...this.gitBytes(['ls-files','--others','--exclude-standard','-z']).toString('utf8').split('\0')
-        ].filter(name=>name&&(durable(name)||name==='.gitignore'))).size);
+        ].filter(name=>name&&(shared(name)||name==='.gitignore'))).size);
         this.last={state:pending?'pending':'synced',at:new Date().toISOString(),pending,...(pending?{detail:'New local edits will upload on the next synchronization cycle.'}:{})};
     }catch(error){this.last={state:this.pendingConflicts().length?'conflict':'pending',at:new Date().toISOString(),error:'Sync did not complete; local files remain available',detail:error.message==='Workspace is being written by another process'?'The assistant is saving its state.':String(error.message).split('\n')[0]};}
     atomic(path.join(this.store.state,'sync-status.json'),JSON.stringify(this.last,null,2));return this.last;
@@ -102,7 +102,7 @@ export class FileSync {
           const previous=fs.existsSync(saved)?JSON.parse(fs.readFileSync(saved,'utf8')):null;
           if(previous?.resolved_at&&previous.remote_commit===remoteCommit){
             const live=path.resolve(this.store.root,name),target=path.resolve(dir,name);
-            if(!durable(name)||!live.startsWith(this.store.root+path.sep)||!target.startsWith(dir+path.sep))throw new Error('Invalid conflict path');
+            if(!shared(name)||!live.startsWith(this.store.root+path.sep)||!target.startsWith(dir+path.sep))throw new Error('Invalid conflict path');
             atomic(target,fs.readFileSync(live));this.git(['add','--',name],dir);continue;
           }
           const versions={base:read(1),local:read(2),remote:read(3)},binary=Object.values(versions).some(v=>v&&(v.includes(0)||!Buffer.from(v.toString('utf8')).equals(v)));
@@ -120,7 +120,7 @@ export class FileSync {
       if(removed.some(key=>![...merged.records.values()].some(r=>r.uid===this.store.records.get(key).uid&&(r.aliases||[]).includes(this.store.records.get(key).id))))throw new Error('Remote removal without a tombstone or proven rename needs review: '+removed.join(', '));
       const batch=[...merged.records.values()].filter(r=>this.store.records.get(r.type+'/'+r.id)?._hash!==r._hash).map(r=>{const value={...r};delete value._hash;return value;});
       if(batch.length||removed.length)this.store.commit(batch,{removeKeys:removed});
-      const documents=this.git(['ls-files'],dir).split('\n').filter(n=>durable(n)&&!n.startsWith('records/')).map(file=>({file,text:fs.readFileSync(path.join(dir,file))})).filter(item=>!fs.existsSync(path.join(this.store.root,item.file))||!fs.readFileSync(path.join(this.store.root,item.file)).equals(item.text));
+      const documents=this.git(['ls-files'],dir).split('\n').filter(n=>shared(n)&&!n.startsWith('records/')).map(file=>({file,text:fs.readFileSync(path.join(dir,file))})).filter(item=>!fs.existsSync(path.join(this.store.root,item.file))||!fs.readFileSync(path.join(this.store.root,item.file)).equals(item.text));
       if(documents.length)this.store.publishFiles(documents);
       const commit=this.git(['rev-parse','HEAD'],dir);
       // Files are already published through the recoverable transaction. Move only Git's head/index.

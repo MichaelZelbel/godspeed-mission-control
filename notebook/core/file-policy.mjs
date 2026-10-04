@@ -9,4 +9,10 @@ export const durableFiles=['AGENTS.md','CLAUDE.md','README.md','procedures.md','
 // and then failed.
 export const devicePrivatePaths=['assistant-state/history'];
 export function devicePrivate(name){const value=String(name).split('\\').join('/');return devicePrivatePaths.some(p=>value===p||value.startsWith(p+'/'));}
-export function durable(name){return !name.split('/').some(p=>p==='..'||p.startsWith('.')||/^(secrets|node_modules)$/i.test(p))&&!devicePrivate(name)&&(durableRoots.some(root=>name.startsWith(root+'/'))||durableFiles.includes(name));}
+// durable: may be written through the transaction writer and belongs in this
+// machine's own backups. shared: also leaves this machine, into the knowledge
+// repository, the search index and the AI's context. The archive is the first
+// path that is one without being the other, so the two had to stop being the
+// same question.
+export function durable(name){return !name.split('/').some(p=>p==='..'||p.startsWith('.')||/^(secrets|node_modules)$/i.test(p))&&(durableRoots.some(root=>name.startsWith(root+'/'))||durableFiles.includes(name));}
+export function shared(name){return durable(name)&&!devicePrivate(name);}
