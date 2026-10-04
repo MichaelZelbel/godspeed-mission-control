@@ -1,15 +1,20 @@
 import {spawn} from 'node:child_process';
+import fs from 'node:fs';
 import {hash} from './records/store.mjs';
 import {assistantEnvironment} from './assistant-files.mjs';
 import {hermesResponse,hermesFailureMessage} from './runtime.mjs';
 
 // A transport adapter only: Hermes owns its conversation, tools and agent loop.
-export function nativeAgent({executable,home,cwd,spawnProcess=spawn}){
+export function nativeAgent({executable,home,cwd,providerFile,spawnProcess=spawn}){
  return input=>new Promise((resolve,reject)=>{
   const args=['chat','--query-file','-','--quiet','--oneshot','--in',cwd,'--continue','godspeed-notebook-'+hash(input.conversation_id||input.note_id||'general').slice(0,24),'--create-if-missing','--no-restore-cwd'];
-  if(input.model)args.push('--model',input.model);
+  const provider=providerFile&&fs.existsSync(providerFile)?JSON.parse(fs.readFileSync(providerFile,'utf8')):null;
+  if(input.model||provider?.model)args.push('--model',input.model||provider.model);
+  if(provider)args.push('--provider','openai-api');
   if(input.effort)args.push('--reasoning',input.effort);
-  const child=spawnProcess(executable,args,{cwd,windowsHide:true,detached:process.platform!=='win32',shell:false,env:assistantEnvironment({home,workspace:cwd}),stdio:['pipe','pipe','pipe']});
+  const env=assistantEnvironment({home,workspace:cwd});env.GODSPEED_FILE_HERMES='0';
+  if(provider){env.OPENAI_API_KEY=provider.key;env.OPENAI_BASE_URL=provider.url.replace(/\/chat\/completions\/?$/,'');}
+  const child=spawnProcess(executable,args,{cwd,windowsHide:true,detached:process.platform!=='win32',shell:false,env,stdio:['pipe','pipe','pipe']});
   let output='',diagnostic='',settled=false;
   const stop=()=>{if(process.platform==='win32')spawn('taskkill',['/pid',String(child.pid),'/T','/F'],{windowsHide:true,stdio:'ignore'});else try{process.kill(-child.pid,'SIGTERM');}catch{child.kill('SIGTERM');}};
   const finish=(error,result)=>{if(settled)return;settled=true;input.signal?.removeEventListener('abort',abort);error?reject(error):resolve(result);};

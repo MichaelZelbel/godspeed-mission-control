@@ -8,6 +8,7 @@ if [ "$(id -u)" = 0 ]; then
 fi
 export GODSPEED_COACH_GIT_SYNC=off GODSPEED_JOURNAL_GIT_SYNC=off
 export GODSPEED_FILE_HERMES=1 GODSPEED_NODE=/usr/local/bin/node
+if [ "${GODSPEED_ORIGINAL_RUNTIME:-}" = on ]; then export GODSPEED_FILE_HERMES=0; fi
 export GODSPEED_ASSISTANT_PUBLISHER=/opt/godspeed/kit/notebook/scripts/save-assistant-state.mjs
 export PYTHONPATH=/opt/godspeed/kit/notebook/assistant-files${PYTHONPATH:+:$PYTHONPATH}
 node /opt/godspeed/kit/notebook/bin/godspeed.mjs init >/dev/null

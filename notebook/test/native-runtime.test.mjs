@@ -5,6 +5,7 @@ test('notebook transport preserves the real Hermes agent loop, tools and named c
  let captured;const agent=nativeAgent({executable:'hermes',home:'fixture-home',cwd:'fixture-workspace',spawnProcess:(exe,args,options)=>{captured={exe,args,options};const child=new EventEmitter();child.stdin=new PassThrough();child.stdout=new PassThrough();child.stderr=new PassThrough();child.stdin.on('data',data=>{assert.equal(String(data),'Fictional question');queueMicrotask(()=>{child.stdout.write('Fictional reply');child.emit('close',0);});});return child;}});
  assert.equal((await agent({message:'Fictional question',conversation_id:'fictional-thread'})).reply,'Fictional reply');
  assert.equal(captured.exe,'hermes');assert.ok(captured.args.includes('--continue'));assert.ok(captured.args.includes('--create-if-missing'));assert.equal(captured.args.includes('--max-turns'),false);assert.equal(captured.args.includes('--toolsets'),false);
+ assert.equal(captured.options.env.GODSPEED_FILE_HERMES,'0');
 });
 test('Godspeed chat uses native Hermes rather than the notebook action planner while memory stays connected',async t=>{
  const store=new Store(fixture(t)),domains=new Domains(new QueryService(store),{provider:()=>assert.fail('Replacement planner ran')});domains.nativeAgent=async input=>({reply:'Original agent '+input.message});

@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Main's shared installer, followed by the integrated notebook connection.
 set -euo pipefail
-ENGINE=https://raw.githubusercontent.com/MichaelZelbel/kit-bootstrap/e81519b362864ccc6d2614ce3fc141c6f82131f2/setup-godspeed.sh
+ENGINE=https://raw.githubusercontent.com/MichaelZelbel/kit-bootstrap/180321af33ca98e7afbc572f993320290eb7466a/setup-godspeed.sh
 STARTER=https://github.com/MichaelZelbel/godspeed-mission-control.git
-KB_BRANCH=e81519b362864ccc6d2614ce3fc141c6f82131f2
+KB_BRANCH=180321af33ca98e7afbc572f993320290eb7466a
 export KB_BRANCH
 root=${GODSPEED_V2_INSTALL_DIR:-$HOME/godspeed-v2}
 args=("$@")
