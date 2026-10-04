@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 /*
- * transcribe.cjs â€” word-level transcription via hyperframes' native Whisper
+ * transcribe.cjs — word-level transcription via hyperframes' native Whisper
  * (replaces the Python ElevenLabs Scribe path; no Python, no API key).
  *
  *   node transcribe.cjs <project-dir> [model] [language]
  * Reads:  <project>/source.mp4 (audio track)
- * Writes: <project>/transcript.json  â€” { text, language_code, words:[{text,start,end,type}] }
+ * Writes: <project>/transcript.json  — { text, language_code, words:[{text,start,end,type}] }
  */
 const path = require("path");
 const fs = require("fs");
@@ -39,11 +39,11 @@ function ensureSource(project) {
 function _usableWords(d) {
   return d && Array.isArray(d.words) && d.words.some((w) => w && "start" in w && "end" in w);
 }
-// Mean loudness of the audio, for the no-speech guard below. Silence â†’ whisper
+// Mean loudness of the audio, for the no-speech guard below. Silence → whisper
 // hallucinates (famously "Thank you."), and the decision gate refuses "no speech".
 function meanVolumeDb(audio) {
   try {
-    // ffmpeg writes volumedetect stats to STDERR â€” capture it (spawnSync, no throw).
+    // ffmpeg writes volumedetect stats to STDERR — capture it (spawnSync, no throw).
     const r = cp.spawnSync(
       "ffmpeg",
       ["-hide_banner", "-nostats", "-i", audio, "-af", "volumedetect", "-f", "null", "-"],
@@ -102,8 +102,8 @@ function main() {
   }
   // Default = multilingual `small`, NOT `small.en`. Per media-use: ".en models
   // mistranslate non-English and mis-handle accented speech; default to small (auto-detects
-  // language)." We hardcoded small.en before â€” it hallucinated a wrong transcript on an
-  // accented speaker. Pass `small.en` only for known-clean-English; tough accents â†’ a larger model.
+  // language)." We hardcoded small.en before — it hallucinated a wrong transcript on an
+  // accented speaker. Pass `small.en` only for known-clean-English; tough accents → a larger model.
   const model = process.argv[3] || process.env.WHISPER_MODEL || "small";
   const language = process.argv[4] || process.env.WHISPER_LANG || "";
   const out = path.join(project, "transcript.json");
@@ -116,7 +116,7 @@ function main() {
     process.exit(2);
   }
 
-  // already in our schema? skip â€” but validate the SHAPE, not just the keys:
+  // already in our schema? skip — but validate the SHAPE, not just the keys:
   // `hyperframes init` drops a whisper.cpp segment/token-format transcript.json
   // (offsets-in-ms, nested tokens) that can carry a `words` key yet poison the
   // compilers. Only a word-level {text,start,end} array counts as normalized.
@@ -141,7 +141,7 @@ function main() {
     }
     if (d && !wordShaped) {
       console.log(
-        "[transcribe] existing transcript.json is NOT word-level (init stub / segment format) â€” regenerating",
+        "[transcribe] existing transcript.json is NOT word-level (init stub / segment format) — regenerating",
       );
     }
   } catch {}
@@ -159,8 +159,8 @@ function main() {
       { stdio: "ignore" },
     );
 
-  // â”€â”€ engine: WhisperX (preferred â€” wav2vec2 forced alignment gives word timings far
-  // tighter than whisper.cpp's segment-interpolated ones; our gates are 80ms-strict) â†’
+  // ── engine: WhisperX (preferred — wav2vec2 forced alignment gives word timings far
+  // tighter than whisper.cpp's segment-interpolated ones; our gates are 80ms-strict) →
   // fallback hyperframes whisper.cpp. Force with TRANSCRIBE_ENGINE=whisper|whisperx.
   let words = null,
     engine = null;
@@ -217,7 +217,7 @@ function main() {
       const wx = [];
       for (const seg of wxJson.segments || [])
         for (const w of seg.words || []) {
-          // alignment occasionally yields a word with no timing (OOV) â€” interpolate from neighbors later; mark null now
+          // alignment occasionally yields a word with no timing (OOV) — interpolate from neighbors later; mark null now
           wx.push({ text: String(w.word || "").trim(), start: w.start, end: w.end, type: "word" });
         }
       // interpolate missing timings from neighbors (rare OOV/number cases)
@@ -239,13 +239,13 @@ function main() {
       } catch {}
     } catch (e) {
       console.error(
-        `[transcribe] whisperx unavailable (${String(e.message || e).slice(0, 160)}) â€” falling back to whisper.cpp`,
+        `[transcribe] whisperx unavailable (${String(e.message || e).slice(0, 160)}) — falling back to whisper.cpp`,
       );
     }
   }
 
   if (!words) {
-    // run hyperframes Whisper â†’ writes a flat word array to <dir>/transcript.json
+    // run hyperframes Whisper → writes a flat word array to <dir>/transcript.json
     const cli = require("./hyperframes-runtime.cjs").resolve().cli;
     const args = ["transcribe", audio, "-d", project, "--json", "--model", model];
     if (language) args.push("--language", language);
@@ -282,8 +282,8 @@ function main() {
     trimmedTail = words.length - keep.length;
     if (trimmedTail > 0) {
       console.error(
-        `[transcribe] âš  trimmed ${trimmedTail} trailing word(s) starting after the audible end ` +
-          `(${ae.speechEnd.toFixed(2)}s; clip ${ae.total.toFixed(2)}s) â€” whisper hallucinates over silent tails.`,
+        `[transcribe] ⚠ trimmed ${trimmedTail} trailing word(s) starting after the audible end ` +
+          `(${ae.speechEnd.toFixed(2)}s; clip ${ae.total.toFixed(2)}s) — whisper hallucinates over silent tails.`,
       );
       words = keep;
     }
@@ -308,22 +308,22 @@ function main() {
       2,
     ),
   );
-  console.log(`[transcribe] ${engine} ${words.length} words â†’ ${out}`);
-  console.log(`[transcribe] text: ${text.slice(0, 160)}${text.length > 160 ? "â€¦" : ""}`);
+  console.log(`[transcribe] ${engine} ${words.length} words → ${out}`);
+  console.log(`[transcribe] text: ${text.slice(0, 160)}${text.length > 160 ? "…" : ""}`);
 
   // No-speech guard: whisper returns confident hallucinations over silence (e.g. the
-  // whole clip as "Thank you."). The decision gate REFUSES "no speech" â€” operationalize
+  // whole clip as "Thank you."). The decision gate REFUSES "no speech" — operationalize
   // it so an agent trusting the transcript can't sail past the gate.
   const meanDb = meanVolumeDb(audio);
   if (meanDb != null && meanDb < -45) {
     console.error(
-      `\n[transcribe] âš  NEAR-SILENT AUDIO â€” mean ${meanDb.toFixed(1)} dB (real speech â‰ˆ -16..-26 dB).`,
+      `\n[transcribe] ⚠ NEAR-SILENT AUDIO — mean ${meanDb.toFixed(1)} dB (real speech ≈ -16..-26 dB).`,
     );
     console.error(
       `  This transcript is almost certainly a Whisper hallucination, NOT real speech.`,
     );
     console.error(
-      `  Per the decision gate, REFUSE "no speech" â€” confirm with \`ffmpeg -i <src> -af silencedetect\`;`,
+      `  Per the decision gate, REFUSE "no speech" — confirm with \`ffmpeg -i <src> -af silencedetect\`;`,
     );
     console.error(`  do NOT author captions from fabricated words.`);
   }
