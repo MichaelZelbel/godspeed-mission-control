@@ -132,3 +132,46 @@ test('a device that only needs to catch up takes the other side as it is',()=>{
   assert.equal(git(remote,'rev-parse','main'),before);
   assert.ok(b.list('notes').some(n=>n.title==='Only on the desktop'));
 });
+
+// One idle round on the imported test server held the workspace for 2.3 s,
+// 2.1 s of it validating a vault that nothing had changed, and a note save
+// waited behind it once a minute.
+test('a sync round with nothing new does not read the whole vault while holding it',()=>{
+  const {a,b}=fixture(),A=new FileSync(a);
+  a.save('notes',{title:'Desktop note',content:'A'});A.reconcile();new FileSync(b).reconcile();A.reconcile();
+  const reads=a.reads;
+  assert.equal(A.reconcile().state,'synced');
+  assert.equal(a.reads-reads,0,'an idle sync round read the whole vault '+(a.reads-reads)+' times');
+});
+
+test('a sync round with a saved conflict still refuses, even with nothing new to upload',()=>{
+  const {a}=fixture(),A=new FileSync(a);
+  fs.mkdirSync(path.join(a.root,'conflicts'),{recursive:true});
+  atomic(path.join(a.root,'conflicts','pending.json'),JSON.stringify({id:'pending',path:'records/notes/x.md'}));
+  assert.equal(A.reconcile().state,'conflict');
+});
+
+test('taking the other side\'s commit that changes nothing does not rebuild the workspace',()=>{
+  const {a,b,remote}=fixture(),A=new FileSync(a),B=new FileSync(b);
+  a.save('notes',{title:'Desktop note',content:'A'});A.reconcile();B.reconcile();A.reconcile();
+  // An older device wraps every head it receives in a merge of its own.
+  git(b.root,'commit','--allow-empty','-m','Merge that changes nothing');git(b.root,'push','origin','HEAD:main');
+  let integrations=0;const integrate=A.integrate.bind(A);A.integrate=(...args)=>{integrations++;return integrate(...args);};
+  const reads=a.reads;
+  assert.equal(A.reconcile().state,'synced');
+  assert.equal(git(a.root,'rev-parse','HEAD'),git(remote,'rev-parse','main'),'this side must stand on the other side\'s commit');
+  assert.equal(integrations,0,'a commit that changes nothing was integrated '+integrations+' times');
+  assert.equal(a.reads-reads,0,'taking a commit that changes nothing read the vault '+(a.reads-reads)+' times');
+});
+
+test('a merge never acts on a view of the vault older than the lock it holds',()=>{
+  const {a,b,note}=fixture(),A=new FileSync(a);
+  b.save('contacts',{name:'Laptop person'});new FileSync(b).reconcile();
+  a.scan();
+  // Between this process reading the vault and taking the lock, another
+  // program saves a note here.
+  const other=new Store(a.root,{device:'desktop'});other.save('notes',{id:note.id,content:'Saved here a moment ago'},other.get('notes',note.id)._hash);
+  assert.equal(A.reconcile().state,'synced');
+  assert.equal(new Store(a.root).get('notes',note.id).content,'Saved here a moment ago','the merge must keep the newer local save');
+  assert.equal(new Store(a.root).list('contacts').length,1);
+});

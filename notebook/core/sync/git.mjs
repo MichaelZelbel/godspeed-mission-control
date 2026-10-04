@@ -73,7 +73,7 @@ export class FileSync {
     return tracked.length;
   }
   commitLocal(){
-    this.validate();
+    if(this.pendingConflicts().length)throw new Error('Resolve saved conflicts before syncing');
     this.writeIgnoreFile();
     this.untrackPrivate();
     // --diff-filter=d leaves out removals: untracking a path that became
@@ -81,7 +81,13 @@ export class FileSync {
     // correct, and the guard must not read it as an attempt to sync one.
     const staged=this.git(['diff','--cached','--name-only','--diff-filter=d']);
     if(staged.split('\n').some(n=>n&&!shared(n)&&n!=='.gitignore'))throw new Error('Sync repository contains staged files outside durable state');
-    this.git(['add','--',...durableRoots.filter(r=>fs.existsSync(path.join(this.store.root,r))),...durableFiles.filter(r=>fs.existsSync(path.join(this.store.root,r))),...(this.gitDir?[]:['.gitignore'])]);
+    const roots=[...durableRoots.filter(r=>fs.existsSync(path.join(this.store.root,r))),...durableFiles.filter(r=>fs.existsSync(path.join(this.store.root,r))),...(this.gitDir?[]:['.gitignore'])];
+    // Validation guards what a commit uploads. With nothing to commit there is
+    // nothing to guard, and reading the whole vault to validate it anyway held
+    // the workspace for a second of every idle round on an imported vault.
+    if(!staged&&!this.git(['status','--porcelain','--untracked-files=all','--',...roots]))return false;
+    this.validate();
+    this.git(['add','--',...roots]);
     if(this.git(['diff','--cached','--name-only','--diff-filter=d']).split('\n').some(n=>n&&!shared(n)&&n!=='.gitignore'))throw new Error('A private path was staged; sync stopped');
     if(this.git(['diff','--cached','--name-only']))this.git(['commit','-m','Save Godspeed Mission Control records']);
   }
@@ -94,7 +100,7 @@ export class FileSync {
           try{if(this.git(['ls-remote','--heads',this.remote,this.branch]))networkError=error;else remoteExists=false;}catch{networkError=error;}
         }
         this.store.withLock(()=>{
-        this.commitLocal();
+        this.commitLocal();let integrated=false;
         if(!networkError&&remoteExists){
         const remoteRef=this.remote+'/'+this.branch,head=this.git(['rev-parse','HEAD']),remoteHead=this.git(['rev-parse',remoteRef]);
         // When the remote already holds everything here there is nothing to
@@ -102,14 +108,22 @@ export class FileSync {
         // as it is. A merge commit in either case gave the other device a new
         // head to merge in turn, and two devices kept doing that forever.
         if(head!==remoteHead&&!this.contains(remoteHead,head)){
-          this.integrate(remoteRef,{fastForward:this.contains(head,remoteHead)});
-          // Transactions publish the canonical record representation. Older
-          // clones can contain CRLF blobs, so commit that local integration
-          // before upload rather than leave a false pending edit behind.
-          this.commitLocal();
+          const fastForward=this.contains(head,remoteHead);
+          // A device on an older version still wraps every head it receives in
+          // a merge of its own. Its content is what is here already, so this
+          // side moves to it without rebuilding the workspace from it.
+          if(fastForward&&this.git(['rev-parse',head+'^{tree}'])===this.git(['rev-parse',remoteHead+'^{tree}']))this.git(['reset','--soft',remoteHead]);
+          else {
+            this.integrate(remoteRef,{fastForward});integrated=true;
+            // Transactions publish the canonical record representation. Older
+            // clones can contain CRLF blobs, so commit that local integration
+            // before upload rather than leave a false pending edit behind.
+            this.commitLocal();
+          }
         }
         }
-        this.validate();
+        // Only an integration changes the workspace after commitLocal looked.
+        if(integrated)this.validate();
         });
         if(networkError)throw networkError;
         this.git(['push',this.remote,'HEAD:refs/heads/'+this.branch]);
@@ -128,6 +142,9 @@ export class FileSync {
     const integrationRoot=path.join(this.store.state,'sync-worktrees'),dir=path.join(integrationRoot,randomUUID());fs.mkdirSync(integrationRoot,{recursive:true});
     if(!path.resolve(dir).startsWith(path.resolve(integrationRoot)+path.sep))throw new Error('Unsafe sync staging path');
     const localHead=this.git(['rev-parse','HEAD']);
+    // The merge compares against this view, so it is read under the lock it
+    // runs in, whatever commitLocal did or skipped before it.
+    this.store.scan(true);
     this.git(['worktree','add','--detach',dir,'HEAD']);
     try {
       // Independently created profiles can look like renames to Git. Their paths
