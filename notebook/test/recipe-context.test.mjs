@@ -12,3 +12,10 @@ test('workflow loading rejects traversal and a linked installation instead of si
  const temporary=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-workflow-boundary-')),store=new Store(path.join(temporary,'chosen')),outside=path.join(temporary,'other');fs.mkdirSync(outside);fs.writeFileSync(path.join(outside,'SKILL.md'),'Private instructions from another installation.');fs.mkdirSync(path.join(store.root,'skills'));fs.symlinkSync(outside,path.join(store.root,'skills','morning-note'),process.platform==='win32'?'junction':'dir');
  assert.throws(()=>recipeContext(store,'../other'),/Invalid workflow/);assert.throws(()=>recipeContext(store,'morning-note'),/another installation|selected workspace/);
 });
+
+test('multi-stage workflows include sibling method documents and nested playbooks without loading executable vendors',()=>{
+ const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-multistage-method-'))),folder=path.join(store.root,'skills','fictional-method');
+ for(const name of ['poster/playbooks','scripts/vendor'])fs.mkdirSync(path.join(folder,name),{recursive:true});
+ fs.writeFileSync(path.join(folder,'SKILL.md'),'Read the complete fictional selected method.');fs.writeFileSync(path.join(folder,'stages.md'),'Stage two must check actual source bytes.');fs.writeFileSync(path.join(folder,'poster/playbooks/fixture.md'),'The fixture post needs actual live URL verification.');fs.writeFileSync(path.join(folder,'scripts/vendor/dependency.md'),'Executable vendor package documentation, not the authored workflow.');
+ const context=recipeContext(store,'fictional-method');assert.ok(context.sources.some(s=>s.path==='stages.md'));assert.ok(context.sources.some(s=>s.path==='poster/playbooks/fixture.md'));assert.equal(context.sources.some(s=>s.path.includes('/vendor/')),false);
+});

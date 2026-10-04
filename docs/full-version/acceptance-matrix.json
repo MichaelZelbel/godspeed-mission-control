@@ -1,6 +1,6 @@
 {
   "format": 2,
-  "checked_at": "2026-10-04T03:35:58.757646+00:00",
+  "checked_at": "2026-10-04T03:46:44.156483+00:00",
   "complete": false,
   "items": [
     {
@@ -3527,8 +3527,10 @@
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
       "criterion": "Translate the post's point into a concrete visual metaphor.\r Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation.",
-      "status": "source only",
-      "evidence": [],
+      "status": "partial",
+      "evidence": [
+        "Full portable four-flow method, all stage documents, licensed helpers and MIT-selected offline pixel runtime now replace the short recipe. Synthetic actual CLI stamping, feed pixels, task retention/resume and paid permission refusal are checked; twelve focused checks and full source suite 259 plus one skip pass. No real paid generation or external reference upload was authorized or performed; full installed quality/judging/account acceptance remains open."
+      ],
       "required": true,
       "target_test": "Exercise social-visuals through its installed entry point and check actual results after restart"
     },
