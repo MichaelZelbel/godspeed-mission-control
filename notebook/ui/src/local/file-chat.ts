@@ -2,7 +2,7 @@ import { toast } from 'sonner';
 const states = new Map<string,any>();
 const queues = new Map<string,Promise<void>>();
 export async function hydrateFileChats(){
-  const r=await fetch('/api/query',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({table:'note_conversations'})});
+  const r=await fetch('/api/query',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({table:'note_conversations'}),signal:AbortSignal.timeout(15000)});
   if(!r.ok)throw new Error('Conversation history could not be loaded');
   const result=await r.json();for(const row of result.data||[])states.set(row.context_key,row.state);
 }

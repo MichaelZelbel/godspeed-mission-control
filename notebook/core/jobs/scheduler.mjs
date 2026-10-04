@@ -44,6 +44,9 @@ export class Scheduler {
         if(ready){await this.store.waitForWriter();this.store.withLock(()=>{const current=this.store.get('jobs',worker.id);if(current?._hash===worker._hash)this.store.commit([this.store.prepare('jobs',{next_run:new Date(now).toISOString()},current)]);});}
       }
       for (const snapshot of this.store.list('jobs')) {
+        // An inactive snapshot cannot authorize execution. A later activation
+        // is picked up on the next tick; active work still rechecks current state.
+        if(snapshot.owner!==this.device||snapshot.paused||Date.parse(snapshot.next_run)>now||snapshot.state==='awaiting_approval')continue;
         settings=this.store.get('settings','installation');
         if(!settings||settings.owner!==this.device)break;
         const job=this.store.get('jobs',snapshot.id);if(!job)continue;

@@ -1,6 +1,6 @@
 {
   "format": 2,
-  "checked_at": "2026-10-04T02:35:17.783885+00:00",
+  "checked_at": "2026-10-04T02:59:54.451488+00:00",
   "complete": false,
   "items": [
     {
@@ -33,7 +33,8 @@
       "status": "partial",
       "evidence": [
         "Normal fictional-person history retains an ended duplicate slot while its canonical corrected preference remains current. Actual closed record and normal history are retained in endpoint-a372e3c-duplicate-claim-history-ui.txt. Other People controls and broad parity remain required.",
-        "Independent fictional note chat after restart retrieved the corrected two-question preference using actual endpoint output. Reopened reply persistence failed and is retained in endpoint-0a009b3-reopened-reply-missing-ui.txt. New durable-reply source must be installed and retested. Broader People and memory parity remains required."
+        "Independent fictional note chat after restart retrieved the corrected two-question preference using actual endpoint output. Reopened reply persistence failed and is retained in endpoint-0a009b3-reopened-reply-missing-ui.txt. New durable-reply source must be installed and retested. Broader People and memory parity remains required.",
+        "Actual installed 0103579 endpoint independent-note chat retrieved the current two-question preference. Reopened history acceptance remains unverified due intermittent loading failure. Earlier closed claim and correction history retained. Broader People controls and memory parity remain required."
       ],
       "required": true,
       "target_test": "Exercise People through its installed entry point and check actual results after restart"
@@ -3775,7 +3776,8 @@
       "criterion": "No empty reminder; one delivery per stage; evidence closes one occurrence and advances once",
       "status": "partial",
       "evidence": [
-        "Normal development fictional recurring obligation closed with actual software-check evidence and created the next deadline seven days later. Evidence: development-a372e3c-fictional-recurring-obligation-ui.txt. Wider reminder/escalation/restart acceptance remains open."
+        "Normal development fictional recurring obligation closed with actual software-check evidence and created the next deadline seven days later. Evidence: development-a372e3c-fictional-recurring-obligation-ui.txt. Wider reminder/escalation/restart acceptance remains open.",
+        "Installed 0103579 automatic fictional cycles delivered exactly one approaching and one overdue notice, closed on separate saved note revision 4 and advanced recurrence once to October 11. Later ticks retained one open child and no extra notices. Normal overdue notice and next occurrence opened. Snooze input did not persist; explicit-save correction is source-only. Paired and no-obligation acceptance remain required. Evidence development-0103579-automatic-overdue-delivery-ui.txt and development-0103579-obligation-postclosure-quiet.json."
       ],
       "required": true,
       "target_test": "Exercise reminders through its installed entry point and check actual results after restart"
@@ -3942,7 +3944,8 @@
       "status": "partial",
       "evidence": [
         "Normal installed Windows subscription chat loaded choices and saved Fictional subscription check after writer-wait correction. VPS subscription chat saved Fictional VPS subscription check. Fresh endpoint generated/checked drafts and recorded goal feedback, coaching, habits, journal and person-specific conversation.",
-        "The normal endpoint-backed worker actually executed read_note and applied its exact approved target, with a retained tool receipt. It read an unrelated briefing and its semantic check accepted that mistake; source-aware and explicit-source mechanical checks now reject this failure in regressions. Correct required-source reading through both installed supported provider paths remains mandatory."
+        "The normal endpoint-backed worker actually executed read_note and applied its exact approved target, with a retained tool receipt. It read an unrelated briefing and its semantic check accepted that mistake; source-aware and explicit-source mechanical checks now reject this failure in regressions. Correct required-source reading through both installed supported provider paths remains mandatory.",
+        "Actual installed 0103579 gpt-5.5 subscription reply survived full navigation/reload; real endpoint model retrieved current corrected fictional-person preference from an independent note. Endpoint reopened history remains unverified during intermittent loading failures. Evidence development-0103579-subscription-reply-after-navigation-ui.txt and endpoint-0103579-independent-memory-reply-ui.txt. Wider provider/tool/slow-sync acceptance remains required."
       ],
       "required": true,
       "target_test": "Inspect actual controlled read/search tool receipts with each claimed provider path, slow sync, restart, retry and cancellation."
