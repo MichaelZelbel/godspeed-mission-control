@@ -4,6 +4,7 @@ import {hash} from './records/store.mjs';
 import {visibleRows} from './visibility.mjs';
 import {fileContext} from './context.mjs';
 import {retrieveNoteWindows} from './retrieval-windows.mjs';
+import {explicitNoteCapture} from './chat-intent.mjs';
 
 // Retrieve a bounded selection instead of sending the entire personal database.
 export function chatContext(query,input){
@@ -42,7 +43,7 @@ function buildChatContext(query,input){
 }
 export async function retrievedContext(query,input,provider){
  const question=String(input.message||input.messages?.at(-1)?.content||'');let context=chatContext(query,input);
- if(!provider||question.length<8||!/(find|remember|recall|search|where|what|who|prepare|erinner|finde|wer|was|suche)/i.test(question))return context;
+ if(!provider||explicitNoteCapture(question)||question.length<8||!/(find|remember|recall|search|where|what|who|prepare|erinner|finde|wer|was|suche)/i.test(question))return context;
  try{
   const raw=await provider({kind:'retrieval-expansion',query:question,signal:input.signal,contract:'Return JSON {terms:[string]} with at most 12 useful synonyms and related concepts for retrieving the user question. Include both languages where useful. Do not answer the question, invent facts or request changes. No personal records are supplied.'});
   const parsed=typeof raw==='string'?JSON.parse(raw.replace(/^```(?:json)?\s*|\s*```$/g,'')):raw;

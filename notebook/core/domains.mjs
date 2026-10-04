@@ -7,6 +7,7 @@ import {Connectors} from './connectors.mjs';
 import {visibleRows,knowledgeContext} from './visibility.mjs';
 import {chatContext,chatAttachments,retrievedContext} from './chat-context.mjs';
 import {personalOperation,conversationOperations,validateConversationOperations,operationContract} from './personal-operations.mjs';
+import {explicitNoteCapture} from './chat-intent.mjs';
 import {importGoalFiles} from './legacy-goals.mjs';
 import {commandWords} from './card-commands.mjs';
 import {leadWords} from './lead-commands.mjs';
@@ -249,9 +250,8 @@ export class Domains {
       }
       const requested=String(input.message||input.messages?.filter(m=>m.role==='user').at(-1)?.content||'');
       await this.store.waitForWriter({signal});
-      const refusal=/\b(?:do not|don.t|never|must not|should not|nicht|niemals)\s+(?:create|make|save|keep|write|capture|add|erstell\w*|speicher\w*)\b/i.test(requested),hypothetical=/\b(?:if I|suppose|hypothetically|for example|someone said|quoted|wenn ich|beispielsweise)\b/i.test(requested);
-      const directAction=/^(?:(?:please|bitte)\s+|(?:can|could|would)\s+you\s+(?:please\s+)?)?(?:create|make|save|keep|write|capture|add|revise|edit|update|rewrite|erstell\w*|speicher\w*|ändere|bearbeite)\b/i.test(requested.trim());
-      if(!directAction||refusal||hypothetical||!/\b(?:create|make|save|keep|write|capture|add|erstell\w*|speicher\w*)\b[\s\S]*\b(?:note|notes|notiz|notizen)\b/i.test(requested))delete structured.notes_created;
+      const hypothetical=/\b(?:if I|suppose|hypothetically|for example|someone said|quoted|wenn ich|beispielsweise)\b/i.test(requested);
+      if(!explicitNoteCapture(requested))delete structured.notes_created;
       if(name==='collection-chat'&&(hypothetical||/\b(?:do not|don.t|never|must not|should not|nicht|niemals)\s+(?:add|create|change|edit|update|remove|delete)\b/i.test(requested)||! /^(?:(?:please|bitte)\s+|(?:can|could|would)\s+you\s+(?:please\s+)?)?(?:add|create|change|edit|update|remove|delete|erstell\w*|ändere|bearbeite|ergänze|lösche)\b/i.test(requested.trim()))){delete structured.items_created;delete structured.item_updates;}
       if(name==='conversation-chat'&&structured.operations?.length)structured.operation_results=conversationOperations(this,input,structured.operations.filter(op=>!(input.retained_coach_reply&&op.type==='coach-reply'&&op.id===input.talk_id)));
       if(name==='note-chat'){
