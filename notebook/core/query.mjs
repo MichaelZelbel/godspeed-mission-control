@@ -4,6 +4,8 @@ import { slug, hash } from './records/store.mjs';
 import {nativeRows} from './native-personal.mjs';
 import {dueRows} from './native-due.mjs';
 import {assertAssistantRecord,assertAssistantLinks} from './assistant-mutations.mjs';
+import {nativeJobs} from './native-scheduler.mjs';
+import {nativeCardRows} from './card-commands.mjs';
 
 const inventory = JSON.parse(fs.readFileSync(fileURLToPath(new URL('../../docs/full-version/source-inventory.json', import.meta.url)), 'utf8'));
 export const tables = new Set(inventory.dependencies.flatMap(d => d.tables).filter(t => t !== 'note-attachments'));
@@ -63,6 +65,8 @@ export class QueryService {
   constructor(store) { this.store = store; }
   withSnapshot(read){if(!this.snapshotDepth)this.store.scan();this.snapshotDepth=(this.snapshotDepth||0)+1;try{return read();}finally{this.snapshotDepth--;}}
   rows(table) {
+    if(table==='jobs'&&this.nativeHermesHome)return nativeJobs(this.nativeHermesHome,this.store.device);
+    if(this.nativeHermesHome&&['goals','forecasts','work_items'].includes(table))return nativeCardRows(this.store,table);
     if(!this.snapshotDepth)this.store.scan();
     const all=[...this.store.records.values()],memo=new Map(),list = type => {
       if(memo.has(type))return memo.get(type);

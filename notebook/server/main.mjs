@@ -30,6 +30,8 @@ import {transcribeRecording} from '../core/dictation.mjs';
 import {durableRoots,durableFiles} from '../core/file-policy.mjs';
 import { WebAuth, safeReturn } from './web-auth.mjs';
 import { MenerioImport } from './menerio-import.mjs';
+import {nativeAgent} from '../core/native-agent.mjs';
+import {NativeScheduler} from '../core/native-scheduler.mjs';
 import {visibleRows} from '../core/visibility.mjs';
 
 export async function createService({ root, mediaRoot, host = '127.0.0.1', port = 47831, token, uiRoot, provider, device = 'local', authNow } = {}) {
@@ -42,7 +44,11 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   if(!provider&&fs.existsSync(assistantPath)){const descriptor=JSON.parse(fs.readFileSync(assistantPath,'utf8').replace(/^\uFEFF/,''));if(descriptor.verified)provider=hermesProvider({executable:descriptor.executable,home:descriptor.home,cwd:store.root,sourceRoot:descriptor.sourceRoot});}
   let schedulerHeartbeat=new Date().toISOString();
   if(provider){const connected=provider;provider=Object.assign(async input=>{schedulerHeartbeat=new Date().toISOString();try{return await connected(input);}finally{schedulerHeartbeat=new Date().toISOString();}},connected);}
-  const domains=new Domains(query,{provider}),scheduler=new Scheduler(store,{device,executor:jobExecutor(provider,query)});scheduler.onProgress=()=>{schedulerHeartbeat=new Date().toISOString();};
+  const originalRuntime=process.env.GODSPEED_ORIGINAL_RUNTIME==='on';
+  const descriptor=originalRuntime&&fs.existsSync(assistantPath)?JSON.parse(fs.readFileSync(assistantPath,'utf8').replace(/^\uFEFF/,'')):null;
+  if(originalRuntime&&!descriptor?.verified)throw Error('Connect the original Godspeed assistant before starting the integrated notebook');
+  const domains=new Domains(query,{provider}),scheduler=originalRuntime?new NativeScheduler(store,{...descriptor,device}):new Scheduler(store,{device,executor:jobExecutor(provider,query)});scheduler.onProgress=()=>{schedulerHeartbeat=new Date().toISOString();};
+  if(originalRuntime){domains.nativeAgent=nativeAgent({...descriptor,cwd:store.root});query.nativeHermesHome=descriptor.home;}
   domains.sync={reconcile:()=>syncRunner.run(),pendingConflicts:()=>sync.pendingConflicts()};
   mediaRoot = path.resolve(mediaRoot || path.join(store.state, 'media')); fs.mkdirSync(mediaRoot, { recursive: true });
   domains.mediaRoot=mediaRoot;
@@ -137,7 +143,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         const response=await mcp(input,{store,query,index,domains,scopes:accessKey?.scopes});if(response===null){res.writeHead(202);return res.end();}index.rebuild();return send(res,200,response);
       }
       if(route==='/api/pair/create'&&req.method==='POST'){if(device!=='vps')throw new Error('Create a pairing code on the candidate VPS');const code=randomBytes(16).toString('hex');pairCodes.set(code,Date.now()+300000);return send(res,200,{code,expires_minutes:5});}
-      if(route==='/api/pair/connect'&&req.method==='POST'){const input=JSON.parse(await body(req));const result=await mediaSync.pair(input.origin,input.code);if(store.get('settings','installation'))scheduler.transfer('vps');return send(res,200,{...result,media:await mediaSync.reconcile()});}
+      if(route==='/api/pair/connect'&&req.method==='POST'){const input=JSON.parse(await body(req));const result=await mediaSync.pair(input.origin,input.code);if(store.get('settings','installation'))await scheduler.transfer('vps');return send(res,200,{...result,media:await mediaSync.reconcile()});}
       if(route==='/api/media/sync'&&req.method==='POST')return send(res,200,await mediaSync.reconcile());
       if(route==='/api/media/offline'&&req.method==='POST'){const input=JSON.parse(await body(req));if(!['all','selected'].includes(input.offline))throw new Error('Choose all or selected media');const config=mediaSync.config();if(!config)throw new Error('Pair this device first');atomic(mediaSync.configPath,JSON.stringify({...config,offline:input.offline,selected:input.selected||[]}));return send(res,200,{ok:true});}
       if(route==='/api/media/manifest')return send(res,200,{data:mediaSync.manifest()});
@@ -164,18 +170,18 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         const input=JSON.parse(await body(req));return send(res,200,{status:await syncRunner.configure(input.url)});
       }
       if(route==='/api/sync/run'&&req.method==='POST')return send(res,200,{status:await syncRunner.run()});
-      if(route==='/api/owner'&&req.method==='POST'){const input=JSON.parse(await body(req));if(!['local','vps'].includes(input.owner))throw new Error('Choose local or VPS owner');scheduler.transfer(input.owner);return send(res,200,{owner:input.owner});}
-      if(route==='/api/delivery'&&req.method==='POST'){const input=JSON.parse(await body(req));if(!['notebook','telegram'].includes(input.delivery)||input.delivery==='telegram'&&!scheduler.deliver)throw new Error('Configure the separate candidate Telegram bot before choosing chat delivery');const settings=store.get('settings','installation');if(!settings)throw new Error('Start with a goal first');store.save('settings',{id:settings.id,delivery:input.delivery});return send(res,200,{delivery:input.delivery});}
+      if(route==='/api/owner'&&req.method==='POST'){const input=JSON.parse(await body(req));if(!['local','vps'].includes(input.owner))throw new Error('Choose local or VPS owner');await scheduler.transfer(input.owner);return send(res,200,{owner:input.owner});}
+      if(route==='/api/delivery'&&req.method==='POST'){const input=JSON.parse(await body(req));if(!['notebook','telegram'].includes(input.delivery)||input.delivery==='telegram'&&!originalRuntime&&!scheduler.deliver)throw new Error('Configure Telegram before choosing chat delivery');const settings=store.get('settings','installation');if(!settings)throw new Error('Start with a goal first');await store.saveAsync('settings',{id:settings.id,delivery:input.delivery});return send(res,200,{delivery:input.delivery});}
       if(route==='/api/conflicts'&&req.method==='GET')return send(res,200,{data:sync.pendingConflicts().map(name=>conflictView(store,name.replace(/\.json$/,''),{assistantPath}))});
       if(route==='/api/conflicts/resolve'&&req.method==='POST'){
         const input=JSON.parse(await body(req));resolveSavedConflict(store,input,{assistantPath});
         return send(res,200,{ok:true});
       }
-      if(route==='/api/setup'&&req.method==='POST'){const input=JSON.parse(await body(req));return send(res,200,{...scheduler.configure({...input,owner:mediaSync.config()?'vps':device}),results:await scheduler.tick()});}
-      if(route==='/api/jobs/run'&&req.method==='POST')return send(res,200,{results:await scheduler.tick()});
+      if(route==='/api/setup'&&req.method==='POST'){const input=JSON.parse(await body(req));return send(res,200,{...await scheduler.configure({...input,owner:mediaSync.config()?'vps':device}),results:await scheduler.tick()});}
+      if(route==='/api/jobs/run'&&req.method==='POST'){const input=JSON.parse(await body(req));return send(res,200,{results:originalRuntime?await scheduler.runNow(input.id):await scheduler.tick()});}
       if(route==='/api/connections/recheck'&&req.method==='POST'){await jobExecutor(provider,query)({kind:'connection-check',id:'manual-connection-check',manual:true},{store,settings:store.get('settings','installation')||{}});return send(res,200,{connections:query.rows('connector_status').map(({id,ok,status,checked_at})=>({id,ok,status,checked_at}))});}
-      if(route==='/api/jobs/update'&&req.method==='POST'){const input=JSON.parse(await body(req));return send(res,200,{data:await controlRoutine(store,input,{device})});}
-      if(route==='/api/jobs/add'&&req.method==='POST'){const input=JSON.parse(await body(req));return send(res,200,{data:await controlRoutine(store,input,{enable:true,device})});}
+      if(route==='/api/jobs/update'&&req.method==='POST'){const input=JSON.parse(await body(req));return send(res,200,{data:originalRuntime?await scheduler.control(input):await controlRoutine(store,input,{device})});}
+      if(route==='/api/jobs/add'&&req.method==='POST'){const input=JSON.parse(await body(req));return send(res,200,{data:originalRuntime?await scheduler.control(input,{enable:true}):await controlRoutine(store,input,{enable:true,device})});}
       if(route==='/api/index/rebuild'&&req.method==='POST'){index.rebuild();return send(res,200,{ok:true});}
       if(route==='/api/backup'&&req.method==='POST')return send(res,200,await backupRunner.run());
       if(route==='/api/backups'&&req.method==='GET'){
@@ -255,7 +261,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   const jobs=setInterval(()=>{if(!menerioImport.mutating)scheduler.tick().catch(()=>{});},30000);
   const syncTimer=setInterval(()=>{if(!menerioImport.mutating&&fs.existsSync(path.join(store.state,'sync-config.json')))void syncRunner.run();},60000);
   const mediaTimer=setInterval(()=>{if(!menerioImport.mutating)mediaSync.reconcile();},60000);
-  const telegram=process.env.GODSPEED_TELEGRAM==='on'&&process.env.GODSPEED_CANDIDATE_BOT_TOKEN&&process.env.GODSPEED_CANDIDATE_BOT_OWNER?new Telegram({store,domains,token:process.env.GODSPEED_CANDIDATE_BOT_TOKEN,owner:process.env.GODSPEED_CANDIDATE_BOT_OWNER,loginLink:process.env.GODSPEED_BROWSER_ORIGIN?destination=>{const code=randomBytes(32).toString('hex');loginLinks.set(code,Date.now()+300000);return process.env.GODSPEED_BROWSER_ORIGIN+'/login/'+code+'?next='+encodeURIComponent(destination);}:undefined}):null;
+  const telegram=!originalRuntime&&process.env.GODSPEED_TELEGRAM==='on'&&process.env.GODSPEED_CANDIDATE_BOT_TOKEN&&process.env.GODSPEED_CANDIDATE_BOT_OWNER?new Telegram({store,domains,token:process.env.GODSPEED_CANDIDATE_BOT_TOKEN,owner:process.env.GODSPEED_CANDIDATE_BOT_OWNER,loginLink:process.env.GODSPEED_BROWSER_ORIGIN?destination=>{const code=randomBytes(32).toString('hex');loginLinks.set(code,Date.now()+300000);return process.env.GODSPEED_BROWSER_ORIGIN+'/login/'+code+'?next='+encodeURIComponent(destination);}:undefined}):null;
   const telegramTimer=telegram?setInterval(()=>{if(!menerioImport.mutating)telegram.tick().catch(()=>{});},3000):null;
   scheduler.deliver=telegram?(id,result)=>telegram.deliver(id,result):null;
   let debounce,indexDebounce;const watchers=new Map();

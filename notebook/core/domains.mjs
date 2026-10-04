@@ -54,6 +54,11 @@ export class Domains {
       if(contact_id)input={...input,contact_id,person_id:contact_id,conversation_id:'notebook:person:'+contact_id};
     }
     if(['conversation-chat','note-chat','collection-chat'].includes(name)&&!input.message)input={...input,message:input.messages?.filter(m=>m.role==='user').at(-1)?.content||''};
+    if(name==='conversation-chat'&&this.nativeAgent){
+      const result=await this.nativeAgent(input);
+      await this.store.saveAsync('conversation_messages',{role:'assistant',content:result.reply,conversation_id:input.conversation_id||null,contact_id:input.contact_id||null,source_app:'hermes'},undefined,{signal:input.signal});
+      return result;
+    }
     if(['conversation-chat','note-chat'].includes(name)){
       const prompt=input.note_id?this.store.get('notes',input.note_id):this.query.rows('conversation_messages').filter(m=>m.role==='assistant'&&m.conversation_id===input.conversation_id).sort((a,b)=>a.created_at.localeCompare(b.created_at)).at(-1),words=String(input.message||'').trim().toLowerCase().split(/[ ,]+/),answers={yes:'done',ja:'done',done:'done',no:'no',nein:'no',skip:'skip'};
       if(prompt?.habit_ids?.length&&words.length&&words.every(w=>answers[w])){

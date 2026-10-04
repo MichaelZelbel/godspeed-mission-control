@@ -42,7 +42,7 @@ for(const folder of ['.claude','.agents']){
 const ignoreFile=path.join(root,'.gitignore');let ignores=fs.readFileSync(ignoreFile,'utf8');
 for(const entry of ['/.godspeed/','/.codex/','/.vscode/','/.agents/','/.claude/skills'])if(!ignores.split(/\r?\n/).includes(entry))ignores+='\n'+entry+'\n';
 atomic(ignoreFile,ignores);
-for(const command of ['goals','work','forecast','due','subs','watch','mail']){
+for(const command of (process.env.GODSPEED_ORIGINAL_RUNTIME==='on'?['mail']:['goals','work','forecast','due','subs','watch','mail'])){
  const bin=path.join(home,'bin','mc-'+command),script=command==='mail'?path.join(kit,'tools','mc-mail.js'):path.join(kit,'notebook','bin','personal-command.mjs'),args=command==='mail'?[]:[command];
  if(process.platform==='win32')atomic(bin+'.cmd','@echo off\r\n"'+process.execPath+'" "'+script+'" '+args.join(' ')+' %*\r\n');
  else {atomic(bin,'#!/bin/sh\nexec '+[process.execPath,script,...args].map(s=>"'"+s.replaceAll("'","'\\''")+"'").join(' ')+' "$@"\n');fs.chmodSync(bin,0o700);}

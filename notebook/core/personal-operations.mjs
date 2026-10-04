@@ -48,6 +48,16 @@ function memoryCorrection(domains,input,subject){
 }
 export function personalOperation(domains,input){
  const {store,query}=domains,type=input.type;
+ if(process.env.GODSPEED_ORIGINAL_RUNTIME==='on'&&['goal-add','goal-change','goal-outcome','forecast-settle'].includes(type)){
+  let card='goals',args;
+  if(type==='goal-add')args=['file','--kind','outcome','--status',input.status||'adopted','--title',required(input.title,'Goal'),'--measure',input.measure||'','--source','Notebook request, '+new Date().toISOString()];
+  else {const table=type==='forecast-settle'?'forecasts':'goals',item=query.rows(table).find(r=>r.id===input.id);if(!item)throw Error('Choose an existing '+table+' item');
+   if(type==='goal-change'){const fields={title:'TITLE',measure:'MEASURE',status:'STATUS'};args=['change',item.id,'--set',Object.entries(fields).filter(([k])=>input[k]!==undefined).map(([k,f])=>f+'='+required(input[k],f)).join(';'),'--why',required(input.reason,'Reason')];}
+   else if(type==='goal-outcome')args=['progress',item.id,'--evidence',required(input.evidence,'Evidence')];
+   else {card='forecast';args=['resolve',item.id,'--outcome',input.observed?'yes':'no','--evidence',required(input.evidence,'Evidence')];}
+  }
+  const result=cardCommand(store,{card,args});return type==='goal-add'?query.rows('goals').find(r=>r.title===input.title):query.rows(card==='goals'?'goals':'forecasts').find(r=>r.id===input.id)||result;
+ }
  if(type==='addon-command'){const result=addonCommand(store,input);if(input.addon!=='headache')ensureNativeSchedules(store,input.addon);return result;}
  if(type==='card-command')return cardCommand(store,input);
  if(type==='due-command')return dueCommand(store,input.args);
