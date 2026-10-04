@@ -32,7 +32,12 @@ export class FileSync {
   // policy has moved on rather than only when sync is first configured. An
   // installation configured before a path became private carried an ignore file
   // that let `git add` put it straight back.
-  ignoreText(){return '*\n'+durableRoots.map(r=>'!'+r+'/\n!'+r+'/**\n').join('')+durableFiles.map(r=>'!'+r+'\n').join('')+devicePrivatePaths.map(r=>r+'/\n').join('')+'**/.*\n!.gitignore\n**/secrets/\n**/node_modules/\n**/*.sqlite*\n**/*.png\n**/*.jpg\n**/*.mp4\n**/*.mp3\n**/*.pdf\n';}
+  // Every parent of a nested durable root needs its own negation: Git does not
+  // look inside a directory it has been told to ignore, so "!routines/journal/"
+  // without "!routines/" meant the journal and the headache log could never be
+  // staged, and `git add` stopped the whole sync over it. The parent negation
+  // only lets Git descend; the leading "*" still ignores its other children.
+  ignoreText(){return '*\n'+[...new Set(durableRoots.flatMap(r=>r.split('/').map((_,i,parts)=>parts.slice(0,i+1).join('/'))))].map(r=>'!'+r+'/\n').join('')+durableRoots.map(r=>'!'+r+'/**\n').join('')+durableFiles.map(r=>'!'+r+'\n').join('')+devicePrivatePaths.map(r=>r+'/\n').join('')+'**/.*\n!.gitignore\n**/secrets/\n**/node_modules/\n**/*.sqlite*\n**/*.png\n**/*.jpg\n**/*.mp4\n**/*.mp3\n**/*.pdf\n';}
   writeIgnoreFile(){
     const file=path.join(this.store.root,'.gitignore'),text=this.ignoreText();
     if(!fs.existsSync(file)||fs.readFileSync(file,'utf8')!==text)atomic(file,text);

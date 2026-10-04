@@ -83,3 +83,21 @@ test('an older ignore file cannot put the archive back',()=>{
   assert.deepEqual(tracked.filter(n=>n.startsWith('assistant-state/history/')),[],'the archive must stay out whatever the ignore file says');
   assert.ok(tracked.some(n=>n.startsWith('records/notes/')),'real records must still be synced');
 });
+
+// durableRoots holds nested paths (routines/journal, routines/headache). The
+// ignore file negated the nested path but never its parent, and Git does not
+// look inside a directory it has been told to ignore, so those roots could not
+// be staged at all: `git add` reported "routines" as ignored and the whole sync
+// stopped. The journal and the headache log were never reaching the repository.
+test('a durable root inside another folder can actually be synced',()=>{
+  const {store,sync,dir}=workspace();
+  fs.mkdirSync(path.join(dir,'routines','journal'),{recursive:true});
+  fs.writeFileSync(path.join(dir,'routines','journal','2026-10-04.md'),'A journal day that has to travel\n');
+  fs.mkdirSync(path.join(dir,'routines','briefing'),{recursive:true});
+  fs.writeFileSync(path.join(dir,'routines','briefing','run.log'),'machine noise that must stay here\n');
+  store.save('notes',{title:'Alongside',content:'Also synced'});
+  sync.commitLocal();
+  const tracked=sync.gitBytes(['ls-files','-z']).toString('utf8').split('\0').filter(Boolean);
+  assert.ok(tracked.includes('routines/journal/2026-10-04.md'),'the nested durable root must be synced: '+tracked.join(' '));
+  assert.deepEqual(tracked.filter(n=>n.startsWith('routines/briefing/')),[],'a sibling that is not a durable root stays out');
+});
