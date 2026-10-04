@@ -203,6 +203,7 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
   }, [page, open, effectiveMode, isMobile, setSizeMode]);
 
   useEffect(()=>{if(open)setState(loadChatState(user?.id,contextKey));},[open]);
+  useEffect(()=>{const changed=(event:Event)=>{if((event as CustomEvent).detail?.key===contextKey)setState(loadChatState(user?.id,contextKey));};window.addEventListener('godspeed:chat-history-updated',changed);return()=>window.removeEventListener('godspeed:chat-history-updated',changed);},[contextKey,user?.id,setState]);
 
   // Focus textarea when opened
   useEffect(() => {

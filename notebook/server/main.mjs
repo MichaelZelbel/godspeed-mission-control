@@ -15,6 +15,7 @@ import {conflictView,resolveSavedConflict} from '../core/conflicts.mjs';
 import { SyncRunner } from '../core/sync/runner.mjs';
 import { backup, restore } from '../core/archives.mjs';
 import {RecoveryRunner} from '../core/recovery-runner.mjs';
+import {saveConversationState,retainCompletedConversation} from '../core/conversation-state.mjs';
 import { importExport } from '../core/import.mjs';
 import { kinds } from '../core/jobs/scheduler.mjs';
 import { MediaSync } from '../core/sync/media.mjs';
@@ -181,10 +182,8 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       if (route === '/api/search') return send(res, 200, { data: index.search(url.searchParams.get('q') || ''), error: null });
       if (route === '/api/query' && req.method === 'POST') { const input=JSON.parse(await body(req)),result=query.execute(input); if(input.operation&&input.operation!=='select')index.rebuild(); return send(res, 200, result); }
       if(route==='/api/chat-state'&&req.method==='POST'){
-        const input=JSON.parse(await body(req));if(typeof input.context_key!=='string'||!Array.isArray(input.state?.messages))throw new Error('Invalid conversation state');
-        const id='chat-'+hash(input.context_key).slice(0,24),old=store.get('note_conversations',id);
-        store.withLock(()=>store.commit([store.prepare('note_conversations',{id,context_key:input.context_key,state:input.state},old),store.prepare('conversation_messages',{context_key:input.context_key,state_snapshot:input.state})]));
-        return send(res,200,{ok:true});
+        const input=JSON.parse(await body(req));
+        await store.waitForWriter();return send(res,200,saveConversationState(store,input));
       }
       if (route === '/api/rpc' && req.method === 'POST') { const input = JSON.parse(await body(req)); const data = query.rpc(input.rpc, input.args); if(!['search_contacts_page','notes_mentioning_people','my_staff_access_log'].includes(input.rpc))index.rebuild(); return send(res, 200, { data, error: null }); }
       if (route === '/api/structural' && req.method === 'POST') { const input = JSON.parse(await body(req)); return send(res, 200, { data: store.structural(input.type, input.id, input.action, input.options), error: null }); }
@@ -225,7 +224,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         if(isChat){const person=input.contact_id||input.person_id||input.personId;if(person){input.contact_id=person;input.person_id=person;input.conversation_id='notebook:person:'+person;}input.message||=input.messages?.filter(m=>m.role==='user').at(-1)?.content||'';input.conversation_id||='notebook:'+(input.note_id?'note:'+input.note_id:input.collection_id?'collection:'+input.collection_id:'general');const sourceId=id?'chat-input-'+id:undefined;if(!sourceId||!store.get('conversation_messages',sourceId))store.save('conversation_messages',{id:sourceId,role:'user',content:input.message,conversation_id:input.conversation_id,note_id:input.note_id||null,contact_id:input.person_id||null,source_app:'notebook-chat'});}
         const controller=new AbortController();if(isChat&&id)chatRequests.set(id,controller);
         if(receiptId)store.save('command_receipts',{id:receiptId,state:'attempted',request_hash:requestHash});
-        try{const data=name.startsWith('mc-api-keys')?apiKeys.invoke(name,input):await domains.invoke(name,{...input,...(isChat?{signal:controller.signal}:{})});await store.waitForWriter();if(receiptId)store.save('command_receipts',{id:receiptId,state:'verified',result:data});index.rebuild();return send(res,200,name==='backfill-media-analysis'?data:{data,error:null});}catch(error){await store.waitForWriter();if(receiptId&&store.get('command_receipts',receiptId)?.state==='attempted')store.save('command_receipts',{id:receiptId,state:'needs_review',error:error.message,...(error.code==='UNAUTHORIZED_OPERATION'?{rejected_operation_type:error.operation_type,source_quote_matches:error.source_quote_matches}:{})});throw error;}finally{if(isChat&&id)chatRequests.delete(id);}
+        try{const data=name.startsWith('mc-api-keys')?apiKeys.invoke(name,input):await domains.invoke(name,{...input,...(isChat?{signal:controller.signal}:{})});await store.waitForWriter();if(isChat)retainCompletedConversation(store,input,data);if(receiptId)store.save('command_receipts',{id:receiptId,state:'verified',result:data});index.rebuild();return send(res,200,name==='backfill-media-analysis'?data:{data,error:null});}catch(error){await store.waitForWriter();if(receiptId&&store.get('command_receipts',receiptId)?.state==='attempted')store.save('command_receipts',{id:receiptId,state:'needs_review',error:error.message,...(error.code==='UNAUTHORIZED_OPERATION'?{rejected_operation_type:error.operation_type,source_quote_matches:error.source_quote_matches}:{})});throw error;}finally{if(isChat&&id)chatRequests.delete(id);}
       }
       if (route.startsWith('/api/')) return send(res, 404, { error: 'Unknown operation' });
       const requested = path.resolve(uiRoot, '.' + route); if (requested !== uiRoot && !requested.startsWith(uiRoot + path.sep)) return send(res, 403, { error: 'Invalid path' });

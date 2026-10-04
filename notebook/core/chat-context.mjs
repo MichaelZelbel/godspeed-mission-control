@@ -6,6 +6,9 @@ import {fileContext} from './context.mjs';
 
 // Retrieve a bounded selection instead of sending the entire personal database.
 export function chatContext(query,input){
+  return query.withSnapshot(()=>buildChatContext(query,input));
+}
+function buildChatContext(query,input){
   const messages=input.messages||[],question=String(input.message||messages.at(-1)?.content||'');
   const stopWords=new Set('the and for with about what which when where have does this that tell show notes note people person please your mein meine meine notizen eine was wie wer wann und mit das die der'.split(' '));
   const terms=[...new Set(question.toLowerCase().match(/[\p{L}\p{N}]{3,}/gu)||[])].filter(t=>!stopWords.has(t));
