@@ -48,7 +48,7 @@ export function hermesResponse(output){
   return output.replace(/\x1b\[[0-9;]*m/g,'').replace(/^Warning: Unknown toolsets: none\r?\n\s*/,'').replace(/^\s*⚠ tirith security scanner enabled but not available[^\n]*\r?\n\s*/,'').trim();
 }
 export function hermesFailureMessage(diagnostic){
-  if(/context length exceeded|context_length_exceeded|maximum context length|cannot compress further/i.test(diagnostic))return 'The AI request exceeded the model context limit. Reduce the selected source scope before retrying.';
+  if(/context length exceeded|context_length_exceeded|maximum context length|cannot compress further|(?:model )?input exceeds (?:the )?context (?:window|limit)/i.test(diagnostic))return 'The AI request exceeded the model context limit. Reduce the selected source scope before retrying.';
   if(/rate_limit_exceeded|rate limit exceeded|too many requests|usage limit reached|quota exceeded|insufficient_quota/i.test(diagnostic))return 'The connected AI account reached a usage limit. Retry after its limit resets.';
   if(/authenticationerror|invalid_api_key|incorrect api key|token expired|unauthorized|authentication failed/i.test(diagnostic))return 'The connected AI account needs sign-in. Check the account in Settings before retrying.';
   return 'The AI request failed. Its private runtime diagnostics are retained for investigation.';

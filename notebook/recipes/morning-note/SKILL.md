@@ -20,6 +20,8 @@ The daily-brief pipeline owns collection/checking/delivery. This method owns the
 
 Use current dated evidence. Never infer a counter, user identity, income, health outcome or successful business result from a draft or old description.
 
+For monitoring evidence, read the latest exact observation for each selected briefing source and the selected finding. Keep older and unrelated observations in storage; they do not belong in every writing request. Do not shorten an original quote or discard the full maintained method to make the request fit. Before delivery, recheck the adopted goals, fresh health, selected evidence, finding state and current method. A changed source requires a new checked draft. Overlapping runs retain identical checked content only once.
+
 ## Choose without making a second plan
 
 When today's saved decision exists, its reasons and necessary user action drive the note. Do not select a competing action or add another item simply because there is room. When no decision exists, compare the adopted charges and attention plan, and retain that choice honestly in the working notes.

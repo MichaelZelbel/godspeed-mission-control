@@ -71,3 +71,39 @@ test('rehearsal preserves file-newer completion evidence without copying the dep
  assert.equal(fs.readFileSync(dependency,'utf8'),before);assert.equal(fs.statSync(dependency).mtimeMs,stamp);assert.equal(fs.readFileSync(path.join(store.root,'due','fictional-date.md'),'utf8'),originalDue);
  assert.equal(new QueryService(new Store(result.rehearsal_workspace)).rows('deadlines').find(d=>d.native_slug==='fictional-date').status,'closed');
 });
+
+
+test('a briefing cannot deliver after its adopted goal or health source changes during judgment',async()=>{
+ for(const change of ['goal','health']){
+  const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-brief-stale-'))),query=new QueryService(store),goal=store.save('goals',{title:'Fictional inspect the source',status:'adopted'}),health=store.save('health_observations',{metric:'Fictional energy',value:6,observed_at:new Date().toISOString()});let checks=0;
+  const provider=async input=>{if(input.kind==='brief-verification'){if(++checks===2){if(change==='goal')store.save('goals',{id:goal.id,status:'paused'});else store.save('health_observations',{id:health.id,value:3});}return {passed:true,reason:'Fictional checker accepted the old snapshot'};}return 'Fictional energy is 6. Inspect the fictional source for the adopted goal.';};
+  await assert.rejects(jobExecutor(provider,query)({kind:'morning-brief',id:'brief-stale-'+change},{store,settings:{}}),/sources changed/);
+  assert.equal(store.list('notes').filter(n=>n.source_app==='morning-brief').length,0);assert.equal(store.list('notifications').length,0);assert.equal(checks,2);
+ }
+});
+
+test('overlapping checked briefings file identical content only once',async()=>{
+ const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-brief-overlap-'))),query=new QueryService(store),provider=async input=>input.kind==='brief-verification'?{passed:true,reason:'Fictional sources checked'}:'No fresh fictional health observations are available. Inspect the fictional source.';
+ const run=jobExecutor(provider,query),results=await Promise.all([run({kind:'morning-brief',id:'brief-one'},{store,settings:{}}),run({kind:'morning-brief',id:'brief-two'},{store,settings:{}})]);
+ assert.equal(store.list('notes').filter(n=>n.source_app==='morning-brief').length,1);assert.equal(store.list('notifications').length,1);assert.equal(results.filter(r=>r.silent).length,1);
+});
+
+
+test('a briefing reads the latest selected finding source without copying unrelated collection history',async()=>{
+ const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-brief-selected-'))),query=new QueryService(store),topic=store.save('watch_topics',{title:'Fictional selected finding',paused:true}),url='https://fictional.invalid/source';
+ const old=store.save('watch_observations',{topic_id:topic.id,url,content:'Older fictional source words',observed_at:new Date(Date.now()-60000).toISOString()}),current=store.save('watch_observations',{topic_id:topic.id,url,content:'Current exact fictional source words',observed_at:new Date().toISOString()});
+ const unrelated=store.save('watch_observations',{topic_id:'fictional-unselected',url:'https://fictional.invalid/unselected',content:'Unselected fictional history '.repeat(20000),observed_at:new Date().toISOString()});
+ store.save('watch_findings',{topic_id:topic.id,what:'A fictional source changed',link:url,status:'pending',score:80,expires:new Date(Date.now()+86400000).toISOString()});
+ const provider=async input=>{if(input.kind==='brief-verification')return {passed:true,reason:'Fictional current evidence checked'};assert.deepEqual(input.context.source_receipts.map(s=>s.id),[current.id]);assert.equal(input.context.source_receipts[0].content,current.content);return 'No fresh fictional health observations are available. A fictional source changed: '+url;};
+ await jobExecutor(provider,query)({kind:'morning-brief',id:'brief-selected'},{store,settings:{}});assert.equal(store.get('watch_observations',old.id).content,old.content);assert.equal(store.get('watch_observations',unrelated.id).content,unrelated.content);
+});
+
+
+test('a changed briefing method or already-delivered selected finding invalidates its checked draft',async()=>{
+ for(const change of ['method','finding']){
+  const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-brief-scope-'))),query=new QueryService(store),folder=path.join(store.root,'skills/morning-note');fs.mkdirSync(folder,{recursive:true});fs.writeFileSync(path.join(folder,'SKILL.md'),'# Fictional briefing method\nRead the selected source.\n');
+  const topic=store.save('watch_topics',{title:'Fictional selected source',paused:true}),finding=store.save('watch_findings',{topic_id:topic.id,what:'Fictional source changed',link:'https://fictional.invalid/source',score:80,status:'pending',expires:new Date(Date.now()+86400000).toISOString()});let checks=0;
+  const provider=async input=>{if(input.kind==='brief-verification'){if(++checks===2){if(change==='method')fs.appendFileSync(path.join(folder,'SKILL.md'),'The user changed the fictional method.\n');else store.save('watch_findings',{id:finding.id,status:'shown'});}return {passed:true,reason:'Fictional checker accepted the previous selected method'};}return 'No fresh fictional health observations are available. Fictional source changed: https://fictional.invalid/source';};
+  await assert.rejects(jobExecutor(provider,query)({kind:'morning-brief',id:'brief-scope-'+change},{store,settings:{}}),/sources changed/);assert.equal(store.list('notes').filter(n=>n.source_app==='morning-brief').length,0);assert.equal(store.list('notifications').length,0);
+ }
+});
