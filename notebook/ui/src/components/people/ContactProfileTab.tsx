@@ -35,6 +35,14 @@ interface ContactProfileTabProps {
 // Shown in the relationships card, not in the facts list, so never a move target.
 const RELATIONSHIP_SLUGS = ["relationships"];
 
+// The Menerio import leaves its own markers in the text it writes, as HTML
+// comments. Markdown passes an HTML comment through as literal text, so
+// "<!-- menerio:facts:start -->" was sitting in the middle of a person's page.
+// Nothing in Godspeed reads these markers; they are machinery, and machinery is
+// not something a person should have to read around.
+function withoutMarkerComments(text: string) {
+  return text.replace(/<!--[\s\S]*?-->/g, "").replace(/\n{3,}/g, "\n\n").trim();
+}
 export function ContactProfileTab({
   contactId,
   contactName,
@@ -121,7 +129,7 @@ export function ContactProfileTab({
             </div>
           ) : notes ? (
             <div className="text-sm [overflow-wrap:anywhere]">
-              <ReactMarkdown remarkPlugins={chatMarkdownPlugins} components={chatMarkdownComponents}>{notes}</ReactMarkdown>
+              <ReactMarkdown remarkPlugins={chatMarkdownPlugins} components={chatMarkdownComponents}>{withoutMarkerComments(notes)}</ReactMarkdown>
             </div>
           ) : (
             <p className="text-sm text-muted-foreground">No notes yet.</p>
