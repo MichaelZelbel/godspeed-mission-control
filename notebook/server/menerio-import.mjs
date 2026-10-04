@@ -4,6 +4,12 @@ import {randomUUID} from 'node:crypto';
 import {Worker} from 'node:worker_threads';
 import {atomic} from '../core/records/store.mjs';
 const refuse=(message,status=400)=>Object.assign(new Error(message),{status});
+// A preview is a copy of somebody's account taken at a moment, and importing a
+// stale one would quietly write yesterday's version over today's. It is good for
+// a day. Past that the status says so, because a screen that still shows the
+// count and the button can do nothing but refuse.
+const PREVIEW_GOOD_FOR_MS=86400000;
+const previewExpired=job=>job?.state==='ready'&&Date.now()-Date.parse(job.startedAt)>PREVIEW_GOOD_FOR_MS;
 export class MenerioImport {
   constructor(store,mediaRoot,onComplete=()=>{}){
     this.store=store;this.mediaRoot=mediaRoot;this.onComplete=onComplete;
@@ -15,7 +21,11 @@ export class MenerioImport {
   read(){return fs.existsSync(this.file)?JSON.parse(fs.readFileSync(this.file,'utf8')):null;}
   save(job){atomic(this.file,JSON.stringify(job));fs.chmodSync(this.file,0o600);}
   get mutating(){return this.read()?.state==='importing';}
-  status(){const config=this.config();return {prepared:!!config.bundle&&fs.existsSync(config.bundle),connected:!!config.credentials,job:this.read()};}
+  status(){
+    const config=this.config(),job=this.read();
+    return {prepared:!!config.bundle&&fs.existsSync(config.bundle),connected:!!config.credentials,
+      job:previewExpired(job)?{id:job.id,state:'expired',startedAt:job.startedAt,error:'This preview is more than a day old. Prepare a new preview to see what would change now.'}:job};
+  }
   async start(input){
     if(this.worker)throw refuse('A copy is already running. Wait for it to finish.',409);
     let job,mode,prepared,credentials;
@@ -32,7 +42,7 @@ export class MenerioImport {
       fs.mkdirSync(path.join(this.root,job.id),{mode:0o700});
     }else if(input.action==='apply'){
       job=this.read();if(!job||job.id!==input.id||job.state!=='ready')throw refuse('Prepare a new preview before importing.',409);
-      if(Date.now()-Date.parse(job.startedAt)>86400000)throw refuse('This preview expired. Prepare a new preview.',409);
+      if(previewExpired(job))throw refuse('This preview is more than a day old. Prepare a new preview to see what would change now.',409);
       job={...job,state:'importing',progress:'Saving a backup before importing.'};mode='apply';
     }else throw refuse('Choose preview or import.');
     this.save(job);

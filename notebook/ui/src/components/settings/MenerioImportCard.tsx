@@ -9,7 +9,7 @@ import {Label} from '@/components/ui/label';
 import {ArrowRight,CheckCircle2,Download,Loader2} from 'lucide-react';
 
 type Summary={notes:number;trashedNotes:number;contacts:number;attachments:number;items:number;keptExisting:number;archivedTables:number;backupSaved?:boolean};
-type Job={id:string;state:'preparing'|'ready'|'importing'|'complete'|'failed';progress:string;summary?:Summary;copyDate?:string;error?:string};
+type Job={id:string;state:'preparing'|'ready'|'importing'|'complete'|'failed'|'expired';progress?:string;summary?:Summary;copyDate?:string;error?:string};
 type Status={prepared:boolean;connected:boolean;job:Job|null};
 export function MenerioImportCard(){
   const queryClient=useQueryClient();
@@ -42,6 +42,10 @@ export function MenerioImportCard(){
       {!status&&!error&&<p role="status" className="text-sm text-muted-foreground">Checking available copies…</p>}
       {busy&&<div role="status" className="flex items-start gap-3 rounded-lg bg-muted/40 p-4"><Loader2 className="h-5 w-5 animate-spin shrink-0 text-primary" aria-hidden="true"/><div><p className="text-sm font-medium">{job.progress}</p><p className="text-sm text-muted-foreground mt-1">You can leave this screen and return. The copy continues on your server.</p></div></div>}
       {job?.state==='failed'&&<p role="alert" className="text-sm text-destructive">{job.error}</p>}
+      {/* A preview is only good for a day. Saying so here, instead of leaving a
+          stale count next to an Import button that can only refuse, is the whole
+          difference between a dead end and one more click. */}
+      {job?.state==='expired'&&<p role="status" className="text-sm text-muted-foreground">{job.error} Use the button below.</p>}
       {summary&&(job?.state==='ready'||job?.state==='complete')&&<div className="space-y-4">
         <div className="flex items-center gap-2 font-medium">{job.state==='complete'&&<CheckCircle2 className="h-5 w-5 text-success" aria-hidden="true"/>}{job.state==='ready'?'Your copy is ready to review':'Your Menerio copy is now in Godspeed'}</div>
         {job.copyDate&&<p className="text-sm text-muted-foreground">Source copy checked {new Date(job.copyDate).toLocaleString()}.</p>}
