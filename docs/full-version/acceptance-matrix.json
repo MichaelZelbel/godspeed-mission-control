@@ -1,6 +1,6 @@
 {
   "format": 2,
-  "checked_at": "2026-10-04T04:00:25.116370+00:00",
+  "checked_at": "2026-10-04T04:40:00Z",
   "complete": false,
   "items": [
     {
@@ -2638,7 +2638,8 @@
       "status": "partial",
       "evidence": [
         "Dedicated source lifecycle records only actual user verdicts, pending separate implementation approval and quote-linked reported trial outcomes. Assess archives after three completed runs, Caution retains the no-list, and overlapping source runs cannot duplicate a local-change proposal. Source suite and 21 focused checks pass; installed lifecycle and broad discovery remain unverified.",
-        "Source controlled workflow draft/exact approval/application/read-back/retained rollback has seventeen passing focused checks. Full maintained method includes actual contracts. SDK/tool installation, installed real-provider experiment and actual trial benefit remain unverified."
+        "Source controlled workflow draft/exact approval/application/read-back/retained rollback has seventeen passing focused checks. Full maintained method includes actual contracts. SDK/tool installation, installed real-provider experiment and actual trial benefit remain unverified.",
+        "Bounded opt-in public discovery now rotates agent/memory/retrieval queries and fetches maintainer release/README evidence without local data in searches. Actual public search and four source reads passed; source suite 268 pass/one platform skip. Matching installed discovery and lifecycle acceptance remain open."
       ],
       "required": true,
       "target_test": "Exercise radar through its installed entry point and check actual results after restart"
@@ -2774,8 +2775,10 @@
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
       "criterion": "Recurring coaching talks and daily habits. Use when a coaching talk is due (the talk job's brief says COACH TALK DUE), when the [godspeed-coach] block shows an open talk and the person's message continues it, when they answer the evening habit check (yes / no / skip), when they track a habit (\"track head lifts\", \"did head lifts\", \"head lifts done\", \"Kopfheben erledigt\"), when a journal entry clearly names an active habit, when they want a new habit or to pause, graduate or drop one, when they want a new coaching talk (\"a weekly health talk on Sundays at seven\"), when they say \"let's do the health talk now\" or name any coach area, and when they change a talk's day, time, tone or rhythm. Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation.",
-      "status": "source only",
-      "evidence": [],
+      "status": "partial",
+      "evidence": [
+        "Normal development selected fictional CSV, actual connected chat, linked explicit habit, later missed observation and source-aware follow-up passed. Conversation is closed and two native journal entries retained; automatic review recovered on third attempt. Scheduled fresh-source change is not installed yet; other complete coach flows remain open."
+      ],
       "required": true,
       "target_test": "Exercise coach through its installed entry point and check actual results after restart"
     },
@@ -3219,7 +3222,8 @@
       "evidence": [
         "Full portable method is maintained/generated. New scheduled source code fetches configured visible radar topics in the actual run, retains source bytes and trace, requires a matching exact quote, novelty and empty user verdict, permits one bounded correction, logs quiet/failure, deduplicates unchanged proposal sources, and warns once after three blind runs. Five regressions pass using actual local HTTP bytes and credential-redaction fixtures. Native installed runtime, verdict lifecycle and reversible trial execution remain open.",
         "Complete maintained portable method now documents installed source selection and native verdict/result contracts, retained expiry and reported-versus-verified outcomes. Latest source is not installed; full workflow acceptance remains required.",
-        "Source controlled workflow draft/exact approval/application/read-back/retained rollback has seventeen passing focused checks. Full maintained method includes actual contracts. SDK/tool installation, installed real-provider experiment and actual trial benefit remain unverified."
+        "Source controlled workflow draft/exact approval/application/read-back/retained rollback has seventeen passing focused checks. Full maintained method includes actual contracts. SDK/tool installation, installed real-provider experiment and actual trial benefit remain unverified.",
+        "The complete portable method now documents actual bounded public discovery, retained query and source evidence, unchanged restricted-topic scope and explicit activation. Actual public discovery reads pass; installed full-method result remains open."
       ],
       "required": true,
       "target_test": "Exercise mc-radar through its installed entry point and check actual results after restart"
@@ -3305,7 +3309,8 @@
       "criterion": "Stop the candidate service, verify a complete knowledge and media backup, copy the workspace into an empty destination and validate identities, references and restored contents.\r Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation.",
       "status": "partial",
       "evidence": [
-        "2026-10-04: complete owned-installation physical move/undo method, explicit installation pointer, immutable dry run, verified retained backup and separate restoration, exact private byte copies, original and destination aliases, current-data-preserving undo, installed CLI fixture; source-suite-workspace-move.log: 263 pass and one platform skip; installed launcher and assistant move acceptance remain open"
+        "2026-10-04: complete owned-installation physical move/undo method, explicit installation pointer, immutable dry run, verified retained backup and separate restoration, exact private byte copies, original and destination aliases, current-data-preserving undo, installed CLI fixture; source-suite-workspace-move.log: 263 pass and one platform skip; installed launcher and assistant move acceptance remain open",
+        "Actual installed b5391fc CLI verified pre-move empty restoration and full copied bytes, retained original, old-path alias and explicit endpoint installation pointer; selected launcher restarted at the moved root and normal Windows Settings/Notes opened. A later note is being saved through normal UI; undo and subsequent assistant acceptance remain open."
       ],
       "required": true,
       "target_test": "Exercise move-godspeed through its installed entry point and check actual results after restart"
@@ -3808,7 +3813,8 @@
       "evidence": [
         "Installed fictional chat opened a native health talk, retained the volunteer's reply, recorded an explicitly agreed daily screen break and recorded a skipped-break observation as no. The notebook displayed the talk and habit.",
         "Normal development fictional agreement and no observation remain linked to the saved conversation; scheduled native follow-up asked about switching before finishing the source. Evidence: development-b6ed312-fictional-habit-followup-ui.txt and development-b6ed312-fictional-coaching-records.json. Broader installed coaching/restart/health acceptance remains required.",
-        "Selected-health source now preserves day precision and original CSV bytes, retains corrected history, rejects impossible/future dates and excludes stale/future/hidden inputs from coaching and automatic habits. Nineteen focused regressions pass, including actual native coaching source preparation. This is source-only until new matching packages and the full normal health talk/habit/later-observation workflow pass."
+        "Selected-health source now preserves day precision and original CSV bytes, retains corrected history, rejects impossible/future dates and excludes stale/future/hidden inputs from coaching and automatic habits. Nineteen focused regressions pass, including actual native coaching source preparation. This is source-only until new matching packages and the full normal health talk/habit/later-observation workflow pass.",
+        "Normal development health loop preserves selected CSV, latest date/values, actual replies across navigation, explicit linked agreement, missed observation and source-aware follow-up. Automatic review recovered after two retained failures; no real health outcome claimed. Further restart/sync and other areas remain open."
       ],
       "required": true,
       "target_test": "Scheduled later check-in must use actual replies and no observation; verify close/reopen and separate area histories."
@@ -3938,7 +3944,8 @@
         "Normal installed a372e3c conflict controls retained current bytes and both older copies; actual SHA readback confirms no rollback of the 5/5 goal outcome. Fresh retained empty restorations preceded matching Windows/development upgrades. Broader paired conflict/reconnect acceptance remains open.",
         "Normal Windows empty restoration verified main 877/2383 and endpoint 3318/4370. Development synchronous restoration failed after three actual supervisor health timeouts and one restart; partial copy retained. Worker source preserves responsive timers, exact binary bytes and one concurrent result, with seven passing worker/server checks. Normal installed worker recovery remains required.",
         "Matching installed 0a009b3 normal empty-copy recovery passed development 1917/3970, Windows main 877/2383 and endpoint 3318/4370 with rebuilt search and zero supervisor restarts. Evidence filenames include development-0a009b3-normal-responsive-recovery-ui.txt, windows-main-0a009b3-normal-restoration-ui.txt and endpoint-0a009b3-normal-restoration-and-cancel-ui.txt. Wider recovery and upgrade acceptance remains required.",
-        "Source asynchronous normal backup preserves snapshot writer lock through media/hash capture and keeps actual HTTP health responsive; seventeen focused archive/server checks and full source suite pass. Installed verification remains open; retained backups are never pruned."
+        "Source asynchronous normal backup preserves snapshot writer lock through media/hash capture and keeps actual HTTP health responsive; seventeen focused archive/server checks and full source suite pass. Installed verification remains open; retained backups are never pruned.",
+        "Matching b5391fc Windows/development upgrades followed fresh retained verified separate restorations. New normal asynchronous development backup/restoration verified 3022 records/5237 files. Later unrelated health timeout remains retained and under investigation; final package/recovery acceptance remains open."
       ],
       "required": true,
       "target_test": "Repeat recovery/link checks on final matching Windows/VPS packages; accept offline edits, reconnection, retained conflicts and preserved choices/pauses."
