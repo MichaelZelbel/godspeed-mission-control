@@ -144,6 +144,25 @@ def activate():
                 raise RuntimeError('The authoritative assistant file is missing; restore it before continuing')
             self._base = text
             self._expected = current
+            self._transaction_version = self._write_version()
+
+        def _write_version(self):
+            # SQLite counts row writes, schema changes and user-version updates
+            # independently. Read-only or unchanged IF NOT EXISTS startup work
+            # must not re-serialize every retained message on every statement.
+            return (self.total_changes,
+                    self._raw('PRAGMA schema_version').fetchone()[0],
+                    self._raw('PRAGMA user_version').fetchone()[0])
+
+        def blobopen(self, *args, **kwargs):
+            # Incremental blob writes do not advance total_changes. Once used,
+            # keep the conservative full snapshot path for this connection.
+            self._untracked_writes = True
+            return super().blobopen(*args, **kwargs)
+
+        def deserialize(self, *args, **kwargs):
+            self._untracked_writes = True
+            return super().deserialize(*args, **kwargs)
 
         def _snapshot(self):
             tables = []
@@ -191,7 +210,10 @@ def activate():
         def commit(self):
             try:
                 if self.in_transaction:
-                    text = json.dumps(self._snapshot(), ensure_ascii=False, sort_keys=True, indent=2) + '\n'
+                    unchanged = (self._base is not None
+                                 and not getattr(self, '_untracked_writes', False)
+                                 and getattr(self, '_transaction_version', None) == self._write_version())
+                    text = self._base if unchanged else json.dumps(self._snapshot(), ensure_ascii=False, sort_keys=True, indent=2) + '\n'
                     if text != self._base:
                         request = json.dumps(dict(file=self._portable, expected=self._expected, base=self._base, text=text))
                         result = subprocess.run([node, publisher], input=request, encoding='utf-8', capture_output=True, env=os.environ, timeout=60)

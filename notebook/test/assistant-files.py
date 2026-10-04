@@ -58,6 +58,33 @@ class AssistantFiles(unittest.TestCase):
         result=self.run_python('import sqlite3,os; from pathlib import Path; c=sqlite3.connect(str(Path(os.environ["HERMES_HOME"])/"state.db"),isolation_level=None); c.execute("INSERT INTO messages(text) VALUES (?)",("after sync",)); assert c.execute("SELECT COUNT(*) FROM messages").fetchone()[0]==2; c.close()')
         self.assertEqual(result.returncode,0,result.stderr)
 
+    def test_unchanged_startup_transactions_skip_whole_history_serialization(self):
+        self.initialize()
+        result=self.run_python('''import sqlite3,os,hashlib
+from pathlib import Path
+c=sqlite3.connect(str(Path(os.environ["HERMES_HOME"])/"state.db"),isolation_level=None)
+snapshot=next((Path(os.environ["GODSPEED_WORKSPACE"])/"assistant-state").glob("*/*.json"))
+before=snapshot.read_bytes();count=[0];original=type(c)._snapshot
+def measured(self):
+ count[0]+=1
+ return original(self)
+type(c)._snapshot=measured
+for _ in range(40):
+ c.execute("CREATE TABLE IF NOT EXISTS messages(id INTEGER PRIMARY KEY AUTOINCREMENT, text TEXT, binary BLOB)")
+ c.execute("BEGIN IMMEDIATE");c.execute("SELECT * FROM messages").fetchall();c.commit()
+assert count[0]==0, "Unchanged startup transactions serialized history "+str(count[0])+" times"
+assert snapshot.read_bytes()==before
+c.execute("CREATE INDEX message_text ON messages(text)")
+c.execute("PRAGMA user_version=8")
+c.execute("INSERT INTO messages(text) VALUES (?)",("retained actual change",))
+assert count[0]==3
+assert c.execute("PRAGMA user_version").fetchone()[0]==8
+c.close()
+''')
+        self.assertEqual(result.returncode,0,result.stderr)
+        result=self.run_python('import sqlite3,os;from pathlib import Path;c=sqlite3.connect(str(Path(os.environ["HERMES_HOME"])/"state.db"));assert c.execute("SELECT text FROM messages WHERE id=2").fetchone()[0]=="retained actual change";assert c.execute("PRAGMA user_version").fetchone()[0]==8;assert c.execute("SELECT name FROM sqlite_master WHERE name=\'message_text\'").fetchone();c.close()')
+        self.assertEqual(result.returncode,0,result.stderr)
+
     def test_publication_failure_rolls_back(self):
         self.initialize()
         result = self.run_python('import sqlite3,os; from pathlib import Path; c=sqlite3.connect(str(Path(os.environ["HERMES_HOME"])/"state.db"),isolation_level=None); c.execute("INSERT INTO messages(text) VALUES (?)",("must roll back",))', GODSPEED_ASSISTANT_PUBLISHER=str(self.temp / 'missing-publisher.mjs'))
