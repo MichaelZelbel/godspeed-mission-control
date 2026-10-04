@@ -1,4 +1,6 @@
 import { useMemo, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import { chatMarkdownComponents, chatMarkdownPlugins } from "@/lib/chat-markdown";
 import { FileText, Sparkles, Loader2 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -102,6 +104,11 @@ export function ContactProfileTab({
     <div className="space-y-3">
       <Card>
         <CardContent className="pt-6">
+          {/* An imported person carries a whole Markdown document in this
+              field (headings, bold labels, bullet lists). It read as raw
+              source while this was a plain paragraph. Same plumbing as the
+              chat surfaces, so Markdown looks the same wherever it is shown,
+              and the importer's HTML marker comments stay out of sight. */}
           {isEditingNotes ? (
             <div className="space-y-2">
               <Label>Notes</Label>
@@ -113,7 +120,9 @@ export function ContactProfileTab({
               />
             </div>
           ) : notes ? (
-            <p className="text-sm whitespace-pre-wrap">{notes}</p>
+            <div className="text-sm [overflow-wrap:anywhere]">
+              <ReactMarkdown remarkPlugins={chatMarkdownPlugins} components={chatMarkdownComponents}>{notes}</ReactMarkdown>
+            </div>
           ) : (
             <p className="text-sm text-muted-foreground">No notes yet.</p>
           )}

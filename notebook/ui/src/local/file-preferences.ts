@@ -10,7 +10,11 @@ async function persist(){
 }
 export async function hydrateFilePreferences(){
  if(installed)return;
- const response=await fetch('/api/query',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({table:'settings',filters:[['eq','id','ui-preferences']]}),signal:AbortSignal.timeout(15000)});if(!response.ok)throw new Error('Could not load your saved preferences');
+ // Also behind the sign-in gate: see the note in file-chat.ts.
+ let response:Response;
+ try { response=await fetch('/api/query',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({table:'settings',filters:[['eq','id','ui-preferences']]}),signal:AbortSignal.timeout(15000)}); }
+ catch { throw new Error('Your server is busy saving and did not answer in time. Try again in a moment.'); }
+ if(!response.ok)throw new Error('Could not load your saved preferences');
  const record=(await response.json()).data[0];values=record?.preferences||{};version=record?._hash;
  const set=Storage.prototype.setItem,remove=Storage.prototype.removeItem;
  for(const key of Object.keys(localStorage))if(durable(key)&&!(key in values))remove.call(localStorage,key);

@@ -146,7 +146,12 @@ export class QueryService {
       const privateKeys=/^(access_token|refresh_token|api_key|secret|password|token|token_hash|encrypted_token|credentials)$/i;
       const inspect=value=>{if(value&&typeof value==='object')for(const [key,next] of Object.entries(value)){if(privateKeys.test(key))throw new Error('Connector credentials belong in local device configuration, never synced records');inspect(next);}};inspect(values);
       if (views.has(table)||rows.some(r=>r.native_file&&table==='deadlines')) throw new Error('Derived views are read-only; use the personal obligation operation');
-      rows = this.store.withLock(() => {
+      // The dashboard's own writes arrive while background work (the sync
+      // worker, the assistant) owns the workspace. executeAsync takes the lock
+      // one level up and retries only its acquisition, so a held workspace
+      // delays an edit instead of refusing it. See executeAsync below.
+      const holding = request.holdingLock ? run => run() : run => this.store.withLock(run);
+      rows = holding(() => {
         const inputs = operation === 'insert' || operation === 'upsert' ? (Array.isArray(values) ? values : [values]) : rows;
         const changed = inputs.map(value => {
           const old = operation === 'insert' ? null : operation === 'upsert' ? (value.id ? this.store.get(table, value.id) : this.rows(table).find(r => options.onConflict && options.onConflict.split(',').every(k => r[k] === value[k]))) : table==='moments'?value:this.store.get(table, value.id);
@@ -202,6 +207,15 @@ export class QueryService {
     if (single && rows.length !== 1) throw new Error('Expected one record');
     if (maybeSingle && rows.length > 1) throw new Error('Ambiguous record query');
     return { data: options.head ? null : single || maybeSingle ? rows[0] || null : rows, count, error: null };
+  }
+  // The write path the dashboard uses. execute() refuses outright when another
+  // process holds the workspace, which lost a note edit whenever the sync
+  // worker or the assistant happened to be saving. withLockAsync retries the
+  // acquisition only: once this callback has started its failure is never
+  // replayed, so a half-applied transaction can still never repeat.
+  async executeAsync(request, { timeoutMs = 30000, signal } = {}) {
+    if ((request.operation || 'select') === 'select') return this.execute(request);
+    return await this.store.withLockAsync(() => this.execute({ ...request, holdingLock: true }), { timeoutMs, signal });
   }
   rpc(name, args = {}) {
     if (name === 'capture_note_with_lexicon') return this.store.save('notes', { ...args._note, user_id: 'owner' });

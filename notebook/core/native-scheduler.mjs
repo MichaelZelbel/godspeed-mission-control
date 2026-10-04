@@ -29,7 +29,10 @@ export class NativeScheduler{
   return {configured:true,preserved:!!old,firstWorkPending:false,scheduler:'hermes'};
  }
  async transfer(owner){const old=this.store.get('settings','installation');if(!old)throw Error('Complete setup first');await this.store.saveAsync('settings',{id:old.id,owner});}
- async tick(){if(this.ticking||Date.now()-(this.lastTick||0)<60000)return [];this.ticking=true;this.lastTick=Date.now();try{await this.command(['tick']);return [];}finally{this.ticking=false;}}
+ // onProgress is what the health check reads as "the scheduler is alive". A
+ // deliberately skipped tick is alive; a tick still inside this.command is not
+ // reported, so a wedged scheduler is still caught and restarted.
+ async tick(){if(this.ticking)return [];if(Date.now()-(this.lastTick||0)<60000){this.onProgress?.();return [];}this.ticking=true;this.lastTick=Date.now();this.onProgress?.();try{await this.command(['tick']);return [];}finally{this.ticking=false;this.onProgress?.();}}
  async runNow(id){if(id){if(!nativeJobs(this.home,this.device).some(j=>j.id===id))throw Error('Choose an existing Hermes task');return this.command(['run',id]);}return this.command(['tick']);}
  async control(input,{enable=false}={}){
   if(enable){

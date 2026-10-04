@@ -3,7 +3,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { Store, atomic, decode, hash } from '../records/store.mjs';
-import { durable,durableRoots,durableFiles } from '../file-policy.mjs';
+import { durable,durableRoots,durableFiles,devicePrivatePaths } from '../file-policy.mjs';
 import {validateAssistantFiles} from '../assistant-files.mjs';
 import {resolveSavedConflict} from '../conflicts.mjs';
 
@@ -25,16 +25,29 @@ export class FileSync {
     if(!remoteUrl||!/^(https:\/\/github\.com\/|git@github\.com:)/.test(remoteUrl))throw new Error('Use a private GitHub repository URL');
     if(!fs.existsSync(path.join(this.store.root,'.git'))){this.git(['init','-b',this.branch]);this.git(['config','user.name','Godspeed Mission Control']);this.git(['config','user.email','godspeed@localhost']);}
     this.git(['config','core.autocrlf','false']);this.git(['config','core.eol','lf']);if(process.platform==='win32')this.git(['config','core.longpaths','true']);
-    atomic(path.join(this.store.root,'.gitignore'),'*\n'+durableRoots.map(r=>'!'+r+'/\n!'+r+'/**\n').join('')+durableFiles.map(r=>'!'+r+'\n').join('')+'**/.*\n!.gitignore\n**/secrets/\n**/node_modules/\n**/*.sqlite*\n**/*.png\n**/*.jpg\n**/*.mp4\n**/*.mp3\n**/*.pdf\n');
+    atomic(path.join(this.store.root,'.gitignore'),'*\n'+durableRoots.map(r=>'!'+r+'/\n!'+r+'/**\n').join('')+durableFiles.map(r=>'!'+r+'\n').join('')+devicePrivatePaths.map(r=>r+'/\n').join('')+'**/.*\n!.gitignore\n**/secrets/\n**/node_modules/\n**/*.sqlite*\n**/*.png\n**/*.jpg\n**/*.mp4\n**/*.mp3\n**/*.pdf\n');
     try {this.git(['remote','get-url',this.remote]);}catch{this.git(['remote','add',this.remote,remoteUrl]);}
   }
   validate(){this.store.scan();if(this.store.problems.length)throw new Error('Resolve record validation problems before syncing');validateAssistantFiles(this.store.root);if(this.pendingConflicts().length)throw new Error('Resolve saved conflicts before syncing');}
+  // A path that was synced before it became device-private stays in the index
+  // and Git keeps hashing it on every status and every add. Untrack it once,
+  // leaving the file itself on disk, so an existing installation gets the same
+  // fast commit as a new one.
+  untrackPrivate(){
+    const tracked=this.gitBytes(['ls-files','-z']).toString('utf8').split('\0').filter(name=>name&&name!=='.gitignore'&&!durable(name));
+    for(let i=0;i<tracked.length;i+=200)this.git(['rm','--cached','--quiet','-r','--',...tracked.slice(i,i+200)]);
+    return tracked.length;
+  }
   commitLocal(){
     this.validate();
-    const staged=this.git(['diff','--cached','--name-only']);
+    this.untrackPrivate();
+    // --diff-filter=d leaves out removals: untracking a path that became
+    // device-private is the one staged change about a private path that is
+    // correct, and the guard must not read it as an attempt to sync one.
+    const staged=this.git(['diff','--cached','--name-only','--diff-filter=d']);
     if(staged.split('\n').some(n=>n&&!durable(n)&&n!=='.gitignore'))throw new Error('Sync repository contains staged files outside durable state');
     this.git(['add','--',...durableRoots.filter(r=>fs.existsSync(path.join(this.store.root,r))),...durableFiles.filter(r=>fs.existsSync(path.join(this.store.root,r))),'.gitignore']);
-    if(this.git(['diff','--cached','--name-only']).split('\n').some(n=>n&&!durable(n)&&n!=='.gitignore'))throw new Error('A private path was staged; sync stopped');
+    if(this.git(['diff','--cached','--name-only','--diff-filter=d']).split('\n').some(n=>n&&!durable(n)&&n!=='.gitignore'))throw new Error('A private path was staged; sync stopped');
     if(this.git(['diff','--cached','--name-only']))this.git(['commit','-m','Save Godspeed Mission Control records']);
   }
   reconcile(){
