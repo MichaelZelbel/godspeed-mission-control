@@ -8,6 +8,7 @@ import {subscriptionCommand} from './subscriptions.mjs';
 import {recipeContext} from './recipe-context.mjs';
 import {structuralAudit} from './structural-audit.mjs';
 import {radar} from './radar.mjs';
+import {lead} from './lead.mjs';
 export {procedureKinds} from './jobs/kinds.mjs';
 export async function procedure(job,{store,query,provider}){
   const kind=job.kind;let result;
@@ -23,6 +24,7 @@ export async function procedure(job,{store,query,provider}){
   }
   if(kind==='audit')return structuralAudit(job,{store,query,provider});
   if(kind==='radar')return radar(job,{store,query,provider});
+  if(kind==='lead')return lead(job,{store,query,provider});
   if(['review','memory-review'].includes(kind)){
     if(!provider)throw Error('Connect an assistant before reviewing memory');
     const domains=new Domains(query,{provider});let proposed=0;

@@ -6,6 +6,7 @@ import {cardCommand,importCardFiles} from './card-commands.mjs';
 import {dueCommand,dueRows} from './native-due.mjs';
 import {subscriptionCommand} from './subscriptions.mjs';
 import {watchCommand,addWatchTopic} from './watch-commands.mjs';
+import {leadCommand} from './lead-commands.mjs';
 import {localParts,addDays,zonedToUtc} from '../../third-party/addons/godspeed-coach/lib/clock.mjs';
 import {nextCalendarRun} from './jobs/calendar.mjs';
 import {readTable} from '../../third-party/addons/godspeed-coach/lib/auto.mjs';
@@ -51,6 +52,7 @@ export function personalOperation(domains,input){
  if(type==='due-command')return dueCommand(store,input.args);
  if(type==='subscription-command')return subscriptionCommand(store,input.args);
  if(type==='watch-command')return watchCommand(domains,input.args);
+ if(type==='lead-command')return leadCommand(domains,input.args);
  if(['obligation-complete','obligation-snooze'].includes(type)){
   const native=dueRows(store).find(d=>d.id===input.id);if(native){if(input.expected&&input.expected!==native._hash)throw Error('Obligation changed; reload before saving');
    if(type==='obligation-complete'){required(input.evidence,'Completion evidence');return dueCommand(store,['done',native.native_slug,'--evidence',input.evidence]);}

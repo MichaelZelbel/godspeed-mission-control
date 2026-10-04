@@ -192,7 +192,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         store.withLock(()=>store.commit([store.prepare('note_conversations',{id,context_key:input.context_key,state:input.state},old),store.prepare('conversation_messages',{context_key:input.context_key,state_snapshot:input.state})]));
         return send(res,200,{ok:true});
       }
-      if (route === '/api/rpc' && req.method === 'POST') { const input = JSON.parse(await body(req)); const data = query.rpc(input.rpc, input.args); index.rebuild(); return send(res, 200, { data, error: null }); }
+      if (route === '/api/rpc' && req.method === 'POST') { const input = JSON.parse(await body(req)); const data = query.rpc(input.rpc, input.args); if(!['search_contacts_page','notes_mentioning_people','my_staff_access_log'].includes(input.rpc))index.rebuild(); return send(res, 200, { data, error: null }); }
       if (route === '/api/structural' && req.method === 'POST') { const input = JSON.parse(await body(req)); return send(res, 200, { data: store.structural(input.type, input.id, input.action, input.options), error: null }); }
       if (route === '/api/media/upload' && req.method === 'POST') {
         const bytes = await body(req, 100 * 1024 * 1024), form = await new Request('http://localhost/', { method: 'POST', headers: { 'content-type': req.headers['content-type'] }, body: bytes }).formData();

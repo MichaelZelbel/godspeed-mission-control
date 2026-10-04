@@ -1,6 +1,11 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';
 import {Store} from '../core/records/store.mjs';import {QueryService} from '../core/query.mjs';import {jobExecutor} from '../core/runtime.mjs';
 import {dueCommand} from '../core/native-due.mjs';
+test('the briefing preserves the full ready contribution and link without claiming the user saw or posted it',async()=>{
+ const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-brief-lead-'))),query=new QueryService(store),content='Fictional copy-ready option one.\n\nFictional copy-ready option two.\n\nFictional copy-ready option three.',note=store.save('notes',{title:'Fictional contribution',content}),entry=store.save('lead_entries',{title:note.title,content,note_id:note.id,status:'ready',delivery_day:'2026-01-01'});let writes=0;
+ const provider=async input=>{if(input.kind==='brief-verification')return {passed:true,reason:'Fixture current sources and reader checked'};writes++;if(writes===1)return 'No fresh fictional health observations are available. A fictional post is ready.';assert.ok(input.context.check_feedback.some(f=>/complete checked contribution/.test(f)));return 'No fresh fictional health observations are available. Choose a draft to post.\n\n'+input.context.contribution.content+'\n\n'+input.context.contribution.link;};
+ const result=await jobExecutor(provider,query)({kind:'morning-brief',id:'fictional-lead-brief'},{store,settings:{}}),saved=store.get('notes',result.record_id),queued=store.get('lead_entries',entry.id);assert.equal(writes,2);assert.ok(saved.content.includes(content));assert.ok(saved.content.includes('/dashboard/notes/'+note.id));assert.equal(queued.status,'queued');assert.equal(queued.shown_at,undefined);assert.equal(queued.posted_at,undefined);assert.equal(queued.delivery_note_id,saved.id);
+});
 test('brief sources are prepared before writing and failed judgment prevents delivery',async()=>{
  const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-brief-'))),query=new QueryService(store),calls=[];
  store.save('health_observations',{metric:'Fictional energy',value:6,observed_at:new Date().toISOString()});

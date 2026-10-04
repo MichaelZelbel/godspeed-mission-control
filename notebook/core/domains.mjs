@@ -9,6 +9,7 @@ import {chatContext,chatAttachments,retrievedContext} from './chat-context.mjs';
 import {personalOperation,conversationOperations,validateConversationOperations,operationContract} from './personal-operations.mjs';
 import {importGoalFiles} from './legacy-goals.mjs';
 import {commandWords} from './card-commands.mjs';
+import {leadWords} from './lead-commands.mjs';
 function json(result){return typeof result==='string'?JSON.parse(result.trim().replace(/^```(?:json)?\s*/,'').replace(/\s*```$/,'')):result;}
 function cites(source,quote){return typeof source==='string'?source.includes(quote):source&&typeof source==='object'?Object.values(source).some(value=>cites(value,quote)):false;}
 function reviewData(value){const result={...value};for(const field of ['themes','open_loops','connections','gaps','people_summary']){if(typeof result[field]==='string'&&field==='gaps')result[field]=[result[field]];if(result[field]==null)result[field]=[];if(!Array.isArray(result[field]))throw new Error('The review returned an invalid '+field+' list');}return result;}
@@ -59,11 +60,11 @@ export class Domains {
       const talkId=input.talk_id||last?.talk_id;
       if(talkId){const talk=this.query.rows('coach_talks').find(t=>t.id===talkId&&t.status==='open');if(input.talk_id&&!talk)throw Error('Choose an open coaching conversation');if(talk){const source=this.query.rows('conversation_messages').filter(m=>m.role==='user'&&m.conversation_id===input.conversation_id).at(-1),id='coach-reply-'+hash([input.conversation_id,input.request_id||source?.id||input.message]);if(!this.store.get('command_receipts',id)){personalOperation(this,{type:'coach-reply',id:talk.id,content:input.message,expected:talk._hash});this.store.save('command_receipts',{id,state:'verified',talk_id:talk.id,source_id:source?.id});}input={...input,talk_id:talk.id,retained_coach_reply:true};}}
     }
-    if(name==='conversation-chat'&&/^\/(coach|journal|headache|goals|forecast|work|due|subs|watch)\b/.test(String(input.message||''))){
-      const [command,...args]=commandWords(input.message),name=command.slice(1),id='explicit-command-'+hash([input.conversation_id,input.request_id||input.message]),previous=this.store.get('command_receipts',id);
+    if(name==='conversation-chat'&&/^\/(coach|journal|headache|goals|forecast|work|due|subs|watch|lead)\b/.test(String(input.message||''))){
+      const [command,...args]=/^\/lead\b/.test(input.message)?leadWords(input.message):commandWords(input.message),name=command.slice(1),id='explicit-command-'+hash([input.conversation_id,input.request_id||input.message]),previous=this.store.get('command_receipts',id);
       if(previous){if(previous.state!=='verified')throw Error('Previous command requires review');return previous.result;}
       this.store.save('command_receipts',{id,state:'attempted',source_id:input.request_id||null});
-      const action=await personalOperation(this,['coach','journal','headache'].includes(name)?{type:'addon-command',addon:name,args}:name==='due'?{type:'due-command',args}:name==='subs'?{type:'subscription-command',args}:name==='watch'?{type:'watch-command',args}:{type:'card-command',card:name,args});
+      const action=await personalOperation(this,['coach','journal','headache'].includes(name)?{type:'addon-command',addon:name,args}:name==='due'?{type:'due-command',args}:name==='subs'?{type:'subscription-command',args}:name==='watch'?{type:'watch-command',args}:name==='lead'?{type:'lead-command',args}:{type:'card-command',card:name,args});
       const result={reply:action.result,operation_results:[action]};this.store.save('conversation_messages',{role:'assistant',content:result.reply,conversation_id:input.conversation_id||null,source_app:'personal-command'});this.store.save('command_receipts',{id,state:'verified',result});return result;
     }
     if(name==='import-goal-files')return importGoalFiles(this.store);
