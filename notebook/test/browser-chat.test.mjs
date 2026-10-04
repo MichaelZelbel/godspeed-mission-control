@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {createService} from '../server/main.mjs';
-import {hermesResponse} from '../core/runtime.mjs';
+import {hermesResponse,hermesFailureMessage} from '../core/runtime.mjs';
 
 test('browser chat authenticates, saves messages and recalls history after restart',async()=>{
   const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-browser-chat-'));
@@ -26,6 +26,13 @@ test('browser chat authenticates, saves messages and recalls history after resta
 test('Hermes startup diagnostics do not become model JSON',()=>{
   assert.equal(hermesResponse('Warning: Unknown toolsets: none\n\n\x1b[2m  ⚠ tirith security scanner enabled but not available — command scanning will use pattern matching only\x1b[0m\n{"reply":"hello"}\n'),'{"reply":"hello"}');
   assert.equal(hermesResponse('{"reply":"Warning: keep this actual response"}'),'{"reply":"Warning: keep this actual response"}');
+});
+test('Hermes failures distinguish context, usage and sign-in without exposing diagnostics',()=>{
+ const secret='synthetic-private-credential';
+ for(const [diagnostic,expected] of [['Context length exceeded: 413,274 tokens. Cannot compress further.',/context limit/],['rate_limit_exceeded',/usage limit/],['AuthenticationError: token expired',/needs sign-in/],['unclassified process failure',/diagnostics/]]){
+  const message=hermesFailureMessage(diagnostic+' '+secret);assert.match(message,expected);assert.ok(!message.includes(secret));assert.ok(!message.includes('413,274'));
+ }
+ assert.match(hermesFailureMessage('Context length exceeded; AuthenticationError'),/context limit/);
 });
 test('browser request retries return the saved result without duplicate notes',async()=>{
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-browser-retry-')),service=await createService({root,port:0,provider:async()=>({reply:'Saved.',notes_created:[{title:'Fictional draft',content:'Fictional content'}]})}),base='http://127.0.0.1:'+service.address.port;

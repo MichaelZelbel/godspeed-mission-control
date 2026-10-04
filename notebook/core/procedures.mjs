@@ -11,6 +11,7 @@ import {radar} from './radar.mjs';
 import {lead} from './lead.mjs';
 import {currentHealth} from './health-inputs.mjs';
 import {prepareRadarWork,applyRadarWork} from './radar-work.mjs';
+import {missingRuns} from './missing-runs.mjs';
 export {procedureKinds} from './jobs/kinds.mjs';
 export async function procedure(job,{store,query,provider}){
   const kind=job.kind;let result;
@@ -53,13 +54,14 @@ export async function procedure(job,{store,query,provider}){
     const timezone=query.rows('profiles')[0]?.timezone||'UTC',day=d=>new Intl.DateTimeFormat('en-CA',{timeZone:timezone}).format(new Date(d));result={observations:recent,headaches_last_30_days:episodes.filter(e=>!e.cancelled_at).length,medication_days_last_30_days:new Set(medication.map(m=>day(m.taken_at||m.created_at))).size,no_recent_measurements:!recent.length};
   }else if(kind==='disk-check'){const stat=fs.statfsSync(store.root);result={free_bytes:Number(stat.bavail)*Number(stat.bsize),total_bytes:Number(stat.blocks)*Number(stat.bsize),needs_attention:Number(stat.bavail)/Number(stat.blocks)<0.2};}
   else if(['selftest','job-check'].includes(kind)){
-    store.scan();result={problems:store.problems,failed:query.rows('job_receipts').filter(r=>['failed','needs_review'].includes(r.state)),overdue:query.rows('jobs').filter(j=>!j.paused&&Date.parse(j.next_run)<Date.now()-3600000)};
+    store.scan();result={problems:store.problems,failed:query.rows('job_receipts').filter(r=>['failed','needs_review'].includes(r.state)),overdue:missingRuns(store.root,Date.now(),store.device)};
     const added=[];
+    for(const missed of result.overdue){const id='repair-missing-'+hash([missed.job_id,missed.due_at]);if(store.get('work_items',id))continue;added.push(store.save('work_items',{id,kind:'repair',title:'Check missed '+missed.kind,state:'needs_review',job_id:missed.job_id,missing_receipt_id:missed.receipt_id,check:'The original due run has an actual verified completion receipt',allowed_action:'inspect-and-retry',dependencies:[],max_attempts:3}));}
     for(const failure of result.failed){const id='repair-'+hash([failure.job_id,failure.error]);if(store.get('work_items',id))continue;
       const later=query.rows('job_receipts').some(r=>r.job_id===failure.job_id&&r.state==='verified'&&r.started_at>failure.started_at);if(later)continue;
       added.push(store.save('work_items',{id,kind:'repair',title:'Repair '+failure.job_id,state:'needs_review',failure_id:failure.id,job_id:failure.job_id,check:'A new receipt for this job passes its actual completion check',error:failure.error,allowed_action:'inspect-and-retry',dependencies:[],max_attempts:3}));
     }
-    for(const repair of query.rows('work_items').filter(w=>w.kind==='repair'&&w.state!=='verified')){const failure=store.get('job_receipts',repair.failure_id),passed=query.rows('job_receipts').find(r=>r.job_id===repair.job_id&&r.state==='verified'&&r.started_at>failure?.started_at);if(passed)store.save('work_items',{id:repair.id,state:'verified',evidence:passed.id});}
+    for(const repair of query.rows('work_items').filter(w=>w.kind==='repair'&&w.state!=='verified')){const failure=repair.failure_id&&store.get('job_receipts',repair.failure_id),passed=repair.missing_receipt_id?store.get('job_receipts',repair.missing_receipt_id):query.rows('job_receipts').find(r=>r.job_id===repair.job_id&&r.state==='verified'&&r.started_at>failure?.started_at);if(passed?.state==='verified')store.save('work_items',{id:repair.id,state:'verified',evidence:passed.id});}
     if(!added.length&&!result.problems.length&&!result.overdue.length)return {verified:true,silent:true,repair_items:0};
   }
   else if(kind==='portfolio'||kind==='watch'||kind==='domain-watch'){
@@ -102,15 +104,18 @@ export async function procedure(job,{store,query,provider}){
     result=[];const folder=store.state+'/connectors';
     const connectors=new Connectors({store,query});
     if(fs.existsSync(folder))for(const filename of fs.readdirSync(folder).filter(f=>f.endsWith('.json'))){
+      const connector=filename.replace('.json',''),repairId='connector-repair-'+hash(connector),existingRepair=store.get('work_items',repairId),previousStatus=store.get('connector_status',connector);
+      if(!job.manual&&existingRepair&&['pending','needs_review'].includes(existingRepair.state)&&(existingRepair.state==='needs_review'||Date.parse(existingRepair.retry_after)>Date.now())){result.push({connector,ok:previousStatus?.ok??false,status:previousStatus?.status,deferred:true,changed:false});continue;}
+      if(job.manual&&existingRepair&&existingRepair.state!=='verified')store.save('work_items',{id:repairId,state:'pending',attempts:0,retry_after:null});
       const config=JSON.parse(fs.readFileSync(folder+'/'+filename)),url=config.test_url||(filename==='gdrive.json'?new URL('/drive/v3/about?fields=user',config.origin):new URL(config.route||'/',config.origin));
       let observation;try{const response=await connectors.health(filename.replace('.json',''),config,url);observation={connector:filename.replace('.json',''),ok:response.ok,status:response.status};}catch{observation={connector:filename.replace('.json',''),ok:false,error:'Connection read failed'};}
       const old=store.get('connector_status',observation.connector),changed=!old||old.ok!==observation.ok||old.status!==observation.status;
       store.save('connector_status',{id:observation.connector,...observation,checked_at:new Date().toISOString()});
-      const loginId='connector-login-'+hash(observation.connector),repairId='connector-repair-'+hash(observation.connector);
+      const loginId='connector-login-'+hash(observation.connector);
       if(!observation.ok&&[401,403].includes(observation.status)){const prior=store.get('deadlines',loginId);if(!prior||prior.status==='closed')store.save('deadlines',{id:loginId,title:'Reconnect '+observation.connector,status:'open',due_at:new Date().toISOString(),completion_check:'Connection health endpoint accepts the configured account',connector:observation.connector});}
-      else if(!observation.ok&&!store.get('work_items',repairId))store.save('work_items',{id:repairId,kind:'repair',title:'Recheck '+observation.connector,state:'pending',allowed_action:'connector-health-retry',connector:observation.connector,check:'Configured connection endpoint responds successfully',attempts:0,max_attempts:3});
+      else if(!observation.ok&&(!store.get('work_items',repairId)||store.get('work_items',repairId).state==='verified'))store.save('work_items',{id:repairId,kind:'repair',title:'Recheck '+observation.connector,state:'pending',allowed_action:'connector-health-retry',connector:observation.connector,check:'Configured connection endpoint responds successfully',attempts:0,max_attempts:3});
       else if(observation.ok){const login=store.get('deadlines',loginId),repair=store.get('work_items',repairId);if(login&&login.status!=='closed')store.save('deadlines',{id:loginId,status:'closed',closed_at:new Date().toISOString(),completion_evidence:'Health endpoint returned HTTP '+observation.status});if(repair&&repair.state!=='verified')store.save('work_items',{id:repairId,state:'verified',evidence:'Health endpoint returned HTTP '+observation.status});}
-      const pending=store.get('work_items',repairId);if(!observation.ok&&pending?.state==='pending'){const attempts=(pending.attempts||0)+1;store.save('work_items',{id:repairId,attempts,state:attempts>=pending.max_attempts?'needs_review':'pending',retry_after:new Date(Date.now()+60000*2**attempts).toISOString(),last_error:observation.error||'HTTP '+observation.status});}
+      const pending=store.get('work_items',repairId);if(!observation.ok&&pending?.state==='pending'){if([401,403].includes(observation.status))store.save('work_items',{id:repairId,state:'awaiting_login',retry_after:null,last_error:'The configured account needs sign-in'});else{const attempts=(pending.attempts||0)+1;store.save('work_items',{id:repairId,attempts,state:attempts>=pending.max_attempts?'needs_review':'pending',retry_after:new Date(Date.now()+60000*2**attempts).toISOString(),last_error:observation.error||'HTTP '+observation.status});}}
       result.push({...observation,changed});
     }
     if(!result.some(r=>r.changed&&!r.ok))return {verified:true,silent:true,connections:result};

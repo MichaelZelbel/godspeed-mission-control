@@ -32,13 +32,20 @@ export function hermesProvider({executable='hermes',home,cwd,model,provider,sour
     const timer=setTimeout(()=>{stop();cleanup();reject(new Error('The AI did not finish within two minutes. Try a shorter message or a lower effort.'));},120000);
     child.on('error',()=>{cleanup();reject(new Error('The AI connection could not start'));});
     child.stdout.on('data',chunk=>{bytes+=chunk.length;if(bytes>1024*1024){stop();cleanup();reject(new Error('Assistant output exceeded its limit'));}else output.push(chunk);});
-    child.stderr.resume();child.on('close',code=>{cleanup();const text=hermesResponse(Buffer.concat(output).toString('utf8'));code===0&&text?resolve(text):reject(new Error('The AI connection failed. Check the connected account in Settings and try again.'));});
+    // Classify known failures without persisting or exposing private diagnostics.
+    let diagnostic='';child.stderr.on('data',chunk=>{diagnostic=(diagnostic+chunk.toString('utf8')).slice(-32768);});child.on('close',code=>{cleanup();const text=hermesResponse(Buffer.concat(output).toString('utf8'));code===0&&text?resolve(text):reject(new Error(hermesFailureMessage(diagnostic+'\n'+text)));});
     child.stdin.end(JSON.stringify(prompt));
   });
   let cached,loadedAt=0;run.options=async()=>{if(cached&&Date.now()-loadedAt<300000)return cached;const python=process.platform==='win32'?path.join(sourceRoot||path.resolve(executable,'../../hermes-agent'),'venv','Scripts','python.exe'):path.resolve(executable,'../../.venv/bin/python3');const helper=fileURLToPath(new URL('../assistant-files/chat-options.py',import.meta.url));cached=await new Promise((resolve,reject)=>{const p=spawn(python,[helper],{cwd:sourceRoot||path.resolve(executable,'../..'),windowsHide:true,env:assistantEnvironment({home,workspace:cwd}),stdio:['ignore','pipe','ignore']});let out='';const timer=setTimeout(()=>{p.kill();reject(new Error('Model choices could not be loaded'));},20000);p.on('error',()=>{clearTimeout(timer);reject(new Error('Model choices could not be loaded'));});p.stdout.on('data',v=>out+=v);p.on('close',code=>{clearTimeout(timer);try{if(code)throw new Error();resolve(JSON.parse(out.trim().split(/\r?\n/).at(-1)));}catch{reject(new Error('Model choices could not be loaded'));}});});loadedAt=Date.now();return cached;};return run;
 }
 export function hermesResponse(output){
   return output.replace(/\x1b\[[0-9;]*m/g,'').replace(/^Warning: Unknown toolsets: none\r?\n\s*/,'').replace(/^\s*⚠ tirith security scanner enabled but not available[^\n]*\r?\n\s*/,'').trim();
+}
+export function hermesFailureMessage(diagnostic){
+  if(/context length exceeded|context_length_exceeded|maximum context length|cannot compress further/i.test(diagnostic))return 'The AI request exceeded the model context limit. Reduce the selected source scope before retrying.';
+  if(/rate_limit_exceeded|rate limit exceeded|too many requests|usage limit reached|quota exceeded|insufficient_quota/i.test(diagnostic))return 'The connected AI account reached a usage limit. Retry after its limit resets.';
+  if(/authenticationerror|invalid_api_key|incorrect api key|token expired|unauthorized|authentication failed/i.test(diagnostic))return 'The connected AI account needs sign-in. Check the account in Settings before retrying.';
+  return 'The AI request failed. Its private runtime diagnostics are retained for investigation.';
 }
 export function modelProvider({ url, key, model, maxTokens = 4096 } = {}) {
   if(!url || !key || !model)return null;
