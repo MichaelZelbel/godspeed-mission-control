@@ -6,17 +6,17 @@ The current edition stays on `main`. These installers set up version 2 separatel
 
 ## Windows
 
-[Download GodspeedSetup.exe](https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-04-3/GodspeedSetup.exe), then run it.
+[Download GodspeedSetup.exe](https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-04-4/GodspeedSetup.exe), then run it.
 
 This is the complete Windows installer, including the integrated notebook and its Node runtime. It sets up its own workspace and assistant profile. Its installation screens currently call this edition "Full Alpha". The notebook opens at [http://127.0.0.1:47831/dashboard](http://127.0.0.1:47831/dashboard). Connect your own model account in Settings to use the assistant. The installer is unsigned, so Windows may ask you to confirm that you want to run it.
 
-The executable is also [committed on this branch](installers/GodspeedSetup.exe). The [download page](https://github.com/MichaelZelbel/godspeed-mission-control/releases/tag/godspeed-v2-integrated-2026-10-04-3) lists the same file and its checksums.
+The executable is also [committed on this branch](installers/GodspeedSetup.exe). The [download page](https://github.com/MichaelZelbel/godspeed-mission-control/releases/tag/godspeed-v2-integrated-2026-10-04-4) lists the same file and its checksums.
 
 ## Linux VPS or Mac with Docker
 
 This edition uses Docker with Compose on Linux and Mac. Install and start Docker first. Mac acceptance is still unverified; this is not a tested native Mac installer.
 
-[Download install-godspeed.sh](https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-04-3/install-godspeed.sh), or run:
+[Download install-godspeed.sh](https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-04-4/install-godspeed.sh), or run:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/MichaelZelbel/godspeed-mission-control/codex/godspeed-v2-completeness/install-godspeed.sh | bash

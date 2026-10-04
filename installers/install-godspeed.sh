@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Godspeed Mission Control v2: integrated notebook, isolated from version 1.
 set -euo pipefail
-revision=edb7e046e856a86ac32a28d2fb3b38bcd9246b46
-digest=4b258e547d4f555f6d320ef72a1cab66dca3f85458828b468f3539e4673d626a
-url=https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-04-3/Godspeed-v2-integrated-source.tar.gz
+revision=285682a1442625ca1968d9bda9f86c9452d96671
+digest=e52c7e7a11990f2a09725912daafe7f693f9e5751fc493c6b949c4c6d4e0a663
+url=https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-04-4/Godspeed-v2-integrated-source.tar.gz
 root=${GODSPEED_V2_INSTALL_DIR:-$HOME/GodspeedMissionControl-v2}
 host=${GODSPEED_HOST:-}
 if [ "${1:-}" = --help ]; then

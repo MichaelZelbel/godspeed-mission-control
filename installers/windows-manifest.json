@@ -1,7 +1,7 @@
 {
   "channel": "full-alpha",
   "version": "2.0.0-alpha.1",
-  "kitCommit": "edb7e046e856a86ac32a28d2fb3b38bcd9246b46",
+  "kitCommit": "285682a1442625ca1968d9bda9f86c9452d96671",
   "bootstrapCommit": "0d10f08a02599c79d1c86b27f0cd03f64d72c731",
   "nodeVersion": "22.19.0",
   "nodeArchiveSha256": "ea3fad0e67a991d8477d8c01344b56e69c676ccb733f065b22436994b1253f86",
@@ -29,7 +29,7 @@
     },
     {
       "path": "kit/README.md",
-      "sha256": "19b46d4e9dc321416f9070696b19f1e15e36bf799cf2190f68a8c35b3afc054e"
+      "sha256": "fd6ecd212def876a1efafb8b78207a1abeffe9f80cc97e7883eaea1a2f132730"
     },
     {
       "path": "kit/.github/workflows/computer-test.yml",
@@ -45,7 +45,7 @@
     },
     {
       "path": "kit/.github/workflows/v2-integrated.yml",
-      "sha256": "a6d95796f4dfd451ded692d50a02ec50a746b26436d8c8aa26901746de33d0ef"
+      "sha256": "af0092444bd9576852d054644e302641877d6e84ddd91c2b4833fb0b154a5276"
     },
     {
       "path": "kit/.github/workflows/windows-installer.yml",
@@ -269,7 +269,7 @@
     },
     {
       "path": "kit/docker/hostinger/compose.yaml",
-      "sha256": "02248e7f73ea3f3a26aadf68399e7628ee99efa02ea64a370c701ba2f4effa12"
+      "sha256": "95d5ba61914be85566e845543b3dae5ac7cdd83b2406517f0d14a57374e3dc74"
     },
     {
       "path": "kit/docker/hostinger/README.md",
@@ -285,7 +285,7 @@
     },
     {
       "path": "kit/docker/hostinger/installer/compose.mjs",
-      "sha256": "894d0801f09a9c45119a8e76e85522d63ffe6a9c8febc7ef526f9ca2aeab40ad"
+      "sha256": "a7a7ba362cee01c79528244b525a64d13ce0490479f986a40f20f86c4e85d146"
     },
     {
       "path": "kit/docker/hostinger/installer/DESIGN.md",
@@ -545,15 +545,15 @@
     },
     {
       "path": "kit/docs/full-version/trial-handoff.md",
-      "sha256": "fe7dab462029fc5bed31332d68459ca80144de032b02aa9036e01f489d49ad75"
+      "sha256": "b3a6e62ae535778102cc0f4935ef0d921069a1daaf18aa8484059adb959c2467"
     },
     {
       "path": "kit/docs/full-version/trial-scope.md",
-      "sha256": "301dd265eedc694be00605d8ffce04bea89e2925a6dcbcd024c578c1199de6cc"
+      "sha256": "881d37c211eb6991183c8887ab07a983664c4445d5617f2046bc6113e607fd15"
     },
     {
       "path": "kit/docs/full-version/v2-progress.md",
-      "sha256": "1c49ef4ed591c2f351e1108e70c68ab6aaae7b7d9dd795c22dfcbe27af321b57"
+      "sha256": "588aa9685cc6f2bd1ffff831c0e897ff97643428725d1b09fa559d08e914035e"
     },
     {
       "path": "kit/docs/full-version/verification.md",
@@ -977,7 +977,7 @@
     },
     {
       "path": "kit/notebook/core/telegram.mjs",
-      "sha256": "3849960218f03f3fcddf95d05d9f9bbcae87d01ce73b78c31ea329662aa5275b"
+      "sha256": "5d8a52ac19f60bec6132c149f306474e7515eb292b9491866f220953dadd6c29"
     },
     {
       "path": "kit/notebook/core/visibility.mjs",
@@ -10546,6 +10546,10 @@
     {
       "path": "kit/notebook/test/sync.test.mjs",
       "sha256": "e7fb78b5a9d2d023bc7521e3a3406c792fb7362c6324ef2d0380d7c28a46ead4"
+    },
+    {
+      "path": "kit/notebook/test/telegram-replies.test.mjs",
+      "sha256": "a8b1c35063f5f486d646140241c2d2d30f27e25839951669ce6bcf8864dcb571"
     },
     {
       "path": "kit/notebook/test/topic-recipe-tools.test.mjs",
