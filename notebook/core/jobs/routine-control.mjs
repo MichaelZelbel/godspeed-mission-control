@@ -2,7 +2,7 @@ import {kinds} from './scheduler.mjs';
 
 // Controls edit schedule choices only. Execution authority and receipts have
 // their own operations and cannot be supplied through Pause or Enable.
-export async function controlRoutine(store,input,{enable=false,device=store.device,now=Date.now()}={}){
+export async function controlRoutine(store,input,{enable=false,now=Date.now()}={}){
  if(!input||typeof input!=='object'||Array.isArray(input))throw Error('Choose a routine');
  const allowed=enable?['kind','interval_ms','title','discovery']:['id','paused'];
  if(Object.keys(input).some(key=>!allowed.includes(key)))throw Error('Routine controls cannot change execution permission');
@@ -14,7 +14,9 @@ export async function controlRoutine(store,input,{enable=false,device=store.devi
  return store.withLockAsync(()=>{
   const settings=store.get('settings','installation'),id=enable?input.kind:input.id,old=store.get('jobs',id);
   if(!settings)throw Error('Complete setup first');
-  if(settings.owner!==device||old&&old.owner!==device)throw Error('Only the schedule owner can change this routine');
+  // Authenticated paired notebooks may edit choices on any machine. Execution
+  // still belongs to the installation owner and the scheduler checks its device.
+  if(!settings.owner||old&&old.owner!==settings.owner)throw Error('The routine owner differs from the installation owner');
   if(!enable&&!old)throw Error('Routine not found');
   const resume=enable||input.paused===false;
   let changes=enable?{id,kind:input.kind,interval_ms:input.interval_ms,paused:false,...(!old?{owner:settings.owner,title:input.title||input.kind,state:'pending',next_run:new Date(now).toISOString(),retry_count:0}:{}),...(input.title!==undefined?{title:input.title}:{}),...(input.kind==='radar'&&(input.discovery!==undefined||!old)?{discovery:input.discovery!==false}:{})}:{paused:input.paused};

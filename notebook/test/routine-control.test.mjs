@@ -58,3 +58,14 @@ test('an incomplete failed receipt cannot be rearmed as a completed internal fai
  s.store.save('job_receipts',{id:id+'-'+Date.parse(slot),job_id:id,state:'failed',error:'Fictional interrupted failure'});
  const before=s.store.get('jobs',id);assert.equal((await s.post('update',{id,paused:false})).status,400);assert.deepEqual(s.store.get('jobs',id),before);
 });
+test('paired notebook controls retain VPS execution ownership and local scheduler stays silent',async t=>{
+ const s=await fixture(t),id='watch',slot=new Date(Date.now()+86400000).toISOString();
+ s.store.save('settings',{id:'installation',owner:'vps'});
+ s.store.save('jobs',{id,kind:id,owner:'vps',paused:true,state:'pending',next_run:slot,interval_ms:60000,choices:{source:'fictional'}});
+ assert.equal((await s.post('update',{id,paused:false})).status,200);
+ const resumed=s.store.get('jobs',id);assert.equal(resumed.owner,'vps');assert.equal(resumed.next_run,slot);assert.deepEqual(resumed.choices,{source:'fictional'});
+ assert.equal((await s.post('add',{kind:'health-summary',interval_ms:60000})).status,200);
+ assert.equal(s.store.get('jobs','health-summary').owner,'vps');assert.equal(s.store.get('settings','installation').owner,'vps');
+ let calls=0;s.scheduler.executor=async()=>{calls++;return {verified:true,silent:true};};assert.deepEqual(await s.scheduler.tick(Date.now()+86400001),[]);assert.equal(calls,0);assert.equal(s.store.list('job_receipts').length,0);
+ s.store.save('jobs',{id,owner:'local'});assert.equal((await s.post('update',{id,paused:true})).status,400);assert.equal((await s.post('add',{kind:id,interval_ms:60000})).status,400);
+});
