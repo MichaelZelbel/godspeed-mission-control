@@ -10,7 +10,7 @@ These are installation mechanisms, not adopted personal goals. Personal routines
 
 ## Goal decisions and approved local work
 
-Does: consumes adopted goals, saved decisions, exact local approvals and checked results. Decisions receive the latest actual report and the current saved deliverable; earlier defects remain history. Selecting the identical completed local edit gets one bounded correction, then fails without queuing another write if repeated. When the user selects waiting for a separate report, a verified local change remains waiting until an actual later report or a changed goal direction is saved.
+Does: consumes adopted goals, saved decisions, exact local approvals and checked results. Decisions receive the latest actual report and the current saved deliverable; earlier defects remain history. Selecting the identical completed local edit gets one bounded correction, then fails without queuing another write if repeated. Waiting uses the newest decision by date rather than filename, so unchanged evidence stays quiet until its next check. When the user selects waiting for a separate report, a verified local change remains waiting until an actual later report or a changed goal direction is saved.
 Rhythm: not scheduled by this template; the saved routine controls determine cadence, time zone, owner and pause state.
 Lands: goal decisions, work results, tool evidence and forecasts in the notebook.
 Lives: the notebook scheduler in the selected installation.
@@ -27,6 +27,16 @@ Lives: the notebook scheduler in the selected installation.
 May: collect enabled sources, save a checked notebook note and mark included watch findings shown. Rehearsals may change their own copies and send nothing.
 Off-switch: pause Morning brief or Brief rehearsal in routine controls.
 Last checked: 2026-10-04, source regressions check one rewrite, retained failed checks and rehearsal isolation. Complete collector, final cut and delivery acceptance remains unfinished.
+
+## Structural system review
+
+Does: scores actual context, connections, installed methods and cadence separately, retains evidence and the three highest structural gaps, and compares the previous retained baseline. With a connected assistant, it reads actual recent messages and rules and requires exact source quotes for proposed corrections. Missing memory, peer or comparator evidence stays explicitly unverified.
+Rhythm: not scheduled by this template; enable Audit through normal routine controls.
+Lands: a dated notebook review, source-check failures and retained previous reports.
+Lives: the notebook scheduler in the selected installation.
+May: inspect this workspace, visible records and configured connection metadata. Credentials never enter the report. It changes no rules, accounts, other assistant stores or paused routines. An unsupported finding gets one correction before the review fails.
+Off-switch: pause Audit in routine controls.
+Last checked: 2026-10-04, source tests check four layers, observed connection freshness, retained baselines, credential exclusion and quoted findings. Installed acceptance and broader system-review scope remain required.
 
 <!--
 The register (Chapter 21). One block per procedure.

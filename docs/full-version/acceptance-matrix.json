@@ -1,6 +1,6 @@
 {
   "format": 2,
-  "checked_at": "2026-10-04T00:09:32.254108+00:00",
+  "checked_at": "2026-10-04T00:27:01.029813+00:00",
   "complete": false,
   "items": [
     {
@@ -2657,8 +2657,10 @@
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
       "criterion": "Validate system state and goal outcomes, then prepare corrections. Verify the audit result across a failed run, restart and an unchanged repeat; report an observation rather than implying execution.",
-      "status": "source only",
-      "evidence": [],
+      "status": "partial",
+      "evidence": [
+        "Scheduled source implementation now scores four evidenced structural layers, ranks gaps with concrete corrections and verification, preserves unresolved failed routines and prior baselines, excludes connector credentials and quotes actual visible messages/rules before accepting semantic findings. Fabricated findings exhaust one bounded correction without an accepted report. Installed entry-point, actual loaded-memory, configured-limit and peer/comparator coverage remain partial."
+      ],
       "required": true,
       "target_test": "Exercise audit through its installed entry point and check actual results after restart"
     },
@@ -2689,9 +2691,10 @@
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
       "criterion": "Four 25-point evidence-led structural layers, three impact-ranked corrections, rules review, loaded shared-memory checks, message-readability review and weekly comparator rotation; no structural score implies behavioral completion.",
-      "status": "source only",
+      "status": "partial",
       "evidence": [
-        "Full maintained portable workflow: notebook/reusable-recipes/audit/SKILL.md; generated installed copy matches the maintained source plus workspace adapter. Actual installed audit deliverable remains required."
+        "Full maintained portable workflow: notebook/reusable-recipes/audit/SKILL.md; generated installed copy matches the maintained source plus workspace adapter. Actual installed audit deliverable remains required.",
+        "The full maintained audit method is attached to the scheduled semantic review. Source tests verify actual message/rule quotes, retained failures and evidence-based structural output. Installed deliverable and explicitly inaccessible memory/peer/comparator scope remain unverified."
       ],
       "required": true,
       "target_test": "Exercise audit through its installed entry point and check actual results after restart"
@@ -3721,7 +3724,8 @@
         "Installed explicit waiting policy saved one silent wait tied to the actual applied task and cancelled stale duplicate work. A later normal goal outcome saved the actual fictional 2/5 defect and selected a correction. The endpoint correction was refused before writing because it skipped the required actual source read; the approved target remained unchanged. Native development read the actual source and target, then repeated those reads until the tool budget failed without applying. Both failed attempts are retained, not full-loop acceptance.",
         "New source provides one correction for missing actual reads, explicit read/finish phases derived from current tool receipts, and an optional finite numeric goal outcome control. Eight worker and nine personal-operation checks pass; new installed acceptance is required.",
         "Normal f0d1719 development goal change retained the failed old attempt, revoked its old approval and saved fresh exact target permission. The new native task executed source and target reads once but remains attempted without verified completion. Do not count it as accepted.",
-        "Actual f0d1719 endpoint tool work 5ac684eb saved the clean source-only checklist, verified it, and mechanically waited for a separate report. Normal outcome controls saved the actual internal software review and numeric value 4. The next decision repeated the identical previous edit and old defect; it was not approved. Current source supplies ordered latest report/current deliverable and one bounded identical-edit repair. Two meaningful regressions pass; final full suite 182 passes/one skip, zero failures. New installed decision acceptance remains required."
+        "Actual f0d1719 endpoint tool work 5ac684eb saved the clean source-only checklist, verified it, and mechanically waited for a separate report. Normal outcome controls saved the actual internal software review and numeric value 4. The next decision repeated the identical previous edit and old defect; it was not approved. Current source supplies ordered latest report/current deliverable and one bounded identical-edit repair. Two meaningful regressions pass; final full suite 182 passes/one skip, zero failures. New installed decision acceptance remains required.",
+        "Actual installed 1b885b0 development work 102db9cf read the named source and approved target once, saved exactly four source-backed items, and verified target SHA-256 ca5b555f87de462b051c2825e6654cf670d838d24e825429d34f0aecafd30420. The normal outcome form saved an actual internal software review with measured value 5, not a real garden outcome. The next decision waited correctly, but later checks reused an older waiting decision because filesystem order was mistaken for chronology. The source now selects the newest waiting decision by date; the regression reproduced repeated model calls before the fix and stays quiet after it. Installed sustained-quiet acceptance remains required."
       ],
       "required": true,
       "target_test": "Exercise failed decisions/checks, changed direction, delayed exact local approval and restart through final installed notebooks."
@@ -3812,7 +3816,8 @@
         "Normal endpoint chat stored Fictional Alex Garden’s preference with the actual contact subject. A requested correction then used a new label and left two current claims, despite its acknowledgement. Canonical correction source now requires the actual previous claim ID, exposes its attribute and subject in bounded chat context, retains closure evidence, and refuses hidden, historical or other-person targets. Sixteen memory/personal checks pass; actual installed correction/retrieval/restart remains required.",
         "Malformed ordinary outcome JSON with trailing narration failed installed chat before a write. New source uses one combined syntax/permission correction budget before any operation, rejects repeated malformed output and retains actual numeric outcomes once; source regressions pass. Installed chat acceptance remains required.",
         "Actual f0d1719 installed endpoint chat claimed correction without changing either fictional-person claim or writing an operation receipt. Retained failure: endpoint-f0d1719-canonical-memory-chat.txt and endpoint-f0d1719-canonical-memory-claims.json. New source fixes profile-day retrieval, exact full-name identity and unsupported memory acknowledgements; three RED/GREEN regressions and final 179-pass/one-skip suite pass. New installed verification remains required.",
-        "Actual installed 1b885b0 normal endpoint chat correction closed claims-628b0191 with the exact conversation source quote and retained the replacement claims-cb525235 in the same canonical attribute for the same fictional person. endpoint-1b885b0-canonical-memory-claims.json and chat snapshot retained. Broader hidden/history/fresh-context/restart acceptance remains required; partial status remains."
+        "Actual installed 1b885b0 normal endpoint chat correction closed claims-628b0191 with the exact conversation source quote and retained the replacement claims-cb525235 in the same canonical attribute for the same fictional person. endpoint-1b885b0-canonical-memory-claims.json and chat snapshot retained. Broader hidden/history/fresh-context/restart acceptance remains required; partial status remains.",
+        "Normal installed fictional-person History retains the old one-question claim as historical. A fresh person conversation retrieves the current two-question preference. Hiding this person refuses assistant access through the normal chat interface; restoring visibility allows the correct current answer. Evidence: endpoint-1b885b0-person-current-history-ui.txt and actual claims. Broader synonym, ambiguity, restart and shared-corpus acceptance remains required."
       ],
       "required": true,
       "target_test": "Compare corrections, hidden/superseded facts, dates, ambiguity and synonyms after restart against a common Menerio corpus."
@@ -3891,7 +3896,8 @@
         "Authorized development normal Settings recovery verified 943 records and 2586 files, rebuilt search and retained separate restoration storage; development-normal-backup-restore.txt. Windows native 2d57982 upgrade completed after two independently verified snapshots/restorations; Windows fixture health and normal UI reopened. Additional offline/conflict/media recovery acceptance remains required.",
         "Authorized development intermediate 2d57982 image was built on physical srv1069233.hstgr.cloud; its 1565 frontend files matched the Windows manifest and Linux source checks passed 150 with one platform skip. Normal recovery verified 943 records/2586 files before only the owned notebook upgrade; matching 2d Windows native upgrade succeeded. Later source changes require new matching packages and new verified backups.",
         "Matching f0d1719 Windows native and authorized development upgrades passed after retained empty restorations (Windows main 863/2363; endpoint 2429/3475; normal development 1061/2793). All 1565 built Linux image browser files match the Windows manifest byte-for-byte. Broader paired reliability and final completion remain required.",
-        "Matching 1b885b0 installed on Windows and authorized development after retained empty restorations: main 865/2369, endpoint 2600/3650, development 1156/2947. All 1565 development image UI files equal the Windows manifest. Both health endpoints have fresh scheduler heartbeats. Windows/Linux source suites each 180 pass/one skip. Not final completeness."
+        "Matching 1b885b0 installed on Windows and authorized development after retained empty restorations: main 865/2369, endpoint 2600/3650, development 1156/2947. All 1565 development image UI files equal the Windows manifest. Both health endpoints have fresh scheduler heartbeats. Windows/Linux source suites each 180 pass/one skip. Not final completeness.",
+        "Normal development Settings saved a new backup and restored 1250 records/3086 files into retained empty storage at .godspeed/restored-copies/1791073154341-c2c158e5bec0/workspace. No upgrade follows from this evidence yet. Matching fab179a intermediate Windows/development packages were built and retained, not installed; their source suites passed 182 tests plus one platform skip on both platforms."
       ],
       "required": true,
       "target_test": "Repeat recovery/link checks on final matching Windows/VPS packages; accept offline edits, reconnection, retained conflicts and preserved choices/pauses."

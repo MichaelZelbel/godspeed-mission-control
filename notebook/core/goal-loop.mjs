@@ -14,7 +14,7 @@ export async function decide(job,{store,query,provider}){
  const pending=query.rows('work_items').find(w=>w.goal_id===goal.id&&(['pending','attempted','awaiting_approval','needs_review'].includes(w.state)||w.state==='failed'&&w.attempts<(w.max_attempts||3)));
  if(pending)return {verified:true,silent:true,work_id:pending.id,reason:'Existing work must finish or be reviewed first'};
  const decisionEvidence=hash({title:goal.title,own_words:goal.own_words,measure:goal.measure,playbook:goal.playbook,diagnosis:goal.diagnosis,progress:goal.progress,notes:visibleRows(query,'notes').filter(n=>!n.source_app||n.source_app==='conversation-chat').slice(-10).map(n=>[n.id,n._hash])});
- const waiting=visibleRows(query,'decisions').filter(d=>d.goal_id===goal.id&&d.state==='waiting').at(-1);
+ const waiting=visibleRows(query,'decisions').filter(d=>d.goal_id===goal.id&&d.state==='waiting').sort((a,b)=>Date.parse(a.created_at)-Date.parse(b.created_at)).at(-1);
  const applied=visibleRows(query,'work_items').filter(w=>w.goal_id===goal.id&&w.state==='verified'&&w.verification?.kind==='applied-local-note'&&Number.isFinite(Date.parse(w.verification.at))).sort((a,b)=>String(a.verification.at).localeCompare(String(b.verification.at))).at(-1);
  const directionChanged=applied&&(goal.changes||[]).some(c=>c.at>applied.verification.at&&(c.before?.title!==goal.title||c.before?.measure!==goal.measure));
  const reportAfterChange=applied&&(goal.progress||[]).some(p=>(p.kind==='observed'||p.kind==='reported-observation')&&p.at>applied.verification.at);

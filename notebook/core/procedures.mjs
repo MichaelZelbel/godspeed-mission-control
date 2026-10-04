@@ -6,6 +6,7 @@ import {visibleRows} from './visibility.mjs';
 import {Connectors} from './connectors.mjs';
 import {subscriptionCommand} from './subscriptions.mjs';
 import {recipeContext} from './recipe-context.mjs';
+import {structuralAudit} from './structural-audit.mjs';
 export {procedureKinds} from './jobs/kinds.mjs';
 export async function procedure(job,{store,query,provider}){
   const kind=job.kind;let result;
@@ -19,13 +20,7 @@ export async function procedure(job,{store,query,provider}){
     store.withLock(()=>store.commit([note,store.prepare('notifications',{id,record_id:note.id,status:'ready'})]));
     return {verified:true,record_id:note.id,content_hash:store.get('notes',note.id)._hash,delivery:'notebook'};
   }
-  if(kind==='audit'){
-    store.scan();const goals=visibleRows(query,'goals'),work=visibleRows(query,'work_items'),receipts=visibleRows(query,'job_receipts');
-    const findings=[...store.problems.map(p=>({kind:'file-validation',evidence:p})),...goals.filter(g=>['adopted','active'].includes(g.status)&&!(g.measure||g.legacy_fields?.MEASURE)).map(g=>({kind:'missing-progress-measure',goal_id:g.id,evidence:'An adopted goal has no agreed progress measure'})),...work.filter(w=>w.state==='verified'&&!w.verification&&w.kind!=='repair').map(w=>({kind:'unsubstantiated-work',work_id:w.id,evidence:'Work was marked verified without a retained completion check'}))];
-    for(const r of receipts.filter(r=>r.state==='failed'))if(!receipts.some(n=>n.job_id===r.job_id&&n.state==='verified'&&n.started_at>r.started_at))findings.push({kind:'failed-routine',job_id:r.job_id,evidence:r.error});
-    if(!findings.length)return {verified:true,silent:true,checked:{goals:goals.length,work:work.length,receipts:receipts.length}};
-    const id='audit-'+hash(findings);if(store.get('notifications',id))return {verified:true,silent:true};const note=store.save('notes',{title:'Corrections found in your system review',content:JSON.stringify(findings,null,2),source_app:'audit',findings});store.save('notifications',{id,record_id:note.id,status:'ready'});return {verified:true,record_id:note.id,delivery:'notebook'};
-  }
+  if(kind==='audit')return structuralAudit(job,{store,query,provider});
   if(['review','memory-review'].includes(kind)){
     if(!provider)throw Error('Connect an assistant before reviewing memory');
     const domains=new Domains(query,{provider});let proposed=0;

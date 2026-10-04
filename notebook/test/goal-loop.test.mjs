@@ -172,3 +172,10 @@ test('a repeated identical edit after its decision correction fails without queu
  await assert.rejects(jobExecutor(async()=>{calls++;return {kind:'local-note',action:previous.title,check:'Use the source',reason:'Repeat.'};},query)({kind:'goal-decision'},{store,settings:{}}),/completed local edit was selected again/);
  assert.equal(calls,2);assert.equal(store.list('work_items').length,1);assert.equal(store.list('decisions').length,0);
 });
+
+test('the newest waiting decision stays quiet even when an older waiting title sorts after it',async()=>{
+ const {store,query}=fixture(),now=Date.now(),goal=store.save('goals',{title:'Fictional observed goal',status:'adopted',progress:[{kind:'observed',value:5,evidence:'Actual fictional software review passed.',at:new Date(now-1000).toISOString()}]});
+ store.save('decisions',{title:'ZZ historical waiting decision',goal_id:goal.id,state:'waiting',evidence_hash:'old-evidence',check_at:new Date(now+86400000).toISOString(),created_at:new Date(now-3000).toISOString()});let calls=0;
+ const provider=async()=>{calls++;return {kind:'wait',reason:'The actual review is complete; wait for the next real report.',check_at:new Date(now+86400000).toISOString()};};
+ const execute=jobExecutor(provider,query);await execute({kind:'goal-decision'},{store,settings:{}});const next=await execute({kind:'goal-decision'},{store,settings:{}});assert.equal(calls,1);assert.equal(next.silent,true);assert.equal(store.list('decisions').length,2);
+});
