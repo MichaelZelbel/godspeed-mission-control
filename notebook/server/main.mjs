@@ -8,6 +8,7 @@ import { SearchIndex } from '../core/index/search.mjs';
 import { QueryService } from '../core/query.mjs';
 import { Domains } from '../core/domains.mjs';
 import { Scheduler } from '../core/jobs/scheduler.mjs';
+import {controlRoutine} from '../core/jobs/routine-control.mjs';
 import { modelProvider, jobExecutor,hermesProvider } from '../core/runtime.mjs';
 import {assistantEnvironment} from '../core/assistant-files.mjs';
 import { FileSync } from '../core/sync/git.mjs';
@@ -173,8 +174,8 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       if(route==='/api/setup'&&req.method==='POST'){const input=JSON.parse(await body(req));return send(res,200,{...scheduler.configure({...input,owner:mediaSync.config()?'vps':device}),results:await scheduler.tick()});}
       if(route==='/api/jobs/run'&&req.method==='POST')return send(res,200,{results:await scheduler.tick()});
       if(route==='/api/connections/recheck'&&req.method==='POST'){await jobExecutor(provider,query)({kind:'connection-check',id:'manual-connection-check',manual:true},{store,settings:store.get('settings','installation')||{}});return send(res,200,{connections:query.rows('connector_status').map(({id,ok,status,checked_at})=>({id,ok,status,checked_at}))});}
-      if(route==='/api/jobs/update'&&req.method==='POST'){const input=JSON.parse(await body(req));return send(res,200,{data:store.save('jobs',input)});}
-      if(route==='/api/jobs/add'&&req.method==='POST'){const input=JSON.parse(await body(req));if(!kinds.includes(input.kind)||!Number.isFinite(input.interval_ms)||input.interval_ms<60000)throw new Error('Choose a supported routine and interval of at least a minute');if(input.discovery!==undefined&&typeof input.discovery!=='boolean')throw Error('Choose whether radar may discover public sources');return send(res,200,{data:store.save('jobs',{id:input.kind,kind:input.kind,title:input.title||input.kind,owner:store.get('settings','installation')?.owner||device,next_run:new Date().toISOString(),interval_ms:input.interval_ms,state:'pending',paused:false,...(input.kind==='radar'?{discovery:input.discovery!==false}:{})})});}
+      if(route==='/api/jobs/update'&&req.method==='POST'){const input=JSON.parse(await body(req));return send(res,200,{data:await controlRoutine(store,input,{device})});}
+      if(route==='/api/jobs/add'&&req.method==='POST'){const input=JSON.parse(await body(req));return send(res,200,{data:await controlRoutine(store,input,{enable:true,device})});}
       if(route==='/api/index/rebuild'&&req.method==='POST'){index.rebuild();return send(res,200,{ok:true});}
       if(route==='/api/backup'&&req.method==='POST')return send(res,200,await backupRunner.run());
       if(route==='/api/backups'&&req.method==='GET'){
