@@ -17,11 +17,7 @@ const path = require("path");
 const fs = require("fs");
 const os = require("os");
 
-const HF_ROOTS = [
-  process.env.HYPERFRAMES_ROOT,
-  path.resolve(__dirname, "../../.."),
-  path.join(os.homedir(), "Downloads", "hyperframes"),
-].filter(Boolean);
+const HF_ROOTS = require("./hyperframes-runtime.cjs").roots();
 let puppeteer = null;
 for (const root of HF_ROOTS) {
   const cands = [path.join(root, "node_modules", "puppeteer")];

@@ -39,11 +39,7 @@ function withPreviewGsapSri(html, gsapSource) {
   );
 }
 
-const HF_ROOTS = [
-  process.env.HYPERFRAMES_ROOT,
-  path.resolve(__dirname, "../../.."),
-  path.join(os.homedir(), "Downloads", "hyperframes"),
-].filter(Boolean);
+const HF_ROOTS = require("./hyperframes-runtime.cjs").roots();
 function findInBun(root, pkg, sub) {
   const cands = [path.join(root, "node_modules", pkg)];
   const bunDir = path.join(root, "node_modules", ".bun");

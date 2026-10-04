@@ -16,17 +16,9 @@ PROJECT="$(cd "$PROJECT" && pwd)"
 #   1. arg 2   2. $HYPERFRAMES_ROOT   3. repo root if this skill ships INSIDE the
 #   hyperframes repo (skills/embedded-captions/scripts → ../../..)   4. ~/Downloads/hyperframes
 SKILL_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-HF=""
-for cand in "${2:-}" "${HYPERFRAMES_ROOT:-}" "$(cd "$SKILL_SCRIPT_DIR/../../.." 2>/dev/null && pwd)" "$HOME/Downloads/hyperframes"; do
-  if [[ -n "$cand" && -f "$cand/packages/cli/dist/cli.js" ]]; then HF="$cand"; break; fi
-done
-if [[ -z "$HF" ]]; then
-  echo "[render] hyperframes CLI not found. Set HYPERFRAMES_ROOT to your hyperframes" >&2
-  echo "         checkout (needs packages/cli/dist/cli.js — 'bun install && bun run build')." >&2
-  exit 1
-fi
-export HYPERFRAMES_ROOT="$HF"   # so the occlusion gate's measure-layout.cjs finds puppeteer too
-HF_CLI="$HF/packages/cli/dist/cli.js"
+HF="$(node "$SKILL_SCRIPT_DIR/hyperframes-runtime.cjs" --root "${2:-}")"
+HF_CLI="$(node "$SKILL_SCRIPT_DIR/hyperframes-runtime.cjs" --cli "${2:-}")"
+export HYPERFRAMES_ROOT="$HF"
 if [[ ! -d "$PROJECT/frames_fg" ]]; then
   echo "[render] missing matte frames at $PROJECT/frames_fg — run matte.cjs first" >&2
   exit 1

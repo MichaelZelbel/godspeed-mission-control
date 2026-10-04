@@ -54,7 +54,7 @@ def _enable_cuda_dlls():
             os.environ["PATH"] = r + os.pathsep + os.environ.get("PATH", "")
 
 
-def transcribe(wav, model="small"):
+def transcribe(wav, model="small", device="auto"):
     _enable_cuda_dlls()
     from faster_whisper import WhisperModel
 
@@ -69,7 +69,7 @@ def transcribe(wav, model="small"):
 
     t0 = time.time()
     try:
-        words, info, dev = go("cuda", "float16")
+        words, info, dev = go("cpu", "int8") if device == "cpu" else go("cuda", "float16")
     except Exception as e:
         print(f"  cuda unavailable ({str(e).splitlines()[-1][:70]}), using cpu")
         words, info, dev = go("cpu", "int8")
@@ -83,6 +83,7 @@ def main():
     ap.add_argument("-o", "--out")
     ap.add_argument("--words", help="reuse a words.json instead of transcribing")
     ap.add_argument("--model", default="small")
+    ap.add_argument("--device", choices=("auto", "cpu"), default="auto", help="Use CPU int8 without probing CUDA")
     ap.add_argument("--ass-only", action="store_true")
     ap.add_argument("--crf", default="17")
     ap.add_argument("--font-file", help="Explicit licensed font file when Arial Black is not installed")
@@ -116,7 +117,7 @@ def main():
         print("extracting audio...")
         extract_audio(ff, a.video, wav)
         print("transcribing...")
-        words = transcribe(wav, a.model)
+        words = transcribe(wav, a.model, a.device)
         json.dump(words, open(stem + ".words.json", "w", encoding="utf-8"),
                   ensure_ascii=False, indent=1)
         os.remove(wav)
@@ -146,10 +147,12 @@ def main():
         shutil.copy2(ass, os.path.join(temporary, "captions.ass"))
         os.mkdir(os.path.join(temporary, "fonts"))
         shutil.copy2(style["font_file"], os.path.join(temporary, "fonts", "caption-font" + os.path.splitext(style["font_file"])[1]))
-        run([ff, "-v", "error", "-y" if a.overwrite else "-n", "-i", os.path.abspath(a.video),
+        rendered = run([ff, "-v", "info", "-y" if a.overwrite else "-n", "-i", os.path.abspath(a.video),
              "-vf", "subtitles=captions.ass:fontsdir=fonts", "-c:v", "libx264", "-preset", "slow",
              "-crf", a.crf, "-pix_fmt", "yuv420p", "-c:a", "copy", os.path.abspath(out)],
             "burn", cwd=temporary)
+        with open(stem + ".caption-render.log", "w", encoding="utf8") as log:
+            log.write(rendered.stderr)
     print(f"done -> {out}  ({os.path.getsize(out):,} bytes)")
 
 

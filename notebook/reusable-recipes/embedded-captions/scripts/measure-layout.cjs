@@ -21,11 +21,7 @@ const os = require("os");
 // Locate hyperframes' bundled puppeteer. render-and-composite.sh exports
 // HYPERFRAMES_ROOT; standalone we also try the in-repo path + ~/Downloads, and
 // accept ANY puppeteer@* the bun store holds (not a pinned version).
-const HF_ROOTS = [
-  process.env.HYPERFRAMES_ROOT,
-  path.resolve(__dirname, "../../.."), // skills/embedded-captions/scripts → repo root if in-repo
-  path.join(os.homedir(), "Downloads", "hyperframes"),
-].filter(Boolean);
+const HF_ROOTS = require("./hyperframes-runtime.cjs").roots();
 let puppeteer = null;
 for (const root of HF_ROOTS) {
   const cands = [path.join(root, "node_modules", "puppeteer")];
