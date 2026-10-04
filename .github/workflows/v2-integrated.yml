@@ -2,7 +2,7 @@ name: Integrated Godspeed v2
 on:
   push:
     branches: [codex/godspeed-v2-completeness]
-    paths: [.github/workflows/v2-integrated.yml, 'notebook/ui/**']
+    paths: [.github/workflows/v2-integrated.yml, 'notebook/ui/**', notebook/core/telegram.mjs, notebook/test/telegram-replies.test.mjs]
   workflow_dispatch:
 permissions:
   contents: read
@@ -17,7 +17,7 @@ jobs:
         with:
           node-version: '22.19.0'
       - name: Original folder and integrated core checks
-        run: node --test notebook/test/starter-workspace.test.mjs notebook/test/assistant-starter-wiring.test.mjs notebook/test/final-core-contracts.test.mjs
+        run: node --test notebook/test/starter-workspace.test.mjs notebook/test/assistant-starter-wiring.test.mjs notebook/test/final-core-contracts.test.mjs notebook/test/telegram-replies.test.mjs
       - uses: docker/login-action@v3
         with:
           registry: ghcr.io
