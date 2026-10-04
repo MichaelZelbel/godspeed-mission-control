@@ -1,13 +1,14 @@
 # Godspeed Mission Control trial handoff
 
-4 October 2026. Ready for the bounded Windows and development-VPS core trial agreed in trial-scope.md.
+4 October 2026. Separate version-2 branch and GitHub installer downloads prepared for Michael's trial. This is a preview, not stable-release completion.
 
 ## Open the trial
 
 - Windows notebook: http://127.0.0.1:47831/dashboard
 - Development notebook: https://srv1069233.hstgr.cloud:48443/settings
-- Matching Windows installer: `E:/godspeed-test-packages/2026-10-03-v2/GodspeedSetup-Full-Alpha-576f0da.exe`
-- Matching VPS source/UI package: `E:/godspeed-test-packages/2026-10-03-v2/Godspeed-Mission-Control-VPS-576f0da.tar.gz`
+- Windows installer: [GodspeedSetup.exe](https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-preview-2026-10-04/GodspeedSetup.exe)
+- Linux installer: [install-godspeed.sh](https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-preview-2026-10-04/install-godspeed.sh)
+- Matching Linux source/interface package and checksums: [GitHub download page](https://github.com/MichaelZelbel/godspeed-mission-control/releases/tag/godspeed-v2-preview-2026-10-04)
 
 The development server is srv1069233.hstgr.cloud. Production srv1328602.hstgr.cloud is not this handoff's installation target. The separate fictional Windows fixture on port 47839 supplied acceptance evidence and is not the main Windows trial workspace.
 
@@ -26,6 +27,6 @@ All fictional development routines are paused. Existing personal installation, l
 - Mac acceptance and actual two-week personal outcomes are unverified.
 - Historical review entries without complete undo evidence refuse Undo. External media-mapping conflict reversals also refuse Undo; unsupported inherited suggestion kinds report an error.
 - The comprehensive release/recipe matrices remain incomplete. Optional video and other creative workflows were not expanded as trial prerequisites. This handoff does not claim exhaustive feature completeness.
-- Production replacement, live data migration, Menerio retirement and publication require separate authorization.
+- Production replacement, live data migration and Menerio retirement require separate authorization. Michael explicitly requested these separate branch downloads on 4 October 2026. They are published as a prerelease without changing the stable/latest channel.
 
 No confirmation is needed to finish this handoff.
