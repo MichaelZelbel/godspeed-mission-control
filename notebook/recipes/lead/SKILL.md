@@ -55,6 +55,8 @@ If the user has adopted a separate weekly comparison with a company, read its ac
 
 On the first configured monthly run, remeasure the user's adopted progress rungs against actual searches and posted evidence. An inaccessible rung is UNVERIFIED, never zero. Read citations without requiring the user's name to accompany the repeated idea. Retain the previous measurement rather than replacing it.
 
+The executable video queue, monthly measurements and adopted weekly comparison are documented in `references/periodic-duties.md`. Read that entire reference before configuring or evaluating any of these duties.
+
 ## Verify the actual result
 
 Read back the saved entry, source quotes, run log and actual current state. Check the daily cap, blocked shapes, backlog/redraft rule, author attribution, links, voice, intended reader and usable delivery destination. Later actual acceptance/refusal/posting feeds the next run. No claim that the user posted or a rung moved without its actual evidence.
