@@ -1,5 +1,6 @@
 .git
 .github
+installers
 tools/.tmp-*
 **/__pycache__
 *.pyc
