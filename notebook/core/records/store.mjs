@@ -57,7 +57,7 @@ export class Store {
         if (error.code === 'ESRCH') { fs.unlinkSync(lock); return this.withLock(fn); }
         throw error;
       }
-      throw new Error('Workspace is being written by another process');
+      throw Object.assign(new Error('Workspace is being written by another process'),{code:'WRITER_BUSY'});
     }
     try { fs.writeFileSync(fd, JSON.stringify({ pid: process.pid, at: new Date().toISOString() })); fs.fsyncSync(fd); return fn(); }
     finally { fs.closeSync(fd); fs.unlinkSync(lock); }
@@ -72,6 +72,20 @@ export class Store {
       await new Promise(resolve=>setTimeout(resolve,25));
     }
     signal?.throwIfAborted();
+  }
+  async withLockAsync(fn,{signal,timeoutMs=30000}={}) {
+    const deadline=Date.now()+timeoutMs;
+    for(;;){
+      signal?.throwIfAborted();let entered=false;
+      try{return this.withLock(()=>{entered=true;return fn();});}
+      catch(error){
+        // Retry only acquisition. Once a transaction callback has started, its
+        // failure is uncertain and must never replay its work automatically.
+        if(entered||error.code!=='WRITER_BUSY')throw error;
+        const remaining=deadline-Date.now();if(remaining<=0)throw Error('Workspace is still being written. Your request has not been repeated.');
+        await this.waitForWriter({signal,timeoutMs:remaining});
+      }
+    }
   }
   file(record) { return path.join(this.recordsRoot, safe(record.type), safe(record.id) + (record.type === 'notes' ? '.md' : '.json')); }
   scan() {
@@ -125,14 +139,18 @@ export class Store {
     return record;
   }
   save(type, value, expectedHash) {
-    return this.withLock(() => {
+    return this.withLock(() => this.saveUnderLock(type,value,expectedHash));
+  }
+  saveAsync(type,value,expectedHash,options) {
+    return this.withLockAsync(()=>this.saveUnderLock(type,value,expectedHash),options);
+  }
+  saveUnderLock(type,value,expectedHash) {
       const old = value.id ? this.get(type, value.id) : null;
       if (expectedHash !== undefined && expectedHash !== (old?._hash || null)) {
         this.conflict(type,value,old);
       }
       if (type === 'moments' && old) throw new Error('Events are append-only; add a correction event');
       const record = this.prepare(type, value, old); this.commit([record]); return record;
-    });
   }
   conflict(type,value,old,base=null){
     const conflict = { id: randomUUID(), type, record_id: old?.id||value.id, kind:'stale-write',base,local:{...old,...value}, remote: old, at: new Date().toISOString() };

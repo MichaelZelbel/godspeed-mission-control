@@ -1,6 +1,6 @@
 {
   "format": 2,
-  "checked_at": "2026-10-04T05:50:48.080575+00:00",
+  "checked_at": "2026-10-04T06:17:07.078800+00:00",
   "complete": false,
   "items": [
     {
@@ -1475,8 +1475,10 @@
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
       "criterion": "Persist user words and source-linked explicitly requested operations before confirming; later conversations retrieve corrected current facts; retry runs once and cancellation saves no assistant reply.",
-      "status": "source only",
-      "evidence": [],
+      "status": "partial",
+      "evidence": [
+        "Normal installed 96063e7 command disabled duplicate submission and retained the failed request identity, but a write collision persisted and retry correctly refused uncertain replay. New source waits for actual lock acquisition for chat writes/state commits without replaying a started transaction; real cross-process early and late writer regressions pass. Final source suite passed 288 checks and one platform skip. This new writer repair is not installed; full normal concurrent acceptance remains open."
+      ],
       "required": true,
       "target_test": "Exercise conversation-chat through its installed entry point and check actual results after restart"
     },
@@ -1859,8 +1861,10 @@
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
       "criterion": "Retrieve the chosen note and visible context; apply only an explicit requested edit with revision checks; save conversation history; questions and cancelled replies do not change the note.",
-      "status": "source only",
-      "evidence": [],
+      "status": "partial",
+      "evidence": [
+        "Source note changes and completed conversation retention now acquire the writer asynchronously while retaining current-hash conflicts. Real writer/cancellation/uncertain-callback regressions pass, with full 288-pass/one-skip source evidence. New source is not installed; ordinary note chat under concurrent sync and full equivalence remain open."
+      ],
       "required": true,
       "target_test": "Exercise note-chat through its installed entry point and check actual results after restart"
     },
@@ -2649,7 +2653,8 @@
         "Source controlled workflow draft/exact approval/application/read-back/retained rollback has seventeen passing focused checks. Full maintained method includes actual contracts. SDK/tool installation, installed real-provider experiment and actual trial benefit remain unverified.",
         "Bounded opt-in public discovery now rotates agent/memory/retrieval queries and fetches maintainer release/README evidence without local data in searches. Actual public search and four source reads passed; source suite 268 pass/one platform skip. Matching installed discovery and lifecycle acceptance remain open.",
         "Actual 0e0d3a6 connected-provider radar verified quiet at 05:29:14 UTC, then a source-quoted local proposal at 05:32:19 UTC after normal fictional memory-goal adoption. Primary quote and full canonical source digest match. Normal Trial selection, full-method read and exact-hash preparation queued separately gated work; only actual read_workflow is verified so far. Application, rollback and measured benefit remain open.",
-        "Independent installed checks rejected the wrong keep-a-note filing workflow twice; no file changed. Normal command moved the fictional proposal to Assess and cancelled preparation, retaining failures. Dedicated retrieval recipe and executable ten-query comparison now exist in new source, but matching installed preparation, approval, application, rollback and trial evidence remain open."
+        "Independent installed checks rejected the wrong keep-a-note filing workflow twice; no file changed. Normal command moved the fictional proposal to Assess and cancelled preparation, retaining failures. Dedicated retrieval recipe and executable ten-query comparison now exist in new source, but matching installed preparation, approval, application, rollback and trial evidence remain open.",
+        "Wrong workflow preparation remains cancelled and both independent rejections retained. Three later native provider attempts exceeded two minutes and paused the job for review. Assess three-run archive, correct exact-draft approval/application/rollback and measured trial remain open; no timeout is counted as a successful assessment."
       ],
       "required": true,
       "target_test": "Exercise radar through its installed entry point and check actual results after restart"
@@ -3872,7 +3877,8 @@
         "Actual installed 1b885b0 normal endpoint chat correction closed claims-628b0191 with the exact conversation source quote and retained the replacement claims-cb525235 in the same canonical attribute for the same fictional person. endpoint-1b885b0-canonical-memory-claims.json and chat snapshot retained. Broader hidden/history/fresh-context/restart acceptance remains required; partial status remains.",
         "Normal installed fictional-person History retains the old one-question claim as historical. A fresh person conversation retrieves the current two-question preference. Hiding this person refuses assistant access through the normal chat interface; restoring visibility allows the correct current answer. Evidence: endpoint-1b885b0-person-current-history-ui.txt and actual claims. Broader synonym, ambiguity, restart and shared-corpus acceptance remains required.",
         "Normal restarted endpoint fictional-person chat retrieved the current two-question preference after one failed send and a normal retry. Evidence: endpoint-d22ce05-restart-memory-retry-ui.txt. Existing conversation only; broader fresh-context/common-corpus/ambiguous-identity parity remains required.",
-        "Shared exact-source passage retrieval now runs through chat context, native memory lookup and scoped retrieve_memory MCP; hidden/private/sensitive/trashed sources remain excluded. Ten fictional long-note queries retain original offsets, current hashes and broad fallback; actual source CLI comparisons passed and remain private. Full source suite passed 283 checks and one platform skip. New matching installed acceptance and Menerio corpus parity remain open."
+        "Shared exact-source passage retrieval now runs through chat context, native memory lookup and scoped retrieve_memory MCP; hidden/private/sensitive/trashed sources remain excluded. Ten fictional long-note queries retain original offsets, current hashes and broad fallback; actual source CLI comparisons passed and remain private. Full source suite passed 283 checks and one platform skip. New matching installed acceptance and Menerio corpus parity remain open.",
+        "Matching 96063e7 is installed. Bundled comparison exercised ten fictional questions through each actual Windows/Linux installed CLI; exact source windows, hashes and independent broad results passed and fictional copies were retained. Ordinary connected-provider retrieval and complete Menerio corpus parity remain open."
       ],
       "required": true,
       "target_test": "Compare corrections, hidden/superseded facts, dates, ambiguity and synonyms after restart against a common Menerio corpus."
@@ -3961,7 +3967,8 @@
         "Normal Windows empty restoration verified main 877/2383 and endpoint 3318/4370. Development synchronous restoration failed after three actual supervisor health timeouts and one restart; partial copy retained. Worker source preserves responsive timers, exact binary bytes and one concurrent result, with seven passing worker/server checks. Normal installed worker recovery remains required.",
         "Matching installed 0a009b3 normal empty-copy recovery passed development 1917/3970, Windows main 877/2383 and endpoint 3318/4370 with rebuilt search and zero supervisor restarts. Evidence filenames include development-0a009b3-normal-responsive-recovery-ui.txt, windows-main-0a009b3-normal-restoration-ui.txt and endpoint-0a009b3-normal-restoration-and-cancel-ui.txt. Wider recovery and upgrade acceptance remains required.",
         "Source asynchronous normal backup preserves snapshot writer lock through media/hash capture and keeps actual HTTP health responsive; seventeen focused archive/server checks and full source suite pass. Installed verification remains open; retained backups are never pruned.",
-        "Matching b5391fc Windows/development upgrades followed fresh retained verified separate restorations. New normal asynchronous development backup/restoration verified 3022 records/5237 files. Later unrelated health timeout remains retained and under investigation; final package/recovery acceptance remains open."
+        "Matching b5391fc Windows/development upgrades followed fresh retained verified separate restorations. New normal asynchronous development backup/restoration verified 3022 records/5237 files. Later unrelated health timeout remains retained and under investigation; final package/recovery acceptance remains open.",
+        "Fresh pre-upgrade restorations verified development 4004 records/6435 files, Windows main 885/2499 and endpoint 4435/5595. Normal development recovery control passed. Identical immutable historical snapshots in retained copies now share storage; all 13319 affected paths and every latest backup/restoration file were reverified without removing paths or changing live notebook state. Full source evidence and private audit are retained; broad offline/sync recovery remains open."
       ],
       "required": true,
       "target_test": "Repeat recovery/link checks on final matching Windows/VPS packages; accept offline edits, reconnection, retained conflicts and preserved choices/pauses."

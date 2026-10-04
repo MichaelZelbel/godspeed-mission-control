@@ -66,9 +66,9 @@ export class Domains {
     if(name==='conversation-chat'&&/^\/(coach|journal|headache|goals|forecast|work|due|subs|watch|lead|radar)\b/.test(String(input.message||''))){
       const [command,...args]=/^\/lead\b/.test(input.message)?leadWords(input.message):/^\/radar\b/.test(input.message)?radarWords(input.message):commandWords(input.message),name=command.slice(1),id='explicit-command-'+hash([input.conversation_id,input.request_id||input.message]),previous=this.store.get('command_receipts',id);
       if(previous){if(previous.state!=='verified')throw Error('Previous command requires review');return previous.result;}
-      this.store.save('command_receipts',{id,state:'attempted',source_id:input.request_id||null});
+      await this.store.saveAsync('command_receipts',{id,state:'attempted',source_id:input.request_id||null},undefined,{signal:input.signal});
       const action=await personalOperation(this,['coach','journal','headache'].includes(name)?{type:'addon-command',addon:name,args}:name==='due'?{type:'due-command',args}:name==='subs'?{type:'subscription-command',args}:name==='watch'?{type:'watch-command',args}:name==='lead'?{type:'lead-command',args}:name==='radar'?{type:'radar-command',args}:{type:'card-command',card:name,args});
-      const result={reply:action.result,operation_results:[action]};this.store.save('conversation_messages',{role:'assistant',content:result.reply,conversation_id:input.conversation_id||null,source_app:'personal-command'});this.store.save('command_receipts',{id,state:'verified',result});return result;
+      const result={reply:action.result,operation_results:[action]};await this.store.saveAsync('conversation_messages',{role:'assistant',content:result.reply,conversation_id:input.conversation_id||null,source_app:'personal-command'},undefined,{signal:input.signal});await this.store.saveAsync('command_receipts',{id,state:'verified',result},undefined,{signal:input.signal});return result;
     }
     if(name==='import-goal-files')return importGoalFiles(this.store);
     if(name==='personal-operation')return personalOperation(this,input);
@@ -264,19 +264,19 @@ export class Domains {
       const content=structured.reply||JSON.stringify(structured),tool_results=[],notes_created=[];
       if(name==='note-chat'&&typeof structured.note_content==='string'){
         const original=this.store.get('notes',input.note_id);if(!original)throw new Error('Choose a current note before editing it');if(input.base_updated_at&&original.updated_at!==input.base_updated_at)this.store.conflict('notes',{id:original.id,content:structured.note_content},original);
-        const updated=this.store.save('notes',{id:original.id,content:structured.note_content},original._hash);structured.note_edit={previous_content:original.content,content:updated.content,updated_at:updated.updated_at};tool_results.push({tool:'update_note',success:true});
+        const updated=await this.store.saveAsync('notes',{id:original.id,content:structured.note_content},original._hash,{signal});structured.note_edit={previous_content:original.content,content:updated.content,updated_at:updated.updated_at};tool_results.push({tool:'update_note',success:true});
       }
       if(name==='note-chat'&&(structured.note_changes||structured.trash_note)&&!input.note_id)throw new Error('Choose a current note before changing it');
-      if(name==='note-chat'&&structured.note_changes){const original=this.store.get('notes',notes[0]?.id);if(!original)throw new Error('Current note missing');if(Object.keys(structured.note_changes).some(k=>!['title','tags','metadata','is_favorite'].includes(k)))throw new Error('Unknown note field');this.store.save('notes',{id:original.id,...structured.note_changes},original._hash);tool_results.push({tool:'update_note_metadata',success:true});}
+      if(name==='note-chat'&&structured.note_changes){const original=this.store.get('notes',notes[0]?.id);if(!original)throw new Error('Current note missing');if(Object.keys(structured.note_changes).some(k=>!['title','tags','metadata','is_favorite'].includes(k)))throw new Error('Unknown note field');await this.store.saveAsync('notes',{id:original.id,...structured.note_changes},original._hash,{signal});tool_results.push({tool:'update_note_metadata',success:true});}
       if(name==='note-chat'&&structured.trash_note){if(!notes[0])throw new Error('Current note missing');this.store.structural('notes',notes[0].id,'remove');tool_results.push({tool:'trash_note',success:true});}
-      for(const note of structured.notes_created||[])if(note.title&&typeof note.content==='string')notes_created.push(this.store.save('notes',{title:note.title,content:note.content,source_app:name}));
+      for(const note of structured.notes_created||[])if(note.title&&typeof note.content==='string')notes_created.push(await this.store.saveAsync('notes',{title:note.title,content:note.content,source_app:name},undefined,{signal}));
       if(name==='collection-chat')for(const change of [...(structured.items_created||[]),...(structured.item_updates||[])]){
         const old=change.id?context.items.find(i=>i.id===change.id):null;if(change.id&&!old)throw new Error('Assistant requested a row outside this collection');
         const validKeys=new Set((context.collection?.field_schema||[]).map(f=>f.key));if(Object.keys(change.data||{}).some(k=>!validKeys.has(k)))throw new Error('Assistant requested an unknown collection field');
         this.query.execute({table:'collection_items',operation:old?'update':'insert',values:{...(old?{}:{collection_id:input.collection_id}),data:{...old?.data,...change.data}},filters:old?[['eq','id',old.id]]:[],expected:old?{[old.id]:old._hash}:{}});tool_results.push({tool:old?'update_collection_item':'create_collection_item',success:true});
       }
       const opened=structured.operation_results?.find(r=>r.type==='coach_talks'&&r.status==='open');
-      const saved = this.store.save('conversation_messages', { content, role: 'assistant', talk_id:opened?.id||input.talk_id||null,note_id: input.note_id || null, contact_id: input.contact_id || null, person_id:input.contact_id||null, conversation_id: input.conversation_id || null });
+      const saved = await this.store.saveAsync('conversation_messages', { content, role: 'assistant', talk_id:opened?.id||input.talk_id||null,note_id: input.note_id || null, contact_id: input.contact_id || null, person_id:input.contact_id||null, conversation_id: input.conversation_id || null },undefined,{signal});
       return { ...structured,reply:content,response: content, message: content, content, conversation_id: saved.conversation_id,tool_results,notes_created };
     }
     throw new Error('Processing function has not been ported: ' + name);
