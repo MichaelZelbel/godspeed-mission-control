@@ -12,7 +12,17 @@ import { seed } from '../core/seeds.mjs';
 import { execFileSync } from 'node:child_process';
 import {assistantProfiles,selectAssistantProfile} from '../core/assistant-files.mjs';
 import {installSkillTree} from '../core/packaged-skills.mjs';
+import {planWorkspaceMove,moveWorkspace,undoWorkspaceMove} from '../core/workspace-move.mjs';
 const args=process.argv.slice(2),root=process.env.GODSPEED_WORKSPACE;if(!root)throw new Error('Set GODSPEED_WORKSPACE to your candidate workspace');
+if(args[0]==='workspace-move'){
+ const [_,action,value,installationFile]=args;
+ let outcome;
+ if(action==='plan')outcome=planWorkspaceMove({root,to:value,installationFile});
+ else if(action==='apply'){const plan=JSON.parse(fs.readFileSync(value,'utf8'));if(path.resolve(plan.source)!==path.resolve(root))throw Error('The reviewed move plan must own the selected workspace');outcome=moveWorkspace(plan);}
+ else if(action==='undo'){const receipt=JSON.parse(fs.readFileSync(value,'utf8'));if(path.resolve(receipt.destination)!==path.resolve(root))throw Error('The move receipt must own the selected workspace');outcome=undoWorkspaceMove(value);}
+ else throw Error('workspace-move plan DESTINATION INSTALLATION.json | apply PLAN.json | undo RECEIPT.json');
+ console.log(JSON.stringify(outcome,null,2));process.exit(0);
+}
 const store=new Store(root,{device:process.env.GODSPEED_DEVICE||'local'}),query=new QueryService(store),domains=new Domains(query),media=process.env.GODSPEED_MEDIA_ROOT||path.join(store.state,'media');
 const [command,verb,...rest]=args;let result;
 if(command==='init'){

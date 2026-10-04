@@ -48,8 +48,3 @@ node PATH_TO_SELECTED_KIT/notebook/bin/godspeed.mjs workspace-move undo ACTUAL_M
 Undo refuses changed aliases or installation settings. It takes and verifies another separate restoration of the current contents, copies the current workspace back, retains the destination, and leaves an alias there. It preserves new and revised knowledge created after the original move. Verify the receipt says undone, the pointer names the restored original location, and later edits remain readable through both paths. Restart and check through the ordinary notebook and assistant entry again. Never delete retained folders or a failed partial copy.
 
 If copying or alias creation fails, keep the actual error and every retained path. Do not silently retry a physical move, replace a folder, fabricate a successful receipt, or accept a source-only check as installed acceptance.
-
-
-## Installed personal workspace
-
-Use the current user workspace and its configured providers. Keep original workflow, command contracts, scripts and verification criteria. Read the workspace authorization rules before sends, sign-ins, payments or publishing. Search existing device-private credentials before asking for configuration. Saved output and a passing screen are not evidence that the full requested result happened.

@@ -2,7 +2,7 @@
   "format": 1,
   "origin": "Reviewed reusable workflow sources and portable starter workflows",
   "files": {
-    "manifest.json": "452863a095fef30c59b71a002da6b09fe8014d68f9abed47ceef0e18f2786396",
+    "manifest.json": "521366479b2e9c34e3f9cefce21a4aeee0304480eef88c0ef27f44611878df85",
     "book-title-creator/SKILL.md": "34f60c7f8081b9d0778026e69c9254f2239c4a72f95fa686903e57592ab274b8",
     "book-title-strategist/SKILL.md": "1d858bcd7b360202dbb5939090213e5d7ce7024b7c1d24dcfc6020936d3a5530",
     "connect-email/.shipped-sha256": "b4e692ca873c8ca46bdaa9209461bc8dd6c7e9f65d4ba86980bad1be965c1771",
@@ -1100,6 +1100,7 @@
     "social-visuals/scripts/vendor/imagescript/codecs/node/bin/x64-darwin.node": "e4376026ab8147bdc1fdf96df8f3aaa2f8e233b3a66c4955b5a5e6cb012e137f",
     "social-visuals/scripts/vendor/imagescript/codecs/node/bin/x64-linux.node": "3f517064b14c53cea5d3514b841f0cd3538baf67ab988b61d5d78110410292c8",
     "social-visuals/scripts/vendor/imagescript/codecs/node/bin/x64-win32.node": "baa5019e4443e4854564782d1ddc6c12c0f46606853cbf953ae00e71b009c481",
-    "social-visuals/scripts/source-image.mjs": "49b523054056c8324c78b7bc2d12b9cbc20de38ea0c3e419180ed4581f4ac9aa"
+    "social-visuals/scripts/source-image.mjs": "49b523054056c8324c78b7bc2d12b9cbc20de38ea0c3e419180ed4581f4ac9aa",
+    "move-godspeed/SKILL.md": "39737653f040b0d62b39f6349cde46b1a9cea1c939a039a7d7072401a684c6c2"
   }
 }
