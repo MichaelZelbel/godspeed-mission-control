@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Main's shared installer, followed by the integrated notebook connection.
 set -euo pipefail
+# The shared installer adds Hermes here; keep it visible to the notebook hook.
+export PATH="$HOME/.local/bin:$PATH"
 ENGINE=https://raw.githubusercontent.com/MichaelZelbel/kit-bootstrap/180321af33ca98e7afbc572f993320290eb7466a/setup-godspeed.sh
 STARTER=https://github.com/MichaelZelbel/godspeed-mission-control.git
 KB_BRANCH=180321af33ca98e7afbc572f993320290eb7466a
