@@ -2,19 +2,19 @@ import {hash} from './records/store.mjs';
 import {visibleRows} from './visibility.mjs';
 import {recipeContext} from './recipe-context.mjs';
 import {advanceRadarAssessments} from './radar-lifecycle.mjs';
+import {discoverRadarSources,readRadarSource,radarPrimaryContent} from './radar-discovery.mjs';
 
 export async function radar(job,{store,query,provider}){
  const at=new Date().toISOString(),topics=visibleRows(query,'watch_topics').filter(t=>t.radar===true&&!t.paused&&(!job.topic_ids||job.topic_ids.includes(t.id))),sources=[],checks=[];
  const log=async fields=>{await store.waitForWriter();const run=store.save('watch_runs',{kind:'radar',job_id:job.id,observed_at:at,...fields});if(run.state==='verified')advanceRadarAssessments(store,query);return run;};
  try{
   const urls=topics.flatMap(t=>(t.urls||[t.url]).filter(Boolean).map(url=>({topic:t,url})));if(urls.length>20)throw Error('Radar has more than twenty configured sources; select a bounded topic set');
-  for(const {topic,url:raw} of urls){
+  if(job.discovery===true&&!job.topic_ids&&urls.length<20){const cycle=visibleRows(query,'watch_runs').filter(r=>r.kind==='radar'&&r.job_id===job.id).length,discovery=await discoverRadarSources({cycle});checks.push(...discovery.checks);urls.push(...discovery.sources.slice(0,20-urls.length));}
+  for(const {topic,url:raw,accept} of urls){
    try{
     const url=new URL(raw);if(url.protocol!=='https:'&&!(url.protocol==='http:'&&['localhost','127.0.0.1','[::1]'].includes(url.hostname)))throw Error('Radar sources require HTTPS or a local test source');if(url.username||url.password||[...url.searchParams.keys()].some(k=>/^(?:token|key|api[_-]?key|access[_-]?token|password|secret)$/i.test(k)))throw Error('Radar source URLs must not contain credentials');
-    const response=await fetch(url,{signal:AbortSignal.timeout(15000),redirect:'error'});if(!response.ok)throw Error('Source returned HTTP '+response.status);
-    const reader=response.body.getReader(),chunks=[];let length=0;try{for(;;){const {done,value}=await reader.read();if(done)break;length+=value.length;if(length>1024*1024)throw Error('Radar source exceeds its one-megabyte limit');chunks.push(value);}}finally{await reader.cancel();}
-    const content=Buffer.concat(chunks).toString('utf8');if(!content.trim())throw Error('Source returned no readable text');await store.waitForWriter();
-    const observation=store.save('watch_observations',{topic_id:topic.id,url:raw,status:response.status,content,observed_at:new Date().toISOString(),sha256:hash(content),source_app:'radar'});sources.push({id:observation.id,topic_id:topic.id,url:raw,content,sha256:observation.sha256,fetched_at:observation.observed_at,publication_date:topic.publication_date||null});checks.push({topic_id:topic.id,url:raw,ok:true,observation_id:observation.id});
+    const response=await readRadarSource(url,{accept}),primary=radarPrimaryContent(response.content,topic.source_kind),content=primary.content;await store.waitForWriter();
+    const observation=store.save('watch_observations',{topic_id:topic.id,url:raw,primary_url:primary.primary_url,status:response.status,content,raw_content:primary.content===response.content?undefined:response.content,raw_sha256:hash(response.content),publication_date:primary.publication_date||topic.publication_date||null,observed_at:new Date().toISOString(),sha256:hash(content),source_app:'radar'});sources.push({id:observation.id,topic_id:topic.id,url:primary.primary_url||raw,fetch_url:raw,content,sha256:observation.sha256,fetched_at:observation.observed_at,publication_date:observation.publication_date});checks.push({topic_id:topic.id,url:raw,primary_url:primary.primary_url,ok:true,observation_id:observation.id});
    }catch(error){checks.push({topic_id:topic.id,url:redactedURL(raw),ok:false,error:/credential/.test(error.message)?'Source URL contains credentials; use a documented private connector':error.message});}
   }
   const prior=visibleRows(query,'watch_runs').filter(r=>r.kind==='radar'&&r.job_id===job.id).sort((a,b)=>a.observed_at.localeCompare(b.observed_at)).at(-1);

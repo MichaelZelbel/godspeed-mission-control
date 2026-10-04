@@ -2,7 +2,7 @@
   "format": 1,
   "origin": "Reviewed reusable workflow sources and portable starter workflows",
   "files": {
-    "manifest.json": "521366479b2e9c34e3f9cefce21a4aeee0304480eef88c0ef27f44611878df85",
+    "manifest.json": "ca432e8da6ed1f6ff1004c8417cf0c4203a7b72e6812a37090c484ce5d275dfb",
     "book-title-creator/SKILL.md": "34f60c7f8081b9d0778026e69c9254f2239c4a72f95fa686903e57592ab274b8",
     "book-title-strategist/SKILL.md": "1d858bcd7b360202dbb5939090213e5d7ce7024b7c1d24dcfc6020936d3a5530",
     "connect-email/.shipped-sha256": "b4e692ca873c8ca46bdaa9209461bc8dd6c7e9f65d4ba86980bad1be965c1771",
@@ -997,7 +997,7 @@
     "book-title-strategist/references/08-sources.md": "3d997d2a97b3a4cefed89a988ba90d3dd779d2c41972a7123bf63807821fc113",
     "book-title-strategist/scripts/rank_candidates.py": "1f22eead28a420c50124e836e2a40146b3523dfc40c9c643e53ff7fb04907d9b",
     "lead/SKILL.md": "fb98cc9cd18f0e342bda3dbe318fe8ed7c074df160768b05653297badcf9a554",
-    "mc-radar/SKILL.md": "b318934c5409d6796b2d0c7c99d41eb7cf1969b755d615dc9e7ae5e85d45b04f",
+    "mc-radar/SKILL.md": "873247f34a9ca62e452e3f2f8f24a27e54f361fb8d0787fb4b21affa34d30e29",
     "browser-post/LICENSE": "5cd8a19f6d65b5d5766e118b223e06374ef41091b8db1f6f51e2bc58012338db",
     "browser-post/SKILL.md": "a9e5e9aca3fbfb80548f674d3ae24b6bc6f2952a4b6f26eccdf0b5a1354c5610",
     "browser-post/poster/install-waker-linux.sh": "db200466b2f5d7b6ece09b99e0888dd239b09ab44da2ae3b900fb31ed0d2fd39",
