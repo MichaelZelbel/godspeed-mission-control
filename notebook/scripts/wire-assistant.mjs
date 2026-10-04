@@ -89,7 +89,18 @@ if(!/^mcp_servers:/m.test(text)){
     headers=`    headers:\n      Authorization: ${JSON.stringify('Bearer '+key)}\n`;
   }
   text+=`\nmcp_servers:\n  notebook:\n    url: http://127.0.0.1:${port}/mcp\n${headers}`;
-  if(process.env.GODSPEED_COMPUTER==='on')text+=`  godspeed_computer:\n    command: ${JSON.stringify(process.execPath)}\n    args: ["/opt/godspeed/kit/computer/mcp.js"]\n    env:\n      GODSPEED_COMPUTER_DIR: "/opt/data/full-candidate/computer"\n`;
+}
+// The computer connection is a setting, not a one-time choice. Its tool used to
+// be written only while the assistant's configuration was being created, so a
+// server already set up could never gain it: switch the connection on, ask for a
+// connection code, and the answer was that no such tool exists. Reconcile it on
+// every wiring instead, both ways, so off leaves behind no tool that cannot work.
+const computerTool=`  godspeed_computer:\n    command: ${JSON.stringify(process.execPath)}\n    args: ["/opt/godspeed/kit/computer/mcp.js"]\n    env:\n      GODSPEED_COMPUTER_DIR: "/opt/data/full-candidate/computer"\n`;
+text=text.replace(/^  godspeed_computer:[^\n]*\n(?:[ \t]{4,}[^\n]*\n)*/m,'');
+if(process.env.GODSPEED_COMPUTER==='on'){
+  const section=text.match(/^mcp_servers:[^\n]*\n(?:[ \t]+[^\n]*\n|\n)*/m);
+  if(section)text=text.replace(section[0],section[0].replace(/\n+$/,'\n')+computerTool);
+  else text+=`\nmcp_servers:\n${computerTool}`;
 }
 atomic(file,text);fs.chmodSync(file,0o600);
 console.log(JSON.stringify({wired:true,isolated:true,port}));
