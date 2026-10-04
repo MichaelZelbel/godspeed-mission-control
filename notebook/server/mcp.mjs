@@ -7,6 +7,7 @@ const definitions=[
   {name:'list_note_folders',description:'List visible notebook folders and their note counts before filing a note.',inputSchema:schema},
   {name:'search_notes',description:'Find visible, untrashed notes by words. Return their IDs, titles, folders and current revision hashes. source native excludes mirrored external files.',inputSchema:{type:'object',properties:{query:{type:'string'},source:{enum:['native','all']},limit:{type:'integer'}},required:['query']}},
   {name:'get_note',description:'Read one visible, untrashed note including its current hash before editing.',inputSchema:{type:'object',properties:{id:{type:'string'}},required:['id']}},
+  {name:'retrieve_memory',description:'Compare exact visible note windows with independent broad results. Includes original offsets and hashes; read the full source and current dated claims before answering.',inputSchema:{type:'object',properties:{query:{type:'string'}},required:['query']}},
   {name:'update_note',description:'Update exactly the requested note fields. Requires the hash from get_note; preserves old revisions and refuses stale edits.',inputSchema:{type:'object',properties:{id:{type:'string'},expected_hash:{type:'string'},title:{type:'string'},content:{type:'string'},folder_path:{type:'string'},tags:{type:'array',items:{type:'string'}}},required:['id','expected_hash']}},
   {name:'personal_operation',description:'Apply an explicitly requested goal, obligation, coach, habit, journal, health, memory, forecast or routine operation. Read current IDs first. Never approve an outward action.',inputSchema:schema},
   {name:'search_knowledge',description:'Search the rebuildable index of user records.',inputSchema:{type:'object',properties:{query:{type:'string'}},required:['query']}},
@@ -53,6 +54,7 @@ export async function mcp(input,{store,query,index,domains,scopes}){
           value=query.execute({table:'notes',operation:'update',values:fields,filters:[['eq','id',note.id]],expected:{[note.id]:a.expected_hash}}).data;
         }
       }
+      else if(name==='retrieve_memory')value=await domains.invoke('retrieve-memory',a);
       else if(name==='search_knowledge')value=query.withSnapshot(()=>index.search(a.query).filter(r=>r.type!=='workspace_file'&&(!scopes||scopes.includes(toolScope('list_records',{type:r.type})))&&visibleRows(query,r.type).some(v=>v.id===r.id)));
       else if(name==='list_records'){const allowed=new Set(visibleRows(query,a.type).map(r=>r.id));value=query.execute({table:a.type,filters:a.filters||[],limit:a.limit||100}).data.filter(r=>allowed.has(r.id));}
       else if(name==='save_record')value=query.execute({table:a.type,operation:a.value.id?'upsert':'insert',values:a.value,expected:a.value.id?{[a.value.id]:a.expected_hash}:{}}).data;

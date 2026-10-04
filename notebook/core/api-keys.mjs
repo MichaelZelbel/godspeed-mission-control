@@ -17,7 +17,7 @@ export function toolScope(name,args){
   if(['list_contact_topics','get_contact_topic_history','create_contact_topic','update_contact_topic','discuss_contact_topic','archive_contact_topic','reopen_contact_topic','undo_contact_topic_event'].includes(name))return 'contacts';
   if(name==='personal_operation')return 'actions';
   if(['search_knowledge','validate_knowledge'].includes(name))return 'stats';
-  if(['capture_note','list_note_folders','search_notes','get_note','update_note'].includes(name))return 'notes';
+  if(['capture_note','list_note_folders','search_notes','get_note','update_note','retrieve_memory'].includes(name))return 'notes';
   if(['write_fact','record_event'].includes(name))return 'world';
   if(name==='review_suggestions')return 'profile';
   const type=args.type||'';return /^(contacts|contact_|person_)/.test(type)?'contacts':/^(claims|entities|moments|moment_|world_)/.test(type)?'world':/^(profile|fact_|agent_|review_|ai_suggestion)/.test(type)?'profile':/^collection/.test(type)?'collections':/^media|attachment/.test(type)?'media':/^action/.test(type)?'actions':/^note|comments|conversation/.test(type)?'notes':null;

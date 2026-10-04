@@ -11,6 +11,7 @@ import {importGoalFiles} from './legacy-goals.mjs';
 import {commandWords} from './card-commands.mjs';
 import {leadWords} from './lead-commands.mjs';
 import {radarWords} from './radar-lifecycle.mjs';
+import {retrieveNoteWindows} from './retrieval-windows.mjs';
 function json(result){return typeof result==='string'?JSON.parse(result.trim().replace(/^```(?:json)?\s*/,'').replace(/\s*```$/,'')):result;}
 function cites(source,quote){return typeof source==='string'?source.includes(quote):source&&typeof source==='object'?Object.values(source).some(value=>cites(value,quote)):false;}
 function reviewData(value){const result={...value};for(const field of ['themes','open_loops','connections','gaps','people_summary']){if(typeof result[field]==='string'&&field==='gaps')result[field]=[result[field]];if(result[field]==null)result[field]=[];if(!Array.isArray(result[field]))throw new Error('The review returned an invalid '+field+' list');}return result;}
@@ -43,6 +44,7 @@ export class Domains {
     });
   }
   async invoke(name, input = {}) {
+    if(name==='retrieve-memory')return retrieveNoteWindows(this.query,input.query||input.message||'');
     await this.store.waitForWriter({signal:input.signal});
     if(name==='conversation-chat'){
       const contact_id=input.contact_id||input.person_id||input.personId;

@@ -1,6 +1,6 @@
 {
   "format": 2,
-  "checked_at": "2026-10-04T05:40:22.390936+00:00",
+  "checked_at": "2026-10-04T05:50:48.080575+00:00",
   "complete": false,
   "items": [
     {
@@ -2341,7 +2341,8 @@
       "criterion": "Make a real read through each configured connector and save success or failure. Verify the connection-check result across a failed run, restart and an unchanged repeat; report an observation rather than implying execution.",
       "status": "partial",
       "evidence": [
-        "Normal installed 0e0d3a6 Settings configured a loopback fictional connector. Actual HTTP 503 responses followed saved backoff through attempts 1/2/3 and needs_review. Explicit 401 recheck created one sign-in obligation; explicit 200 recheck closed the same obligation and verified repair. Normal screen shows Connected (HTTP 200). Real-account adapters, later automatic quiet and cap quiet remain open."
+        "Normal installed 0e0d3a6 Settings configured a loopback fictional connector. Actual HTTP 503 responses followed saved backoff through attempts 1/2/3 and needs_review. Explicit 401 recheck created one sign-in obligation; explicit 200 recheck closed the same obligation and verified repair. Normal screen shows Connected (HTTP 200). Real-account adapters, later automatic quiet and cap quiet remain open.",
+        "Actual installed receipts now prove unchanged capped 503 was deferred and silent at 05:36:11 UTC before explicit 401 at 05:36:28. Later automatic recovered HTTP 200 checks at 05:40:53 and 05:45:21 were verified and silent; the same sign-in obligation remained closed. Retained private resumed-connector-receipt-proof-oct4.json supports these claims. Real account adapters remain unverified."
       ],
       "required": true,
       "target_test": "Exercise connections through its installed entry point and check actual results after restart"
@@ -2647,7 +2648,8 @@
         "Dedicated source lifecycle records only actual user verdicts, pending separate implementation approval and quote-linked reported trial outcomes. Assess archives after three completed runs, Caution retains the no-list, and overlapping source runs cannot duplicate a local-change proposal. Source suite and 21 focused checks pass; installed lifecycle and broad discovery remain unverified.",
         "Source controlled workflow draft/exact approval/application/read-back/retained rollback has seventeen passing focused checks. Full maintained method includes actual contracts. SDK/tool installation, installed real-provider experiment and actual trial benefit remain unverified.",
         "Bounded opt-in public discovery now rotates agent/memory/retrieval queries and fetches maintainer release/README evidence without local data in searches. Actual public search and four source reads passed; source suite 268 pass/one platform skip. Matching installed discovery and lifecycle acceptance remain open.",
-        "Actual 0e0d3a6 connected-provider radar verified quiet at 05:29:14 UTC, then a source-quoted local proposal at 05:32:19 UTC after normal fictional memory-goal adoption. Primary quote and full canonical source digest match. Normal Trial selection, full-method read and exact-hash preparation queued separately gated work; only actual read_workflow is verified so far. Application, rollback and measured benefit remain open."
+        "Actual 0e0d3a6 connected-provider radar verified quiet at 05:29:14 UTC, then a source-quoted local proposal at 05:32:19 UTC after normal fictional memory-goal adoption. Primary quote and full canonical source digest match. Normal Trial selection, full-method read and exact-hash preparation queued separately gated work; only actual read_workflow is verified so far. Application, rollback and measured benefit remain open.",
+        "Independent installed checks rejected the wrong keep-a-note filing workflow twice; no file changed. Normal command moved the fictional proposal to Assess and cancelled preparation, retaining failures. Dedicated retrieval recipe and executable ten-query comparison now exist in new source, but matching installed preparation, approval, application, rollback and trial evidence remain open."
       ],
       "required": true,
       "target_test": "Exercise radar through its installed entry point and check actual results after restart"
@@ -3233,7 +3235,8 @@
         "Complete maintained portable method now documents installed source selection and native verdict/result contracts, retained expiry and reported-versus-verified outcomes. Latest source is not installed; full workflow acceptance remains required.",
         "Source controlled workflow draft/exact approval/application/read-back/retained rollback has seventeen passing focused checks. Full maintained method includes actual contracts. SDK/tool installation, installed real-provider experiment and actual trial benefit remain unverified.",
         "The complete portable method now documents actual bounded public discovery, retained query and source evidence, unchanged restricted-topic scope and explicit activation. Actual public discovery reads pass; installed full-method result remains open.",
-        "Matching bounded full-method context is installed. Actual public reads and connected-provider quiet/proposal results, normal verdict and exact-hash preparation are retained; preparation/application/rollback and actual two-week trial benefit remain unverified."
+        "Matching bounded full-method context is installed. Actual public reads and connected-provider quiet/proposal results, normal verdict and exact-hash preparation are retained; preparation/application/rollback and actual two-week trial benefit remain unverified.",
+        "Actual primary-source proposal was retained; wrong workflow preparation failed independently twice, and normal Assess cancelled pending work. No weakened check or applied edit. Correct retrieval workflow is new source only; complete installed lifecycle remains open."
       ],
       "required": true,
       "target_test": "Exercise mc-radar through its installed entry point and check actual results after restart"
@@ -3868,7 +3871,8 @@
         "Actual f0d1719 installed endpoint chat claimed correction without changing either fictional-person claim or writing an operation receipt. Retained failure: endpoint-f0d1719-canonical-memory-chat.txt and endpoint-f0d1719-canonical-memory-claims.json. New source fixes profile-day retrieval, exact full-name identity and unsupported memory acknowledgements; three RED/GREEN regressions and final 179-pass/one-skip suite pass. New installed verification remains required.",
         "Actual installed 1b885b0 normal endpoint chat correction closed claims-628b0191 with the exact conversation source quote and retained the replacement claims-cb525235 in the same canonical attribute for the same fictional person. endpoint-1b885b0-canonical-memory-claims.json and chat snapshot retained. Broader hidden/history/fresh-context/restart acceptance remains required; partial status remains.",
         "Normal installed fictional-person History retains the old one-question claim as historical. A fresh person conversation retrieves the current two-question preference. Hiding this person refuses assistant access through the normal chat interface; restoring visibility allows the correct current answer. Evidence: endpoint-1b885b0-person-current-history-ui.txt and actual claims. Broader synonym, ambiguity, restart and shared-corpus acceptance remains required.",
-        "Normal restarted endpoint fictional-person chat retrieved the current two-question preference after one failed send and a normal retry. Evidence: endpoint-d22ce05-restart-memory-retry-ui.txt. Existing conversation only; broader fresh-context/common-corpus/ambiguous-identity parity remains required."
+        "Normal restarted endpoint fictional-person chat retrieved the current two-question preference after one failed send and a normal retry. Evidence: endpoint-d22ce05-restart-memory-retry-ui.txt. Existing conversation only; broader fresh-context/common-corpus/ambiguous-identity parity remains required.",
+        "Shared exact-source passage retrieval now runs through chat context, native memory lookup and scoped retrieve_memory MCP; hidden/private/sensitive/trashed sources remain excluded. Ten fictional long-note queries retain original offsets, current hashes and broad fallback; actual source CLI comparisons passed and remain private. Full source suite passed 283 checks and one platform skip. New matching installed acceptance and Menerio corpus parity remain open."
       ],
       "required": true,
       "target_test": "Compare corrections, hidden/superseded facts, dates, ambiguity and synonyms after restart against a common Menerio corpus."

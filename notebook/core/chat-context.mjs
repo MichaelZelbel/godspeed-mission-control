@@ -3,6 +3,7 @@ import path from 'node:path';
 import {hash} from './records/store.mjs';
 import {visibleRows} from './visibility.mjs';
 import {fileContext} from './context.mjs';
+import {retrieveNoteWindows} from './retrieval-windows.mjs';
 
 // Retrieve a bounded selection instead of sending the entire personal database.
 export function chatContext(query,input){
@@ -24,6 +25,9 @@ function buildChatContext(query,input){
     const selected=pick(type,type==='notes'?8:4);context[type]=selected.rows;context.retrieval.counts[type]=selected.total;
   }
   if(input.note_id){const note=visibleRows(query,'notes').find(r=>r.id===input.note_id&&!r.removed_at&&!r.is_trashed);if(!note)throw new Error('This note is hidden from the assistant');context.notes=[compact(note,24000)];}
+  if(/(?:remember|recall|which|when|where|what|who|update|erinner|wann|wer|was)/i.test(question)){
+    const narrow=retrieveNoteWindows(query,question);context.note_windows=narrow.windows.filter(w=>!input.note_id||w.note_id===input.note_id);context.retrieval.window_search={method:narrow.method,broad:narrow.broad,coverage:narrow.coverage,policy:narrow.policy};
+  }
   const personId=input.contact_id||input.person_id||input.personId;
   if(personId){
     context.person=visibleRows(query,'contacts').find(r=>r.id===personId);if(!context.person)throw new Error('This person is hidden from the assistant');context.person=compact(context.person,12000);

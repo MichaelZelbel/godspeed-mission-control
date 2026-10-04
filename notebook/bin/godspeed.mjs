@@ -54,6 +54,8 @@ else if(command==='record'){
   else throw new Error('Unknown record command');
 }else if(command==='memory'&&verb==='search'){
   const index=new SearchIndex(store);result=index.search(rest.join(' '));index.close();
+}else if(command==='memory'&&verb==='lookup'){
+  result=await domains.invoke('retrieve-memory',{query:rest.join(' ')});
 }else if(command==='world'&&verb==='claim')result=domains.writeFact(JSON.parse(fs.readFileSync(rest[0],'utf8')));
 else if(command==='world'&&verb==='event')result=store.save('moments',JSON.parse(fs.readFileSync(rest[0],'utf8')));
 else if(command==='backup')result=backup(store,media,path.resolve(verb));
@@ -61,5 +63,5 @@ else if(command==='restore')result=restore(store,media,path.resolve(verb));
 else if(command==='import')result=importExport(query,JSON.parse(fs.readFileSync(verb,'utf8')));
 else if(command==='export')result={format:1,records:[...store.scan().values()].map(r=>{const copy={...r};delete copy._hash;return copy;})};
 else if(command==='validate')result={problems:store.scan()&&store.problems};
-else throw new Error('Commands: init, record list/get/save/merge/remove/display-name, memory search, world claim/event, backup, restore, import, export, validate');
+else throw new Error('Commands: init, record list/get/save/merge/remove/display-name, memory search/lookup, world claim/event, backup, restore, import, export, validate');
 console.log(JSON.stringify(result,null,2));
