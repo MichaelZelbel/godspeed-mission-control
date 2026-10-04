@@ -10,7 +10,7 @@ These are installation mechanisms, not adopted personal goals. Personal routines
 
 ## Goal decisions and approved local work
 
-Does: consumes adopted goals, saved decisions, exact local approvals and checked results. When the user selects waiting for a separate report, a verified local change remains waiting until an actual later report or a changed goal direction is saved.
+Does: consumes adopted goals, saved decisions, exact local approvals and checked results. Decisions receive the latest actual report and the current saved deliverable; earlier defects remain history. Selecting the identical completed local edit gets one bounded correction, then fails without queuing another write if repeated. When the user selects waiting for a separate report, a verified local change remains waiting until an actual later report or a changed goal direction is saved.
 Rhythm: not scheduled by this template; the saved routine controls determine cadence, time zone, owner and pause state.
 Lands: goal decisions, work results, tool evidence and forecasts in the notebook.
 Lives: the notebook scheduler in the selected installation.

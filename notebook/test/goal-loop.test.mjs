@@ -159,3 +159,16 @@ test('a brief concurrent writer after a model reply does not lose the work resul
   else{await run;assert.equal(store.get('work_items',item.id).state,'verified');}
  }
 });
+
+test('a later review does not select an identical completed edit as the next move',async()=>{
+ const {store,query}=fixture(),now=Date.now(),at=n=>new Date(now+n).toISOString(),note=store.save('notes',{title:'Fictional checked checklist',content:'Stop when wet. Record dry and wet readings.'}),progress=[{kind:'observed',value:2,evidence:'Fictional old checklist lacked the source rule.',at:at(-3000)},{kind:'observed',value:4,evidence:'Fictional actual review: the corrected checklist follows the source; avoid redundant recording advice.',at:at(-1000)}],goal=store.save('goals',{title:'Fictional checklist progress',measure:'A separately reported review',status:'adopted',wait_for_report:true,progress}),previous=store.save('work_items',{title:'Replace the fictional checklist with the source rule',goal_id:goal.id,state:'verified',kind:'local-note',result_id:note.id,verification:{kind:'applied-local-note',at:at(-2000),result_id:note.id}});let calls=0;
+ const provider=async input=>{calls++;if(calls===1)return {kind:'local-note',action:previous.title,check:'Use the source',reason:'Fictional old checklist lacked the source.'};assert.equal(input.context.current_evidence.latest_report.value,4);assert.equal(input.context.current_evidence.latest_verified_change.id,previous.id);assert.equal(input.context.current_evidence.current_deliverable.content,note.content);return {kind:'wait',reason:'The source correction is complete; await a later actual reviewer.',check_at:at(86400000)};};
+ await jobExecutor(provider,query)({kind:'goal-decision'},{store,settings:{}});
+ assert.equal(calls,2);assert.equal(store.list('work_items').length,1);assert.equal(store.list('decisions').at(-1).state,'waiting');
+});
+
+test('a repeated identical edit after its decision correction fails without queuing another write',async()=>{
+ const {store,query}=fixture(),goal=store.save('goals',{title:'Fictional checked source task',status:'adopted'}),previous=store.save('work_items',{title:'Replace the fictional target from its source',goal_id:goal.id,kind:'local-note',state:'verified',verification:{kind:'applied-local-note',at:new Date().toISOString()}});let calls=0;
+ await assert.rejects(jobExecutor(async()=>{calls++;return {kind:'local-note',action:previous.title,check:'Use the source',reason:'Repeat.'};},query)({kind:'goal-decision'},{store,settings:{}}),/completed local edit was selected again/);
+ assert.equal(calls,2);assert.equal(store.list('work_items').length,1);assert.equal(store.list('decisions').length,0);
+});
