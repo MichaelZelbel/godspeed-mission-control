@@ -5,12 +5,14 @@ export function now() {
 }
 
 const WEEKDAYS = { Mon: "mon", Tue: "tue", Wed: "wed", Thu: "thu", Fri: "fri", Sat: "sat", Sun: "sun" };
+const localFormatters = new Map();
 
 export function localParts(date, tz) {
-  const f = new Intl.DateTimeFormat("en-CA", {
+  let f = localFormatters.get(tz);
+  if (!f) { f = new Intl.DateTimeFormat("en-CA", {
     timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit",
     hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23", weekday: "short",
-  });
+  }); if (localFormatters.size >= 64) localFormatters.delete(localFormatters.keys().next().value); localFormatters.set(tz, f); }
   const p = Object.fromEntries(f.formatToParts(date).map((x) => [x.type, x.value]));
   return {
     date: `${p.year}-${p.month}-${p.day}`, hm: `${p.hour}:${p.minute}`, hms: `${p.hour}${p.minute}${p.second}`,

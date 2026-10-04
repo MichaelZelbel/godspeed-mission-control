@@ -76,15 +76,21 @@ export class Store {
   file(record) { return path.join(this.recordsRoot, safe(record.type), safe(record.id) + (record.type === 'notes' ? '.md' : '.json')); }
   scan() {
     const records = new Map(), problems = [], uids = new Map(), aliases = new Map();
+    const priorCache=this.decodedCache||new Map(),nextCache=new Map();let cachedBytes=0;
     for (const dir of fs.readdirSync(this.recordsRoot, { withFileTypes: true })) {
       if (!dir.isDirectory() || dir.isSymbolicLink()) continue;
       for (const entry of fs.readdirSync(path.join(this.recordsRoot, dir.name), { withFileTypes: true })) {
         if (!entry.isFile() || !/\.(json|md)$/.test(entry.name)) continue;
         const file = path.join(this.recordsRoot, dir.name, entry.name);
         try {
-          const record = decode(fs.readFileSync(file, 'utf8'), file), key = record.type + '/' + record.id;
+          // Always read actual bytes. Metadata-only caches miss in-place edits or
+          // restored timestamps; retained templates must never escape to callers.
+          const text=fs.readFileSync(file,'utf8'),cached=priorCache.get(file),same=cached?.text===text;
+          const record=same?structuredClone(cached.record):decode(text,file),key=record.type+'/'+record.id;
+          if(!same)record._hash=hash(encode(record));
+          const bytes=text.length*2;if(cachedBytes+bytes<=16*1024*1024&&nextCache.size<10000){nextCache.set(file,same?cached:{text,record:structuredClone(record)});cachedBytes+=bytes;}
           if (uids.has(record.uid)) problems.push({ file, error: 'Duplicate UUID', other: uids.get(record.uid) });
-          uids.set(record.uid, key); record._hash = hash(encode(record)); records.set(key, record);
+          uids.set(record.uid, key); records.set(key, record);
           for (const alias of record.removed_at ? [] : [record.id, ...(record.aliases || [])]) {
             const akey = record.type + '/' + alias.toLowerCase();
             if (aliases.has(akey) && aliases.get(akey) !== key) problems.push({ file, error: 'Ambiguous alias', alias });
@@ -93,7 +99,7 @@ export class Store {
         } catch (e) { problems.push({ file, error: e.message }); }
       }
     }
-    this.records = records; this.problems = problems; this.lastScan = new Date().toISOString();
+    this.decodedCache=nextCache;this.records = records; this.problems = problems; this.lastScan = new Date().toISOString();
     this.problems.push(...this.validateReferences([...records.values()])); return records;
   }
   validateReferences(records) {
