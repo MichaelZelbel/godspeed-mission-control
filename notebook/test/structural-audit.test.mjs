@@ -2,6 +2,23 @@ import test from 'node:test';import assert from 'node:assert/strict';import fs f
 import {Store} from '../core/records/store.mjs';import {QueryService} from '../core/query.mjs';import {procedure} from '../core/procedures.mjs';
 import {fileURLToPath} from 'node:url';
 function fixture(){const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-audit-'))),query=new QueryService(store);return {store,query};}
+test('audit correction identifies the failed source field and retains the actual rejected response',async()=>{
+ const f=fixture();fs.mkdirSync(path.join(f.store.root,'rules'));fs.writeFileSync(path.join(f.store.root,'rules','fictional-source.md'),'Keep the exact source wording.');
+ f.store.save('settings',{id:'installation',owner:'vps'});f.store.save('jobs',{id:'fictional-audit',kind:'audit',paused:false,interval_ms:86400000});let calls=0;
+ const bad={findings:[{source_type:'rule',source_id:'rules/fictional-source.md',quote:'Keep the exact source wording.',finding:'Fictional rule finding',correction:'Retain exact wording'}],comparison:'No material difference.'};
+ const result=await procedure({id:'audit-correction',kind:'audit'},{...f,provider:async input=>{
+  assert.ok(input.context.citation_catalog.some(s=>s.source_type==='rule'&&s.source_id==='fictional-source.md'));
+  if(++calls===1)return bad;assert.match(input.contract,/source_id is absent/);return {...bad,findings:[{...bad.findings[0],source_id:'fictional-source.md'}]};
+ }});
+ assert.equal(calls,2);const failed=f.store.list('job_receipts').find(r=>r.kind==='audit-source-check');assert.deepEqual(JSON.parse(failed.failed_response),bad);assert.equal(failed.state,'failed');
+ const note=f.store.get('notes',result.record_id);assert.equal(note.audit.semantic_review.findings[0].source_id,'fictional-source.md');assert.match(note.audit.layers[3].criteria.find(c=>c.key==='recurring-trigger').evidence,/owner: vps/);
+});
+test('audit changed quotes fail after one precise correction and remain rejected evidence',async()=>{
+ const f=fixture(),message=f.store.save('conversation_messages',{role:'assistant',content:'One exact fictional source sentence.'});let calls=0;
+ const bad={findings:[{source_type:'message',source_id:message.id,quote:'One... fictional sentence.',finding:'Fictional invalid quote',correction:'Use exact evidence'}],comparison:'No material difference.'};
+ await assert.rejects(procedure({id:'audit-exact-quote',kind:'audit'},{...f,provider:async input=>{if(++calls===2)assert.match(input.contract,/changed whitespace or rewritten words/);return bad;}}),/after one correction/);
+ assert.equal(calls,2);assert.equal(f.store.list('notes').filter(n=>n.source_app==='audit').length,0);assert.equal(f.store.list('job_receipts').filter(r=>r.kind==='audit-source-check'&&JSON.parse(r.failed_response).findings[0].quote===bad.findings[0].quote).length,2);
+});
 test('scheduled audit records four evidenced structural layers and unknown external coverage',async()=>{
  const f=fixture();fs.writeFileSync(path.join(f.store.root,'AGENTS.md'),('A meaningful fictional operating manual explains the chosen workspace. ').repeat(30));fs.mkdirSync(path.join(f.store.root,'profile'));fs.writeFileSync(path.join(f.store.root,'profile','voice.md'),'Fictional voice: short and plain.');f.store.save('profiles',{name:'Fictional Tester',purpose:'Test a useful workflow'});
  for(let i=0;i<4;i++)f.store.save('notes',{title:'Fictional knowledge '+i,content:'Useful fictional evidence '+i});f.store.save('decisions',{title:'Fictional choice',reason:'The saved evidence supports this choice'});f.store.save('jobs',{id:'fictional-recurring',kind:'audit',paused:false,interval_ms:86400000});f.store.save('job_receipts',{job_id:'fictional-recurring',state:'verified',finished_at:new Date().toISOString()});
