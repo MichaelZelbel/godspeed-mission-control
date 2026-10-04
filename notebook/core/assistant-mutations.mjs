@@ -10,15 +10,15 @@ export function assertAssistantRecord(query,type,id,seen=new Set()) {
  if(seen.has(key))return record;seen.add(key);
  assertAssistantLinks(query,type,record,seen);return record;
 }
-export function assertAssistantLinks(query,type,value,seen=new Set()) {
+export function assertAssistantLinks(query,type,value,seen=new Set(),historicalTargets=new Set()) {
  for(const ref of [...value.references||[],...query.references(type,value)])assertAssistantRecord(query,ref.type,ref.id,seen);
  if(type==='notes')for(const id of value.related||[])assertAssistantRecord(query,'notes',id,seen);
  if(type==='review_queue'){
   if(value.payload)assertAssistantLinks(query,type,value.payload,seen);
-  for(const target of value.applied_targets||[])assertAssistantRecord(query,target.type==='claim'?'claims':target.type,target.id,seen);
+  for(const target of value.applied_targets||[]){const table=target.type==='claim'?'claims':target.type;if(!historicalTargets.has(table+'/'+target.id))assertAssistantRecord(query,table,target.id,seen);}
  }
 }
-export function assistantMutationContext({store,query,domains,scopes},input) {
+export function assistantMutationContext({store,query,domains,scopes},input,toolName) {
  const ownerStore=store,guard=Object.create(store),expected=input.expected||input.expected_hashes||{};
  ownerStore.scan();const initialUids=new Set([...ownerStore.records.values()].map(r=>r.uid));
  guard.scan=()=>{ownerStore.scan();guard.records=ownerStore.records;return guard.records;};
@@ -41,7 +41,19 @@ export function assistantMutationContext({store,query,domains,scopes},input) {
    const projected=Object.create(guard);projected.records=new Map(guard.records);projected.scan=()=>projected.records;projected.get=(type,id)=>projected.records.get(type+'/'+id)||[...projected.records.values()].find(r=>r.type===type&&(r.aliases||[]).includes(id));
    for(const key of options.removeKeys||[])projected.records.delete(key);
    for(const next of records)projected.records.set(next.type+'/'+next.id,next);
-   const projectedQuery=new QueryService(projected);for(const next of records)assertAssistantLinks(projectedQuery,next.type,next);
+   const projectedQuery=new QueryService(projected);for(const next of records){
+    const historicalTargets=new Set(),prior=ownerStore.records.get('review_queue/'+next.id);
+    // A rollback receipt describes what was written, including records this
+    // same authorized Undo now tombstones. Its original targets were already
+    // visibility/version checked above; they are not new projected links.
+    if(toolName==='review_suggestions'&&['rollback','remove','block','reject','never_again'].includes(input.action||input.decision)&&next.type==='review_queue'&&['removed','blocked'].includes(next.status)&&next.rolled_back_at&&prior?.undo_receipt_version===1&&prior.undo_supported!==false&&JSON.stringify(next.applied_targets)===JSON.stringify(prior.applied_targets)){
+     for(const target of prior.applied_targets||[]){
+      const table=target.type==='claim'?'claims':target.type,key=table+'/'+target.id,current=ownerStore.records.get(key),after=projected.records.get(key);
+      if(!target.before&&!target.shared&&current?._hash===target.after_hash&&after?.uid===current.uid&&after.removed_at&&records.some(record=>record.type===table&&record.id===target.id&&record.removed_at))historicalTargets.add(key);
+     }
+    }
+    assertAssistantLinks(projectedQuery,next.type,next,new Set(),historicalTargets);
+   }
   });
   return ownerStore.commit(records,options);
  };

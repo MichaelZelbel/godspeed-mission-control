@@ -32,7 +32,7 @@ export async function mcp(input,{store,query,index,domains,scopes}){
       const {name,arguments:a={}}=input.params||{};let value;
       if(['save_record','update_note','capture_note','personal_operation','write_fact','record_event','structural_change','review_suggestions',...topicToolNames.filter(n=>!n.startsWith('list_')&&!n.startsWith('get_'))].includes(name)){
         domains=Object.assign(Object.create(Object.getPrototypeOf(domains)),domains,{toolScope:type=>toolScope('save_record',{type})});
-        ({store,query,domains}=assistantMutationContext({store,query,domains,scopes},a));
+        ({store,query,domains}=assistantMutationContext({store,query,domains,scopes},a,name));
       }
       if(topicToolNames.includes(name))value=topicTool(name,a,{store,query});
       else if(name==='list_note_folders')value=query.withSnapshot(()=>{
