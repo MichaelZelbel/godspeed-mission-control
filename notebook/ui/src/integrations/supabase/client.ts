@@ -1,8 +1,7 @@
 // Compatibility vocabulary for reused screens. All requests reach the local file service.
+import {createRecordWrites} from './record-writes.mjs';
 export const SUPABASE_URL = location.origin;
 export const SUPABASE_PUBLISHABLE_KEY = '';
-const versions = new Map<string,string>();
-const snapshots = new Map<string,any>();
 async function request(route:string,body?:any) {
   try {
     const response=await fetch('/api/'+route,{method:body===undefined?'GET':'POST',headers:{'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});
@@ -11,9 +10,10 @@ async function request(route:string,body?:any) {
     return result;
   }catch(e:any){return {data:null,error:{message:e.message}};}
 }
+const writes = createRecordWrites({send:(state:any)=>request(state.rpc?'rpc':'query',state)});
 class Query implements PromiseLike<any> {
   state:any; signal?:AbortSignal;
-  constructor(table?:string,rpc?:string,args?:any){this.state={table,rpc,args,filters:[],orders:[],expected:{},baselines:{}};}
+  constructor(table?:string,rpc?:string,args?:any){this.state={table,rpc,args,filters:[],orders:[]};}
   select(selection='*',options={}){this.state.selection=selection;this.state.options={...this.state.options,...options};return this;}
   insert(values:any){this.state.operation='insert';this.state.values=values;return this;}
   upsert(values:any,options={}){this.state.operation='upsert';this.state.values=values;this.state.options=options;return this;}
@@ -31,11 +31,10 @@ class Query implements PromiseLike<any> {
   range(a:number,b:number){this.state.range=[a,b];return this;} limit(n:number){this.state.limit=n;return this;}
   single(){this.state.single=true;return this;} maybeSingle(){this.state.maybeSingle=true;return this;}
   abortSignal(signal:AbortSignal){this.signal=signal;return this;} setHeader(){return this;}
-  async run(){
-    if(this.state.operation==='update'||this.state.operation==='delete') for(const [key,value] of versions) if(key.startsWith(this.state.table+'/')){const id=key.slice(this.state.table.length+1);this.state.expected[id]=value;this.state.baselines[id]=snapshots.get(key);}
-    const result=await request(this.state.rpc?'rpc':'query',this.state);
-    for(const r of Array.isArray(result.data)?result.data:result.data?[result.data]:[]) if(r.id&&r._hash){const key=this.state.table+'/'+r.id;versions.set(key,r._hash);snapshots.set(key,r);}
-    return result;
+  run(){
+    // Version stamping, remembering what came back, and running one write per
+    // record at a time all live in record-writes.mjs so they can be tested.
+    return writes.perform(this.state);
   }
   then<TResult1=any,TResult2=never>(onfulfilled?:((value:any)=>TResult1|PromiseLike<TResult1>)|null,onrejected?:((reason:any)=>TResult2|PromiseLike<TResult2>)|null):PromiseLike<TResult1|TResult2>{return this.run().then(onfulfilled,onrejected);}
 }
