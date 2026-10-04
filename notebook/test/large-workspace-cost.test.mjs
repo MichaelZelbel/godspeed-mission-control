@@ -46,3 +46,29 @@ test('refreshing the search index after a save rewrites only what changed',async
     assert.equal(rows[1],0,'a refresh with nothing new writes nothing');
   }finally{index.close();}
 });
+
+// The open dashboard refetches its lists in bursts: a dozen requests at once,
+// each of which read the whole vault, held the server for seven to nine
+// seconds on the imported workspace, and a note save queued behind them.
+test('a burst of dashboard reads reads the vault once and still sees another program\'s change',async()=>{
+  const {createService}=await import('../server/main.mjs');
+  const dir=root(),service=await createService({root:dir,port:0}),base='http://127.0.0.1:'+service.address.port;
+  const select=async id=>(await(await fetch(base+'/api/query',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({table:'notes',filters:[['eq','id',id]],selection:'*',maybeSingle:true})})).json()).data;
+  try{
+    service.store.save('notes',{id:'burst',title:'Burst',content:'before'});
+    await select('burst');const reads=service.store.reads;
+    for(let i=0;i<10;i++)await select('burst');
+    assert.ok(service.store.reads-reads<=1,'ten reads in a row read the whole vault '+(service.store.reads-reads)+' times');
+    // Another program (the sync worker, the assistant) writes a record file.
+    const other=new Store(dir);other.save('notes',{id:'burst',content:'changed elsewhere'},other.get('notes','burst')._hash);
+    let seen;for(let i=0;i<60&&seen?.content!=='changed elsewhere';i++){await new Promise(r=>setTimeout(r,50));seen=await select('burst');}
+    assert.equal(seen?.content,'changed elsewhere','a change made by another program must reach the next reads');
+  }finally{await service.close();}
+});
+
+test('a write always reads the vault as it is, even when reads may reuse the last one',()=>{
+  const dir=root(),store=new Store(dir);store.reuseFor=60000;
+  store.save('notes',{id:'w',title:'W',content:'one'});store.scan();
+  const other=new Store(dir);other.save('notes',{id:'w',content:'two'},other.get('notes','w')._hash);
+  assert.equal(store.withLock(()=>store.snapshot(()=>store.get('notes','w').content)),'two','under the workspace lock the view must be read fresh');
+});

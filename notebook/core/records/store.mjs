@@ -60,8 +60,9 @@ export class Store {
       }
       throw Object.assign(new Error('Workspace is being written by another process'),{code:'WRITER_BUSY'});
     }
+    this.holding = (this.holding || 0) + 1;
     try { fs.writeFileSync(fd, JSON.stringify({ pid: process.pid, at: new Date().toISOString() })); fs.fsyncSync(fd); return fn(); }
-    finally { fs.closeSync(fd); fs.unlinkSync(lock); }
+    finally { this.holding--; fs.closeSync(fd); fs.unlinkSync(lock); }
   }
   async waitForWriter({signal,timeoutMs=30000}={}) {
     const lock=path.join(this.state,'workspace.lock'),until=Date.now()+timeoutMs;
@@ -100,8 +101,15 @@ export class Store {
     this.scan(); this.snapshotDepth = 1;
     try { return fn(); } finally { this.snapshotDepth = 0; }
   }
+  // A program that watches the vault (the notebook server) may let reads reuse
+  // the last full read for `reuseFor` milliseconds, and calls invalidate() on
+  // every change it sees. Reads made while this process holds the writer lock
+  // always read the vault as it is, so a write never acts on a reused view.
+  invalidate() { this.stale = true; }
   scan(force = false) {
     if (this.snapshotDepth && !force && this.records) return this.records;
+    if (!force && this.reuseFor && this.records && !this.holding && !this.stale && Date.now() - this.scannedAt < this.reuseFor) return this.records;
+    this.stale = false; this.scannedAt = Date.now();
     // How often the vault was actually read, which is what a save costs.
     this.reads = (this.reads || 0) + 1;
     const records = new Map(), problems = [], uids = new Map(), aliases = new Map();

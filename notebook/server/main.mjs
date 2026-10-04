@@ -269,11 +269,16 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   const telegramTimer=telegram?setInterval(()=>{if(!menerioImport.mutating)telegram.tick().catch(()=>{});},3000):null;
   scheduler.deliver=telegram?(id,result)=>telegram.deliver(id,result):null;
   let debounce,indexDebounce;const watchers=new Map();
-  const changed=(event,name)=>{if(menerioImport.mutating||!name||name.replaceAll('\\','/').startsWith('.')||name.endsWith('.tmp'))return;clearTimeout(indexDebounce);indexDebounce=setTimeout(()=>{if(menerioImport.mutating)return;void index.rebuildBackground().catch(()=>{});},750);if(fs.existsSync(path.join(store.state,'sync-config.json'))){clearTimeout(debounce);debounce=setTimeout(()=>{if(!menerioImport.mutating)void syncRunner.run();},5000);}};
+  const changed=(event,name)=>{store.invalidate();if(menerioImport.mutating||!name||name.replaceAll('\\','/').startsWith('.')||name.endsWith('.tmp'))return;clearTimeout(indexDebounce);indexDebounce=setTimeout(()=>{if(menerioImport.mutating)return;void index.rebuildBackground().catch(()=>{});},750);if(fs.existsSync(path.join(store.state,'sync-config.json'))){clearTimeout(debounce);debounce=setTimeout(()=>{if(!menerioImport.mutating)void syncRunner.run();},5000);}};
   // Private backups and Git merge workspaces are outside the watched knowledge.
   const watchRoot=name=>{const folder=path.join(store.root,name);if(!watchers.has(name)&&fs.existsSync(folder))watchers.set(name,fs.watch(folder,{recursive:true},changed));};
   for(const name of durableRoots)watchRoot(name);
   const rootWatcher=fs.watch(store.root,(event,name)=>{if(durableRoots.includes(name)){watchRoot(name);changed(event,name);}else if(durableFiles.includes(name))changed(event,name);});
+  // Every request read the whole vault, and the open dashboard sends a dozen at
+  // once: on an imported workspace that held the server for seven to nine
+  // seconds a minute. With the watchers above telling it about every change,
+  // reads may reuse the last full read for two seconds. Writes never do.
+  store.reuseFor=2000;
   return { server, store, index, query, domains, scheduler, sync, mediaSync,address: server.address(), close: async () => { await syncRunner.close();await menerioImport.close();rootWatcher.close();for(const watcher of watchers.values())watcher.close();clearTimeout(debounce);clearTimeout(indexDebounce);clearInterval(telegramTimer);clearInterval(interval);clearInterval(jobs);clearInterval(syncTimer);clearInterval(mediaTimer); await new Promise(resolve => server.close(resolve)); index.close(); } };
 }
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
