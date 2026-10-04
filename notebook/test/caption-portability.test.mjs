@@ -24,9 +24,9 @@ test('all bundled caption scripts remain equivalent', () => {
     }
   }
 });
-test('near-silent audio is refused before even reusing a cached transcript', () => {
+test('near-silent audio is refused before even reusing a cached transcript', t => {
   const ff=spawnSync('ffmpeg',['-version']);
-  if(ff.error) return;
+  if(ff.error){t.skip('FFmpeg is unavailable; no silent-audio execution was verified');return;}
   const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-caption-silence-'));
   const made=spawnSync('ffmpeg',['-v','error','-f','lavfi','-i','anullsrc=r=16000:cl=mono','-t','1','-c:a','aac',path.join(root,'source.mp4')]);
   assert.equal(made.status,0);

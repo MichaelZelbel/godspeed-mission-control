@@ -44,6 +44,8 @@ Aim for 150-300 words when the sources support that much. With thin material, be
 
 **Completed work.** When the facts contain verified work with a usable link, include at least the newest useful piece. Say what it is and what the user can do with it. A saved draft is a draft; do not imply it established a real-world outcome. Do not expose commit hashes, job states or internal paths.
 
+Use the supplied `action_artifacts` for a decision's exact content and usable link. A goal or an unprepared work item is not a completed proposal to approve. When a checked contribution is included, make reviewing that contribution the main choice; do not mix it with a request to approve a different unfinished workflow. If no prepared artifact needs a decision, do not invent one.
+
 **What only the user can do.** At most three numbered items. Each states what it is for someone who saw none of the work, what happens if ignored and the exact next step, with one link. Any exact text offered to send appears in quotes. Explain what each offered answer would cause.
 
 Mention deadlines only when actual urgency/consequence merits attention. Distinguish desired targets from costly deadlines. A target's morning question or weekly follow-up can appear after genuine urgent deadlines, with no invented penalty. One question is one item.

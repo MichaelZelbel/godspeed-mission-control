@@ -15,11 +15,14 @@ Run from this skill folder, with the user's actual video path:
 python scripts/burn.py clip.mp4
 python scripts/burn.py clip.mp4 --ass-only
 python scripts/burn.py clip.mp4 --words clip.words.json
+python scripts/burn.py clip.mp4 --device cpu --font-file fonts/ArchivoBlack-Regular.ttf --font-name "Archivo Black"
 ```
 
 The tool extracts audio, uses faster-whisper word timing, groups and wraps words, saves ASS subtitles and burns them using real FFmpeg. It retains the original and the word transcript. Reuse that transcript for another render rather than paying for or repeating transcription. `--ass-only` is an intermediate subtitle result, not a finished captioned video.
 
 Dependencies are listed in `requirements.txt`. Pillow measures the actual font. imageio-ffmpeg supplies a real encoder; a real FFmpeg on PATH is the fallback. Faster-whisper is needed only for a new transcript; GPU libraries are optional and CPU transcription is supported. Do not call missing Python packages an account requirement.
+
+Use `--device cpu` when explicitly selecting CPU transcription. The bundled Archivo Black file carries its OFL license in `fonts/`; selecting it changes the original Arial Black appearance. Each burn retains a `.caption-render.log` with the actual FFmpeg font-selection result. Verify that result and the rendered pixels rather than assuming the chosen family was available.
 
 ## Style and font
 
