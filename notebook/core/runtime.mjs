@@ -79,8 +79,8 @@ export function jobExecutor(configuredProvider,query) {
     if(job.kind==='habit-check'){
       const habit=visibleRows(query,'habits').find(h=>h.id===job.habit_id&&h.status==='active');if(!habit)return {verified:true,silent:true};
       if(!provider)throw Error('Connect an assistant before reviewing a habit');
-      const sources={agreement:habit.agreement,observations:habit.observations,previous:visibleRows(query,'coach_talks').filter(t=>t.area===habit.area).slice(-3)};
-      const question=await provider({kind:'habit-review',context:sources,contract:'Ask one short question about this agreed habit using its actual observations. Missing observations mean unknown. Do not invent success, change the agreement, or diagnose.'});
+      const sources={agreement:habit.agreement,observations:habit.observations,previous:visibleRows(query,'coach_talks').filter(t=>t.area===habit.area).slice(-3),...(habit.area==='health'?{health:currentHealth(query)}:{})};
+      const question=await provider({kind:'habit-review',context:sources,contract:'Ask one short question about this agreed habit using its actual observations. Missing observations mean unknown. Dated health measurements are source observations, never proof that this newly agreed habit happened. Do not invent success, change the agreement, or diagnose.'});
       if(typeof question!=='string'||!question.trim())throw Error('Habit review returned no question');
       const note=retainHabitReview(store,habit,question,sources);return {verified:true,record_id:note.id,delivery:'notebook'};
     }

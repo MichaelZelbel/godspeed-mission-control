@@ -45,7 +45,8 @@ export function nativeOperation(store,input){
  if(input.type==='habit-agree'){
   if(input.auto&&!parseAuto(input.auto))throw Error('Automatic habit evidence needs a numeric measurement comparison');
   const talk=nativeRows(store,'coach_talks').find(t=>t.id===input.talk_id);if(!talk)throw Error('Coaching talk missing');
-  const habit=addHabit(store.root,{area:talk.area,title:input.title,doneMeans:input.done_means||input.title,days:input.days||'daily',auto:input.auto||'',agreed:input.agreement+' [talk:'+talk.id+']'},day,coachSettings(store.root).max_habits);
+  const reference='[talk:'+talk.id+']',agreement=input.agreement.includes(reference)?input.agreement:input.agreement+' '+reference;
+  const habit=addHabit(store.root,{area:talk.area,title:input.title,doneMeans:input.done_means||input.title,days:input.days||'daily',auto:input.auto||'',agreed:agreement},day,coachSettings(store.root).max_habits);
   atomic(habit.file,setHead(fs.readFileSync(habit.file,'utf8'),'CHECK-AT',input.check_at));
   return nativeRows(store,'habits').find(h=>h.id==='habit-'+habit.area+'-'+habit.slug);
  }
