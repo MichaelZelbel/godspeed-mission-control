@@ -1,5 +1,12 @@
 import {visibleRows} from './visibility.mjs';
 
+export function deliveryShape(settings,queue){
+ const shape=settings.delivery_shape;if(shape===undefined||shape==='auto')return null;
+ if(!['post','repost','comment','video'].includes(shape))throw Error('Choose auto, post, repost, comment or video for the contribution');
+ if(shape==='video'&&!queue)throw Error('Choosing video requires an enabled confirmed video pipeline');
+ return shape;
+}
+
 export function videoQueue(query,configuration){
  if(!configuration||configuration.enabled!==true)return null;
  if(configuration.pipeline_confirmed!==true)throw Error('Confirm the working video production pipeline before enabling scripts');

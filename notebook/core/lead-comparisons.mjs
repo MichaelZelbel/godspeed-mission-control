@@ -1,5 +1,5 @@
 import fs from 'node:fs';import path from 'node:path';import {randomInt} from 'node:crypto';import {spawnSync} from 'node:child_process';
-import {hash} from './records/store.mjs';import {visibleRows} from './visibility.mjs';import {localPath} from './local-path.mjs';
+import {hash,encode} from './records/store.mjs';import {visibleRows} from './visibility.mjs';import {localPath} from './local-path.mjs';
 
 export function comparisonConfiguration(query,input){
  if(!input||typeof input.enabled!=='boolean')throw Error('Choose whether the adopted weekly comparison is enabled');if(!input.enabled)return {enabled:false};
@@ -34,16 +34,29 @@ export async function weeklyComparison({store,query,settings,now=Date.now()}){
  if(!collection)throw Error('The actual comparison output collection is missing or hidden');
  if(!protocol?.content?.trim())throw Error('The adopted comparison protocol is missing or hidden');
  if(old&&old.protocol_hash!==protocol._hash)throw Error('The comparison protocol changed during its agreed window');
- const items=visibleRows(query,'collection_items').filter(item=>item.collection_id===config.collection_id&&!item.is_trashed&&item.data?.[config.period_field]===period&&Date.parse(item.updated_at||item.created_at)<=Date.parse(cutoff_at)),outputs=config.sides.map(side=>{
+ const visibleItems=visibleRows(query,'collection_items').filter(item=>item.collection_id===config.collection_id&&!item.is_trashed&&item.data?.[config.period_field]===period);
+ const items=visibleItems.filter(item=>Date.parse(item.updated_at||item.created_at)<=Date.parse(cutoff_at)),outputs=config.sides.map(side=>{
   const matching=items.filter(item=>item.data?.[config.side_field]===side);if(matching.length>1)throw Error('The comparison contains ambiguous duplicate outputs for one side');
-  const item=matching[0];if(!item)return {side,missing:true};const text=item.data?.[config.text_field];if(typeof text!=='string'||!text.trim()||text.length>128000)throw Error('The actual comparison output must contain bounded verbatim text');return {side,source_id:item.id,source_hash:item._hash,content:text};
+  const item=matching[0];if(!item){
+   const prior=old?.outputs?.find(o=>o.side===side&&!o.missing),current=prior&&visibleItems.find(i=>i.id===prior.source_id&&i.data?.[config.side_field]===side);
+   if(prior&&current&&now>=Date.parse(cutoff_at)&&Date.parse(old.observed_at)<=Date.parse(cutoff_at)&&Date.parse(current.updated_at||current.created_at)>Date.parse(cutoff_at)){
+    const history=query.rows('record_history').find(h=>h.source_type==='collection_items'&&h.source_id===prior.source_id&&hash(encode(h.snapshot))===prior.source_hash&&h.snapshot.data?.[config.text_field]===prior.content);
+    if(!history)throw Error('The on-time comparison output changed after cutoff and its original version requires review');
+    return {...prior,source_version:'retained-history',history_id:history.id,current_source_hash:current._hash};
+   }
+   return {side,missing:true};
+  }const text=item.data?.[config.text_field];if(typeof text!=='string'||!text.trim()||text.length>128000)throw Error('The actual comparison output must contain bounded verbatim text');return {side,source_id:item.id,source_hash:item._hash,content:text};
  });
  const expired=now>=Date.parse(cutoff_at),state=outputs.every(o=>!o.missing)?'ready':expired?'missing_sides':'waiting';
  if(old&&hash(old.outputs)===hash(outputs)&&old.state===state)return [old];
  return [await store.withLockAsync(()=>{
   const current=store.get('lead_comparisons',id);if(current&&current._hash!==old?._hash)throw Error('Another run retained this comparison; retry without replaying its key');
   if(hash(store.get('settings','lead')?.comparison||null)!==hash(config)||!visibleRows(query,'notes').some(n=>n.id===protocol.id&&n._hash===protocol._hash)||!visibleRows(query,'goals').some(g=>g.id===goal.id&&g._hash===goal._hash&&['adopted','active'].includes(g.status))||!visibleRows(query,'collections').some(c=>c.id===collection.id&&c._hash===collection._hash&&!c.is_trashed&&!c.is_archived))throw Error('The comparison goal, protocol, collection or configuration changed');
-  for(const output of outputs)if(!output.missing&&!visibleRows(query,'collection_items').some(i=>i.id===output.source_id&&i._hash===output.source_hash))throw Error('An actual comparison output changed during its read');
+  for(const output of outputs)if(!output.missing){
+   const expected=output.source_version==='retained-history'?output.current_source_hash:output.source_hash;
+   if(!visibleRows(query,'collection_items').some(i=>i.id===output.source_id&&i._hash===expected&&!i.is_trashed&&i.data?.[config.side_field]===output.side&&i.data?.[config.period_field]===period))throw Error('An actual comparison output changed during its read');
+   if(output.source_version==='retained-history'){const history=store.get('record_history',output.history_id);if(!history||hash(encode(history.snapshot))!==output.source_hash||history.snapshot.data?.[config.text_field]!==output.content)throw Error('The retained on-time comparison version changed during its read');}
+  }
   const retainedFile=localPath(store.root,'work/lead-comparisons/'+id+'/blind-key.json'),retained=fs.existsSync(retainedFile)?JSON.parse(fs.readFileSync(retainedFile,'utf8')):null;
   if(retained&&(retained.comparison_id!==id||retained.period!==period||retained.protocol_id!==protocol.id||retained.protocol_hash!==protocol._hash||!config.sides.includes(retained.mapping?.A)||!config.sides.includes(retained.mapping?.B)||retained.mapping.A===retained.mapping.B))throw Error('The retained private blind key requires review');
   const mapping=current?.blind_key?.mapping||retained?.mapping||(randomInt(2)?{A:config.sides[0],B:config.sides[1]}:{A:config.sides[1],B:config.sides[0]}),key={comparison_id:id,period,protocol_id:protocol.id,protocol_hash:protocol._hash,mapping},proof=committedBlindKey(store,id,key);

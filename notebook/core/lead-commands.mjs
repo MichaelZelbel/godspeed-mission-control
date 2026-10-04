@@ -1,5 +1,5 @@
 import {safe} from './records/store.mjs';import {visibleRows} from './visibility.mjs';
-import {videoQueue} from './lead-video.mjs';
+import {videoQueue,deliveryShape} from './lead-video.mjs';
 import {monthlyConfiguration} from './lead-measurements.mjs';
 import {comparisonConfiguration} from './lead-comparisons.mjs';
 const result=value=>({result:typeof value==='string'?value:JSON.stringify(value,null,2)});
@@ -10,7 +10,7 @@ function json(words){let value;try{value=JSON.parse(words.join(' '));}catch{thro
 export function leadCommand({store,query},args){
  if(!Array.isArray(args)||args.some(a=>typeof a!=='string'||a.length>20000))throw Error('Choose a supported lead command');
  const [command='help',...words]=args;
- if(['help','-h','--help'].includes(command))return result('/lead queue|runs|examples|positions|contacts|markets|measurements|comparisons\n/lead example JSON {content,status:approved|refused,position_id?,shape?}\n/lead position JSON {id?,title,status:adopted|paused,goal_id,research_due_at?,research_action?}\n/lead contact JSON {id?,name,url,hot?,known_person?,relationship?,relationship_confirmed?,shared_event_note_id?}\n/lead market JSON {id?,name,url,status:selected|archived}\n/lead configure JSON {profile_urls?:[HTTPS],video?:{enabled,pipeline_confirmed,collection_id,title_field,script_field},monthly?:{enabled,day,rungs},comparison?:{enabled,adopted,goal_id,protocol_note_id,collection_id,side_field,period_field,text_field,sides,starts_at,cutoff_hours}}\n/lead source NOTE_ID on|off\n/lead outcome ENTRY_ID JSON {status:shown|refused|ignored|posted,feedback?,posted_url?,posted_at?}\nThese commands prepare local drafts and retain your reported outcomes. They never publish. Posted links require separate verification before being treated as observed publication. Named contact drafts need an actual dated statement and a useful source-backed offer; known personal contacts also need a confirmed relationship and a selected shared-event note. Enable the Lead routine in Settings only when you want it to run.');
+ if(['help','-h','--help'].includes(command))return result('/lead queue|runs|examples|positions|contacts|markets|measurements|comparisons\n/lead example JSON {content,status:approved|refused,position_id?,shape?}\n/lead position JSON {id?,title,status:adopted|paused,goal_id,research_due_at?,research_action?}\n/lead contact JSON {id?,name,url,hot?,known_person?,relationship?,relationship_confirmed?,shared_event_note_id?}\n/lead market JSON {id?,name,url,status:selected|archived}\n/lead configure JSON {profile_urls?:[HTTPS],delivery_shape?:auto|post|repost|comment|video,video?:{enabled,pipeline_confirmed,collection_id,title_field,script_field},monthly?:{enabled,day,rungs},comparison?:{enabled,adopted,goal_id,protocol_note_id,collection_id,side_field,period_field,text_field,sides,starts_at,cutoff_hours}}\n/lead source NOTE_ID on|off\n/lead outcome ENTRY_ID JSON {status:shown|refused|ignored|posted,feedback?,posted_url?,posted_at?}\nThese commands prepare local drafts and retain your reported outcomes. They never publish. Posted links require separate verification before being treated as observed publication. Named contact drafts need an actual dated statement and a useful source-backed offer; known personal contacts also need a confirmed relationship and a selected shared-event note. Enable the Lead routine in Settings only when you want it to run.');
  const tables={queue:'lead_entries',runs:'lead_runs',examples:'lead_examples',positions:'lead_positions',contacts:'lead_contacts',markets:'lead_market',measurements:'lead_measurements',comparisons:'lead_comparisons'};
  if(tables[command])return result(visibleRows(query,tables[command]));
  if(command==='source'){const id=safe(words[0]||''),note=visibleRows(query,'notes').find(n=>n.id===id);if(!note)throw Error('Select an existing assistant-visible note');if(!['on','off'].includes(words[1]))throw Error('Choose source on or off');return result(store.save('notes',{id,lead_evidence:words[1]==='on'},note._hash));}
@@ -42,10 +42,12 @@ export function leadCommand({store,query},args){
  if(command==='configure'){
   const previous=store.get('settings','lead'),fields={};
   if(input.profile_urls!==undefined){if(!Array.isArray(input.profile_urls)||input.profile_urls.length>10)throw Error('Select at most ten public profile URLs');fields.profile_urls=input.profile_urls.map(publicURL);}
+  if(input.delivery_shape!==undefined)fields.delivery_shape=input.delivery_shape;
   if(input.video!==undefined){if(!input.video||typeof input.video.enabled!=='boolean')throw Error('Choose whether video scripts are enabled');const queue=videoQueue(query,input.video);fields.video=queue?{enabled:true,pipeline_confirmed:true,collection_id:queue.collection.id,title_field:queue.title_field,script_field:queue.script_field}:{enabled:false};}
   if(input.monthly!==undefined)fields.monthly=monthlyConfiguration(query,input.monthly);
   if(input.comparison!==undefined)fields.comparison=comparisonConfiguration(query,input.comparison);
-  if(!Object.keys(fields).length)throw Error('Supply selected profiles, video configuration or adopted periodic duties');
+  if(!Object.keys(fields).length)throw Error('Supply selected profiles, contribution shape, video configuration or adopted periodic duties');
+  const next={...previous,...fields};deliveryShape(next,videoQueue(query,next.video));
   return result(store.save('settings',{id:'lead',...fields},previous?._hash));
  }
  throw Error('Choose a supported lead command; use /lead help');
