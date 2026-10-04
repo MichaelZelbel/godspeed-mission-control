@@ -7,6 +7,33 @@ import {installSkillTree} from '../core/packaged-skills.mjs';
 const root=process.env.GODSPEED_WORKSPACE,home=process.argv[2];if(!root||!home)throw new Error('Choose the candidate workspace and isolated assistant home');
 const store=new Store(root),port=Number(process.env.GODSPEED_PORT||47831),file=path.join(home,'config.yaml');fs.mkdirSync(home,{recursive:true});
 const kit=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..');
+// Keep the original main-branch command suite available as well as the
+// integrated adapters below. Dependencies stay beside their original wrappers.
+const commandHome=path.join(home,'bin');
+fs.mkdirSync(commandHome,{recursive:true});
+fs.cpSync(path.join(kit,'tools'),commandHome,{recursive:true});
+for(const name of fs.readdirSync(commandHome).filter(n=>n.startsWith('mc-')&&!path.extname(n))){
+  const wrapper=path.join(commandHome,name),source=fs.readFileSync(wrapper,'utf8');
+  if(process.platform!=='win32')fs.chmodSync(wrapper,0o700);
+  const target=source.match(/exec node "\$\(dirname "\$0"\)\/([^"\n]+)"/);
+  if(process.platform==='win32'&&target)atomic(wrapper+'.cmd','@echo off\r\nset "GODSPEED_ROOT='+root+'"\r\nset "GODSPEED_DIR='+root+'"\r\n"'+process.execPath+'" "%~dp0'+target[1]+'" %*\r\n');
+  else if(process.platform==='win32'&&source.startsWith('#!/usr/bin/env python3'))atomic(wrapper+'.cmd','@echo off\r\npython "%~dp0'+name+'" %*\r\n');
+  else if(process.platform==='win32')atomic(wrapper+'.cmd','@echo off\r\nset "GODSPEED_ROOT='+root+'"\r\nset "GODSPEED_DIR='+root+'"\r\nset "PATH='+path.dirname(process.execPath)+';%PATH%"\r\nset "GODSPEED_BASH="\r\nfor /f "delims=" %%G in (\'where git.exe 2^>nul\') do if exist "%%~dpG..\\bin\\bash.exe" set "GODSPEED_BASH=%%~dpG..\\bin\\bash.exe"\r\nif not defined GODSPEED_BASH (echo Git Bash is required for this Godspeed command. & exit /b 1)\r\n"%GODSPEED_BASH%" "%~dp0'+name+'" %*\r\n');
+}
+const rulesScript=path.join(kit,'tools/compile-rules.js');
+if(process.platform==='win32')atomic(path.join(commandHome,'mc-compile-rules.cmd'),'@echo off\r\n"'+process.execPath+'" "'+rulesScript+'" --godspeed "'+root+'" %*\r\n');
+else {const rulesCommand=path.join(commandHome,'mc-compile-rules');atomic(rulesCommand,'#!/bin/sh\nexec '+[process.execPath,rulesScript,'--godspeed',root].map(s=>"'"+s.replaceAll("'","'\\''")+"'").join(' ')+' "$@"\n');fs.chmodSync(rulesCommand,0o700);}
+// Developer assistants opened on this folder reach the same integrated memory.
+const mcpFile=path.join(root,'.mcp.json'),mcp=JSON.parse(fs.readFileSync(mcpFile,'utf8').replace(/^\uFEFF/,''));
+mcp.mcpServers??={};
+if(process.env.GODSPEED_DEVICE!=='vps'){
+  mcp.mcpServers.godspeed={type:'http',url:`http://127.0.0.1:${port}/mcp`};
+  atomic(mcpFile,JSON.stringify(mcp,null,2)+'\n');
+  const codexFile=path.join(root,'.codex/config.toml');
+  if(!fs.existsSync(codexFile))atomic(codexFile,`[mcp_servers.godspeed]\nurl = "http://127.0.0.1:${port}/mcp"\n`);
+  const vscodeFile=path.join(root,'.vscode/settings.json');
+  if(!fs.existsSync(vscodeFile))atomic(vscodeFile,JSON.stringify({'terminal.integrated.env.windows':{GODSPEED_WORKSPACE:root,GODSPEED_ROOT:root,GODSPEED_DIR:root,HERMES_HOME:home,PATH:commandHome+';'+path.dirname(process.execPath)+';${env:PATH}'},'terminal.integrated.env.linux':{GODSPEED_WORKSPACE:root,GODSPEED_ROOT:root,GODSPEED_DIR:root,HERMES_HOME:home,PATH:commandHome+':'+path.dirname(process.execPath)+':${env:PATH}'}},null,2)+'\n');
+}
 for(const command of ['goals','work','forecast','due','subs','watch','mail']){
  const bin=path.join(home,'bin','mc-'+command),script=command==='mail'?path.join(kit,'tools','mc-mail.js'):path.join(kit,'notebook','bin','personal-command.mjs'),args=command==='mail'?[]:[command];
  if(process.platform==='win32')atomic(bin+'.cmd','@echo off\r\n"'+process.execPath+'" "'+script+'" '+args.join(' ')+' %*\r\n');
@@ -40,6 +67,10 @@ else{
  else if(!/  enabled:/.test(block))updated=block+'  enabled: ['+names.map(n=>JSON.stringify(n)).join(', ')+']\n';
  else throw Error('The existing plugin configuration needs review before enabling personal workflows');
  text=text.replace(block,updated);
+}
+if(/^mcp_servers:/m.test(text)){
+  // Re-running setup with a new local port must not retain the old endpoint.
+  text=text.replace(/(^  godspeed:\s*\n\s+url: )http:\/\/127\.0\.0\.1:\d+\/mcp/m,`$1http://127.0.0.1:${port}/mcp`);
 }
 if(!/^mcp_servers:/m.test(text)){
   let headers='';if(process.env.GODSPEED_DEVICE==='vps'){

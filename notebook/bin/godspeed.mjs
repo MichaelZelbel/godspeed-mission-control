@@ -13,6 +13,7 @@ import { execFileSync } from 'node:child_process';
 import {assistantProfiles,selectAssistantProfile} from '../core/assistant-files.mjs';
 import {installSkillTree} from '../core/packaged-skills.mjs';
 import {planWorkspaceMove,moveWorkspace,undoWorkspaceMove} from '../core/workspace-move.mjs';
+import {installStarter} from '../core/starter-workspace.mjs';
 const args=process.argv.slice(2),root=process.env.GODSPEED_WORKSPACE;if(!root)throw new Error('Set GODSPEED_WORKSPACE to your candidate workspace');
 if(args[0]==='workspace-move'){
  const [_,action,value,installationFile]=args;
@@ -27,15 +28,14 @@ const store=new Store(root,{device:process.env.GODSPEED_DEVICE||'local'}),query=
 const [command,verb,...rest]=args;let result;
 if(command==='init'){
   seed(store);
-  const starter=fileURLToPath(new URL('../../starter-godspeed/',import.meta.url));
-  for(const name of ['AGENTS.md','CLAUDE.md','profile','rules','skills','procedures.md'])if(!fs.existsSync(path.join(root,name)))fs.cpSync(path.join(starter,name),path.join(root,name),{recursive:true});
+  installStarter(root);
   const addons=fileURLToPath(new URL('../../third-party/addons/',import.meta.url));
   const recipes=fileURLToPath(new URL('../recipes/',import.meta.url));
   for(const [name,recipe] of [['godspeed-coach','coach'],['godspeed-journal','interstitial-journal'],['mc-phone','phone-errands'],['mc-video','video-finishing']]){
     const source=path.join(addons,name,'skill',recipe);if(fs.existsSync(source)&&!fs.existsSync(path.join(root,'skills',recipe)))fs.cpSync(source,path.join(root,'skills',recipe),{recursive:true});
   }
   if(fs.existsSync(recipes))for(const name of fs.readdirSync(recipes))installSkillTree(store,path.join(recipes,name),path.join(root,'skills',name));
-  const contract=path.join(root,'FULL-ALPHA.md');if(!fs.existsSync(contract))atomic(contract,'# File runtime\n\nUser records live in records/. SQLite is disposable. Use the notebook or local MCP tools for structured edits, facts and events. File sync uses the conflict-preserving reconciler; never run git pull --rebase on a connected workspace. Use the notebook control desk for schedules, owner, search, backups and connector configuration. This contract overrides older starter instructions referring to cloud storage or legacy world commands. Credentials stay in .godspeed local device configuration, outside private Git sync.\n');
+  const contract=path.join(root,'FULL-ALPHA.md');if(!fs.existsSync(contract))atomic(contract,'# Integrated notebook\n\nThis is the complete Godspeed Mission Control starter with an integrated notebook. AGENTS.md and the original folder workflow remain the operating manual. Notebook records live in records/ alongside those folders. Use the notebook or its MCP tools for notebook edits; use the original commands and readable files for Godspeed work. Credentials and disposable SQLite indexes stay in .godspeed and never enter private Git sync. Connected file sync uses the conflict-preserving reconciler; do not run a second Git synchronizer on the same workspace.\n');
   const spec=fs.readFileSync(fileURLToPath(new URL('../../docs/full-version/file-format.md',import.meta.url)),'utf8');
   if(!fs.existsSync(path.join(root,'README.md')))atomic(path.join(root,'README.md'),'# Godspeed Mission Control\n\n'+spec);
   result={initialized:true,preservedExisting:true};
