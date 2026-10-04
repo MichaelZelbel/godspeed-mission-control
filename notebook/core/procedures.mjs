@@ -10,9 +10,12 @@ import {structuralAudit} from './structural-audit.mjs';
 import {radar} from './radar.mjs';
 import {lead} from './lead.mjs';
 import {currentHealth} from './health-inputs.mjs';
+import {prepareRadarWork,applyRadarWork} from './radar-work.mjs';
 export {procedureKinds} from './jobs/kinds.mjs';
 export async function procedure(job,{store,query,provider}){
   const kind=job.kind;let result;
+  if(kind==='radar-prepare')return prepareRadarWork(job,{store,query,provider});
+  if(kind==='radar-work')return applyRadarWork(job,{store,query});
   if(kind==='subscription-review'){
     const {measurement:meter,content:dashboard}=JSON.parse((await subscriptionCommand(store,['review',...(job.no_network?['--no-network']:[])])).result);
     if(!meter.rows.length)return {verified:true,silent:true,reason:'No subscription register has been selected'};

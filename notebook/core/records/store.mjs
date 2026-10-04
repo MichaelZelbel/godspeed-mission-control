@@ -241,12 +241,13 @@ export class Store {
       throw new Error('Unknown structural operation');
     });
   }
-  backup(destination) {
+  backup(destination,{finalize}={}) {
     if (fs.existsSync(destination)) throw new Error('Backup destination already exists');
     return this.withLock(() => {
       this.recover(); fs.mkdirSync(destination, { recursive: true });
       for (const root of [...durableRoots,...durableFiles,'conflicts']) if (fs.existsSync(path.join(this.root, root))) fs.cpSync(path.join(this.root, root), path.join(destination, root), { recursive: true });
       atomic(path.join(destination, 'backup.json'), JSON.stringify({ format: 1, at: new Date().toISOString(), records: this.scan().size }));
+      finalize?.(destination);
       return destination;
     });
   }

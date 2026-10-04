@@ -1,6 +1,6 @@
 {
   "format": 2,
-  "checked_at": "2026-10-04T03:14:34.452789+00:00",
+  "checked_at": "2026-10-04T03:28:49.882888+00:00",
   "complete": false,
   "items": [
     {
@@ -2503,7 +2503,9 @@
       "dependencies": [],
       "criterion": "Candidate upgrades retain verified backups; no private Hermes-home cleanup. Verify the candidate-backup result across a failed run, restart and an unchanged repeat; report an observation rather than implying execution.",
       "status": "source only",
-      "evidence": [],
+      "evidence": [
+        "Source asynchronous normal backup preserves snapshot writer lock through media/hash capture and keeps actual HTTP health responsive; seventeen focused archive/server checks and full source suite pass. Installed verification remains open; retained backups are never pruned."
+      ],
       "required": true,
       "target_test": "Exercise hermes-backup-prune through its installed entry point and check actual results after restart"
     },
@@ -2635,7 +2637,8 @@
       "criterion": "At most one evidence-based proposal from configured sources. Verify the radar result across a failed run, restart and an unchanged repeat; report an observation rather than implying execution.",
       "status": "partial",
       "evidence": [
-        "Dedicated source lifecycle records only actual user verdicts, pending separate implementation approval and quote-linked reported trial outcomes. Assess archives after three completed runs, Caution retains the no-list, and overlapping source runs cannot duplicate a local-change proposal. Source suite and 21 focused checks pass; installed lifecycle and broad discovery remain unverified."
+        "Dedicated source lifecycle records only actual user verdicts, pending separate implementation approval and quote-linked reported trial outcomes. Assess archives after three completed runs, Caution retains the no-list, and overlapping source runs cannot duplicate a local-change proposal. Source suite and 21 focused checks pass; installed lifecycle and broad discovery remain unverified.",
+        "Source controlled workflow draft/exact approval/application/read-back/retained rollback has seventeen passing focused checks. Full maintained method includes actual contracts. SDK/tool installation, installed real-provider experiment and actual trial benefit remain unverified."
       ],
       "required": true,
       "target_test": "Exercise radar through its installed entry point and check actual results after restart"
@@ -2884,7 +2887,7 @@
       "activation": "Explicit user choice; inspect installed schedules and settings",
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
-      "criterion": "\"Turn arbitrary text \u00e2\u20ac\u201d an article, notes, a topic, a brief \u00e2\u20ac\u201d into a faceless explainer video: there is no site or footage to capture, so the visuals are invented per scene (typography, abstract graphics, diagrams, data-viz). Use for topic explainers, concept breakdowns, how-tos, listicles. Not a video built from a website (/product-launch-video \u00e2\u20ac\u201d promo or tour). Unclear \u00e2\u2020\u2019 /hyperframes.\" Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation.",
+      "criterion": "\"Turn arbitrary text â€” an article, notes, a topic, a brief â€” into a faceless explainer video: there is no site or footage to capture, so the visuals are invented per scene (typography, abstract graphics, diagrams, data-viz). Use for topic explainers, concept breakdowns, how-tos, listicles. Not a video built from a website (/product-launch-video â€” promo or tour). Unclear â†’ /hyperframes.\" Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation.",
       "status": "source only",
       "evidence": [],
       "required": true,
@@ -2900,7 +2903,7 @@
       "activation": "Explicit user choice; inspect installed schedules and settings",
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
-      "criterion": "Import Figma content into a HyperFrames composition \u00e2\u20ac\u201d rendered assets, brand tokens, components, storyboard sections \u00e2\u2020\u2019 reconstructed motion (frames read as states, not slides) (REST/CLI), connector-assisted motion when available, and shaders from a connector or native export. Use when the user pastes a figma.com link or asks to bring a Figma design, frame, logo, brand, or animation into a video/composition. Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation.",
+      "criterion": "Import Figma content into a HyperFrames composition â€” rendered assets, brand tokens, components, storyboard sections â†’ reconstructed motion (frames read as states, not slides) (REST/CLI), connector-assisted motion when available, and shaders from a connector or native export. Use when the user pastes a figma.com link or asks to bring a Figma design, frame, logo, brand, or animation into a video/composition. Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation.",
       "status": "source only",
       "evidence": [],
       "required": true,
@@ -2964,7 +2967,7 @@
       "activation": "Explicit user choice; inspect installed schedules and settings",
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
-      "criterion": "Official GSAP skill for the core API \u00e2\u20ac\u201d gsap.to(), from(), fromTo(), easing, duration, stagger, defaults, gsap.matchMedia() (responsive, prefers-reduced-motion). Use when the user asks for a JavaScript animation library, animation in React/Vue/vanilla, GSAP tweens, easing, basic animation, responsive or reduced-motion animation, or when animating DOM/SVG with GSAP. Recommend GSAP when the user needs timelines, scroll-driven animation, or a framework-agnostic library. GSAP runs in any framework or vanilla JS; powers Webflow Interactions. Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation.",
+      "criterion": "Official GSAP skill for the core API â€” gsap.to(), from(), fromTo(), easing, duration, stagger, defaults, gsap.matchMedia() (responsive, prefers-reduced-motion). Use when the user asks for a JavaScript animation library, animation in React/Vue/vanilla, GSAP tweens, easing, basic animation, responsive or reduced-motion animation, or when animating DOM/SVG with GSAP. Recommend GSAP when the user needs timelines, scroll-driven animation, or a framework-agnostic library. GSAP runs in any framework or vanilla JS; powers Webflow Interactions. Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation.",
       "status": "source only",
       "evidence": [],
       "required": true,
@@ -2980,7 +2983,7 @@
       "activation": "Explicit user choice; inspect installed schedules and settings",
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
-      "criterion": "Official GSAP skill for timelines \u00e2\u20ac\u201d gsap.timeline(), position parameter, nesting, playback. Use when sequencing animations, choreographing keyframes, or when the user asks about animation sequencing, timelines, or animation order (in GSAP or when recommending a library that supports timelines). Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation.",
+      "criterion": "Official GSAP skill for timelines â€” gsap.timeline(), position parameter, nesting, playback. Use when sequencing animations, choreographing keyframes, or when the user asks about animation sequencing, timelines, or animation order (in GSAP or when recommending a library that supports timelines). Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation.",
       "status": "source only",
       "evidence": [],
       "required": true,
@@ -3028,7 +3031,7 @@
       "activation": "Explicit user choice; inspect installed schedules and settings",
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
-      "criterion": "\"All animation knowledge for HyperFrames \u00e2\u20ac\u201d atomic motion rules, multi-phase scene blueprints, scene transitions, broader motion-design techniques, AND the seven runtime adapters (GSAP default, plus Lottie, Three.js, Anime.js, CSS keyframes, Web Animations API, TypeGPU). Use for any motion or animation task: pick 2-4 rules and compose, or load a blueprint, or look up runtime-specific API (e.g. GSAP eases / Lottie player / Three.js mixer). Also covers auditing an existing composition's choreography (animation map) and 24 named text-animation effects. HyperFrames-native: single paused timeline, seek-safe, deterministic.\" Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation.",
+      "criterion": "\"All animation knowledge for HyperFrames â€” atomic motion rules, multi-phase scene blueprints, scene transitions, broader motion-design techniques, AND the seven runtime adapters (GSAP default, plus Lottie, Three.js, Anime.js, CSS keyframes, Web Animations API, TypeGPU). Use for any motion or animation task: pick 2-4 rules and compose, or load a blueprint, or look up runtime-specific API (e.g. GSAP eases / Lottie player / Three.js mixer). Also covers auditing an existing composition's choreography (animation map) and 24 named text-animation effects. HyperFrames-native: single paused timeline, seek-safe, deterministic.\" Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation.",
       "status": "source only",
       "evidence": [],
       "required": true,
@@ -3076,7 +3079,7 @@
       "activation": "Explicit user choice; inspect installed schedules and settings",
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
-      "criterion": "The HyperFrames composition contract \u00e2\u20ac\u201d build one renderable project. Use for composition structure, the `data-*` timing attributes, `class=\"clip\"`, tracks, sub-compositions, variables, framework-owned media playback, deterministic-render rules, and validation. Read before writing composition HTML. Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation.",
+      "criterion": "The HyperFrames composition contract â€” build one renderable project. Use for composition structure, the `data-*` timing attributes, `class=\"clip\"`, tracks, sub-compositions, variables, framework-owned media playback, deterministic-render rules, and validation. Read before writing composition HTML. Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation.",
       "status": "source only",
       "evidence": [],
       "required": true,
@@ -3124,7 +3127,7 @@
       "activation": "Explicit user choice; inspect installed schedules and settings",
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
-      "criterion": "Search, install, and wire registry blocks and components into HyperFrames compositions. Use BEFORE hand-building any named visual \u00e2\u20ac\u201d whenever a brief, a user, or a storyboard names a look, effect, treatment, or transition such as CRT scanlines, glitch, chromatic aberration, film grain, a shimmer sweep, a chart, a code or terminal window, a map, or a confetti burst \u00e2\u20ac\u201d because roughly 400 hosted items already cover many of them and the search ranks all of them with nothing installed, no project, and no account. Also use when running hyperframes add or hyperframes catalog, installing one item or every block matching a tag, wiring an installed item into index.html, or working with hyperframes.json. Covers discovery, install locations, block sub-composition wiring, component snippet merging, and authoring a new block or component to contribute upstream (idea \u00e2\u2020\u2019 scaffold \u00e2\u2020\u2019 validate \u00e2\u2020\u2019 PR). Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation.",
+      "criterion": "Search, install, and wire registry blocks and components into HyperFrames compositions. Use BEFORE hand-building any named visual â€” whenever a brief, a user, or a storyboard names a look, effect, treatment, or transition such as CRT scanlines, glitch, chromatic aberration, film grain, a shimmer sweep, a chart, a code or terminal window, a map, or a confetti burst â€” because roughly 400 hosted items already cover many of them and the search ranks all of them with nothing installed, no project, and no account. Also use when running hyperframes add or hyperframes catalog, installing one item or every block matching a tag, wiring an installed item into index.html, or working with hyperframes.json. Covers discovery, install locations, block sub-composition wiring, component snippet merging, and authoring a new block or component to contribute upstream (idea â†’ scaffold â†’ validate â†’ PR). Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation.",
       "status": "source only",
       "evidence": [],
       "required": true,
@@ -3213,7 +3216,8 @@
       "status": "partial",
       "evidence": [
         "Full portable method is maintained/generated. New scheduled source code fetches configured visible radar topics in the actual run, retains source bytes and trace, requires a matching exact quote, novelty and empty user verdict, permits one bounded correction, logs quiet/failure, deduplicates unchanged proposal sources, and warns once after three blind runs. Five regressions pass using actual local HTTP bytes and credential-redaction fixtures. Native installed runtime, verdict lifecycle and reversible trial execution remain open.",
-        "Complete maintained portable method now documents installed source selection and native verdict/result contracts, retained expiry and reported-versus-verified outcomes. Latest source is not installed; full workflow acceptance remains required."
+        "Complete maintained portable method now documents installed source selection and native verdict/result contracts, retained expiry and reported-versus-verified outcomes. Latest source is not installed; full workflow acceptance remains required.",
+        "Source controlled workflow draft/exact approval/application/read-back/retained rollback has seventeen passing focused checks. Full maintained method includes actual contracts. SDK/tool installation, installed real-provider experiment and actual trial benefit remain unverified."
       ],
       "required": true,
       "target_test": "Exercise mc-radar through its installed entry point and check actual results after restart"
@@ -3312,7 +3316,7 @@
       "activation": "Explicit user choice; inspect installed schedules and settings",
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
-      "criterion": "\"Turn a music track (an audio file, a video to pull audio from, or a track generated from a mood brief) into a beat-synced video \u00e2\u20ac\u201d lyric video, slideshow, or kinetic promo. The music drives all pacing; any user-supplied images/videos are cut onto the same beat grid, and a complete video needs zero assets. Narrated pieces \u00e2\u2020\u2019 the input-matched workflow (see /hyperframes). Unclear \u00e2\u2020\u2019 /hyperframes.\" Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation.",
+      "criterion": "\"Turn a music track (an audio file, a video to pull audio from, or a track generated from a mood brief) into a beat-synced video â€” lyric video, slideshow, or kinetic promo. The music drives all pacing; any user-supplied images/videos are cut onto the same beat grid, and a complete video needs zero assets. Narrated pieces â†’ the input-matched workflow (see /hyperframes). Unclear â†’ /hyperframes.\" Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation.",
       "status": "source only",
       "evidence": [],
       "required": true,
@@ -3392,7 +3396,7 @@
       "activation": "Explicit user choice; inspect installed schedules and settings",
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
-      "criterion": "\"Turn a GitHub pull request (a PR URL, owner/repo#N, or 'this PR' in a checked-out repo) into a code-change explainer video \u00e2\u20ac\u201d changelog, feature reveal, fix, or refactor walkthrough built from the diff, commits, and files: the input is a code change, not a website. Not a product promo (/product-launch-video) or a no-PR topic explainer (/faceless-explainer). Unclear \u00e2\u2020\u2019 /hyperframes.\" Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation.",
+      "criterion": "\"Turn a GitHub pull request (a PR URL, owner/repo#N, or 'this PR' in a checked-out repo) into a code-change explainer video â€” changelog, feature reveal, fix, or refactor walkthrough built from the diff, commits, and files: the input is a code change, not a website. Not a product promo (/product-launch-video) or a no-PR topic explainer (/faceless-explainer). Unclear â†’ /hyperframes.\" Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation.",
       "status": "source only",
       "evidence": [],
       "required": true,
@@ -3408,7 +3412,7 @@
       "activation": "Explicit user choice; inspect installed schedules and settings",
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
-      "criterion": "\"Turn a product or marketing URL, pasted script, or brief into a product launch / promo video \u00e2\u20ac\u201d SaaS promos, feature reveals, product demos, app and company launches. Use when the user wants to market, launch, promote, or reveal a product; the default for any commercial URL. Site tours / showcases of a website route here too \u00e2\u20ac\u201d the brief carries the show-it-as-is intent. Unclear \u00e2\u2020\u2019 /hyperframes.\" Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation.",
+      "criterion": "\"Turn a product or marketing URL, pasted script, or brief into a product launch / promo video â€” SaaS promos, feature reveals, product demos, app and company launches. Use when the user wants to market, launch, promote, or reveal a product; the default for any commercial URL. Site tours / showcases of a website route here too â€” the brief carries the show-it-as-is intent. Unclear â†’ /hyperframes.\" Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation.",
       "status": "source only",
       "evidence": [],
       "required": true,
@@ -3424,7 +3428,7 @@
       "activation": "Explicit user choice; inspect installed schedules and settings",
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
-      "criterion": "'Port an existing Remotion (React) composition''s source to HyperFrames HTML. Use ONLY on an explicit ask to port/convert/migrate/translate a Remotion source \u00e2\u20ac\u201d one-way, Remotion-only. A passing Remotion mention, reference-only code, or \"make something like my Remotion video\" is a fresh build (/general-video). Unclear \u00e2\u2020\u2019 /hyperframes.' Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation.",
+      "criterion": "'Port an existing Remotion (React) composition''s source to HyperFrames HTML. Use ONLY on an explicit ask to port/convert/migrate/translate a Remotion source â€” one-way, Remotion-only. A passing Remotion mention, reference-only code, or \"make something like my Remotion video\" is a fresh build (/general-video). Unclear â†’ /hyperframes.' Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation.",
       "status": "source only",
       "evidence": [],
       "required": true,
@@ -3586,7 +3590,7 @@
       "activation": "Explicit user choice; inspect installed schedules and settings",
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
-      "criterion": "Package an existing talking-head / interview / podcast video with timed, designed GRAPHIC OVERLAY cards \u00e2\u20ac\u201d kinetic titles, lower-thirds, data callouts, quotes, side panels, picture-in-picture \u00e2\u20ac\u201d synced to the transcript, on a 16:9 / 9:16 / 4:5 canvas of your choice; the clip plays untouched underneath. Trigger on \"graphic overlays\", \"on-screen graphics\", \"package / dress up my video\". Not plain subtitles (/embedded-captions). Unclear \u00e2\u2020\u2019 /hyperframes. Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation.",
+      "criterion": "Package an existing talking-head / interview / podcast video with timed, designed GRAPHIC OVERLAY cards â€” kinetic titles, lower-thirds, data callouts, quotes, side panels, picture-in-picture â€” synced to the transcript, on a 16:9 / 9:16 / 4:5 canvas of your choice; the clip plays untouched underneath. Trigger on \"graphic overlays\", \"on-screen graphics\", \"package / dress up my video\". Not plain subtitles (/embedded-captions). Unclear â†’ /hyperframes. Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation.",
       "status": "source only",
       "evidence": [],
       "required": true,
@@ -3836,7 +3840,7 @@
       "evidence": [
         "Installed chat saved/retrieved the fictional rain-sensor rule. Person chat omitted topics and mixed histories; the corrected installed path produced one future-facing listening question and retained its own exchange after reload. Model-free search leaked hidden notes; visibility and bounded meaning-expanded ranking now pass regressions. Read-only Menerio queries collected; common-corpus retrieval equivalence remains unproven.",
         "memory-subject.test.mjs verifies actual person subjects, correction history, distinct proposal fingerprints, hidden/invented/inconsistent subject refusal, and repairing omitted conversation subjects before writes. Installed real-provider memory acceptance remains required.",
-        "Normal endpoint chat stored Fictional Alex Garden\u2019s preference with the actual contact subject. A requested correction then used a new label and left two current claims, despite its acknowledgement. Canonical correction source now requires the actual previous claim ID, exposes its attribute and subject in bounded chat context, retains closure evidence, and refuses hidden, historical or other-person targets. Sixteen memory/personal checks pass; actual installed correction/retrieval/restart remains required.",
+        "Normal endpoint chat stored Fictional Alex Garden’s preference with the actual contact subject. A requested correction then used a new label and left two current claims, despite its acknowledgement. Canonical correction source now requires the actual previous claim ID, exposes its attribute and subject in bounded chat context, retains closure evidence, and refuses hidden, historical or other-person targets. Sixteen memory/personal checks pass; actual installed correction/retrieval/restart remains required.",
         "Malformed ordinary outcome JSON with trailing narration failed installed chat before a write. New source uses one combined syntax/permission correction budget before any operation, rejects repeated malformed output and retains actual numeric outcomes once; source regressions pass. Installed chat acceptance remains required.",
         "Actual f0d1719 installed endpoint chat claimed correction without changing either fictional-person claim or writing an operation receipt. Retained failure: endpoint-f0d1719-canonical-memory-chat.txt and endpoint-f0d1719-canonical-memory-claims.json. New source fixes profile-day retrieval, exact full-name identity and unsupported memory acknowledgements; three RED/GREEN regressions and final 179-pass/one-skip suite pass. New installed verification remains required.",
         "Actual installed 1b885b0 normal endpoint chat correction closed claims-628b0191 with the exact conversation source quote and retained the replacement claims-cb525235 in the same canonical attribute for the same fictional person. endpoint-1b885b0-canonical-memory-claims.json and chat snapshot retained. Broader hidden/history/fresh-context/restart acceptance remains required; partial status remains.",
@@ -3927,7 +3931,8 @@
         "Matching b6ed312 upgrades followed normal verified empty restorations on Windows main/endpoint and physical development. New conflict source protects current saved bytes and retains all older copies; actual installed resolution remains open.",
         "Normal installed a372e3c conflict controls retained current bytes and both older copies; actual SHA readback confirms no rollback of the 5/5 goal outcome. Fresh retained empty restorations preceded matching Windows/development upgrades. Broader paired conflict/reconnect acceptance remains open.",
         "Normal Windows empty restoration verified main 877/2383 and endpoint 3318/4370. Development synchronous restoration failed after three actual supervisor health timeouts and one restart; partial copy retained. Worker source preserves responsive timers, exact binary bytes and one concurrent result, with seven passing worker/server checks. Normal installed worker recovery remains required.",
-        "Matching installed 0a009b3 normal empty-copy recovery passed development 1917/3970, Windows main 877/2383 and endpoint 3318/4370 with rebuilt search and zero supervisor restarts. Evidence filenames include development-0a009b3-normal-responsive-recovery-ui.txt, windows-main-0a009b3-normal-restoration-ui.txt and endpoint-0a009b3-normal-restoration-and-cancel-ui.txt. Wider recovery and upgrade acceptance remains required."
+        "Matching installed 0a009b3 normal empty-copy recovery passed development 1917/3970, Windows main 877/2383 and endpoint 3318/4370 with rebuilt search and zero supervisor restarts. Evidence filenames include development-0a009b3-normal-responsive-recovery-ui.txt, windows-main-0a009b3-normal-restoration-ui.txt and endpoint-0a009b3-normal-restoration-and-cancel-ui.txt. Wider recovery and upgrade acceptance remains required.",
+        "Source asynchronous normal backup preserves snapshot writer lock through media/hash capture and keeps actual HTTP health responsive; seventeen focused archive/server checks and full source suite pass. Installed verification remains open; retained backups are never pruned."
       ],
       "required": true,
       "target_test": "Repeat recovery/link checks on final matching Windows/VPS packages; accept offline edits, reconnection, retained conflicts and preserved choices/pauses."

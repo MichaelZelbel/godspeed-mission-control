@@ -13,8 +13,9 @@ import {assistantEnvironment} from '../core/assistant-files.mjs';
 import { FileSync } from '../core/sync/git.mjs';
 import {conflictView,resolveSavedConflict} from '../core/conflicts.mjs';
 import { SyncRunner } from '../core/sync/runner.mjs';
-import { backup, restore } from '../core/archives.mjs';
+import { restore } from '../core/archives.mjs';
 import {RecoveryRunner} from '../core/recovery-runner.mjs';
+import {BackupRunner} from '../core/backup-runner.mjs';
 import {saveConversationState,retainCompletedConversation} from '../core/conversation-state.mjs';
 import { importExport } from '../core/import.mjs';
 import { kinds } from '../core/jobs/scheduler.mjs';
@@ -51,7 +52,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   if (remote && !token) throw new Error('Remote access requires a candidate token');
   const auth = new WebAuth(store.state, { token, remote, now: authNow });
   const menerioImport=new MenerioImport(store,mediaRoot,()=>index.rebuild());
-  const chatRequests=new Map(),recoveryRunner=new RecoveryRunner(store);let dictationBusy=false;
+  const chatRequests=new Map(),recoveryRunner=new RecoveryRunner(store),backupRunner=new BackupRunner(store,mediaRoot);let dictationBusy=false;
   const loginLinks=new Map();
   const apiKeys=new ApiKeys(store);
   const authorized = req => auth.authorized(req) || pairKeys.includes(hash(String(req.headers['x-godspeed-pair-key']||req.headers.authorization?.replace(/^Bearer /,'')||'')));
@@ -94,7 +95,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         return send(res,405,{error:'Use GET or POST'});
       }
       if(menerioImport.mutating&&(route==='/mcp'||route.startsWith('/api/'))&&!['/api/session','/api/status','/api/chat/options'].includes(route))return send(res,423,{error:'Your Menerio content is being copied. Wait for the import to finish.'});
-      if(req.method==='POST'&&route.startsWith('/api/')&&route!=='/api/chat/stop')await store.waitForWriter();
+      if(req.method==='POST'&&route.startsWith('/api/')&&!['/api/chat/stop','/api/backup'].includes(route))await store.waitForWriter();
       if(route==='/api/latest-work'&&req.method==='GET'){
         const notes=visibleRows(query,'notes').filter(n=>!n.is_trashed),work=visibleRows(query,'work_items').filter(w=>w.state==='verified'&&w.verification&&notes.some(n=>n.id===w.result_id)).sort((a,b)=>b.updated_at.localeCompare(a.updated_at))[0],note=work&&notes.find(n=>n.id===work.result_id);
         return send(res,200,{data:note?[note]:[],verification_current:!!note&&work.verification.content_hash===note._hash,evidence:work?.verification.evidence||null,result_kind:work?.verification.kind||null,reported_passed:work?.verification.kind==='reported-observation'?work.verification.passed:null});
@@ -169,9 +170,9 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       if(route==='/api/jobs/update'&&req.method==='POST'){const input=JSON.parse(await body(req));return send(res,200,{data:store.save('jobs',input)});}
       if(route==='/api/jobs/add'&&req.method==='POST'){const input=JSON.parse(await body(req));if(!kinds.includes(input.kind)||!Number.isFinite(input.interval_ms)||input.interval_ms<60000)throw new Error('Choose a supported routine and interval of at least a minute');return send(res,200,{data:store.save('jobs',{id:input.kind,kind:input.kind,title:input.title||input.kind,owner:store.get('settings','installation')?.owner||device,next_run:new Date().toISOString(),interval_ms:input.interval_ms,state:'pending',paused:false})});}
       if(route==='/api/index/rebuild'&&req.method==='POST'){index.rebuild();return send(res,200,{ok:true});}
-      if(route==='/api/backup'&&req.method==='POST'){const destination=path.join(store.state,'backups',Date.now().toString());return send(res,200,{path:backup(store,mediaRoot,destination)});}
+      if(route==='/api/backup'&&req.method==='POST')return send(res,200,await backupRunner.run());
       if(route==='/api/backups'&&req.method==='GET'){
-        const folder=path.join(store.state,'backups'),data=fs.existsSync(folder)?fs.readdirSync(folder).filter(id=>/^\d+$/.test(id)).flatMap(id=>{try{const manifest=JSON.parse(fs.readFileSync(path.join(folder,id,'backup.json'),'utf8'));return [{id,at:manifest.at,records:manifest.records}];}catch{return [];}}).sort((a,b)=>b.id.localeCompare(a.id)):[];return send(res,200,{data});
+        const folder=path.join(store.state,'backups'),data=fs.existsSync(folder)?fs.readdirSync(folder).filter(id=>/^\d+$/.test(id)).flatMap(id=>{try{const manifest=JSON.parse(fs.readFileSync(path.join(folder,id,'backup.json'),'utf8'));return Array.isArray(manifest.files)?[{id,at:manifest.at,records:manifest.records}]:[];}catch{return [];}}).sort((a,b)=>b.id.localeCompare(a.id)):[];return send(res,200,{data});
       }
       if(route==='/api/restore-copy'&&req.method==='POST'){
         const input=JSON.parse(await body(req));if(!/^\d+$/.test(input.backup_id||''))throw Error('Choose one saved backup');

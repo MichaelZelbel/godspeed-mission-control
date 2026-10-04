@@ -1,21 +1,23 @@
 import {hash,safe} from './records/store.mjs';
 import {visibleRows} from './visibility.mjs';
+import {radarWorkCommand} from './radar-work.mjs';
 const answer=value=>({result:typeof value==='string'?value:JSON.stringify(value,null,2)});
 const words=(value,label)=>{if(typeof value!=='string'||!value.trim()||value.length>10000)throw Error(label+' needs actual text');return value.trim();};
 export function radarWords(message){
  const match=String(message).match(/^\/radar\s*(\S+)?\s*([\s\S]*)$/);if(!match)throw Error('Choose a radar command');
  const command=match[1]||'help',tail=match[2].trim();
- if(['verdict','result'].includes(command)){const value=tail.match(/^(\S+)\s+([\s\S]+)$/);if(!value)throw Error('Supply a proposal ID and one JSON object');return ['/radar',command,value[1],value[2]];}
+ if(['verdict','result','method','prepare','allow','rollback'].includes(command)){const value=tail.match(/^(\S+)\s+([\s\S]+)$/);if(!value)throw Error('Supply a proposal ID and one JSON object');return ['/radar',command,value[1],value[2]];}
  return ['/radar',command,...(tail?[tail]:[])];
 }
 export function radarCommand({store,query},args){
  const [command='help',id,...tail]=args;
- if(command==='help')return answer('/radar queue|history|trials\n/radar verdict PROPOSAL_ID JSON {verdict:Adopt|Trial|Assess|Caution,reason,expected_hash?}\n/radar result PROPOSAL_ID JSON {passed:boolean,evidence_note_id,quote,observed_at}\nYour verdict is retained exactly. Adopt and Trial queue work pending separate execution approval. A reported result is evidence from you, not automatic verification of an experiment. Nothing is sent, installed or published by these commands.');
- if(command==='queue')return answer(visibleRows(query,'notes').filter(n=>n.source_app==='radar'&&n.radar&&n.radar.lifecycle!=='archived'));
+ if(command==='help')return answer('/radar queue|history|trials\n/radar verdict PROPOSAL_ID JSON {verdict:Adopt|Trial|Assess|Caution,reason,expected_hash?}\n/radar result PROPOSAL_ID JSON {passed:boolean,evidence_note_id,quote,observed_at}\n/radar method PROPOSAL_ID JSON {file:skills/NAME/SKILL.md}\n/radar prepare PROPOSAL_ID JSON {file,file_hash,proposal_hash}\n/radar allow PROPOSAL_ID JSON {draft_id,draft_hash,file_hash,proposal_hash}\n/radar rollback PROPOSAL_ID JSON {file_hash,proposal_hash,work_id?}\nAdopt and Trial retain your verdict and queue separate approval. Prepare reads one installed workflow and drafts checked exact edits without changing the workflow. Allow grants one-hour permission for that exact reviewed draft and current file. The controlled scheduled worker applies only those bytes and retains rollback. No shell, installation, send or purchase is supported here. A reported trial result is your evidence, not automatic verification of its benefit.');
+ if(command==='queue')return answer(visibleRows(query,'notes').filter(n=>n.source_app==='radar'&&n.radar&&n.radar.verdict!=='Caution'&&n.radar.lifecycle!=='archived'));
  if(command==='history')return answer(visibleRows(query,'radar_decisions'));
  if(command==='trials')return answer(visibleRows(query,'radar_trials'));
  safe(id||'');let input;try{input=JSON.parse(tail.join(' '));}catch{throw Error('Supply one complete JSON object; use /radar help');}
  if(!input||typeof input!=='object'||Array.isArray(input))throw Error('Supply one complete JSON object');
+ if(['method','prepare','allow','rollback'].includes(command))return answer(radarWorkCommand({store,query},command,id,input));
  const note=visibleRows(query,'notes').find(n=>n.id===id&&n.source_app==='radar'&&n.radar);
  if(!note)throw Error('Select an existing assistant-visible radar proposal');
  if(input.expected_hash!==undefined&&input.expected_hash!==note._hash)throw Error('The proposal changed; read its current version before deciding');
@@ -33,9 +35,9 @@ export function radarCommand({store,query},args){
    const patch={...note.radar,verdict:input.verdict,verdict_reason:reason,decided_at:at,decision_id:decision.id,lifecycle:input.verdict==='Caution'?'caution':input.verdict==='Assess'?'assess':'awaiting-implementation-approval',assessment_run_ids:[],archived_at:null};
    const records=[decision,store.prepare('notes',{radar:patch,content:note.content+'\n\nUser decision: '+input.verdict+'\nReason: '+reason+'\nDecided: '+at},current)];
    const priorWork=note.radar.implementation_work_id?store.get('work_items',note.radar.implementation_work_id):null;
-   if(priorWork?.state==='awaiting_approval')records.push(store.prepare('work_items',{state:'cancelled',cancelled_at:at,cancellation_reason:'The user changed the radar verdict; the old pending action was never executed'},priorWork));
+   if(['awaiting_approval','preparing','pending'].includes(priorWork?.state))records.push(store.prepare('work_items',{state:'cancelled',allowed_action:null,approval:null,cancelled_at:at,cancellation_reason:'The user changed the radar verdict; the old pending action was never executed'},priorWork));
    const priorTrial=store.list('radar_trials').find(t=>t.proposal_id===note.id&&t.decision_id===note.radar.decision_id);
-   if(priorTrial&&priorTrial.state!=='reported')records.push(store.prepare('radar_trials',{state:priorWork?.state==='awaiting_approval'?'superseded-before-implementation':'superseded-requires-review',superseded_at:at,new_decision_id:decision.id},priorTrial));
+   if(priorTrial&&priorTrial.state!=='reported')records.push(store.prepare('radar_trials',{state:['awaiting_approval','preparing','pending'].includes(priorWork?.state)?'superseded-before-implementation':'superseded-requires-review',superseded_at:at,new_decision_id:decision.id},priorTrial));
    delete patch.implementation_work_id;
    if(['Adopt','Trial'].includes(input.verdict)){
     const workId='radar-implementation-'+hash([note.id,decision.id]);records.push(store.prepare('work_items',{id:workId,title:note.radar.change,kind:'radar-implementation',state:'awaiting_approval',allowed_action:null,source_note_id:note.id,decision_id:decision.id,check:note.radar.check,rollback:note.radar.rollback,scope:note.radar.experiment,requires_separate_execution_approval:true}));patch.implementation_work_id=workId;

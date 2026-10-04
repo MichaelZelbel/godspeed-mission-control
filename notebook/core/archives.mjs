@@ -9,13 +9,13 @@ function files(root,prefix=''){
   });
 }
 export function backup(store,mediaRoot,destination){
-  store.backup(destination);
+  return store.backup(destination,{finalize:()=>{
   const captured=JSON.parse(fs.readFileSync(path.join(destination,'backup.json'),'utf8'));
   if(fs.existsSync(mediaRoot))fs.cpSync(mediaRoot,path.join(destination,'media'),{recursive:true});
   // User-state archives carry knowledge and media, never device credentials.
   const entries=files(destination).filter(n=>n!=='backup.json').map(name=>({path:name,sha256:hash(fs.readFileSync(path.join(destination,name)))}));
   atomic(path.join(destination,'backup.json'),JSON.stringify({...captured,files:entries},null,2));
-  return destination;
+  }});
 }
 export function restore(store,mediaRoot,source,{deviceConfig=false}={}){
   const manifest=JSON.parse(fs.readFileSync(path.join(source,'backup.json'),'utf8'));
