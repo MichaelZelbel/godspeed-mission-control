@@ -1,0 +1,13 @@
+import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import path from 'node:path';import os from 'node:os';import {fileURLToPath} from 'node:url';import {execFileSync} from 'node:child_process';import {installStarter} from '../core/starter-workspace.mjs';
+test('original Godspeed skills and commands reach the integrated notebook in developer assistants',()=>{
+  const base=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-wiring-')),root=path.join(base,'workspace'),home=path.join(base,'assistant');installStarter(root);
+  const script=fileURLToPath(new URL('../scripts/wire-assistant.mjs',import.meta.url));
+  const wire=port=>execFileSync(process.execPath,[script,home],{env:{...process.env,GODSPEED_WORKSPACE:root,GODSPEED_PORT:String(port),GODSPEED_DEVICE:'local'},windowsHide:true});wire(41987);
+  assert.equal(JSON.parse(fs.readFileSync(path.join(root,'.mcp.json'))).mcpServers.notebook.url,'http://127.0.0.1:41987/mcp');
+  for(const alias of ['.claude','.agents'])assert.equal(fs.realpathSync(path.join(root,alias,'skills')),fs.realpathSync(path.join(root,'skills')));
+  for(const command of ['mc-search','mc-check-brief','mc-decide','mc-goals','mc-work-run','mc-compile-rules'])assert.ok(fs.existsSync(path.join(home,'bin',command+(process.platform==='win32'?'.cmd':''))),command);
+  wire(41988);
+  assert.match(fs.readFileSync(path.join(root,'.codex/config.toml'),'utf8'),/41988\/mcp/);
+  assert.match(fs.readFileSync(path.join(home,'config.yaml'),'utf8'),/notebook:\s*\n\s+url: http:\/\/127\.0\.0\.1:41988\/mcp/);
+  assert.match(fs.readFileSync(path.join(root,'.gitignore'),'utf8'),/\/\.godspeed\//);
+});

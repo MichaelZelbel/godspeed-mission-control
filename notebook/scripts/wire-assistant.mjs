@@ -27,13 +27,21 @@ else {const rulesCommand=path.join(commandHome,'mc-compile-rules');atomic(rulesC
 const mcpFile=path.join(root,'.mcp.json'),mcp=JSON.parse(fs.readFileSync(mcpFile,'utf8').replace(/^\uFEFF/,''));
 mcp.mcpServers??={};
 if(process.env.GODSPEED_DEVICE!=='vps'){
-  mcp.mcpServers.godspeed={type:'http',url:`http://127.0.0.1:${port}/mcp`};
+  if(mcp.mcpServers.godspeed?.url?.startsWith('http://127.0.0.1:'))delete mcp.mcpServers.godspeed;
+  mcp.mcpServers.notebook={type:'http',url:`http://127.0.0.1:${port}/mcp`};
   atomic(mcpFile,JSON.stringify(mcp,null,2)+'\n');
   const codexFile=path.join(root,'.codex/config.toml');
-  if(!fs.existsSync(codexFile))atomic(codexFile,`[mcp_servers.godspeed]\nurl = "http://127.0.0.1:${port}/mcp"\n`);
+  if(!fs.existsSync(codexFile)||/^\[mcp_servers\.(godspeed|notebook)\]\r?\nurl = "http:\/\/127\.0\.0\.1:\d+\/mcp"\s*$/.test(fs.readFileSync(codexFile,'utf8')))atomic(codexFile,`[mcp_servers.notebook]\nurl = "http://127.0.0.1:${port}/mcp"\n`);
   const vscodeFile=path.join(root,'.vscode/settings.json');
   if(!fs.existsSync(vscodeFile))atomic(vscodeFile,JSON.stringify({'terminal.integrated.env.windows':{GODSPEED_WORKSPACE:root,GODSPEED_ROOT:root,GODSPEED_DIR:root,HERMES_HOME:home,PATH:commandHome+';'+path.dirname(process.execPath)+';${env:PATH}'},'terminal.integrated.env.linux':{GODSPEED_WORKSPACE:root,GODSPEED_ROOT:root,GODSPEED_DIR:root,HERMES_HOME:home,PATH:commandHome+':'+path.dirname(process.execPath)+':${env:PATH}'}},null,2)+'\n');
 }
+for(const folder of ['.claude','.agents']){
+  const alias=path.join(root,folder,'skills');fs.mkdirSync(path.dirname(alias),{recursive:true});
+  if(!fs.existsSync(alias))fs.symlinkSync(process.platform==='win32'?path.join(root,'skills'):'../skills',alias,process.platform==='win32'?'junction':'dir');
+}
+const ignoreFile=path.join(root,'.gitignore');let ignores=fs.readFileSync(ignoreFile,'utf8');
+for(const entry of ['/.godspeed/','/.codex/','/.vscode/','/.agents/','/.claude/skills'])if(!ignores.split(/\r?\n/).includes(entry))ignores+='\n'+entry+'\n';
+atomic(ignoreFile,ignores);
 for(const command of ['goals','work','forecast','due','subs','watch','mail']){
  const bin=path.join(home,'bin','mc-'+command),script=command==='mail'?path.join(kit,'tools','mc-mail.js'):path.join(kit,'notebook','bin','personal-command.mjs'),args=command==='mail'?[]:[command];
  if(process.platform==='win32')atomic(bin+'.cmd','@echo off\r\n"'+process.execPath+'" "'+script+'" '+args.join(' ')+' %*\r\n');
@@ -69,8 +77,10 @@ else{
  text=text.replace(block,updated);
 }
 if(/^mcp_servers:/m.test(text)){
+  // The original Godspeed keep-a-note recipe names this connection notebook.
+  if(!/^  notebook:/m.test(text))text=text.replace(/^  godspeed:\s*$/m,'  notebook:');
   // Re-running setup with a new local port must not retain the old endpoint.
-  text=text.replace(/(^  godspeed:\s*\n\s+url: )http:\/\/127\.0\.0\.1:\d+\/mcp/m,`$1http://127.0.0.1:${port}/mcp`);
+  text=text.replace(/(^  notebook:\s*\n\s+url: )http:\/\/127\.0\.0\.1:\d+\/mcp/m,`$1http://127.0.0.1:${port}/mcp`);
 }
 if(!/^mcp_servers:/m.test(text)){
   let headers='';if(process.env.GODSPEED_DEVICE==='vps'){
@@ -78,7 +88,7 @@ if(!/^mcp_servers:/m.test(text)){
     if(fs.existsSync(keyFile))key=JSON.parse(fs.readFileSync(keyFile)).key;else{key=new ApiKeys(store).invoke('mc-api-keys/generate',{name:'Candidate assistant',scopes:['notes','contacts','world','collections','media','profile','actions','stats']}).api_key;atomic(keyFile,JSON.stringify({key}));fs.chmodSync(keyFile,0o600);}
     headers=`    headers:\n      Authorization: ${JSON.stringify('Bearer '+key)}\n`;
   }
-  text+=`\nmcp_servers:\n  godspeed:\n    url: http://127.0.0.1:${port}/mcp\n${headers}`;
+  text+=`\nmcp_servers:\n  notebook:\n    url: http://127.0.0.1:${port}/mcp\n${headers}`;
   if(process.env.GODSPEED_COMPUTER==='on')text+=`  godspeed_computer:\n    command: ${JSON.stringify(process.execPath)}\n    args: ["/opt/godspeed/kit/computer/mcp.js"]\n    env:\n      GODSPEED_COMPUTER_DIR: "/opt/data/full-candidate/computer"\n`;
 }
 atomic(file,text);fs.chmodSync(file,0o600);
