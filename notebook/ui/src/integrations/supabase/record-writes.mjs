@@ -15,10 +15,21 @@ export function createRecordWrites({send}) {
     if(!table)return;
     for(const row of Array.isArray(data)?data:data?[data]:[])if(row&&row.id&&row._hash){const key=table+'/'+row.id;versions.set(key,row._hash);snapshots.set(key,row);}
   };
+  // Only the records a write can touch. The server reads the version of the
+  // records it changes and nothing else, so stamping every row the screen had
+  // ever seen only made the request enormous: with the notes list loaded, one
+  // note's save carried all 317 notes with their full text, 2.1MB on the test
+  // server, and a request that size is refused outright. The vault's size must
+  // not decide whether an edit saves.
   const stamp=state=>{
     const expected={},baselines={};
-    if(state.operation==='update'||state.operation==='delete')for(const [key,value] of versions)if(key.startsWith(state.table+'/')){
-      const id=key.slice(state.table.length+1);expected[id]=value;baselines[id]=snapshots.get(key);
+    if(state.operation==='update'||state.operation==='delete'){
+      const targets=targetIds(state);
+      for(const [key,value] of versions)if(key.startsWith(state.table+'/')){
+        const id=key.slice(state.table.length+1);
+        if(targets&&!targets.has(id))continue;
+        expected[id]=value;baselines[id]=snapshots.get(key);
+      }
     }
     return {...state,expected,baselines};
   };
@@ -42,16 +53,26 @@ export function createRecordWrites({send}) {
   return {perform,versions,snapshots};
 }
 
+// The records a write names, or nothing when its filters do not say which ones
+// (then every remembered version still goes, as it always did).
+export function targetIds(state) {
+  const ids=new Set();
+  for(const filter of state.filters||[]){
+    const [operator,column,value]=filter;
+    if(column!=='id')continue;
+    if(operator==='eq'&&typeof value==='string')ids.add(value);
+    else if(operator==='in'&&Array.isArray(value))for(const item of value)if(typeof item==='string')ids.add(item);
+    else return null;
+  }
+  return ids.size?ids:null;
+}
+
 // Which single record a write targets, or nothing when it is a read or touches
 // a set of records at once (a bulk action, which carries no one version).
 export function recordKey(state) {
   if(!state.table||!state.operation||state.operation==='select')return null;
   if(state.operation==='insert')return null;
   if(state.operation==='upsert')return typeof state.values?.id==='string'?state.table+'/'+state.values.id:null;
-  const ids=new Set();
-  for(const filter of state.filters||[]){
-    const [operator,column,value]=filter;
-    if(column==='id'&&operator==='eq'&&typeof value==='string')ids.add(value);
-  }
-  return ids.size===1?state.table+'/'+[...ids][0]:null;
+  const ids=targetIds(state);
+  return ids?.size===1?state.table+'/'+[...ids][0]:null;
 }
