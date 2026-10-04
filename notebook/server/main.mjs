@@ -193,12 +193,12 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       }
       if(route==='/api/import'&&req.method==='POST')return send(res,200,importExport(query,JSON.parse(await body(req,100*1024*1024))));
       if(route==='/api/export')return send(res,200,{format:1,records:[...store.scan().values()].map(r=>{const copy={...r};delete copy._hash;return copy;})});
-      // A search waits for a refresh that a write has already armed, so it
-      // always answers from everything saved. The write itself does not wait.
-      if (route === '/api/search') { await index.settled(); return send(res, 200, { data: index.search(url.searchParams.get('q') || ''), error: null }); }
-      // Rebuilding the search index reads every record and every workspace
-      // file. Done before answering, it cost a note save more than the save.
-      if (route === '/api/query' && req.method === 'POST') { const input=JSON.parse(await body(req)),result=await query.executeAsync(input); if(input.operation&&input.operation!=='select')void index.rebuildBackground().catch(()=>{}); return send(res, 200, result); }
+      if (route === '/api/search') return send(res, 200, { data: index.search(url.searchParams.get('q') || ''), error: null });
+      // A write puts the rows it changed into the search index itself. Reading
+      // every record and every workspace file to rebuild it, which is what a
+      // save used to wait for, cost more than the save; the file watcher still
+      // arms a full refresh for whatever other programs write.
+      if (route === '/api/query' && req.method === 'POST') { const input=JSON.parse(await body(req)),result=await query.executeAsync(input); if(input.operation&&input.operation!=='select'){const rows=Array.isArray(result.data)?result.data:result.data?[result.data]:[];index.update(rows.map(row=>store.records.get(input.table+'/'+row.id)||row));} return send(res, 200, result); }
       if(route==='/api/chat-state'&&req.method==='POST'){
         const input=JSON.parse(await body(req));
         return send(res,200,await saveConversationState(store,input,{asyncWriter:true}));

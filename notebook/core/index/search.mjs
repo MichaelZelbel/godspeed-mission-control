@@ -50,18 +50,27 @@ export class SearchIndex {
     })().finally(()=>{this.pending=null;});
     return this.pending;
   }
-  // Wait for a refresh that is already collecting files, so a search run right
-  // after a save still sees it. rebuildBackground() repeats its read whenever
-  // another write arrived while it was reading, which is why awaiting the
-  // pending refresh is enough and a search never has to rebuild anything.
-  // Capped, because that repeat means continuous typing would otherwise keep a
-  // search waiting for a refresh that never gets to finish; a search that
-  // answers from a second-old index beats one that never answers.
-  async settled(timeoutMs = 3000) {
-    if (!this.pending) return;
-    let timer;
-    try { await Promise.race([this.pending.catch(() => {}), new Promise(resolve => { timer = setTimeout(resolve, timeoutMs); })]); }
-    finally { clearTimeout(timer); }
+  // Put the records a write just changed straight into the index, so a search
+  // run immediately afterwards finds them. Rebuilding instead reads every
+  // record and every workspace file: before the answer it cost a note save
+  // more than the save, and after it, it cost the next search that much.
+  // Writing the few rows that changed costs neither.
+  update(records) {
+    this.generation=(this.generation||0)+1;
+    const remove=this.db.prepare('DELETE FROM documents WHERE uid=?'),insert=this.db.prepare('INSERT OR REPLACE INTO documents VALUES(?,?,?,?,?)');
+    this.db.exec('BEGIN');
+    try {
+      for(const record of records){
+        if(!record?.uid||!record?.type)continue;
+        remove.run(record.uid);
+        if(!record.removed_at)insert.run(record.uid,record.type,record.id,record.title||record.name||record.id,JSON.stringify(record));
+      }
+      this.db.exec('COMMIT');
+    } catch(error) { this.db.exec('ROLLBACK'); throw error; }
+    // The index no longer matches the last full read, so the next refresh must
+    // write what it finds rather than recognise its own fingerprint and skip.
+    this.fingerprint=null;
+    this.lastRebuild=new Date().toISOString();
   }
   // Every file is read in one step that cannot be interrupted, and the loop
   // then hands the event loop back. A read that spans an await keeps the file

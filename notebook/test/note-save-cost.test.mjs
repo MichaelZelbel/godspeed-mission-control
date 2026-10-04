@@ -6,10 +6,11 @@ const query=(base,body)=>fetch(base+'/api/query',{method:'POST',headers:{'Conten
 // Count what one request costs, without counting the background refresh the
 // file watcher arms afterwards.
 function watch(service){
-  const start=service.store.reads||0,counts={foregroundRebuilds:0,backgroundRebuilds:0,get reads(){return (service.store.reads||0)-start;}};
-  const rebuild=service.index.rebuild.bind(service.index),background=service.index.rebuildBackground.bind(service.index);
+  const start=service.store.reads||0,counts={foregroundRebuilds:0,backgroundRebuilds:0,indexUpdates:0,get reads(){return (service.store.reads||0)-start;}};
+  const rebuild=service.index.rebuild.bind(service.index),background=service.index.rebuildBackground.bind(service.index),update=service.index.update.bind(service.index);
   service.index.rebuild=(...args)=>{counts.foregroundRebuilds++;return rebuild(...args);};
   service.index.rebuildBackground=(...args)=>{counts.backgroundRebuilds++;return background(...args);};
+  service.index.update=(...args)=>{counts.indexUpdates++;return update(...args);};
   return counts;
 }
 
@@ -27,9 +28,11 @@ test('saving a note reads the workspace once, not once per step of the write',as
     assert.ok(counts.reads<=2,'a save read the whole workspace '+counts.reads+' times; at most 2 are needed');
     // The search index is rebuilt from every record and every workspace file.
     // Waiting for that before answering made a save cost half a second more
-    // than the save itself.
+    // than the save itself, and making the next search wait for it instead
+    // only moved that cost onto the search.
     assert.equal(counts.foregroundRebuilds,0,'a save must not wait for the search index to be rebuilt');
-    assert.ok(counts.backgroundRebuilds>=1,'a save must still ask for a fresh search index');
+    assert.equal(counts.backgroundRebuilds,0,'a save must not start a full re-read of the vault either');
+    assert.equal(counts.indexUpdates,1,'a save writes the rows it changed into the search index itself');
   }finally{await service.close();}
 });
 
