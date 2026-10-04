@@ -111,6 +111,13 @@ export class FileSync {
         if(!conflicted.length)throw e;
         const remoteCommit=this.git(['rev-parse',remoteRef]), unresolved=[];
         for(const name of conflicted){
+          // A path that no longer leaves this machine has no meaningful remote
+          // side: what the remote carries is only what was uploaded before the
+          // policy changed. Taking it out of the merge keeps this machine's own
+          // copy and stops carrying it. Saving a conflict instead blocked every
+          // later synchronization over a file nobody can review, and the next
+          // merge wrote the conflict again, so clearing them never held.
+          if(!shared(name)){this.git(['rm','--force','--quiet','--ignore-unmatch','--',name],dir);continue;}
           const stages=this.git(['ls-files','--stage','--',name],dir).split('\n').map(line=>Number(line.match(/^\d+ [a-f0-9]+ (\d)\t/)?.[1])).filter(Boolean);
           const read=stage=>stages.includes(stage)?this.gitBytes(['show',':'+stage+':'+name],dir):null;
           const id=hash(name).slice(0,24),saved=path.join(this.store.root,'conflicts',id+'.json');
