@@ -2,14 +2,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID, createHash } from 'node:crypto';
 import { durable,durableRoots,durableFiles,recordsFolder,legacyRecordsFolder } from '../file-policy.mjs';
+import { encode as encodeFile, decode as decodeFile, safe as safeName, candidate, fits, folderFor, nameFor, candidateName, systemPath, isReadable, key as nameKey, childrenOf } from './layout.mjs';
 const CACHE_BYTES = 1024 * 1024 * 1024;
 
 export const hash = value => createHash('sha256').update(Buffer.isBuffer(value) || typeof value === 'string' ? value : JSON.stringify(value)).digest('hex');
 export const slug = value => String(value).normalize('NFKD').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 80) || 'record';
-export function safe(value) {
-  if (!/^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,180}$/.test(value) || value.includes('..')) throw new Error('Invalid record path');
-  return value;
-}
+export const safe = safeName;
 export function atomic(file, text) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const tmp = file + '.' + randomUUID() + '.tmp';
@@ -22,24 +20,12 @@ export function atomic(file, text) {
     Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,25);
   }}
 }
-export function encode(record) {
-  if (record.type === 'notes') {
-    const { content = '', ...meta } = record;
-    return '---\n' + JSON.stringify(meta, null, 2) + '\n---\n' + content;
-  }
-  return JSON.stringify(record, null, 2) + '\n';
-}
-export function decode(text, file) {
-  const result = file.endsWith('.md') ? (() => {
-    const match = text.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/);
-    if (!match) throw new Error('Expected JSON frontmatter');
-    return { ...JSON.parse(match[1]), content: match[2] };
-  })() : JSON.parse(text);
-  if (result.format !== 1 || !result.id || !result.uid || !result.type) throw new Error('Invalid record contract');
-  safe(result.id); safe(result.type);
-  if (result.id !== path.basename(file).replace(/\.(json|md)$/, '') || result.type !== path.basename(path.dirname(file))) throw new Error('Record identity differs from path');
-  return result;
-}
+// A record's file: readable Markdown with YAML frontmatter for what a person
+// reads, JSON for machine bookkeeping (see layout.mjs). decode() throws an
+// error whose code is NOT_RECORD for an owner's own Markdown page.
+export const encode = encodeFile;
+export const decode = decodeFile;
+const posix = file => file.split(path.sep).join('/');
 export class Store {
   constructor(root, { device = 'local', failAfter = null } = {}) {
     this.root = path.resolve(root); this.device = safe(device); this.failAfter = failAfter;
@@ -97,7 +83,13 @@ export class Store {
       }
     }
   }
-  file(record) { return path.join(this.recordsRoot, safe(record.type), safe(record.id) + (record.type === 'notes' ? '.md' : '.json')); }
+  // Where a record's file is now, or where a new one would be written.
+  file(record) {
+    if (!this.records) this.scan();
+    const current = this.fileOf.get(record.type + '/' + record.id);
+    if (current) return current;
+    return path.join(this.recordsRoot, ...this.planPaths([record]).targets.get(record.type + '/' + record.id).split('/'));
+  }
   // One read of the vault serves every step inside. A note save read all of it
   // four times - once to find the record, once per get, twice in the commit -
   // and on a real workspace that was almost the whole cost of saving. Nothing
@@ -120,18 +112,36 @@ export class Store {
     this.stale = false; this.scannedAt = Date.now();
     // How often the vault was actually read, which is what a save costs.
     this.reads = (this.reads || 0) + 1;
-    const records = new Map(), problems = [], uids = new Map(), aliases = new Map();
-    const priorCache=this.decodedCache||new Map(),nextCache=new Map();let cachedBytes=0;
-    for (const dir of fs.readdirSync(this.recordsRoot, { withFileTypes: true })) {
-      if (!dir.isDirectory() || dir.isSymbolicLink()) continue;
-      for (const entry of fs.readdirSync(path.join(this.recordsRoot, dir.name), { withFileTypes: true })) {
-        if (!entry.isFile() || !/\.(json|md)$/.test(entry.name)) continue;
-        const file = path.join(this.recordsRoot, dir.name, entry.name);
+    const records = new Map(), problems = [], uids = new Map(), aliases = new Map(), fileOf = new Map(), keyOfUid = new Map(), documents = new Set();
+    const priorCache=this.decodedCache||new Map(),nextCache=new Map(),lost=new Set(),wasRecord=new Set([...(this.fileOf?.values()||[]),...(this.lostRecords||[])]);let cachedBytes=0;
+    // Every record file under notebook/, at any depth. Dot folders (an
+    // editor's own settings, its trash) and linked folders are not the
+    // notebook's.
+    const files=[],walk=(dir,relative)=>{
+      let entries;try{entries=fs.readdirSync(dir,{withFileTypes:true});}catch(error){if(error.code==='ENOENT')return;throw error;}
+      for(const entry of entries){
+        if(entry.name.startsWith('.')||entry.isSymbolicLink())continue;
+        const name=relative?relative+'/'+entry.name:entry.name,file=path.join(dir,entry.name);
+        if(entry.isDirectory())walk(file,name);else if(entry.isFile()&&candidate(name))files.push(file);
+      }
+    };
+    walk(this.recordsRoot,'');
+    for (const file of files) {
         try {
           // Always read actual bytes. Metadata-only caches miss in-place edits or
           // restored timestamps; retained templates must never escape to callers.
           const text=fs.readFileSync(file,'utf8'),cached=priorCache.get(file),same=cached?.text===text;
-          const record=same?structuredClone(cached.record):decode(text,file),key=record.type+'/'+record.id;
+          if(same&&cached.document){documents.add(file);nextCache.set(file,cached);continue;}
+          let record;
+          try{record=same?structuredClone(cached.record):decode(text,file);}
+          catch(error){
+            // An owner's own page in the notebook folder is not a record. A file
+            // that held a record a moment ago and lost its frontmatter is.
+            if(error.code==='NOT_RECORD'&&wasRecord.has(file)){lost.add(file);throw Error('This file held a record and lost its frontmatter');}
+            if(error.code!=='NOT_RECORD')throw error;
+            documents.add(file);nextCache.set(file,{text,document:true});continue;
+          }
+          const key=record.type+'/'+record.id;
           if(!same)record._hash=hash(encode(record));
           // A record left out of the cache is decoded, re-encoded and hashed on
           // every read. At 16 MB a real imported vault (15,900 records, 63 MB)
@@ -140,16 +150,15 @@ export class Store {
           // workspace reaches.
           const bytes=text.length*2;if(cachedBytes+bytes<=CACHE_BYTES){nextCache.set(file,same?cached:{text,record:structuredClone(record)});cachedBytes+=bytes;}
           if (uids.has(record.uid)) problems.push({ file, error: 'Duplicate UUID', other: uids.get(record.uid) });
-          uids.set(record.uid, key); records.set(key, record);
+          uids.set(record.uid, key); records.set(key, record); fileOf.set(key, file); keyOfUid.set(record.uid, key);
           for (const alias of record.removed_at ? [] : [record.id, ...(record.aliases || [])]) {
             const akey = record.type + '/' + alias.toLowerCase();
             if (aliases.has(akey) && aliases.get(akey) !== key) problems.push({ file, error: 'Ambiguous alias', alias });
             aliases.set(akey, key);
           }
         } catch (e) { problems.push({ file, error: e.message }); }
-      }
     }
-    this.decodedCache=nextCache;this.records = records; this.problems = problems; this.lastScan = new Date().toISOString();
+    this.decodedCache=nextCache;this.lostRecords=lost;this.records = records; this.fileOf = fileOf; this.keyOfUid = keyOfUid; this.documents = documents; this.problems = problems; this.lastScan = new Date().toISOString();
     this.problems.push(...this.validateReferences([...records.values()])); return records;
   }
   validateReferences(records) {
@@ -207,7 +216,63 @@ export class Store {
     atomic(path.join(this.root, 'conflicts', conflict.id + '.json'), JSON.stringify(conflict, null, 2));
     const error = new Error('This record changed. Both versions were saved for review.'); error.code = 'CONFLICT'; throw error;
   }
-  commit(records,{removeKeys=[],files=[]}={}) {
+  // The file each of these records is written to, relative to notebook/. A
+  // record keeps a file that still fits it; otherwise it goes to its folder
+  // under its own name, with " 2", " 3" for a name another file there already
+  // has, compared as a file system that ignores case would. Renaming a parent
+  // (a collection) also moves the records placed under it: `moved`.
+  planPaths(records,{removeKeys=[],forced=null,proposed=null}={}){
+    if(!this.records)this.scan();
+    const keyOf=r=>r.type+'/'+r.id,relative=file=>posix(path.relative(this.recordsRoot,file));
+    const view=proposed||new Map([...this.records,...records.map(r=>[keyOf(r),r])]),find=(type,id)=>view.get(type+'/'+id);
+    const batch=new Map(records.map(r=>[keyOf(r),r])),moved=[];
+    for(const record of records)for(const child of childrenOf.get(record.type)||[])for(const [k,r] of this.records){
+      if(r.type!==child.type||r[child.field]!==record.id||batch.has(k))continue;
+      const file=this.fileOf.get(k);if(!file||fits(r,relative(file),find))continue;
+      const copy={...r};delete copy._hash;moved.push(copy);batch.set(k,copy);
+    }
+    const all=[...records,...moved],moving=new Set([...removeKeys,...all.map(keyOf)]);
+    // A structural rename gives a record a new id; its file is the old one's.
+    const currentOf=r=>{const file=this.fileOf.get(keyOf(r));if(file)return file;const old=this.keyOfUid?.get(r.uid);return old&&moving.has(old)?this.fileOf.get(old):undefined;};
+    const taken=new Map(),freed=new Set(),listings=new Map();
+    for(const [k,file] of this.fileOf){if(moving.has(k))freed.add(file);else taken.set(nameKey(relative(file)),k);}
+    for(const file of this.documents||[])taken.set(nameKey(relative(file)),null);
+    const entries=dir=>{if(!listings.has(dir)){let names=[];try{names=fs.readdirSync(path.join(this.recordsRoot,...dir.split('/').filter(Boolean)));}catch(error){if(error.code!=='ENOENT'&&error.code!=='ENOTDIR')throw error;}listings.set(dir,names);}return listings.get(dir);};
+    // Anything else already there (a folder, a picture, a file being moved in
+    // the same write is not) keeps its name.
+    const onDisk=rel=>{const dir=path.posix.dirname(rel),base=path.posix.basename(rel),folder=dir==='.'?'':dir;return entries(folder).some(name=>nameKey(name)===nameKey(base)&&!freed.has(path.join(this.recordsRoot,...folder.split('/').filter(Boolean),name)));};
+    // A folder that exists in another letter case is used as it is spelled.
+    const spelled=folder=>folder.split('/').filter(Boolean).reduce((done,part)=>{const match=entries(done).find(name=>nameKey(name)===nameKey(part));return (done?done+'/':'')+(match||part);},'');
+    const targets=new Map(),claim=(k,rel)=>{targets.set(k,rel);taken.set(nameKey(rel),k);};
+    if(forced)for(const r of all)if(forced.has(keyOf(r)))claim(keyOf(r),forced.get(keyOf(r)));
+    for(const r of all){
+      const k=keyOf(r);if(targets.has(k))continue;
+      const current=currentOf(r);if(!current)continue;
+      const rel=relative(current),holder=taken.get(nameKey(rel));
+      if(fits(r,rel,find)&&(holder===undefined||holder===k))claim(k,rel);
+    }
+    for(const r of all){
+      const k=keyOf(r);if(targets.has(k))continue;
+      if(!isReadable(r)){claim(k,systemPath(r));continue;}
+      const folder=spelled(folderFor(r,find)),name=nameFor(r);
+      for(let n=1;;n++){const rel=(folder?folder+'/':'')+candidateName(name,n);if(!taken.has(nameKey(rel))&&!onDisk(rel)){claim(k,rel);break;}}
+    }
+    return {targets,moved};
+  }
+  // Records whose file is not where the layout puts it, or not in the form it
+  // writes today, oldest first: what converting a workspace changes.
+  layoutChanges(){
+    this.scan();
+    const relative=file=>posix(path.relative(this.recordsRoot,file)),find=(type,id)=>this.records.get(type+'/'+id);
+    const pending=[...this.records.entries()].filter(([k,r])=>{const file=this.fileOf.get(k);return !fits(r,relative(file),find)||fs.readFileSync(file,'utf8')!==encode(r);})
+      .map(([,r])=>r).sort((a,b)=>String(a.created_at||'').localeCompare(String(b.created_at||''))||a.type.localeCompare(b.type)||a.uid.localeCompare(b.uid))
+      .map(r=>{const copy={...r};delete copy._hash;return copy;});
+    const {targets}=this.planPaths(pending);
+    return pending.map(r=>({record:r,type:r.type,id:r.id,from:relative(this.fileOf.get(r.type+'/'+r.id)),to:targets.get(r.type+'/'+r.id)}));
+  }
+  // `paths` places records at given files (relative to notebook/), for a
+  // merge that already decided where each one is.
+  commit(records,{removeKeys=[],files=[],paths=null}={}) {
     this.scan();
     const history=[];
     for(const record of records){
@@ -232,35 +297,46 @@ export class Store {
       if(!r.removed_at)for(const alias of [r.id,...r.aliases||[]]){const key=r.type+'/'+alias.toLowerCase();if(aliases.has(key)&&aliases.get(key)!==r.uid)errors.push({error:'Ambiguous case-insensitive identity or alias',alias});aliases.set(key,r.uid);}
     }
     if (errors.length) throw new Error('Reference validation failed: ' + JSON.stringify(errors));
+    const {targets,moved}=this.planPaths(records,{removeKeys,forced:paths,proposed});records=[...records,...moved];
+    const fileAt=record=>path.join(this.recordsRoot,...targets.get(record.type+'/'+record.id).split('/')),written=new Set(records.map(fileAt));
     const tx = randomUUID(), dir = path.join(this.state, 'transactions', tx); fs.mkdirSync(dir, { recursive: true });
-    const manifest = records.map((record, i) => {
-      const file = this.file(record), relative = path.relative(this.root, file).replaceAll('\\', '/');
-      atomic(path.join(dir, i + '.after'), encode(record));
-      if (fs.existsSync(file)) atomic(path.join(dir, i + '.before'), fs.readFileSync(file, 'utf8'));
-      return { file: relative, staged: i + '.after', hash: hash(encode(record)) };
-    });
+    const manifest=[];
+    // The old file of a moved or removed record goes first: on a file system
+    // that ignores case, renaming plan.md to Plan.md would otherwise delete
+    // the file it had just written.
+    const drop=file=>{if(!file||written.has(file)||!fs.existsSync(file))return;atomic(path.join(dir,manifest.length+'.before'),fs.readFileSync(file));manifest.push({file:posix(path.relative(this.root,file)),delete:true});};
+    for(const record of records)drop(this.fileOf.get(record.type+'/'+record.id));
+    for(const key of removeKeys)drop(this.fileOf.get(key));
+    for (const record of records) {
+      const file = fileAt(record), relative = posix(path.relative(this.root, file)), text = encode(record), i = manifest.length;
+      atomic(path.join(dir, i + '.after'), text);
+      if (fs.existsSync(file)) atomic(path.join(dir, i + '.before'), fs.readFileSync(file));
+      manifest.push({ file: relative, staged: i + '.after', hash: hash(text) });
+    }
     for(const item of files){if(!durable(item.file))throw Error('File is outside durable state');const staged=manifest.length+'.after';atomic(path.join(dir,staged),item.text);manifest.push({file:item.file,staged,hash:hash(item.text)});}
-    for(const key of removeKeys){const old=this.records.get(key);if(!old)continue;const file=this.file(old);atomic(path.join(dir,manifest.length+'.before'),fs.readFileSync(file,'utf8'));manifest.push({file:path.relative(this.root,file).replaceAll('\\','/'),delete:true});}
     atomic(path.join(dir, 'manifest.json'), JSON.stringify(manifest));
     atomic(path.join(dir, 'prepared'), tx);
-    this.applyTransaction(dir, manifest); this.refreshView(records, removeKeys);
+    this.applyTransaction(dir, manifest); this.refreshView(records, removeKeys, targets);
   }
   // The commit wrote exactly these files under the writer lock, so the view is
   // brought up to date from them instead of reading the whole vault again,
   // which doubled the cost of every save. Each record is decoded from the very
   // text that went to disk, so the view holds what a fresh read would find.
-  refreshView(records, removeKeys = []) {
-    if (!this.records) return this.scan(true);
-    const view = new Map(this.records), written = new Set();
-    for (const key of removeKeys) view.delete(key);
+  refreshView(records, removeKeys = [], targets = null) {
+    if (!this.records||!targets) return this.scan(true);
+    const view = new Map(this.records), fileOf = new Map(this.fileOf), keyOfUid = new Map(this.keyOfUid), written = new Set(), dropped = new Set();
+    for (const key of removeKeys) { if (fileOf.has(key)) dropped.add(fileOf.get(key)); view.delete(key); fileOf.delete(key); }
     for (const record of records) {
-      const file = this.file(record), text = encode(record), fresh = decode(text, file);
-      fresh._hash = hash(encode(fresh)); view.set(fresh.type + '/' + fresh.id, fresh); written.add(file);
+      const key = record.type + '/' + record.id, file = path.join(this.recordsRoot, ...targets.get(key).split('/')), text = encode(record), fresh = decode(text, file);
+      if (fileOf.has(key) && fileOf.get(key) !== file) dropped.add(fileOf.get(key));
+      fresh._hash = hash(encode(fresh)); view.set(key, fresh); fileOf.set(key, file); keyOfUid.set(fresh.uid, key); written.add(file);
       this.decodedCache?.set(file, { text, record: structuredClone(fresh) });
     }
+    for (const file of dropped) if (!written.has(file)) this.decodedCache?.delete(file);
+    for (const [uid, key] of keyOfUid) if (!view.has(key)) keyOfUid.delete(uid);
     // The commit validated every reference of the new state before writing.
-    this.problems = (this.problems || []).filter(p => p.file && !written.has(p.file) && p.error !== 'Missing or inconsistent reference');
-    this.records = view; this.lastScan = new Date().toISOString(); return view;
+    this.problems = (this.problems || []).filter(p => p.file && !written.has(p.file) && !dropped.has(p.file) && p.error !== 'Missing or inconsistent reference');
+    this.records = view; this.fileOf = fileOf; this.keyOfUid = keyOfUid; this.lastScan = new Date().toISOString(); return view;
   }
   applyTransaction(dir, manifest) {
     for (let i = 0; i < manifest.length; i++) {

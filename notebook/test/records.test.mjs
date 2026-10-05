@@ -75,8 +75,13 @@ test('backup restoration preserves non-UTF8 personal skill assets byte for byte'
 });
 test('missing references refuse publication and incomplete direct edits remain untouched', () => {
   const store = new Store(temp()); assert.throws(() => store.save('notes', { title: 'Bad', references: [{ type: 'contacts', id: 'missing' }] }), /validation failed/);
-  const file = path.join(store.recordsRoot, 'notes', 'broken.md'); atomic(file, 'unfinished'); store.scan();
+  const note = store.save('notes', { title: 'Half edited', content: 'Complete' }), file = store.file(note);
+  atomic(file, 'unfinished'); store.scan();
   assert.equal(store.problems.length, 1); assert.equal(fs.readFileSync(file, 'utf8'), 'unfinished');
+  const broken = path.join(store.recordsRoot, 'Ideas', 'Broken.md'); atomic(broken, '---\nid: broken\nuid: [unclosed\n---\nText'); store.scan();
+  assert.equal(store.problems.length, 2, 'A record whose frontmatter does not read is reported'); assert.equal(fs.readFileSync(broken, 'utf8'), '---\nid: broken\nuid: [unclosed\n---\nText');
+  const own = path.join(store.recordsRoot, 'Ideas', 'My own page.md'); atomic(own, '# Written in Obsidian\n'); store.scan();
+  assert.equal(store.problems.length, 2, 'A page the owner wrote without a record is not a problem'); assert.ok(store.documents.has(own));
 });
 test('path traversal and append-only event mutation are refused', () => {
   const store = new Store(temp()); assert.throws(() => store.save('../secrets', {}), /Invalid/);

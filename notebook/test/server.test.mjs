@@ -40,7 +40,7 @@ test('installed recovery restores a separate empty copy and verifies bytes witho
   const original=service.store.save('notes',{title:'Fictional recovery',content:'Exact fictional rain rule'});
   const saved=await post('backup',{}),id=path.basename(saved.path);service.store.save('notes',{id:original.id,content:'Later fictional edit'});
   const result=await post('restore-copy',{backup_id:id});assert.equal(result.verified,true);assert.ok(result.compared_files>0);
-  assert.equal(service.store.get('notes',original.id).content,'Later fictional edit');assert.match(fs.readFileSync(path.join(result.workspace,'notebook/notes',original.id+'.md'),'utf8'),/Exact fictional rain rule/);
+  assert.equal(service.store.get('notes',original.id).content,'Later fictional edit');assert.match(fs.readFileSync(path.join(result.workspace,'notebook','Fictional recovery.md'),'utf8'),/Exact fictional rain rule/);
   const refused=await fetch(base+'/api/restore-copy',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({backup_id:'../outside'})});assert.equal(refused.status,400);
  }finally{await service.close();}
 });

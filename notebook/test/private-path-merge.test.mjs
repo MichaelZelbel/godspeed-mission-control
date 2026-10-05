@@ -65,6 +65,6 @@ test('a file that no longer leaves this machine cannot stop synchronization',asy
   assert.deepEqual(tracked.filter(name=>name.startsWith('assistant-state/history/')),[],'the archive must be out of the repository');
   // And the real edit still reaches the remote.
   const uploaded=git(dir,'ls-tree','-r','--name-only','origin/main').split('\n').filter(Boolean);
-  assert.ok(uploaded.some(name=>name.startsWith('notebook/notes/')),'notes must still be uploaded: '+uploaded.join(' '));
+  assert.ok(uploaded.some(name=>name.startsWith('notebook/')&&name.endsWith('.md')),'notes must still be uploaded: '+uploaded.join(' '));
   assert.deepEqual(uploaded.filter(name=>name.startsWith('assistant-state/history/')),[],'the archive must be gone from the remote too');
 });

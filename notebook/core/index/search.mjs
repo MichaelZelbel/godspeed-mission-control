@@ -3,6 +3,7 @@ import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import {durableRoots,durableFiles,shared,recordsFolder} from '../file-policy.mjs';
 import {hash,decode,encode} from '../records/store.mjs';
+import {candidate} from '../records/layout.mjs';
 
 export class SearchIndex {
   constructor(store) {
@@ -17,6 +18,8 @@ export class SearchIndex {
     for (const r of this.store.records.values()) if (!r.removed_at) documents.push([r.uid,r.type,r.id,r.title||r.name||r.id,JSON.stringify(r)]);
     const visit=relative=>{const absolute=path.join(this.store.root,relative);if(!fs.existsSync(absolute))return;const stat=fs.lstatSync(absolute);if(stat.isSymbolicLink())return;if(stat.isDirectory()){for(const name of fs.readdirSync(absolute))if(shared(relative+'/'+name))visit(relative+'/'+name);}else if(stat.size<=512*1024&&/\.(md|json|jsonl|txt)$/.test(relative))documents.push(['file-'+hash(relative),'workspace_file',relative,relative,fs.readFileSync(absolute,'utf8')]);};
     for(const name of [...durableRoots.filter(r=>r!==recordsFolder),...durableFiles])visit(name);
+    // An owner's own pages in the notebook folder are searched like any file.
+    for(const file of this.store.documents||[])visit(path.relative(this.store.root,file).split(path.sep).join('/'));
     return this.replace(documents);
   }
   // Compare content read from disk with what the index holds, never size or
@@ -106,16 +109,22 @@ export class SearchIndex {
     const documents=[],records=new Map(),io=fs.promises;
     this.readsSinceBreath=0;
     const entries=async folder=>{try{return await io.readdir(folder,{withFileTypes:true});}catch(error){if(error.code==='ENOENT')return [];throw error;}};
-    for(const dir of await entries(this.store.recordsRoot)){
-      if(!dir.isDirectory()||dir.isSymbolicLink())continue;
-      for(const entry of await entries(path.join(this.store.recordsRoot,dir.name))){
-        if(this.closed)return [];
-        if(!entry.isFile()||!/\.(json|md)$/.test(entry.name))continue;
-        const file=path.join(this.store.recordsRoot,dir.name,entry.name);
+    // The same files Store.scan reads: every record file under notebook/.
+    const pages=[],walk=async relative=>{
+      for(const entry of await entries(path.join(this.store.recordsRoot,...relative.split('/').filter(Boolean)))){
+        if(this.closed)return;
+        if(entry.name.startsWith('.')||entry.isSymbolicLink())continue;
+        const name=relative?relative+'/'+entry.name:entry.name;
+        if(entry.isDirectory()){await walk(name);continue;}
+        if(!entry.isFile()||!candidate(name))continue;
+        const file=path.join(this.store.recordsRoot,...name.split('/'));
         await this.breathe();
-        try{const text=this.readText(file);if(text===null)continue;const record=decode(text,file);record._hash=hash(encode(record));records.set(record.type+'/'+record.id,record);}catch{/* Invalid records are excluded just as in Store.scan. */}
+        try{const text=this.readText(file);if(text===null)continue;const record=decode(text,file);record._hash=hash(encode(record));records.set(record.type+'/'+record.id,record);}
+        catch(error){if(error.code==='NOT_RECORD')pages.push(path.relative(this.store.root,file).split(path.sep).join('/'));/* Invalid records are excluded just as in Store.scan. */}
       }
-    }
+    };
+    await walk('');
+    if(this.closed)return [];
     for(const r of records.values())if(!r.removed_at)documents.push([r.uid,r.type,r.id,r.title||r.name||r.id,JSON.stringify(r)]);
     const visit=async relative=>{
       if(this.closed)return;
@@ -130,6 +139,7 @@ export class SearchIndex {
       }
     };
     for(const name of [...durableRoots.filter(r=>r!==recordsFolder),...durableFiles])await visit(name);
+    for(const name of pages)await visit(name);
     return documents;
   }
   search(query) {

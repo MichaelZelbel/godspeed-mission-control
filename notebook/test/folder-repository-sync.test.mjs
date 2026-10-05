@@ -36,7 +36,7 @@ test('the notebook commits only its own folder and leaves the owner work, index 
   assert.equal(envy.sync.reconcile().state,'synced');
   const pushed=git(envy.dir,'show','--name-only','--format=%an','origin/main').split('\n').filter(Boolean);
   assert.equal(pushed[0],'Godspeed Mission Control');
-  assert.deepEqual(pushed.slice(1),['notebook/notes/'+note.id+'.md'],'Only the note left the machine');
+  assert.deepEqual(pushed.slice(1),['notebook/Shared note.md'],'Only the note left the machine');
   assert.equal(git(envy.dir,'diff','--cached','--name-only'),'rules/own.md','The session work stays staged');
   assert.equal(git(envy.dir,'diff','--name-only'),'AGENTS.md','The unsaved edit stays as it was');
   assert.equal(read(envy.dir,'.gitignore'),ignore);
@@ -63,7 +63,7 @@ test('the owner commits arrive in the same pull and nothing is left untracked',(
   assert.equal(envy.sync.reconcile().state,'synced');
   assert.equal(read(envy.dir,'rules','new.md'),'A new rule\n');assert.equal(status(envy.dir),'');
   git(laptop,'pull','--rebase','--autostash','origin','main');
-  assert.ok(fs.readdirSync(path.join(laptop,'notebook','contacts')).length===1,'A plain git pull brings the notebook to a machine without one');
+  assert.ok(fs.readdirSync(path.join(laptop,'notebook','People')).length===1,'A plain git pull brings the notebook to a machine without one');
 });
 
 test('the same note changed on two machines ends as one review item and never as conflict markers',()=>{
@@ -74,7 +74,7 @@ test('the same note changed on two machines ends as one review item and never as
   edit(server,'Server version\n');edit(envy,'Envy version\n');
   assert.equal(server.sync.reconcile().state,'synced');
   assert.equal(envy.sync.reconcile().state,'synced','A settled conflict does not hold the notebook back');
-  const file=path.join('notebook','notes',note.id+'.md');
+  const file=path.join('notebook','Contested.md');
   assert.doesNotMatch(read(envy.dir,file),/<<<<<<<|>>>>>>>/);assert.match(read(envy.dir,file),/Envy version/);
   const reviews=envy.sync.pendingConflicts();assert.equal(reviews.length,1);
   const review=JSON.parse(read(envy.dir,'conflicts',reviews[0]));
@@ -98,7 +98,7 @@ test('a pull that would overwrite an unsaved owner edit waits and loses nothing'
   assert.equal(git(envy.dir,'log','-1','--format=%s'),'Save notebook records','The note is saved locally meanwhile');
   git(envy.dir,'checkout','--','rules/own.md');
   assert.equal(envy.sync.reconcile().state,'synced');
-  assert.equal(read(envy.dir,'rules','own.md'),'Laptop version\n');assert.ok(remoteFiles(envy.dir).includes('notebook/notes/'+note.id+'.md'));
+  assert.equal(read(envy.dir,'rules','own.md'),'Laptop version\n');assert.ok(remoteFiles(envy.dir).includes('notebook/Waits.md'));
 });
 
 test('files the owner changed on two machines are left to Git, untouched',()=>{

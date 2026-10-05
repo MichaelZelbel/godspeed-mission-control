@@ -7,6 +7,19 @@ function retained(store,id){
   safe(id);const file=path.join(store.root,'conflicts',id+'.json');
   return {file,conflict:JSON.parse(fs.readFileSync(file,'utf8'))};
 }
+// The record a saved file conflict is about, found by the uid in any of its
+// versions: its file may have been renamed since the conflict was saved.
+function conflictRecord(store,conflict){
+  if(conflict.kind!=='git'||conflict.encoding==='base64'||!isRecordPath(conflict.path))return null;
+  store.scan();
+  for(const text of [conflict.local,conflict.remote,conflict.base]){
+    if(typeof text!=='string')continue;
+    let uid;try{uid=decode(text,conflict.path).uid;}catch{continue;}
+    const key=store.keyOfUid?.get(uid);if(key)return store.records.get(key);
+  }
+  return null;
+}
+const isRecord=(bytes,file)=>{if(!bytes)return false;try{decode(bytes.toString('utf8'),file);return true;}catch{return false;}};
 function targetFor(store,conflict,assistantPath){
   let target,allowed;
   if(conflict.kind==='assistant-skill'){
@@ -14,7 +27,8 @@ function targetFor(store,conflict,assistantPath){
     allowed=path.resolve(descriptor.home,'skills');target=path.resolve(conflict.target);
   }else if(conflict.kind==='git'){
     if(!durable(conflict.path))throw Error('Conflict target is not durable state');
-    allowed=store.root;target=path.resolve(store.root,conflict.path);
+    const record=conflictRecord(store,conflict);
+    allowed=store.root;target=record?store.file(record):path.resolve(store.root,conflict.path);
   }else if(conflict.kind==='stale-write'){
     const record=store.get(conflict.type,conflict.record_id);
     if(!record)throw Error('The current record is missing; retain the conflict for review');
@@ -62,7 +76,7 @@ export function resolveSavedConflict(store,{id,choice,text,expected_hash},{assis
         if(value.id!==conflict.record_id||value.uid!==current.uid)throw Error('A merged edit must keep the original record identity');
         if(conflict.type==='moments')throw Error('Events are append-only; add a correction event');
         store.commit([store.prepare(conflict.type,value,current)]);
-      }else if(conflict.kind==='git'&&isRecordPath(conflict.path)){
+      }else if(conflict.kind==='git'&&isRecordPath(conflict.path)&&isRecord(before,target)){
         const value=decode(Buffer.isBuffer(selected)?selected.toString('utf8'):selected,target),current=decode(before.toString('utf8'),target);
         if(value.id!==current.id||value.uid!==current.uid||value.type!==current.type)throw Error('A merged edit must keep the original record identity');
         if(current.type==='moments')throw Error('Events are append-only; add a correction event');

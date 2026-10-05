@@ -123,7 +123,10 @@ export function stageAccount(bundle,destination,{disposable=false}={}){
   if(disposable){
     // A preview can be rebuilt from the verified source. Avoid thousands of
     // synchronous journal flushes for this private, noncanonical staging copy.
-    for(const record of records){const file=store.file(record);fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,encode(record));}
+    // Names are given for the whole set at once, so two notes with one title
+    // get " 2" instead of the second overwriting the first.
+    const {targets}=store.planPaths(records);
+    for(const record of records){const file=path.join(store.recordsRoot,...targets.get(record.type+'/'+record.id).split('/'));fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,encode(record));}
   }else store.withLock(()=>store.commit(records));
   store.scan();if(store.problems.length)throw new Error('Migrated references need review; the staged copy was retained');
   // Complete sanitized source archive lives outside synced knowledge and model context.

@@ -8,7 +8,8 @@ test('repeated record reads see actual external bytes even with restored metadat
  const first=store.get('notes',note.id),originalHash=first._hash;first.content='Caller mutation';first.tags.push('not saved');assert.equal(store.get('notes',note.id).content,'Alpha');assert.deepEqual(store.get('notes',note.id).tags,['original']);
  fs.writeFileSync(file,encode({...note,content:'Bravo'}));fs.utimesSync(file,before.atime,before.mtime);assert.equal(store.get('notes',note.id).content,'Bravo');assert.notEqual(store.get('notes',note.id)._hash,originalHash);
  fs.writeFileSync(file,'Broken canonical bytes');assert.equal(store.get('notes',note.id),undefined);assert.ok(store.problems.length);fs.writeFileSync(file,encode(note));assert.equal(store.get('notes',note.id).content,'Alpha');assert.equal(store.problems.length,0);
- fs.renameSync(file,file.replace('.md','-foreign.md'));store.scan();assert.equal(store.records.size,0);assert.ok(store.problems.some(p=>p.error.includes('identity')));
+ // A record is found by the id in its frontmatter, wherever its file is.
+ fs.renameSync(file,file.replace('.md','-moved by hand.md'));store.scan();assert.equal(store.records.size,1);assert.equal(store.get('notes',note.id).content,'Alpha');assert.equal(store.file(note),file.replace('.md','-moved by hand.md'));assert.deepEqual(store.problems,[]);
 });
 test('cached clocks keep different time zones and daylight-saving folds distinct and journal history unchanged',()=>{
  for(const parts of [journalParts,coachParts]){assert.equal(parts(new Date('2026-10-25T00:30:00Z'),'Europe/Berlin').hm,'02:30');assert.equal(parts(new Date('2026-10-25T01:30:00Z'),'Europe/Berlin').hm,'02:30');assert.equal(parts(new Date('2026-10-25T01:30:00Z'),'UTC').hm,'01:30');assert.equal(parts(new Date('2026-10-25T01:30:00Z'),'America/New_York').date,'2026-10-24');assert.throws(()=>parts(new Date(),'Fictional/Invalid'),RangeError);}
