@@ -75,6 +75,17 @@ test('installers, archives and files too large to upload stay on the owner machi
   assert.equal(sync.reconcile().state,'synced','The kept file does not come back as a pending change');
 });
 
+test('a checkout inside the folder and the paths a machine keeps to itself stay out of sync',()=>{
+  const {owner,knowledge}=fixture();
+  const checkout=path.join(owner.root,'work','trials','another-app');fs.mkdirSync(checkout,{recursive:true});git(checkout,'init','-q');atomic(path.join(checkout,'app.js'),'build');
+  atomic(path.join(owner.root,'work','artifacts','server-login','token.txt'),'synthetic login');atomic(path.join(owner.root,'work','plan.md'),'Shared plan\n');
+  atomic(path.join(owner.state,'sync-local-only'),'# trial copies\nwork/artifacts/server-login/\n');
+  const sync=join(owner,knowledge);
+  assert.equal(sync.reconcile().state,'synced');
+  const shared=git(owner.root,'--git-dir='+path.join(owner.state,'sync.git'),'ls-tree','-r','--name-only','HEAD');
+  assert.match(shared,/work\/plan\.md/);assert.doesNotMatch(shared,/another-app|server-login/);
+});
+
 test('after the first join, edits travel both ways and concurrent ones are kept for review',()=>{
   const {owner,knowledge,server,serverSync}=fixture(),sync=join(owner,knowledge);
   assert.equal(sync.reconcile().state,'synced');assert.equal(serverSync.reconcile().state,'synced');

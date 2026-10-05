@@ -69,7 +69,23 @@ export class FileSync {
     // An owner's folder holds whatever its owner keeps there. A single file too
     // large to upload stays on this machine instead of stopping every sync, and
     // the list is made against the policy alone so it never hides itself.
-    if(this.gitDir){const large=this.largeFiles();if(large.length)write(policy+'# Too large to synchronize, kept on this machine\n'+large.map(n=>'/'+n.replace(/[*?[\]\\]/g,'\\$&')+'\n').join(''));}
+    if(this.gitDir){
+      const escape=n=>'/'+n.replace(/[*?[\]\\]/g,'\\$&')+'\n';
+      // What this machine keeps to itself: one path or pattern per line in
+      // .godspeed/sync-local-only (trial installs, build copies, a login kept
+      // for one task), and every checkout of another repository inside the
+      // folder, which Git refuses to add and which stopped every sync on x30.
+      const listFile=path.join(this.store.state,'sync-local-only'),own=fs.existsSync(listFile)?fs.readFileSync(listFile,'utf8').split(/\r?\n/).map(l=>l.trim()).filter(l=>l&&!l.startsWith('#')):[];
+      const nested=this.nestedRepositories(),large=this.largeFiles();
+      if(own.length||nested.length||large.length)write(policy+'# Kept on this machine\n'+own.map(l=>l+'\n').join('')+nested.map(n=>escape(n+'/')).join('')+large.map(escape).join(''));
+    }
+  }
+  nestedRepositories(){
+    const found=[],walk=relative=>{let entries;try{entries=fs.readdirSync(path.join(this.store.root,relative),{withFileTypes:true});}catch{return;}
+      for(const entry of entries){if(!entry.isDirectory()||entry.name==='node_modules'||entry.name.startsWith('.'))continue;const child=relative+'/'+entry.name;
+        if(fs.existsSync(path.join(this.store.root,child,'.git')))found.push(child);else walk(child);}};
+    for(const root of durableRoots)if(fs.existsSync(path.join(this.store.root,root)))walk(root);
+    return found;
   }
   largeFiles(){
     const roots=[...durableRoots,...durableFiles].filter(r=>fs.existsSync(path.join(this.store.root,r)));if(!roots.length)return [];
