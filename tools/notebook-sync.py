@@ -54,7 +54,12 @@ import urllib.request
 # were "all godspeed folders except dev/", so the folder is skipped by name as well.
 # .git/ and node_modules/ only matter when there is no git to ask and the folder is
 # walked instead.
-SKIP_DIRS = ("dev", ".git", "node_modules")
+#
+# notebook/ is never sent either (2026-10-05). It is the notebook itself, kept as files: Godspeed v2
+# writes the notes, people and facts it holds there, most of them brought over from this same
+# notebook. Sending them up would hand the notebook every one of its own notes back as a new
+# note, 1,801 of them at once on the mission control where this was found.
+SKIP_DIRS = ("dev", ".git", "node_modules", "notebook")
 
 # world/removed/ holds the pull's own notices about records the notebook dropped. They
 # are copies of things Menerio already had and then deleted; sending them up would put
