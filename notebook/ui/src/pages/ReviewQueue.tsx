@@ -89,7 +89,10 @@ export default function ReviewQueue() {
   // badge. It used to be ignored, so the person landed in the whole queue.
   const [searchParams, setSearchParams] = useSearchParams();
   const contactFilter = searchParams.get("contact_id");
-  const { items, wikiRevisions, isLoading, updateStatus } = useReviewQueue(contactFilter);
+  // Waiting is the queue the sidebar counts; Kept keeps earlier Keeps reachable for Roll Back.
+  const [view, setView] = useState<"waiting" | "kept">("waiting");
+  const { items, wikiRevisions: allWikiRevisions, isLoading, updateStatus, pendingCount } = useReviewQueue(contactFilter, view);
+  const wikiRevisions = view === "waiting" ? allWikiRevisions : [];
   const queryClient = useQueryClient();
   const [selectedWikiRevision, setSelectedWikiRevision] = useState<WikiRevisionReviewItem | null>(null);
   const [rollbackWikiRevision, setRollbackWikiRevision] = useState<WikiRevisionReviewItem | null>(null);
@@ -889,7 +892,7 @@ export default function ReviewQueue() {
     label: string,
     run: () => Promise<void>,
   ) => {
-    const total = items.length + wikiRevisions.length;
+    const total = pendingCount;
     if (total >= BULK_CONFIRM_THRESHOLD) {
       setBulkConfirm({ kind, label, total, run });
     } else {
@@ -917,9 +920,10 @@ export default function ReviewQueue() {
         ...(contactFilter ? [] : wikiRevisions.map((revision) => ({ kind: "wiki" as const, created_at: revision.created_at, revision }))),
         ...items
           .filter((item) => !contactFilter || (item.payload as { contact_id?: string } | null)?.contact_id === contactFilter)
-          .map((item) => ({ kind: "review" as const, created_at: item.created_at, item })),
+          // Kept changes sort by when they were kept, so the latest Keep is the first to undo.
+          .map((item) => ({ kind: "review" as const, created_at: view === "kept" ? item.applied_at || item.created_at : item.created_at, item })),
       ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()),
-    [items, wikiRevisions, contactFilter],
+    [items, wikiRevisions, contactFilter, view],
   );
 
   // Paginate to keep the DOM small even with thousands of pending items.
@@ -956,9 +960,18 @@ export default function ReviewQueue() {
         <p className="text-muted-foreground text-sm mt-1">
           {BRAND.name} automatically added these insights from your notes. Keep what looks right, remove what does not, or block things you never want added again.
         </p>
+        <div className="flex gap-1 mt-3">
+          {(["waiting", "kept"] as const).map((option) => (
+            <Button key={option} size="sm" variant={view === option ? "secondary" : "ghost"} onClick={() => { setView(option); setPage(0); }}>
+              {option === "waiting" ? "Waiting for you" : "Already kept"}
+            </Button>
+          ))}
+        </div>
         {hasReviewItems && (
           <p className="text-xs text-muted-foreground mt-2">
-            {combinedReviewItems.length.toLocaleString()} pending {combinedReviewItems.length === 1 ? "change" : "changes"}
+            {view === "kept"
+              ? "Changes you kept, newest first. You can still roll back or block any of them."
+              : <>{(contactFilter ? combinedReviewItems.length : pendingCount).toLocaleString()} pending {(contactFilter ? combinedReviewItems.length : pendingCount) === 1 ? "change" : "changes"}</>}
             {pageCount > 1 && <> · showing {page * PAGE_SIZE + 1}–{Math.min(combinedReviewItems.length, (page + 1) * PAGE_SIZE)}</>}
           </p>
         )}
@@ -975,7 +988,7 @@ export default function ReviewQueue() {
 
       {/* The bulk buttons act on every pending change on the server, so they
           are hidden while the list shows one person's suggestions only. */}
-      {hasReviewItems && !contactFilter && (
+      {hasReviewItems && !contactFilter && view === "waiting" && (
         <div className="flex flex-wrap items-center gap-2">
           <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={handleNeverAgainAll} disabled={bulkDisabled}>
             <X className="h-4 w-4 mr-1" />
@@ -1005,10 +1018,12 @@ export default function ReviewQueue() {
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12 text-center">
             <Inbox className="h-12 w-12 text-muted-foreground/40 mb-4" />
-            <p className="text-muted-foreground font-medium">All caught up!</p>
-            <p className="text-sm text-muted-foreground/70 mt-1">
-              New AI changes will appear here as you add notes.
-            </p>
+            <p className="text-muted-foreground font-medium">{view === "kept" ? "Nothing kept yet." : "All caught up!"}</p>
+            {view === "waiting" && (
+              <p className="text-sm text-muted-foreground/70 mt-1">
+                New AI changes will appear here as you add notes.
+              </p>
+            )}
           </CardContent>
         </Card>
       ) : (

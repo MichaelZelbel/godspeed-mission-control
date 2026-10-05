@@ -2,6 +2,9 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 
+// Suggestions still waiting for a decision: the queue's list, its count and the sidebar badge.
+const WAITING_STATUSES = ["pending", "pending_review", "auto_applied_unreviewed"];
+
 export interface ReviewItem {
   id: string;
   user_id: string;
@@ -48,23 +51,25 @@ export interface WikiRevisionReviewItem {
  * "N pending profile suggestions" link). Filtered in the database: filtering
  * the 500 newest rows in the page found nothing for a person whose
  * suggestions were older, while the badge that led there counted them.
+ * @param view "waiting" is what the sidebar counts; "kept" lists earlier Keeps,
+ * newest first, so one can still be rolled back without crowding the queue.
  */
-export function useReviewQueue(contactId: string | null = null) {
+export function useReviewQueue(contactId: string | null = null, view: "waiting" | "kept" = "waiting") {
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
   const { data: items = [], isLoading } = useQuery({
-    queryKey: ["review-queue", user?.id, contactId ?? "all"],
+    queryKey: ["review-queue", user?.id, contactId ?? "all", view],
     queryFn: async () => {
       // Only fetch the columns a card actually renders, and cap at 500 rows.
       // The full count is served by the separate head:true query below.
       let query = supabase
         .from("review_queue" as any)
         .select("id,user_id,suggestion_type,target_entity_id,target_entity_type,applied_at,source_note_id,suppression_key,extracted_value,is_sensitive,title,description,payload,status,created_at,reviewed_at,confidence_score,blocked_at, source_note:notes!review_queue_source_note_id_fkey(title)")
-        .in("status", ["pending", "pending_review", "auto_applied_unreviewed", "kept"])
+        .in("status", view === "kept" ? ["kept"] : WAITING_STATUSES)
         .or(`snoozed_until.is.null,snoozed_until.lte.${new Date().toISOString()}`);
       if (contactId) query = query.contains("payload", { contact_id: contactId });
-      const { data, error } = await query.order("created_at", { ascending: false }).range(0, 499);
+      const { data, error } = await query.order(view === "kept" ? "applied_at" : "created_at", { ascending: false }).range(0, 499);
       if (error) throw error;
       return (data || []) as unknown as ReviewItem[];
     },
@@ -134,7 +139,7 @@ export function useReviewQueueCount(): number {
       const { count, error } = await supabase
         .from("review_queue" as any)
         .select("id", { count: "exact", head: true })
-        .in("status", ["pending", "pending_review", "auto_applied_unreviewed"])
+        .in("status", WAITING_STATUSES)
         .or(`snoozed_until.is.null,snoozed_until.lte.${new Date().toISOString()}`);
       if (error) throw error;
       return count || 0;

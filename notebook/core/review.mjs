@@ -119,7 +119,8 @@ export class Review {
   bulk(input){
     const action=input.action||input.decision,ids=input.scope?.ids||input.ids||input.review_ids;
     if(!['keep','accept','block','reject','never_again','rollback','remove','snooze'].includes(action))throw new Error('Choose a review action');
-    const selected=this.query.rows('review_queue').filter(r=>ids?ids.includes(r.id):['rollback','remove','block','reject','never_again'].includes(action)?['pending','pending_review','kept','auto_applied_unreviewed'].includes(r.status):['pending','pending_review','auto_applied_unreviewed'].includes(r.status));
+    // "All" is what the review page and the sidebar count: waiting, not snoozed.
+    const now=new Date().toISOString(),selected=this.query.rows('review_queue').filter(r=>ids?ids.includes(r.id):['pending','pending_review','auto_applied_unreviewed'].includes(r.status)&&!(r.snoozed_until>now));
     const job=this.store.save('review_queue_bulk_jobs',{action,status:'running',total:selected.length,processed:0,succeeded:0,failed:0,errors:[]});let succeeded=0;const errors=[];
     for(const item of selected)try{
       if(['keep','accept'].includes(action)){if(item.status!=='kept')this.apply(item);}
