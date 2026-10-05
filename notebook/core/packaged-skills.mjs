@@ -9,7 +9,13 @@ export function installSkillTree(store,source,target,{adopted=false}={}){
  const ledger=path.join(store.state,'packaged-skills.json'),previous=fs.existsSync(ledger)?JSON.parse(fs.readFileSync(ledger)):{};let updated=0,conflicts=0;
  if(adopted&&fs.existsSync(target)){
   const installed=dir=>fs.readdirSync(dir,{withFileTypes:true}).some(entry=>!entry.name.startsWith('.')&&(entry.isDirectory()?installed(path.join(dir,entry.name)):previous[hash(path.join(target,path.relative(source,path.join(dir,entry.name))))]!==undefined));
-  if(!installed(source))return {updated,conflicts,kept:true};
+  // A skill whose SKILL.md is not what this package last put there is the
+  // owner's, whatever the ledger still remembers from before the folder was
+  // adopted. A server workspace that began as a starter carried the ledger of
+  // its own first install into the owner's repository, and every start then
+  // added the package's helpers to the owner's skills (2026-10-05).
+  const skill=path.join(target,'SKILL.md'),owners=fs.existsSync(skill)&&previous[hash(skill)]!==normalized(fs.readFileSync(skill));
+  if(owners||!installed(source))return {updated,conflicts,kept:true};
  }
  function walk(dir){for(const entry of fs.readdirSync(dir,{withFileTypes:true})){if(entry.name.startsWith('.'))continue;const file=path.join(dir,entry.name);if(entry.isSymbolicLink())throw Error('Packaged skills must not contain symbolic links');if(entry.isDirectory()){walk(file);continue;}
   const relative=path.relative(source,file),dest=path.join(target,relative),bytes=fs.readFileSync(file),digest=normalized(bytes),key=hash(dest),old=fs.existsSync(dest)?fs.readFileSync(dest):null;

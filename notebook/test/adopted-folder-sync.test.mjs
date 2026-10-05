@@ -125,3 +125,16 @@ test('packaged recipes keep the owner skills of an adopted mission control and n
   atomic(path.join(recipes,'later','SKILL.md'),'Later skill v1');install('later');atomic(path.join(recipes,'later','SKILL.md'),'Later skill v2');install('later');
   assert.equal(read(owner,'skills','later','SKILL.md'),'Later skill v2','An unedited packaged skill is still updated');
 });
+
+test('a ledger from before the folder was adopted never puts package helpers into the owner skills',()=>{
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-ledger-test-')),recipes=path.join(root,'recipes'),owner=path.join(root,'owner'),store=new Store(owner);
+  for(const [file,text] of [['poster/SKILL.md','Packaged poster'],['poster/LICENSE','License'],['poster/tools/run.mjs','helper']])atomic(path.join(recipes,file),text);
+  // The workspace began as a starter: the package installed the whole skill and the ledger recorded it.
+  installSkillTree(store,path.join(recipes,'poster'),path.join(owner,'skills','poster'));
+  fs.rmSync(path.join(owner,'skills','poster'),{recursive:true});
+  // Then it became the owner's mission control, whose own poster skill has no helpers.
+  atomic(path.join(owner,'skills','poster','SKILL.md'),'The owner poster skill');
+  installSkillTree(store,path.join(recipes,'poster'),path.join(owner,'skills','poster'),{adopted:true});
+  assert.deepEqual(fs.readdirSync(path.join(owner,'skills','poster')),['SKILL.md']);
+  assert.equal(read(owner,'skills','poster','SKILL.md'),'The owner poster skill');
+});
