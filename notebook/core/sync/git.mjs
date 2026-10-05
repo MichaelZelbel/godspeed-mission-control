@@ -8,9 +8,9 @@ import {validateAssistantFiles} from '../assistant-files.mjs';
 import {resolveSavedConflict} from '../conflicts.mjs';
 
 export class FileSync {
-  constructor(store,{branch='main',remote='origin'}={}) {
+  constructor(store,{branch='main',remote='origin',largeFile=50*1024*1024}={}) {
     if(!/^[\w/.-]+$/.test(branch)||branch.startsWith('-')||!/^\w+$/.test(remote))throw new Error('Invalid sync configuration');
-    this.store=store;this.branch=branch;this.remote=remote;this.last=null;
+    this.store=store;this.branch=branch;this.remote=remote;this.largeFile=largeFile;this.last=null;
     // A folder that already belongs to its own repository (an existing mission
     // control shared across machines) keeps that repository untouched. The
     // knowledge repository then lives beside it in the private state folder,
@@ -55,12 +55,25 @@ export class FileSync {
   // without "!routines/" meant the journal and the headache log could never be
   // staged, and `git add` stopped the whole sync over it. The parent negation
   // only lets Git descend; the leading "*" still ignores its other children.
-  ignoreText(){return '*\n'+[...new Set(durableRoots.flatMap(r=>r.split('/').map((_,i,parts)=>parts.slice(0,i+1).join('/'))))].map(r=>'!'+r+'/\n').join('')+durableRoots.map(r=>'!'+r+'/**\n').join('')+durableFiles.map(r=>'!'+r+'\n').join('')+devicePrivatePaths.map(r=>r+'/\n').join('')+'**/.*\n!.gitignore\n**/secrets/\n**/node_modules/\n**/*.sqlite*\n**/*.png\n**/*.jpg\n**/*.mp4\n**/*.mp3\n**/*.pdf\n';}
+  ignoreText(){return '*\n'+[...new Set(durableRoots.flatMap(r=>r.split('/').map((_,i,parts)=>parts.slice(0,i+1).join('/'))))].map(r=>'!'+r+'/\n').join('')+durableRoots.map(r=>'!'+r+'/**\n').join('')+durableFiles.map(r=>'!'+r+'\n').join('')+devicePrivatePaths.map(r=>r+'/\n').join('')+'**/.*\n!.gitignore\n**/secrets/\n**/node_modules/\n**/*.sqlite*\n**/*.png\n**/*.jpg\n**/*.mp4\n**/*.mp3\n**/*.pdf\n'+
+    // Installers, archives and recordings are build output and copies, not
+    // knowledge. An owner's work/ folder held 4 GB of them, one file 1 GB: every
+    // `git add` ran into the time limit, and GitHub refuses any file over 100 MB.
+    '**/*.zip\n**/*.tar\n**/*.gz\n**/*.tgz\n**/*.7z\n**/*.exe\n**/*.msi\n**/*.dmg\n**/*.iso\n**/*.mov\n**/*.webm\n**/*.wav\n**/*.m4a\n';}
   writeIgnoreFile(){
     // Beside an owner's repository the policy goes into the knowledge
     // repository's own exclude file; the folder's .gitignore is the owner's.
-    const file=this.gitDir?path.join(this.gitDir,'info','exclude'):path.join(this.store.root,'.gitignore'),text=this.ignoreText();
-    if(!fs.existsSync(file)||fs.readFileSync(file,'utf8')!==text)atomic(file,text);
+    const file=this.gitDir?path.join(this.gitDir,'info','exclude'):path.join(this.store.root,'.gitignore'),policy=this.ignoreText();
+    const write=text=>{if(!fs.existsSync(file)||fs.readFileSync(file,'utf8')!==text)atomic(file,text);};
+    write(policy);
+    // An owner's folder holds whatever its owner keeps there. A single file too
+    // large to upload stays on this machine instead of stopping every sync, and
+    // the list is made against the policy alone so it never hides itself.
+    if(this.gitDir){const large=this.largeFiles();if(large.length)write(policy+'# Too large to synchronize, kept on this machine\n'+large.map(n=>'/'+n.replace(/[*?[\]\\]/g,'\\$&')+'\n').join(''));}
+  }
+  largeFiles(){
+    const roots=[...durableRoots,...durableFiles].filter(r=>fs.existsSync(path.join(this.store.root,r)));if(!roots.length)return [];
+    return this.gitBytes(['ls-files','-z','--others','--exclude-standard','--',...roots]).toString('utf8').split('\0').filter(name=>{if(!name)return false;try{return fs.statSync(path.join(this.store.root,name)).size>this.largeFile;}catch{return false;}});
   }
   validate(){this.store.scan();if(this.store.problems.length)throw new Error('Resolve record validation problems before syncing');validateAssistantFiles(this.store.root);if(this.pendingConflicts().length)throw new Error('Resolve saved conflicts before syncing');}
   // A path that was synced before it became device-private stays in the index

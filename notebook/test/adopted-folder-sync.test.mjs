@@ -32,8 +32,8 @@ function fixture(){
   git(ownerDir,'add','-A');git(ownerDir,'commit','-m','Owner mission control');git(ownerDir,'push','origin','main');
   return {root,knowledge,hub,server,serverSync,owner:new Store(ownerDir,{device:'desktop'}),imported};
 }
-function join(owner,knowledge){
-  const sync=new FileSync(owner);sync.initialize('https://github.com/synthetic/private.git');
+function join(owner,knowledge,options){
+  const sync=new FileSync(owner,options);sync.initialize('https://github.com/synthetic/private.git');
   // The synthetic GitHub address stands in for the private repository.
   git(owner.root,'--git-dir='+path.join(owner.state,'sync.git'),'remote','set-url','origin',knowledge);
   return sync;
@@ -62,6 +62,17 @@ test('the first join keeps the owner files and brings the server records in',()=
   assert.equal(serverSync.reconcile().state,'synced');
   assert.equal(read(server.root,'AGENTS.md'),'Owner manual\n');assert.equal(read(server.root,'rules','own.md'),'Only the owner has this\n');
   assert.equal(fs.existsSync(path.join(server.root,'dev','tool.sh')),false);assert.equal(fs.existsSync(path.join(server.root,'secret.txt')),false);
+});
+
+test('installers, archives and files too large to upload stay on the owner machine',()=>{
+  const {owner,knowledge}=fixture();
+  atomic(path.join(owner.root,'work','notes.md'),'Small and shared\n');atomic(path.join(owner.root,'work','artifacts','setup.exe'),'installer');
+  atomic(path.join(owner.root,'work','artifacts','copy.tar.gz'),'archive');atomic(path.join(owner.root,'work','artifacts','huge [1].bin'),Buffer.alloc(4096,1));
+  const sync=join(owner,knowledge,{largeFile:2048});
+  assert.equal(sync.reconcile().state,'synced');
+  const shared=git(owner.root,'--git-dir='+path.join(owner.state,'sync.git'),'ls-tree','-r','--name-only','HEAD');
+  assert.match(shared,/work\/notes\.md/);assert.doesNotMatch(shared,/setup\.exe|copy\.tar\.gz|huge/);
+  assert.equal(sync.reconcile().state,'synced','The kept file does not come back as a pending change');
 });
 
 test('after the first join, edits travel both ways and concurrent ones are kept for review',()=>{
