@@ -48,9 +48,11 @@ export class Store {
       if (e.code !== 'EEXIST') throw e;
       let owner;
       try { owner = JSON.parse(fs.readFileSync(lock, 'utf8')); } catch { throw new Error('Workspace lock requires recovery'); }
+      // EPERM: the writer is alive but not ours to signal (on Windows, the server started by
+      // the installer's task). That is a busy workspace, not an error.
       try { process.kill(owner.pid, 0); } catch (error) {
         if (error.code === 'ESRCH') { fs.unlinkSync(lock); return this.withLock(fn); }
-        throw error;
+        if (error.code !== 'EPERM') throw error;
       }
       throw Object.assign(new Error('Workspace is being written by another process'),{code:'WRITER_BUSY'});
     }
@@ -63,7 +65,7 @@ export class Store {
     while(fs.existsSync(lock)){
       signal?.throwIfAborted();
       let owner;try{owner=JSON.parse(fs.readFileSync(lock,'utf8'));}catch(error){if(error.code==='ENOENT')continue;}
-      if(owner?.pid)try{process.kill(owner.pid,0);}catch(error){if(error.code==='ESRCH')return;throw error;}
+      if(owner?.pid)try{process.kill(owner.pid,0);}catch(error){if(error.code==='ESRCH')return;if(error.code!=='EPERM')throw error;}
       if(Date.now()>=until)throw Error('Workspace is still being written. Your request has not been repeated.');
       await new Promise(resolve=>setTimeout(resolve,25));
     }

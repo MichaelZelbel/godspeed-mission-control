@@ -41,3 +41,10 @@ test('a writer arriving after the response wait cannot lose the generated reply'
   assert.equal(service.store.list('conversation_messages').filter(m=>m.role==='assistant').length,1);
  }finally{await service.close();}
 });
+
+test('a writer that is alive but not ours to signal reads as busy, and its lock stays',()=>{
+ const store=new Store(root()),lock=path.join(store.state,'workspace.lock');fs.writeFileSync(lock,JSON.stringify({pid:424242}));
+ const kill=process.kill;process.kill=()=>{throw Object.assign(Error('operation not permitted'),{code:'EPERM'});};
+ try{assert.throws(()=>store.withLock(()=>{}),{code:'WRITER_BUSY'});}finally{process.kill=kill;}
+ assert.ok(fs.existsSync(lock),'The other writer\'s lock is left alone');
+});
