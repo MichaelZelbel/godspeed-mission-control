@@ -77,7 +77,9 @@ export function sanitizeName(value, fallback = 'Untitled') {
   name = points.slice(0, end).join('').replace(/[.\s]+$/, '').replace(RESERVED, '$1_');
   return name || fallback;
 }
-function folderParts(value) { return text(value).split(/[\\/]+/).map(part => sanitizeName(part, '')).filter(Boolean); }
+// A folder named secrets or node_modules is never synced or written by the
+// notebook (file-policy.mjs), so a note folder of that name gets a "_".
+function folderParts(value) { return text(value).split(/[\\/]+/).map(part => sanitizeName(part, '')).filter(Boolean).map(part => /^(secrets|node_modules)$/i.test(part) ? part + '_' : part); }
 // Two names that are the same file on a case-insensitive file system.
 export const key = name => { const text = String(name); return (/^[\x20-\x7e]*$/.test(text) ? text : text.normalize('NFC')).toLowerCase(); };
 

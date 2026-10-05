@@ -104,6 +104,13 @@ for(const mode of ['folder','knowledge']){
     assert.match(read(a.dir,'notebook','Meeting notes.md'),/Laptop meeting/,'The machine that merged keeps its own note under the plain name');
   });
 
+  test(mode+': a note whose title ends like a database or sits in a folder called Secrets still travels',()=>{
+    const {a,b}=machines(mode),db=a.store.save('notes',{title:'backup.sqlite',content:'Not a database\n'}),secret=a.store.save('notes',{title:'Passwords policy',folder_path:'Secrets',content:'No passwords here\n'});
+    round(a,b);
+    assert.deepEqual(notebookFiles(b.dir),['Secrets_/Passwords policy.md','backup.sqlite.md']);
+    assert.equal(b.store.get('notes',db.id).content,'Not a database\n');assert.equal(b.store.get('notes',secret.id).folder_path,'Secrets');
+  });
+
   test(mode+': a note trashed on one machine while edited on the other ends in the trash with the edit',()=>{
     const {a,b}=machines(mode),note=a.store.save('notes',{title:'Old idea',folder_path:'Ideas',content:'v1\n'});
     round(a,b);

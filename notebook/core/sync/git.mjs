@@ -107,7 +107,10 @@ export class FileSync {
     // Installers, archives and recordings are build output and copies, not
     // knowledge. An owner's work/ folder held 4 GB of them, one file 1 GB: every
     // `git add` ran into the time limit, and GitHub refuses any file over 100 MB.
-    '**/*.zip\n**/*.tar\n**/*.gz\n**/*.tgz\n**/*.7z\n**/*.exe\n**/*.msi\n**/*.dmg\n**/*.iso\n**/*.mov\n**/*.webm\n**/*.wav\n**/*.m4a\n';}
+    '**/*.zip\n**/*.tar\n**/*.gz\n**/*.tgz\n**/*.7z\n**/*.exe\n**/*.msi\n**/*.dmg\n**/*.iso\n**/*.mov\n**/*.webm\n**/*.wav\n**/*.m4a\n'+
+    // A notebook page is named after its title, so a note called
+    // "backup.sqlite" is backup.sqlite.md and must not be taken for a database.
+    '!'+recordsFolder+'/**/[!.]*.md\n';}
   writeIgnoreFile(){
     // Beside an owner's repository the policy goes into the knowledge
     // repository's own exclude file; the folder's .gitignore is the owner's.
@@ -322,7 +325,10 @@ export class FileSync {
   // it merges, and a merge it cannot settle inside its own paths is left to Git
   // and to the owner.
   inScope(name){
-    if(!shared(name)||keptLocal.some(ext=>new RegExp('\\.'+ext.replace('*','.*')+'$','i').test(name)))return false;
+    // A notebook page is always the notebook's, whatever its title ends in:
+    // a note called "backup.sqlite" is backup.sqlite.md.
+    const page=name.startsWith(recordsFolder+'/')&&name.endsWith('.md');
+    if(!shared(name)||(!page&&keptLocal.some(ext=>new RegExp('\\.'+ext.replace('*','.*')+'$','i').test(name))))return false;
     const paths=this.folder.paths;return paths.includes('*')||paths.some(p=>name===p||name.startsWith(p+'/'));
   }
   scopeRoots(){return this.folder.paths.includes('*')?[...durableRoots,...durableFiles]:this.folder.paths;}
