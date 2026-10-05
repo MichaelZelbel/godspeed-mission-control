@@ -41,12 +41,12 @@ for(const mode of ['folder','knowledge']){
   test(mode+': a renamed note arrives renamed, as the same note, with no copy left behind',()=>{
     const {a,b}=machines(mode),note=a.store.save('notes',{title:'Groceries',folder_path:'Home',content:'Milk\n'});
     round(a,b);assert.equal(read(b.dir,'notebook','Home','Groceries.md'),read(a.dir,'notebook','Home','Groceries.md'));
-    edit(a.store,'notes',note.id,{title:'Einkaufsliste für Grüße 🎉',folder_path:'Home/Weekly'});
+    edit(a.store,'notes',note.id,{title:'Einkaufsliste f\u00fcr Gr\u00fc\u00dfe \u{1F389}',folder_path:'Home/Weekly'});
     round(a,b);
-    assert.deepEqual(notebookFiles(b.dir),['Home/Weekly/Einkaufsliste für Grüße 🎉.md']);
-    assert.equal(b.store.get('notes',note.id).title,'Einkaufsliste für Grüße 🎉');assert.equal(b.store.list('notes').length,1);
+    assert.deepEqual(notebookFiles(b.dir),['Home/Weekly/Einkaufsliste f\u00fcr Gr\u00fc\u00dfe \u{1F389}.md']);
+    assert.equal(b.store.get('notes',note.id).title,'Einkaufsliste f\u00fcr Gr\u00fc\u00dfe \u{1F389}');assert.equal(b.store.list('notes').length,1);
     assert.deepEqual(notebookFiles(a.dir),notebookFiles(b.dir));
-    round(b,a);assert.deepEqual(notebookFiles(a.dir),['Home/Weekly/Einkaufsliste für Grüße 🎉.md'],'Nothing comes back');
+    round(b,a);assert.deepEqual(notebookFiles(a.dir),['Home/Weekly/Einkaufsliste f\u00fcr Gr\u00fc\u00dfe \u{1F389}.md'],'Nothing comes back');
   });
 
   test(mode+': a rename on one machine and an edit on the other end as one note with both changes',()=>{

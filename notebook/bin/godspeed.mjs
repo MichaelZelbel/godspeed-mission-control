@@ -65,5 +65,13 @@ else if(command==='import')result=importExport(query,JSON.parse(fs.readFileSync(
 else if(command==='export')result={format:1,records:[...store.scan().values()].map(r=>{const copy={...r};delete copy._hash;return copy;})};
 else if(command==='validate')result={problems:store.scan()&&store.problems};
 else if(command==='sync'&&verb==='folder')result=await (await import('../core/sync/git.mjs')).useFolderRepository(store,rest);
-else throw new Error('Commands: init, record list/get/save/merge/remove/display-name, memory search/lookup, world claim/event, backup, restore, import, export, validate, sync folder [PATH...]');
+else if(command==='convert-notebook'){
+  // The whole list can run to thousands of lines: it goes to a file, the
+  // summary to the screen.
+  const dryRun=args.includes('--dry-run'),outcome=(await import('../core/convert-notebook.mjs')).convertNotebook(store,{dryRun});
+  const list=path.join(store.state,dryRun?'convert-notebook-dry-run.json':'convert-notebook-report.json');atomic(list,JSON.stringify(outcome,null,2));
+  const {renamed=[],rewritten=[],problems,...summary}=outcome;
+  result={...summary,renamed:renamed.length,rewritten:rewritten.length,...(problems?{problems}:{}),first_renames:renamed.slice(0,10).map(r=>r.from+' -> '+r.to),full_list:list};
+}
+else throw new Error('Commands: init, record list/get/save/merge/remove/display-name, memory search/lookup, world claim/event, backup, restore, import, export, validate, sync folder [PATH...], convert-notebook [--dry-run]');
 console.log(JSON.stringify(result,null,2));

@@ -68,18 +68,18 @@ const RESERVED = /^(con|prn|aux|nul|com[0-9\u00b9\u00b2\u00b3]|lpt[0-9\u00b9\u00
 // characters, "Untitled" when nothing is left. A file name must also work on
 // every machine: no control characters, no leading dot (a hidden file sync
 // never carries), no trailing dot or space (Windows drops them), no device
-// name Windows reserves, and few enough bytes that " 99.md" still fits the
-// 255-byte limit of the file system.
+// name Windows reserves, and at most 200 bytes, so " 999.md" and the
+// temporary name of a safe write (41 more) still fit the file system's 255.
 export function sanitizeName(value, fallback = 'Untitled') {
   let name = text(value).normalize('NFC').replace(/[<>:"/\\|?*\u0000-\u001f\u007f]/g, '').replace(/\s+/g, ' ').trim().replace(/^[.\s]+/, '');
   const points = [...name]; let bytes = 0, end = 0;
-  for (; end < points.length && end < 200; end++) { bytes += Buffer.byteLength(points[end]); if (bytes > 240) break; }
+  for (; end < points.length && end < 200; end++) { bytes += Buffer.byteLength(points[end]); if (bytes > 200) break; }
   name = points.slice(0, end).join('').replace(/[.\s]+$/, '').replace(RESERVED, '$1_');
   return name || fallback;
 }
 function folderParts(value) { return text(value).split(/[\\/]+/).map(part => sanitizeName(part, '')).filter(Boolean); }
 // Two names that are the same file on a case-insensitive file system.
-export const key = name => String(name).normalize('NFC').toLowerCase();
+export const key = name => { const text = String(name); return (/^[\x20-\x7e]*$/.test(text) ? text : text.normalize('NFC')).toLowerCase(); };
 
 // ---- Placement -----------------------------------------------------------
 
