@@ -12,13 +12,6 @@ export function itemWroteFact(item: RevertableItem): boolean {
   return !!item.target_entity_id && (["claim", "claims"].includes(item.target_entity_type || "") || !!item.applied_at);
 }
 export class FactNotRevertible extends Error {}
-const NOT_REVERTIBLE="This fact cannot be undone: it was merged with another fact or has changed since. Edit it on the profile instead.";
-export function factRevertBlockReason(item: RevertableItem): string | null {
-  if(!item.target_entity_id)return null;
-  const info=item.payload?.fact_store_switch || {};
-  if(info.revertible===false || info.entry_missing===true)return NOT_REVERTIBLE;
-  return ["claim", "claims"].includes(item.target_entity_type || "") ? null : NOT_REVERTIBLE;
-}
 export function itemClaimIds(item: RevertableItem): string[] {
   const extra=Array.isArray(item.payload?.claim_ids)?item.payload!.claim_ids.map(String):[];
   return [...new Set([item.target_entity_id,...extra].filter((id): id is string=>!!id))];

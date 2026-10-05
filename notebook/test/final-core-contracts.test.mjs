@@ -61,7 +61,7 @@ test('Undo validates all targets before mutation and refuses legacy receipts hon
  const env=fixture(t);env.domains.writeFact({label:'Home city',value:'Town A'});const item=review(env.store);await env.domains.invoke('review-queue-bulk',{action:'keep',ids:[item.id]});
  const targets=env.store.get('review_queue',item.id).applied_targets;assert.ok(targets.length>=3);const late=targets.at(-1);env.store.save(late.type,{id:late.id,label:'Later edit',value:late.type==='claims'?'Town C':undefined});
  const hashes=targets.map(x=>env.store.get(x.type,x.id)._hash),undo=await env.domains.invoke('review-queue-bulk',{action:'rollback',ids:[item.id]});assert.equal(undo.succeeded,0);assert.equal(undo.errors.length,1);assert.deepEqual(targets.map(x=>env.store.get(x.type,x.id)._hash),hashes);assert.equal(env.store.get('review_queue',item.id).status,'kept');
- const legacy=env.store.save('review_queue',{suggestion_type:'add_profile_entry',status:'kept',applied_at:new Date().toISOString(),payload:{value:'Legacy'}}),result=await env.domains.invoke('review-queue-bulk',{action:'rollback',ids:[legacy.id]});assert.equal(result.succeeded,0);assert.match(result.errors[0].error,/receipt|evidence/);assert.equal(env.store.get('review_queue',legacy.id).status,'kept');
+ const legacy=env.store.save('review_queue',{suggestion_type:'add_profile_entry',status:'kept',applied_at:new Date().toISOString(),payload:{value:'Legacy'}}),result=await env.domains.invoke('review-queue-bulk',{action:'rollback',ids:[legacy.id]});assert.equal(result.succeeded,0);assert.match(result.errors[0].error,/cannot undo/);assert.equal(env.store.get('review_queue',legacy.id).status,'kept');
 });
 
 test('visible Never Again payload persists suppression and job counts match actual results',async t=>{
@@ -73,7 +73,7 @@ test('actual UI request adapter uses the same Keep, individual Undo, Never Again
  env.domains.writeFact({label:'Home city',value:'Town A'});const item=review(env.store),kept=await runReviewOperation(client,'keep');assert.equal(reviewJobCounts(env.store.get('review_queue_bulk_jobs',kept.job_id)).succeeded,1);const saved=env.store.get('review_queue',item.id);assert.equal(saved.target_entity_type,'claim');assert.equal(env.store.get('claims',saved.target_entity_id).value,'Town B');
  await runReviewOperation(client,'rollback',[item.id]);assert.deepEqual(env.query.rows('profile_facts').filter(r=>r.is_current).map(r=>r.value),['Town A']);
  const rejected=review(env.store,'Wrong town');await runReviewOperation(client,'never_again',[rejected.id]);assert.equal(env.domains.writeFact(rejected.payload).facts[0].outcome,'suppressed');assert.deepEqual(payloads,[{action:'keep',scope:'all'},{action:'rollback',scope:{ids:[item.id]}},{action:'never_again',scope:{ids:[rejected.id]}}]);
- const legacy=env.store.save('review_queue',{status:'kept',applied_at:'2026-10-04T00:00:00Z',suggestion_type:'add_profile_entry'});await assert.rejects(runReviewOperation(client,'rollback',[legacy.id]),/receipt/);
+ const legacy=env.store.save('review_queue',{status:'kept',applied_at:'2026-10-04T00:00:00Z',suggestion_type:'add_profile_entry'});await assert.rejects(runReviewOperation(client,'rollback',[legacy.id]),/cannot undo/);
 });
 
 test('existing assistant updates succeed only with the current hash and linked structural hashes',async t=>{

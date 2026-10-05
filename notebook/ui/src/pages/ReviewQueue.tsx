@@ -24,7 +24,7 @@ import { canonicalLabel, isSymmetricLabel, relationshipPairKey, type EntityRef }
 import { relationshipWriteDecision } from "@/lib/profile-integrity";
 import { useAddClaim } from "@/hooks/useClaims";
 import { invalidateFactViews } from "@/hooks/useFacts";
-import { factRevertBlockReason, revertFactItem } from "@/lib/review-fact-revert";
+import { revertFactItem } from "@/lib/review-fact-revert";
 import {runReviewOperation,reviewJobCounts} from "@/lib/review-operation.mjs";
 import { normalizeAttribute, isReservedAttribute } from "@/lib/claims";
 import {
@@ -65,6 +65,8 @@ const typeConfig: Record<string, { icon: typeof UserPlus; label: string; color: 
   unknown_profile_field: { icon: Sparkles, label: "New profile field", color: "text-fuchsia-500" },
 
 };
+// Applied suggestions of these kinds changed people or files in ways the server cannot reverse.
+const FINAL_CHANGES = ["merge_duplicate_person", "merge_profile_entries", "resolve_relationship_conflict", "media_conflict"];
 
 const truncateText = (text: string | null | undefined, length = 200) => {
   const value = (text || "").replace(/\s+/g, " ").trim();
@@ -1090,12 +1092,8 @@ export default function ReviewQueue() {
             const config = typeConfig[item.suggestion_type] || typeConfig.link_note;
             const Icon = config.icon;
             const payload = item.payload as any;
-            // An applied profile fact that can no longer be rolled back (merged, or edited since).
-            const revertBlocked =
-              (item.suggestion_type === "add_profile_entry" || item.suggestion_type === "unknown_profile_field") &&
-              item.applied_at
-                ? factRevertBlockReason(item)
-                : null;
+            // A merge that already happened cannot be taken back from here.
+            const carriedOut = !!item.applied_at && FINAL_CHANGES.includes(item.suggestion_type);
 
             return (
               <Card key={item.id} className="transition-all hover:shadow-lg">
@@ -1251,6 +1249,8 @@ export default function ReviewQueue() {
                     {item.suggestion_type === "normalize_profile_entry" ? (
                       // The normalizer is retired; its suggestions are superseded.
                       <span className="text-xs text-muted-foreground">No longer needed</span>
+                    ) : carriedOut ? (
+                      <span className="text-xs text-muted-foreground">Already carried out</span>
                     ) : (
                     <div className="flex gap-2">
                       <Button
@@ -1258,8 +1258,7 @@ export default function ReviewQueue() {
                         variant="ghost"
                         className="text-destructive hover:text-destructive"
                         onClick={() => handleBlock(item)}
-                        disabled={updateStatus.isPending || isBulkRunning || inFlight.has(item.id) || !!revertBlocked}
-                        title={revertBlocked || undefined}
+                        disabled={updateStatus.isPending || isBulkRunning || inFlight.has(item.id)}
                       >
                         <X className="h-4 w-4 mr-1" />
                         Never Again
@@ -1268,8 +1267,7 @@ export default function ReviewQueue() {
                         size="sm"
                         variant="ghost"
                         onClick={() => handleRemove(item)}
-                        disabled={updateStatus.isPending || isBulkRunning || inFlight.has(item.id) || !!revertBlocked}
-                        title={revertBlocked || undefined}
+                        disabled={updateStatus.isPending || isBulkRunning || inFlight.has(item.id)}
                       >
                         <RotateCcw className="h-4 w-4 mr-1" />
                         Roll Back

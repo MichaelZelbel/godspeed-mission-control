@@ -1,7 +1,7 @@
 import { slug, hash } from './records/store.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
-import { Review } from './review.mjs';
+import { Review,factSubject,factSuppressed } from './review.mjs';
 import {assertAssistantRecord} from './assistant-mutations.mjs';
 import { fileContext } from './context.mjs';
 import {Connectors} from './connectors.mjs';
@@ -23,8 +23,7 @@ export class Domains {
     const subject_type = input.entity_id ? 'entity' : input.contact_id ? 'contact' : input.subject_type||'self', subject_id = input.entity_id || input.contact_id || input.subject_id || null;
     const attribute = input.attribute || slug(input.label).replaceAll('-', '_'), value = String(input.value || '').trim();
     if (!attribute || !value) throw new Error('A fact needs a label and value');
-    const suppressed = this.query.rows('ai_suggestion_suppressions').find(s => (s.subject_type === subject_type && s.subject_id === subject_id && s.attribute === attribute && s.value === value)||s.suppression_key===`${subject_type}:${subject_id||''}:${attribute}:${value.toLowerCase()}`);
-    if (suppressed) return { ok: true, facts: [{ attribute, outcome: 'suppressed', reason: 'Previously rejected by the user' }] };
+    if (factSuppressed(this.query,{subject_type,subject_id,attribute,value})) return { ok: true, facts: [{ attribute, outcome: 'suppressed', reason: 'Previously rejected by the user' }] };
     return this.store.withLock(() => {
       const claims = this.query.rows('claims').filter(r => r.subject_type === subject_type && r.subject_id === subject_id && r.attribute === attribute);
       if(this.assistant)for(const claim of claims)assertAssistantRecord(this.query,'claims',claim.id);
@@ -205,6 +204,8 @@ export class Domains {
       for (const suggestion of suggestions.suggestions || []) {
         const fingerprint = hash([source.uid, suggestion.type, suggestion.payload]);
         if (this.query.rows('review_queue').some(r => r.fingerprint === fingerprint)) continue;
+        // A fact the person answered with Never Again is not proposed again.
+        if (['add_profile_entry','add_claim'].includes(suggestion.type)&&factSuppressed(this.query,{...factSubject(suggestion.payload||{}),value:String(suggestion.payload?.value||'').trim()})) continue;
         saved.push(this.store.save('review_queue', { title: suggestion.title || 'Review suggestion', suggestion_type: suggestion.type, payload: suggestion.payload || {}, description: suggestion.evidence_quote || null, source_note_id: input.note_id || null, fingerprint, status: 'pending_review', origin: 'ai', confidence_score: suggestion.confidence || null }));
       }
       return { success: true, suggestions: saved.map(r=>({...r,...r.payload,review_id:r.id})), processed: saved.length,created:0,linked:0,message:'Saved '+saved.length+' proposals for review.' };
