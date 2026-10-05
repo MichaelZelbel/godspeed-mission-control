@@ -56,7 +56,11 @@ export class FileSync {
     // never rewritten.
     const own=path.join(store.state,'sync.git');this.gitDir=!this.folder&&fs.existsSync(own)?own:null;
   }
-  gitBytes(args,cwd=this.store.root,{env={},timeout=30000,input}={}){if(this.gitDir&&cwd===this.store.root)args=['--git-dir='+this.gitDir,'--work-tree='+this.store.root,...args];return execFileSync('git',args,{cwd,windowsHide:true,timeout,maxBuffer:256*1024*1024,env:{...process.env,GIT_TERMINAL_PROMPT:'0',GCM_INTERACTIVE:'Never',...env},...(input===undefined?{stdio:['ignore','pipe','pipe']}:{input,stdio:['pipe','pipe','pipe']})});}
+  // Notes are named after their titles, so a long title in a deep folder can
+  // pass Windows' 260-character path limit, which Git for Windows refuses
+  // unless told otherwise. Node writes such a file fine; without this, sync
+  // would stop at it on Windows only.
+  gitBytes(args,cwd=this.store.root,{env={},timeout=30000,input}={}){if(this.gitDir&&cwd===this.store.root)args=['--git-dir='+this.gitDir,'--work-tree='+this.store.root,...args];if(process.platform==='win32')args=['-c','core.longpaths=true',...args];return execFileSync('git',args,{cwd,windowsHide:true,timeout,maxBuffer:256*1024*1024,env:{...process.env,GIT_TERMINAL_PROMPT:'0',GCM_INTERACTIVE:'Never',...env},...(input===undefined?{stdio:['ignore','pipe','pipe']}:{input,stdio:['pipe','pipe','pipe']})});}
   git(args,cwd=this.store.root,options){return this.gitBytes(args,cwd,options).toString('utf8').trim();}
   // File names exactly as Git has them. Its line output quotes a name with an
   // umlaut or an emoji, and notes are named after their titles; `args` must
@@ -361,8 +365,14 @@ export class FileSync {
     this.validate();
     const list=path.join(this.store.state,'sync-paths');atomic(list,files.join('\0')+'\0');
     const options={env:this.identity(),timeout:120000};
-    this.git([...this.quiet(),'--literal-pathspecs','add','-A','--pathspec-from-file='+list,'--pathspec-file-nul'],undefined,options);
-    try{this.git([...this.quiet(),'--literal-pathspecs','commit','--only','--no-status','-m','Save notebook records','--pathspec-from-file='+list,'--pathspec-file-nul'],undefined,options);}
+    // On a file system that ignores case, Git files a new path under the
+    // spelling of a folder it already tracks: with the old collections/ still
+    // in the index, Collections/Books.md was committed as collections/Books.md
+    // and never settled. The list above comes from Git's own case-aware status,
+    // so taking each name exactly as written cannot add a second spelling.
+    const exact=['-c','core.ignorecase=false','--literal-pathspecs'];
+    this.git([...this.quiet(),...exact,'add','-A','--pathspec-from-file='+list,'--pathspec-file-nul'],undefined,options);
+    try{this.git([...this.quiet(),...exact,'commit','--only','--no-status','-m','Save notebook records','--pathspec-from-file='+list,'--pathspec-file-nul'],undefined,options);}
     // Another commit (a session's) may have taken these paths first.
     catch(error){if(this.folderChanges().length)throw error;}
     return true;
