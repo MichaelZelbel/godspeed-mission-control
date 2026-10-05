@@ -71,7 +71,7 @@ const RESERVED = /^(con|prn|aux|nul|com[0-9\u00b9\u00b2\u00b3]|lpt[0-9\u00b9\u00
 // name Windows reserves, and at most 200 bytes, so " 999.md" and the
 // temporary name of a safe write (41 more) still fit the file system's 255.
 export function sanitizeName(value, fallback = 'Untitled') {
-  let name = text(value).normalize('NFC').replace(/[<>:"/\\|?*\u0000-\u001f\u007f]/g, '').replace(/\s+/g, ' ').trim().replace(/^[.\s]+/, '');
+  let name = text(value).normalize('NFC').replace(/[<>:"/\\|?*]/g, '').replace(/\s+/g, ' ').replace(/[\u0000-\u001f\u007f]/g, '').trim().replace(/^[.\s]+/, '');
   const points = [...name]; let bytes = 0, end = 0;
   for (; end < points.length && end < 200; end++) { bytes += Buffer.byteLength(points[end]); if (bytes > 200) break; }
   name = points.slice(0, end).join('').replace(/[.\s]+$/, '').replace(RESERVED, '$1_');
@@ -145,7 +145,13 @@ const FRONTMATTER = /^---[ \t]*\r?\n(?:([\s\S]*?)\r?\n)?---[ \t]*(?:\r?\n([\s\S]
 // not a record (an owner's own page in the folder): NotARecord, not an error.
 export function decode(source, file) {
   if (file.endsWith('.json')) {
-    const record = contract(JSON.parse(source));
+    // Outside the system folder, a JSON file without a record in it is the
+    // owner's, as a Markdown page without one is.
+    const system = path.basename(path.dirname(path.dirname(file))) === systemFolder;
+    let value;
+    try { value = JSON.parse(source); } catch (error) { if (system) throw error; throw new NotARecord('Not JSON'); }
+    if (!system && (!value || typeof value !== 'object' || !Object.hasOwn(value, 'uid'))) throw new NotARecord('JSON without a record');
+    const record = contract(value);
     if (record.id !== path.basename(file).replace(/\.json$/, '') || record.type !== path.basename(path.dirname(file))) throw new Error('Record identity differs from path');
     return record;
   }

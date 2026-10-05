@@ -224,12 +224,12 @@ export class Store {
   // under its own name, with " 2", " 3" for a name another file there already
   // has, compared as a file system that ignores case would. Renaming a parent
   // (a collection) also moves the records placed under it: `moved`.
-  planPaths(records,{removeKeys=[],forced=null,proposed=null}={}){
+  planPaths(records,{removeKeys=[],forced=null,proposed=null,cascade=true}={}){
     if(!this.records)this.scan();
     const keyOf=r=>r.type+'/'+r.id,relative=file=>posix(path.relative(this.recordsRoot,file));
     const view=proposed||new Map([...this.records,...records.map(r=>[keyOf(r),r])]),find=(type,id)=>view.get(type+'/'+id);
     const batch=new Map(records.map(r=>[keyOf(r),r])),moved=[];
-    for(const record of records)for(const child of childrenOf.get(record.type)||[])for(const [k,r] of this.records){
+    if(cascade)for(const record of records)for(const child of childrenOf.get(record.type)||[])for(const [k,r] of this.records){
       if(r.type!==child.type||r[child.field]!==record.id||batch.has(k))continue;
       const file=this.fileOf.get(k);if(!file||fits(r,relative(file),find))continue;
       const copy={...r};delete copy._hash;moved.push(copy);batch.set(k,copy);
@@ -284,8 +284,9 @@ export class Store {
     return pending.map(r=>({record:r,type:r.type,id:r.id,from:relative(this.fileOf.get(r.type+'/'+r.id)),to:targets.get(r.type+'/'+r.id)}));
   }
   // `paths` places records at given files (relative to notebook/), for a
-  // merge that already decided where each one is.
-  commit(records,{removeKeys=[],files=[],paths=null}={}) {
+  // merge or a conversion that already decided where each one is; then
+  // nothing else moves (`cascade` false).
+  commit(records,{removeKeys=[],files=[],paths=null,cascade=!paths}={}) {
     this.scan();
     const history=[];
     for(const record of records){
@@ -310,7 +311,7 @@ export class Store {
       if(!r.removed_at)for(const alias of [r.id,...r.aliases||[]]){const key=r.type+'/'+alias.toLowerCase();if(aliases.has(key)&&aliases.get(key)!==r.uid)errors.push({error:'Ambiguous case-insensitive identity or alias',alias});aliases.set(key,r.uid);}
     }
     if (errors.length) throw new Error('Reference validation failed: ' + JSON.stringify(errors));
-    const {targets,moved}=this.planPaths(records,{removeKeys,forced:paths,proposed});records=[...records,...moved];
+    const {targets,moved}=this.planPaths(records,{removeKeys,forced:paths,proposed,cascade});records=[...records,...moved];
     const fileAt=record=>path.join(this.recordsRoot,...targets.get(record.type+'/'+record.id).split('/')),written=new Set(records.map(fileAt));
     const tx = randomUUID(), dir = path.join(this.state, 'transactions', tx); fs.mkdirSync(dir, { recursive: true });
     const manifest=[];
@@ -358,7 +359,7 @@ export class Store {
       if (fileOf.has(key)) { if (fileOf.get(key) !== file) dropped.add(fileOf.get(key)); release(key, fileOf.get(key)); }
       fresh._hash = hash(encode(fresh)); view.set(key, fresh); fileOf.set(key, file); keyOfUid.set(fresh.uid, key); written.add(file);
       keyOfFile.set(file, key); pathIndex.set(nameOf(file), [...(pathIndex.get(nameOf(file)) || []).filter(h => h !== key && h !== null), key]);
-      this.decodedCache?.set(file, { text, record: structuredClone(fresh) });
+      this.decodedCache?.set(file, { text, record: structuredClone(fresh) }); this.documents?.delete(file);
     }
     for (const file of dropped) if (!written.has(file)) this.decodedCache?.delete(file);
     if (removeKeys.length) for (const [uid, key] of keyOfUid) if (!view.has(key)) keyOfUid.delete(uid);

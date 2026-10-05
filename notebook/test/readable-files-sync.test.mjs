@@ -104,6 +104,25 @@ for(const mode of ['folder','knowledge']){
     assert.match(read(a.dir,'notebook','Meeting notes.md'),/Laptop meeting/,'The machine that merged keeps its own note under the plain name');
   });
 
+  test(mode+': a note trashed on one machine while edited on the other ends in the trash with the edit',()=>{
+    const {a,b}=machines(mode),note=a.store.save('notes',{title:'Old idea',folder_path:'Ideas',content:'v1\n'});
+    round(a,b);
+    edit(a.store,'notes',note.id,{is_trashed:true});edit(b.store,'notes',note.id,{content:'v1\nmore\n'});
+    round(b,a,b);
+    for(const m of [a,b]){assert.deepEqual(notebookFiles(m.dir),['Trash/Ideas/Old idea.md']);const r=m.store.get('notes',note.id);assert.equal(r.is_trashed,true);assert.equal(r.content,'v1\nmore\n');}
+  });
+
+  test(mode+': a record removed on one machine while edited on the other leaves the readable folders, edit kept',()=>{
+    const {a,b}=machines(mode),thing=a.store.save('entities',{name:'Acme',description:'A company'});
+    round(a,b);
+    a.store.structural('entities',thing.id,'remove');edit(b.store,'entities',thing.id,{description:'A company in Berlin'});
+    round(a,b,a);
+    for(const m of [a,b]){
+      const r=m.store.list('entities',{removed:true}).find(e=>e.id===thing.id);assert.ok(r.removed_at);assert.equal(r.description,'A company in Berlin');
+      assert.deepEqual(notebookFiles(m.dir),[]);assert.ok(exists(m.dir,'notebook','_system','entities',thing.id+'.md'));
+    }
+  });
+
   test(mode+': a renamed person, edited elsewhere, and a new person under the old name are both kept',()=>{
     const {a,b}=machines(mode),person=a.store.save('contacts',{name:'Alex Example',notes:'Met at the fair\n'});
     round(a,b);
@@ -120,12 +139,12 @@ for(const mode of ['folder','knowledge']){
   });
 }
 
-test('folder: renaming a collection moves its items, on both machines',()=>{
-  const {a,b}=machines('folder'),books=a.store.save('collections',{name:'Books'}),item=a.store.save('collection_items',{collection_id:books.id,title:'Dune',data:{author:'Frank Herbert'}});
+for(const [mode,first] of [['folder','renaming machine'],['folder','editing machine'],['knowledge','renaming machine']])test(mode+': renaming a collection moves its items on both machines, whichever merges ('+first+' syncs first)',()=>{
+  const {a,b}=machines(mode),books=a.store.save('collections',{name:'Books'}),item=a.store.save('collection_items',{collection_id:books.id,title:'Dune',data:{author:'Frank Herbert'}});
   round(a,b);assert.ok(exists(b.dir,'notebook','Collections','Books','Dune.md'));
   a.store.structural('collections',books.id,'display-name',{name:'Novels'});
   edit(b.store,'collection_items',item.id,{data:{author:'Frank Herbert',year:1965}});
-  round(a,b,a);
+  if(first==='renaming machine')round(a,b,a);else round(b,a,b);
   for(const m of [a,b]){
     assert.deepEqual(notebookFiles(m.dir),['Collections/Novels.md','Collections/Novels/Dune.md']);
     assert.deepEqual(m.store.get('collection_items',item.id).data,{author:'Frank Herbert',year:1965});
