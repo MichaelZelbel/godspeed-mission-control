@@ -36,7 +36,7 @@ if(command==='init'){
     const source=path.join(addons,name,'skill',recipe);if(fs.existsSync(source)&&!fs.existsSync(path.join(root,'skills',recipe)))fs.cpSync(source,path.join(root,'skills',recipe),{recursive:true});
   }
   if(fs.existsSync(recipes))for(const name of fs.readdirSync(recipes))installSkillTree(store,path.join(recipes,name),path.join(root,'skills',name),{adopted});
-  const contract=path.join(root,'FULL-ALPHA.md');if(!fs.existsSync(contract))atomic(contract,'# Integrated notebook\n\nThis is the complete Godspeed Mission Control starter with an integrated notebook. AGENTS.md and the original folder workflow remain the operating manual. Notebook records live in records/ alongside those folders. Use the notebook or its MCP tools for notebook edits; use the original commands and readable files for Godspeed work. Credentials and disposable SQLite indexes stay in .godspeed and never enter private Git sync. Connected file sync uses the conflict-preserving reconciler; do not run a second Git synchronizer on the same workspace.\n');
+  const contract=path.join(root,'FULL-ALPHA.md');if(!fs.existsSync(contract))atomic(contract,'# Integrated notebook\n\nThis is the complete Godspeed Mission Control starter with an integrated notebook. AGENTS.md and the original folder workflow remain the operating manual. Notebook records live in notebook/ alongside those folders. Use the notebook or its MCP tools for notebook edits; use the original commands and readable files for Godspeed work. Credentials and disposable SQLite indexes stay in .godspeed and never enter private Git sync. Connected file sync uses the conflict-preserving reconciler; do not run a second Git synchronizer on the same workspace.\n');
   const spec=fs.readFileSync(fileURLToPath(new URL('../../docs/full-version/file-format.md',import.meta.url)),'utf8');
   if(!fs.existsSync(path.join(root,'README.md')))atomic(path.join(root,'README.md'),'# Godspeed Mission Control\n\n'+spec);
   result={initialized:true,preservedExisting:true};
@@ -64,5 +64,6 @@ else if(command==='restore')result=restore(store,media,path.resolve(verb));
 else if(command==='import')result=importExport(query,JSON.parse(fs.readFileSync(verb,'utf8')));
 else if(command==='export')result={format:1,records:[...store.scan().values()].map(r=>{const copy={...r};delete copy._hash;return copy;})};
 else if(command==='validate')result={problems:store.scan()&&store.problems};
-else throw new Error('Commands: init, record list/get/save/merge/remove/display-name, memory search/lookup, world claim/event, backup, restore, import, export, validate');
+else if(command==='sync'&&verb==='folder')result=await (await import('../core/sync/git.mjs')).useFolderRepository(store,rest);
+else throw new Error('Commands: init, record list/get/save/merge/remove/display-name, memory search/lookup, world claim/event, backup, restore, import, export, validate, sync folder [PATH...]');
 console.log(JSON.stringify(result,null,2));

@@ -38,7 +38,7 @@ test('a file that no longer leaves this machine cannot stop synchronization',asy
   fs.mkdirSync(path.join(dir,path.dirname(privateFile)),{recursive:true});
   fs.writeFileSync(path.join(dir,privateFile),body('uploaded before the policy changed'));
   store.save('notes',{title:'Real note',content:'Knowledge that does belong in the repository'});
-  git(dir,'add','--force','--',privateFile,'records');
+  git(dir,'add','--force','--',privateFile,'notebook');
   git(dir,'commit','-m','Older version that synced the assistant archive');
   git(dir,'push','origin','HEAD:refs/heads/main');
 
@@ -65,6 +65,6 @@ test('a file that no longer leaves this machine cannot stop synchronization',asy
   assert.deepEqual(tracked.filter(name=>name.startsWith('assistant-state/history/')),[],'the archive must be out of the repository');
   // And the real edit still reaches the remote.
   const uploaded=git(dir,'ls-tree','-r','--name-only','origin/main').split('\n').filter(Boolean);
-  assert.ok(uploaded.some(name=>name.startsWith('records/notes/')),'notes must still be uploaded: '+uploaded.join(' '));
+  assert.ok(uploaded.some(name=>name.startsWith('notebook/notes/')),'notes must still be uploaded: '+uploaded.join(' '));
   assert.deepEqual(uploaded.filter(name=>name.startsWith('assistant-state/history/')),[],'the archive must be gone from the remote too');
 });

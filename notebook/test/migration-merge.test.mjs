@@ -29,7 +29,7 @@ test('merge preserves current edits and provider, repairs matching references, b
  const conversation=f.store.get('note_conversations','conversation');assert.equal(conversation.references.find(r=>r.type==='notes').uid,old.uid);
  assert.equal(f.store.get('jobs','imported-job').paused,true);
  assert.equal(fs.readFileSync(path.join(f.store.state,'assistant.json'),'utf8'),'{"verified":false,"testMarker":"private existing provider config"}');
- assert.equal(f.store.problems.length,0);assert.ok(fs.existsSync(path.join(f.jobRoot,'backup/records/notes/matching.md')));
+ assert.equal(f.store.problems.length,0);assert.ok(fs.existsSync(path.join(f.jobRoot,'backup/notebook/notes/matching.md')));
  const repeat=planMerge(f.store,f.staged,f.mediaRoot);assert.equal(repeat.records.length,0);assert.equal(repeat.media.length,0);
  assert.ok(fs.existsSync(path.join(f.staged,'.godspeed/migration-source/source/unsupported.json')));
 });

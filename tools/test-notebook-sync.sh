@@ -123,7 +123,7 @@ fi
 # The visible skills/ is the room since the Hermes switch (2026-09-02); .claude/skills
 # is a link the installer makes, and on an older godspeed it may still be the only room.
 mkdir -p "$W/godspeed/observations" "$W/godspeed/skills/plan-my-day" "$W/godspeed/profile" "$W/godspeed/rules" \
-         "$W/godspeed/goals" "$W/godspeed/dev/some-project"
+         "$W/godspeed/goals" "$W/godspeed/dev/some-project" "$W/godspeed/notebook/notes"
 printf 'You proofread before sending.\n' > "$W/godspeed/observations/quirk.md"
 printf '# Plan my day\n'                 > "$W/godspeed/skills/plan-my-day/SKILL.md"
 printf '# About me\n'                    > "$W/godspeed/profile/about-me.md"
@@ -132,6 +132,7 @@ printf '# Health\n'                      > "$W/godspeed/goals/health.md"
 printf '# Manual\n'                      > "$W/godspeed/AGENTS.md"
 printf '# My projects\n'                 > "$W/godspeed/dev/README.md"
 printf '# A project\n'                   > "$W/godspeed/dev/some-project/README.md"
+printf -- '---\n{"id":"n-1"}\n---\nA note\n' > "$W/godspeed/notebook/notes/n-1.md"
 cat > "$W/godspeed/decisions.md" <<'DECEOF'
 # Decisions
 
@@ -193,6 +194,11 @@ if echo "$plan" | grep -q "would create dev/"; then
   bad "dev/ reached the plan, and dev/ never leaves the computer" "$plan"
 else
   ok "dev/ is never sent, not even its README"
+fi
+if echo "$plan" | grep -q "would create notebook/"; then
+  bad "notebook/ reached the plan: the notebook would get its own notes back as new ones" "$plan"
+else
+  ok "notebook/, the notebook kept as files, is never sent back to it"
 fi
 
 # ---- git decides, when there is a git to ask -------------------------------------------

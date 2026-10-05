@@ -21,7 +21,7 @@ export function planWorkspaceMove({root,to,installationFile}){
  const source=path.resolve(root),destination=path.resolve(to||'');noLinks(source);noLinks(destination);const selected=setup(source,installationFile);
  if(!to||normalized(source)===normalized(destination)||contained(destination,source)||contained(source,destination)||fs.existsSync(destination))throw Error('Choose an absent destination outside the current workspace');
  if(contained(selected.file,destination))throw Error('The installation pointer must also live outside the destination');
- if(!fs.existsSync(path.join(source,'FULL-ALPHA.md'))||!fs.existsSync(path.join(source,'records')))throw Error('Only the selected isolated test workspace can be moved by this helper');
+ if(!fs.existsSync(path.join(source,'FULL-ALPHA.md'))||!['notebook','records'].some(name=>fs.existsSync(path.join(source,name))))throw Error('Only the selected isolated test workspace can be moved by this helper');
  const files=inventory(source);let active=false;try{stopped(source);}catch{active=true;}
  return {format:1,source,destination,installation_file:selected.file,installation_hash:selected.config_hash,files,file_count:Object.keys(files).length,files_hash:hash(Object.entries(files).sort(([a],[b])=>a.localeCompare(b))),requires_owned_stop:active,retains_original:true,old_path_alias:true,scope:'Only this selected workspace and its explicit installation pointer; other apps and sessions are untouched'};
 }

@@ -147,7 +147,7 @@ test('a sync round with nothing new does not read the whole vault while holding 
 test('a sync round with a saved conflict still refuses, even with nothing new to upload',()=>{
   const {a}=fixture(),A=new FileSync(a);
   fs.mkdirSync(path.join(a.root,'conflicts'),{recursive:true});
-  atomic(path.join(a.root,'conflicts','pending.json'),JSON.stringify({id:'pending',path:'records/notes/x.md'}));
+  atomic(path.join(a.root,'conflicts','pending.json'),JSON.stringify({id:'pending',path:'notebook/notes/x.md'}));
   assert.equal(A.reconcile().state,'conflict');
 });
 

@@ -17,6 +17,6 @@ test('separate recovery checks preserve event-loop progress, share concurrent wo
 test('a failed recovery worker refuses changed backup bytes without touching the live workspace',async()=>{
  const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-recovery-worker-fail-'))),media=path.join(store.state,'media');fs.mkdirSync(media);
  store.save('notes',{id:'fictional-preserved',content:'Live fictional content'});const source=path.join(store.state,'backups','fixture');backup(store,media,source);
- fs.appendFileSync(path.join(source,'records/notes/fictional-preserved.md'),'\nUnapproved alteration');
+ fs.appendFileSync(path.join(source,'notebook/notes/fictional-preserved.md'),'\nUnapproved alteration');
  await assert.rejects(new RecoveryRunner(store).run(source),/integrity mismatch/);assert.equal(store.get('notes','fictional-preserved').content,'Live fictional content');
 });

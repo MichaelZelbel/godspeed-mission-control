@@ -17,7 +17,7 @@ export async function briefing(job,{store,query,provider}){
  if(job.rehearsal){
   const copy=path.join(store.state,'brief-rehearsals',randomUUID());fs.mkdirSync(copy,{recursive:true,mode:0o700});
   await store.waitForWriter();await store.withLockAsync(()=>{
-   fs.cpSync(store.recordsRoot,path.join(copy,'records'),{recursive:true,preserveTimestamps:true});
+   fs.cpSync(store.recordsRoot,path.join(copy,path.basename(store.recordsRoot)),{recursive:true,preserveTimestamps:true});
    for(const name of ['profile','rules','due','coach','journal','routines/headache']){const source=path.join(store.root,name);if(fs.existsSync(source))fs.cpSync(source,path.join(copy,name),{recursive:true,preserveTimestamps:true});}
    // file-newer tests only existence and mtime. Reproduce that evidence without
    // copying unrelated deliverables or credential contents into the rehearsal.

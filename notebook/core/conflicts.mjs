@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {atomic,decode,hash,safe} from './records/store.mjs';
-import {durable} from './file-policy.mjs';
+import {durable,isRecordPath} from './file-policy.mjs';
 
 function retained(store,id){
   safe(id);const file=path.join(store.root,'conflicts',id+'.json');
@@ -62,7 +62,7 @@ export function resolveSavedConflict(store,{id,choice,text,expected_hash},{assis
         if(value.id!==conflict.record_id||value.uid!==current.uid)throw Error('A merged edit must keep the original record identity');
         if(conflict.type==='moments')throw Error('Events are append-only; add a correction event');
         store.commit([store.prepare(conflict.type,value,current)]);
-      }else if(conflict.kind==='git'&&conflict.path.startsWith('records/')){
+      }else if(conflict.kind==='git'&&isRecordPath(conflict.path)){
         const value=decode(Buffer.isBuffer(selected)?selected.toString('utf8'):selected,target),current=decode(before.toString('utf8'),target);
         if(value.id!==current.id||value.uid!==current.uid||value.type!==current.type)throw Error('A merged edit must keep the original record identity');
         if(current.type==='moments')throw Error('Events are append-only; add a correction event');

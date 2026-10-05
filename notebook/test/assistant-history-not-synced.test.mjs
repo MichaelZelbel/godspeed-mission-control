@@ -36,7 +36,7 @@ test('the assistant state archive is never staged for the knowledge repository',
   store.save('notes',{title:'Real note','content':'Knowledge that does belong in the repository'});
   sync.commitLocal();
   const tracked=git(dir,'ls-files').split('\n').filter(Boolean);
-  assert.ok(tracked.some(name=>name.startsWith('records/notes/')),'notes must still be synced: '+tracked.join(' '));
+  assert.ok(tracked.some(name=>name.startsWith('notebook/notes/')),'notes must still be synced: '+tracked.join(' '));
   assert.ok(tracked.includes(current.replaceAll(path.sep,'/')),'the current assistant snapshot must still be synced');
   assert.deepEqual(tracked.filter(name=>name.startsWith('assistant-state/history/')),[],'the history archive must not be synced');
   // The archive is still written and still backed up on this machine; what it
@@ -81,7 +81,7 @@ test('an older ignore file cannot put the archive back',()=>{
   sync.commitLocal();
   const tracked=sync.gitBytes(['ls-files','-z']).toString('utf8').split('\0').filter(Boolean);
   assert.deepEqual(tracked.filter(n=>n.startsWith('assistant-state/history/')),[],'the archive must stay out whatever the ignore file says');
-  assert.ok(tracked.some(n=>n.startsWith('records/notes/')),'real records must still be synced');
+  assert.ok(tracked.some(n=>n.startsWith('notebook/notes/')),'real records must still be synced');
 });
 
 // durableRoots holds nested paths (routines/journal, routines/headache). The

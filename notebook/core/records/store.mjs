@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID, createHash } from 'node:crypto';
-import { durable,durableRoots,durableFiles } from '../file-policy.mjs';
+import { durable,durableRoots,durableFiles,recordsFolder,legacyRecordsFolder } from '../file-policy.mjs';
 const CACHE_BYTES = 1024 * 1024 * 1024;
 
 export const hash = value => createHash('sha256').update(Buffer.isBuffer(value) || typeof value === 'string' ? value : JSON.stringify(value)).digest('hex');
@@ -43,9 +43,17 @@ export function decode(text, file) {
 export class Store {
   constructor(root, { device = 'local', failAfter = null } = {}) {
     this.root = path.resolve(root); this.device = safe(device); this.failAfter = failAfter;
-    this.recordsRoot = path.join(this.root, 'records'); this.state = path.join(this.root, '.godspeed');
-    fs.mkdirSync(this.recordsRoot, { recursive: true }); fs.mkdirSync(this.state, { recursive: true });
-    this.withLock(() => this.recover()); this.scan();
+    this.recordsRoot = path.join(this.root, recordsFolder); this.state = path.join(this.root, '.godspeed');
+    fs.mkdirSync(this.state, { recursive: true });
+    this.withLock(() => { this.moveLegacyRecords(); fs.mkdirSync(this.recordsRoot, { recursive: true }); this.recover(); }); this.scan();
+  }
+  // Records lived in records/ until 2026-10-05. A workspace that still has that
+  // folder, and no notebook folder yet, has it renamed once, before any pending
+  // transaction is replayed into it.
+  moveLegacyRecords() {
+    const legacy = path.join(this.root, legacyRecordsFolder);
+    if (fs.existsSync(this.recordsRoot) || !fs.existsSync(legacy) || !fs.lstatSync(legacy).isDirectory()) return;
+    fs.renameSync(legacy, this.recordsRoot);
   }
   withLock(fn) {
     const lock = path.join(this.state, 'workspace.lock');
@@ -256,8 +264,10 @@ export class Store {
   }
   applyTransaction(dir, manifest) {
     for (let i = 0; i < manifest.length; i++) {
-      const item = manifest[i], file = path.resolve(this.root, item.file);
-      if (!file.startsWith(this.root + path.sep)||!(durable(item.file.replaceAll('\\','/'))||/^conflicts\/[\w-]+\.json$/.test(item.file))) throw new Error('Invalid transaction target');
+      // A transaction an older version prepared still names records/; it is
+      // replayed into the folder those records were moved to.
+      const item = manifest[i], name = item.file.replaceAll('\\','/').replace(new RegExp('^'+legacyRecordsFolder+'/'), recordsFolder+'/'), file = path.resolve(this.root, name);
+      if (!file.startsWith(this.root + path.sep)||!(durable(name)||/^conflicts\/[\w-]+\.json$/.test(name))) throw new Error('Invalid transaction target');
       if(item.delete){if(fs.existsSync(file))fs.unlinkSync(file);continue;}
       const text = fs.readFileSync(path.join(dir, item.staged));
       if (hash(text) !== item.hash) throw new Error('Corrupt transaction stage');
@@ -336,7 +346,7 @@ export class Store {
   }
   restore(source) {
     if (this.scan().size) throw new Error('Restore requires an empty workspace');
-    for(const name of [...durableRoots.filter(r=>r!=='records'),...durableFiles])if(fs.existsSync(path.join(this.root,name)))throw new Error('Restore requires empty durable state');
+    for(const name of [...durableRoots.filter(r=>r!==recordsFolder),...durableFiles])if(fs.existsSync(path.join(this.root,name)))throw new Error('Restore requires empty durable state');
     const manifest = JSON.parse(fs.readFileSync(path.join(source, 'backup.json'), 'utf8')); if (manifest.format !== 1) throw new Error('Unsupported backup format');
     return this.withLock(() => {
       const checked=new Store(source);if(checked.problems.length)throw new Error('Backup records need review');

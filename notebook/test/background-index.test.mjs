@@ -39,7 +39,7 @@ test('concurrent background refreshes coalesce and foreground rebuild cannot be 
 
 test('actual file indexing leaves static and authentication requests responsive',async t=>{
   const root=temporary(),ui=path.join(root,'.fixture-ui');fs.mkdirSync(ui);fs.writeFileSync(path.join(ui,'index.html'),'<html>Fictional dashboard</html>');
-  const folder=path.join(root,'records','notes');fs.mkdirSync(folder,{recursive:true});
+  const folder=path.join(root,'notebook','notes');fs.mkdirSync(folder,{recursive:true});
   for(let i=0;i<1500;i++)fs.writeFileSync(path.join(folder,`fictional-${i}.md`),encode({format:1,type:'notes',id:`fictional-${i}`,uid:`fictional-${i}`,title:`Fictional ${i}`,content:'Fictional actual-byte fixture. '.repeat(100)}));
   const service=await createService({root,uiRoot:ui,port:0}),url=`http://127.0.0.1:${service.address.port}`;
   try{

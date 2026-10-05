@@ -1,6 +1,6 @@
 # User files
 
-Format 1 records live in `records/<type>/<id>.json`. Notes use `.md`, JSON frontmatter between `---` delimiters and a Markdown body. IDs and UUIDs never change during ordinary edits. Aliases retain earlier names; UUID references identify the actual target. New readable IDs include eight UUID characters so offline same-name creations remain separate.
+Format 1 records live in `notebook/<type>/<id>.json`, so a notebook is one folder of the mission control named for what it is (it was `records/` until 2026-10-05; a workspace that still has that folder has it renamed once when it is opened, and a pending transaction written under the old name is replayed into the new one). Notes use `.md`, JSON frontmatter between `---` delimiters and a Markdown body. IDs and UUIDs never change during ordinary edits. Aliases retain earlier names; UUID references identify the actual target. New readable IDs include eight UUID characters so offline same-name creations remain separate.
 
 Every record carries `format`, `type`, `id`, `uid`, `revision`, `device`, `created_at`, `updated_at`, `aliases` and typed `references`. Collection schemas, row values, favorites, comments, review decisions, schedules and receipts are records. Profile claims close earlier validity; timeline edits append correction records. Earlier record contents are immutable snapshots under `record_history`.
 
