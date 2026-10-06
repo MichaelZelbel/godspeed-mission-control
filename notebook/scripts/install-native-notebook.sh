@@ -6,7 +6,12 @@ root=${1:?The original installer must supply its Godspeed folder}
 root=$(cd "$root" && pwd -P)
 state="$root/.godspeed/integrated-runtime"
 mkdir -p "$state"
-revision=${GODSPEED_PRODUCT_REF:-codex/godspeed-v2-completeness}
+# One exact version, named by the installer that runs this. Until 6 October 2026 it
+# defaulted to the development branch, so two installs a day apart got different code.
+revision=${GODSPEED_PRODUCT_REF:-}
+if ! [[ "$revision" =~ ^[0-9a-f]{40}$ ]] && [ "${GODSPEED_ALLOW_MOVING_REF:-}" != 1 ]; then
+  echo 'Run the published installer: it names the exact version to install.' >&2; exit 1
+fi
 if [ ! -d "$state/source/.git" ]; then
   git clone --no-checkout https://github.com/MichaelZelbel/godspeed-mission-control.git "$state/source"
 fi
@@ -16,6 +21,8 @@ npm --prefix "$state/source/notebook/ui" ci --no-audit --no-fund
 npm --prefix "$state/source/notebook/ui" run build
 export GODSPEED_WORKSPACE="$root" GODSPEED_ORIGINAL_RUNTIME=on
 export GODSPEED_PORT=${GODSPEED_PORT:-47831} GODSPEED_BIND=127.0.0.1
+# The machine's name in the notebook; the one named owner runs the routines.
+export GODSPEED_DEVICE=${GODSPEED_DEVICE:-local} GODSPEED_MEDIA_ROOT=${GODSPEED_MEDIA_ROOT:-$state/media}
 original_home=${HERMES_HOME:-$HOME/.hermes}
 export HERMES_HOME="$original_home"
 if [ "${GODSPEED_INTEGRATED_BESIDE:-}" = 1 ]; then
@@ -32,6 +39,10 @@ fi
 assistant=$(command -v hermes || true)
 [ -n "$assistant" ] || { echo 'The original installer has not installed Hermes yet.' >&2; exit 1; }
 node "$state/source/notebook/bin/godspeed.mjs" init
+# Joining: a mission control that is its own Git repository carries the notebook in it.
+if [ ! -f "$root/.godspeed/sync-config.json" ] && git -C "$root" remote get-url origin >/dev/null 2>&1; then
+  node "$state/source/notebook/bin/godspeed.mjs" sync folder || echo 'The notebook was not joined to the repository; it works on this machine alone until it is.' >&2
+fi
 node "$state/source/notebook/scripts/wire-assistant.mjs" "$HERMES_HOME"
 node --input-type=module - "$assistant" <<'NODE'
 import fs from 'node:fs';import path from 'node:path';
@@ -39,7 +50,7 @@ fs.writeFileSync(path.join(process.env.GODSPEED_WORKSPACE,'.godspeed/assistant.j
 NODE
 node --input-type=module - "$state" <<'NODE'
 import fs from 'node:fs';import path from 'node:path';
-const state=process.argv[2],env=Object.fromEntries(['GODSPEED_WORKSPACE','GODSPEED_ORIGINAL_RUNTIME','GODSPEED_PORT','GODSPEED_BIND','HERMES_HOME'].map(k=>[k,process.env[k]]));
+const state=process.argv[2],env=Object.fromEntries(['GODSPEED_WORKSPACE','GODSPEED_ORIGINAL_RUNTIME','GODSPEED_PORT','GODSPEED_BIND','HERMES_HOME','GODSPEED_DEVICE','GODSPEED_MEDIA_ROOT'].map(k=>[k,process.env[k]]));
 fs.writeFileSync(path.join(state,'start.mjs'),`import {spawn} from 'node:child_process';const p=spawn(${JSON.stringify(process.execPath)},[${JSON.stringify(path.join(state,'source/notebook/scripts/supervise.mjs'))}],{stdio:'inherit',env:{...process.env,...${JSON.stringify(env)}}});for(const s of ['SIGTERM','SIGINT'])process.on(s,()=>p.kill(s));p.on('exit',c=>process.exit(c||0));`,{mode:0o600});
 NODE
 if command -v systemctl >/dev/null; then

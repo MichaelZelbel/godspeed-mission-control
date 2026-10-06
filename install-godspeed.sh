@@ -15,5 +15,10 @@ for ((i=0;i<$#;i++)); do
 done
 SCRIPT=$(curl -fsSL "$ENGINE")
 bash -c "$SCRIPT" setup-godspeed --starter-repo "$STARTER" --godspeed "$root" "$@"
-hook=$(curl -fsSL https://raw.githubusercontent.com/MichaelZelbel/godspeed-mission-control/codex/godspeed-v2-completeness/notebook/scripts/install-native-notebook.sh)
+# The development installer takes the branch's newest commit, named exactly, so the
+# hook and the code it installs are the same version (the published one in installers/
+# names a release instead).
+GODSPEED_PRODUCT_REF=${GODSPEED_PRODUCT_REF:-$(git ls-remote https://github.com/MichaelZelbel/godspeed-mission-control.git refs/heads/codex/godspeed-v2-completeness | cut -f1)}
+export GODSPEED_PRODUCT_REF
+hook=$(curl -fsSL "https://raw.githubusercontent.com/MichaelZelbel/godspeed-mission-control/$GODSPEED_PRODUCT_REF/notebook/scripts/install-native-notebook.sh")
 bash -c "$hook" install-native-notebook "$root"
