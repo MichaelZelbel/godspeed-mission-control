@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { randomBytes, createHash, timingSafeEqual, scrypt as derive } from 'node:crypto';
 import { promisify } from 'node:util';
+import net from 'node:net';
 
 const scrypt = promisify(derive);
 const digest = value => createHash('sha256').update(String(value || '')).digest('hex');
@@ -19,11 +20,65 @@ function validate(input) {
   if (typeof input.password !== 'string' || input.password.length < 12 || input.password.length > 256) throw fail('Choose a password with 12 to 256 characters.');
 }
 
+// The proxy whose X-Forwarded-For is believed: Caddy on this machine or on the
+// Compose network (loopback and private addresses), or the addresses in
+// GODSPEED_TRUSTED_PROXIES ("none" believes nobody). From anyone else the
+// header is ignored, so a stranger cannot pose as another address.
+export function trustedProxies(setting = process.env.GODSPEED_TRUSTED_PROXIES) {
+  const list = new net.BlockList(), value = String(setting ?? '').trim();
+  const entries = value ? (value === 'none' ? [] : value.split(',').map(s => s.trim()).filter(Boolean)) : ['127.0.0.0/8', '::1/128', '10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16', 'fc00::/7'];
+  for (const entry of entries) {
+    const [address, bits] = entry.split('/'), type = net.isIPv6(address) ? 'ipv6' : 'ipv4';
+    if (!net.isIP(address)) throw new Error('GODSPEED_TRUSTED_PROXIES lists an address that is not one: ' + entry);
+    if (bits === undefined) list.addAddress(address, type); else list.addSubnet(address, Number(bits), type);
+  }
+  return list;
+}
+const plainAddress = value => { const text = String(value || '').trim().replace(/^\[|\]$/g, '').replace(/^::ffff:(?=\d+\.\d+\.\d+\.\d+$)/i, ''); return net.isIP(text) ? text : null; };
+const trusted = (list, address) => !!address && list.check(address, net.isIPv6(address) ? 'ipv6' : 'ipv4');
+export function clientAddress(req, proxies = trustedProxies()) {
+  const peer = plainAddress(req.socket?.remoteAddress);
+  if (!peer) return 'unknown';
+  if (!trusted(proxies, peer)) return peer;
+  // The nearest hop the trusted proxies did not add is the client.
+  const hops = String(req.headers?.['x-forwarded-for'] || '').split(',').map(plainAddress);
+  for (let i = hops.length - 1; i >= 0; i--) { if (!hops[i]) break; if (!trusted(proxies, hops[i])) return hops[i]; }
+  return peer;
+}
+// Failed sign-ins, counted per client address and per username. Until
+// 6 October 2026 one counter of twelve a minute served everyone, so a
+// stranger's wrong guesses locked the owner out. Now an address that keeps
+// failing waits longer each time; a username under attack, or a flood of
+// failures overall, slows only addresses that have failed themselves. An
+// address with no failures always has its password or code checked.
+const FREE = 5, USER_FREE = 10, CEILING = 1000, WINDOW = 10 * 60000, FORGET = 3600000, LONGEST = 15 * 60000, KEPT = 10000;
+const delay = (count, free) => count < free ? 0 : Math.min(LONGEST, 1000 * 2 ** (count - free));
+class Failures {
+  constructor(now) { this.now = now; this.addresses = new Map(); this.users = new Map(); this.recent = []; }
+  entry(map, key) { const e = map.get(key); if (e && e.last + FORGET < this.now()) { map.delete(key); return null; } return e || null; }
+  wait(address, user) {
+    const now = this.now(), own = this.entry(this.addresses, address);
+    if (!own) return 0;
+    let until = own.last + delay(own.count, FREE);
+    const named = user ? this.entry(this.users, user) : null;
+    if (named) until = Math.max(until, named.last + delay(named.count, USER_FREE));
+    this.recent = this.recent.filter(at => at > now - WINDOW);
+    if (this.recent.length >= CEILING) until = Math.max(until, this.recent[this.recent.length - CEILING] + WINDOW);
+    return Math.max(0, until - now);
+  }
+  failed(address, user) {
+    const now = this.now(), bump = (map, key) => { const e = this.entry(map, key) || { count: 0 }; map.delete(key); map.set(key, { count: e.count + 1, last: now }); while (map.size > KEPT) map.delete(map.keys().next().value); };
+    bump(this.addresses, address); if (user) bump(this.users, user);
+    this.recent.push(now); if (this.recent.length > CEILING * 2) this.recent = this.recent.slice(-CEILING);
+  }
+  succeeded(address) { this.addresses.delete(address); }
+}
+
 // Device-private state: never part of the knowledge records, Git sync or AI context.
 export class WebAuth {
-  constructor(state, { token, remote, now = Date.now } = {}) {
+  constructor(state, { token, remote, now = Date.now, proxies = trustedProxies() } = {}) {
     this.file = path.join(state, 'web-auth.json'); this.token = token; this.remote = remote; this.now = now;
-    this.attempts = []; this.busy = false;
+    this.failures = new Failures(() => this.now()); this.proxies = proxies; this.busy = false;
     if (!fs.existsSync(this.file)) this.save({ version: 1, sessions: {}, invitations: {} });
   }
   read() { return JSON.parse(fs.readFileSync(this.file, 'utf8')); }
@@ -34,10 +89,13 @@ export class WebAuth {
     fs.renameSync(temp, this.file); fs.chmodSync(this.file, 0o600);
   }
   configured() { return !!this.read().owner; }
-  limit() {
-    this.attempts = this.attempts.filter(at => at > this.now() - 60000);
-    if (this.attempts.length >= 12) throw fail('Too many attempts. Wait one minute, then try again.', 429, 'RATE_LIMIT');
-    this.attempts.push(this.now());
+  // Runs one credential check under the limits: refused while this address
+  // must wait, counted when the check fails, forgotten when it succeeds.
+  async limited(req, user, check) {
+    const address = clientAddress(req, this.proxies), wait = this.failures.wait(address, user);
+    if (wait > 0) throw fail(wait <= 60000 ? 'Too many attempts. Wait a minute, then try again.' : 'Too many attempts. Wait ' + Math.ceil(wait / 60000) + ' minutes, then try again.', 429, 'RATE_LIMIT');
+    try { const result = await check(); this.failures.succeeded(address); return result; }
+    catch (error) { if (error.status === 401 || error.status === 403) this.failures.failed(address, user); throw error; }
   }
   cookie(req) { return (req.headers.cookie || '').match(/(?:^|;\s*)godspeed_session=([^;]+)/)?.[1]; }
   authorized(req) {
@@ -69,17 +127,18 @@ export class WebAuth {
   async handle(route, req, input = {}) {
     if (route === '/api/auth/status' && req.method === 'GET') return { configured: this.configured(), local: !this.remote, signed_in: this.authorized(req), session_expired: !!this.cookie(req) && !this.authorized(req) };
     if (route === '/api/auth/bootstrap' && req.method === 'POST') {
-      this.limit();
-      if (!this.token || !equal(digest(input.token), digest(this.token))) throw fail('The setup code was not accepted. Copy the code you saved during installation.', 401);
-      return this.invite();
+      return this.limited(req, null, async () => {
+        if (!this.token || !equal(digest(input.token), digest(this.token))) throw fail('The setup code was not accepted. Copy the code you saved during installation.', 401);
+        return this.invite();
+      });
     }
     if (route === '/api/auth/invite' && req.method === 'POST') {
-      this.limit();
-      if (!this.validInvite(input)) throw fail('This setup link has expired or was already used. Use your installation setup code to open a new one.', 401);
-      return { ok: true };
+      return this.limited(req, null, async () => {
+        if (!this.validInvite(input)) throw fail('This setup link has expired or was already used. Use your installation setup code to open a new one.', 401);
+        return { ok: true };
+      });
     }
-    if (route === '/api/auth/setup' && req.method === 'POST') {
-      this.limit();
+    if (route === '/api/auth/setup' && req.method === 'POST') return this.limited(req, null, async () => {
       if (this.busy) throw fail('Account setup is already in progress. Try signing in shortly.', 409);
       this.busy = true;
       try {
@@ -92,9 +151,9 @@ export class WebAuth {
         data.invitations = {}; data.sessions = {};
         return { ok: true, recovery_code: code, cookie: this.startSession(data, input.remember === true) };
       } finally { this.busy = false; }
-    }
-    if (route === '/api/login' && req.method === 'POST') {
-      this.limit(); const data = this.read();
+    });
+    if (route === '/api/login' && req.method === 'POST') return this.limited(req, username(input.username) || null, async () => {
+      const data = this.read();
       // Old installer helpers can create a private setup link until the owner is created.
       if (!data.owner) {
         if (!this.token || !equal(digest(input.token), digest(this.token))) throw fail('Open your private setup link to create your account.', 401);
@@ -104,9 +163,9 @@ export class WebAuth {
       const current = this.read();
       if (!current.owner || username(input.username) !== current.owner.username || !equal(candidate.hash, current.owner.password.hash)) throw fail('Username or password was not accepted. Check both and try again.', 401);
       return { ok: true, cookie: this.startSession(current, input.remember === true) };
-    }
-    if (route === '/api/auth/recover' && req.method === 'POST') {
-      this.limit();
+    });
+    // The recovery code belongs to the account, so its failures count against one name.
+    if (route === '/api/auth/recover' && req.method === 'POST') return this.limited(req, 'account recovery', async () => {
       if (this.busy) throw fail('An account change is in progress. Try again shortly.', 409);
       this.busy = true;
       try {
@@ -117,7 +176,7 @@ export class WebAuth {
         data.owner = { username: username(input.username), password, recovery: recoveryHash(code) }; data.sessions = {};
         return { ok: true, recovery_code: code, cookie: this.startSession(data, input.remember === true) };
       } finally { this.busy = false; }
-    }
+    });
     if (route === '/api/logout' && req.method === 'POST') {
       const data = this.read(); delete data.sessions[digest(this.cookie(req))]; this.save(data);
       return { ok: true, cookie: this.sessionCookie('', 0) };
