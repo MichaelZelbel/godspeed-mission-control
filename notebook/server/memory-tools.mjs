@@ -303,7 +303,7 @@ function collectionFor(query, ref) {
   return found;
 }
 const itemsOf = (query, collection) => live(visibleRows(query, 'collection_items')).filter(i => i.collection_id === collection.id);
-const itemView = i => ({item_id: i.id, title: i.title, data: i.data || {}, created_at: i.created_at, updated_at: i.updated_at});
+const itemView = i => ({id: i.id, item_id: i.id, title: i.title, data: i.data || {}, created_at: i.created_at, updated_at: i.updated_at});
 // Web-search words: "a phrase", -excluded, and OR between alternatives.
 function matcher(search) {
   const groups = String(search || '').split(/\s+OR\s+/).map(part => { const terms = [...part.matchAll(/(-?)"([^"]+)"|(-?)(\S+)/g)].map(m => ({not: !!(m[1] || m[3]), text: norm(m[2] || m[4])})).filter(t => t.text); return terms; }).filter(g => g.length);
@@ -322,7 +322,8 @@ function listItems(a, {query}) {
     && (!dateField || ((!a.date_from || String(i.data?.[dateField.key] || '') >= a.date_from) && (!a.date_to || String(i.data?.[dateField.key] || '').slice(0, 10) <= a.date_to))));
   const key = a.sort === 'updated' ? 'updated_at' : 'created_at';
   rows.sort((x, y) => a.sort === 'oldest' ? String(x.created_at).localeCompare(String(y.created_at)) : String(y[key]).localeCompare(String(x[key])));
-  return {collection: {name: c.name, slug: c.slug}, total: rows.length, items: rows.slice(0, count(a.limit, 1, 100, 20)).map(itemView)};
+  // A plain list, as Menerio answered it (scripts/links.py reads it so).
+  return rows.slice(0, count(a.limit, 1, 100, 20)).map(itemView);
 }
 async function searchCollections(a, ctx) {
   const {query, index} = ctx, collections = new Map(live(visibleRows(query, 'collections')).map(c => [c.id, c])), items = live(visibleRows(query, 'collection_items')).filter(i => collections.has(i.collection_id)), match = matcher(a.query);

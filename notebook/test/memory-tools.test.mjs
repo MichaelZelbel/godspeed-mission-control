@@ -100,11 +100,11 @@ test('collections: schema, add (unknown fields refused), filter, update and sear
     const added=await call('add_collection_item',{collection_slug:'reading-list',data:{title:'Fictional Atlas',status:'to read'}});
     await call('add_collection_item',{collection_slug:'reading-list',data:{title:'Fictional Ocean',status:'done',finished:'2026-09-30'}});
     assert.equal(added.title,'Fictional Atlas');
-    assert.deepEqual((await call('list_collection_items',{collection_slug:'reading-list',status:'to read'})).items.map(i=>i.title),['Fictional Atlas']);
-    assert.deepEqual((await call('list_collection_items',{collection_slug:'reading-list',search:'fictional -ocean'})).items.map(i=>i.title),['Fictional Atlas']);
+    assert.deepEqual((await call('list_collection_items',{collection_slug:'reading-list',status:'to read'})).map(i=>i.title),['Fictional Atlas']);
+    assert.deepEqual((await call('list_collection_items',{collection_slug:'reading-list',search:'fictional -ocean'})).map(i=>i.title),['Fictional Atlas']);
     await call('update_collection_item',{item_id:added.item_id,data:{status:'done'}});
     assert.equal(service.store.get('collection_items',added.item_id).data.title,'Fictional Atlas','fields not given stay');
-    assert.equal((await call('list_collection_items',{collection_slug:'reading-list',status:'done'})).total,2);
+    assert.equal((await call('list_collection_items',{collection_slug:'reading-list',status:'done'})).length,2);
     assert.deepEqual((await call('search_all_collections',{query:'atlas'})).map(i=>i.collection_slug),['reading-list']);
   }finally{await service.close();}
 });
