@@ -97,7 +97,9 @@ export class QueryService {
       memo.set(type,corrected);return corrected;
     };
     const get=(type,id)=>this.store.records.get(type+'/'+id)||ofType(type).find(r=>(r.former_ids||[]).includes(id))||ofType(type).find(r=>(r.aliases||[]).includes(id));
-    if (table === 'world_entities') return [...list('contacts').map(r => ({ ...r, source_table: 'contact', kind: 'person', description: r.notes || null, ai_visibility: r.ai_visibility || 'visible' })), ...list('entities').map(r => ({ ...r, source_table: 'entity', kind: r.entity_type }))];
+    // A person merged into another is not a second entity (19 of them on the
+    // real notebook showed in World until 6 October 2026).
+    if (table === 'world_entities') return [...list('contacts').filter(r => !r.merged_into).map(r => ({ ...r, source_table: 'contact', kind: 'person', description: r.notes || null, ai_visibility: r.ai_visibility || 'visible' })), ...list('entities').map(r => ({ ...r, source_table: 'entity', kind: r.entity_type }))];
     if (table === 'world_events') return list('moments').map(r => ({ ...r, source_table: 'moment' }));
     if (table === 'world_claims') return [...this.rows('profile_facts').filter(r=>r.visibility_scope!=='private').map(r=>({...r,id:r.claim_id,source_table:'claim',subject_kind:r.subject_type,category:r.category_slug||'other',object_id:null,source_kind:r.source_type,source_ref:r.source_id})),...list('contact_relationships').map(r=>({...r,source_table:'contact_relationship',subject_kind:r.source_type,subject_id:r.source_id,category:'relationship',attribute:'relationship',value:r.custom_label||r.label,object_id:r.target_id,cardinality:'many',confidence:r.confidence||'likely'}))];
     if (table === 'profile_facts') {
@@ -125,6 +127,15 @@ export class QueryService {
       return [...new Map([...list(table),...derived].map(r=>[r.id,r])).values()];
     }
     if(table==='weekly_reviews')return list(table).map(r=>({...r,review_data:{...r.review_data,gaps:typeof r.review_data?.gaps==='string'?[r.review_data.gaps]:r.review_data?.gaps||[]}}));
+    // A membership of a person merged into another belongs to the person they
+    // went into: shown as theirs, or not at all when they are a member already.
+    // The real "Dream 100" group showed 100 members, one of them twice.
+    if(table==='contact_group_memberships'){
+      const people=new Map(list('contacts').map(c=>[c.id,c])),byUid=new Map(list('contacts').map(c=>[c.uid,c])),rows=list(table);
+      const target=id=>{let person=people.get(id);for(let hops=0;person?.merged_into&&hops<5;hops++)person=people.get(person.merged_into)||byUid.get(person.merged_into);return person?.id||id;};
+      const members=new Set(rows.filter(m=>!people.get(m.contact_id)?.merged_into).map(m=>m.group_id+'/'+m.contact_id));
+      return rows.flatMap(r=>{const base={...defaults.contact_group_memberships,...r,last_movement_at:r.last_movement_at||r.created_at};if(!people.get(r.contact_id)?.merged_into)return [base];const to=target(r.contact_id);return members.has(r.group_id+'/'+to)?[]:[{...base,contact_id:to}];});
+    }
     if(table==='collection_items')return list(table).map(r=>{const collection=get('collections',r.collection_id),primary=collection?.field_schema?.find(f=>f.primary),title=primary?r.data?.[primary.key]:r.title;return {...defaults.collection_items,...r,title:title==null?'Untitled':String(title)};});
     return [...list(table),...(['coach_talks','habits','journal','health_episodes','medications'].includes(table)?nativeRows(this.store,table):[])].map(r => ({ ...(defaults[table] || {}), ...r,...table==='contact_groups'?{type:r.group_type||'custom'}:table==='contact_group_memberships'?{last_movement_at:r.last_movement_at||r.created_at}:{} }));
   }
