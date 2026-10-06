@@ -6,7 +6,9 @@ const NOT_UNDOABLE='Godspeed cannot tell exactly what this change did, so it can
 const key=value=>String(value||'').normalize('NFKD').toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,''),same=value=>String(value??'').trim().toLowerCase();
 export function factSubject(p){const subject_type=p.entity_id?'entity':p.contact_id?'contact':p.subject_type||'self';return {subject_type,subject_id:p.entity_id||p.contact_id||p.subject_id||null,attribute:p.attribute||key(p.canonical_label||p.label)};}
 export function factSuppressed(query,{subject_type,subject_id,attribute,value}){
-  return query.rows('ai_suggestion_suppressions').some(s=>s.subject_type===subject_type&&(s.subject_id||null)===(subject_id||null)&&key(s.attribute)===key(attribute)&&same(s.value)===same(value)||s.suppression_key===`${subject_type}:${subject_id||''}:${attribute}:${String(value).toLowerCase()}`);
+  // The owner is the self subject, whether written as no id or as 'owner'.
+  if(subject_type==='self'&&subject_id==='owner')subject_id=null;
+  return query.rows('ai_suggestion_suppressions').some(s=>s.subject_type===subject_type&&(s.subject_type==='self'&&s.subject_id==='owner'?null:s.subject_id||null)===(subject_id||null)&&key(s.attribute)===key(attribute)&&same(s.value)===same(value)||s.suppression_key===`${subject_type}:${subject_id||''}:${attribute}:${String(value).toLowerCase()}`);
 }
 // A suggestion applied before Godspeed kept undo receipts (the Menerio import)
 // records only what it pointed at. Undo removes that change where it is still
@@ -76,6 +78,8 @@ export class Review {
     else if(type==='add_alias'){
       const old=this.store.get('contacts',p.contact_id);if(!old)throw new Error('Person missing');save('contacts',{...old,aliases:[...new Set([...(old.aliases||[]),p.alias])].filter(Boolean)});
     }else if(type==='add_moment'){
+      // A timeline entry needs a title and a date; proposals from before 6 October 2026 could lack both.
+      if(!String(p.title||'').trim()||!/^\d{4}-\d{2}-\d{2}/.test(String(p.happened_at||'')))throw new Error('This suggestion has no title or no date, so it cannot become a timeline entry. Remove it instead.');
       const moment=save('moments',{...p,source:'note_auto',status:p.status||'past_fact'});
       for(const [i,participant] of (p.participants||[]).entries())if(participant.contact_id)save('moment_participants',{id:'review-'+item.uid+'-'+i,moment_id:moment.id,person_id:participant.contact_id});
     }else if(type==='add_relationship')save('contact_relationships',p);

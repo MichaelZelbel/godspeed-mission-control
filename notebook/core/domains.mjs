@@ -1,3 +1,7 @@
+import {momentDraft} from './moment-draft.mjs';
+import {NOTE_TYPES,processNote} from './proposals.mjs';
+import {NoteProcessing} from './processing.mjs';
+export {momentDraft,NOTE_TYPES};
 import {groupContext} from './group-context.mjs';
 import {noteConnections,linkSuggestions} from './related.mjs';
 import { slug, hash } from './records/store.mjs';
@@ -19,19 +23,6 @@ import {retrieveNoteWindows} from './retrieval-windows.mjs';
 function json(result){return typeof result==='string'?JSON.parse(result.trim().replace(/^```(?:json)?\s*/,'').replace(/\s*```$/,'')):result;}
 function cites(source,quote){return typeof source==='string'?source.includes(quote):source&&typeof source==='object'?Object.values(source).some(value=>cites(value,quote)):false;}
 function reviewData(value){const result={...value};for(const field of ['themes','open_loops','connections','gaps','people_summary']){if(typeof result[field]==='string'&&field==='gaps')result[field]=[result[field]];if(result[field]==null)result[field]=[];if(!Array.isArray(result[field]))throw new Error('The review returned an invalid '+field+' list');}return result;}
-// A moment draft as the Add Moment form reads it, whatever the model wrote.
-export function momentDraft(draft){
-  const day=value=>{const text=String(value||'').trim();const m=text.match(/^(\d{4}-\d{2}-\d{2})/);return m?m[1]:null;};
-  const whole=(value,low,high,fallback,words={})=>{const n=Number(value);if(Number.isFinite(n))return Math.min(high,Math.max(low,Math.round(n)));const w=words[String(value||'').toLowerCase()];return w??fallback;};
-  const status=String(draft.status||'').toLowerCase(),known=['past_fact','future_plan','ongoing','unknown'];
-  return {...draft,
-    happened_at:day(draft.happened_at),happened_end:day(draft.happened_end),
-    status:known.includes(status)?status:/plan|schedul|upcoming|future|geplant/.test(status)?'future_plan':/ongoing|current|laufend/.test(status)?'ongoing':/done|past|happened|completed/.test(status)?'past_fact':'unknown',
-    impact_level:whole(draft.impact_level,1,4,2,{minor:1,low:1,neutral:2,noticeable:2,medium:2,significant:3,high:3,major:4,'life-changing':4}),
-    confidence_date:whole(draft.confidence_date,0,10,5,{low:3,medium:5,high:8,certain:10}),
-    confidence_truth:whole(draft.confidence_truth,0,10,5,{low:3,medium:5,high:8,certain:10}),
-    participants:[...new Set([...(Array.isArray(draft.participants)?draft.participants:[]),...(Array.isArray(draft.people)?draft.people:[])].filter(n=>typeof n==='string'&&n.trim()))]};
-}
 // A week's notes for its review: each note's first 800 characters, newest
 // first, at most 60,000 characters. The whole notes made the answer so long
 // that it was cut off mid-JSON ("Expected double-quoted property name").
@@ -43,8 +34,6 @@ export function weekNotes(notes){
   }
   return out;
 }
-// The note types the notebook's metadata editor offers (NoteMetadataEditor.tsx).
-export const NOTE_TYPES=['observation','task','idea','reference','person_note','meeting_note','decision','project'];
 export class Domains {
   constructor(query, { provider = null } = {}) { this.query = query; this.store = query.store; this.provider = provider; }
   writeFact(input) {
@@ -247,6 +236,8 @@ export class Domains {
       const result=json(await this.provider({kind:name,input,categories:this.query.rows('profile_categories'),contract:'Return JSON {label,value,category_slug,category_name,confidence,source}. Classify only the fact supplied by the user. Preserve explicit label and value exactly. This is a proposal, not a saved confirmed fact.'}));
       if(input.label)result.label=input.label;if(input.value)result.value=input.value;if(!result.label||!result.value||!result.category_slug)throw new Error('The assistant returned an incomplete fact proposal');return result;
     }
+    if(name==='process-note'&&input.note_id){if(!this.provider)throw new Error('Choose and configure a model provider before analysis');return processNote(this,input,{cites,factSuppressed,factSubject});}
+    if(name==='sweep-note-processing')return (this.processing||new NoteProcessing({store:this.store,query:this.query,domains:this,device:this.store.device})).sweep();
     if (['process-note','generate-profile-suggestions','enrich-people','extract-moment-profile','analyze-media','classify-profile-fact'].includes(name)) {
       if (!this.provider) throw new Error('Choose and configure a model provider before analysis');
       const source = input.note_id ? visibleRows(this.query,'notes').find(r=>r.id===input.note_id) : input.moment_id?visibleRows(this.query,'moments').find(r=>r.id===input.moment_id):{notes:visibleRows(this.query,'notes'),moments:visibleRows(this.query,'moments'),people:visibleRows(this.query,'contacts'),confirmed_facts:visibleRows(this.query,'profile_facts'),self_aliases:this.query.rows('user_self_aliases')};

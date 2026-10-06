@@ -21,7 +21,7 @@ test('model reviews tolerate a legacy gap string and inference validates before 
  let invalid=false;
  const domains=new Domains(query,{provider:async input=>{
   if(input.kind==='classify-profile-fact')return {label:'Changed',value:'Changed',category_slug:'preferences'};
-  assert.equal(input.source.id,note.id);return {metadata:{summary:'Inferred summary',type:'observation'},tags:['synthetic'],suggestions:[{type:'add_claim',payload:{label:'Color',value:'Blue'},evidence_quote:invalid?'Invented evidence':'Alex said "blue is my favorite".'}]};
+  assert.equal((input.note||input.source).id,note.id);return {metadata:{summary:'Inferred summary',type:'observation'},tags:['synthetic'],suggestions:[{type:'add_claim',payload:{label:'Color',value:'Blue'},evidence_quote:invalid?'Invented evidence':'Alex said "blue is my favorite".'}]};
  }});
  const proposal=await domains.invoke('classify-profile-fact',{label:'Reading time',value:'Evening'});assert.equal(proposal.label,'Reading time');assert.equal(proposal.value,'Evening');assert.equal(query.rows('claims').length,0);
  await domains.invoke('process-note',{note_id:note.id});assert.equal(store.get('notes',note.id).metadata.summary,'Owner summary');assert.equal(store.get('notes',note.id).metadata.type,'observation');assert.equal(query.rows('review_queue').length,1);

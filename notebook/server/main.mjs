@@ -34,6 +34,7 @@ import { MenerioImport } from './menerio-import.mjs';
 import {nativeAgent} from '../core/native-agent.mjs';
 import {NativeScheduler} from '../core/native-scheduler.mjs';
 import {visibleRows} from '../core/visibility.mjs';
+import {NoteProcessing} from '../core/processing.mjs';
 
 // What the browser is told each built file is. A module script sent as
 // octet-stream is refused outright: the PDF reader's worker (.mjs) was, so
@@ -298,6 +299,9 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   // Vectors for new and changed notes, a batch every 20 seconds while there is work.
   const meaningRound=async()=>{if(menerioImport.mutating||!index.meaning?.ready)return;try{await index.meaning.step({budget:512});}catch{}};
   const meaningTimer=setInterval(()=>{void meaningRound();},20000);meaningTimer.unref?.();
+  // New and changed notes are processed on the machine that runs the routines.
+  const processing=domains.processing=new NoteProcessing({store,query,domains,device});
+  const processingTimer=setInterval(()=>{if(!menerioImport.mutating)void processing.tick().catch(()=>{});},60000);processingTimer.unref?.();
   const interval = setInterval(() => { if (!menerioImport.mutating) void store.verify().then(()=>index.rebuildBackground()).catch(()=>{}); }, 600000);
   const jobs=setInterval(()=>{if(!menerioImport.mutating)scheduler.tick().catch(()=>{});},30000);
   const syncTimer=setInterval(()=>{if(!menerioImport.mutating&&fs.existsSync(path.join(store.state,'sync-config.json')))void syncRunner.run();},60000);
@@ -326,7 +330,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   const watchRoot=name=>{const folder=path.join(store.root,name);if(!watchers.has(name)&&fs.existsSync(folder))watchers.set(name,fs.watch(folder,{recursive:true},changed(name)));};
   for(const name of durableRoots)watchRoot(name);
   const rootWatcher=fs.watch(store.root,(event,name)=>{if(durableRoots.includes(name)){watchRoot(name);changed(name)(event,null);}else if(durableFiles.includes(name))changed('')(event,name);});
-  return { server, store, index, query, domains, scheduler, sync, mediaSync,address: server.address(), close: async () => { clearInterval(meaningTimer);stopIndexing();store.unwatch();await syncRunner.close();await menerioImport.close();rootWatcher.close();for(const watcher of watchers.values())watcher.close();clearTimeout(debounce);clearTimeout(indexDebounce);clearInterval(telegramTimer);clearInterval(interval);clearInterval(jobs);clearInterval(syncTimer);clearInterval(mediaTimer); await new Promise(resolve => server.close(resolve)); index.close(); } };
+  return { server, store, index, query, domains, scheduler, sync, mediaSync,address: server.address(), close: async () => { clearInterval(meaningTimer);clearInterval(processingTimer);stopIndexing();store.unwatch();await syncRunner.close();await menerioImport.close();rootWatcher.close();for(const watcher of watchers.values())watcher.close();clearTimeout(debounce);clearTimeout(indexDebounce);clearInterval(telegramTimer);clearInterval(interval);clearInterval(jobs);clearInterval(syncTimer);clearInterval(mediaTimer); await new Promise(resolve => server.close(resolve)); index.close(); } };
 }
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const root = process.env.GODSPEED_WORKSPACE;

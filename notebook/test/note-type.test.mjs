@@ -8,7 +8,7 @@ import {Domains,NOTE_TYPES} from '../core/domains.mjs';
 test('classifying a note keeps a type the notebook offers and drops any other',async()=>{
   const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-note-type-'))),domains=new Domains(new QueryService(store));
   const a=store.save('notes',{title:'Fictional plan',content:'Decide the fictional garden layout.'}),b=store.save('notes',{title:'Other',content:'Other fictional text.'});
-  let asked='';domains.provider=async input=>{asked=input.contract;return {suggestions:[],metadata:{type:input.input.note_id===a.id?'decision':'process-note',topics:['garden']},tags:['garden']};};
+  let asked='';domains.provider=async input=>{asked=input.contract;return {suggestions:[],metadata:{type:(input.note?.id||input.input?.note_id)===a.id?'decision':'process-note',topics:['garden']},tags:['garden']};};
   await domains.invoke('process-note',{note_id:a.id});await domains.invoke('process-note',{note_id:b.id});
   assert.ok(NOTE_TYPES.every(t=>asked.includes(t)),'the model is told the types');
   assert.equal(store.get('notes',a.id).metadata.type,'decision');
