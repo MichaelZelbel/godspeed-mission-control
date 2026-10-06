@@ -8,6 +8,7 @@ import { slug, hash } from './records/store.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { Review,factSubject,factSuppressed } from './review.mjs';
+import {claimHolds} from './query.mjs';
 import {assertAssistantRecord} from './assistant-mutations.mjs';
 import { fileContext } from './context.mjs';
 import {Connectors} from './connectors.mjs';
@@ -45,7 +46,7 @@ export class Domains {
       const claims = this.query.rows('claims').filter(r => r.subject_type === subject_type && r.subject_id === subject_id && r.attribute === attribute);
       if(this.assistant)for(const claim of claims)assertAssistantRecord(this.query,'claims',claim.id);
       const valid_from = input.valid_from || new Intl.DateTimeFormat('en-CA', { timeZone: this.query.rows('profiles')[0]?.timezone || 'UTC' }).format(new Date());
-      const current=c=>c.valid_from<=valid_from&&(!c.valid_to||c.valid_to>valid_from),closure_evidence={source_type:input.source_type||'manual',source_id:input.source_id||null,quote:input.evidence_quote||null};
+      const current=c=>claimHolds(c,valid_from),closure_evidence={source_type:input.source_type||'manual',source_id:input.source_id||null,quote:input.evidence_quote||null};
       const target=input.replaces_claim_id?claims.find(c=>c.id===input.replaces_claim_id):null;
       if(input.replaces_claim_id&&(!target||!current(target)||target._hash!==input.replaces_claim_hash))throw Error('The fact selected for correction changed; reload before replacing it');
       const sameValue=claims.filter(r=>r.value.toLowerCase()===value.toLowerCase()),existing=sameValue.find(current)||sameValue[0];
@@ -198,7 +199,18 @@ export class Domains {
     if (name === 'merge-contacts') {
       if (input.merge_into_self) return this.store.withLock(()=>{
         const source=this.store.get('contacts',input.source_contact_id);if(!source)throw new Error('Person missing');
-        const changes=['claims','fact_slots'].flatMap(type=>this.query.rows(type).filter(r=>r.subject_type==='contact'&&r.subject_id===source.id).map(r=>{const next=this.store.prepare(type,{subject_type:'self',subject_id:null,contact_id:null,merged_from_contact_id:source.id},r);next.references=this.query.references(type,next);return next;}));
+        // Their facts become yours. Where you already have a setting row for
+        // the fact, yours stays and theirs goes; where a single-valued fact of
+        // yours has a current answer, it stays current and theirs becomes
+        // history on the day of the merge. Until 6 October 2026 both stayed:
+        // two current home cities, and two settings for one fact.
+        const today=new Intl.DateTimeFormat('en-CA',{timeZone:this.query.rows('profiles')[0]?.timezone||'UTC'}).format(new Date()),now=new Date().toISOString();
+        const of=(type,self)=>this.query.rows(type).filter(r=>self?r.subject_type==='self':r.subject_type==='contact'&&r.subject_id===source.id);
+        const mySlots=new Map(of('fact_slots',true).map(s=>[s.attribute,s])),theirSlots=new Map(of('fact_slots').map(s=>[s.attribute,s])),myClaims=of('claims',true);
+        const move=(type,r,extra={})=>{const next=this.store.prepare(type,{subject_type:'self',subject_id:null,contact_id:null,merged_from_contact_id:source.id,...extra},r);next.references=this.query.references(type,next);return next;};
+        const answered=c=>((mySlots.get(c.attribute)||theirSlots.get(c.attribute))?.cardinality||c.cardinality)!=='many'&&claimHolds(c,today)&&myClaims.some(x=>x.attribute===c.attribute&&claimHolds(x,today));
+        const changes=[...[...theirSlots.values()].map(s=>mySlots.has(s.attribute)?this.store.prepare('fact_slots',{removed_at:now},s):move('fact_slots',s)),
+          ...of('claims').map(c=>answered(c)?move('claims',c,{valid_to:today,closure_evidence:{source_type:'merge',source_id:source.id,quote:null}}):move('claims',c))];
         const aliases=[source.name,...source.aliases||[]].map(alias=>this.store.prepare('user_self_aliases',{alias,source_contact_id:source.id}));
         this.store.commit([...changes,...aliases,this.store.prepare('contacts',{merged_into:'self',removed_at:new Date().toISOString()},source)]);return {success:true,merged_into_self:true};
       });
