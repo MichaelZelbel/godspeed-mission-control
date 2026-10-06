@@ -156,7 +156,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         const response=await mcp(input,{store,query,index,domains,scopes:accessKey?.scopes});if(response===null){res.writeHead(202);return res.end();}return send(res,200,response);
       }
       if(route==='/api/pair/create'&&req.method==='POST'){if(device!=='vps')throw new Error('Create a pairing code on the candidate VPS');const code=randomBytes(16).toString('hex');pairCodes.set(code,Date.now()+300000);return send(res,200,{code,expires_minutes:5});}
-      if(route==='/api/pair/connect'&&req.method==='POST'){const input=JSON.parse(await body(req));const result=await mediaSync.pair(input.origin,input.code);if(store.get('settings','installation'))await scheduler.transfer('vps');return send(res,200,{...result,media:await mediaSync.reconcile()});}
+      if(route==='/api/pair/connect'&&req.method==='POST'){const input=JSON.parse(await body(req));const result=await mediaSync.pair(input.origin,input.code);return send(res,200,{...result,media:await mediaSync.reconcile()});}
       if(route==='/api/media/sync'&&req.method==='POST')return send(res,200,await mediaSync.reconcile());
       if(route==='/api/media/offline'&&req.method==='POST'){const input=JSON.parse(await body(req));if(!['all','selected'].includes(input.offline))throw new Error('Choose all or selected media');const config=mediaSync.config();if(!config)throw new Error('Pair this device first');atomic(mediaSync.configPath,JSON.stringify({...config,offline:input.offline,selected:input.selected||[]}));return send(res,200,{ok:true});}
       if(route==='/api/media/manifest')return send(res,200,{data:mediaSync.manifest()});
