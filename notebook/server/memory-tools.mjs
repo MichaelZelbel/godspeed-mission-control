@@ -173,6 +173,7 @@ async function searchBrain(a, ctx) {
     pages = found.rows.filter(close).map(r => ({page: byId.get(r.id), snippet: r.snippet})).filter(p => p.page).slice(0, limit);
   }
   const shown = hits.slice(offset, offset + limit), label = labeler(query);
+  ctx.seen?.(shown.filter(h => !h.file).map(h => h.note));
   parts.push('Found ' + claims.length + ' claim(s), ' + hits.length + ' note(s) [' + mode + '] and ' + pages.length + ' Lexicon page(s).' + (hits.length ? ' Showing notes ' + (shown.length ? offset + 1 : 0) + '-' + (offset + shown.length) + ' (has_more: ' + (offset + limit < hits.length) + ').' : '') + (note ? ' ' + note : ''));
   for (const f of claims.slice(0, limit)) parts.push('[claim] ' + label(f) + ', ' + (f.label || f.attribute) + ': ' + f.value + (f.two_answers ? '   TWO ANSWERS: ' + f.two_answers.join(' | ') : '')
     + '\n    ' + (f.valid_from ? f.valid_from + ' to ' + (f.valid_to || 'now') : 'undated') + ' · ' + (f.confidence || 'confirmed') + ' · id ' + f.id
@@ -256,6 +257,7 @@ function noteList(a, ctx) {
     && (!topic || [...(n.tags || []), ...(n.metadata?.topics || [])].some(t => norm(t).includes(topic)) || norm(n.title).includes(topic)));
   if (a.person) { const p = personFor(query, {name: a.person}), about = new Set(personNotes(query, p).map(n => n.id)); rows = rows.filter(n => about.has(n.id)); }
   rows.sort((x, y) => String(y.updated_at).localeCompare(String(x.updated_at)));
+  ctx.seen?.(rows.slice(0, limit));
   return rows.length ? rows.slice(0, limit).map((n, i) => [(i + 1) + '. ' + (n.title || 'Untitled'), '   ID: ' + n.id, '   Updated: ' + String(n.updated_at).slice(0, 10) + (n.metadata?.type ? ' · Type: ' + n.metadata.type : '') + (n.folder_path ? ' · Folder: ' + n.folder_path : ''), ...(n.tags?.length ? ['   Tags: ' + n.tags.join(', ')] : []), '   ' + clip(n.content, 200)].join('\n')).join('\n\n') : 'No notes match.';
 }
 function stats(ctx) {
@@ -425,7 +427,7 @@ export async function memoryTool(name, a, ctx, guarded) {
     if (name === 'search_contacts') return searchContacts(a, ctx);
     if (name === 'get_contact_context') return contactContext(a, ctx);
     if (name === 'get_contact_profile') return contactProfile(a, ctx);
-    if (name === 'get_person_notes') { const p = personFor(query, a); return personNotes(query, p).slice(0, count(a.limit, 1, 100, 20)).map(n => ({note_id: n.id, title: n.title, updated: String(n.updated_at).slice(0, 10), preview: clip(n.content, 200)})); }
+    if (name === 'get_person_notes') { const p = personFor(query, a), rows = personNotes(query, p).slice(0, count(a.limit, 1, 100, 20)); ctx.seen?.(rows); return rows.map(n => ({note_id: n.id, title: n.title, updated: String(n.updated_at).slice(0, 10), preview: clip(n.content, 200)})); }
     if (name === 'get_claims') return getClaims(a, ctx);
     if (name === 'list_recent_notes' || name === 'list_recent') return noteList(a, ctx);
     if (name === 'get_stats') return stats(ctx);
@@ -441,8 +443,9 @@ export async function memoryTool(name, a, ctx, guarded) {
 export async function searchNotes(a, ctx) {
   const text = required(a.query, 'words to search for'), limit = count(a.limit, 1, 50, 20), offset = count(a.offset, 0, 1000, 0);
   const {hits} = await noteHits(ctx, text, {limit: 50});
-  return hits.filter(h => a.source === 'native' ? !h.file && !mirrored(h.note) : a.source === 'godspeed' ? h.file || mirrored(h.note) : true).slice(offset, offset + limit)
-    .map(h => h.file ? {id: h.file, title: h.file, folder_path: path.posix.dirname(h.file), updated_at: h.note.updated_at, source: 'Mission Control file', ...(a.view === 'metadata' ? {} : {snippet: excerpt(h, text)})} : ({id: h.note.id, title: h.note.title, folder_path: h.note.folder_path || '', updated_at: h.note.updated_at, tags: h.note.tags || [], type: h.note.metadata?.type || null, _hash: h.note._hash, ...(a.view === 'metadata' ? {} : {snippet: excerpt(h, text)}), ...(h.via ? {found_in: h.via} : {})}));
+  const shown = hits.filter(h => a.source === 'native' ? !h.file && !mirrored(h.note) : a.source === 'godspeed' ? h.file || mirrored(h.note) : true).slice(offset, offset + limit);
+  ctx.seen?.(shown.filter(h => !h.file).map(h => h.note));
+  return shown.map(h => h.file ? {id: h.file, title: h.file, folder_path: path.posix.dirname(h.file), updated_at: h.note.updated_at, source: 'Mission Control file', ...(a.view === 'metadata' ? {} : {snippet: excerpt(h, text)})} : ({id: h.note.id, title: h.note.title, folder_path: h.note.folder_path || '', updated_at: h.note.updated_at, tags: h.note.tags || [], type: h.note.metadata?.type || null, _hash: h.note._hash, ...(a.view === 'metadata' ? {} : {snippet: excerpt(h, text)}), ...(h.via ? {found_in: h.via} : {})}));
 }
 export function relatedTo(ctx, note) {
   try { return relatedNotes(ctx.query, note, {index: ctx.index, limit: 5}).map(r => ({id: r.id, title: r.title})); } catch { return []; }
