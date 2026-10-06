@@ -1,4 +1,7 @@
-"""Publish data-independent recipes. Private prose and historical examples are never copied."""
+"""Publish data-independent recipes. Private prose and historical examples are never copied.
+
+Every file is written with LF line endings on every platform: until 7 October 2026 a run on
+Windows wrote CRLF and so rewrote every generated SKILL.md it touched."""
 import json,pathlib,shutil
 root=pathlib.Path(__file__).resolve().parents[2]
 inventory=json.loads((root/'docs/full-version/source-inventory.json').read_text())
@@ -51,14 +54,14 @@ for skill in inventory['skills']:
  reusable=root/'notebook/reusable-recipes'/name
  if (reusable/'SKILL.md').exists():
   shutil.copytree(reusable,folder,dirs_exist_ok=True)
-  with (folder/'SKILL.md').open('a',encoding='utf-8') as f:f.write('\n\n## Installed personal workspace\n\nUse the current user workspace and its configured providers. Keep original workflow, command contracts, scripts and verification criteria. Read the workspace authorization rules before sends, sign-ins, payments or publishing. Search existing device-private credentials before asking for configuration. Saved output and a passing screen are not evidence that the full requested result happened.\n')
+  with (folder/'SKILL.md').open('a',encoding='utf-8',newline='\n') as f:f.write('\n\n## Installed personal workspace\n\nUse the current user workspace and its configured providers. Keep original workflow, command contracts, scripts and verification criteria. Read the workspace authorization rules before sends, sign-ins, payments or publishing. Search existing device-private credentials before asking for configuration. Saved output and a passing screen are not evidence that the full requested result happened.\n')
  elif name in native:
   addon,recipe=native[name];source=root/'third-party/addons'/addon/'skill'/recipe
   if not (source/'SKILL.md').exists():raise ValueError('Missing maintained workflow '+name)
   shutil.copytree(source,folder,dirs_exist_ok=True)
  else:
   text+='\n## Start and finish\n\n1. Confirm the actual request, its intended result and the scope you may change. Use only visible records. Resolve ambiguous people or competing versions before editing.\n2. Read the existing state through the notebook tools and the command help. Record the IDs, current revision, sources and dates needed for this result. Do not infer execution from a model reply.\n3. Follow the workflow above. Save the actual deliverable and its evidence, retaining the original when changing it. Use a stable request identifier on a retry.\n4. Open or read the saved result through the same installed entry point. Check it against the requested outcome, including links and referenced people. For a failed attempt retain the error and a next check; never file it as completed.\n5. Confirm the outcome in one plain sentence. Stay quiet when a scheduled check finds no actionable change. Outward steps remain proposals until their exact action is approved.\n\n## Runtime and recovery\n\nThe notebook MCP exposes search_knowledge, list_records, save_record, capture_note, personal_operation, write_fact, record_event and review_suggestions. Personal commands in chat are /goals, /work, /forecast, /due, /coach and /journal followed by their documented arguments. Consult help before guessing arguments. Jobs use one schedule owner and retained receipts. Configured-account requirements are separate from missing adapters; report a missing tool as a missing implementation. Reconnect only the selected isolated service. Never fall back to a personal installation.\n'
-  (folder/'SKILL.md').write_text(text,encoding='utf-8')
+  (folder/'SKILL.md').write_text(text,encoding='utf-8',newline='\n')
  classified.append({'name':name,'classification':'optional connector' if name in media or name in {'phone-errands','browser-post','connect-email'} else 'source only','reason':'Portable recipe with local file contract; chosen media/service provider is configured separately.' if name in media else 'Portable recipe and shared record/runtime operations; no private incident prose or account details.'})
-(root/'notebook/data/recipe-inventory.json').write_text(json.dumps(classified,indent=2)+'\n')
+(root/'notebook/data/recipe-inventory.json').write_text(json.dumps(classified,indent=2)+'\n',encoding='utf-8',newline='\n')
 print('Classified',len(classified),'recipes; packaged',len(classified)-len(company),'portable recipes')
