@@ -26,7 +26,9 @@ test('saving a note reads the workspace once, not once per step of the write',as
     // A full read of the vault is the whole cost of a save on a real
     // workspace. One read to see the records is enough: the save knows what it
     // wrote, so reading everything again to pick that up doubled the cost.
-    assert.equal(counts.reads,1,'a save read the whole workspace '+counts.reads+' times; once is enough');
+    // Since 6 October 2026 the server's store reads only files it is told
+    // changed, so a save reads the whole workspace not even once.
+    assert.ok(counts.reads<=1,'a save read the whole workspace '+counts.reads+' times; once is enough');
     // The search index is rebuilt from every record and every workspace file.
     // Waiting for that before answering made a save cost half a second more
     // than the save itself, and making the next search wait for it instead

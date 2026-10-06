@@ -34,8 +34,15 @@ import {nativeAgent} from '../core/native-agent.mjs';
 import {NativeScheduler} from '../core/native-scheduler.mjs';
 import {visibleRows} from '../core/visibility.mjs';
 
+// What the browser is told each built file is. A module script sent as
+// octet-stream is refused outright: the PDF reader's worker (.mjs) was, so
+// PDFs could not be read in the notebook until 6 October 2026.
+export const staticTypes = { '.html':'text/html; charset=utf-8','.js':'text/javascript','.mjs':'text/javascript','.css':'text/css','.json':'application/json','.map':'application/json','.webmanifest':'application/manifest+json','.wasm':'application/wasm','.svg':'image/svg+xml','.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.gif':'image/gif','.webp':'image/webp','.ico':'image/x-icon','.woff2':'font/woff2','.woff':'font/woff','.ttf':'font/ttf','.txt':'text/plain; charset=utf-8' };
 export async function createService({ root, mediaRoot, host = '127.0.0.1', port = 47831, token, uiRoot, provider, device = 'local', authNow } = {}) {
-  const store = new Store(root,{device}), index = new SearchIndex(store), query = new QueryService(store), sync = new FileSync(store);
+  // The store keeps every record in memory and re-reads only the files its
+  // watcher names; the index follows the store's changes row by row.
+  const store = new Store(root,{device,watch:true}), index = new SearchIndex(store,{background:true}), query = new QueryService(store), sync = new FileSync(store);
+  const stopIndexing=store.onChange(({changed,gone})=>{try{index.update(changed);index.forget(gone);}catch{}});
   const syncRunner=new SyncRunner(root,{onResult:result=>{sync.last=result;atomic(path.join(store.state,'sync-status.json'),JSON.stringify(result));}});
   const providerPath=path.join(store.state,'provider.json');
   if(!provider&&fs.existsSync(providerPath))provider=modelProvider(JSON.parse(fs.readFileSync(providerPath,'utf8')));
@@ -124,7 +131,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
             if(receiptId)await store.saveAsync('command_receipts',{id:receiptId,state:'attempted',request_hash:requestHash},undefined,{signal:controller.signal});
             const sourceId=input.request_id?'browser-message-'+hash([conversation,input.request_id]):undefined;if(!sourceId||!store.get('conversation_messages',sourceId))await store.saveAsync('conversation_messages',{id:sourceId,role:'user',content:input.message,conversation_id:conversation,source_app:'browser-chat'},undefined,{signal:controller.signal});
             const result=await domains.invoke('conversation-chat',{message:input.message,conversation_id:conversation,request_id:input.request_id,talk_id:talk?.id,signal:controller.signal}),saved={reply:result.reply};
-            if(receiptId)await store.saveAsync('command_receipts',{id:receiptId,state:'verified',result:saved},undefined,{signal:controller.signal});index.rebuild();return send(res,200,saved);
+            if(receiptId)await store.saveAsync('command_receipts',{id:receiptId,state:'verified',result:saved},undefined,{signal:controller.signal});return send(res,200,saved);
           }catch(error){if(receiptId&&store.get('command_receipts',receiptId)?.state==='attempted')await store.saveAsync('command_receipts',{id:receiptId,state:'needs_review',error:error.message});throw error;}finally{if(receiptId)chatRequests.delete(receiptId);}
         }
         return send(res,405,{error:'Use GET or POST'});
@@ -140,7 +147,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         if(!authorized(req)&&!accessKey)return send(res,401,{error:'Authentication required'});
         if(req.method!=='POST'){res.writeHead(405,{'Allow':'POST'});return res.end();}
         const input=JSON.parse(await body(req));if(accessKey&&input.method==='tools/call'&&!accessKey.scopes.includes(toolScope(input.params.name,input.params.arguments||{})))return send(res,403,{error:'This API key does not grant that capability'});
-        const response=await mcp(input,{store,query,index,domains,scopes:accessKey?.scopes});if(response===null){res.writeHead(202);return res.end();}index.rebuild();return send(res,200,response);
+        const response=await mcp(input,{store,query,index,domains,scopes:accessKey?.scopes});if(response===null){res.writeHead(202);return res.end();}return send(res,200,response);
       }
       if(route==='/api/pair/create'&&req.method==='POST'){if(device!=='vps')throw new Error('Create a pairing code on the candidate VPS');const code=randomBytes(16).toString('hex');pairCodes.set(code,Date.now()+300000);return send(res,200,{code,expires_minutes:5});}
       if(route==='/api/pair/connect'&&req.method==='POST'){const input=JSON.parse(await body(req));const result=await mediaSync.pair(input.origin,input.code);if(store.get('settings','installation'))await scheduler.transfer('vps');return send(res,200,{...result,media:await mediaSync.reconcile()});}
@@ -198,12 +205,12 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       // every record and every workspace file to rebuild it, which is what a
       // save used to wait for, cost more than the save; the file watcher still
       // arms a full refresh for whatever other programs write.
-      if (route === '/api/query' && req.method === 'POST') { const input=JSON.parse(await body(req)),result=await query.executeAsync(input); if(input.operation&&input.operation!=='select'){const rows=Array.isArray(result.data)?result.data:result.data?[result.data]:[];index.update(rows.map(row=>store.records.get(input.table+'/'+row.id)||row));} return send(res, 200, result); }
+      if (route === '/api/query' && req.method === 'POST') { const input=JSON.parse(await body(req)),result=await query.executeAsync(input); return send(res, 200, result); }
       if(route==='/api/chat-state'&&req.method==='POST'){
         const input=JSON.parse(await body(req));
         return send(res,200,await saveConversationState(store,input,{asyncWriter:true}));
       }
-      if (route === '/api/rpc' && req.method === 'POST') { const input = JSON.parse(await body(req)); const data = query.rpc(input.rpc, input.args); if(!['search_contacts_page','notes_mentioning_people','my_staff_access_log'].includes(input.rpc))index.rebuild(); return send(res, 200, { data, error: null }); }
+      if (route === '/api/rpc' && req.method === 'POST') { const input = JSON.parse(await body(req)); const data = query.rpc(input.rpc, input.args); return send(res, 200, { data, error: null }); }
       if (route === '/api/structural' && req.method === 'POST') { const input = JSON.parse(await body(req)); return send(res, 200, { data: store.structural(input.type, input.id, input.action, input.options), error: null }); }
       if (route === '/api/media/upload' && req.method === 'POST') {
         const bytes = await body(req, 100 * 1024 * 1024), form = await new Request('http://localhost/', { method: 'POST', headers: { 'content-type': req.headers['content-type'] }, body: bytes }).formData();
@@ -246,7 +253,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
           const data=name.startsWith('mc-api-keys')?apiKeys.invoke(name,input):await domains.invoke(name,{...input,...(isChat?{signal:controller.signal}:{})});
           if(isChat)await retainCompletedConversation(store,input,data,{asyncWriter:true,signal:controller.signal});
           if(receiptId)await store.saveAsync('command_receipts',{id:receiptId,state:'verified',result:data},undefined,{signal:controller.signal});
-          index.rebuild();return send(res,200,name==='backfill-media-analysis'?data:{data,error:null});
+          return send(res,200,name==='backfill-media-analysis'?data:{data,error:null});
         }catch(error){
           if(receiptId&&store.get('command_receipts',receiptId)?.state==='attempted')await store.saveAsync('command_receipts',{id:receiptId,state:'needs_review',error:error.message,...(error.code==='UNAUTHORIZED_OPERATION'?{rejected_operation_type:error.operation_type,source_quote_matches:error.source_quote_matches}:{})});
           throw error;
@@ -256,30 +263,43 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       const requested = path.resolve(uiRoot, '.' + route); if (requested !== uiRoot && !requested.startsWith(uiRoot + path.sep)) return send(res, 403, { error: 'Invalid path' });
       const file = fs.existsSync(requested) && fs.statSync(requested).isFile() ? requested : path.join(uiRoot, 'index.html');
       if (!fs.existsSync(file)) return send(res, 503, { error: 'Build the notebook frontend first' });
-      const mime = { '.html':'text/html; charset=utf-8','.js':'text/javascript','.css':'text/css','.svg':'image/svg+xml','.png':'image/png','.woff2':'font/woff2' }[path.extname(file)] || 'application/octet-stream';
+      const mime = staticTypes[path.extname(file).toLowerCase()] || 'application/octet-stream';
       res.writeHead(200, { 'Content-Type': mime, 'X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer' }); fs.createReadStream(file).pipe(res);
     } catch (e) { send(res, e.status || (e.code === 'CONFLICT' ? 409 : 400), { error: e.message, code: e.code }); }
   });
   await new Promise((resolve, reject) => { server.once('error', reject); server.listen(port, host, resolve); });
-  const interval = setInterval(() => { if (!menerioImport.mutating) void index.rebuildBackground().catch(()=>{}); }, 30000);
+  // The watchers say what changed. Now and then the store compares every
+  // file's size and time with what it read, and the index re-reads the
+  // workspace, in case a watcher missed something (it can, under load).
+  const interval = setInterval(() => { if (!menerioImport.mutating) void store.verify().then(()=>index.rebuildBackground()).catch(()=>{}); }, 600000);
   const jobs=setInterval(()=>{if(!menerioImport.mutating)scheduler.tick().catch(()=>{});},30000);
   const syncTimer=setInterval(()=>{if(!menerioImport.mutating&&fs.existsSync(path.join(store.state,'sync-config.json')))void syncRunner.run();},60000);
   const mediaTimer=setInterval(()=>{if(!menerioImport.mutating)mediaSync.reconcile();},60000);
   const telegram=!originalRuntime&&process.env.GODSPEED_TELEGRAM==='on'&&process.env.GODSPEED_CANDIDATE_BOT_TOKEN&&process.env.GODSPEED_CANDIDATE_BOT_OWNER?new Telegram({store,domains,token:process.env.GODSPEED_CANDIDATE_BOT_TOKEN,owner:process.env.GODSPEED_CANDIDATE_BOT_OWNER,loginLink:process.env.GODSPEED_BROWSER_ORIGIN?destination=>{const code=randomBytes(32).toString('hex');loginLinks.set(code,Date.now()+300000);return process.env.GODSPEED_BROWSER_ORIGIN+'/login/'+code+'?next='+encodeURIComponent(destination);}:undefined}):null;
   const telegramTimer=telegram?setInterval(()=>{if(!menerioImport.mutating)telegram.tick().catch(()=>{});},3000):null;
   scheduler.deliver=telegram?(id,result)=>telegram.deliver(id,result):null;
-  let debounce,indexDebounce;const watchers=new Map();
-  const changed=(event,name)=>{store.invalidate();if(menerioImport.mutating||!name||name.replaceAll('\\','/').startsWith('.')||name.endsWith('.tmp'))return;clearTimeout(indexDebounce);indexDebounce=setTimeout(()=>{if(menerioImport.mutating)return;void index.rebuildBackground().catch(()=>{});},750);if(fs.existsSync(path.join(store.state,'sync-config.json'))){clearTimeout(debounce);debounce=setTimeout(()=>{if(!menerioImport.mutating)void syncRunner.run();},5000);}};
+  let debounce,indexDebounce;const watchers=new Map(),changedFiles=new Set();
+  // A changed workspace file is read into the index on its own; the store
+  // watches its records itself. An owner's page in the notebook folder is a
+  // file to the index too. Any change schedules a sync round.
+  const changed=root=>(event,name)=>{
+    if(menerioImport.mutating)return;
+    const relative=name==null?null:(root?root+'/':'')+String(name).replaceAll('\\','/');
+    if(relative!==null&&(relative.split('/').some(part=>part.startsWith('.'))||relative.endsWith('.tmp')))return;
+    changedFiles.add(relative===null?'*':relative);
+    clearTimeout(indexDebounce);indexDebounce=setTimeout(()=>{
+      if(menerioImport.mutating)return;
+      const names=[...changedFiles];changedFiles.clear();
+      if(names.includes('*')){void index.rebuildBackground().catch(()=>{});return;}
+      try{store.scan();index.refreshFiles(names);}catch{}
+    },750);
+    if(fs.existsSync(path.join(store.state,'sync-config.json'))){clearTimeout(debounce);debounce=setTimeout(()=>{if(!menerioImport.mutating)void syncRunner.run();},5000);}
+  };
   // Private backups and Git merge workspaces are outside the watched knowledge.
-  const watchRoot=name=>{const folder=path.join(store.root,name);if(!watchers.has(name)&&fs.existsSync(folder))watchers.set(name,fs.watch(folder,{recursive:true},changed));};
+  const watchRoot=name=>{const folder=path.join(store.root,name);if(!watchers.has(name)&&fs.existsSync(folder))watchers.set(name,fs.watch(folder,{recursive:true},changed(name)));};
   for(const name of durableRoots)watchRoot(name);
-  const rootWatcher=fs.watch(store.root,(event,name)=>{if(durableRoots.includes(name)){watchRoot(name);changed(event,name);}else if(durableFiles.includes(name))changed(event,name);});
-  // Every request read the whole vault, and the open dashboard sends a dozen at
-  // once: on an imported workspace that held the server for seven to nine
-  // seconds a minute. With the watchers above telling it about every change,
-  // reads may reuse the last full read for two seconds. Writes never do.
-  store.reuseFor=2000;
-  return { server, store, index, query, domains, scheduler, sync, mediaSync,address: server.address(), close: async () => { await syncRunner.close();await menerioImport.close();rootWatcher.close();for(const watcher of watchers.values())watcher.close();clearTimeout(debounce);clearTimeout(indexDebounce);clearInterval(telegramTimer);clearInterval(interval);clearInterval(jobs);clearInterval(syncTimer);clearInterval(mediaTimer); await new Promise(resolve => server.close(resolve)); index.close(); } };
+  const rootWatcher=fs.watch(store.root,(event,name)=>{if(durableRoots.includes(name)){watchRoot(name);changed(name)(event,null);}else if(durableFiles.includes(name))changed('')(event,name);});
+  return { server, store, index, query, domains, scheduler, sync, mediaSync,address: server.address(), close: async () => { stopIndexing();store.unwatch();await syncRunner.close();await menerioImport.close();rootWatcher.close();for(const watcher of watchers.values())watcher.close();clearTimeout(debounce);clearTimeout(indexDebounce);clearInterval(telegramTimer);clearInterval(interval);clearInterval(jobs);clearInterval(syncTimer);clearInterval(mediaTimer); await new Promise(resolve => server.close(resolve)); index.close(); } };
 }
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const root = process.env.GODSPEED_WORKSPACE;

@@ -392,6 +392,10 @@ export class FileSync {
     try{this.git([...this.quiet(),'merge','--ff-only','--no-stat','-q',target],undefined,{timeout:300000});}
     catch(error){throw new Error('Waiting for local changes to be saved before the notebook can bring in the other machines\' edits: '+String(error.stderr||error.message).split('\n').filter(l=>/^\s+\S/.test(l)).map(l=>l.trim()).slice(0,3).join(', '));}
     for(const review of reviews)atomic(path.join(this.store.root,'conflicts',review.id+'.json'),JSON.stringify(review,null,2));
+    // The notebook server re-reads only files it is told about: the ones
+    // this merge changed, before it next writes under the workspace lock.
+    let changed=['*'];try{changed=this.names(['diff','--name-only','-z','--no-renames',head,target,'--',recordsFolder]).map(name=>name.slice(recordsFolder.length+1));}catch{}
+    this.store.journal(changed);
     this.store.scan(true);
     return target;
   }

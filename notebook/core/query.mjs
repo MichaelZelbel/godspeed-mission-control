@@ -61,6 +61,22 @@ function condition(row, [op, key, value]) {
     default: throw new Error('Unsupported filter ' + op);
   }
 }
+// The columns a selection names, as a database would return them; null for
+// "everything" or for anything this does not understand. The id and the
+// version hash always come along: the dashboard needs both to save safely.
+// Sending every column regardless sent the notes list as 63 MB of full text.
+export function projection(selection){
+  const text=String(selection??'*').trim();if(!text||text==='*')return null;
+  const items=[];let depth=0,part='';for(const c of text){if(c==='(')depth++;if(c===')')depth--;if(c===','&&!depth){items.push(part.trim());part='';}else part+=c;}if(part.trim())items.push(part.trim());
+  const keys=new Set(['id','_hash']);
+  for(const item of items){
+    if(item==='*')return null;
+    const join=item.match(/^(?:(\w+):)?(\w+)(?:!\w+)?\s*\(/);if(join){keys.add(join[1]||join[2]);continue;}
+    const plain=item.match(/^\w+$/);if(plain){keys.add(item);continue;}
+    return null;
+  }
+  return keys;
+}
 export class QueryService {
   constructor(store) { this.store = store; }
   withSnapshot(read){if(!this.snapshotDepth)this.store.scan();this.snapshotDepth=(this.snapshotDepth||0)+1;try{return read();}finally{this.snapshotDepth--;}}
@@ -68,14 +84,19 @@ export class QueryService {
     if(table==='jobs'&&this.nativeHermesHome)return nativeJobs(this.nativeHermesHome,this.store.device);
     if(this.nativeHermesHome&&['goals','forecasts','work_items'].includes(table))return nativeCardRows(this.store,table);
     if(!this.snapshotDepth)this.store.scan();
-    const all=[...this.store.records.values()],memo=new Map(),list = type => {
+    // Records of one type come from the store's per-type lists: filtering all
+    // sixteen thousand records once per table and query added up.
+    let everything=null;const all=()=>everything||=[...this.store.records.values()];
+    const ofType=type=>typeof this.store.ofType==='function'?this.store.ofType(type):all().filter(r=>r.type===type);
+    const memo=new Map(),list = type => {
       if(memo.has(type))return memo.get(type);
-      const values=all.filter(r=>r.type===type&&!r.removed_at);if(type==='deadlines')values.push(...dueRows(this.store));
+      const values=ofType(type).filter(r=>!r.removed_at);if(type==='deadlines')values.push(...dueRows(this.store));
       if(type!=='moments'){memo.set(type,values);return values;}
-      const corrected=values.map(original=>{const corrections=all.filter(r=>r.type==='event_corrections'&&r.moment_id===original.id).sort((a,b)=>a.sequence-b.sequence||a.id.localeCompare(b.id));return corrections.reduce((r,c)=>({...r,...c.patch,_hash:c._hash}),original);}).filter(r=>!r.removed_at);
+      const byMoment=new Map();for(const c of ofType('event_corrections')){let l=byMoment.get(c.moment_id);if(!l)byMoment.set(c.moment_id,l=[]);l.push(c);}
+      const corrected=values.map(original=>{const corrections=(byMoment.get(original.id)||[]).slice().sort((a,b)=>a.sequence-b.sequence||a.id.localeCompare(b.id));return corrections.reduce((r,c)=>({...r,...c.patch,_hash:c._hash}),original);}).filter(r=>!r.removed_at);
       memo.set(type,corrected);return corrected;
     };
-    const get=(type,id)=>this.store.records.get(type+'/'+id)||all.find(r=>r.type===type&&(r.aliases||[]).includes(id));
+    const get=(type,id)=>this.store.records.get(type+'/'+id)||ofType(type).find(r=>(r.aliases||[]).includes(id));
     if (table === 'world_entities') return [...list('contacts').map(r => ({ ...r, source_table: 'contact', kind: 'person', description: r.notes || null, ai_visibility: r.ai_visibility || 'visible' })), ...list('entities').map(r => ({ ...r, source_table: 'entity', kind: r.entity_type }))];
     if (table === 'world_events') return list('moments').map(r => ({ ...r, source_table: 'moment' }));
     if (table === 'world_claims') return [...this.rows('profile_facts').filter(r=>r.visibility_scope!=='private').map(r=>({...r,id:r.claim_id,source_table:'claim',subject_kind:r.subject_type,category:r.category_slug||'other',object_id:null,source_kind:r.source_type,source_ref:r.source_id})),...list('contact_relationships').map(r=>({...r,source_table:'contact_relationship',subject_kind:r.source_type,subject_id:r.source_id,category:'relationship',attribute:'relationship',value:r.custom_label||r.label,object_id:r.target_id,cardinality:'many',confidence:r.confidence||'likely'}))];
@@ -98,7 +119,7 @@ export class QueryService {
     if(table==='activity_events'){
       const tracked=new Set(['notes','contacts','claims','entities','collections','collection_items','moments','contact_groups','contact_group_memberships','action_items','contact_topics','profile_categories','fact_slots']);
       const label={notes:'note',contacts:'person',claims:'fact',entities:'world entity',collections:'collection',collection_items:'collection item',moments:'event',contact_groups:'group',contact_group_memberships:'group membership',action_items:'action',contact_topics:'discussion topic',profile_categories:'profile category',fact_slots:'fact setting'};
-      const current=all.filter(r=>tracked.has(r.type)),prior=list('record_history').filter(r=>tracked.has(r.source_type)).map(r=>r.snapshot),versions=[...prior,...current];
+      const current=all().filter(r=>tracked.has(r.type)),prior=list('record_history').filter(r=>tracked.has(r.source_type)).map(r=>r.snapshot),versions=[...prior,...current];
       const derived=versions.map(r=>({id:'activity-'+hash([r.uid,r.revision,r.updated_at]).slice(0,32),actor_id:'owner',user_id:'owner',item_id:r.id,item_type:label[r.type],action:r.removed_at?'delete':r.revision===1?'create':'update',created_at:r.updated_at,metadata:{source_uid:r.uid,revision:r.revision}}));
       for(const r of list('event_corrections'))derived.push({id:'activity-'+r.uid,actor_id:'owner',user_id:'owner',item_id:r.moment_id,item_type:'event',action:r.patch.removed_at?'delete':'update',created_at:r.created_at,metadata:{correction:true}});
       return [...new Map([...list(table),...derived].map(r=>[r.id,r])).values()];
@@ -194,14 +215,20 @@ export class QueryService {
     // Preserve observed joined shapes without a second source of truth.
     // rows() already read a consistent snapshot. Resolve joins from that same
     // snapshot instead of rescanning the whole vault once per joined item.
-    const identities=new Map();for(const record of this.store.records.values())for(const id of [record.id,...record.aliases||[]])identities.set(record.type+'/'+id,record);
-    const joined=(type,id)=>identities.get(type+'/'+id)||null;
+    // Joins only when the selection asks for one, from one map of identities
+    // per view of the store rather than one per query.
+    const joins=/\(/.test(String(selection));let identities=null;
+    const joined=(type,id)=>{if(!identities){if(this.identityFor!==this.store.records){this.identityCache=new Map();for(const record of this.store.records.values())for(const id of [record.id,...record.aliases||[]])this.identityCache.set(record.type+'/'+id,record);this.identityFor=this.store.records;}identities=this.identityCache;}return identities.get(type+'/'+id)||null;};
+    const keep=projection(selection);
     rows = rows.map(r => {
-      const result = { ...r, _hash: r._hash || this.store.records.get(table+'/'+r.id)?._hash };
-      if (selection.includes('source_note:')) result.source_note = r.source_note_id ? joined('notes', r.source_note_id) : null;
-      if (selection.includes('notes(')) result.notes = r.note_id ? joined('notes', r.note_id) : null;
-      if (selection.includes('contacts(')) result.contacts = r.contact_id ? joined('contacts', r.contact_id) : null;
-      for(const match of selection.matchAll(/(\w+):(\w+)(?:!\w+)?\(/g)){const [,alias,column]=match,target=links[column]||(tables.has(column)?column:null),foreign=links[column]?column:Object.keys(links).find(key=>links[key]===target&&r[key]);if(target&&foreign)result[alias]=r[foreign]?joined(target,r[foreign]):null;}
+      let result = { ...r, _hash: r._hash || this.store.records.get(table+'/'+r.id)?._hash };
+      if(joins){
+        if (selection.includes('source_note:')) result.source_note = r.source_note_id ? joined('notes', r.source_note_id) : null;
+        if (selection.includes('notes(')) result.notes = r.note_id ? joined('notes', r.note_id) : null;
+        if (selection.includes('contacts(')) result.contacts = r.contact_id ? joined('contacts', r.contact_id) : null;
+        for(const match of selection.matchAll(/(\w+):(\w+)(?:!\w+)?\(/g)){const [,alias,column]=match,target=links[column]||(tables.has(column)?column:null),foreign=links[column]?column:Object.keys(links).find(key=>links[key]===target&&r[key]);if(target&&foreign)result[alias]=r[foreign]?joined(target,r[foreign]):null;}
+      }
+      if(keep)result=Object.fromEntries(Object.entries(result).filter(([key])=>keep.has(key)));
       return result;
     });
     if (single && rows.length !== 1) throw new Error('Expected one record');

@@ -9,7 +9,9 @@ import {Store} from '../core/records/store.mjs';
 test('read-only people RPCs do not rebuild the full index while mutating RPCs still refresh it',async()=>{
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-read-rpc-')),seed=new Store(root),person=seed.save('contacts',{name:'Fictional index check'}),template=seed.save('collection_templates',{title:'Fictional template',usage_count:0}),service=await createService({root,port:0}),base='http://127.0.0.1:'+service.address.port;let rebuilds=0;const original=service.index.rebuild.bind(service.index);service.index.rebuild=()=>{rebuilds++;return original();};
  const rpc=async(name,args)=>{const response=await fetch(base+'/api/rpc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({rpc:name,args})});assert.equal(response.status,200);return response.json();};
- try{const read=await rpc('search_contacts_page',{search_text:'Fictional index'});assert.equal(read.data.rows[0].id,person.id);await rpc('notes_mentioning_people',{names:['Fictional index']});await rpc('my_staff_access_log',{});assert.equal(rebuilds,0);await rpc('increment_collection_template_usage',{template_id:template.id});assert.equal(rebuilds,1);assert.ok(service.index.search('"usage_count":1').some(r=>r.id===template.id));}finally{await service.close();}
+ try{const read=await rpc('search_contacts_page',{search_text:'Fictional index'});assert.equal(read.data.rows[0].id,person.id);await rpc('notes_mentioning_people',{names:['Fictional index']});await rpc('my_staff_access_log',{});assert.equal(rebuilds,0);await rpc('increment_collection_template_usage',{template_id:template.id});
+  // A changed record reaches the index row by row (since 6 October 2026), never through a full rebuild.
+  assert.equal(rebuilds,0);const saved=service.store.get('collection_templates',template.id);assert.equal(saved.usage_count,1);assert.equal(service.index.indexed.get(saved.uid),saved._hash);assert.ok(service.index.search('Fictional template').some(r=>r.id===template.id));}finally{await service.close();}
 });
 
 test('latest work excludes failed drafts and reports a changed checked result',async()=>{

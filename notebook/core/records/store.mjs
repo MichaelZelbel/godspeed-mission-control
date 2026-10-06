@@ -3,7 +3,6 @@ import path from 'node:path';
 import { randomUUID, createHash } from 'node:crypto';
 import { durable,durableRoots,durableFiles,recordsFolder,legacyRecordsFolder } from '../file-policy.mjs';
 import { encode as encodeFile, decode as decodeFile, safe as safeName, candidate, fits, folderFor, nameFor, candidateName, systemPath, isReadable, key as nameKey, childrenOf } from './layout.mjs';
-const CACHE_BYTES = 1024 * 1024 * 1024;
 
 export const hash = value => createHash('sha256').update(Buffer.isBuffer(value) || typeof value === 'string' ? value : JSON.stringify(value)).digest('hex');
 export const slug = value => String(value).normalize('NFKD').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 80) || 'record';
@@ -26,12 +25,27 @@ export function atomic(file, text) {
 export const encode = encodeFile;
 export const decode = decodeFile;
 const posix = file => file.split(path.sep).join('/');
+// A copy that shares the (immutable) strings: what structuredClone did per
+// record and per read, at a fraction of the cost, since a note's text is
+// most of its size.
+export function copy(value) {
+  if (value === null || typeof value !== 'object') return value;
+  if (Array.isArray(value)) return value.map(copy);
+  const out = {}; for (const key in value) out[key] = copy(value[key]); return out;
+}
+// The records the store holds are frozen: they live as long as their files
+// do not change, so code that changed one in place instead of a copy would
+// change what the next save writes. It fails loudly instead.
+// GODSPEED_FREEZE_RECORDS=0 turns this off.
+const freezing = process.env.GODSPEED_FREEZE_RECORDS !== '0';
+function deepFreeze(value) { if (value && typeof value === 'object' && !Object.isFrozen(value)) { Object.freeze(value); for (const key in value) deepFreeze(value[key]); } return value; }
 export class Store {
-  constructor(root, { device = 'local', failAfter = null } = {}) {
+  constructor(root, { device = 'local', failAfter = null, watch = false } = {}) {
     this.root = path.resolve(root); this.device = safe(device); this.failAfter = failAfter;
     this.recordsRoot = path.join(this.root, recordsFolder); this.state = path.join(this.root, '.godspeed');
     fs.mkdirSync(this.state, { recursive: true });
-    this.withLock(() => { this.moveLegacyRecords(); fs.mkdirSync(this.recordsRoot, { recursive: true }); this.recover(); }); this.scan();
+    this.withLock(() => { this.moveLegacyRecords(); fs.mkdirSync(this.recordsRoot, { recursive: true }); this.recover(); });
+    if (watch) this.watch(); else this.scan();
   }
   // Records lived in records/ until 2026-10-05. A workspace that still has that
   // folder, and no notebook folder yet, has it renamed once, before any pending
@@ -110,17 +124,22 @@ export class Store {
   invalidate() { this.stale = true; }
   scan(force = false) {
     if (this.snapshotDepth && !force && this.records) return this.records;
+    // A store that watches the folder (the notebook server) re-reads only the
+    // files the watcher or another writer's change journal named. Reading all
+    // of them per request is what held the server: on a real imported
+    // workspace (16,000 files, 114 MB) a read took longer than the two
+    // seconds it was allowed to be reused, so an open dashboard kept the
+    // server reading for 138 of 240 seconds and the health check waited 30.
+    if (!force && this.watching && this.records) { this.readJournal(); if (!this.dirtyAll) { this.applyDirty(); return this.records; } force = true; }
     if (!force && this.reuseFor && this.records && !this.holding && !this.stale && Date.now() - this.scannedAt < this.reuseFor) return this.records;
-    this.stale = false; this.scannedAt = Date.now();
+    this.stale = false; this.scannedAt = Date.now(); this.dirtyAll = false; this.dirty?.clear();
     // How often the vault was actually read, which is what a save costs.
     this.reads = (this.reads || 0) + 1;
-    const records = new Map(), problems = [], uids = new Map(), aliases = new Map(), fileOf = new Map(), keyOfUid = new Map(), documents = new Set();
-    const priorCache=this.decodedCache||new Map(),nextCache=new Map(),lost=new Set(),wasRecord=new Set([...(this.fileOf?.values()||[]),...(this.lostRecords||[])]);let cachedBytes=0;
     // Every record file under notebook/, at any depth. Dot folders (an
     // editor's own settings, its trash) and linked folders are not the
     // notebook's.
     const files=[],walk=(dir,relative)=>{
-      let entries;try{entries=fs.readdirSync(dir,{withFileTypes:true});}catch(error){if(error.code==='ENOENT')return;throw error;}
+      let entries;try{entries=fs.readdirSync(dir,{withFileTypes:true});}catch(error){if(error.code==='ENOENT'||error.code==='ENOTDIR')return;throw error;}
       for(const entry of entries){
         if(entry.name.startsWith('.')||entry.isSymbolicLink())continue;
         const name=relative?relative+'/'+entry.name:entry.name,file=path.join(dir,entry.name);
@@ -128,43 +147,192 @@ export class Store {
       }
     };
     walk(this.recordsRoot,'');
+    const prior=this.entries||new Map(),entries=new Map();
+    for(const [file,name] of files){const entry=this.readEntry(file,name,prior.get(file));if(entry)entries.set(file,entry);}
+    this.entries=entries;
+    return this.derive();
+  }
+  // One file as the store holds it: its text and either its record, the fact
+  // that it is an owner's own page, or the problem that keeps it from being
+  // read. The text is kept so that a file reported as changed but holding the
+  // same bytes costs one read and nothing more. Always actual bytes: metadata
+  // misses in-place edits and restored timestamps.
+  readEntry(file,name,previous){
+    let text;try{text=fs.readFileSync(file,'utf8');}catch(error){if(error.code==='ENOENT'||error.code==='EISDIR'||error.code==='ENOTDIR')return null;return {name,problem:error.message};}
+    if(previous&&previous.text===text&&previous.name===name)return previous;
+    try{const record=decode(text,file);record._hash=hash(encode(record));if(freezing)deepFreeze(record);return {name,text,record};}
+    catch(error){
+      // An owner's own page in the notebook folder is not a record. A file
+      // that held a record a moment ago and lost its frontmatter is.
+      if(error.code==='NOT_RECORD'&&(previous?.record||previous?.lost))return {name,text,lost:true,problem:'This file held a record and lost its frontmatter'};
+      if(error.code==='NOT_RECORD')return {name,text,document:true};
+      return {name,text,problem:error.message};
+    }
+  }
+  // The store's view from what it holds per file. No file is read here.
+  derive(){
+    const before=this.records;
+    const records = new Map(), problems = [], uids = new Map(), aliases = new Map(), fileOf = new Map(), keyOfUid = new Map(), documents = new Set();
     // Which file names are in use, compared as a file system that ignores case
     // would (null for a page that is not a record), and who holds each file.
     const pathIndex=new Map(),keyOfFile=new Map(),index=(name,key)=>{const k=nameKey(name),list=pathIndex.get(k);if(list)list.push(key);else pathIndex.set(k,[key]);};
-    for (const [file,name] of files) {
-        try {
-          // Always read actual bytes. Metadata-only caches miss in-place edits or
-          // restored timestamps; retained templates must never escape to callers.
-          const text=fs.readFileSync(file,'utf8'),cached=priorCache.get(file),same=cached?.text===text;
-          if(same&&cached.document){documents.add(file);index(name,null);nextCache.set(file,cached);continue;}
-          let record;
-          try{record=same?structuredClone(cached.record):decode(text,file);}
-          catch(error){
-            // An owner's own page in the notebook folder is not a record. A file
-            // that held a record a moment ago and lost its frontmatter is.
-            if(error.code==='NOT_RECORD'&&wasRecord.has(file)){lost.add(file);throw Error('This file held a record and lost its frontmatter');}
-            if(error.code!=='NOT_RECORD')throw error;
-            documents.add(file);index(name,null);nextCache.set(file,{text,document:true});continue;
-          }
-          const key=record.type+'/'+record.id;
-          if(!same)record._hash=hash(encode(record));
-          // A record left out of the cache is decoded, re-encoded and hashed on
-          // every read. At 16 MB a real imported vault (15,900 records, 63 MB)
-          // kept a third of itself cached and spent a second per request on the
-          // rest, so the cache holds the whole vault up to a size no personal
-          // workspace reaches.
-          const bytes=text.length*2;if(cachedBytes+bytes<=CACHE_BYTES){nextCache.set(file,same?cached:{text,record:structuredClone(record)});cachedBytes+=bytes;}
-          if (uids.has(record.uid)) problems.push({ file, error: 'Duplicate UUID', other: uids.get(record.uid) });
-          uids.set(record.uid, key); records.set(key, record); fileOf.set(key, file); keyOfUid.set(record.uid, key); keyOfFile.set(file, key); index(name, key);
-          for (const alias of record.removed_at ? [] : [record.id, ...(record.aliases || [])]) {
-            const akey = record.type + '/' + alias.toLowerCase();
-            if (aliases.has(akey) && aliases.get(akey) !== key) problems.push({ file, error: 'Ambiguous alias', alias });
-            aliases.set(akey, key);
-          }
-        } catch (e) { problems.push({ file, error: e.message }); }
+    for(const [file,entry] of this.entries){
+      if(entry.document){documents.add(file);index(entry.name,null);continue;}
+      if(entry.problem){problems.push({file,error:entry.problem});continue;}
+      try{
+        const record=entry.record,key=record.type+'/'+record.id;
+        if (uids.has(record.uid)) problems.push({ file, error: 'Duplicate UUID', other: uids.get(record.uid) });
+        uids.set(record.uid, key); records.set(key, record); fileOf.set(key, file); keyOfUid.set(record.uid, key); keyOfFile.set(file, key); index(entry.name, key);
+        for (const alias of record.removed_at ? [] : [record.id, ...(record.aliases || [])]) {
+          const akey = record.type + '/' + alias.toLowerCase();
+          if (aliases.has(akey) && aliases.get(akey) !== key) problems.push({ file, error: 'Ambiguous alias', alias });
+          aliases.set(akey, key);
+        }
+      }catch(e){problems.push({file,error:e.message});}
     }
-    this.decodedCache=nextCache;this.lostRecords=lost;this.records = records; this.fileOf = fileOf; this.keyOfUid = keyOfUid; this.pathIndex = pathIndex; this.keyOfFile = keyOfFile; this.documents = documents; this.problems = problems; this.lastScan = new Date().toISOString();
-    this.problems.push(...this.validateReferences([...records.values()])); return records;
+    this.records = records; this.fileOf = fileOf; this.keyOfUid = keyOfUid; this.pathIndex = pathIndex; this.keyOfFile = keyOfFile; this.documents = documents; this.problems = problems; this.lastScan = new Date().toISOString();
+    this.problems.push(...this.validateReferences([...records.values()]));
+    this.byTypeCache=null;this.byTypeFor=records;
+    if(before&&this.listeners?.size)this.announce(before,records);
+    return records;
+  }
+  // Kept under its old name for the tests that count what the store holds.
+  get decodedCache(){return this.entries;}
+  // Records of one type, without filtering every record of every type.
+  ofType(type){
+    // A transaction's or a guard's view (Object.create of the store) holds a
+    // records map of its own and changes it in place: no cache for those.
+    if(this.byTypeFor!==this.records)return [...this.records.values()].filter(r=>r.type===type);
+    if(!this.byTypeCache){this.byTypeCache=new Map();for(const record of this.records.values()){let list=this.byTypeCache.get(record.type);if(!list)this.byTypeCache.set(record.type,list=[]);list.push(record);}}
+    return this.byTypeCache.get(type)||[];
+  }
+  // Who wants to hear which records changed (the search index): the records
+  // now current, and the records gone or removed since the last view.
+  onChange(listener){(this.listeners||=new Set()).add(listener);return ()=>this.listeners.delete(listener);}
+  announce(before,after){
+    const changed=[],gone=[];
+    for(const [key,record] of after){const old=before.get(key);if(!old||old._hash!==record._hash)changed.push(record);}
+    for(const [key,record] of before)if(!after.has(key)||after.get(key).uid!==record.uid)gone.push(record);
+    if(!changed.length&&!gone.length)return;
+    for(const listener of this.listeners)try{listener({changed,gone});}catch{}
+  }
+  // ---- Watching the folder -------------------------------------------------
+  // The notebook server watches notebook/ and tells the store which files
+  // changed; the store then reads only those. Writers in other processes (the
+  // sync worker, the command line) also append the files they wrote to a
+  // change journal, so a write made under the workspace lock sees them at
+  // once, before the watcher has delivered its events.
+  watch(){
+    if(this.watching)return;
+    this.dirty=new Set();this.dirtyAll=false;
+    this.journalFile=path.join(this.state,'changes.log');
+    // Watch first, then note the journal, then read everything: a change made
+    // in between is at worst read twice, never missed.
+    const start=()=>{
+      try{
+        this.watcher=fs.watch(this.recordsRoot,{recursive:true},(event,name)=>this.touched(name==null?null:String(name)));
+        this.watcher.on('error',()=>{this.dirtyAll=true;try{this.watcher.close();}catch{}this.watcher=null;this.rewatch=setTimeout(start,1000);this.rewatch.unref?.();});
+      }catch{this.dirtyAll=true;this.rewatch=setTimeout(start,1000);this.rewatch.unref?.();}
+    };
+    fs.mkdirSync(this.recordsRoot,{recursive:true});start();
+    this.journalAt=this.journalPosition();
+    this.scan(true);this.watching=true;
+  }
+  unwatch(){this.watching=false;clearTimeout(this.rewatch);try{this.watcher?.close();}catch{}this.watcher=null;}
+  // A path relative to notebook/; null means "something changed, I cannot
+  // say what" (an overflowing watcher), which costs one full read.
+  touched(name){
+    if(name==null){this.dirtyAll=true;return;}
+    const relative=name.split('\\').join('/').replace(/^\/+/,'');
+    if(!relative){this.dirtyAll=true;return;}
+    if(relative.split('/').some(part=>part.startsWith('.')))return;
+    this.dirty.add(relative);
+  }
+  applyDirty(){
+    if(!this.dirty.size)return false;
+    const names=[...this.dirty];this.dirty.clear();
+    const byName=new Map();for(const [file,entry] of this.entries)byName.set(entry.name,file);
+    const affected=new Map();
+    for(const name of names){
+      const known=byName.get(name);
+      if(known){affected.set(known,name);continue;}
+      const absolute=path.join(this.recordsRoot,...name.split('/'));
+      let stat=null;try{stat=fs.lstatSync(absolute);}catch(error){if(error.code!=='ENOENT'&&error.code!=='ENOTDIR')throw error;}
+      if(stat?.isFile()){if(candidate(name))affected.set(absolute,name);continue;}
+      if(stat?.isSymbolicLink())continue;
+      // A folder: renamed, moved, deleted or new. Everything known under it
+      // and everything now in it is read again.
+      const prefix=name+'/';for(const [file,entry] of this.entries)if(entry.name.startsWith(prefix))affected.set(file,entry.name);
+      if(stat?.isDirectory()){
+        const walk=(dir,relative)=>{let list;try{list=fs.readdirSync(dir,{withFileTypes:true});}catch{return;}for(const e of list){if(e.name.startsWith('.')||e.isSymbolicLink())continue;const n=relative+'/'+e.name,f=path.join(dir,e.name);if(e.isDirectory())walk(f,n);else if(e.isFile()&&candidate(n))affected.set(f,n);}};
+        walk(absolute,name);
+      }
+    }
+    let changed=false;
+    for(const [file,name] of affected){
+      const previous=this.entries.get(file),entry=this.readEntry(file,name,previous);
+      if(entry===previous)continue;
+      changed=true;if(entry)this.entries.set(file,entry);else this.entries.delete(file);
+    }
+    if(changed){this.dirtyChanges=(this.dirtyChanges||0)+1;this.derive();}
+    return changed;
+  }
+  journalPosition(){try{const fd=fs.openSync(this.journalFile||path.join(this.state,'changes.log'),'r');try{const head=Buffer.alloc(64),n=fs.readSync(fd,head,0,64,0);return {epoch:head.subarray(0,n).toString('utf8').split('\n')[0],size:fs.fstatSync(fd).size};}finally{fs.closeSync(fd);}}catch(error){if(error.code==='ENOENT')return {epoch:null,size:0};throw error;}}
+  readJournal(){
+    const now=this.journalPosition(),was=this.journalAt||{epoch:null,size:0};
+    if(now.epoch===was.epoch&&now.size===was.size)return;
+    this.journalAt=now;
+    if(now.epoch!==was.epoch&&was.epoch!==null||now.size<was.size){this.dirtyAll=true;return;}
+    const from=now.epoch===was.epoch?was.size:0,fd=fs.openSync(this.journalFile,'r');
+    try{
+      const buffer=Buffer.alloc(now.size-from);fs.readSync(fd,buffer,0,buffer.length,from);
+      for(const line of buffer.toString('utf8').split('\n')){
+        if(!line||line.startsWith('#'))continue;
+        const tab=line.indexOf('\t'),writer=line.slice(0,tab),name=line.slice(tab+1);
+        if(writer===this.writerId)continue;
+        if(name==='*'){this.dirtyAll=true;return;}
+        this.touched(name);
+      }
+    }finally{fs.closeSync(fd);}
+  }
+  // Tell every watching store which files under notebook/ this process
+  // wrote ('*' for "anything may have changed"). Writers hold the workspace
+  // lock, so lines never interleave. A journal past four megabytes starts
+  // over under a new epoch, which a reader answers with one full read.
+  journal(names){
+    if(!names.length)return;
+    const file=path.join(this.state,'changes.log');
+    let epoch=null;try{const stat=fs.statSync(file);if(stat.size<4*1024*1024)epoch=true;}catch(error){if(error.code!=='ENOENT')throw error;}
+    if(!epoch)fs.writeFileSync(file,'#'+randomUUID()+'\n');
+    // Tagged per store, not per process: two stores in one process (an
+    // import beside the server) must still see each other's writes.
+    this.writerId||=process.pid+'-'+randomUUID().slice(0,8);
+    fs.appendFileSync(file,names.map(name=>this.writerId+'\t'+name+'\n').join(''));
+  }
+  // The watcher's safety net, run now and then in the background: a file
+  // whose size or time differs from what the store read is read again.
+  async verify(){
+    if(!this.watching)return 0;
+    const io=fs.promises,seen=new Set();let marked=0;
+    const walk=async(dir,relative)=>{
+      let list;try{list=await io.readdir(dir,{withFileTypes:true});}catch{return;}
+      for(const e of list){
+        if(e.name.startsWith('.')||e.isSymbolicLink())continue;
+        const name=relative?relative+'/'+e.name:e.name,file=path.join(dir,e.name);
+        if(e.isDirectory()){await walk(file,name);continue;}
+        if(!e.isFile()||!candidate(name))continue;
+        seen.add(file);
+        let stat;try{stat=await io.stat(file);}catch{continue;}
+        const entry=this.entries.get(file);
+        // The first look at a file only notes its size and time, unless it
+        // changed around the time it was read.
+        if(!entry||entry.size!==undefined&&(entry.size!==stat.size||entry.mtimeMs!==stat.mtimeMs)||entry.size===undefined&&stat.mtimeMs>(this.scannedAt||0)-3000){this.touched(name);marked++;}
+        if(entry){entry.size=stat.size;entry.mtimeMs=stat.mtimeMs;}
+      }
+    };
+    await walk(this.recordsRoot,'');
+    for(const [file,entry] of this.entries)if(!seen.has(file)){this.touched(entry.name);marked++;}
+    return marked;
   }
   validateReferences(records) {
     const problems = [], uids = new Map(records.map(r => [r.uid,r]));
@@ -175,8 +343,9 @@ export class Store {
     }
     return problems;
   }
-  list(type, { removed = false } = {}) { this.scan(); return [...this.records.values()].filter(r => r.type === type && (removed || !r.removed_at)); }
-  get(type, id) { this.scan(); return this.records.get(type + '/' + id) || [...this.records.values()].find(r => r.type === type && (r.aliases || []).includes(id)); }
+  // Callers get copies: a record they change is theirs, never the view's.
+  list(type, { removed = false } = {}) { this.scan(); return this.ofType(type).filter(r => removed || !r.removed_at).map(copy); }
+  get(type, id) { this.scan(); const record = this.records.get(type + '/' + id) || this.ofType(type).find(r => (r.aliases || []).includes(id)); return record && copy(record); }
   prepare(type, value, old = null) {
     const now = new Date().toISOString(), uid = old?.uid || value.uid || randomUUID();
     const id = old?.id || value.id || slug(value.name || value.title || type) + '-' + uid.slice(0, 8);
@@ -359,15 +528,18 @@ export class Store {
     for (const record of records) {
       const key = record.type + '/' + record.id, file = path.join(this.recordsRoot, ...targets.get(key).split('/')), text = encode(record), fresh = decode(text, file);
       if (fileOf.has(key)) { if (fileOf.get(key) !== file) dropped.add(fileOf.get(key)); release(key, fileOf.get(key)); }
-      fresh._hash = hash(encode(fresh)); view.set(key, fresh); fileOf.set(key, file); keyOfUid.set(fresh.uid, key); written.add(file);
+      fresh._hash = hash(encode(fresh)); if (freezing) deepFreeze(fresh); view.set(key, fresh); fileOf.set(key, file); keyOfUid.set(fresh.uid, key); written.add(file);
       keyOfFile.set(file, key); pathIndex.set(nameOf(file), [...(pathIndex.get(nameOf(file)) || []).filter(h => h !== key && h !== null), key]);
-      this.decodedCache?.set(file, { text, record: structuredClone(fresh) }); this.documents?.delete(file);
+      this.entries?.set(file, { name: posix(path.relative(this.recordsRoot, file)), text, record: fresh }); this.documents?.delete(file);
     }
-    for (const file of dropped) if (!written.has(file)) this.decodedCache?.delete(file);
+    for (const file of dropped) if (!written.has(file)) this.entries?.delete(file);
     if (removeKeys.length) for (const [uid, key] of keyOfUid) if (!view.has(key)) keyOfUid.delete(uid);
     // The commit validated every reference of the new state before writing.
     this.problems = (this.problems || []).filter(p => p.file && !written.has(p.file) && !dropped.has(p.file) && p.error !== 'Missing or inconsistent reference');
-    this.records = view; this.fileOf = fileOf; this.keyOfUid = keyOfUid; this.pathIndex = pathIndex; this.keyOfFile = keyOfFile; this.lastScan = new Date().toISOString(); return view;
+    const before = this.records;
+    this.records = view; this.fileOf = fileOf; this.keyOfUid = keyOfUid; this.pathIndex = pathIndex; this.keyOfFile = keyOfFile; this.lastScan = new Date().toISOString(); this.byTypeCache = null; this.byTypeFor = view;
+    if (this.listeners?.size) this.announce(before, view);
+    return view;
   }
   applyTransaction(dir, manifest) {
     for (let i = 0; i < manifest.length; i++) {
@@ -381,6 +553,7 @@ export class Store {
       atomic(file, text);
       if (this.failAfter === i + 1) throw new Error('Injected crash');
     }
+    this.journal(manifest.map(item=>item.file.replaceAll('\\','/').replace(new RegExp('^'+legacyRecordsFolder+'/'), recordsFolder+'/')).filter(name=>name.startsWith(recordsFolder+'/')).map(name=>name.slice(recordsFolder.length+1)));
     atomic(path.join(dir, 'completed'), new Date().toISOString());
     this.discardCompletedTransaction(dir);
   }
