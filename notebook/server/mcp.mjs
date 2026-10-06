@@ -1,7 +1,7 @@
 import {visibleRows} from '../core/visibility.mjs';
 import {toolScope} from '../core/api-keys.mjs';
 import {topicDefinitions,topicToolNames,topicTool} from './topic-tools.mjs';
-import {assistantMutationContext} from '../core/assistant-mutations.mjs';
+import {assistantMutationContext,assertAssistantTable} from '../core/assistant-mutations.mjs';
 import {memoryDefinitions,memoryToolNames,memoryTool,searchNotes,relatedTo,readFile} from './memory-tools.mjs';
 const schema={type:'object',properties:{},additionalProperties:true};
 const definitions=[
@@ -15,7 +15,7 @@ const definitions=[
   {name:'personal_operation',description:'Apply an explicitly requested goal, obligation, coach, habit, journal, health, memory, forecast or routine operation. Read current IDs first. Never approve an outward action.',inputSchema:schema},
   {name:'search_knowledge',description:'Search the rebuildable index of user records.',inputSchema:{type:'object',properties:{query:{type:'string'}},required:['query']}},
   {name:'list_records',description:'Read file-backed notes, contacts, profile facts, world views, collections, timeline, media metadata, reviews, comments, goals or work.',inputSchema:{type:'object',properties:{type:{type:'string'},filters:{type:'array'},limit:{type:'integer'}},required:['type']}},
-  {name:'save_record',description:'Save one user record with optimistic conflict detection. Preserve its id and hash for edits. Use review suggestions for AI-inferred facts.',inputSchema:{type:'object',properties:{type:{type:'string'},value:{type:'object'},expected_hash:{type:'string'}},required:['type','value']}},
+  {name:'save_record',description:'Save one note, person, thing, timeline entry, collection or item, Lexicon page, action or review suggestion with optimistic conflict detection. Preserve its id and hash for edits. Use review suggestions for AI-inferred facts; settings, shares, approvals, routines and assistant instructions stay with the owner.',inputSchema:{type:'object',properties:{type:{type:'string'},value:{type:'object'},expected_hash:{type:'string'}},required:['type','value']}},
   {name:'capture_note',description:'Capture the user\'s note once in a durable Markdown file, preserving the chosen folder, tags and related-note links.',inputSchema:{type:'object',properties:{title:{type:'string'},content:{type:'string'},folder_path:{type:'string'},tags:{type:'array',items:{type:'string'}},related:{type:'array',items:{type:'string'}}},required:['content']}},
   {name:'write_fact',description:'Record a confirmed fact and close earlier single-valued claims. AI inference must instead create a pending review_queue record.',inputSchema:schema},
   {name:'record_event',description:'Append a timeline event. Earlier events are never replaced.',inputSchema:schema},
@@ -42,6 +42,8 @@ export async function mcp(input,{store,query,index,domains,scopes}){
       if(name==='update_note'&&a.note_id&&!a.id)a.id=a.note_id;
       // Menerio's update_note took no version: the current one is the one read.
       if(name==='update_note'&&(a.note_id||a.id)&&!a.expected_hash){const current=visibleRows(query,'notes').find(n=>n.id===(a.note_id||a.id));if(current)a.expected_hash=current._hash;}
+      // Refused before anything is read, in plain words (the guard's commit refuses them too).
+      if(['save_record','structural_change'].includes(name))assertAssistantTable(String(a.type||''),name);
       if(['save_record','update_note','capture_note','personal_operation','write_fact','record_event','structural_change','review_suggestions',...topicToolNames.filter(n=>!n.startsWith('list_')&&!n.startsWith('get_'))].includes(name)){
         domains=Object.assign(Object.create(Object.getPrototypeOf(domains)),domains,{toolScope:type=>toolScope('save_record',{type})});
         ({store,query,domains}=assistantMutationContext({store,query,domains,scopes},a,name));
