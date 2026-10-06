@@ -13,6 +13,7 @@ import {nextCalendarRun} from './jobs/calendar.mjs';
 import {readTable} from '../../third-party/addons/godspeed-coach/lib/auto.mjs';
 import {localPath} from './local-path.mjs';
 import {visibleRows} from './visibility.mjs';
+import {checkOutboundURL} from './outbound-fetch.mjs';
 export const operationContract=`Return JSON {reply,notes_created?:[{title,content}],operations?:[{type,source_quote,...fields}]}. Use an operation only when the user's current message explicitly requests that change. source_quote must be exact user words requesting it, never a note quote. Supported operations:
 goal-add {title,measure,status?:adopted|provisional,wait_for_report?:boolean}; goal-change {id,title?,measure?,status?:adopted|provisional|paused|achieved|retired,wait_for_report?:boolean,reason}; goal-outcome {id,evidence,value?,outcome};
 When the user explicitly asks to wait for their separate report after an applied change, persist wait_for_report:true in that goal. Do not enable it without that request.
@@ -83,7 +84,8 @@ export function personalOperation(domains,input){
   if(!Object.keys(table).length||!measurements)throw Error('CSV needs a date column with YYYY-MM-DD dates and numeric measurement columns');store.withLock(()=>store.commit(rows));return {imported:rows.length,source_file:path.relative(store.root,file)};
  }
  if(type==='watch-add'){
-  const title=required(input.title,'Watch topic'),url=new URL(required(input.url,'Source address'));if(url.protocol!=='https:'&&!(url.protocol==='http:'&&['localhost','127.0.0.1'].includes(url.hostname)))throw Error('Use an HTTPS source or an isolated local test source');
+  // Never an address on this server or its network (6 October 2026: an actions key watched an internal one).
+  const title=required(input.title,'Watch topic'),url=checkOutboundURL(required(input.url,'Source address'));if(url.protocol!=='https:'&&process.env.GODSPEED_OUTBOUND_ALLOW_LOCAL!=='1')throw Error('Use an HTTPS source');
   if(url.username||url.password||[...url.searchParams.keys()].some(k=>/^(?:token|key|api[_-]?key|access[_-]?token|password|secret)$/i.test(k)))throw Error('Use a public source address without credentials');
   if(!Number.isInteger(input.minutes)||input.minutes<1||input.minutes>525600)throw Error('Choose the number of minutes between checks');required(input.criteria,'Meaningful change criteria');
   return addWatchTopic(store,{title,urls:[url.href],criteria:input.criteria,cadence_minutes:input.minutes,include_in_brief:input.include_in_brief===true,radar:input.radar===true,lead:input.lead===true,paused:false});
