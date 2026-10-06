@@ -143,3 +143,10 @@ test('Mission Control\'s own files are searched with the notes and read whole; t
     assert.equal((await call('search_notes',{query:'Fictional Social handle',source:'native'})).length,0,'native means the owner\'s own notes only');
   }finally{await service.close();}
 });
+
+test('a hit\'s excerpt is the passage holding most of the asked words, long enough to answer from',async()=>{
+  const {bestWindow}=await import('../server/memory-tools.mjs');
+  const text='Intro about other things. '.repeat(40)+'The fictional portal lists the user number FICT-0012345678 for the fictional partner account. '+'Later filler. '.repeat(40);
+  const out=bestWindow(text,'fictional partner user number');
+  assert.match(out,/FICT-0012345678/);assert.ok(out.length>=300&&out.length<=440,'about 420 characters, not 14 words');
+});

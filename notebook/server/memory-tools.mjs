@@ -3,6 +3,7 @@ import path from 'node:path';
 import {visibleRows} from '../core/visibility.mjs';
 import {momentDraft} from '../core/moment-draft.mjs';
 import {relatedNotes} from '../core/related.mjs';
+import {STOPWORDS} from '../core/index/stopwords.mjs';
 
 // Menerio's tool names and arguments, answered from the notebook. Mission
 // Control's skills, routines and memory benchmark called these names for
@@ -108,14 +109,14 @@ async function noteHits(ctx, text, {limit = 50, files = true} = {}) {
   for (const r of found.rows) {
     if (r.type === 'workspace_file') {
       if (privateFile(r.id) || out.has('file:' + r.id)) continue;
-      out.set('file:' + r.id, {file: r.id, note: {id: r.id, title: r.id, updated_at: fileTime(store, r.id)}, snippet: r.snippet ? r.snippet.replace(/[[\]]/g, '') : null, matched: r.matched || 'words', via: 'Mission Control file'});
+      out.set('file:' + r.id, {file: r.id, note: {id: r.id, title: r.id, updated_at: fileTime(store, r.id)}, full: () => { try { return fs.readFileSync(path.join(store.root, r.id), 'utf8'); } catch { return ''; } }, snippet: r.snippet ? r.snippet.replace(/[[\]]/g, '') : null, matched: r.matched || 'words', via: 'Mission Control file'});
       continue;
     }
     const id = r.type === 'notes' ? r.id : r.type === 'note_chunks' ? store.get('note_chunks', r.id)?.note_id : store.get('media_analysis', r.id)?.note_id;
     const note = id && notes.get(id);
     if (!note || out.has(id)) continue;
     const passage = r.type === 'notes' ? null : r.type === 'note_chunks' ? store.get('note_chunks', r.id)?.content : store.get('media_analysis', r.id)?.extracted_text || store.get('media_analysis', r.id)?.description;
-    out.set(id, {note, snippet: r.snippet ? r.snippet.replace(/[[\]]/g, '') : passage ? clip(passage, 400) : null, matched: r.matched || 'words', via: r.type === 'notes' ? null : r.type === 'note_chunks' ? 'attached document' : 'attached picture'});
+    out.set(id, {note, full: () => passage || (note.title || '') + '\n' + (note.content || ''), snippet: r.snippet ? r.snippet.replace(/[[\]]/g, '') : passage ? clip(passage, 400) : null, matched: r.matched || 'words', via: r.type === 'notes' ? null : r.type === 'note_chunks' ? 'attached document' : 'attached picture'});
   }
   return {hits: [...out.values()], mode: found.mode, note: found.note};
 }
@@ -129,14 +130,31 @@ export function readFile(ctx, relative) {
   if (!known) return null;
   try { return {id: name, title: name, source: 'Mission Control file', content: fs.readFileSync(path.join(ctx.store.root, name), 'utf8'), updated_at: fileTime(ctx.store, name)}; } catch { return null; }
 }
-function snippetOf(note, text) {
-  const body = String(note.content || ''), words = norm(text).split(' ').filter(w => w.length > 2);
-  const at = words.map(w => body.toLowerCase().indexOf(w)).filter(i => i >= 0).sort((a, b) => a - b)[0];
-  return clip(at > 120 ? '…' + body.slice(at - 100, at + 300) : body.slice(0, 400), 420);
+function snippetOf(note, text) { return bestWindow(note.content, text); }
+// The window of a text, about 420 characters, that holds the most of the
+// asked words, as Menerio's excerpts did. A 14-word match, or none for a file
+// found by meaning, was often too little to answer from (6 October 2026).
+export function bestWindow(body, query, size = 420) {
+  const text = String(body || '');
+  if (text.length <= size) return clip(text, size);
+  const words = [...new Set(norm(query).split(/[^\p{L}\p{N}]+/u).filter(w => w.length > 2 && !STOPWORDS.has(w)))];
+  const lower = text.toLowerCase(), hits = [];
+  for (const w of words) for (let i = lower.indexOf(w); i >= 0 && hits.length < 4000; i = lower.indexOf(w, i + w.length)) hits.push([i, w]);
+  if (!hits.length) return clip(text.slice(0, size), size);
+  hits.sort((a, b) => a[0] - b[0]);
+  let start = hits[0][0], best = 0;
+  for (let i = 0, j = 0; i < hits.length; i++) {
+    while (hits[j][0] < hits[i][0] - (size - 80)) j++;
+    const distinct = new Set(hits.slice(j, i + 1).map(h => h[1])).size;
+    if (distinct > best) { best = distinct; start = hits[j][0]; }
+  }
+  start = Math.max(0, start - 60);
+  return (start > 0 ? '…' : '') + clip(text.slice(start, start + size), size);
 }
-const noteBlock = (h, i, view, text) => h.file ? ['[note] --- Result ' + i + ' ---', 'Title: ' + h.file, 'ID: ' + h.file, 'Source: Mission Control file (get_note reads it whole)', ...(h.note.updated_at ? ['Updated: ' + h.note.updated_at.slice(0, 10)] : []), ...(view === 'metadata' ? [] : ['Match: ' + (h.snippet || '')])].join('\n') : ['[note] --- Result ' + i + ' ---', 'Title: ' + (h.note.title || 'Untitled'), 'ID: ' + h.note.id, 'Updated: ' + String(h.note.updated_at || '').slice(0, 10),
+const excerpt = (h, text) => bestWindow(h.full ? h.full() : h.note.content, text) || h.snippet || '';
+const noteBlock = (h, i, view, text) => h.file ? ['[note] --- Result ' + i + ' ---', 'Title: ' + h.file, 'ID: ' + h.file, 'Source: Mission Control file (get_note reads it whole)', ...(h.note.updated_at ? ['Updated: ' + h.note.updated_at.slice(0, 10)] : []), ...(view === 'metadata' ? [] : ['Match: ' + excerpt(h, text)])].join('\n') : ['[note] --- Result ' + i + ' ---', 'Title: ' + (h.note.title || 'Untitled'), 'ID: ' + h.note.id, 'Updated: ' + String(h.note.updated_at || '').slice(0, 10),
   ...(h.note.metadata?.type ? ['Type: ' + h.note.metadata.type] : []), ...(h.note.folder_path ? ['Folder: ' + h.note.folder_path] : []), ...(h.note.tags?.length ? ['Tags: ' + h.note.tags.join(', ')] : []),
-  ...(h.via ? ['Found in: ' + h.via] : []), ...(view === 'metadata' ? [] : ['Match: ' + (h.snippet || snippetOf(h.note, text))])].join('\n');
+  ...(h.via ? ['Found in: ' + h.via] : []), ...(view === 'metadata' ? [] : ['Match: ' + excerpt(h, text)])].join('\n');
 
 async function searchBrain(a, ctx) {
   const text = required(a.query, 'words to search for'), include = Array.isArray(a.include) && a.include.length ? a.include : ['claim', 'note', 'lexicon'];
@@ -423,7 +441,7 @@ export async function searchNotes(a, ctx) {
   const text = required(a.query, 'words to search for'), limit = count(a.limit, 1, 50, 20), offset = count(a.offset, 0, 1000, 0);
   const {hits} = await noteHits(ctx, text, {limit: 50});
   return hits.filter(h => a.source === 'native' ? !h.file && !mirrored(h.note) : a.source === 'godspeed' ? h.file || mirrored(h.note) : true).slice(offset, offset + limit)
-    .map(h => h.file ? {id: h.file, title: h.file, folder_path: path.posix.dirname(h.file), updated_at: h.note.updated_at, source: 'Mission Control file', ...(a.view === 'metadata' ? {} : {snippet: h.snippet || ''})} : ({id: h.note.id, title: h.note.title, folder_path: h.note.folder_path || '', updated_at: h.note.updated_at, tags: h.note.tags || [], type: h.note.metadata?.type || null, _hash: h.note._hash, ...(a.view === 'metadata' ? {} : {snippet: h.snippet || snippetOf(h.note, text)}), ...(h.via ? {found_in: h.via} : {})}));
+    .map(h => h.file ? {id: h.file, title: h.file, folder_path: path.posix.dirname(h.file), updated_at: h.note.updated_at, source: 'Mission Control file', ...(a.view === 'metadata' ? {} : {snippet: excerpt(h, text)})} : ({id: h.note.id, title: h.note.title, folder_path: h.note.folder_path || '', updated_at: h.note.updated_at, tags: h.note.tags || [], type: h.note.metadata?.type || null, _hash: h.note._hash, ...(a.view === 'metadata' ? {} : {snippet: excerpt(h, text)}), ...(h.via ? {found_in: h.via} : {})}));
 }
 export function relatedTo(ctx, note) {
   try { return relatedNotes(ctx.query, note, {index: ctx.index, limit: 5}).map(r => ({id: r.id, title: r.title})); } catch { return []; }
