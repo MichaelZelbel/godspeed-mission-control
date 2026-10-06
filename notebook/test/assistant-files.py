@@ -59,7 +59,7 @@ class AssistantFiles(unittest.TestCase):
         self.initialize()
         result=self.run_python('import sqlite3,os; from pathlib import Path; c=sqlite3.connect(str(Path(os.environ["HERMES_HOME"])/"state.db"),isolation_level=None); c.execute("BEGIN"); [c.execute("INSERT INTO messages(text) VALUES (?)",("fictional message %d" % i,)) for i in range(150)]; c.execute("COMMIT"); c.close()')
         self.assertEqual(result.returncode,0,result.stderr)
-        folder=next(p for p in (self.workspace/'assistant-state').glob('*/*') if p.is_dir() and p.name!='history')
+        folder=next(p for p in (self.workspace/'assistant-state').glob('*/*') if p.is_dir() and p.parent.name!='history')
         before={p.name:p.read_bytes() for p in folder.glob('*.json')}
         self.assertGreaterEqual(len(before),5)
         history=set((self.workspace/'assistant-state/history').rglob('*'))

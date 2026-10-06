@@ -24,7 +24,7 @@ export async function controlRoutine(store,input,{enable=false,now=Date.now()}={
   const resume=enable||input.paused===false;
   // A daily time runs once a day at that time in the owner's timezone (jobs/calendar.mjs).
   const calendar=input.at!==undefined?{time:dailyTime(input.at).time}:null;
-  let changes=enable?{id,kind:input.kind,...(calendar?{calendar,interval_ms:86400000}:{interval_ms:input.interval_ms,calendar:null}),paused:false,...(!old?{owner:settings.owner,title:input.title||input.kind,state:'pending',next_run:calendar?nextCalendarRun({calendar},settings.timezone,now):new Date(now).toISOString(),retry_count:0}:calendar?{next_run:nextCalendarRun({calendar},settings.timezone,now)}:{}),...(input.title!==undefined?{title:input.title}:{}),...(input.kind==='radar'&&(input.discovery!==undefined||!old)?{discovery:input.discovery!==false}:{})}:{paused:input.paused};
+  let changes=enable?{id,kind:input.kind,...(calendar?{calendar,interval_ms:86400000}:{interval_ms:input.interval_ms}),paused:false,...(!old?{owner:settings.owner,title:input.title||input.kind,state:'pending',next_run:calendar?nextCalendarRun({calendar},settings.timezone,now):new Date(now).toISOString(),retry_count:0}:calendar?{next_run:nextCalendarRun({calendar},settings.timezone,now)}:{}),...(input.title!==undefined?{title:input.title}:{}),...(input.kind==='radar'&&(input.discovery!==undefined||!old)?{discovery:input.discovery!==false}:{})}:{paused:input.paused};
   if(old&&resume){
    const receipts=store.list('job_receipts').filter(r=>r.job_id===old.id);
    const failed=old.state==='failed'||old.state==='needs_review';

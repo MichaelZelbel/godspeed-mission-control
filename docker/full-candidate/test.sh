@@ -27,7 +27,8 @@ done
 docker exec "$name" node -e "fetch('http://127.0.0.1:47831/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 docker exec "$name" /opt/hermes/.venv/bin/python3 -c 'import faster_whisper; print("Packaged local dictation dependency verified.")'
 # Run the actual modules shipped in this image, with small synthetic fixtures.
-docker exec -e GODSPEED_ORIGINAL_RUNTIME=off -w /opt/godspeed/kit/notebook "$name" sh -c 'node --test test/*.test.mjs' > "$evidence/server-tests.log" 2>&1
+# A failure names its tests in the build log; the whole log stays in the evidence.
+docker exec -e GODSPEED_ORIGINAL_RUNTIME=off -w /opt/godspeed/kit/notebook "$name" sh -c 'node --test test/*.test.mjs' > "$evidence/server-tests.log" 2>&1 || { grep -E '^not ok|^# (tests|pass|fail)' "$evidence/server-tests.log"; grep -E -A12 '^not ok' "$evidence/server-tests.log" | grep -E 'error|expected|actual|Error|FAIL|assert' | head -60; exit 1; }
 printf 'localhost {\n tls internal\n reverse_proxy %s:47831\n}\n' "$name" > "$evidence/Caddyfile"
 docker run -d --name "$name-https" --network "$network" --memory=256m --cpus=1 \
   -p 127.0.0.1:48443:443 -v "$evidence/Caddyfile:/etc/caddy/Caddyfile:ro" \
