@@ -46,6 +46,33 @@ function memoryCorrection(domains,input,subject){
  const claim=domains.store.get('claims',fact.claim_id);
  return {attribute:fact.attribute,label:fact.label||input.label,replaces_claim_id:claim.id,replaces_claim_hash:claim._hash};
 }
+// The coaching, habit and journal operations write the add-ons' own files,
+// outside the record store, so no record transaction can take them back.
+const NATIVE=['coach-open','coach-reply','coach-close','habit-agree','habit-observe','journal-add','journal-switch'];
+function nativeArguments(input){
+ const type=input.type;
+ if(type==='coach-open'){if(!['health','work-money','relationships'].includes(input.area))throw Error('Choose a supported coaching area');required(input.question,'Coaching question');}
+ if(type==='coach-reply')required(input.content,'Reply');
+ if(type==='habit-agree'){required(input.title,'Habit');required(input.agreement,'Explicit agreement');date(input.check_at,'Next check-in');}
+ if(type==='habit-observe'){required(input.observation,'Observation');if(!['done','no','skip'].includes(input.answer))throw Error('Habit observation needs an explicit done, no or skip answer');}
+ if(type==='journal-add')required(input.content,'Journal entry');
+ if(type==='journal-switch'&&typeof input.enabled!=='boolean')throw Error('Choose enabled or disabled');
+ // The due files' own obligations (native-due.mjs), checked here before any change is made.
+ if(type==='obligation-complete')required(input.evidence,'Completion evidence');
+ if(type==='obligation-snooze')date(input.until,'New target');
+}
+const outsideRecords=(domains,op)=>NATIVE.includes(op.type)||op.type==='routine-change'&&!!domains.nativeScheduler||process.env.GODSPEED_ORIGINAL_RUNTIME==='on'&&['goal-add','goal-change','goal-outcome','forecast-settle'].includes(op.type)||['obligation-complete','obligation-snooze'].includes(op.type)&&dueRows(domains.store).some(d=>d.id===op.id);
+// The same domains, reading and writing a staged view of the store.
+const staged=(domains,store)=>{const query=new domains.query.constructor(store);query.nativeHermesHome=domains.query.nativeHermesHome;return Object.assign(Object.create(Object.getPrototypeOf(domains)),domains,{store,query});};
+// A copy of the records to try a change on, without the workspace lock and
+// never written: what Store.transaction stages, kept here.
+function rehearsal(store){
+ const records=new Map(store.scan()),view=Object.create(store);
+ return Object.assign(view,{records,scan:()=>records,withLock:fn=>fn(),snapshot:fn=>fn(),
+  get:(type,id)=>records.get(type+'/'+id)||[...records.values()].find(r=>r.type===type&&((r.former_ids||[]).includes(id)||(r.aliases||[]).includes(id)))||null,
+  list:(type,{removed=false}={})=>[...records.values()].filter(r=>r.type===type&&(removed||!r.removed_at)),
+  commit:rows=>{for(const raw of rows){const record={...raw};delete record._hash;records.set(record.type+'/'+record.id,{...record,_hash:hash(encode(record))});}}});
+}
 export function personalOperation(domains,input){
  const {store,query}=domains,type=input.type;
  if(type==='routine-change'&&domains.nativeScheduler)return domains.nativeScheduler.control(input);
@@ -89,13 +116,8 @@ export function personalOperation(domains,input){
   return addWatchTopic(store,{title,urls:[url.href],criteria:input.criteria,cadence_minutes:input.minutes,include_in_brief:input.include_in_brief===true,radar:input.radar===true,lead:input.lead===true,paused:false});
  }
  if(type==='watch-change'){const topic=store.get('watch_topics',required(input.id,'Watch ID'));if(!topic)throw Error('Watch topic missing');if(typeof input.paused!=='boolean')throw Error('Choose pause or resume');return store.withLock(()=>{const job=store.get('jobs','watch-'+topic.id);store.commit([store.prepare('watch_topics',{paused:input.paused},topic),...(job?[store.prepare('jobs',{paused:input.paused},job)]:[])]);return store.get('watch_topics',topic.id);});}
- if(['coach-open','coach-reply','coach-close','habit-agree','habit-observe','journal-add','journal-switch'].includes(type)){
-  if(type==='coach-open'){if(!['health','work-money','relationships'].includes(input.area))throw Error('Choose a supported coaching area');required(input.question,'Coaching question');}
-  if(type==='coach-reply')required(input.content,'Reply');
-  if(type==='habit-agree'){required(input.title,'Habit');required(input.agreement,'Explicit agreement');date(input.check_at,'Next check-in');}
-  if(type==='habit-observe')required(input.observation,'Observation');
-  if(type==='journal-add')required(input.content,'Journal entry');
-  if(type==='journal-switch'&&typeof input.enabled!=='boolean')throw Error('Choose enabled or disabled');
+ if(NATIVE.includes(type)){
+  nativeArguments(input);
   const result=store.withLock(()=>nativeOperation(store,input));ensureNativeSchedules(store,type.startsWith('journal')?'journal':'coach');
   if(type==='habit-agree')store.save('jobs',{id:'habit-check-'+result.id,kind:'habit-check',habit_id:result.id,owner:store.get('settings','installation')?.owner||store.device,paused:false,next_run:date(input.check_at,'Next check-in'),interval_ms:7*86400000,state:'pending'});
   return result;
@@ -257,6 +279,17 @@ export function validateConversationOperations(domains,input,operations){
    if(operation.passed===true&&/\b(?:failed|did not pass|didn.t pass|not passed|nicht bestanden)\b/i.test(message))throw Error('Check success contradicts the actual user report');
   }
  }
+ // Every operation is tried, in order, on a copy of the records before any is
+ // saved, so one that fails its own checks (a date without its time zone)
+ // goes back to the model with the rest. Until 6 October 2026 the goal was
+ // created, the reminder after it failed, no reply was saved, and asking
+ // again only said "Previous operation needs review".
+ const trial=staged(domains,rehearsal(domains.store)),exists={'coach-reply':['coach_talks','id'],'coach-close':['coach_talks','id'],'habit-agree':['coach_talks','talk_id'],'habit-observe':['habits','id']};
+ for(const operation of operations){
+  if(!outsideRecords(domains,operation)){personalOperation(trial,{...operation});continue;}
+  nativeArguments(operation);const [table,field]=exists[operation.type]||[];
+  if(table&&!domains.query.rows(table).some(r=>r.id===operation[field]))throw Error('Choose an existing '+(table==='habits'?'habit':'coaching talk'));
+ }
 }
 export function conversationOperations(domains,input,operations){
  if(!Array.isArray(operations)||operations.length>10)throw Error('Invalid conversation operations');
@@ -266,17 +299,35 @@ export function conversationOperations(domains,input,operations){
  const planId='personal-plan-'+hash([input.conversation_id,requestId]);
  const digest=hash(operations),plan=domains.store.get('command_receipts',planId);
  if(plan&&plan.plan_hash!==digest)throw Error('Request retry conflicts with its saved operation plan; reload the original result');
+ if(plan?.state==='verified'&&Array.isArray(plan.results))return plan.results;
  validateConversationOperations(domains,input,operations);
- if(!plan)domains.store.save('command_receipts',{id:planId,state:'attempted',source_id:source?.id||requestId,plan_hash:digest,operations});
- const results=[];
- for(const [i,operation] of operations.entries()){
+ for(const operation of operations){
   if(!operation.source_quote||!message.includes(operation.source_quote))throw Error('Operation needs an exact source quote from the explicit user request');
   if(operation.evidence_quote&&!message.includes(operation.evidence_quote))throw Error('Memory evidence must occur in the user message');
-  const id='personal-'+hash([input.conversation_id,requestId,i]);const previous=domains.store.get('command_receipts',id);if(previous){if(previous.state!=='verified')throw Error('Previous operation needs review');results.push(previous.result);continue;}
-  domains.store.save('command_receipts',{id,state:'attempted',source_id:source?.id||requestId,operation:operation.type});
-  const result=personalOperation(domains,{...operation,source_id:source?.id||requestId});
-  domains.store.save('command_receipts',{id,state:'verified',source_id:source?.id||requestId,operation:operation.type,result});results.push(result);
  }
- domains.store.save('command_receipts',{id:planId,state:'verified',results});
+ const sourceId=source?.id||requestId,receipt=i=>'personal-'+hash([input.conversation_id,requestId,i]),outside=operations.map(op=>outsideRecords(domains,op)),results=[];
+ // The operations on records, each with its receipt, are saved in one
+ // transaction: all of them or none, so a failed request can simply be
+ // asked again. The add-ons' file operations follow, one by one with their
+ // receipts as before, since no transaction can take a file write back.
+ if(outside.some(Boolean)&&!plan)domains.store.save('command_receipts',{id:planId,state:'attempted',source_id:sourceId,plan_hash:digest,operations});
+ if(outside.some(o=>!o))domains.store.transaction(view=>{
+  const records=staged(domains,view);
+  for(const [i,operation] of operations.entries()){
+   if(outside[i])continue;const id=receipt(i),previous=view.get('command_receipts',id);
+   if(previous){if(previous.state!=='verified')throw Error('Previous operation needs review');results[i]=previous.result;continue;}
+   results[i]=personalOperation(records,{...operation,source_id:sourceId});view.save('command_receipts',{id,state:'verified',source_id:sourceId,operation:operation.type,result:results[i]});
+  }
+  if(!outside.some(Boolean))view.save('command_receipts',{id:planId,state:'verified',source_id:sourceId,plan_hash:digest,operations,results});
+ });
+ if(!outside.some(Boolean))return results;
+ for(const [i,operation] of operations.entries()){
+  if(!outside[i])continue;const id=receipt(i),previous=domains.store.get('command_receipts',id);
+  if(previous){if(previous.state!=='verified')throw Error('Previous operation needs review');results[i]=previous.result;continue;}
+  domains.store.save('command_receipts',{id,state:'attempted',source_id:sourceId,operation:operation.type});
+  results[i]=personalOperation(domains,{...operation,source_id:sourceId});
+  domains.store.save('command_receipts',{id,state:'verified',source_id:sourceId,operation:operation.type,result:results[i]});
+ }
+ domains.store.save('command_receipts',{id:planId,state:'verified',plan_hash:digest,results});
  return results;
 }

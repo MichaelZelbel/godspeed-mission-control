@@ -6,6 +6,7 @@ import {keyTerms} from './related.mjs';
 // the notes that name them, within a budget. Until 6 October 2026 these sent
 // every person and the whole text of every note (about 40 MB for the real
 // notebook), which no model accepts: the briefing failed with "HTTP 400".
+// Everything here is read as the assistant may see it (visibility.mjs).
 const BUDGET = 90000;
 const cut = (text, n) => {const s = String(text || ''); return s.length > n ? s.slice(0, n) + '…' : s;};
 const person = p => ({id: p.id, name: p.name, aliases: p.aliases || [], relationship: p.relationship || null, company: p.company || null, role: p.role || p.job_title || null, about: cut(p.notes, 300)});
@@ -20,8 +21,8 @@ export function groupContext(query, group, {membership = null, periodDays = 30, 
     group: {id: group.id, name: group.name, type: group.group_type || group.type || null, description: cut(group.description, 2000), purpose: cut(group.purpose, 1000), stages: group.stages || [], success_criteria: group.success_criteria || []},
     members: members.map(m => ({membership_id: m.id, contact_id: m.contact_id, name: byId.get(m.contact_id)?.name, status: m.status, position: m.position, reason: cut(m.notes || m.reason, 300), last_movement_at: m.last_movement_at || null})),
     people: focus.map(m => person(byId.get(m.contact_id))),
-    topics: query.rows('contact_topics').filter(t => focusIds.has(t.contact_id) && !t.archived_at && t.status !== 'completed').slice(0, 200).map(t => ({contact_id: t.contact_id, title: t.title, priority: t.priority, last_discussed_at: t.last_discussed_at})),
-    interactions: query.rows('contact_interactions').filter(i => focusIds.has(i.contact_id) && String(i.occurred_at || i.created_at || '') >= since).slice(-200).map(i => ({contact_id: i.contact_id, at: i.occurred_at || i.created_at, kind: i.interaction_type || i.type || null, summary: cut(i.summary || i.notes || i.content, 400)})),
+    topics: visibleRows(query, 'contact_topics').filter(t => focusIds.has(t.contact_id) && !t.archived_at && t.status !== 'completed').slice(0, 200).map(t => ({contact_id: t.contact_id, title: t.title, priority: t.priority, last_discussed_at: t.last_discussed_at})),
+    interactions: visibleRows(query, 'contact_interactions').filter(i => focusIds.has(i.contact_id) && String(i.occurred_at || i.created_at || '') >= since).slice(-200).map(i => ({contact_id: i.contact_id, at: i.occurred_at || i.created_at, kind: i.interaction_type || i.type || null, summary: cut(i.summary || i.notes || i.content, 400)})),
     notes: []
   };
   let used = JSON.stringify(context).length;

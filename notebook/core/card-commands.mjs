@@ -1,4 +1,4 @@
-import fs from 'node:fs';import path from 'node:path';import {spawnSync} from 'node:child_process';import {createRequire} from 'node:module';import {fileURLToPath} from 'node:url';import {hash,atomic,safe} from './records/store.mjs';
+import fs from 'node:fs';import path from 'node:path';import {spawnSync} from 'node:child_process';import {createRequire} from 'node:module';import {fileURLToPath} from 'node:url';import {hash,safe} from './records/store.mjs';
 const {parseCard,renderCard}=createRequire(import.meta.url)('../../tools/mc-cards.js');
 import {localPath} from './local-path.mjs';
 const table={goals:'goals',forecast:'forecasts',work:'work_items'};
@@ -62,17 +62,31 @@ export function cardCommand(store,{card,args}){
  if(!allowed[card]?.includes(args?.[0])||args.some(a=>typeof a!=='string'||a.length>20000)||args.some(a=>['--godspeed','--approved-by','--approved-by-him','--check-command','--command','--runner'].includes(a)))throw Error('Unsupported personal card command');
  boundedArguments(args);
  for(const row of store.list('goals'))for(const entry of row.legacy_log||[])if(['DIAGNOSIS','REFUTED','PLAYBOOK'].includes(entry.event)&&entry.rest){const relative=entry.rest.split(/[:,]/)[0];if(!/^goals\/(?:diagnoses|playbooks)\/[A-Za-z0-9_.-]+\.md$/.test(relative))throw Error('Goal evidence must identify a projected local file');localPath(store.root,relative);}
- const staging=path.join(store.state,'card-runs',Date.now()+'-'+hash(args).slice(0,12));fs.mkdirSync(path.join(staging,'observations'),{recursive:true});
- // Project a disposable snapshot for the original command, including linked
- // goals/work/forecasts. Durable records remain the sole authority.
- const before=new Map();for(const [kind,type] of Object.entries(table)){const folder=kind==='forecast'?'forecasts':kind;fs.mkdirSync(path.join(staging,folder),{recursive:true});for(const row of store.list(type)){before.set(type+'/'+row.id,row);atomic(path.join(staging,folder,safe(row.id)+'.md'),renderCard(cardFor(row,kind),[]));}}
- for(const note of store.list('notes').filter(n=>!n.is_trashed))atomic(path.join(staging,'notes',safe(note.id)+'.md'),note.content||'');
- const supporting=new Map();for(const folder of ['diagnoses','playbooks']){const source=localPath(store.root,'goals/'+folder);if(fs.existsSync(source)){regularTree(source);for(const name of fs.readdirSync(source).filter(n=>n.endsWith('.md')))supporting.set(folder+'/'+name,hash(fs.readFileSync(path.join(source,name))));fs.cpSync(source,path.join(staging,'goals',folder),{recursive:true});}}
- const script=fileURLToPath(new URL('../../tools/'+card+'.js',import.meta.url)),run=spawnSync(process.execPath,[script,...args],{cwd:staging,encoding:'utf8',timeout:15000,windowsHide:true,shell:false,env:{...process.env,GODSPEED_ROOT:staging}});
- if(run.status!==0)throw Error(String(run.stderr||run.stdout||'Personal card command failed').slice(0,600));
- store.withLock(()=>{const changes=[];for(const [kind,type] of Object.entries(table)){const folder=kind==='forecast'?'forecasts':kind;for(const name of fs.readdirSync(path.join(staging,folder)).filter(n=>n.endsWith('.md')&&n!=='README.md')){const content=fs.readFileSync(path.join(staging,folder,name),'utf8'),c=parseCard(content);if(!c.f.ID)continue;const old=before.get(type+'/'+c.f.ID),current=store.get(type,c.f.ID);if(old&&hash(renderCard(cardFor(old,kind),[]))===hash(content))continue;if(current?._hash!==old?._hash)store.conflict(type,values(c,kind),current);changes.push(store.prepare(type,{...preserveUnchangedValues(c,kind,old),legacy_fields:c.f,legacy_log:c.log,...(kind==='work'&&current?.kind?{kind:current.kind}:{})},current));}}
- const files=[];for(const folder of ['diagnoses','playbooks']){const src=path.join(staging,'goals',folder);if(fs.existsSync(src))for(const name of fs.readdirSync(src).filter(n=>n.endsWith('.md'))){const relative='goals/'+folder+'/'+safe(name),target=localPath(store.root,relative),content=fs.readFileSync(path.join(src,name),'utf8'),original=supporting.get(folder+'/'+name);if(hash(content)===original)continue;if((fs.existsSync(target)?hash(fs.readFileSync(target)):undefined)!==original)throw Error('Goal evidence file changed during command; retained snapshot needs review');if(original)files.push({file:'goals/history/'+hash(relative)+'-'+original+'.md',text:fs.readFileSync(target,'utf8')});files.push({file:relative,text:content});}}
- if(changes.length||files.length)store.commit(changes,{files});
- });return {result:run.stdout.trim(),retained_snapshot:path.relative(store.root,staging)};
+ // The command runs on a disposable projection of the cards (goals, work,
+ // forecasts and their evidence files) and of the one note it names (bets
+ // --moves); the records stay the only authority, and the projection is
+ // removed when the command ends. Until 6 October 2026 every command also
+ // copied and synced every note, hidden ones too, into a folder that was
+ // never removed: about four seconds per "goals list" at 400 notes.
+ const runs=path.join(store.state,'card-runs');sweepRuns(runs);
+ const staging=path.join(runs,Date.now()+'-'+hash([args,process.pid,Math.random()]).slice(0,12));fs.mkdirSync(path.join(staging,'observations'),{recursive:true});
+ try{
+  const before=new Map();for(const [kind,type] of Object.entries(table)){const folder=kind==='forecast'?'forecasts':kind;fs.mkdirSync(path.join(staging,folder),{recursive:true});for(const row of store.list(type)){before.set(type+'/'+row.id,row);fs.writeFileSync(path.join(staging,folder,safe(row.id)+'.md'),renderCard(cardFor(row,kind),[]));}}
+  for(const [i,arg] of args.entries())if(arg==='--moves'){const name=path.posix.basename(args[i+1]),note=store.get('notes',name.replace(/\.md$/,''));if(note&&!note.is_trashed&&safe(note.id)+'.md'===name){fs.mkdirSync(path.join(staging,'notes'),{recursive:true});fs.writeFileSync(path.join(staging,'notes',name),note.content||'');}}
+  const supporting=new Map();for(const folder of ['diagnoses','playbooks']){const source=localPath(store.root,'goals/'+folder);if(fs.existsSync(source)){regularTree(source);for(const name of fs.readdirSync(source).filter(n=>n.endsWith('.md')))supporting.set(folder+'/'+name,hash(fs.readFileSync(path.join(source,name))));fs.cpSync(source,path.join(staging,'goals',folder),{recursive:true});}}
+  const script=fileURLToPath(new URL('../../tools/'+card+'.js',import.meta.url)),run=spawnSync(process.execPath,[script,...args],{cwd:staging,encoding:'utf8',timeout:15000,windowsHide:true,shell:false,env:{...process.env,GODSPEED_ROOT:staging}});
+  if(run.status!==0)throw Error(String(run.stderr||run.stdout||'Personal card command failed').slice(0,600));
+  store.withLock(()=>{const changes=[];for(const [kind,type] of Object.entries(table)){const folder=kind==='forecast'?'forecasts':kind;for(const name of fs.readdirSync(path.join(staging,folder)).filter(n=>n.endsWith('.md')&&n!=='README.md')){const content=fs.readFileSync(path.join(staging,folder,name),'utf8'),c=parseCard(content);if(!c.f.ID)continue;const old=before.get(type+'/'+c.f.ID),current=store.get(type,c.f.ID);if(old&&hash(renderCard(cardFor(old,kind),[]))===hash(content))continue;if(current?._hash!==old?._hash)store.conflict(type,values(c,kind),current);changes.push(store.prepare(type,{...preserveUnchangedValues(c,kind,old),legacy_fields:c.f,legacy_log:c.log,...(kind==='work'&&current?.kind?{kind:current.kind}:{})},current));}}
+  const files=[];for(const folder of ['diagnoses','playbooks']){const src=path.join(staging,'goals',folder);if(fs.existsSync(src))for(const name of fs.readdirSync(src).filter(n=>n.endsWith('.md'))){const relative='goals/'+folder+'/'+safe(name),target=localPath(store.root,relative),content=fs.readFileSync(path.join(src,name),'utf8'),original=supporting.get(folder+'/'+name);if(hash(content)===original)continue;if((fs.existsSync(target)?hash(fs.readFileSync(target)):undefined)!==original)throw Error('A goal evidence file changed while the command ran; nothing was saved. Run the command again.');if(original)files.push({file:'goals/history/'+hash(relative)+'-'+original+'.md',text:fs.readFileSync(target,'utf8')});files.push({file:relative,text:content});}}
+  if(changes.length||files.length)store.commit(changes,{files});
+  });return {result:run.stdout.trim()};
+ }finally{fs.rmSync(staging,{recursive:true,force:true});}
+}
+// Run folders an earlier version left behind (each a copy of every note), and
+// any of a command that was killed. A command takes at most 15 seconds, so a
+// folder an hour old belongs to none that is running.
+function sweepRuns(runs){
+ let names;try{names=fs.readdirSync(runs);}catch{return;}
+ for(const name of names){const folder=path.join(runs,name);try{if(Date.now()-fs.statSync(folder).mtimeMs>3600000)fs.rmSync(folder,{recursive:true,force:true});}catch{}}
 }
 export function commandWords(message){const out=[];let word='',quote=null,escape=false;for(const c of message){if(escape){word+=c;escape=false;}else if(c==='\\')escape=true;else if(quote){if(c===quote)quote=null;else word+=c;}else if(c==='"'||c==="'")quote=c;else if(/\s/.test(c)){if(word){out.push(word);word='';}}else word+=c;}if(quote||escape)throw Error('Close the command\'s quotation marks');if(word)out.push(word);return out;}

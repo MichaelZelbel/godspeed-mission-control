@@ -8,6 +8,11 @@ import {explicitNoteCapture} from './chat-intent.mjs';
 // Full write baselines stay outside the enumerable prompt object.
 const writeSnapshots=new WeakMap();
 export const collectionWriteSnapshot=context=>writeSnapshots.get(context)||[];
+// The current note of a note chat, whole and with its version, as it was when
+// the model was given it. The prompt copy of a long note is cut; an edit is
+// applied to this, and saved only while the note still is this version.
+const noteSnapshots=new WeakMap();
+export const noteWriteSnapshot=context=>noteSnapshots.get(context)||null;
 
 // Retrieve a bounded selection instead of sending the entire personal database.
 export function chatContext(query,input){
@@ -32,7 +37,7 @@ function buildChatContext(query,input){
   for(const type of ['notes','contacts','entities','world_claims','moments','profile_facts','goals','media_analysis']){
     const selected=pick(type,type==='notes'?8:4);context[type]=selected.rows;context.retrieval.counts[type]=selected.total;
   }
-  if(input.note_id){const note=visibleRows(query,'notes').find(r=>r.id===input.note_id&&!r.removed_at&&!r.is_trashed);if(!note)throw new Error('This note is hidden from the assistant');context.notes=[compact(note,24000)];}
+  if(input.note_id){const note=visibleRows(query,'notes').find(r=>r.id===input.note_id&&!r.removed_at&&!r.is_trashed);if(!note)throw new Error('This note is hidden from the assistant');noteSnapshots.set(context,structuredClone(note));context.notes=[compact(note,24000)];}
   if(/(?:remember|recall|which|when|where|what|who|update|erinner|wann|wer|was)/i.test(question)){
     const narrow=retrieveNoteWindows(query,question);context.note_windows=narrow.windows.filter(w=>!input.note_id||w.note_id===input.note_id);context.retrieval.window_search={method:narrow.method,broad:narrow.broad,coverage:narrow.coverage,policy:narrow.policy};
   }

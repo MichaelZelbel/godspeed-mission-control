@@ -1,5 +1,5 @@
 import { hash,atomic,safe } from './records/store.mjs';
-import {QueryService} from './query.mjs';
+import {QueryService,claimHolds} from './query.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 const NOT_UNDOABLE='Godspeed cannot tell exactly what this change did, so it cannot undo it. Correct it on the profile or person instead.';
@@ -20,7 +20,20 @@ function unreceiptedChanges(item,store){
     const {subject_type,subject_id,attribute}=factSubject(p),value=same(p.value),ids=new Set([id,...p.claim_ids||[]].filter(Boolean)),parts=new Set(String(p.value||'').split(',').map(same));
     if(!attribute||!value)throw Error(NOT_UNDOABLE);
     const today=new Intl.DateTimeFormat('en-CA',{timeZone:query.rows('profiles')[0]?.timezone||'UTC'}).format(new Date());
-    return remove('claims',query.rows('claims').filter(c=>c.subject_type===subject_type&&(c.subject_id||null)===subject_id&&(!c.valid_to||c.valid_to>today)&&(key(c.attribute)===key(attribute)&&same(c.value)===value||ids.has(c.id)&&parts.has(same(c.value)))));
+    const claims=query.rows('claims').filter(c=>c.subject_type===subject_type&&(c.subject_id||null)===subject_id),gone=claims.filter(c=>(!c.valid_to||c.valid_to>today)&&(key(c.attribute)===key(attribute)&&same(c.value)===value||ids.has(c.id)&&parts.has(same(c.value))));
+    // A replacing value closed the one before it on the day it began. Undoing
+    // it brings that one back, unless another value is current by then or
+    // two earlier values ended that day. Until 6 October 2026 Roll Back
+    // reported success and left no current value at all.
+    const removed=new Set(gone.map(c=>c.id)),slots=query.rows('fact_slots'),reopened=[];
+    for(const claim of gone){
+      const rest=claims.filter(c=>key(c.attribute)===key(claim.attribute)&&!removed.has(c.id)),single=(slots.find(s=>s.subject_type===subject_type&&(s.subject_id||null)===subject_id&&s.attribute===claim.attribute)?.cardinality||claim.cardinality)!=='many';
+      if(!claim.valid_from||!single||rest.some(c=>claimHolds(c,today)))continue;
+      const before=rest.filter(c=>c.valid_to===claim.valid_from);
+      if(before.length>1)throw Error('Two earlier values of this fact ended the day it began, so Godspeed cannot tell which one to bring back. Correct it on the profile instead.');
+      if(before.length){const next=store.prepare('claims',{valid_to:null},before[0]);delete next.closure_evidence;reopened.push(next);}
+    }
+    return [...remove('claims',gone),...reopened];
   }
   if(type==='add_contact'||type==='add_entity'){
     // The exact record only: a lookup by alias could land on a person it was merged into.
@@ -49,14 +62,18 @@ export class Review {
   apply(item){
     return this.store.transaction((store,changed,before)=>{
       const current=store.get('review_queue',item.id);if(!current)throw Error('Review item missing');
-      if(['kept','auto_applied_unreviewed'].includes(current.status)&&current.applied_at)return current;
+      if(current.status==='kept'&&current.applied_at)return current;
+      // Applied before it was reviewed (Menerio's automatic additions): Keep
+      // confirms it. Until 6 October 2026 Keep reported success and the item
+      // stayed waiting for ever.
+      if(current.status==='auto_applied_unreviewed'&&current.applied_at)return store.save('review_queue',{id:current.id,status:'kept',reviewed_at:new Date().toISOString()});
       if(!['pending','pending_review','auto_applied_unreviewed'].includes(current.status||'pending_review'))throw Error('This suggestion is no longer pending');
       const query=new QueryService(store),domains=Object.assign(Object.create(Object.getPrototypeOf(this.domains)),this.domains,{store,query});
       return new Review(domains).applyStaged(current,changed,before);
     });
   }
   applyStaged(item,changed,before){
-    const p=item.payload||{},type=item.suggestion_type,targets=[];let primaryId;
+    const p=item.payload||{},type=item.suggestion_type,targets=[];let primaryId,linked=null;
     const save=(table,value)=>{
       const id=value.id||'review-'+item.uid,old=this.store.get(table,id);
       const result=this.query.execute({table,operation:old?'upsert':'insert',values:{...value,id,origin:'review_queue',source_review_id:item.id}}).data[0];
@@ -73,7 +90,14 @@ export class Review {
       atomic(path.join(root,hash(local.path)+'.mapping.json'),JSON.stringify(local));atomic(path.join(root,hash(p.remote.path)+'.mapping.json'),JSON.stringify(p.remote));
     }else if(type==='source_version'){
       if(!this.store.get('notes',p.previous_note_id)||!this.store.get('notes',p.new_note_id))throw new Error('An imported source version is missing');
-    }else if(type==='add_contact')save('contacts',{name:p.name,aliases:p.aliases||[],notes:p.notes||null});
+    }else if(type==='add_contact'){
+      // A person of that name (or nickname) who exists already is the one
+      // meant: Keep links the suggestion to them and creates no one, so Undo
+      // removes no one. Until 6 October 2026 every Keep made a new person.
+      const name=same(p.name),existing=this.query.rows('contacts').filter(c=>!c.merged_into&&[c.name,...(c.aliases||[])].some(n=>typeof n==='string'&&same(n)===name));
+      if(existing.length>1)throw Error('Several people are called '+p.name+'. Add or merge them on the People page instead.');
+      if(existing.length)linked={type:'contacts',id:existing[0].id};else save('contacts',{name:p.name,aliases:p.aliases||[],notes:p.notes||null});
+    }
     else if(type==='add_entity')save('entities',{name:p.name,entity_type:p.entity_type||'other',description:p.description||null});
     else if(type==='add_alias'){
       const old=this.store.get('contacts',p.contact_id);if(!old)throw new Error('Person missing');save('contacts',{...old,aliases:[...new Set([...(old.aliases||[]),p.alias])].filter(Boolean)});
@@ -83,13 +107,20 @@ export class Review {
       const moment=save('moments',{...p,source:'note_auto',status:p.status||'past_fact'});
       for(const [i,participant] of (p.participants||[]).entries())if(participant.contact_id)save('moment_participants',{id:'review-'+item.uid+'-'+i,moment_id:moment.id,person_id:participant.contact_id});
     }else if(type==='add_relationship')save('contact_relationships',p);
-    else if(type==='group_member_suggestion')save('contact_group_memberships',{group_id:p.group_id,contact_id:p.contact_id,status:p.default_status||null});
+    else if(type==='group_member_suggestion'){
+      // A membership that exists already is kept as it is. A new one starts in
+      // the group's first stage: until 6 October 2026 it had no stage at all,
+      // and a person already in the group got a second membership.
+      const group=this.store.get('contact_groups',p.group_id);if(!group)throw Error('Group missing');
+      const existing=this.query.rows('contact_group_memberships').find(m=>m.group_id===group.id&&m.contact_id===p.contact_id);
+      if(existing)linked={type:'contact_group_memberships',id:existing.id};else save('contact_group_memberships',{group_id:group.id,contact_id:p.contact_id,status:p.default_status||group.stages?.[0]?.id||'new'});
+    }
     else if(type==='connect_note_person')save('person_documents',{contact_id:p.contact_id,note_id:p.note_id});
     else throw new Error('Unsupported review suggestion '+type);
     const receipt=[...changed].map(([key,record])=>({type:record.type,id:record.id,before:before.get(key)||null,after_hash:this.store.get(record.type,record.id)._hash}));
     // Duplicate facts were not written by this suggestion, and must stay.
     receipt.push(...targets.filter(t=>t.shared));
-    const primary=receipt.find(t=>t.id===primaryId)||receipt[0],targetType=primary?.type==='claims'?'claim':primary?.type;
+    const primary=receipt.find(t=>t.id===primaryId)||receipt[0]||linked,targetType=primary?.type==='claims'?'claim':primary?.type;
     return this.store.save('review_queue',{id:item.id,status:'kept',applied_at:new Date().toISOString(),undo_receipt_version:1,undo_supported:type!=='media_conflict',applied_targets:receipt,target_entity_id:primary?.id,target_entity_type:targetType});
   }
   rollback(item){

@@ -129,6 +129,11 @@ function embedsOf(selection){return topLevel(String(selection??'')).flatMap(item
 // A row as the table shows it: its defaults filled in, and a group's own
 // type rather than the kind of record it is stored as.
 const shaped=(table,r)=>({...(defaults[table]||{}),...r,...table==='contact_groups'?{type:r.group_type||'custom'}:table==='contact_group_memberships'?{last_movement_at:r.last_movement_at||r.created_at}:{}});
+// Whether a claim holds on a day (YYYY-MM-DD): the one definition of a current
+// value, for the profile views and for writing a fact. A claim without a start
+// (Menerio's undated imports) holds from always. Until 6 October 2026 writing a
+// fact read such a claim as never current, so a new value left two current ones.
+export const claimHolds=(claim,day)=>(!claim.valid_from||claim.valid_from<=day)&&(!claim.valid_to||claim.valid_to>day);
 export class QueryService {
   constructor(store) { this.store = store; }
   withSnapshot(read){if(!this.snapshotDepth)this.store.scan();this.snapshotDepth=(this.snapshotDepth||0)+1;try{return read();}finally{this.snapshotDepth--;}}
@@ -159,9 +164,9 @@ export class QueryService {
       return list('claims').map(r => {
       const slot = list('fact_slots').find(s => s.subject_type === r.subject_type && s.subject_id === r.subject_id && s.attribute === r.attribute);
       const category = list('profile_categories').find(s => s.slug === slot?.category_slug && (s.contact_id || null) === (r.subject_type === 'contact' ? r.subject_id : null));
-      return { ...r, claim_id: r.id, contact_id: r.subject_type === 'contact' ? r.subject_id : null, is_current: (!r.valid_to || r.valid_to > today) && (!r.valid_from || r.valid_from <= today),
+      return { ...r, claim_id: r.id, contact_id: r.subject_type === 'contact' ? r.subject_id : null, is_current: claimHolds(r, today),
         slot_id: slot?.id || null, label: slot?.label || r.attribute, category_slug: slot?.category_slug || null, category_name: category?.name || null,
-        cardinality:slot?.cardinality||r.cardinality,visibility_scope: category?.visibility_scope || 'all', show_to_agent: slot?.show_to_agent ?? false, is_pinned: slot?.is_pinned ?? false, has_conflict: (slot?.cardinality||r.cardinality)!=='many'&&list('claims').filter(c=>c.subject_type===r.subject_type&&c.subject_id===r.subject_id&&c.attribute===r.attribute&&(!c.valid_from||c.valid_from<=today)&&(!c.valid_to||c.valid_to>today)).length>1 };
+        cardinality:slot?.cardinality||r.cardinality,visibility_scope: category?.visibility_scope || 'all', show_to_agent: slot?.show_to_agent ?? false, is_pinned: slot?.is_pinned ?? false, has_conflict: (slot?.cardinality||r.cardinality)!=='many'&&list('claims').filter(c=>c.subject_type===r.subject_type&&c.subject_id===r.subject_id&&c.attribute===r.attribute&&claimHolds(c,today)).length>1 };
       });
     }
     if (table === 'v_ai_allowance_current') return [];
