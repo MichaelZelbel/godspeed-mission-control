@@ -95,18 +95,26 @@ function condition(row, [op, key, value]) {
 // "everything" or for anything this does not understand. The id and the
 // version hash always come along: the dashboard needs both to save safely.
 // Sending every column regardless sent the notes list as 63 MB of full text.
+const topLevel=text=>{const items=[];let depth=0,part='';for(const c of text){if(c==='(')depth++;if(c===')')depth--;if(c===','&&!depth){items.push(part.trim());part='';}else part+=c;}if(part.trim())items.push(part.trim());return items;};
+const EMBED=/^(?:(\w+):)?(\w+)((?:!\w+)*)\s*\(/;
 export function projection(selection){
   const text=String(selection??'*').trim();if(!text||text==='*')return null;
-  const items=[];let depth=0,part='';for(const c of text){if(c==='(')depth++;if(c===')')depth--;if(c===','&&!depth){items.push(part.trim());part='';}else part+=c;}if(part.trim())items.push(part.trim());
   const keys=new Set(['id','_hash']);
-  for(const item of items){
+  for(const item of topLevel(text)){
     if(item==='*')return null;
-    const join=item.match(/^(?:(\w+):)?(\w+)(?:!\w+)?\s*\(/);if(join){keys.add(join[1]||join[2]);continue;}
+    const join=item.match(EMBED);if(join){keys.add(join[1]||join[2]);continue;}
     const plain=item.match(/^\w+$/);if(plain){keys.add(item);continue;}
     return null;
   }
   return keys;
 }
+// The records a selection embeds, as PostgREST reads them: the name they
+// arrive under, the table or the foreign key column, !inner, and a
+// constraint named as a hint (notes!review_queue_source_note_id_fkey).
+function embedsOf(selection){return topLevel(String(selection??'')).flatMap(item=>{const m=item.match(EMBED);if(!m)return [];const hints=m[3].split('!').filter(Boolean);return [{alias:m[1]||m[2],name:m[2],inner:hints.includes('inner'),hint:hints.find(h=>h!=='inner'&&h!=='left')||null}];});}
+// A row as the table shows it: its defaults filled in, and a group's own
+// type rather than the kind of record it is stored as.
+const shaped=(table,r)=>({...(defaults[table]||{}),...r,...table==='contact_groups'?{type:r.group_type||'custom'}:table==='contact_group_memberships'?{last_movement_at:r.last_movement_at||r.created_at}:{}});
 export class QueryService {
   constructor(store) { this.store = store; }
   withSnapshot(read){if(!this.snapshotDepth)this.store.scan();this.snapshotDepth=(this.snapshotDepth||0)+1;try{return read();}finally{this.snapshotDepth--;}}
@@ -167,7 +175,52 @@ export class QueryService {
       return rows.flatMap(r=>{const base={...defaults.contact_group_memberships,...r,last_movement_at:r.last_movement_at||r.created_at};if(!people.get(r.contact_id)?.merged_into)return [base];const to=target(r.contact_id);return members.has(r.group_id+'/'+to)?[]:[{...base,contact_id:to}];});
     }
     if(table==='collection_items')return list(table).map(r=>{const collection=get('collections',r.collection_id),primary=collection?.field_schema?.find(f=>f.primary),title=primary?r.data?.[primary.key]:r.title;return {...defaults.collection_items,...r,title:title==null?'Untitled':String(title)};});
-    return [...list(table),...(['coach_talks','habits','journal','health_episodes','medications'].includes(table)?nativeRows(this.store,table):[])].map(r => ({ ...(defaults[table] || {}), ...r,...table==='contact_groups'?{type:r.group_type||'custom'}:table==='contact_group_memberships'?{last_movement_at:r.last_movement_at||r.created_at}:{} }));
+    return [...list(table),...(['coach_talks','habits','journal','health_episodes','medications'].includes(table)?nativeRows(this.store,table):[])].map(r => shaped(table, r));
+  }
+  // rows() already read a consistent snapshot; joins resolve from that same
+  // snapshot through one map of identities per view of the store, rather than
+  // rescanning the vault once per joined item. A removed record is gone, as a
+  // deleted row is: a membership of a deleted group embeds no group.
+  identity(type,id){
+    if(this.identityFor!==this.store.records){this.identityCache=new Map();for(const record of this.store.records.values())if(!record.removed_at)for(const id of [...identityIds(record),...record.aliases||[]])if(!this.identityCache.has(record.type+'/'+id)||id===record.id)this.identityCache.set(record.type+'/'+id,record);this.identityFor=this.store.records;}
+    return this.identityCache.get(type+'/'+id)||null;
+  }
+  inSnapshot(read){this.snapshotDepth=(this.snapshotDepth||0)+1;try{return read();}finally{this.snapshotDepth--;}}
+  // Which records an embed brings, read from the links between tables the way
+  // PostgREST reads foreign keys: a column of this row naming one record
+  // (contacts:contact_id, notes!..._source_note_id_fkey, notes(*) by note_id),
+  // or else the embedded table's records whose column names this row, as a
+  // list (a group's contact_group_memberships).
+  relation(table,embed,rows){
+    if(links[embed.name])return {target:links[embed.name],column:embed.name};
+    if(/_id$/.test(embed.name)&&tables.has(embed.alias))return {target:embed.alias,column:embed.name};
+    if(!tables.has(embed.name))return null;
+    const usual=embed.name.replace(/ies$/,'y').replace(/s$/,'')+'_id',toward=Object.keys(links).filter(k=>links[k]===embed.name).sort((a,b)=>(b===usual)-(a===usual));
+    const column=(embed.hint&&toward.filter(k=>embed.hint.includes(k)).sort((a,b)=>b.length-a.length)[0])||toward.find(k=>rows.some(r=>r[k]!==undefined));
+    if(column)return {target:embed.name,column};
+    const back=Object.keys(links).filter(k=>links[k]===table&&(!embed.hint||embed.hint.includes(k)));
+    if(!back.length)return toward.length?{target:embed.name,column:toward[0]}:null;
+    const children=this.inSnapshot(()=>this.rows(embed.name)),by=back.find(k=>children.some(c=>c[k]!==undefined))||back[0],of=new Map();
+    for(const child of children){let list=of.get(child[by]);if(!list)of.set(child[by],list=[]);list.push(child);}
+    return {target:embed.name,column:by,children:of};
+  }
+  // Embedded records come after a row's own filters and before counting and
+  // paging, as in PostgREST: a filter on an embedded column narrows what is
+  // embedded, and with !inner a row left with nothing embedded is left out.
+  embed(table,rows,embeds,filters){
+    if(!rows.length)return rows;
+    const plans=embeds.flatMap(e=>{const relation=this.relation(table,e,rows);return relation?[{...e,...relation,filters:filters.filter(f=>f[1].startsWith(e.alias+'.')).map(([op,key,value])=>[op,key.slice(e.alias.length+1),value])}]:[];});
+    return rows.flatMap(r=>{
+      const extra={};
+      for(const e of plans){
+        let value;
+        if(e.children)value=[r.id,...r.former_ids||[]].flatMap(id=>e.children.get(id)||[]).filter(child=>e.filters.every(f=>condition(child,f)));
+        else{const found=r[e.column]?this.identity(e.target,r[e.column]):null,record=found&&shaped(e.target,found);value=record&&e.filters.every(f=>condition(record,f))?record:null;}
+        if(e.inner&&(e.children?!value.length:!value))return [];
+        extra[e.alias]=value;
+      }
+      return [{...r,...extra}];
+    });
   }
   references(type, value) {
     const refs = [...(value.references || [])].filter(r => !r.field);
@@ -203,8 +256,13 @@ export class QueryService {
   execute(request) {
     const { table, operation = 'select', values, filters = [], orders = [], selection = '*', options = {}, single = false, maybeSingle = false, expected = {}, baselines = {} } = request;
     if (!tables.has(table)) throw new Error('Unknown record domain ' + table);
-    let rows = this.rows(table).filter(row => filters.every(f => condition(row, f)));
+    // A filter on an embedded column ("contact_groups.is_trashed") waits for
+    // the join. Until 6 October 2026 it was checked against the row itself,
+    // where that column never is, so a person's Groups tab was always empty.
+    const embeds=embedsOf(selection),names=new Set(embeds.map(e=>e.alias)),embedded=f=>{const key=String(f[1]??''),dot=key.indexOf('.');return dot>0&&names.has(key.slice(0,dot));};
+    let rows = this.rows(table).filter(row => filters.every(f => embedded(f) || condition(row, f)));
     if (operation !== 'select') {
+      if(filters.some(embedded))throw new Error('Filters on embedded records narrow reads only');
       const privateKeys=/^(access_token|refresh_token|api_key|secret|password|token|token_hash|encrypted_token|credentials)$/i;
       const inspect=value=>{if(value&&typeof value==='object')for(const [key,next] of Object.entries(value)){if(privateKeys.test(key))throw new Error('Connector credentials belong in local device configuration, never synced records');inspect(next);}};inspect(values);
       if (views.has(table)||rows.some(r=>r.native_file&&table==='deadlines')) throw new Error('Derived views are read-only; use the personal obligation operation');
@@ -252,26 +310,18 @@ export class QueryService {
         this.store.commit([...changed,...gone]); return table==='moments'?this.rows(table).filter(r=>changed.some(c=>c.id===r.id||c.moment_id===r.id)):changed;
       });
     }
+    // Joined before counting when the join decides which rows there are
+    // (!inner, a filter on an embedded column); otherwise only the page is joined.
+    const early=embeds.some(e=>e.inner)||filters.some(embedded);
+    if(early)rows=this.embed(table,rows,embeds,filters.filter(embedded));
     const count = rows.length;
     if (orders.length) rows.sort((a, b) => { for (const [key, settings = {}] of orders) { const av = getValue(a, key), bv = getValue(b, key); if (av === bv) continue; const n = av == null ? (settings.nullsFirst ? -1 : 1) : bv == null ? (settings.nullsFirst ? 1 : -1) : av < bv ? -1 : 1; return settings.ascending === false ? -n : n; } return 0; });
     if (request.range) rows = rows.slice(request.range[0], request.range[1] + 1);
     if (request.limit !== undefined) rows = rows.slice(0, request.limit);
-    // Preserve observed joined shapes without a second source of truth.
-    // rows() already read a consistent snapshot. Resolve joins from that same
-    // snapshot instead of rescanning the whole vault once per joined item.
-    // Joins only when the selection asks for one, from one map of identities
-    // per view of the store rather than one per query.
-    const joins=/\(/.test(String(selection));let identities=null;
-    const joined=(type,id)=>{if(!identities){if(this.identityFor!==this.store.records){this.identityCache=new Map();for(const record of this.store.records.values())for(const id of [...identityIds(record),...record.aliases||[]])if(!this.identityCache.has(record.type+'/'+id)||id===record.id)this.identityCache.set(record.type+'/'+id,record);this.identityFor=this.store.records;}identities=this.identityCache;}return identities.get(type+'/'+id)||null;};
+    if(embeds.length&&!early)rows=this.embed(table,rows,embeds,[]);
     const keep=projection(selection);
     rows = rows.map(r => {
       let result = { ...r, _hash: r._hash || this.store.records.get(table+'/'+r.id)?._hash };
-      if(joins){
-        if (selection.includes('source_note:')) result.source_note = r.source_note_id ? joined('notes', r.source_note_id) : null;
-        if (selection.includes('notes(')) result.notes = r.note_id ? joined('notes', r.note_id) : null;
-        if (selection.includes('contacts(')) result.contacts = r.contact_id ? joined('contacts', r.contact_id) : null;
-        for(const match of selection.matchAll(/(\w+):(\w+)(?:!\w+)?\(/g)){const [,alias,column]=match,target=links[column]||(tables.has(column)?column:null),foreign=links[column]?column:Object.keys(links).find(key=>links[key]===target&&r[key]);if(target&&foreign)result[alias]=r[foreign]?joined(target,r[foreign]):null;}
-      }
       // A list shows a note's first words, not its text: content_preview and
       // content_length stand in for content where a selection names them.
       if(keep?.has('content_preview')&&typeof r.content==='string'){result.content_preview=r.content.slice(0,400);result.content_length=r.content.length;}
