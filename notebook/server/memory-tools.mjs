@@ -4,6 +4,7 @@ import {visibleRows} from '../core/visibility.mjs';
 import {momentDraft} from '../core/moment-draft.mjs';
 import {relatedNotes} from '../core/related.mjs';
 import {STOPWORDS} from '../core/index/stopwords.mjs';
+import {privateFile as markedPrivate} from '../core/context.mjs';
 
 // Menerio's tool names and arguments, answered from the notebook. Mission
 // Control's skills, routines and memory benchmark called these names for
@@ -101,6 +102,26 @@ const labeler = query => { const n = subjectNames(query); return f => f.subject_
 // (6 October 2026, the memory benchmark). The verbatim prompt archive and the
 // assistant's state are never part of it.
 export const privateFile = relative => /^(prompts|assistant-state)\//.test(String(relative));
+// The scopes a key needs for a Mission Control file, by the folder it is in.
+// Until 6 October 2026 a key with only "notes" read health, World, journal and
+// coaching files through search_notes and get_note. A key must hold every
+// scope listed; the owner's computer, which uses no key, reads them all.
+export function fileScopes(relative) {
+  const name = String(relative);
+  if (/^world\//.test(name)) return ['world'];
+  if (/^profile\//.test(name)) return ['profile'];
+  if (/^(coach|journal|routines|goals|work|due|forecasts|watch|brief|observations\/health-inputs)\//.test(name)) return ['actions'];
+  // An archived file can be any of these.
+  if (/^archives\//.test(name)) return ['notes', 'actions', 'world', 'profile'];
+  return ['notes'];
+}
+// A file an assistant may see: not in a private folder, not marked private or
+// hidden by the owner (core/context.mjs), and covered by the key's scopes.
+export function fileAllowed(ctx, relative, text) {
+  if (privateFile(relative) || (ctx.scopes && !fileScopes(relative).every(scope => ctx.scopes.includes(scope)))) return false;
+  if (text === undefined) { try { text = fs.readFileSync(path.join(ctx.store.root, relative), 'utf8'); } catch { return false; } }
+  return !markedPrivate(relative, text);
+}
 async function noteHits(ctx, text, {limit = 50, files = true} = {}) {
   const {index, query, store} = ctx;
   const notes = new Map(live(visibleRows(query, 'notes')).filter(n => !n.is_trashed).map(n => [n.id, n]));
@@ -108,7 +129,7 @@ async function noteHits(ctx, text, {limit = 50, files = true} = {}) {
   const out = new Map();
   for (const r of found.rows) {
     if (r.type === 'workspace_file') {
-      if (privateFile(r.id) || out.has('file:' + r.id)) continue;
+      if (out.has('file:' + r.id) || !fileAllowed(ctx, r.id)) continue;
       out.set('file:' + r.id, {file: r.id, note: {id: r.id, title: r.id, updated_at: fileTime(store, r.id)}, full: () => { try { return fs.readFileSync(path.join(store.root, r.id), 'utf8'); } catch { return ''; } }, snippet: r.snippet ? r.snippet.replace(/[[\]]/g, '') : null, matched: r.matched || 'words', via: 'Mission Control file'});
       continue;
     }
@@ -128,7 +149,9 @@ export function readFile(ctx, relative) {
   if (!name || privateFile(name) || name.split('/').some(p => p === '..' || p.startsWith('.')) || !ctx.index?.db) return null;
   const known = ctx.index.db.prepare("SELECT 1 FROM docs WHERE type='workspace_file' AND id=?").get(name);
   if (!known) return null;
-  try { return {id: name, title: name, source: 'Mission Control file', content: fs.readFileSync(path.join(ctx.store.root, name), 'utf8'), updated_at: fileTime(ctx.store, name)}; } catch { return null; }
+  let content; try { content = fs.readFileSync(path.join(ctx.store.root, name), 'utf8'); } catch { return null; }
+  if (!fileAllowed(ctx, name, content)) return null;
+  return {id: name, title: name, source: 'Mission Control file', content, updated_at: fileTime(ctx.store, name)};
 }
 function snippetOf(note, text) { return bestWindow(note.content, text); }
 // The window of a text, about 420 characters, that holds the most of the

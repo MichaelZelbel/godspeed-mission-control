@@ -43,7 +43,7 @@ export async function mcp(input,{store,query,index,domains,scopes}){
       const {name,arguments:a={}}=input.params||{};let value;
       if(memoryToolNames.includes(name)){
         const scoped=Object.assign(Object.create(Object.getPrototypeOf(domains)),domains,{toolScope:type=>toolScope('save_record',{type})});
-        value=await memoryTool(name,a,{store,query,index,domains,seen},expected=>assistantMutationContext({store,query,domains:scoped,scopes},{...a,expected},name));
+        value=await memoryTool(name,a,{store,query,index,domains,seen,scopes},expected=>assistantMutationContext({store,query,domains:scoped,scopes},{...a,expected},name));
         return {jsonrpc:'2.0',id,result:{content:[{type:'text',text:typeof value==='string'?value:JSON.stringify(value)}]}};
       }
       // Menerio named the note note_id; the write guard reads id (6 October 2026: an edit by
@@ -63,9 +63,9 @@ export async function mcp(input,{store,query,index,domains,scopes}){
         for(const note of notes){const folder=note.folder_path||'';folders.set(folder,(folders.get(folder)||0)+1);}
         return [...folders].map(([folder_path,note_count])=>({folder_path,note_count})).sort((a,b)=>a.folder_path.localeCompare(b.folder_path));
       });
-      else if(name==='search_notes')value=await searchNotes(a,{store,query,index,domains,seen});
+      else if(name==='search_notes')value=await searchNotes(a,{store,query,index,domains,seen,scopes});
       // A Mission Control file found by search_notes or search_brain is read by its path.
-      else if(name==='get_note'&&(value=readFile({store,index},a.note||a.id)));
+      else if(name==='get_note'&&(value=readFile({store,index,scopes},a.note||a.id)));
       else if(name==='get_note'||name==='update_note'){
         const ref=a.note_id||a.id||a.note,notes=visibleRows(query,'notes').filter(n=>!n.is_trashed),note=notes.find(n=>n.id===ref)||(name==='get_note'?notes.filter(n=>n.title===ref).sort((x,y)=>String(y.updated_at).localeCompare(String(x.updated_at)))[0]:null);if(!note)throw Error('Choose a visible existing note');
         if(name==='get_note'){value=note;seen([note]);}
