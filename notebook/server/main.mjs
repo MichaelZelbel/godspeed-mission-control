@@ -18,6 +18,7 @@ import { SyncRunner } from '../core/sync/runner.mjs';
 import { restore } from '../core/archives.mjs';
 import {RecoveryRunner} from '../core/recovery-runner.mjs';
 import {BackupRunner} from '../core/backup-runner.mjs';
+import {BackupSchedule} from '../core/backup-schedule.mjs';
 import {saveConversationState,retainCompletedConversation} from '../core/conversation-state.mjs';
 import { importExport } from '../core/import.mjs';
 import { kinds } from '../core/jobs/scheduler.mjs';
@@ -302,6 +303,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   // New and changed notes are processed on the machine that runs the routines.
   const processing=domains.processing=new NoteProcessing({store,query,domains,device});
   const processingTimer=setInterval(()=>{if(!menerioImport.mutating)void processing.tick().catch(()=>{});},60000);processingTimer.unref?.();
+  const backupSchedule=new BackupSchedule({store,runner:backupRunner,device}),backupTimer=setInterval(()=>{if(!menerioImport.mutating)void backupSchedule.tick().catch(()=>{});},600000);backupTimer.unref?.();
   const interval = setInterval(() => { if (!menerioImport.mutating) void store.verify().then(()=>index.rebuildBackground()).catch(()=>{}); }, 600000);
   const jobs=setInterval(()=>{if(!menerioImport.mutating)scheduler.tick().catch(()=>{});},30000);
   const syncTimer=setInterval(()=>{if(!menerioImport.mutating&&fs.existsSync(path.join(store.state,'sync-config.json')))void syncRunner.run();},60000);
@@ -330,7 +332,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   const watchRoot=name=>{const folder=path.join(store.root,name);if(!watchers.has(name)&&fs.existsSync(folder))watchers.set(name,fs.watch(folder,{recursive:true},changed(name)));};
   for(const name of durableRoots)watchRoot(name);
   const rootWatcher=fs.watch(store.root,(event,name)=>{if(durableRoots.includes(name)){watchRoot(name);changed(name)(event,null);}else if(durableFiles.includes(name))changed('')(event,name);});
-  return { server, store, index, query, domains, scheduler, sync, mediaSync,address: server.address(), close: async () => { clearInterval(meaningTimer);clearInterval(processingTimer);stopIndexing();store.unwatch();await syncRunner.close();await menerioImport.close();rootWatcher.close();for(const watcher of watchers.values())watcher.close();clearTimeout(debounce);clearTimeout(indexDebounce);clearInterval(telegramTimer);clearInterval(interval);clearInterval(jobs);clearInterval(syncTimer);clearInterval(mediaTimer); await new Promise(resolve => server.close(resolve)); index.close(); } };
+  return { server, store, index, query, domains, scheduler, sync, mediaSync,address: server.address(), close: async () => { clearInterval(meaningTimer);clearInterval(processingTimer);clearInterval(backupTimer);stopIndexing();store.unwatch();await syncRunner.close();await menerioImport.close();rootWatcher.close();for(const watcher of watchers.values())watcher.close();clearTimeout(debounce);clearTimeout(indexDebounce);clearInterval(telegramTimer);clearInterval(interval);clearInterval(jobs);clearInterval(syncTimer);clearInterval(mediaTimer); await new Promise(resolve => server.close(resolve)); index.close(); } };
 }
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const root = process.env.GODSPEED_WORKSPACE;
