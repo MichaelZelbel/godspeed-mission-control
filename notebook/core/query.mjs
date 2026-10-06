@@ -17,6 +17,9 @@ for(const table of ['lead_entries','lead_runs','lead_examples','lead_positions',
 tables.add('lead_measurements');
 tables.add('lead_comparisons');
 const defaults = {
+  // Postgres filled in status; an item saved without one would now be left
+  // out by Actions' .neq("status", "dismissed"), since NULL <> x is not true.
+  action_items: { status: 'open' },
   contacts: { notes: null, app_mappings: {}, merged_into: null, is_favorite: false, is_sensitive: false, last_viewed_at: null },
   contact_groups:{is_archived:false,is_trashed:false,parent_group_id:null,sensitivity:'normal',group_type:'custom',stages:[],success_criteria:[],attributes_schema:{},status:'active'},
   contact_group_memberships:{status:'new',position:0,attributes:{},notes:null},
@@ -41,11 +44,12 @@ const links = { contact_id: 'contacts', person_id: 'contacts', note_id: 'notes',
 function splitFilters(text){let depth=0,quoted=false,part='',items=[];for(let i=0;i<text.length;i++){const c=text[i];if(quoted&&c==='\\'){part+=c+(text[++i]??'');continue;}if(c==='"')quoted=!quoted;else if(!quoted&&c==='(')depth++;else if(!quoted&&c===')')depth--;if(c===','&&!depth&&!quoted){items.push(part);part='';}else part+=c;}if(part)items.push(part);return items;}
 const unquote=value=>value.length>1&&value.startsWith('"')&&value.endsWith('"')?value.slice(1,-1).replace(/\\([\s\S])/g,'$1'):value;
 const list=value=>Array.isArray(value)?value:splitFilters(String(value).replace(/^\(([\s\S]*)\)$/,'$1')).map(unquote);
+const negate=result=>result===null?null:!result;
 function filterExpression(row,text){
-  for(const op of ['and','or','not.and','not.or'])if(text.startsWith(op+'(')&&text.endsWith(')')){const result=condition(row,[op.replace('not.',''),'',text.slice(op.length+1,-1)]);return op.startsWith('not.')?!result:result;}
+  for(const op of ['and','or','not.and','not.or'])if(text.startsWith(op+'(')&&text.endsWith(')')){const result=condition(row,[op.replace('not.',''),'',text.slice(op.length+1,-1)]);return op.startsWith('not.')?negate(result):result;}
   const match=text.match(/^(.+?)\.(not\.)?(eq|neq|is|in|like|ilike|gt|gte|lt|lte)\.([\s\S]*)$/);if(!match)throw new Error('Invalid filter expression');
   const [,key,not,op,raw]=match,value=op==='in'?list(raw):/^(null|true|false)$/.test(raw)?JSON.parse(raw):unquote(raw);
-  const result=condition(row,[op,key,value]);return not?!result:result;
+  const result=condition(row,[op,key,value]);return not?negate(result):result;
 }
 // Postgres LIKE: % is any run of characters, line breaks included, _ exactly
 // one, a backslash takes the next character literally, and the pattern covers
@@ -76,19 +80,29 @@ const collation=new Intl.Collator('en');
 export function compareValues(a,b){if(typeof a==='string'&&typeof b==='string')return collation.compare(a,b)||(a<b?-1:a>b?1:0);return a<b?-1:a>b?1:0;}
 function getValue(row, key) { return key.replaceAll('->>', '.').replaceAll('->', '.').split('.').reduce((v, k) => v?.[k], row); }
 function contains(a, b) { return Array.isArray(b) ? b.every(v => (a || []).includes(v)) : b && typeof b === 'object' ? Object.entries(b).every(([k, v]) => contains(a?.[k], v)) : a === b; }
+// The or() grammar is text, and Postgres reads a value as its column's type:
+// position.eq.1 is the number 1, is_trashed.eq.false the boolean.
+const cast=(a,v)=>typeof v!=='string'?v:typeof a==='number'&&v.trim()!==''&&Number.isFinite(Number(v))?Number(v):typeof a==='boolean'&&(v==='true'||v==='false')?v==='true':v;
+// Postgres answers a comparison with an empty (NULL) value as unknown, and a
+// row is kept only for true: NULL <> 'done' is not true, nor is NOT (NULL =
+// 'done'), nor NULL < 5. Until 6 October 2026 neq, not and lt kept such rows.
+// condition() answers true, false or null for unknown; callers keep === true.
+const comparisons=new Set(['eq','neq','in','contains','overlaps','gt','gte','lt','lte','like','ilike']);
 function condition(row, [op, key, value]) {
+  if (op === 'or' || op === 'and') { const results = splitFilters(String(value)).map(part => filterExpression(row, part)), decisive = op === 'or'; return results.includes(decisive) ? decisive : results.includes(null) ? null : !decisive; }
+  if (op === 'not') return negate(condition(row, [value[0], key, value[1]]));
   const a = getValue(row, key);
+  if (op === 'is') return value === null ? a == null : a === value;
+  if (!comparisons.has(op)) throw new Error('Unsupported filter ' + op);
+  if (a == null) return null;
+  const v = cast(a, value);
   switch (op) {
-    case 'eq': return a === value; case 'neq': return a !== value;
-    case 'is': return value === null ? a == null : a === value;
-    case 'in': return value.includes(a); case 'contains': return contains(a, value);
+    case 'eq': return a === v; case 'neq': return a !== v;
+    // .not('id','in','(a,b)') sends the list as text; it was searched as text.
+    case 'in': return list(value).some(item => a === cast(a, item)); case 'contains': return contains(a, value);
     case 'overlaps': return (a || []).some(x => value.includes(x));
-    case 'gt': return a > value; case 'gte': return a >= value; case 'lt': return a < value; case 'lte': return a <= value;
-    case 'like': case 'ilike': return a != null && likePattern(op, String(value)).test(String(a));
-    case 'not': return !condition(row, [value[0], key, value[1]]);
-    case 'or': return splitFilters(String(value)).some(part=>filterExpression(row,part));
-    case 'and': return splitFilters(String(value)).every(part=>filterExpression(row,part));
-    default: throw new Error('Unsupported filter ' + op);
+    case 'gt': return compareValues(a, v) > 0; case 'gte': return compareValues(a, v) >= 0; case 'lt': return compareValues(a, v) < 0; case 'lte': return compareValues(a, v) <= 0;
+    case 'like': case 'ilike': return likePattern(op, String(value)).test(String(a));
   }
 }
 // The columns a selection names, as a database would return them; null for
@@ -214,8 +228,8 @@ export class QueryService {
       const extra={};
       for(const e of plans){
         let value;
-        if(e.children)value=[r.id,...r.former_ids||[]].flatMap(id=>e.children.get(id)||[]).filter(child=>e.filters.every(f=>condition(child,f)));
-        else{const found=r[e.column]?this.identity(e.target,r[e.column]):null,record=found&&shaped(e.target,found);value=record&&e.filters.every(f=>condition(record,f))?record:null;}
+        if(e.children)value=[r.id,...r.former_ids||[]].flatMap(id=>e.children.get(id)||[]).filter(child=>e.filters.every(f=>condition(child,f)===true));
+        else{const found=r[e.column]?this.identity(e.target,r[e.column]):null,record=found&&shaped(e.target,found);value=record&&e.filters.every(f=>condition(record,f)===true)?record:null;}
         if(e.inner&&(e.children?!value.length:!value))return [];
         extra[e.alias]=value;
       }
@@ -260,7 +274,7 @@ export class QueryService {
     // the join. Until 6 October 2026 it was checked against the row itself,
     // where that column never is, so a person's Groups tab was always empty.
     const embeds=embedsOf(selection),names=new Set(embeds.map(e=>e.alias)),embedded=f=>{const key=String(f[1]??''),dot=key.indexOf('.');return dot>0&&names.has(key.slice(0,dot));};
-    let rows = this.rows(table).filter(row => filters.every(f => embedded(f) || condition(row, f)));
+    let rows = this.rows(table).filter(row => filters.every(f => embedded(f) || condition(row, f) === true));
     if (operation !== 'select') {
       if(filters.some(embedded))throw new Error('Filters on embedded records narrow reads only');
       const privateKeys=/^(access_token|refresh_token|api_key|secret|password|token|token_hash|encrypted_token|credentials)$/i;
@@ -271,10 +285,17 @@ export class QueryService {
       // one level up and retries only its acquisition, so a held workspace
       // delays an edit instead of refusing it. See executeAsync below.
       const holding = request.holdingLock ? run => this.store.snapshot(run) : run => this.store.withLock(() => this.store.snapshot(run));
+      // The record an upsert replaces, by its unique key as Postgres reads one:
+      // an empty value never equals another, and a missing user_id is the one
+      // local owner's. Until 6 October 2026 suppressFactValue, which sends no
+      // user_id, filed the same suppression again on every click.
+      const unique=String(options.onConflict||'').split(',').map(k=>k.trim()).filter(Boolean),keyed=(r,k)=>k==='user_id'?r[k]??'owner':r[k];
+      const existing=value=>value.id?this.store.get(table,value.id):unique.length?this.rows(table).find(r=>unique.every(k=>keyed(value,k)!=null&&keyed(r,k)===keyed(value,k))):undefined;
       rows = holding(() => {
-        const inputs = operation === 'insert' || operation === 'upsert' ? (Array.isArray(values) ? values : [values]) : rows;
+        // ignoreDuplicates is ON CONFLICT DO NOTHING: an existing link keeps its metadata.
+        const inputs = operation === 'insert' || operation === 'upsert' ? (Array.isArray(values) ? values : [values]).filter(value => !(operation === 'upsert' && options.ignoreDuplicates && existing(value))) : rows;
         const changed = inputs.map(value => {
-          const old = operation === 'insert' ? null : operation === 'upsert' ? (value.id ? this.store.get(table, value.id) : this.rows(table).find(r => options.onConflict && options.onConflict.split(',').every(k => r[k] === value[k]))) : table==='moments'?value:this.store.get(table, value.id);
+          const old = operation === 'insert' ? null : operation === 'upsert' ? existing(value) : table==='moments'?value:this.store.get(table, value.id);
           if (operation === 'insert' && value.id && this.store.get(table, value.id)) throw new Error('Record already exists');
           if(request.assistant){
             if(old){assertAssistantRecord(this,table,old.id);if(typeof expected[old.id]!=='string'||!expected[old.id].trim())throw Error('Read the current record hash before editing');if(expected[old.id]!==old._hash)this.store.conflict(table,operation==='update'?values:value,old,baselines[old.id]);}
@@ -315,7 +336,13 @@ export class QueryService {
     const early=embeds.some(e=>e.inner)||filters.some(embedded);
     if(early)rows=this.embed(table,rows,embeds,filters.filter(embedded));
     const count = rows.length;
-    if (orders.length) rows.sort((a, b) => { for (const [key, settings = {}] of orders) { const av = getValue(a, key), bv = getValue(b, key); if (av === bv) continue; const n = av == null ? (settings.nullsFirst ? -1 : 1) : bv == null ? (settings.nullsFirst ? 1 : -1) : av < bv ? -1 : 1; return settings.ascending === false ? -n : n; } return 0; });
+    // Empty values go last ascending and first descending unless nullsFirst
+    // says otherwise. Until 6 October 2026 the direction flipped an explicit
+    // nullsFirst too, so useClaims listed undated facts before the newest.
+    // Each row's values are read once, not once per comparison (half a second
+    // for sixteen thousand rows).
+    if (orders.length) { const settings = orders.map(([, s]) => ({ descending: s?.ascending === false, nullsFirst: s?.nullsFirst ?? s?.ascending === false }));
+      rows = rows.map(r => [r, orders.map(([key]) => getValue(r, key))]).sort((a, b) => { for (let i = 0; i < settings.length; i++) { const av = a[1][i], bv = b[1][i]; if (av == null || bv == null) { if (av == null && bv == null) continue; return (av == null) === settings[i].nullsFirst ? -1 : 1; } const n = compareValues(av, bv); if (n) return settings[i].descending ? -n : n; } return 0; }).map(([r]) => r); }
     if (request.range) rows = rows.slice(request.range[0], request.range[1] + 1);
     if (request.limit !== undefined) rows = rows.slice(0, request.limit);
     if(embeds.length&&!early)rows=this.embed(table,rows,embeds,[]);
