@@ -17,6 +17,9 @@ for(const table of ['lead_entries','lead_runs','lead_examples','lead_positions',
 tables.add('lead_measurements');
 tables.add('lead_comparisons');
 const defaults = {
+  // Postgres filled in status; an item saved without one would now be left
+  // out by Actions' .neq("status", "dismissed"), since NULL <> x is not true.
+  action_items: { status: 'open' },
   contacts: { notes: null, app_mappings: {}, merged_into: null, is_favorite: false, is_sensitive: false, last_viewed_at: null },
   contact_groups:{is_archived:false,is_trashed:false,parent_group_id:null,sensitivity:'normal',group_type:'custom',stages:[],success_criteria:[],attributes_schema:{},status:'active'},
   contact_group_memberships:{status:'new',position:0,attributes:{},notes:null},
@@ -34,49 +37,98 @@ const defaults = {
 const links = { contact_id: 'contacts', person_id: 'contacts', note_id: 'notes', source_note_id: 'notes', linked_note_id: 'notes',
   collection_id: 'collections', folder_id: 'collection_item_folders', moment_id: 'moments', entity_id: 'entities',
   from_contact_id: 'contacts', to_contact_id: 'contacts', parent_folder_id: 'collection_item_folders', claim_id: 'claims', slot_id: 'fact_slots', category_id: 'profile_categories', group_id: 'contact_groups',parent_group_id:'contact_groups',target_note_id:'notes',evidence_note_id:'notes',document_id:'notes',topic_id:'contact_topics' };
-function splitFilters(text){let depth=0,quoted=false,part='',items=[];for(const c of text){if(c==='"')quoted=!quoted;if(!quoted&&c==='(')depth++;if(!quoted&&c===')')depth--;if(c===','&&!depth&&!quoted){items.push(part);part='';}else part+=c;}if(part)items.push(part);return items;}
+// PostgREST's grammar for or(), and() and in-lists: a double-quoted value
+// keeps its commas, dots and parentheses, and inside the quotes a backslash
+// takes the next character as it is. Until 6 October 2026 a \" ended the
+// quotes here and a \\ stayed doubled, so pgOrValue's output never matched.
+function splitFilters(text){let depth=0,quoted=false,part='',items=[];for(let i=0;i<text.length;i++){const c=text[i];if(quoted&&c==='\\'){part+=c+(text[++i]??'');continue;}if(c==='"')quoted=!quoted;else if(!quoted&&c==='(')depth++;else if(!quoted&&c===')')depth--;if(c===','&&!depth&&!quoted){items.push(part);part='';}else part+=c;}if(part)items.push(part);return items;}
+const unquote=value=>value.length>1&&value.startsWith('"')&&value.endsWith('"')?value.slice(1,-1).replace(/\\([\s\S])/g,'$1'):value;
+const list=value=>Array.isArray(value)?value:splitFilters(String(value).replace(/^\(([\s\S]*)\)$/,'$1')).map(unquote);
+const negate=result=>result===null?null:!result;
 function filterExpression(row,text){
-  for(const op of ['and','or'])if(text.startsWith(op+'(')&&text.endsWith(')')){const results=splitFilters(text.slice(op.length+1,-1)).map(p=>filterExpression(row,p));return op==='and'?results.every(Boolean):results.some(Boolean);}
+  for(const op of ['and','or','not.and','not.or'])if(text.startsWith(op+'(')&&text.endsWith(')')){const result=condition(row,[op.replace('not.',''),'',text.slice(op.length+1,-1)]);return op.startsWith('not.')?negate(result):result;}
   const match=text.match(/^(.+?)\.(not\.)?(eq|neq|is|in|like|ilike|gt|gte|lt|lte)\.([\s\S]*)$/);if(!match)throw new Error('Invalid filter expression');
-  let value=match[4];if(value.startsWith('"')&&value.endsWith('"'))value=value.slice(1,-1).replaceAll('\\"','"');else if(value==='null')value=null;else if(value==='true'||value==='false')value=value==='true';
-  if(match[3]==='in')value=splitFilters(String(value).replace(/^\(|\)$/g,''));
-  const result=condition(row,[match[3],match[1],value]);return match[2]?!result:result;
+  const [,key,not,op,raw]=match,value=op==='in'?list(raw):/^(null|true|false)$/.test(raw)?JSON.parse(raw):unquote(raw);
+  const result=condition(row,[op,key,value]);return not?negate(result):result;
 }
+// Postgres LIKE: % is any run of characters, line breaks included, _ exactly
+// one, a backslash takes the next character literally, and the pattern covers
+// the whole text; ILIKE folds case. Until 6 October 2026 % stopped at a line
+// break, so the notes search missed every note of more than one line, and the
+// backslash the screens put before _ and % was a character to find: "cool_cat"
+// was not found in People and was added a second time.
+const likes=new Map();
+function likePattern(op,pattern){
+  const known=likes.get(op+'\0'+pattern);if(known)return known;
+  const runs=[''],chars=[...pattern];
+  for(let i=0;i<chars.length;i++){
+    let c=chars[i];if(c==='%'){runs.push('');continue;}if(c==='_'){runs[runs.length-1]+='.';continue;}
+    if(c==='\\'){if(++i===chars.length)throw new Error('LIKE pattern must not end with escape character');c=chars[i];}
+    runs[runs.length-1]+=c.replace(/[.*+?^${}()|[\]\\/]/g,'\\$&');
+  }
+  // Each run between two % is taken at its first place and never tried again
+  // (a lookahead does not backtrack), so several % in one pattern cannot turn
+  // a long note into minutes of backtracking.
+  const source=runs.length===1?runs[0]:runs[0]+runs.slice(1,-1).map((run,i)=>'(?=(.*?'+run+'))\\'+(i+1)).join('')+'.*'+runs.at(-1);
+  const expression=new RegExp('^(?:'+source+')$',op==='ilike'?'isu':'su');
+  if(likes.size>500)likes.clear();likes.set(op+'\0'+pattern,expression);return expression;
+}
+// One order for everything that sorts or pages, as the app's Postgres had it:
+// text by its collation (apple before Zebra, Ömer beside Otto), with ties
+// between different texts broken by their characters so the order is total.
+const collation=new Intl.Collator('en');
+export function compareValues(a,b){if(typeof a==='string'&&typeof b==='string')return collation.compare(a,b)||(a<b?-1:a>b?1:0);return a<b?-1:a>b?1:0;}
 function getValue(row, key) { return key.replaceAll('->>', '.').replaceAll('->', '.').split('.').reduce((v, k) => v?.[k], row); }
 function contains(a, b) { return Array.isArray(b) ? b.every(v => (a || []).includes(v)) : b && typeof b === 'object' ? Object.entries(b).every(([k, v]) => contains(a?.[k], v)) : a === b; }
+// The or() grammar is text, and Postgres reads a value as its column's type:
+// position.eq.1 is the number 1, is_trashed.eq.false the boolean.
+const cast=(a,v)=>typeof v!=='string'?v:typeof a==='number'&&v.trim()!==''&&Number.isFinite(Number(v))?Number(v):typeof a==='boolean'&&(v==='true'||v==='false')?v==='true':v;
+// Postgres answers a comparison with an empty (NULL) value as unknown, and a
+// row is kept only for true: NULL <> 'done' is not true, nor is NOT (NULL =
+// 'done'), nor NULL < 5. Until 6 October 2026 neq, not and lt kept such rows.
+// condition() answers true, false or null for unknown; callers keep === true.
+const comparisons=new Set(['eq','neq','in','contains','overlaps','gt','gte','lt','lte','like','ilike']);
 function condition(row, [op, key, value]) {
+  if (op === 'or' || op === 'and') { const results = splitFilters(String(value)).map(part => filterExpression(row, part)), decisive = op === 'or'; return results.includes(decisive) ? decisive : results.includes(null) ? null : !decisive; }
+  if (op === 'not') return negate(condition(row, [value[0], key, value[1]]));
   const a = getValue(row, key);
+  if (op === 'is') return value === null ? a == null : a === value;
+  if (!comparisons.has(op)) throw new Error('Unsupported filter ' + op);
+  if (a == null) return null;
+  const v = cast(a, value);
   switch (op) {
-    case 'eq': return a === value; case 'neq': return a !== value;
-    case 'is': return value === null ? a == null : a === value;
-    case 'in': return value.includes(a); case 'contains': return contains(a, value);
+    case 'eq': return a === v; case 'neq': return a !== v;
+    // .not('id','in','(a,b)') sends the list as text; it was searched as text.
+    case 'in': return list(value).some(item => a === cast(a, item)); case 'contains': return contains(a, value);
     case 'overlaps': return (a || []).some(x => value.includes(x));
-    case 'gt': return a > value; case 'gte': return a >= value; case 'lt': return a < value; case 'lte': return a <= value;
-    case 'like': case 'ilike': {
-      const expression = String(value).split('').map(c => c === '%' ? '.*' : c === '_' ? '.' : c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('');
-      return new RegExp('^' + expression + '$', op === 'ilike' ? 'i' : '').test(String(a ?? ''));
-    }
-    case 'not': return !condition(row, [value[0], key, value[1]]);
-    case 'or': return splitFilters(String(value)).some(part=>filterExpression(row,part));
-    default: throw new Error('Unsupported filter ' + op);
+    case 'gt': return compareValues(a, v) > 0; case 'gte': return compareValues(a, v) >= 0; case 'lt': return compareValues(a, v) < 0; case 'lte': return compareValues(a, v) <= 0;
+    case 'like': case 'ilike': return likePattern(op, String(value)).test(String(a));
   }
 }
 // The columns a selection names, as a database would return them; null for
 // "everything" or for anything this does not understand. The id and the
 // version hash always come along: the dashboard needs both to save safely.
 // Sending every column regardless sent the notes list as 63 MB of full text.
+const topLevel=text=>{const items=[];let depth=0,part='';for(const c of text){if(c==='(')depth++;if(c===')')depth--;if(c===','&&!depth){items.push(part.trim());part='';}else part+=c;}if(part.trim())items.push(part.trim());return items;};
+const EMBED=/^(?:(\w+):)?(\w+)((?:!\w+)*)\s*\(/;
 export function projection(selection){
   const text=String(selection??'*').trim();if(!text||text==='*')return null;
-  const items=[];let depth=0,part='';for(const c of text){if(c==='(')depth++;if(c===')')depth--;if(c===','&&!depth){items.push(part.trim());part='';}else part+=c;}if(part.trim())items.push(part.trim());
   const keys=new Set(['id','_hash']);
-  for(const item of items){
+  for(const item of topLevel(text)){
     if(item==='*')return null;
-    const join=item.match(/^(?:(\w+):)?(\w+)(?:!\w+)?\s*\(/);if(join){keys.add(join[1]||join[2]);continue;}
+    const join=item.match(EMBED);if(join){keys.add(join[1]||join[2]);continue;}
     const plain=item.match(/^\w+$/);if(plain){keys.add(item);continue;}
     return null;
   }
   return keys;
 }
+// The records a selection embeds, as PostgREST reads them: the name they
+// arrive under, the table or the foreign key column, !inner, and a
+// constraint named as a hint (notes!review_queue_source_note_id_fkey).
+function embedsOf(selection){return topLevel(String(selection??'')).flatMap(item=>{const m=item.match(EMBED);if(!m)return [];const hints=m[3].split('!').filter(Boolean);return [{alias:m[1]||m[2],name:m[2],inner:hints.includes('inner'),hint:hints.find(h=>h!=='inner'&&h!=='left')||null}];});}
+// A row as the table shows it: its defaults filled in, and a group's own
+// type rather than the kind of record it is stored as.
+const shaped=(table,r)=>({...(defaults[table]||{}),...r,...table==='contact_groups'?{type:r.group_type||'custom'}:table==='contact_group_memberships'?{last_movement_at:r.last_movement_at||r.created_at}:{}});
 export class QueryService {
   constructor(store) { this.store = store; }
   withSnapshot(read){if(!this.snapshotDepth)this.store.scan();this.snapshotDepth=(this.snapshotDepth||0)+1;try{return read();}finally{this.snapshotDepth--;}}
@@ -137,7 +189,52 @@ export class QueryService {
       return rows.flatMap(r=>{const base={...defaults.contact_group_memberships,...r,last_movement_at:r.last_movement_at||r.created_at};if(!people.get(r.contact_id)?.merged_into)return [base];const to=target(r.contact_id);return members.has(r.group_id+'/'+to)?[]:[{...base,contact_id:to}];});
     }
     if(table==='collection_items')return list(table).map(r=>{const collection=get('collections',r.collection_id),primary=collection?.field_schema?.find(f=>f.primary),title=primary?r.data?.[primary.key]:r.title;return {...defaults.collection_items,...r,title:title==null?'Untitled':String(title)};});
-    return [...list(table),...(['coach_talks','habits','journal','health_episodes','medications'].includes(table)?nativeRows(this.store,table):[])].map(r => ({ ...(defaults[table] || {}), ...r,...table==='contact_groups'?{type:r.group_type||'custom'}:table==='contact_group_memberships'?{last_movement_at:r.last_movement_at||r.created_at}:{} }));
+    return [...list(table),...(['coach_talks','habits','journal','health_episodes','medications'].includes(table)?nativeRows(this.store,table):[])].map(r => shaped(table, r));
+  }
+  // rows() already read a consistent snapshot; joins resolve from that same
+  // snapshot through one map of identities per view of the store, rather than
+  // rescanning the vault once per joined item. A removed record is gone, as a
+  // deleted row is: a membership of a deleted group embeds no group.
+  identity(type,id){
+    if(this.identityFor!==this.store.records){this.identityCache=new Map();for(const record of this.store.records.values())if(!record.removed_at)for(const id of [...identityIds(record),...record.aliases||[]])if(!this.identityCache.has(record.type+'/'+id)||id===record.id)this.identityCache.set(record.type+'/'+id,record);this.identityFor=this.store.records;}
+    return this.identityCache.get(type+'/'+id)||null;
+  }
+  inSnapshot(read){this.snapshotDepth=(this.snapshotDepth||0)+1;try{return read();}finally{this.snapshotDepth--;}}
+  // Which records an embed brings, read from the links between tables the way
+  // PostgREST reads foreign keys: a column of this row naming one record
+  // (contacts:contact_id, notes!..._source_note_id_fkey, notes(*) by note_id),
+  // or else the embedded table's records whose column names this row, as a
+  // list (a group's contact_group_memberships).
+  relation(table,embed,rows){
+    if(links[embed.name])return {target:links[embed.name],column:embed.name};
+    if(/_id$/.test(embed.name)&&tables.has(embed.alias))return {target:embed.alias,column:embed.name};
+    if(!tables.has(embed.name))return null;
+    const usual=embed.name.replace(/ies$/,'y').replace(/s$/,'')+'_id',toward=Object.keys(links).filter(k=>links[k]===embed.name).sort((a,b)=>(b===usual)-(a===usual));
+    const column=(embed.hint&&toward.filter(k=>embed.hint.includes(k)).sort((a,b)=>b.length-a.length)[0])||toward.find(k=>rows.some(r=>r[k]!==undefined));
+    if(column)return {target:embed.name,column};
+    const back=Object.keys(links).filter(k=>links[k]===table&&(!embed.hint||embed.hint.includes(k)));
+    if(!back.length)return toward.length?{target:embed.name,column:toward[0]}:null;
+    const children=this.inSnapshot(()=>this.rows(embed.name)),by=back.find(k=>children.some(c=>c[k]!==undefined))||back[0],of=new Map();
+    for(const child of children){let list=of.get(child[by]);if(!list)of.set(child[by],list=[]);list.push(child);}
+    return {target:embed.name,column:by,children:of};
+  }
+  // Embedded records come after a row's own filters and before counting and
+  // paging, as in PostgREST: a filter on an embedded column narrows what is
+  // embedded, and with !inner a row left with nothing embedded is left out.
+  embed(table,rows,embeds,filters){
+    if(!rows.length)return rows;
+    const plans=embeds.flatMap(e=>{const relation=this.relation(table,e,rows);return relation?[{...e,...relation,filters:filters.filter(f=>f[1].startsWith(e.alias+'.')).map(([op,key,value])=>[op,key.slice(e.alias.length+1),value])}]:[];});
+    return rows.flatMap(r=>{
+      const extra={};
+      for(const e of plans){
+        let value;
+        if(e.children)value=[r.id,...r.former_ids||[]].flatMap(id=>e.children.get(id)||[]).filter(child=>e.filters.every(f=>condition(child,f)===true));
+        else{const found=r[e.column]?this.identity(e.target,r[e.column]):null,record=found&&shaped(e.target,found);value=record&&e.filters.every(f=>condition(record,f)===true)?record:null;}
+        if(e.inner&&(e.children?!value.length:!value))return [];
+        extra[e.alias]=value;
+      }
+      return [{...r,...extra}];
+    });
   }
   references(type, value) {
     const refs = [...(value.references || [])].filter(r => !r.field);
@@ -173,8 +270,13 @@ export class QueryService {
   execute(request) {
     const { table, operation = 'select', values, filters = [], orders = [], selection = '*', options = {}, single = false, maybeSingle = false, expected = {}, baselines = {} } = request;
     if (!tables.has(table)) throw new Error('Unknown record domain ' + table);
-    let rows = this.rows(table).filter(row => filters.every(f => condition(row, f)));
+    // A filter on an embedded column ("contact_groups.is_trashed") waits for
+    // the join. Until 6 October 2026 it was checked against the row itself,
+    // where that column never is, so a person's Groups tab was always empty.
+    const embeds=embedsOf(selection),names=new Set(embeds.map(e=>e.alias)),embedded=f=>{const key=String(f[1]??''),dot=key.indexOf('.');return dot>0&&names.has(key.slice(0,dot));};
+    let rows = this.rows(table).filter(row => filters.every(f => embedded(f) || condition(row, f) === true));
     if (operation !== 'select') {
+      if(filters.some(embedded))throw new Error('Filters on embedded records narrow reads only');
       const privateKeys=/^(access_token|refresh_token|api_key|secret|password|token|token_hash|encrypted_token|credentials)$/i;
       const inspect=value=>{if(value&&typeof value==='object')for(const [key,next] of Object.entries(value)){if(privateKeys.test(key))throw new Error('Connector credentials belong in local device configuration, never synced records');inspect(next);}};inspect(values);
       if (views.has(table)||rows.some(r=>r.native_file&&table==='deadlines')) throw new Error('Derived views are read-only; use the personal obligation operation');
@@ -183,10 +285,17 @@ export class QueryService {
       // one level up and retries only its acquisition, so a held workspace
       // delays an edit instead of refusing it. See executeAsync below.
       const holding = request.holdingLock ? run => this.store.snapshot(run) : run => this.store.withLock(() => this.store.snapshot(run));
+      // The record an upsert replaces, by its unique key as Postgres reads one:
+      // an empty value never equals another, and a missing user_id is the one
+      // local owner's. Until 6 October 2026 suppressFactValue, which sends no
+      // user_id, filed the same suppression again on every click.
+      const unique=String(options.onConflict||'').split(',').map(k=>k.trim()).filter(Boolean),keyed=(r,k)=>k==='user_id'?r[k]??'owner':r[k];
+      const existing=value=>value.id?this.store.get(table,value.id):unique.length?this.rows(table).find(r=>unique.every(k=>keyed(value,k)!=null&&keyed(r,k)===keyed(value,k))):undefined;
       rows = holding(() => {
-        const inputs = operation === 'insert' || operation === 'upsert' ? (Array.isArray(values) ? values : [values]) : rows;
+        // ignoreDuplicates is ON CONFLICT DO NOTHING: an existing link keeps its metadata.
+        const inputs = operation === 'insert' || operation === 'upsert' ? (Array.isArray(values) ? values : [values]).filter(value => !(operation === 'upsert' && options.ignoreDuplicates && existing(value))) : rows;
         const changed = inputs.map(value => {
-          const old = operation === 'insert' ? null : operation === 'upsert' ? (value.id ? this.store.get(table, value.id) : this.rows(table).find(r => options.onConflict && options.onConflict.split(',').every(k => r[k] === value[k]))) : table==='moments'?value:this.store.get(table, value.id);
+          const old = operation === 'insert' ? null : operation === 'upsert' ? existing(value) : table==='moments'?value:this.store.get(table, value.id);
           if (operation === 'insert' && value.id && this.store.get(table, value.id)) throw new Error('Record already exists');
           if(request.assistant){
             if(old){assertAssistantRecord(this,table,old.id);if(typeof expected[old.id]!=='string'||!expected[old.id].trim())throw Error('Read the current record hash before editing');if(expected[old.id]!==old._hash)this.store.conflict(table,operation==='update'?values:value,old,baselines[old.id]);}
@@ -222,26 +331,24 @@ export class QueryService {
         this.store.commit([...changed,...gone]); return table==='moments'?this.rows(table).filter(r=>changed.some(c=>c.id===r.id||c.moment_id===r.id)):changed;
       });
     }
+    // Joined before counting when the join decides which rows there are
+    // (!inner, a filter on an embedded column); otherwise only the page is joined.
+    const early=embeds.some(e=>e.inner)||filters.some(embedded);
+    if(early)rows=this.embed(table,rows,embeds,filters.filter(embedded));
     const count = rows.length;
-    if (orders.length) rows.sort((a, b) => { for (const [key, settings = {}] of orders) { const av = getValue(a, key), bv = getValue(b, key); if (av === bv) continue; const n = av == null ? (settings.nullsFirst ? -1 : 1) : bv == null ? (settings.nullsFirst ? 1 : -1) : av < bv ? -1 : 1; return settings.ascending === false ? -n : n; } return 0; });
+    // Empty values go last ascending and first descending unless nullsFirst
+    // says otherwise. Until 6 October 2026 the direction flipped an explicit
+    // nullsFirst too, so useClaims listed undated facts before the newest.
+    // Each row's values are read once, not once per comparison (half a second
+    // for sixteen thousand rows).
+    if (orders.length) { const settings = orders.map(([, s]) => ({ descending: s?.ascending === false, nullsFirst: s?.nullsFirst ?? s?.ascending === false }));
+      rows = rows.map(r => [r, orders.map(([key]) => getValue(r, key))]).sort((a, b) => { for (let i = 0; i < settings.length; i++) { const av = a[1][i], bv = b[1][i]; if (av == null || bv == null) { if (av == null && bv == null) continue; return (av == null) === settings[i].nullsFirst ? -1 : 1; } const n = compareValues(av, bv); if (n) return settings[i].descending ? -n : n; } return 0; }).map(([r]) => r); }
     if (request.range) rows = rows.slice(request.range[0], request.range[1] + 1);
     if (request.limit !== undefined) rows = rows.slice(0, request.limit);
-    // Preserve observed joined shapes without a second source of truth.
-    // rows() already read a consistent snapshot. Resolve joins from that same
-    // snapshot instead of rescanning the whole vault once per joined item.
-    // Joins only when the selection asks for one, from one map of identities
-    // per view of the store rather than one per query.
-    const joins=/\(/.test(String(selection));let identities=null;
-    const joined=(type,id)=>{if(!identities){if(this.identityFor!==this.store.records){this.identityCache=new Map();for(const record of this.store.records.values())for(const id of [...identityIds(record),...record.aliases||[]])if(!this.identityCache.has(record.type+'/'+id)||id===record.id)this.identityCache.set(record.type+'/'+id,record);this.identityFor=this.store.records;}identities=this.identityCache;}return identities.get(type+'/'+id)||null;};
+    if(embeds.length&&!early)rows=this.embed(table,rows,embeds,[]);
     const keep=projection(selection);
     rows = rows.map(r => {
       let result = { ...r, _hash: r._hash || this.store.records.get(table+'/'+r.id)?._hash };
-      if(joins){
-        if (selection.includes('source_note:')) result.source_note = r.source_note_id ? joined('notes', r.source_note_id) : null;
-        if (selection.includes('notes(')) result.notes = r.note_id ? joined('notes', r.note_id) : null;
-        if (selection.includes('contacts(')) result.contacts = r.contact_id ? joined('contacts', r.contact_id) : null;
-        for(const match of selection.matchAll(/(\w+):(\w+)(?:!\w+)?\(/g)){const [,alias,column]=match,target=links[column]||(tables.has(column)?column:null),foreign=links[column]?column:Object.keys(links).find(key=>links[key]===target&&r[key]);if(target&&foreign)result[alias]=r[foreign]?joined(target,r[foreign]):null;}
-      }
       // A list shows a note's first words, not its text: content_preview and
       // content_length stand in for content where a selection names them.
       if(keep?.has('content_preview')&&typeof r.content==='string'){result.content_preview=r.content.slice(0,400);result.content_length=r.content.length;}
@@ -280,8 +387,13 @@ export class QueryService {
   rpc(name, args = {}) {
     if (name === 'capture_note_with_lexicon') return this.store.save('notes', { ...args._note, user_id: 'owner' });
     if (name === 'search_contacts_page') {
-      const query = String(args.search_text || '').toLowerCase(), all = this.rows('contacts').filter(r => !r.merged_into && r.id !== args.exclude_contact_id && [r.name, ...r.aliases].some(n => n.toLowerCase().includes(query))).sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
-      const after = all.filter(r => !args.after_id || r.name > args.after_name || (r.name === args.after_name && r.id > args.after_id));
+      // The next page starts after the last one by the same comparison that
+      // sorted it. Until 6 October 2026 it was cut by character codes instead,
+      // and every capitalised name after a lowercase or accented one (Nina,
+      // Otto after Ömer) was never listed.
+      const byName = (a, b) => compareValues(String(a.name ?? ''), String(b.name ?? '')) || compareValues(String(a.id), String(b.id));
+      const query = String(args.search_text || '').toLowerCase(), all = this.rows('contacts').filter(r => !r.merged_into && r.id !== args.exclude_contact_id && [r.name, ...(r.aliases || [])].some(n => String(n ?? '').toLowerCase().includes(query))).sort(byName);
+      const after = all.filter(r => !args.after_id || byName(r, { name: args.after_name, id: args.after_id }) > 0);
       const rows = after.slice(0, args.page_size || 50), last = rows.at(-1); return { rows, total: all.length, next: after.length > rows.length ? { name: last.name, id: last.id } : null };
     }
     if (name === 'notes_mentioning_people') return this.rows('notes').filter(r => (args.names || args.p_names || []).some(n => (r.content || '').toLowerCase().includes(n.toLowerCase())));
