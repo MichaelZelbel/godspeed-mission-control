@@ -1,9 +1,9 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import http from 'node:http';
 import {providerTimeBudget,providerTimeoutMessage,jobExecutor,modelProvider,hermesProvider,hermesFailureMessage} from '../core/runtime.mjs';import {Store} from '../core/records/store.mjs';import {QueryService} from '../core/query.mjs';
 test('interactive and background calls remain bounded, with no arbitrary timeout extension',()=>{
- assert.equal(providerTimeBudget({}),120000);assert.equal(providerTimeBudget({timeout_ms:300000}),300000);
+ assert.equal(providerTimeBudget({}),600000);assert.equal(providerTimeBudget({timeout_ms:300000}),300000);
  for(const timeout_ms of [0,-1,Infinity,'300000',3600000])assert.throws(()=>providerTimeBudget({timeout_ms}),/supported/);
- assert.match(providerTimeoutMessage(300000),/attempt failed/);assert.match(providerTimeoutMessage(120000),/two minutes/);
+ assert.match(providerTimeoutMessage(300000),/attempt failed/);assert.match(providerTimeoutMessage(600000),/ten minutes/);
 });
 test('scheduled coaching uses its background budget and preserves the chosen model effort',async()=>{
  const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-background-budget-'))),query=new QueryService(store),calls=[],provider=async input=>{calls.push(input);return 'Which fictional habit feels easiest?';};
