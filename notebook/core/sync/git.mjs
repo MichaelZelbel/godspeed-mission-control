@@ -193,7 +193,10 @@ export class FileSync {
   // Through the folder's own repository a saved conflict is already merged
   // (this machine's version stays, both wait for review), so it no longer
   // holds back the rest of the notebook.
-  validate(){this.store.scan();if(this.store.problems.length)throw new Error('Resolve record validation problems before syncing');if(!this.folder||this.inScope('assistant-state/profile.json'))validateAssistantFiles(this.store.root);if(!this.folder&&this.pendingConflicts().length)throw new Error('Resolve saved conflicts before syncing');}
+  // A save that could not finish and was set aside (store.mjs setAside) is kept for the
+  // owner to look at, but every record on disk is whole: it is listed, and does not hold
+  // back every other note's sync until someone marks it reviewed.
+  validate(){this.store.scan();if(this.store.problems.some(p=>!p.set_aside))throw new Error('Resolve record validation problems before syncing');if(!this.folder||this.inScope('assistant-state/profile.json'))validateAssistantFiles(this.store.root);if(!this.folder&&this.pendingConflicts().length)throw new Error('Resolve saved conflicts before syncing');}
   // A path that was synced before it became device-private stays in the index
   // and Git keeps hashing it on every status and every add. Untrack it once,
   // leaving the file itself on disk, so an existing installation gets the same
