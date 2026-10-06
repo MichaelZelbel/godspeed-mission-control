@@ -23,7 +23,7 @@ curl -fsSLO https://github.com/MichaelZelbel/godspeed-mission-control/releases/d
 echo "c3d4bb54cb438d7aacd962200cb91c63053d4e98e51f1d8d2c1630fea33ca503  install-godspeed.sh" | sha256sum -c - && bash install-godspeed.sh
 ```
 
-On a Mac, write `shasum -a 256 -c -` where it says `sha256sum -c -`. The check refuses any other file, and the installer names one exact version of the notebook, so every reader of this release installs the same code.
+On a Mac, write `shasum -a 256 -c -` where it says `sha256sum -c -`. The check refuses any other file, and the installer names one exact version of the notebook, so every reader of this release gets the same notebook.
 
 On a computer that already has Godspeed, download and check it the same way, then use the original installer's separate-folder option:
 
