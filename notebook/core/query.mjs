@@ -4,7 +4,7 @@ import { slug, readableSlug, hash, identityIds } from './records/store.mjs';
 import {nativeRows} from './native-personal.mjs';
 import {dueRows} from './native-due.mjs';
 import {assertAssistantRecord,assertAssistantLinks} from './assistant-mutations.mjs';
-import {nativeJobs} from './native-scheduler.mjs';
+import {nativeJobs,NativeScheduler} from './native-scheduler.mjs';
 import {nativeCardRows} from './card-commands.mjs';
 
 const inventory = JSON.parse(fs.readFileSync(fileURLToPath(new URL('../../docs/full-version/source-inventory.json', import.meta.url)), 'utf8'));
@@ -138,7 +138,10 @@ export class QueryService {
   constructor(store) { this.store = store; }
   withSnapshot(read){if(!this.snapshotDepth)this.store.scan();this.snapshotDepth=(this.snapshotDepth||0)+1;try{return read();}finally{this.snapshotDepth--;}}
   rows(table) {
-    if(table==='jobs'&&this.nativeHermesHome)return nativeJobs(this.nativeHermesHome,this.store.device);
+    // With the original assistant the routines are Hermes' jobs, plus the notebook's own record
+    // routines that run beside them (NativeScheduler.recordKinds). Until 6 October 2026 only
+    // Hermes' were listed, so a watch or radar routine could be neither seen nor paused.
+    if(table==='jobs'&&this.nativeHermesHome){if(!this.snapshotDepth)this.store.scan();return [...nativeJobs(this.nativeHermesHome,this.store.device),...this.store.list('jobs').filter(j=>NativeScheduler.recordKinds.includes(j.kind))];}
     if(this.nativeHermesHome&&['goals','forecasts','work_items'].includes(table))return nativeCardRows(this.store,table);
     if(!this.snapshotDepth)this.store.scan();
     // Records of one type come from the store's per-type lists: filtering all

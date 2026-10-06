@@ -1,5 +1,7 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import http from 'node:http';
 import {Store} from '../core/records/store.mjs';import {NativeScheduler} from '../core/native-scheduler.mjs';import {Scheduler} from '../core/jobs/scheduler.mjs';import {QueryService} from '../core/query.mjs';import {watchCommand} from '../core/watch-commands.mjs';
+// The watch below reads a page from a server on this machine (core/outbound-fetch.mjs).
+process.env.GODSPEED_OUTBOUND_ALLOW_LOCAL='1';
 
 const temporary=t=>{const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-hermes-mode-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));return root;};
 const owned=(root,device,owner='vps')=>{
@@ -63,4 +65,14 @@ test('choosing another machine to run the routines moves the notebook\'s record 
  const server=owned(temporary(t),'vps');server.store.save('jobs',{id:'watch-sweeper',kind:'watch',owner:'vps',paused:false,state:'pending',next_run:new Date().toISOString(),interval_ms:60000});
  await server.scheduler.transfer('desktop-3f9a1c2e');
  assert.equal(server.store.get('settings','installation').owner,'desktop-3f9a1c2e');assert.equal(server.store.get('jobs','watch-sweeper').owner,'desktop-3f9a1c2e');
+});
+
+test('with the original assistant, the routines list shows the record routines beside Hermes\' jobs',async t=>{
+ const root=temporary(t),server=owned(root,'vps'),query=new QueryService(server.store);
+ fs.mkdirSync(path.join(root,'.hermes','cron'),{recursive:true});fs.writeFileSync(path.join(root,'.hermes','cron','jobs.json'),JSON.stringify({jobs:[{id:'brief',name:'Morning brief',enabled:true}]}));
+ server.store.save('jobs',{id:'watch-sweeper',kind:'watch',owner:'vps',paused:false,state:'pending',next_run:new Date().toISOString(),interval_ms:60000});
+ server.store.save('jobs',{id:'goal-work',kind:'goal-work',owner:'vps',paused:false,state:'pending',next_run:new Date().toISOString(),interval_ms:86400000});
+ query.nativeHermesHome=path.join(root,'.hermes');
+ // Hermes runs the goal routines, so the notebook's own copy is not listed as one that runs.
+ assert.deepEqual(query.rows('jobs').map(j=>j.id).sort(),['brief','watch-sweeper']);
 });
