@@ -27,9 +27,16 @@ test('HTTP health keeps answering while normal backup capture runs',async()=>{
  }finally{await service.close();}
 });
 
-test('the snapshot lock covers media copying and complete manifest publication',()=>{
- const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-backup-consistency-')));
+// Until 6 October 2026 the lock covered media copying and the manifest too,
+// which at 16,000 records held every save back for seven minutes. The
+// snapshot is taken under the lock; what follows runs without it, and a save
+// made meanwhile is not in the backup.
+test('the writer lock covers only the snapshot; media copying and the manifest run without it',()=>{
+ const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-backup-consistency-'))),destination=path.join(store.state,'backups','fixture');
+ store.save('notes',{title:'In the snapshot',content:'kept'});
  let captured=false;
- store.backup(path.join(store.state,'backups','fixture'),{finalize:()=>{assert.ok(fs.existsSync(path.join(store.state,'workspace.lock')));assert.throws(()=>new Store(store.root),/being written/);captured=true;}});
+ store.backup(destination,{finalize:()=>{assert.equal(fs.existsSync(path.join(store.state,'workspace.lock')),false);new Store(store.root).save('notes',{title:'After the snapshot'});captured=true;}});
  assert.equal(captured,true);assert.equal(fs.existsSync(path.join(store.state,'workspace.lock')),false);
+ assert.deepEqual(Store.inspect(destination).list('notes').map(n=>n.title),['In the snapshot']);
+ assert.equal(JSON.parse(fs.readFileSync(path.join(destination,'backup.json'),'utf8')).records,1);
 });

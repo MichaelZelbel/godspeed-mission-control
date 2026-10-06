@@ -1,8 +1,11 @@
 import {Worker} from 'node:worker_threads';
+import fs from 'node:fs';
 import path from 'node:path';
+import {partialOf} from './archives.mjs';
 
-// Capture retains the workspace writer lock in a separate thread. Health and
-// reads can continue; competing writes wait rather than altering the snapshot.
+// A backup runs in a separate thread, so health and reads go on; it holds the
+// workspace writer lock only for the moment of its snapshot (Store.backup),
+// so saves go on too.
 export class BackupRunner{
  constructor(store,mediaRoot){this.store=store;this.mediaRoot=mediaRoot;this.active=null;}
  run(){
@@ -15,7 +18,8 @@ export class BackupRunner{
    const finish=(error,result)=>{if(settled)return;settled=true;if(this.active===active)this.active=null;error?reject(error):resolve(result);};
    worker.once('message',message=>message.error?finish(Error(message.error)):finish(null,message.result));
    worker.once('error',error=>finish(error));
-   worker.once('exit',code=>{if(!settled)finish(Error('Backup stopped before verification (exit '+code+'). Its retained partial copy has not been removed.'));});
+   // A thread that stopped part-way leaves its unfinished copy, which goes.
+   worker.once('exit',code=>{if(settled)return;try{fs.rmSync(partialOf(destination),{recursive:true,force:true});}catch{}finish(Error('Backup stopped before it was complete (exit '+code+'). Nothing of it was kept.'));});
   });
   return active.promise;
  }

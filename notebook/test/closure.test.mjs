@@ -57,7 +57,9 @@ test('a backup counts its captured records rather than later scheduled writes',(
  const {store}=setup(),media=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-snapshot-media-'));
  store.save('notes',{title:'Snapshot source',content:'Before the snapshot'});
  const destination=path.join(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-snapshot-')),'backup'),copy=fs.cpSync;
- fs.cpSync=(source,target,options)=>{const result=copy(source,target,options);if(source===media)assert.throws(()=>store.save('notes',{title:'Concurrent result',content:'Must wait for the snapshot'}),/being written/);return result;};
+ // Since 6 October 2026 media is copied after the snapshot, without the writer
+ // lock: a save then goes through, and is not in this backup.
+ fs.cpSync=(source,target,options)=>{const result=copy(source,target,options);if(source===media)store.save('notes',{title:'Concurrent result',content:'Saved after the snapshot'});return result;};
  try{backup(store,media,destination);}finally{fs.cpSync=copy;}
  store.save('notes',{title:'Later scheduled result',content:'After the captured records'});
  const manifest=JSON.parse(fs.readFileSync(path.join(destination,'backup.json'))),snapshot=new Store(destination);
