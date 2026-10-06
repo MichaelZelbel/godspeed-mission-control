@@ -51,6 +51,8 @@ test('private link prepares complete deployment without fields and opens real ow
     const config = await f.request(configPath); assert.equal(config.status, 200);
     assert.ok(config.data.includes(job.bootstrap)); assert.ok(config.data.includes('/etc/hostname:/run/godspeed-vps-hostname:ro'));
     assert.equal(/\$\{GODSPEED_(HOST|SETUP_CODE)/.test(config.data), false);
+    // Telegram is connected from the page after the account is made, so nothing here switches it off or asks for a bot.
+    assert.equal(/GODSPEED_TELEGRAM|BOT_TOKEN/.test(config.data), false);
     assert.equal((await f.request('/api/status/' + ticket.id, { key: 'wrong' })).status, 401);
     assert.equal((await f.request('/api/ready/' + ticket.id, { key: 'wrong', body: { hostname: 'srv123456.hstgr.cloud' } })).status, 401);
     assert.equal((await f.request('/api/ready/' + ticket.id, { key: job.callback, body: { hostname: 'attacker.example' } })).status, 400);

@@ -23,7 +23,6 @@ services:
       GODSPEED_INSTALL_CALLBACK: ${JSON.stringify(job.callback)}
       GODSPEED_DEVICE: vps
       GODSPEED_COMPUTER: "off"
-      GODSPEED_TELEGRAM: "off"
     entrypoint: ["/bin/sh", "-ec"]
     command:
       - ${JSON.stringify(`node -e ${shellQuote(callbackCode)} & exec /opt/godspeed/kit/docker/full-candidate/entrypoint.sh`)}

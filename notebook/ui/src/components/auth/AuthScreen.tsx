@@ -11,6 +11,12 @@ function safeNext(value:string|null) {
   if(url.origin!==location.origin || /^\/(setup|login|api)(\/|$)/.test(url.pathname))return '/dashboard';
   return url.pathname+url.search+url.hash;
 }
+// A new account goes through Connect Telegram first, on a server where the page connects it.
+async function firstStop(destination:string,created:boolean){
+  if(!created)return destination;
+  try{const r=await fetch('/api/telegram');const t=r.ok?await r.json():null;if(t?.available&&!t.connected)return '/dashboard/telegram?welcome=1&next='+encodeURIComponent(destination);}catch{}
+  return destination;
+}
 export function AuthShell({children}:{children:React.ReactNode}) {
   return <main className="auth-page"><div className="auth-wrap"><header className="auth-brand"><img src={logo} width="56" height="56" alt=""/><h1>Godspeed<br/>Mission Control</h1></header><section className="auth-panel">{children}</section><footer className="auth-server"><ShieldCheck size={16} aria-hidden="true"/><span>Your server: {location.hostname}</span></footer></div></main>;
 }
@@ -21,6 +27,7 @@ export function AuthScreen() {
   const [setupCode,setSetupCode]=useState(''),[code,setCode]=useState(''),[recovery,setRecovery]=useState('');
   const [remember,setRemember]=useState(false),[visible,setVisible]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState('');
   const [saved,setSaved]=useState(false),[copied,setCopied]=useState(false);
+  const created=useRef(false);
   const invite=useRef(new URLSearchParams(location.hash.slice(1)).get('invite')||'');
   const next=useRef(route.pathname==='/setup'?safeNext(new URLSearchParams(route.search).get('next')):route.pathname+route.search+route.hash);
   const errorRef=useRef<HTMLParagraphElement>(null);
@@ -47,7 +54,7 @@ export function AuthScreen() {
       } else {
         if(password!==confirmation)throw new Error('The passwords do not match. Enter the same password twice.');
         const data=await authRequest(mode==='setup'?'/api/auth/setup':'/api/auth/recover',{username,password,remember,invite:invite.current,recovery_code:code});
-        setPassword('');setConfirmation('');setCode('');invite.current='';setRecovery(data.recovery_code);setMode('saved');
+        created.current=mode==='setup';setPassword('');setConfirmation('');setCode('');invite.current='';setRecovery(data.recovery_code);setMode('saved');
         if(location.hash.startsWith('#invite='))history.replaceState(null,'',location.pathname+location.search);
       }
     }catch(e:any){setError(e.message);}finally{setBusy(false);}
@@ -66,7 +73,7 @@ export function AuthScreen() {
       <div className="auth-code-actions"><button type="button" className="auth-secondary" onClick={async()=>{try{await navigator.clipboard.writeText(recovery);setCopied(true);}catch{setError('Copying is unavailable in this browser. Download the code instead.');}}}>{copied?<Check size={18}/>:<Copy size={18}/>} {copied?'Copied':'Copy code'}</button><button type="button" className="auth-secondary" onClick={download}><Download size={18}/> Download</button></div>
       <p className="auth-help">This replaces any previous recovery code. Godspeed cannot email you a password reset.</p>
       <label className="auth-check"><input type="checkbox" checked={saved} onChange={e=>setSaved(e.target.checked)}/><span>I have saved my recovery code.</span></label>
-      <button type="button" className="auth-primary" disabled={!saved||busy} onClick={async()=>{setBusy(true);try{await auth.refreshSession();navigate(safeNext(next.current),{replace:true});}catch(e:any){setError(e.message);}finally{setBusy(false);}}}>{busy?'Opening…':'Open Godspeed Mission Control'}</button>
+      <button type="button" className="auth-primary" disabled={!saved||busy} onClick={async()=>{setBusy(true);try{await auth.refreshSession();navigate(await firstStop(safeNext(next.current),created.current),{replace:true});}catch(e:any){setError(e.message);}finally{setBusy(false);}}}>{busy?'Opening…':'Open Godspeed Mission Control'}</button>
     </>:<form onSubmit={submit}>
       {mode==='invite'?<><label className="auth-label" htmlFor="setup-code">Setup code</label><input className="auth-input" id="setup-code" name="setup-code" type="password" autoComplete="off" required value={setupCode} onChange={e=>setSetupCode(e.target.value)} aria-describedby="setup-help"/><p className="auth-help" id="setup-help">For a Hostinger deployment, use the setup code you entered before deploying. It is only used to create your account.</p></>:<>
         {mode==='recover'&&<><label className="auth-label" htmlFor="recovery-code">Recovery code</label><input className="auth-input" id="recovery-code" name="recovery-code" autoComplete="off" required value={code} onChange={e=>setCode(e.target.value)} spellCheck={false}/></>}

@@ -11,7 +11,13 @@ import {Download} from 'lucide-react';
 import {PersonalControl} from './PersonalControl';
 import {ConflictReview} from './ConflictReview';
 import {MeaningSearch} from './MeaningSearch';
+import {TelegramConnect,telegramStatus} from './ConnectTelegram';
 async function call(route:string,body?:any){const r=await fetch('/api/'+route,{method:body?'POST':'GET',headers:{'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});const data=await r.json();if(!r.ok)throw new Error(data.error);return data;}
+function TelegramSettings(){
+  const status=useQuery({queryKey:['telegram-status'],queryFn:telegramStatus});
+  if(!status.data?.available&&status.data?.managed!=='environment')return null;
+  return <section className="border rounded p-4 space-y-3"><h2 className="text-xl">Telegram</h2><TelegramConnect/></section>;
+}
 export default function Control(){
   const qc=useQueryClient(),[goal,setGoal]=useState(''),[timezone,setTimezone]=useState(Intl.DateTimeFormat().resolvedOptions().timeZone),[error,setError]=useState(''),[search,setSearch]=useState('');
   const [url,setUrl]=useState('https://api.openai.com/v1/chat/completions'),[key,setKey]=useState(''),[model,setModel]=useState(''),[remote,setRemote]=useState(''),[routine,setRoutine]=useState('coaching'),[hours,setHours]=useState('1440'),[dailyAt,setDailyAt]=useState(''),[origin,setOrigin]=useState(''),[pairCode,setPairCode]=useState(''),[createdCode,setCreatedCode]=useState(''),[offline,setOffline]=useState('all');
@@ -30,6 +36,7 @@ export default function Control(){
   return <div className="max-w-4xl space-y-6"><h1 className="text-2xl font-bold">Settings</h1><p>Manage your notebook, assistant and connected devices.</p>
     <p role="alert" className="text-red-400">{error}</p>
     <Button asChild className="min-h-11 gap-2"><Link to="/dashboard/settings/import"><Download className="h-4 w-4" aria-hidden="true"/>Import from Menerio</Link></Button>
+    <TelegramSettings/>
     {usefulWork.data?.data[0]&&<section className="border rounded p-4"><h2 className="text-xl">Your latest work result</h2><p>{usefulWork.data.result_kind==='reported-observation'?(usefulWork.data.verification_current?(usefulWork.data.reported_passed?'Your reported check passed. The report is saved.':'Your reported check failed. The report is saved.'):'This report has changed since it was saved.'):usefulWork.data.verification_current?'Checked against its task.':'This result has changed since its check.'}</p><div className="prose dark:prose-invert max-w-none"><ReactMarkdown>{usefulWork.data.data[0].content}</ReactMarkdown></div><a className="underline" href={'/dashboard/notes/'+usefulWork.data.data[0].id}>Open the saved note</a></section>}
     <details className="border rounded p-4"><summary>Privacy, suggestions and notifications</summary><AiVisibilitySettings/><AISuggestionPreferences/><NotificationPreferences/></details>
     <details className="border rounded p-4"><summary>Connect other assistants</summary><ApiKeysManager/></details>

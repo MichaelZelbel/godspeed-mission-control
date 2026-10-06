@@ -32,6 +32,7 @@ import {transcribeRecording} from '../core/dictation.mjs';
 import {durableRoots,durableFiles} from '../core/file-policy.mjs';
 import { WebAuth, safeReturn } from './web-auth.mjs';
 import { MenerioImport } from './menerio-import.mjs';
+import {TelegramConnection} from './telegram-connect.mjs';
 import {nativeAgent} from '../core/native-agent.mjs';
 import {NativeScheduler} from '../core/native-scheduler.mjs';
 import {visibleRows} from '../core/visibility.mjs';
@@ -72,6 +73,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   if (remote && !token) throw new Error('Remote access requires a candidate token');
   const auth = new WebAuth(store.state, { token, remote, now: authNow });
   const menerioImport=new MenerioImport(store,mediaRoot,()=>index.rebuild());
+  const telegramConnection=new TelegramConnection();
   const chatRequests=new Map(),recoveryRunner=new RecoveryRunner(store),backupRunner=new BackupRunner(store,mediaRoot);let dictationBusy=false;
   const loginLinks=new Map();
   const apiKeys=new ApiKeys(store);
@@ -113,6 +115,14 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         if(req.method==='GET')return send(res,200,menerioImport.status());
         if(req.method==='POST')return send(res,202,{job:await menerioImport.start(JSON.parse(await body(req,16384)))});
         return send(res,405,{error:'Use GET or POST'});
+      }
+      // Telegram, connected from the page after the account is made (telegram-connect.mjs).
+      if(route==='/api/telegram'||route.startsWith('/api/telegram/')){
+        if(!auth.authorized(req))return send(res,403,{error:'Sign in as the server owner to connect Telegram.'});
+        if(route==='/api/telegram'&&req.method==='GET')return send(res,200,telegramConnection.status());
+        if(route==='/api/telegram/connect'&&req.method==='POST')return send(res,200,await telegramConnection.connect(JSON.parse(await body(req,4096)).token));
+        if(route==='/api/telegram/disconnect'&&req.method==='POST')return send(res,200,telegramConnection.disconnect());
+        return send(res,404,{error:'Unknown operation'});
       }
       if(menerioImport.mutating&&(route==='/mcp'||route.startsWith('/api/'))&&!['/api/session','/api/status','/api/chat/options'].includes(route))return send(res,423,{error:'Your Menerio content is being copied. Wait for the import to finish.'});
       if(req.method==='POST'&&route.startsWith('/api/')&&!['/api/chat/stop','/api/backup'].includes(route))await store.waitForWriter();

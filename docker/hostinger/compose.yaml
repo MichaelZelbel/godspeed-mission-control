@@ -13,7 +13,6 @@ services:
       GODSPEED_ACCESS_TOKEN: ${GODSPEED_SETUP_CODE:?Choose and save a private setup code}
       GODSPEED_DEVICE: vps
       GODSPEED_COMPUTER: "off"
-      GODSPEED_TELEGRAM: "off"
     volumes:
       - godspeed-data:/opt/data/full-candidate
     expose:

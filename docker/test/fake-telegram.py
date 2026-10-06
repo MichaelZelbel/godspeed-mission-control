@@ -11,7 +11,10 @@
 # Scenario: {"users": {"111": {"first_name": "Anna", "username": "anna"}},
 #            "start": [{"from": 111, "text": "/start"}],
 #            "rules": [{"when": "morning brief", "do": [{"from": 111, "press": "brief:yes"}]}]}
-# A rule fires once unless it says "times". Only standard library, so it runs anywhere.
+# A rule fires once unless it says "times". A reader can also send a file:
+# {"from": 111, "document": {"file_name": "notes.md", "content": "..."}}, fetched back
+# through getFile and /file/bot<token>/<path> like Telegram's. Only standard library,
+# so it runs anywhere.
 import argparse
 import json
 import re
@@ -25,6 +28,7 @@ class Fake:
         self.token = token
         self.cv = threading.Condition()
         self.updates, self.sent, self.edits, self.calls, self.deleted = [], [], [], {}, []
+        self.files = {}
         self.next_update, self.next_msg = 1, 100
         self.users = scenario.get("users", {})
         self.rules = scenario.get("rules", [])
@@ -41,6 +45,16 @@ class Fake:
             upd = {"message": {"message_id": self.next_msg, "from": user, "chat": chat,
                                "date": int(time.time()), "text": a["text"]}}
             self.next_msg += 1
+        elif "document" in a:
+            d = a["document"]
+            data = d.get("content", "").encode("utf-8") if "content" in d else bytes.fromhex(d.get("hex", ""))
+            fid = "file%d" % (len(self.files) + 1)
+            self.files[fid] = data
+            upd = {"message": {"message_id": self.next_msg, "from": user, "chat": chat, "date": int(time.time()),
+                               "document": {"file_id": fid, "file_unique_id": fid, "file_name": d["file_name"],
+                                            "mime_type": d.get("mime_type", "text/markdown"),
+                                            "file_size": d.get("file_size", len(data))}}}
+            self.next_msg += 1
         else:
             msg = next((m for m in reversed(self.sent) if m["chat_id"] == uid and a["press"] in m["buttons"]), None)
             upd = {"callback_query": {"id": "cq%d" % self.next_update, "from": user, "data": a["press"],
@@ -53,6 +67,9 @@ class Fake:
     def handle(self, method, p):
         with self.cv:
             self.calls[method] = self.calls.get(method, 0) + 1
+            if method == "getFile":
+                fid = p.get("file_id")
+                return {"file_id": fid, "file_size": len(self.files.get(fid, b"")), "file_path": "documents/%s" % fid}
             if method == "getMe":
                 return {"id": 42, "is_bot": True, "first_name": "Godspeed", "username": "test_godspeed_bot"}
             if method == "getUpdates":
@@ -103,6 +120,23 @@ def serve(fake, port=0):
             self._go()
 
         def _go(self):
+            if self.path == "/__act":
+                # A test acting as the reader at a moment it chooses (docker/full-candidate/test-browser.cjs:
+                # pressing Start with the one-time code the web page showed).
+                n = int(self.headers.get("Content-Length") or 0)
+                with fake.cv:
+                    fake.act(json.loads(self.rfile.read(n).decode()))
+                self.send_response(204)
+                self.end_headers()
+                return
+            f = re.match(r"^/file/bot([^/]+)/documents/(\w+)$", self.path)
+            if f and f.group(1) == fake.token and f.group(2) in fake.files:
+                data = fake.files[f.group(2)]
+                self.send_response(200)
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+                return
             m = re.match(r"^/bot([^/]+)/(\w+)", self.path)
             n = int(self.headers.get("Content-Length") or 0)
             try:
