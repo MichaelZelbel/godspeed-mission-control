@@ -12,6 +12,8 @@ The paid checkout has not been completed. Actual generated deployment, HTTPS iss
 
 Copy this folder to /opt/godspeed-hostinger-installer. Install godspeed-installer.service. Its GODSPEED_INSTALL_BIND must be the actual Docker host-gateway address (inspect Docker's bridge network). The test machine uses 10.0.0.1. The coordinator is not exposed publicly on that HTTP port; the generated Caddy configuration proxies /godspeed-install over HTTPS when deployed on the coordinator's own server. Other buyer servers use HTTPS directly and do not proxy the coordinator.
 
+The generated configuration says nothing about Telegram. The buyer connects a bot on their own server's web page after the account is made (../README.md, "Telegram, connected after the account"), so a bot's key never reaches this coordinator, the website or its logs.
+
 DynamicUser and StateDirectory keep private jobs in /var/lib/godspeed-installer, retained through restarts. Jobs expire after 24 hours; counts and request rates are bounded. Browser, callback and Compose credentials are separate. Never log generated configurations, ticket files, invitation links, authorization headers or job state. No customer AI traffic is routed through the coordinator.
 
 seed-vps-test.mjs is only an operator tool for the authorized test VPS; it generates and stores a synthetic private ticket and Compose configuration in /opt/godspeed-hostinger-test. It is not part of the customer flow.

@@ -81,7 +81,7 @@ test('servers that do not connect Telegram from the page say so and refuse a key
  const environment=new TelegramConnection({dir:root,mode:'on',environmentBot:true,originalRuntime:true});
  assert.deepEqual(environment.status(),{available:false,managed:'environment',connected:true,phase:'ready'});
  await assert.rejects(environment.connect(KEY),{status:409});
- for(const options of [{dir:root,mode:'off',originalRuntime:true},{dir:undefined,mode:'web',originalRuntime:true},{dir:root,mode:'web',originalRuntime:false}])
+ for(const options of [{dir:root,mode:'off',originalRuntime:true},{dir:'',mode:'web',originalRuntime:true},{dir:root,mode:'web',originalRuntime:false}])
   assert.equal(new TelegramConnection(options).status().available,false);
 });
 

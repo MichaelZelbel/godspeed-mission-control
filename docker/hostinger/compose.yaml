@@ -4,6 +4,7 @@
 # GODSPEED_SETUP_CODE: choose a private, unique code and save it in your password manager.
 # After Deploy, open https://YOUR_VPS_HOSTNAME and use that code to create your account.
 # Save the recovery code shown during account creation. No email service is required.
+# Then the page offers to connect a Telegram bot; its key stays on this server.
 name: godspeed-mission-control
 services:
   godspeed:
