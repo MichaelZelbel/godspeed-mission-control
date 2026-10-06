@@ -66,6 +66,10 @@ if command -v systemctl >/dev/null; then
 Description=Godspeed Mission Control integrated notebook
 After=network-online.target
 [Service]
+# Git signs in through the user's credential helper (gh on a server), which needs a home folder;
+# a system service starts without one, so the notebook could not sync (6 October 2026).
+Environment=HOME=$HOME
+Environment=PATH=$PATH
 WorkingDirectory=$root
 ExecStart=$(command -v node) "$state/start.mjs"
 Restart=on-failure
