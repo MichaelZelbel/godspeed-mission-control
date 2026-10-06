@@ -170,3 +170,20 @@ test('switching to the folder repository checks the ignore file and sets the old
     assert.ok(new FileSync(store).folder);
   }finally{FileSync.prototype.verifyRemote=original;}
 });
+
+test('on the server, a file the notebook never commits is set aside instead of blocking every merge',()=>{
+  // 6 October 2026: the test server's own assistant wrote brief/<day>.md, the
+  // routine machine pushed one of the same name, and the server's notebook
+  // waited from 05:02 to 12:05 for a save that could never come.
+  const {clone,machine}=fixture(),server=machine('server',['*']),laptop=clone('laptop');
+  atomic(path.join(laptop,'brief','2026-10-06.md'),'The real brief\n');git(laptop,'add','-A');git(laptop,'commit','-qm','Brief');git(laptop,'push','origin','main');
+  atomic(path.join(server.dir,'brief','2026-10-06.md'),'A test brief written on the server\n');
+  assert.equal(server.sync.reconcile().state,'synced');
+  assert.equal(read(server.dir,'brief','2026-10-06.md'),'The real brief\n');
+  const aside=fs.readdirSync(path.join(server.store.state,'set-aside'));
+  assert.equal(read(server.store.state,'set-aside',aside[0],'brief','2026-10-06.md'),'A test brief written on the server\n','kept whole');
+  // On a machine where the owner commits, the same thing still waits for the owner.
+  const envy=machine('envy');atomic(path.join(laptop,'brief','2026-10-07.md'),'Next\n');git(laptop,'add','-A');git(laptop,'commit','-qm','Next');git(laptop,'push','origin','main');
+  atomic(path.join(envy.dir,'brief','2026-10-07.md'),'Mine\n');
+  assert.equal(envy.sync.reconcile().state,'pending');assert.equal(read(envy.dir,'brief','2026-10-07.md'),'Mine\n');
+});

@@ -335,6 +335,19 @@ export class FileSync {
     if(!shared(name)||(!page&&keptLocal.some(ext=>new RegExp('\\.'+ext.replace('*','.*')+'$','i').test(name))))return false;
     const paths=this.folder.paths;return paths.includes('*')||paths.some(p=>name===p||name.startsWith(p+'/'));
   }
+  // Copies files out of the way into .godspeed/set-aside/<time>/ and gives
+  // the folder back what the last commit holds (or nothing, for a new file).
+  setAside(names){
+    const folder=path.join(this.store.state,'set-aside',new Date().toISOString().replace(/[:.]/g,'-'));
+    for(const name of names){
+      const from=path.join(this.store.root,...name.split('/'));if(!fs.existsSync(from))continue;
+      const to=path.join(folder,...name.split('/'));fs.mkdirSync(path.dirname(to),{recursive:true});fs.copyFileSync(from,to);
+      let tracked=true;try{this.git(['ls-files','--error-unmatch','--',name]);}catch{tracked=false;}
+      if(tracked)this.git(['checkout','--',name]);else fs.rmSync(from);
+    }
+    fs.writeFileSync(path.join(folder,'README.txt'),'These files on this machine stood in the way of the other machines\' changes and were never part of what the notebook commits. They are kept here whole.\n'+names.join('\n')+'\n');
+    return folder;
+  }
   scopeRoots(){return this.folder.paths.includes('*')?[...durableRoots,...durableFiles]:this.folder.paths;}
   // Git's own hooks belong to the owner's commits and pushes from a person:
   // the notebook's commits must not start the owner's post-commit jobs. Its
@@ -389,8 +402,20 @@ export class FileSync {
     let target=remoteHead,reviews=[];
     if(!this.contains(head,remoteHead))({commit:target,reviews}=this.mergeFolder(head,remoteHead));
     this.guardRemovals(head,target);
-    try{this.git([...this.quiet(),'merge','--ff-only','--no-stat','-q',target],undefined,{timeout:300000});}
-    catch(error){throw new Error('Waiting for local changes to be saved before the notebook can bring in the other machines\' edits: '+String(error.stderr||error.message).split('\n').filter(l=>/^\s+\S/.test(l)).map(l=>l.trim()).slice(0,3).join(', '));}
+    const forward=()=>this.git([...this.quiet(),'merge','--ff-only','--no-stat','-q',target],undefined,{timeout:300000});
+    const waiting=error=>new Error('Waiting for local changes to be saved before the notebook can bring in the other machines\' edits: '+String(error.stderr||error.message).split('\n').filter(l=>/^\s+\S/.test(l)).map(l=>l.trim()).slice(0,3).join(', '));
+    try{forward();}
+    catch(error){
+      // On a machine where the notebook is the only one that commits (paths
+      // "*"), a file it never commits, such as a brief its own assistant wrote,
+      // would block every merge for good: it blocked the test server from 05:02
+      // to 12:05 on 6 October 2026. Such a file is moved aside, kept whole, and
+      // the merge is tried again. Anywhere else the owner commits it.
+      const blocked=String(error.stderr||error.message).split('\n').filter(l=>/^\s+\S/.test(l)).map(l=>l.trim());
+      if(!this.folder?.paths?.includes('*')||!blocked.length||blocked.some(name=>this.inScope(name)))throw waiting(error);
+      this.setAside(blocked);
+      try{forward();}catch(again){throw waiting(again);}
+    }
     for(const review of reviews)atomic(path.join(this.store.root,'conflicts',review.id+'.json'),JSON.stringify(review,null,2));
     // The notebook server re-reads only files it is told about: the ones
     // this merge changed, before it next writes under the workspace lock.
