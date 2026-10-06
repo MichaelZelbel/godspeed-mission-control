@@ -26,10 +26,20 @@ else {const rulesCommand=path.join(commandHome,'mc-compile-rules');atomic(rulesC
 // Developer assistants opened on this folder reach the same integrated memory.
 const mcpFile=path.join(root,'.mcp.json'),mcp=JSON.parse(fs.readFileSync(mcpFile,'utf8').replace(/^\uFEFF/,''));
 mcp.mcpServers??={};
+// The shared .mcp.json names the standard address; a machine whose notebook
+// listens elsewhere says so in its own untracked settings. Until 6 October 2026
+// every machine wrote its own port into the shared file, which then changed
+// back and forth between machines.
+const NOTEBOOK_URL='${GODSPEED_NOTEBOOK_URL:-http://127.0.0.1:47831/mcp}';
+const writeIfChanged=(file,text)=>{if(!fs.existsSync(file)||fs.readFileSync(file,'utf8')!==text){fs.mkdirSync(path.dirname(file),{recursive:true});atomic(file,text);}};
 if(process.env.GODSPEED_DEVICE!=='vps'){
   if(mcp.mcpServers.godspeed?.url?.startsWith('http://127.0.0.1:'))delete mcp.mcpServers.godspeed;
-  mcp.mcpServers.notebook={type:'http',url:`http://127.0.0.1:${port}/mcp`};
-  atomic(mcpFile,JSON.stringify(mcp,null,2)+'\n');
+  if(!mcp.mcpServers.notebook||/^http:\/\/127\.0\.0\.1:\d+\/mcp$/.test(mcp.mcpServers.notebook.url||''))mcp.mcpServers.notebook={type:'http',url:NOTEBOOK_URL};
+  writeIfChanged(mcpFile,JSON.stringify(mcp,null,2)+'\n');
+  const localFile=path.join(root,'.claude','settings.local.json');let local={};
+  try{local=JSON.parse(fs.readFileSync(localFile,'utf8').replace(/^\uFEFF/,''));}catch{}
+  const own=port===47831?undefined:`http://127.0.0.1:${port}/mcp`;
+  if(local.env?.GODSPEED_NOTEBOOK_URL!==own){local.env={...local.env};if(own)local.env.GODSPEED_NOTEBOOK_URL=own;else delete local.env.GODSPEED_NOTEBOOK_URL;writeIfChanged(localFile,JSON.stringify(local,null,2)+'\n');}
   const codexFile=path.join(root,'.codex/config.toml');
   if(!fs.existsSync(codexFile)||/^\[mcp_servers\.(godspeed|notebook)\]\r?\nurl = "http:\/\/127\.0\.0\.1:\d+\/mcp"\s*$/.test(fs.readFileSync(codexFile,'utf8')))atomic(codexFile,`[mcp_servers.notebook]\nurl = "http://127.0.0.1:${port}/mcp"\n`);
   const vscodeFile=path.join(root,'.vscode/settings.json');
@@ -40,8 +50,8 @@ for(const folder of ['.claude','.agents']){
   if(!fs.existsSync(alias))fs.symlinkSync(process.platform==='win32'?path.join(root,'skills'):'../skills',alias,process.platform==='win32'?'junction':'dir');
 }
 const ignoreFile=path.join(root,'.gitignore');let ignores=fs.readFileSync(ignoreFile,'utf8');
-for(const entry of ['/.godspeed/','/.codex/','/.vscode/','/.agents/','/.claude/skills'])if(!ignores.split(/\r?\n/).includes(entry))ignores+='\n'+entry+'\n';
-atomic(ignoreFile,ignores);
+const missing=['/.godspeed/','/.codex/','/.vscode/','/.agents/','/.claude/skills','/.claude/settings.local.json'].filter(entry=>!ignores.split(/\r?\n/).includes(entry));
+if(missing.length)atomic(ignoreFile,ignores.replace(/\n*$/,'\n')+missing.join('\n')+'\n');
 for(const command of (process.env.GODSPEED_ORIGINAL_RUNTIME==='on'?['mail']:['goals','work','forecast','due','subs','watch','mail'])){
  const bin=path.join(home,'bin','mc-'+command),script=command==='mail'?path.join(kit,'tools','mc-mail.js'):path.join(kit,'notebook','bin','personal-command.mjs'),args=command==='mail'?[]:[command];
  if(process.platform==='win32')atomic(bin+'.cmd','@echo off\r\n"'+process.execPath+'" "'+script+'" '+args.join(' ')+' %*\r\n');
