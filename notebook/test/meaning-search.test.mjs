@@ -80,3 +80,16 @@ test('the chat is given the notes word-and-meaning search ranks first, without a
     assert.equal(given.notes[0].id,ortho.id);assert.match(given.retrieval.method,/meaning/);assert.ok(!kinds.includes('retrieval-expansion'));
   }finally{index.close();await service.close();}
 });
+
+test('the best match by meaning is near the top even when many documents hold one of the words',async()=>{
+  // 6 October 2026: "knee doctor" put the German note "Orthopäde Termin" twelfth behind
+  // ten documents that held the word "doctor".
+  const {mergeRanked}=await import('../core/index/meaning.mjs');
+  const words=Array.from({length:10},(_,i)=>({uid:'w'+i,title:'word '+i}));
+  const meanings=[{uid:'ortho',similarity:0.39},{uid:'w3',similarity:0.27},...Array.from({length:20},(_,i)=>({uid:'m'+i,similarity:0.2}))];
+  const out=mergeRanked(words,meanings,{limit:10});
+  assert.deepEqual(out.slice(0,3).map(r=>r.uid),['w0','ortho','w1']);
+  assert.equal(out.find(r=>r.uid==='w3').matched,'words and meaning');
+  assert.ok(!out.slice(0,10).some(r=>r.uid.startsWith('m')),'weak meaning matches wait behind the word matches');
+  const loose=mergeRanked([{uid:'l',loose:true}],[{uid:'ortho',similarity:0.39}]);assert.equal(loose[0].uid,'ortho','meaning first when no document held every word');
+});

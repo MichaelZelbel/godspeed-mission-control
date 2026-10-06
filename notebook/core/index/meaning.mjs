@@ -177,10 +177,27 @@ export class MeaningIndex {
 
 // Word and meaning results as one list: reciprocal rank fusion, so a note
 // near the top of either list rises, and one on both rises most.
-export function mergeRanked(words, meanings, {limit = 50, k = 60} = {}) {
-  const score = new Map(), row = new Map();
-  // A word match where only some of the words were found weighs half.
-  words.forEach((r, i) => { score.set(r.uid, (score.get(r.uid) || 0) + (r.loose ? 0.5 : 1) / (k + i + 1)); row.set(r.uid, {...r, matched: 'words'}); });
-  meanings.forEach((r, i) => { score.set(r.uid, (score.get(r.uid) || 0) + 1 / (k + i + 1)); const old = row.get(r.uid); row.set(r.uid, old ? {...old, matched: 'words and meaning', similarity: r.similarity} : {...r, matched: 'meaning'}); });
-  return [...score].sort((a, b) => b[1] - a[1]).slice(0, limit).map(([uid, s]) => ({...row.get(uid), score: s}));
+export function mergeRanked(words, meanings, {limit = 50} = {}) {
+  // Close meaning matches take turns with the word matches: word, meaning, word, meaning.
+  // A score that adds both lists up let every document holding one of the words outrank the
+  // best match by meaning, so "knee doctor" put "Orthopäde Termin" twelfth (6 October 2026).
+  // A meaning match is close when it is near the best one; the rest follow the word matches.
+  // When no document held every word (loose matches), meaning goes first.
+  const top = meanings[0]?.similarity ?? 0, floor = Math.max(0.3, top * 0.8);
+  const close = meanings.filter(m => (m.similarity ?? 0) >= floor), weak = meanings.filter(m => (m.similarity ?? 0) < floor);
+  const out = [], seen = new Map();
+  const add = (r, how) => {
+    const old = seen.get(r.uid);
+    if (old) { if (old.matched !== how) old.matched = 'words and meaning'; if (r.similarity !== undefined) old.similarity = r.similarity; return; }
+    const row = {...r, matched: how}; seen.set(r.uid, row); out.push(row);
+  };
+  const wordsFirst = words.length > 0 && !words[0].loose;
+  for (let i = 0; i < Math.max(words.length, close.length); i++) {
+    const pair = wordsFirst ? [[words[i], 'words'], [close[i], 'meaning']] : [[close[i], 'meaning'], [words[i], 'words']];
+    for (const [r, how] of pair) if (r) add(r, how);
+  }
+  for (const r of weak) add(r, 'meaning');
+  // Every word match is also listed under meaning when the meaning list holds it.
+  for (const r of meanings) if (seen.has(r.uid)) { const row = seen.get(r.uid); if (row.matched === 'words') { row.matched = 'words and meaning'; row.similarity = r.similarity; } }
+  return out.slice(0, limit);
 }
