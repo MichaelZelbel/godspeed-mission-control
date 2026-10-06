@@ -19,3 +19,17 @@ test('original Godspeed skills and commands reach the integrated notebook in dev
   assert.match(fs.readFileSync(path.join(root,'.gitignore'),'utf8'),/\/\.godspeed\//);
   wire(47831);assert.equal(local().GODSPEED_NOTEBOOK_URL,undefined,'the standard port needs no override');
 });
+// A Windows junction keeps an absolute target: after a move by hand it led nowhere,
+// and wiring again failed with EEXIST, so the notebook did not start.
+test('a folder moved by hand is wired again, and a real skills folder in a link\'s place is kept',()=>{
+  const base=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-moved-')),before=path.join(base,'before'),root=path.join(base,'after'),home=path.join(base,'assistant');installStarter(before);
+  const script=fileURLToPath(new URL('../scripts/wire-assistant.mjs',import.meta.url));
+  const wire=workspace=>execFileSync(process.execPath,[script,home],{env:{...process.env,GODSPEED_WORKSPACE:workspace,GODSPEED_PORT:'41989',GODSPEED_DEVICE:'local'},windowsHide:true});
+  wire(before);fs.renameSync(before,root);
+  wire(root);
+  for(const alias of ['.claude','.agents'])assert.equal(fs.realpathSync(path.join(root,alias,'skills')),fs.realpathSync(path.join(root,'skills')));
+  fs.unlinkSync(path.join(root,'.agents','skills'));fs.mkdirSync(path.join(root,'.agents','skills'));fs.writeFileSync(path.join(root,'.agents','skills','mine.md'),'kept');
+  wire(root);
+  assert.equal(fs.lstatSync(path.join(root,'.agents','skills')).isSymbolicLink(),false);
+  assert.equal(fs.readFileSync(path.join(root,'.agents','skills','mine.md'),'utf8'),'kept');
+});
