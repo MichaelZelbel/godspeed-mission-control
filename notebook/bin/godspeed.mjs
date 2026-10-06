@@ -64,6 +64,7 @@ else if(command==='restore')result=restore(store,media,path.resolve(verb));
 else if(command==='import')result=importExport(query,JSON.parse(fs.readFileSync(verb,'utf8')));
 else if(command==='export')result={format:1,records:[...store.scan().values()].map(r=>{const copy={...r};delete copy._hash;return copy;})};
 else if(command==='validate')result={problems:store.scan()&&store.problems};
+else if(command==='menerio'&&verb==='chunks')result=(await import('../core/menerio-chunks.mjs')).importOrphanChunks(store,path.resolve(rest[0]));
 else if(command==='sync'&&verb==='folder')result=await (await import('../core/sync/git.mjs')).useFolderRepository(store,rest);
 else if(command==='convert-notebook'){
   // The whole list can run to thousands of lines: it goes to a file, the
@@ -73,5 +74,5 @@ else if(command==='convert-notebook'){
   const {renamed=[],rewritten=[],problems,...summary}=outcome;
   result={...summary,renamed:renamed.length,rewritten:rewritten.length,...(problems?{problems}:{}),first_renames:renamed.slice(0,10).map(r=>r.from+' -> '+r.to),full_list:list};
 }
-else throw new Error('Commands: init, record list/get/save/merge/remove/display-name, memory search/lookup, world claim/event, backup, restore, import, export, validate, sync folder [PATH...], convert-notebook [--dry-run]');
+else throw new Error('Commands: init, record list/get/save/merge/remove/display-name, memory search/lookup, world claim/event, backup, restore, import, export, validate, sync folder [PATH...], menerio chunks ARCHIVE_SOURCE_DIR, convert-notebook [--dry-run]');
 console.log(JSON.stringify(result,null,2));
