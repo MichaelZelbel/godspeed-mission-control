@@ -17,8 +17,12 @@ if [ ! -d "$state/source/.git" ]; then
 fi
 git -C "$state/source" fetch origin "$revision"
 git -C "$state/source" checkout --detach FETCH_HEAD
-npm --prefix "$state/source/notebook/ui" ci --no-audit --no-fund
-npm --prefix "$state/source/notebook/ui" run build
+# A server nobody browses (a routine runner) can skip building the screens:
+# the build needs more memory than a small server spares.
+if [ "${GODSPEED_SKIP_UI:-}" != 1 ]; then
+  npm --prefix "$state/source/notebook/ui" ci --no-audit --no-fund
+  npm --prefix "$state/source/notebook/ui" run build
+fi
 export GODSPEED_WORKSPACE="$root" GODSPEED_ORIGINAL_RUNTIME=on
 export GODSPEED_PORT=${GODSPEED_PORT:-47831} GODSPEED_BIND=127.0.0.1
 # The machine's name in the notebook; the one named owner runs the routines.
