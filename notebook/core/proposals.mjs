@@ -80,7 +80,9 @@ export async function processNote(domains, input, {cites, factSuppressed, factSu
   if (!note) throw new Error('Source note missing');
   const timezone = store.get('settings', 'installation')?.timezone || 'UTC', today = new Intl.DateTimeFormat('en-CA', {timeZone: timezone}).format(new Date());
   const people = peopleFor(query, note), person = resolver(query);
-  const facts = query.rows('profile_facts').filter(f => f.is_current && (f.subject_type === 'self' || people.some(p => p.id === f.contact_id))).slice(0, 80).map(f => ({subject: f.subject_type === 'self' ? 'self' : f.contact_id, label: f.label, value: f.value}));
+  // Confirmed facts, as the assistant may see them: until 6 October 2026 a
+  // fact in a private section (a diagnosis) was sent with every processed note.
+  const facts = visibleRows(query, 'profile_facts').filter(f => f.is_current && (f.subject_type === 'self' || people.some(p => p.id === f.contact_id))).slice(0, 80).map(f => ({subject: f.subject_type === 'self' ? 'self' : f.contact_id, label: f.label, value: f.value}));
   const media = visibleRows(query, 'media_analysis').filter(m => m.note_id === note.id).map(m => ({file: m.original_filename, description: m.description, text: String(m.extracted_text || '').slice(0, 4000)}));
   const result = await domains.provider({kind: 'process-note', today, note: {id: note.id, title: note.title, text: String(note.content || '').slice(0, MAX_TEXT), folder: note.folder_path || null, tags: note.tags || []}, people, confirmed_facts: facts, media, contract: CONTRACT});
   const answer = typeof result === 'string' ? JSON.parse(result.replace(/^```(?:json)?\s*|\s*```$/g, '')) : result;

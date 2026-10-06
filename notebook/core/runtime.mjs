@@ -131,7 +131,9 @@ export function jobExecutor(configuredProvider,query) {
       return {verified:true,record_id:result.id,delivery:'notebook'};
     }
     if(!provider)throw new Error('Connect a supported assistant or model provider to run this routine');
-    const context={...fileContext(store),...knowledgeContext(query),goals:query.rows('goals'),notes:visibleRows(query,'notes'),facts:visibleRows(query,'profile_facts').filter(f=>f.is_current&&f.show_to_agent),health:query.rows('health_observations'),habits:query.rows('habits'),deadlines:query.rows('deadlines'),previous:query.rows('job_receipts').filter(r=>r.kind===job.kind&&r.state==='verified').slice(-3)};
+    // Only what may leave the owner's view (visibility.mjs). Until 6 October
+    // 2026 hidden goals, sensitive health readings and hidden deadlines went too.
+    const context={...fileContext(store),...knowledgeContext(query),goals:visibleRows(query,'goals'),notes:visibleRows(query,'notes'),facts:visibleRows(query,'profile_facts').filter(f=>f.is_current&&f.show_to_agent),health:visibleRows(query,'health_observations'),habits:visibleRows(query,'habits'),deadlines:visibleRows(query,'deadlines'),previous:query.rows('job_receipts').filter(r=>r.kind===job.kind&&r.state==='verified').slice(-3)};
     const instructions={
       'goal-decision':'Choose one useful action toward the active goal. Write three short plain paragraphs: the action, the reason and expected evidence. Do not use JSON. Do not send messages or spend money.',
       'goal-work':'Complete useful work for the active goal, such as a draft, research analysis of supplied sources, or a conversation preparation. Save the actual deliverable in your answer. Do not invent completed external work.',

@@ -55,7 +55,13 @@ export class Domains {
         return { ok: true, facts: [{ attribute, outcome: current(existing) ? 'already_recorded' : 'history_not_revived', claimId: existing.id,closed:changed.length }] };
       }
       const oldSlot = this.query.rows('fact_slots').find(s => s.subject_type === subject_type && s.subject_id === subject_id && s.attribute === attribute);
-      const slot = this.store.prepare('fact_slots', { subject_type, subject_id, contact_id: input.contact_id || null, attribute, label: input.label, category_slug: input.category_slug || null, cardinality: oldSlot?.cardinality || input.cardinality || 'one', show_to_agent: true, is_pinned: input.is_pinned || false }, oldSlot);
+      // A new value keeps how its fact is shown: its section, label, pin and
+      // "Always show to assistants", unless this write sets them. Until
+      // 6 October 2026 every change reset them, so a fact the owner had
+      // filed in a private section or kept off the assistant's list was
+      // given to the assistant again.
+      const kept=(key,fallback)=>input[key]!==undefined&&input[key]!==null?input[key]:oldSlot?.[key]??fallback;
+      const slot = this.store.prepare('fact_slots', { subject_type, subject_id, contact_id: input.contact_id || null, attribute, label: input.label||oldSlot?.label||input.attribute||attribute, category_slug: input.category_slug||oldSlot?.category_slug||null, cardinality: oldSlot?.cardinality || input.cardinality || 'one', show_to_agent: kept('show_to_agent',true)!==false, is_pinned: kept('is_pinned',false)===true }, oldSlot);
       const changed = claims.filter(c => current(c) && (slot.cardinality!=='many'||c.id===input.replaces_claim_id)).map(c => this.store.prepare('claims', { valid_to: valid_from,closure_evidence }, c));
       const claim = this.store.prepare('claims', { subject_type, subject_id, attribute, value, valid_from, valid_to: null, confidence: 'confirmed', cardinality: slot.cardinality, source_type: input.source_type || 'manual', source_id: input.source_id || null, evidence_quote: input.evidence_quote || null, origin: input.origin || 'user_manual' });
       for (const r of [slot, claim]) r.references = this.query.references(r.type, r);
@@ -115,7 +121,9 @@ export class Domains {
     if(['ensure-token-allowance','moderate-content'].includes(name))return {allowed:true,approved:true,uses_own_provider:true,local_owner_policy:true};
     if(['generate-group-briefing','suggest-group-members','suggest-group-next-step'].includes(name)){
       if(!this.provider)throw new Error('Connect your chosen assistant before group analysis');
-      const membership=input.membership_id?this.store.get('contact_group_memberships',input.membership_id):null,group=this.store.get('contact_groups',input.group_id||membership?.group_id);if(!group)throw new Error('Group missing');
+      // A private group (or a sensitive one, while sensitive things are hidden) is not given to a model.
+      const membership=input.membership_id?this.store.get('contact_group_memberships',input.membership_id):null,stored=this.store.get('contact_groups',input.group_id||membership?.group_id);if(!stored)throw new Error('Group missing');
+      const group=visibleRows(this.query,'contact_groups').find(g=>g.id===stored.id);if(!group)throw new Error('This group is hidden from the assistant');
       const people=visibleRows(this.query,'contacts'),members=this.query.rows('contact_group_memberships').filter(m=>m.group_id===group.id&&people.some(p=>p.id===m.contact_id));
       const contract=name==='generate-group-briefing'?'Return JSON {briefing_markdown} about actual member progress, open topics and next steps. Use only supplied evidence.':name==='suggest-group-members'?'Return JSON {members:[{contact_id,reason,evidence_quote}]} using supplied people IDs and actual notes. Recommendations require review.':'Return JSON {next_step,reason,suggested_status}. Use the actual group stages and member context.';
       const result=json(await this.provider({kind:name,...groupContext(this.query,group,{membership,periodDays:input.period_days||30,forSuggestions:name==='suggest-group-members'}),contract}));
@@ -206,6 +214,11 @@ export class Domains {
       }
       return { findings, count: findings.length };
     }
+    // The owner's own search (the notes screens send caller 'app') finds the
+    // notes they hid from the assistant; only what goes to a model is limited.
+    // Until 6 October 2026 the owner's search never found a hidden note.
+    const searchable=()=>(input.caller==='app'?this.query.rows('notes'):visibleRows(this.query,'notes')).filter(n=>!n.is_trashed);
+    const byWords=(notes,text)=>{const words=String(text||'').toLowerCase().split(/\s+/).filter(Boolean);return notes.map(n=>({...n,similarity:words.filter(w=>(n.title+' '+n.content).toLowerCase().includes(w)).length/(words.length||1)})).filter(n=>n.similarity>0).sort((a,b)=>b.similarity-a.similarity);};
     if (name === 'search-notes-semantic' && this.index?.searchHybrid) {
       // Words and meaning from the search index (no model call per search).
       // The screens read `results`; the function answered `notes`, so meaning
@@ -213,7 +226,7 @@ export class Domains {
       const question=String(input.query||input.search_query||'').trim(),limit=Math.min(Number(input.limit)||20,100);
       if(!question)return {results:[],notes:[],mode:'words',semantic:false};
       const found=await this.index.searchHybrid(question,{limit:limit*3,types:['notes','media_analysis','note_chunks']});
-      const notes=new Map(visibleRows(this.query,'notes').filter(n=>!n.is_trashed).map(n=>[n.id,n])),attached=id=>this.store.get('media_analysis',id)?.note_id||this.store.get('note_chunks',id)?.note_id;
+      const notes=new Map(searchable().map(n=>[n.id,n])),attached=id=>this.store.get('media_analysis',id)?.note_id||this.store.get('note_chunks',id)?.note_id;
       const seen=new Set(),results=[];
       for(const row of found.rows){const id=row.type==='notes'?row.id:attached(row.id),note=id&&notes.get(id);if(!note||seen.has(id))continue;seen.add(id);results.push({...note,similarity:row.similarity??Math.min(1,row.score*30),matched:row.matched||'words'});if(results.length>=limit)break;}
       return {results,notes:results,mode:found.mode,semantic:found.mode!=='words',note:found.note||null};
@@ -221,14 +234,15 @@ export class Domains {
     if (name === 'search-notes-semantic') {
       if(this.provider){
         const question=String(input.query||input.search_query||''),context=await retrievedContext(this.query,{message:'Find notes for '+question},this.provider),candidates=context.notes;
-        if(!candidates.length)return {notes:[],mode:'meaning-expanded and provider-ranked',semantic:true};
+        // The owner's hidden notes are matched by their words, never sent to the model.
+        const visible=new Set(visibleRows(this.query,'notes').map(n=>n.id)),own=input.caller==='app'?byWords(searchable().filter(n=>!visible.has(n.id)),question):[];
+        if(!candidates.length)return {notes:own,mode:'meaning-expanded and provider-ranked',semantic:true};
         const result=json(await this.provider({kind:name,query:question,notes:candidates,contract:'Rank these retrieved note excerpts by semantic relevance to the query. Return JSON {matches:[{id,score}]} where scores are between 0 and 1. Use only supplied IDs. This is a bounded candidate selection, not a search of an entire database.'}));
         if(!Array.isArray(result.matches)||result.matches.some(m=>!Number.isFinite(m.score)||m.score<0||m.score>1))throw Error('Search returned invalid relevance scores');
         const ids=new Set(candidates.map(n=>n.id)),notes=visibleRows(this.query,'notes').filter(n=>!n.is_trashed&&ids.has(n.id)),seen=new Set();
-        return {notes:result.matches.filter(m=>ids.has(m.id)&&!seen.has(m.id)&&seen.add(m.id)).sort((a,b)=>b.score-a.score).map(m=>({...notes.find(n=>n.id===m.id),similarity:m.score})).filter(n=>n.id),mode:'meaning-expanded and provider-ranked',semantic:true};
+        return {notes:[...result.matches.filter(m=>ids.has(m.id)&&!seen.has(m.id)&&seen.add(m.id)).sort((a,b)=>b.score-a.score).map(m=>({...notes.find(n=>n.id===m.id),similarity:m.score})).filter(n=>n.id),...own],mode:'meaning-expanded and provider-ranked',semantic:true};
       }
-      const words = String(input.query || input.search_query || '').toLowerCase().split(/\s+/).filter(Boolean);
-      return { notes: visibleRows(this.query,'notes').filter(n=>!n.is_trashed).map(n => ({ ...n, similarity: words.filter(w => (n.title + ' ' + n.content).toLowerCase().includes(w)).length / (words.length || 1) })).filter(n => n.similarity > 0).sort((a,b) => b.similarity-a.similarity), mode: 'keyword', semantic: false };
+      return { notes: byWords(searchable(),input.query||input.search_query), mode: 'keyword', semantic: false };
     }
     if (name === 'review-queue-bulk') return new Review(this).bulk(input);
     if(name==='classify-profile-fact'){
