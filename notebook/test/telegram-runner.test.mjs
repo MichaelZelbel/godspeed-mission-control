@@ -11,7 +11,7 @@ import {TelegramRunner} from '../../docker/full-candidate/telegram-runner.mjs';
 function fixture(){
  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-telegram-runner-'));let clock=1_000_000,pid=0;
  const started=[],signals=[];
- const runner=new TelegramRunner({dir,env:{PATH:'/usr/bin',HOME:'/fictional'},now:()=>clock,python:'/fictional/python3',hermes:'/fictional/hermes',
+ const runner=new TelegramRunner({dir,env:{PATH:'/usr/bin',HOME:'/fictional',GODSPEED_ACCESS_TOKEN:'fictional-sign-in-code',GODSPEED_CANDIDATE_BOT_TOKEN:'fictional-other-bot'},now:()=>clock,python:'/fictional/python3',hermes:'/fictional/hermes',
   setup:'/kit/godspeed-telegram-setup',finish:'/kit/telegram-setup-finish.mjs',
   spawnProcess:(command,args,options)=>{const child=new EventEmitter();child.pid=++pid;child.kill=()=>{};Object.assign(child,{command,args,options});started.push(child);return child;},
   kill:(id,signal)=>{signals.push([id,signal]);const child=started.find(c=>c.pid===id);setImmediate(()=>child.emit('exit',null));}});
@@ -44,6 +44,8 @@ test('a chat that stops is started again after a pause; once done, the gateway t
  assert.deepEqual([gateway.command,gateway.args],['/fictional/hermes',['gateway','run']]);
  assert.equal(gateway.options.env.TELEGRAM_BOT_TOKEN,connection.token);assert.equal(gateway.options.env.TELEGRAM_ALLOWED_USERS,'111');assert.equal(gateway.options.env.TELEGRAM_HOME_CHANNEL,'111');
  assert.equal(gateway.options.env.GODSPEED_TELEGRAM_TOKEN,undefined);
+ // The assistant with tools never holds the web sign-in code or another bot's key.
+ assert.equal(gateway.options.env.GODSPEED_ACCESS_TOKEN,undefined);assert.equal(gateway.options.env.GODSPEED_CANDIDATE_BOT_TOKEN,undefined);assert.equal(gateway.options.env.HOME,'/fictional');
  gateway.emit('exit',1);await tick(f.runner);assert.equal(f.started.length,3);f.advance(5001);await tick(f.runner);
  assert.equal(f.started.length,4,'a gateway that stopped comes back, and nothing else stops with it');
 });

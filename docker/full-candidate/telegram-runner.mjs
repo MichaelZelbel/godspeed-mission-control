@@ -3,6 +3,7 @@ import path from 'node:path';
 import {spawn} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
+import {passedEnvironment} from '../../notebook/core/assistant-files.mjs';
 
 // Telegram on the one-click server, switched on from the web page instead of a redeploy.
 // The page (notebook/server/telegram-connect.mjs) writes the bot's key to
@@ -29,7 +30,8 @@ export class TelegramRunner{
     const setup=this.read('setup.json')||{};
     if(setup.done&&String(setup.bot_id)===String(connection.bot_id)&&setup.owner_id&&setup.chat_id)
       return {kind:'gateway',key:'gateway:'+digest(connection.token,setup.owner_id,setup.chat_id),command:this.hermes,args:['gateway','run'],
-        env:{...this.env,TELEGRAM_BOT_TOKEN:connection.token,TELEGRAM_ALLOWED_USERS:String(setup.owner_id),TELEGRAM_HOME_CHANNEL:String(setup.chat_id)}};
+        // The assistant with tools sees only what passedEnvironment allows (assistant-files.mjs).
+        env:{...passedEnvironment(this.env),TELEGRAM_BOT_TOKEN:connection.token,TELEGRAM_ALLOWED_USERS:String(setup.owner_id),TELEGRAM_HOME_CHANNEL:String(setup.chat_id)}};
     return {kind:'setup',key:'setup:'+digest(connection.token,connection.start_code),command:this.python,args:[this.setup],
       env:{...this.env,PATH:path.dirname(this.python)+path.delimiter+(this.env.PATH||''),GODSPEED_TELEGRAM_TOKEN:connection.token,
         GODSPEED_TELEGRAM_START_CODE:connection.start_code,GODSPEED_TG_FLOW:'notebook',GODSPEED_TG_HERMES:this.hermes,
