@@ -39,7 +39,10 @@ class Query implements PromiseLike<any> {
   then<TResult1=any,TResult2=never>(onfulfilled?:((value:any)=>TResult1|PromiseLike<TResult1>)|null,onrejected?:((reason:any)=>TResult2|PromiseLike<TResult2>)|null):PromiseLike<TResult1|TResult2>{return this.run().then(onfulfilled,onrejected);}
 }
 const storage=(bucket:string)=>({
-  upload:async(name:string,file:Blob,options:any={})=>{const form=new FormData();form.append('file',file);form.append('path',name);const r=await fetch('/api/media/upload?bucket='+encodeURIComponent(bucket),{method:'POST',body:form});const data=await r.json();return r.ok?{data,error:null}:{data:null,error:{message:data.error}};},
+  upload:async(name:string,file:Blob,options:any={})=>{const form=new FormData();form.append('file',file);form.append('path',name);
+    // A PDF's text travels with it, so the notebook can keep and search it
+    // (lib/pdf-text.ts). A PDF whose text cannot be read still uploads.
+    if(file.type==='application/pdf'||/\.pdf$/i.test(name)){try{const {extractPdfText}=await import('@/lib/pdf-text');const text=await extractPdfText(file);if(text)form.append('extracted_text',text);}catch{}}const r=await fetch('/api/media/upload?bucket='+encodeURIComponent(bucket),{method:'POST',body:form});const data=await r.json();return r.ok?{data,error:null}:{data:null,error:{message:data.error}};},
   getPublicUrl:(name:string)=>({data:{publicUrl:'/api/media/file/'+encodeURIComponent(name)}}),
   createSignedUrl:async(name:string)=>({data:{signedUrl:'/api/media/file/'+encodeURIComponent(name)},error:null}),
   createSignedUrls:async(names:string[])=>({data:names.map(name=>({path:name,signedUrl:'/api/media/file/'+encodeURIComponent(name),error:null})),error:null}),

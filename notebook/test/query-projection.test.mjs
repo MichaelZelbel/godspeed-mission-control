@@ -23,3 +23,11 @@ test('a join named in a selection is still filled in',()=>{
   const row=query.execute({table:'action_items',selection:'id, title, contacts(name)',filters:[['eq','id','a1']],single:true}).data;
   assert.equal(row.contacts.name,'Ana');assert.equal(row.contact_id,undefined);
 });
+
+// The notes list carried every note's whole text: 10 MB per load for the real
+// notebook's 1,372 notes. It asks for a preview and the length instead.
+test('a list can ask for a note\'s first words and length instead of its text',()=>{
+  const {store,query}=setup();store.save('notes',{id:'long',title:'Long',content:'word '.repeat(5000)});
+  const row=query.execute({table:'notes',selection:'id, title, content_preview',filters:[['eq','id','long']],single:true}).data;
+  assert.equal(row.content,undefined);assert.equal(row.content_preview.length,400);assert.equal(row.content_length,25000);
+});

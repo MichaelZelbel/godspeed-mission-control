@@ -334,7 +334,10 @@ export default function Notes() {
     return allNotes.filter((n) => {
       const title = (n.title || "").trim().toLowerCase();
       const titleEmpty = !title || title === "untitled";
-      const bodyText = String(n.content || "")
+      // A list row carries the first 400 characters; a longer note is not empty.
+      const listRow = n as { content_preview?: string; content_length?: number };
+      if (n.content == null && (listRow.content_length ?? 0) > 400) return false;
+      const bodyText = String(n.content ?? listRow.content_preview ?? "")
         .replace(/<[^>]*>/g, " ")
         .replace(/^#+\s*$/gm, "")
         .replace(/^[-*+]\s*$/gm, "")
@@ -705,13 +708,19 @@ export default function Notes() {
   // The open note is fetched as a single row so it is always fresh without
   // refetching the whole (potentially very large) notes list. The list copy is
   // only a fallback for the first paint / offline mode.
-  const { data: selectedNoteRow } = useNote(selectedId);
+  const { data: selectedNoteRow, isFetched: selectedNoteFetched, isError: selectedNoteFailed } = useNote(selectedId);
+  // Read and not there (or not readable): the empty state, not "Opening note…" forever.
+  const selectedNoteMissing = (selectedNoteFetched && !selectedNoteRow) || selectedNoteFailed;
   const selectedNote = useMemo(() => {
     if (!selectedId) return null;
+    // Only a copy holding the whole text may stand in for the open note: the
+    // list's copies carry a preview, and an editor started from a preview
+    // could save the shortened text over the note.
+    const whole = (n: Note | SemanticSearchResult | undefined) => (n && typeof n.content === "string" ? n : undefined);
     const fallback =
-      allNotes.find((n) => n.id === selectedId) ||
-      trashNotes.find((n) => n.id === selectedId) ||
-      favNotes.find((n) => n.id === selectedId) ||
+      whole(allNotes.find((n) => n.id === selectedId)) ||
+      whole(trashNotes.find((n) => n.id === selectedId)) ||
+      whole(favNotes.find((n) => n.id === selectedId)) ||
       // Also check current search results (semantic/ilike may return notes not yet in cache)
       (searchResults ?? []).find((n) => n.id === selectedId) ||
       null;
@@ -1321,6 +1330,8 @@ export default function Notes() {
               />
             </div>
           </>
+        ) : selectedId && !selectedNoteMissing ? (
+          <div className="flex items-center justify-center h-full text-sm text-muted-foreground" role="status">Opening note…</div>
         ) : (
           <div className="flex flex-col items-center justify-center h-full text-center p-8">
             <div className="mb-4">

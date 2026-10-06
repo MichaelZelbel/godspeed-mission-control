@@ -113,6 +113,11 @@ export function NoteMetadataEditor({ noteId, metadata: savedMetadata, onUpdate, 
   const topicInputRef = useCallback((node: HTMLInputElement | null) => {
     if (node && showTagInput) node.focus();
   }, [showTagInput]);
+  // "Add tag" from the note's menu: the tag box is inside this section, so a
+  // section remembered as collapsed must open, or nothing happens at all.
+  useEffect(() => {
+    if (showTagInput && !isOpen) setIsOpen(true);
+  }, [showTagInput, isOpen, setIsOpen]);
 
   // Build a lookup from person name (lowercase) -> matched contact info
   const matchedLookup = useMemo(() => {

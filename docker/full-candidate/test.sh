@@ -37,6 +37,8 @@ npm install --prefix "$runtime" --no-audit --no-fund playwright@1.56.1 >/dev/nul
 "$runtime/node_modules/.bin/playwright" install --with-deps chromium >/dev/null
 export NODE_PATH="$runtime/node_modules"
 node docker/full-candidate/test-browser.cjs "$name" "$evidence"
+# One browser check per screen defect found walking the real notebook (test-screens.cjs).
+node docker/full-candidate/test-screens.cjs https://localhost:48443 "$evidence/session.json" | tee "$evidence/screens.log"
 docker restart "$name" >/dev/null
 node docker/full-candidate/test-browser.cjs "$name" "$evidence" resumed
 du -sm "$evidence" > "$evidence/evidence-size.txt"

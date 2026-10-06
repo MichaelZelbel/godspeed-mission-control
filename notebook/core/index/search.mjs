@@ -273,5 +273,14 @@ export class SearchIndex {
     if (!rows.length && terms.length > 1) rows = run(quoted.join(' OR '));
     return rows.map(({ uid, type, id, title, snippet, rank }) => ({ uid, type, id, title, ...(snippet ? { snippet } : {}), rank }));
   }
+  // Any of these words, best matches first: how a note's related notes are
+  // found (related.mjs). Each word is quoted, so none is read as syntax.
+  searchAny(words, { types = null, limit = 20 } = {}) {
+    const terms = words.flatMap(w => queryWords(w)).slice(0, 24);
+    if (!terms.length) return [];
+    const typeFilter = types?.length ? ' AND d.type IN (' + types.map(() => '?').join(',') + ')' : '';
+    return this.db.prepare(`SELECT d.uid, d.type, d.id, d.title, snippet(docs_fts, 1, '[', ']', '…', 14) AS snippet, bm25(docs_fts, 4.0, 1.0) AS rank
+      FROM docs_fts JOIN docs d ON d.rowid = docs_fts.rowid WHERE docs_fts MATCH ?${typeFilter} ORDER BY rank LIMIT ?`).all(terms.map(t => '"' + t.replaceAll('"', '""') + '"').join(' OR '), ...(types?.length ? types : []), limit);
+  }
   close() { this.closed = true; this.db.close(); }
 }

@@ -13,3 +13,13 @@ test('built module scripts, workers and the app manifest are served with types a
     }
   }finally{await service.close();}
 });
+
+test('built files named by their content are kept by the browser, the page itself is always checked',async()=>{
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-static-cache-')),ui=path.join(root,'.ui');fs.mkdirSync(path.join(ui,'assets'),{recursive:true});
+  fs.writeFileSync(path.join(ui,'index.html'),'<html></html>');fs.writeFileSync(path.join(ui,'assets','index-abc123.js'),'export {}');
+  const service=await createService({root,uiRoot:ui,port:0}),base='http://127.0.0.1:'+service.address.port;
+  try{
+    const asset=await fetch(base+'/assets/index-abc123.js');assert.match(asset.headers.get('cache-control'),/immutable/);await asset.text();
+    const page=await fetch(base+'/dashboard/notes');assert.equal(page.headers.get('cache-control'),'no-cache');await page.text();
+  }finally{await service.close();}
+});

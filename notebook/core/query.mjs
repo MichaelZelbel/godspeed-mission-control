@@ -230,7 +230,10 @@ export class QueryService {
         if (selection.includes('contacts(')) result.contacts = r.contact_id ? joined('contacts', r.contact_id) : null;
         for(const match of selection.matchAll(/(\w+):(\w+)(?:!\w+)?\(/g)){const [,alias,column]=match,target=links[column]||(tables.has(column)?column:null),foreign=links[column]?column:Object.keys(links).find(key=>links[key]===target&&r[key]);if(target&&foreign)result[alias]=r[foreign]?joined(target,r[foreign]):null;}
       }
-      if(keep)result=Object.fromEntries(Object.entries(result).filter(([key])=>keep.has(key)));
+      // A list shows a note's first words, not its text: content_preview and
+      // content_length stand in for content where a selection names them.
+      if(keep?.has('content_preview')&&typeof r.content==='string'){result.content_preview=r.content.slice(0,400);result.content_length=r.content.length;}
+      if(keep)result=Object.fromEntries(Object.entries(result).filter(([key])=>keep.has(key)||key==='content_length'&&keep.has('content_preview')));
       return result;
     });
     if (single && rows.length !== 1) throw new Error('Expected one record');

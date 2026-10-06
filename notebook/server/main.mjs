@@ -56,7 +56,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   if(originalRuntime&&!descriptor?.verified)throw Error('Connect the original Godspeed assistant before starting the integrated notebook');
   const domains=new Domains(query,{provider}),scheduler=originalRuntime?new NativeScheduler(store,{...descriptor,device}):new Scheduler(store,{device,executor:jobExecutor(provider,query)});scheduler.onProgress=()=>{schedulerHeartbeat=new Date().toISOString();};
   if(originalRuntime){domains.nativeAgent=nativeAgent({...descriptor,cwd:store.root,providerFile:providerPath});domains.nativeScheduler=scheduler;query.nativeHermesHome=descriptor.home;}
-  domains.sync={reconcile:()=>syncRunner.run(),pendingConflicts:()=>sync.pendingConflicts()};
+  domains.sync={reconcile:()=>syncRunner.run(),pendingConflicts:()=>sync.pendingConflicts()};domains.index=index;
   mediaRoot = path.resolve(mediaRoot || path.join(store.state, 'media')); fs.mkdirSync(mediaRoot, { recursive: true });
   domains.mediaRoot=mediaRoot;
   const mediaSync=new MediaSync(store,mediaRoot),pairCodes=new Map(),pairKeysPath=path.join(store.state,'pair-clients.json');
@@ -216,12 +216,15 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         const bytes = await body(req, 100 * 1024 * 1024), form = await new Request('http://localhost/', { method: 'POST', headers: { 'content-type': req.headers['content-type'] }, body: bytes }).formData();
         const file = form.get('file'); if (!(file instanceof Blob)) throw new Error('Missing media file');
         const original = String(form.get('path') || file.name || 'media'), data = Buffer.from(await file.arrayBuffer()), digest = hash(data);
-        const extractedText=form.get('extracted_text');if(extractedText!=null&&(typeof extractedText!=='string'||extractedText.length>60000||file.type!=='application/pdf'))throw new Error('Invalid extracted PDF text');
+        // A PDF's text read in the browser. Note attachments can be long
+        // (a contract, a manual); a chat attachment is held to 60,000 characters
+        // where it is used (chatAttachments).
+        const extractedText=form.get('extracted_text');if(extractedText!=null&&(typeof extractedText!=='string'||extractedText.length>1000000||file.type!=='application/pdf'))throw new Error('Invalid extracted PDF text');
         const target = digest + '-' + safe(path.basename(original).replace(/[^a-zA-Z0-9_.-]/g, '_') || 'media');
         atomic(path.join(mediaRoot, target), data);
         const previousFile=path.join(mediaRoot,hash(original)+'.mapping.json');
         if(fs.existsSync(previousFile)){const previous=JSON.parse(fs.readFileSync(previousFile,'utf8'));if(!previous.removed_at&&previous.sha256!==digest)throw new Error('This media path already has different content. Choose a new path; both binaries were retained.');}
-        atomic(path.join(mediaRoot, hash(original) + '.mapping.json'), JSON.stringify({ path: original, file: target, sha256: digest, size: data.length, contentType: file.type,...(extractedText?{extractedText}:{}) }));
+        atomic(path.join(mediaRoot, hash(original) + '.mapping.json'), JSON.stringify({ path: original, file: target, sha256: digest, size: data.length, contentType: file.type,...(extractedText?{extractedText:extractedText.replace(/\r\n?/g,'\n')}:{}) }));
         return send(res, 200, { data: { path: original, fullPath: original, id: digest }, error: null });
       }
       if(route==='/api/media/remove'&&req.method==='POST'){
@@ -264,7 +267,11 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       const file = fs.existsSync(requested) && fs.statSync(requested).isFile() ? requested : path.join(uiRoot, 'index.html');
       if (!fs.existsSync(file)) return send(res, 503, { error: 'Build the notebook frontend first' });
       const mime = staticTypes[path.extname(file).toLowerCase()] || 'application/octet-stream';
-      res.writeHead(200, { 'Content-Type': mime, 'X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer' }); fs.createReadStream(file).pipe(res);
+      // Built files under assets/ carry their content hash in their name, so a
+      // browser may keep them; without this it fetched 1.8 MB of script again
+      // on every page load. index.html is always checked, so a new build shows.
+      const cache = file.startsWith(path.join(uiRoot,'assets')+path.sep) ? 'public, max-age=31536000, immutable' : 'no-cache';
+      res.writeHead(200, { 'Content-Type': mime, 'Cache-Control': cache, 'X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer' }); fs.createReadStream(file).pipe(res);
     } catch (e) { send(res, e.status || (e.code === 'CONFLICT' ? 409 : 400), { error: e.message, code: e.code }); }
   });
   await new Promise((resolve, reject) => { server.once('error', reject); server.listen(port, host, resolve); });

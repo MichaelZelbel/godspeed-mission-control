@@ -63,7 +63,7 @@ const NoteRow = memo(function NoteRow({
     () => formatDistanceToNow(new Date(note.updated_at), { addSuffix: true }),
     [note.updated_at]
   );
-  const previewText = useMemo(() => getNotePreviewText(note.content), [note.content]);
+  const previewText = useMemo(() => getNotePreviewText(note.content ?? (note as { content_preview?: string }).content_preview), [note.content, (note as { content_preview?: string }).content_preview]);
 
   const handleClick = useCallback(
     (e: React.MouseEvent) => onClick(e, note.id),
