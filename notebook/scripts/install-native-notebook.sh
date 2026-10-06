@@ -280,7 +280,8 @@ case "$manager" in
     unit_text user > "$user_unit"
     ln -sf "../$SERVICE" "$(dirname "$user_unit")/default.target.wants/$SERVICE"
     # Without lingering, a user's services stop at logout and wait for the next login.
-    loginctl enable-linger "$service_user" >/dev/null 2>&1 || true
+    # Never a hidden password prompt: without the right to it, this simply fails.
+    loginctl --no-ask-password enable-linger "$service_user" >/dev/null 2>&1 || true
     if systemctl --user daemon-reload >/dev/null 2>&1 && systemctl --user restart "$SERVICE" >/dev/null 2>&1; then started=user; fi
     if [ "$(loginctl show-user "$service_user" -p Linger --value 2>/dev/null || true)" != yes ]; then
       echo "The notebook runs while you are logged in. For it to start with the computer and keep running after you log out, ask whoever runs this computer to run once: sudo loginctl enable-linger $service_user" >&2
