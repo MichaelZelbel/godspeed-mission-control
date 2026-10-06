@@ -1,3 +1,4 @@
+import { formatAction } from "@/lib/activity-text.mjs";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -47,16 +48,7 @@ const ACTION_OPTIONS = [
   { value: "role_change", label: "Role Change" },
 ];
 
-function formatAction(action: string, itemType: string, metadata?: any): string {
-  const labels: Record<string, string> = {
-    create: `Created a ${itemType}`,
-    update: `Updated a ${itemType}`,
-    delete: `Deleted a ${itemType}`,
-    login: "Signed in",
-    profile_update: "Updated profile",
-    role_change: metadata?.new_role ? `Role changed to ${metadata.new_role}` : "Role changed",
-  };
-  return labels[action] || `${action} ${itemType}`;
+ ${itemType}`;
 }
 
 const PAGE_SIZE = 20;

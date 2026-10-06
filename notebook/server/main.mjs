@@ -189,7 +189,8 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       if(route==='/api/connections/recheck'&&req.method==='POST'){await jobExecutor(provider,query)({kind:'connection-check',id:'manual-connection-check',manual:true},{store,settings:store.get('settings','installation')||{}});return send(res,200,{connections:query.rows('connector_status').map(({id,ok,status,checked_at})=>({id,ok,status,checked_at}))});}
       if(route==='/api/jobs/update'&&req.method==='POST'){const input=JSON.parse(await body(req));return send(res,200,{data:originalRuntime?await scheduler.control(input):await controlRoutine(store,input,{device})});}
       if(route==='/api/jobs/add'&&req.method==='POST'){const input=JSON.parse(await body(req));return send(res,200,{data:originalRuntime?await scheduler.control(input,{enable:true}):await controlRoutine(store,input,{enable:true,device})});}
-      if(route==='/api/index/rebuild'&&req.method==='POST'){index.rebuild();return send(res,200,{ok:true});}
+      // A full rebuild reads every file: in the background, so the notebook keeps answering.
+      if(route==='/api/index/rebuild'&&req.method==='POST'){void store.verify().then(()=>index.rebuildBackground()).catch(()=>{});return send(res,202,{ok:true,started:true});}
       if(route==='/api/backup'&&req.method==='POST')return send(res,200,await backupRunner.run());
       if(route==='/api/backups'&&req.method==='GET'){
         const folder=path.join(store.state,'backups'),data=fs.existsSync(folder)?fs.readdirSync(folder).filter(id=>/^\d+$/.test(id)).flatMap(id=>{try{const manifest=JSON.parse(fs.readFileSync(path.join(folder,id,'backup.json'),'utf8'));return Array.isArray(manifest.files)?[{id,at:manifest.at,records:manifest.records}]:[];}catch{return [];}}).sort((a,b)=>b.id.localeCompare(a.id)):[];return send(res,200,{data});

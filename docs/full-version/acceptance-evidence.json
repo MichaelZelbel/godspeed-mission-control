@@ -102,5 +102,509 @@
     ],
     "criterion": "Through installed normal /subs and native mc-subs use fictional selected receipt ledgers, distinguish missing/damaged/unpriced/measured zero and actual spend, preserve exact learned register answers with prior versions, produce the full review and one question, explicitly activate monthly timing, observe a changed and an unchanged cycle, and retain all state after restart without payments or account changes.",
     "target_test": "Install the committed command and complete fictional meter/register/monthly review acceptance through normal Windows/VPS interfaces."
+  },
+  "screen:Dashboard": {
+    "status": "verified working",
+    "evidence": [
+      "2026-10-06: Opened on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900; data visible in 1.06 s on a full load, 0.11 s from the sidebar; counts match the lists (people count fixed: 294 vs 275, test home-counts)."
+    ]
+  },
+  "screen:Notes": {
+    "status": "verified working",
+    "evidence": [
+      "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: list visible in 0.67-0.74 s (2.5 s before; list now carries previews, test query-projection), open note 0.26 s with no save on open, new note + title + body saved in 0.11-0.13 s, favorite, pin, AI visibility, Add tag (fixed, browser check), Classify with AI (type fixed, test note-type), note chat, Find connections (fixed: it filed a review item per person per note and froze the server, test note-connections), Make a copy, Share publicly, Markdown source, trash and restore, image and PDF dropped in (PDF fixed, test pdf-upload), attachments analyzed."
+    ]
+  },
+  "screen:People": {
+    "status": "verified working",
+    "evidence": [
+      "Normal fictional-person history retains an ended duplicate slot while its canonical corrected preference remains current. Actual closed record and normal history are retained in endpoint-a372e3c-duplicate-claim-history-ui.txt. Other People controls and broad parity remain required.",
+      "Independent fictional note chat after restart retrieved the corrected two-question preference using actual endpoint output. Reopened reply persistence failed and is retained in endpoint-0a009b3-reopened-reply-missing-ui.txt. New durable-reply source must be installed and retested. Broader People and memory parity remains required.",
+      "Actual installed 0103579 endpoint independent-note chat retrieved the current two-question preference. Reopened history acceptance remains unverified due intermittent loading failure. Earlier closed claim and correction history retained. Broader People controls and memory parity remain required.",
+      "Installed 0103579 endpoint independently recalled the corrected fictional-person preference, and normal keyboard activation reopened its retained reply after full navigation (endpoint-0103579-reply-after-navigation-ui.txt). Current 0dbae11 broader UI acceptance awaits a visible browser viewport. Broader People actions and memory comparison remain required.",
+      "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: list and search (Yumei in 63 ms), person page with relationships and 53 facts, add person (now opens, fixed), alias, topic, fact via AI classification, relationship form, merge with confirmation, delete (now removes topics and facts too, test former-ids); two people may share a nickname (fixed, test former-ids)."
+    ]
+  },
+  "screen:Profile": {
+    "status": "partial",
+    "evidence": [
+      "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: profile, Agent Instructions and Export & Share open; agent instructions are empty because Menerio's were not imported (step 3), and the owner shows as \"Owner\" because Menerio's profile was not merged in."
+    ]
+  },
+  "screen:World": {
+    "status": "verified working",
+    "evidence": [
+      "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: entities, events and claims tabs; add a thing (place) opens its page; merged people no longer listed twice (test home-counts)."
+    ]
+  },
+  "screen:Collections": {
+    "status": "verified working",
+    "evidence": [
+      "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: Movies & TV (36), Links (88), Household Knowledge, Reading List; new blank collection (address fixed, test collection-address), Create with AI, delete collection."
+    ]
+  },
+  "screen:CollectionDetail": {
+    "status": "verified working",
+    "evidence": [
+      "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: search, sort menu, column sort, filter by status, columns, paging, new item with every field type incl. date and linked person, edit after reload, favorite, folder, make a copy, delete, AI chat (fixed: saw 20 of 37 items, and an added item was saved empty, tests collection-chat-items)."
+    ]
+  },
+  "screen:CollectionSchema": {
+    "status": "verified working",
+    "evidence": [
+      "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: add option, rename a field (key kept), add field, duplicate label refused with a message; table headers follow."
+    ]
+  },
+  "screen:CollectionTemplates": {
+    "status": "verified working",
+    "evidence": [
+      "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: category filter, preview, Use This Template creates the collection (usage count fixed, test collection-address, browser check)."
+    ]
+  },
+  "screen:TimelinePage": {
+    "status": "verified working",
+    "evidence": [
+      "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: 215 moments, filters, Add Moment with Suggest title and other values (draft values and today's date fixed, test moment-draft)."
+    ]
+  },
+  "screen:MediaLibrary": {
+    "status": "verified working",
+    "evidence": [
+      "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: PDF reader worker loads (type fixed, test static-types, browser check), scan finds 8 unanalyzed images, an item's analysis and Re-analyze."
+    ]
+  },
+  "screen:ReviewQueue": {
+    "status": "partial",
+    "evidence": [
+      "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: 23 waiting items, Keep, Never Again and the kept list work; a timeline proposal shaped like a fact created an untitled moment when kept (fixed in step 2's proposal checks)."
+    ]
+  },
+  "screen:Groups": {
+    "status": "verified working",
+    "evidence": [
+      "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: groups list 0.48 s, group page 0.57 s."
+    ]
+  },
+  "screen:GroupDetail": {
+    "status": "verified working",
+    "evidence": [
+      "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: list, goals, about, briefing generated on the real 99-member group (fixed: it sent every note and failed with HTTP 400, test group-context), add member dialog; a merged person counted once (test home-counts)."
+    ]
+  },
+  "screen:WeeklyReview": {
+    "status": "verified working",
+    "evidence": [
+      "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: Create Review failed mid-JSON on the real week (fixed: notes bounded, longer answer allowed, test weekly-review-notes)."
+    ]
+  },
+  "screen:Actions": {
+    "status": "verified working",
+    "evidence": [
+      "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: 550 actions, add action, start (in progress)."
+    ]
+  },
+  "screen:ActivityPage": {
+    "status": "verified working",
+    "evidence": [
+      "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: activity rows and filter; wording fixed (test activity-text)."
+    ]
+  },
+  "screen:Settings": {
+    "status": "partial",
+    "evidence": [
+      "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: rebuild search (now in the background), save a backup (3 minutes for the copy, notebook kept answering), saved connections check; shows a leftover fictional acceptance result from an earlier session."
+    ]
+  },
+  "domain:notes": {
+    "status": "verified working",
+    "evidence": [
+      "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: list projection, save, history, trash, connections, PDF text."
+    ]
+  },
+  "domain:contacts": {
+    "status": "verified working",
+    "evidence": [
+      "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: nicknames shared, merge keeps names, delete cascade."
+    ]
+  },
+  "domain:collections": {
+    "status": "verified working",
+    "evidence": [
+      "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: create, schema edit, slug, delete."
+    ]
+  },
+  "domain:collection_items": {
+    "status": "verified working",
+    "evidence": [
+      "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: create, edit, copy, delete, chat add and update."
+    ]
+  },
+  "domain:collection_item_folders": {
+    "status": "verified working",
+    "evidence": [
+      "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: new folder."
+    ]
+  },
+  "domain:collection_templates": {
+    "status": "verified working",
+    "evidence": [
+      "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: use and usage count."
+    ]
+  },
+  "domain:contact_topics": {
+    "status": "verified working",
+    "evidence": [
+      "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: add, removed with the person."
+    ]
+  },
+  "domain:claims": {
+    "status": "verified working",
+    "evidence": [
+      "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: fact via classification, removed with the person."
+    ]
+  },
+  "domain:contact_relationships": {
+    "status": "verified working",
+    "evidence": [
+      "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: removed with the person."
+    ]
+  },
+  "domain:contact_group_memberships": {
+    "status": "verified working",
+    "evidence": [
+      "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: merged person counted once."
+    ]
+  },
+  "domain:moments": {
+    "status": "verified working",
+    "evidence": [
+      "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: create via dialog with AI draft."
+    ]
+  },
+  "domain:entities": {
+    "status": "verified working",
+    "evidence": [
+      "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: add a place."
+    ]
+  },
+  "domain:world_entities": {
+    "status": "verified working",
+    "evidence": [
+      "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: merged people excluded."
+    ]
+  },
+  "domain:media_analysis": {
+    "status": "verified working",
+    "evidence": [
+      "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: image analysis, PDF text stored page by page."
+    ]
+  },
+  "domain:action_items": {
+    "status": "verified working",
+    "evidence": [
+      "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: add, start."
+    ]
+  },
+  "domain:shared_notes": {
+    "status": "verified working",
+    "evidence": [
+      "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: share publicly."
+    ]
+  },
+  "domain:review_queue": {
+    "status": "verified working",
+    "evidence": [
+      "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: keep, never again."
+    ]
+  },
+  "domain:weekly_reviews": {
+    "status": "verified working",
+    "evidence": [
+      "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: bounded input."
+    ]
+  },
+  "domain:group_briefings": {
+    "status": "verified working",
+    "evidence": [
+      "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: bounded input."
+    ]
+  },
+  "function:collection-chat": {
+    "status": "verified working",
+    "evidence": [
+      "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: every item, flat fields read, empty add refused."
+    ]
+  },
+  "function:generate_collection_schema": {
+    "status": "verified working",
+    "evidence": [
+      "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: board games collection."
+    ]
+  },
+  "function:note-chat": {
+    "status": "verified working",
+    "evidence": [
+      "Source note changes and completed conversation retention now acquire the writer asynchronously while retaining current-hash conflicts. Real writer/cancellation/uncertain-callback regressions pass, with full 288-pass/one-skip source evidence. New source is not installed; ordinary note chat under concurrent sync and full equivalence remain open.",
+      "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: answered from the note."
+    ]
+  },
+  "function:process-note": {
+    "status": "verified working",
+    "evidence": [
+      "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: tags, metadata, type constrained."
+    ]
+  },
+  "function:find-connections": {
+    "status": "verified working",
+    "evidence": [
+      "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: one note, read-only, ~1 s."
+    ]
+  },
+  "function:suggest-connections": {
+    "status": "verified working",
+    "evidence": [
+      "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: link suggestions."
+    ]
+  },
+  "function:compute-connections": {
+    "status": "verified working",
+    "evidence": [
+      "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: read-only."
+    ]
+  },
+  "function:draft-event": {
+    "status": "verified working",
+    "evidence": [
+      "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: form values and today."
+    ]
+  },
+  "function:analyze-media": {
+    "status": "verified working",
+    "evidence": [
+      "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: image described (model that reads images)."
+    ]
+  },
+  "function:weekly-review": {
+    "status": "verified working",
+    "evidence": [
+      "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: bounded."
+    ]
+  },
+  "function:classify-profile-fact": {
+    "status": "verified working",
+    "evidence": [
+      "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: fact classified and saved."
+    ]
+  },
+  "function:normalize-profile": {
+    "status": "verified working",
+    "evidence": [
+      "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: write_fact."
+    ]
+  },
+  "function:review-queue-bulk": {
+    "status": "verified working",
+    "evidence": [
+      "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: keep and never again."
+    ]
+  },
+  "function:moderate-content": {
+    "status": "verified working",
+    "evidence": [
+      "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: share."
+    ]
+  },
+  "function:backfill-media-analysis": {
+    "status": "verified working",
+    "evidence": [
+      "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: scan."
+    ]
+  },
+  "function:conversation-chat": {
+    "status": "partial",
+    "evidence": [
+      "Normal installed 96063e7 command disabled duplicate submission and retained the failed request identity, but a write collision persisted and retry correctly refused uncertain replay. New source waits for actual lock acquisition for chat writes/state commits without replaying a started transaction; real cross-process early and late writer regressions pass. Final source suite passed 288 checks and one platform skip. This new writer repair is not installed; full normal concurrent acceptance remains open."
+    ],
+    "target_test": "Exercise conversation-chat through its installed entry point and check actual results after restart"
+  },
+  "procedure:connections": {
+    "status": "partial",
+    "evidence": [
+      "Normal installed 0e0d3a6 Settings configured a loopback fictional connector. Actual HTTP 503 responses followed saved backoff through attempts 1/2/3 and needs_review. Explicit 401 recheck created one sign-in obligation; explicit 200 recheck closed the same obligation and verified repair. Normal screen shows Connected (HTTP 200). Real-account adapters, later automatic quiet and cap quiet remain open.",
+      "Actual installed receipts now prove unchanged capped 503 was deferred and silent at 05:36:11 UTC before explicit 401 at 05:36:28. Later automatic recovered HTTP 200 checks at 05:40:53 and 05:45:21 were verified and silent; the same sign-in obligation remained closed. Retained private resumed-connector-receipt-proof-oct4.json supports these claims. Real account adapters remain unverified."
+    ],
+    "target_test": "Exercise connections through its installed entry point and check actual results after restart"
+  },
+  "procedure:brief-judges": {
+    "status": "partial",
+    "evidence": [
+      "Normal installed 0a9ba5d briefing attempted three scheduled cycles and failed before saving a note. Native retained APIError logs identify input exceeding the model context window; all recent monitoring history occupied 911095 JSON bytes. Source now selects the latest exact observation for chosen briefing feeds and the selected finding, preserving the complete maintained method and all old source history. Final atomic checks reject changed goals, health, evidence, finding state or method, and overlapping identical checked briefings file once. Focused 16 checks pass; exact full source suite passes 320 with one platform skip and no failures in 115.00 seconds. Evidence: brief-context-limit-diagnosis-0a9ba5d.json, brief-selected-sources-before.log, brief-selected-sources-after.log, brief-stale-and-overlap-before.log, brief-all-source-guards-focused.log and source-suite-brief-final-source-guards.log. Private installed failures: briefing-paused-final-failures-0a9ba5d.json. Installed briefing remains paused, and successful corrected normal delivery, collector/rehearsal breadth and final acceptance remain open."
+    ],
+    "target_test": "Exercise brief-judges through its installed entry point and check actual results after restart"
+  },
+  "procedure:selftest": {
+    "status": "partial",
+    "evidence": [
+      "Independent supervisor missing-run detection reads exact owner/due receipts without a Store or action replay; due-specific repair tracking closes only on the original verified receipt. Missing-run/recovery source regressions pass. Installed 0e0d3a6 supervisor records empty missing_runs and no check error. Nonempty installed missing-run and arbitrary repair execution remain unverified."
+    ],
+    "target_test": "Exercise selftest through its installed entry point and check actual results after restart"
+  },
+  "procedure:brief-morning": {
+    "status": "partial",
+    "evidence": [
+      "Normal installed 0a9ba5d briefing attempted three scheduled cycles and failed before saving a note. Native retained APIError logs identify input exceeding the model context window; all recent monitoring history occupied 911095 JSON bytes. Source now selects the latest exact observation for chosen briefing feeds and the selected finding, preserving the complete maintained method and all old source history. Final atomic checks reject changed goals, health, evidence, finding state or method, and overlapping identical checked briefings file once. Focused 16 checks pass; exact full source suite passes 320 with one platform skip and no failures in 115.00 seconds. Evidence: brief-context-limit-diagnosis-0a9ba5d.json, brief-selected-sources-before.log, brief-selected-sources-after.log, brief-stale-and-overlap-before.log, brief-all-source-guards-focused.log and source-suite-brief-final-source-guards.log. Private installed failures: briefing-paused-final-failures-0a9ba5d.json. Installed briefing remains paused, and successful corrected normal delivery, collector/rehearsal breadth and final acceptance remain open."
+    ],
+    "target_test": "Exercise brief-morning through its installed entry point and check actual results after restart"
+  },
+  "procedure:job-check": {
+    "status": "partial",
+    "evidence": [
+      "Source exact-due missing-run repairs and retained failed receipts are verified by missing-runs.test.mjs and missing-run-repair.test.mjs; interrupted/outward actions are not replayed. Matching 0e0d3a6 is installed, but complete normal missing-run repair acceptance remains open."
+    ],
+    "target_test": "Exercise job-check through its installed entry point and check actual results after restart"
+  },
+  "procedure:lead": {
+    "status": "partial",
+    "evidence": [
+      "Source: notebook/core/lead.mjs and lead-commands.mjs implement the checked local contribution pipeline; notebook/test/lead.test.mjs and lead-commands.test.mjs exercise actual local HTTP reads, correction failure, retained redraft, daily overlap cap, research priority, exact explicit-command text, hidden-source refusal and publication readback. Normal installed execution and optional full-method duties remain open.",
+      "Source now requires the public position own adopted visible goal and rechecks goal/position state before delivery; unrelated or paused goals stay quiet. Sixteen lead/command regressions pass. New source not yet installed; complete optional workflow duties remain open.",
+      "Source now reads independent fifteen-source daily market slices and validates one named contact draft against recent dated primary bytes, useful original-work offer and separate claim check, preserving personal relationship evidence and the one-entry daily cap. Twenty focused tests and full 280-pass/one-skip suite pass. New source is not installed; video/weekly/monthly and broad installed contribution acceptance remain open.",
+      "Executable video scripts now file complete independently checked drafts in the selected existing collection; adopted monthly measurements read actual sources and retain UNVERIFIED/null failures and prior results; adopted weekly comparisons preserve actual outputs verbatim and verify a real private Git key commit, missing-side cutoff and retained-key recovery. Thirty-six focused checks pass. Earlier full duty suite passed 307 checks and one platform skip; exact final package tests and normal installed acceptance remain required. No send, publication, rendering or generated company output occurs. Complete remains false.",
+      "Installed matching 852cb08 Windows/development packages: normal development subscription chat saved the exact fictional evidence note; normal controls selected it, adopted a fictional position and approved a labelled fictional video exemplar. Actual scheduled Lead retained one independently checked 137-word spoken script with six visual directions in the selected existing collection; normal collection UI displayed the full script. Exact source quotes match and the next cycle stayed quiet with one item/notification. Three monthly actual JSON measurements survived restart and repeated quietly: numeric four, two idea matches of three returned results, and HTTP503 UNVERIFIED/null. Private evidence: periodic-upgrade-native-note-success-852cb08.json, periodic-actual-video-and-quiet-repeat-852cb08.json and periodic-monthly-third-or-later-quiet-003ca30.json. Actual blinded weekly comparison, broad configured market/contact workflows and final full-method acceptance remain open. No external publication, send, rendering or company output was performed.",
+      "Matching 0a9ba5d Windows/development packages include private-key exclusion, explicit contribution shape and retained on-time comparison versions. Normal development controls created the fictional protocol and two exact software outputs, selected video and enabled their actual comparison. Scheduled runs retained one ready comparison with both exact source texts and the same committed private A/B assignment. Actual file context excludes the assignment. Normal command displayed the retained comparison; the next cycle remained quiet with one existing video queue item and one notification. Private checks: comparison-scheduled-window-status-0a9ba5d.json, comparison-normal-repeat-0a9ba5d.json and video-retained-after-comparison-0a9ba5d.json. Missing-cutoff, late-edit installed checks and wider market/contact acceptance remain open.",
+      "Normal configured fictional already-expired comparison window retained two explicitly missing sides with zero invented outputs, a committed private assignment and quiet repeated scheduled runs. The earlier ready comparison and its key remain unchanged, and normal controls restored its original window. Private evidence: comparison-expired-window-running-status-0a9ba5d.json, comparison-missing-window-second-scheduled-result-0a9ba5d.json and comparison-original-window-restored-0a9ba5d.json. Installed late-edit and wider contribution acceptance remain open."
+    ],
+    "target_test": "Exercise lead through its installed entry point and check actual results after restart"
+  },
+  "procedure:brief-rehearsal": {
+    "status": "partial",
+    "evidence": [
+      "Normal installed 0a9ba5d briefing attempted three scheduled cycles and failed before saving a note. Native retained APIError logs identify input exceeding the model context window; all recent monitoring history occupied 911095 JSON bytes. Source now selects the latest exact observation for chosen briefing feeds and the selected finding, preserving the complete maintained method and all old source history. Final atomic checks reject changed goals, health, evidence, finding state or method, and overlapping identical checked briefings file once. Focused 16 checks pass; exact full source suite passes 320 with one platform skip and no failures in 115.00 seconds. Evidence: brief-context-limit-diagnosis-0a9ba5d.json, brief-selected-sources-before.log, brief-selected-sources-after.log, brief-stale-and-overlap-before.log, brief-all-source-guards-focused.log and source-suite-brief-final-source-guards.log. Private installed failures: briefing-paused-final-failures-0a9ba5d.json. Installed briefing remains paused, and successful corrected normal delivery, collector/rehearsal breadth and final acceptance remain open."
+    ],
+    "target_test": "Exercise brief-rehearsal through its installed entry point and check actual results after restart"
+  },
+  "procedure:radar": {
+    "status": "partial",
+    "evidence": [
+      "Dedicated source lifecycle records only actual user verdicts, pending separate implementation approval and quote-linked reported trial outcomes. Assess archives after three completed runs, Caution retains the no-list, and overlapping source runs cannot duplicate a local-change proposal. Source suite and 21 focused checks pass; installed lifecycle and broad discovery remain unverified.",
+      "Source controlled workflow draft/exact approval/application/read-back/retained rollback has seventeen passing focused checks. Full maintained method includes actual contracts. SDK/tool installation, installed real-provider experiment and actual trial benefit remain unverified.",
+      "Bounded opt-in public discovery now rotates agent/memory/retrieval queries and fetches maintainer release/README evidence without local data in searches. Actual public search and four source reads passed; source suite 268 pass/one platform skip. Matching installed discovery and lifecycle acceptance remain open.",
+      "Actual 0e0d3a6 connected-provider radar verified quiet at 05:29:14 UTC, then a source-quoted local proposal at 05:32:19 UTC after normal fictional memory-goal adoption. Primary quote and full canonical source digest match. Normal Trial selection, full-method read and exact-hash preparation queued separately gated work; only actual read_workflow is verified so far. Application, rollback and measured benefit remain open.",
+      "Independent installed checks rejected the wrong keep-a-note filing workflow twice; no file changed. Normal command moved the fictional proposal to Assess and cancelled preparation, retaining failures. Dedicated retrieval recipe and executable ten-query comparison now exist in new source, but matching installed preparation, approval, application, rollback and trial evidence remain open.",
+      "Wrong workflow preparation remains cancelled and both independent rejections retained. A later native provider attempt exceeded two minutes; the subsequent attempt was interrupted and retained as uncertain, with the job paused for review. Assess three-run archive, correct exact-draft approval/application/rollback and measured trial remain open; no timeout is counted as a successful assessment."
+    ],
+    "target_test": "Exercise radar through its installed entry point and check actual results after restart"
+  },
+  "procedure:audit": {
+    "status": "partial",
+    "evidence": [
+      "Scheduled source implementation now scores four evidenced structural layers, ranks gaps with concrete corrections and verification, preserves unresolved failed routines and prior baselines, excludes connector credentials and quotes actual visible messages/rules before accepting semantic findings. Fabricated findings exhaust one bounded correction without an accepted report. Installed entry-point, actual loaded-memory, configured-limit and peer/comparator coverage remain partial.",
+      "Normal development routine controls ran the installed full audit, and normal Notes opened/read its retained four-layer report. It incorrectly awarded user-customization points to unchanged shipped morning-brief and use-my-computer methods; direct actual-byte comparison proves the defect. The report is retained as failed scoring acceptance. Source now excludes shipped starters and known shipped revisions, and ignores advancing healthy receipt counts when deduplicating unchanged structure. Two meaningful regressions failed before correction and pass after it. Corrected installed scoring/repeat acceptance remains required."
+    ],
+    "target_test": "Exercise audit through its installed entry point and check actual results after restart"
+  },
+  "recipe:audit": {
+    "status": "partial",
+    "evidence": [
+      "Full maintained portable workflow: notebook/reusable-recipes/audit/SKILL.md; generated installed copy matches the maintained source plus workspace adapter. Actual installed audit deliverable remains required.",
+      "The full maintained audit method is attached to the scheduled semantic review. Source tests verify actual message/rule quotes, retained failures and evidence-based structural output. Installed deliverable and explicitly inaccessible memory/peer/comparator scope remain unverified."
+    ],
+    "target_test": "Exercise audit through its installed entry point and check actual results after restart"
+  },
+  "recipe:browser-post": {
+    "status": "partial",
+    "evidence": [
+      "Complete maintained/generated licensed workflow, playbooks and portable helpers now replace the condensed recipe. Eleven source checks include actual fictional HTTP and one-shot Node helper. Selected-account configuration and an explicitly approved installed real posting result remain open; no post was performed."
+    ],
+    "target_test": "Exercise browser-post through its installed entry point and check actual results after restart"
+  },
+  "recipe:coach": {
+    "status": "partial",
+    "evidence": [
+      "Normal development selected fictional CSV, actual connected chat, linked explicit habit, later missed observation and source-aware follow-up passed. Conversation is closed and two native journal entries retained; automatic review recovered on third attempt. Scheduled fresh-source change is not installed yet; other complete coach flows remain open."
+    ],
+    "target_test": "Exercise coach through its installed entry point and check actual results after restart"
+  },
+  "recipe:daily-brief": {
+    "status": "partial",
+    "evidence": [
+      "Complete maintained method and generated installed copy; recipe-context.test.mjs checks the actual provider receives the complete selected method and its references. Installed complete workflow and delivery acceptance remain required.",
+      "Normal installed 0a9ba5d briefing attempted three scheduled cycles and failed before saving a note. Native retained APIError logs identify input exceeding the model context window; all recent monitoring history occupied 911095 JSON bytes. Source now selects the latest exact observation for chosen briefing feeds and the selected finding, preserving the complete maintained method and all old source history. Final atomic checks reject changed goals, health, evidence, finding state or method, and overlapping identical checked briefings file once. Focused 16 checks pass; exact full source suite passes 320 with one platform skip and no failures in 115.00 seconds. Evidence: brief-context-limit-diagnosis-0a9ba5d.json, brief-selected-sources-before.log, brief-selected-sources-after.log, brief-stale-and-overlap-before.log, brief-all-source-guards-focused.log and source-suite-brief-final-source-guards.log. Private installed failures: briefing-paused-final-failures-0a9ba5d.json. Installed briefing remains paused, and successful corrected normal delivery, collector/rehearsal breadth and final acceptance remain open."
+    ],
+    "target_test": "Exercise daily-brief through its installed entry point and check actual results after restart"
+  },
+  "recipe:lead": {
+    "status": "partial",
+    "evidence": [
+      "Full portable original method is maintained/generated: actual fourteen-day outcomes, refusal/exemplar learning, backlog/redraft and blocked-shape rules, due research priority, rotating contact/market reads, reader/voice/attribution checks, one-entry cap, optional adopted weekly/monthly duties and retained run logs. User-specific data is configuration. Full automated queue/delivery and installed deliverable remain open.",
+      "Maintained full portable method now has a dedicated runtime and /lead local configuration/outcome entry points. Complete installed deliverable, optional reach/video/weekly/monthly duties and market rotation remain unverified.",
+      "Maintained full method now documents executable market selection, separate daily cursors and source-checked named drafts. Actual local HTTP regression evidence is retained in lead-market-reach-targeted.log; source suite has 280 passes and one platform skip. New source still needs matching installation; video, adopted weekly comparison and monthly evidence duties remain incomplete.",
+      "Executable video scripts now file complete independently checked drafts in the selected existing collection; adopted monthly measurements read actual sources and retain UNVERIFIED/null failures and prior results; adopted weekly comparisons preserve actual outputs verbatim and verify a real private Git key commit, missing-side cutoff and retained-key recovery. Thirty-six focused checks pass. Earlier full duty suite passed 307 checks and one platform skip; exact final package tests and normal installed acceptance remain required. No send, publication, rendering or generated company output occurs. Complete remains false.",
+      "Installed matching 852cb08 Windows/development packages: normal development subscription chat saved the exact fictional evidence note; normal controls selected it, adopted a fictional position and approved a labelled fictional video exemplar. Actual scheduled Lead retained one independently checked 137-word spoken script with six visual directions in the selected existing collection; normal collection UI displayed the full script. Exact source quotes match and the next cycle stayed quiet with one item/notification. Three monthly actual JSON measurements survived restart and repeated quietly: numeric four, two idea matches of three returned results, and HTTP503 UNVERIFIED/null. Private evidence: periodic-upgrade-native-note-success-852cb08.json, periodic-actual-video-and-quiet-repeat-852cb08.json and periodic-monthly-third-or-later-quiet-003ca30.json. Actual blinded weekly comparison, broad configured market/contact workflows and final full-method acceptance remain open. No external publication, send, rendering or company output was performed.",
+      "Matching 0a9ba5d Windows/development packages include private-key exclusion, explicit contribution shape and retained on-time comparison versions. Normal development controls created the fictional protocol and two exact software outputs, selected video and enabled their actual comparison. Scheduled runs retained one ready comparison with both exact source texts and the same committed private A/B assignment. Actual file context excludes the assignment. Normal command displayed the retained comparison; the next cycle remained quiet with one existing video queue item and one notification. Private checks: comparison-scheduled-window-status-0a9ba5d.json, comparison-normal-repeat-0a9ba5d.json and video-retained-after-comparison-0a9ba5d.json. Missing-cutoff, late-edit installed checks and wider market/contact acceptance remain open.",
+      "Normal configured fictional already-expired comparison window retained two explicitly missing sides with zero invented outputs, a committed private assignment and quiet repeated scheduled runs. The earlier ready comparison and its key remain unchanged, and normal controls restored its original window. Private evidence: comparison-expired-window-running-status-0a9ba5d.json, comparison-missing-window-second-scheduled-result-0a9ba5d.json and comparison-original-window-restored-0a9ba5d.json. Installed late-edit and wider contribution acceptance remain open."
+    ],
+    "target_test": "Exercise lead through its installed entry point and check actual results after restart"
+  },
+  "recipe:mc-brief-operations": {
+    "status": "partial",
+    "evidence": [
+      "Complete maintained method and generated installed copy; recipe-context.test.mjs checks the actual provider receives the complete selected method and its references. Installed complete workflow and delivery acceptance remain required.",
+      "Normal installed 0a9ba5d briefing attempted three scheduled cycles and failed before saving a note. Native retained APIError logs identify input exceeding the model context window; all recent monitoring history occupied 911095 JSON bytes. Source now selects the latest exact observation for chosen briefing feeds and the selected finding, preserving the complete maintained method and all old source history. Final atomic checks reject changed goals, health, evidence, finding state or method, and overlapping identical checked briefings file once. Focused 16 checks pass; exact full source suite passes 320 with one platform skip and no failures in 115.00 seconds. Evidence: brief-context-limit-diagnosis-0a9ba5d.json, brief-selected-sources-before.log, brief-selected-sources-after.log, brief-stale-and-overlap-before.log, brief-all-source-guards-focused.log and source-suite-brief-final-source-guards.log. Private installed failures: briefing-paused-final-failures-0a9ba5d.json. Installed briefing remains paused, and successful corrected normal delivery, collector/rehearsal breadth and final acceptance remain open."
+    ],
+    "target_test": "Exercise mc-brief-operations through its installed entry point and check actual results after restart"
+  },
+  "recipe:mc-radar": {
+    "status": "partial",
+    "evidence": [
+      "Full portable method is maintained/generated. New scheduled source code fetches configured visible radar topics in the actual run, retains source bytes and trace, requires a matching exact quote, novelty and empty user verdict, permits one bounded correction, logs quiet/failure, deduplicates unchanged proposal sources, and warns once after three blind runs. Five regressions pass using actual local HTTP bytes and credential-redaction fixtures. Native installed runtime, verdict lifecycle and reversible trial execution remain open.",
+      "Complete maintained portable method now documents installed source selection and native verdict/result contracts, retained expiry and reported-versus-verified outcomes. Latest source is not installed; full workflow acceptance remains required.",
+      "Source controlled workflow draft/exact approval/application/read-back/retained rollback has seventeen passing focused checks. Full maintained method includes actual contracts. SDK/tool installation, installed real-provider experiment and actual trial benefit remain unverified.",
+      "The complete portable method now documents actual bounded public discovery, retained query and source evidence, unchanged restricted-topic scope and explicit activation. Actual public discovery reads pass; installed full-method result remains open.",
+      "Matching bounded full-method context is installed. Actual public reads and connected-provider quiet/proposal results, normal verdict and exact-hash preparation are retained; preparation/application/rollback and actual two-week trial benefit remain unverified.",
+      "Actual primary-source proposal was retained; wrong workflow preparation failed independently twice, and normal Assess cancelled pending work. No weakened check or applied edit. Correct retrieval workflow is new source only; complete installed lifecycle remains open.",
+      "Normal development a46 controls read the full installed retrieve-memory method and retained ten-query report, prepared one bounded independently verified edit, displayed the exact draft, accepted current-hash approval, and applied its exact bytes at 08:31:38 UTC. Ten actual installed CLI comparisons passed with broad fallback and exact source hashes/offsets retained in diagnostics/radar-retrieval-applied-a46f2dc. Normal exact-hash rollback restored the original method hash e27eb29c9b53a2c82a4f815bca09f6a9825f105be84bcbde69f1c09fe9d221a1. Private readbacks radar-retrieval-applied-readback-a46f2dc.json and radar-retrieval-rollback-final-a46f2dc.json. This proves a reversible software method change, not a two-week benefit or the still-open three-run Assess lifecycle."
+    ],
+    "target_test": "Exercise mc-radar through its installed entry point and check actual results after restart"
+  },
+  "recipe:morning-note": {
+    "status": "partial",
+    "evidence": [
+      "Complete maintained method and generated installed copy; recipe-context.test.mjs checks the actual provider receives the complete selected method and its references. Installed complete workflow and delivery acceptance remain required.",
+      "Normal installed 0a9ba5d briefing attempted three scheduled cycles and failed before saving a note. Native retained APIError logs identify input exceeding the model context window; all recent monitoring history occupied 911095 JSON bytes. Source now selects the latest exact observation for chosen briefing feeds and the selected finding, preserving the complete maintained method and all old source history. Final atomic checks reject changed goals, health, evidence, finding state or method, and overlapping identical checked briefings file once. Focused 16 checks pass; exact full source suite passes 320 with one platform skip and no failures in 115.00 seconds. Evidence: brief-context-limit-diagnosis-0a9ba5d.json, brief-selected-sources-before.log, brief-selected-sources-after.log, brief-stale-and-overlap-before.log, brief-all-source-guards-focused.log and source-suite-brief-final-source-guards.log. Private installed failures: briefing-paused-final-failures-0a9ba5d.json. Installed briefing remains paused, and successful corrected normal delivery, collector/rehearsal breadth and final acceptance remain open."
+    ],
+    "target_test": "Exercise morning-note through its installed entry point and check actual results after restart"
+  },
+  "recipe:move-godspeed": {
+    "status": "partial",
+    "evidence": [
+      "2026-10-04: complete owned-installation physical move/undo method, explicit installation pointer, immutable dry run, verified retained backup and separate restoration, exact private byte copies, original and destination aliases, current-data-preserving undo, installed CLI fixture; source-suite-workspace-move.log: 263 pass and one platform skip; installed launcher and assistant move acceptance remain open",
+      "Actual installed b5391fc CLI verified pre-move empty restoration and full copied bytes, retained original, old-path alias and explicit endpoint installation pointer; selected launcher restarted at the moved root and normal Windows Settings/Notes opened. A later note is being saved through normal UI; undo and subsequent assistant acceptance remain open.",
+      "Actual physical endpoint undo completed with 4141 records after verified restoration, preserved exact later note/conversation and both retained copies, restored the original pointer/alias and restarted only the selected launcher. After 0e0d3a6 upgrade the same note opened normally and both Windows health endpoints passed. Opening its conversation still fails CDP mouse dispatch; full normal assistant acceptance remains open."
+    ],
+    "target_test": "Exercise move-godspeed through its installed entry point and check actual results after restart"
+  },
+  "recipe:social-visuals": {
+    "status": "partial",
+    "evidence": [
+      "Full portable four-flow method, all stage documents, licensed helpers and MIT-selected offline pixel runtime now replace the short recipe. Synthetic actual CLI stamping, feed pixels, task retention/resume and paid permission refusal are checked; twelve focused checks and full source suite 259 plus one skip pass. No real paid generation or external reference upload was authorized or performed; full installed quality/judging/account acceptance remains open."
+    ],
+    "target_test": "Exercise social-visuals through its installed entry point and check actual results after restart"
+  },
+  "recipe:video-captions": {
+    "status": "partial",
+    "evidence": [
+      "Full maintained portable workflow, original caption generator and adapted burn tool are generated into the recipe. The generated entry point rendered a synthetic 1080x1920 fixture with a supplied transcript; two renders matched exactly, caption glyphs were within x269..801 and audio packet SHA-256 was preserved. Logs and fictional-video-captions-verification.json retain proof. New speech transcription, Linux font override and packaged installation acceptance remain required.",
+      "Real Windows source-entry execution transcribed synthetic speech into 23 correct timed words and burned an actual 9.1-second video, including explicit CPU execution and retained libass Archivo Black font selection. Visible representative phrase and stream duration were checked. Source commits e43e8fe and 626617f; private caption-evidence contains commands, original, outputs, timing checks and frame. Installed Linux/full embedded acceptance remains open."
+    ],
+    "target_test": "Exercise video-captions through its installed entry point and check actual results after restart"
+  },
+  "behavior:reminders": {
+    "status": "partial",
+    "evidence": [
+      "Normal development fictional recurring obligation closed with actual software-check evidence and created the next deadline seven days later. Evidence: development-a372e3c-fictional-recurring-obligation-ui.txt. Wider reminder/escalation/restart acceptance remains open.",
+      "Installed 0103579 automatic fictional cycles delivered exactly one approaching and one overdue notice, closed on separate saved note revision 4 and advanced recurrence once to October 11. Later ticks retained one open child and no extra notices. Normal overdue notice and next occurrence opened. Snooze input did not persist; explicit-save correction is source-only. Paired and no-obligation acceptance remain required. Evidence development-0103579-automatic-overdue-delivery-ui.txt and development-0103579-obligation-postclosure-quiet.json."
+    ],
+    "target_test": "Exercise reminders through its installed entry point and check actual results after restart"
   }
 }

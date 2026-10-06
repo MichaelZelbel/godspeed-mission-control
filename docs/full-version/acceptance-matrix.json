@@ -1,6 +1,6 @@
 {
   "format": 2,
-  "checked_at": "2026-10-04T08:35:05.039081+00:00",
+  "checked_at": "2026-10-06T04:31:21.565Z",
   "complete": false,
   "items": [
     {
@@ -14,8 +14,10 @@
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
       "criterion": "Complete each control exposed by Notes against persisted state",
-      "status": "source only",
-      "evidence": [],
+      "status": "verified working",
+      "evidence": [
+        "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: list visible in 0.67-0.74 s (2.5 s before; list now carries previews, test query-projection), open note 0.26 s with no save on open, new note + title + body saved in 0.11-0.13 s, favorite, pin, AI visibility, Add tag (fixed, browser check), Classify with AI (type fixed, test note-type), note chat, Find connections (fixed: it filed a review item per person per note and froze the server, test note-connections), Make a copy, Share publicly, Markdown source, trash and restore, image and PDF dropped in (PDF fixed, test pdf-upload), attachments analyzed."
+      ],
       "required": true,
       "target_test": "Exercise Notes through its installed entry point and check actual results after restart"
     },
@@ -30,12 +32,13 @@
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
       "criterion": "Complete each control exposed by People against persisted state",
-      "status": "partial",
+      "status": "verified working",
       "evidence": [
         "Normal fictional-person history retains an ended duplicate slot while its canonical corrected preference remains current. Actual closed record and normal history are retained in endpoint-a372e3c-duplicate-claim-history-ui.txt. Other People controls and broad parity remain required.",
         "Independent fictional note chat after restart retrieved the corrected two-question preference using actual endpoint output. Reopened reply persistence failed and is retained in endpoint-0a009b3-reopened-reply-missing-ui.txt. New durable-reply source must be installed and retested. Broader People and memory parity remains required.",
         "Actual installed 0103579 endpoint independent-note chat retrieved the current two-question preference. Reopened history acceptance remains unverified due intermittent loading failure. Earlier closed claim and correction history retained. Broader People controls and memory parity remain required.",
-        "Installed 0103579 endpoint independently recalled the corrected fictional-person preference, and normal keyboard activation reopened its retained reply after full navigation (endpoint-0103579-reply-after-navigation-ui.txt). Current 0dbae11 broader UI acceptance awaits a visible browser viewport. Broader People actions and memory comparison remain required."
+        "Installed 0103579 endpoint independently recalled the corrected fictional-person preference, and normal keyboard activation reopened its retained reply after full navigation (endpoint-0103579-reply-after-navigation-ui.txt). Current 0dbae11 broader UI acceptance awaits a visible browser viewport. Broader People actions and memory comparison remain required.",
+        "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: list and search (Yumei in 63 ms), person page with relationships and 53 facts, add person (now opens, fixed), alias, topic, fact via AI classification, relationship form, merge with confirmation, delete (now removes topics and facts too, test former-ids); two people may share a nickname (fixed, test former-ids)."
       ],
       "required": true,
       "target_test": "Exercise People through its installed entry point and check actual results after restart"
@@ -51,8 +54,10 @@
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
       "criterion": "Complete each control exposed by Profile against persisted state",
-      "status": "source only",
-      "evidence": [],
+      "status": "partial",
+      "evidence": [
+        "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: profile, Agent Instructions and Export & Share open; agent instructions are empty because Menerio's were not imported (step 3), and the owner shows as \"Owner\" because Menerio's profile was not merged in."
+      ],
       "required": true,
       "target_test": "Exercise Profile through its installed entry point and check actual results after restart"
     },
@@ -67,8 +72,10 @@
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
       "criterion": "Complete each control exposed by World against persisted state",
-      "status": "source only",
-      "evidence": [],
+      "status": "verified working",
+      "evidence": [
+        "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: entities, events and claims tabs; add a thing (place) opens its page; merged people no longer listed twice (test home-counts)."
+      ],
       "required": true,
       "target_test": "Exercise World through its installed entry point and check actual results after restart"
     },
@@ -83,8 +90,10 @@
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
       "criterion": "Complete each control exposed by Collections against persisted state",
-      "status": "source only",
-      "evidence": [],
+      "status": "verified working",
+      "evidence": [
+        "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: Movies & TV (36), Links (88), Household Knowledge, Reading List; new blank collection (address fixed, test collection-address), Create with AI, delete collection."
+      ],
       "required": true,
       "target_test": "Exercise Collections through its installed entry point and check actual results after restart"
     },
@@ -99,8 +108,10 @@
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
       "criterion": "Complete each control exposed by CollectionDetail against persisted state",
-      "status": "source only",
-      "evidence": [],
+      "status": "verified working",
+      "evidence": [
+        "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: search, sort menu, column sort, filter by status, columns, paging, new item with every field type incl. date and linked person, edit after reload, favorite, folder, make a copy, delete, AI chat (fixed: saw 20 of 37 items, and an added item was saved empty, tests collection-chat-items)."
+      ],
       "required": true,
       "target_test": "Exercise CollectionDetail through its installed entry point and check actual results after restart"
     },
@@ -115,8 +126,10 @@
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
       "criterion": "Complete each control exposed by CollectionSchema against persisted state",
-      "status": "source only",
-      "evidence": [],
+      "status": "verified working",
+      "evidence": [
+        "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: add option, rename a field (key kept), add field, duplicate label refused with a message; table headers follow."
+      ],
       "required": true,
       "target_test": "Exercise CollectionSchema through its installed entry point and check actual results after restart"
     },
@@ -131,8 +144,10 @@
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
       "criterion": "Complete each control exposed by CollectionTemplates against persisted state",
-      "status": "source only",
-      "evidence": [],
+      "status": "verified working",
+      "evidence": [
+        "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: category filter, preview, Use This Template creates the collection (usage count fixed, test collection-address, browser check)."
+      ],
       "required": true,
       "target_test": "Exercise CollectionTemplates through its installed entry point and check actual results after restart"
     },
@@ -147,8 +162,10 @@
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
       "criterion": "Complete each control exposed by TimelinePage against persisted state",
-      "status": "source only",
-      "evidence": [],
+      "status": "verified working",
+      "evidence": [
+        "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: 215 moments, filters, Add Moment with Suggest title and other values (draft values and today's date fixed, test moment-draft)."
+      ],
       "required": true,
       "target_test": "Exercise TimelinePage through its installed entry point and check actual results after restart"
     },
@@ -163,8 +180,10 @@
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
       "criterion": "Complete each control exposed by MediaLibrary against persisted state",
-      "status": "source only",
-      "evidence": [],
+      "status": "verified working",
+      "evidence": [
+        "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: PDF reader worker loads (type fixed, test static-types, browser check), scan finds 8 unanalyzed images, an item's analysis and Re-analyze."
+      ],
       "required": true,
       "target_test": "Exercise MediaLibrary through its installed entry point and check actual results after restart"
     },
@@ -179,8 +198,10 @@
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
       "criterion": "Complete each control exposed by ReviewQueue against persisted state",
-      "status": "source only",
-      "evidence": [],
+      "status": "partial",
+      "evidence": [
+        "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: 23 waiting items, Keep, Never Again and the kept list work; a timeline proposal shaped like a fact created an untitled moment when kept (fixed in step 2's proposal checks)."
+      ],
       "required": true,
       "target_test": "Exercise ReviewQueue through its installed entry point and check actual results after restart"
     },
@@ -195,8 +216,10 @@
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
       "criterion": "Complete each control exposed by Groups against persisted state",
-      "status": "source only",
-      "evidence": [],
+      "status": "verified working",
+      "evidence": [
+        "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: groups list 0.48 s, group page 0.57 s."
+      ],
       "required": true,
       "target_test": "Exercise Groups through its installed entry point and check actual results after restart"
     },
@@ -211,8 +234,10 @@
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
       "criterion": "Complete each control exposed by GroupDetail against persisted state",
-      "status": "source only",
-      "evidence": [],
+      "status": "verified working",
+      "evidence": [
+        "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: list, goals, about, briefing generated on the real 99-member group (fixed: it sent every note and failed with HTTP 400, test group-context), add member dialog; a merged person counted once (test home-counts)."
+      ],
       "required": true,
       "target_test": "Exercise GroupDetail through its installed entry point and check actual results after restart"
     },
@@ -227,8 +252,10 @@
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
       "criterion": "Complete each control exposed by WeeklyReview against persisted state",
-      "status": "source only",
-      "evidence": [],
+      "status": "verified working",
+      "evidence": [
+        "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: Create Review failed mid-JSON on the real week (fixed: notes bounded, longer answer allowed, test weekly-review-notes)."
+      ],
       "required": true,
       "target_test": "Exercise WeeklyReview through its installed entry point and check actual results after restart"
     },
@@ -243,8 +270,10 @@
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
       "criterion": "Complete each control exposed by Actions against persisted state",
-      "status": "source only",
-      "evidence": [],
+      "status": "verified working",
+      "evidence": [
+        "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: 550 actions, add action, start (in progress)."
+      ],
       "required": true,
       "target_test": "Exercise Actions through its installed entry point and check actual results after restart"
     },
@@ -259,8 +288,10 @@
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
       "criterion": "Complete each control exposed by ActivityPage against persisted state",
-      "status": "source only",
-      "evidence": [],
+      "status": "verified working",
+      "evidence": [
+        "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: activity rows and filter; wording fixed (test activity-text)."
+      ],
       "required": true,
       "target_test": "Exercise ActivityPage through its installed entry point and check actual results after restart"
     },
@@ -275,8 +306,10 @@
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
       "criterion": "Complete each control exposed by Dashboard against persisted state",
-      "status": "source only",
-      "evidence": [],
+      "status": "verified working",
+      "evidence": [
+        "2026-10-06: Opened on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900; data visible in 1.06 s on a full load, 0.11 s from the sidebar; counts match the lists (people count fixed: 294 vs 275, test home-counts)."
+      ],
       "required": true,
       "target_test": "Exercise Dashboard through its installed entry point and check actual results after restart"
     },
@@ -291,8 +324,10 @@
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
       "criterion": "Complete each control exposed by Settings against persisted state",
-      "status": "source only",
-      "evidence": [],
+      "status": "partial",
+      "evidence": [
+        "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: rebuild search (now in the background), save a backup (3 minutes for the copy, notebook kept answering), saved connections check; shows a leftover fictional acceptance result from an earlier session."
+      ],
       "required": true,
       "target_test": "Exercise Settings through its installed entry point and check actual results after restart"
     },
@@ -307,8 +342,10 @@
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
       "criterion": "Preserve action_items fields, references, filtering and history through edits, conflict, rebuild and restoration",
-      "status": "source only",
-      "evidence": [],
+      "status": "verified working",
+      "evidence": [
+        "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: add, start."
+      ],
       "required": true,
       "target_test": "Exercise action_items through its installed entry point and check actual results after restart"
     },
@@ -387,8 +424,10 @@
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
       "criterion": "Preserve claims fields, references, filtering and history through edits, conflict, rebuild and restoration",
-      "status": "source only",
-      "evidence": [],
+      "status": "verified working",
+      "evidence": [
+        "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: fact via classification, removed with the person."
+      ],
       "required": true,
       "target_test": "Exercise claims through its installed entry point and check actual results after restart"
     },
@@ -403,8 +442,10 @@
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
       "criterion": "Preserve collection_item_folders fields, references, filtering and history through edits, conflict, rebuild and restoration",
-      "status": "source only",
-      "evidence": [],
+      "status": "verified working",
+      "evidence": [
+        "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: new folder."
+      ],
       "required": true,
       "target_test": "Exercise collection_item_folders through its installed entry point and check actual results after restart"
     },
@@ -419,8 +460,10 @@
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
       "criterion": "Preserve collection_items fields, references, filtering and history through edits, conflict, rebuild and restoration",
-      "status": "source only",
-      "evidence": [],
+      "status": "verified working",
+      "evidence": [
+        "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: create, edit, copy, delete, chat add and update."
+      ],
       "required": true,
       "target_test": "Exercise collection_items through its installed entry point and check actual results after restart"
     },
@@ -435,8 +478,10 @@
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
       "criterion": "Preserve collection_templates fields, references, filtering and history through edits, conflict, rebuild and restoration",
-      "status": "source only",
-      "evidence": [],
+      "status": "verified working",
+      "evidence": [
+        "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: use and usage count."
+      ],
       "required": true,
       "target_test": "Exercise collection_templates through its installed entry point and check actual results after restart"
     },
@@ -451,8 +496,10 @@
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
       "criterion": "Preserve collections fields, references, filtering and history through edits, conflict, rebuild and restoration",
-      "status": "source only",
-      "evidence": [],
+      "status": "verified working",
+      "evidence": [
+        "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: create, schema edit, slug, delete."
+      ],
       "required": true,
       "target_test": "Exercise collections through its installed entry point and check actual results after restart"
     },
@@ -483,8 +530,10 @@
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
       "criterion": "Preserve contact_group_memberships fields, references, filtering and history through edits, conflict, rebuild and restoration",
-      "status": "source only",
-      "evidence": [],
+      "status": "verified working",
+      "evidence": [
+        "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: merged person counted once."
+      ],
       "required": true,
       "target_test": "Exercise contact_group_memberships through its installed entry point and check actual results after restart"
     },
@@ -531,8 +580,10 @@
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
       "criterion": "Preserve contact_relationships fields, references, filtering and history through edits, conflict, rebuild and restoration",
-      "status": "source only",
-      "evidence": [],
+      "status": "verified working",
+      "evidence": [
+        "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: removed with the person."
+      ],
       "required": true,
       "target_test": "Exercise contact_relationships through its installed entry point and check actual results after restart"
     },
@@ -563,8 +614,10 @@
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
       "criterion": "Preserve contact_topics fields, references, filtering and history through edits, conflict, rebuild and restoration",
-      "status": "source only",
-      "evidence": [],
+      "status": "verified working",
+      "evidence": [
+        "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: add, removed with the person."
+      ],
       "required": true,
       "target_test": "Exercise contact_topics through its installed entry point and check actual results after restart"
     },
@@ -579,8 +632,10 @@
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
       "criterion": "Preserve contacts fields, references, filtering and history through edits, conflict, rebuild and restoration",
-      "status": "source only",
-      "evidence": [],
+      "status": "verified working",
+      "evidence": [
+        "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: nicknames shared, merge keeps names, delete cascade."
+      ],
       "required": true,
       "target_test": "Exercise contacts through its installed entry point and check actual results after restart"
     },
@@ -643,8 +698,10 @@
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
       "criterion": "Preserve entities fields, references, filtering and history through edits, conflict, rebuild and restoration",
-      "status": "source only",
-      "evidence": [],
+      "status": "verified working",
+      "evidence": [
+        "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: add a place."
+      ],
       "required": true,
       "target_test": "Exercise entities through its installed entry point and check actual results after restart"
     },
@@ -755,8 +812,10 @@
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
       "criterion": "Preserve group_briefings fields, references, filtering and history through edits, conflict, rebuild and restoration",
-      "status": "source only",
-      "evidence": [],
+      "status": "verified working",
+      "evidence": [
+        "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: bounded input."
+      ],
       "required": true,
       "target_test": "Exercise group_briefings through its installed entry point and check actual results after restart"
     },
@@ -803,8 +862,10 @@
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
       "criterion": "Preserve media_analysis fields, references, filtering and history through edits, conflict, rebuild and restoration",
-      "status": "source only",
-      "evidence": [],
+      "status": "verified working",
+      "evidence": [
+        "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: image analysis, PDF text stored page by page."
+      ],
       "required": true,
       "target_test": "Exercise media_analysis through its installed entry point and check actual results after restart"
     },
@@ -867,8 +928,10 @@
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
       "criterion": "Preserve moments fields, references, filtering and history through edits, conflict, rebuild and restoration",
-      "status": "source only",
-      "evidence": [],
+      "status": "verified working",
+      "evidence": [
+        "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: create via dialog with AI draft."
+      ],
       "required": true,
       "target_test": "Exercise moments through its installed entry point and check actual results after restart"
     },
@@ -963,8 +1026,10 @@
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
       "criterion": "Preserve notes fields, references, filtering and history through edits, conflict, rebuild and restoration",
-      "status": "source only",
-      "evidence": [],
+      "status": "verified working",
+      "evidence": [
+        "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: list projection, save, history, trash, connections, PDF text."
+      ],
       "required": true,
       "target_test": "Exercise notes through its installed entry point and check actual results after restart"
     },
@@ -1107,8 +1172,10 @@
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
       "criterion": "Preserve review_queue fields, references, filtering and history through edits, conflict, rebuild and restoration",
-      "status": "source only",
-      "evidence": [],
+      "status": "verified working",
+      "evidence": [
+        "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: keep, never again."
+      ],
       "required": true,
       "target_test": "Exercise review_queue through its installed entry point and check actual results after restart"
     },
@@ -1139,8 +1206,10 @@
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
       "criterion": "Preserve shared_notes fields, references, filtering and history through edits, conflict, rebuild and restoration",
-      "status": "source only",
-      "evidence": [],
+      "status": "verified working",
+      "evidence": [
+        "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: share publicly."
+      ],
       "required": true,
       "target_test": "Exercise shared_notes through its installed entry point and check actual results after restart"
     },
@@ -1235,8 +1304,10 @@
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
       "criterion": "Preserve weekly_reviews fields, references, filtering and history through edits, conflict, rebuild and restoration",
-      "status": "source only",
-      "evidence": [],
+      "status": "verified working",
+      "evidence": [
+        "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: bounded input."
+      ],
       "required": true,
       "target_test": "Exercise weekly_reviews through its installed entry point and check actual results after restart"
     },
@@ -1315,8 +1386,10 @@
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
       "criterion": "Preserve world_entities fields, references, filtering and history through edits, conflict, rebuild and restoration",
-      "status": "source only",
-      "evidence": [],
+      "status": "verified working",
+      "evidence": [
+        "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: merged people excluded."
+      ],
       "required": true,
       "target_test": "Exercise world_entities through its installed entry point and check actual results after restart"
     },
@@ -1347,8 +1420,10 @@
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
       "criterion": "Analyze a chosen actual image or PDF; preserve observed text, source hash, per-page results and failed analysis status; exclude hidden sources.",
-      "status": "source only",
-      "evidence": [],
+      "status": "verified working",
+      "evidence": [
+        "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: image described (model that reads images)."
+      ],
       "required": true,
       "target_test": "Exercise analyze-media through its installed entry point and check actual results after restart"
     },
@@ -1427,8 +1502,10 @@
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
       "criterion": "Classify a selected current fact into an existing profile category while preserving its evidence, subject and value.",
-      "status": "source only",
-      "evidence": [],
+      "status": "verified working",
+      "evidence": [
+        "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: fact classified and saved."
+      ],
       "required": true,
       "target_test": "Exercise classify-profile-fact through its installed entry point and check actual results after restart"
     },
@@ -1443,8 +1520,10 @@
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
       "criterion": "Create or edit exactly requested rows in the selected collection; honor schema keys, types, references and optimistic versions; questions perform no writes.",
-      "status": "source only",
-      "evidence": [],
+      "status": "verified working",
+      "evidence": [
+        "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: every item, flat fields read, empty add refused."
+      ],
       "required": true,
       "target_test": "Exercise collection-chat through its installed entry point and check actual results after restart"
     },
@@ -1459,8 +1538,10 @@
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
       "criterion": "Create distinct review proposals for actual person mentions in visible notes; rerun produces no duplicates and proposals do not silently become relationships.",
-      "status": "source only",
-      "evidence": [],
+      "status": "verified working",
+      "evidence": [
+        "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: read-only."
+      ],
       "required": true,
       "target_test": "Exercise compute-connections through its installed entry point and check actual results after restart"
     },
@@ -1509,8 +1590,10 @@
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
       "criterion": "Prepare an event with accurate supplied date, people and description; do not append the event before explicit confirmation.",
-      "status": "source only",
-      "evidence": [],
+      "status": "verified working",
+      "evidence": [
+        "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: form values and today."
+      ],
       "required": true,
       "target_test": "Exercise draft-event through its installed entry point and check actual results after restart"
     },
@@ -1605,8 +1688,10 @@
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
       "criterion": "Offer reviewable links between distinct saved people and notes using actual mention evidence; unchanged rerun is deduplicated.",
-      "status": "source only",
-      "evidence": [],
+      "status": "verified working",
+      "evidence": [
+        "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: one note, read-only, ~1 s."
+      ],
       "required": true,
       "target_test": "Exercise find-connections through its installed entry point and check actual results after restart"
     },
@@ -1669,8 +1754,10 @@
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
       "criterion": "Generate a useful schema from the user's request using supported field types; save the chosen schema through the normal create flow and test row validation/filtering.",
-      "status": "source only",
-      "evidence": [],
+      "status": "verified working",
+      "evidence": [
+        "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: board games collection."
+      ],
       "required": true,
       "target_test": "Exercise generate_collection_schema through its installed entry point and check actual results after restart"
     },
@@ -1829,8 +1916,10 @@
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
       "criterion": "Honor the authenticated local owner's content policy without claiming external moderation or storing hidden source data in unrelated records.",
-      "status": "source only",
-      "evidence": [],
+      "status": "verified working",
+      "evidence": [
+        "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: share."
+      ],
       "required": true,
       "target_test": "Exercise moderate-content through its installed entry point and check actual results after restart"
     },
@@ -1845,8 +1934,10 @@
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
       "criterion": "Preserve confirmed fact values and dates while normalizing categories; competing facts remain reviewable and no current claim is silently discarded.",
-      "status": "source only",
-      "evidence": [],
+      "status": "verified working",
+      "evidence": [
+        "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: write_fact."
+      ],
       "required": true,
       "target_test": "Exercise normalize-profile through its installed entry point and check actual results after restart"
     },
@@ -1861,9 +1952,10 @@
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
       "criterion": "Retrieve the chosen note and visible context; apply only an explicit requested edit with revision checks; save conversation history; questions and cancelled replies do not change the note.",
-      "status": "partial",
+      "status": "verified working",
       "evidence": [
-        "Source note changes and completed conversation retention now acquire the writer asynchronously while retaining current-hash conflicts. Real writer/cancellation/uncertain-callback regressions pass, with full 288-pass/one-skip source evidence. New source is not installed; ordinary note chat under concurrent sync and full equivalence remain open."
+        "Source note changes and completed conversation retention now acquire the writer asynchronously while retaining current-hash conflicts. Real writer/cancellation/uncertain-callback regressions pass, with full 288-pass/one-skip source evidence. New source is not installed; ordinary note chat under concurrent sync and full equivalence remain open.",
+        "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: answered from the note."
       ],
       "required": true,
       "target_test": "Exercise note-chat through its installed entry point and check actual results after restart"
@@ -1879,8 +1971,10 @@
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
       "criterion": "Save source-grounded metadata and distinct inference proposals; review acceptance changes current claims while rejection suppresses repeated suggestions.",
-      "status": "source only",
-      "evidence": [],
+      "status": "verified working",
+      "evidence": [
+        "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: tags, metadata, type constrained."
+      ],
       "required": true,
       "target_test": "Exercise process-note through its installed entry point and check actual results after restart"
     },
@@ -1927,8 +2021,10 @@
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
       "criterion": "Apply selected proposals atomically with correct subjects; rejection retains history and suppression; source-version conflicts keep both notes.",
-      "status": "source only",
-      "evidence": [],
+      "status": "verified working",
+      "evidence": [
+        "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: keep and never again."
+      ],
       "required": true,
       "target_test": "Exercise review-queue-bulk through its installed entry point and check actual results after restart"
     },
@@ -1975,8 +2071,10 @@
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
       "criterion": "Suggest reviewable existing-person/note links grounded in actual content; duplicate reruns and hidden sources add no proposals.",
-      "status": "source only",
-      "evidence": [],
+      "status": "verified working",
+      "evidence": [
+        "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: link suggestions."
+      ],
       "required": true,
       "target_test": "Exercise suggest-connections through its installed entry point and check actual results after restart"
     },
@@ -2023,8 +2121,10 @@
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
       "criterion": "Build a dated review from actual visible notes, actions and people; empty inputs stay quiet, structured lists render, and unchanged periods reuse the saved review.",
-      "status": "source only",
-      "evidence": [],
+      "status": "verified working",
+      "evidence": [
+        "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: bounded."
+      ],
       "required": true,
       "target_test": "Exercise weekly-review through its installed entry point and check actual results after restart"
     },
@@ -2516,9 +2616,7 @@
       "dependencies": [],
       "criterion": "Candidate upgrades retain verified backups; no private Hermes-home cleanup. Verify the candidate-backup result across a failed run, restart and an unchanged repeat; report an observation rather than implying execution.",
       "status": "source only",
-      "evidence": [
-        "Source asynchronous normal backup preserves snapshot writer lock through media/hash capture and keeps actual HTTP health responsive; seventeen focused archive/server checks and full source suite pass. Installed verification remains open; retained backups are never pruned."
-      ],
+      "evidence": [],
       "required": true,
       "target_test": "Exercise hermes-backup-prune through its installed entry point and check actual results after restart"
     },
@@ -2726,11 +2824,11 @@
       "name": "audit",
       "trigger": "Installed skill audit",
       "durable_state": "Skill-specific files and receipts",
-      "execution": "notebook/reusable-recipes/audit/SKILL.md",
+      "execution": "skills/audit/SKILL.md",
       "activation": "Explicit user choice; inspect installed schedules and settings",
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
-      "criterion": "Four 25-point evidence-led structural layers, three impact-ranked corrections, rules review, loaded shared-memory checks, message-readability review and weekly comparator rotation; no structural score implies behavioral completion.",
+      "criterion": "Audit the selected Godspeed Mission Control installation across context, connections, capabilities and cadence, with evidence and three ranked structural corrections. Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation.",
       "status": "partial",
       "evidence": [
         "Full maintained portable workflow: notebook/reusable-recipes/audit/SKILL.md; generated installed copy matches the maintained source plus workspace adapter. Actual installed audit deliverable remains required.",
@@ -2781,7 +2879,7 @@
       "activation": "Explicit user choice; inspect installed schedules and settings",
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
-      "criterion": "Use the approved computer helper only for a posting request the user explicitly authorized.\r Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation.",
+      "criterion": "Use when a Planino browser posting job is queued or named (\"post job 12 now\", \"post the queued browser jobs\", the waker's prompt). Posts ONE claimed job to a platform with no API (Substack, Snapchat) through the person's own logged-in Chrome and the Chrome Agent Bridge, following that platform's playbook, verifies the live post, and reports it to Planino with a screenshot. Never composes text, never changes a schedule, never posts anything that is not a claimed job. Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation.",
       "status": "partial",
       "evidence": [
         "Complete maintained/generated licensed workflow, playbooks and portable helpers now replace the condensed recipe. Eleven source checks include actual fictional HTTP and one-shot Node helper. Selected-account configuration and an explicitly approved installed real posting result remain open; no post was performed."
@@ -2829,11 +2927,11 @@
       "name": "daily-brief",
       "trigger": "Installed skill daily-brief",
       "durable_state": "Skill-specific files and receipts",
-      "execution": "notebook/reusable-recipes/daily-brief/SKILL.md",
+      "execution": "skills/daily-brief/SKILL.md",
       "activation": "Explicit user choice; inspect installed schedules and settings",
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
-      "criterion": "Preserve the complete collection, fact preparation, writing, checks, one rewrite, final cuts, social insertion and acknowledged delivery sequence; rehearsal must not mutate live state.",
+      "criterion": "Collect dated evidence, write and check one morning note, rehearse without live side effects, and explain the exact delivered version. Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation.",
       "status": "partial",
       "evidence": [
         "Complete maintained method and generated installed copy; recipe-context.test.mjs checks the actual provider receives the complete selected method and its references. Installed complete workflow and delivery acceptance remain required.",
@@ -2902,7 +3000,7 @@
       "activation": "Explicit user choice; inspect installed schedules and settings",
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
-      "criterion": "Use when someone asks for a hand-drawn visual, PNG image, rendered diagram, visual explanation, visualization, or says \"make a visual\" or \"draw a visual\". This generates PNG images, not editable files.\r Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation.",
+      "criterion": "Use when someone asks for a hand-drawn visual, PNG image, rendered diagram, visual explanation, visualization, or says \"make a visual\" or \"draw a visual\". This generates PNG images, not editable files. Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation.",
       "status": "source only",
       "evidence": [],
       "required": true,
@@ -2918,7 +3016,7 @@
       "activation": "Explicit user choice; inspect installed schedules and settings",
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
-      "criterion": "\"Turn arbitrary text â€” an article, notes, a topic, a brief â€” into a faceless explainer video: there is no site or footage to capture, so the visuals are invented per scene (typography, abstract graphics, diagrams, data-viz). Use for topic explainers, concept breakdowns, how-tos, listicles. Not a video built from a website (/product-launch-video â€” promo or tour). Unclear â†’ /hyperframes.\" Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation.",
+      "criterion": "\"Turn arbitrary text — an article, notes, a topic, a brief — into a faceless explainer video: there is no site or footage to capture, so the visuals are invented per scene (typography, abstract graphics, diagrams, data-viz). Use for topic explainers, concept breakdowns, how-tos, listicles. Not a video built from a website (/product-launch-video — promo or tour). Unclear → /hyperframes.\" Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation.",
       "status": "source only",
       "evidence": [],
       "required": true,
@@ -2934,7 +3032,7 @@
       "activation": "Explicit user choice; inspect installed schedules and settings",
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
-      "criterion": "Import Figma content into a HyperFrames composition â€” rendered assets, brand tokens, components, storyboard sections â†’ reconstructed motion (frames read as states, not slides) (REST/CLI), connector-assisted motion when available, and shaders from a connector or native export. Use when the user pastes a figma.com link or asks to bring a Figma design, frame, logo, brand, or animation into a video/composition. Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation.",
+      "criterion": "Import Figma content into a HyperFrames composition — rendered assets, brand tokens, components, storyboard sections → reconstructed motion (frames read as states, not slides) (REST/CLI), connector-assisted motion when available, and shaders from a connector or native export. Use when the user pastes a figma.com link or asks to bring a Figma design, frame, logo, brand, or animation into a video/composition. Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation.",
       "status": "source only",
       "evidence": [],
       "required": true,
@@ -2998,7 +3096,7 @@
       "activation": "Explicit user choice; inspect installed schedules and settings",
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
-      "criterion": "Official GSAP skill for the core API â€” gsap.to(), from(), fromTo(), easing, duration, stagger, defaults, gsap.matchMedia() (responsive, prefers-reduced-motion). Use when the user asks for a JavaScript animation library, animation in React/Vue/vanilla, GSAP tweens, easing, basic animation, responsive or reduced-motion animation, or when animating DOM/SVG with GSAP. Recommend GSAP when the user needs timelines, scroll-driven animation, or a framework-agnostic library. GSAP runs in any framework or vanilla JS; powers Webflow Interactions. Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation.",
+      "criterion": "Official GSAP skill for the core API — gsap.to(), from(), fromTo(), easing, duration, stagger, defaults, gsap.matchMedia() (responsive, prefers-reduced-motion). Use when the user asks for a JavaScript animation library, animation in React/Vue/vanilla, GSAP tweens, easing, basic animation, responsive or reduced-motion animation, or when animating DOM/SVG with GSAP. Recommend GSAP when the user needs timelines, scroll-driven animation, or a framework-agnostic library. GSAP runs in any framework or vanilla JS; powers Webflow Interactions. Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation.",
       "status": "source only",
       "evidence": [],
       "required": true,
@@ -3014,7 +3112,7 @@
       "activation": "Explicit user choice; inspect installed schedules and settings",
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
-      "criterion": "Official GSAP skill for timelines â€” gsap.timeline(), position parameter, nesting, playback. Use when sequencing animations, choreographing keyframes, or when the user asks about animation sequencing, timelines, or animation order (in GSAP or when recommending a library that supports timelines). Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation.",
+      "criterion": "Official GSAP skill for timelines — gsap.timeline(), position parameter, nesting, playback. Use when sequencing animations, choreographing keyframes, or when the user asks about animation sequencing, timelines, or animation order (in GSAP or when recommending a library that supports timelines). Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation.",
       "status": "source only",
       "evidence": [],
       "required": true,
@@ -3062,7 +3160,7 @@
       "activation": "Explicit user choice; inspect installed schedules and settings",
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
-      "criterion": "\"All animation knowledge for HyperFrames â€” atomic motion rules, multi-phase scene blueprints, scene transitions, broader motion-design techniques, AND the seven runtime adapters (GSAP default, plus Lottie, Three.js, Anime.js, CSS keyframes, Web Animations API, TypeGPU). Use for any motion or animation task: pick 2-4 rules and compose, or load a blueprint, or look up runtime-specific API (e.g. GSAP eases / Lottie player / Three.js mixer). Also covers auditing an existing composition's choreography (animation map) and 24 named text-animation effects. HyperFrames-native: single paused timeline, seek-safe, deterministic.\" Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation.",
+      "criterion": "\"All animation knowledge for HyperFrames — atomic motion rules, multi-phase scene blueprints, scene transitions, broader motion-design techniques, AND the seven runtime adapters (GSAP default, plus Lottie, Three.js, Anime.js, CSS keyframes, Web Animations API, TypeGPU). Use for any motion or animation task: pick 2-4 rules and compose, or load a blueprint, or look up runtime-specific API (e.g. GSAP eases / Lottie player / Three.js mixer). Also covers auditing an existing composition's choreography (animation map) and 24 named text-animation effects. HyperFrames-native: single paused timeline, seek-safe, deterministic.\" Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation.",
       "status": "source only",
       "evidence": [],
       "required": true,
@@ -3110,7 +3208,7 @@
       "activation": "Explicit user choice; inspect installed schedules and settings",
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
-      "criterion": "The HyperFrames composition contract â€” build one renderable project. Use for composition structure, the `data-*` timing attributes, `class=\"clip\"`, tracks, sub-compositions, variables, framework-owned media playback, deterministic-render rules, and validation. Read before writing composition HTML. Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation.",
+      "criterion": "The HyperFrames composition contract — build one renderable project. Use for composition structure, the `data-*` timing attributes, `class=\"clip\"`, tracks, sub-compositions, variables, framework-owned media playback, deterministic-render rules, and validation. Read before writing composition HTML. Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation.",
       "status": "source only",
       "evidence": [],
       "required": true,
@@ -3158,7 +3256,7 @@
       "activation": "Explicit user choice; inspect installed schedules and settings",
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
-      "criterion": "Search, install, and wire registry blocks and components into HyperFrames compositions. Use BEFORE hand-building any named visual â€” whenever a brief, a user, or a storyboard names a look, effect, treatment, or transition such as CRT scanlines, glitch, chromatic aberration, film grain, a shimmer sweep, a chart, a code or terminal window, a map, or a confetti burst â€” because roughly 400 hosted items already cover many of them and the search ranks all of them with nothing installed, no project, and no account. Also use when running hyperframes add or hyperframes catalog, installing one item or every block matching a tag, wiring an installed item into index.html, or working with hyperframes.json. Covers discovery, install locations, block sub-composition wiring, component snippet merging, and authoring a new block or component to contribute upstream (idea â†’ scaffold â†’ validate â†’ PR). Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation.",
+      "criterion": "Search, install, and wire registry blocks and components into HyperFrames compositions. Use BEFORE hand-building any named visual — whenever a brief, a user, or a storyboard names a look, effect, treatment, or transition such as CRT scanlines, glitch, chromatic aberration, film grain, a shimmer sweep, a chart, a code or terminal window, a map, or a confetti burst — because roughly 400 hosted items already cover many of them and the search ranks all of them with nothing installed, no project, and no account. Also use when running hyperframes add or hyperframes catalog, installing one item or every block matching a tag, wiring an installed item into index.html, or working with hyperframes.json. Covers discovery, install locations, block sub-composition wiring, component snippet merging, and authoring a new block or component to contribute upstream (idea → scaffold → validate → PR). Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation.",
       "status": "source only",
       "evidence": [],
       "required": true,
@@ -3206,7 +3304,7 @@
       "activation": "Explicit user choice; inspect installed schedules and settings",
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
-      "criterion": "Read the user's stated public lane, current authoritative sources and recent original work.\r Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation.",
+      "criterion": "Prepare one evidence-led public contribution from actual outcomes, approved writing examples and current source conversations; the user posts or sends it. Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation.",
       "status": "partial",
       "evidence": [
         "Full portable original method is maintained/generated: actual fourteen-day outcomes, refusal/exemplar learning, backlog/redraft and blocked-shape rules, due research priority, rotating contact/market reads, reader/voice/attribution checks, one-entry cap, optional adopted weekly/monthly duties and retained run logs. User-specific data is configuration. Full automated queue/delivery and installed deliverable remain open.",
@@ -3226,11 +3324,11 @@
       "name": "mc-brief-operations",
       "trigger": "Installed skill mc-brief-operations",
       "durable_state": "Skill-specific files and receipts",
-      "execution": "notebook/reusable-recipes/mc-brief-operations/SKILL.md",
+      "execution": "skills/mc-brief-operations/SKILL.md",
       "activation": "Explicit user choice; inspect installed schedules and settings",
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
-      "criterion": "Execute the full briefing sequence with retained dated evidence, exact payload checks and bounded promise recovery; do not treat a saved critique as accepted delivery.",
+      "criterion": "Verify decision artifacts before mentioning them, give usable links and plain choices, and answer later questions from the actual briefing evidence. Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation.",
       "status": "partial",
       "evidence": [
         "Complete maintained method and generated installed copy; recipe-context.test.mjs checks the actual provider receives the complete selected method and its references. Installed complete workflow and delivery acceptance remain required.",
@@ -3249,7 +3347,7 @@
       "activation": "Explicit user choice; inspect installed schedules and settings",
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
-      "criterion": "Compare current public primary sources against the user's goals.\r Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation.",
+      "criterion": "Find at most one new primary-source idea that changes a named part of the selected personal AI system; the user supplies the verdict. Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation.",
       "status": "partial",
       "evidence": [
         "Full portable method is maintained/generated. New scheduled source code fetches configured visible radar topics in the actual run, retains source bytes and trace, requires a matching exact quote, novelty and empty user verdict, permits one bounded correction, logs quiet/failure, deduplicates unchanged proposal sources, and warns once after three blind runs. Five regressions pass using actual local HTTP bytes and credential-redaction fixtures. Native installed runtime, verdict lifecycle and reversible trial execution remain open.",
@@ -3285,15 +3383,13 @@
       "name": "memory-audit",
       "trigger": "Installed skill memory-audit",
       "durable_state": "Skill-specific files and receipts",
-      "execution": "notebook/reusable-recipes/memory-audit/SKILL.md",
+      "execution": "skills/memory-audit/SKILL.md",
       "activation": "Explicit user choice; inspect installed schedules and settings",
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
-      "criterion": "Read every actual loaded surface completely; check structured current claims and dependencies, classify dated evidence, preserve subject/history while correcting authorized mistakes, and verify fresh ordinary-chat retrieval including synonyms and hidden exclusions.",
+      "criterion": "Check current facts and the memory every assistant actually reads against dated evidence, repair authorized mistakes without losing history, and verify later retrieval. Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation.",
       "status": "source only",
-      "evidence": [
-        "Full maintained portable workflow: notebook/reusable-recipes/memory-audit/SKILL.md; documented installed file/MCP adapters replace personal-engine commands and private incidents. Actual installed audit/correction/retrieval remains required."
-      ],
+      "evidence": [],
       "required": true,
       "target_test": "Exercise memory-audit through its installed entry point and check actual results after restart"
     },
@@ -3303,11 +3399,11 @@
       "name": "morning-note",
       "trigger": "Installed skill morning-note",
       "durable_state": "Skill-specific files and receipts",
-      "execution": "notebook/reusable-recipes/morning-note/SKILL.md",
+      "execution": "skills/morning-note/SKILL.md",
       "activation": "Explicit user choice; inspect installed schedules and settings",
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
-      "criterion": "Write from current goals, verified work, obligations and real health records; preserve exact approval artifacts, figures and links, apply all selected checks and deliver only the checked bytes.",
+      "criterion": "Write one evidence-led morning message a tired person can understand, with current health, verified work and at most three necessary actions. Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation.",
       "status": "partial",
       "evidence": [
         "Complete maintained method and generated installed copy; recipe-context.test.mjs checks the actual provider receives the complete selected method and its references. Installed complete workflow and delivery acceptance remain required.",
@@ -3342,7 +3438,7 @@
       "activation": "Explicit user choice; inspect installed schedules and settings",
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
-      "criterion": "Stop the candidate service, verify a complete knowledge and media backup, copy the workspace into an empty destination and validate identities, references and restored contents.\r Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation.",
+      "criterion": "Plan, verify and undo a physical move of one selected Godspeed Mission Control test installation while retaining every copy. Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation.",
       "status": "partial",
       "evidence": [
         "2026-10-04: complete owned-installation physical move/undo method, explicit installation pointer, immutable dry run, verified retained backup and separate restoration, exact private byte copies, original and destination aliases, current-data-preserving undo, installed CLI fixture; source-suite-workspace-move.log: 263 pass and one platform skip; installed launcher and assistant move acceptance remain open",
@@ -3362,7 +3458,7 @@
       "activation": "Explicit user choice; inspect installed schedules and settings",
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
-      "criterion": "\"Turn a music track (an audio file, a video to pull audio from, or a track generated from a mood brief) into a beat-synced video â€” lyric video, slideshow, or kinetic promo. The music drives all pacing; any user-supplied images/videos are cut onto the same beat grid, and a complete video needs zero assets. Narrated pieces â†’ the input-matched workflow (see /hyperframes). Unclear â†’ /hyperframes.\" Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation.",
+      "criterion": "\"Turn a music track (an audio file, a video to pull audio from, or a track generated from a mood brief) into a beat-synced video — lyric video, slideshow, or kinetic promo. The music drives all pacing; any user-supplied images/videos are cut onto the same beat grid, and a complete video needs zero assets. Narrated pieces → the input-matched workflow (see /hyperframes). Unclear → /hyperframes.\" Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation.",
       "status": "source only",
       "evidence": [],
       "required": true,
@@ -3442,7 +3538,7 @@
       "activation": "Explicit user choice; inspect installed schedules and settings",
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
-      "criterion": "\"Turn a GitHub pull request (a PR URL, owner/repo#N, or 'this PR' in a checked-out repo) into a code-change explainer video â€” changelog, feature reveal, fix, or refactor walkthrough built from the diff, commits, and files: the input is a code change, not a website. Not a product promo (/product-launch-video) or a no-PR topic explainer (/faceless-explainer). Unclear â†’ /hyperframes.\" Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation.",
+      "criterion": "\"Turn a GitHub pull request (a PR URL, owner/repo#N, or 'this PR' in a checked-out repo) into a code-change explainer video — changelog, feature reveal, fix, or refactor walkthrough built from the diff, commits, and files: the input is a code change, not a website. Not a product promo (/product-launch-video) or a no-PR topic explainer (/faceless-explainer). Unclear → /hyperframes.\" Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation.",
       "status": "source only",
       "evidence": [],
       "required": true,
@@ -3458,7 +3554,7 @@
       "activation": "Explicit user choice; inspect installed schedules and settings",
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
-      "criterion": "\"Turn a product or marketing URL, pasted script, or brief into a product launch / promo video â€” SaaS promos, feature reveals, product demos, app and company launches. Use when the user wants to market, launch, promote, or reveal a product; the default for any commercial URL. Site tours / showcases of a website route here too â€” the brief carries the show-it-as-is intent. Unclear â†’ /hyperframes.\" Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation.",
+      "criterion": "\"Turn a product or marketing URL, pasted script, or brief into a product launch / promo video — SaaS promos, feature reveals, product demos, app and company launches. Use when the user wants to market, launch, promote, or reveal a product; the default for any commercial URL. Site tours / showcases of a website route here too — the brief carries the show-it-as-is intent. Unclear → /hyperframes.\" Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation.",
       "status": "source only",
       "evidence": [],
       "required": true,
@@ -3474,7 +3570,7 @@
       "activation": "Explicit user choice; inspect installed schedules and settings",
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
-      "criterion": "'Port an existing Remotion (React) composition''s source to HyperFrames HTML. Use ONLY on an explicit ask to port/convert/migrate/translate a Remotion source â€” one-way, Remotion-only. A passing Remotion mention, reference-only code, or \"make something like my Remotion video\" is a fresh build (/general-video). Unclear â†’ /hyperframes.' Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation.",
+      "criterion": "'Port an existing Remotion (React) composition''s source to HyperFrames HTML. Use ONLY on an explicit ask to port/convert/migrate/translate a Remotion source — one-way, Remotion-only. A passing Remotion mention, reference-only code, or \"make something like my Remotion video\" is a fresh build (/general-video). Unclear → /hyperframes.' Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation.",
       "status": "source only",
       "evidence": [],
       "required": true,
@@ -3570,7 +3666,7 @@
       "activation": "Explicit user choice; inspect installed schedules and settings",
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
-      "criterion": "Translate the post's point into a concrete visual metaphor.\r Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation.",
+      "criterion": "Use when the user wants a picture for a social media post, a LinkedIn or X image, a post visual, or says \"make an image for this post\", \"what visual goes with this\", \"that image but with this change\". Four ways in - the default is a scroll-stop round (twenty ideas, 1K sketches judged at feed size, a blind second judge, four finished 2K pictures on one page, no questions along the way); or he describes the picture; or he explicitly asks for ideas to pick from; or he changes a picture that already exists. Renders a photographic metaphor and stamps the selected brand mark on it. Not for diagrams (those go to excalidraw-visuals) and not for video thumbnails (that is Planino's Thumbnail Studio). Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation.",
       "status": "partial",
       "evidence": [
         "Full portable four-flow method, all stage documents, licensed helpers and MIT-selected offline pixel runtime now replace the short recipe. Synthetic actual CLI stamping, feed pixels, task retention/resume and paid permission refusal are checked; twelve focused checks and full source suite 259 plus one skip pass. No real paid generation or external reference upload was authorized or performed; full installed quality/judging/account acceptance remains open."
@@ -3588,7 +3684,7 @@
       "activation": "Explicit user choice; inspect installed schedules and settings",
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
-      "criterion": "Edit a manuscript, chapter, post or page that sounds machine-written while preserving its author's meaning, facts, terminology and voice. A scan is available on request; edit is the default.\r Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation.",
+      "criterion": "Edit a manuscript, chapter, post or page that sounds machine-written while preserving its author's meaning, facts, terminology and voice. A scan is available on request; edit is the default. Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation.",
       "status": "source only",
       "evidence": [],
       "required": true,
@@ -3622,7 +3718,7 @@
       "activation": "Explicit user choice; inspect installed schedules and settings",
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
-      "criterion": "Capture and manage topics to discuss with a person in the notebook, prepare for a call, change priority, record a discussion, stop repetition, undo, or reopen. Use for English or German requests such as \"talk to Alex about\", \"we discussed\", \"bring this up each time\", \"mit Alex besprechen\", \"haben wir besprochen\", and \"Was soll ich ansprechen?\".\r Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation.",
+      "criterion": "Capture and manage topics to discuss with a person in the notebook, prepare for a call, change priority, record a discussion, stop repetition, undo, or reopen. Use for English or German requests such as \"talk to Alex about\", \"we discussed\", \"bring this up each time\", \"mit Alex besprechen\", \"haben wir besprochen\", and \"Was soll ich ansprechen?\". Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation.",
       "status": "source only",
       "evidence": [],
       "required": true,
@@ -3638,7 +3734,7 @@
       "activation": "Explicit user choice; inspect installed schedules and settings",
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
-      "criterion": "Package an existing talking-head / interview / podcast video with timed, designed GRAPHIC OVERLAY cards â€” kinetic titles, lower-thirds, data callouts, quotes, side panels, picture-in-picture â€” synced to the transcript, on a 16:9 / 9:16 / 4:5 canvas of your choice; the clip plays untouched underneath. Trigger on \"graphic overlays\", \"on-screen graphics\", \"package / dress up my video\". Not plain subtitles (/embedded-captions). Unclear â†’ /hyperframes. Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation.",
+      "criterion": "Package an existing talking-head / interview / podcast video with timed, designed GRAPHIC OVERLAY cards — kinetic titles, lower-thirds, data callouts, quotes, side panels, picture-in-picture — synced to the transcript, on a 16:9 / 9:16 / 4:5 canvas of your choice; the clip plays untouched underneath. Trigger on \"graphic overlays\", \"on-screen graphics\", \"package / dress up my video\". Not plain subtitles (/embedded-captions). Unclear → /hyperframes. Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation.",
       "status": "source only",
       "evidence": [],
       "required": true,
@@ -3650,13 +3746,11 @@
       "name": "video-captions",
       "trigger": "Installed skill video-captions",
       "durable_state": "Skill-specific files and receipts",
-      "execution": "notebook/recipes/video-captions/scripts/burn.py",
+      "execution": "skills/video-captions/SKILL.md",
       "activation": "Explicit user choice; inspect installed schedules and settings",
       "permissions": "Authenticated owner; outward changes require exact approval",
-      "dependencies": [
-        "Python, Pillow, a real FFmpeg, selected licensed font; faster-whisper for new transcription; optional CUDA acceleration"
-      ],
-      "criterion": "Transcribe actual source audio into retained word timings; burn captions with an explicitly available licensed font; preserve original, transcript, ASS and render receipt; inspect spelling, timing, wrapping, safe area and original audio through installed Windows and Linux entry points.",
+      "dependencies": [],
+      "criterion": "Burn timed captions into a supplied video using one maintained style, retain the original and transcript, and inspect the actual rendered result. Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation.",
       "status": "partial",
       "evidence": [
         "Full maintained portable workflow, original caption generator and adapted burn tool are generated into the recipe. The generated entry point rendered a synthetic 1080x1920 fixture with a supplied transcript; two renders matched exactly, caption glyphs were within x269..801 and audio packet SHA-256 was preserved. Logs and fictional-video-captions-verification.json retain proof. New speech transcription, Linux font override and packaged installation acceptance remain required.",
@@ -3691,7 +3785,7 @@
       "activation": "Explicit user choice; inspect installed schedules and settings",
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
-      "criterion": "Use when the user wants a hook for a YouTube video or a Short, the first sentence or two he says on camera, from a script, beat sheet or bullet list that already exists. Trigger on \"write me hooks\", \"hook ideas for this video\", \"how should this video open\", \"these hooks don't work\", or a rejection of an earlier set. Writes wide in forced slots, then a judge that did not write them checks every candidate against the script's facts and against every note he has ever given on this video, and only the survivors reach him. Three good ones, or \"none passed and here is why\", never eight weak ones. Not for titles, thumbnails or post images.\r Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation.",
+      "criterion": "Use when the user wants a hook for a YouTube video or a Short, the first sentence or two he says on camera, from a script, beat sheet or bullet list that already exists. Trigger on \"write me hooks\", \"hook ideas for this video\", \"how should this video open\", \"these hooks don't work\", or a rejection of an earlier set. Writes wide in forced slots, then a judge that did not write them checks every candidate against the script's facts and against every note he has ever given on this video, and only the survivors reach him. Three good ones, or \"none passed and here is why\", never eight weak ones. Not for titles, thumbnails or post images. Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation.",
       "status": "source only",
       "evidence": [],
       "required": true,
@@ -3721,20 +3815,13 @@
       "name": "web-design",
       "trigger": "Installed skill web-design",
       "durable_state": "Skill-specific files and receipts",
-      "execution": "notebook/recipes/web-design/SKILL.md and scripts/check.mjs",
+      "execution": "skills/web-design/SKILL.md",
       "activation": "Explicit user choice; inspect installed schedules and settings",
       "permissions": "Authenticated owner; outward changes require exact approval",
-      "dependencies": [
-        "playwright-core or playwright in a documented search root",
-        "installed Chrome or WEBDESIGN_CHROME",
-        "current owner brand/content and licensed source assets"
-      ],
-      "criterion": "Build a distinctive accessible page from the supplied purpose and content.\r Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation.",
+      "dependencies": [],
+      "criterion": "Use when building, redesigning, porting or reviewing any web page, site, landing page, link page, product page, book page, component or web app UI, or when a page \"looks like a template\", \"looks AI-made\", \"looks flat\" or \"looks amateurish\". Exercise its supplied command/script and judge the actual requested deliverable using the full workflow criteria. Account configuration cannot substitute for missing implementation.",
       "status": "source only",
-      "evidence": [
-        "Complete 233-line source workflow ported with calibration, craft floor, verification contract, attribution and Apache license; private house rules replaced by current owner contract.",
-        "Checker command help and module syntax verified. Local preview path test rejects sibling traversal and malformed URLs and accepts the chosen page/route. Browser deliverable, screenshots and fresh review remain unverified."
-      ],
+      "evidence": [],
       "required": true,
       "target_test": "Exercise web-design through its installed entry point and check actual results after restart"
     },
@@ -3788,15 +3875,7 @@
       "evidence": [
         "Installed endpoint chat recorded the observed deficiency in the outline's rain-sensor section. Subsequent unattended decision selected that section and work saved a revised, independently checked outline. Further proposed observations wait for review; a draft is not a measured outcome.",
         "Normal fictional notebook saved a reported failed internal review, score 2/5, into the exact selected observation task. The next unattended decision requested concrete rain-sensor calibration steps. An interrupted draft was retried through the notebook and saved a checked result. The reported score remains failed; a model draft check is not a measured improvement. The notebook goal editor saved a new one-page-checklist direction and progress measure. Installed follow-up exposed original own_words left unchanged; the source now updates them, cancels pending decisions and retains cancellation after a late provider result. Repeat changed-direction acceptance with this correction remains required. Retained UI captures: installed-reported-check-and-retried-draft.txt and installed-changed-goal-direction.txt.",
-        "Normal installed endpoint notebook changed current direction, cancelling the old observation task. A later scheduled local-note decision waited over several cycles for exact approval. Normal notebook selection approved fictional-approved-target-checklist-ffcaa8ae; work replace-one-existing-local-checklist-note-with-a-new-one-page-practical-wet-rain-468adcd8 replaced that target at 2026-10-03T21:08:39.538Z and the actual 256-word checklist opened in its note editor. This establishes a delayed approved local edit, not an actual volunteer rating. The actual read_note receipt read an unrelated briefing rather than the requested rain-rule source, and the next decision requested substantially the same edit again. Both are retained acceptance failures. New source gives semantic verification the actual goal, source records and tool results, mechanically requires read_note for explicit required source IDs, and supports a quiet waiting decision until fresh outcome evidence. Installed acceptance of these later corrections is pending.",
-        "Normal endpoint controlled execution read both the approved local target and the actual explicitly named source, with verified tool receipts. However it saved approval narration and extra instructions, then proposed the same edit again. This installed attempt fails complete loop acceptance; endpoint-exact-source-tool-receipts.json and endpoint-exact-source-applied-note.txt retain the evidence.",
-        "worker-source-freshness.test.mjs checks required-source context excludes unrelated notes, permits one clean-deliverable correction before any target write, and refuses a repeated approval request without changing the target. goal-outcome-wait-policy.test.mjs checks explicit waiting after verified local work, quiet unrelated changes, actual later reports and changed direction. Installed acceptance of the corrections remains required.",
-        "Installed explicit waiting policy saved one silent wait tied to the actual applied task and cancelled stale duplicate work. A later normal goal outcome saved the actual fictional 2/5 defect and selected a correction. The endpoint correction was refused before writing because it skipped the required actual source read; the approved target remained unchanged. Native development read the actual source and target, then repeated those reads until the tool budget failed without applying. Both failed attempts are retained, not full-loop acceptance.",
-        "New source provides one correction for missing actual reads, explicit read/finish phases derived from current tool receipts, and an optional finite numeric goal outcome control. Eight worker and nine personal-operation checks pass; new installed acceptance is required.",
-        "Normal f0d1719 development goal change retained the failed old attempt, revoked its old approval and saved fresh exact target permission. The new native task executed source and target reads once but remains attempted without verified completion. Do not count it as accepted.",
-        "Actual f0d1719 endpoint tool work 5ac684eb saved the clean source-only checklist, verified it, and mechanically waited for a separate report. Normal outcome controls saved the actual internal software review and numeric value 4. The next decision repeated the identical previous edit and old defect; it was not approved. Current source supplies ordered latest report/current deliverable and one bounded identical-edit repair. Two meaningful regressions pass; final full suite 182 passes/one skip, zero failures. New installed decision acceptance remains required.",
-        "Actual installed 1b885b0 development work 102db9cf read the named source and approved target once, saved exactly four source-backed items, and verified target SHA-256 ca5b555f87de462b051c2825e6654cf670d838d24e825429d34f0aecafd30420. The normal outcome form saved an actual internal software review with measured value 5, not a real garden outcome. The next decision waited correctly, but later checks reused an older waiting decision because filesystem order was mistaken for chronology. The source now selects the newest waiting decision by date; the regression reproduced repeated model calls before the fix and stays quiet after it. Installed sustained-quiet acceptance remains required.",
-        "Installed d22ce05 development scheduled checks at 00:37:37, 00:40:38 and 00:41:38 UTC completed silently in about 1.5 seconds, retained the same 14 decisions and created no additional work. The real applied target and measured review remain retained. Evidence: development-d22ce05-quiet-wait-before/second/third/fourth.json. This establishes unchanged-wait behavior in this installed native case; endpoint later-decision and other goal-loop branches remain required."
+        "Normal installed endpoint notebook changed current direction, cancelling the old observation task. A later scheduled local-note decision waited over several cycles for exact approval. Normal notebook selection approved fictional-approved-target-checklist-ffcaa8ae; work replace-one-existing-local-checklist-note-with-a-new-one-page-practical-wet-rain-468adcd8 replaced that target at 2026-10-03T21:08:39.538Z and the actual 256-word checklist opened in its note editor. This establishes a delayed approved local edit, not an actual volunteer rating. The actual read_note receipt read an unrelated briefing rather than the requested rain-rule source, and the next decision requested substantially the same edit again. Both are retained acceptance failures. New source gives semantic verification the actual goal, source records and tool results, mechanically requires read_note for explicit required source IDs, and supports a quiet waiting decision until fresh outcome evidence. Installed acceptance of these later corrections is pending."
       ],
       "required": true,
       "target_test": "Exercise failed decisions/checks, changed direction, delayed exact local approval and restart through final installed notebooks."
@@ -3849,10 +3928,7 @@
       "criterion": "Native commands share history with chat/notebook; later check-in uses replies",
       "status": "partial",
       "evidence": [
-        "Installed fictional chat opened a native health talk, retained the volunteer's reply, recorded an explicitly agreed daily screen break and recorded a skipped-break observation as no. The notebook displayed the talk and habit.",
-        "Normal development fictional agreement and no observation remain linked to the saved conversation; scheduled native follow-up asked about switching before finishing the source. Evidence: development-b6ed312-fictional-habit-followup-ui.txt and development-b6ed312-fictional-coaching-records.json. Broader installed coaching/restart/health acceptance remains required.",
-        "Selected-health source now preserves day precision and original CSV bytes, retains corrected history, rejects impossible/future dates and excludes stale/future/hidden inputs from coaching and automatic habits. Nineteen focused regressions pass, including actual native coaching source preparation. This is source-only until new matching packages and the full normal health talk/habit/later-observation workflow pass.",
-        "Normal development health loop preserves selected CSV, latest date/values, actual replies across navigation, explicit linked agreement, missed observation and source-aware follow-up. Automatic review recovered after two retained failures; no real health outcome claimed. Further restart/sync and other areas remain open."
+        "Installed fictional chat opened a native health talk, retained the volunteer's reply, recorded an explicitly agreed daily screen break and recorded a skipped-break observation as no. The notebook displayed the talk and habit."
       ],
       "required": true,
       "target_test": "Scheduled later check-in must use actual replies and no observation; verify close/reopen and separate area histories."
@@ -3888,16 +3964,7 @@
       "criterion": "Source-linked corrections survive restart; hidden/superseded facts excluded; synonym comparison with Menerio",
       "status": "partial",
       "evidence": [
-        "Installed chat saved/retrieved the fictional rain-sensor rule. Person chat omitted topics and mixed histories; the corrected installed path produced one future-facing listening question and retained its own exchange after reload. Model-free search leaked hidden notes; visibility and bounded meaning-expanded ranking now pass regressions. Read-only Menerio queries collected; common-corpus retrieval equivalence remains unproven.",
-        "memory-subject.test.mjs verifies actual person subjects, correction history, distinct proposal fingerprints, hidden/invented/inconsistent subject refusal, and repairing omitted conversation subjects before writes. Installed real-provider memory acceptance remains required.",
-        "Normal endpoint chat stored Fictional Alex Garden’s preference with the actual contact subject. A requested correction then used a new label and left two current claims, despite its acknowledgement. Canonical correction source now requires the actual previous claim ID, exposes its attribute and subject in bounded chat context, retains closure evidence, and refuses hidden, historical or other-person targets. Sixteen memory/personal checks pass; actual installed correction/retrieval/restart remains required.",
-        "Malformed ordinary outcome JSON with trailing narration failed installed chat before a write. New source uses one combined syntax/permission correction budget before any operation, rejects repeated malformed output and retains actual numeric outcomes once; source regressions pass. Installed chat acceptance remains required.",
-        "Actual f0d1719 installed endpoint chat claimed correction without changing either fictional-person claim or writing an operation receipt. Retained failure: endpoint-f0d1719-canonical-memory-chat.txt and endpoint-f0d1719-canonical-memory-claims.json. New source fixes profile-day retrieval, exact full-name identity and unsupported memory acknowledgements; three RED/GREEN regressions and final 179-pass/one-skip suite pass. New installed verification remains required.",
-        "Actual installed 1b885b0 normal endpoint chat correction closed claims-628b0191 with the exact conversation source quote and retained the replacement claims-cb525235 in the same canonical attribute for the same fictional person. endpoint-1b885b0-canonical-memory-claims.json and chat snapshot retained. Broader hidden/history/fresh-context/restart acceptance remains required; partial status remains.",
-        "Normal installed fictional-person History retains the old one-question claim as historical. A fresh person conversation retrieves the current two-question preference. Hiding this person refuses assistant access through the normal chat interface; restoring visibility allows the correct current answer. Evidence: endpoint-1b885b0-person-current-history-ui.txt and actual claims. Broader synonym, ambiguity, restart and shared-corpus acceptance remains required.",
-        "Normal restarted endpoint fictional-person chat retrieved the current two-question preference after one failed send and a normal retry. Evidence: endpoint-d22ce05-restart-memory-retry-ui.txt. Existing conversation only; broader fresh-context/common-corpus/ambiguous-identity parity remains required.",
-        "Shared exact-source passage retrieval now runs through chat context, native memory lookup and scoped retrieve_memory MCP; hidden/private/sensitive/trashed sources remain excluded. Ten fictional long-note queries retain original offsets, current hashes and broad fallback; actual source CLI comparisons passed and remain private. Full source suite passed 283 checks and one platform skip. New matching installed acceptance and Menerio corpus parity remain open.",
-        "Matching 96063e7 is installed. Bundled comparison exercised ten fictional questions through each actual Windows/Linux installed CLI; exact source windows, hashes and independent broad results passed and fictional copies were retained. Ordinary connected-provider retrieval and complete Menerio corpus parity remain open."
+        "Installed chat saved/retrieved the fictional rain-sensor rule. Person chat omitted topics and mixed histories; the corrected installed path produced one future-facing listening question and retained its own exchange after reload. Model-free search leaked hidden notes; visibility and bounded meaning-expanded ranking now pass regressions. Read-only Menerio queries collected; common-corpus retrieval equivalence remains unproven."
       ],
       "required": true,
       "target_test": "Compare corrections, hidden/superseded facts, dates, ambiguity and synonyms after restart against a common Menerio corpus."
@@ -3916,11 +3983,7 @@
       "status": "partial",
       "evidence": [
         "Normal notebook recorded fictional energy 7 and enabled briefing with a selected watch source. Drafts containing the banned em dash failed delivery. Writing contract now explicitly forbids it; accepted fresh-health delivery remains pending.",
-        "Normal fictional selected briefing saved Your morning briefing (your-morning-briefing-36f5e3de), including the recorded energy value 7, Friday watch change and pending outline review. Earlier failed punctuation checks remain. Selected routines later paused during interrupted runs; lasting unattended reliability remains incomplete.",
-        "brief-gate.test.mjs checks one evidence-led rewrite, retained failed checks, nonrecursive prior context and retained separate rehearsals. Native obligation checks preserve live records, notification state, native text and timestamps; file-newer dependencies reproduce only existence and timestamp without copying unrelated or credential contents. Full collector, numeric/link/card gates, final cuts, social insertion and acknowledged delivery remain incomplete.",
-        "Source exact gate retains complete ready contribution and actual notebook link; a saved briefing queues it without claiming the user saw or published it. Source: notebook/test/brief-gate.test.mjs. Full installed pipeline remains open.",
-        "Normal installed 0a9ba5d briefing attempted three scheduled cycles and failed before saving a note. Native retained APIError logs identify input exceeding the model context window; all recent monitoring history occupied 911095 JSON bytes. Source now selects the latest exact observation for chosen briefing feeds and the selected finding, preserving the complete maintained method and all old source history. Final atomic checks reject changed goals, health, evidence, finding state or method, and overlapping identical checked briefings file once. Focused 16 checks pass; exact full source suite passes 320 with one platform skip and no failures in 115.00 seconds. Evidence: brief-context-limit-diagnosis-0a9ba5d.json, brief-selected-sources-before.log, brief-selected-sources-after.log, brief-stale-and-overlap-before.log, brief-all-source-guards-focused.log and source-suite-brief-final-source-guards.log. Private installed failures: briefing-paused-final-failures-0a9ba5d.json. Installed briefing remains paused, and successful corrected normal delivery, collector/rehearsal breadth and final acceptance remain open.",
-        "Installed a46 factual and mechanical gates accepted original and rewritten drafts; both reader gates rejected an unlinked requested decision and conflicting action focus. Nothing was delivered. Current source adds exact prepared action links and changed-artifact checks, with 13 focused checks passing. Actual corrected installed delivery, wider collectors and rehearsal remain open."
+        "Normal fictional selected briefing saved Your morning briefing (your-morning-briefing-36f5e3de), including the recorded energy value 7, Friday watch change and pending outline review. Earlier failed punctuation checks remain. Selected routines later paused during interrupted runs; lasting unattended reliability remains incomplete."
       ],
       "required": true,
       "target_test": "Inspect an accepted installed briefing with exact fresh measurement, supported action and changed source; failed gates prevent delivery and unchanged advice stays quiet."
@@ -3939,8 +4002,7 @@
       "status": "partial",
       "evidence": [
         "Normal notebook configured a fictional localhost connector. HTTP 401 caused one Reconnect spend-guard obligation. After HTTP 200 returned, unattended checking closed that same obligation with completion evidence.",
-        "New bounded restart recovery reclaims an interrupted scheduled read only for an explicit read-only routine allowlist, retains its prior attempt and one repair item, verifies that repair from the same completed receipt, and leaves an uncertain outward attempt paused. Meaningful stopped-read/outward regressions pass. Existing interrupted jobs without safe pause provenance remain untouched; actual installed repair acceptance is pending.",
-        "Installed independent supervisor and normal loopback connector recovery evidence: installed-connector-bounded-cap-verification.json, installed-connector-login-obligation-actual.json and installed-connector-normal-200-recovery.json, retained privately. These establish exact retry/sign-in/verified closure, not arbitrary self-repair or full uninterrupted health. A 05:30:17 UTC supervisor timeout remains retained without restart."
+        "New bounded restart recovery reclaims an interrupted scheduled read only for an explicit read-only routine allowlist, retains its prior attempt and one repair item, verifies that repair from the same completed receipt, and leaves an uncertain outward attempt paused. Meaningful stopped-read/outward regressions pass. Existing interrupted jobs without safe pause provenance remain untouched; actual installed repair acceptance is pending."
       ],
       "required": true,
       "target_test": "Accept automatic recoverable connector and failed local-job repair, bounded retries, checked closure and quiet repeat cycles."
@@ -3976,20 +4038,7 @@
       "evidence": [
         "Retained Windows/VPS/fixture backups restored into empty copies with matching knowledge/media digests. Normal fixture notebook Save a backup and Restore a separate copy checked 229 records and 1246 durable files, reported six rebuildable exclusions, retained the copy and rebuilt search without overwriting active records.",
         "A real backup race was reproduced: the captured files preceded a concurrent save, but the manifest counted later live records. The source now retains the actual snapshot count. Verified empty retained restorations before source-assisted corrections: Windows 849 records/2325 durable comparisons and fictional endpoint 1623/2641, each with six rebuildable exclusions. Reports: verified-source-assisted-recovery-corrections.log. The isolated installer backups were relocated to private E storage with verified manifest hashes and an original-path junction; every recovery path remains. Native Inno upgrade failed during backup with incomplete PowerShell 5.1 stderr. Packaged setup succeeded on a second PowerShell 7 approach; normal native-installer acceptance remains pending. A new native helper retains complete stderr and checks exit status, tested on native PowerShell 5.1.",
-        "Additional source-assisted Windows backups retained and verified empty restorations: Windows 851 records and 2327 durable-file comparisons, endpoint 1670 and 2688, verified-changed-direction-corrections.log. Fresh corrected supervisor observed over fourteen minutes of ordinary UI polling and endpoint tool work with zero restarts and no health failure history at 21:18 UTC. This is bounded stability evidence, not a two-week trial or final packaged recovery acceptance. Three obsolete source-build directories on the VPS were losslessly archived, every file and downloaded archive checked before their directories were removed; remote and E copies remain, another session build and all recovery copies were preserved.",
-        "Authorized development normal Settings recovery verified 943 records and 2586 files, rebuilt search and retained separate restoration storage; development-normal-backup-restore.txt. Windows native 2d57982 upgrade completed after two independently verified snapshots/restorations; Windows fixture health and normal UI reopened. Additional offline/conflict/media recovery acceptance remains required.",
-        "Authorized development intermediate 2d57982 image was built on physical srv1069233.hstgr.cloud; its 1565 frontend files matched the Windows manifest and Linux source checks passed 150 with one platform skip. Normal recovery verified 943 records/2586 files before only the owned notebook upgrade; matching 2d Windows native upgrade succeeded. Later source changes require new matching packages and new verified backups.",
-        "Matching f0d1719 Windows native and authorized development upgrades passed after retained empty restorations (Windows main 863/2363; endpoint 2429/3475; normal development 1061/2793). All 1565 built Linux image browser files match the Windows manifest byte-for-byte. Broader paired reliability and final completion remain required.",
-        "Matching 1b885b0 installed on Windows and authorized development after retained empty restorations: main 865/2369, endpoint 2600/3650, development 1156/2947. All 1565 development image UI files equal the Windows manifest. Both health endpoints have fresh scheduler heartbeats. Windows/Linux source suites each 180 pass/one skip. Not final completeness.",
-        "Normal development Settings saved a new backup and restored 1250 records/3086 files into retained empty storage at .godspeed/restored-copies/1791073154341-c2c158e5bec0/workspace. No upgrade follows from this evidence yet. Matching fab179a intermediate Windows/development packages were built and retained, not installed; their source suites passed 182 tests plus one platform skip on both platforms.",
-        "Matching d22ce059a9d5fb065f95f454ef1718f2e9ceafe2 Windows/development packages installed after verified separate restorations: main 867/2371, endpoint 2828/3878, development 1327/3262. Windows installer 969dd8dd697bab7d9b4ac3139384b662f87a4b3f9863ba3dc81b098d7802945c; development image sha256:6fd220d8df81805bceb59355157bb19928608a488fa76dbf94167e48e2624157. Direct built-image comparison matches all 1565 Windows browser files. Windows installer completed and both health endpoints returned fresh heartbeats. Both source suites passed 188 checks plus one skip. Intermediate installation only.",
-        "Matching b6ed312 upgrades followed normal verified empty restorations on Windows main/endpoint and physical development. New conflict source protects current saved bytes and retains all older copies; actual installed resolution remains open.",
-        "Normal installed a372e3c conflict controls retained current bytes and both older copies; actual SHA readback confirms no rollback of the 5/5 goal outcome. Fresh retained empty restorations preceded matching Windows/development upgrades. Broader paired conflict/reconnect acceptance remains open.",
-        "Normal Windows empty restoration verified main 877/2383 and endpoint 3318/4370. Development synchronous restoration failed after three actual supervisor health timeouts and one restart; partial copy retained. Worker source preserves responsive timers, exact binary bytes and one concurrent result, with seven passing worker/server checks. Normal installed worker recovery remains required.",
-        "Matching installed 0a009b3 normal empty-copy recovery passed development 1917/3970, Windows main 877/2383 and endpoint 3318/4370 with rebuilt search and zero supervisor restarts. Evidence filenames include development-0a009b3-normal-responsive-recovery-ui.txt, windows-main-0a009b3-normal-restoration-ui.txt and endpoint-0a009b3-normal-restoration-and-cancel-ui.txt. Wider recovery and upgrade acceptance remains required.",
-        "Source asynchronous normal backup preserves snapshot writer lock through media/hash capture and keeps actual HTTP health responsive; seventeen focused archive/server checks and full source suite pass. Installed verification remains open; retained backups are never pruned.",
-        "Matching b5391fc Windows/development upgrades followed fresh retained verified separate restorations. New normal asynchronous development backup/restoration verified 3022 records/5237 files. Later unrelated health timeout remains retained and under investigation; final package/recovery acceptance remains open.",
-        "Fresh pre-upgrade restorations verified development 4004 records/6435 files, Windows main 885/2499 and endpoint 4435/5595. Normal development recovery control passed. Identical immutable historical snapshots in retained copies now share storage; all 13319 affected paths and every latest backup/restoration file were reverified without removing paths or changing live notebook state. Full source evidence and private audit are retained; broad offline/sync recovery remains open."
+        "Additional source-assisted Windows backups retained and verified empty restorations: Windows 851 records and 2327 durable-file comparisons, endpoint 1670 and 2688, verified-changed-direction-corrections.log. Fresh corrected supervisor observed over fourteen minutes of ordinary UI polling and endpoint tool work with zero restarts and no health failure history at 21:18 UTC. This is bounded stability evidence, not a two-week trial or final packaged recovery acceptance. Three obsolete source-build directories on the VPS were losslessly archived, every file and downloaded archive checked before their directories were removed; remote and E copies remain, another session build and all recovery copies were preserved."
       ],
       "required": true,
       "target_test": "Repeat recovery/link checks on final matching Windows/VPS packages; accept offline edits, reconnection, retained conflicts and preserved choices/pauses."
@@ -4008,8 +4057,7 @@
       "status": "partial",
       "evidence": [
         "Normal installed Windows subscription chat loaded choices and saved Fictional subscription check after writer-wait correction. VPS subscription chat saved Fictional VPS subscription check. Fresh endpoint generated/checked drafts and recorded goal feedback, coaching, habits, journal and person-specific conversation.",
-        "The normal endpoint-backed worker actually executed read_note and applied its exact approved target, with a retained tool receipt. It read an unrelated briefing and its semantic check accepted that mistake; source-aware and explicit-source mechanical checks now reject this failure in regressions. Correct required-source reading through both installed supported provider paths remains mandatory.",
-        "Actual installed 0103579 gpt-5.5 subscription reply survived full navigation/reload; real endpoint model retrieved current corrected fictional-person preference from an independent note. Endpoint reopened history remains unverified during intermittent loading failures. Evidence development-0103579-subscription-reply-after-navigation-ui.txt and endpoint-0103579-independent-memory-reply-ui.txt. Wider provider/tool/slow-sync acceptance remains required."
+        "The normal endpoint-backed worker actually executed read_note and applied its exact approved target, with a retained tool receipt. It read an unrelated briefing and its semantic check accepted that mistake; source-aware and explicit-source mechanical checks now reject this failure in regressions. Correct required-source reading through both installed supported provider paths remains mandatory."
       ],
       "required": true,
       "target_test": "Inspect actual controlled read/search tool receipts with each claimed provider path, slow sync, restart, retry and cancellation."

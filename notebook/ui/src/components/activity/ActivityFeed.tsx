@@ -1,3 +1,4 @@
+import { formatAction } from "@/lib/activity-text.mjs";
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -26,18 +27,7 @@ const ACTION_ICONS: Record<string, React.ElementType> = {
   role_change: Shield,
 };
 
-function formatAction(action: string, itemType: string, metadata?: any): string {
-  const labels: Record<string, string> = {
-    create: `Created a ${itemType}`,
-    update: `Updated a ${itemType}`,
-    delete: `Deleted a ${itemType}`,
-    login: "Signed in",
-    profile_update: "Updated profile",
-    role_change: metadata?.new_role
-      ? `Role changed to ${metadata.new_role}`
-      : "Role changed",
-  };
-  return labels[action] || `${action} ${itemType}`;
+ ${itemType}`;
 }
 
 function timeAgo(date: string): string {

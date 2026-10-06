@@ -32,6 +32,17 @@ export function momentDraft(draft){
     confidence_truth:whole(draft.confidence_truth,0,10,5,{low:3,medium:5,high:8,certain:10}),
     participants:[...new Set([...(Array.isArray(draft.participants)?draft.participants:[]),...(Array.isArray(draft.people)?draft.people:[])].filter(n=>typeof n==='string'&&n.trim()))]};
 }
+// A week's notes for its review: each note's first 800 characters, newest
+// first, at most 60,000 characters. The whole notes made the answer so long
+// that it was cut off mid-JSON ("Expected double-quoted property name").
+export function weekNotes(notes){
+  const out=[];let used=0;
+  for(const n of [...notes].sort((a,b)=>String(b.created_at||'').localeCompare(String(a.created_at||'')))){
+    const entry={title:n.title,created_at:n.created_at,folder:n.folder_path||null,tags:n.tags||[],type:n.metadata?.type||null,text:String(n.content||'').slice(0,800)};
+    const size=JSON.stringify(entry).length;if(used+size>60000)break;out.push(entry);used+=size;
+  }
+  return out;
+}
 // The note types the notebook's metadata editor offers (NoteMetadataEditor.tsx).
 export const NOTE_TYPES=['observation','task','idea','reference','person_note','meeting_note','decision','project'];
 export class Domains {
@@ -127,7 +138,7 @@ export class Domains {
       const days=Math.max(1,Math.min(90,Number(input.days)||7)),end=new Date().toISOString().slice(0,10),start=new Date(Date.now()-days*86400000).toISOString().slice(0,10),notes=visibleRows(this.query,'notes').filter(n=>n.created_at>=start);
       const old=this.query.rows('weekly_reviews').find(r=>r.week_start===start&&r.week_end===end);if(old){const normalized=reviewData(old.review_data);if(JSON.stringify(normalized)!==JSON.stringify(old.review_data))this.store.save('weekly_reviews',{id:old.id,review_data:normalized});return {...old,review_data:normalized,existing:true};}
       if(!notes.length)return {skipped:'no_notes'};if(!this.provider)throw new Error('Connect a model before generating a review');
-      const review_data=reviewData(json(await this.provider({kind:name,notes,context:fileContext(this.store),contract:'Return JSON {week_summary,themes:[{name,note_count,synthesis}],open_loops:[{action_item,source_note_title,captured_date,urgency}],connections:[{note_title_1,note_title_2,connection_description}],gaps:string[],people_summary:[{name,interaction_count,latest_context}],stats:{total_notes,by_type_counts,most_active_day}}. All list fields must be arrays, never a plain string. Use only supplied sources.'})));
+      const review_data=reviewData(json(await this.provider({kind:name,notes:weekNotes(notes),max_tokens:8000,context:fileContext(this.store),contract:'Return JSON {week_summary,themes:[{name,note_count,synthesis}],open_loops:[{action_item,source_note_title,captured_date,urgency}],connections:[{note_title_1,note_title_2,connection_description}],gaps:string[],people_summary:[{name,interaction_count,latest_context}],stats:{total_notes,by_type_counts,most_active_day}}. All list fields must be arrays, never a plain string. Use only supplied sources.'})));
       return this.store.save('weekly_reviews',{week_start:start,week_end:end,review_data});
     }
     if(['get-graph-data','backfill-wikilinks','enrich-person-from-lexicon','wiki-ingest'].includes(name))throw new Error('Lexicon and note graph are deferred in this candidate');
