@@ -125,3 +125,21 @@ test('every tool has the key permission a caller expects, and records that had n
   // Until 6 October 2026 these record types had no permission at all, so every key was refused them.
   for(const [type,scope] of [['goals','actions'],['work_items','actions'],['deadlines','actions'],['habits','actions'],['wiki_pages','notes']])assert.equal(toolScope('list_records',{type}),scope,type);
 });
+
+test('Mission Control\'s own files are searched with the notes and read whole; the prompt archive never',async()=>{
+  const {service,call}=await setup();
+  try{
+    const root=service.store.root;
+    fs.mkdirSync(path.join(root,'world','claims'),{recursive:true});fs.writeFileSync(path.join(root,'world','claims','michael--fictional-handle.md'),'---\nkind: claim\n---\nMichael\'s Fictional Social handle is @fictional.example since 2026-09-03.\n');
+    fs.mkdirSync(path.join(root,'prompts','archive'),{recursive:true});fs.writeFileSync(path.join(root,'prompts','archive','fictional.jsonl'),'{"text":"what is my Fictional Social handle"}\n');
+    // Folders Menerio searched as copies are searched too; the benchmark's questions and run logs are not.
+    fs.mkdirSync(path.join(root,'archives','references'),{recursive:true});fs.writeFileSync(path.join(root,'archives','references','fictional-partner.md'),'Fictional partner portal user FICT-12345 for the Fictional Social handle account.\n');
+    for(const folder of [['routines','memory-bench','kyo'],['routines','briefing','runs','x']]){fs.mkdirSync(path.join(root,...folder),{recursive:true});fs.writeFileSync(path.join(root,...folder,'answers.jsonl'),'{"gold":"the Fictional Social handle is @fictional.example"}\n');}
+    service.index.rebuild();
+    const text=await call('search_brain',{query:'Fictional Social handle',include:['note']});
+    assert.match(text,/ID: world\/claims\/michael--fictional-handle\.md/);assert.doesNotMatch(text,/prompts\//);
+    assert.match(text,/archives\/references\/fictional-partner\.md/);assert.doesNotMatch(text,/memory-bench|\/runs\//);
+    assert.match((await call('get_note',{note:'world/claims/michael--fictional-handle.md'})).content,/@fictional\.example/);
+    assert.equal((await call('search_notes',{query:'Fictional Social handle',source:'native'})).length,0,'native means the owner\'s own notes only');
+  }finally{await service.close();}
+});

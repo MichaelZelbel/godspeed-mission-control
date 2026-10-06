@@ -2,14 +2,14 @@ import {visibleRows} from '../core/visibility.mjs';
 import {toolScope} from '../core/api-keys.mjs';
 import {topicDefinitions,topicToolNames,topicTool} from './topic-tools.mjs';
 import {assistantMutationContext} from '../core/assistant-mutations.mjs';
-import {memoryDefinitions,memoryToolNames,memoryTool,searchNotes,relatedTo} from './memory-tools.mjs';
+import {memoryDefinitions,memoryToolNames,memoryTool,searchNotes,relatedTo,readFile} from './memory-tools.mjs';
 const schema={type:'object',properties:{},additionalProperties:true};
 const definitions=[
   ...topicDefinitions,
   ...memoryDefinitions,
   {name:'list_note_folders',description:'List visible notebook folders and their note counts before filing a note.',inputSchema:schema},
   {name:'search_notes',description:'Find visible, untrashed notes by words and, when connected, by meaning, including text read out of their attached documents. Returns ids, titles, folders, a matching excerpt and current revision hashes. source native leaves out mirrored Mission Control files, godspeed keeps only them.',inputSchema:{type:'object',properties:{query:{type:'string'},source:{enum:['native','all','godspeed']},limit:{type:'integer'},offset:{type:'integer'},view:{enum:['snippet','metadata']}},required:['query']}},
-  {name:'get_note',description:'Read one visible, untrashed note by id (or exact title) including its current hash, before editing it.',inputSchema:{type:'object',properties:{note:{type:'string',description:'Note id (preferred) or exact title'},id:{type:'string'}}}},
+  {name:'get_note',description:'Read one visible, untrashed note by id (or exact title) including its current hash, before editing it; or a Mission Control file by the path a search returned.',inputSchema:{type:'object',properties:{note:{type:'string',description:'Note id (preferred) or exact title'},id:{type:'string'}}}},
   {name:'retrieve_memory',description:'Compare exact visible note windows with independent broad results. Includes original offsets and hashes; read the full source and current dated claims before answering.',inputSchema:{type:'object',properties:{query:{type:'string'}},required:['query']}},
   {name:'update_note',description:'Update exactly the given note fields; content replaces the whole body, so read the note with get_note first. With the hash from get_note a note changed since is refused; old revisions are kept either way.',inputSchema:{type:'object',properties:{note_id:{type:'string'},id:{type:'string'},expected_hash:{type:'string'},title:{type:'string'},content:{type:'string'},folder_path:{type:'string'},tags:{type:'array',items:{type:'string'}},is_favorite:{type:'boolean'},is_pinned:{type:'boolean'}}}},
   {name:'personal_operation',description:'Apply an explicitly requested goal, obligation, coach, habit, journal, health, memory, forecast or routine operation. Read current IDs first. Never approve an outward action.',inputSchema:schema},
@@ -50,6 +50,8 @@ export async function mcp(input,{store,query,index,domains,scopes}){
         return [...folders].map(([folder_path,note_count])=>({folder_path,note_count})).sort((a,b)=>a.folder_path.localeCompare(b.folder_path));
       });
       else if(name==='search_notes')value=await searchNotes(a,{store,query,index,domains});
+      // A Mission Control file found by search_notes or search_brain is read by its path.
+      else if(name==='get_note'&&(value=readFile({store,index},a.note||a.id)));
       else if(name==='get_note'||name==='update_note'){
         const ref=a.note_id||a.id||a.note,notes=visibleRows(query,'notes').filter(n=>!n.is_trashed),note=notes.find(n=>n.id===ref)||(name==='get_note'?notes.filter(n=>n.title===ref).sort((x,y)=>String(y.updated_at).localeCompare(String(x.updated_at)))[0]:null);if(!note)throw Error('Choose a visible existing note');
         if(name==='get_note')value=note;

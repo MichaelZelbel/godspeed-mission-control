@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import {visibleRows} from '../core/visibility.mjs';
 import {momentDraft} from '../core/moment-draft.mjs';
 import {relatedNotes} from '../core/related.mjs';
@@ -92,29 +94,47 @@ const labeler = query => { const n = subjectNames(query); return f => f.subject_
 
 // Notes found by a search, whatever was hit: a note, a passage read out of
 // its PDF, or the description of one of its pictures.
-async function noteHits(ctx, text, {limit = 50} = {}) {
+// Mission Control's own files (world/, observations/, profile/, rules/ and the
+// rest the index reads) are searched with the notes, ranked by the same
+// measure: Menerio had them as copies and found them, the notebook did not
+// (6 October 2026, the memory benchmark). The verbatim prompt archive and the
+// assistant's state are never part of it.
+export const privateFile = relative => /^(prompts|assistant-state)\//.test(String(relative));
+async function noteHits(ctx, text, {limit = 50, files = true} = {}) {
   const {index, query, store} = ctx;
   const notes = new Map(live(visibleRows(query, 'notes')).filter(n => !n.is_trashed).map(n => [n.id, n]));
-  const found = await index.searchHybrid(text, {limit: Math.max(limit, 50), types: ['notes', 'note_chunks', 'media_analysis']});
+  const found = await index.searchHybrid(text, {limit: Math.max(limit, 50), types: ['notes', 'note_chunks', 'media_analysis', ...(files ? ['workspace_file'] : [])]});
   const out = new Map();
   for (const r of found.rows) {
+    if (r.type === 'workspace_file') {
+      if (privateFile(r.id) || out.has('file:' + r.id)) continue;
+      out.set('file:' + r.id, {file: r.id, note: {id: r.id, title: r.id, updated_at: fileTime(store, r.id)}, snippet: r.snippet ? r.snippet.replace(/[[\]]/g, '') : null, matched: r.matched || 'words', via: 'Mission Control file'});
+      continue;
+    }
     const id = r.type === 'notes' ? r.id : r.type === 'note_chunks' ? store.get('note_chunks', r.id)?.note_id : store.get('media_analysis', r.id)?.note_id;
     const note = id && notes.get(id);
     if (!note || out.has(id)) continue;
     const passage = r.type === 'notes' ? null : r.type === 'note_chunks' ? store.get('note_chunks', r.id)?.content : store.get('media_analysis', r.id)?.extracted_text || store.get('media_analysis', r.id)?.description;
     out.set(id, {note, snippet: r.snippet ? r.snippet.replace(/[[\]]/g, '') : passage ? clip(passage, 400) : null, matched: r.matched || 'words', via: r.type === 'notes' ? null : r.type === 'note_chunks' ? 'attached document' : 'attached picture'});
   }
-  // The owner's own notes before copies of Mission Control's files, as in Menerio.
-  const hits = [...out.values()];
-  return {hits: [...hits.filter(h => !mirrored(h.note)), ...hits.filter(h => mirrored(h.note))], mode: found.mode, note: found.note};
+  return {hits: [...out.values()], mode: found.mode, note: found.note};
 }
 const mirrored = n => !!n.is_external || /^godspeed\//i.test(n.folder_path || '');
+function fileTime(store, relative) { try { return fs.statSync(path.join(store.root, relative)).mtime.toISOString(); } catch { return null; } }
+// One Mission Control file, read whole through get_note, when the index holds it.
+export function readFile(ctx, relative) {
+  const name = String(relative || '').split('\\').join('/');
+  if (!name || privateFile(name) || name.split('/').some(p => p === '..' || p.startsWith('.')) || !ctx.index?.db) return null;
+  const known = ctx.index.db.prepare("SELECT 1 FROM docs WHERE type='workspace_file' AND id=?").get(name);
+  if (!known) return null;
+  try { return {id: name, title: name, source: 'Mission Control file', content: fs.readFileSync(path.join(ctx.store.root, name), 'utf8'), updated_at: fileTime(ctx.store, name)}; } catch { return null; }
+}
 function snippetOf(note, text) {
   const body = String(note.content || ''), words = norm(text).split(' ').filter(w => w.length > 2);
   const at = words.map(w => body.toLowerCase().indexOf(w)).filter(i => i >= 0).sort((a, b) => a - b)[0];
   return clip(at > 120 ? '…' + body.slice(at - 100, at + 300) : body.slice(0, 400), 420);
 }
-const noteBlock = (h, i, view, text) => ['[note] --- Result ' + i + ' ---', 'Title: ' + (h.note.title || 'Untitled'), 'ID: ' + h.note.id, 'Updated: ' + String(h.note.updated_at || '').slice(0, 10),
+const noteBlock = (h, i, view, text) => h.file ? ['[note] --- Result ' + i + ' ---', 'Title: ' + h.file, 'ID: ' + h.file, 'Source: Mission Control file (get_note reads it whole)', ...(h.note.updated_at ? ['Updated: ' + h.note.updated_at.slice(0, 10)] : []), ...(view === 'metadata' ? [] : ['Match: ' + (h.snippet || '')])].join('\n') : ['[note] --- Result ' + i + ' ---', 'Title: ' + (h.note.title || 'Untitled'), 'ID: ' + h.note.id, 'Updated: ' + String(h.note.updated_at || '').slice(0, 10),
   ...(h.note.metadata?.type ? ['Type: ' + h.note.metadata.type] : []), ...(h.note.folder_path ? ['Folder: ' + h.note.folder_path] : []), ...(h.note.tags?.length ? ['Tags: ' + h.note.tags.join(', ')] : []),
   ...(h.via ? ['Found in: ' + h.via] : []), ...(view === 'metadata' ? [] : ['Match: ' + (h.snippet || snippetOf(h.note, text))])].join('\n');
 
@@ -402,8 +422,8 @@ export async function memoryTool(name, a, ctx, guarded) {
 export async function searchNotes(a, ctx) {
   const text = required(a.query, 'words to search for'), limit = count(a.limit, 1, 50, 20), offset = count(a.offset, 0, 1000, 0);
   const {hits} = await noteHits(ctx, text, {limit: 50});
-  return hits.filter(h => a.source === 'native' ? !mirrored(h.note) : a.source === 'godspeed' ? mirrored(h.note) : true).slice(offset, offset + limit)
-    .map(h => ({id: h.note.id, title: h.note.title, folder_path: h.note.folder_path || '', updated_at: h.note.updated_at, tags: h.note.tags || [], type: h.note.metadata?.type || null, _hash: h.note._hash, ...(a.view === 'metadata' ? {} : {snippet: h.snippet || snippetOf(h.note, text)}), ...(h.via ? {found_in: h.via} : {})}));
+  return hits.filter(h => a.source === 'native' ? !h.file && !mirrored(h.note) : a.source === 'godspeed' ? h.file || mirrored(h.note) : true).slice(offset, offset + limit)
+    .map(h => h.file ? {id: h.file, title: h.file, folder_path: path.posix.dirname(h.file), updated_at: h.note.updated_at, source: 'Mission Control file', ...(a.view === 'metadata' ? {} : {snippet: h.snippet || ''})} : ({id: h.note.id, title: h.note.title, folder_path: h.note.folder_path || '', updated_at: h.note.updated_at, tags: h.note.tags || [], type: h.note.metadata?.type || null, _hash: h.note._hash, ...(a.view === 'metadata' ? {} : {snippet: h.snippet || snippetOf(h.note, text)}), ...(h.via ? {found_in: h.via} : {})}));
 }
 export function relatedTo(ctx, note) {
   try { return relatedNotes(ctx.query, note, {index: ctx.index, limit: 5}).map(r => ({id: r.id, title: r.title})); } catch { return []; }

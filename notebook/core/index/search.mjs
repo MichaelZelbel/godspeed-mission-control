@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import {durableRoots,durableFiles,shared,recordsFolder} from '../file-policy.mjs';
+import {durableRoots,durableFiles,shared,recordsFolder,devicePrivate} from '../file-policy.mjs';
 import {hash,decode,encode} from '../records/store.mjs';
 import {candidate} from '../records/layout.mjs';
 import {mergeRanked} from './meaning.mjs';
@@ -35,6 +35,8 @@ export function searchText(record) {
   visit(record, 0);
   return parts.join('\n');
 }
+export const SEARCH_ONLY_ROOTS = ['archives', 'brief', 'investigations', 'reviews', 'watch', 'video', 'routines'];
+export const searchOnly = relative => !relative.split('/').some(p => p.startsWith('.') || p === 'node_modules') && !/^routines\/(memory-bench|[^/]+\/runs)(\/|$)/.test(relative) && !devicePrivate(relative);
 export function documentOf(record) {
   if (!record?.uid || !record.type || record.removed_at || UNSEARCHED.has(record.type)) return null;
   const title = record.title || record.name || (record.attribute ? record.attribute + ': ' + (record.value ?? '') : null) || record.id;
@@ -125,11 +127,15 @@ export class SearchIndex {
   fileDocument(relative, text) { return ['file-' + hash(relative), 'workspace_file', relative, relative, text, hash(text)]; }
   rebuild() {
     this.generation = (this.generation || 0) + 1;
-    const documents = this.recordDocuments();
-    const visit = relative => { const absolute = path.join(this.store.root, relative); if (!fs.existsSync(absolute)) return; const stat = fs.lstatSync(absolute); if (stat.isSymbolicLink()) return; if (stat.isDirectory()) { for (const name of fs.readdirSync(absolute)) if (shared(relative + '/' + name)) visit(relative + '/' + name); } else if (stat.size <= 512 * 1024 && /\.(md|json|jsonl|txt)$/.test(relative)) documents.push(this.fileDocument(relative, fs.readFileSync(absolute, 'utf8'))); };
+    const documents = this.recordDocuments(), seen = new Set();
+    const visit = (relative, allowed = shared, limit = 512 * 1024) => { const absolute = path.join(this.store.root, relative); if (!fs.existsSync(absolute)) return; const stat = fs.lstatSync(absolute); if (stat.isSymbolicLink()) return; if (stat.isDirectory()) { for (const name of fs.readdirSync(absolute)) if (allowed(relative + '/' + name)) visit(relative + '/' + name, allowed, limit); } else if (stat.size <= limit && /\.(md|json|jsonl|txt)$/.test(relative) && !seen.has(relative)) { seen.add(relative); documents.push(this.fileDocument(relative, fs.readFileSync(absolute, 'utf8'))); } };
     for (const name of [...durableRoots.filter(r => r !== recordsFolder), ...durableFiles]) visit(name);
     // An owner's own pages in the notebook folder are searched like any file.
     for (const file of this.store.documents || []) visit(path.relative(this.store.root, file).split(path.sep).join('/'));
+    // Mission Control's other folders are searched too, as Menerio searched its
+    // copies of them (6 October 2026), up to Menerio's 300 KB a file. Never
+    // the routines' run logs or the memory benchmark's own questions.
+    for (const name of SEARCH_ONLY_ROOTS) visit(name, searchOnly, 300 * 1024);
     return this.replace(documents);
   }
   // Compare what was read with what the index holds and write only the rows
@@ -237,13 +243,15 @@ export class SearchIndex {
       if (this.closed) return [];
       for (const r of records.values()) { const d = documentOf(r); if (d) documents.push(d); }
     }
-    const visit = async relative => {
+    const seen = new Set();
+    const visit = async (relative, allowed = shared, limit = 512 * 1024) => {
       if (this.closed) return;
       const absolute = path.join(this.store.root, relative); let stat;
       try { stat = await io.lstat(absolute); } catch (error) { if (error.code === 'ENOENT') return; throw error; }
       if (stat.isSymbolicLink()) return;
-      if (stat.isDirectory()) { for (const entry of await entries(absolute)) if (shared(relative + '/' + entry.name)) await visit(relative + '/' + entry.name); }
-      else if (stat.size <= 512 * 1024 && /\.(md|json|jsonl|txt)$/.test(relative)) {
+      if (stat.isDirectory()) { for (const entry of await entries(absolute)) if (allowed(relative + '/' + entry.name)) await visit(relative + '/' + entry.name, allowed, limit); }
+      else if (stat.size <= limit && /\.(md|json|jsonl|txt)$/.test(relative) && !seen.has(relative)) {
+        seen.add(relative);
         await this.breathe();
         const text = this.readText(absolute);
         if (text !== null) documents.push(this.fileDocument(relative, text));
@@ -251,6 +259,7 @@ export class SearchIndex {
     };
     for (const name of [...durableRoots.filter(r => r !== recordsFolder), ...durableFiles]) await visit(name);
     for (const name of pages) await visit(name);
+    for (const name of SEARCH_ONLY_ROOTS) await visit(name, searchOnly, 300 * 1024);
     return documents;
   }
   // Ranked word search. Every word must appear; a word may be the start of

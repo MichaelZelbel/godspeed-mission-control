@@ -124,7 +124,8 @@ export class MeaningIndex {
   get ready() { return !!this.embed; }
   // Documents the index holds that meaning search covers, and their text.
   documents() {
-    return this.index.db.prepare(`SELECT d.uid, d.type, d.digest, f.title, f.body FROM docs d JOIN docs_fts f ON f.rowid=d.rowid WHERE d.type IN (${[...MEANING_TYPES].map(() => '?').join(',')})`).all(...MEANING_TYPES);
+    // Mission Control's own files too, never the verbatim prompt archive or the assistant's state.
+    return this.index.db.prepare(`SELECT d.uid, d.type, d.digest, f.title, f.body FROM docs d JOIN docs_fts f ON f.rowid=d.rowid WHERE d.type IN (${[...MEANING_TYPES].map(() => '?').join(',')}) OR (d.type='workspace_file' AND d.id NOT LIKE 'prompts/%' AND d.id NOT LIKE 'assistant-state/%')`).all(...MEANING_TYPES);
   }
   pending() {
     const have = this.vectors.digests(this.config.model), docs = this.documents();
