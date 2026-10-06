@@ -34,13 +34,40 @@ const defaults = {
 const links = { contact_id: 'contacts', person_id: 'contacts', note_id: 'notes', source_note_id: 'notes', linked_note_id: 'notes',
   collection_id: 'collections', folder_id: 'collection_item_folders', moment_id: 'moments', entity_id: 'entities',
   from_contact_id: 'contacts', to_contact_id: 'contacts', parent_folder_id: 'collection_item_folders', claim_id: 'claims', slot_id: 'fact_slots', category_id: 'profile_categories', group_id: 'contact_groups',parent_group_id:'contact_groups',target_note_id:'notes',evidence_note_id:'notes',document_id:'notes',topic_id:'contact_topics' };
-function splitFilters(text){let depth=0,quoted=false,part='',items=[];for(const c of text){if(c==='"')quoted=!quoted;if(!quoted&&c==='(')depth++;if(!quoted&&c===')')depth--;if(c===','&&!depth&&!quoted){items.push(part);part='';}else part+=c;}if(part)items.push(part);return items;}
+// PostgREST's grammar for or(), and() and in-lists: a double-quoted value
+// keeps its commas, dots and parentheses, and inside the quotes a backslash
+// takes the next character as it is. Until 6 October 2026 a \" ended the
+// quotes here and a \\ stayed doubled, so pgOrValue's output never matched.
+function splitFilters(text){let depth=0,quoted=false,part='',items=[];for(let i=0;i<text.length;i++){const c=text[i];if(quoted&&c==='\\'){part+=c+(text[++i]??'');continue;}if(c==='"')quoted=!quoted;else if(!quoted&&c==='(')depth++;else if(!quoted&&c===')')depth--;if(c===','&&!depth&&!quoted){items.push(part);part='';}else part+=c;}if(part)items.push(part);return items;}
+const unquote=value=>value.length>1&&value.startsWith('"')&&value.endsWith('"')?value.slice(1,-1).replace(/\\([\s\S])/g,'$1'):value;
+const list=value=>Array.isArray(value)?value:splitFilters(String(value).replace(/^\(([\s\S]*)\)$/,'$1')).map(unquote);
 function filterExpression(row,text){
-  for(const op of ['and','or'])if(text.startsWith(op+'(')&&text.endsWith(')')){const results=splitFilters(text.slice(op.length+1,-1)).map(p=>filterExpression(row,p));return op==='and'?results.every(Boolean):results.some(Boolean);}
+  for(const op of ['and','or','not.and','not.or'])if(text.startsWith(op+'(')&&text.endsWith(')')){const result=condition(row,[op.replace('not.',''),'',text.slice(op.length+1,-1)]);return op.startsWith('not.')?!result:result;}
   const match=text.match(/^(.+?)\.(not\.)?(eq|neq|is|in|like|ilike|gt|gte|lt|lte)\.([\s\S]*)$/);if(!match)throw new Error('Invalid filter expression');
-  let value=match[4];if(value.startsWith('"')&&value.endsWith('"'))value=value.slice(1,-1).replaceAll('\\"','"');else if(value==='null')value=null;else if(value==='true'||value==='false')value=value==='true';
-  if(match[3]==='in')value=splitFilters(String(value).replace(/^\(|\)$/g,''));
-  const result=condition(row,[match[3],match[1],value]);return match[2]?!result:result;
+  const [,key,not,op,raw]=match,value=op==='in'?list(raw):/^(null|true|false)$/.test(raw)?JSON.parse(raw):unquote(raw);
+  const result=condition(row,[op,key,value]);return not?!result:result;
+}
+// Postgres LIKE: % is any run of characters, line breaks included, _ exactly
+// one, a backslash takes the next character literally, and the pattern covers
+// the whole text; ILIKE folds case. Until 6 October 2026 % stopped at a line
+// break, so the notes search missed every note of more than one line, and the
+// backslash the screens put before _ and % was a character to find: "cool_cat"
+// was not found in People and was added a second time.
+const likes=new Map();
+function likePattern(op,pattern){
+  const known=likes.get(op+'\0'+pattern);if(known)return known;
+  const runs=[''],chars=[...pattern];
+  for(let i=0;i<chars.length;i++){
+    let c=chars[i];if(c==='%'){runs.push('');continue;}if(c==='_'){runs[runs.length-1]+='.';continue;}
+    if(c==='\\'){if(++i===chars.length)throw new Error('LIKE pattern must not end with escape character');c=chars[i];}
+    runs[runs.length-1]+=c.replace(/[.*+?^${}()|[\]\\/]/g,'\\$&');
+  }
+  // Each run between two % is taken at its first place and never tried again
+  // (a lookahead does not backtrack), so several % in one pattern cannot turn
+  // a long note into minutes of backtracking.
+  const source=runs.length===1?runs[0]:runs[0]+runs.slice(1,-1).map((run,i)=>'(?=(.*?'+run+'))\\'+(i+1)).join('')+'.*'+runs.at(-1);
+  const expression=new RegExp('^(?:'+source+')$',op==='ilike'?'isu':'su');
+  if(likes.size>500)likes.clear();likes.set(op+'\0'+pattern,expression);return expression;
 }
 function getValue(row, key) { return key.replaceAll('->>', '.').replaceAll('->', '.').split('.').reduce((v, k) => v?.[k], row); }
 function contains(a, b) { return Array.isArray(b) ? b.every(v => (a || []).includes(v)) : b && typeof b === 'object' ? Object.entries(b).every(([k, v]) => contains(a?.[k], v)) : a === b; }
@@ -52,12 +79,10 @@ function condition(row, [op, key, value]) {
     case 'in': return value.includes(a); case 'contains': return contains(a, value);
     case 'overlaps': return (a || []).some(x => value.includes(x));
     case 'gt': return a > value; case 'gte': return a >= value; case 'lt': return a < value; case 'lte': return a <= value;
-    case 'like': case 'ilike': {
-      const expression = String(value).split('').map(c => c === '%' ? '.*' : c === '_' ? '.' : c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('');
-      return new RegExp('^' + expression + '$', op === 'ilike' ? 'i' : '').test(String(a ?? ''));
-    }
+    case 'like': case 'ilike': return a != null && likePattern(op, String(value)).test(String(a));
     case 'not': return !condition(row, [value[0], key, value[1]]);
     case 'or': return splitFilters(String(value)).some(part=>filterExpression(row,part));
+    case 'and': return splitFilters(String(value)).every(part=>filterExpression(row,part));
     default: throw new Error('Unsupported filter ' + op);
   }
 }
