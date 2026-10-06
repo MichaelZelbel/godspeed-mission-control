@@ -37,6 +37,9 @@ export async function mcp(input,{store,query,index,domains,scopes}){
         value=await memoryTool(name,a,{store,query,index,domains},expected=>assistantMutationContext({store,query,domains:scoped,scopes},{...a,expected},name));
         return {jsonrpc:'2.0',id,result:{content:[{type:'text',text:typeof value==='string'?value:JSON.stringify(value)}]}};
       }
+      // Menerio named the note note_id; the write guard reads id (6 October 2026: an edit by
+      // note_id was refused as if no version had been read).
+      if(name==='update_note'&&a.note_id&&!a.id)a.id=a.note_id;
       // Menerio's update_note took no version: the current one is the one read.
       if(name==='update_note'&&(a.note_id||a.id)&&!a.expected_hash){const current=visibleRows(query,'notes').find(n=>n.id===(a.note_id||a.id));if(current)a.expected_hash=current._hash;}
       if(['save_record','update_note','capture_note','personal_operation','write_fact','record_event','structural_change','review_suggestions',...topicToolNames.filter(n=>!n.startsWith('list_')&&!n.startsWith('get_'))].includes(name)){

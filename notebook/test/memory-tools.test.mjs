@@ -150,3 +150,14 @@ test('a hit\'s excerpt is the passage holding most of the asked words, long enou
   const out=bestWindow(text,'fictional partner user number');
   assert.match(out,/FICT-0012345678/);assert.ok(out.length>=300&&out.length<=440,'about 420 characters, not 14 words');
 });
+
+test('a note is edited by note_id, as Menerio named it, with or without the version read',async()=>{
+  const {service,call,note}=await setup();
+  try{
+    const read=await call('get_note',{note:note.id});
+    await call('update_note',{note_id:note.id,expected_hash:read._hash,content:'Edited by note_id.'});
+    assert.equal(service.store.get('notes',note.id).content,'Edited by note_id.');
+    await call('update_note',{note_id:note.id,content:'Edited again.'});
+    assert.equal(service.store.get('notes',note.id).content,'Edited again.');
+  }finally{await service.close();}
+});
