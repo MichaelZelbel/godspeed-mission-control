@@ -303,5 +303,20 @@ export class SearchIndex {
     const rows = mergeRanked(words, meanings.filter(m => known.has(m.uid)).map(m => ({ ...known.get(m.uid), similarity: m.similarity })), { limit });
     return { rows, mode: 'words and meaning' };
   }
+  // A passage read out of a note's PDF (note_chunks) is found as its note: the
+  // hit becomes the note, once, at the passage's place in the list.
+  passagesAsNotes(rows) {
+    const out = [], seen = new Set();
+    for (const r of rows) {
+      let row = r;
+      if (r.type === 'note_chunks') {
+        const noteId = this.store.get('note_chunks', r.id)?.note_id, note = noteId && this.store.get('notes', noteId);
+        if (!note) continue;
+        row = { ...r, uid: note.uid, type: 'notes', id: note.id, title: note.title || note.id, via: 'passage' };
+      }
+      if (!seen.has(row.uid)) { seen.add(row.uid); out.push(row); }
+    }
+    return out;
+  }
   close() { this.closed = true; this.db.close(); }
 }

@@ -14,6 +14,12 @@ test('only passages with text found in no note are imported, once, and search fi
     {id:'c2',note_id:note.id,chunk_index:'1',heading_path:'Page 1',content:'Fictional tenant Erika Musterfrau pays 950 euros a month, notice period three months.',created_at:'2026-08-15 23:58:24.263369+00'}]));
   assert.deepEqual(importOrphanChunks(store,source),{found:1,added:1,already:0,missing_note:0});
   assert.equal(importOrphanChunks(store,source).added,0,'a second run adds nothing');
-  const index=new SearchIndex(store);try{assert.ok(index.search('Musterfrau notice').some(r=>r.type==='note_chunks'));}finally{index.close();}
+  const index=new SearchIndex(store);try{
+    assert.ok(index.search('Musterfrau notice').some(r=>r.type==='note_chunks'));
+    // Until 6 October 2026 such a hit was listed under the passage's id; it is the note that was found.
+    const found=index.passagesAsNotes(index.search('Musterfrau notice'));
+    assert.deepEqual(found.map(r=>[r.type,r.id,r.title,r.via]),[['notes',note.id,'Fictional lease','passage']]);
+    assert.equal(index.passagesAsNotes([...index.search('Fictional lease'),...index.search('Musterfrau')]).filter(r=>r.id===note.id).length,1,'the note is listed once');
+  }finally{index.close();}
   assert.equal(store.get('note_chunks','c2').note_id,note.id);
 });

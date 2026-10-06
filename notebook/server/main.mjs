@@ -206,7 +206,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       }
       if(route==='/api/import'&&req.method==='POST')return send(res,200,importExport(query,JSON.parse(await body(req,100*1024*1024))));
       if(route==='/api/export')return send(res,200,{format:1,records:[...store.scan().values()].map(r=>{const copy={...r};delete copy._hash;return copy;})});
-      if (route === '/api/search') { const types=url.searchParams.get('types')?.split(',').filter(Boolean)||null,found=await index.searchHybrid(url.searchParams.get('q') || '',{limit:Number(url.searchParams.get('limit'))||200,types}); return send(res, 200, { data: found.rows, mode: found.mode, note: found.note||null, error: null }); }
+      if (route === '/api/search') { const types=url.searchParams.get('types')?.split(',').filter(Boolean)||null,passages=!types?.includes('note_chunks'),found=await index.searchHybrid(url.searchParams.get('q') || '',{limit:Number(url.searchParams.get('limit'))||200,types:types?.includes('notes')&&passages?[...types,'note_chunks']:types}); return send(res, 200, { data: passages?index.passagesAsNotes(found.rows):found.rows, mode: found.mode, note: found.note||null, error: null }); }
       if(route==='/api/embeddings'){
         if(req.method==='GET'){const config=embeddingConfig(store.state);return send(res,200,{configured:!!config,url:config?.url||null,model:config?.model||null,dimensions:config?.dimensions||null,has_key:!!config?.key,status:index.meaning?.status||null});}
         if(req.method==='DELETE'){saveEmbeddingConfig(store.state,null);connectMeaning(null);return send(res,200,{configured:false});}
