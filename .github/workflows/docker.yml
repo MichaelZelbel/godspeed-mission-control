@@ -114,10 +114,13 @@ jobs:
         run: docker build --build-arg REVISION="$GITHUB_SHA" -f docker/full-candidate/Dockerfile -t godspeed-full-test .
       - name: Verify packaged server and fresh browser setup
         run: bash docker/full-candidate/test.sh godspeed-full-test
+      # Never :latest. That tag is the stable channel: docker/compose.yaml on main pulls it, so a
+      # preview pushed there reaches every stable reader on their next update (it did, until
+      # 2026-10-06). Only the publish job above, on main, moves :latest.
       - name: Publish the exact tested image
         id: publish-full
         run: |
-          for tag in full-alpha latest full-sha-${GITHUB_SHA}; do
+          for tag in full-alpha full-sha-${GITHUB_SHA}; do
             docker tag godspeed-full-test "$IMAGE:$tag"
             docker push "$IMAGE:$tag"
           done
