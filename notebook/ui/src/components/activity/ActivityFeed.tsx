@@ -27,8 +27,6 @@ const ACTION_ICONS: Record<string, React.ElementType> = {
   role_change: Shield,
 };
 
- ${itemType}`;
-}
 
 function timeAgo(date: string): string {
   const diff = Date.now() - new Date(date).getTime();

@@ -48,8 +48,6 @@ const ACTION_OPTIONS = [
   { value: "role_change", label: "Role Change" },
 ];
 
- ${itemType}`;
-}
 
 const PAGE_SIZE = 20;
 
