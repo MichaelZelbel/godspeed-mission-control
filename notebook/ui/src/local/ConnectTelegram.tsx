@@ -35,7 +35,7 @@ export function TelegramConnect({welcome=false,onContinue}:{welcome?:boolean;onC
   const form=<form className="space-y-3" onSubmit={connect}>
     <ol className="list-decimal pl-5 space-y-2">
       <li>In Telegram, open <a className="underline" href="https://t.me/BotFather" target="_blank" rel="noopener noreferrer">BotFather</a> and send <code>/newbot</code>. Choose a name, then a username that ends in <code>bot</code>.</li>
-      <li>BotFather answers with your bot's key, a long line like <code>123456789:AAH4kq…</code>. Paste it here. It stays on your server.</li>
+      <li>BotFather answers with your bot's key, a long line such as <code>123456789:AAH4kq…</code> Paste it here. It stays on your server.</li>
     </ol>
     <label className="block font-medium" htmlFor="telegram-key">Your bot's key</label>
     <Input id="telegram-key" type="password" autoComplete="off" spellCheck={false} required value={key} onChange={e=>setKey(e.target.value)}/>
