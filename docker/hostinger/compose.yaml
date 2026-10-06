@@ -1,7 +1,8 @@
 # Godspeed Mission Control for a fresh Hostinger Docker VPS.
 # Before Deploy, fill the two environment fields in Docker Manager:
 # GODSPEED_HOST: your VPS hostname, for example srv123456.hstgr.cloud (no https://).
-# GODSPEED_SETUP_CODE: choose a private, unique code and save it in your password manager.
+# GODSPEED_SETUP_CODE: at least 32 random letters and digits (let your password manager make
+#   them), saved there. Whoever enters this code first becomes the owner of the server.
 # After Deploy, open https://YOUR_VPS_HOSTNAME and use that code to create your account.
 # Save the recovery code shown during account creation. No email service is required.
 # Then the page offers to connect a Telegram bot; its key stays on this server.
