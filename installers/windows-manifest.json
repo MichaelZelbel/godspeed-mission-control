@@ -1,9 +1,9 @@
 {
     "channel":  "full-alpha",
     "version":  "2.0.0-alpha.1",
-    "kitCommit":  "80ac89e71ed2b30dc0d851a1c31320559a4c48ad",
-    "kitCommittedAt":  "2026-10-06T12:11:23+02:00",
-    "bootstrapCommit":  "f1ab5ff35f60a1f59f349b659b140eaf2322c08f",
+    "kitCommit":  "5961989f5ab2b3a37dd0ee3fe26b5c9fca1db1aa",
+    "kitCommittedAt":  "2026-10-06T14:10:59+02:00",
+    "bootstrapCommit":  "8833d1b19e29c598da6ff625cb7c5a62a9df591f",
     "nodeVersion":  "22.19.0",
     "nodeArchiveSha256":  "ea3fad0e67a991d8477d8c01344b56e69c676ccb733f065b22436994b1253f86",
     "dataFormat":  1,
@@ -30,7 +30,7 @@
                   },
                   {
                       "path":  "kit/README.md",
-                      "sha256":  "fb69d6aca787ee592ca427d657dd65ee0929cee3c791ebed9d1685f7bedabf68"
+                      "sha256":  "7a149366966aa4c765821981c05fcf86ff18309dc6ad44041d5b87c05c0a39db"
                   },
                   {
                       "path":  "kit/.github/workflows/computer-test.yml",
@@ -550,7 +550,7 @@
                   },
                   {
                       "path":  "kit/docs/full-version/trial-handoff.md",
-                      "sha256":  "d70578fed92f94044dc28f92ad7f602f172b5385e8ffd7d35816f01aba0914c0"
+                      "sha256":  "16508939db9cea12599f104403a9a900938d190e8d3cbe2c58cd022a58e1ca49"
                   },
                   {
                       "path":  "kit/docs/full-version/trial-scope.md",
@@ -942,7 +942,7 @@
                   },
                   {
                       "path":  "kit/notebook/core/proposals.mjs",
-                      "sha256":  "e79fc9aa08d6ae790516df6c2e07b8653038546cbe6e6981d88c74155acabc93"
+                      "sha256":  "3451cb285719aed35c2bff3dbf0e1df0524a172a08512437b6c7092706f5b31e"
                   },
                   {
                       "path":  "kit/notebook/core/public-source.mjs",
@@ -950,7 +950,7 @@
                   },
                   {
                       "path":  "kit/notebook/core/query.mjs",
-                      "sha256":  "38fc9410decb0d159bc97c0cd913e31b37537c6d8af356bff51ddb18ca44b115"
+                      "sha256":  "063a88ad85636914c0490b249a7b4344bc6dbb29a5d4cfaa4de68dd115a1a785"
                   },
                   {
                       "path":  "kit/notebook/core/radar-context.mjs",
@@ -1042,7 +1042,7 @@
                   },
                   {
                       "path":  "kit/notebook/core/index/meaning.mjs",
-                      "sha256":  "10f0cef3b796ecdda1ac093881e2527de97a57e76dcfaf9830361d6e86e5dc8a"
+                      "sha256":  "0ec1d37f319bf47b31a8c4e942d3953fa45c0075faa7dfe3bd760ca8a826a081"
                   },
                   {
                       "path":  "kit/notebook/core/index/search.mjs",
@@ -1074,7 +1074,7 @@
                   },
                   {
                       "path":  "kit/notebook/core/records/store.mjs",
-                      "sha256":  "1710188e9051e08adb9087fabbf2db0b95645186900ea7ae8618c10f2e9e3763"
+                      "sha256":  "d6830ff6b7b6de8c1e6cc01ecca07fce24ec91db56e386cb1b6a3c5f0dfe6c0c"
                   },
                   {
                       "path":  "kit/notebook/core/records/yaml.mjs",
@@ -10218,7 +10218,7 @@
                   },
                   {
                       "path":  "kit/notebook/scripts/install-native-notebook.sh",
-                      "sha256":  "de1035b1f99c390a71fd724f2b4e4302ba5cc1036836e31c748ea43f7af87144"
+                      "sha256":  "d610b783f333088249ebdb86a24eac899c2b99b1502294959a536d255a06dc6a"
                   },
                   {
                       "path":  "kit/notebook/scripts/inventory.py",
@@ -10298,7 +10298,7 @@
                   },
                   {
                       "path":  "kit/notebook/server/mcp.mjs",
-                      "sha256":  "ea8ca4669f2d0bf44ed1c6f249f621bc44f4297259b92c4695d64ad34acac1db"
+                      "sha256":  "f5a4ddc6e3dd943174cc390bb731e4a70a33f7cb804fb84891b842fa71198fcc"
                   },
                   {
                       "path":  "kit/notebook/server/memory-tools.mjs",
@@ -10546,7 +10546,7 @@
                   },
                   {
                       "path":  "kit/notebook/test/meaning-search.test.mjs",
-                      "sha256":  "2c05579963c86245a04cf207822fe51a2a5fa6fe4ac0ad562f0e667f13bfe68f"
+                      "sha256":  "56ddbc203518eeac6c5dd2d585b4c198c068dfb388cd02523c88790101954a6c"
                   },
                   {
                       "path":  "kit/notebook/test/memory-follow-through.test.mjs",
@@ -10558,7 +10558,7 @@
                   },
                   {
                       "path":  "kit/notebook/test/memory-tools.test.mjs",
-                      "sha256":  "be026f1ed57b093ae3a15f1f9d907944f127cf29f07798f25cb3f551d993c0b4"
+                      "sha256":  "4dbf00625ad4a8451a627927ba770bfe8734d01838638a4b4dc988603f23f8f2"
                   },
                   {
                       "path":  "kit/notebook/test/menerio-chunks.test.mjs",
@@ -10602,7 +10602,7 @@
                   },
                   {
                       "path":  "kit/notebook/test/note-processing.test.mjs",
-                      "sha256":  "47012bafeab674f314013f1d61798e1f06e55495c37a496db394e390367b5ea1"
+                      "sha256":  "42a6f9f5fe7a33abc63c67376a0c82da72eb906853f13b10183c31ea0244056e"
                   },
                   {
                       "path":  "kit/notebook/test/note-recipe-tools.test.mjs",
@@ -10695,6 +10695,10 @@
                   {
                       "path":  "kit/notebook/test/readable-files.test.mjs",
                       "sha256":  "19f2dbe67abd08b482d3c9a372a713915bf45a6f849007ac6f7ba978c34cf1d1"
+                  },
+                  {
+                      "path":  "kit/notebook/test/readable-ids.test.mjs",
+                      "sha256":  "49b344c29d602a463693754d9b482a8d9036767b8f4e3429441e5cc2891e005d"
                   },
                   {
                       "path":  "kit/notebook/test/recipe-context.test.mjs",
@@ -20282,7 +20286,7 @@
                   },
                   {
                       "path":  "kit/tools/mc-notebook-sync",
-                      "sha256":  "a8c392581da932d2331b72941402bfeeb031cf90d826d2aa3b08f9d9150ff100"
+                      "sha256":  "5bea928e448b8cf679341875d48824be814e26947190602210a11fb0aa6bb509"
                   },
                   {
                       "path":  "kit/tools/mc-notebook.js",
@@ -20318,11 +20322,11 @@
                   },
                   {
                       "path":  "kit/tools/mc-work-run",
-                      "sha256":  "2dfc54dd9b4acd8b234388ee2940127f05e3c10749b060ff1e9ee2e4fd085a34"
+                      "sha256":  "62d20221a14c7a23db18654aae4c34f0a9175f952162ecb1db22b885e6f9859c"
                   },
                   {
                       "path":  "kit/tools/menerio-connect.js",
-                      "sha256":  "a32c0c6d9344170a9b57d9894860d4c1f2145030a14d76cc35d01167bb028377"
+                      "sha256":  "3fb8887df472e8c2d3aa3e67308390f327c5799aa40721982583aacaa65eaaca"
                   },
                   {
                       "path":  "kit/tools/notebook-sync.py",
@@ -20334,7 +20338,7 @@
                   },
                   {
                       "path":  "kit/tools/prompt-harvest.js",
-                      "sha256":  "65155bbffa9afa53c4452aee942bb4d20bfce2176f9e59debb564d1f6a76ac0a"
+                      "sha256":  "bdfb31754dbd1ce1de249a22fe646a19d2e5f6c75434443855b14896df04d92a"
                   },
                   {
                       "path":  "kit/tools/README.md",
@@ -20346,7 +20350,7 @@
                   },
                   {
                       "path":  "kit/tools/search.js",
-                      "sha256":  "654967ea3a757faf4d5db1751b9fe80e0fe391588e980c1ec03365d706416a5f"
+                      "sha256":  "70c35fc7f40e6d63c037b3faf2bf655ff699bb70a58eff46b9b34cdc71464105"
                   },
                   {
                       "path":  "kit/tools/subscriptions.cjs",
@@ -20418,7 +20422,7 @@
                   },
                   {
                       "path":  "kit/tools/test-notebook-sync.sh",
-                      "sha256":  "def2b75fbfe12953449cd97c8b00061107ef7520d88e6da71a59c2eab8c86435"
+                      "sha256":  "444fd317474782cb446b484a363a8a2bf646d4f756a00936b64a97f087682cd0"
                   },
                   {
                       "path":  "kit/tools/test-obligation-close-hook.js",
