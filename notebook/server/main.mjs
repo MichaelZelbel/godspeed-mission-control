@@ -122,8 +122,13 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       const hostName = (req.headers.host || '').split(':')[0];
       if (!remote && !['localhost', '127.0.0.1', '[', '::1'].includes(hostName)) return send(res, 403, { error: 'Unrecognized local host' });
       if (req.headers.origin && new URL(req.headers.origin).host !== req.headers.host) return send(res, 403, { error: 'Cross-site requests are refused' });
+      // A one-time sign-in link opens a page with one button, and only pressing
+      // it (a POST) uses the link. Until 6 October 2026 any GET used it, so
+      // Telegram's link-preview fetcher got the session and the owner's tap failed.
       if(route.startsWith('/login/')){
-        const code=route.slice(7),expiry=loginLinks.get(code);if(!expiry||expiry<Date.now())return send(res,401,{error:'This login link expired or was already used'});
+        const code=route.slice(7),expiry=loginLinks.get(code),page=(status,text,button)=>{res.writeHead(status,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','Referrer-Policy':'no-referrer','X-Content-Type-Options':'nosniff','X-Frame-Options':'DENY','Content-Security-Policy':"default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'"});res.end('<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Godspeed Mission Control</title><body style="font-family:system-ui,sans-serif;max-width:28rem;margin:4rem auto;padding:0 1rem;line-height:1.5"><h1 style="font-size:1.3rem">'+text+'</h1>'+(button?'<form method="post"><button type="submit" style="font-size:1.05rem;padding:.6rem 1.4rem">Continue</button></form>':'')+'</body></html>');};
+        if(!expiry||expiry<Date.now())return page(401,'This sign-in link expired or was already used.',false);
+        if(req.method!=='POST')return page(200,'Open your Godspeed Mission Control',true);
         loginLinks.delete(code);
         if(!auth.configured()) { res.writeHead(303,{'Location':auth.invite().path,'Cache-Control':'no-store','Referrer-Policy':'no-referrer'});return res.end(); }
         const destination=safeReturn(url.searchParams.get('next')||'/dashboard');
