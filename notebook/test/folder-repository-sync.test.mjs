@@ -108,7 +108,8 @@ test('files the owner changed on two machines are left to Git, untouched',()=>{
   envy.store.save('notes',{title:'Also here',content:'x'});
   const head=git(envy.dir,'rev-parse','HEAD'),result=envy.sync.reconcile();
   assert.equal(result.state,'pending');assert.match(result.detail,/outside the notebook/);
-  assert.equal(read(envy.dir,'rules','own.md'),'Envy version\n');assert.equal(git(envy.dir,'rev-parse','HEAD~1'),head);
+  // The owner's branch takes only commits the other side has: the note waits as a file.
+  assert.equal(read(envy.dir,'rules','own.md'),'Envy version\n');assert.equal(git(envy.dir,'rev-parse','HEAD'),head);assert.ok(fs.existsSync(path.join(envy.dir,'notebook','Also here.md')));
   assert.equal(git(envy.dir,'rev-parse','origin/main'),git(laptop,'rev-parse','HEAD'),'Nothing was pushed over the conflict');
 });
 

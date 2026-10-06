@@ -60,8 +60,14 @@ export function resolveSavedConflict(store,{id,choice,text,expected_hash},{assis
     }else if(expected_hash!==currentHash)throw Error('This file changed again; reload and compare its current version');
     if(choice==='current'&&!before)throw Error('The current file is missing; retain the conflict for review');
     let selected=choice==='current'?before:choice==='merged'?text:conflict[choice];
-    if(selected===null||selected===undefined)throw Error('A missing retained version cannot replace a saved file');
-    if(choice!=='current'&&conflict.encoding==='base64'){
+    // A retained version that is missing is a removal (the file was deleted on
+    // one of the machines), and choosing it removes the file here too: a
+    // record becomes a tombstone, as the notebook's remove makes one, so
+    // references to it stay valid and the removal reaches every machine.
+    // Until 6 October 2026 a removal could not be chosen at all.
+    const removal=(selected===null||selected===undefined)&&conflict.kind==='git'&&['local','remote'].includes(choice)&&Object.hasOwn(conflict,choice);
+    if(!removal&&(selected===null||selected===undefined))throw Error('A missing retained version cannot replace a saved file');
+    if(!removal&&choice!=='current'&&conflict.encoding==='base64'){
       if(choice==='merged')throw Error('Choose a retained binary version; text merging is unavailable for binary files');
       selected=Buffer.from(selected,'base64');if(hash(selected)!==conflict.digests?.[choice])throw Error('Retained binary conflict version failed its integrity check');
     }
@@ -69,7 +75,12 @@ export function resolveSavedConflict(store,{id,choice,text,expected_hash},{assis
     // of current is an acknowledgement and never rewrites that file.
     const resolved={...conflict,resolved_at:new Date().toISOString(),choice,reviewed_hash:currentHash,reviewed_encoding:before&&(before.includes(0)||!Buffer.from(before.toString('utf8')).equals(before))?'base64':'utf8'};
     resolved.reviewed_current=before?before.toString(resolved.reviewed_encoding):null;
-    if(choice!=='current'){
+    if(removal){
+      const record=before&&isRecordPath(conflict.path)&&isRecord(before,target)?decode(before.toString('utf8'),target):null;
+      if(record?.type==='moments')throw Error('Events are append-only; add a correction event');
+      if(record)store.commit([store.prepare(record.type,{removed_at:record.removed_at||new Date().toISOString()},store.get(record.type,record.id))]);
+      else if(before)store.publishFiles([{file:conflict.path,delete:true}]);
+    }else if(choice!=='current'){
       if(conflict.kind==='stale-write'){
         const value=typeof selected==='string'?JSON.parse(selected):selected;
         const current=store.get(conflict.type,conflict.record_id);
