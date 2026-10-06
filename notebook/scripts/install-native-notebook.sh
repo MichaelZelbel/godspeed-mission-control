@@ -235,12 +235,19 @@ fi
 stopped=""
 switched=""
 trap 'status=$?; if [ "$status" -ne 0 ] && [ -n "$stopped" ] && [ -z "$switched" ]; then echo "The installation stopped, so the notebook that ran before is started again." >&2; if [ "$stopped" = system ]; then as_root systemctl start "$SERVICE" >/dev/null 2>&1 || true; else systemctl --user start "$SERVICE" >/dev/null 2>&1 || true; fi; fi' EXIT
+# A unit whose file is here is stopped even when it is not running at this moment: one
+# that keeps failing restarts every few seconds and could start in the middle of this.
 if systemd_here; then
-  if systemctl is-active --quiet "$SERVICE" 2>/dev/null; then
-    if [ "$manager" = system ]; then as_root systemctl stop "$SERVICE"; stopped=system
-    else echo "A notebook started by the computer's administrator is running. Ask them to stop it (sudo systemctl stop $SERVICE), then run the installer again." >&2; exit 1; fi
+  if [ "$manager" = system ] && [ -f "$system_unit" ]; then
+    if systemctl is-active --quiet "$SERVICE" 2>/dev/null; then stopped=system; fi
+    as_root systemctl stop "$SERVICE"
+  elif systemctl is-active --quiet "$SERVICE" 2>/dev/null; then
+    echo "A notebook started by the computer's administrator is running. Ask them to stop it (sudo systemctl stop $SERVICE), then run the installer again." >&2; exit 1
   fi
-  if systemctl --user is-active --quiet "$SERVICE" 2>/dev/null; then systemctl --user stop "$SERVICE"; stopped=${stopped:-user}; fi
+  if [ -f "$user_unit" ]; then
+    if systemctl --user is-active --quiet "$SERVICE" 2>/dev/null; then stopped=${stopped:-user}; fi
+    systemctl --user stop "$SERVICE" >/dev/null 2>&1 || true
+  fi
 fi
 
 "$node" "$version/notebook/bin/godspeed.mjs" init
