@@ -139,12 +139,13 @@ export class SearchIndex {
     return this.replace(documents);
   }
   // Compare what was read with what the index holds and write only the rows
-  // that differ. Returns the number of rows written.
-  replace(documents) {
-    const next = new Map(documents.map(document => [document[0], document]));
+  // that differ. Returns the number of rows written. Rows in `kept` were
+  // written while the read went on and are newer than what it read.
+  replace(documents, kept = null) {
+    const next = new Map(documents.filter(document => !kept?.has(document[0])).map(document => [document[0], document]));
     const changed = [...next.values()].filter(document => this.indexed.get(document[0]) !== (document[5] ?? hash(document[4])));
     for (const document of changed) if (document[5] === undefined) document[5] = hash(document[4]);
-    const removed = [...this.indexed.keys()].filter(uid => !next.has(uid));
+    const removed = [...this.indexed.keys()].filter(uid => !next.has(uid) && !kept?.has(uid));
     this.lastRebuild = new Date().toISOString();
     return this.write(changed, removed);
   }
@@ -155,21 +156,24 @@ export class SearchIndex {
       let changed = false;
       do {
         this.again = false;
+        // A row written while file reads yield is newer than what they read
+        // and is kept as written; only a full foreground rebuild starts the
+        // read over. Until 6 October 2026 every write started it over, even a
+        // run receipt that is never searched, so with a routine writing more
+        // often than one read takes the refresh never finished.
+        this.touched = new Set();
         const generation = this.generation, documents = await this.readBackground();
         if (this.closed) break;
-        // A foreground writer/rebuild may run while file reads yield. Never
-        // replace its newer index with the earlier background collection.
         if (generation !== this.generation) { this.again = true; continue; }
-        changed = this.replace(documents) > 0 || changed;
+        changed = this.replace(documents, this.touched) > 0 || changed;
       } while (this.again && !this.closed);
       return changed;
-    })().finally(() => { this.pending = null; });
+    })().finally(() => { this.pending = null; this.touched = null; });
     return this.pending;
   }
   // Put the records a write just changed straight into the index, so a search
   // run immediately afterwards finds them.
   update(records) {
-    this.generation = (this.generation || 0) + 1;
     const changed = [], removed = [];
     for (const record of records) {
       if (!record?.uid || !record?.type) continue;
@@ -177,14 +181,15 @@ export class SearchIndex {
       if (document) { if (this.indexed.get(document[0]) !== document[5]) changed.push(document); }
       else if (this.indexed.has(record.uid)) removed.push(record.uid);
     }
-    this.write(changed, removed);
+    this.write(changed, removed);this.touch(changed, removed);
     this.lastRebuild = new Date().toISOString();
   }
+  // What a running background refresh must not overwrite.
+  touch(changed, removed) { if (this.touched) { for (const document of changed) this.touched.add(document[0]); for (const uid of removed) this.touched.add(uid); } }
   // What the store reports as gone (a removed or renamed record).
   forget(records) {
-    this.generation = (this.generation || 0) + 1;
     const store = this.store, removed = records.filter(r => r?.uid && this.indexed.has(r.uid) && !(store.keyOfUid?.has(r.uid) && !store.records.get(store.keyOfUid.get(r.uid))?.removed_at)).map(r => r.uid);
-    this.write([], removed);
+    this.write([], removed);this.touch([], removed);
   }
   // Workspace files named by a watcher, read again on their own.
   refreshFiles(names) {
@@ -200,7 +205,7 @@ export class SearchIndex {
         if (this.indexed.get(uid) !== document[5]) changed.push(document);
       } else if (this.indexed.has(uid)) removed.push(uid);
     }
-    this.generation = (this.generation || 0) + 1;
+    this.touch(changed, removed);
     return this.write(changed, removed);
   }
   // Every file is read in one step that cannot be interrupted, and the loop

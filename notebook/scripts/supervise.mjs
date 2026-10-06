@@ -1,15 +1,9 @@
-import fs from 'node:fs';import path from 'node:path';import {spawn} from 'node:child_process';import {fileURLToPath} from 'node:url';import {hash,atomic} from '../core/records/store.mjs';
-import {terminateOwnedTree} from '../core/process-tree.mjs';
-import {HealthMonitor} from '../core/supervisor-health.mjs';
-import {missingRuns} from '../core/missing-runs.mjs';
+import {fileURLToPath} from 'node:url';
+import {Supervisor} from '../core/supervisor.mjs';
+import {machineDevice} from '../core/device-id.mjs';
 // Separate from the notebook process: a stopped or unresponsive service cannot
-// perform its own missing-run check. This process owns only its direct child.
+// perform its own missing-run check (core/supervisor.mjs). It reads them for
+// this machine's own name, the same one the notebook gives itself.
 const root=process.env.GODSPEED_WORKSPACE;if(!root)throw Error('Choose the isolated workspace');
-const server=fileURLToPath(new URL('../server/main.mjs',import.meta.url)),port=Number(process.env.GODSPEED_PORT||47831),instance=hash(path.resolve(root)).slice(0,24),state=path.join(root,'.godspeed','supervisor.json');
-let child,stopping=false,restarts=0,started=0,checking=false,shutdown=Promise.resolve(),missing=[],missingError=null;
-const monitor=new HealthMonitor();
-function status(value){atomic(state,JSON.stringify({pid:process.pid,child_pid:child?.pid,at:new Date().toISOString(),restarts,health_failures:monitor.failures,failure_history:monitor.history,missing_runs:missing,missing_run_check_error:missingError,...value}));}
-function launch(){if(stopping)return;started=Date.now();monitor.launched();child=spawn(process.execPath,[server],{env:process.env,windowsHide:true,shell:false,stdio:'inherit'});status({state:'starting'});child.on('error',error=>{monitor.failure('Notebook process could not start: '+error.message);status({state:'failed',reason:'Notebook process could not start'});});child.on('exit',async(code,signal)=>{try{await shutdown;}catch{status({state:'needs_review',reason:'Owned process shutdown failed'});clearInterval(timer);process.exitCode=1;return;}if(stopping)return;monitor.failure('Notebook stopped: '+(signal||'exit '+code));restarts++;status({state:'recovering',reason:monitor.history.at(-1).reason});if(restarts<=5)setTimeout(launch,Math.min(1000*2**restarts,30000));else {status({state:'needs_review',reason:'Five automatic restarts failed'});clearInterval(timer);process.exitCode=1;}});}
-const timer=setInterval(async()=>{if(stopping||checking||!child||Date.now()-started<90000)return;checking=true;try{try{missing=missingRuns(root,Date.now(),process.env.GODSPEED_DEVICE||'local');missingError=null;}catch{missing=[];missingError='Saved scheduling evidence could not be read';}const response=await fetch('http://127.0.0.1:'+port+'/health',{signal:AbortSignal.timeout(15000)}),health=await response.json();if(!response.ok||health.instance!==instance)throw Error('Workspace health check failed');if(health.scheduler_heartbeat&&Date.now()-Date.parse(health.scheduler_heartbeat)>180000)throw Error('Scheduler heartbeat stopped');monitor.success();if(monitor.stablyHealthy())restarts=0;status({state:'healthy'});}catch(error){const decision=monitor.failure(error.message);status({state:decision.restart?'recovering':'checking',reason:error.message});if(decision.restart){shutdown=terminateOwnedTree(child);try{await shutdown;}catch{status({state:'needs_review',reason:'Owned process shutdown failed'});}}}finally{checking=false;}},30000);
-for(const signal of ['SIGINT','SIGTERM'])process.on(signal,async()=>{stopping=true;clearInterval(timer);shutdown=terminateOwnedTree(child);try{await shutdown;status({state:'stopped'});}catch{status({state:'needs_review',reason:'Owned process shutdown failed'});process.exitCode=1;}});
-launch();
+const supervisor=new Supervisor({root,server:fileURLToPath(new URL('../server/main.mjs',import.meta.url)),port:Number(process.env.GODSPEED_PORT||47831),device:machineDevice(root).id}).start();
+for(const signal of ['SIGINT','SIGTERM'])process.on(signal,()=>{void supervisor.stop();});

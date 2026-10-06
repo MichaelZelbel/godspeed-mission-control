@@ -10,6 +10,7 @@ import {leadCommand} from './lead-commands.mjs';
 import {radarCommand} from './radar-lifecycle.mjs';
 import {localParts,addDays,zonedToUtc} from '../../third-party/addons/godspeed-coach/lib/clock.mjs';
 import {nextCalendarRun} from './jobs/calendar.mjs';
+import {resumeChanges} from './jobs/routine-control.mjs';
 import {readTable} from '../../third-party/addons/godspeed-coach/lib/auto.mjs';
 import {localPath} from './local-path.mjs';
 import {visibleRows} from './visibility.mjs';
@@ -216,7 +217,8 @@ export function personalOperation(domains,input){
   const fingerprint=hash([input.source_id,subject.subject_type,subject.subject_id,input.label,input.value]);const existing=query.rows('review_queue').find(r=>r.fingerprint===fingerprint);if(existing)return existing;
   return store.save('review_queue',{title:'Remember '+required(input.label,'Fact label'),suggestion_type:'add_claim',payload:{...subject,label:input.label,value:required(input.value,'Fact value'),source_type:'conversation',source_id:input.source_id,evidence_quote:input.evidence_quote},description:input.evidence_quote,status:'pending_review',fingerprint,origin:'conversation'});
  }
- if(type==='routine-change'){const j=old('jobs');if(input.paused!==undefined&&typeof input.paused!=='boolean')throw Error('Pause must be true or false');if(input.calendar&&(!/^([01]\d|2[0-3]):[0-5]\d$/.test(input.calendar.time)||input.calendar.weekdays?.some(d=>!Number.isInteger(d)||d<0||d>6)))throw Error('Calendar needs a valid local time and weekdays');return store.save('jobs',{id:j.id,...(input.paused!==undefined?{paused:input.paused}:{}),...(input.calendar?{calendar:input.calendar,next_run:nextCalendarRun({...j,calendar:input.calendar},store.get('settings','installation')?.timezone||'UTC')}:{})},j._hash);}
+ // A resume passes the same review guard as the routine controls (resumeChanges).
+ if(type==='routine-change'){const j=old('jobs');if(input.paused!==undefined&&typeof input.paused!=='boolean')throw Error('Pause must be true or false');if(input.calendar&&(!/^([01]\d|2[0-3]):[0-5]\d$/.test(input.calendar.time)||input.calendar.weekdays?.some(d=>!Number.isInteger(d)||d<0||d>6)))throw Error('Calendar needs a valid local time and weekdays');const settings=store.get('settings','installation')||{};return store.save('jobs',{id:j.id,...(input.paused!==undefined?{paused:input.paused}:{}),...(input.calendar?{calendar:input.calendar,next_run:nextCalendarRun({...j,calendar:input.calendar},settings.timezone||'UTC')}:{}),...(input.paused===false?resumeChanges(store,settings,j):{})},j._hash);}
  if(type==='forecast-settle'){const f=old('forecasts');required(input.evidence,'Forecast evidence');if(typeof input.observed!=='boolean')throw Error('Forecast observation must be true or false');if(f.status==='settled')return f;return store.save('forecasts',{id:f.id,status:'settled',observed:input.observed,evidence:input.evidence,brier_score:(f.probability-Number(input.observed))**2,settled_at:new Date().toISOString()},f._hash);}
  if(type==='work-allow-local'){
   const item=old('work_items'),note=store.get('notes',required(input.note_id,'Target note ID'));

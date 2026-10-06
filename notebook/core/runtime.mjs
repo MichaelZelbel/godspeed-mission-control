@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process';
+import {runChild} from './child-process.mjs';
 import { fileContext } from './context.mjs';
 import path from 'node:path';
 import fs from 'node:fs';
@@ -18,33 +18,34 @@ export function providerTimeBudget(input){
   return input.timeout_ms||600000;
 }
 export function providerTimeoutMessage(milliseconds){return milliseconds===300000?'The scheduled AI call exceeded five minutes. This attempt failed.':'The AI did not finish within ten minutes. Try a shorter message or a lower effort.';}
-export function hermesProvider({executable='hermes',home,cwd,model,provider,sourceRoot}={}){
+export function hermesProvider({executable='hermes',home,cwd,model,provider,sourceRoot,spawnProcess}={}){
   if(!['hermes','hermes.exe'].includes(path.basename(executable).toLowerCase()))throw new Error('Choose the verified Hermes runtime');
-  const run=input=>new Promise(async (resolve,reject)=>{
-    let timeoutMs;try{timeoutMs=providerTimeBudget(input);}catch(error){return reject(error);}
-    if(input.attachments?.some(a=>a.mime==='application/pdf'))return reject(new Error('Use a document-capable model endpoint for PDF analysis'));
+  const run=async input=>{
+    const timeoutMs=providerTimeBudget(input);
+    if(input.attachments?.some(a=>a.mime==='application/pdf'))throw new Error('Use a document-capable model endpoint for PDF analysis');
     const signal=input.signal;
-    if(signal?.aborted)return reject(new Error('Reply stopped'));
-    if(input.model||input.effort){let options;try{options=await run.options();}catch(e){return reject(e);}if(signal?.aborted)return reject(new Error('Reply stopped'));const selected=options.models.find(m=>m.id===(input.model||options.current));if(!selected)return reject(new Error('This model is not available through your connected account'));if(input.effort&&!selected.efforts.includes(input.effort))return reject(new Error('This effort is not supported by the selected model'));}
+    if(signal?.aborted)throw new Error('Reply stopped');
+    if(input.model||input.effort){const options=await run.options();if(signal?.aborted)throw new Error('Reply stopped');const selected=options.models.find(m=>m.id===(input.model||options.current));if(!selected)throw new Error('This model is not available through your connected account');if(input.effort&&!selected.efforts.includes(input.effort))throw new Error('This effort is not supported by the selected model');}
     const args=['chat','--query-file','-','--quiet','--oneshot','--max-turns','1','--toolsets','none','--in',cwd,'--source','tool'];
     if(input.model||model)args.push('--model',input.model||model);if(input.effort)args.push('--reasoning',input.effort);if(provider)args.push('--provider',provider);
     const temporary=[];
-    for(const [i,attachment] of (input.attachments||[]).entries()){
-      fs.mkdirSync(path.join(home,'pending'),{recursive:true});const file=path.join(home,'pending','godspeed-'+process.pid+'-'+Date.now()+'-'+i+'.png');fs.writeFileSync(file,Buffer.from(attachment.data,'base64'),{mode:0o600});temporary.push(file);args.push('--image',file);
-    }
-    const {attachments,signal:ignoredSignal,timeout_ms:ignoredBudget,...prompt}=input;
-    const child=spawn(executable,args,{cwd,windowsHide:true,detached:process.platform!=='win32',shell:false,env:assistantEnvironment({home,workspace:cwd}),stdio:['pipe','pipe','pipe']}),output=[];let bytes=0;
-    const stop=()=>{if(process.platform==='win32'&&child.pid)spawn('taskkill',['/pid',String(child.pid),'/T','/F'],{windowsHide:true,stdio:'ignore'});else if(child.pid){try{process.kill(-child.pid,'SIGTERM');}catch{child.kill('SIGTERM');}}};
-    const aborted=()=>{stop();reject(new Error('Reply stopped'));};signal?.addEventListener('abort',aborted,{once:true});
-    const cleanup=()=>{clearTimeout(timer);signal?.removeEventListener('abort',aborted);for(const file of temporary)try{fs.unlinkSync(file);}catch{}};
-    const timer=setTimeout(()=>{stop();cleanup();reject(new Error(providerTimeoutMessage(timeoutMs)));},timeoutMs);
-    child.on('error',()=>{cleanup();reject(new Error('The AI connection could not start'));});
-    child.stdout.on('data',chunk=>{bytes+=chunk.length;if(bytes>1024*1024){stop();cleanup();reject(new Error('Assistant output exceeded its limit'));}else output.push(chunk);});
-    // Classify known failures without persisting or exposing private diagnostics.
-    let diagnostic='';child.stderr.on('data',chunk=>{diagnostic=(diagnostic+chunk.toString('utf8')).slice(-32768);});child.on('close',code=>{cleanup();const text=hermesResponse(Buffer.concat(output).toString('utf8'));code===0&&text?resolve(text):reject(new Error(hermesFailureMessage(diagnostic+'\n'+text)));});
-    child.stdin.end(JSON.stringify(prompt));
-  });
-  let cached,loadedAt=0;run.options=async()=>{if(cached&&Date.now()-loadedAt<300000)return cached;const python=process.platform==='win32'?path.join(sourceRoot||path.resolve(executable,'../../hermes-agent'),'venv','Scripts','python.exe'):path.resolve(executable,'../../.venv/bin/python3');const helper=fileURLToPath(new URL('../assistant-files/chat-options.py',import.meta.url));cached=await new Promise((resolve,reject)=>{const p=spawn(python,[helper],{cwd:sourceRoot||path.resolve(executable,'../..'),windowsHide:true,env:assistantEnvironment({home,workspace:cwd}),stdio:['ignore','pipe','ignore']});let out='';const timer=setTimeout(()=>{p.kill();reject(new Error('Model choices could not be loaded'));},20000);p.on('error',()=>{clearTimeout(timer);reject(new Error('Model choices could not be loaded'));});p.stdout.on('data',v=>out+=v);p.on('close',code=>{clearTimeout(timer);try{if(code)throw new Error();resolve(JSON.parse(out.trim().split(/\r?\n/).at(-1)));}catch{reject(new Error('Model choices could not be loaded'));}});});loadedAt=Date.now();return cached;};return run;
+    try{
+      for(const [i,attachment] of (input.attachments||[]).entries()){
+        fs.mkdirSync(path.join(home,'pending'),{recursive:true});const file=path.join(home,'pending','godspeed-'+process.pid+'-'+Date.now()+'-'+i+'.png');fs.writeFileSync(file,Buffer.from(attachment.data,'base64'),{mode:0o600});temporary.push(file);args.push('--image',file);
+      }
+      const {attachments,signal:ignoredSignal,timeout_ms:ignoredBudget,...prompt}=input;
+      // Classify known failures without persisting or exposing private diagnostics.
+      const result=await runChild(executable,args,{cwd,env:assistantEnvironment({home,workspace:cwd}),input:JSON.stringify(prompt),timeoutMs,maxBytes:1024*1024,signal,spawnProcess}).catch(error=>{throw childFailure(error,timeoutMs,'The AI connection could not start');});
+      const text=hermesResponse(result.stdout);
+      if(result.code===0&&text)return text;
+      throw new Error(hermesFailureMessage(result.stderr+'\n'+text));
+    }finally{for(const file of temporary)try{fs.unlinkSync(file);}catch{}}
+  };
+  let cached,loadedAt=0;run.options=async()=>{if(cached&&Date.now()-loadedAt<300000)return cached;const python=process.platform==='win32'?path.join(sourceRoot||path.resolve(executable,'../../hermes-agent'),'venv','Scripts','python.exe'):path.resolve(executable,'../../.venv/bin/python3');const helper=fileURLToPath(new URL('../assistant-files/chat-options.py',import.meta.url));cached=await runChild(python,[helper],{cwd:sourceRoot||path.resolve(executable,'../..'),env:assistantEnvironment({home,workspace:cwd}),timeoutMs:20000,spawnProcess}).then(result=>{if(result.code)throw Error();return JSON.parse(result.stdout.trim().split(/\r?\n/).at(-1));}).catch(()=>{throw new Error('Model choices could not be loaded');});loadedAt=Date.now();return cached;};return run;
+}
+// The words a person sees when an AI program could not answer.
+export function childFailure(error,timeoutMs,unstarted){
+  return new Error({ABORTED:'Reply stopped',TIMEOUT:providerTimeoutMessage(timeoutMs),OUTPUT_LIMIT:'Assistant output exceeded its limit'}[error.code]||unstarted);
 }
 export function hermesResponse(output){
   return output.replace(/\x1b\[[0-9;]*m/g,'').replace(/^Warning: Unknown toolsets: none\r?\n\s*/,'').replace(/^\s*⚠ tirith security scanner enabled but not available[^\n]*\r?\n\s*/,'').trim();
@@ -72,15 +73,13 @@ export function modelProvider({ url, key, model, maxTokens = 4096 } = {}) {
 export function commandProvider({ command, args = [], cwd, timeoutMs = 120000 } = {}) {
   if(!command)return null;
   if(!['claude','claude.exe','codex','codex.exe','hermes','hermes.exe'].includes(command))throw new Error('Unsupported assistant runtime');
-  return input=>new Promise((resolve,reject)=>{
-    const child=spawn(command,args,{cwd,windowsHide:true,shell:false,stdio:['pipe','pipe','pipe']}), output=[];let bytes=0;
-    const timer=setTimeout(()=>{child.kill();reject(new Error('Assistant runtime timed out'));},timeoutMs);
-    child.on('error',e=>{clearTimeout(timer);reject(e);});
-    child.stdout.on('data',chunk=>{bytes+=chunk.length;if(bytes>1024*1024){child.kill();reject(new Error('Assistant output is too large'));}else output.push(chunk);});
+  return async input=>{
     // stderr can contain credentials. Never preserve it in user records.
-    child.stderr.resume();child.on('close',code=>{clearTimeout(timer);code===0?resolve(Buffer.concat(output).toString('utf8').trim()):reject(new Error('Assistant runtime exited with code '+code));});
-    child.stdin.end(JSON.stringify(input)+'\n');
-  });
+    const result=await runChild(command,args,{cwd,input:JSON.stringify(input)+'\n',timeoutMs,maxBytes:1024*1024}).catch(error=>{
+      if(error.code==='TIMEOUT')throw new Error('Assistant runtime timed out');if(error.code==='OUTPUT_LIMIT')throw new Error('Assistant output is too large');throw error.cause||error;});
+    if(result.code!==0)throw new Error('Assistant runtime exited with code '+result.code);
+    return result.stdout.trim();
+  };
 }
 export function jobExecutor(configuredProvider,query) {
   return async (job,{settings,store})=>{

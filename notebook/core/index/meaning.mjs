@@ -64,8 +64,17 @@ export function passages(title, body) {
   return out;
 }
 
+// The space a vector lives in: the model, the size it was asked for and the
+// service that made it. Vectors of one space cannot be compared with another's.
+// Until 6 October 2026 the model's name alone stood for all three, so the same
+// model at another size kept every old vector (see MeaningIndex).
+export function vectorSpace(config){
+  if(!config)return null;let url=config.url;try{url=embeddingsUrl(config.url);}catch{}
+  return [config.model,config.dimensions||'',url].join(' | ');
+}
 // The vectors, in the search index's own SQLite file. Small on purpose: one
 // place to swap the store if another is ever wanted (none is built now).
+// The model column holds the vector space (vectorSpace).
 export class VectorStore {
   constructor(db) {
     this.db = db;
@@ -75,7 +84,12 @@ export class VectorStore {
   }
   // uid -> digest the stored vectors were made from, for one model.
   digests(model) { return new Map(this.db.prepare('SELECT uid, digest FROM vectors WHERE model=? AND chunk=0').all(model).map(r => [r.uid, r.digest])); }
+  // How many numbers each stored vector of the space has (0 when none is stored).
+  size(model) { const row = this.db.prepare('SELECT length(vec) AS bytes FROM vectors WHERE model=? LIMIT 1').get(model); return row ? row.bytes / 4 : 0; }
+  clear(model) { if (this.db.prepare('DELETE FROM vectors WHERE model=?').run(model).changes) this.cache = null; }
   put(uid, digest, model, vectors) {
+    const size = this.size(model);
+    if (vectors.some(v => v.length !== (size || vectors[0].length))) throw new Error('Vectors of different sizes cannot be kept together');
     this.db.exec('BEGIN');
     try {
       this.db.prepare('DELETE FROM vectors WHERE uid=?').run(uid);
@@ -92,8 +106,10 @@ export class VectorStore {
   // until something changes: a scan of 30,000 is a fraction of a second.
   load(model) {
     if (this.cache?.model === model) return this.cache;
-    const rows = this.db.prepare('SELECT uid, vec FROM vectors WHERE model=?').all(model);
-    const dim = rows[0] ? rows[0].vec.byteLength / 4 : 0, matrix = new Float32Array(rows.length * dim), uids = new Array(rows.length);
+    // Only vectors of one size go into the block: a stray one of another size
+    // made it fail with "Invalid typed array length".
+    const all = this.db.prepare('SELECT uid, vec FROM vectors WHERE model=?').all(model), dim = all[0] ? all[0].vec.byteLength / 4 : 0, rows = all.filter(r => r.vec.byteLength === dim * 4);
+    const matrix = new Float32Array(rows.length * dim), uids = new Array(rows.length);
     rows.forEach((r, i) => { matrix.set(new Float32Array(r.vec.buffer, r.vec.byteOffset, dim), i * dim); uids[i] = r.uid; });
     return this.cache = {model, dim, matrix, uids};
   }
@@ -116,9 +132,10 @@ export class VectorStore {
 // remembered and shown, and retried later, never thrown at a reader.
 export class MeaningIndex {
   constructor(index, {config, embed = config ? embedder(config) : null} = {}) {
-    this.index = index; this.config = config; this.embed = embed; this.vectors = new VectorStore(index.db);
-    this.status = {configured: !!config, model: config?.model || null, indexed: 0, pending: 0, last_error: null, last_run: null};
-    if (config) this.vectors.dropOtherModels(config.model);
+    this.index = index; this.config = config; this.embed = embed; this.vectors = new VectorStore(index.db); this.space = vectorSpace(config);
+    this.status = {configured: !!config, model: config?.model || null, dimensions: config?.dimensions || null, indexed: 0, pending: 0, last_error: null, last_run: null};
+    // Another model, size or service: what was embedded before cannot be compared, and is made again.
+    if (config) this.vectors.dropOtherModels(this.space);
     this.queryCache = new Map(); this.empty = new Set();
   }
   get ready() { return !!this.embed; }
@@ -128,7 +145,7 @@ export class MeaningIndex {
     return this.index.db.prepare(`SELECT d.uid, d.type, d.digest, f.title, f.body FROM docs d JOIN docs_fts f ON f.rowid=d.rowid WHERE d.type IN (${[...MEANING_TYPES].map(() => '?').join(',')}) OR (d.type='workspace_file' AND d.id NOT LIKE 'prompts/%' AND d.id NOT LIKE 'assistant-state/%')`).all(...MEANING_TYPES);
   }
   pending() {
-    const have = this.vectors.digests(this.config.model), docs = this.documents();
+    const have = this.vectors.digests(this.space), docs = this.documents();
     const live = new Set(docs.map(d => d.uid)), stale = [...have.keys()].filter(uid => !live.has(uid));
     return {todo: docs.filter(d => have.get(d.uid) !== d.digest && !this.empty.has(d.uid + '\0' + d.digest)), stale, total: docs.length};
   }
@@ -149,7 +166,8 @@ export class MeaningIndex {
         }
         if (!batch.length) continue;
         const {vectors} = await this.embed(batch, {signal});
-        for (const o of owners) { this.vectors.put(o.doc.uid, o.doc.digest, this.config.model, vectors.slice(o.from, o.from + o.count)); done++; }
+        this.checkSize(vectors);
+        for (const o of owners) { this.vectors.put(o.doc.uid, o.doc.digest, this.space, vectors.slice(o.from, o.from + o.count)); done++; }
       }
       const left = this.pending();
       Object.assign(this.status, {indexed: left.total - left.todo.length, pending: left.todo.length, last_error: null, last_run: new Date().toISOString()});
@@ -159,8 +177,17 @@ export class MeaningIndex {
       throw error;
     } finally { this.running = false; }
   }
+  // A service that answers at another size than asked is refused; one whose
+  // size changed although none was asked has its old vectors made again.
+  checkSize(vectors) {
+    const asked = this.config.dimensions, stored = this.vectors.size(this.space), wrong = vectors.find(v => v.length !== (asked || stored || vectors[0].length));
+    if (!wrong) return;
+    if (asked) throw new Error('The embeddings service answered with ' + wrong.length + ' numbers per text; the setting asks for ' + asked + '. Change the setting or the service.');
+    this.vectors.clear(this.space); this.empty.clear(); this.queryCache.clear();
+    throw new Error('The embeddings service changed the size of its answers; meaning search is being built again');
+  }
   async queryVector(text) {
-    const key = hash(this.config.model + '\0' + text);
+    const key = hash(this.space + '\0' + text);
     if (this.queryCache.has(key)) return this.queryCache.get(key);
     const {vectors} = await this.embed([text]);
     if (this.queryCache.size > 200) this.queryCache.delete(this.queryCache.keys().next().value);
@@ -170,8 +197,9 @@ export class MeaningIndex {
   async search(text, {limit = 50, types = null} = {}) {
     if (!this.embed || !String(text || '').trim()) return [];
     const vector = await this.queryVector(String(text).slice(0, 2000));
+    this.checkSize([vector]);
     const allowed = types?.length ? new Set(this.index.db.prepare(`SELECT uid FROM docs WHERE type IN (${types.map(() => '?').join(',')})`).all(...types).map(r => r.uid)) : null;
-    return this.vectors.search(this.config.model, vector, {limit, uids: allowed});
+    return this.vectors.search(this.space, vector, {limit, uids: allowed});
   }
 }
 

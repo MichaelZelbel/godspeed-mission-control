@@ -100,3 +100,24 @@ test('a title beside the payload is read, and ill-shaped proposals never cost th
   const other=store.save('notes',{title:'Knee 2',content:'Ani asks again about the fictional knee appointment next Tuesday.'});
   assert.equal((await domains.invoke('process-note',{note_id:other.id})).processed,0);assert.deepEqual(store.get('notes',other.id).tags,['knee'],'tags kept with no usable proposal');
 });
+
+// The limit counted one record per note, so a note that kept changing was
+// processed again after each quiet period and still counted once: with a
+// limit of three, ten paid calls in a day, and the screen said two.
+test('the daily limit counts every processing run, not every note',async()=>{
+  const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-processing-limit-')),{device:'local'}),query=new QueryService(store);
+  store.save('settings',{id:'installation',owner:'local',timezone:'Europe/Berlin',delivery:'notebook'});
+  store.save('settings',{id:'processing',enabled:true,daily_limit:3,quiet_minutes:0,min_chars:5,retry_minutes:30,max_attempts:3,since:'2000-01-01T00:00:00.000Z'});
+  let paid=0;const failing=new Set();const domains={provider:()=>{},invoke:async(name,input)=>{paid++;if(failing.has(input.note_id))throw Error('Fictional model failure');return {processed:1};}};
+  const processing=new NoteProcessing({store,query,domains,device:'local'});
+  const journal=store.save('notes',{title:'Today journal',content:'08:00 started the day'});
+  let now=Date.now()+1000;
+  for(let i=0;i<10;i++){await processing.tick({now});store.save('notes',{id:journal.id,content:store.get('notes',journal.id).content+'\n'+(9+i)+':00 another entry'});now+=60000;}
+  assert.equal(paid,3);assert.equal(processing.status.processed_today,3);
+  // A failed run is a paid run too.
+  const other=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-processing-limit-'));const s2=new Store(other,{device:'local'}),q2=new QueryService(s2);
+  s2.save('settings',{id:'installation',owner:'local',timezone:'Europe/Berlin'});s2.save('settings',{id:'processing',enabled:true,daily_limit:2,quiet_minutes:0,min_chars:5,retry_minutes:0,max_attempts:5,since:'2000-01-01T00:00:00.000Z'});
+  const p2=new NoteProcessing({store:s2,query:q2,domains,device:'local'}),broken=s2.save('notes',{title:'Broken note',content:'This one always fails'});failing.add(broken.id);paid=0;
+  for(let i=0;i<5;i++)await p2.tick({now:Date.now()+1000+i*60000});
+  assert.equal(paid,2);
+});

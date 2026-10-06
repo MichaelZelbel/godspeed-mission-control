@@ -25,25 +25,29 @@ export async function controlRoutine(store,input,{enable=false,now=Date.now()}={
   // A daily time runs once a day at that time in the owner's timezone (jobs/calendar.mjs).
   const calendar=input.at!==undefined?{time:dailyTime(input.at).time}:null;
   let changes=enable?{id,kind:input.kind,...(calendar?{calendar,interval_ms:86400000}:{interval_ms:input.interval_ms}),paused:false,...(!old?{owner:settings.owner,title:input.title||input.kind,state:'pending',next_run:calendar?nextCalendarRun({calendar},settings.timezone,now):new Date(now).toISOString(),retry_count:0}:calendar?{next_run:nextCalendarRun({calendar},settings.timezone,now)}:{}),...(input.title!==undefined?{title:input.title}:{}),...(input.kind==='radar'&&(input.discovery!==undefined||!old)?{discovery:input.discovery!==false}:{})}:{paused:input.paused};
-  if(old&&resume){
-   const receipts=store.list('job_receipts').filter(r=>r.job_id===old.id);
-   const failed=old.state==='failed'||old.state==='needs_review';
-   const slotReceipt=receipts.find(r=>r.id===old.id+'-'+Date.parse(old.next_run));
-   const completedFailure=receipts.some(r=>r.state==='failed'&&Number.isFinite(Date.parse(r.finished_at)));
-   const failedSlot=slotReceipt?.state==='failed';
-   const uncertain=receipts.some(r=>r.state==='attempted')
-    ||(failed||failedSlot)&&(old.outward||settings.delivery!=='notebook')
-    ||failed&&!completedFailure
-    ||failedSlot&&!Number.isFinite(Date.parse(slotReceipt.finished_at));
-   if(old.state==='awaiting_approval'||uncertain)throw Error('This routine needs its previous attempt reviewed before it can resume');
-   if(failed||slotReceipt?.state==='failed'){
-    // Each scheduler receipt is keyed by the millisecond slot. Reuse none of
-    // those slots, even if multiple explicit requests share the same clock tick.
-    let at=now;const used=new Set(receipts.map(r=>r.id));
-    while(used.has(old.id+'-'+at))at++;
-    changes={...changes,state:'pending',retry_count:0,next_run:new Date(at).toISOString()};
-   }
-  }
+  if(old&&resume)changes={...changes,...resumeChanges(store,settings,old,now)};
   const record=store.prepare('jobs',changes,old);store.commit([record]);return record;
  });
+}
+// What resuming a routine changes, or why it may not resume. Every resume goes
+// through here: routine-change (personal-operations.mjs) wrote paused:false
+// straight onto the job until 6 October 2026, so a routine whose delivery was
+// uncertain resumed and its next run sent the message again.
+export function resumeChanges(store,settings,old,now=Date.now()){
+ const receipts=store.list('job_receipts').filter(r=>r.job_id===old.id);
+ const failed=old.state==='failed'||old.state==='needs_review';
+ const slotReceipt=receipts.find(r=>r.id===old.id+'-'+Date.parse(old.next_run));
+ const completedFailure=receipts.some(r=>r.state==='failed'&&Number.isFinite(Date.parse(r.finished_at)));
+ const failedSlot=slotReceipt?.state==='failed';
+ const uncertain=receipts.some(r=>r.state==='attempted')
+  ||(failed||failedSlot)&&(old.outward||settings.delivery!=='notebook')
+  ||failed&&!completedFailure
+  ||failedSlot&&!Number.isFinite(Date.parse(slotReceipt.finished_at));
+ if(old.state==='awaiting_approval'||uncertain)throw Error('This routine needs its previous attempt reviewed before it can resume');
+ if(!failed&&!failedSlot)return {};
+ // Each scheduler receipt is keyed by the millisecond slot. Reuse none of
+ // those slots, even if multiple explicit requests share the same clock tick.
+ let at=now;const used=new Set(receipts.map(r=>r.id));
+ while(used.has(old.id+'-'+at))at++;
+ return {state:'pending',retry_count:0,next_run:new Date(at).toISOString()};
 }

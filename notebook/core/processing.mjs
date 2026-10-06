@@ -14,6 +14,9 @@ const DEFAULTS = {enabled: true, daily_limit: 40, quiet_minutes: 2, min_chars: 3
 export const contentFingerprint = note => hash([String(note.title || ''), String(note.content || '')]);
 const jobId = noteId => 'analysis-' + hash(noteId).slice(0, 24);
 const today = (timezone, at = new Date()) => new Intl.DateTimeFormat('en-CA', {timeZone: timezone || 'UTC'}).format(at);
+// How many times a note was processed on `day`; a record written before runs
+// were counted stands for the one run it records.
+const runsToday = (job, day) => job.day !== day ? 0 : job.runs_today ?? (['completed', 'failed', 'running'].includes(job.state) ? 1 : 0);
 
 export function processingSettings(store) {
   const saved = store.get('settings', 'processing');
@@ -57,7 +60,10 @@ export class NoteProcessing {
     if (!settings.enabled) return {skipped: 'processing is switched off'};
     if (!this.domains.provider) { this.status = {...this.status, state: 'waiting for a model'}; return {skipped: 'no model connected'}; }
     const timezone = this.store.get('settings', 'installation')?.timezone, day = today(timezone, new Date(now));
-    const doneToday = this.query.rows('note_ai_jobs').filter(j => j.automatic && j.day === day && ['completed', 'failed'].includes(j.state)).length;
+    // Every run counts, failed ones too: a note's record holds how many it had
+    // today (runs_today). Until 6 October 2026 a note counted once however
+    // often it was processed again, so the limit did not hold.
+    const doneToday = this.query.rows('note_ai_jobs').filter(j => j.automatic && j.day === day).reduce((n, j) => n + runsToday(j, day), 0);
     this.status.processed_today = doneToday;
     if (doneToday >= settings.daily_limit) { this.status.state = 'daily limit reached'; return {skipped: 'daily limit reached', limit: settings.daily_limit}; }
     const next = this.candidates(settings, now).find(c => c.ready);
@@ -65,7 +71,7 @@ export class NoteProcessing {
     this.running = true;
     const {note, fingerprint, job} = next, attempts = job?.desired_fingerprint === fingerprint ? (job.attempts || 0) + 1 : 1;
     try {
-      recordJob(this.store, this.query, note, {state: 'running', desired_fingerprint: fingerprint, attempts, automatic: true, day, execution_started_at: new Date(now).toISOString(), last_error: null});
+      recordJob(this.store, this.query, note, {state: 'running', desired_fingerprint: fingerprint, attempts, automatic: true, day, runs_today: (job?.automatic ? runsToday(job, day) : 0) + 1, execution_started_at: new Date(now).toISOString(), last_error: null});
       await this.domains.invoke('process-note', {note_id: note.id, reason: 'automatic'});
       recordJob(this.store, this.query, note, {state: 'completed', fingerprint, desired_fingerprint: fingerprint, attempts, automatic: true, day, last_error: null, next_eligible_at: null});
       this.status = {...this.status, state: 'idle', last_run: new Date().toISOString(), last_error: null, processed_today: doneToday + 1};
