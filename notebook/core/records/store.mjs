@@ -19,6 +19,16 @@ export function atomic(file, text) {
     Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,25);
   }}
 }
+// Releasing the lock must not fail on a scanner's brief hold: a lock left behind
+// names this process, which is alive, so every later write would wait on it.
+function release(lock){
+  const deadline=Date.now()+3000;
+  for(;;){try{fs.unlinkSync(lock);return;}catch(error){
+    if(error.code==='ENOENT')return;
+    if(process.platform!=='win32'||!['EPERM','EACCES','EBUSY'].includes(error.code)||Date.now()>=deadline)throw error;
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,25);
+  }}
+}
 // A record's file: readable Markdown with YAML frontmatter for what a person
 // reads, JSON for machine bookkeeping (see layout.mjs). decode() throws an
 // error whose code is NOT_RECORD for an owner's own Markdown page.
@@ -64,22 +74,30 @@ export class Store {
   }
   withLock(fn) {
     const lock = path.join(this.state, 'workspace.lock');
+    const busy = () => Object.assign(new Error('Workspace is being written by another process'),{code:'WRITER_BUSY'});
     let fd;
     try { fd = fs.openSync(lock, 'wx'); } catch (e) {
+      // Windows answers EPERM while a just-released lock file is still held by a
+      // scanner or another process's handle: a busy workspace, retried by
+      // withLockAsync, not an error the owner sees (until 6 October 2026 it was).
+      if (process.platform === 'win32' && ['EPERM', 'EACCES', 'EBUSY'].includes(e.code)) throw busy();
       if (e.code !== 'EEXIST') throw e;
-      let owner;
-      try { owner = JSON.parse(fs.readFileSync(lock, 'utf8')); } catch { throw new Error('Workspace lock requires recovery'); }
+      let owner,text;
+      try { text = fs.readFileSync(lock, 'utf8'); } catch (error) { if (['ENOENT', 'EPERM', 'EACCES', 'EBUSY'].includes(error.code)) throw busy(); throw error; }
+      // A writer that has just created the lock may not have written its name yet.
+      if (!text.trim()) { try { if (Date.now() - fs.statSync(lock).mtimeMs < 10000) throw busy(); } catch (error) { if (error.code === 'WRITER_BUSY' || error.code === 'ENOENT') throw busy(); throw error; } }
+      try { owner = JSON.parse(text); } catch { throw new Error('Workspace lock requires recovery'); }
       // EPERM: the writer is alive but not ours to signal (on Windows, the server started by
       // the installer's task). That is a busy workspace, not an error.
       try { process.kill(owner.pid, 0); } catch (error) {
         if (error.code === 'ESRCH') { fs.unlinkSync(lock); return this.withLock(fn); }
         if (error.code !== 'EPERM') throw error;
       }
-      throw Object.assign(new Error('Workspace is being written by another process'),{code:'WRITER_BUSY'});
+      throw busy();
     }
     this.holding = (this.holding || 0) + 1;
     try { fs.writeFileSync(fd, JSON.stringify({ pid: process.pid, at: new Date().toISOString() })); fs.fsyncSync(fd); return fn(); }
-    finally { this.holding--; fs.closeSync(fd); fs.unlinkSync(lock); }
+    finally { this.holding--; fs.closeSync(fd); release(lock); }
   }
   async waitForWriter({signal,timeoutMs=30000}={}) {
     const lock=path.join(this.state,'workspace.lock'),until=Date.now()+timeoutMs;
