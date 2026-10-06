@@ -82,6 +82,14 @@ BRIEFING_MAX = 1024 * 1024   # a briefing is a page or two of text
 
 WINDOWS_EXE = "https://github.com/MichaelZelbel/godspeed-mission-control/releases/latest/download/GodspeedSetup.exe"
 ONE_LINER = "https://raw.githubusercontent.com/MichaelZelbel/godspeed-mission-control/main/install-godspeed.sh"
+if FLOW == "notebook":
+    # The one-click server is version 2, and the latest release and main are version 1, so a
+    # reader sent there got the other product (until 6 October 2026). Version 2's published
+    # installers, from the commit this server was built from (GODSPEED_REVISION in its image).
+    _ref = os.environ.get("GODSPEED_REVISION", "")
+    _ref = _ref if re.fullmatch(r"[0-9a-f]{40}", _ref) else "codex/godspeed-v2-completeness"
+    WINDOWS_EXE = "https://github.com/MichaelZelbel/godspeed-mission-control/raw/%s/installers/GodspeedSetup.exe" % _ref
+    ONE_LINER = "https://raw.githubusercontent.com/MichaelZelbel/godspeed-mission-control/%s/installers/install-godspeed.sh" % _ref
 
 
 SECRETS = []   # keys the reader sent, masked in every log line like the bot token
@@ -155,10 +163,12 @@ def write_telegram_env(user_id, chat_id):
         pass
 
 
-def run(cmd, timeout=120, stdin_text=None, env=None):
-    """A quiet command: (exit code, output). A missing program is exit 127."""
+def run(cmd, timeout=120, stdin_text=None, env=None, new_session=False):
+    """A quiet command: (exit code, output). A missing program is exit 127. new_session
+    leaves it no terminal, so a program that asks for a secret reads it from stdin_text."""
     try:
-        p = subprocess.run(cmd, input=stdin_text, capture_output=True, text=True, timeout=timeout, env=env)
+        p = subprocess.run(cmd, input=stdin_text, capture_output=True, text=True, timeout=timeout, env=env,
+                           start_new_session=new_session)
         return p.returncode, (p.stdout or "") + (p.stderr or "")
     except FileNotFoundError:
         return 127, ""
@@ -743,8 +753,11 @@ def brain_key(chat, slug):
         SECRETS.append(key)
         chat.send("Thanks, I deleted your message. Checking the key with %s..." % esc(name))
         run(HERMES + ["auth", "remove", slug, "godspeed-setup"], timeout=60)   # a key tried before
-        rc, _ = run(HERMES + ["auth", "add", slug, "--type", "api-key", "--api-key", key,
-                              "--label", "godspeed-setup"], timeout=60)
+        # The key goes in on standard input. As --api-key it was on the command line, where
+        # every account on the server can read it in the process list (until 6 October 2026).
+        # Without --api-key Hermes asks for it, and with no terminal it reads the answer there.
+        rc, _ = run(HERMES + ["auth", "add", slug, "--type", "api-key", "--label", "godspeed-setup"],
+                    timeout=60, stdin_text=key + "\n", new_session=True)
         use_model(slug, default_model(slug))
         ok, why = proof() if rc == 0 else (False, "the key could not be stored")
         log("brain: %s: %s" % (slug, "answers" if ok else why[:200]))
@@ -1075,7 +1088,9 @@ def step_hand_over(chat):
     if rc != 0:
         log("hand-over: hermes send did not deliver (exit %s); sending directly" % rc)
         chat.send(esc(first))
-    rc, url = run(["git", "-C", GODSPEED, "remote", "get-url", "origin"], timeout=30)
+    # On the one-click server the folder is the notebook's, not the installer's ~/godspeed.
+    folder = WORKSPACE if FLOW == "notebook" and WORKSPACE else GODSPEED
+    rc, url = run(["git", "-C", folder, "remote", "get-url", "origin"], timeout=30)
     url = url.strip() if rc == 0 else ""
     if url.startswith("https://github.com/"):
         chat.send(

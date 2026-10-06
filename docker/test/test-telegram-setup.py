@@ -66,7 +66,10 @@ if a[:3] == ["config", "set", "model.default"]:
 if a[:2] == ["auth", "remove"]:
     st["keys"].pop(a[2], None); save(); sys.exit(0)
 if a[:2] == ["auth", "add"] and "api-key" in a:
-    st["keys"][a[2]] = a[a.index("--api-key") + 1]; save(); print("Added %s credential" % a[2]); sys.exit(0)
+    # What hermes_cli/auth_commands.py does: --api-key, or else it asks, and with no
+    # terminal the answer is read from standard input.
+    key = a[a.index("--api-key") + 1] if "--api-key" in a else sys.stdin.readline().strip()
+    st["keys"][a[2]] = key; save(); print("Added %s credential" % a[2]); sys.exit(0)
 if a[:2] == ["chat", "--oneshot"]:
     # The proof question: ChatGPT answers only on the models the plan may use, a key only when good.
     p = st.get("provider")
@@ -148,7 +151,7 @@ print("Filed the goal and the clock")
 '''
 
 
-def scenario_run(name, scenario, extra_env=None, env_file=None, timeout=120):
+def scenario_run(name, scenario, extra_env=None, env_file=None, timeout=120, prepare=None):
     tmp = tempfile.mkdtemp(prefix="tg-setup-")
     home, fakes = os.path.join(tmp, "home"), os.path.join(tmp, "fake")
     os.makedirs(home)
@@ -173,6 +176,8 @@ def scenario_run(name, scenario, extra_env=None, env_file=None, timeout=120):
                HERMES_HOME=os.path.join(home, ".hermes"), GODSPEED=os.path.join(home, "godspeed"),
                FAKE_DIR=fakes, TZ="Europe/Berlin")
     os.makedirs(os.path.join(tmp, "workspace"))
+    if prepare:
+        prepare(os.path.join(tmp, "workspace"))
     env.pop("GODSPEED_TELEGRAM_OWNER", None)
     env.pop("GODSPEED_TELEGRAM_START_CODE", None)
     env.pop("GODSPEED_TG_FLOW", None)
@@ -397,6 +402,8 @@ def test_key_provider():
     check("every message with a key is deleted from the chat", len(r["fake"].deleted) == 3)
     check("no key is in the log, the output or any message the bot sent",
           all(k not in r["log"] and k not in r["out"] and not any_has(to_anna, k) for k in (good, bad)))
+    check("and no key is on a command line, where the process list shows it",
+          all(k not in r["hermes"] for k in (good, bad)))
     check("the installer's own ChatGPT sign-in is skipped", r["runs"] and r["runs"][-1].get("KB_SIGNIN_SKIP") == "1")
 
 
@@ -426,7 +433,7 @@ def test_one_click_happy():
             {"when": "Now your briefing", "do": [{"from": 111, "document": {"file_name": "what-my-ai-knew (1).md",
                                                                            "content": briefing}}]},
             {"when": "Last one: your goal", "do": [{"from": 111, "text": "Run a  half marathon\nin May."}]},
-        ]}, extra_env=ONE_CLICK)
+        ]}, extra_env=dict(ONE_CLICK, GODSPEED_REVISION=REVISION), prepare=backed_up)
     to_anna, to_eve = r["to"](111), r["to"](999)
     check("it finishes, exit 0", r["rc"] == 0)
     check("only the link's code takes the bot", r["state"].get("owner_id") == 111 and r["state"].get("bot_id") == 42)
@@ -460,6 +467,21 @@ def test_one_click_happy():
     check("setup is marked done", r["state"].get("done") is True)
     check("neither the key nor the start code is in any log",
           all(x not in r["log"] and x not in r["out"] for x in (TOKEN, CODE)))
+    # Version 2's installers at this server's own commit, never version 1's latest release.
+    check("another computer is sent to version 2's installers, of this server's version",
+          any_has(to_anna, "godspeed-mission-control/raw/%s/installers/GodspeedSetup.exe" % REVISION,
+                  "godspeed-mission-control/%s/installers/install-godspeed.sh" % REVISION,
+                  "--repo https://github.com/anna/notebook.git")
+          and not any_has(to_anna, "releases/latest"))
+
+
+REVISION = "0123456789abcdef0123456789abcdef01234567"
+
+
+def backed_up(workspace):
+    """The notebook's folder already has its backup on GitHub."""
+    subprocess.run(["git", "init", "-q", workspace], check=True)
+    subprocess.run(["git", "-C", workspace, "remote", "add", "origin", "https://github.com/anna/notebook.git"], check=True)
 
 
 def test_one_click_snags():
