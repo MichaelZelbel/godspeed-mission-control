@@ -11,6 +11,9 @@ services:
   godspeed:
     image: ghcr.io/michaelzelbel/godspeed-mission-control@sha256:351e8a1697b70a39e2577113df8e4ec3fd4a9b9c2b75b8b00e63f38291f287f4
     restart: unless-stopped
+    # A small init as process 1 collects the programs the assistant leaves behind. The image's
+    # own entrypoint replaces the one that did, and until 7 October 2026 they piled up as zombies.
+    init: true
     environment:
       GODSPEED_ACCESS_TOKEN: ${GODSPEED_SETUP_CODE:?Choose and save a private setup code}
       GODSPEED_DEVICE: vps

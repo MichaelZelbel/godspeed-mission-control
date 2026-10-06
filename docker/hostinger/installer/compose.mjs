@@ -26,6 +26,7 @@ services:
   godspeed:
     image: ${IMAGE}
     restart: unless-stopped
+    init: true
     environment:
 ${job.bootstrap ? `      GODSPEED_ACCESS_TOKEN: ${JSON.stringify(job.bootstrap)}\n` : ''}      GODSPEED_INSTALL_CALLBACK: ${JSON.stringify(job.callback)}
       GODSPEED_DEVICE: vps

@@ -13,7 +13,9 @@ const freePort=()=>new Promise(resolve=>{const s=net.createServer();s.listen(0,'
 test('two computers started without a name are told apart, and neither is called local',async t=>{
  const ids=[];
  for(const name of ['desktop','laptop']){
-  const root=temporary(t),port=await freePort(),env={...process.env,GODSPEED_WORKSPACE:root,GODSPEED_PORT:String(port)};delete env.GODSPEED_DEVICE;delete env.GODSPEED_ORIGINAL_RUNTIME;
+  // None of this machine's own Godspeed settings: inside the image they include a sign-in code,
+  // and a server with one asks for a sign-in before it says anything about itself.
+  const env={...Object.fromEntries(Object.entries(process.env).filter(([name])=>!/^GODSPEED_/i.test(name))),GODSPEED_WORKSPACE:'',GODSPEED_PORT:''},root=temporary(t),port=await freePort();env.GODSPEED_WORKSPACE=root;env.GODSPEED_PORT=String(port);
   const child=spawn(process.execPath,[server],{env,stdio:['ignore','pipe','pipe'],windowsHide:true});
   try{
    let status=null;for(const until=Date.now()+30000;!status&&Date.now()<until;){try{const r=await fetch('http://127.0.0.1:'+port+'/api/status');if(r.ok)status=await r.json();}catch{}if(!status)await new Promise(r=>setTimeout(r,250));}

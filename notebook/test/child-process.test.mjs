@@ -67,7 +67,10 @@ fs.writeFileSync(${JSON.stringify(pids)},process.pid+' '+grandchild.pid);setInte
  for(const until=Date.now()+7500;!fs.existsSync(pids)&&Date.now()<until;)await new Promise(r=>setTimeout(r,100));
  await assert.rejects(running,error=>error.code==='TIMEOUT');
  const [parent,grandchild]=fs.readFileSync(pids,'utf8').split(' ').map(Number);
- const alive=pid=>{try{process.kill(pid,0);return true;}catch(error){return error.code==='EPERM';}};
+ // A killed program nobody has collected yet (a zombie, as under a container's process 1 that
+ // collects nothing) is stopped: it runs nothing, it only has not been reaped.
+ const zombie=pid=>{try{return /^\d+ \(.*\) Z/s.test(fs.readFileSync('/proc/'+pid+'/stat','utf8'));}catch{return false;}};
+ const alive=pid=>{try{process.kill(pid,0);return !zombie(pid);}catch(error){return error.code==='EPERM';}};
  const until=Date.now()+8000;while((alive(parent)||alive(grandchild))&&Date.now()<until)await new Promise(r=>setTimeout(r,100));
  assert.equal(alive(parent),false,'the program itself must be gone');assert.equal(alive(grandchild),false,'and what it started');
 });

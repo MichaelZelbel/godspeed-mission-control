@@ -17,7 +17,7 @@ export GODSPEED_VERIFY_SETUP_CODE
 GODSPEED_VERIFY_SETUP_CODE=$(openssl rand -hex 32)
 docker network create "$network" >/dev/null
 docker volume create "$volume" >/dev/null
-docker run -d --name "$name" --network "$network" --memory=2g --cpus=2 \
+docker run -d --init --name "$name" --network "$network" --memory=2g --cpus=2 \
   --mount "type=volume,src=$volume,dst=/opt/data/full-candidate" \
   -e "GODSPEED_ACCESS_TOKEN=$GODSPEED_VERIFY_SETUP_CODE" -e GODSPEED_TELEGRAM_API=http://127.0.0.1:8081 "$image" >/dev/null
 for attempt in $(seq 1 90); do
