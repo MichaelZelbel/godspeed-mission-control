@@ -314,10 +314,34 @@ function show(result) {
   console.log("source: " + result.source_line);
 }
 
+// Godspeed v2's notebook on this computer searches the mission control's files itself, by
+// words and, when connected, by meaning, and is the memory since 6 October 2026. It is asked
+// first; it never hands back the prompt archive or the assistant's state.
+async function askNotebook(q, max) {
+  const base = (process.env.GODSPEED_NOTEBOOK_URL || "http://127.0.0.1:47831/mcp").replace(/\/mcp\/?$/, "");
+  try {
+    const r = await fetch(base + "/api/search?types=workspace_file&limit=" + Math.max(max * 2, 20) + "&q=" + encodeURIComponent(q), { signal: AbortSignal.timeout(8000) });
+    if (!r.ok) return null;
+    const body = await r.json();
+    if (!Array.isArray(body.data)) return null;
+    const hits = body.data.filter((row) => row.type === "workspace_file" && !/^(prompts|assistant-state)\//.test(row.id) && row.id.toLowerCase() !== NEVER_A_HIT)
+      .map((row) => {
+        const heading = (readText(row.id) || "").split(/\r?\n/).find((l) => /^#\s/.test(l));
+        return { path: row.id, title: heading ? heading.replace(/^#\s+/, "") : row.id, snippet: row.snippet ? row.snippet.replace(/[[\]]/g, "") : "" };
+      });
+    return { hits: hits.slice(0, max), mode: body.mode || "words" };
+  } catch (e) { return null; }
+}
+
 async function main() {
   const terms = termsOf(query);
   let reason = "";
   let answeredEmpty = false;
+  // Only for the mission control the notebook runs in (its folder sync is set up).
+  if (!localOnly && fs.existsSync(path.join(godspeed, ".godspeed", "sync-config.json"))) {
+    const v2 = await askNotebook(query, limit);
+    if (v2 && v2.hits.length) return show({ query: query, source: "notebook", mode: v2.mode, source_line: "the notebook (" + v2.mode + ")", hits: v2.hits });
+  }
   if (!localOnly) {
     const k = nb.menerioKey(godspeed);
     if (!k.key) {
