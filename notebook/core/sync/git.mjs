@@ -288,7 +288,7 @@ export class FileSync {
       validateAssistantFiles(dir);
       if(merged.problems.length)throw new Error('The merged reference graph needs review');
       const removed=[...this.store.records.keys()].filter(key=>!merged.records.has(key));
-      if(removed.some(key=>![...merged.records.values()].some(r=>r.uid===this.store.records.get(key).uid&&(r.aliases||[]).includes(this.store.records.get(key).id))))throw new Error('Remote removal without a tombstone or proven rename needs review: '+removed.join(', '));
+      if(removed.some(key=>![...merged.records.values()].some(r=>r.uid===this.store.records.get(key).uid&&[...(r.former_ids||[]),...(r.aliases||[])].includes(this.store.records.get(key).id))))throw new Error('Remote removal without a tombstone or proven rename needs review: '+removed.join(', '));
       // A record is brought in where the merge put it, so a rename on another
       // machine renames the file here, and every machine names it the same.
       const inside=(store,file)=>path.relative(store.recordsRoot,file).split(path.sep).join('/'),recordFiles=store=>new Set([...store.fileOf.values()].map(file=>path.relative(store.root,file).split(path.sep).join('/')));

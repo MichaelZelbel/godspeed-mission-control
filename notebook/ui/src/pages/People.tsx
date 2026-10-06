@@ -108,9 +108,12 @@ export default function People() {
   const submitCreatePerson = () => {
     if (!createName.trim()) return;
     createPerson.mutate(createName, {
-      onSuccess: () => {
+      // The new person opens: until 6 October 2026 the dialog closed onto the
+      // empty "Select a person" page and the new person had to be searched for.
+      onSuccess: (person: { id?: string } | null | undefined) => {
         setCreateOpen(false);
         setCreateName("");
+        if (person?.id) openPerson(person.id);
       },
     });
   };
@@ -374,8 +377,8 @@ export default function People() {
                 <strong>{deleteTarget?.name ?? "This person"}</strong> will be permanently deleted.
               </span>
               <span className="block">
-                Their note links, logged interactions, relationships, and group memberships are
-                removed with them. Notes themselves are kept.
+                Their topics, facts, logged interactions, relationships and group memberships
+                are removed with them. Notes themselves are kept.
               </span>
               <span className="block font-medium text-destructive">This cannot be undone.</span>
             </AlertDialogDescription>

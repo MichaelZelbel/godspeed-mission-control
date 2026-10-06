@@ -9,10 +9,10 @@ export function planMerge(store,staged,mediaRoot){
   store.scan();const incoming=new Store(staged),existing=[...store.records.values()];
   if(store.problems.length||incoming.problems.length)throw new Error('Some stored relationships need repair before importing. Your content has not been changed.');
   const identities=new Map(),uids=new Map(existing.map(r=>[r.uid,r]));
-  for(const record of existing)for(const alias of [record.id,...record.aliases||[]])identities.set(record.type+'/'+alias.toLowerCase(),record);
+  for(const record of existing)for(const alias of [record.id,...record.former_ids||[]])identities.set(record.type+'/'+alias.toLowerCase(),record);
   const selected=[],resolved=new Map();let skipped=0;
   for(const record of incoming.records.values()){
-    const matches=[...new Set([uids.get(record.uid),...([record.id,...record.aliases||[]].map(id=>identities.get(record.type+'/'+id.toLowerCase())))].filter(Boolean))];
+    const matches=[...new Set([uids.get(record.uid),...([record.id,...record.former_ids||[]].map(id=>identities.get(record.type+'/'+id.toLowerCase())))].filter(Boolean))];
     if(matches.length>1||matches.some(r=>r.type!==record.type))throw new Error('An imported identity matches more than one existing item. Your content has not been changed.');
     if(matches.length){skipped++;resolved.set(record.uid,matches[0]);continue;}
     const next=structuredClone(record);delete next._hash;next.device=store.device;
@@ -22,7 +22,7 @@ export function planMerge(store,staged,mediaRoot){
   }
   for(const record of selected)for(const ref of record.references||[]){
     const target=resolved.get(ref.uid);
-    if(target){ref.uid=target.uid;if(![target.id,...target.aliases||[]].includes(ref.id)){
+    if(target){ref.uid=target.uid;if(![target.id,...target.former_ids||[],...target.aliases||[]].includes(ref.id)){
       // A collision with a different identity is never silently rewired.
       throw new Error('An imported relationship conflicts with an existing item. Your content has not been changed.');
     }}

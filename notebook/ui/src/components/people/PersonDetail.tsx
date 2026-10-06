@@ -291,7 +291,7 @@ export function PersonDetail({ person, people, onClose }: PersonDetailProps) {
                         <AlertDialogHeader>
                           <AlertDialogTitle>Delete {person.name}?</AlertDialogTitle>
                           <AlertDialogDescription>
-                            This removes the person together with their interactions, relationships and group memberships. It cannot be undone.
+                            This removes the person together with their topics, facts, interactions, relationships and group memberships. Notes that mention them stay. It cannot be undone.
                           </AlertDialogDescription>
                         </AlertDialogHeader>
                         <AlertDialogFooter>

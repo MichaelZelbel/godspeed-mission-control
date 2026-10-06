@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { slug, hash } from './records/store.mjs';
+import { slug, hash, identityIds } from './records/store.mjs';
 import {nativeRows} from './native-personal.mjs';
 import {dueRows} from './native-due.mjs';
 import {assertAssistantRecord,assertAssistantLinks} from './assistant-mutations.mjs';
@@ -96,7 +96,7 @@ export class QueryService {
       const corrected=values.map(original=>{const corrections=(byMoment.get(original.id)||[]).slice().sort((a,b)=>a.sequence-b.sequence||a.id.localeCompare(b.id));return corrections.reduce((r,c)=>({...r,...c.patch,_hash:c._hash}),original);}).filter(r=>!r.removed_at);
       memo.set(type,corrected);return corrected;
     };
-    const get=(type,id)=>this.store.records.get(type+'/'+id)||ofType(type).find(r=>(r.aliases||[]).includes(id));
+    const get=(type,id)=>this.store.records.get(type+'/'+id)||ofType(type).find(r=>(r.former_ids||[]).includes(id))||ofType(type).find(r=>(r.aliases||[]).includes(id));
     if (table === 'world_entities') return [...list('contacts').map(r => ({ ...r, source_table: 'contact', kind: 'person', description: r.notes || null, ai_visibility: r.ai_visibility || 'visible' })), ...list('entities').map(r => ({ ...r, source_table: 'entity', kind: r.entity_type }))];
     if (table === 'world_events') return list('moments').map(r => ({ ...r, source_table: 'moment' }));
     if (table === 'world_claims') return [...this.rows('profile_facts').filter(r=>r.visibility_scope!=='private').map(r=>({...r,id:r.claim_id,source_table:'claim',subject_kind:r.subject_type,category:r.category_slug||'other',object_id:null,source_kind:r.source_type,source_ref:r.source_id})),...list('contact_relationships').map(r=>({...r,source_table:'contact_relationship',subject_kind:r.source_type,subject_id:r.source_id,category:'relationship',attribute:'relationship',value:r.custom_label||r.label,object_id:r.target_id,cardinality:'many',confidence:r.confidence||'likely'}))];
@@ -207,7 +207,8 @@ export class QueryService {
           }
           record.references = this.references(table, record); return record;
         });
-        this.store.commit(changed); return table==='moments'?this.rows(table).filter(r=>changed.some(c=>c.id===r.id||c.moment_id===r.id)):changed;
+        const gone=operation==='delete'&&table==='contacts'?this.personBelongings(changed.map(c=>c.id)):[];
+        this.store.commit([...changed,...gone]); return table==='moments'?this.rows(table).filter(r=>changed.some(c=>c.id===r.id||c.moment_id===r.id)):changed;
       });
     }
     const count = rows.length;
@@ -220,7 +221,7 @@ export class QueryService {
     // Joins only when the selection asks for one, from one map of identities
     // per view of the store rather than one per query.
     const joins=/\(/.test(String(selection));let identities=null;
-    const joined=(type,id)=>{if(!identities){if(this.identityFor!==this.store.records){this.identityCache=new Map();for(const record of this.store.records.values())for(const id of [record.id,...record.aliases||[]])this.identityCache.set(record.type+'/'+id,record);this.identityFor=this.store.records;}identities=this.identityCache;}return identities.get(type+'/'+id)||null;};
+    const joined=(type,id)=>{if(!identities){if(this.identityFor!==this.store.records){this.identityCache=new Map();for(const record of this.store.records.values())for(const id of [...identityIds(record),...record.aliases||[]])if(!this.identityCache.has(record.type+'/'+id)||id===record.id)this.identityCache.set(record.type+'/'+id,record);this.identityFor=this.store.records;}identities=this.identityCache;}return identities.get(type+'/'+id)||null;};
     const keep=projection(selection);
     rows = rows.map(r => {
       let result = { ...r, _hash: r._hash || this.store.records.get(table+'/'+r.id)?._hash };
@@ -239,6 +240,20 @@ export class QueryService {
     if (single && rows.length !== 1) throw new Error('Expected one record');
     if (maybeSingle && rows.length > 1) throw new Error('Ambiguous record query');
     return { data: options.head ? null : single || maybeSingle ? rows[0] || null : rows, count, error: null };
+  }
+  // What goes with a deleted person, as it did in Menerio: their topics, facts,
+  // relationships, group memberships, interactions, documents and fact
+  // settings. Notes and timeline events that mention them stay. Until
+  // 6 October 2026 only the person went, and their topics and facts stayed
+  // behind pointing at no one.
+  personBelongings(contactIds){
+    const ids=new Set(contactIds),now=new Date().toISOString(),out=[],live=type=>this.store.list(type).filter(r=>!r.removed_at);
+    const of=r=>ids.has(r.contact_id)||ids.has(r.person_id);
+    const topics=live('contact_topics').filter(of),topicIds=new Set(topics.map(t=>t.id));
+    const relationships=live('contact_relationships').filter(r=>r.source_type==='contact'&&ids.has(r.source_id)||r.target_type==='contact'&&ids.has(r.target_id));
+    for(const r of [...topics,...live('contact_topic_events').filter(e=>topicIds.has(e.topic_id)),...relationships,...live('contact_group_memberships').filter(of),...live('contact_interactions').filter(of),...live('person_documents').filter(of),...live('claims').filter(c=>c.subject_type==='contact'&&ids.has(c.subject_id)),...live('fact_slots').filter(s=>s.subject_type==='contact'&&ids.has(s.subject_id)||ids.has(s.contact_id)),...live('profile_categories').filter(c=>ids.has(c.contact_id))])
+      out.push(this.store.prepare(r.type,{removed_at:now},r));
+    return out;
   }
   // The write path the dashboard uses. execute() refuses outright when another
   // process holds the workspace, which lost a note edit whenever the sync

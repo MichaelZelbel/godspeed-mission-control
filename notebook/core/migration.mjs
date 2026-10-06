@@ -101,7 +101,7 @@ export function stageAccount(bundle,destination,{disposable=false}={}){
     if(!tables.has(table.name)||deferredTables.has(table.name)||table.name.endsWith('_connections')||['connected_apps','shared_notes','user_mcp_servers'].includes(table.name)){if(rows.length)archived.push({table:table.name,count:rows.length,reason:deferredTables.has(table.name)?'Graph and chunk data retained in the source archive; graph screen is not available yet':'Source-only feature or connection configuration retained without activation'});continue;}
     for(const row of rows){
       const sourceId=stableId(table.name,row,table.primaryKey),id=table.name==='profiles'?'owner':sourceId;
-      const value={...row,id,uid:sourceId,user_id:'owner',aliases:[...new Set([...(row.aliases||[]),...(id!==sourceId?[sourceId]:[])])],metadata:{...row.metadata,menerio_source_user:manifest.sourceUser,menerio_source_id:sourceId,menerio_source_table:table.name}};
+      const value={...row,id,uid:sourceId,user_id:'owner',aliases:row.aliases||[],former_ids:[...new Set([...(row.former_ids||[]),...(id!==sourceId?[sourceId]:[])])],metadata:{...row.metadata,menerio_source_user:manifest.sourceUser,menerio_source_id:sourceId,menerio_source_table:table.name}};
       if(table.name==='contact_groups'){value.group_type=row.type;value.is_archived=!!row.archived_at;}
       if(table.name==='contact_interactions')value.interaction_type=row.type;
       if(table.name==='moments'&&row.deleted_at)value.removed_at=row.deleted_at;
@@ -109,7 +109,7 @@ export function stageAccount(bundle,destination,{disposable=false}={}){
       const record=store.prepare(table.name,value);if(row.created_at)record.created_at=row.created_at;if(row.updated_at)record.updated_at=row.updated_at;records.push(record);
     }
   }
-  const identities=new Map();for(const r of records)for(const id of [r.id,...r.aliases])identities.set(r.type+'/'+id,r);query.store={get:(type,id)=>identities.get(type+'/'+id)};
+  const identities=new Map();for(const r of records)for(const id of [r.id,...r.former_ids||[]])identities.set(r.type+'/'+id,r);query.store={get:(type,id)=>identities.get(type+'/'+id)};
   for(const record of records)record.references=query.references(record.type,record);
   const unavailable=[];
   for(const record of [...records])for(const ref of record.references)if(!identities.has(ref.type+'/'+ref.id)){

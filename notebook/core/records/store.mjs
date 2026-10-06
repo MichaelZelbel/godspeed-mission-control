@@ -25,6 +25,13 @@ export function atomic(file, text) {
 export const encode = encodeFile;
 export const decode = decodeFile;
 const posix = file => file.split(path.sep).join('/');
+// The ids a record answered to before (a rename, a merge). Until 6 October
+// 2026 they went into `aliases`, which for a person are nicknames and for a
+// note Obsidian's alternative titles: two people called "Lexi" were then one
+// identity twice, and the second could not be saved. Ids already written into
+// aliases are still found, but names are never checked for uniqueness.
+export const identityIds = record => [record.id, ...(record.former_ids || [])];
+export const answersTo = (record, id) => record.id === id || (record.former_ids || []).includes(id) || (record.aliases || []).includes(id);
 // A copy that shares the (immutable) strings: what structuredClone did per
 // record and per read, at a fraction of the cost, since a note's text is
 // most of its size.
@@ -183,7 +190,7 @@ export class Store {
         const record=entry.record,key=record.type+'/'+record.id;
         if (uids.has(record.uid)) problems.push({ file, error: 'Duplicate UUID', other: uids.get(record.uid) });
         uids.set(record.uid, key); records.set(key, record); fileOf.set(key, file); keyOfUid.set(record.uid, key); keyOfFile.set(file, key); index(entry.name, key);
-        for (const alias of record.removed_at ? [] : [record.id, ...(record.aliases || [])]) {
+        for (const alias of record.removed_at ? [] : identityIds(record)) {
           const akey = record.type + '/' + alias.toLowerCase();
           if (aliases.has(akey) && aliases.get(akey) !== key) problems.push({ file, error: 'Ambiguous alias', alias });
           aliases.set(akey, key);
@@ -336,16 +343,16 @@ export class Store {
   }
   validateReferences(records) {
     const problems = [], uids = new Map(records.map(r => [r.uid,r]));
-    const keys = new Set(records.flatMap(r => [r.type + '/' + r.id, ...(r.aliases || []).map(a => r.type + '/' + a)]));
+    const keys = new Set(records.flatMap(r => [r.type + '/' + r.id, ...[...(r.former_ids || []), ...(r.aliases || [])].map(a => r.type + '/' + a)]));
     for (const r of records) for (const ref of r.references || []) {
       const target=ref.uid?uids.get(ref.uid):null;
-      if (!(ref.uid ? target&&target.type===ref.type&&[target.id,...target.aliases||[]].includes(ref.id) : keys.has(ref.type + '/' + ref.id))) problems.push({ record: r.id, error: 'Missing or inconsistent reference', reference: ref });
+      if (!(ref.uid ? target&&target.type===ref.type&&answersTo(target,ref.id) : keys.has(ref.type + '/' + ref.id))) problems.push({ record: r.id, error: 'Missing or inconsistent reference', reference: ref });
     }
     return problems;
   }
   // Callers get copies: a record they change is theirs, never the view's.
   list(type, { removed = false } = {}) { this.scan(); return this.ofType(type).filter(r => removed || !r.removed_at).map(copy); }
-  get(type, id) { this.scan(); const record = this.records.get(type + '/' + id) || this.ofType(type).find(r => (r.aliases || []).includes(id)); return record && copy(record); }
+  get(type, id) { this.scan(); const record = this.records.get(type + '/' + id) || this.ofType(type).find(r => (r.former_ids || []).includes(id)) || this.ofType(type).find(r => (r.aliases || []).includes(id)); return record && copy(record); }
   prepare(type, value, old = null) {
     const now = new Date().toISOString(), uid = old?.uid || value.uid || randomUUID();
     const id = old?.id || value.id || slug(value.name || value.title || type) + '-' + uid.slice(0, 8);
@@ -369,7 +376,7 @@ export class Store {
     return this.withLock(()=>{
       this.scan();const before=new Map(this.records),changed=new Map(),files=new Map(),view=Object.create(this);
       view.records=new Map(before);view.scan=()=>view.records;view.withLock=fn=>fn();
-      view.get=(type,id)=>view.records.get(type+'/'+id)||[...view.records.values()].find(r=>r.type===type&&(r.aliases||[]).includes(id))||null;
+      view.get=(type,id)=>view.records.get(type+'/'+id)||[...view.records.values()].find(r=>r.type===type&&(r.former_ids||[]).includes(id))||[...view.records.values()].find(r=>r.type===type&&(r.aliases||[]).includes(id))||null;
       view.list=(type,{removed=false}={})=>[...view.records.values()].filter(r=>r.type===type&&(removed||!r.removed_at));
       view.commit=(records,options={})=>{for(const item of options.files||[])files.set(item.file,item);for(const raw of records){const record={...raw};delete record._hash;const key=record.type+'/'+record.id;changed.set(key,record);view.records.set(key,{...record,_hash:hash(encode(record))});}};
       const result=work(view,changed,before,files);
@@ -479,7 +486,7 @@ export class Store {
     const ids = new Set(),aliases=new Map();
     for (const r of proposed.values()) {
       if (ids.has(r.uid)) errors.push({ error: 'Duplicate UUID' }); ids.add(r.uid);
-      if(!r.removed_at)for(const alias of [r.id,...r.aliases||[]]){const key=r.type+'/'+alias.toLowerCase();if(aliases.has(key)&&aliases.get(key)!==r.uid)errors.push({error:'Ambiguous case-insensitive identity or alias',alias});aliases.set(key,r.uid);}
+      if(!r.removed_at)for(const alias of identityIds(r)){const key=r.type+'/'+alias.toLowerCase();if(aliases.has(key)&&aliases.get(key)!==r.uid)errors.push({error:'Ambiguous case-insensitive identity or alias',alias});aliases.set(key,r.uid);}
     }
     if (errors.length) throw new Error('Reference validation failed: ' + JSON.stringify(errors));
     const {targets,moved}=this.planPaths(records,{removeKeys,forced:paths,proposed,cascade});records=[...records,...moved];
@@ -586,7 +593,7 @@ export class Store {
       if (action === 'display-name') { const next = this.prepare(type, { name: options.name }, old); this.commit([next]); return next; }
       if(action==='rename'){
         const nextId=safe(options.id);if(nextId.toLowerCase()===old.id.toLowerCase())throw new Error('A path rename must change its spelling beyond case');
-        const next={...this.prepare(type,{aliases:[...new Set([...(old.aliases||[]),old.id])]},old),id:nextId};
+        const next={...this.prepare(type,{former_ids:[...new Set([...(old.former_ids||[]),old.id])]},old),id:nextId};
         const changed=[...this.records.values()].filter(r=>r.uid!==old.uid&&(r.references||[]).some(ref=>ref.uid===old.uid||ref.type===type&&ref.id===old.id)).map(r=>{
           const patch=structuredClone(r);for(const ref of patch.references)if(ref.uid===old.uid||ref.type===type&&ref.id===old.id){ref.uid=old.uid;ref.id=nextId;if(ref.field){const keys=ref.field.split('.');let object=patch;for(const key of keys.slice(0,-1))object=object[key]??={};const key=keys.at(-1);object[key]=Array.isArray(object[key])?object[key].map(v=>v===old.id?nextId:v):nextId;}}
           return this.prepare(r.type,patch,r);
@@ -607,7 +614,10 @@ export class Store {
             return this.prepare(r.type, { ...patch, references: r.references.map(ref => ref.uid === old.uid || (ref.type === type && ref.id === id) ? { ...ref, uid: target.uid, id: target.id } : ref) }, r);
           });
         const tombstone = this.prepare(type, { removed_at: new Date().toISOString(), merged_into: target.uid }, old);
-        const merged = this.prepare(type, { aliases: [...new Set([...(target.aliases || []), old.id, ...(old.aliases || [])])], merged_sources: [...(target.merged_sources || []), old.uid] }, target);
+        // The merged record answers to the source's ids; a person merged into
+        // another also keeps their name and nicknames as nicknames.
+        const names = type === 'contacts' ? [old.name, ...(old.aliases || [])].filter(n => typeof n === 'string' && n.trim() && n !== target.name) : (old.aliases || []);
+        const merged = this.prepare(type, { aliases: [...new Set([...(target.aliases || []), ...names])], former_ids: [...new Set([...(target.former_ids || []), ...identityIds(old)])], merged_sources: [...(target.merged_sources || []), old.uid] }, target);
         // The removed source retains its own id; aliases resolve by UUID provenance.
         this.commit([...changed.filter(r => r.uid !== old.uid && r.uid !== target.uid), tombstone, merged]); return merged;
       }
