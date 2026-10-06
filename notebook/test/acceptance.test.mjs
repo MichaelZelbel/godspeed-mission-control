@@ -38,7 +38,7 @@ test('one-time login links expire after use and API scopes are enforced by real 
   const invitation=await(await fetch(origin+'/api/auth/bootstrap',{method:'POST',body:JSON.stringify({token:'synthetic-test-owner'})})).json();
   const invite=new URLSearchParams(invitation.path.split('#')[1]).get('invite');
   const login=await fetch(origin+'/api/auth/setup',{method:'POST',body:JSON.stringify({invite,username:'test-owner',password:'synthetic test password'})}),cookie=login.headers.get('set-cookie').split(';')[0];
-  const link=await(await fetch(origin+'/api/login-link',{method:'POST',headers:{Cookie:cookie}})).json();assert.equal((await fetch(origin+link.path,{redirect:'manual'})).status,303);assert.equal((await fetch(origin+link.path,{redirect:'manual'})).status,401);
+  const link=await(await fetch(origin+'/api/login-link',{method:'POST',headers:{Cookie:cookie}})).json();assert.equal((await fetch(origin+link.path,{redirect:'manual'})).status,200);assert.equal((await fetch(origin+link.path,{method:'POST',redirect:'manual'})).status,303);assert.equal((await fetch(origin+link.path,{method:'POST',redirect:'manual'})).status,401);
   const key=await(await fetch(origin+'/api/functions/mc-api-keys/generate',{method:'POST',headers:{Cookie:cookie},body:JSON.stringify({name:'Notes only',scopes:['notes']})})).json();
   const denied=await fetch(origin+'/mcp',{method:'POST',headers:{Authorization:'Bearer '+key.data.api_key},body:JSON.stringify({jsonrpc:'2.0',id:1,method:'tools/call',params:{name:'write_fact',arguments:{label:'Private fixture',value:'No'}}})});assert.equal(denied.status,403);
  }finally{await service.close();}

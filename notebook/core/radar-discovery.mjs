@@ -1,14 +1,15 @@
+import {outboundFetch} from './outbound-fetch.mjs';
 // Public source discovery sends fixed research topics, never workspace contents.
 export const radarResearchTopics=['ai-agents','agent-memory','rag'];
 const maintainedProjects=['NousResearch/hermes-agent','langchain-ai/langgraph','run-llama/llama_index'];
-export async function readRadarSource(url,{accept='application/vnd.github+json',fetcher=fetch}={}){
- const response=await fetcher(url,{headers:{Accept:accept,'User-Agent':'Godspeed-Mission-Control-Radar'},signal:AbortSignal.timeout(15000),redirect:'error'});
+// A topic's address is read through the outbound check (outbound-fetch.mjs):
+// never this server or its network (until 6 October 2026 any address was read).
+export async function readRadarSource(url,{accept='application/vnd.github+json',fetcher}={}){
+ const response=await outboundFetch(String(url),{headers:{Accept:accept,'User-Agent':'Godspeed-Mission-Control-Radar'}},{fetcher,timeoutMs:15000,maxBytes:1024*1024,maxRedirects:0}).catch(error=>{throw /larger than/.test(error.message)?Error('Radar source exceeds its one-megabyte limit'):error;});
  if(!response.ok)throw Error('Source returned HTTP '+response.status);
- const reader=response.body.getReader(),chunks=[];let length=0;
- try{for(;;){const {done,value}=await reader.read();if(done)break;length+=value.length;if(length>1024*1024)throw Error('Radar source exceeds its one-megabyte limit');chunks.push(value);}}finally{await reader.cancel();}
- const content=Buffer.concat(chunks).toString('utf8');if(!content.trim())throw Error('Source returned no readable text');return {content,status:response.status};
+ const content=Buffer.from(await response.arrayBuffer()).toString('utf8');if(!content.trim())throw Error('Source returned no readable text');return {content,status:response.status};
 }
-export async function discoverRadarSources({cycle=0,now=Date.now(),fetcher=fetch}={}){
+export async function discoverRadarSources({cycle=0,now=Date.now(),fetcher}={}){
  const topic=radarResearchTopics[cycle%radarResearchTopics.length],since=new Date(now-90*86400000).toISOString().slice(0,10);
  const query='topic:'+topic+' stars:>=100 fork:false archived:false pushed:>='+since;
  const url='https://api.github.com/search/repositories?'+new URLSearchParams({q:query,sort:'updated',order:'desc',per_page:'3'}),checks=[];

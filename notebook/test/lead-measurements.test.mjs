@@ -1,5 +1,7 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import http from 'node:http';
 import {Store} from '../core/records/store.mjs';import {QueryService} from '../core/query.mjs';import {leadCommand} from '../core/lead-commands.mjs';import {monthlyMeasurements} from '../core/lead-measurements.mjs';import {lead} from '../core/lead.mjs';
+// Its sources are local fixture servers, which the product itself refuses to read (core/outbound-fetch.mjs).
+process.env.GODSPEED_OUTBOUND_ALLOW_LOCAL='1';
 function fixture(){const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-monthly-progress-'))),query=new QueryService(store),goal=store.save('goals',{title:'Fictional source-aware public work',status:'adopted'});return {store,query,goal};}
 function configure(f,url,rungs){leadCommand(f,['configure',JSON.stringify({monthly:{enabled:true,day:1,rungs:rungs||[{id:'fictional-reader-count',title:'Fictional observed readership',goal_id:f.goal.id,url,kind:'numeric',value_path:'counts.readers'}]}})]);return f.store.get('settings','lead');}
 async function source(t,body){let count=0;const server=http.createServer((req,res)=>{count++;if(body.status)res.statusCode=body.status;res.end(typeof body.value==='string'?body.value:JSON.stringify(body.value));});await new Promise(r=>server.listen(0,'127.0.0.1',r));t.after(()=>new Promise(r=>server.close(r)));return {url:'http://127.0.0.1:'+server.address().port,count:()=>count};}

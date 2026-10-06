@@ -3,6 +3,7 @@ import path from 'node:path';
 import {createHash} from 'node:crypto';
 import {Store,atomic,encode,hash} from './records/store.mjs';
 import {QueryService,tables} from './query.mjs';
+import {mediaObjectName} from './media-names.mjs';
 
 const secretColumns=new Set(['access_token','refresh_token','github_token','bot_token','webhook_secret','webhook_url','channel_token','start_page_token','share_token','pairing_code','key_hash','key_prefix','token_hash','token_prefix','auth','password','credentials','code_challenge','caller_hash','user_code']);
 const credentialTables=new Set(['godspeed_api_keys','mcp_api_tokens','godspeed_connect_requests','godspeed_devices','user_roles','user_suspensions']);
@@ -133,7 +134,7 @@ export function stageAccount(bundle,destination,{disposable=false}={}){
   const archive=path.join(store.state,'migration-source');fs.mkdirSync(archive,{recursive:true,mode:0o700});for(const entry of manifest.files){const target=safeDestination(archive,entry.path);fs.mkdirSync(path.dirname(target),{recursive:true});fs.copyFileSync(safeDestination(bundle,entry.path),target);}atomic(path.join(archive,'migration.json'),JSON.stringify(manifest,null,2));
   const mediaRoot=path.join(store.state,'media');fs.mkdirSync(mediaRoot,{recursive:true});
   for(const media of manifest.media){
-    const original=media.name,filename=media.sha256+'-'+path.posix.basename(original).replace(/[^a-zA-Z0-9_.-]/g,'_');fs.copyFileSync(safeDestination(bundle,media.path),path.join(mediaRoot,filename));
+    const original=media.name,filename=mediaObjectName(media.sha256,original);fs.copyFileSync(safeDestination(bundle,media.path),path.join(mediaRoot,filename));
     const mapping={path:original,file:filename,sha256:media.sha256,size:media.size,contentType:media.contentType||'application/octet-stream'};
     const mappingFile=path.join(mediaRoot,hash(original)+'.mapping.json');if(fs.existsSync(mappingFile))throw new Error('Same storage path appears in multiple buckets; review retained copy');atomic(mappingFile,JSON.stringify(mapping));
   }

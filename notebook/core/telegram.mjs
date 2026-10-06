@@ -3,7 +3,10 @@ import path from 'node:path';
 import {atomic} from './records/store.mjs';
 export class Telegram {
   constructor({store,domains,token,owner,origin='https://api.telegram.org',transport=fetch,loginLink}){this.store=store;this.domains=domains;this.token=token;this.owner=String(owner);this.origin=origin;this.transport=transport;this.loginLink=loginLink;this.file=path.join(store.state,'telegram-offset.json');this.running=false;}
-  async call(method,input){const response=await this.transport(this.origin+'/bot'+this.token+'/'+method,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(input),signal:AbortSignal.timeout(35000)});const data=await response.json();if(!response.ok||!data.ok)throw new Error('Candidate Telegram request failed');return data.result;}
+  // A message carrying a link goes without a preview: Telegram's servers fetch
+  // a previewed link first, and a one-time sign-in link was used up by them
+  // before the owner could tap it (until 6 October 2026).
+  async call(method,input){if(method==='sendMessage'&&/https?:\/\//i.test(String(input.text||'')))input={...input,link_preview_options:{is_disabled:true}};const response=await this.transport(this.origin+'/bot'+this.token+'/'+method,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(input),signal:AbortSignal.timeout(35000)});const data=await response.json();if(!response.ok||!data.ok)throw new Error('Candidate Telegram request failed');return data.result;}
   async failureNotice(id,text){
     const receiptId=id+'-failure-notice';
     if(this.store.get('command_receipts',receiptId))return;

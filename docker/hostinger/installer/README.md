@@ -14,7 +14,11 @@ Copy this folder to /opt/godspeed-hostinger-installer. Install godspeed-installe
 
 The generated configuration says nothing about Telegram. The buyer connects a bot on their own server's web page after the account is made (../README.md, "Telegram, connected after the account"), so a bot's key never reaches this coordinator, the website or its logs.
 
-DynamicUser and StateDirectory keep private jobs in /var/lib/godspeed-installer, retained through restarts. Jobs expire after 24 hours; counts and request rates are bounded. Browser, callback and Compose credentials are separate. Never log generated configurations, ticket files, invitation links, authorization headers or job state. No customer AI traffic is routed through the coordinator.
+DynamicUser and StateDirectory keep private jobs in /var/lib/godspeed-installer, retained through restarts. Browser, callback and Compose credentials are separate.
+
+The generated Compose file carries no setup code (since 6 October 2026). On its first start the server makes its own, keeps it in its data volume, and sends it with the authenticated hostname callback; the first callback binds both the server address and that code, and the Compose link opens nothing after it. Hostinger fetches and keeps the Compose file, so a setup code written into it reached Hostinger and anyone who saw the link.
+
+Limits: an installation whose Compose file was never fetched expires after one hour, a deployed one after 24 hours. One client address (the address Caddy names in X-Forwarded-For) holds at most five undeployed installations and starts at most twenty a day; overall at most thirty start per minute. Before, the Origin header was the only gate and one global cap of 100 jobs kept for a day let a script block real buyers. Never log generated configurations, ticket files, invitation links, authorization headers or job state. No customer AI traffic is routed through the coordinator.
 
 seed-vps-test.mjs is only an operator tool for the authorized test VPS; it generates and stores a synthetic private ticket and Compose configuration in /opt/godspeed-hostinger-test. It is not part of the customer flow.
 

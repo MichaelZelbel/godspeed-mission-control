@@ -1,6 +1,8 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import http from 'node:http';
 import {Store} from '../core/records/store.mjs';import {QueryService} from '../core/query.mjs';import {Domains} from '../core/domains.mjs';import {procedure} from '../core/procedures.mjs';
 import {personalOperation} from '../core/personal-operations.mjs';
+// Its sources are local fixture servers, which the product itself refuses to read (core/outbound-fetch.mjs).
+process.env.GODSPEED_OUTBOUND_ALLOW_LOCAL='1';
 function fixture(){const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-radar-verdict-'))),query=new QueryService(store),domains=new Domains(query,{provider:async()=>{throw Error('Explicit user verdict must not ask a model');}});let n=0;const note=store.save('notes',{title:'Fictional radar proposal',source_app:'radar',content:'Exact retained proposal and source quote',radar:{verdict:null,change:'A fictional dated source adapter',experiment:'Compare the fictional source dates',check:'Both saved dates match their source',rollback:'Restore the retained fictional adapter',end_date:'2026-12-01',source_hash:'fictional-original'}});return {store,query,domains,note,run:(message,request_id='fictional-'+n++)=>domains.invoke('conversation-chat',{conversation_id:'fictional-radar-user',message,request_id})};}
 test('actual user verdict JSON is retained exactly and retry queues no second approval task',async()=>{
  const f=fixture(),reason='Fictional decision: "Try source dates"\nRetain the old adapter.',message='/radar verdict '+f.note.id+' '+JSON.stringify({verdict:'Trial',reason});

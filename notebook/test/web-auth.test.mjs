@@ -51,10 +51,17 @@ test('public setup ownership, password login, durable sessions, expiry, recovery
     assert.equal((await request('/api/session',undefined,newCookie)).status,401);
     assert.equal((await request('/api/logout')).status,405);
     assert.equal((await request('/api/auth/bootstrap',{token:options.token})).status,409);
-    now+=60001;for(let i=0;i<12;i++)assert.equal((await request('/api/login',{username:'no',password:'wrong'})).status,401);
-    assert.equal((await request('/api/login',credentials)).status,429);
+    // One address's own failures make it wait, even with the right password (until 6 October 2026 everyone's counted together).
+    const owner={username:'new-owner',password:'a different sufficiently long password'};
+    now+=3600001;for(let i=0;i<5;i++)assert.equal((await request('/api/login',{username:'no',password:'wrong'})).status,401);
+    assert.equal((await request('/api/login',{username:'no',password:'wrong'})).status,429);
+    assert.equal((await request('/api/login',owner)).status,429);
+    now+=1001;assert.equal((await request('/api/login',owner)).status,200);
     assert.equal(safeReturn('//unrelated.example'),'/dashboard');assert.equal(safeReturn('/\\unrelated.example'),'/dashboard');
     assert.equal(safeReturn('/dashboard/notes/one?tab=history#entry'),'/dashboard/notes/one?tab=history#entry');
+    // A path that only becomes "//elsewhere" once normalized (6 October 2026 review).
+    for(const next of ['/.//evil.example/phish','/..//evil.example/x','/%2e//evil.example/x','/%2E%2E//evil.example','/./\\evil.example','/\t/evil.example','/dashboard/../..//evil.example'])assert.equal(safeReturn(next),'/dashboard',next);
+    assert.equal(safeReturn('/dashboard/./notes'),'/dashboard/notes');
   }finally{await service.close();}
 });
 
@@ -65,4 +72,40 @@ test('setup invitations expire and cannot be reused after replacement',async()=>
   const readInvite=link=>new URLSearchParams(link.path.split('#')[1]).get('invite');
   assert.equal(auth.validInvite({invite:readInvite(first)}),false);assert.equal(auth.validInvite({invite:readInvite(second)}),true);
   now+=24*3600000+1;assert.equal(auth.validInvite({invite:readInvite(second)}),false);
+});
+
+test('failed sign-ins by a stranger never lock the owner out',async()=>{
+  const {clientAddress,trustedProxies}=await import('../server/web-auth.mjs');
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-limits-'));let now=Date.now();
+  const token='private-installation-proof-not-a-password',service=await createService({root,host:'0.0.0.0',port:0,token,authNow:()=>now}),base='http://127.0.0.1:'+service.address.port;
+  // Caddy, on this machine, names the client in X-Forwarded-For.
+  async function request(route,input,from){const r=await fetch(base+route,{method:'POST',headers:{'Content-Type':'application/json','X-Forwarded-For':from},body:JSON.stringify(input)});return {status:r.status,data:await r.json()};}
+  try{
+    const invite=new URLSearchParams((await request('/api/auth/bootstrap',{token},'198.51.100.7')).data.path.split('#')[1]).get('invite');
+    const owner={username:'owner-test',password:'correct horse battery staple'},setup=await request('/api/auth/setup',{...owner,invite},'198.51.100.7');assert.equal(setup.status,200);
+    const stranger='203.0.113.5',statuses=[];
+    for(let i=0;i<14;i++)statuses.push((await request('/api/login',{username:'owner-test',password:'wrong guess '+i},stranger)).status);
+    assert.deepEqual(statuses,[401,401,401,401,401,...Array(9).fill(429)]);
+    assert.equal((await request('/api/auth/recover',{recovery_code:'wrong',...owner},stranger)).status,429);
+    assert.equal((await request('/api/auth/bootstrap',{token:'guess'},stranger)).status,429);
+    assert.equal((await request('/api/login',owner,'198.51.100.7')).status,200);
+    // The stranger's wait grows: one more check after a second, then two seconds.
+    now+=1001;assert.equal((await request('/api/login',{username:'owner-test',password:'again'},stranger)).status,401);
+    now+=1001;assert.equal((await request('/api/login',{username:'owner-test',password:'again'},stranger)).status,429);
+    now+=1001;assert.equal((await request('/api/login',{username:'owner-test',password:'again'},stranger)).status,401);
+    // Many addresses on one username: each failing address then waits; a clean one is still checked.
+    for(let i=0;i<12;i++)assert.equal((await request('/api/login',{username:'owner-test',password:'spread '+i},'203.0.113.'+(100+i))).status,401);
+    assert.equal((await request('/api/login',{username:'owner-test',password:'spread again'},'203.0.113.100')).status,429);
+    assert.equal((await request('/api/login',owner,'192.0.2.44')).status,200);
+    assert.equal((await request('/api/auth/recover',{recovery_code:setup.data.recovery_code,...owner},'192.0.2.45')).status,200);
+  }finally{await service.close();}
+  // A forwarded address is believed only from the proxy.
+  const req=(peer,forwarded)=>({socket:{remoteAddress:peer},headers:forwarded?{'x-forwarded-for':forwarded}:{}});
+  assert.equal(clientAddress(req('203.0.113.9','10.1.1.1')),'203.0.113.9');
+  assert.equal(clientAddress(req('::ffff:127.0.0.1','198.51.100.1')),'198.51.100.1');
+  assert.equal(clientAddress(req('172.18.0.3','6.6.6.6, 198.51.100.2, 172.18.0.2')),'198.51.100.2');
+  assert.equal(clientAddress(req('127.0.0.1','not an address')),'127.0.0.1');
+  assert.equal(clientAddress(req('127.0.0.1','198.51.100.1'),trustedProxies('none')),'127.0.0.1');
+  assert.equal(clientAddress(req('203.0.113.9','198.51.100.1'),trustedProxies('203.0.113.0/24')),'198.51.100.1');
+  assert.equal(clientAddress({headers:{}}),'unknown');
 });

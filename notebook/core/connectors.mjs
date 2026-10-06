@@ -1,18 +1,25 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {atomic,hash,safe} from './records/store.mjs';
+import {mediaObjectName} from './media-names.mjs';
+import {outboundFetch} from './outbound-fetch.mjs';
+// A connector reads the one service its owner configured, which may be on his
+// own network (a bridge on a private address); a redirect elsewhere on a
+// private network is refused, and size and time are bounded
+// (outbound-fetch.mjs, 6 October 2026).
+const configured=(url,init,options={})=>{const target=new URL(url);return outboundFetch(target.href,init,{allowHosts:[target.hostname],maxBytes:101*1024*1024,...options});};
 export class Connectors {
   constructor(domains){this.domains=domains;this.store=domains.store;this.query=domains.query;}
   config(name){const file=path.join(this.store.state,'connectors',safe(name)+'.json');return fs.existsSync(file)?JSON.parse(fs.readFileSync(file,'utf8')):null;}
   save(name,value){const file=path.join(this.store.state,'connectors',safe(name)+'.json');atomic(file,JSON.stringify(value));fs.chmodSync(file,0o600);return {configured:true};}
   async health(name,config,url){
-    const check=()=>fetch(url,{headers:config.token?{Authorization:'Bearer '+config.token}:{},signal:AbortSignal.timeout(15000)});let response=await check();
+    const check=()=>configured(url,{headers:config.token?{Authorization:'Bearer '+config.token}:{}},{timeoutMs:15000});let response=await check();
     if(response.status===401&&name==='gdrive'&&config.refresh_token&&config.client_id){
-      const refreshed=await fetch('https://oauth2.googleapis.com/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({grant_type:'refresh_token',refresh_token:config.refresh_token,client_id:config.client_id,...config.client_secret?{client_secret:config.client_secret}:{}}),signal:AbortSignal.timeout(15000)});
+      const refreshed=await outboundFetch('https://oauth2.googleapis.com/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({grant_type:'refresh_token',refresh_token:config.refresh_token,client_id:config.client_id,...config.client_secret?{client_secret:config.client_secret}:{}}).toString()},{timeoutMs:15000,maxRedirects:0});
       if(refreshed.ok){const data=await refreshed.json();if(typeof data.access_token==='string'&&data.access_token){config={...config,token:data.access_token};this.save(name,config);response=await check();}}
     }return response;
   }
-  async request(config,route){const url=new URL(route,config.origin);if(url.origin!==new URL(config.origin).origin)throw new Error('Connector request left its configured service');const r=await fetch(url,{headers:{Authorization:'Bearer '+config.token},signal:AbortSignal.timeout(30000)});if(!r.ok)throw new Error('Connector failed with HTTP '+r.status);return r;}
+  async request(config,route){const url=new URL(route,config.origin);if(url.origin!==new URL(config.origin).origin)throw new Error('Connector request left its configured service');const r=await configured(url,{headers:{Authorization:'Bearer '+config.token}},{timeoutMs:30000,allowHosts:[new URL(config.origin).hostname]});if(!r.ok)throw new Error('Connector failed with HTTP '+r.status);return r;}
   async invoke(name,input){
     if(name==='configure-connector'){
       if(!['spend-guard','board-export','browser-post'].includes(input.name))throw new Error('Choose a supported optional connector');
@@ -26,7 +33,7 @@ export class Connectors {
         const intent=hash({name:input.name,payload:input.payload}),approval=this.store.get('approvals',input.approval_id);
         if(!approval||approval.status!=='approved'||approval.intent_sha256!==intent||Date.parse(approval.expires_at)<Date.now())throw new Error('This exact outward payload needs a current approval');
         this.store.save('approvals',{id:approval.id,status:'attempted',attempted_at:new Date().toISOString()});
-        try{const r=await fetch(new URL(config.route,config.origin),{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+config.token,'Idempotency-Key':approval.id},body:JSON.stringify(input.payload),signal:AbortSignal.timeout(30000)});if(!r.ok)throw new Error('Posting connector returned HTTP '+r.status);const receipt=await r.json();if(!receipt.id&&!receipt.url)throw new Error('Posting connector returned no receipt');this.store.save('approvals',{id:approval.id,status:'verified',receipt});return {receipt,verified:true};}catch(e){this.store.save('approvals',{id:approval.id,status:'needs_review',error:e.message});throw e;}
+        try{const r=await configured(new URL(config.route,config.origin),{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+config.token,'Idempotency-Key':approval.id},body:JSON.stringify(input.payload)},{timeoutMs:30000,maxRedirects:0});if(!r.ok)throw new Error('Posting connector returned HTTP '+r.status);const receipt=await r.json();if(!receipt.id&&!receipt.url)throw new Error('Posting connector returned no receipt');this.store.save('approvals',{id:approval.id,status:'verified',receipt});return {receipt,verified:true};}catch(e){this.store.save('approvals',{id:approval.id,status:'needs_review',error:e.message});throw e;}
       }
       const result=await(await this.request(config,config.route)).json();
       if(input.name==='board-export')return {records:result,observed_at:new Date().toISOString()};
@@ -55,7 +62,7 @@ export class Connectors {
         if(bytes.length>100*1024*1024)throw new Error('Drive file exceeds the candidate media limit');
         const originalId='drive-note-'+hash(file.id).slice(0,24),noteId=this.store.get('notes',originalId)?originalId+'-'+hash(file.modifiedTime).slice(0,8):originalId;
         const note=this.store.save('notes',{id:noteId,title:file.name,content:file.mimeType.startsWith('text/')?bytes.toString('utf8'):'Imported document: '+file.name,source_app:'gdrive'});
-        if(!file.mimeType.startsWith('text/')){const sha256=hash(bytes),storage_path='drive/'+file.id+'/'+file.name,filename=sha256+'-'+safe(file.name.replace(/[^a-zA-Z0-9_.-]/g,'_'));atomic(path.join(this.domains.mediaRoot,filename),bytes);atomic(path.join(this.domains.mediaRoot,hash(storage_path)+'.mapping.json'),JSON.stringify({path:storage_path,file:filename,sha256,size:bytes.length,contentType:file.mimeType}));this.query.execute({table:'note_attachments',operation:'insert',values:{note_id:note.id,storage_path,filename:file.name,file_type:file.mimeType}});}
+        if(!file.mimeType.startsWith('text/')){const sha256=hash(bytes),storage_path='drive/'+file.id+'/'+file.name,filename=mediaObjectName(sha256,file.name);atomic(path.join(this.domains.mediaRoot,filename),bytes);atomic(path.join(this.domains.mediaRoot,hash(storage_path)+'.mapping.json'),JSON.stringify({path:storage_path,file:filename,sha256,size:bytes.length,contentType:file.mimeType}));this.query.execute({table:'note_attachments',operation:'insert',values:{note_id:note.id,storage_path,filename:file.name,file_type:file.mimeType}});}
         this.store.save('gdrive_imports',{id,source_id:file.id,note_id:note.id,modified_at:file.modifiedTime,sha256:hash(bytes)});if(old)this.store.save('review_queue',{suggestion_type:'source_version',title:'Review the new imported version of '+file.name,payload:{previous_note_id:old.note_id,new_note_id:note.id},status:'pending_review'});results.push(note.id);
       }return {imported:results.length,results};
     }

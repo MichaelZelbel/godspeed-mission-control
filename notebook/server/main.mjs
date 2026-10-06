@@ -3,7 +3,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomBytes } from 'node:crypto';
-import { Store, atomic, safe, hash } from '../core/records/store.mjs';
+import { pipeline } from 'node:stream';
+import os from 'node:os';
+import { Store, atomic, hash } from '../core/records/store.mjs';
 import { SearchIndex } from '../core/index/search.mjs';
 import { MeaningIndex, embeddingConfig, saveEmbeddingConfig, embedder } from '../core/index/meaning.mjs';
 import { QueryService } from '../core/query.mjs';
@@ -37,11 +39,31 @@ import {nativeAgent} from '../core/native-agent.mjs';
 import {NativeScheduler} from '../core/native-scheduler.mjs';
 import {visibleRows} from '../core/visibility.mjs';
 import {NoteProcessing} from '../core/processing.mjs';
+import {mediaObjectName,mediaFileName} from '../core/media-names.mjs';
+import {retireShares} from '../core/shares.mjs';
 
 // What the browser is told each built file is. A module script sent as
 // octet-stream is refused outright: the PDF reader's worker (.mjs) was, so
 // PDFs could not be read in the notebook until 6 October 2026.
 export const staticTypes = { '.html':'text/html; charset=utf-8','.js':'text/javascript','.mjs':'text/javascript','.css':'text/css','.json':'application/json','.map':'application/json','.webmanifest':'application/manifest+json','.wasm':'application/wasm','.svg':'image/svg+xml','.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.gif':'image/gif','.webp':'image/webp','.ico':'image/x-icon','.woff2':'font/woff2','.woff':'font/woff','.ttf':'font/ttf','.txt':'text/plain; charset=utf-8' };
+// What an error may tell the browser. The notebook's own refusals are plain
+// sentences and pass; a file-system or programming error carries server paths
+// and internals, so it is logged and the browser gets a plain sentence instead
+// (until 6 October 2026 it got "ENOENT: no such file or directory, open 'C:\Users\...'").
+// An absolute path left in a passed message is cut out as well.
+export function userFacing(error, roots = []) {
+  if (!(error instanceof Error)) return null;
+  const code = String(error.code || '');
+  if (error.syscall || /^E[A-Z]{2,}$/.test(code) || /^ERR_/.test(code)) return null;
+  // JSON.parse quotes a piece of what it read, which may be a saved file.
+  if (error instanceof SyntaxError) return 'The request or a saved file was not valid JSON.';
+  if (error instanceof URIError) return 'This address is not valid.';
+  if (error instanceof TypeError || error instanceof RangeError || error instanceof ReferenceError) return null;
+  let message = String(error.message || '');
+  for (const root of roots.filter(Boolean).sort((a, b) => b.length - a.length)) for (const form of new Set([root, root.replaceAll('\\', '/'), root.replaceAll('\\', '\\\\')])) message = message.split(form).join('[path]');
+  message = message.replace(/[A-Za-z]:[\\/][^\s'"]*|\\\\[^\s'"]+|(?<![\w.])\/(?:home|opt|root|var|tmp|Users|srv|data|mnt|etc|private)\/[^\s'"]*/g, '[path]');
+  return message || null;
+}
 export async function createService({ root, mediaRoot, host = '127.0.0.1', port = 47831, token, uiRoot, provider, device = 'local', authNow } = {}) {
   // The store keeps every record in memory and re-reads only the files its
   // watcher names; the index follows the store's changes row by row.
@@ -67,7 +89,10 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   mediaRoot = path.resolve(mediaRoot || path.join(store.state, 'media')); fs.mkdirSync(mediaRoot, { recursive: true });
   domains.mediaRoot=mediaRoot;
   const mediaSync=new MediaSync(store,mediaRoot),pairCodes=new Map(),pairKeysPath=path.join(store.state,'pair-clients.json');
-  const pairKeys=fs.existsSync(pairKeysPath)?JSON.parse(fs.readFileSync(pairKeysPath,'utf8')):[];
+  // A paired device's key, kept as its hash with an id, so the owner can list and revoke it.
+  // Keys saved before 6 October 2026 were bare hashes; they are read as unnamed keys.
+  const pairKeys=(fs.existsSync(pairKeysPath)?JSON.parse(fs.readFileSync(pairKeysPath,'utf8')):[]).map(k=>typeof k==='string'?{id:k.slice(0,16),hash:k,created_at:null}:k);
+  const savePairKeys=()=>{atomic(pairKeysPath,JSON.stringify(pairKeys));fs.chmodSync(pairKeysPath,0o600);};
   const instance=hash(store.root).slice(0,24);
   const remote = !['127.0.0.1', '::1', 'localhost'].includes(host);
   if (remote && !token) throw new Error('Remote access requires a candidate token');
@@ -77,8 +102,25 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   const chatRequests=new Map(),recoveryRunner=new RecoveryRunner(store),backupRunner=new BackupRunner(store,mediaRoot);let dictationBusy=false;
   const loginLinks=new Map();
   const apiKeys=new ApiKeys(store);
-  const authorized = req => auth.authorized(req) || pairKeys.includes(hash(String(req.headers['x-godspeed-pair-key']||req.headers.authorization?.replace(/^Bearer /,'')||'')));
+  // A pairing key lets the other device copy media, nothing else: until 6 October 2026
+  // it opened every /api/ route, including queries, sync settings and new pairing codes.
+  const pairedMedia = (req, route) => {
+    const media = req.method === 'GET' ? route === '/api/media/manifest' || route.startsWith('/api/media/blob/') : req.method === 'POST' && ['/api/media/transfer', '/api/media/tombstone'].includes(route);
+    const presented = String(req.headers['x-godspeed-pair-key'] || '');
+    return media && !!presented && pairKeys.some(k => !k.revoked_at && k.hash === hash(presented));
+  };
+  const authorized = (req, route) => auth.authorized(req) || pairedMedia(req, route);
   function send(res, status, body, headers = {}) { res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', ...headers }); res.end(JSON.stringify(body)); }
+  // A file is opened before the reply starts, so a missing one is a 404, and a
+  // read that fails halfway ends that one reply. Until 6 October 2026 either
+  // stopped the whole server (an 'error' nobody listened for).
+  async function sendFile(res, file, headers) {
+    let handle; try { handle = await fs.promises.open(file, 'r'); } catch { return send(res, 404, { error: 'This file is missing.' }); }
+    let size; try { size = (await handle.stat()).size; } catch (error) { await handle.close().catch(() => {}); throw error; }
+    res.writeHead(200, { ...headers, 'Content-Length': size });
+    pipeline(handle.createReadStream(), res, error => { if (error) res.destroy(); });
+  }
+  const mapping = original => { const file = path.join(mediaRoot, hash(original) + '.mapping.json'); if (!fs.existsSync(file)) return null; return JSON.parse(fs.readFileSync(file, 'utf8')); };
   async function body(req, limit = 2 * 1024 * 1024) {
     let size = 0; const chunks = [];
     for await (const chunk of req) { size += chunk.length; if (size > limit) throw new Error('Request is too large'); chunks.push(chunk); }
@@ -90,9 +132,15 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       const url = new URL(req.url, 'http://localhost'), route = url.pathname;
       const hostName = (req.headers.host || '').split(':')[0];
       if (!remote && !['localhost', '127.0.0.1', '[', '::1'].includes(hostName)) return send(res, 403, { error: 'Unrecognized local host' });
-      if (req.headers.origin && new URL(req.headers.origin).host !== req.headers.host) return send(res, 403, { error: 'Cross-site requests are refused' });
+      // An Origin that is not an address ("null" from a sandboxed page) is cross-site too.
+      if (req.headers.origin) { let from = null; try { from = new URL(req.headers.origin).host; } catch {} if (from !== req.headers.host) return send(res, 403, { error: 'Cross-site requests are refused' }); }
+      // A one-time sign-in link opens a page with one button, and only pressing
+      // it (a POST) uses the link. Until 6 October 2026 any GET used it, so
+      // Telegram's link-preview fetcher got the session and the owner's tap failed.
       if(route.startsWith('/login/')){
-        const code=route.slice(7),expiry=loginLinks.get(code);if(!expiry||expiry<Date.now())return send(res,401,{error:'This login link expired or was already used'});
+        const code=route.slice(7),expiry=loginLinks.get(code),page=(status,text,button)=>{res.writeHead(status,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','Referrer-Policy':'no-referrer','X-Content-Type-Options':'nosniff','X-Frame-Options':'DENY','Content-Security-Policy':"default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'"});res.end('<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Godspeed Mission Control</title><body style="font-family:system-ui,sans-serif;max-width:28rem;margin:4rem auto;padding:0 1rem;line-height:1.5"><h1 style="font-size:1.3rem">'+text+'</h1>'+(button?'<form method="post"><button type="submit" style="font-size:1.05rem;padding:.6rem 1.4rem">Continue</button></form>':'')+'</body></html>');};
+        if(!expiry||expiry<Date.now())return page(401,'This sign-in link expired or was already used.',false);
+        if(req.method!=='POST')return page(200,'Open your Godspeed Mission Control',true);
         loginLinks.delete(code);
         if(!auth.configured()) { res.writeHead(303,{'Location':auth.invite().path,'Cache-Control':'no-store','Referrer-Policy':'no-referrer'});return res.end(); }
         const destination=safeReturn(url.searchParams.get('next')||'/dashboard');
@@ -105,11 +153,11 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       }
       if(route==='/api/pair/claim'&&req.method==='POST'){
         const input=JSON.parse(await body(req)),expires=pairCodes.get(input.code);if(!expires||expires<Date.now())return send(res,401,{error:'Pairing code expired or was already used'});
-        pairCodes.delete(input.code);const key=randomBytes(32).toString('hex');pairKeys.push(hash(key));atomic(pairKeysPath,JSON.stringify(pairKeys));fs.chmodSync(pairKeysPath,0o600);return send(res,200,{key});
+        pairCodes.delete(input.code);const key=randomBytes(32).toString('hex');pairKeys.push({id:randomBytes(8).toString('hex'),hash:hash(key),created_at:new Date().toISOString()});savePairKeys();return send(res,200,{key});
       }
       if (route === '/health') return send(res, 200, { ok: true, format: 1, version: '2.0.0-alpha.1',instance,scheduler_heartbeat:schedulerHeartbeat });
-      if(route==='/api/shared-note'&&req.method==='GET'){const share=query.rows('shared_notes').find(s=>s.share_token===url.searchParams.get('token')&&s.is_active),note=share&&store.get('notes',share.note_id);if(!note||note.removed_at)return send(res,404,{error:'This share is unavailable'});return send(res,200,{title:note.title,content:note.content,tags:note.tags,entity_type:note.entity_type,created_at:note.created_at,updated_at:note.updated_at});}
-      if (route.startsWith('/api/') && !authorized(req)) return send(res, 401, { error: 'Sign in to continue.', code: auth.cookie(req)?'SESSION_EXPIRED':'SIGN_IN_REQUIRED' });
+      if(route==='/api/shared-note'&&req.method==='GET'){const share=query.rows('shared_notes').find(s=>s.share_token===url.searchParams.get('token')&&s.is_active),note=share&&store.get('notes',share.note_id);if(!note||note.removed_at||note.is_trashed)return send(res,404,{error:'This share is unavailable'});return send(res,200,{title:note.title,content:note.content,tags:note.tags,entity_type:note.entity_type,created_at:note.created_at,updated_at:note.updated_at});}
+      if (route.startsWith('/api/') && !authorized(req, route)) return send(res, 401, { error: 'Sign in to continue.', code: auth.cookie(req)?'SESSION_EXPIRED':'SIGN_IN_REQUIRED' });
       if(route==='/api/menerio/import'){
         if(!auth.authorized(req))return send(res,403,{error:'Sign in as the server owner to import.'});
         if(req.method==='GET')return send(res,200,menerioImport.status());
@@ -160,22 +208,24 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       }
       if(route==='/mcp'){
         const accessKey=apiKeys.authenticate(String(req.headers.authorization||'').replace(/^Bearer /,''));
-        if(!authorized(req)&&!accessKey)return send(res,401,{error:'Authentication required'});
+        if(!auth.authorized(req)&&!accessKey)return send(res,401,{error:'Authentication required'});
         if(req.method!=='POST'){res.writeHead(405,{'Allow':'POST'});return res.end();}
         const input=JSON.parse(await body(req));if(accessKey&&input.method==='tools/call'&&!accessKey.scopes.includes(toolScope(input.params.name,input.params.arguments||{})))return send(res,403,{error:'This API key does not grant that capability'});
         const response=await mcp(input,{store,query,index,domains,scopes:accessKey?.scopes});if(response===null){res.writeHead(202);return res.end();}return send(res,200,response);
       }
+      if(route==='/api/pair/keys'&&req.method==='GET')return send(res,200,{data:pairKeys.map(({id,created_at,revoked_at})=>({id,created_at,revoked_at:revoked_at||null}))});
+      if(route==='/api/pair/revoke'&&req.method==='POST'){const input=JSON.parse(await body(req)),key=pairKeys.find(k=>k.id===input.id);if(!key)throw new Error('Choose a paired device to disconnect');key.revoked_at||=new Date().toISOString();savePairKeys();return send(res,200,{revoked:true});}
       if(route==='/api/pair/create'&&req.method==='POST'){if(device!=='vps')throw new Error('Create a pairing code on the candidate VPS');const code=randomBytes(16).toString('hex');pairCodes.set(code,Date.now()+300000);return send(res,200,{code,expires_minutes:5});}
       if(route==='/api/pair/connect'&&req.method==='POST'){const input=JSON.parse(await body(req));const result=await mediaSync.pair(input.origin,input.code);return send(res,200,{...result,media:await mediaSync.reconcile()});}
       if(route==='/api/media/sync'&&req.method==='POST')return send(res,200,await mediaSync.reconcile());
       if(route==='/api/media/offline'&&req.method==='POST'){const input=JSON.parse(await body(req));if(!['all','selected'].includes(input.offline))throw new Error('Choose all or selected media');const config=mediaSync.config();if(!config)throw new Error('Pair this device first');atomic(mediaSync.configPath,JSON.stringify({...config,offline:input.offline,selected:input.selected||[]}));return send(res,200,{ok:true});}
       if(route==='/api/media/manifest')return send(res,200,{data:mediaSync.manifest()});
       if(route==='/api/media/tombstone'&&req.method==='POST'){const input=JSON.parse(await body(req)),old=mediaSync.manifest().find(m=>m.path===input.path);if(!old||old.sha256!==input.sha256||!input.removed_at||!Number.isFinite(Date.parse(input.removed_at)))throw new Error('This removal does not match the saved media version');atomic(path.join(mediaRoot,hash(old.path)+'.mapping.json'),JSON.stringify({...old,removed_at:input.removed_at}));return send(res,200,{ok:true});}
-      if(route.startsWith('/api/media/blob/')&&req.method==='GET'){const filename=safe(decodeURIComponent(route.slice('/api/media/blob/'.length)));if(!mediaSync.manifest().some(m=>m.file===filename&&!m.removed_at))throw new Error('Unknown media object');res.writeHead(200,{'Content-Type':'application/octet-stream','X-Content-Type-Options':'nosniff'});fs.createReadStream(path.join(mediaRoot,filename)).pipe(res);return;}
+      if(route.startsWith('/api/media/blob/')&&req.method==='GET'){const filename=mediaFileName(decodeURIComponent(route.slice('/api/media/blob/'.length)));if(!mediaSync.manifest().some(m=>m.file===filename&&!m.removed_at))return send(res,404,{error:'Unknown media object'});return sendFile(res,path.join(mediaRoot,filename),{'Content-Type':'application/octet-stream','X-Content-Type-Options':'nosniff'});}
       if(route==='/api/media/transfer'&&req.method==='POST'){
         const input=JSON.parse(await body(req,140*1024*1024)),mapping=input.mapping,data=Buffer.from(input.data,'base64');
         if(hash(data)!==mapping.sha256||data.length!==mapping.size)throw new Error('Transfer integrity mismatch');
-        safe(mapping.file);if(!mapping.file.startsWith(mapping.sha256+'-'))throw new Error('Invalid media object name');
+        mediaFileName(mapping.file);if(!mapping.file.startsWith(mapping.sha256+'-'))throw new Error('Invalid media object name');
         const old=mediaSync.manifest().find(m=>m.path===mapping.path);if(old&&old.sha256!==mapping.sha256)throw new Error('A different media version exists. Resolve it before transfer');
         atomic(path.join(mediaRoot,mapping.file),data);atomic(path.join(mediaRoot,hash(mapping.path)+'.mapping.json'),JSON.stringify(mapping));return send(res,200,{ok:true});
       }
@@ -234,13 +284,13 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       // every record and every workspace file to rebuild it, which is what a
       // save used to wait for, cost more than the save; the file watcher still
       // arms a full refresh for whatever other programs write.
-      if (route === '/api/query' && req.method === 'POST') { const input=JSON.parse(await body(req)),result=await query.executeAsync(input); return send(res, 200, result); }
+      if (route === '/api/query' && req.method === 'POST') { const input=JSON.parse(await body(req)),result=await query.executeAsync(input); if(input.table==='notes'&&Array.isArray(result.data)&&(input.operation==='delete'||[].concat(input.values||[]).some(v=>v?.is_trashed===true||v?.removed_at)))await retireShares(store,result.data.map(n=>n.id)); return send(res, 200, result); }
       if(route==='/api/chat-state'&&req.method==='POST'){
         const input=JSON.parse(await body(req));
         return send(res,200,await saveConversationState(store,input,{asyncWriter:true}));
       }
       if (route === '/api/rpc' && req.method === 'POST') { const input = JSON.parse(await body(req)); const data = query.rpc(input.rpc, input.args); return send(res, 200, { data, error: null }); }
-      if (route === '/api/structural' && req.method === 'POST') { const input = JSON.parse(await body(req)); return send(res, 200, { data: store.structural(input.type, input.id, input.action, input.options), error: null }); }
+      if (route === '/api/structural' && req.method === 'POST') { const input = JSON.parse(await body(req)), data = store.structural(input.type, input.id, input.action, input.options); if (input.type === 'notes' && input.action === 'remove') await retireShares(store, [input.id]); return send(res, 200, { data, error: null }); }
       if (route === '/api/media/upload' && req.method === 'POST') {
         const bytes = await body(req, 100 * 1024 * 1024), form = await new Request('http://localhost/', { method: 'POST', headers: { 'content-type': req.headers['content-type'] }, body: bytes }).formData();
         const file = form.get('file'); if (!(file instanceof Blob)) throw new Error('Missing media file');
@@ -249,7 +299,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         // (a contract, a manual); a chat attachment is held to 60,000 characters
         // where it is used (chatAttachments).
         const extractedText=form.get('extracted_text');if(extractedText!=null&&(typeof extractedText!=='string'||extractedText.length>1000000||file.type!=='application/pdf'))throw new Error('Invalid extracted PDF text');
-        const target = digest + '-' + safe(path.basename(original).replace(/[^a-zA-Z0-9_.-]/g, '_') || 'media');
+        const target = mediaObjectName(digest, original);
         atomic(path.join(mediaRoot, target), data);
         const previousFile=path.join(mediaRoot,hash(original)+'.mapping.json');
         if(fs.existsSync(previousFile)){const previous=JSON.parse(fs.readFileSync(previousFile,'utf8'));if(!previous.removed_at&&previous.sha256!==digest)throw new Error('This media path already has different content. Choose a new path; both binaries were retained.');}
@@ -260,10 +310,10 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         const input=JSON.parse(await body(req));for(const original of input.paths||[]){const file=path.join(mediaRoot,hash(original)+'.mapping.json');if(fs.existsSync(file)){const mapping=JSON.parse(fs.readFileSync(file,'utf8'));mapping.removed_at=new Date().toISOString();atomic(file,JSON.stringify(mapping));}}return send(res,200,{data:[],error:null});
       }
       if (route.startsWith('/api/media/file/') && req.method === 'GET') {
-        const original = decodeURIComponent(route.slice('/api/media/file/'.length));
-        const mapping = JSON.parse(fs.readFileSync(path.join(mediaRoot, hash(original) + '.mapping.json'), 'utf8'));
-        if(mapping.removed_at)return send(res,404,{error:'Media removed'});
-        res.writeHead(200, { 'Content-Type': mapping.contentType || 'application/octet-stream', 'Content-Length': mapping.size, 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "default-src 'none'; sandbox" }); fs.createReadStream(path.join(mediaRoot, safe(mapping.file))).pipe(res); return;
+        const original = decodeURIComponent(route.slice('/api/media/file/'.length)), stored = mapping(original);
+        if(!stored)return send(res,404,{error:'Media not found'});
+        if(stored.removed_at)return send(res,404,{error:'Media removed'});
+        return sendFile(res, path.join(mediaRoot, mediaFileName(stored.file)), { 'Content-Type': stored.contentType || 'application/octet-stream', 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "default-src 'none'; sandbox" });
       }
       if(route==='/api/chat/transcribe'&&req.method==='POST'){
         if(dictationBusy)return send(res,429,{error:'Another recording is being transcribed. Please try again shortly.'});
@@ -300,8 +350,15 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       // browser may keep them; without this it fetched 1.8 MB of script again
       // on every page load. index.html is always checked, so a new build shows.
       const cache = file.startsWith(path.join(uiRoot,'assets')+path.sep) ? 'public, max-age=31536000, immutable' : 'no-cache';
-      res.writeHead(200, { 'Content-Type': mime, 'Cache-Control': cache, 'X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer' }); fs.createReadStream(file).pipe(res);
-    } catch (e) { send(res, e.status || (e.code === 'CONFLICT' ? 409 : 400), { error: e.message, code: e.code }); }
+      return sendFile(res, file, { 'Content-Type': mime, 'Cache-Control': cache, 'X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer' });
+    } catch (e) {
+      // A reply already under way cannot carry an error; it is cut off instead
+      // (writing headers twice stopped the server until 6 October 2026).
+      if (res.headersSent) { console.error('Godspeed Mission Control: '+req.method+' '+String(req.url).split('?')[0]+' failed after the reply started:', e); res.destroy(); return; }
+      const shown = userFacing(e, [store.root, store.state, mediaRoot, uiRoot, os.homedir(), os.tmpdir()]);
+      if (!shown || e instanceof SyntaxError) console.error('Godspeed Mission Control: '+req.method+' '+String(req.url).split('?')[0]+' failed:', e);
+      send(res, e.status || (e.code === 'CONFLICT' ? 409 : 400), { error: shown || 'Something went wrong on the server. The details are in its log.', ...(shown && e.code ? { code: e.code } : {}) });
+    }
   });
   await new Promise((resolve, reject) => { server.once('error', reject); server.listen(port, host, resolve); });
   // The watchers say what changed. Now and then the store compares every
@@ -347,6 +404,10 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const root = process.env.GODSPEED_WORKSPACE;
   if (!root) throw new Error('Set GODSPEED_WORKSPACE to a separate candidate folder');
+  // A last line of defence: one request's stray failure is written to the log
+  // and the notebook keeps answering everyone else. Until 6 October 2026 a
+  // missing media file ended the process for every open page and assistant.
+  for (const event of ['unhandledRejection', 'uncaughtException']) process.on(event, error => console.error('Godspeed Mission Control: ' + event + ', the server keeps running:', error));
   const service = await createService({ root, mediaRoot: process.env.GODSPEED_MEDIA_ROOT, host: process.env.GODSPEED_BIND || '127.0.0.1', port: Number(process.env.GODSPEED_PORT || 47831), token: process.env.GODSPEED_ACCESS_TOKEN,device:process.env.GODSPEED_DEVICE||'local' });
   console.log('Godspeed Mission Control candidate listening on port ' + service.address.port);
   for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, async () => { await service.close(); process.exit(0); });

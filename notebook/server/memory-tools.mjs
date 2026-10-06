@@ -4,6 +4,8 @@ import {visibleRows} from '../core/visibility.mjs';
 import {momentDraft} from '../core/moment-draft.mjs';
 import {relatedNotes} from '../core/related.mjs';
 import {STOPWORDS} from '../core/index/stopwords.mjs';
+import {privateFile as markedPrivate} from '../core/context.mjs';
+import {retireShares} from '../core/shares.mjs';
 
 // Menerio's tool names and arguments, answered from the notebook. Mission
 // Control's skills, routines and memory benchmark called these names for
@@ -101,6 +103,26 @@ const labeler = query => { const n = subjectNames(query); return f => f.subject_
 // (6 October 2026, the memory benchmark). The verbatim prompt archive and the
 // assistant's state are never part of it.
 export const privateFile = relative => /^(prompts|assistant-state)\//.test(String(relative));
+// The scopes a key needs for a Mission Control file, by the folder it is in.
+// Until 6 October 2026 a key with only "notes" read health, World, journal and
+// coaching files through search_notes and get_note. A key must hold every
+// scope listed; the owner's computer, which uses no key, reads them all.
+export function fileScopes(relative) {
+  const name = String(relative);
+  if (/^world\//.test(name)) return ['world'];
+  if (/^profile\//.test(name)) return ['profile'];
+  if (/^(coach|journal|routines|goals|work|due|forecasts|watch|brief|observations\/health-inputs)\//.test(name)) return ['actions'];
+  // An archived file can be any of these.
+  if (/^archives\//.test(name)) return ['notes', 'actions', 'world', 'profile'];
+  return ['notes'];
+}
+// A file an assistant may see: not in a private folder, not marked private or
+// hidden by the owner (core/context.mjs), and covered by the key's scopes.
+export function fileAllowed(ctx, relative, text) {
+  if (privateFile(relative) || (ctx.scopes && !fileScopes(relative).every(scope => ctx.scopes.includes(scope)))) return false;
+  if (text === undefined) { try { text = fs.readFileSync(path.join(ctx.store.root, relative), 'utf8'); } catch { return false; } }
+  return !markedPrivate(relative, text);
+}
 async function noteHits(ctx, text, {limit = 50, files = true} = {}) {
   const {index, query, store} = ctx;
   const notes = new Map(live(visibleRows(query, 'notes')).filter(n => !n.is_trashed).map(n => [n.id, n]));
@@ -108,7 +130,7 @@ async function noteHits(ctx, text, {limit = 50, files = true} = {}) {
   const out = new Map();
   for (const r of found.rows) {
     if (r.type === 'workspace_file') {
-      if (privateFile(r.id) || out.has('file:' + r.id)) continue;
+      if (out.has('file:' + r.id) || !fileAllowed(ctx, r.id)) continue;
       out.set('file:' + r.id, {file: r.id, note: {id: r.id, title: r.id, updated_at: fileTime(store, r.id)}, full: () => { try { return fs.readFileSync(path.join(store.root, r.id), 'utf8'); } catch { return ''; } }, snippet: r.snippet ? r.snippet.replace(/[[\]]/g, '') : null, matched: r.matched || 'words', via: 'Mission Control file'});
       continue;
     }
@@ -128,7 +150,9 @@ export function readFile(ctx, relative) {
   if (!name || privateFile(name) || name.split('/').some(p => p === '..' || p.startsWith('.')) || !ctx.index?.db) return null;
   const known = ctx.index.db.prepare("SELECT 1 FROM docs WHERE type='workspace_file' AND id=?").get(name);
   if (!known) return null;
-  try { return {id: name, title: name, source: 'Mission Control file', content: fs.readFileSync(path.join(ctx.store.root, name), 'utf8'), updated_at: fileTime(ctx.store, name)}; } catch { return null; }
+  let content; try { content = fs.readFileSync(path.join(ctx.store.root, name), 'utf8'); } catch { return null; }
+  if (!fileAllowed(ctx, name, content)) return null;
+  return {id: name, title: name, source: 'Mission Control file', content, updated_at: fileTime(ctx.store, name)};
 }
 function snippetOf(note, text) { return bestWindow(note.content, text); }
 // The window of a text, about 420 characters, that holds the most of the
@@ -173,6 +197,7 @@ async function searchBrain(a, ctx) {
     pages = found.rows.filter(close).map(r => ({page: byId.get(r.id), snippet: r.snippet})).filter(p => p.page).slice(0, limit);
   }
   const shown = hits.slice(offset, offset + limit), label = labeler(query);
+  ctx.seen?.(shown.filter(h => !h.file).map(h => h.note));
   parts.push('Found ' + claims.length + ' claim(s), ' + hits.length + ' note(s) [' + mode + '] and ' + pages.length + ' Lexicon page(s).' + (hits.length ? ' Showing notes ' + (shown.length ? offset + 1 : 0) + '-' + (offset + shown.length) + ' (has_more: ' + (offset + limit < hits.length) + ').' : '') + (note ? ' ' + note : ''));
   for (const f of claims.slice(0, limit)) parts.push('[claim] ' + label(f) + ', ' + (f.label || f.attribute) + ': ' + f.value + (f.two_answers ? '   TWO ANSWERS: ' + f.two_answers.join(' | ') : '')
     + '\n    ' + (f.valid_from ? f.valid_from + ' to ' + (f.valid_to || 'now') : 'undated') + ' · ' + (f.confidence || 'confirmed') + ' · id ' + f.id
@@ -256,6 +281,7 @@ function noteList(a, ctx) {
     && (!topic || [...(n.tags || []), ...(n.metadata?.topics || [])].some(t => norm(t).includes(topic)) || norm(n.title).includes(topic)));
   if (a.person) { const p = personFor(query, {name: a.person}), about = new Set(personNotes(query, p).map(n => n.id)); rows = rows.filter(n => about.has(n.id)); }
   rows.sort((x, y) => String(y.updated_at).localeCompare(String(x.updated_at)));
+  ctx.seen?.(rows.slice(0, limit));
   return rows.length ? rows.slice(0, limit).map((n, i) => [(i + 1) + '. ' + (n.title || 'Untitled'), '   ID: ' + n.id, '   Updated: ' + String(n.updated_at).slice(0, 10) + (n.metadata?.type ? ' · Type: ' + n.metadata.type : '') + (n.folder_path ? ' · Folder: ' + n.folder_path : ''), ...(n.tags?.length ? ['   Tags: ' + n.tags.join(', ')] : []), '   ' + clip(n.content, 200)].join('\n')).join('\n\n') : 'No notes match.';
 }
 function stats(ctx) {
@@ -343,6 +369,8 @@ async function write(name, a, ctx, guarded) {
     if (a.restore) { if (!note.is_trashed) return {note_id: note.id, restored: false, message: 'The note is not in the trash'}; query.execute({table: 'notes', operation: 'update', values: {is_trashed: false, trashed_at: null}, filters: [['eq', 'id', note.id]], expected: {[note.id]: note._hash}}); return {note_id: note.id, restored: true}; }
     if (note.is_trashed) return {note_id: note.id, trashed: true, message: 'Already in the trash'};
     guarded({['notes/' + note.id]: note._hash}).query.execute({table: 'notes', operation: 'update', values: {is_trashed: true, trashed_at: new Date().toISOString()}, filters: [['eq', 'id', note.id]], expected: {[note.id]: note._hash}, assistant: true});
+    // The server switches the note's public link off; the assistant never writes shares itself.
+    await retireShares(store, [note.id]);
     return {note_id: note.id, title: note.title, trashed: true, message: 'Moved to the trash; the owner can restore it'};
   }
   if (name === 'log_interaction') {
@@ -425,7 +453,7 @@ export async function memoryTool(name, a, ctx, guarded) {
     if (name === 'search_contacts') return searchContacts(a, ctx);
     if (name === 'get_contact_context') return contactContext(a, ctx);
     if (name === 'get_contact_profile') return contactProfile(a, ctx);
-    if (name === 'get_person_notes') { const p = personFor(query, a); return personNotes(query, p).slice(0, count(a.limit, 1, 100, 20)).map(n => ({note_id: n.id, title: n.title, updated: String(n.updated_at).slice(0, 10), preview: clip(n.content, 200)})); }
+    if (name === 'get_person_notes') { const p = personFor(query, a), rows = personNotes(query, p).slice(0, count(a.limit, 1, 100, 20)); ctx.seen?.(rows); return rows.map(n => ({note_id: n.id, title: n.title, updated: String(n.updated_at).slice(0, 10), preview: clip(n.content, 200)})); }
     if (name === 'get_claims') return getClaims(a, ctx);
     if (name === 'list_recent_notes' || name === 'list_recent') return noteList(a, ctx);
     if (name === 'get_stats') return stats(ctx);
@@ -441,8 +469,9 @@ export async function memoryTool(name, a, ctx, guarded) {
 export async function searchNotes(a, ctx) {
   const text = required(a.query, 'words to search for'), limit = count(a.limit, 1, 50, 20), offset = count(a.offset, 0, 1000, 0);
   const {hits} = await noteHits(ctx, text, {limit: 50});
-  return hits.filter(h => a.source === 'native' ? !h.file && !mirrored(h.note) : a.source === 'godspeed' ? h.file || mirrored(h.note) : true).slice(offset, offset + limit)
-    .map(h => h.file ? {id: h.file, title: h.file, folder_path: path.posix.dirname(h.file), updated_at: h.note.updated_at, source: 'Mission Control file', ...(a.view === 'metadata' ? {} : {snippet: excerpt(h, text)})} : ({id: h.note.id, title: h.note.title, folder_path: h.note.folder_path || '', updated_at: h.note.updated_at, tags: h.note.tags || [], type: h.note.metadata?.type || null, _hash: h.note._hash, ...(a.view === 'metadata' ? {} : {snippet: excerpt(h, text)}), ...(h.via ? {found_in: h.via} : {})}));
+  const shown = hits.filter(h => a.source === 'native' ? !h.file && !mirrored(h.note) : a.source === 'godspeed' ? h.file || mirrored(h.note) : true).slice(offset, offset + limit);
+  ctx.seen?.(shown.filter(h => !h.file).map(h => h.note));
+  return shown.map(h => h.file ? {id: h.file, title: h.file, folder_path: path.posix.dirname(h.file), updated_at: h.note.updated_at, source: 'Mission Control file', ...(a.view === 'metadata' ? {} : {snippet: excerpt(h, text)})} : ({id: h.note.id, title: h.note.title, folder_path: h.note.folder_path || '', updated_at: h.note.updated_at, tags: h.note.tags || [], type: h.note.metadata?.type || null, _hash: h.note._hash, ...(a.view === 'metadata' ? {} : {snippet: excerpt(h, text)}), ...(h.via ? {found_in: h.via} : {})}));
 }
 export function relatedTo(ctx, note) {
   try { return relatedNotes(ctx.query, note, {index: ctx.index, limit: 5}).map(r => ({id: r.id, title: r.title})); } catch { return []; }
