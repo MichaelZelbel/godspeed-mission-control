@@ -6,6 +6,10 @@ import { encode as encodeFile, decode as decodeFile, safe as safeName, candidate
 
 export const hash = value => createHash('sha256').update(Buffer.isBuffer(value) || typeof value === 'string' ? value : JSON.stringify(value)).digest('hex');
 export const slug = value => String(value).normalize('NFKD').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 80) || 'record';
+// For new ids and names: German letters spelled out and accents dropped, so a note called
+// "Orthopäde Termin" is orthopaede-termin-..., not orthopa-de-termin-... (6 October 2026).
+// slug() itself stays as it was, because facts keep the keys it made.
+export const readableSlug = value => slug(String(value).replace(/[äÄ]/g, 'ae').replace(/[öÖ]/g, 'oe').replace(/[üÜ]/g, 'ue').replace(/ß/g, 'ss').normalize('NFKD').replace(/[\u0300-\u036f]/g, ''));
 export const safe = safeName;
 export function atomic(file, text) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -373,7 +377,7 @@ export class Store {
   get(type, id) { this.scan(); const record = this.records.get(type + '/' + id) || this.ofType(type).find(r => (r.former_ids || []).includes(id)) || this.ofType(type).find(r => (r.aliases || []).includes(id)); return record && copy(record); }
   prepare(type, value, old = null) {
     const now = new Date().toISOString(), uid = old?.uid || value.uid || randomUUID();
-    const id = old?.id || value.id || slug(value.name || value.title || type) + '-' + uid.slice(0, 8);
+    const id = old?.id || value.id || readableSlug(value.name || value.title || type) + '-' + uid.slice(0, 8);
     const record = { tags: [], aliases: [], references: [], metadata: {}, user_id: 'owner', ...old, ...value,
       format: 1, type: safe(type), id: safe(id), uid, device: old?.device || this.device,
       revision: (old?.revision || 0) + 1, created_at: old?.created_at || value.created_at || now, updated_at: now };

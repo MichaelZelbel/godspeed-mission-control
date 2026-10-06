@@ -84,3 +84,19 @@ test('a timeline proposal without a title or date is left out, and an old one ca
   const item=store.save('review_queue',{suggestion_type:'add_moment',title:'Old',payload:{label:'Knie',value:'Montag'},status:'pending_review'});
   await assert.rejects(domains.invoke('review-queue-bulk',{action:'keep',scope:{ids:[item.id]}}).then(r=>{if(r.errors?.length)throw new Error(r.errors[0].error||JSON.stringify(r.errors[0]));}),/no title or no date/);
 });
+
+test('a title beside the payload is read, and ill-shaped proposals never cost the note its tags and people',async()=>{
+  // 6 October 2026: the model put the timeline title next to the payload; the one
+  // proposal was "malformed", and the whole answer, tags and people included, was dropped.
+  const {store,query,domains,ana}=setup();
+  domains.provider=async input=>({metadata:{type:'task',people:['Ani']},tags:['knee'],suggestions:[
+    {type:'add_moment',title:'Fictional knee appointment',payload:{happened_at:'2026-10-13',status:'future_plan',participants:['self']},evidence_quote:input.note.text.slice(0,25)},
+    {type:'add_claim',payload:{},evidence_quote:input.note.text.slice(0,25)}]});
+  const note=store.save('notes',{title:'Knee',content:'Ani asks whether the fictional knee appointment is next Tuesday.'});
+  const r=await domains.invoke('process-note',{note_id:note.id});
+  assert.equal(r.processed,1);assert.equal(query.rows('review_queue')[0].payload.title,'Fictional knee appointment');
+  const saved=store.get('notes',note.id);assert.deepEqual(saved.tags,['knee']);assert.deepEqual(saved.metadata.matched_people.map(p=>p.contact_id),[ana.id]);
+  domains.provider=async input=>({metadata:{type:'task'},tags:['knee'],suggestions:[{type:'add_claim',payload:{},evidence_quote:input.note.text.slice(0,25)}]});
+  const other=store.save('notes',{title:'Knee 2',content:'Ani asks again about the fictional knee appointment next Tuesday.'});
+  assert.equal((await domains.invoke('process-note',{note_id:other.id})).processed,0);assert.deepEqual(store.get('notes',other.id).tags,['knee'],'tags kept with no usable proposal');
+});

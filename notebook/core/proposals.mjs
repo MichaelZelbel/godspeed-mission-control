@@ -51,10 +51,11 @@ export function shapeProposal(s, {person, note, today, cites}) {
       subject_type: who ? 'contact' : 'self', subject_id: who ? who.id : null, ...(who ? {contact_id: who.id} : {}), source_type: 'note', source_id: note.id, ...(p.valid_from ? {valid_from: p.valid_from} : {})}};
   }
   if (s.type === 'add_moment') {
-    const d = momentDraft({...p, people: p.participants || p.people});
-    if (!String(p.title || '').trim() || !d.happened_at) return null;
+    // Models also put the title beside the payload instead of in it (6 October 2026).
+    const d = momentDraft({...p, people: p.participants || p.people}), title = String(p.title || s.title || '').trim();
+    if (!title || !d.happened_at) return null;
     const participants = (d.participants || []).map(person).filter(Boolean).map(x => ({contact_id: x.id, name: x.name}));
-    return {...base, title: base.title || String(p.title), payload: {title: String(p.title).trim(), description: String(p.description || '').trim() || null, happened_at: d.happened_at, happened_end: d.happened_end, status: d.status, participants, source_note_id: note.id}};
+    return {...base, title: base.title || title, payload: {title, description: String(p.description || '').trim() || null, happened_at: d.happened_at, happened_end: d.happened_end, status: d.status, participants, source_note_id: note.id}};
   }
   if (s.type === 'add_contact') {
     const name = String(p.name || '').trim();
@@ -85,7 +86,10 @@ export async function processNote(domains, input, {cites, factSuppressed, factSu
   const answer = typeof result === 'string' ? JSON.parse(result.replace(/^```(?:json)?\s*|\s*```$/g, '')) : result;
   if (!answer || typeof answer !== 'object' || !Array.isArray(answer.suggestions || [])) throw new Error('The assistant returned an invalid proposal list');
   const raw = answer.suggestions || [], shaped = raw.map(s => shapeProposal(s, {person, note, today, cites: q => cites(note, q)}));
-  if (raw.length && !shaped.some(Boolean)) throw new Error(raw.some(s => !s?.evidence_quote || !cites(note, s.evidence_quote)) ? 'Inference cites text absent from its source' : 'Every proposal was malformed');
+  // An answer that quotes words the note does not hold is not trusted at all. Proposals that are
+  // only shaped wrong are left out on their own: until 6 October 2026 they also threw away the
+  // note's tags and its people.
+  if (raw.length && !shaped.some(Boolean) && raw.some(s => !s?.evidence_quote || !cites(note, s.evidence_quote))) throw new Error('Inference cites text absent from its source');
   // Metadata: what the model wrote before may be replaced; what the owner wrote stays.
   const old = note.metadata || {}, mine = new Set(old.ai_fields || []), fresh = {...(answer.metadata || {})};
   if (!NOTE_TYPES.includes(fresh.type)) delete fresh.type;

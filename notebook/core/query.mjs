@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { slug, hash, identityIds } from './records/store.mjs';
+import { slug, readableSlug, hash, identityIds } from './records/store.mjs';
 import {nativeRows} from './native-personal.mjs';
 import {dueRows} from './native-due.mjs';
 import {assertAssistantRecord,assertAssistantLinks} from './assistant-mutations.mjs';
@@ -210,7 +210,7 @@ export class QueryService {
           if(table==='contact_group_memberships'&&(!record.last_movement_at||old&&payload.status&&old.status!==payload.status))record.last_movement_at=record.updated_at;
           // The address the create dialog shows ("/collections/books"), unless
           // another collection already has it; then the record's own id makes it unique.
-          if (['collections','contact_groups'].includes(table) && !old) { const plain = slug(record.slug||record.name); record.slug = this.rows(table).some(r => String(r.slug||'').toLowerCase() === plain) ? plain+'-'+record.uid.slice(0,8) : plain; }
+          if (['collections','contact_groups'].includes(table) && !old) { const plain = readableSlug(record.slug||record.name); record.slug = this.rows(table).some(r => String(r.slug||'').toLowerCase() === plain) ? plain+'-'+record.uid.slice(0,8) : plain; }
           if(table==='collection_items'){
             const collection=this.store.get('collections',record.collection_id);if(!collection)throw new Error('Collection missing');
             const primary=collection.field_schema?.find(f=>f.primary);record.title=primary?String(record.data?.[primary.key]??'Untitled'):record.title||'Untitled';
