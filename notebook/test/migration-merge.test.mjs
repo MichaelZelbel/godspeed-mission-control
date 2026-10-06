@@ -8,14 +8,14 @@ import {planMerge,applyMerge,workspaceDigest} from '../core/migration-merge.mjs'
 import {Store,hash,atomic} from '../core/records/store.mjs';
 import {createService} from '../server/main.mjs';
 const user='aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
-async function fixture(){
+async function fixture({profile=null,ownName='Keep my account'}={}){
  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-merge-'));
- const rows={notes:[{id:'matching',user_id:user,title:'Original',content:'Original Menerio version'},{id:'new-note',user_id:user,title:'New note',content:'Full content',is_trashed:true}],contacts:[{id:'new-person',user_id:user,name:'A saved person'}],note_conversations:[{id:'conversation',user_id:user,note_id:'matching'}],jobs:[{id:'imported-job',user_id:user,paused:false,owner:'local',next_run:'2020-01-01'}],unsupported:[{id:'legacy',user_id:user,content:'Keep privately'}]};
+ const rows={...profile?{profiles:[{id:user,...profile}]}:{},notes:[{id:'matching',user_id:user,title:'Original',content:'Original Menerio version'},{id:'new-note',user_id:user,title:'New note',content:'Full content',is_trashed:true}],contacts:[{id:'new-person',user_id:user,name:'A saved person'}],note_conversations:[{id:'conversation',user_id:user,note_id:'matching'}],jobs:[{id:'imported-job',user_id:user,paused:false,owner:'local',next_run:'2020-01-01'}],unsupported:[{id:'legacy',user_id:user,content:'Keep privately'}]};
  const source={project:'synthetic',user,catalog:async()=>Object.keys(rows).map(name=>({name,columns:['id','user_id'],primaryKey:['id'],foreignKeys:[]})),fingerprint:async t=>({count:rows[t.name].length,digest:hash(rows[t.name])}),page:async(t,w,o,n)=>rows[t.name].slice(o,o+n),media:async()=>[{bucket:'files',name:'file.txt',size:5}],download:async()=>Buffer.from('hello')};
  const bundle=path.join(dir,'bundle');await copyAccount(source,bundle);
  const staged=path.join(dir,'stage');stageAccount(bundle,staged);
  const root=path.join(dir,'live'),store=new Store(root);store.save('notes',{id:'matching',title:'Edited in Godspeed',content:'Keep this current content'});
- store.save('profiles',{id:'owner',display_name:'Keep my account'});
+ store.save('profiles',{id:'owner',display_name:ownName});
  fs.writeFileSync(path.join(store.state,'assistant.json'),'{"verified":false,"testMarker":"private existing provider config"}');
  const mediaRoot=path.join(store.state,'media'),jobRoot=path.join(store.state,'job-one');fs.mkdirSync(jobRoot);
  return {dir,root,store,bundle,staged,mediaRoot,jobRoot};
@@ -63,4 +63,12 @@ test('import API requires ownership, previews without changes and executes a rea
   assert.equal((await call('/api/menerio/import',{action:'apply',id:ready.id},cookie)).status,409);
   assert.equal((await call('/api/session',null,cookie)).status,200);
  }finally{await service.close();}
+});
+test('the owner name from the import fills the placeholder "Owner", never a name the owner chose',async()=>{
+ const imported={display_name:'Fictional Owner',website:'https://example.org',bio:''};
+ const a=await fixture({profile:imported,ownName:'Owner'}),plan=planMerge(a.store,a.staged,a.mediaRoot);applyMerge({...a,digest:plan.digest});
+ assert.equal(a.store.get('profiles','owner').display_name,'Fictional Owner');assert.equal(a.store.get('profiles','owner').website,'https://example.org');
+ assert.equal(planMerge(a.store,a.staged,a.mediaRoot).records.length,0,'a second import changes nothing');
+ const b=await fixture({profile:imported}),second=planMerge(b.store,b.staged,b.mediaRoot);applyMerge({...b,digest:second.digest});
+ assert.equal(b.store.get('profiles','owner').display_name,'Keep my account');
 });

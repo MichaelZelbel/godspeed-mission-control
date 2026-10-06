@@ -10,11 +10,19 @@ export function planMerge(store,staged,mediaRoot){
   if(store.problems.length||incoming.problems.length)throw new Error('Some stored relationships need repair before importing. Your content has not been changed.');
   const identities=new Map(),uids=new Map(existing.map(r=>[r.uid,r]));
   for(const record of existing)for(const alias of [record.id,...record.former_ids||[]])identities.set(record.type+'/'+alias.toLowerCase(),record);
-  const selected=[],resolved=new Map();let skipped=0;
+  const selected=[],resolved=new Map(),fills=[];let skipped=0;
   for(const record of incoming.records.values()){
     const matches=[...new Set([uids.get(record.uid),...([record.id,...record.former_ids||[]].map(id=>identities.get(record.type+'/'+id.toLowerCase())))].filter(Boolean))];
     if(matches.length>1||matches.some(r=>r.type!==record.type))throw new Error('An imported identity matches more than one existing item. Your content has not been changed.');
-    if(matches.length){skipped++;resolved.set(record.uid,matches[0]);continue;}
+    if(matches.length){
+      skipped++;resolved.set(record.uid,matches[0]);
+      // The owner's name fills the notebook's placeholder; until 6 October 2026
+      // an import kept "Owner" because the profile already existed.
+      const own=matches[0],fill=record.type==='profiles'&&(!own.display_name||own.display_name==='Owner')&&typeof record.display_name==='string'&&record.display_name.trim()&&record.display_name!=='None'
+        ?Object.fromEntries(['display_name','website','bio','avatar_url'].filter(k=>typeof record[k]==='string'&&record[k].trim()&&record[k]!=='None'&&(k==='display_name'||!own[k])).map(k=>[k,record[k]])):null;
+      if(fill){selected.push(store.prepare('profiles',fill,own));fills.push(['profiles',own.id,own._hash,fill]);}
+      continue;
+    }
     const next=structuredClone(record);delete next._hash;next.device=store.device;
     // Imported schedules never start executing merely because content was copied.
     if(next.type==='jobs'){next.enabled=false;next.paused=true;}
@@ -39,7 +47,7 @@ export function planMerge(store,staged,mediaRoot){
   const notes=selected.filter(r=>r.type==='notes'&&!r.removed_at),contacts=selected.filter(r=>r.type==='contacts'&&!r.removed_at);
   // Detect changes to what would be added, rather than unrelated preferences or
   // existing edits that are already protected by the keep-current policy.
-  const digest=hash({records:selected.map(r=>[r.type,r.id,hash(r)]).sort((a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b))),media});
+  const digest=hash({records:selected.filter(r=>!fills.some(f=>f[0]===r.type&&f[1]===r.id)).map(r=>[r.type,r.id,hash(r)]).sort((a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b))),media,...fills.length?{fills}:{}});
   return {digest,records:selected,media,summary:{notes:notes.filter(r=>!r.is_trashed).length,trashedNotes:notes.filter(r=>r.is_trashed).length,contacts:contacts.length,attachments:report.media,items:selected.length,keptExisting:skipped,archivedTables:report.archivedTables.filter(t=>t.count).length}};
 }
 export function applyMerge({root,device,staged,bundle,mediaRoot,jobRoot,digest}){

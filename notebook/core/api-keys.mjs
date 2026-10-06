@@ -16,9 +16,15 @@ export class ApiKeys {
 export function toolScope(name,args){
   if(['list_contact_topics','get_contact_topic_history','create_contact_topic','update_contact_topic','discuss_contact_topic','archive_contact_topic','reopen_contact_topic','undo_contact_topic_event'].includes(name))return 'contacts';
   if(name==='personal_operation')return 'actions';
-  if(['search_knowledge','validate_knowledge'].includes(name))return 'stats';
+  if(['search_knowledge','validate_knowledge','get_stats'].includes(name))return 'stats';
+  // Menerio's names (server/memory-tools.mjs).
+  if(['search_brain','list_recent','list_recent_notes','trash_note','lexicon_search'].includes(name))return 'notes';
+  if(name==='get_user_profile')return 'profile';
+  if(['search_contacts','get_contact_context','get_contact_profile','get_person_notes','log_interaction'].includes(name))return 'contacts';
+  if(['get_claims','add_claim','create_moment_with_ai','search_moments','search_entities','get_entity_context'].includes(name))return 'world';
+  if(['list_collections','get_collection_schema','list_collection_items','add_collection_item','update_collection_item','search_all_collections'].includes(name))return 'collections';
   if(['capture_note','list_note_folders','search_notes','get_note','update_note','retrieve_memory'].includes(name))return 'notes';
   if(['write_fact','record_event'].includes(name))return 'world';
   if(name==='review_suggestions')return 'profile';
-  const type=args.type||'';return /^(contacts|contact_|person_)/.test(type)?'contacts':/^(claims|entities|moments|moment_|world_)/.test(type)?'world':/^(profile|fact_|agent_|review_|ai_suggestion)/.test(type)?'profile':/^collection/.test(type)?'collections':/^media|attachment/.test(type)?'media':/^action/.test(type)?'actions':/^note|comments|conversation/.test(type)?'notes':null;
+  const type=args.type||'';return /^(contacts|contact_|person_)/.test(type)?'contacts':/^(claims|entities|moments|moment_|world_)/.test(type)?'world':/^(profile|fact_|agent_|review_|ai_suggestion)/.test(type)?'profile':/^collection/.test(type)?'collections':/^media|attachment/.test(type)?'media':/^(action|goal|work_|deadline|habit|obligation|forecast|journal|coach)/.test(type)?'actions':/^(note|comments|conversation|wiki_)/.test(type)?'notes':null;
 }
