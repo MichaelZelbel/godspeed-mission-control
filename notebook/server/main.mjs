@@ -183,7 +183,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         const input=JSON.parse(await body(req));return send(res,200,{status:await syncRunner.configure(input.url)});
       }
       if(route==='/api/sync/run'&&req.method==='POST')return send(res,200,{status:await syncRunner.run()});
-      if(route==='/api/owner'&&req.method==='POST'){const input=JSON.parse(await body(req));if(!['local','vps'].includes(input.owner))throw new Error('Choose local or VPS owner');await scheduler.transfer(input.owner);return send(res,200,{owner:input.owner});}
+      if(route==='/api/owner'&&req.method==='POST'){const input=JSON.parse(await body(req));const owner=input.owner==='this'?device:input.owner;if(typeof owner!=='string'||!/^[a-z0-9][a-z0-9-]{0,39}$/.test(owner))throw new Error('Choose the machine that runs the routines by its name');await scheduler.transfer(owner);return send(res,200,{owner});}
       if(route==='/api/delivery'&&req.method==='POST'){const input=JSON.parse(await body(req));if(!['notebook','telegram'].includes(input.delivery)||input.delivery==='telegram'&&!originalRuntime&&!scheduler.deliver)throw new Error('Configure Telegram before choosing chat delivery');const settings=store.get('settings','installation');if(!settings)throw new Error('Start with a goal first');await store.saveAsync('settings',{id:settings.id,delivery:input.delivery});return send(res,200,{delivery:input.delivery});}
       if(route==='/api/conflicts'&&req.method==='GET')return send(res,200,{data:sync.pendingConflicts().map(name=>conflictView(store,name.replace(/\.json$/,''),{assistantPath}))});
       if(route==='/api/conflicts/resolve'&&req.method==='POST'){

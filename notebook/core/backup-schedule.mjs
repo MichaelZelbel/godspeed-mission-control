@@ -19,13 +19,15 @@ export class BackupSchedule{
   const last=this.saved()[0];
   return hour>=this.hour&&(!last||day(last)!==day(now));
  }
+ // A server short of disk keeps fewer (settings/backups keep, 1 to 30).
+ kept(){const keep=Number(this.store.get('settings','backups')?.keep);return Number.isInteger(keep)&&keep>=1&&keep<=30?keep:this.keep;}
  async tick(now=Date.now()){
   if(this.running||!this.due(now))return null;
   this.running=true;
   try{
    const result=await this.runner.run();
    // Only complete backups count, and only older ones are removed.
-   for(const id of this.saved().slice(this.keep))fs.rmSync(path.join(this.folder(),String(id)),{recursive:true,force:true});
+   for(const id of this.saved().slice(this.kept()))fs.rmSync(path.join(this.folder(),String(id)),{recursive:true,force:true});
    return result;
   }finally{this.running=false;}
  }

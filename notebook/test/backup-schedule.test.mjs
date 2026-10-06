@@ -22,3 +22,11 @@ test('one backup a day after 03:00 in the owner\'s timezone, on the routine mach
   const laptop=setup('local');await laptop.schedule.tick(Date.parse('2026-10-06T09:00:00Z'));assert.equal(laptop.runs(),0);
   store.save('settings',{id:'backups',enabled:false});assert.equal(schedule.due(Date.parse('2026-10-08T09:00:00Z')),false);
 });
+
+test('a server short of disk can keep fewer backups',async()=>{
+  const {store,schedule}=setup('vps');
+  for(const id of ['1','2','3'])fs.mkdirSync(path.join(store.state,'backups',id),{recursive:true}),fs.writeFileSync(path.join(store.state,'backups',id,'backup.json'),'{}');
+  store.save('settings',{id:'backups',keep:1});
+  await schedule.tick(Date.parse('2026-10-06T09:00:00Z'));
+  assert.equal(fs.readdirSync(path.join(store.state,'backups')).length,1);
+});
