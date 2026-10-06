@@ -12,7 +12,7 @@ const restartableReads=new Set(['disk-check','health-summary','watch','domain-wa
 const quietReads=new Set([...restartableReads,'coach-tick','journal-tick','coach-cycle','deadline-reminder']);
 // The longest a job is taken to be working: goal work makes up to five AI calls of five minutes.
 export const JOB_LIMIT=45*60000;
-const KEEP_MS=14*86400000,KEEP_LAST=3,PRUNE_EVERY=6*3600000,PRUNE_BATCH=500;
+const KEEP_MS=14*86400000,KEEP_HISTORY_MS=2*86400000,KEEP_LAST=3,PRUNE_EVERY=6*3600000,PRUNE_BATCH=500;
 export class Scheduler {
   // only: the kinds this scheduler runs (beside Hermes, the record routines
   // Hermes has no job for); delivery: where its results go, overriding settings.
@@ -166,17 +166,17 @@ export class Scheduler {
     await this.store.withLockAsync(()=>{const current=this.store.get('jobs',id);if(current&&current.last_outcome!==outcome)this.store.commit([this.store.prepare('jobs',{last_outcome:outcome},current)]);});
   }
   // Run receipts and the earlier versions of jobs and receipts are system
-  // bookkeeping that nothing reads after a fortnight. Until 6 October 2026
-  // nothing removed them, and every one was synced through Git and held in
-  // memory. Kept: the last three verified runs of each job, every failed or
-  // interrupted one, and everything younger than two weeks.
+  // bookkeeping. Until 6 October 2026 nothing removed them, and every one was
+  // synced through Git and held in memory. Kept: the receipts of the last two
+  // weeks, the last three verified runs of each job and every failed or
+  // interrupted one; the earlier versions, which nothing reads, for two days.
   async prune(now){
     if(!this.pruneAgain&&now-(this.prunedAt||0)<PRUNE_EVERY)return 0;
     this.prunedAt=now;
     const cutoff=now-KEEP_MS,keys=[],seen=new Map(),of=type=>typeof this.store.ofType==='function'?this.store.ofType(type):this.store.list(type);
     const runs=of('job_receipts').filter(r=>r.state==='verified'&&r.job_id&&r.id.startsWith(r.job_id+'-')&&/^\d+$/.test(r.id.slice(r.job_id.length+1))).sort((a,b)=>String(b.finished_at||b.updated_at).localeCompare(String(a.finished_at||a.updated_at)));
     for(const r of runs){const n=seen.get(r.job_id)||0;seen.set(r.job_id,n+1);if(n>=KEEP_LAST&&Date.parse(r.finished_at||r.updated_at)<cutoff)keys.push('job_receipts/'+r.id);}
-    for(const h of of('record_history'))if(['jobs','job_receipts'].includes(h.source_type)&&Date.parse(h.recorded_at||h.updated_at)<cutoff)keys.push('record_history/'+h.id);
+    for(const h of of('record_history'))if(['jobs','job_receipts'].includes(h.source_type)&&Date.parse(h.recorded_at||h.updated_at)<now-KEEP_HISTORY_MS)keys.push('record_history/'+h.id);
     const batch=keys.slice(0,PRUNE_BATCH);this.pruneAgain=keys.length>batch.length;
     if(batch.length)await this.store.withLockAsync(()=>this.store.commit([],{removeKeys:batch}));
     return batch.length;

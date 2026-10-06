@@ -125,7 +125,7 @@ test('a check that found nothing to say leaves no receipt; one that said somethi
  say=true;await scheduler.tick(t0+8*900000);assert.equal(store.list('job_receipts').length,1);
 });
 
-test('old run receipts and the history of jobs are removed after two weeks, keeping the last runs and every failure',async t=>{
+test('old run receipts are removed after two weeks and the history of jobs after two days, keeping the last runs and every failure',async t=>{
  const {store}=workspace(t);store.save('settings',{id:'installation',owner:'vps',timezone:'UTC',delivery:'notebook'});
  store.save('jobs',{id:'portfolio',kind:'portfolio',owner:'vps',paused:true,state:'pending',next_run:new Date(t0).toISOString(),interval_ms:3600000});
  for(let i=0;i<10;i++){store.save('job_receipts',{id:'portfolio-'+(t0+i*3600000),job_id:'portfolio',kind:'portfolio',state:'verified',finished_at:new Date(t0+i*3600000).toISOString()});store.save('jobs',{id:'portfolio',last_run:new Date(t0+i*3600000).toISOString()});}
@@ -134,7 +134,9 @@ test('old run receipts and the history of jobs are removed after two weeks, keep
  const note=store.save('notes',{title:'Kept',content:'first'});store.save('notes',{id:note.id,content:'second'});
  const scheduler=new Scheduler(store,{device:'vps',executor:async()=>({verified:true})});
  assert.ok(store.list('record_history').some(h=>h.source_type==='jobs'));
- const later=Date.now()+15*86400000;
+ // Three days on, only the history of jobs and receipts has gone.
+ await scheduler.prune(Date.now()+3*86400000);assert.equal(store.list('record_history').filter(h=>h.source_type==='jobs').length,0);assert.equal(store.list('job_receipts').filter(r=>r.kind==='portfolio').length,11);
+ scheduler.prunedAt=0;const later=Date.now()+15*86400000;
  for(let i=0;i<10&&(i===0||scheduler.pruneAgain);i++)await scheduler.prune(later+i);
  const runs=store.list('job_receipts').filter(r=>r.kind==='portfolio');
  assert.equal(runs.filter(r=>r.state==='verified').length,3,'the last three runs stay');assert.ok(runs.some(r=>r.state==='failed'),'a failure stays');
