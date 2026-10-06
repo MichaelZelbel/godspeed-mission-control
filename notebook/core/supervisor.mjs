@@ -1,6 +1,7 @@
 import path from 'node:path';import {spawn} from 'node:child_process';import {hash,atomic} from './records/store.mjs';
 import {terminateOwnedTree} from './process-tree.mjs';
 import {HealthMonitor,STALL_AFTER} from './supervisor-health.mjs';
+export const RETRY_AFTER_FAILURES=10*60000;
 import {missingRuns} from './missing-runs.mjs';
 // Separate from the notebook process: a stopped or unresponsive service cannot
 // perform its own missing-run check. This process owns only its direct child.
@@ -29,7 +30,9 @@ export class Supervisor{
    if(this.stopping)return;
    this.monitor.failure(reason);this.restarts++;this.status({state:'recovering',reason});
    if(this.restarts<=5)this.setTimer(()=>this.launch(),Math.min(1000*2**this.restarts,30000));
-   else this.giveUp('Five automatic restarts failed');
+   // Past five it keeps trying, every ten minutes, and says so. Until 7 October
+   // 2026 it stopped for good, and the notebook stayed down until someone saw it.
+   else{this.status({state:'needs_review',reason:'Five automatic restarts failed; trying again every ten minutes'});this.setTimer(()=>this.launch(),RETRY_AFTER_FAILURES);}
   };
   child.on('error',error=>{this.status({state:'failed',reason:'Notebook process could not start'});void relaunch('Notebook process could not start: '+error.message);});
   child.on('exit',(code,signal)=>{void relaunch('Notebook stopped: '+(signal||'exit '+code));});
@@ -44,7 +47,10 @@ export class Supervisor{
    if(health.scheduler_heartbeat&&now-Date.parse(health.scheduler_heartbeat)>STALL_AFTER)throw Error('Scheduler heartbeat stopped');
    this.monitor.success(now);if(this.monitor.stablyHealthy(now))this.restarts=0;this.status({state:'healthy'});
   }catch(error){
-   const decision=this.monitor.failure(error.message,now);this.status({state:decision.restart?'recovering':'checking',reason:error.message});
+   // A reply that did not come in time is a slow notebook; a refused connection, one not
+   // (or no longer) listening; anything else, one that answered that it is stuck.
+   const kind=error?.name==='TimeoutError'||error?.name==='AbortError'?'slow':error?.message==='fetch failed'||error?.cause?.code==='ECONNREFUSED'?'refused':'stuck';
+   const decision=this.monitor.failure(error.message,now,kind);this.status({state:decision.restart?'recovering':'checking',reason:error.message});
    if(decision.restart){this.shutdown=this.terminate(this.child);try{await this.shutdown;}catch{this.status({state:'needs_review',reason:'Owned process shutdown failed'});}}
   }finally{this.checking=false;}
  }
