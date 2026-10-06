@@ -14,6 +14,7 @@ import {assistantProfiles,selectAssistantProfile} from '../core/assistant-files.
 import {installSkillTree} from '../core/packaged-skills.mjs';
 import {planWorkspaceMove,moveWorkspace,undoWorkspaceMove} from '../core/workspace-move.mjs';
 import {installStarter,adoptedMissionControl} from '../core/starter-workspace.mjs';
+import {machineDevice} from '../core/device-id.mjs';
 const args=process.argv.slice(2),root=process.env.GODSPEED_WORKSPACE;if(!root)throw new Error('Set GODSPEED_WORKSPACE to your candidate workspace');
 if(args[0]==='workspace-move'){
  const [_,action,value,installationFile]=args;
@@ -24,7 +25,7 @@ if(args[0]==='workspace-move'){
  else throw Error('workspace-move plan DESTINATION INSTALLATION.json | apply PLAN.json | undo RECEIPT.json');
  console.log(JSON.stringify(outcome,null,2));process.exit(0);
 }
-const store=new Store(root,{device:process.env.GODSPEED_DEVICE||'local'}),query=new QueryService(store),domains=new Domains(query),media=process.env.GODSPEED_MEDIA_ROOT||path.join(store.state,'media');
+const store=new Store(root,{device:machineDevice(root).id}),query=new QueryService(store),domains=new Domains(query),media=process.env.GODSPEED_MEDIA_ROOT||path.join(store.state,'media');
 const [command,verb,...rest]=args;let result;
 if(command==='init'){
   seed(store);

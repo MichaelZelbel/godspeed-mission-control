@@ -6,11 +6,12 @@
 import fs from 'node:fs';
 import {Store} from '../core/records/store.mjs';
 import {NativeScheduler} from '../core/native-scheduler.mjs';
+import {machineDevice} from '../core/device-id.mjs';
 
 const root=process.env.GODSPEED_WORKSPACE;if(!root)throw Error('Set GODSPEED_WORKSPACE to the notebook folder');
 const input=JSON.parse(fs.readFileSync(0,'utf8')||'{}');
 const timezone=typeof input.timezone==='string'&&input.timezone?input.timezone:undefined,goal=String(input.goal||'').trim();
-const store=new Store(root,{device:process.env.GODSPEED_DEVICE||'local'});
+const store=new Store(root,{device:machineDevice(root).id});
 const scheduler=new NativeScheduler(store,{executable:process.env.GODSPEED_HERMES||'/opt/hermes/bin/hermes',home:process.env.HERMES_HOME,device:store.device});
 await scheduler.configure({goal,timezone,delivery:'telegram'});
 // configure keeps an earlier setup's clock and delivery; the chat's answers are newer.

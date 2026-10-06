@@ -214,8 +214,11 @@ done
 if [ -z "${GODSPEED_INTEGRATED_BESIDE:-}" ] && [ "$(previous_setting HERMES_HOME)" = "$state/hermes" ]; then GODSPEED_INTEGRATED_BESIDE=1; fi
 export GODSPEED_WORKSPACE="$root" GODSPEED_ORIGINAL_RUNTIME=on
 export GODSPEED_PORT=${GODSPEED_PORT:-47831} GODSPEED_BIND=127.0.0.1
-# The machine's name in the notebook; the one named owner runs the routines.
-export GODSPEED_DEVICE=${GODSPEED_DEVICE:-local} GODSPEED_MEDIA_ROOT=${GODSPEED_MEDIA_ROOT:-$state/media}
+# The machine's name in the notebook; the one named owner runs the routines. Unnamed, the
+# notebook names the machine itself once (core/device-id.mjs); "local", which every machine
+# was given until 6 October 2026, could not tell two machines apart.
+if [ -n "${GODSPEED_DEVICE:-}" ] && [ "$GODSPEED_DEVICE" != local ]; then export GODSPEED_DEVICE; else unset GODSPEED_DEVICE; fi
+export GODSPEED_MEDIA_ROOT=${GODSPEED_MEDIA_ROOT:-$state/media}
 original_home=${HERMES_HOME:-$HOME/.hermes}
 export HERMES_HOME="$original_home"
 if [ "${GODSPEED_INTEGRATED_BESIDE:-}" = 1 ]; then
