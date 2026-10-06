@@ -59,6 +59,9 @@ test('public setup ownership, password login, durable sessions, expiry, recovery
     now+=1001;assert.equal((await request('/api/login',owner)).status,200);
     assert.equal(safeReturn('//unrelated.example'),'/dashboard');assert.equal(safeReturn('/\\unrelated.example'),'/dashboard');
     assert.equal(safeReturn('/dashboard/notes/one?tab=history#entry'),'/dashboard/notes/one?tab=history#entry');
+    // A path that only becomes "//elsewhere" once normalized (6 October 2026 review).
+    for(const next of ['/.//evil.example/phish','/..//evil.example/x','/%2e//evil.example/x','/%2E%2E//evil.example','/./\\evil.example','/\t/evil.example','/dashboard/../..//evil.example'])assert.equal(safeReturn(next),'/dashboard',next);
+    assert.equal(safeReturn('/dashboard/./notes'),'/dashboard/notes');
   }finally{await service.close();}
 });
 

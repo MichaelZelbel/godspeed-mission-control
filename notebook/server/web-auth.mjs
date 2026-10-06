@@ -188,6 +188,9 @@ export class WebAuth {
 export function safeReturn(value) {
   if (typeof value !== 'string' || !value.startsWith('/') || value.startsWith('//') || /[\\\r\n]/.test(value)) return '/dashboard';
   const url = new URL(value, 'https://godspeed.invalid');
-  if (url.origin !== 'https://godspeed.invalid' || /^\/(setup|login|api)(\/|$)/.test(url.pathname)) return '/dashboard';
+  // Checked after the path is normalized: "/.//evil.example" becomes
+  // "//evil.example", which a browser follows to another site (until
+  // 6 October 2026 it was handed back as the destination).
+  if (url.origin !== 'https://godspeed.invalid' || !/^\/(?![/\\])/.test(url.pathname) || /[\\\t]/.test(url.pathname) || /^\/(setup|login|api)(\/|$)/.test(url.pathname)) return '/dashboard';
   return url.pathname + url.search + url.hash;
 }
