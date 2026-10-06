@@ -15,7 +15,7 @@ export function validateAssistantFiles(root){
   for(const id of fs.readdirSync(directory).filter(id=>/^[a-f0-9-]{36}$/.test(id))){
     for(const name of fs.readdirSync(path.join(directory,id)).filter(name=>name.endsWith('.json'))){
       const snapshot=JSON.parse(fs.readFileSync(path.join(directory,id,name),'utf8'));
-      if(snapshot.format!==1||snapshot.profile!==id||typeof snapshot.database!=='string'||!Array.isArray(snapshot.tables))throw new Error('Assistant state identity needs review: '+id+'/'+name);
+      if(![1,2].includes(snapshot.format)||snapshot.profile!==id||typeof snapshot.database!=='string'||!Array.isArray(snapshot.tables))throw new Error('Assistant state identity needs review: '+id+'/'+name);
     }
   }
 }
