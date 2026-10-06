@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { randomBytes } from 'node:crypto';
 import { Store, atomic, safe, hash } from '../core/records/store.mjs';
 import { SearchIndex } from '../core/index/search.mjs';
+import { MeaningIndex, embeddingConfig, saveEmbeddingConfig, embedder } from '../core/index/meaning.mjs';
 import { QueryService } from '../core/query.mjs';
 import { Domains } from '../core/domains.mjs';
 import { Scheduler } from '../core/jobs/scheduler.mjs';
@@ -43,6 +44,9 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   // watcher names; the index follows the store's changes row by row.
   const store = new Store(root,{device,watch:true}), index = new SearchIndex(store,{background:true}), query = new QueryService(store), sync = new FileSync(store);
   const stopIndexing=store.onChange(({changed,gone})=>{try{index.update(changed);index.forget(gone);}catch{}});
+  // Meaning search, when a service is connected (Settings, or GODSPEED_EMBEDDINGS_*).
+  const connectMeaning=config=>{index.meaning=new MeaningIndex(index,{config});};
+  connectMeaning(embeddingConfig(store.state));
   const syncRunner=new SyncRunner(root,{onResult:result=>{sync.last=result;atomic(path.join(store.state,'sync-status.json'),JSON.stringify(result));}});
   const providerPath=path.join(store.state,'provider.json');
   if(!provider&&fs.existsSync(providerPath))provider=modelProvider(JSON.parse(fs.readFileSync(providerPath,'utf8')));
@@ -201,7 +205,19 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       }
       if(route==='/api/import'&&req.method==='POST')return send(res,200,importExport(query,JSON.parse(await body(req,100*1024*1024))));
       if(route==='/api/export')return send(res,200,{format:1,records:[...store.scan().values()].map(r=>{const copy={...r};delete copy._hash;return copy;})});
-      if (route === '/api/search') return send(res, 200, { data: index.search(url.searchParams.get('q') || ''), error: null });
+      if (route === '/api/search') { const types=url.searchParams.get('types')?.split(',').filter(Boolean)||null,found=await index.searchHybrid(url.searchParams.get('q') || '',{limit:Number(url.searchParams.get('limit'))||200,types}); return send(res, 200, { data: found.rows, mode: found.mode, note: found.note||null, error: null }); }
+      if(route==='/api/embeddings'){
+        if(req.method==='GET'){const config=embeddingConfig(store.state);return send(res,200,{configured:!!config,url:config?.url||null,model:config?.model||null,dimensions:config?.dimensions||null,has_key:!!config?.key,status:index.meaning?.status||null});}
+        if(req.method==='DELETE'){saveEmbeddingConfig(store.state,null);connectMeaning(null);return send(res,200,{configured:false});}
+        if(req.method==='POST'){
+          const input=JSON.parse(await body(req)),config={url:String(input.url||'').trim(),key:String(input.key||embeddingConfig(store.state)?.key||''),model:String(input.model||'').trim(),...(Number(input.dimensions)>0?{dimensions:Number(input.dimensions)}:{})};
+          if(!config.url||!config.model)throw new Error('Give the embeddings address and model');
+          const {vectors}=await embedder(config)(['Godspeed Mission Control connection check']);
+          saveEmbeddingConfig(store.state,config);connectMeaning(config);void meaningRound();
+          return send(res,200,{configured:true,model:config.model,dimensions:vectors[0].length});
+        }
+        return send(res,405,{error:'Use GET, POST or DELETE'});
+      }
       // A write puts the rows it changed into the search index itself. Reading
       // every record and every workspace file to rebuild it, which is what a
       // save used to wait for, cost more than the save; the file watcher still
@@ -279,6 +295,9 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   // The watchers say what changed. Now and then the store compares every
   // file's size and time with what it read, and the index re-reads the
   // workspace, in case a watcher missed something (it can, under load).
+  // Vectors for new and changed notes, a batch every 20 seconds while there is work.
+  const meaningRound=async()=>{if(menerioImport.mutating||!index.meaning?.ready)return;try{await index.meaning.step({budget:512});}catch{}};
+  const meaningTimer=setInterval(()=>{void meaningRound();},20000);meaningTimer.unref?.();
   const interval = setInterval(() => { if (!menerioImport.mutating) void store.verify().then(()=>index.rebuildBackground()).catch(()=>{}); }, 600000);
   const jobs=setInterval(()=>{if(!menerioImport.mutating)scheduler.tick().catch(()=>{});},30000);
   const syncTimer=setInterval(()=>{if(!menerioImport.mutating&&fs.existsSync(path.join(store.state,'sync-config.json')))void syncRunner.run();},60000);
@@ -307,7 +326,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   const watchRoot=name=>{const folder=path.join(store.root,name);if(!watchers.has(name)&&fs.existsSync(folder))watchers.set(name,fs.watch(folder,{recursive:true},changed(name)));};
   for(const name of durableRoots)watchRoot(name);
   const rootWatcher=fs.watch(store.root,(event,name)=>{if(durableRoots.includes(name)){watchRoot(name);changed(name)(event,null);}else if(durableFiles.includes(name))changed('')(event,name);});
-  return { server, store, index, query, domains, scheduler, sync, mediaSync,address: server.address(), close: async () => { stopIndexing();store.unwatch();await syncRunner.close();await menerioImport.close();rootWatcher.close();for(const watcher of watchers.values())watcher.close();clearTimeout(debounce);clearTimeout(indexDebounce);clearInterval(telegramTimer);clearInterval(interval);clearInterval(jobs);clearInterval(syncTimer);clearInterval(mediaTimer); await new Promise(resolve => server.close(resolve)); index.close(); } };
+  return { server, store, index, query, domains, scheduler, sync, mediaSync,address: server.address(), close: async () => { clearInterval(meaningTimer);stopIndexing();store.unwatch();await syncRunner.close();await menerioImport.close();rootWatcher.close();for(const watcher of watchers.values())watcher.close();clearTimeout(debounce);clearTimeout(indexDebounce);clearInterval(telegramTimer);clearInterval(interval);clearInterval(jobs);clearInterval(syncTimer);clearInterval(mediaTimer); await new Promise(resolve => server.close(resolve)); index.close(); } };
 }
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const root = process.env.GODSPEED_WORKSPACE;

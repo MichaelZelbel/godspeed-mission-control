@@ -1,5 +1,6 @@
 import {visibleRows} from './visibility.mjs';
 import {queryWords} from './index/search.mjs';
+import {STOPWORDS} from './index/stopwords.mjs';
 
 // Related notes, the people a note names and its actions: what the note's
 // Connections panel, its Suggested Links and the dashboard's daily connection
@@ -8,8 +9,7 @@ import {queryWords} from './index/search.mjs';
 // notebook and filed a "Link X to Y" review item for each name it found, one
 // save at a time; on the real notebook that held the server for minutes and
 // filed more than a thousand items, and the panel could not read the answer.
-const STOP = new Set(('the and for with that this from have has had was were are you your our their they them then than into about over under after before when what which while where there here been being also only just more most some such very will would could should can not but all any each other one two '
-  + 'der die das und oder mit von für auf aus bei ist sind war waren wird werden ein eine einer eines einem einen nicht auch noch nur sich sie ihr ihre wir uns mein meine dein deine sein seine hat haben hatte dass wenn dann als wie was wer wo zum zur über unter nach vor durch schon sehr mehr').split(' '));
+const STOP = STOPWORDS;
 const plain = text => String(text || '').replace(/<[^>]+>/g, ' ').replace(/!?\[\[([^\]|]+)(\|[^\]]+)?\]\]/g, ' $1 ').replace(/[#*_`>~\[\]()]/g, ' ');
 
 // The words that say what a note is about: its title's words and its most

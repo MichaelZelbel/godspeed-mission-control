@@ -217,6 +217,18 @@ export class Domains {
       }
       return { findings, count: findings.length };
     }
+    if (name === 'search-notes-semantic' && this.index?.searchHybrid) {
+      // Words and meaning from the search index (no model call per search).
+      // The screens read `results`; the function answered `notes`, so meaning
+      // search showed nothing (6 October 2026). Both are given.
+      const question=String(input.query||input.search_query||'').trim(),limit=Math.min(Number(input.limit)||20,100);
+      if(!question)return {results:[],notes:[],mode:'words',semantic:false};
+      const found=await this.index.searchHybrid(question,{limit:limit*3,types:['notes','media_analysis','note_chunks']});
+      const notes=new Map(visibleRows(this.query,'notes').filter(n=>!n.is_trashed).map(n=>[n.id,n])),attached=id=>this.store.get('media_analysis',id)?.note_id||this.store.get('note_chunks',id)?.note_id;
+      const seen=new Set(),results=[];
+      for(const row of found.rows){const id=row.type==='notes'?row.id:attached(row.id),note=id&&notes.get(id);if(!note||seen.has(id))continue;seen.add(id);results.push({...note,similarity:row.similarity??Math.min(1,row.score*30),matched:row.matched||'words'});if(results.length>=limit)break;}
+      return {results,notes:results,mode:found.mode,semantic:found.mode!=='words',note:found.note||null};
+    }
     if (name === 'search-notes-semantic') {
       if(this.provider){
         const question=String(input.query||input.search_query||''),context=await retrievedContext(this.query,{message:'Find notes for '+question},this.provider),candidates=context.notes;
@@ -261,7 +273,7 @@ export class Domains {
     }
     if (['note-chat','collection-chat','conversation-chat','draft-event','weekly-review','generate_collection_schema'].includes(name)) {
       if (!this.provider) throw new Error('Choose and configure a model provider before asking Godspeed');
-      const context=await retrievedContext(this.query,input,this.provider),notes=context.notes;
+      const context=await retrievedContext(this.query,input,this.provider,{index:this.index}),notes=context.notes;
       const attached=chatAttachments(this.mediaRoot,input.files||[]);context.documents=attached.documents;
       if(input.attachments){
         if(!Array.isArray(input.attachments)||input.attachments.length>10)throw Error('Attach up to 10 text files per message');

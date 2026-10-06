@@ -4,6 +4,8 @@ import { DatabaseSync } from 'node:sqlite';
 import {durableRoots,durableFiles,shared,recordsFolder} from '../file-policy.mjs';
 import {hash,decode,encode} from '../records/store.mjs';
 import {candidate} from '../records/layout.mjs';
+import {mergeRanked} from './meaning.mjs';
+import {STOPWORDS} from './stopwords.mjs';
 
 // The search index: one SQLite file beside the notebook, rebuilt from the
 // notebook whenever it is missing or of an older form, so it never holds
@@ -255,7 +257,9 @@ export class SearchIndex {
   // a longer one. When that finds little, words are also looked for inside
   // longer words, and failing all of that, any of the words will do.
   search(query, { limit = 200, types = null } = {}) {
-    const terms = queryTerms(query), words = terms.flat();
+    // Common words go, unless the query is nothing but common words.
+    const all = queryTerms(query), meaningful = all.filter(t => t.length > 1 || !STOPWORDS.has(t[0].toLowerCase()));
+    const terms = meaningful.length ? meaningful : all, words = terms.flat();
     if (!words.length) return [];
     const typeFilter = types?.length ? ' AND d.type IN (' + types.map(() => '?').join(',') + ')' : '', typeArgs = types?.length ? types : [];
     const run = match => this.db.prepare(`SELECT d.uid, d.type, d.id, d.title, snippet(docs_fts, 1, '[', ']', '…', 14) AS snippet, bm25(docs_fts, 4.0, 1.0) AS rank
@@ -270,8 +274,9 @@ export class SearchIndex {
         .all(...words.map(w => '%' + w.replace(/[\\%_]/g, '\\$&') + '%'), ...typeArgs, limit);
       rows = [...rows, ...extra.filter(r => !seen.has(r.uid))].slice(0, limit);
     }
-    if (!rows.length && terms.length > 1) rows = run(quoted.join(' OR '));
-    return rows.map(({ uid, type, id, title, snippet, rank }) => ({ uid, type, id, title, ...(snippet ? { snippet } : {}), rank }));
+    let loose = false;
+    if (!rows.length && terms.length > 1) { rows = run(quoted.join(' OR ')); loose = true; }
+    return rows.map(({ uid, type, id, title, snippet, rank }) => ({ uid, type, id, title, ...(snippet ? { snippet } : {}), rank, ...(loose ? { loose: true } : {}) }));
   }
   // Any of these words, best matches first: how a note's related notes are
   // found (related.mjs). Each word is quoted, so none is read as syntax.
@@ -281,6 +286,22 @@ export class SearchIndex {
     const typeFilter = types?.length ? ' AND d.type IN (' + types.map(() => '?').join(',') + ')' : '';
     return this.db.prepare(`SELECT d.uid, d.type, d.id, d.title, snippet(docs_fts, 1, '[', ']', '…', 14) AS snippet, bm25(docs_fts, 4.0, 1.0) AS rank
       FROM docs_fts JOIN docs d ON d.rowid = docs_fts.rowid WHERE docs_fts MATCH ?${typeFilter} ORDER BY rank LIMIT ?`).all(terms.map(t => '"' + t.replaceAll('"', '""') + '"').join(' OR '), ...(types?.length ? types : []), limit);
+  }
+  // Words and, when a meaning service is connected (this.meaning, meaning.mjs),
+  // meaning: one ranked list. Says which it used.
+  async searchHybrid(query, { limit = 50, types = null } = {}) {
+    const words = this.search(query, { limit: Math.max(limit, 100), types });
+    if (!this.meaning?.ready) return { rows: words.slice(0, limit), mode: 'words', note: 'Searching by words only: no meaning service is connected.' };
+    let meanings = [];
+    try { meanings = await this.meaning.search(query, { limit: Math.max(limit, 100), types }); }
+    catch (error) { return { rows: words.slice(0, limit), mode: 'words', note: 'Meaning search is unavailable right now (' + error.message + '); these are word matches.' }; }
+    const known = new Map(words.map(r => [r.uid, r])), missing = meanings.filter(m => !known.has(m.uid)).map(m => m.uid);
+    if (missing.length) {
+      const rows = this.db.prepare(`SELECT uid, type, id, title FROM docs WHERE uid IN (${missing.map(() => '?').join(',')})`).all(...missing);
+      for (const r of rows) known.set(r.uid, { uid: r.uid, type: r.type, id: r.id, title: r.title });
+    }
+    const rows = mergeRanked(words, meanings.filter(m => known.has(m.uid)).map(m => ({ ...known.get(m.uid), similarity: m.similarity })), { limit });
+    return { rows, mode: 'words and meaning' };
   }
   close() { this.closed = true; this.db.close(); }
 }

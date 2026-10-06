@@ -464,7 +464,7 @@ export class FileSync {
     }
     if(!this.inScope(name))throw Object.assign(new Error('Files outside the notebook changed on this machine and on another ('+name+'); Git has to settle them first'),{code:'OWNER_CONFLICT'});
     const kept=local?'local':'remote',encoding=binary||Object.values(versions).some(v=>v&&!Buffer.from(v.toString('utf8')).equals(v))?'base64':'utf8';
-    reviews.push({id:hash(name+' '+remoteHead).slice(0,24),path:name,kind:'git',kept,...(encoding==='base64'?{encoding,digests:Object.fromEntries(Object.entries(versions).map(([key,v])=>[key,v&&hash(v)]))}:{}),
+    reviews.push({id:hash(name+'\0'+remoteHead).slice(0,24),path:name,kind:'git',kept,...(encoding==='base64'?{encoding,digests:Object.fromEntries(Object.entries(versions).map(([key,v])=>[key,v&&hash(v)]))}:{}),
       ...Object.fromEntries(Object.entries(versions).map(([key,v])=>[key,v===null?null:v.toString(encoding)])),remote_commit:remoteHead,at:new Date().toISOString()});
     return local||remote;
   }

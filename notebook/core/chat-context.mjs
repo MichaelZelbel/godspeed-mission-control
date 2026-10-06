@@ -21,6 +21,10 @@ function buildChatContext(query,input){
     const today=new Intl.DateTimeFormat('en-CA',{timeZone:query.rows('profiles')[0]?.timezone||'UTC'}).format(new Date());
     const rows=visibleRows(query,type).filter(r=>!r.removed_at&&!r.is_trashed&&(type!=='profile_facts'||(r.is_current&&r.show_to_agent))&&(type!=='world_claims'||((!r.valid_to||r.valid_to>today)&&(!r.valid_from||r.valid_from<=today))));
     const ranked=rows.map(r=>({r,score:terms.reduce((n,t)=>n+(String(r.title||r.name||'').toLowerCase().includes(t)?4:0)+(JSON.stringify(r).toLowerCase().includes(t)?1:0),0)})).filter(x=>x.score).sort((a,b)=>b.score-a.score);
+    if(type==='notes'&&Array.isArray(input.ranked_note_ids)&&input.ranked_note_ids.length){
+      const byId=new Map(rows.map(r=>[r.id,r])),first=input.ranked_note_ids.map(id=>byId.get(id)).filter(Boolean),ids=new Set(first.map(r=>r.id));
+      return {rows:[...first,...ranked.map(x=>x.r).filter(r=>!ids.has(r.id))].slice(0,limit).map(r=>compact(r,5000)),total:rows.length};
+    }
     return {rows:ranked.slice(0,limit).map(({r})=>compact(r,5000)),total:rows.length};
   };
   const context={...fileContext(query.store,10000),retrieval:{method:'keyword selection; only supplied records are available',counts:{}}};
@@ -44,14 +48,30 @@ function buildChatContext(query,input){
   context.messages=input.conversation_id?query.rows('conversation_messages').filter(m=>m.conversation_id===input.conversation_id).sort((a,b)=>a.created_at.localeCompare(b.created_at)).slice(-12).map(({role,content})=>({role,content:String(content).slice(0,8000)})):[];
   return context;
 }
-export async function retrievedContext(query,input,provider){
- const question=String(input.message||input.messages?.at(-1)?.content||'');let context=chatContext(query,input);
+// With the search index (index.searchHybrid), the chat's notes are the ones
+// words and meaning rank first; with meaning connected, the model is not also
+// asked for synonyms.
+export async function retrievedContext(query,input,provider,{index}={}){
+ const question=String(input.message||input.messages?.at(-1)?.content||'');
+ let ranked=null;
+ if(index?.searchHybrid&&question.trim().length>=3&&!input.note_id){
+  try{
+   const found=await index.searchHybrid(question,{limit:24,types:['notes','media_analysis','note_chunks']}),ids=[];
+   for(const row of found.rows){const id=row.type==='notes'?row.id:query.store.get(row.type,row.id)?.note_id;if(id&&!ids.includes(id))ids.push(id);}
+   ranked={ids:ids.slice(0,8),mode:found.mode};input={...input,ranked_note_ids:ranked.ids};
+  }catch{}
+ }
+ let context=chatContext(query,input);
+ if(ranked){context.retrieval.method=ranked.mode==='words'?'ranked word search':'ranked word and meaning search';if(ranked.mode!=='words')return finishPeople(query,input,question,context);}
  if(!provider||explicitNoteCapture(question)||question.length<8||!/(find|remember|recall|search|where|what|who|prepare|erinner|finde|wer|was|suche)/i.test(question))return context;
  try{
   const raw=await provider({kind:'retrieval-expansion',query:question,signal:input.signal,contract:'Return JSON {terms:[string]} with at most 12 useful synonyms and related concepts for retrieving the user question. Include both languages where useful. Do not answer the question, invent facts or request changes. No personal records are supplied.'});
   const parsed=typeof raw==='string'?JSON.parse(raw.replace(/^```(?:json)?\s*|\s*```$/g,'')):raw;
   if(Array.isArray(parsed.terms)&&parsed.terms.length){const terms=parsed.terms.filter(t=>typeof t==='string'&&t.length<=60).slice(0,12);context=chatContext(query,{...input,message:question+' '+terms.join(' ')});context.retrieval.method='keyword and meaning-expanded selection';context.retrieval.expanded_terms=terms;}
  }catch{context.retrieval.meaning_expansion='unavailable; keyword results retained';}
+ return finishPeople(query,input,question,context);
+}
+function finishPeople(query,input,question,context){
  const people=visibleRows(query,'contacts'),fullMatches=people.filter(c=>[c.name,...(c.aliases||[])].filter(n=>typeof n==='string'&&n.trim()).some(n=>question.toLocaleLowerCase().includes(n.toLocaleLowerCase())));
  const longest=Math.max(0,...fullMatches.map(c=>String(c.name||'').length));
  const candidates=fullMatches.length?fullMatches.filter(c=>String(c.name||'').length===longest):people.filter(c=>{const first=String(c.name||'').toLowerCase().split(' ')[0];return first.length>=3&&new RegExp('\\b'+first.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'\\b','i').test(question);});
