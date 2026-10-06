@@ -344,7 +344,7 @@ if [ -d "$GODSPEED/.git" ] && command -v git >/dev/null 2>&1; then
   if ! git -C "$GODSPEED" diff --cached --quiet 2>/dev/null; then
     git -C "$GODSPEED" commit -q -m "Work $TODAY: $DONE attempted, $VERIFIED verified" >/dev/null 2>&1 || true
     if git -C "$GODSPEED" remote get-url origin >/dev/null 2>&1; then
-      git -C "$GODSPEED" pull --rebase --autostash -q origin HEAD >/dev/null 2>&1 || true
+      git -C "$GODSPEED" pull --rebase --autostash -q origin HEAD >/dev/null 2>&1 || git -C "$GODSPEED" rebase --abort >/dev/null 2>&1 || true
       PUSH_OUT="$(git -C "$GODSPEED" push -q origin HEAD 2>&1)" \
         || log "PUSH FAILED, so today's work exists on this machine only: $(printf '%s' "$PUSH_OUT" | grep -v '^$' | tail -3 | tr '\n' ' ' | cut -c1-300)"
     fi
