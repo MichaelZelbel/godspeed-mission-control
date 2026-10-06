@@ -88,7 +88,10 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   mediaRoot = path.resolve(mediaRoot || path.join(store.state, 'media')); fs.mkdirSync(mediaRoot, { recursive: true });
   domains.mediaRoot=mediaRoot;
   const mediaSync=new MediaSync(store,mediaRoot),pairCodes=new Map(),pairKeysPath=path.join(store.state,'pair-clients.json');
-  const pairKeys=fs.existsSync(pairKeysPath)?JSON.parse(fs.readFileSync(pairKeysPath,'utf8')):[];
+  // A paired device's key, kept as its hash with an id, so the owner can list and revoke it.
+  // Keys saved before 6 October 2026 were bare hashes; they are read as unnamed keys.
+  const pairKeys=(fs.existsSync(pairKeysPath)?JSON.parse(fs.readFileSync(pairKeysPath,'utf8')):[]).map(k=>typeof k==='string'?{id:k.slice(0,16),hash:k,created_at:null}:k);
+  const savePairKeys=()=>{atomic(pairKeysPath,JSON.stringify(pairKeys));fs.chmodSync(pairKeysPath,0o600);};
   const instance=hash(store.root).slice(0,24);
   const remote = !['127.0.0.1', '::1', 'localhost'].includes(host);
   if (remote && !token) throw new Error('Remote access requires a candidate token');
@@ -98,7 +101,14 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   const chatRequests=new Map(),recoveryRunner=new RecoveryRunner(store),backupRunner=new BackupRunner(store,mediaRoot);let dictationBusy=false;
   const loginLinks=new Map();
   const apiKeys=new ApiKeys(store);
-  const authorized = req => auth.authorized(req) || pairKeys.includes(hash(String(req.headers['x-godspeed-pair-key']||req.headers.authorization?.replace(/^Bearer /,'')||'')));
+  // A pairing key lets the other device copy media, nothing else: until 6 October 2026
+  // it opened every /api/ route, including queries, sync settings and new pairing codes.
+  const pairedMedia = (req, route) => {
+    const media = req.method === 'GET' ? route === '/api/media/manifest' || route.startsWith('/api/media/blob/') : req.method === 'POST' && ['/api/media/transfer', '/api/media/tombstone'].includes(route);
+    const presented = String(req.headers['x-godspeed-pair-key'] || '');
+    return media && !!presented && pairKeys.some(k => !k.revoked_at && k.hash === hash(presented));
+  };
+  const authorized = (req, route) => auth.authorized(req) || pairedMedia(req, route);
   function send(res, status, body, headers = {}) { res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', ...headers }); res.end(JSON.stringify(body)); }
   // A file is opened before the reply starts, so a missing one is a 404, and a
   // read that fails halfway ends that one reply. Until 6 October 2026 either
@@ -141,11 +151,11 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       }
       if(route==='/api/pair/claim'&&req.method==='POST'){
         const input=JSON.parse(await body(req)),expires=pairCodes.get(input.code);if(!expires||expires<Date.now())return send(res,401,{error:'Pairing code expired or was already used'});
-        pairCodes.delete(input.code);const key=randomBytes(32).toString('hex');pairKeys.push(hash(key));atomic(pairKeysPath,JSON.stringify(pairKeys));fs.chmodSync(pairKeysPath,0o600);return send(res,200,{key});
+        pairCodes.delete(input.code);const key=randomBytes(32).toString('hex');pairKeys.push({id:randomBytes(8).toString('hex'),hash:hash(key),created_at:new Date().toISOString()});savePairKeys();return send(res,200,{key});
       }
       if (route === '/health') return send(res, 200, { ok: true, format: 1, version: '2.0.0-alpha.1',instance,scheduler_heartbeat:schedulerHeartbeat });
       if(route==='/api/shared-note'&&req.method==='GET'){const share=query.rows('shared_notes').find(s=>s.share_token===url.searchParams.get('token')&&s.is_active),note=share&&store.get('notes',share.note_id);if(!note||note.removed_at||note.is_trashed)return send(res,404,{error:'This share is unavailable'});return send(res,200,{title:note.title,content:note.content,tags:note.tags,entity_type:note.entity_type,created_at:note.created_at,updated_at:note.updated_at});}
-      if (route.startsWith('/api/') && !authorized(req)) return send(res, 401, { error: 'Sign in to continue.', code: auth.cookie(req)?'SESSION_EXPIRED':'SIGN_IN_REQUIRED' });
+      if (route.startsWith('/api/') && !authorized(req, route)) return send(res, 401, { error: 'Sign in to continue.', code: auth.cookie(req)?'SESSION_EXPIRED':'SIGN_IN_REQUIRED' });
       if(route==='/api/menerio/import'){
         if(!auth.authorized(req))return send(res,403,{error:'Sign in as the server owner to import.'});
         if(req.method==='GET')return send(res,200,menerioImport.status());
@@ -196,11 +206,13 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       }
       if(route==='/mcp'){
         const accessKey=apiKeys.authenticate(String(req.headers.authorization||'').replace(/^Bearer /,''));
-        if(!authorized(req)&&!accessKey)return send(res,401,{error:'Authentication required'});
+        if(!auth.authorized(req)&&!accessKey)return send(res,401,{error:'Authentication required'});
         if(req.method!=='POST'){res.writeHead(405,{'Allow':'POST'});return res.end();}
         const input=JSON.parse(await body(req));if(accessKey&&input.method==='tools/call'&&!accessKey.scopes.includes(toolScope(input.params.name,input.params.arguments||{})))return send(res,403,{error:'This API key does not grant that capability'});
         const response=await mcp(input,{store,query,index,domains,scopes:accessKey?.scopes});if(response===null){res.writeHead(202);return res.end();}return send(res,200,response);
       }
+      if(route==='/api/pair/keys'&&req.method==='GET')return send(res,200,{data:pairKeys.map(({id,created_at,revoked_at})=>({id,created_at,revoked_at:revoked_at||null}))});
+      if(route==='/api/pair/revoke'&&req.method==='POST'){const input=JSON.parse(await body(req)),key=pairKeys.find(k=>k.id===input.id);if(!key)throw new Error('Choose a paired device to disconnect');key.revoked_at||=new Date().toISOString();savePairKeys();return send(res,200,{revoked:true});}
       if(route==='/api/pair/create'&&req.method==='POST'){if(device!=='vps')throw new Error('Create a pairing code on the candidate VPS');const code=randomBytes(16).toString('hex');pairCodes.set(code,Date.now()+300000);return send(res,200,{code,expires_minutes:5});}
       if(route==='/api/pair/connect'&&req.method==='POST'){const input=JSON.parse(await body(req));const result=await mediaSync.pair(input.origin,input.code);return send(res,200,{...result,media:await mediaSync.reconcile()});}
       if(route==='/api/media/sync'&&req.method==='POST')return send(res,200,await mediaSync.reconcile());
