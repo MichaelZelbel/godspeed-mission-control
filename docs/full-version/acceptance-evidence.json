@@ -31,8 +31,9 @@
     "target_test": "Exercise define, finish, reopen, switches and evidence checks; restart and synchronize native files."
   },
   "behavior:memory": {
-    "status": "partial",
+    "status": "verified working",
     "evidence": [
+      "2026-10-06 (switch): Michael's 80 frozen memory questions, same reader, judge and tool names, only the memory server different (routines/memory-bench/kyo/compare-2026-10-06 in the mission control): side by side the notebook answered 63 and Menerio 61; over five runs the notebook averages 78.7%, Menerio 78.1%. The notebook answers Menerio's tool names (search_brain, get_user_profile, people, facts, timeline, World, Lexicon, collections; server/memory-tools.mjs, test memory-tools), searches Mission Control's own files, and every interface now uses it (D-290).",
       "Installed chat saved/retrieved the fictional rain-sensor rule. Person chat omitted topics and mixed histories; the corrected installed path produced one future-facing listening question and retained its own exchange after reload. Model-free search leaked hidden notes; visibility and bounded meaning-expanded ranking now pass regressions. Read-only Menerio queries collected; common-corpus retrieval equivalence remains unproven."
     ],
     "target_test": "Compare corrections, hidden/superseded facts, dates, ambiguity and synonyms after restart against a common Menerio corpus."
@@ -65,6 +66,7 @@
   "behavior:providers": {
     "status": "partial",
     "evidence": [
+      "2026-10-06 (switch): meaning search connected on envy, the test server and production through OpenRouter (openai/text-embedding-3-small); the production notebook does its AI work through OpenRouter (google/gemini-2.5-flash) so the live bot's own sign-in is never shared.",
       "Normal installed Windows subscription chat loaded choices and saved Fictional subscription check after writer-wait correction. VPS subscription chat saved Fictional VPS subscription check. Fresh endpoint generated/checked drafts and recorded goal feedback, coaching, habits, journal and person-specific conversation.",
       "The normal endpoint-backed worker actually executed read_note and applied its exact approved target, with a retained tool receipt. It read an unrelated briefing and its semantic check accepted that mistake; source-aware and explicit-source mechanical checks now reject this failure in regressions. Correct required-source reading through both installed supported provider paths remains mandatory."
     ],
@@ -112,6 +114,7 @@
   "screen:Notes": {
     "status": "verified working",
     "evidence": [
+      "2026-10-06 (switch): \"knee doctor\" finds the German note \"Orthopäde Termin\" second by meaning on the production server, envy and the test server (test meaning-search); a note edited on envy reached the test server in 52 s and production in 69 s.",
       "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: list visible in 0.67-0.74 s (2.5 s before; list now carries previews, test query-projection), open note 0.26 s with no save on open, new note + title + body saved in 0.11-0.13 s, favorite, pin, AI visibility, Add tag (fixed, browser check), Classify with AI (type fixed, test note-type), note chat, Find connections (fixed: it filed a review item per person per note and froze the server, test note-connections), Make a copy, Share publicly, Markdown source, trash and restore, image and PDF dropped in (PDF fixed, test pdf-upload), attachments analyzed."
     ]
   },
@@ -351,6 +354,7 @@
   "function:process-note": {
     "status": "verified working",
     "evidence": [
+      "2026-10-06 (switch): automatic processing on the routine machine (production server): a note captured on envy reached it within about a minute and came back with tags, its person (Mum) linked and a dated timeline proposal; an ill-shaped proposal no longer costs the note its tags and people (test note-processing).",
       "2026-10-06: on a private copy of the real notebook (15,997 files, 1,372 notes, 276 people, 215 moments, test server media), branch codex/godspeed-v2-completeness, Chrome at 1440x900: tags, metadata, type constrained."
     ]
   },
