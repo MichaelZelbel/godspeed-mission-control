@@ -95,3 +95,15 @@ test('the supervisor starts a notebook again after it failed to start, and reads
  await supervisor.check();assert.equal(device,'desktop-3f9a1c2e');assert.equal(supervisor.monitor.failures,0);
  assert.equal(JSON.parse(fs.readFileSync(path.join(root,'.godspeed','supervisor.json'),'utf8')).state,'healthy');
 });
+
+test('a notebook still owned by the old name that arrives after the start is taken over on the next tick',async t=>{
+ const {claimLegacyOwner}=await identity();const root=temporary(t),store=new Store(root,{device:'desktop-3f9a1c2e'}),id={id:'desktop-3f9a1c2e',generated:true};
+ let ran=0;const scheduler=new Scheduler(store,{device:id.id,executor:async()=>{ran++;return {verified:true,silent:true};}});scheduler.claimLegacy=()=>claimLegacyOwner(store,id);
+ assert.deepEqual(await scheduler.tick(),[]);
+ // The first sync brings the records an older version wrote.
+ store.save('settings',{id:'installation',owner:'local',timezone:'UTC',delivery:'notebook'});store.save('jobs',{id:'selftest',kind:'selftest',owner:'local',paused:false,state:'pending',next_run:new Date(Date.now()-1000).toISOString(),interval_ms:86400000});
+ await scheduler.tick();
+ assert.equal(store.get('settings','installation').owner,id.id);assert.equal(ran,1);
+ const native=new NativeScheduler(store,{executable:'hermes',home:root,device:id.id,run:async()=>({stdout:''})});store.save('settings',{id:'installation',owner:'local'});native.claimLegacy=()=>claimLegacyOwner(store,id);
+ await native.tick();assert.equal(store.get('settings','installation').owner,id.id);
+});

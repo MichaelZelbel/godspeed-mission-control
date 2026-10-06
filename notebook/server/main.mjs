@@ -352,7 +352,9 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   // This machine's own name, never one shared by every PC (device-id.mjs).
   const {machineDevice,claimLegacyOwner}=await import('../core/device-id.mjs'),device=machineDevice(root);
   const service = await createService({ root, mediaRoot: process.env.GODSPEED_MEDIA_ROOT, host: process.env.GODSPEED_BIND || '127.0.0.1', port: Number(process.env.GODSPEED_PORT || 47831), token: process.env.GODSPEED_ACCESS_TOKEN,device:device.id });
-  try{if(await claimLegacyOwner(service.store,device))console.log('This machine ('+device.id+') now runs the routines the old shared name "local" ran');}catch(error){console.error('The routines of the old shared name "local" could not be taken over: '+error.message);}
+  // At start, and on any later tick that finds the old shared name as the owner.
+  const claim=service.scheduler.claimLegacy=async()=>{if(await claimLegacyOwner(service.store,device))console.log('This machine ('+device.id+') now runs the routines the old shared name "local" ran');};
+  try{await claim();}catch(error){console.error('The routines of the old shared name "local" could not be taken over: '+error.message);}
   console.log('Godspeed Mission Control candidate listening on port ' + service.address.port);
   for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, async () => { await service.close(); process.exit(0); });
 }

@@ -6,6 +6,7 @@ import {QueryService} from '../query.mjs';
 import {readyWork} from '../goal-loop.mjs';
 import {watchDue} from '../watch-commands.mjs';
 import {beatWhile,HEARTBEAT_EVERY} from '../supervisor-health.mjs';
+import {LEGACY_DEVICE} from '../device-id.mjs';
 export const kinds = ['goal-decision', 'goal-work', 'habit-check', 'coaching', 'deadline-reminder', 'profiling', 'review', 'morning-brief', 'audit', 'memory-review', 'watch',...procedureKinds];
 const restartableReads=new Set(['disk-check','health-summary','watch','domain-watch','portfolio','connection-check','audit','selftest','job-check']);
 // Checks that usually find nothing: a run of one that says nothing leaves no receipt (finish below).
@@ -50,6 +51,9 @@ export class Scheduler {
     this.running = true; this.onProgress?.();const results = [];
     try {
       let settings = this.store.get('settings','installation');
+      // A notebook still owned by the old shared name (one that arrived by
+      // sync or from a backup after this machine started) is taken over now.
+      if(settings?.owner===LEGACY_DEVICE&&this.claimLegacy){try{await this.claimLegacy();}catch{}settings=this.store.get('settings','installation');}
       if (!settings || settings.owner !== this.device) return [];
       for(const finish of [...this.unfinished.values()])try{await finish();}catch{}
       try{await this.pullWorkForward(now);}catch{}

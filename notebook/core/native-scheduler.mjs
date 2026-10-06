@@ -6,6 +6,7 @@ import {assistantEnvironment} from './assistant-files.mjs';
 import {nativeCardRows} from './card-commands.mjs';
 import {runCommand} from './child-process.mjs';
 import {beatWhile,HEARTBEAT_EVERY} from './supervisor-health.mjs';
+import {LEGACY_DEVICE} from './device-id.mjs';
 const skills={'goal-decision':'next-action','goal-work':'work-item','morning-brief':'morning-brief',coaching:'coach','habit-check':'coach',journal:'interstitial-journal',headache:'headache-tracker'};
 export function nativeJobs(home,device='local'){
  const file=path.join(home,'cron/jobs.json');if(!fs.existsSync(file))return [];
@@ -59,6 +60,8 @@ export class NativeScheduler{
  owner(){return this.store.get('settings','installation')?.owner||null;}
  owns(){const owner=this.owner();return !owner||owner===this.device;}
  async tick(){
+  // A notebook still owned by the old shared name is taken over (device-id.mjs).
+  if(this.owner()===LEGACY_DEVICE&&this.claimLegacy)try{await this.claimLegacy();}catch{}
   if(!this.owns()){this.onProgress?.();return [];}
   const records=this.records?.tick().catch(()=>[])||Promise.resolve([]);
   if(this.ticking)return records;
