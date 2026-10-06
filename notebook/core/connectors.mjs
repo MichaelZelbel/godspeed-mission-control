@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {atomic,hash,safe} from './records/store.mjs';
+import {mediaObjectName} from './media-names.mjs';
 export class Connectors {
   constructor(domains){this.domains=domains;this.store=domains.store;this.query=domains.query;}
   config(name){const file=path.join(this.store.state,'connectors',safe(name)+'.json');return fs.existsSync(file)?JSON.parse(fs.readFileSync(file,'utf8')):null;}
@@ -55,7 +56,7 @@ export class Connectors {
         if(bytes.length>100*1024*1024)throw new Error('Drive file exceeds the candidate media limit');
         const originalId='drive-note-'+hash(file.id).slice(0,24),noteId=this.store.get('notes',originalId)?originalId+'-'+hash(file.modifiedTime).slice(0,8):originalId;
         const note=this.store.save('notes',{id:noteId,title:file.name,content:file.mimeType.startsWith('text/')?bytes.toString('utf8'):'Imported document: '+file.name,source_app:'gdrive'});
-        if(!file.mimeType.startsWith('text/')){const sha256=hash(bytes),storage_path='drive/'+file.id+'/'+file.name,filename=sha256+'-'+safe(file.name.replace(/[^a-zA-Z0-9_.-]/g,'_'));atomic(path.join(this.domains.mediaRoot,filename),bytes);atomic(path.join(this.domains.mediaRoot,hash(storage_path)+'.mapping.json'),JSON.stringify({path:storage_path,file:filename,sha256,size:bytes.length,contentType:file.mimeType}));this.query.execute({table:'note_attachments',operation:'insert',values:{note_id:note.id,storage_path,filename:file.name,file_type:file.mimeType}});}
+        if(!file.mimeType.startsWith('text/')){const sha256=hash(bytes),storage_path='drive/'+file.id+'/'+file.name,filename=mediaObjectName(sha256,file.name);atomic(path.join(this.domains.mediaRoot,filename),bytes);atomic(path.join(this.domains.mediaRoot,hash(storage_path)+'.mapping.json'),JSON.stringify({path:storage_path,file:filename,sha256,size:bytes.length,contentType:file.mimeType}));this.query.execute({table:'note_attachments',operation:'insert',values:{note_id:note.id,storage_path,filename:file.name,file_type:file.mimeType}});}
         this.store.save('gdrive_imports',{id,source_id:file.id,note_id:note.id,modified_at:file.modifiedTime,sha256:hash(bytes)});if(old)this.store.save('review_queue',{suggestion_type:'source_version',title:'Review the new imported version of '+file.name,payload:{previous_note_id:old.note_id,new_note_id:note.id},status:'pending_review'});results.push(note.id);
       }return {imported:results.length,results};
     }
