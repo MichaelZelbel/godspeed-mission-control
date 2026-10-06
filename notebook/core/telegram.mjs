@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import {atomic} from './records/store.mjs';
+import {atomic,hash} from './records/store.mjs';
 export class Telegram {
   constructor({store,domains,token,owner,origin='https://api.telegram.org',transport=fetch,loginLink}){this.store=store;this.domains=domains;this.token=token;this.owner=String(owner);this.origin=origin;this.transport=transport;this.loginLink=loginLink;this.file=path.join(store.state,'telegram-offset.json');this.running=false;}
   async call(method,input){const response=await this.transport(this.origin+'/bot'+this.token+'/'+method,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(input),signal:AbortSignal.timeout(35000)});const data=await response.json();if(!response.ok||!data.ok)throw new Error('Candidate Telegram request failed');return data.result;}
@@ -13,8 +13,11 @@ export class Telegram {
     catch{await this.store.saveAsync('command_receipts',{id:receiptId,state:'needs_review'});}
   }
   async deliver(id,result){
-    const receiptId='delivery-'+id,old=this.store.get('command_receipts',receiptId);if(old?.state==='verified')return old;if(old)throw Object.assign(new Error('A previous delivery needs review before another send'),{code:'OUTWARD_UNCERTAIN'});
     const record=[...this.store.records.values()].find(r=>r.id===result.record_id);if(!record?.content)throw new Error('No saved message exists for delivery');
+    // One saved message is sent once, whichever run hands it over: until
+    // 6 October 2026 the key was the run's slot, so a retried or resumed run
+    // sent the same message again. The slot's own receipt still counts.
+    const receiptId='delivery-'+hash([record.type,record.id,String(record.content)]).slice(0,40),old=this.store.get('command_receipts',receiptId)||this.store.get('command_receipts','delivery-'+id);if(old?.state==='verified')return old;if(old)throw Object.assign(new Error('A previous delivery needs review before another send'),{code:'OUTWARD_UNCERTAIN'});
     const text=String(record.content);if(text.length>4000)throw new Error('Prepare a shorter delivery before sending this saved result');
     await this.store.saveAsync('command_receipts',{id:receiptId,source:'telegram-delivery',state:'attempted',record_id:record.id,content:text});
     try{const sent=await this.call('sendMessage',{chat_id:this.owner,text});await this.store.saveAsync('conversation_messages',{role:'assistant',content:text,talk_id:result.talk_id||record.talk_id||null,habit_ids:record.habit_ids||[],observation_day:record.observation_day||null,source_app:'telegram',message_id:sent.message_id,conversation_id:'telegram-owner'});return await this.store.saveAsync('command_receipts',{id:receiptId,state:'verified',message_id:sent.message_id});}catch{await this.store.saveAsync('command_receipts',{id:receiptId,state:'needs_review'});throw Object.assign(new Error('Telegram delivery is uncertain and will not be replayed'),{code:'OUTWARD_UNCERTAIN'});}

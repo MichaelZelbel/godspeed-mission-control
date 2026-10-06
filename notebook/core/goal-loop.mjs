@@ -54,14 +54,26 @@ export async function decide(job,{store,query,provider}){
   store.commit(records);return {verified:true,silent:true,record_id:decision.id,work_id:work.id};
  });
 }
+// The one answer to "is there goal work to do now?", for work() below and for
+// the scheduler, which pulls the worker forward when there is. Until 6 October
+// 2026 the scheduler asked of every record while work() asked only of what
+// the AI may see: work under a goal made private, hidden or removed was ready
+// to one and invisible to the other, and the worker ran every 30 seconds,
+// found nothing and was pulled forward again, all day.
+export function readyWork(query,{now=Date.now(),goalId=null}={}){
+ return query.withSnapshot(()=>{
+  const goals=new Map(visibleRows(query,'goals').map(g=>[g.id,g])),decisions=new Map(visibleRows(query,'decisions').map(d=>[d.id,d]));
+  return visibleRows(query,'work_items').find(w=>(w.state==='pending'||w.state==='failed'&&w.kind==='draft'&&w.attempts<(w.max_attempts||3)&&Date.parse(w.retry_after)<=now)
+   &&(!goalId||w.goal_id===goalId)&&(w.kind==='draft'&&w.allowed_action==='save-draft'||w.kind==='local-note'&&w.allowed_action==='write-local-note')
+   &&goals.has(w.goal_id)&&adopted(goals.get(w.goal_id))&&decisions.get(w.decision_id)?.state==='selected'
+   &&(w.dependencies||[]).every(id=>query.store.get('work_items',id)?.state==='verified'))||null;
+ });
+}
 export async function work(job,{store,query,provider}){
- const item=visibleRows(query,'work_items').find(w=>(w.state==='pending'||w.state==='failed'&&w.kind==='draft'&&w.attempts<(w.max_attempts||3)&&Date.parse(w.retry_after)<=Date.now())&&w.goal_id&&w.decision_id&&['draft','local-note'].includes(w.kind)&&(!job.goal_id||w.goal_id===job.goal_id));
+ const item=readyWork(query,{goalId:job.goal_id||null});
  if(!item)return {verified:true,silent:true,reason:'No selected authorised work'};
  const goal=visibleRows(query,'goals').find(g=>g.id===item.goal_id),decision=visibleRows(query,'decisions').find(d=>d.id===item.decision_id);
- if(!goal||!adopted(goal)||!decision||decision.state!=='selected')return {verified:true,silent:true,reason:'Goal or decision is no longer active'};
- if((item.dependencies||[]).some(id=>store.get('work_items',id)?.state!=='verified'))return {verified:true,silent:true,reason:'Dependencies are unfinished'};
  const applied=item.kind==='local-note'&&item.allowed_action==='write-local-note';
- if(!applied&&(item.kind!=='draft'||item.allowed_action!=='save-draft'))throw Error('This action needs its exact approval and a supported worker');
  const target=applied?visibleRows(query,'notes').find(n=>n.id===item.target_id):null;
  if(applied&&(!target||target._hash!==item.target_hash))throw Error('Approved target changed before execution');
  if(!provider)throw Error('Connect an assistant before executing goal work');

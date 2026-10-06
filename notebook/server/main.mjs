@@ -56,12 +56,14 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   provider ||= modelProvider({url:process.env.GODSPEED_MODEL_URL,key:process.env.GODSPEED_MODEL_KEY,model:process.env.GODSPEED_MODEL});
   const assistantPath=process.env.GODSPEED_ASSISTANT_CONFIG||path.join(store.state,'assistant.json');
   if(!provider&&fs.existsSync(assistantPath)){const descriptor=JSON.parse(fs.readFileSync(assistantPath,'utf8').replace(/^\uFEFF/,''));if(descriptor.verified)provider=hermesProvider({executable:descriptor.executable,home:descriptor.home,cwd:store.root,sourceRoot:descriptor.sourceRoot});}
-  let schedulerHeartbeat=new Date().toISOString();
-  if(provider){const connected=provider;provider=Object.assign(async input=>{schedulerHeartbeat=new Date().toISOString();try{return await connected(input);}finally{schedulerHeartbeat=new Date().toISOString();}},connected);}
+  // What the supervisor reads as "alive" (supervisor-health.mjs): an AI call
+  // beats while it is inside its own time limit, plus a minute to be stopped.
+  let schedulerHeartbeat=new Date().toISOString();const {beatWhile}=await import('../core/supervisor-health.mjs'),beat=()=>{schedulerHeartbeat=new Date().toISOString();};
+  if(provider){const connected=provider;provider=Object.assign(async input=>beatWhile(connected(input),beat,{limitMs:(input?.timeout_ms||600000)+60000}),connected);}
   const originalRuntime=process.env.GODSPEED_ORIGINAL_RUNTIME==='on';
   const descriptor=originalRuntime&&fs.existsSync(assistantPath)?JSON.parse(fs.readFileSync(assistantPath,'utf8').replace(/^\uFEFF/,'')):null;
   if(originalRuntime&&!descriptor?.verified)throw Error('Connect the original Godspeed assistant before starting the integrated notebook');
-  const domains=new Domains(query,{provider}),scheduler=originalRuntime?new NativeScheduler(store,{...descriptor,device}):new Scheduler(store,{device,executor:jobExecutor(provider,query)});scheduler.onProgress=()=>{schedulerHeartbeat=new Date().toISOString();};
+  const domains=new Domains(query,{provider}),scheduler=originalRuntime?new NativeScheduler(store,{...descriptor,device,records:new Scheduler(store,{device,executor:jobExecutor(provider,query),only:NativeScheduler.recordKinds,delivery:'notebook'})}):new Scheduler(store,{device,query,executor:jobExecutor(provider,query)});scheduler.onProgress=beat;
   if(originalRuntime){domains.nativeAgent=nativeAgent({...descriptor,cwd:store.root,providerFile:providerPath});domains.nativeScheduler=scheduler;query.nativeHermesHome=descriptor.home;}
   domains.sync={reconcile:()=>syncRunner.run(),pendingConflicts:()=>sync.pendingConflicts()};domains.index=index;
   mediaRoot = path.resolve(mediaRoot || path.join(store.state, 'media')); fs.mkdirSync(mediaRoot, { recursive: true });
@@ -347,7 +349,10 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const root = process.env.GODSPEED_WORKSPACE;
   if (!root) throw new Error('Set GODSPEED_WORKSPACE to a separate candidate folder');
-  const service = await createService({ root, mediaRoot: process.env.GODSPEED_MEDIA_ROOT, host: process.env.GODSPEED_BIND || '127.0.0.1', port: Number(process.env.GODSPEED_PORT || 47831), token: process.env.GODSPEED_ACCESS_TOKEN,device:process.env.GODSPEED_DEVICE||'local' });
+  // This machine's own name, never one shared by every PC (device-id.mjs).
+  const {machineDevice,claimLegacyOwner}=await import('../core/device-id.mjs'),device=machineDevice(root);
+  const service = await createService({ root, mediaRoot: process.env.GODSPEED_MEDIA_ROOT, host: process.env.GODSPEED_BIND || '127.0.0.1', port: Number(process.env.GODSPEED_PORT || 47831), token: process.env.GODSPEED_ACCESS_TOKEN,device:device.id });
+  try{if(await claimLegacyOwner(service.store,device))console.log('This machine ('+device.id+') now runs the routines the old shared name "local" ran');}catch(error){console.error('The routines of the old shared name "local" could not be taken over: '+error.message);}
   console.log('Godspeed Mission Control candidate listening on port ' + service.address.port);
   for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, async () => { await service.close(); process.exit(0); });
 }

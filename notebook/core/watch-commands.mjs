@@ -48,4 +48,15 @@ export function watchCommand({store,query},args){
  }
  throw Error('Choose a supported watch command; use help');
 }
-export function addWatchTopic(store,data){return store.withLock(()=>{const topic=store.prepare('watch_topics',data),owner=store.get('settings','installation')?.owner||store.device,existing=store.get('jobs','watch-sweeper'),records=[topic];if(!existing)records.push(store.prepare('jobs',{id:'watch-sweeper',kind:'watch',owner,paused:false,next_run:new Date().toISOString(),interval_ms:60000,state:'pending'}));store.commit(records);return topic;});}
+// A new topic wakes the sweeper, which otherwise sleeps until its first topic is due (scheduler.mjs).
+export function addWatchTopic(store,data){return store.withLock(()=>{const topic=store.prepare('watch_topics',data),owner=store.get('settings','installation')?.owner||store.device,existing=store.get('jobs','watch-sweeper'),records=[topic],now=new Date().toISOString();if(!existing)records.push(store.prepare('jobs',{id:'watch-sweeper',kind:'watch',owner,paused:false,next_run:now,interval_ms:60000,state:'pending'}));else if(Date.parse(existing.next_run)>Date.parse(now))records.push(store.prepare('jobs',{next_run:now},existing));store.commit(records);return topic;});}
+// Whether a watch sweep has a topic to read now (true), else when its first
+// topic is next due (milliseconds), or null when it has none. The same topics
+// the sweep itself reads (procedures.mjs).
+export function watchDue(query,job,now=Date.now()){
+ let next=null;
+ for(const topic of visibleRows(query,'watch_topics').filter(t=>!t.paused&&(!job.topic_ids||job.topic_ids.includes(t.id)))){
+  const at=Date.parse(topic.next_run_at);if(!topic.next_run_at||!(at>now))return true;next=next===null?at:Math.min(next,at);
+ }
+ return next;
+}
