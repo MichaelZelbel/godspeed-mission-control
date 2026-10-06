@@ -147,3 +147,19 @@ test('a __proto__ key in frontmatter is a key like any other',()=>{
   const root=temp(),store=new Store(root),note=store.save('notes',JSON.parse('{"title":"Form","structured_fields":{"__proto__":{"role":"x"},"kept":1}}'));
   for(const view of [store,new Store(root)]){const fields=view.get('notes',note.id).structured_fields;assert.deepEqual(Object.keys(fields),['__proto__','kept']);assert.equal(fields.role,undefined);}
 });
+
+// A rename by letter case deletes plan.md and writes Plan.md, which on Windows
+// and macOS are one file: what each of the two found and leaves is shared.
+test('a rename by letter case that fails is undone to the old name, and one interrupted is finished',t=>{
+  const root=temp(),store=new Store(root),note=store.save('notes',{title:'plan',content:'x'}),dir=store.recordsRoot;
+  failRename(t,to=>path.basename(to)==='Plan.md');
+  assert.throws(()=>store.save('notes',{...store.get('notes',note.id),title:'Plan'}),/fictional disk/);t.mock.restoreAll();
+  assert.deepEqual(fs.readdirSync(dir).filter(n=>n.endsWith('.md')),['plan.md']);assert.equal(body(path.join(dir,'plan.md')),'x');
+  assert.deepEqual(transactions(store),[]);
+  // Interrupted after Plan.md was written, before its history copy.
+  store.failAfter=2;
+  assert.throws(()=>store.save('notes',{...store.get('notes',note.id),title:'Plan'}),/Injected crash/);store.failAfter=null;
+  const reopened=new Store(root);
+  assert.deepEqual(fs.readdirSync(dir).filter(n=>n.endsWith('.md')),['Plan.md']);assert.equal(reopened.get('notes',note.id).title,'Plan');
+  assert.deepEqual(setAside(reopened),[]);assert.deepEqual(reopened.problems,[]);assert.equal(reopened.list('record_history').length,1);
+});
