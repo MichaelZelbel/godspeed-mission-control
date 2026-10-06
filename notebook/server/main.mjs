@@ -55,7 +55,8 @@ export function userFacing(error, roots = []) {
   if (!(error instanceof Error)) return null;
   const code = String(error.code || '');
   if (error.syscall || /^E[A-Z]{2,}$/.test(code) || /^ERR_/.test(code)) return null;
-  if (error instanceof SyntaxError) return 'The request was not valid JSON.';
+  // JSON.parse quotes a piece of what it read, which may be a saved file.
+  if (error instanceof SyntaxError) return 'The request or a saved file was not valid JSON.';
   if (error instanceof URIError) return 'This address is not valid.';
   if (error instanceof TypeError || error instanceof RangeError || error instanceof ReferenceError) return null;
   let message = String(error.message || '');
@@ -131,7 +132,8 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       const url = new URL(req.url, 'http://localhost'), route = url.pathname;
       const hostName = (req.headers.host || '').split(':')[0];
       if (!remote && !['localhost', '127.0.0.1', '[', '::1'].includes(hostName)) return send(res, 403, { error: 'Unrecognized local host' });
-      if (req.headers.origin && new URL(req.headers.origin).host !== req.headers.host) return send(res, 403, { error: 'Cross-site requests are refused' });
+      // An Origin that is not an address ("null" from a sandboxed page) is cross-site too.
+      if (req.headers.origin) { let from = null; try { from = new URL(req.headers.origin).host; } catch {} if (from !== req.headers.host) return send(res, 403, { error: 'Cross-site requests are refused' }); }
       // A one-time sign-in link opens a page with one button, and only pressing
       // it (a POST) uses the link. Until 6 October 2026 any GET used it, so
       // Telegram's link-preview fetcher got the session and the owner's tap failed.
@@ -354,7 +356,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       // (writing headers twice stopped the server until 6 October 2026).
       if (res.headersSent) { console.error('Godspeed Mission Control: '+req.method+' '+String(req.url).split('?')[0]+' failed after the reply started:', e); res.destroy(); return; }
       const shown = userFacing(e, [store.root, store.state, mediaRoot, uiRoot, os.homedir(), os.tmpdir()]);
-      if (!shown) console.error('Godspeed Mission Control: '+req.method+' '+String(req.url).split('?')[0]+' failed:', e);
+      if (!shown || e instanceof SyntaxError) console.error('Godspeed Mission Control: '+req.method+' '+String(req.url).split('?')[0]+' failed:', e);
       send(res, e.status || (e.code === 'CONFLICT' ? 409 : 400), { error: shown || 'Something went wrong on the server. The details are in its log.', ...(shown && e.code ? { code: e.code } : {}) });
     }
   });
