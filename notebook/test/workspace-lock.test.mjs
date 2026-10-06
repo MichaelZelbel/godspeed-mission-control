@@ -10,6 +10,8 @@ test('a lock that is still being written means busy, and the write goes through 
   setTimeout(()=>fs.unlinkSync(lock),100);
   assert.equal(await store.withLockAsync(()=>'written',{timeoutMs:5000}),'written');
   assert.equal(fs.existsSync(lock),false,'released');
+  // An empty lock left for a minute is a writer that crashed before naming
+  // itself. Until 6 October 2026 it needed recovery by hand; it is taken over.
   fs.writeFileSync(lock,'');const old=new Date(Date.now()-60000);fs.utimesSync(lock,old,old);
-  assert.throws(()=>store.withLock(()=>1),/requires recovery/,'an empty lock left for a minute is a crash, as before');
+  assert.equal(store.withLock(()=>'taken over'),'taken over');assert.equal(fs.existsSync(lock),false);
 });
