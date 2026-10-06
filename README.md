@@ -16,21 +16,26 @@ The executable is also [committed on this branch](installers/GodspeedSetup.exe).
 
 This uses main's shared native installer for Git, Node.js, Hermes and the original Godspeed folders, then adds the notebook. Docker is not required for this route. Mac installation remains unverified.
 
-[Download install-godspeed.sh](https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-06-2/install-godspeed.sh), or run:
+Download this release's installer, check that it is the published file, and run it:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/MichaelZelbel/godspeed-mission-control/codex/godspeed-v2-completeness/install-godspeed.sh | bash
+curl -fsSLO https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-06-2/install-godspeed.sh
+echo "c3d4bb54cb438d7aacd962200cb91c63053d4e98e51f1d8d2c1630fea33ca503  install-godspeed.sh" | sha256sum -c - && bash install-godspeed.sh
 ```
 
-On a computer that already has Godspeed, use the original installer's separate-folder option:
+On a Mac, write `shasum -a 256 -c -` where it says `sha256sum -c -`. The check refuses any other file, and the installer names one exact version of the notebook, so every reader of this release gets the same notebook.
+
+On a computer that already has Godspeed, download and check it the same way, then use the original installer's separate-folder option:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/MichaelZelbel/godspeed-mission-control/codex/godspeed-v2-completeness/install-godspeed.sh | bash -s -- --beside --godspeed "$HOME/godspeed-v2"
+bash install-godspeed.sh --beside --godspeed "$HOME/godspeed-v2"
 ```
 
 The notebook opens locally at `http://127.0.0.1:47831/dashboard`. On Linux it starts through systemd. Use the Hostinger installation below for a deployment with HTTPS.
 
-The default folder is `~/godspeed-v2`. The original installer also accepts `--godspeed` and `--repo`. The downloadable installer pins its notebook source separately from main.
+The default folder is `~/godspeed-v2`. The original installer also accepts `--godspeed` and `--repo`.
+
+For development only: `install-godspeed.sh` at the top of this branch installs the branch's newest commit, so it can differ from one day to the next. It is not for readers.
 
 ## One-click Hostinger installation
 

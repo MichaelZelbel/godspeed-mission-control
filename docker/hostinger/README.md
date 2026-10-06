@@ -10,7 +10,13 @@ Hostinger's supported purchase link is:
 
 Current purchase and install link, including Michael's saved Hostinger referral:
 
-[Install Godspeed Mission Control on Hostinger](https://www.hostinger.com/docker-hosting?compose_url=https%3A%2F%2Fraw.githubusercontent.com%2FMichaelZelbel%2Fgodspeed-mission-control%2Fa759dc8%2Fdocker%2Fhostinger%2Fcompose.yaml&REFERRALCODE=GHNMICHAEJC8#pricing)
+[Install Godspeed Mission Control on Hostinger](https://www.hostinger.com/docker-hosting?compose_url=https%3A%2F%2Fraw.githubusercontent.com%2FMichaelZelbel%2Fgodspeed-mission-control%2Fc7d7dabb958d8b3d609915aa725cbc1e83aa9b93%2Fdocker%2Fhostinger%2Fcompose.yaml&REFERRALCODE=GHNMICHAEJC8#pricing)
+
+The link names the commit whose `compose.yaml` pins the current image
+(`v2-sha-20cdd7b`, digest `351e8a16…`). Until 6 October 2026 it named `a759dc8`, an
+older file with an older image, so the button installed a version this page no longer
+described. Whenever `compose.yaml` pins a new image, point this link at the commit that
+made that change.
 
 The `#pricing` anchor opens the plan selection section, where Hostinger displays
 the project name `godspeed-mission-control` and a `Referral code applied` badge.
@@ -24,7 +30,9 @@ complete tested image by digest, so unrelated changes to `latest` cannot replace
 
 After checkout, Hostinger opens Docker Manager with the installation ready to deploy.
 Fill `GODSPEED_HOST` with the VPS hostname shown by Hostinger, without `https://`,
-and choose a private `GODSPEED_SETUP_CODE`. Save that code in your password manager.
+and choose a private `GODSPEED_SETUP_CODE` of at least 32 random letters and digits (let
+your password manager make it). Save that code there. A shorter code is refused once the
+server runs an image with that check, because whoever enters it first owns the server.
 Deploy, then open `https://YOUR_VPS_HOSTNAME`. Enter the setup code, create your
 username and password, and save the recovery code. Later visits use your account.
 

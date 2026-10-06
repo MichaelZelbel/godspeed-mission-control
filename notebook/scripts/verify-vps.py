@@ -64,11 +64,18 @@ try:
     post('media/transfer',{'mapping':{'path':'synthetic/acceptance.png','file':digest+'-acceptance.png','sha256':digest,'size':len(png),'contentType':'image/png'},'data':base64.b64encode(png).decode()})
     assert request('/api/media/file/synthetic/acceptance.png')[1]==png
     compose('restart','notebook');wait();login();assert retained()['uid']==note['uid'];checks.append('restart preserves exact identity and Unicode note')
-    native_create="from hermes_state import SessionDB;db=SessionDB();db.create_session('package-native-history','cli');mid=db.append_message('package-native-history','user','Synthetic native file history');assert mid==1;db.close()"
+    # The assistant's history the way the service keeps it. Until 6 October 2026 this certified
+    # the file-backed store, which an exec session got from the image while the service ran
+    # without it; now both have the image's one setting, and this checks that they agree.
+    service_env=dict(item.split('=',1) for item in compose('exec','-T','notebook','cat','/proc/1/environ').split('\0') if '=' in item)
+    session_env=dict(line.split('=',1) for line in compose('exec','-T','-u','hermes','notebook','env').splitlines() if '=' in line)
+    assert service_env.get('GODSPEED_FILE_HERMES')==session_env.get('GODSPEED_FILE_HERMES')=='0',(service_env.get('GODSPEED_FILE_HERMES'),session_env.get('GODSPEED_FILE_HERMES'))
+    native_create="from hermes_state import SessionDB;db=SessionDB();db.create_session('package-native-history','cli');mid=db.append_message('package-native-history','user','Synthetic native history');assert mid==1;db.close()"
     compose('exec','-T','-u','hermes','notebook','python','-c',native_create)
-    native_rebuild="import os;from pathlib import Path;home=Path(os.environ['HERMES_HOME']);(home/'state.db').unlink();from hermes_state import SessionDB;db=SessionDB();rows=db.get_messages('package-native-history');assert len(rows)==1 and rows[0]['id']==1 and rows[0]['content']=='Synthetic native file history';db.close()"
-    compose('exec','-T','-u','hermes','notebook','python','-c',native_rebuild)
-    checks.append('actual native assistant conversation and message identity recover from files after database deletion')
+    compose('restart','notebook');wait();login()
+    native_read="from hermes_state import SessionDB;db=SessionDB();rows=db.get_messages('package-native-history');assert len(rows)==1 and rows[0]['id']==1 and rows[0]['content']=='Synthetic native history';db.close()"
+    compose('exec','-T','-u','hermes','notebook','python','-c',native_read)
+    checks.append('an assistant conversation saved by hand is kept the way the service keeps it, across a restart')
     compose('exec','-T','notebook','node','/opt/godspeed/kit/notebook/bin/godspeed.mjs','backup','/opt/data/full-candidate/backups/acceptance')
     compose('stop','notebook')
     compose('run','--rm','--no-deps','--entrypoint','sh','notebook','-c','rm -f "$GODSPEED_WORKSPACE/.godspeed/search.sqlite"')

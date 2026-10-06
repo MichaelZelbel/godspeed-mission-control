@@ -4,6 +4,7 @@ import {fileURLToPath} from 'node:url';
 import {Store,atomic} from '../core/records/store.mjs';
 import {ApiKeys} from '../core/api-keys.mjs';
 import {installSkillTree} from '../core/packaged-skills.mjs';
+import {commandFile} from './windows-command-file.mjs';
 const root=process.env.GODSPEED_WORKSPACE,home=process.argv[2];if(!root||!home)throw new Error('Choose the candidate workspace and isolated assistant home');
 const store=new Store(root),port=Number(process.env.GODSPEED_PORT||47831),file=path.join(home,'config.yaml');fs.mkdirSync(home,{recursive:true});
 const kit=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..');
@@ -11,17 +12,20 @@ const kit=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..');
 // integrated adapters below. Dependencies stay beside their original wrappers.
 const commandHome=path.join(home,'bin');
 fs.mkdirSync(commandHome,{recursive:true});
+// Every Windows command file lives in commandHome; windows-command-file.mjs says why
+// the paths in it are written the way they are.
+const cmd=write=>commandFile(write,{folder:commandHome});
 fs.cpSync(path.join(kit,'tools'),commandHome,{recursive:true});
 for(const name of fs.readdirSync(commandHome).filter(n=>n.startsWith('mc-')&&!path.extname(n))){
   const wrapper=path.join(commandHome,name),source=fs.readFileSync(wrapper,'utf8');
   if(process.platform!=='win32')fs.chmodSync(wrapper,0o700);
   const target=source.match(/exec node "\$\(dirname "\$0"\)\/([^"\n]+)"/);
-  if(process.platform==='win32'&&target)atomic(wrapper+'.cmd','@echo off\r\nset "GODSPEED_ROOT='+root+'"\r\nset "GODSPEED_DIR='+root+'"\r\n"'+process.execPath+'" "%~dp0'+target[1]+'" %*\r\n');
+  if(process.platform==='win32'&&target)atomic(wrapper+'.cmd',cmd(at=>'set "GODSPEED_ROOT='+at(root)+'"\r\nset "GODSPEED_DIR='+at(root)+'"\r\n"'+at(process.execPath)+'" "%~dp0'+target[1]+'" %*\r\n'));
   else if(process.platform==='win32'&&source.startsWith('#!/usr/bin/env python3'))atomic(wrapper+'.cmd','@echo off\r\npython "%~dp0'+name+'" %*\r\n');
-  else if(process.platform==='win32')atomic(wrapper+'.cmd','@echo off\r\nset "GODSPEED_ROOT='+root+'"\r\nset "GODSPEED_DIR='+root+'"\r\nset "PATH='+path.dirname(process.execPath)+';%PATH%"\r\nset "GODSPEED_BASH="\r\nfor /f "delims=" %%G in (\'where git.exe 2^>nul\') do if exist "%%~dpG..\\bin\\bash.exe" set "GODSPEED_BASH=%%~dpG..\\bin\\bash.exe"\r\nif not defined GODSPEED_BASH (echo Git Bash is required for this Godspeed command. & exit /b 1)\r\n"%GODSPEED_BASH%" "%~dp0'+name+'" %*\r\n');
+  else if(process.platform==='win32')atomic(wrapper+'.cmd',cmd(at=>'set "GODSPEED_ROOT='+at(root)+'"\r\nset "GODSPEED_DIR='+at(root)+'"\r\nset "PATH='+at(path.dirname(process.execPath))+';%PATH%"\r\nset "GODSPEED_BASH="\r\nfor /f "delims=" %%G in (\'where git.exe 2^>nul\') do if exist "%%~dpG..\\bin\\bash.exe" set "GODSPEED_BASH=%%~dpG..\\bin\\bash.exe"\r\nif not defined GODSPEED_BASH (echo Git Bash is required for this Godspeed command. & exit /b 1)\r\n"%GODSPEED_BASH%" "%~dp0'+name+'" %*\r\n'));
 }
 const rulesScript=path.join(kit,'tools/compile-rules.js');
-if(process.platform==='win32')atomic(path.join(commandHome,'mc-compile-rules.cmd'),'@echo off\r\n"'+process.execPath+'" "'+rulesScript+'" --godspeed "'+root+'" %*\r\n');
+if(process.platform==='win32')atomic(path.join(commandHome,'mc-compile-rules.cmd'),cmd(at=>'"'+at(process.execPath)+'" "'+at(rulesScript)+'" --godspeed "'+at(root)+'" %*\r\n'));
 else {const rulesCommand=path.join(commandHome,'mc-compile-rules');atomic(rulesCommand,'#!/bin/sh\nexec '+[process.execPath,rulesScript,'--godspeed',root].map(s=>"'"+s.replaceAll("'","'\\''")+"'").join(' ')+' "$@"\n');fs.chmodSync(rulesCommand,0o700);}
 // Developer assistants opened on this folder reach the same integrated memory.
 const mcpFile=path.join(root,'.mcp.json'),mcp=JSON.parse(fs.readFileSync(mcpFile,'utf8').replace(/^\uFEFF/,''));
@@ -45,21 +49,34 @@ if(process.env.GODSPEED_DEVICE!=='vps'){
   const vscodeFile=path.join(root,'.vscode/settings.json');
   if(!fs.existsSync(vscodeFile))atomic(vscodeFile,JSON.stringify({'terminal.integrated.env.windows':{GODSPEED_WORKSPACE:root,GODSPEED_ROOT:root,GODSPEED_DIR:root,HERMES_HOME:home,PATH:commandHome+';'+path.dirname(process.execPath)+';${env:PATH}'},'terminal.integrated.env.linux':{GODSPEED_WORKSPACE:root,GODSPEED_ROOT:root,GODSPEED_DIR:root,HERMES_HOME:home,PATH:commandHome+':'+path.dirname(process.execPath)+':${env:PATH}'}},null,2)+'\n');
 }
+// A Windows junction stores an absolute target, so after the folder was moved by hand
+// it pointed at a folder that is gone: existsSync follows the link and said false,
+// making the link again failed with EEXIST, and the notebook did not start (until
+// 6 October 2026). A link that does not lead to this folder's skills is replaced; a
+// real folder in its place belongs to the owner and is left alone.
+const skills=path.join(root,'skills'),samePath=(a,b)=>process.platform==='win32'?a.toLowerCase()===b.toLowerCase():a===b;
 for(const folder of ['.claude','.agents']){
   const alias=path.join(root,folder,'skills');fs.mkdirSync(path.dirname(alias),{recursive:true});
-  if(!fs.existsSync(alias))fs.symlinkSync(process.platform==='win32'?path.join(root,'skills'):'../skills',alias,process.platform==='win32'?'junction':'dir');
+  let link=null;try{link=fs.lstatSync(alias);}catch{}
+  if(link&&!link.isSymbolicLink())continue;
+  if(link){
+    let leads=false;try{leads=samePath(fs.realpathSync(alias),fs.realpathSync(skills));}catch{}
+    if(leads)continue;
+    fs.unlinkSync(alias);
+  }
+  fs.symlinkSync(process.platform==='win32'?skills:'../skills',alias,process.platform==='win32'?'junction':'dir');
 }
 const ignoreFile=path.join(root,'.gitignore');let ignores=fs.readFileSync(ignoreFile,'utf8');
 const missing=['/.godspeed/','/.codex/','/.vscode/','/.agents/','/.claude/skills','/.claude/settings.local.json'].filter(entry=>!ignores.split(/\r?\n/).includes(entry));
 if(missing.length)atomic(ignoreFile,ignores.replace(/\n*$/,'\n')+missing.join('\n')+'\n');
 for(const command of (process.env.GODSPEED_ORIGINAL_RUNTIME==='on'?['mail']:['goals','work','forecast','due','subs','watch','mail'])){
  const bin=path.join(home,'bin','mc-'+command),script=command==='mail'?path.join(kit,'tools','mc-mail.js'):path.join(kit,'notebook','bin','personal-command.mjs'),args=command==='mail'?[]:[command];
- if(process.platform==='win32')atomic(bin+'.cmd','@echo off\r\n"'+process.execPath+'" "'+script+'" '+args.join(' ')+' %*\r\n');
+ if(process.platform==='win32')atomic(bin+'.cmd',cmd(at=>'"'+at(process.execPath)+'" "'+at(script)+'" '+args.join(' ')+' %*\r\n'));
  else {atomic(bin,'#!/bin/sh\nexec '+[process.execPath,script,...args].map(s=>"'"+s.replaceAll("'","'\\''")+"'").join(' ')+' "$@"\n');fs.chmodSync(bin,0o700);}
 }
 {
  const script=path.join(kit,'third-party/addons/mc-video/bin/mc-video.mjs'),bin=path.join(home,'bin','mc-video');
- if(process.platform==='win32')atomic(bin+'.cmd','@echo off\r\n"'+process.execPath+'" "'+script+'" %* --godspeed "'+root+'"\r\n');
+ if(process.platform==='win32')atomic(bin+'.cmd',cmd(at=>'"'+at(process.execPath)+'" "'+at(script)+'" %* --godspeed "'+at(root)+'"\r\n'));
  else {atomic(bin,'#!/bin/sh\nexec '+[process.execPath,script].map(s=>"'"+s.replaceAll("'","'\\''")+"'").join(' ')+' "$@" --godspeed '+"'"+root.replaceAll("'","'\\''")+"'"+'\n');fs.chmodSync(bin,0o700);}
 }
 for(const [addon,skill] of [['coach','coach'],['journal','interstitial-journal'],['headache','headache-tracker']]){
@@ -70,7 +87,7 @@ for(const [addon,skill] of [['coach','coach'],['journal','interstitial-journal']
  // workspace skills are preserved by the installer's normal conflict policy.
  installSkillTree(store,path.join(source,'skill',skill),path.join(home,'skills',skill));
  const script=path.join(source,'bin/godspeed-'+addon+'.mjs'),bin=path.join(home,'bin','godspeed-'+addon);
- if(process.platform==='win32')atomic(bin+'.cmd','@echo off\r\n"'+process.execPath+'" "'+script+'" %* --godspeed "'+root+'"\r\n');
+ if(process.platform==='win32')atomic(bin+'.cmd',cmd(at=>'"'+at(process.execPath)+'" "'+at(script)+'" %* --godspeed "'+at(root)+'"\r\n'));
  else {atomic(bin,'#!/bin/sh\nexec '+[process.execPath,script].map(s=>"'"+s.replaceAll("'","'\\''")+"'").join(' ')+' "$@" --godspeed '+"'"+root.replaceAll("'","'\\''")+"'"+'\n');fs.chmodSync(bin,0o700);}
 }
 let text=fs.existsSync(file)?fs.readFileSync(file,'utf8').replace(/^\uFEFF/,''):`terminal:\n  cwd: ${JSON.stringify(root)}\nskills:\n  external_dirs: [${JSON.stringify(path.join(root,'skills'))}]\nmemory:\n  memory_enabled: false\n`;
