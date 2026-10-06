@@ -14,7 +14,10 @@ const origin=process.env.GODSPEED_VERIFY_ORIGIN||'https://localhost:48443';
   if(mode==='resumed'){
    for(let n=0;n<60;n++){try{const r=await context.request.get(origin+'/health');if(r.ok())break;}catch{}await page.waitForTimeout(1000);}
    await page.goto(origin+'/dashboard/settings/import');
-   await page.getByRole('heading',{name:'Import from Menerio'}).waitFor();
+   // This wait failed now and then after the restart (6 October 2026); the log
+   // then says what the page showed instead.
+   try{await page.getByRole('heading',{name:'Import from Menerio'}).waitFor();}
+   catch(error){console.log('After the restart the page at',page.url(),'showed:',(await page.locator('body').innerText().catch(()=>'')).slice(0,600));await page.screenshot({path:path.join(evidence,'resumed-failure.png'),fullPage:true}).catch(()=>{});throw error;}
    assert.equal((await context.request.get(origin+'/api/session')).status(),200);
    const logout=await context.request.post(origin+'/api/logout',{data:{}});assert.equal(logout.status(),200);
    assert.equal((await context.request.get(origin+'/api/session')).status(),401);
