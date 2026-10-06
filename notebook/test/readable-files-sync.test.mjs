@@ -165,8 +165,10 @@ test('folder: a whole notebook renamed at once is not mistaken for a mass remova
   round(a,b);
   assert.equal(notebookFiles(b.dir).filter(f=>f.startsWith('Archive/')).length,40);
   const gone=Array.from({length:40},(_,i)=>i);for(const i of gone)fs.unlinkSync(a.store.file(a.store.get('notes',notes[i].id)));
-  assert.equal(a.sync.reconcile().state,'synced');
-  assert.notEqual(b.sync.reconcile().state,'synced','Removing them all is still stopped for review');
+  // Since 6 October 2026 a removal that large is stopped before it leaves
+  // the machine, as well as when it arrives (sync-review-fixes.test.mjs).
+  assert.notEqual(a.sync.reconcile().state,'synced','Removing them all is still stopped for review');
+  assert.equal(b.sync.reconcile().state,'synced');
   assert.equal(notebookFiles(b.dir).length,40);
 });
 

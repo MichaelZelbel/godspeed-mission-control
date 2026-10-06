@@ -17,5 +17,14 @@ export class SyncRunner {
    child.on('close',code=>{try{if(code)throw Error();finish(JSON.parse(output.trim().split(/\r?\n/).at(-1)));}catch{finish({state:'pending',error:'Synchronization did not complete; local files remain available'});}});
   });return this.pending;
  }
- async close(){this.closed=true;if(!this.child)return;const child=this.child,pending=this.pending;if(process.platform==='win32')spawn('taskkill',['/pid',String(child.pid),'/T','/F'],{windowsHide:true,stdio:'ignore'});else{try{process.kill(-child.pid,'SIGTERM');}catch{}const timer=setTimeout(()=>{try{process.kill(-child.pid,'SIGKILL');}catch{}},1500);await pending;clearTimeout(timer);try{process.kill(-child.pid,'SIGKILL');}catch{}return;}await pending;}
+ // A worker stopped in the middle of a Git command leaves Git's lock files
+ // behind, and they kept every later round waiting (6 October 2026). It is
+ // given `grace` to finish its round, which is seconds when nothing is slow,
+ // and only then stopped by force.
+ async close({grace=15000}={}){
+  this.closed=true;if(!this.child)return;const child=this.child,pending=this.pending;
+  let timer;const finished=await Promise.race([pending.then(()=>true),new Promise(resolve=>{timer=setTimeout(()=>resolve(false),grace);})]);clearTimeout(timer);
+  if(finished||!this.child)return;
+  if(process.platform==='win32')spawn('taskkill',['/pid',String(child.pid),'/T','/F'],{windowsHide:true,stdio:'ignore'});else{try{process.kill(-child.pid,'SIGTERM');}catch{}const kill=setTimeout(()=>{try{process.kill(-child.pid,'SIGKILL');}catch{}},1500);await pending;clearTimeout(kill);try{process.kill(-child.pid,'SIGKILL');}catch{}return;}await pending;
+ }
 }

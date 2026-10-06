@@ -18,8 +18,11 @@
 //   rename into a name the other side used): both stay, the one already there
 //   on this machine keeps the name and the other gets " 2", " 3".
 //
-// The same record changed on both sides without moving is left to the line
-// merge the reconciler already does for every file.
+// The same record changed on both sides without moving is merged field by
+// field too. Every save rewrites its `modified:` line, so the line merge the
+// reconciler does for every file could never take two edits of different
+// fields; until 6 October 2026 one of them survived only in a review. Only
+// two different edits of one field go on to that line merge, and so to review.
 import { recordsFolder } from '../file-policy.mjs';
 import { decode, encode, hash } from '../records/store.mjs';
 import path from 'node:path';
@@ -159,6 +162,12 @@ export function identityPlan({ git, mergeText, find = () => undefined, base, loc
     const base = path.posix.basename(file).slice(0, -3).normalize('NFC');
     return base === name || (base.startsWith(name + ' ') && /^(?:[2-9]|[1-9]\d+)$/.test(base.slice(name.length + 1)));
   };
+  // A page's name that differs from what its record wants only in letter case.
+  const caseOnly = (file, folder, name) => {
+    if (matches(file, folder, name) || !file.endsWith('.md') || nameKey(dirOf(file)) !== nameKey(folder)) return false;
+    const base = path.posix.basename(file).slice(0, -3).normalize('NFC');
+    return [base, base.replace(/ (?:[2-9]|[1-9]\d+)$/, '')].some(b => nameKey(b) === nameKey(name));
+  };
   const finals = new Map(), reviews = [], planned = new Set();
   const review = (file, e, kept) => reviews.push({ id: hash(file + '\0' + remoteCommit).slice(0, 24), path: file, kind: 'git', kept, base: e.base?.text ?? null, local: e.local?.text ?? null, remote: e.remote?.text ?? null, remote_commit: remoteCommit, at: new Date().toISOString() });
   for (const e of place.values()) {
@@ -167,13 +176,26 @@ export function identityPlan({ git, mergeText, find = () => undefined, base, loc
     if (rs === 'unchanged' || rs === 'absent') { finals.set(e.uid, e.local && { file: e.local.file, text: e.local.text, from: 'local' }); continue; }
     // The same result on both sides (a history entry both wrote) needs nothing.
     if (e.local && e.remote && e.local.file === e.remote.file && e.local.text === e.remote.text) { finals.set(e.uid, { file: e.local.file, text: e.local.text, from: 'local' }); continue; }
-    // Changed on both sides at one path: the reconciler's line merge.
-    if (e.local && e.remote && e.local.file === e.remote.file && (!e.base || e.local.file === e.base.file)) { finals.set(e.uid, { file: e.local.file, deferred: true, from: 'local' }); continue; }
+    // Changed on both sides at one path: one record, field by field. Two
+    // edits of one field are the line merge's, which keeps both for review.
+    if (e.local && e.remote && e.local.file === e.remote.file && (!e.base || e.local.file === e.base.file)) {
+      const merged = e.base ? mergeRecords(e.base.record, e.local.record, e.remote.record, mergeText) : null;
+      if (!merged?.record) { finals.set(e.uid, { file: e.local.file, deferred: true, from: 'local' }); continue; }
+      planned.add(e.uid);
+      const text = encode(merged.record), folder = folderOf(merged.record, e), name = nameFor(merged.record);
+      // It keeps its file, unless its title changed only in letter case: a
+      // file system that ignores case kept the old name for it.
+      finals.set(e.uid, caseOnly(e.local.file, folder, name) ? { text, record: merged.record, folder, from: 'local' } : { file: e.local.file, text, from: 'local' });
+      continue;
+    }
     if (!e.local && !e.remote) { finals.set(e.uid, null); continue; }
     if (!e.local || !e.remote) {
       // Deleted on one side, moved or changed on the other: the surviving one.
       const kept = e.local ? 'local' : 'remote', v = e[kept];
       if (!e.base || e.base.file === v.file) { finals.set(e.uid, { file: v.file, deferred: true, from: kept }); continue; }
+      // Removed on both sides, on one by deleting its file and on the other
+      // as a tombstone: they agree, and the tombstone is its removed form.
+      if (v.record?.removed_at) { planned.add(e.uid); finals.set(e.uid, { file: v.file, text: v.text, from: kept }); continue; }
       planned.add(e.uid); finals.set(e.uid, { file: v.file, text: v.text, from: kept }); review(v.file, e, kept); continue;
     }
     planned.add(e.uid);
@@ -204,12 +226,15 @@ export function identityPlan({ git, mergeText, find = () => undefined, base, loc
     if (!winner && records.some(o => finals.get(o.uid).deferred)) continue;
     for (const o of records) if (o !== winner) { moveOut.push(o.uid); planned.add(o.uid); }
   }
-  // A new name in the record's own folder: " 2", " 3", ...
+  // A new name in the record's own folder: " 2", " 3", ... The names the
+  // record itself had are free for it: a title changed only in letter case
+  // (Original to ORIGINAL) is the same name to a file system that ignores case.
   for (const uid of [...moveOut, ...[...finals].filter(([, f]) => f && !f.file).map(([uid]) => uid)]) {
-    const f = finals.get(uid), record = f.record || decode(f.text, f.file), folder = f.folder ?? (parented(record) && f.file ? dirOf(f.file) : folderFor(record, find)), name = nameFor(record);
+    const f = finals.get(uid), e = place.get(uid), own = new Set([e.base, e.local, e.remote].filter(v => v?.file).map(v => nameKey(v.file)));
+    const record = f.record || decode(f.text, f.file), folder = f.folder ?? (parented(record) && f.file ? dirOf(f.file) : folderFor(record, find)), name = nameFor(record);
     for (let n = f.file ? 2 : 1; ; n++) {
-      const file = prefix + (folder ? folder + '/' : '') + candidateName(name, n);
-      if (!names.has(nameKey(file)) && !occupants.has(nameKey(file))) { names.add(nameKey(file)); occupants.set(nameKey(file), [{ uid, file }]); finals.set(uid, { ...f, file, text: f.text || encode(record) }); break; }
+      const file = prefix + (folder ? folder + '/' : '') + candidateName(name, n), k = nameKey(file);
+      if ((!names.has(k) || own.has(k) && !f.file) && !occupants.has(k)) { names.add(k); occupants.set(k, [{ uid, file }]); finals.set(uid, { ...f, file, text: f.text || encode(record) }); break; }
     }
   }
   if (!planned.size) return null;

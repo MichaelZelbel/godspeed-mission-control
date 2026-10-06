@@ -113,7 +113,7 @@ test('a conversion on one machine and an offline edit in the old layout on anoth
   fs.mkdirSync(origin);git(origin,'init','--bare','--initial-branch=main');
   git(seed,'init','-q','-b','main');git(seed,'config','user.name','Owner');git(seed,'config','user.email','owner@localhost');
   atomic(path.join(seed,'.gitignore'),'/.godspeed/\n/conflicts/\n/FULL-ALPHA.md\n/assistant-state/\n');git(seed,'add','-A');git(seed,'commit','-qm','Old layout');git(seed,'remote','add','origin',origin);git(seed,'push','-q','origin','main');
-  const machine=name=>{const dir=path.join(base,name);git(base,'clone','-q',origin,dir);git(dir,'config','user.name','Owner');git(dir,'config','user.email','owner@localhost');
+  const machine=name=>{const dir=path.join(base,name);git(base,'clone','-q','-c','core.autocrlf=false',origin,dir);git(dir,'config','user.name','Owner');git(dir,'config','user.email','owner@localhost');
     const store=new Store(dir,{device:name});atomic(path.join(store.state,'sync-config.json'),JSON.stringify({enabled:true,repository:'folder',paths:['notebook']}));return {dir,store,sync:new FileSync(store)};};
   const a=machine('desktop'),b=machine('laptop');
   // The laptop edits a note in the old file, as an older version would have.
