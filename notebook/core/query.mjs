@@ -69,6 +69,11 @@ function likePattern(op,pattern){
   const expression=new RegExp('^(?:'+source+')$',op==='ilike'?'isu':'su');
   if(likes.size>500)likes.clear();likes.set(op+'\0'+pattern,expression);return expression;
 }
+// One order for everything that sorts or pages, as the app's Postgres had it:
+// text by its collation (apple before Zebra, Ömer beside Otto), with ties
+// between different texts broken by their characters so the order is total.
+const collation=new Intl.Collator('en');
+export function compareValues(a,b){if(typeof a==='string'&&typeof b==='string')return collation.compare(a,b)||(a<b?-1:a>b?1:0);return a<b?-1:a>b?1:0;}
 function getValue(row, key) { return key.replaceAll('->>', '.').replaceAll('->', '.').split('.').reduce((v, k) => v?.[k], row); }
 function contains(a, b) { return Array.isArray(b) ? b.every(v => (a || []).includes(v)) : b && typeof b === 'object' ? Object.entries(b).every(([k, v]) => contains(a?.[k], v)) : a === b; }
 function condition(row, [op, key, value]) {
@@ -305,8 +310,13 @@ export class QueryService {
   rpc(name, args = {}) {
     if (name === 'capture_note_with_lexicon') return this.store.save('notes', { ...args._note, user_id: 'owner' });
     if (name === 'search_contacts_page') {
-      const query = String(args.search_text || '').toLowerCase(), all = this.rows('contacts').filter(r => !r.merged_into && r.id !== args.exclude_contact_id && [r.name, ...r.aliases].some(n => n.toLowerCase().includes(query))).sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
-      const after = all.filter(r => !args.after_id || r.name > args.after_name || (r.name === args.after_name && r.id > args.after_id));
+      // The next page starts after the last one by the same comparison that
+      // sorted it. Until 6 October 2026 it was cut by character codes instead,
+      // and every capitalised name after a lowercase or accented one (Nina,
+      // Otto after Ömer) was never listed.
+      const byName = (a, b) => compareValues(String(a.name ?? ''), String(b.name ?? '')) || compareValues(String(a.id), String(b.id));
+      const query = String(args.search_text || '').toLowerCase(), all = this.rows('contacts').filter(r => !r.merged_into && r.id !== args.exclude_contact_id && [r.name, ...(r.aliases || [])].some(n => String(n ?? '').toLowerCase().includes(query))).sort(byName);
+      const after = all.filter(r => !args.after_id || byName(r, { name: args.after_name, id: args.after_id }) > 0);
       const rows = after.slice(0, args.page_size || 50), last = rows.at(-1); return { rows, total: all.length, next: after.length > rows.length ? { name: last.name, id: last.id } : null };
     }
     if (name === 'notes_mentioning_people') return this.rows('notes').filter(r => (args.names || args.p_names || []).some(n => (r.content || '').toLowerCase().includes(n.toLowerCase())));
