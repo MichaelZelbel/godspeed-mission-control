@@ -5,6 +5,7 @@ import {momentDraft} from '../core/moment-draft.mjs';
 import {relatedNotes} from '../core/related.mjs';
 import {STOPWORDS} from '../core/index/stopwords.mjs';
 import {privateFile as markedPrivate} from '../core/context.mjs';
+import {retireShares} from '../core/shares.mjs';
 
 // Menerio's tool names and arguments, answered from the notebook. Mission
 // Control's skills, routines and memory benchmark called these names for
@@ -368,6 +369,8 @@ async function write(name, a, ctx, guarded) {
     if (a.restore) { if (!note.is_trashed) return {note_id: note.id, restored: false, message: 'The note is not in the trash'}; query.execute({table: 'notes', operation: 'update', values: {is_trashed: false, trashed_at: null}, filters: [['eq', 'id', note.id]], expected: {[note.id]: note._hash}}); return {note_id: note.id, restored: true}; }
     if (note.is_trashed) return {note_id: note.id, trashed: true, message: 'Already in the trash'};
     guarded({['notes/' + note.id]: note._hash}).query.execute({table: 'notes', operation: 'update', values: {is_trashed: true, trashed_at: new Date().toISOString()}, filters: [['eq', 'id', note.id]], expected: {[note.id]: note._hash}, assistant: true});
+    // The server switches the note's public link off; the assistant never writes shares itself.
+    await retireShares(store, [note.id]);
     return {note_id: note.id, title: note.title, trashed: true, message: 'Moved to the trash; the owner can restore it'};
   }
   if (name === 'log_interaction') {
