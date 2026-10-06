@@ -883,3 +883,7 @@
 .animate-float-heart {
   animation: float-heart 25s ease-in-out infinite;
 }
+/* The floating chat button steps aside while a docked chat is open (lib/side-chat.ts). */
+body[data-docked-chat] button[aria-label="Chat with Godspeed"] {
+  display: none;
+}

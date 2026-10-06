@@ -197,7 +197,9 @@ export class QueryService {
           if(table==='contact_groups'&&payload.type&&payload.type!=='contact_groups')record.group_type=payload.type;
           if(table==='contact_group_memberships'&&!record.status_changed_at)record.status_changed_at=record.created_at;
           if(table==='contact_group_memberships'&&(!record.last_movement_at||old&&payload.status&&old.status!==payload.status))record.last_movement_at=record.updated_at;
-          if (['collections','contact_groups'].includes(table) && !old) record.slug = slug(record.slug||record.name)+'-'+record.uid.slice(0,8);
+          // The address the create dialog shows ("/collections/books"), unless
+          // another collection already has it; then the record's own id makes it unique.
+          if (['collections','contact_groups'].includes(table) && !old) { const plain = slug(record.slug||record.name); record.slug = this.rows(table).some(r => String(r.slug||'').toLowerCase() === plain) ? plain+'-'+record.uid.slice(0,8) : plain; }
           if(table==='collection_items'){
             const collection=this.store.get('collections',record.collection_id);if(!collection)throw new Error('Collection missing');
             const primary=collection.field_schema?.find(f=>f.primary);record.title=primary?String(record.data?.[primary.key]??'Untitled'):record.title||'Untitled';
@@ -255,7 +257,9 @@ export class QueryService {
     }
     if (name === 'notes_mentioning_people') return this.rows('notes').filter(r => (args.names || args.p_names || []).some(n => (r.content || '').toLowerCase().includes(n.toLowerCase())));
     if(name==='increment_collection_template_usage'){
-      const old=this.store.get('collection_templates',args.template_id||args.p_template_id);if(!old)throw new Error('Template missing');return this.store.save('collection_templates',{id:old.id,usage_count:(old.usage_count||0)+1});
+      // The templates page names the template by its slug (p_slug); until
+      // 6 October 2026 that was refused, so using a template always ended in an error.
+      const id=args.template_id||args.p_template_id,old=(id&&this.store.get('collection_templates',id))||(args.p_slug?this.rows('collection_templates').find(t=>t.slug===args.p_slug):null);if(!old)throw new Error('Template missing');return this.store.save('collection_templates',{id:old.id,usage_count:(old.usage_count||0)+1});
     }
     if(name==='reassign_contact_topics')return this.store.withLock(()=>{const topics=this.rows('contact_topics').filter(t=>t.contact_id===args.p_source_contact_id).map(t=>this.store.prepare('contact_topics',{contact_id:args.p_target_contact_id,version:(t.version||0)+1},t));for(const t of topics)t.references=this.references(t.type,t);this.store.commit(topics);return {moved:topics.length};});
     if(name==='apply_contact_topic_command')return this.topicCommand(args.p_request_id,args.p_command);

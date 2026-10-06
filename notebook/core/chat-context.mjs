@@ -40,7 +40,7 @@ function buildChatContext(query,input){
     context.person_conversation=input.conversationContext||null;
     context.person_evidence_policy='Use only recorded facts and topics about this person. A planned future event is not an event that has happened. Do not invent past conversations or outcomes. Follow the requested number of questions and the saved listening intent.';
   }
-  if(input.collection_id){context.collection=visibleRows(query,'collections').find(r=>r.id===input.collection_id);if(!context.collection)throw new Error('This collection is hidden from the assistant');const rows=visibleRows(query,'collection_items').filter(r=>r.collection_id===input.collection_id).slice(0,20);writeSnapshots.set(context,structuredClone(rows));context.items=rows.map(r=>compact(r,1500));}
+  if(input.collection_id){context.collection=visibleRows(query,'collections').find(r=>r.id===input.collection_id);if(!context.collection)throw new Error('This collection is hidden from the assistant');const {rows,titles}=collectionItems(visibleRows(query,'collection_items').filter(r=>r.collection_id===input.collection_id),terms);writeSnapshots.set(context,structuredClone(rows));context.items=rows.map(itemContext);context.items_total=titles.length;if(rows.length<titles.length){context.item_titles=titles;context.items_note='Only the items most relevant to the question are given in full; item_titles lists every item.';}}
   context.messages=input.conversation_id?query.rows('conversation_messages').filter(m=>m.conversation_id===input.conversation_id).sort((a,b)=>a.created_at.localeCompare(b.created_at)).slice(-12).map(({role,content})=>({role,content:String(content).slice(0,8000)})):[];
   return context;
 }
@@ -57,6 +57,28 @@ export async function retrievedContext(query,input,provider){
  const candidates=fullMatches.length?fullMatches.filter(c=>String(c.name||'').length===longest):people.filter(c=>{const first=String(c.name||'').toLowerCase().split(' ')[0];return first.length>=3&&new RegExp('\\b'+first.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'\\b','i').test(question);});
  if(candidates.length>1&&!input.contact_id&&!input.person_id)context.ambiguities={people:candidates.slice(0,10).map(c=>({id:c.id,name:c.name})),instruction:'Ask which person the user means; do not guess'};
  return context;
+}
+// A collection's items for its chat: every item, as its fields, until the
+// budget is spent; a larger collection gives the items most relevant to the
+// question in full and every title. Until 6 October 2026 the chat saw the
+// first twenty items in file order, so asked which of 37 films were seen with
+// someone, it named one seen with someone else and missed four.
+const ITEM_BUDGET=80000;
+// Each item is bounded on its own, as before: a long text field is cut in
+// the prompt copy, never in what a change is applied to (the write snapshot).
+// Long values are cut one by one, so every field of the item stays visible.
+function itemContext(r){
+  let cut=false;const short=value=>{if(typeof value==='string'&&value.length>600){cut=true;return value.slice(0,600)+'…';}if(Array.isArray(value))return value.map(short);if(value&&typeof value==='object')return Object.fromEntries(Object.entries(value).map(([k,v])=>[k,short(v)]));return value;};
+  const data=short(r.data||{});
+  return {id:r.id,title:typeof r.title==='string'&&r.title.length>300?r.title.slice(0,300)+'…':r.title,data,...(r.folder_id?{folder_id:r.folder_id}:{}),...(r.is_favorite?{is_favorite:true}:{}),updated_at:r.updated_at,...(cut?{context_truncated:true}:{})};
+}
+function collectionItems(all,terms){
+  const titles=all.map(r=>r.title).sort((a,b)=>String(a).localeCompare(String(b))),size=r=>JSON.stringify(itemContext(r)).length;
+  if(all.reduce((n,r)=>n+size(r),0)<=ITEM_BUDGET)return {rows:all,titles};
+  const score=r=>{const text=JSON.stringify(r.data||{}).toLowerCase()+' '+String(r.title||'').toLowerCase();return terms.reduce((n,t)=>n+(text.includes(t)?1:0),0);};
+  const ranked=all.map((r,i)=>({r,i,s:score(r)})).sort((a,b)=>b.s-a.s||String(b.r.updated_at||'').localeCompare(String(a.r.updated_at||''))||a.i-b.i);
+  const rows=[];let used=0;for(const {r} of ranked){const n=size(r);if(used+n>ITEM_BUDGET)continue;rows.push(r);used+=n;}
+  return {rows,titles};
 }
 function compact(record,max){const result={};let remaining=max;for(const key of ['id','claim_id','subject_type','subject_kind','subject_id','contact_id','attribute','label','title','name','value','valid_from','valid_to','confidence','source_type','source_id','evidence_quote','content','description','notes','email','phone','bio','summary','metadata','tags','field_schema','data','created_at']){if(record[key]==null)continue;const text=typeof record[key]==='string'?record[key]:JSON.stringify(record[key]);if(text.length>remaining){result[key]=text.slice(0,remaining);result.context_truncated=true;break;}result[key]=record[key];remaining-=text.length;}return result;}
 export function chatAttachments(mediaRoot,files=[]){

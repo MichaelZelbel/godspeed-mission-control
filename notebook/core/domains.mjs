@@ -285,9 +285,14 @@ export class Domains {
         if(!notes_created.length)content='I could not save the requested note. No note was created.';
         else for(const note of notes_created)tool_results.push({tool:'create_note',success:true,note_id:note.id});
       }
-      if(name==='collection-chat')for(const change of [...(structured.items_created||[]),...(structured.item_updates||[])]){
+      if(name==='collection-chat')for(const raw of [...(structured.items_created||[]),...(structured.item_updates||[])]){
+        // Models also answer {id?, <field>: value} instead of {id?, data:{...}}.
+        // Read as nothing, that saved an empty "Untitled" item while the reply
+        // said the item was added (6 October 2026).
+        const change=raw&&typeof raw.data==='object'&&raw.data!==null?raw:{id:raw?.id,data:Object.fromEntries(Object.entries(raw||{}).filter(([key])=>key!=='id'))};
         const old=change.id?collectionWriteSnapshot(context).find(i=>i.id===change.id):null;if(change.id&&!old)throw new Error('Assistant requested a row outside this collection');
         const validKeys=new Set((context.collection?.field_schema||[]).map(f=>f.key));if(Object.keys(change.data||{}).some(k=>!validKeys.has(k)))throw new Error('Assistant requested an unknown collection field');
+        if(!old&&!Object.values(change.data||{}).some(v=>v!==null&&v!==''))throw new Error('The assistant tried to add an item without any values; nothing was added');
         this.query.execute({table:'collection_items',operation:old?'update':'insert',values:{...(old?{}:{collection_id:input.collection_id}),data:{...old?.data,...change.data}},filters:old?[['eq','id',old.id]]:[],expected:old?{[old.id]:old._hash}:{},assistant:true});tool_results.push({tool:old?'update_collection_item':'create_collection_item',success:true});
       }
       const opened=structured.operation_results?.find(r=>r.type==='coach_talks'&&r.status==='open');

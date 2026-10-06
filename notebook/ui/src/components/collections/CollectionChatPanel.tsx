@@ -1,5 +1,6 @@
 import ChatComposer, {type ChatFile} from "@/components/chat/ChatComposer";
 import { useState, useRef, useEffect, useCallback } from "react";
+import { useDockedChat } from "@/lib/side-chat";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { triggerCreditsRefresh } from "@/lib/credits-events";
@@ -38,6 +39,7 @@ export function CollectionChatPanel({
   onClose,
   onCollectionChanged,
 }: CollectionChatPanelProps) {
+  useDockedChat();
   const { session, user } = useAuth();
   const contextKey = itemId
     ? `collection:${collectionId}:item:${itemId}`

@@ -1,3 +1,4 @@
+import { useDockedChat } from "@/lib/side-chat";
 import ChatComposer, {type ChatFile} from "@/components/chat/ChatComposer";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -54,6 +55,7 @@ export interface NoteChatPanelProps {
 }
 
 export function NoteChatPanel({ note, onClose, onNoteChanged }: NoteChatPanelProps) {
+  useDockedChat();
   const { session, user } = useAuth();
   const contextKey = `note:${note.id}`;
   const [state, setState] = useState<PersistedChatState>(() =>
