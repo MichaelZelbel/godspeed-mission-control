@@ -1,8 +1,10 @@
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
+import { threadId } from 'node:worker_threads';
 import { randomUUID, createHash } from 'node:crypto';
-import { durable,durableRoots,durableFiles,recordsFolder,legacyRecordsFolder } from '../file-policy.mjs';
-import { encode as encodeFile, decode as decodeFile, safe as safeName, candidate, fits, folderFor, nameFor, candidateName, systemPath, isReadable, key as nameKey, childrenOf } from './layout.mjs';
+import { durable,durableRoots,durableFiles,recordsFolder,legacyRecordsFolder,isRecordPath } from '../file-policy.mjs';
+import { encode as encodeFile, decode as decodeFile, safe as safeName, candidate, fits, folderFor, nameFor, candidateName, systemPath, isReadable, key as nameKey, childrenOf, own } from './layout.mjs';
 
 export const hash = value => createHash('sha256').update(Buffer.isBuffer(value) || typeof value === 'string' ? value : JSON.stringify(value)).digest('hex');
 export const slug = value => String(value).normalize('NFKD').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 80) || 'record';
@@ -11,27 +13,110 @@ export const slug = value => String(value).normalize('NFKD').toLowerCase().repla
 // slug() itself stays as it was, because facts keep the keys it made.
 export const readableSlug = value => slug(String(value).replace(/[äÄ]/g, 'ae').replace(/[öÖ]/g, 'oe').replace(/[üÜ]/g, 'ue').replace(/ß/g, 'ss').normalize('NFKD').replace(/[\u0300-\u036f]/g, ''));
 export const safe = safeName;
-export function atomic(file, text) {
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  const tmp = file + '.' + randomUUID() + '.tmp';
-  const fd = fs.openSync(tmp, 'wx');
-  try { fs.writeFileSync(fd, text); fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
-  const deadline=Date.now()+1500;
-  for(;;){try{fs.renameSync(tmp,file);break;}catch(error){
+const sleep=ms=>Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,ms);
+// Windows scanners can briefly hold a file during an atomic swap or a delete.
+export function retrying(work,ms=1500){
+  const deadline=Date.now()+ms;
+  for(;;){try{return work();}catch(error){
     if(process.platform!=='win32'||!['EPERM','EACCES','EBUSY'].includes(error.code)||Date.now()>=deadline)throw error;
-    // Windows scanners can briefly hold the destination during an atomic swap.
-    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,25);
+    sleep(25);
   }}
 }
-// Releasing the lock must not fail on a scanner's brief hold: a lock left behind
-// names this process, which is alive, so every later write would wait on it.
-function release(lock){
-  const deadline=Date.now()+3000;
-  for(;;){try{fs.unlinkSync(lock);return;}catch(error){
-    if(error.code==='ENOENT')return;
-    if(process.platform!=='win32'||!['EPERM','EACCES','EBUSY'].includes(error.code)||Date.now()>=deadline)throw error;
-    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,25);
-  }}
+// A rename is on disk only once the folder that names the file is: Linux keeps
+// it in memory until that folder is synced (until 6 October 2026 only the file
+// itself was). Windows cannot open a folder for this, and NTFS needs it not.
+export function syncFolder(dir){
+  if(process.platform==='win32')return;
+  let fd;try{fd=fs.openSync(dir,'r');fs.fsyncSync(fd);}catch{}finally{if(fd!==undefined)try{fs.closeSync(fd);}catch{}}
+}
+// `sync: false` leaves the folder to the caller, who syncs each folder once
+// after many writes (a transaction) instead of once per file.
+export function atomic(file, text, { sync = true } = {}) {
+  const dir = path.dirname(file); fs.mkdirSync(dir, { recursive: true });
+  const tmp = file + '.' + randomUUID() + '.tmp';
+  const fd = fs.openSync(tmp, 'wx');
+  try {
+    try { fs.writeFileSync(fd, text); fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
+    retrying(()=>fs.renameSync(tmp,file));
+  } catch (error) {
+    // A temporary file left in notebook/ would be committed by sync as if it
+    // were the owner's (until 6 October 2026 a failed write left it there).
+    try{retrying(()=>fs.unlinkSync(tmp),500);}catch{}
+    throw error;
+  }
+  if (sync) syncFolder(dir);
+}
+// ---- The writer lock ----------------------------------------------------
+// One writer at a time, across every program that opens the workspace: the
+// server, the sync worker, the command line, the backup thread. The lock file
+// names its writer by process, thread and a token of this one acquisition.
+const busy=()=>Object.assign(new Error('Workspace is being written by another process'),{code:'WRITER_BUSY'});
+const heldLocks=new Set();
+// Whether the writer a lock names is gone. Until 6 October 2026 only a process
+// that no longer existed counted, so a lock whose number now belonged to an
+// unrelated program (after a restart) blocked every save for good, and an
+// empty one (a crash between creating and naming it) stopped the workspace
+// from opening at all.
+function lockIsStale(text,stat){
+  let owner=null;try{owner=JSON.parse(text);}catch{}
+  // A writer that has just created the lock may not have written its name
+  // yet; one still nameless after ten seconds died in between.
+  if(!owner||typeof owner!=='object'||!Number.isInteger(owner.pid)||owner.pid<=0)return Date.now()-stat.mtimeMs>=10000;
+  const at=Number.isFinite(Date.parse(owner.at))?Date.parse(owner.at):stat.mtimeMs;
+  // Written before this computer started: whoever has that number now is not its writer.
+  if(at<Date.now()-os.uptime()*1000-60000)return true;
+  if(owner.pid===process.pid){
+    // This program's own number from before it started is a restarted
+    // container's, which reuses numbers; a lock this very thread wrote and no
+    // longer holds was left by a release that failed. Any other is another
+    // thread of this program (the backup), alive.
+    if(at<Date.now()-process.uptime()*1000-1000)return true;
+    return typeof owner.token==='string'&&owner.thread===threadId&&!heldLocks.has(owner.token);
+  }
+  // EPERM: alive but not ours to signal (on Windows, the server the installer's task started).
+  try{process.kill(owner.pid,0);return false;}catch(error){return error.code==='ESRCH';}
+}
+// The lock as it is now, read so that a file replaced while it was read is never taken for the one found.
+function lookAt(lock){
+  const before=fs.statSync(lock,{bigint:true}),text=fs.readFileSync(lock,'utf8'),after=fs.statSync(lock,{bigint:true});
+  if(before.ino!==after.ino||before.mtimeNs!==after.mtimeNs||before.size!==after.size)return null;
+  return {text,ino:after.ino,mtimeMs:Number(after.mtimeMs)};
+}
+// Takes over a lock its writer left behind, one program at a time. Until 6
+// October 2026 two programs that both found the same dead writer each removed
+// "its" lock, the second removing the first one's fresh lock, and then both
+// wrote at once. Now the lock is read again under a short-lived break lock and
+// removed only if it is still the very file, with the very bytes, found dead.
+// Whatever races here reads as busy, which withLockAsync retries: true means
+// the lock is gone and acquisition may be tried once more.
+function takeOver(lock){
+  let seen;try{seen=lookAt(lock);}catch(error){return error.code==='ENOENT';}
+  if(!seen||!lockIsStale(seen.text,seen))return false;
+  const breaker=lock+'.break',mine=randomUUID();let fd;
+  try{fd=fs.openSync(breaker,'wx');}catch(error){
+    // A break lock is held for a moment; one older than ten seconds belongs to
+    // a program that died holding it. It is removed, and the next try breaks.
+    if(error.code==='EEXIST')try{if(Date.now()-fs.statSync(breaker).mtimeMs>10000)fs.unlinkSync(breaker);}catch{}
+    return false;
+  }
+  try{
+    fs.writeFileSync(fd,mine);
+    let again;try{again=lookAt(lock);}catch(error){return error.code==='ENOENT';}
+    if(!again||again.ino!==seen.ino||again.text!==seen.text||!lockIsStale(again.text,again))return false;
+    try{fs.unlinkSync(lock);}catch(error){return error.code==='ENOENT';}
+    return true;
+  }catch{return false;}
+  finally{try{fs.closeSync(fd);}catch{}try{if(fs.readFileSync(breaker,'utf8')===mine)fs.unlinkSync(breaker);}catch{}}
+}
+// Releasing the lock must not fail on a scanner's brief hold: a lock left
+// behind names this process, which is alive, so every later write elsewhere
+// would wait on it. Only this acquisition's own lock is removed, never one
+// another writer has put there since.
+function release(lock,token,ino){
+  let text,stat;try{stat=fs.statSync(lock,{bigint:true});text=fs.readFileSync(lock,'utf8');}catch(error){if(error.code==='ENOENT')return;throw error;}
+  let owner=null;try{owner=JSON.parse(text);}catch{}
+  if(owner?.token!==token&&!(owner===null&&ino&&stat.ino===ino))return;
+  try{retrying(()=>fs.unlinkSync(lock),3000);}catch(error){if(error.code!=='ENOENT')throw error;}
 }
 // A record's file: readable Markdown with YAML frontmatter for what a person
 // reads, JSON for machine bookkeeping (see layout.mjs). decode() throws an
@@ -49,17 +134,68 @@ export const answersTo = (record, id) => record.id === id || (record.former_ids 
 // A copy that shares the (immutable) strings: what structuredClone did per
 // record and per read, at a fraction of the cost, since a note's text is
 // most of its size.
+// Own keys only, each set as data: a "__proto__" key is copied as a key, not
+// made the copy's prototype (until 6 October 2026 it was).
 export function copy(value) {
   if (value === null || typeof value !== 'object') return value;
   if (Array.isArray(value)) return value.map(copy);
-  const out = {}; for (const key in value) out[key] = copy(value[key]); return out;
+  const out = {}; for (const key of Object.keys(value)) own(out, key, copy(value[key])); return out;
 }
 // The records the store holds are frozen: they live as long as their files
 // do not change, so code that changed one in place instead of a copy would
 // change what the next save writes. It fails loudly instead.
 // GODSPEED_FREEZE_RECORDS=0 turns this off.
 const freezing = process.env.GODSPEED_FREEZE_RECORDS !== '0';
-function deepFreeze(value) { if (value && typeof value === 'object' && !Object.isFrozen(value)) { Object.freeze(value); for (const key in value) deepFreeze(value[key]); } return value; }
+function deepFreeze(value) { if (value && typeof value === 'object' && !Object.isFrozen(value)) { Object.freeze(value); for (const key of Object.keys(value)) deepFreeze(value[key]); } return value; }
+// What is wrong with a set of records as a whole. Each problem carries a key
+// that names it, so a write can tell the problems it would add from those the
+// notebook already has.
+function integrity(records){
+  const problems=[],uids=new Map(records.map(r=>[r.uid,r]));
+  const keys=new Set(records.flatMap(r=>[r.type+'/'+r.id,...[...(r.former_ids||[]),...(r.aliases||[])].map(a=>r.type+'/'+a)]));
+  for(const r of records)for(const ref of r.references||[]){
+    const target=ref.uid?uids.get(ref.uid):null;
+    if(!(ref.uid?target&&target.type===ref.type&&answersTo(target,ref.id):keys.has(ref.type+'/'+ref.id)))problems.push({record:r.id,error:'Missing or inconsistent reference',reference:ref,key:['reference',r.type,r.id,ref.type,ref.id,ref.uid||'',ref.field||''].join('\0')});
+  }
+  const ids=new Set(),aliases=new Map();
+  for(const r of records){
+    if(ids.has(r.uid))problems.push({error:'Duplicate UUID',key:'uid\0'+r.uid});ids.add(r.uid);
+    if(!r.removed_at)for(const alias of identityIds(r)){const key=r.type+'/'+String(alias).toLowerCase();if(aliases.has(key)&&aliases.get(key)!==r.uid)problems.push({error:'Ambiguous case-insensitive identity or alias',alias,key:'alias\0'+key});aliases.set(key,r.uid);}
+  }
+  return {problems,keys:new Set(problems.map(p=>p.key))};
+}
+const referenceProblems=checked=>checked.problems.filter(p=>p.error==='Missing or inconsistent reference').map(({key,...problem})=>problem);
+// One durable file or folder copied into a backup. `copied` notes the file
+// each copy was taken from, by its identity, size and times; one taken from a
+// file unchanged since is not copied again. `seen` collects what is there now.
+function copyInto(root,destination,name,copied,seen=null){
+  const source=path.join(root,...name.split('/')),target=path.join(destination,...name.split('/'));let info;
+  try{info=fs.lstatSync(source,{bigint:true});}catch(error){if(error.code==='ENOENT'||error.code==='ENOTDIR')return;throw error;}
+  if(info.isSymbolicLink())throw new Error('Archive cannot follow symbolic links');
+  if(info.isDirectory()){fs.mkdirSync(target,{recursive:true});for(const child of fs.readdirSync(source))copyInto(root,destination,name+'/'+child,copied,seen);return;}
+  if(!info.isFile())return;
+  seen?.add(name);
+  if(sameFile(copied.get(name),info))return;
+  fs.copyFileSync(source,target);
+  // A file that changed while it was copied is copied again on the next look.
+  let after=null;try{after=fs.lstatSync(source,{bigint:true});}catch{}
+  copied.set(name,sameFile(info,after)?info:null);
+}
+const sameFile=(a,b)=>!!a&&!!b&&a.ino===b.ino&&a.size===b.size&&a.mtimeNs===b.mtimeNs&&a.ctimeNs===b.ctimeNs;
+// A file's bytes, or null when there is none.
+function readOrNull(file){try{return fs.readFileSync(file);}catch(error){if(error.code==='ENOENT'||error.code==='ENOTDIR')return null;throw error;}}
+const MISSING='missing';
+function stateOf(file){try{return hash(fs.readFileSync(file));}catch(error){return error.code==='ENOENT'||error.code==='ENOTDIR'?MISSING:error.code==='EISDIR'?'folder':'unreadable';}}
+const finished=dir=>fs.existsSync(path.join(dir,'completed'))||fs.existsSync(path.join(dir,'rolled-back'));
+// The order transactions were prepared in, which is the order they are
+// replayed in. One prepared before 6 October 2026 is placed by when it was.
+let sequence=0;
+const nextOrder=()=>String(Date.now()).padStart(15,'0')+'-'+String(++sequence).padStart(9,'0');
+function preparedOrder(dir){
+  const file=path.join(dir,'prepared');
+  try{const order=JSON.parse(fs.readFileSync(file,'utf8'))?.order;if(typeof order==='string')return order;}catch{}
+  try{return String(Math.floor(fs.statSync(file).mtimeMs)).padStart(15,'0')+'-0';}catch{return '';}
+}
 export class Store {
   constructor(root, { device = 'local', failAfter = null, watch = false } = {}) {
     this.root = path.resolve(root); this.device = safe(device); this.failAfter = failAfter;
@@ -77,42 +213,40 @@ export class Store {
     fs.renameSync(legacy, this.recordsRoot);
   }
   withLock(fn) {
-    const lock = path.join(this.state, 'workspace.lock');
-    const busy = () => Object.assign(new Error('Workspace is being written by another process'),{code:'WRITER_BUSY'});
+    const lock = path.join(this.state, 'workspace.lock'), token = randomUUID();
     let fd;
-    try { fd = fs.openSync(lock, 'wx'); } catch (e) {
-      // Windows answers EPERM while a just-released lock file is still held by a
-      // scanner or another process's handle: a busy workspace, retried by
-      // withLockAsync, not an error the owner sees (until 6 October 2026 it was).
-      if (process.platform === 'win32' && ['EPERM', 'EACCES', 'EBUSY'].includes(e.code)) throw busy();
-      if (e.code !== 'EEXIST') throw e;
-      let owner,text;
-      try { text = fs.readFileSync(lock, 'utf8'); } catch (error) { if (['ENOENT', 'EPERM', 'EACCES', 'EBUSY'].includes(error.code)) throw busy(); throw error; }
-      // A writer that has just created the lock may not have written its name yet.
-      if (!text.trim()) { try { if (Date.now() - fs.statSync(lock).mtimeMs < 10000) throw busy(); } catch (error) { if (error.code === 'WRITER_BUSY' || error.code === 'ENOENT') throw busy(); throw error; } }
-      try { owner = JSON.parse(text); } catch { throw new Error('Workspace lock requires recovery'); }
-      // EPERM: the writer is alive but not ours to signal (on Windows, the server started by
-      // the installer's task). That is a busy workspace, not an error.
-      try { process.kill(owner.pid, 0); } catch (error) {
-        if (error.code === 'ESRCH') { fs.unlinkSync(lock); return this.withLock(fn); }
-        if (error.code !== 'EPERM') throw error;
+    for (let tries = 0; ; tries++) {
+      try { fd = fs.openSync(lock, 'wx'); break; } catch (e) {
+        // Windows answers EPERM while a just-released lock file is still held by a
+        // scanner or another process's handle: a busy workspace, retried by
+        // withLockAsync, not an error the owner sees (until 6 October 2026 it was).
+        if (process.platform === 'win32' && ['EPERM', 'EACCES', 'EBUSY'].includes(e.code)) throw busy();
+        if (e.code !== 'EEXIST') throw e;
+        if (tries || !takeOver(lock)) throw busy();
       }
-      throw busy();
     }
-    this.holding = (this.holding || 0) + 1;
-    try { fs.writeFileSync(fd, JSON.stringify({ pid: process.pid, at: new Date().toISOString() })); fs.fsyncSync(fd); return fn(); }
-    finally { this.holding--; fs.closeSync(fd); release(lock); }
+    // The file is the lock, not its open handle, which is closed at once: a
+    // workspace move renames the folder under the lock, and Windows refuses to
+    // rename a folder that holds an open file.
+    let ino;
+    try { ino = fs.fstatSync(fd, { bigint: true }).ino; fs.writeFileSync(fd, JSON.stringify({ pid: process.pid, thread: threadId, token, at: new Date().toISOString() })); fs.fsyncSync(fd); }
+    catch (error) { try { fs.closeSync(fd); } catch {} try { release(lock, token, ino); } catch {} throw error; }
+    fs.closeSync(fd);
+    heldLocks.add(token); this.holding = (this.holding || 0) + 1;
+    try { return fn(); }
+    finally { this.holding--; heldLocks.delete(token); release(lock, token, ino); }
   }
+  // Waits until the writer lock is free, or its writer gone ('stale': the next
+  // acquisition takes it over).
   async waitForWriter({signal,timeoutMs=30000}={}) {
     const lock=path.join(this.state,'workspace.lock'),until=Date.now()+timeoutMs;
-    while(fs.existsSync(lock)){
+    for(;;){
       signal?.throwIfAborted();
-      let owner;try{owner=JSON.parse(fs.readFileSync(lock,'utf8'));}catch(error){if(error.code==='ENOENT')continue;}
-      if(owner?.pid)try{process.kill(owner.pid,0);}catch(error){if(error.code==='ESRCH')return;if(error.code!=='EPERM')throw error;}
+      let seen=null;try{seen=lookAt(lock);}catch(error){if(error.code==='ENOENT'){signal?.throwIfAborted();return;}}
+      if(seen&&lockIsStale(seen.text,seen))return 'stale';
       if(Date.now()>=until)throw Error('Workspace is still being written. Your request has not been repeated.');
       await new Promise(resolve=>setTimeout(resolve,25));
     }
-    signal?.throwIfAborted();
   }
   async withLockAsync(fn,{signal,timeoutMs=30000}={}) {
     const deadline=Date.now()+timeoutMs;
@@ -124,7 +258,8 @@ export class Store {
         // failure is uncertain and must never replay its work automatically.
         if(entered||error.code!=='WRITER_BUSY')throw error;
         const remaining=deadline-Date.now();if(remaining<=0)throw Error('Workspace is still being written. Your request has not been repeated.');
-        await this.waitForWriter({signal,timeoutMs:remaining});
+        // A stale lock another program is taking over this very moment: a short pause, not a busy loop.
+        if(await this.waitForWriter({signal,timeoutMs:remaining})==='stale')await new Promise(resolve=>setTimeout(resolve,5+Math.random()*20));
       }
     }
   }
@@ -220,7 +355,8 @@ export class Store {
       }catch(e){problems.push({file,error:e.message});}
     }
     this.records = records; this.fileOf = fileOf; this.keyOfUid = keyOfUid; this.pathIndex = pathIndex; this.keyOfFile = keyOfFile; this.documents = documents; this.problems = problems; this.lastScan = new Date().toISOString();
-    this.problems.push(...this.validateReferences([...records.values()]));
+    const checked=integrity([...records.values()]);this.integrityFor=records;this.integrityNow=checked;
+    this.problems.push(...referenceProblems(checked),...this.setAsideProblems());
     this.byTypeCache=null;this.byTypeFor=records;
     if(before&&this.listeners?.size)this.announce(before,records);
     return records;
@@ -280,30 +416,56 @@ export class Store {
   applyDirty(){
     if(!this.dirty.size)return false;
     const names=[...this.dirty];this.dirty.clear();
-    const byName=new Map();for(const [file,entry] of this.entries)byName.set(entry.name,file);
-    const affected=new Map();
+    const byKey=new Map();for(const [file,entry] of this.entries){const k=nameKey(entry.name);byKey.set(k,[...(byKey.get(k)||[]),file]);}
+    // A name as its folder spells it now, or null. On a file system that
+    // ignores case, plan.md still opens after another program renamed it
+    // Plan.md, so a name only counts once its folder lists it that way: until
+    // 6 October 2026 the store then held the record under both spellings, as
+    // a duplicate.
+    const listings=new Map(),listing=dir=>{if(!listings.has(dir)){let list=null;try{list=fs.readdirSync(dir);}catch{}listings.set(dir,list);}return listings.get(dir);};
+    const spelled=name=>{let dir=this.recordsRoot;const out=[];for(const part of name.split('/')){const list=listing(dir),real=list&&(list.includes(part)?part:list.find(n=>nameKey(n)===nameKey(part)));if(!real)return null;out.push(real);dir=path.join(dir,real);}return out.join('/');};
+    const absolute=name=>path.join(this.recordsRoot,...name.split('/')),affected=new Map();
+    const walk=(dir,relative)=>{let list;try{list=fs.readdirSync(dir,{withFileTypes:true});}catch{return;}for(const e of list){if(e.name.startsWith('.')||e.isSymbolicLink())continue;const n=relative+'/'+e.name,f=path.join(dir,e.name);if(e.isDirectory())walk(f,n);else if(e.isFile()&&candidate(n))affected.set(f,n);}};
     for(const name of names){
-      const known=byName.get(name);
-      if(known){affected.set(known,name);continue;}
-      const absolute=path.join(this.recordsRoot,...name.split('/'));
-      let stat=null;try{stat=fs.lstatSync(absolute);}catch(error){if(error.code!=='ENOENT'&&error.code!=='ENOTDIR')throw error;}
-      if(stat?.isFile()){if(candidate(name))affected.set(absolute,name);continue;}
+      const key=nameKey(name);for(const file of byKey.get(key)||[])affected.set(file,this.entries.get(file).name);
+      const real=spelled(name);
+      let stat=null;if(real)try{stat=fs.lstatSync(absolute(real));}catch(error){if(error.code!=='ENOENT'&&error.code!=='ENOTDIR')throw error;}
+      if(stat?.isFile()){if(candidate(real))affected.set(absolute(real),real);continue;}
       if(stat?.isSymbolicLink())continue;
       // A folder: renamed, moved, deleted or new. Everything known under it
       // and everything now in it is read again.
-      const prefix=name+'/';for(const [file,entry] of this.entries)if(entry.name.startsWith(prefix))affected.set(file,entry.name);
-      if(stat?.isDirectory()){
-        const walk=(dir,relative)=>{let list;try{list=fs.readdirSync(dir,{withFileTypes:true});}catch{return;}for(const e of list){if(e.name.startsWith('.')||e.isSymbolicLink())continue;const n=relative+'/'+e.name,f=path.join(dir,e.name);if(e.isDirectory())walk(f,n);else if(e.isFile()&&candidate(n))affected.set(f,n);}};
-        walk(absolute,name);
-      }
+      const prefix=key+'/';for(const [file,entry] of this.entries)if(nameKey(entry.name).startsWith(prefix))affected.set(file,entry.name);
+      if(stat?.isDirectory())walk(absolute(real),real);
     }
     let changed=false;
+    const read=(file,name)=>{const previous=this.entries.get(file),entry=this.readEntry(file,name,previous);if(entry===previous)return;changed=true;if(entry)this.entries.set(file,entry);else this.entries.delete(file);};
     for(const [file,name] of affected){
-      const previous=this.entries.get(file),entry=this.readEntry(file,name,previous);
-      if(entry===previous)continue;
-      changed=true;if(entry)this.entries.set(file,entry);else this.entries.delete(file);
+      const real=spelled(name);
+      if(real===name){read(file,name);continue;}
+      // Gone, or spelled otherwise now: the old spelling holds nothing any more.
+      if(this.entries.delete(file))changed=true;
+      if(real&&candidate(real)&&!affected.has(absolute(real)))read(absolute(real),real);
     }
     if(changed){this.dirtyChanges=(this.dirtyChanges||0)+1;this.derive();}
+    return changed;
+  }
+  // A watching store learns of an edit made outside the notebook (Obsidian,
+  // the assistant editing a file) only once the watcher's event has been
+  // handled, which can be after a save of the same record arrived. Under the
+  // lock, exactly the files a write will overwrite or delete are read again
+  // first, so the save is compared with what is really there and the version
+  // it replaces goes into the history (until 6 October 2026 such an edit was
+  // overwritten, with no conflict and no history copy). True if any changed.
+  freshen(files){
+    if(!this.watching||!this.entries)return false;
+    let changed=false,vanished=false;
+    for(const file of new Set(files)){
+      const previous=file&&this.entries.get(file);if(!previous)continue;
+      const entry=this.readEntry(file,previous.name,previous);if(entry===previous)continue;
+      changed=true;if(entry)this.entries.set(file,entry);else{this.entries.delete(file);vanished=true;}
+    }
+    // A file that went (renamed in Obsidian, say) is looked for everywhere.
+    if(vanished)this.scan(true);else if(changed)this.derive();
     return changed;
   }
   journalPosition(){try{const fd=fs.openSync(this.journalFile||path.join(this.state,'changes.log'),'r');try{const head=Buffer.alloc(64),n=fs.readSync(fd,head,0,64,0);return {epoch:head.subarray(0,n).toString('utf8').split('\n')[0],size:fs.fstatSync(fd).size};}finally{fs.closeSync(fd);}}catch(error){if(error.code==='ENOENT')return {epoch:null,size:0};throw error;}}
@@ -363,15 +525,7 @@ export class Store {
     for(const [file,entry] of this.entries)if(!seen.has(file)){this.touched(entry.name);marked++;}
     return marked;
   }
-  validateReferences(records) {
-    const problems = [], uids = new Map(records.map(r => [r.uid,r]));
-    const keys = new Set(records.flatMap(r => [r.type + '/' + r.id, ...[...(r.former_ids || []), ...(r.aliases || [])].map(a => r.type + '/' + a)]));
-    for (const r of records) for (const ref of r.references || []) {
-      const target=ref.uid?uids.get(ref.uid):null;
-      if (!(ref.uid ? target&&target.type===ref.type&&answersTo(target,ref.id) : keys.has(ref.type + '/' + ref.id))) problems.push({ record: r.id, error: 'Missing or inconsistent reference', reference: ref });
-    }
-    return problems;
-  }
+  validateReferences(records) { return referenceProblems(integrity(records)); }
   // Callers get copies: a record they change is theirs, never the view's.
   list(type, { removed = false } = {}) { this.scan(); return this.ofType(type).filter(r => removed || !r.removed_at).map(copy); }
   get(type, id) { this.scan(); const record = this.records.get(type + '/' + id) || this.ofType(type).find(r => (r.former_ids || []).includes(id)) || this.ofType(type).find(r => (r.aliases || []).includes(id)); return record && copy(record); }
@@ -403,11 +557,14 @@ export class Store {
       view.commit=(records,options={})=>{for(const item of options.files||[])files.set(item.file,item);for(const raw of records){const record={...raw};delete record._hash;const key=record.type+'/'+record.id;changed.set(key,record);view.records.set(key,{...record,_hash:hash(encode(record))});}};
       const result=work(view,changed,before,files);
       if(result&&typeof result.then==='function')throw Error('Record transactions must finish synchronously');
+      // A record edited outside since the work read it is not overwritten unseen.
+      if(this.freshen([...changed.keys()].map(key=>this.fileOf.get(key))))for(const [key,record] of changed){const seen=before.get(key),now=this.records.get(key);if(seen&&now&&seen._hash!==now._hash)this.conflict(record.type,record,copy(now));}
       this.commit([...changed.values()],{files:[...files.values()]});return result;
     });
   }
   saveUnderLock(type,value,expectedHash) {
-      const old = value.id ? this.get(type, value.id) : null;
+      let old = value.id ? this.get(type, value.id) : null;
+      if (old && this.freshen([this.fileOf.get(old.type + '/' + old.id)])) old = this.get(type, value.id);
       if (expectedHash !== undefined && expectedHash !== (old?._hash || null)) {
         this.conflict(type,value,old);
       }
@@ -488,6 +645,7 @@ export class Store {
   // nothing else moves (`cascade` false).
   commit(records,{removeKeys=[],files=[],paths=null,cascade=!paths}={}) {
     this.scan();
+    if(this.watching)this.freshen([...records.flatMap(r=>[this.fileOf.get(r.type+'/'+r.id),this.fileOf.get(this.keyOfUid?.get(r.uid))]),...removeKeys.map(k=>this.fileOf.get(k))]);
     const history=[];
     for(const record of records){
       const old=this.records.get(record.type+'/'+record.id)||removeKeys.map(k=>this.records.get(k)).find(r=>r?.uid===record.uid);
@@ -504,36 +662,27 @@ export class Store {
     const proposed = new Map(this.records);
     for(const key of removeKeys)proposed.delete(key);
     for (const record of records) proposed.set(record.type + '/' + record.id, record);
-    const errors = this.validateReferences([...proposed.values()]);
-    const ids = new Set(),aliases=new Map();
-    for (const r of proposed.values()) {
-      if (ids.has(r.uid)) errors.push({ error: 'Duplicate UUID' }); ids.add(r.uid);
-      if(!r.removed_at)for(const alias of identityIds(r)){const key=r.type+'/'+alias.toLowerCase();if(aliases.has(key)&&aliases.get(key)!==r.uid)errors.push({error:'Ambiguous case-insensitive identity or alias',alias});aliases.set(key,r.uid);}
-    }
+    // Only what this write would break is refused. Until 6 October 2026 the
+    // whole notebook had to be right, so one reference broken elsewhere (one
+    // that arrived through sync, say) refused every later save of anything.
+    const checked=integrity([...proposed.values()]),known=(this.integrityFor===this.records&&this.integrityNow||integrity([...this.records.values()])).keys;
+    const errors=checked.problems.filter(p=>!known.has(p.key)).map(({key,...problem})=>problem);
     if (errors.length) throw new Error('Reference validation failed: ' + JSON.stringify(errors));
     const {targets,moved}=this.planPaths(records,{removeKeys,forced:paths,proposed,cascade});records=[...records,...moved];
-    const fileAt=record=>path.join(this.recordsRoot,...targets.get(record.type+'/'+record.id).split('/')),written=new Set(records.map(fileAt));
-    const tx = randomUUID(), dir = path.join(this.state, 'transactions', tx); fs.mkdirSync(dir, { recursive: true });
-    const manifest=[];
+    const fileAt=record=>path.join(this.recordsRoot,...targets.get(record.type+'/'+record.id).split('/')),written=new Set(records.map(fileAt)),relative=file=>posix(path.relative(this.root,file));
     // The old file of a moved or removed record goes first: on a file system
     // that ignores case, renaming plan.md to Plan.md would otherwise delete
     // the file it had just written.
     // Nor is a file deleted that another record still holds: a conversion
     // writes in groups, and a later group may still be reading from there.
     const batch=new Set([...records.map(r=>r.type+'/'+r.id),...removeKeys]),held=file=>{const k=this.keyOfFile?.get(file);return k!==undefined&&!batch.has(k);};
-    const drop=file=>{if(!file||written.has(file)||held(file)||!fs.existsSync(file))return;atomic(path.join(dir,manifest.length+'.before'),fs.readFileSync(file));manifest.push({file:posix(path.relative(this.root,file)),delete:true});};
+    const items=[],dropped=new Set(),drop=file=>{if(!file||written.has(file)||held(file)||dropped.has(file)||!fs.existsSync(file))return;dropped.add(file);items.push({file:relative(file),delete:true});};
     for(const record of records)drop(this.fileOf.get(record.type+'/'+record.id));
     for(const key of removeKeys)drop(this.fileOf.get(key));
-    for (const record of records) {
-      const file = fileAt(record), relative = posix(path.relative(this.root, file)), text = encode(record), i = manifest.length;
-      atomic(path.join(dir, i + '.after'), text);
-      if (fs.existsSync(file)) atomic(path.join(dir, i + '.before'), fs.readFileSync(file));
-      manifest.push({ file: relative, staged: i + '.after', hash: hash(text) });
-    }
-    for(const item of files){if(!durable(item.file))throw Error('File is outside durable state');const staged=manifest.length+'.after';atomic(path.join(dir,staged),item.text);manifest.push({file:item.file,staged,hash:hash(item.text)});}
-    atomic(path.join(dir, 'manifest.json'), JSON.stringify(manifest));
-    atomic(path.join(dir, 'prepared'), tx);
-    this.applyTransaction(dir, manifest); this.prune(manifest.filter(item=>item.delete).map(item=>path.resolve(this.root,item.file))); this.refreshView(records, removeKeys, targets);
+    for(const record of records)items.push({file:relative(fileAt(record)),text:encode(record)});
+    for(const item of files){if(!durable(item.file))throw Error('File is outside durable state');items.push({file:item.file,text:item.text});}
+    const staged=this.stage(items);
+    this.publish(staged);this.prune(staged.manifest.filter(item=>item.delete).map(item=>path.resolve(this.root,item.file)));this.refreshView(records,removeKeys,targets,checked);
   }
   // A folder left empty by a record moving or going away goes too, up to the
   // notebook folder: Git never carries an empty folder, so it would only stay
@@ -547,7 +696,7 @@ export class Store {
   // brought up to date from them instead of reading the whole vault again,
   // which doubled the cost of every save. Each record is decoded from the very
   // text that went to disk, so the view holds what a fresh read would find.
-  refreshView(records, removeKeys = [], targets = null) {
+  refreshView(records, removeKeys = [], targets = null, checked = null) {
     if (!this.records||!targets) return this.scan(true);
     // The indexes of files belong to this store alone and change in place.
     const view = new Map(this.records), fileOf = this.fileOf, keyOfUid = this.keyOfUid, pathIndex = this.pathIndex, keyOfFile = this.keyOfFile, written = new Set(), dropped = new Set();
@@ -563,50 +712,205 @@ export class Store {
     }
     for (const file of dropped) if (!written.has(file)) this.entries?.delete(file);
     if (removeKeys.length) for (const [uid, key] of keyOfUid) if (!view.has(key)) keyOfUid.delete(uid);
-    // The commit validated every reference of the new state before writing.
-    this.problems = (this.problems || []).filter(p => p.file && !written.has(p.file) && !dropped.has(p.file) && p.error !== 'Missing or inconsistent reference');
+    // The commit checked the references of the new state before writing; a
+    // reference broken before it, and left as it was, is still reported.
+    this.problems = [...(this.problems || []).filter(p => p.file && !written.has(p.file) && !dropped.has(p.file) && p.error !== 'Missing or inconsistent reference'), ...(checked ? referenceProblems(checked) : [])];
     const before = this.records;
     this.records = view; this.fileOf = fileOf; this.keyOfUid = keyOfUid; this.pathIndex = pathIndex; this.keyOfFile = keyOfFile; this.lastScan = new Date().toISOString(); this.byTypeCache = null; this.byTypeFor = view;
+    this.integrityFor = checked ? view : null; this.integrityNow = checked;
     if (this.listeners?.size) this.announce(before, view);
     return view;
   }
+  // ---- Transactions --------------------------------------------------------
+  // A write is staged whole in .godspeed/transactions/<id>, marked prepared,
+  // put in place file by file, then marked completed and discarded. A
+  // program that dies in between leaves it prepared, and the next program to
+  // open the workspace finishes it (recover).
+  //
+  // The file a transaction item names. One an older version prepared still
+  // names records/; it is replayed into the folder those records moved to.
+  target(item){
+    const name=String(item.file).replaceAll('\\','/').replace(new RegExp('^'+legacyRecordsFolder+'/'),recordsFolder+'/'),file=path.resolve(this.root,name);
+    if(!file.startsWith(this.root+path.sep)||!(durable(name)||/^conflicts\/[\w-]+\.json$/.test(name)))throw new Error('Invalid transaction target');
+    return {name,file};
+  }
+  // Each file a transaction writes is one it may write, inside the workspace,
+  // not a folder, with every folder above it a folder; those missing are made
+  // now. Returns the folders made.
+  checkTargets(items){
+    const made=[],seen=new Set();
+    try{
+      for(const item of items){
+        const {name,file}=this.target(item);if(item.delete)continue;
+        let at=this.root;
+        for(const part of path.relative(this.root,path.dirname(file)).split(path.sep).filter(Boolean)){
+          at=path.join(at,part);if(seen.has(at))continue;
+          let stat=null;try{stat=fs.statSync(at);}catch(error){if(error.code!=='ENOENT')throw error;}
+          if(stat&&!stat.isDirectory())throw new Error('Invalid transaction target: '+posix(path.relative(this.root,at))+' is a file where a folder is needed');
+          if(!stat){try{fs.mkdirSync(at);}catch(error){throw new Error('Invalid transaction target: the folder '+posix(path.relative(this.root,at))+' cannot be made ('+error.code+')');}made.push(at);}
+          seen.add(at);
+        }
+        let stat=null;try{stat=fs.statSync(file);}catch(error){if(error.code!=='ENOENT')throw error;}
+        if(stat?.isDirectory())throw new Error('Invalid transaction target: '+name+' is a folder');
+      }
+      return made;
+    }catch(error){for(const folder of made.reverse())try{fs.rmdirSync(folder);}catch{}throw error;}
+  }
+  // Stages a transaction: each item's new bytes and what its target held
+  // before, so a failed write can be undone and a replay can tell a target
+  // someone changed since. Every target is checked before the transaction is
+  // marked prepared: a target that cannot be written is a write refused,
+  // never a prepared transaction stuck for good (until 6 October 2026 one
+  // was, and every later start of the workspace failed on it).
+  stage(items){
+    const tx=randomUUID(),dir=path.join(this.state,'transactions',tx),manifest=[],deleted=new Set();let made=[];
+    try{
+      made=this.checkTargets(items);fs.mkdirSync(dir,{recursive:true});
+      items.forEach((entry,i)=>{
+        const {file}=this.target(entry),key=nameKey(entry.file),item={file:entry.file};
+        // On a file system that ignores case, a target an earlier delete in
+        // this transaction removes under another spelling is gone by then.
+        const aliased=!entry.delete&&deleted.has(key)&&!(fs.existsSync(path.dirname(file))&&fs.readdirSync(path.dirname(file)).includes(path.basename(file)));
+        const before=aliased?null:readOrNull(file);
+        if(entry.delete){item.delete=true;deleted.add(key);}
+        else{atomic(path.join(dir,i+'.after'),entry.text,{sync:false});Object.assign(item,{staged:i+'.after',hash:hash(entry.text)});}
+        if(before){atomic(path.join(dir,i+'.before'),before,{sync:false});Object.assign(item,{existed:true,before:i+'.before',before_hash:hash(before)});}else item.existed=false;
+        manifest.push(item);
+      });
+      syncFolder(dir);atomic(path.join(dir,'manifest.json'),JSON.stringify(manifest));
+      atomic(path.join(dir,'prepared'),JSON.stringify({tx,order:nextOrder()}));
+      return {dir,manifest,made};
+    }catch(error){try{fs.rmSync(dir,{recursive:true,force:true});}catch{}for(const folder of made.reverse())try{fs.rmdirSync(folder);}catch{}throw error;}
+  }
+  // Puts a prepared transaction in place. A failure while this program lives
+  // (a file another program holds, a full disk) is undone from the
+  // before-images and the transaction discarded, so it can never be replayed
+  // later over newer saves: until 6 October 2026 it stayed prepared, and the
+  // next program to open the workspace replayed it over everything saved
+  // since. Only if undoing fails as well does it stay prepared, for recover()
+  // to judge. failAfter stands for the program dying half-way: nothing is
+  // undone then.
+  publish({dir,manifest,made}){
+    try{this.applyTransaction(dir,manifest);}
+    catch(error){
+      if(!error.crash)try{this.rollBack(dir,manifest,made);}catch{}
+      // What this store holds may no longer be what is on disk.
+      this.invalidate();if(this.watching)for(const item of manifest){const {name}=this.target(item);if(isRecordPath(name))this.touched(name.slice(recordsFolder.length+1));}
+      throw error;
+    }
+  }
   applyTransaction(dir, manifest) {
+    const targets=manifest.map(item=>this.target(item));
     for (let i = 0; i < manifest.length; i++) {
-      // A transaction an older version prepared still names records/; it is
-      // replayed into the folder those records were moved to.
-      const item = manifest[i], name = item.file.replaceAll('\\','/').replace(new RegExp('^'+legacyRecordsFolder+'/'), recordsFolder+'/'), file = path.resolve(this.root, name);
-      if (!file.startsWith(this.root + path.sep)||!(durable(name)||/^conflicts\/[\w-]+\.json$/.test(name))) throw new Error('Invalid transaction target');
-      if(item.delete){if(fs.existsSync(file))fs.unlinkSync(file);continue;}
+      const item = manifest[i], {file} = targets[i];
+      if(item.delete){try{retrying(()=>fs.unlinkSync(file));}catch(error){if(error.code!=='ENOENT')throw error;}continue;}
       const text = fs.readFileSync(path.join(dir, item.staged));
       if (hash(text) !== item.hash) throw new Error('Corrupt transaction stage');
-      atomic(file, text);
-      if (this.failAfter === i + 1) throw new Error('Injected crash');
+      atomic(file, text, { sync: false });
+      if (this.failAfter === i + 1) throw Object.assign(new Error('Injected crash'), { crash: true });
     }
-    this.journal(manifest.map(item=>item.file.replaceAll('\\','/').replace(new RegExp('^'+legacyRecordsFolder+'/'), recordsFolder+'/')).filter(name=>name.startsWith(recordsFolder+'/')).map(name=>name.slice(recordsFolder.length+1)));
+    for (const folder of new Set(targets.map(t => path.dirname(t.file)))) syncFolder(folder);
+    // Other watching stores learn of these files at once; one that does not
+    // (the journal could not be written) still hears of them from its watcher.
+    try{this.journal(targets.map(t=>t.name).filter(name=>name.startsWith(recordsFolder+'/')).map(name=>name.slice(recordsFolder.length+1)));}catch{}
     atomic(path.join(dir, 'completed'), new Date().toISOString());
+    this.discardCompletedTransaction(dir);
+  }
+  // Undoes what a failed transaction did, last item first: a file it wrote
+  // gets its before-image back, or goes if it did not exist before (only while
+  // it still holds what this transaction wrote); a file it deleted comes back.
+  // A file holding anything else was changed by someone else meanwhile, and is
+  // left as it is.
+  rollBack(dir,manifest,made=[]){
+    for(let i=manifest.length-1;i>=0;i--){
+      const item=manifest[i],{file}=this.target(item),current=readOrNull(file),now=current&&hash(current),left=item.delete?current===null:now===item.hash;
+      if(item.existed){
+        if(now===item.before_hash||!left&&current!==null)continue;
+        const bytes=fs.readFileSync(path.join(dir,item.before));if(hash(bytes)!==item.before_hash)throw new Error('Corrupt transaction stage');
+        atomic(file,bytes,{sync:false});
+      }else if(!item.delete&&left)retrying(()=>fs.unlinkSync(file));
+    }
+    for(const folder of [...made].reverse())try{fs.rmdirSync(folder);}catch{}
+    atomic(path.join(dir,'rolled-back'),new Date().toISOString());
     this.discardCompletedTransaction(dir);
   }
   discardCompletedTransaction(dir) {
     const root=path.resolve(this.state,'transactions'),name=path.basename(dir);
     if(path.dirname(path.resolve(dir))!==root||! /^(?:\.completed-)?[a-f0-9-]{36}$/.test(name))throw new Error('Invalid transaction cleanup path');
-    if(!name.startsWith('.completed-')&&!fs.existsSync(path.join(dir,'completed')))return;
+    if(!name.startsWith('.completed-')&&!finished(dir))return;
     // Rename out of the recovery namespace before deleting any payload. A crash
     // during cleanup can then never replay partially deleted staging files.
     const discarded=name.startsWith('.completed-')?dir:path.join(root,'.completed-'+name);
     try{if(discarded!==dir)fs.renameSync(dir,discarded);fs.rmSync(discarded,{recursive:true});}catch{}
   }
+  // Finishes what a program that died half-way had prepared, oldest first,
+  // but only where that cannot undo anything saved since: every file it names
+  // must still be as it found it or as it leaves it. One that fails that (a
+  // later save, an edit, a sync changed one of its files), or that names a
+  // file it may not write, is set aside, kept and reported, and the
+  // workspace opens anyway. Until 6 October 2026 every prepared transaction
+  // was replayed, in no particular order, over whatever was there, and one
+  // that could not be replayed stopped every later start.
   recover() {
     const root = path.join(this.state, 'transactions'); if (!fs.existsSync(root)) return;
+    const pending=[];
     for (const name of fs.readdirSync(root)) {
       const dir = path.join(root, name);
-      if(name.startsWith('.completed-')||fs.existsSync(path.join(dir,'completed'))){this.discardCompletedTransaction(dir);continue;}
-      if (fs.existsSync(path.join(dir, 'prepared')) && !fs.existsSync(path.join(dir, 'completed'))) this.applyTransaction(dir, JSON.parse(fs.readFileSync(path.join(dir, 'manifest.json'), 'utf8')));
+      if(name.startsWith('.completed-')||finished(dir)){this.discardCompletedTransaction(dir);continue;}
+      if(fs.existsSync(path.join(dir,'prepared')))pending.push({dir,name,order:preparedOrder(dir)});
+    }
+    pending.sort((a,b)=>a.order.localeCompare(b.order)||a.name.localeCompare(b.name));
+    for(const {dir} of pending){
+      let manifest=null;try{manifest=JSON.parse(fs.readFileSync(path.join(dir,'manifest.json'),'utf8'));}catch{}
+      const stale=Array.isArray(manifest)?this.staleness(dir,manifest):'its list of files cannot be read';
+      if(stale)this.setAside(dir,stale);else this.applyTransaction(dir,manifest);
     }
   }
+  // Why replaying a prepared transaction would change more than it meant to,
+  // or null. Every file it names must hold what it found or what it leaves; on
+  // a file system that ignores case, items naming one file under two
+  // spellings (a rename by letter case) share their states.
+  staleness(dir,manifest){
+    let targets;try{targets=manifest.map(item=>this.target(item));}catch{return 'it names a file it may not write';}
+    for(const {name,file} of targets)for(let at=path.dirname(file);at.startsWith(this.root+path.sep);at=path.dirname(at)){let stat=null;try{stat=fs.statSync(at);}catch{}if(stat&&!stat.isDirectory())return 'a file stands where the folder of '+name+' must be';}
+    // Prepared by a version before 6 October 2026, which kept no before-image
+    // of a page it was about to create, and none at all for whole files.
+    let legacyCommit=false;try{legacyCommit=fs.readFileSync(path.join(dir,'prepared'),'utf8')!=='prepared';}catch{}
+    const states=new Map(),allow=(key,state)=>{if(state===undefined)return;let set=states.get(key);if(!set)states.set(key,set=new Set());set.add(state);};
+    for(let i=0;i<manifest.length;i++){
+      const item=manifest[i],{name}=targets[i],key=nameKey(name);
+      if(!item.delete){let staged=null;try{staged=fs.readFileSync(path.join(dir,item.staged));}catch{}if(!staged||hash(staged)!==item.hash)return 'its copy of '+name+' is damaged';}
+      allow(key,item.delete?MISSING:item.hash);
+      if(item.existed===true)allow(key,item.before_hash);
+      else if(item.existed===false)allow(key,MISSING);
+      else{const before=readOrNull(path.join(dir,i+'.before'));allow(key,before?hash(before):!item.delete&&legacyCommit&&isRecordPath(name)?MISSING:undefined);}
+    }
+    for(const {name,file} of targets)if(!states.get(nameKey(name)).has(stateOf(file)))return name+' was changed after this save was prepared';
+    return null;
+  }
+  // Kept, never deleted, out of the recovery namespace, and reported until
+  // someone has looked at it (a file named reviewed in its folder).
+  setAside(dir,reason){
+    try{
+      atomic(path.join(dir,'set-aside.json'),JSON.stringify({at:new Date().toISOString(),reason},null,2));
+      const root=path.join(this.state,'transactions-set-aside');fs.mkdirSync(root,{recursive:true});
+      let target=path.join(root,path.basename(dir));for(let n=2;fs.existsSync(target);n++)target=path.join(root,path.basename(dir)+'-'+n);
+      fs.renameSync(dir,target);
+    }catch{(this.unmovable||=new Set()).add(dir);}
+  }
+  setAsideProblems(){
+    if(!this.state)return [];
+    const root=path.join(this.state,'transactions-set-aside');let names=[];try{names=fs.readdirSync(root);}catch{}
+    return [...names.map(name=>path.join(root,name)),...(this.unmovable||[])].filter(dir=>!fs.existsSync(path.join(dir,'reviewed')))
+      .map(dir=>({file:dir,set_aside:path.basename(dir),error:'A save that could not finish was set aside instead of replayed, because a file it would change was changed after it. It is kept for review'}));
+  }
+  // Whole files written through the same transactions (sync's pages, a
+  // resolved conflict, a restore). Deletes go first, as in commit(): on a
+  // file system that ignores case, a page renamed by letter case would
+  // otherwise lose the file just written.
   publishFiles(items){
-    const dir=path.join(this.state,'transactions',randomUUID());fs.mkdirSync(dir,{recursive:true});
-    const manifest=items.map((item,i)=>{if(!durable(item.file)&&!/^conflicts\/[\w-]+\.json$/.test(item.file))throw new Error('File is outside durable state');if(item.delete)return {file:item.file,delete:true};atomic(path.join(dir,i+'.after'),item.text);return {file:item.file,staged:i+'.after',hash:hash(item.text)};});
-    atomic(path.join(dir,'manifest.json'),JSON.stringify(manifest));atomic(path.join(dir,'prepared'),'prepared');this.applyTransaction(dir,manifest);
+    for(const item of items)if(!durable(item.file)&&!/^conflicts\/[\w-]+\.json$/.test(item.file))throw new Error('File is outside durable state');
+    this.publish(this.stage([...items.filter(item=>item.delete).map(item=>({file:item.file,delete:true})),...items.filter(item=>!item.delete).map(item=>({file:item.file,text:item.text}))]));
   }
   structural(type, id, action, options = {}) {
     return this.withLock(() => {
@@ -646,28 +950,58 @@ export class Store {
       throw new Error('Unknown structural operation');
     });
   }
+  // A backup holds the writer lock only for the moment that makes it one
+  // consistent copy. Every durable file is copied first without the lock;
+  // then, under it, each is looked at again (which file it is, its size and
+  // times) and only those changed meanwhile are copied once more, those gone
+  // removed. The notebook replaces a file by renaming a new one over it, so a
+  // changed file is always a different file. Counting, media, hashes and the
+  // manifest follow without the lock. Until 6 October 2026 the whole copy and
+  // hash ran under it, which at 16,000 records held every other save back for
+  // seven minutes, and the server's saves gave up after thirty seconds.
   backup(destination,{finalize}={}) {
     if (fs.existsSync(destination)) throw new Error('Backup destination already exists');
-    return this.withLock(() => {
-      this.recover(); fs.mkdirSync(destination, { recursive: true });
-      for (const root of [...durableRoots,...durableFiles,'conflicts']) if (fs.existsSync(path.join(this.root, root))) fs.cpSync(path.join(this.root, root), path.join(destination, root), { recursive: true });
-      atomic(path.join(destination, 'backup.json'), JSON.stringify({ format: 1, at: new Date().toISOString(), records: this.scan().size }));
-      finalize?.(destination);
-      return destination;
+    fs.mkdirSync(destination, { recursive: true });
+    const roots=[...durableRoots,...durableFiles,'conflicts'],copied=new Map();let at;
+    for(const name of roots)copyInto(this.root,destination,name,copied);
+    this.withLock(()=>{
+      this.recover();const seen=new Set();
+      for(const name of roots)copyInto(this.root,destination,name,copied,seen);
+      for(const name of copied.keys())if(!seen.has(name)){fs.rmSync(path.join(destination,...name.split('/')),{force:true});copied.delete(name);}
+      at=new Date().toISOString();
     });
+    atomic(path.join(destination, 'backup.json'), JSON.stringify({ format: 1, at, records: Store.inspect(destination).records.size }));
+    finalize?.(destination);
+    return destination;
+  }
+  // A workspace or a backup, only read: no lock, no state folder, nothing
+  // recovered or moved, a records/ folder from before 2026-10-05 read where it
+  // is. Restoring checks a backup this way: until 6 October 2026 it opened the
+  // backup as a workspace, which wrote into it (a lock, its state folder, and
+  // records/ renamed to notebook/), so the same backup could not be restored
+  // twice, nor one on read-only media at all.
+  static inspect(root) {
+    const view = Object.create(Store.prototype);
+    view.root = path.resolve(root); view.device = 'local'; view.state = path.join(view.root, '.godspeed'); view.recordsRoot = path.join(view.root, recordsFolder);
+    const legacy = path.join(view.root, legacyRecordsFolder);
+    if (!fs.existsSync(view.recordsRoot) && fs.existsSync(legacy)) view.recordsRoot = legacy;
+    view.withLock = () => { throw new Error('This copy is only read'); };
+    view.scan(); return view;
   }
   restore(source) {
     if (this.scan().size) throw new Error('Restore requires an empty workspace');
     for(const name of [...durableRoots.filter(r=>r!==recordsFolder),...durableFiles])if(fs.existsSync(path.join(this.root,name)))throw new Error('Restore requires empty durable state');
     const manifest = JSON.parse(fs.readFileSync(path.join(source, 'backup.json'), 'utf8')); if (manifest.format !== 1) throw new Error('Unsupported backup format');
     return this.withLock(() => {
-      const checked=new Store(source);if(checked.problems.length)throw new Error('Backup records need review');
+      const checked=Store.inspect(source);if(checked.problems.length)throw new Error('Backup records need review');
+      // A backup from before 2026-10-05 holds records/; its files go to notebook/.
+      const legacy=checked.recordsRoot!==path.join(checked.root,recordsFolder),as=relative=>legacy?relative.replace(new RegExp('^'+legacyRecordsFolder+'/'),recordsFolder+'/'):relative;
       const items=[];const visit=(relative)=>{
         const target=path.join(source,relative),info=fs.lstatSync(target);if(info.isSymbolicLink())throw new Error('Restore cannot follow symbolic links');
         if(info.isDirectory())for(const name of fs.readdirSync(target))visit(path.posix.join(relative,name));
-        else if(durable(relative)||/^conflicts\/[\w-]+\.json$/.test(relative))items.push({file:relative,text:fs.readFileSync(target)});
+        else{const name=as(relative);if(durable(name)||/^conflicts\/[\w-]+\.json$/.test(name))items.push({file:name,text:fs.readFileSync(target)});}
       };
-      for(const name of [...durableRoots,...durableFiles,'conflicts'])if(fs.existsSync(path.join(source,name)))visit(name);
+      for(const name of [...durableRoots,...durableFiles,'conflicts',...(legacy?[legacyRecordsFolder]:[])])if(fs.existsSync(path.join(source,name)))visit(name);
       this.publishFiles(items);
       this.scan(); if (this.problems.length) throw new Error('Restored records need review'); return this.records.size;
     });

@@ -81,6 +81,10 @@ export function stringify(object) {
 // ---- Reading -------------------------------------------------------------
 
 class YamlError extends Error {}
+// A key read is set as data: "__proto__" is a key like any other, as JSON.parse
+// has it, not the map's prototype (until 6 October 2026 it became one, and an
+// "isAdmin" under it was then inherited by the whole map).
+function setKey(map, key, value) { if (key === '__proto__') Object.defineProperty(map, key, { value, enumerable: true, writable: true, configurable: true }); else map[key] = value; }
 const fail = (message, line) => { throw new YamlError(message + (line === undefined ? '' : ' (frontmatter line ' + (line + 1) + ')')); };
 
 function resolvePlain(text) {
@@ -231,7 +235,7 @@ export function parse(text) {
           let v = null;
           if (source[i] === ':') { i++; space(); v = source[i] === ',' || source[i] === '}' ? null : value(); }
           if (Object.hasOwn(map, key)) fail('Duplicate key ' + key, startRow);
-          map[key] = v; space();
+          setKey(map, key, v); space();
           if (source[i] === ',') i++; else if (source[i] !== '}') fail('Expected , or } in a flow mapping', startRow);
         }
       }
@@ -329,7 +333,7 @@ export function parse(text) {
       const entry = keyAt(line.slice(own));
       if (!entry) return map;
       if (Object.hasOwn(map, entry.key)) fail('Duplicate key ' + entry.key, row);
-      map[entry.key] = inlineValue(entry.value, line.length - entry.value.length, indent, true);
+      setKey(map, entry.key, inlineValue(entry.value, line.length - entry.value.length, indent, true));
     }
   }
   function sequence(indent) {

@@ -47,7 +47,7 @@ const layouts = {
   // collection moves its items.
   collection_items: {
     word: 'collection item', parent: { type: 'collections', field: 'collection_id' }, first: ['title', 'collection_id', 'data'],
-    folder: (r, find) => 'Collections/' + sanitizeName(find?.('collections', r.collection_id)?.name, 'Unfiled'),
+    folder: (r, find) => 'Collections/' + guarded(sanitizeName(find?.('collections', r.collection_id)?.name, 'Unfiled')),
     name: r => text(r.title).trim() || firstText(r.data),
   },
   contact_topics: { word: 'topic', folder: () => 'Topics', name: r => r.title, first: ['title', 'status', 'priority', 'mode', 'contact_id'] },
@@ -78,8 +78,11 @@ export function sanitizeName(value, fallback = 'Untitled') {
   return name || fallback;
 }
 // A folder named secrets or node_modules is never synced or written by the
-// notebook (file-policy.mjs), so a note folder of that name gets a "_".
-function folderParts(value) { return text(value).split(/[\\/]+/).map(part => sanitizeName(part, '')).filter(Boolean).map(part => /^(secrets|node_modules)$/i.test(part) ? part + '_' : part); }
+// notebook (file-policy.mjs), so a folder of that name gets a "_". Until 6
+// October 2026 only note folders did: a collection called Secrets put its items
+// where nothing may be written, and the save that tried stopped every start.
+function guarded(part) { return /^(secrets|node_modules)$/i.test(part) ? part + '_' : part; }
+function folderParts(value) { return text(value).split(/[\\/]+/).map(part => sanitizeName(part, '')).filter(Boolean).map(guarded); }
 // Two names that are the same file on a case-insensitive file system.
 export const key = name => { const text = String(name); return (/^[\x20-\x7e]*$/.test(text) ? text : text.normalize('NFC')).toLowerCase(); };
 
@@ -135,7 +138,7 @@ export function encode(record) {
   if (bodyField) used.add(bodyField);
   for (const [field, shown] of RENAMES) if (Object.hasOwn(record_, shown) && !Object.hasOwn(record_, field)) throw new Error('A record field named ' + shown + ' would be read back as ' + field);
   const renamed = new Map(RENAMES.filter(([field, shown]) => Object.hasOwn(record_, field) && !Object.hasOwn(record_, shown)));
-  const put = field => { if (used.has(field) || !Object.hasOwn(record_, field)) return; used.add(field); front[renamed.get(field) || field] = record_[field]; };
+  const put = field => { if (used.has(field) || !Object.hasOwn(record_, field)) return; used.add(field); own(front, renamed.get(field) || field, record_[field]); };
   for (const field of l.first || []) put(field);
   for (const field of ['created_at', 'updated_at', 'tags', 'aliases', 'is_favorite', 'is_pinned', 'is_sensitive']) put(field);
   for (const field of Object.keys(record_)) put(field);
@@ -143,9 +146,19 @@ export function encode(record) {
 }
 
 const FRONTMATTER = /^---[ \t]*\r?\n(?:([\s\S]*?)\r?\n)?---[ \t]*(?:\r?\n([\s\S]*))?$/;
+const UID_LINE = /^[ \t]*["']?uid["']?[ \t]*:/m;
+// A key set as data: "__proto__" in frontmatter is a field like any other, not
+// the record's prototype (until 6 October 2026 it became one).
+export function own(object, key, value) { if (key === '__proto__') Object.defineProperty(object, key, { value, enumerable: true, writable: true, configurable: true }); else object[key] = value; return object; }
 // Reads one record file. A Markdown file without a uid in its frontmatter is
 // not a record (an owner's own page in the folder): NotARecord, not an error.
+// A page whose frontmatter does name a uid but cannot be read is a record that
+// broke (a blank line above it, its closing --- gone) and is reported as a
+// problem: until 6 October 2026 a fresh start took it for an owner's page and
+// the record was quietly gone. A byte order mark, which some Windows editors
+// write, is not part of the text (until then it made a record an owner page).
 export function decode(source, file) {
+  if (source.charCodeAt(0) === 0xfeff) source = source.slice(1);
   if (file.endsWith('.json')) {
     // Outside the system folder, a JSON file without a record in it is the
     // owner's, as a Markdown page without one is.
@@ -157,9 +170,13 @@ export function decode(source, file) {
     if (record.id !== path.basename(file).replace(/\.json$/, '') || record.type !== path.basename(path.dirname(file))) throw new Error('Record identity differs from path');
     return record;
   }
-  if (!source.startsWith('---')) throw new NotARecord('No frontmatter');
+  if (!source.startsWith('---')) {
+    const lead = /^\s*---[ \t]*\r?\n/.exec(source);
+    if (lead && UID_LINE.test(source.slice(lead[0].length).split(/\r?\n---[ \t]*(?:\r?\n|$)/)[0])) throw new Error('The frontmatter of this record does not start on the first line');
+    throw new NotARecord('No frontmatter');
+  }
   const match = source.match(FRONTMATTER);
-  if (!match) throw new NotARecord('No frontmatter');
+  if (!match) { if (/^---[ \t]*\r?\n/.test(source) && UID_LINE.test(source)) throw new Error('The frontmatter of this record is not closed by a --- line'); throw new NotARecord('No frontmatter'); }
   const front = match[1] ?? '', body = match[2] ?? '';
   // Before 2026-10-05 a note's frontmatter was JSON.
   if (front.trimStart().startsWith('{')) return contract({ ...JSON.parse(front), content: body });
@@ -169,7 +186,7 @@ export function decode(source, file) {
   if (!Object.hasOwn(data, 'uid')) throw new NotARecord('Frontmatter without a record');
   const type = typeOfWord.get(data.type) || data.type, record = {};
   const shown = new Map(RENAMES.filter(([field, name]) => Object.hasOwn(data, name) && !Object.hasOwn(data, field)).map(([field, name]) => [name, field]));
-  for (const [field, value] of Object.entries(data)) record[field === 'type' ? 'type' : shown.get(field) || field] = field === 'type' ? type : value;
+  for (const [field, value] of Object.entries(data)) own(record, field === 'type' ? 'type' : shown.get(field) || field, field === 'type' ? type : value);
   const l = Object.hasOwn(layouts, type) ? layouts[type] : null;
   if (l?.body && (body !== '' || !Object.hasOwn(data, l.body))) record[l.body] = body;
   else if (body.trim()) throw new Error('This file has text below its frontmatter that its record has no place for');
