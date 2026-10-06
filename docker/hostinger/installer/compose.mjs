@@ -1,4 +1,4 @@
-const IMAGE = 'ghcr.io/michaelzelbel/godspeed-mission-control@sha256:fb4298da94ea8c340a19afb03d6c5897f55d40ad245ffe14cb36f57fdc0096b3';
+const IMAGE = 'ghcr.io/michaelzelbel/godspeed-mission-control@sha256:2960cdbdf61553d7c69bf4f2a1524c1ceaeb9f6e78b979d538a4a58e5345bc3d';
 const CADDY = 'caddy:2.10.2-alpine@sha256:4c6e91c6ed0e2fa03efd5b44747b625fec79bc9cd06ac5235a779726618e530d';
 
 // Private per-installation configuration. No public or user-chosen setup key.
