@@ -29,3 +29,18 @@ test('installed CLI dry run leaves the entire selected workspace unchanged and r
  fs.writeFileSync(file,JSON.stringify(plan));const moved=JSON.parse(execFileSync(process.execPath,[cli,'workspace-move','apply',file],{env,encoding:'utf8',windowsHide:true,stdio:'pipe'}));assert.equal(moved.state,'verified');
  const undone=JSON.parse(execFileSync(process.execPath,[cli,'workspace-move','undo',moved.receipt_file],{env:{...env,GODSPEED_WORKSPACE:f.to},encoding:'utf8',windowsHide:true,stdio:'pipe'}));assert.equal(undone.state,'undone');
 });
+// Until 6 October 2026 the writer lock was released before the old folder was
+// renamed aside, so a save made in between went into the retired folder and
+// never into the moved copy; the same in an undo.
+test('the old folder is renamed aside while the move still holds the writer lock, and an undo likewise',t=>{
+ const f=fixture();f.store.save('notes',{title:'Fictional move source',content:'Before moving'});
+ const plan=planWorkspaceMove(f),rename=fs.renameSync,locked={};
+ t.mock.method(fs,'renameSync',(from,to)=>{for(const [name,folder] of [['move',plan.source],['undo',plan.destination]])if(from===folder&&!(name in locked))locked[name]=fs.existsSync(path.join(from,'.godspeed','workspace.lock'));return rename(from,to);});
+ const moved=moveWorkspace(plan);
+ assert.equal(locked.move,true);assert.equal(moved.state,'verified');
+ assert.equal(fs.existsSync(path.join(moved.retained_original,'.godspeed','workspace.lock')),false,'the retained original keeps no lock');
+ const undone=undoWorkspaceMove(moved.receipt_file);t.mock.restoreAll();
+ assert.equal(locked.undo,true);assert.equal(undone.state,'undone');
+ assert.equal(fs.existsSync(path.join(undone.undo_retained,'.godspeed','workspace.lock')),false);
+ assert.equal(fs.existsSync(path.join(f.root,'.godspeed','workspace.lock')),false);
+});

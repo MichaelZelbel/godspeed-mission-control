@@ -34,16 +34,21 @@ export function moveWorkspace(plan){
  const retained=plan.source+'.retained-'+id,receiptFolder=path.join(path.dirname(selected.file),'workspace-moves',id);fs.mkdirSync(receiptFolder,{recursive:true});
  const receipt={format:1,id,state:'copying',source:plan.source,destination:plan.destination,retained_original:retained,installation_file:selected.file,installation_before:fs.readFileSync(selected.file,'utf8'),installation_before_hash:selected.config_hash,backup:archive,restoration:recovered.workspace,restoration_verified:true,records:recovered.records,at:new Date().toISOString()};
  const receiptFile=path.join(receiptFolder,'move.json');atomic(receiptFile,JSON.stringify(receipt,null,2));
- let captured;
+ // The old folder is renamed aside while the writer lock is still held: until
+ // 6 October 2026 the lock was released first, and a save made in between went
+ // into the folder being retired, never into the copy. The lock file goes with
+ // the folder; the retained original keeps none.
+ let captured,target;
  store.withLock(()=>{
   captured=inventory(plan.source);fs.mkdirSync(path.dirname(plan.destination),{recursive:true});fs.cpSync(plan.source,plan.destination,{recursive:true,errorOnExist:true,force:false,filter:file=>path.relative(plan.source,file).replaceAll('\\','/')!=='.godspeed/workspace.lock'});
   if(!sameFiles(captured,inventory(plan.destination))||!sameFiles(captured,inventory(plan.source)))throw Error('The copied workspace changed or its bytes differ; both copies are retained for review');
+  if(hash(fs.readFileSync(selected.file))!==selected.config_hash)throw Error('The installation pointer changed before the move; copied files are retained');
+  target=new Store(plan.destination);if(target.problems.length||target.records.size!==store.records.size)throw Error('The copied knowledge references did not verify; retain both folders');
+  if(fs.existsSync(retained)||fs.existsSync(plan.destination+'.retained-'+id))throw Error('A retained move path already exists');
+  fs.renameSync(plan.source,retained);
+  try{fs.symlinkSync(plan.destination,plan.source,process.platform==='win32'?'junction':'dir');}catch(error){fs.renameSync(retained,plan.source);throw error;}
+  fs.rmSync(path.join(retained,'.godspeed','workspace.lock'),{force:true});
  });
- if(hash(fs.readFileSync(selected.file))!==selected.config_hash)throw Error('The installation pointer changed before the move; copied files are retained');
- const target=new Store(plan.destination);if(target.problems.length||target.records.size!==store.records.size)throw Error('The copied knowledge references did not verify; retain both folders');
- if(fs.existsSync(retained)||fs.existsSync(plan.destination+'.retained-'+id))throw Error('A retained move path already exists');
- fs.renameSync(plan.source,retained);
- try{fs.symlinkSync(plan.destination,plan.source,process.platform==='win32'?'junction':'dir');}catch(error){fs.renameSync(retained,plan.source);throw error;}
  receipt.state='alias-ready';receipt.copied_files=Object.keys(captured).length;atomic(receiptFile,JSON.stringify(receipt,null,2));
  const next={...selected.config,workspace:plan.destination};atomic(selected.file,JSON.stringify(next,null,2));receipt.installation_after_hash=hash(fs.readFileSync(selected.file));
  const index=new SearchIndex(target);try{index.rebuild();}finally{index.close();}
@@ -57,13 +62,17 @@ export function undoWorkspaceMove(receiptFile){
  const store=new Store(destination),media=selected.config.media||path.join(store.state,'media'),id=Date.now()+'-'+randomUUID().slice(0,12),archive=path.join(store.state,'backups','undo-move-'+id);backup(store,media,archive);const recovered=restoreSeparateCopy(store,archive);
  if(!recovered.verified)throw Error('The separate pre-undo restoration did not verify');
  const copy=source+'.undo-copy-'+id,retained=destination+'.retained-'+id;let captured;
- store.withLock(()=>{captured=inventory(destination);fs.cpSync(destination,copy,{recursive:true,errorOnExist:true,force:false,filter:file=>path.relative(destination,file).replaceAll('\\','/')!=='.godspeed/workspace.lock'});if(!sameFiles(captured,inventory(copy))||!sameFiles(captured,inventory(destination)))throw Error('Undo copy changed; retain all copies for review');});
- if(hash(fs.readFileSync(selected.file))!==selected.config_hash)throw Error('The installation pointer changed during undo');
- // Remove only the verified owned link, never its target or any retained copy.
- fs.unlinkSync(source);
- try{fs.renameSync(copy,source);}catch(error){fs.symlinkSync(destination,source,process.platform==='win32'?'junction':'dir');throw error;}
- try{fs.renameSync(destination,retained);}catch(error){fs.renameSync(source,copy);fs.symlinkSync(destination,source,process.platform==='win32'?'junction':'dir');throw error;}
- try{fs.symlinkSync(source,destination,process.platform==='win32'?'junction':'dir');}catch(error){fs.renameSync(retained,destination);fs.renameSync(source,copy);fs.symlinkSync(destination,source,process.platform==='win32'?'junction':'dir');throw error;}
+ // Swapped while the writer lock is still held, as in a move.
+ store.withLock(()=>{
+  captured=inventory(destination);fs.cpSync(destination,copy,{recursive:true,errorOnExist:true,force:false,filter:file=>path.relative(destination,file).replaceAll('\\','/')!=='.godspeed/workspace.lock'});if(!sameFiles(captured,inventory(copy))||!sameFiles(captured,inventory(destination)))throw Error('Undo copy changed; retain all copies for review');
+  if(hash(fs.readFileSync(selected.file))!==selected.config_hash)throw Error('The installation pointer changed during undo');
+  // Remove only the verified owned link, never its target or any retained copy.
+  fs.unlinkSync(source);
+  try{fs.renameSync(copy,source);}catch(error){fs.symlinkSync(destination,source,process.platform==='win32'?'junction':'dir');throw error;}
+  try{fs.renameSync(destination,retained);}catch(error){fs.renameSync(source,copy);fs.symlinkSync(destination,source,process.platform==='win32'?'junction':'dir');throw error;}
+  try{fs.symlinkSync(source,destination,process.platform==='win32'?'junction':'dir');}catch(error){fs.renameSync(retained,destination);fs.renameSync(source,copy);fs.symlinkSync(destination,source,process.platform==='win32'?'junction':'dir');throw error;}
+  fs.rmSync(path.join(retained,'.godspeed','workspace.lock'),{force:true});
+ });
  atomic(selected.file,JSON.stringify({...selected.config,workspace:source},null,2));
  const current=new Store(source),index=new SearchIndex(current);try{index.rebuild();}finally{index.close();}
  if(current.problems.length||current.records.size!==recovered.records||normalized(fs.realpathSync(destination))!==normalized(source))throw Error('The undone workspace failed its final check; retained copies remain available');
