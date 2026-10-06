@@ -1,13 +1,16 @@
 import {kinds} from './scheduler.mjs';
+import {nextCalendarRun} from './calendar.mjs';
+import {dailyTime} from '../native-scheduler.mjs';
 
 // Controls edit schedule choices only. Execution authority and receipts have
 // their own operations and cannot be supplied through Pause or Enable.
 export async function controlRoutine(store,input,{enable=false,now=Date.now()}={}){
  if(!input||typeof input!=='object'||Array.isArray(input))throw Error('Choose a routine');
- const allowed=enable?['kind','interval_ms','title','discovery']:['id','paused'];
+ const allowed=enable?['kind','interval_ms','at','title','discovery']:['id','paused'];
  if(Object.keys(input).some(key=>!allowed.includes(key)))throw Error('Routine controls cannot change execution permission');
  if(enable){
-  if(!kinds.includes(input.kind)||!Number.isFinite(input.interval_ms)||input.interval_ms<60000)throw Error('Choose a supported routine and interval of at least a minute');
+  if(input.at!==undefined&&!dailyTime(input.at))throw Error('Choose a daily time as hours and minutes, like 05:16');
+  if(!kinds.includes(input.kind)||input.at===undefined&&(!Number.isFinite(input.interval_ms)||input.interval_ms<60000))throw Error('Choose a supported routine and a daily time or an interval of at least a minute');
   if(input.title!==undefined&&typeof input.title!=='string')throw Error('Choose a routine title');
   if(input.discovery!==undefined&&(input.kind!=='radar'||typeof input.discovery!=='boolean'))throw Error('Choose whether radar may discover public sources');
  }else if(typeof input.id!=='string'||typeof input.paused!=='boolean')throw Error('Choose whether to pause the routine');
@@ -19,7 +22,9 @@ export async function controlRoutine(store,input,{enable=false,now=Date.now()}={
   if(!settings.owner||old&&old.owner!==settings.owner)throw Error('The routine owner differs from the installation owner');
   if(!enable&&!old)throw Error('Routine not found');
   const resume=enable||input.paused===false;
-  let changes=enable?{id,kind:input.kind,interval_ms:input.interval_ms,paused:false,...(!old?{owner:settings.owner,title:input.title||input.kind,state:'pending',next_run:new Date(now).toISOString(),retry_count:0}:{}),...(input.title!==undefined?{title:input.title}:{}),...(input.kind==='radar'&&(input.discovery!==undefined||!old)?{discovery:input.discovery!==false}:{})}:{paused:input.paused};
+  // A daily time runs once a day at that time in the owner's timezone (jobs/calendar.mjs).
+  const calendar=input.at!==undefined?{time:dailyTime(input.at).time}:null;
+  let changes=enable?{id,kind:input.kind,...(calendar?{calendar,interval_ms:86400000}:{interval_ms:input.interval_ms,calendar:null}),paused:false,...(!old?{owner:settings.owner,title:input.title||input.kind,state:'pending',next_run:calendar?nextCalendarRun({calendar},settings.timezone,now):new Date(now).toISOString(),retry_count:0}:calendar?{next_run:nextCalendarRun({calendar},settings.timezone,now)}:{}),...(input.title!==undefined?{title:input.title}:{}),...(input.kind==='radar'&&(input.discovery!==undefined||!old)?{discovery:input.discovery!==false}:{})}:{paused:input.paused};
   if(old&&resume){
    const receipts=store.list('job_receipts').filter(r=>r.job_id===old.id);
    const failed=old.state==='failed'||old.state==='needs_review';
