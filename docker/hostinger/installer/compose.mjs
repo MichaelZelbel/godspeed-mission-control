@@ -2,14 +2,22 @@ const IMAGE = 'ghcr.io/michaelzelbel/godspeed-mission-control@sha256:351e8a1697b
 const CADDY = 'caddy:2.10.2-alpine@sha256:4c6e91c6ed0e2fa03efd5b44747b625fec79bc9cd06ac5235a779726618e530d';
 
 // Private per-installation configuration. No public or user-chosen setup key.
+// Since 6 October 2026 the server makes its own setup code on first start (kept
+// in its data volume) and hands it to the coordinator with the authenticated
+// callback, so this file, which Hostinger fetches and keeps, carries none. An
+// installation started before then still has its code written here.
 export function composeFor(job, { origin, hostnameFile = '/etc/hostname', testing = false, coordinatorProxy }) {
-  for (const value of [job.id, job.bootstrap, job.callback]) if (!/^[a-f0-9]{64}$/.test(value)) throw new Error('Invalid installation credential');
+  for (const value of [job.id, job.callback, ...(job.bootstrap ? [job.bootstrap] : [])]) if (!/^[a-f0-9]{64}$/.test(value)) throw new Error('Invalid installation credential');
   const endpoint = new URL(origin);
   if (endpoint.protocol !== 'https:' && !testing) throw new Error('Installation coordinator requires HTTPS');
   if (!/^[a-zA-Z0-9._:/-]+$/.test(hostnameFile)) throw new Error('Invalid hostname file');
   const hostnameCode = `const fs=require('fs');let h=fs.readFileSync('/run/godspeed-vps-hostname','utf8').trim();if(/^srv[0-9]+$/.test(h))h+='.hstgr.cloud';if(!/^srv[0-9]+\\.hstgr\\.cloud$/.test(h)${testing ? "&&h!=='localhost'" : ''})throw Error('Hostinger server address could not be detected');`;
   const callbackTarget = coordinatorProxy ? `h===${JSON.stringify(endpoint.hostname)}?${JSON.stringify("http://host.docker.internal:" + coordinatorProxy.split(":")[1] + endpoint.pathname + "/api/ready/" + job.id)}:${JSON.stringify(origin + "/api/ready/" + job.id)}` : JSON.stringify(origin + "/api/ready/" + job.id);
-  const callbackCode = `${hostnameCode}async function ready(){for(let i=0;i<180;i++){try{const r=await fetch('http://127.0.0.1:47831/health',{signal:AbortSignal.timeout(3000)});if(r.ok){const c=await fetch(${callbackTarget},{method:'POST',headers:{'content-type':'application/json',authorization:'Bearer '+process.env.GODSPEED_INSTALL_CALLBACK},body:JSON.stringify({hostname:h}),signal:AbortSignal.timeout(10000)});if(c.ok)return;}}catch{}await new Promise(r=>setTimeout(r,5000));}console.error('Automatic installation handoff could not reach the installation page');}ready();`;
+  const callbackCode = `${hostnameCode}async function ready(){for(let i=0;i<180;i++){try{const r=await fetch('http://127.0.0.1:47831/health',{signal:AbortSignal.timeout(3000)});if(r.ok){const c=await fetch(${callbackTarget},{method:'POST',headers:{'content-type':'application/json',authorization:'Bearer '+process.env.GODSPEED_INSTALL_CALLBACK},body:JSON.stringify({hostname:h,setup:process.env.GODSPEED_ACCESS_TOKEN}),signal:AbortSignal.timeout(10000)});if(c.ok)return;}}catch{}await new Promise(r=>setTimeout(r,5000));}console.error('Automatic installation handoff could not reach the installation page');}ready();`;
+  // The server's own setup code, made once on first start in its data volume
+  // (the volume survives restarts and updates). $$ is a literal $ for Compose.
+  const setupFile = '/opt/data/full-candidate/.install-setup-code';
+  const setupScript = `if [ ! -s ${setupFile} ]; then (umask 077; node -e 'process.stdout.write(require("crypto").randomBytes(32).toString("hex"))' > ${setupFile}); fi; GODSPEED_ACCESS_TOKEN=$$(cat ${setupFile}); export GODSPEED_ACCESS_TOKEN; `;
   if (coordinatorProxy && !/^host\.docker\.internal:[0-9]{2,5}$/.test(coordinatorProxy)) throw new Error('Invalid coordinator proxy');
   const selfProxy = coordinatorProxy ? `if [ "$$h" = ${shellQuote(endpoint.hostname)} ]; then printf '%s\\n' "$$h {" '  handle /godspeed-install* {' '    reverse_proxy ${coordinatorProxy}' '  }' '  handle {' '    reverse_proxy godspeed:47831' '  }' '}' > /tmp/godspeed-Caddyfile; exec caddy run --adapter caddyfile --config /tmp/godspeed-Caddyfile; fi; ` : '';
   const hostScript = `h=$$(cat /run/godspeed-vps-hostname | tr -d '\\r\\n'); printf '%s' "$$h" | grep -Eq '^srv[0-9]+(\\.hstgr\\.cloud)?$$${testing ? '|^localhost$$' : ''}' || { echo 'Hostinger server address could not be detected' >&2; exit 1; }; case "$$h" in *.hstgr.cloud${testing ? '|localhost' : ''}) ;; *) h="$$h.hstgr.cloud";; esac; ${selfProxy}exec caddy reverse-proxy --from "$$h" --to godspeed:47831`;
@@ -19,13 +27,12 @@ services:
     image: ${IMAGE}
     restart: unless-stopped
     environment:
-      GODSPEED_ACCESS_TOKEN: ${JSON.stringify(job.bootstrap)}
-      GODSPEED_INSTALL_CALLBACK: ${JSON.stringify(job.callback)}
+${job.bootstrap ? `      GODSPEED_ACCESS_TOKEN: ${JSON.stringify(job.bootstrap)}\n` : ''}      GODSPEED_INSTALL_CALLBACK: ${JSON.stringify(job.callback)}
       GODSPEED_DEVICE: vps
       GODSPEED_COMPUTER: "off"
     entrypoint: ["/bin/sh", "-ec"]
     command:
-      - ${JSON.stringify(`node -e ${shellQuote(callbackCode)} & exec /opt/godspeed/kit/docker/full-candidate/entrypoint.sh`)}
+      - ${JSON.stringify(`${job.bootstrap ? '' : setupScript}node -e ${shellQuote(callbackCode)} & exec /opt/godspeed/kit/docker/full-candidate/entrypoint.sh`)}
     volumes:
       - godspeed-data:/opt/data/full-candidate
       - ${hostnameFile}:/run/godspeed-vps-hostname:ro
