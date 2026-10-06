@@ -156,6 +156,14 @@ answers() {
   return 1
 }
 
+# A re-run keeps the settings the installation ran with until now, which start.mjs
+# holds: above all the machine's name, since the one named owner runs the routines.
+# Until 6 October 2026 a re-run without GODSPEED_DEVICE renamed a server called
+# "production" to "local", and every routine it owned stopped running.
+previous_setting() {
+  [ -f "$state/start.mjs" ] || return 0
+  "$node" -e 'const t=require("fs").readFileSync(process.argv[1],"utf8"),m=t.match(new RegExp("\""+process.argv[2]+"\":(\"(?:[^\"\\\\]|\\\\.)*\")"));if(m)process.stdout.write(JSON.parse(m[1]))' "$state/start.mjs" "$1" 2>/dev/null || true
+}
 # Lets a test load the functions above without installing anything.
 if [ "${GODSPEED_INSTALLER_FUNCTIONS_ONLY:-}" = 1 ]; then return 0 2>/dev/null || exit 0; fi
 
@@ -196,6 +204,14 @@ if [ "${GODSPEED_SKIP_UI:-}" != 1 ] && [ ! -f "$version/notebook/ui/.godspeed-bu
   : > "$version/notebook/ui/.godspeed-built"
 fi
 
+# What this installation ran with until now stays, unless this run names it (previous_setting).
+for setting in GODSPEED_DEVICE GODSPEED_PORT GODSPEED_MEDIA_ROOT; do
+  if [ -z "${!setting:-}" ]; then
+    value=$(previous_setting "$setting")
+    if [ -n "$value" ]; then export "$setting=$value"; fi
+  fi
+done
+if [ -z "${GODSPEED_INTEGRATED_BESIDE:-}" ] && [ "$(previous_setting HERMES_HOME)" = "$state/hermes" ]; then GODSPEED_INTEGRATED_BESIDE=1; fi
 export GODSPEED_WORKSPACE="$root" GODSPEED_ORIGINAL_RUNTIME=on
 export GODSPEED_PORT=${GODSPEED_PORT:-47831} GODSPEED_BIND=127.0.0.1
 # The machine's name in the notebook; the one named owner runs the routines.

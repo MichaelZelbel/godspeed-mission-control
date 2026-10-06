@@ -115,3 +115,14 @@ test('without a pinned version the installer stops before it changes anything',o
   assert.equal(result.status,1);
   assert.match(result.stderr,/Run the published installer/);
 });
+
+test('a re-run keeps the machine name and settings the last installation ran with',options,()=>{
+  const state=scratch('rerun'),node=slash(process.execPath);
+  // start.mjs exactly as the installer before 6 October 2026 wrote it.
+  const env={GODSPEED_WORKSPACE:'/root/godspeed',GODSPEED_ORIGINAL_RUNTIME:'on',GODSPEED_PORT:'47900',GODSPEED_BIND:'127.0.0.1',HERMES_HOME:state+'/hermes',GODSPEED_DEVICE:'production',GODSPEED_MEDIA_ROOT:'/srv/media "x"'};
+  fs.writeFileSync(path.join(state,'start.mjs'),`import {spawn} from 'node:child_process';const p=spawn("/usr/bin/node",["${state}/source/notebook/scripts/supervise.mjs"],{stdio:'inherit',env:{...process.env,...${JSON.stringify(env)}}});`);
+  const read=sh('for n in GODSPEED_DEVICE GODSPEED_PORT GODSPEED_MEDIA_ROOT HERMES_HOME GODSPEED_MISSING; do printf "%s=[%s]\n" "$n" "$(previous_setting "$n")"; done',{state,node});
+  assert.equal(read.status,0,read.err);
+  assert.equal(read.out,`GODSPEED_DEVICE=[production]\nGODSPEED_PORT=[47900]\nGODSPEED_MEDIA_ROOT=[/srv/media "x"]\nHERMES_HOME=[${state}/hermes]\nGODSPEED_MISSING=[]\n`);
+  assert.equal(sh('previous_setting GODSPEED_DEVICE',{state:scratch('fresh'),node}).out,'','a first installation has nothing to keep');
+});

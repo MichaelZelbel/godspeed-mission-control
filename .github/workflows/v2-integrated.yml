@@ -17,6 +17,18 @@ on:
 permissions:
   contents: read
 jobs:
+  native-linux:
+    # The Linux installer for real on a fresh Ubuntu with systemd and sudo: a first install,
+    # an upgrade that keeps the machine's name, and a restart after the notebook is killed
+    # (notebook/test/native-install-linux.sh). Until 6 October 2026 no run ever did this.
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install, upgrade and recover
+        run: bash notebook/test/native-install-linux.sh
   image:
     runs-on: ubuntu-latest
     timeout-minutes: 40
