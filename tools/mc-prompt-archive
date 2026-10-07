@@ -241,7 +241,12 @@ SECRET_PATTERNS = [
 
 # Something that still looks like a credential after the passes above. Anything matching
 # this is not cleaned, it is dropped: a half-scrubbed secret is a stored secret.
-STILL_RISKY = re.compile(r"[A-Za-z0-9+/_\-]{40,}={0,2}")
+# The run must be CONTIGUOUS with no "/" in it. The class used to include "/", so a GitHub
+# commit URL or a deep repo path (mixed case, digits, slashes) was read as one 40+ blob and
+# the whole prompt was dropped over it, losing the line it was quoted in (2026-10-07, a
+# commit URL Michael pasted to ask about). A real secret is one unbroken token; a path is
+# several, joined by slashes, so the blob between separators is what has to look secret.
+STILL_RISKY = re.compile(r"[A-Za-z0-9+_\-]{40,}={0,2}")
 
 
 def redact_terms():
@@ -258,8 +263,10 @@ def redact_terms():
 
 
 def _looks_credential(text):
-    """A long run of mixed case and digits is a credential; a long path or a long word
-    is not. Requiring all three classes is what stops it eating ordinary prose."""
+    """A long run of mixed case and digits is a credential; a long path, URL or word is not.
+    The run is taken between slashes (see STILL_RISKY), so a commit URL or a repo path is not
+    mistaken for a key and the whole prompt dropped. Requiring all three character classes in
+    one unbroken blob is what stops it eating ordinary prose."""
     for m in STILL_RISKY.finditer(text):
         chunk = m.group(0)
         if (any(c.isdigit() for c in chunk) and any(c.islower() for c in chunk)

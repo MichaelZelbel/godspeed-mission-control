@@ -855,6 +855,34 @@ echo "$A66" | grep -q "AcmeCorp" \
   || ok "66 rescrub cleans the project field of already-stored rows"
 rm -f "$W/prompts/archive/"*.jsonl
 
+# 67. The last-resort guard dropped a WHOLE prompt when it saw a 40+ character run that still
+#     looked like a credential, but its character class included "/", so an ordinary GitHub
+#     commit URL or a deep repo path (mixed case, digits, slashes) was read as one blob and the
+#     prompt was lost with the line it sat in (2026-10-07). A URL or path must be kept whole;
+#     a real unbroken secret must still be dropped.
+P67="$("$PY" - "$ARC" <<'PYEOF'
+import importlib.machinery, importlib.util, sys
+l = importlib.machinery.SourceFileLoader("pa", sys.argv[1])
+s = importlib.util.spec_from_loader("pa", l); m = importlib.util.module_from_spec(s); l.exec_module(m)
+keep = [
+    "Look at https://github.com/MichaelZelbel/godspeed-mission-control/commit/79bf27f and tell me",
+    "the file is at C:/Users/Besitzer/AppData/Local/Temp/claude/c--godspeed/2d972171-1ea6-403b/notes.md ok",
+    "see /home/michael/projects/MissionControl/notebook/core/goal-loop.mjs line 80",
+]
+for text in keep:
+    if m.scrub(text, [])[0] != text:
+        print("FAIL a URL/path prompt was changed or dropped:", text[:46], "->", str(m.scrub(text, [])[0])[:60])
+    if m.scrub_answer(text, []) != text:
+        print("FAIL a URL/path line was cut from an answer:", text[:46])
+# A real long secret is one unbroken token, so it must still be dropped whole.
+secret = "Xq7" + "ZmP2vLd8RtY4wNb1CfH6jGk3sVe9AuQ5oIrTzB0xM"
+if m.scrub("use this value " + secret + " now", [])[0] is not None:
+    print("FAIL a real long secret was no longer dropped")
+PYEOF
+)"
+[ -z "$P67" ] && ok "67 a GitHub URL or deep path is kept whole, and a real long secret still drops" \
+  || bad "67 the still-risky guard mis-fired on a URL/path, or stopped catching a secret" "$P67"
+
 echo
 echo "  $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ] || exit 1
