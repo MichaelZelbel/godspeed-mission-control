@@ -53,13 +53,15 @@ function noteChange(base,shown,structured){
     }
   }
   // Fields: which ones may not have changed meanwhile (stale), and tags, which are merged.
-  const fields={},stale=[],asked=structured.note_changes,same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
+  const fields={},stale=[],asked=structured.note_changes,same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);let shownTags=[];
   if(asked!==undefined&&asked!==null){
     if(typeof asked!=='object'||Array.isArray(asked)||Object.keys(asked).some(k=>!['title','tags','metadata','is_favorite'].includes(k)))throw new Error('Unknown note field');
     for(const key of ['title','is_favorite'])if(asked[key]!==undefined&&!same(asked[key],base[key])){fields[key]=asked[key];stale.push(key);}
     if(asked.tags!==undefined){
       if(!Array.isArray(asked.tags)||asked.tags.some(t=>typeof t!=='string'))throw new Error('Tags must be a list of words');
-      const tags=[...new Set(asked.tags.map(t=>t.trim()).filter(Boolean))];if(!same([...tags].sort(),[...(base.tags||[])].sort()))fields.tags=tags;
+      // Read against the tags the model was shown: one it never saw, it cannot take away.
+      const tags=[...new Set(asked.tags.map(t=>t.trim()).filter(Boolean))],seen=Array.isArray(shown.tags)?shown.tags:[];
+      if(!same([...tags].sort(),[...seen].sort())){fields.tags=tags;shownTags=seen;}
     }
     if(asked.metadata!==undefined){
       if(!asked.metadata||typeof asked.metadata!=='object'||Array.isArray(asked.metadata))throw new Error('Unknown note field');
@@ -68,7 +70,7 @@ function noteChange(base,shown,structured){
       if(Object.keys(metadata).length){fields.metadata=metadata;stale.push(...Object.keys(metadata).map(k=>'metadata.'+k));}
     }
   }
-  return {content:edited&&content!==base.content?content:undefined,fields,stale};
+  return {content:edited&&content!==base.content?content:undefined,fields,stale,shownTags};
 }
 // The note's tags now, less what the model took away from the tags it was given, plus what it added.
 const mergedTags=(now=[],before=[],after=[])=>[...new Set([...now.filter(t=>!before.includes(t)||after.includes(t)),...after.filter(t=>!before.includes(t))])];
@@ -434,7 +436,7 @@ export class Domains {
           const now=this.store.get('notes',base.id);if(!now)throw new Error('Current note missing');
           const value={id:base.id,...change.fields,...(change.content!==undefined?{content:change.content}:{})};
           // Tags are merged as a set and metadata field by field, onto the note as it is now.
-          if(value.tags)value.tags=mergedTags(now.tags,base.tags,value.tags);
+          if(value.tags)value.tags=mergedTags(now.tags,change.shownTags,value.tags);
           if(value.metadata)value.metadata={...now.metadata,...value.metadata,...(Array.isArray(now.metadata?.ai_fields)?{ai_fields:now.metadata.ai_fields.filter(k=>!(k in change.fields.metadata))}:{})};
           // Refused, with both versions kept for review: the screen showed
           // another version (its content hash, or else its saved time) than
