@@ -737,14 +737,18 @@ export class FileSync {
   }
   // After the push: the reviews of the merge first, then the owner's branch
   // moves to the pushed commit. A push the process did not live to see
-  // through is completed on the next round, or dropped when it never arrived.
-  finishPush(remoteRef,pushed=false){
-    const file=path.join(this.store.state,'sync-pushing.json'),plan=readJson(file);if(!plan)return;
+  // through, or that Git reported as failed, is completed once the other side
+  // shows it arrived, or dropped once it shows it did not. While the other
+  // side cannot be read (`fetched` false) the plan waits. Returns whether the
+  // push was completed.
+  finishPush(remoteRef,{pushed=false,fetched=true}={}){
+    const file=path.join(this.store.state,'sync-pushing.json'),plan=readJson(file);if(!plan)return false;
+    let arrived=pushed;if(!arrived)try{arrived=this.contains(plan.target,this.git(['rev-parse',remoteRef]));}catch{}
+    if(!arrived&&!fetched)return false;
     try{
-      let arrived=pushed;if(!arrived)try{arrived=this.contains(plan.target,this.git(['rev-parse',remoteRef]));}catch{}
-      if(!arrived)return;
+      if(!arrived)return false;
       for(const review of plan.reviews)this.saveReview(review);
-      this.moveBranch(plan);
+      this.moveBranch(plan);return true;
     }finally{fs.rmSync(file,{force:true});}
   }
   moveBranch({head,local,target,lines}){
@@ -831,14 +835,23 @@ export class FileSync {
       const remoteRef=this.remote+'/'+this.branch,pushing=path.join(this.store.state,'sync-pushing.json');
       // Offline nothing is committed: the edits wait as files, which a plain
       // `git pull --rebase` of the owner's leaves alone.
-      const plan=this.store.withLock(()=>{this.folderReady();this.finishPush(remoteRef);return networkError?null:this.planFolder(remoteRef);});
+      const plan=this.store.withLock(()=>{this.folderReady();this.finishPush(remoteRef,{fetched:!networkError});return networkError?null:this.planFolder(remoteRef);});
       if(networkError)throw networkError;
       if(plan){
         // Exactly the commit checked under the lock goes out, with whatever
         // the owner has unpushed beneath it, through the owner's push checks.
         atomic(pushing,JSON.stringify(plan));
-        try{this.git(['push',this.remote,plan.target+':refs/heads/'+this.branch],undefined,{timeout:600000});}catch(error){fs.rmSync(pushing,{force:true});throw error;}
-        this.lockSoon(()=>this.finishPush(remoteRef,true));
+        // A push reported as failed may still have arrived (the connection
+        // dropped after the remote took it, a time limit). Until 7 October
+        // 2026 the plan was dropped at once, and with it the reviews of the
+        // merge: the other machine's version of a note both changed then
+        // lived only in Git's history. The other side is read again instead.
+        try{this.git(['push',this.remote,plan.target+':refs/heads/'+this.branch],undefined,{timeout:600000});}
+        catch(error){
+          let fetched=false;try{this.git(['fetch','--no-tags',this.remote,this.branch],undefined,{timeout:120000});fetched=true;}catch{}
+          if(!this.lockSoon(()=>this.finishPush(remoteRef,{fetched})))throw error;
+        }
+        this.lockSoon(()=>this.finishPush(remoteRef,{pushed:true}));
       }
       const pending=this.folderChanges().length;
       this.last={state:pending?'pending':'synced',at:new Date().toISOString(),pending,...(pending?{detail:'New local edits will upload on the next synchronization cycle.'}:{})};
