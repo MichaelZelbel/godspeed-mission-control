@@ -4,6 +4,16 @@ import {topicDefinitions,topicToolNames,topicTool} from './topic-tools.mjs';
 import {assistantMutationContext,assertAssistantTable} from '../core/assistant-mutations.mjs';
 import {memoryDefinitions,memoryToolNames,memoryTool,searchNotes,relatedTo,readFile} from './memory-tools.mjs';
 const schema={type:'object',properties:{},additionalProperties:true};
+// The record types list_records and search_knowledge may return to an assistant:
+// the owner's own content, each a type whose visibility rule (visibility.mjs)
+// actually hides records about a hidden person, a private section or a sensitive
+// subject. Bookkeeping and link types (record_history, notifications,
+// review_queue, contact_topic_events, note_connections, wiki_revisions,
+// receipts, embeddings, conversation_messages, settings, jobs and the control
+// tables) have no such rule, so visibleRows returns them all, and until
+// 7 October 2026 a hidden note's content came back inside record_history.snapshot
+// or notifications.body. Topics, facts and reviews have their own filtered tools.
+export const listableTypes=new Set(['notes','note_folders','contacts','contact_groups','contact_group_memberships','contact_relationships','entities','claims','fact_slots','profile_categories','moments','moment_participants','moment_entities','collections','collection_items','collection_item_folders','wiki_pages','comments','goals','work_items','deadlines','habits','forecasts','journal','coach_talks','health_observations','action_items','contact_topics','weekly_reviews','media_analysis']);
 const definitions=[
   ...topicDefinitions,
   ...memoryDefinitions,
@@ -83,9 +93,9 @@ export async function mcp(input,{store,query,index,domains,scopes,delegated=fals
         }
       }
       else if(name==='retrieve_memory')value=await domains.invoke('retrieve-memory',a);
-      else if(name==='search_knowledge'){value=query.withSnapshot(()=>index.search(a.query).filter(r=>r.type!=='workspace_file'&&(!scopes||scopes.includes(toolScope('list_records',{type:r.type})))&&visibleRows(query,r.type).some(v=>v.id===r.id)));}
+      else if(name==='search_knowledge'){value=query.withSnapshot(()=>index.search(a.query).filter(r=>listableTypes.has(r.type)&&(!scopes||scopes.includes(toolScope('list_records',{type:r.type})))&&visibleRows(query,r.type).some(v=>v.id===r.id)));}
       // Hidden records leave first, then the limit counts (until 6 October 2026 five hidden notes ahead of three visible ones made a limit of 5 return none).
-      else if(name==='list_records'){const allowed=new Set(visibleRows(query,a.type).map(r=>r.id));value=query.execute({table:a.type,filters:a.filters||[]}).data.filter(r=>allowed.has(r.id)).slice(0,Math.max(0,Number(a.limit)||100));if(a.type==='notes')seen(value);}
+      else if(name==='list_records'){if(!listableTypes.has(String(a.type)))throw Error('list_records reads the owner\'s own content, not '+a.type+' records. Use the tool made for them.');const allowed=new Set(visibleRows(query,a.type).map(r=>r.id));value=query.execute({table:a.type,filters:a.filters||[]}).data.filter(r=>allowed.has(r.id)).slice(0,Math.max(0,Number(a.limit)||100));if(a.type==='notes')seen(value);}
       else if(name==='save_record')value=query.execute({table:a.type,operation:a.value.id?'upsert':'insert',values:a.value,expected:a.value.id?{[a.value.id]:a.expected_hash}:{},assistant:true}).data;
       else if(name==='capture_note'){const captured=await domains.invoke('quick-capture',a);value={...captured,id:captured.note.id,title:captured.note.title,folder_path:captured.note.folder_path||'',related:relatedTo({query,index},captured.note)};seen([owner.get('notes',captured.note.id)]);}
       else if(name==='personal_operation')value=await domains.invoke('personal-operation',a);
