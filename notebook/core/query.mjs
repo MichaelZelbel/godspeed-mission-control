@@ -133,6 +133,12 @@ const shaped=(table,r)=>({...(defaults[table]||{}),...r,...table==='contact_grou
 // value, for the profile views and for writing a fact. A claim without a start
 // (Menerio's undated imports) holds from always. Until 6 October 2026 writing a
 // fact read such a claim as never current, so a new value left two current ones.
+// The person a group member is: someone Menerio merged into another is the
+// one they went into.
+function memberOf(people){
+  const byId=new Map(people.map(c=>[c.id,c])),byUid=new Map(people.map(c=>[c.uid,c]));
+  return id=>{let person=byId.get(id);for(let hops=0;person?.merged_into&&hops<5;hops++)person=byId.get(person.merged_into)||byUid.get(person.merged_into);return person?.id||id;};
+}
 export const claimHolds=(claim,day)=>(!claim.valid_from||claim.valid_from<=day)&&(!claim.valid_to||claim.valid_to>day);
 export class QueryService {
   constructor(store) { this.store = store; }
@@ -190,11 +196,11 @@ export class QueryService {
     // A membership of a person merged into another belongs to the person they
     // went into: shown as theirs, or not at all when they are a member already.
     // The real "Dream 100" group showed 100 members, one of them twice.
+    // Two merged duplicates in one group show as that person once.
     if(table==='contact_group_memberships'){
-      const people=new Map(list('contacts').map(c=>[c.id,c])),byUid=new Map(list('contacts').map(c=>[c.uid,c])),rows=list(table);
-      const target=id=>{let person=people.get(id);for(let hops=0;person?.merged_into&&hops<5;hops++)person=people.get(person.merged_into)||byUid.get(person.merged_into);return person?.id||id;};
-      const members=new Set(rows.filter(m=>!people.get(m.contact_id)?.merged_into).map(m=>m.group_id+'/'+m.contact_id));
-      return rows.flatMap(r=>{const base={...defaults.contact_group_memberships,...r,last_movement_at:r.last_movement_at||r.created_at};if(!people.get(r.contact_id)?.merged_into)return [base];const to=target(r.contact_id);return members.has(r.group_id+'/'+to)?[]:[{...base,contact_id:to}];});
+      const people=new Map(list('contacts').map(c=>[c.id,c])),target=memberOf(list('contacts')),rows=list(table);
+      const members=new Set(rows.filter(m=>!people.get(m.contact_id)?.merged_into).map(m=>m.group_id+'/'+m.contact_id)),shown=new Set();
+      return rows.flatMap(r=>{const base={...defaults.contact_group_memberships,...r,last_movement_at:r.last_movement_at||r.created_at};if(!people.get(r.contact_id)?.merged_into)return [base];const to=target(r.contact_id),key=r.group_id+'/'+to;if(members.has(key)||shown.has(key))return [];shown.add(key);return [{...base,contact_id:to}];});
     }
     if(table==='collection_items')return list(table).map(r=>{const collection=get('collections',r.collection_id),primary=collection?.field_schema?.find(f=>f.primary),title=primary?r.data?.[primary.key]:r.title;return {...defaults.collection_items,...r,title:title==null?'Untitled':String(title)};});
     return [...list(table),...(['coach_talks','habits','journal','health_episodes','medications'].includes(table)?nativeRows(this.store,table):[])].map(r => shaped(table, r));
@@ -335,7 +341,7 @@ export class QueryService {
           }
           record.references = this.references(table, record); return record;
         });
-        const gone=operation==='delete'&&table==='contacts'?this.personBelongings(changed.map(c=>c.id)):[];
+        const gone=operation==='delete'&&table==='contacts'?this.personBelongings(changed.map(c=>c.id)):operation==='delete'&&table==='contact_group_memberships'?this.membershipTwins(changed):[];
         this.store.commit([...changed,...gone]); return table==='moments'?this.rows(table).filter(r=>changed.some(c=>c.id===r.id||c.moment_id===r.id)):changed;
       });
     }
@@ -372,6 +378,14 @@ export class QueryService {
   // settings. Notes and timeline events that mention them stay. Until
   // 6 October 2026 only the person went, and their topics and facts stayed
   // behind pointing at no one.
+  // Every other membership that shows as one being removed: a merged
+  // duplicate's membership of the same group shows as the person they went
+  // into once that person's own is gone. Until 7 October 2026 removing
+  // someone from a group brought them back as their duplicate.
+  membershipTwins(removed){
+    const person=memberOf(this.store.list('contacts')),ids=new Set(removed.map(r=>r.id)),keys=new Set(removed.map(r=>r.group_id+'/'+person(r.contact_id))),now=new Date().toISOString();
+    return this.store.list('contact_group_memberships').filter(m=>!ids.has(m.id)&&keys.has(m.group_id+'/'+person(m.contact_id))).map(m=>this.store.prepare(m.type,{removed_at:now},m));
+  }
   personBelongings(contactIds){
     const ids=new Set(contactIds),now=new Date().toISOString(),out=[],live=type=>this.store.list(type).filter(r=>!r.removed_at);
     const of=r=>ids.has(r.contact_id)||ids.has(r.person_id);
