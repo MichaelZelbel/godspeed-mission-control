@@ -721,6 +721,64 @@ else
 fi
 rm -rf "$W/prompts/machine-runs"
 
+# 63. A Telegram bot token, and the other common token shapes, are removed by shape.
+#     The real case: a bot token sat in prompts/archive and prompts/machine-runs from July to
+#     7 October 2026, because its 35 characters after the colon are under STILL_RISKY's 40 and
+#     "bot<digits>" in a URL has no word boundary before the digits. The fixtures are glued
+#     together at run time, so this file holds no token-shaped string for a scanner to flag,
+#     and rescrub must clean the machine-runs drawer as well as the archive.
+P63="$("$PY" - "$ARC" "$W" <<'PYEOF'
+import importlib.machinery, importlib.util, io, json, os, subprocess, sys
+l = importlib.machinery.SourceFileLoader("pa", sys.argv[1])
+s = importlib.util.spec_from_loader("pa", l); m = importlib.util.module_from_spec(s); l.exec_module(m)
+r = lambda n, a="Ab3": (a * 40)[:n]
+tg = "8123456789" + ":" + "AA" + r(33)
+cases = [  # (what was typed, the part that must not survive)
+    ("the bot token is " + tg, tg),
+    ("curl https://api.telegram.org/bot" + tg + "/sendMessage", tg),
+    ("pat " + "github" + "_pat_" + r(40), r(40)),
+    ("gitlab " + "gl" + "pat-" + r(20), r(20)),
+    ("stripe " + "sk" + "_live_" + r(24), r(24)),
+    ("hook " + "wh" + "sec_" + r(24), r(24)),
+    ("npm " + "npm" + "_" + r(36), r(36)),
+    ("hugging " + "hf" + "_" + r(34), r(34)),
+    ("groq " + "gsk" + "_" + r(32), r(32)),
+    ("xai " + "xai" + "-" + r(32), r(32)),
+    ("tailscale " + "tskey" + "-auth-" + r(30), r(30)),
+    ("aws " + "AS" + "IA" + "QWERTYUIOPASDFGH", "QWERTYUIOPASDFGH"),
+    ("sendgrid " + "SG" + "." + r(22) + "." + r(30), r(30)),
+    ("google " + "ya" + "29." + r(30), r(30)),
+    ("discord " + "M" + r(25) + "." + r(6) + "." + r(30), r(30)),
+    ("post to https://hooks.slack.com/services/" + "T0" + r(8) + "/B0" + r(8) + "/" + r(24), r(24)),
+    ("post to https://discord.com/api/webhooks/" + "123456789012345678/" + r(30), r(30)),
+    ("db postgres://admin:" + "Sup3rSecretPw" + "@db.example.org/app", "Sup3rSecretPw"),
+]
+for text, secret in cases:
+    out = m.scrub(text, [])[0] or ""
+    if secret in out:
+        print("FAIL kept:", text[:24], "->", out[:60])
+prose = ["the meeting is at 10:30 and ends at 11:15", "issue 12345678: AA batteries are low",
+         "read docs at https://example.com:8080/path", "the bot answers at https://t.me/some_example_bot"]
+for text in prose:
+    if m.scrub(text, [])[0] != text:
+        print("FAIL prose changed:", text, "->", m.scrub(text, [])[0])
+# rescrub reaches prompts/machine-runs/ too, not only prompts/archive/
+w = sys.argv[2]
+os.makedirs(os.path.join(w, "prompts", "machine-runs"), exist_ok=True)
+p = os.path.join(w, "prompts", "machine-runs", "vps-2026-09.jsonl")
+with io.open(p, "w", encoding="utf-8") as fh:
+    fh.write(json.dumps({"id": "x63", "text": "token " + tg + " for the bot"}) + "\n")
+env = dict(os.environ, HOME=os.path.join(w, "home63"), GODSPEED_HOME=os.path.join(w, "home63"))
+subprocess.run([sys.executable, sys.argv[1], "--godspeed", w, "rescrub"], env=env,
+               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+if tg in io.open(p, encoding="utf-8").read():
+    print("FAIL rescrub left a bot token in prompts/machine-runs")
+PYEOF
+)"
+rm -rf "$W/prompts/machine-runs"
+[ -z "$P63" ] && ok "63 bot tokens and other token shapes are removed, in both drawers, and prose is kept" \
+  || bad "63 a token shape survived the scrubber, or prose was eaten" "$P63"
+
 echo
 echo "  $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ] || exit 1

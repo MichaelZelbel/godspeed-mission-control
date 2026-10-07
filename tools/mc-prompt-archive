@@ -172,6 +172,34 @@ SECRET_PATTERNS = [
     (re.compile(r"\bAKIA[0-9A-Z]{16}\b"),                           "[key removed]"),
     (re.compile(r"\bAIza[0-9A-Za-z_\-]{30,}"),                      "[key removed]"),
     (re.compile(r"\bey[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}"), "[token removed]"),
+    # A Telegram bot token, "<bot id>:AA<33 more>". It sat in the archive from July to October
+    # 2026 under three patterns that all missed it: the part after the colon is 35 characters,
+    # under STILL_RISKY's 40, and inside a URL ("api.telegram.org/bot123...") there is no word
+    # boundary before the digits, so the shape is anchored on "not a digit" instead of \b.
+    (re.compile(r"(?<![0-9])[0-9]{6,12}:AA[A-Za-z0-9_\-]{30,}"),     "[key removed]"),
+    # Other services' tokens, by the prefix each one prints on its keys. Every one of them
+    # is shorter than 40 characters in some form, or broken up by a dot, so STILL_RISKY
+    # alone would let it through.
+    (re.compile(r"\bgithub_pat_[A-Za-z0-9_]{20,}"),                  "[key removed]"),
+    (re.compile(r"\bglpat-[A-Za-z0-9_\-]{20,}"),                     "[key removed]"),
+    (re.compile(r"\b(?:sk|rk|pk)_(?:live|test)_[A-Za-z0-9]{16,}"),   "[key removed]"),
+    (re.compile(r"\bwhsec_[A-Za-z0-9]{20,}"),                        "[key removed]"),
+    (re.compile(r"\b(?:npm|hf|gsk|r8|sbp|dop_v1|shpat|shpss)_[A-Za-z0-9]{20,}"), "[key removed]"),
+    (re.compile(r"\bxai-[A-Za-z0-9]{20,}"),                          "[key removed]"),
+    (re.compile(r"\btskey-[A-Za-z0-9\-]{20,}"),                      "[key removed]"),
+    (re.compile(r"\bASIA[0-9A-Z]{16}\b"),                            "[key removed]"),
+    (re.compile(r"\bSG\.[A-Za-z0-9_\-]{16,}\.[A-Za-z0-9_\-]{16,}"),  "[key removed]"),
+    (re.compile(r"\bya29\.[A-Za-z0-9_\-]{20,}"),                     "[token removed]"),
+    (re.compile(r"(?<![A-Za-z0-9])1//0[A-Za-z0-9_\-]{30,}"),         "[token removed]"),
+    # A Discord bot token: three dot-separated parts, each too short to be caught alone.
+    (re.compile(r"\b[MNO][A-Za-z0-9_\-]{23,27}\.[A-Za-z0-9_\-]{6}\.[A-Za-z0-9_\-]{27,}"), "[token removed]"),
+    # A webhook URL is its own credential: whoever holds it can post.
+    (re.compile(r"https://hooks\.slack\.com/services/[A-Za-z0-9/]+"), "[webhook removed]"),
+    (re.compile(r"https://(?:ptb\.|canary\.)?discord(?:app)?\.com/api/webhooks/[0-9]+/[A-Za-z0-9_\-]+"),
+     "[webhook removed]"),
+    # A password inside a URL, "https://user:secret@host". Runs before the email pattern,
+    # which would otherwise read "secret@host.com" as an address and leave the user name.
+    (re.compile(r"\b([a-z][a-z0-9+.\-]*://)[^\s/:@]+:[^\s/@]+@"),    r"\1[credentials removed]@"),
     # To END OF LINE, not to the next space. \S+ ate only the word "Bearer" and left the
     # token sitting there in plain sight, which the test caught on the first run. A header
     # value has spaces in it, so a pattern that stops at one is a pattern that leaks.
@@ -1007,7 +1035,10 @@ def cmd_rescrub(godspeed, dry):
         print("Put one name per line in %s (never committed), or set GODSPEED_REDACT_TERMS."
               % os.path.join(home_dir(), ".godspeed", "redact.txt"))
     changed = dropped = total = 0
-    for f in sorted(glob.glob(os.path.join(archive_dir(godspeed), "*.jsonl"))):
+    # The machine-runs drawer too: it is never searched, but it is in the same repository,
+    # and on 2026-10-07 it held six copies of a bot token that only the archive got cleaned of.
+    for f in sorted(glob.glob(os.path.join(archive_dir(godspeed), "*.jsonl"))
+                    + glob.glob(os.path.join(machine_runs_dir(godspeed), "*.jsonl"))):
         out, file_changed = [], False
         for line in io.open(f, encoding="utf-8", errors="replace"):
             line = line.rstrip("\n")
