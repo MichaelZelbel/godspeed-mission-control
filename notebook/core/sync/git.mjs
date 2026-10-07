@@ -5,7 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { Store, atomic, decode, encode, hash, identityIds } from '../records/store.mjs';
 import { identityPlan, identities, readBlobs } from './identity.mjs';
 import { shared,durableRoots,durableFiles,devicePrivatePaths,recordsFolder,isRecordPath,deletableTypes } from '../file-policy.mjs';
-import { candidate, isReadable, key as nameKey } from '../records/layout.mjs';
+import { candidate, key as nameKey } from '../records/layout.mjs';
 import {validateAssistantFiles} from '../assistant-files.mjs';
 import {resolveSavedConflict} from '../conflicts.mjs';
 
@@ -26,11 +26,15 @@ function reviewItem(id,name,versions,remoteCommit,extra={}){
 }
 // Many records of one kind leaving at once is a mistake somewhere (a bulk
 // delete by hand, a program gone wrong), not an edit: more than 25 of one type
-// that are also more than a fifth of that type's live pages. Until 6 October
+// that are also more than a fifth of that type's live records. Until 6 October
 // 2026 the folder guard divided by every file under notebook/, history
 // snapshots included, so all 40 notes of a notebook holding 160 snapshots went
-// on the other machine, and nothing guarded a removal on its way out.
-const liveCounts=records=>{const counts=new Map();for(const r of records)if(isReadable(r))counts.set(r.type,(counts.get(r.type)||0)+1);return counts;};
+// on the other machine, and nothing guarded a removal on its way out. Until 7
+// October 2026 only the pages a person reads counted, so forty memberships or
+// settings went unguarded; now the notebook's own records count too, all but
+// the bookkeeping a machine prunes (deletableTypes).
+const counted=r=>!r.removed_at&&!deletableTypes.has(r.type)&&!(r.type==='contacts'&&r.merged_into);
+const liveCounts=records=>{const counts=new Map();for(const r of records)if(counted(r))counts.set(r.type,(counts.get(r.type)||0)+1);return counts;};
 function tooManyRemoved(removed,live){
   for(const [type,n] of liveCounts(removed))if(n>25&&n*5>(live.get(type)||0))return 'Removal of '+n+' notebook records ('+type+') at once needs review';
   return null;
@@ -422,19 +426,21 @@ export class FileSync {
       let merged=new Store(dir);
       const lost=()=>[...this.store.records.keys()].filter(key=>!merged.records.has(key));
       const proven=key=>[...merged.records.values()].some(r=>r.uid===this.store.records.get(key).uid&&[...(r.former_ids||[]),...(r.aliases||[])].includes(this.store.records.get(key).id));
-      const deletable=key=>deletableTypes.has(key.split('/')[0]),unproven=lost().filter(key=>!proven(key)&&!deletable(key));
+      const deletable=key=>deletableTypes.has(key.split('/')[0]),unproven=lost().filter(key=>!proven(key)&&!deletable(key));let accepted=new Set();
       if(unproven.length){
         const many=tooManyRemoved(unproven.map(key=>this.store.records.get(key)),liveCounts(this.store.records.values()));
-        if(many)throw new Error('Remote '+many[0].toLowerCase()+many.slice(1));
+        const decision=many&&this.massReview(unproven.map(key=>this.store.records.get(key)),remoteCommit,'Remote '+many[0].toLowerCase()+many.slice(1));
+        if(many&&!decision)throw new Error('Remote '+many[0].toLowerCase()+many.slice(1)+'; it is kept for review');
+        if(decision?.choice==='remote')accepted=new Set(unproven);
         // A removal without a tombstone (from an older version, or Git used
         // by hand) is kept for review instead of stopping every later sync,
         // which until 6 October 2026 it did without saying what to review.
         // Choosing the removal makes the record a tombstone here
         // (conflicts.mjs); choosing to keep it brings it back in this merge.
         const kept=[],open=[];
-        for(const key of unproven){
+        for(const key of decision?.choice==='remote'?[]:unproven){
           const name=posix(path.relative(this.store.root,this.store.fileOf.get(key))),id=hash(name).slice(0,24),saved=path.join(this.store.root,'conflicts',id+'.json'),previous=readJson(saved);
-          if(previous?.resolved_at&&previous.remote_commit===remoteCommit){kept.push(name);continue;}
+          if(decision||previous?.resolved_at&&previous.remote_commit===remoteCommit){kept.push(name);continue;}
           let before=null;try{before=this.gitBytes(['cat-file','blob',base+':'+name],dir);}catch{}
           atomic(saved,JSON.stringify(reviewItem(id,name,{base:before,local:fs.readFileSync(this.store.fileOf.get(key)),remote:null},remoteCommit,{reason:'Removed on another machine without a tombstone'}),null,2));open.push(name);
         }
@@ -447,7 +453,7 @@ export class FileSync {
       validateAssistantFiles(dir);
       if(merged.problems.length)throw new Error('The merged reference graph needs review');
       const removed=lost();
-      if(removed.some(key=>!proven(key)&&!deletable(key)))throw new Error('Remote removal without a tombstone or proven rename needs review: '+removed.join(', '));
+      if(removed.some(key=>!proven(key)&&!deletable(key)&&!accepted.has(key)))throw new Error('Remote removal without a tombstone or proven rename needs review: '+removed.join(', '));
       // A record is brought in where the merge put it, so a rename on another
       // machine renames the file here, and every machine names it the same.
       const inside=(store,file)=>path.relative(store.recordsRoot,file).split(path.sep).join('/'),recordFiles=store=>new Set([...store.fileOf.values()].map(file=>path.relative(store.root,file).split(path.sep).join('/')));
@@ -654,11 +660,12 @@ export class FileSync {
     // What the checks compare against is read under this lock, once:
     // committing read it already.
     if(!files.length)this.store.scan();
-    // Only the other side moved: the branch takes its commit as it is.
-    if(local===head&&this.contains(head,remoteHead)){this.checkIncoming(head,remoteHead,remoteHead);this.forward(remoteHead,head);return null;}
+    // Only the other side moved: the branch takes its commit as it is, or,
+    // with records kept here that it removed, that commit with them back.
+    if(local===head&&this.contains(head,remoteHead)){const keep=this.checkIncoming(head,remoteHead,remoteHead);if(!keep.length){this.forward(remoteHead,head);return null;}return {head,local:head,target:this.restore(remoteHead,keep,head),lines:[],reviews:[]};}
     const {commit:target,reviews}=this.mergeFolder(local,remoteHead);
-    this.checkIncoming(local,target,remoteHead);
-    return {head,local,target,lines,reviews};
+    const keep=this.checkIncoming(local,target,remoteHead);
+    return {head,local,target:keep.length?this.restore(target,keep,local):target,lines,reviews};
   }
   // Before the branch takes `target`: the notebook this machine would read
   // must still read. Until 6 October 2026 a merged notebook was taken
@@ -682,7 +689,7 @@ export class FileSync {
       for(const item of items.values())this.saveReview(item);
       throw Object.assign(new Error('The other machines\' notebook changes would leave '+problems.length+' problem'+(problems.length===1?'':'s')+' here ('+problems[0].error+'); they were not taken, and what to look at is kept for review'),{code:'REVIEW'});
     }
-    this.guardRemovals(from,target);
+    return this.guardRemovals(from,target,remoteHead);
   }
   // The problems a full read here would report after taking `target`: the
   // files it changes since `from`, read over what the store holds now. Only
@@ -714,6 +721,27 @@ export class FileSync {
     for(const p of this.store.validateReferences([...records.values()].map(v=>v.record)))problems.push({key:'ref:'+p.record+':'+JSON.stringify(p.reference),name:fileOf.get(p.record),error:p.error,reference:p.reference});
     return problems;
   }
+  // A removal from the other machines too large to take unasked is one
+  // review: keep the records, and they come back on every machine, or accept
+  // the removal. Until 7 October 2026 it only stopped sync, saying neither
+  // what to look at nor how to let it through. Returns the decision once
+  // there is one; it holds for these records, whatever else the other
+  // machines changed meanwhile.
+  massReview(records,remoteCommit,message){
+    const id=hash('removal\0'+records.map(r=>r.uid).sort().join('\0')).slice(0,24),file=path.join(this.store.root,'conflicts',id+'.json'),previous=readJson(file);
+    if(previous?.resolved_at)return previous;
+    if(!previous)atomic(file,JSON.stringify({id,kind:'mass-removal',path:message,reason:'Removed on another machine all at once. Keep them, and they come back on every machine, or accept the removal.',records:records.map(r=>({type:r.type,id:r.id,uid:r.uid})),local:records.map(r=>r.type+': '+(r.title||r.name||r.id)).sort().join('\n'),remote:null,remote_commit:remoteCommit,at:new Date().toISOString()},null,2));
+    return null;
+  }
+  // `commit` with `names` as `from` has them: the records kept on this machine.
+  restore(commit,names,from){
+    const index=path.join(this.store.state,'sync-restore-index'),env={GIT_INDEX_FILE:index};this.dropIndex(index);
+    try{
+      this.git(['read-tree',commit],undefined,{env,timeout:120000});
+      for(let i=0;i<names.length;i+=200)this.gitBytes(['update-index','-z','--index-info'],undefined,{env,input:this.names(['--literal-pathspecs','ls-tree','-z',from,'--',...names.slice(i,i+200)]).join('\0')+'\0',timeout:120000});
+      return this.git(['commit-tree',this.git(['write-tree'],undefined,{env}),'-p',commit,'-m','Keep the records chosen on this machine'],undefined,{env:this.identity()});
+    }finally{this.dropIndex(index);}
+  }
   // A review is written once: one already waiting stays as it is.
   saveReview(item){const file=path.join(this.store.root,'conflicts',item.id+'.json'),previous=readJson(file);if(previous&&!previous.resolved_at)return;atomic(file,JSON.stringify(item,null,2));}
   // A whole folder of records disappearing at once is a mistake somewhere,
@@ -721,12 +749,17 @@ export class FileSync {
   // A record that moved (a rename, a new folder, the conversion to readable
   // files) is still there: only what is gone from every path counts, against
   // the live pages of its type here (tooManyRemoved).
-  guardRemovals(from,target){
+  // Returns the files to keep when a review chose to keep them.
+  guardRemovals(from,target,remoteHead){
     const gone=this.names(['diff','--name-only','-z','--no-renames','--diff-filter=D',from,target,'--',recordsFolder]);
-    if(gone.length<=25)return;
+    if(gone.length<=25)return [];
     const git=(args,options)=>this.gitBytes(args,undefined,options),kept=new Set(identities(git,target,this.names(['diff','--name-only','-z','--no-renames','--diff-filter=AM',from,target,'--',recordsFolder])));
-    const many=tooManyRemoved(this.decodedAt(from,gone).filter(r=>!kept.has('uid:'+r.uid)),liveCounts(this.store.records.values()));
-    if(many)throw new Error(many);
+    const removed=[];readBlobs(git,gone.map(name=>from+':'+name)).forEach((bytes,i)=>{if(!bytes)return;try{const r=decode(bytes.toString('utf8'),gone[i]);if(!kept.has('uid:'+r.uid))removed.push([gone[i],r]);}catch{}});
+    const many=tooManyRemoved(removed.map(([,r])=>r),liveCounts(this.store.records.values()));
+    if(!many)return [];
+    const decision=this.massReview(removed.map(([,r])=>r),remoteHead,many);
+    if(!decision)throw Object.assign(new Error(many+'; it is kept for review'),{code:'REVIEW'});
+    return decision.choice==='remote'?[]:removed.map(([name])=>name);
   }
   // The owner's branch takes `target`. Git refuses when that would overwrite
   // a file the owner is still editing, so nothing unsaved is lost: the

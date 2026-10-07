@@ -48,7 +48,10 @@ function targetFor(store,conflict,assistantPath){
   return target;
 }
 export function conflictView(store,id,{assistantPath}={}){
-  const {conflict}=retained(store,id),target=targetFor(store,conflict,assistantPath);
+  const {conflict}=retained(store,id);
+  // A removal of many records from the other machines (sync/git.mjs massReview): what they are is its version here.
+  if(conflict.kind==='mass-removal')return {...conflict,current:conflict.local,current_hash:hash(conflict.local),current_encoding:'utf8'};
+  const target=targetFor(store,conflict,assistantPath);
   const bytes=fs.existsSync(target)?fs.readFileSync(target):null;
   const binary=bytes&&(bytes.includes(0)||!Buffer.from(bytes.toString('utf8')).equals(bytes));
   return {...conflict,current_hash:bytes?hash(bytes):null,current_encoding:binary?'base64':'utf8',current:bytes?bytes.toString(binary?'base64':'utf8'):null};
@@ -57,6 +60,13 @@ export function resolveSavedConflict(store,{id,choice,text,expected_hash},{assis
   return store.withLock(()=>{
     const {file,conflict}=retained(store,id);if(conflict.resolved_at)return conflict;
     if(!['current','local','remote','merged'].includes(choice))throw Error('Choose the current version, a retained version or a merged edit');
+    // Keeping the records (local, current) or accepting their removal
+    // (remote) is a decision the next sync carries out; nothing changes here.
+    if(conflict.kind==='mass-removal'){
+      if(choice==='merged')throw Error('Keep these records or accept their removal');
+      if(expected_hash!==hash(conflict.local))throw Error('Reload this review before deciding');
+      const resolved={...conflict,resolved_at:new Date().toISOString(),choice:choice==='remote'?'remote':'local'};atomic(file,JSON.stringify(resolved,null,2));return resolved;
+    }
     const target=targetFor(store,conflict,assistantPath),before=fs.existsSync(target)?fs.readFileSync(target):null,currentHash=before?hash(before):null;
     if(expected_hash===undefined){
       if(!legacyLocalCheck||choice==='current')throw Error('Reload the current version before resolving this conflict');
