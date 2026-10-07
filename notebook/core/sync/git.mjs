@@ -831,17 +831,24 @@ export class FileSync {
       this.moveBranch(plan);return true;
     }finally{fs.rmSync(file,{force:true});}
   }
+  // Waits, up to half a minute, while a Git of the owner's holds the index
+  // for a moment (an editor's status, a session's add).
+  indexFree(){const lock=path.join(this.git(['rev-parse','--absolute-git-dir']),'index.lock');for(const until=Date.now()+30000;fs.existsSync(lock)&&Date.now()<until;)Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,100);}
   moveBranch({head,local,target,lines}){
     // The owner committed or pulled meanwhile: the next round, or their own
     // pull, brings the rest.
     if(this.git(['rev-parse','HEAD'])!==head)return;
     if(local!==head){
+      this.indexFree();
       this.git(['update-ref','-m','Save notebook records','refs/heads/'+this.branch,local,head]);
       // The owner's index takes exactly these files as committed; whatever
-      // else the owner has staged stays staged.
-      this.gitBytes(['-c','core.ignorecase=false','update-index','-z','--index-info'],undefined,{input:lines.join('\0')+'\0',timeout:120000});
+      // else the owner has staged stays staged. A Git of the owner's that
+      // takes the index between the two steps is waited for: until 7 October
+      // 2026 the branch had moved and the index stayed behind, showing the
+      // notebook's commit as staged changes taking it back.
+      for(let attempt=0;;attempt++){try{this.gitBytes(['-c','core.ignorecase=false','update-index','-z','--index-info'],undefined,{input:lines.join('\0')+'\0',timeout:120000});break;}catch(error){if(attempt>=2)throw error;this.indexFree();}}
     }
-    if(target!==local)this.forward(target,local);
+    if(target!==local){this.indexFree();this.forward(target,local);}
   }
   // The workspace lock, waited for a few seconds: a save holding it now is
   // over in moments, and what follows a push should not wait a whole round.
