@@ -385,7 +385,7 @@ export class FileSync {
       // A record renamed or moved on either side is merged as one record
       // before any file of it is called a conflict (identity.mjs).
       if(merging&&!(firstJoin&&this.gitDir)){
-        const plan=identityPlan({git:(args,options)=>this.gitBytes(args,dir,options),mergeText:(b,l,r)=>this.mergeText(b,l,r),find:(type,id)=>this.store.records.get(type+'/'+id),base,local:localHead,remote:remoteCommit});
+        const plan=identityPlan({git:(args,options)=>this.gitBytes(args,dir,options),mergeText:(b,l,r)=>this.mergeText(b,l,r),find:(type,id)=>this.store.records.get(type+'/'+id),base,local:localHead,remote:remoteCommit,preferRemote:firstJoin&&!this.gitDir});
         if(plan){
           for(const name of plan.deletes){fs.rmSync(path.join(dir,name),{force:true});this.git(['--literal-pathspecs','rm','--cached','--quiet','--ignore-unmatch','--',name],dir);}
           for(const [name,text] of plan.writes){atomic(path.join(dir,name),text);this.git(['--literal-pathspecs','add','--',name],dir);}
