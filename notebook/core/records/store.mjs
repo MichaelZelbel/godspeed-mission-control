@@ -530,7 +530,7 @@ export class Store {
   list(type, { removed = false } = {}) { this.scan(); return this.ofType(type).filter(r => removed || !r.removed_at).map(copy); }
   get(type, id) { this.scan(); const record = this.records.get(type + '/' + id) || this.ofType(type).find(r => (r.former_ids || []).includes(id)) || this.ofType(type).find(r => (r.aliases || []).includes(id)); return record && copy(record); }
   prepare(type, value, old = null) {
-    const now = new Date().toISOString(), uid = old?.uid || value.uid || randomUUID();
+    const now = new Date().toISOString(), uid = safe(String(old?.uid || value.uid || randomUUID()));
     const id = old?.id || value.id || readableSlug(value.name || value.title || type) + '-' + uid.slice(0, 8);
     const record = { tags: [], aliases: [], references: [], metadata: {}, user_id: 'owner', ...old, ...value,
       format: 1, type: safe(type), id: safe(id), uid, device: old?.device || this.device,
@@ -644,6 +644,10 @@ export class Store {
   // merge or a conversion that already decided where each one is; then
   // nothing else moves (`cascade` false).
   commit(records,{removeKeys=[],files=[],paths=null,cascade=!paths}={}) {
+    // Every record names its file through its type, id and uid (an earlier
+    // version is kept under the uid), including records that never went
+    // through prepare(): a merge, a conversion, a transaction's own objects.
+    for(const record of records){safe(record.type);safe(record.id);safe(String(record.uid));}
     this.scan();
     if(this.watching)this.freshen([...records.flatMap(r=>[this.fileOf.get(r.type+'/'+r.id),this.fileOf.get(this.keyOfUid?.get(r.uid))]),...removeKeys.map(k=>this.fileOf.get(k))]);
     const history=[];

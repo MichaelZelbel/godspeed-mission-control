@@ -95,7 +95,8 @@ export const isReadableType = type => Object.hasOwn(layouts, type);
 export function isReadable(record) {
   return isReadableType(record.type) && !record.removed_at && !(record.type === 'contacts' && record.merged_into);
 }
-export function systemPath(record) { return systemFolder + '/' + record.type + '/' + record.id + (isReadableType(record.type) ? '.md' : '.json'); }
+// The type and id become a file name here, so both are checked here as well.
+export function systemPath(record) { return systemFolder + '/' + safe(record.type) + '/' + safe(record.id) + (isReadableType(record.type) ? '.md' : '.json'); }
 // The folder a record belongs in, relative to notebook/. `find(type, id)`
 // reads another record, for a type placed under its parent.
 export function folderFor(record, find) { return isReadable(record) ? layouts[record.type].folder(record, find) : systemFolder + '/' + record.type; }
@@ -121,9 +122,12 @@ export function safe(value) {
   if (!/^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,180}$/.test(value) || value.includes('..')) throw new Error('Invalid record path');
   return value;
 }
+// The uid is checked like the id: an earlier version of a record is saved under
+// a name made from it (Store.commit), and until 7 October 2026 a uid with "../"
+// in it put that copy in rules/ or profile/, outside the notebook.
 function contract(record) {
   if (!record || typeof record !== 'object' || Array.isArray(record) || record.format !== 1 || !record.id || !record.uid || !record.type) throw new Error('Invalid record contract');
-  safe(record.id); safe(record.type);
+  safe(record.id); safe(record.type); safe(String(record.uid));
   return record;
 }
 // JSON's meaning of a value (dates as text, nothing for undefined), so a
