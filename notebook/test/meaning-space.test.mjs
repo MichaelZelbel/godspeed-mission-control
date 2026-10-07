@@ -47,3 +47,17 @@ test('stored vectors of a size the service no longer gives are rebuilt instead o
  assert.equal(await index.meaning.step(),2,'every note is embedded at the size the service now gives');
  assert.equal(top(await index.searchHybrid('knee doctor')),'Orthopäde Termin by meaning');
 });
+
+// Every round read every text to learn which few had changed: over a second
+// for 9,000 documents on Michael's laptop, twice every 20 seconds, on the
+// thread that answers the browser (7 October 2026).
+test('a round with nothing new reads no text, and a changed note reads only its own',async t=>{
+ const {store,index,knee}=fixture(t);
+ index.meaning=new MeaningIndex(index,{config:config(64),embed:embedOf(64)});await index.meaning.step();
+ assert.ok(index.meaning.documents().every(d=>!('body' in d)),'the list of documents carries no text');
+ const read=[],text=index.meaning.text.bind(index.meaning);index.meaning.text=doc=>{read.push(doc.uid);return text(doc);};
+ assert.equal(await index.meaning.step(),0);assert.deepEqual(read,[]);
+ store.save('notes',{id:knee.id,content:'Montag 9 Uhr, MRT und Knie besprechen.'});index.update([store.get('notes',knee.id)]);
+ assert.equal(await index.meaning.step(),1);assert.equal(read.length,1);
+ assert.equal(top(await index.searchHybrid('knee doctor')),'Orthopäde Termin by meaning');
+});

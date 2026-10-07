@@ -80,8 +80,12 @@ export function vectorSpace(config){
 export class VectorStore {
   constructor(db) {
     this.db = db;
+    // vectors_digests answers digests() from the index alone: without it every
+    // round walked every stored vector, 34,000 rows of 6 KB on Michael's
+    // laptop, to read 9,000 digests (7 October 2026).
     db.exec(`CREATE TABLE IF NOT EXISTS vectors (uid TEXT NOT NULL, chunk INTEGER NOT NULL, model TEXT NOT NULL, digest TEXT NOT NULL, vec BLOB NOT NULL, PRIMARY KEY (uid, chunk));
-      CREATE INDEX IF NOT EXISTS vectors_model ON vectors(model);`);
+      CREATE INDEX IF NOT EXISTS vectors_model ON vectors(model);
+      CREATE INDEX IF NOT EXISTS vectors_digests ON vectors(model, uid, digest) WHERE chunk=0;`);
     this.cache = null;
   }
   // uid -> digest the stored vectors were made from, for one model.
@@ -152,12 +156,18 @@ export class MeaningIndex {
     const query = new QueryService(store), uids = query.withSnapshot(() => new Set([...MEANING_TYPES].flatMap(type => visibleRows(query, type).map(r => r.uid))));
     this.sharedFor = store.records; this.sharedUids = uids; return uids;
   }
-  // Documents the index holds that meaning search covers, and their text.
+  // Documents the index holds that meaning search covers, without their text:
+  // text(doc) reads one when it is embedded. Until 7 October 2026 every round
+  // read every text (65 million characters for 9,000 documents on Michael's
+  // laptop, over a second) to learn which few had changed, twice a round,
+  // every 20 seconds, on the thread that answers the browser; on a busy
+  // machine the dashboard waited 50 seconds for a page.
   documents() {
     // Mission Control's own files too, never the verbatim prompt archive or the assistant's state.
     const shared = this.shared();
-    return this.index.db.prepare(`SELECT d.uid, d.type, d.digest, f.title, f.body FROM docs d JOIN docs_fts f ON f.rowid=d.rowid WHERE d.type IN (${[...MEANING_TYPES].map(() => '?').join(',')}) OR (d.type='workspace_file' AND d.id NOT LIKE 'prompts/%' AND d.id NOT LIKE 'assistant-state/%')`).all(...MEANING_TYPES).filter(d => d.type === 'workspace_file' || shared.has(d.uid));
+    return this.index.db.prepare(`SELECT d.rowid, d.uid, d.type, d.digest FROM docs d WHERE d.type IN (${[...MEANING_TYPES].map(() => '?').join(',')}) OR (d.type='workspace_file' AND d.id NOT LIKE 'prompts/%' AND d.id NOT LIKE 'assistant-state/%')`).all(...MEANING_TYPES).filter(d => d.type === 'workspace_file' || shared.has(d.uid));
   }
+  text(doc) { return this.index.db.prepare('SELECT title, body FROM docs_fts WHERE rowid=?').get(doc.rowid) || {}; }
   pending() {
     const have = this.vectors.digests(this.space), docs = this.documents();
     const live = new Set(docs.map(d => d.uid)), stale = [...have.keys()].filter(uid => !live.has(uid));
@@ -174,7 +184,7 @@ export class MeaningIndex {
       for (let i = 0; i < todo.length && used < budget;) {
         const batch = [], owners = [];
         for (; i < todo.length && batch.length < BATCH && used < budget; i++) {
-          const parts = passages(todo[i].title, todo[i].body);
+          const {title, body} = this.text(todo[i]), parts = passages(title, body);
           if (!parts.length) { this.empty.add(todo[i].uid + '\0' + todo[i].digest); continue; }
           owners.push({doc: todo[i], from: batch.length, count: parts.length}); batch.push(...parts); used += parts.length;
         }
