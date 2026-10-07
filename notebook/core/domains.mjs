@@ -451,7 +451,12 @@ export class Domains {
       const hypothetical=/\b(?:if I|suppose|hypothetically|for example|someone said|quoted|wenn ich|beispielsweise)\b/i.test(requested);
       const attemptedNoteCapture=Array.isArray(structured.notes_created)&&structured.notes_created.length>0;
       if(!explicitNoteCapture(requested))delete structured.notes_created;
-      if(name==='collection-chat'&&(hypothetical||/\b(?:do not|don.t|never|must not|should not|nicht|niemals)\s+(?:add|create|change|edit|update|remove|delete)\b/i.test(requested)||! /^(?:(?:please|bitte)\s+|(?:can|could|would)\s+you\s+(?:please\s+)?)?(?:add|create|change|edit|update|remove|delete|erstell\w*|ändere|bearbeite|ergänze|lösche)\b/i.test(requested.trim()))){delete structured.items_created;delete structured.item_updates;}
+      // Items change only when asked plainly. Rename, mark, set, move, fix,
+      // correct and replace ask too: until 7 October 2026 "Rename Soup to
+      // Stew" changed nothing while the reply said it was renamed. A change
+      // left out is said to be left out.
+      let collectionUnasked=false;
+      if(name==='collection-chat'&&(hypothetical||/\b(?:do not|don.t|never|must not|should not|nicht|niemals)\s+(?:add|create|change|edit|update|remove|delete|rename|mark|set|move|fix|correct|replace)\b/i.test(requested)||! /^(?:(?:please|bitte)\s+|(?:can|could|would)\s+you\s+(?:please\s+)?)?(?:add|create|change|edit|update|remove|delete|rename|mark|set|move|fix|correct|replace|erstell\w*|ändere|bearbeite|ergänze|lösche|benenne|markiere|setze)\b/i.test(requested.trim()))){collectionUnasked=!!(structured.items_created?.length||structured.item_updates?.length);delete structured.items_created;delete structured.item_updates;}
       if(name==='conversation-chat'&&structured.operations?.length)structured.operation_results=conversationOperations(this,input,structured.operations.filter(op=>!(input.retained_coach_reply&&op.type==='coach-reply'&&op.id===input.talk_id)));
       if(name==='note-chat'){
         const request=String(input.message||input.messages?.filter(m=>m.role==='user').at(-1)?.content||'').trim();
@@ -518,6 +523,7 @@ export class Domains {
         // the first two saved, with no reply to say so.
         if(changes.length)this.store.transaction(view=>{const query=new this.query.constructor(view);for(const {old,change} of changes)query.execute({table:'collection_items',operation:old?'update':'insert',values:{...(old?{}:{collection_id:input.collection_id}),data:{...old?.data,...change.data}},filters:old?[['eq','id',old.id]]:[],expected:old?{[old.id]:old._hash}:{},assistant:true});});
         for(const {old} of changes)tool_results.push({tool:old?'update_collection_item':'create_collection_item',success:true});
+        if(collectionUnasked)content=(content?content+'\n\n':'')+'Nothing in the collection was changed: ask me plainly, for example "Rename Soup to Stew".';
         if(cut.length)content='I did not change '+[...new Set(cut.map(c=>c.field+' of '+c.item))].join(', ')+': it is longer than I can read at once, and I saw only its beginning, so it stays as it was.'+(changes.length?' Everything else you asked for is saved.':'')+' Edit it on the item itself.';
       }
       const opened=structured.operation_results?.find(r=>r.type==='coach_talks'&&r.status==='open');
