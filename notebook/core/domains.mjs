@@ -21,6 +21,7 @@ import {commandWords} from './card-commands.mjs';
 import {leadWords} from './lead-commands.mjs';
 import {radarWords} from './radar-lifecycle.mjs';
 import {retrieveNoteWindows} from './retrieval-windows.mjs';
+import {retireShares} from './shares.mjs';
 // The note screens' content hash (ui/src/lib/note-ai-edit.ts hashNoteContent,
 // FNV-1a and the length): what a chat request says the owner was looking at.
 export function noteContentHash(content){const s=String(content??'');let h=0x811c9dc5;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,0x01000193)>>>0;}return h.toString(16)+':'+s.length;}
@@ -454,7 +455,7 @@ export class Domains {
       if(name==='conversation-chat'&&structured.operations?.length)structured.operation_results=conversationOperations(this,input,structured.operations.filter(op=>!(input.retained_coach_reply&&op.type==='coach-reply'&&op.id===input.talk_id)));
       if(name==='note-chat'){
         const request=String(input.message||input.messages?.filter(m=>m.role==='user').at(-1)?.content||'').trim();
-        const edit=/^(?:(?:please|bitte)\s+|(?:can|could|would)\s+you\s+(?:please\s+)?)?(?:edit|revise|change|update|rewrite|replace|correct|fix|translate|append|insert|add|rename|mark|delete|remove|trash|schreibe|ändere|bearbeite|korrigiere|ergänze|lösche)\b/i.test(request);
+        const edit=/^(?:(?:please|bitte)\s+|(?:can|could|would)\s+you\s+(?:please\s+)?)?(?:edit|revise|change|update|rewrite|replace|correct|fix|translate|append|insert|add|rename|mark|delete|remove|trash|move|verschiebe|schreibe|ändere|bearbeite|korrigiere|ergänze|lösche)\b/i.test(request);
         if(!input.note_id||!edit){delete structured.note_content;delete structured.note_edits;delete structured.note_changes;delete structured.trash_note;}
       }
       if(name==='draft-event'&&structured?.draft)structured.draft=momentDraft(structured.draft);
@@ -488,7 +489,9 @@ export class Domains {
         }
       }
       if(name==='note-chat'&&structured.trash_note&&!input.note_id)throw new Error('Choose a current note before changing it');
-      if(name==='note-chat'&&structured.trash_note){if(!notes[0])throw new Error('Current note missing');this.store.structural('notes',notes[0].id,'remove');tool_results.push({tool:'trash_note',success:true});}
+      // To Trash, as the editor's Move to Trash does, and its public link ends.
+      // Until 7 October 2026 it was removed for good, with nothing to restore.
+      if(name==='note-chat'&&structured.trash_note){if(!notes[0])throw new Error('Current note missing');await this.store.saveAsync('notes',{id:notes[0].id,is_trashed:true,trashed_at:new Date().toISOString()},undefined,{signal});await retireShares(this.store,[notes[0].id]);tool_results.push({tool:'trash_note',success:true});}
       for(const note of structured.notes_created||[])if(note.title&&typeof note.content==='string')notes_created.push(await this.store.saveAsync('notes',{title:note.title,content:note.content,source_app:name},undefined,{signal}));
       if(['conversation-chat','note-chat'].includes(name)&&(explicitNoteCapture(requested)||attemptedNoteCapture)){
         if(!notes_created.length)content='I could not save the requested note. No note was created.';

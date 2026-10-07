@@ -142,6 +142,8 @@ export function withSummary(
 
 /** Note-modifying tools we should react to in the UI. */
 export const NOTE_MODIFYING_TOOLS = [
+  "update_note",
+  "trash_note",
   "append_to_note",
   "insert_into_note",
   "replace_in_note",
