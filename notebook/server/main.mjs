@@ -213,7 +213,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         if(!auth.authorized(req)&&!accessKey)return send(res,401,{error:'Authentication required'});
         if(req.method!=='POST'){res.writeHead(405,{'Allow':'POST'});return res.end();}
         const input=JSON.parse(await body(req));if(accessKey&&input.method==='tools/call'&&!accessKey.scopes.includes(toolScope(input.params.name,input.params.arguments||{})))return send(res,403,{error:'This API key does not grant that capability'});
-        const response=await mcp(input,{store,query,index,domains,scopes:accessKey?.scopes});if(response===null){res.writeHead(202);return res.end();}return send(res,200,response);
+        const response=await mcp(input,{store,query,index,domains,scopes:accessKey?.scopes,delegated:!!accessKey&&!apiKeys.installationAssistant(accessKey)});if(response===null){res.writeHead(202);return res.end();}return send(res,200,response);
       }
       if(route==='/api/pair/keys'&&req.method==='GET')return send(res,200,{data:pairKeys.map(({id,created_at,revoked_at})=>({id,created_at,revoked_at:revoked_at||null}))});
       if(route==='/api/pair/revoke'&&req.method==='POST'){const input=JSON.parse(await body(req)),key=pairKeys.find(k=>k.id===input.id);if(!key)throw new Error('Choose a paired device to disconnect');key.revoked_at||=new Date().toISOString();savePairKeys();return send(res,200,{revoked:true});}
@@ -247,7 +247,16 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       if(route==='/api/sync/run'&&req.method==='POST')return send(res,200,{status:await syncRunner.run()});
       if(route==='/api/owner'&&req.method==='POST'){const input=JSON.parse(await body(req));const owner=input.owner==='this'?device:input.owner;if(typeof owner!=='string'||!/^[a-z0-9][a-z0-9-]{0,39}$/.test(owner))throw new Error('Choose the machine that runs the routines by its name');await scheduler.transfer(owner);return send(res,200,{owner});}
       if(route==='/api/delivery'&&req.method==='POST'){const input=JSON.parse(await body(req));if(!['notebook','telegram'].includes(input.delivery)||input.delivery==='telegram'&&!originalRuntime&&!scheduler.deliver)throw new Error('Configure Telegram before choosing chat delivery');const settings=store.get('settings','installation');if(!settings)throw new Error('Start with a goal first');await store.saveAsync('settings',{id:settings.id,delivery:input.delivery});return send(res,200,{delivery:input.delivery});}
-      if(route==='/api/conflicts'&&req.method==='GET')return send(res,200,{data:sync.pendingConflicts().map(name=>conflictView(store,name.replace(/\.json$/,''),{assistantPath}))});
+      if(route==='/api/conflicts'&&req.method==='GET')return send(res,200,{data:sync.pendingConflicts().map(name=>{
+        // One pending conflict whose record is gone (a stale-write whose record
+        // was removed) or whose file no longer reads must not throw away the
+        // whole list: it is shown degraded so the rest still load and it can
+        // still be dismissed (SY13, 2026-10-07).
+        const id=name.replace(/\.json$/,'');
+        try{return conflictView(store,id,{assistantPath});}
+        catch(error){let raw={};try{raw=JSON.parse(fs.readFileSync(path.join(store.root,'conflicts',name),'utf8'));}catch{}
+          return {id:raw.id||id,kind:raw.kind,path:raw.path||(raw.type&&raw.record_id?raw.type+'/'+raw.record_id:null),degraded:true,detail:String(error.message)};}
+      })});
       if(route==='/api/conflicts/resolve'&&req.method==='POST'){
         const input=JSON.parse(await body(req));resolveSavedConflict(store,input,{assistantPath});
         return send(res,200,{ok:true});

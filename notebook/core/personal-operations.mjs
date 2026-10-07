@@ -77,6 +77,12 @@ function rehearsal(store){
 }
 export function personalOperation(domains,input){
  const {store,query}=domains,type=input.type;
+ // A key the owner gave another program (domains.delegated, set by mcp.mjs) acts
+ // within its scopes and never as the owner: it does not run a work item's
+ // check, give a radar verdict, allow a file or note change, or approve. The
+ // owner and the installation's own assistant keep those (card-commands.mjs).
+ const delegated=domains.delegated===true;
+ if(delegated&&(type==='work-allow-local'||type==='radar-command'&&['verdict','allow'].includes(input.args?.[0])))throw Error('Approving work and giving a radar verdict stay with the owner. Tell them what you recommend instead.');
  if(type==='routine-change'&&domains.nativeScheduler)return domains.nativeScheduler.control(input);
  if(process.env.GODSPEED_ORIGINAL_RUNTIME==='on'&&['goal-add','goal-change','goal-outcome','forecast-settle'].includes(type)){
   let card='goals',args;
@@ -86,10 +92,10 @@ export function personalOperation(domains,input){
    else if(type==='goal-outcome')args=['progress',item.id,'--evidence',required(input.evidence,'Evidence')];
    else {card='forecast';args=['resolve',item.id,'--outcome',input.observed?'yes':'no','--evidence',required(input.evidence,'Evidence')];}
   }
-  const result=cardCommand(store,{card,args});return type==='goal-add'?query.rows('goals').find(r=>r.title===input.title):query.rows(card==='goals'?'goals':'forecasts').find(r=>r.id===input.id)||result;
+  const result=cardCommand(store,{card,args},{delegated});return type==='goal-add'?query.rows('goals').find(r=>r.title===input.title):query.rows(card==='goals'?'goals':'forecasts').find(r=>r.id===input.id)||result;
  }
  if(type==='addon-command'){const result=addonCommand(store,input);if(input.addon!=='headache')ensureNativeSchedules(store,input.addon);return result;}
- if(type==='card-command')return cardCommand(store,input);
+ if(type==='card-command')return cardCommand(store,input,{delegated});
  if(type==='due-command')return dueCommand(store,input.args);
  if(type==='subscription-command')return subscriptionCommand(store,input.args);
  if(type==='watch-command')return watchCommand(domains,input.args);

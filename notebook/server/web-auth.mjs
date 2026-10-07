@@ -5,6 +5,18 @@ import { promisify } from 'node:util';
 import net from 'node:net';
 
 const scrypt = promisify(derive);
+// scrypt runs on libuv's small worker pool, which also serves fs.promises and
+// name lookups. Until 7 October 2026 nothing capped it, so many sign-in
+// attempts at once (one 32 MiB hash each) starved file reads and the owner's
+// own sign-in: a file open went from 20 ms to 16 s under 120 attempts. At most
+// two hash at a time; the rest wait here, not on the pool.
+let scryptBusy = 0; const scryptWaiting = [];
+async function hashPassword(password, salt) {
+  if (scryptBusy >= 2) await new Promise(resolve => scryptWaiting.push(resolve));
+  scryptBusy++;
+  try { return await scrypt(password, salt, 64, { N: 32768, r: 8, p: 1, maxmem: 64 * 1024 * 1024 }); }
+  finally { scryptBusy--; scryptWaiting.shift()?.(); }
+}
 const digest = value => createHash('sha256').update(String(value || '')).digest('hex');
 const equal = (a, b) => typeof a === 'string' && typeof b === 'string' && a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b));
 const fail = (message, status = 400, code = 'AUTH_ERROR') => Object.assign(new Error(message), { status, code });
@@ -12,7 +24,7 @@ const recoveryCode = () => randomBytes(24).toString('hex').toUpperCase().match(/
 const recoveryHash = value => digest(String(value || '').replace(/[-\s]/g, '').toUpperCase());
 const username = value => String(value || '').trim().toLowerCase();
 async function passwordHash(password, salt = randomBytes(16).toString('hex')) {
-  const key = await scrypt(password, salt, 64, { N: 32768, r: 8, p: 1, maxmem: 64 * 1024 * 1024 });
+  const key = await hashPassword(password, salt);
   return { salt, hash: key.toString('hex') };
 }
 function validate(input) {
@@ -54,12 +66,23 @@ export function clientAddress(req, proxies = trustedProxies()) {
 const FREE = 5, USER_FREE = 10, CEILING = 1000, WINDOW = 10 * 60000, FORGET = 3600000, LONGEST = 15 * 60000, KEPT = 10000;
 const delay = (count, free) => count < free ? 0 : Math.min(LONGEST, 1000 * 2 ** (count - free));
 class Failures {
-  constructor(now) { this.now = now; this.addresses = new Map(); this.users = new Map(); this.recent = []; }
+  constructor(now) { this.now = now; this.addresses = new Map(); this.users = new Map(); this.recent = []; this.inflight = new Map(); }
   entry(map, key) { const e = map.get(key); if (e && e.last + FORGET < this.now()) { map.delete(key); return null; } return e || null; }
+  // An attempt whose check is still running counts against the gate, so that
+  // many guesses fired at once (which all passed the wait check before any of
+  // them recorded a failure) no longer all get checked. Until 7 October 2026
+  // the count moved only after the slow scrypt, so 40 at once from one address
+  // were all checked.
+  begin(address) { this.inflight.set(address, (this.inflight.get(address) || 0) + 1); }
+  end(address) { const n = (this.inflight.get(address) || 0) - 1; if (n > 0) this.inflight.set(address, n); else this.inflight.delete(address); }
   wait(address, user) {
-    const now = this.now(), own = this.entry(this.addresses, address);
-    if (!own) return 0;
-    let until = own.last + delay(own.count, FREE);
+    const now = this.now(), own = this.entry(this.addresses, address), flying = this.inflight.get(address) || 0;
+    // An address with no failures and nothing in flight is always checked, so a
+    // username under attack never locks the owner out from a clean address. An
+    // in-flight attempt counts like a failure here, so a burst from one address
+    // still gates after the free allowance.
+    if (!own && !flying) return 0;
+    let until = (own ? own.last : now) + delay((own ? own.count : 0) + flying, FREE);
     const named = user ? this.entry(this.users, user) : null;
     if (named) until = Math.max(until, named.last + delay(named.count, USER_FREE));
     this.recent = this.recent.filter(at => at > now - WINDOW);
@@ -94,8 +117,11 @@ export class WebAuth {
   async limited(req, user, check) {
     const address = clientAddress(req, this.proxies), wait = this.failures.wait(address, user);
     if (wait > 0) throw fail(wait <= 60000 ? 'Too many attempts. Wait a minute, then try again.' : 'Too many attempts. Wait ' + Math.ceil(wait / 60000) + ' minutes, then try again.', 429, 'RATE_LIMIT');
+    // Counted before the check runs, so attempts fired at once see each other.
+    this.failures.begin(address);
     try { const result = await check(); this.failures.succeeded(address); return result; }
     catch (error) { if (error.status === 401 || error.status === 403) this.failures.failed(address, user); throw error; }
+    finally { this.failures.end(address); }
   }
   cookie(req) { return (req.headers.cookie || '').match(/(?:^|;\s*)godspeed_session=([^;]+)/)?.[1]; }
   authorized(req) {

@@ -779,6 +779,110 @@ rm -rf "$W/prompts/machine-runs"
 [ -z "$P63" ] && ok "63 bot tokens and other token shapes are removed, in both drawers, and prose is kept" \
   || bad "63 a token shape survived the scrubber, or prose was eaten" "$P63"
 
+# 64. The product's OWN key formats must be redacted, not stored in cleartext. All reached the
+#     committed archive before 2026-10-07: the prefixed keys (godspeed_<64 hex>, mnr_<48 hex>)
+#     are under STILL_RISKY's 40; a bare 32- or 64-char lowercase-hex blob (session cookie,
+#     login-link code, pairing key) is pure lowercase, which _looks_credential never fired on;
+#     and a "_SECRET"/"_KEY" suffix had no word boundary before it so the assignment pattern
+#     missed GODSPEED_NOTEBOOK_KEY= and WEBHOOK_SECRET=. Glued at run time so this file holds no
+#     key-shaped literal, and a 40-char commit SHA must still survive untouched.
+P64="$("$PY" - "$ARC" <<'PYEOF'
+import importlib.machinery, importlib.util, sys
+l = importlib.machinery.SourceFileLoader("pa", sys.argv[1])
+s = importlib.util.spec_from_loader("pa", l); m = importlib.util.module_from_spec(s); l.exec_module(m)
+hx = lambda n: ("0123456789abcdef" * 8)[:n]
+gkey = "godspeed" + "_" + hx(64)
+mkey = "mnr" + "_" + hx(48)
+sess = hx(64)
+cook = hx(32)
+cases = [  # (what was typed, the part that must not survive) in prompt AND answer
+    ("my notebook key is " + gkey + " please connect it", gkey),
+    ("export GODSPEED_NOTEBOOK_KEY=" + gkey, gkey),
+    ("MENERIO_API_KEY=" + mkey + " comes up empty", mkey),
+    ("use key " + mkey, mkey),
+    ("WEBHOOK_SECRET=" + hx(64), hx(64)),
+    ("the pairing code is " + sess, sess),
+    ("here is the session cookie " + cook + " paste it", cook),
+    ("FOO_SECRET=" + "Sup3r" + "SecretVal99", "Sup3rSecretVal99"),
+]
+for text, secret in cases:
+    out = m.scrub(text, [])[0] or ""
+    if secret in out:
+        print("FAIL prompt kept:", text[:30], "->", out[:70])
+    aout = m.scrub_answer(text, [])
+    if secret in aout:
+        print("FAIL answer kept:", text[:30], "->", aout[:70])
+# An ordinary 40-char git commit SHA is neither 32 nor 64 hex, so it must survive untouched.
+sha = hx(16) + hx(16) + hx(8)
+keep = "the commit " + sha + " broke the build"
+if m.scrub(keep, [])[0] != keep:
+    print("FAIL a 40-char commit SHA was redacted:", str(m.scrub(keep, [])[0])[:70])
+PYEOF
+)"
+[ -z "$P64" ] && ok "64 the product's own key formats are redacted, and a 40-char commit SHA is kept" \
+  || bad "64 an own-format key survived scrubbing, or a commit SHA was eaten" "$P64"
+
+# 65. The archive `project` field is the working-directory basename for Claude Code and
+#     OpenCode, so a path like C--work-AcmeCorp-migration carried a client name straight into
+#     the one file whose job is to keep such names out (the no-confidential-names rule). Until
+#     2026-10-07 it was stored with no scrub and no redact pass at all. The prompt body here is
+#     clean, so only the folder name can leak: it must be redacted before the row is written.
+rm -f "$W/prompts/archive/"*.jsonl
+mkdir -p "$W/home65/.claude/projects/C--work-AcmeCorp-migration"
+printf '%s\n' '{"type":"user","entrypoint":"cli","timestamp":"2026-10-05T09:00:00Z","message":{"content":"plan the data migration for next week"}}' \
+  > "$W/home65/.claude/projects/C--work-AcmeCorp-migration/m.jsonl"
+( export HOME="$W/home65" GODSPEED_HOME="$W/home65" USERPROFILE="$W/home65" \
+         GODSPEED_PROMPT_SOURCES="claude" GODSPEED_REDACT_TERMS="AcmeCorp"
+  cd "$W" && "$PY" "$ARC" --godspeed "$W" archive ) >"$W/p65.out" 2>&1
+A65="$(cat "$W/prompts/archive/"*.jsonl 2>/dev/null)"
+if echo "$A65" | grep -q "AcmeCorp"; then
+  bad "65 a client name in the project field reached the repository" "$A65"
+elif echo "$A65" | grep -qF '"project": "C--work-[name removed]-migration"'; then
+  ok "65 the project field is scrubbed through the redact list before it is stored"
+else
+  bad "65 the project field was not cleaned as expected" "$A65"
+fi
+
+# 66. Rescrub cleans the project field of rows ALREADY stored, for the day a name is added to
+#     the list too late, the same promise it keeps for the text and the answer beside it.
+printf '%s\n' '{"id":"cafef00dcafef00d","at":"2026-10-05T09:00:00","machine":"test","tool":"claude-code","project":"C--work-AcmeCorp-migration","text":"an already-stored prompt with a clean body"}' \
+  >> "$W/prompts/archive/test-2026-10.jsonl"
+( export HOME="$W/home66" GODSPEED_HOME="$W/home66" USERPROFILE="$W/home66" GODSPEED_REDACT_TERMS="AcmeCorp"
+  cd "$W" && "$PY" "$ARC" --godspeed "$W" rescrub ) >"$W/p66.out" 2>&1
+A66="$(cat "$W/prompts/archive/"*.jsonl 2>/dev/null)"
+echo "$A66" | grep -q "AcmeCorp" \
+  && bad "66 rescrub left a client name in a stored project field" "$A66" \
+  || ok "66 rescrub cleans the project field of already-stored rows"
+rm -f "$W/prompts/archive/"*.jsonl
+
+# 67. The last-resort guard dropped a WHOLE prompt when it saw a 40+ character run that still
+#     looked like a credential, but its character class included "/", so an ordinary GitHub
+#     commit URL or a deep repo path (mixed case, digits, slashes) was read as one blob and the
+#     prompt was lost with the line it sat in (2026-10-07). A URL or path must be kept whole;
+#     a real unbroken secret must still be dropped.
+P67="$("$PY" - "$ARC" <<'PYEOF'
+import importlib.machinery, importlib.util, sys
+l = importlib.machinery.SourceFileLoader("pa", sys.argv[1])
+s = importlib.util.spec_from_loader("pa", l); m = importlib.util.module_from_spec(s); l.exec_module(m)
+keep = [
+    "Look at https://github.com/MichaelZelbel/godspeed-mission-control/commit/79bf27f and tell me",
+    "the file is at C:/Users/Besitzer/AppData/Local/Temp/claude/c--godspeed/2d972171-1ea6-403b/notes.md ok",
+    "see /home/michael/projects/MissionControl/notebook/core/goal-loop.mjs line 80",
+]
+for text in keep:
+    if m.scrub(text, [])[0] != text:
+        print("FAIL a URL/path prompt was changed or dropped:", text[:46], "->", str(m.scrub(text, [])[0])[:60])
+    if m.scrub_answer(text, []) != text:
+        print("FAIL a URL/path line was cut from an answer:", text[:46])
+# A real long secret is one unbroken token, so it must still be dropped whole.
+secret = "Xq7" + "ZmP2vLd8RtY4wNb1CfH6jGk3sVe9AuQ5oIrTzB0xM"
+if m.scrub("use this value " + secret + " now", [])[0] is not None:
+    print("FAIL a real long secret was no longer dropped")
+PYEOF
+)"
+[ -z "$P67" ] && ok "67 a GitHub URL or deep path is kept whole, and a real long secret still drops" \
+  || bad "67 the still-risky guard mis-fired on a URL/path, or stopped catching a secret" "$P67"
+
 echo
 echo "  $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ] || exit 1

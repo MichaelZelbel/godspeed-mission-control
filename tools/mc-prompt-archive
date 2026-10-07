@@ -193,6 +193,18 @@ SECRET_PATTERNS = [
     (re.compile(r"(?<![A-Za-z0-9])1//0[A-Za-z0-9_\-]{30,}"),         "[token removed]"),
     # A Discord bot token: three dot-separated parts, each too short to be caught alone.
     (re.compile(r"\b[MNO][A-Za-z0-9_\-]{23,27}\.[A-Za-z0-9_\-]{6}\.[A-Za-z0-9_\-]{27,}"), "[token removed]"),
+    # THIS PRODUCT'S OWN key formats. Every one reached the committed archive in cleartext
+    # until 2026-10-07, the one place a key must never land. The prefixed keys are shorter
+    # than STILL_RISKY's 40, and the bare-hex ones are pure lowercase, which _looks_credential
+    # (it wants upper AND lower AND a digit) never fired on. A scrubber that ships in a kit has
+    # to know the kit's own keys first.
+    (re.compile(r"\bgodspeed_[0-9a-f]{64}\b"),                       "[key removed]"),  # notebook API key
+    (re.compile(r"\bmnr_[0-9a-f]{48}\b"),                            "[key removed]"),  # MENERIO_API_KEY / connect key
+    # A bare 32- or 64-char lowercase-hex blob: a web-auth session cookie, an /api/login-link
+    # code, a device-pairing key or code. Bounded by non-hex and pinned to EXACTLY 32 or 64,
+    # so an ordinary 40-char git commit SHA (neither length) is left alone and its prompt kept.
+    (re.compile(r"(?<![0-9a-fA-F])[0-9a-f]{64}(?![0-9a-fA-F])"),     "[key removed]"),
+    (re.compile(r"(?<![0-9a-fA-F])[0-9a-f]{32}(?![0-9a-fA-F])"),     "[key removed]"),
     # A webhook URL is its own credential: whoever holds it can post.
     (re.compile(r"https://hooks\.slack\.com/services/[A-Za-z0-9/]+"), "[webhook removed]"),
     (re.compile(r"https://(?:ptb\.|canary\.)?discord(?:app)?\.com/api/webhooks/[0-9]+/[A-Za-z0-9_\-]+"),
@@ -205,7 +217,12 @@ SECRET_PATTERNS = [
     # value has spaces in it, so a pattern that stops at one is a pattern that leaks.
     (re.compile(r"(?i)\bauthorization\s*:.*"),                       "authorization: [removed]"),
     (re.compile(r"(?i)\b(bearer)\s+\S{8,}"),                         r"\1 [removed]"),
-    (re.compile(r"(?i)\b(api[_-]?key|secret|token|password|passwd|pwd)\s*[:=]\s*\S+"),
+    # NAME=VALUE / NAME: VALUE whose name ENDS in a credential word. The old pattern put a \b
+    # right before the word, but "_" is a word character, so a "_SECRET" / "_KEY" suffix had no
+    # boundary before it and never matched: GODSPEED_NOTEBOOK_KEY=, WEBHOOK_SECRET= and
+    # FOO_SECRET= all leaked their value (2026-10-07). Allow a leading [A-Za-z0-9_]* run and a
+    # bare "key"; keep the name, drop the value.
+    (re.compile(r"(?i)\b([A-Za-z0-9_]*(?:api[_-]?key|secret|token|password|passwd|pwd|key))\s*[:=]\s*\S+"),
      r"\1=[removed]"),
     # A password said in a sentence, in either language: "Dein Passwort ist das folgende:  X",
     # "my password is X". The pattern above wants the colon right after the word, so a
@@ -224,7 +241,12 @@ SECRET_PATTERNS = [
 
 # Something that still looks like a credential after the passes above. Anything matching
 # this is not cleaned, it is dropped: a half-scrubbed secret is a stored secret.
-STILL_RISKY = re.compile(r"[A-Za-z0-9+/_\-]{40,}={0,2}")
+# The run must be CONTIGUOUS with no "/" in it. The class used to include "/", so a GitHub
+# commit URL or a deep repo path (mixed case, digits, slashes) was read as one 40+ blob and
+# the whole prompt was dropped over it, losing the line it was quoted in (2026-10-07, a
+# commit URL Michael pasted to ask about). A real secret is one unbroken token; a path is
+# several, joined by slashes, so the blob between separators is what has to look secret.
+STILL_RISKY = re.compile(r"[A-Za-z0-9+_\-]{40,}={0,2}")
 
 
 def redact_terms():
@@ -241,8 +263,10 @@ def redact_terms():
 
 
 def _looks_credential(text):
-    """A long run of mixed case and digits is a credential; a long path or a long word
-    is not. Requiring all three classes is what stops it eating ordinary prose."""
+    """A long run of mixed case and digits is a credential; a long path, URL or word is not.
+    The run is taken between slashes (see STILL_RISKY), so a commit URL or a repo path is not
+    mistaken for a key and the whole prompt dropped. Requiring all three character classes in
+    one unbroken blob is what stops it eating ordinary prose."""
     for m in STILL_RISKY.finditer(text):
         chunk = m.group(0)
         if (any(c.isdigit() for c in chunk) and any(c.islower() for c in chunk)
@@ -261,6 +285,25 @@ def scrub(text, terms):
     if _looks_credential(t):
         return None, "contains something that still looks like a credential"
     return t, None
+
+
+def scrub_project(value, terms):
+    """Clean the archived `project` field. For Claude Code and OpenCode it is the
+    working-directory basename, so a path like "C--work-AcmeCorp-migration" carried an
+    employer or client name straight into the one file built to keep such names out (the
+    no-confidential-names rule). Until 2026-10-07 it was stored with no scrub at all. Run
+    the same redaction as scrub(), but never drop the whole row over an odd-looking folder
+    name: blank that one field instead, because the prompt is still worth keeping."""
+    if not value:
+        return value
+    t = value
+    for rx, rep in SECRET_PATTERNS:
+        t = rx.sub(rep, t)
+    for term in terms:
+        t = re.sub(re.escape(term), "[name removed]", t, flags=re.I)
+    if _looks_credential(t):
+        return "[project removed]"
+    return t
 
 
 # --------------------------------------------------------------- the answers
@@ -888,7 +931,7 @@ def _harvest_locked(godspeed, dry, since, machine):
             continue
         seen.add(rid)
         row = {"id": rid, "at": rec["at"][:19], "machine": machine, "tool": rec["tool"],
-               "project": rec["project"], "text": clean}
+               "project": scrub_project(rec["project"], terms), "text": clean}
         if rec.get("channel"):
             row["channel"] = rec["channel"]  # which door: desktop, cli or telegram
         if ans:
@@ -1059,6 +1102,15 @@ def cmd_rescrub(godspeed, dry):
                 r["text"] = clean
                 changed += 1
                 file_changed = True
+            # The project field is the working-directory basename and can carry a client or
+            # employer name too, so the day a name is added to the list it must be cleaned out
+            # of what is already stored, not only out of the text beside it.
+            if r.get("project"):
+                cp = scrub_project(r["project"], terms)
+                if cp != r["project"]:
+                    r["project"] = cp
+                    changed += 1
+                    file_changed = True
             # The answer is rescrubbed with the answer rule (lose the line, keep the
             # reply), or the redact list would clean the prompts and leave the same
             # name sitting in every answer beside them.
@@ -1124,9 +1176,14 @@ def cmd_sources(godspeed, machine):
     print("what this machine (%s) can see, and whether the archive has it:" % machine)
     if off:
         print("  (switched off by your choice, so not read at all: %s)" % ", ".join(off))
+    # The grouping key above stays raw so the counts are exact, but the name is PRINTED, so a
+    # bot profile that carries a client name is redacted on the way out, the same pass the
+    # stored project field gets. The counts here never reach the repository; this is only tidy.
+    terms = redact_terms()
     leaks = []
     for key in sorted(total, key=lambda k: -total[k]):
-        name = key[0] + ("/" + key[1] if key[1] else "")
+        shown = scrub_project(key[1], terms) if key[1] else ""
+        name = key[0] + ("/" + shown if shown else "")
         n, h = total[key], have.get(key, 0)
         print("  %-28s %6d typed   %6d archived   newest %s"
               % (name, n, h, newest.get(key) or "undated"))
