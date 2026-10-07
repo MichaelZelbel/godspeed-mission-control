@@ -4,7 +4,7 @@ import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { Store, atomic, decode, encode, hash, identityIds } from '../records/store.mjs';
 import { identityPlan, identities, readBlobs } from './identity.mjs';
-import { shared,durableRoots,durableFiles,devicePrivatePaths,recordsFolder,isRecordPath,deletableTypes } from '../file-policy.mjs';
+import { shared,durableRoots,durableFiles,devicePrivatePaths,recordsFolder,isRecordPath,deletableTypes,windowsInvalid } from '../file-policy.mjs';
 import { candidate, key as nameKey } from '../records/layout.mjs';
 import {validateAssistantFiles} from '../assistant-files.mjs';
 import {resolveSavedConflict} from '../conflicts.mjs';
@@ -208,15 +208,17 @@ export class FileSync {
     for(const root of durableRoots){let stat=null;try{stat=fs.lstatSync(at(root));}catch{}if(stat?.isSymbolicLink())found.push(root);else if(stat?.isDirectory())walk(root);}
     return found;
   }
-  // Whether a file Git does not track yet stays here: a checkout of another
-  // repository, which Git lists as one folder ("skills/x/"), or a link.
-  keptLocal(name){if(this.gitDir)return false;if(name.endsWith('/'))return true;try{return fs.lstatSync(path.join(this.store.root,...name.split('/'))).isSymbolicLink();}catch{return false;}}
-  // A gitlink or a link an older version committed is carried no more. Only
-  // a commit brings one, so this looks once per run and after each merge.
+  // Whether a file Git does not track yet stays here: one named what Windows
+  // cannot hold (it would stop every Windows machine's sync), a checkout of
+  // another repository, which Git lists as one folder ("skills/x/"), or a link.
+  keptLocal(name){if(windowsInvalid(name.replace(/\/$/,'')))return true;if(this.gitDir)return false;if(name.endsWith('/'))return true;try{return fs.lstatSync(path.join(this.store.root,...name.split('/'))).isSymbolicLink();}catch{return false;}}
+  // A gitlink, a link or a name Windows cannot hold that an older version
+  // committed is carried no more; the file stays here. Only a commit brings
+  // one, so this looks once per run and after each merge.
   untrackSpecial(roots){
     if(this.specialChecked||!roots.length)return 0;
-    const special=this.names(['--literal-pathspecs','ls-files','-s','-z','--',...roots]).map(line=>line.match(/^(160000|120000) [0-9a-f]+ \d\t([\s\S]+)$/)?.[2]).filter(Boolean);
-    for(let i=0;i<special.length;i+=200)this.git(['--literal-pathspecs','rm','--cached','--quiet','--',...special.slice(i,i+200)]);
+    const special=this.names(['--literal-pathspecs','ls-files','-s','-z','--',...roots]).map(line=>line.match(/^(\d+) [0-9a-f]+ \d\t([\s\S]+)$/)).filter(m=>m&&(['160000','120000'].includes(m[1])||windowsInvalid(m[2]))).map(m=>m[2]);
+    for(let i=0;i<special.length;i+=200)this.git(['-c','core.protectNTFS=false','--literal-pathspecs','rm','--cached','--quiet','--',...special.slice(i,i+200)]);
     this.specialChecked=true;return special.length;
   }
   // The regular files of the tree checked out at `cwd`: a merge's gitlink
@@ -359,7 +361,23 @@ export class FileSync {
   }
   // Whether commit `ancestor` is already part of the history of `descendant`.
   contains(ancestor,descendant){try{this.git(['merge-base','--is-ancestor',ancestor,descendant]);return true;}catch{return false;}}
+  // `commit` without `names`, as a commit on it, the same every time: Git on
+  // Windows cannot check out a name Windows cannot hold, and from the moment
+  // one was in the repository every merge on a Windows machine failed, for
+  // good (7 October 2026). A commit from an older version that carries one
+  // is taken without it; the machine that made it keeps its file.
+  without(commit,names){
+    const index=path.join(this.store.state,'sync-without-index'),env={GIT_INDEX_FILE:index},nt=['-c','core.protectNTFS=false'];this.dropIndex(index);
+    try{
+      this.git([...nt,'read-tree',commit],undefined,{env,timeout:120000});
+      for(let i=0;i<names.length;i+=200)this.git([...nt,'--literal-pathspecs','update-index','--force-remove','--',...names.slice(i,i+200)],undefined,{env});
+      const date=this.git(['log','-1','--format=%cI',commit]);
+      return this.git(['commit-tree',this.git([...nt,'write-tree'],undefined,{env}),'-p',commit,'-m','Leave out names Windows cannot hold'],undefined,{env:{...this.identity(),GIT_AUTHOR_DATE:date,GIT_COMMITTER_DATE:date}});
+    }finally{this.dropIndex(index);}
+  }
   integrate(remoteRef,{fastForward=false}={}){
+    const carried=this.names(['ls-tree','-r','-z','--name-only',remoteRef,'--',...durableRoots,...durableFiles]).filter(windowsInvalid);
+    if(carried.length)remoteRef=this.without(remoteRef,carried);
     const integrationRoot=path.join(this.store.state,'sync-worktrees'),dir=path.join(integrationRoot,randomUUID());fs.mkdirSync(integrationRoot,{recursive:true});
     if(!path.resolve(dir).startsWith(path.resolve(integrationRoot)+path.sep))throw new Error('Unsafe sync staging path');
     const localHead=this.git(['rev-parse','HEAD']);
@@ -499,7 +517,7 @@ export class FileSync {
       // only records carried removals: a deleted rule or skill stayed on every
       // other machine, and the next upload from any of them put it back. A
       // file changed here meanwhile is a modify/delete conflict above instead.
-      const gone=this.names(['diff','--name-only','-z','--no-renames','--diff-filter=D',localHead,'HEAD'],dir).filter(n=>{if(!shared(n)||localRecords.has(n)||mergedRecords.has(n))return false;try{return fs.lstatSync(path.join(this.store.root,n)).isFile();}catch{return false;}})
+      const gone=this.names(['diff','--name-only','-z','--no-renames','--diff-filter=D',localHead,'HEAD'],dir).filter(n=>{if(!shared(n)||localRecords.has(n)||mergedRecords.has(n)||windowsInvalid(n))return false;try{return fs.lstatSync(path.join(this.store.root,n)).isFile();}catch{return false;}})
         .filter(n=>this.git(['hash-object','--',n])===this.git(['rev-parse',localHead+':'+n]));
       const tracked=this.blobFiles(dir).filter(n=>shared(n)&&!mergedRecords.has(n)).length;
       if(gone.length>25&&gone.length*5>tracked+gone.length)throw new Error('Remote removal of '+gone.length+' files needs review');
@@ -586,7 +604,7 @@ export class FileSync {
     const out=this.gitBytes(['--no-optional-locks','--literal-pathspecs','status','--porcelain','-z','--no-renames','--untracked-files=all','--ignore-submodules=all','--',...this.scopeRoots()]).toString('utf8');
     const ignored=this.inScope(recordsFolder+'/Page.md')&&fs.existsSync(this.store.recordsRoot)?this.names(['--literal-pathspecs','ls-files','-z','--others','--ignored','--exclude-standard','--',recordsFolder]).filter(name=>candidate(name.slice(recordsFolder.length+1))).map(name=>'!! '+name):[];
     return [...out.split('\0').filter(Boolean),...ignored].map(entry=>({code:entry.slice(0,2),name:entry.slice(3)}))
-      .filter(({code,name})=>!name.endsWith('/')&&this.inScope(name)&&(code.includes('D')||(()=>{try{return fs.statSync(path.join(this.store.root,name)).size<=this.largeFile;}catch{return false;}})()))
+      .filter(({code,name})=>!name.endsWith('/')&&!windowsInvalid(name)&&this.inScope(name)&&(code.includes('D')||(()=>{try{return fs.statSync(path.join(this.store.root,name)).size<=this.largeFile;}catch{return false;}})()))
       .map(({name})=>name);
   }
   dropIndex(index){for(const file of [index,index+'.lock'])fs.rmSync(file,{force:true});}
@@ -766,7 +784,12 @@ export class FileSync {
   // notebook tries again on the next round.
   forward(target,from){
     const run=()=>this.git([...this.quiet(),'merge','--ff-only','--no-stat','-q',target],undefined,{timeout:300000});
-    const waiting=error=>new Error('Waiting for local changes to be saved before the notebook can bring in the other machines\' edits: '+String(error.stderr||error.message).split('\n').filter(l=>/^\s+\S/.test(l)).map(l=>l.trim()).slice(0,3).join(', '));
+    const waiting=error=>{
+      // A name Windows cannot hold, committed elsewhere by the owner's own Git.
+      const invalid=String(error.stderr||error.message).match(/invalid path '([^']+)'/);
+      if(invalid)return new Error('A file named "'+invalid[1]+'" arrived from another machine, and Windows cannot hold that name. Rename it on the machine that made it; the notebook syncs again then');
+      return new Error('Waiting for local changes to be saved before the notebook can bring in the other machines\' edits: '+String(error.stderr||error.message).split('\n').filter(l=>/^\s+\S/.test(l)).map(l=>l.trim()).slice(0,3).join(', '));
+    };
     try{run();}
     catch(error){
       // On a machine where the notebook is the only one that commits (paths

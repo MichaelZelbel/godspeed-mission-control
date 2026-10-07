@@ -28,4 +28,10 @@ export function shared(name){return durable(name)&&!devicePrivate(name);}
 // sync wrote every pruned receipt back as a tombstone, which the next prune
 // removed again, every round.
 export const deletableTypes=new Set(['job_receipts','record_history']);
+// A path Windows cannot hold: a part with <>:"\|?* or a control character,
+// one ending in a dot or a space, or a device name (CON, PRN, AUX, NUL, COM1
+// to COM9, LPT1 to LPT9, with any extension). The notebook names its own
+// pages so they never are (records/layout.mjs); a file made on a Mac or on
+// Linux can be, and Git on Windows cannot check it out.
+export function windowsInvalid(name){return String(name).split('/').some(part=>/[<>:"\\|?*\u0000-\u001f]/.test(part)||/[. ]$/.test(part)||/^(con|prn|aux|nul|com[1-9¹²³]|lpt[1-9¹²³])(\.|$)/i.test(part));}
 export function isRecordPath(name){return String(name).split('\\').join('/').startsWith(recordsFolder+'/');}
