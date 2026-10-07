@@ -45,7 +45,10 @@ const versionsOf=store=>{let seen=readVersions.get(store);if(!seen)readVersions.
 export function rememberRead(store,notes){const seen=versionsOf(store);for(const n of notes||[])if(n?.id&&typeof n._hash==='string'){seen.delete(n.id);seen.set(n.id,n._hash);}while(seen.size>20000)seen.delete(seen.keys().next().value);}
 // delegated: the call comes with a key the owner gave another program, not
 // from the owner or the installation's own assistant (api-keys.mjs).
-export async function mcp(input,{store,query,index,domains,scopes,delegated=false}){
+// `explain` turns an error into what the caller is told (server/main.mjs
+// userFacing): a refusal plainly, an internal failure without its insides.
+// Until 7 October 2026 an assistant was handed the raw text of any error.
+export async function mcp(input,{store,query,index,domains,scopes,delegated=false,explain=error=>error.message}){
   const id=input.id??null,owner=store,seen=notes=>rememberRead(owner,notes);let result;
   // A key reads through its own view: what its scopes cover (api-keys.mjs).
   query=scopedQuery(query,scopes);
@@ -113,5 +116,5 @@ export async function mcp(input,{store,query,index,domains,scopes,delegated=fals
       result={content:[{type:'text',text:typeof value==='string'?value:JSON.stringify(value)}]};
     }else return {jsonrpc:'2.0',id,error:{code:-32601,message:'Unknown method'}};
     return {jsonrpc:'2.0',id,result};
-  }catch(e){return input.method==='tools/call'?{jsonrpc:'2.0',id,result:{content:[{type:'text',text:e.message}],isError:true}}:{jsonrpc:'2.0',id,error:{code:-32602,message:e.message}};}
+  }catch(e){const text=explain(e);return input.method==='tools/call'?{jsonrpc:'2.0',id,result:{content:[{type:'text',text}],isError:true}}:{jsonrpc:'2.0',id,error:{code:-32602,message:text}};}
 }
