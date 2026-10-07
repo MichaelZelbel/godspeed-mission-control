@@ -12,7 +12,11 @@ export class Supervisor{
   this.instance=hash(path.resolve(root)).slice(0,24);this.state=path.join(root,'.godspeed','supervisor.json');
   this.child=null;this.stopping=false;this.restarts=0;this.started=0;this.checking=false;this.shutdown=Promise.resolve();this.missingRuns=[];this.missingError=null;this.monitor=new HealthMonitor();
  }
- status(value){atomic(this.state,JSON.stringify({pid:process.pid,child_pid:this.child?.pid,at:new Date().toISOString(),restarts:this.restarts,health_failures:this.monitor.failures,failure_history:this.monitor.history,missing_runs:this.missingRuns,missing_run_check_error:this.missingError,...value}));}
+ // Best-effort: this file is advisory, and the notebook is a non-detached child,
+ // so a throw here (a read-only file, a full disk, a scanner holding it for a
+ // moment) must never end the supervisor and take the notebook down with it.
+ // Until 7 October 2026 one failed write did exactly that on Windows.
+ status(value){try{atomic(this.state,JSON.stringify({pid:process.pid,child_pid:this.child?.pid,at:new Date().toISOString(),restarts:this.restarts,health_failures:this.monitor.failures,failure_history:this.monitor.history,missing_runs:this.missingRuns,missing_run_check_error:this.missingError,...value}));}catch(error){console.error('Godspeed Mission Control supervisor: could not write its status file (continuing):',error.message);}}
  start(){this.launch();this.timer=setInterval(()=>{void this.check();},this.every);return this;}
  giveUp(reason){this.status({state:'needs_review',reason});clearInterval(this.timer);this.exit(1);}
  launch(){
