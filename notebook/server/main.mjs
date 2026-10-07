@@ -362,7 +362,9 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       // browser may keep them; without this it fetched 1.8 MB of script again
       // on every page load. index.html is always checked, so a new build shows.
       const cache = file.startsWith(path.join(uiRoot,'assets')+path.sep) ? 'public, max-age=31536000, immutable' : 'no-cache';
-      return sendFile(res, file, { 'Content-Type': mime, 'Cache-Control': cache, 'X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer' });
+      // Only the notebook itself may frame its pages: another site could show
+      // them in a frame made to look like something else (7 October 2026).
+      return sendFile(res, file, { 'Content-Type': mime, 'Cache-Control': cache, 'X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer','Content-Security-Policy':"frame-ancestors 'self'",'X-Frame-Options':'SAMEORIGIN' });
     } catch (e) {
       // A reply already under way cannot carry an error; it is cut off instead
       // (writing headers twice stopped the server until 6 October 2026).
