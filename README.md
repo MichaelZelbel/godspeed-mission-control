@@ -37,6 +37,8 @@ The default folder is `~/godspeed-v2`. The original installer also accepts `--go
 
 For development only: `install-godspeed.sh` at the top of this branch installs the branch's newest commit, so it can differ from one day to the next. It is not for readers.
 
+On a server, the development installer also gives the notebook a web address with HTTPS, and the next release will too. A server is a Linux computer without a desktop whose public address has a name in public DNS; another name can be given with `GODSPEED_HOST=notebook.example.com`. The address is `https://` plus that name, or that name with `:48443` when the server's own Caddy already serves it. At the end the installer prints a private link that makes your account (username, password, and a recovery code to keep); after that you sign in there. Ports 80 and 443 must be free or held by Caddy, and the installer needs sudo once. The assistant and the routines on the server keep using `http://127.0.0.1:47831`, which asks no sign-in and answers only on the server itself.
+
 ## One-click Hostinger installation
 
 [Install Godspeed Mission Control v2 on Hostinger](https://srv1069233.hstgr.cloud/godspeed-install). This prepares a private deployment configuration for Hostinger's Deploy button, then gives you your new server's setup link. Hostinger charges for the server; complete its checkout yourself. The integrated image is pinned separately from the existing main/latest edition.

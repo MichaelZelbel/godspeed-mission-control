@@ -9,7 +9,9 @@ import {fileURLToPath} from 'node:url';
 // and systemd's Restart=on-failure brings it back. Until 6 October 2026 such a death
 // counted as a clean exit and the notebook stayed down. A stop the service asked
 // for (SIGTERM or SIGINT, passed on to the notebook) still ends cleanly.
-export const NAMES=['GODSPEED_WORKSPACE','GODSPEED_ORIGINAL_RUNTIME','GODSPEED_PORT','GODSPEED_BIND','HERMES_HOME','GODSPEED_DEVICE','GODSPEED_MEDIA_ROOT'];
+// GODSPEED_WEB_PORT and GODSPEED_HOST are a server's: its web door, and the name its web
+// address has, which a later installation keeps (install-native-notebook.sh).
+export const NAMES=['GODSPEED_WORKSPACE','GODSPEED_ORIGINAL_RUNTIME','GODSPEED_PORT','GODSPEED_BIND','HERMES_HOME','GODSPEED_DEVICE','GODSPEED_MEDIA_ROOT','GODSPEED_WEB_PORT','GODSPEED_HOST'];
 
 export function startScript({node,supervise,env}){
   return `import {spawn} from 'node:child_process';import os from 'node:os';

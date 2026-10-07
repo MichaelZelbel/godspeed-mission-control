@@ -167,6 +167,155 @@ previous_setting() {
   [ -f "$state/start.mjs" ] || return 0
   "$node" -e 'const t=require("fs").readFileSync(process.argv[1],"utf8"),m=t.match(new RegExp("\""+process.argv[2]+"\":(\"(?:[^\"\\\\]|\\\\.)*\")"));if(m)process.stdout.write(JSON.parse(m[1]))' "$state/start.mjs" "$1" 2>/dev/null || true
 }
+
+# --- The web address, on a server ---------------------------------------------------
+# A server gets a web address with HTTPS, and every visit through it signs in. Caddy takes
+# the certificate and hands each visit to the notebook's web door (GODSPEED_WEB_PORT),
+# which answers only on this machine; the door on GODSPEED_PORT stays as it was for the
+# assistant, the routines and the tools here. Until 7 October 2026 a server installed this
+# way had only http://127.0.0.1:47831, which no other computer or phone can open. A server
+# is a computer without a desktop whose public address has a name in public DNS
+# (server-address.mjs), or one named in GODSPEED_HOST.
+CADDY_VERSION=2.11.4
+HTTPS_SERVICE=godspeed-https.service
+CADDYFILE=/etc/caddy/Caddyfile
+SITE_FILE=/etc/caddy/godspeed-notebook.caddy
+
+desktop_here() { systemd_here && systemctl is-active --quiet display-manager 2>/dev/null; }
+
+caddy_platform() {
+  [ "$(uname -s)" = Linux ] || return 1
+  case "$(uname -m)" in
+    x86_64|amd64) printf linux_amd64 ;;
+    aarch64|arm64) printf linux_arm64 ;;
+    armv7l) printf linux_armv7 ;;
+    *) return 1 ;;
+  esac
+}
+
+# Prints the path of the installation's own Caddy, downloading it when needed, checked
+# against the checksum list Caddy publishes beside it, the way Node.js is above.
+install_caddy() {
+  local platform name base dir tmp want
+  platform=$(caddy_platform) || return 1
+  name="caddy_${CADDY_VERSION}_$platform.tar.gz"
+  base="https://github.com/caddyserver/caddy/releases/download/v$CADDY_VERSION"
+  dir="$state/runtime/caddy-$CADDY_VERSION"
+  # Output is read whole, never piped into grep -q: under pipefail a grep that stops at its
+  # first match can fail the command that is still writing, and a match reads as none.
+  if [ -x "$dir/caddy" ]; then
+    case "$("$dir/caddy" version 2>/dev/null)" in "v$CADDY_VERSION "*) printf '%s' "$dir/caddy"; return 0 ;; esac
+  fi
+  mkdir -p "$state/runtime" || return 1
+  tmp=$(mktemp -d "$state/runtime/.download.XXXXXX") || return 1
+  if ! curl -fsSL "$base/caddy_${CADDY_VERSION}_checksums.txt" -o "$tmp/checksums.txt" \
+     || ! curl -fsSL "$base/$name" -o "$tmp/$name"; then
+    rm -rf "$tmp"; return 1
+  fi
+  want=$(awk -v file="$name" '$2 == file { print $1 }' "$tmp/checksums.txt")
+  if [ -z "$want" ] || [ "$(sha512sum "$tmp/$name" | cut -d' ' -f1)" != "$want" ]; then
+    echo 'The downloaded Caddy did not match its published checksum, so it was not used.' >&2
+    rm -rf "$tmp"; return 1
+  fi
+  if ! mkdir "$tmp/out" || ! tar -xzf - -C "$tmp/out" caddy < "$tmp/$name" || ! "$tmp/out/caddy" version >/dev/null 2>&1; then
+    rm -rf "$tmp"; return 1
+  fi
+  rm -rf "$dir" && mkdir -p "$dir" && mv "$tmp/out/caddy" "$dir/caddy" && rm -rf "$tmp" || return 1
+  printf '%s' "$dir/caddy"
+}
+
+# The site: the address, and the notebook's web door behind it.
+site_text() {
+  printf '# The Godspeed Mission Control notebook'"'"'s web address. Its installer writes this file.\n'
+  printf '%s {\n\treverse_proxy 127.0.0.1:%s\n}\n' "$1" "$2"
+}
+# The whole configuration of the installation's own Caddy. It has no admin endpoint (a
+# change restarts it), so it never holds the port another Caddy's endpoint uses.
+own_caddyfile() { printf '{\n\tadmin off\n}\n\n'; site_text "$1" "$2"; }
+
+https_unit_text() {
+  printf '[Unit]\nDescription=Godspeed Mission Control web address\nWants=network-online.target\nAfter=network-online.target\n'
+  printf '[Service]\nUser=%s\nGroup=%s\n' "$service_user" "$service_group"
+  printf 'Environment=%s\n' "$(unit_quoted "HOME=$HOME")" "$(unit_quoted "XDG_DATA_HOME=$state/https")" "$(unit_quoted "XDG_CONFIG_HOME=$state/https")"
+  printf 'ExecStart=%s run --config %s --adapter caddyfile\n' "$(unit_word "$1")" "$(unit_word "$state/https/Caddyfile")"
+  printf 'AmbientCapabilities=CAP_NET_BIND_SERVICE\nRestart=on-failure\nRestartSec=5\n[Install]\nWantedBy=multi-user.target\n'
+}
+
+# How the address is made depends on who answers on ports 80 and 443, which a certificate
+# needs: the installation's own Caddy when nobody does (or it already does), the server's
+# own Caddy when that is the one (the notebook's site is added to it), and nothing when
+# another program holds them.
+web_front() {
+  if [ -f "/etc/systemd/system/$HTTPS_SERVICE" ]; then echo own; return; fi
+  if systemctl is-active --quiet caddy 2>/dev/null && [ -f "$CADDYFILE" ]; then echo caddy; return; fi
+  if [ -z "$(ss -ltnH '( sport = :80 or sport = :443 )' 2>/dev/null)" ]; then echo own; return; fi
+  echo taken
+}
+port_holders() { as_root ss -ltnpH '( sport = :80 or sport = :443 )' 2>/dev/null | grep -o 'users:(("[^"]*"' | cut -d'"' -f2 | sort -u | paste -sd, - || true; }
+
+# On the server's own Caddy, a name it already serves on 443 keeps that site, and the
+# notebook gets a port of its own beside it under the same name and certificate.
+caddy_site() {
+  if awk -v name="$1" -v own="import $SITE_FILE" 'BEGIN { name = tolower(name) } /^[[:space:]]*#/ || $0 == own { next } index(tolower($0), name) { found = 1 } END { exit !found }' "$CADDYFILE"; then
+    printf '%s:%s' "$1" "${GODSPEED_HTTPS_PORT:-48443}"
+  else
+    printf '%s' "$1"
+  fi
+}
+
+# A firewall this server runs lets the port in.
+open_port() {
+  if command -v ufw >/dev/null 2>&1 && [[ "$(as_root ufw status 2>/dev/null)" == "Status: active"* ]]; then
+    as_root ufw allow "$1/tcp" >/dev/null || true
+  fi
+  if command -v firewall-cmd >/dev/null 2>&1 && as_root firewall-cmd --state >/dev/null 2>&1; then
+    as_root firewall-cmd --quiet --permanent --add-port="$1/tcp" && as_root firewall-cmd --quiet --reload || true
+  fi
+}
+
+# Adds the site to the server's Caddy. A reload Caddy refuses leaves it serving what it
+# served before, and the two files are put back as they were.
+add_to_caddy() {
+  local keep
+  keep=$(mktemp -d) || return 1
+  as_root cp -p "$CADDYFILE" "$keep/Caddyfile" || { rm -rf "$keep"; return 1; }
+  if [ -f "$SITE_FILE" ]; then as_root cp -p "$SITE_FILE" "$keep/site"; fi
+  if ! { site_text "$1" "$GODSPEED_WEB_PORT" | as_root tee "$SITE_FILE" >/dev/null \
+         && as_root chmod 644 "$SITE_FILE" \
+         && { grep -qxF "import $SITE_FILE" "$CADDYFILE" \
+              || printf '\n# The Godspeed Mission Control notebook'"'"'s web address (its installer keeps this line).\nimport %s\n' "$SITE_FILE" | as_root tee -a "$CADDYFILE" >/dev/null; } \
+         && as_root systemctl reload caddy; }; then
+    as_root cp -p "$keep/Caddyfile" "$CADDYFILE"
+    if [ -f "$keep/site" ]; then as_root cp -p "$keep/site" "$SITE_FILE"; else as_root rm -f "$SITE_FILE"; fi
+    rm -rf "$keep"; return 1
+  fi
+  rm -rf "$keep"
+}
+
+start_own_caddy() {
+  local caddy
+  caddy=$(install_caddy) || return 1
+  mkdir -p "$state/https" && own_caddyfile "$1" "$GODSPEED_WEB_PORT" > "$state/https/Caddyfile" || return 1
+  https_unit_text "$caddy" | as_root tee "/etc/systemd/system/$HTTPS_SERVICE" >/dev/null
+  as_root systemctl daemon-reload && as_root systemctl enable "$HTTPS_SERVICE" >/dev/null 2>&1 && as_root systemctl restart "$HTTPS_SERVICE"
+}
+
+# The address answers with the notebook's own /health, over a certificate curl trusts. A
+# new certificate takes Caddy seconds to a minute or two.
+address_answers() {
+  local attempt
+  for attempt in $(seq 1 "${1:-30}"); do
+    case "$(curl -fsS -m 8 "$web_address/health" 2>/dev/null)" in *'"ok":true'*) return 0 ;; esac
+    sleep 4
+  done
+  return 1
+}
+
+# The private link that makes the owner's account, from the door on this machine; nothing
+# once the account exists.
+setup_path() {
+  "$node" -e 'const base="http://127.0.0.1:"+process.argv[1];fetch(base+"/api/auth/status").then(r=>r.json()).then(s=>s.configured?"":fetch(base+"/api/login-link",{method:"POST",headers:{"content-type":"application/json"},body:"{}"}).then(r=>r.json()).then(d=>d.path||Promise.reject())).then(p=>process.stdout.write(p),()=>process.exit(1))' "$GODSPEED_PORT"
+}
 # Lets a test load the functions above without installing anything.
 if [ "${GODSPEED_INSTALLER_FUNCTIONS_ONLY:-}" = 1 ]; then return 0 2>/dev/null || exit 0; fi
 
@@ -208,7 +357,7 @@ if [ "${GODSPEED_SKIP_UI:-}" != 1 ] && [ ! -f "$version/notebook/ui/.godspeed-bu
 fi
 
 # What this installation ran with until now stays, unless this run names it (previous_setting).
-for setting in GODSPEED_DEVICE GODSPEED_PORT GODSPEED_MEDIA_ROOT; do
+for setting in GODSPEED_DEVICE GODSPEED_PORT GODSPEED_MEDIA_ROOT GODSPEED_WEB_PORT GODSPEED_HOST; do
   if [ -z "${!setting:-}" ]; then
     value=$(previous_setting "$setting")
     if [ -n "$value" ]; then export "$setting=$value"; fi
@@ -251,6 +400,34 @@ manager=none
 if systemd_here; then
   if root_available; then manager=system; else manager=user; fi
 fi
+
+# A server's web address ("The web address, on a server" above): the name it had, or the
+# one GODSPEED_HOST gives, or the one public DNS has for it. Decided here, before the
+# notebook is stopped, and made once the new notebook answers.
+web_host=""
+web_front_kind=""
+web_site=""
+web_problem=""
+if [ -n "${GODSPEED_HOST:-}" ]; then
+  web_host=$("$node" "$version/notebook/scripts/server-address.mjs" --name "$GODSPEED_HOST") \
+    || { echo "GODSPEED_HOST is not a name a web address can have: $GODSPEED_HOST" >&2; exit 1; }
+elif [ "$(uname -s)" = Linux ] && ! desktop_here; then
+  web_host=$("$node" "$version/notebook/scripts/server-address.mjs" 2>/dev/null || true)
+fi
+if [ -n "$web_host" ]; then
+  export GODSPEED_HOST="$web_host" GODSPEED_WEB_PORT=${GODSPEED_WEB_PORT:-47833}
+  if [ "$manager" != system ]; then
+    web_problem="This is a server, and making its web address needs systemd and the administrator's rights once. Run the installer again from an account that may use sudo."
+  else
+    web_front_kind=$(web_front)
+    case "$web_front_kind" in
+      own) web_site=$web_host ;;
+      caddy) web_site=$(caddy_site "$web_host") ;;
+      *) web_problem="This is a server, but another program ($(port_holders)) answers on ports 80 and 443, which its web address needs for a certificate, so the notebook has no web address yet." ;;
+    esac
+  fi
+fi
+web_address=${web_site:+https://$web_site}
 
 # Stop the notebook before its folder and its assistant are changed, and start the one
 # that ran before again if the installation stops before it is switched over.
@@ -370,9 +547,42 @@ if [ -n "$started" ]; then
     [ "$old" = "$(basename "$version")" ] || [ "$old" = "$previous" ] || rm -rf "${state:?}/versions/$old"
   done
   rm -rf "${state:?}/source" "$state"/versions/.incoming.* "$state"/runtime/.download.*
+
+  # The web address, now that the notebook's web door answers.
+  if [ -n "$web_site" ]; then
+    web_ports="ports 80 and 443"
+    case "$web_front_kind" in
+      own)
+        open_port 80; open_port 443
+        start_own_caddy "$web_site" \
+          || web_problem="Caddy, which gives the notebook its web address, could not be set up here. What it said is shown by: journalctl -u $HTTPS_SERVICE -n 50"
+        ;;
+      caddy)
+        case "$web_site" in *:*) web_ports="port ${web_site##*:}"; open_port "${web_site##*:}" ;; esac
+        add_to_caddy "$web_site" \
+          || web_problem="This server's Caddy did not take the notebook's web address, so it goes on serving what it served before. What it said is shown by: journalctl -u caddy -n 50"
+        ;;
+    esac
+    if [ -z "$web_problem" ] && ! address_answers; then
+      if [ "$web_front_kind" = own ]; then logs="journalctl -u $HTTPS_SERVICE -n 50"; else logs="journalctl -u caddy -n 50"; fi
+      web_problem="The notebook's web address $web_address does not answer yet. If the hosting provider has a firewall, it must let in $web_ports. What Caddy said is shown by: $logs"
+    fi
+  fi
 fi
 if [ "$service_user" = root ]; then
   echo 'The notebook and its assistant run as root here, so the assistant can change anything on this computer. Installing from an ordinary account avoids that.' >&2
 fi
 echo "Godspeed Mission Control folder: $root"
-echo "Notebook: http://127.0.0.1:$GODSPEED_PORT/dashboard"
+if [ -n "$web_address" ] && [ -z "$web_problem" ]; then
+  setup=$(setup_path || true)
+  if [ -n "$setup" ]; then
+    echo "Notebook: open this private link to make your account. It works once, for 24 hours, and running the installer again makes a new one:"
+    echo "$web_address$setup"
+  else
+    echo "Notebook: $web_address/dashboard"
+  fi
+else
+  echo "Notebook: http://127.0.0.1:$GODSPEED_PORT/dashboard"
+  # A server without its web address is not finished.
+  if [ -n "$web_problem" ]; then echo "$web_problem" >&2; exit 1; fi
+fi

@@ -50,7 +50,7 @@ jobs:
         run: node --test notebook/test/starter-workspace.test.mjs notebook/test/assistant-starter-wiring.test.mjs notebook/test/computer-wiring-on-existing-server.test.mjs notebook/test/windows-command-files.test.mjs notebook/test/final-core-contracts.test.mjs notebook/test/telegram-replies.test.mjs notebook/test/native-runtime.test.mjs
       - name: Installers and setup, without Docker
         run: |
-          node --test notebook/test/native-installer.test.mjs notebook/test/native-start-script.test.mjs notebook/test/setup-code.test.mjs
+          node --test notebook/test/native-installer.test.mjs notebook/test/native-start-script.test.mjs notebook/test/setup-code.test.mjs notebook/test/native-web-address.test.mjs notebook/test/server-address.test.mjs notebook/test/web-door.test.mjs
           bash docker/full-candidate/test-package-update.sh
           python3 docker/test/test-telegram-setup.py
       - name: Build the integrated version

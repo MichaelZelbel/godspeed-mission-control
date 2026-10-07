@@ -64,7 +64,7 @@ export function userFacing(error, roots = []) {
   message = message.replace(/[A-Za-z]:[\\/][^\s'"]*|\\\\[^\s'"]+|(?<![\w.])\/(?:home|opt|root|var|tmp|Users|srv|data|mnt|etc|private)\/[^\s'"]*/g, '[path]');
   return message || null;
 }
-export async function createService({ root, mediaRoot, host = '127.0.0.1', port = 47831, token, uiRoot, provider, device = 'local', authNow } = {}) {
+export async function createService({ root, mediaRoot, host = '127.0.0.1', port = 47831, webPort, token, uiRoot, provider, device = 'local', authNow } = {}) {
   // The store keeps every record in memory and re-reads only the files its
   // watcher names; the index follows the store's changes row by row.
   const store = new Store(root,{device,watch:true}), index = new SearchIndex(store,{background:true}), query = new QueryService(store), sync = new FileSync(store);
@@ -99,6 +99,14 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   const remote = !['127.0.0.1', '::1', 'localhost'].includes(host);
   if (remote && !token) throw new Error('Remote access requires a candidate token');
   const auth = new WebAuth(store.state, { token, remote, now: authNow });
+  // The web address's own door (webPort, GODSPEED_WEB_PORT). On a server the Linux installer
+  // puts HTTPS in front of it, and every visit through it signs in, while the door on `port`
+  // stays as it is for the assistant, the routines and the tools on this machine. Until
+  // 7 October 2026 a server installed with the Linux installer had only that local door, so
+  // its owner could not open the notebook from any other computer or phone. The owner's
+  // account is made through a private setup link the installer asks the local door for
+  // (/api/login-link), so without a token nothing typed into the web door creates one.
+  const web = webPort === undefined || webPort === null ? null : { port: Number(webPort), auth: new WebAuth(store.state, { token, remote: true, now: authNow }) };
   const menerioImport=new MenerioImport(store,mediaRoot,()=>index.rebuild());
   const telegramConnection=new TelegramConnection();
   const chatRequests=new Map(),recoveryRunner=new RecoveryRunner(store),backupRunner=new BackupRunner(store,mediaRoot);let dictationBusy=false;
@@ -111,7 +119,6 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
     const presented = String(req.headers['x-godspeed-pair-key'] || '');
     return media && !!presented && pairKeys.some(k => !k.revoked_at && k.hash === hash(presented));
   };
-  const authorized = (req, route) => auth.authorized(req) || pairedMedia(req, route);
   function send(res, status, body, headers = {}) { res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', ...headers }); res.end(JSON.stringify(body)); }
   // A file is opened before the reply starts, so a missing one is a 404, and a
   // read that fails halfway ends that one reply. Until 6 October 2026 either
@@ -129,7 +136,9 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
     return Buffer.concat(chunks);
   }
   uiRoot = path.resolve(uiRoot || fileURLToPath(new URL('../ui/dist', import.meta.url)));
-  const server = http.createServer(async (req, res) => {
+  // One handler for both doors; `remote` and `auth` are the door's own.
+  const handle = (remote, auth) => async (req, res) => {
+    const authorized = (req, route) => auth.authorized(req) || pairedMedia(req, route);
     try {
       const url = new URL(req.url, 'http://localhost'), route = url.pathname;
       const hostName = (req.headers.host || '').split(':')[0];
@@ -370,8 +379,19 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       if (!shown || e instanceof SyntaxError) console.error('Godspeed Mission Control: '+req.method+' '+String(req.url).split('?')[0]+' failed:', e);
       send(res, e.status || (e.code === 'CONFLICT' ? 409 : 400), { error: shown || 'Something went wrong on the server. The details are in its log.', ...(shown && e.code ? { code: e.code } : {}) });
     }
-  });
-  await new Promise((resolve, reject) => { server.once('error', reject); server.listen(port, host, resolve); });
+  };
+  const listen = (server, port, host) => new Promise((resolve, reject) => { server.once('error', reject); server.listen(port, host, resolve); });
+  const server = http.createServer(handle(remote, auth));
+  await listen(server, port, host);
+  // Only the HTTPS proxy on this machine reaches the web door. A door that cannot open
+  // (its port taken) leaves the notebook running for everything on this machine; the
+  // installer's check of the web address then says so.
+  let webServer = null;
+  if (web) {
+    webServer = http.createServer(handle(true, web.auth));
+    try { await listen(webServer, web.port, '127.0.0.1'); }
+    catch (error) { console.error('Godspeed Mission Control: the web address\'s door on port ' + web.port + ' could not open: ' + error.message); webServer = null; }
+  }
   // The watchers say what changed. Now and then the store compares every
   // file's size and time with what it read, and the index re-reads the
   // workspace, in case a watcher missed something (it can, under load).
@@ -410,7 +430,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   const watchRoot=name=>{const folder=path.join(store.root,name);if(!watchers.has(name)&&fs.existsSync(folder))watchers.set(name,fs.watch(folder,{recursive:true},changed(name)));};
   for(const name of durableRoots)watchRoot(name);
   const rootWatcher=fs.watch(store.root,(event,name)=>{if(durableRoots.includes(name)){watchRoot(name);changed(name)(event,null);}else if(durableFiles.includes(name))changed('')(event,name);});
-  return { server, store, index, query, domains, scheduler, sync, mediaSync,address: server.address(), close: async () => { clearInterval(meaningTimer);clearInterval(processingTimer);clearInterval(backupTimer);stopIndexing();store.unwatch();await syncRunner.close();await menerioImport.close();rootWatcher.close();for(const watcher of watchers.values())watcher.close();clearTimeout(debounce);clearTimeout(indexDebounce);clearInterval(telegramTimer);clearInterval(interval);clearInterval(jobs);clearInterval(syncTimer);clearInterval(mediaTimer); await new Promise(resolve => server.close(resolve)); index.close(); } };
+  return { server, store, index, query, domains, scheduler, sync, mediaSync,address: server.address(), webAddress: webServer?.address() || null, close: async () => { if (webServer) await new Promise(resolve => webServer.close(resolve)); clearInterval(meaningTimer);clearInterval(processingTimer);clearInterval(backupTimer);stopIndexing();store.unwatch();await syncRunner.close();await menerioImport.close();rootWatcher.close();for(const watcher of watchers.values())watcher.close();clearTimeout(debounce);clearTimeout(indexDebounce);clearInterval(telegramTimer);clearInterval(interval);clearInterval(jobs);clearInterval(syncTimer);clearInterval(mediaTimer); await new Promise(resolve => server.close(resolve)); index.close(); } };
 }
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const root = process.env.GODSPEED_WORKSPACE;
@@ -424,10 +444,10 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   process.on('uncaughtException', error => { console.error('Godspeed Mission Control: uncaughtException, the server restarts:', error); process.exit(1); });
   // This machine's own name, never one shared by every PC (device-id.mjs).
   const {machineDevice,claimLegacyOwner}=await import('../core/device-id.mjs'),device=machineDevice(root);
-  const service = await createService({ root, mediaRoot: process.env.GODSPEED_MEDIA_ROOT, host: process.env.GODSPEED_BIND || '127.0.0.1', port: Number(process.env.GODSPEED_PORT || 47831), token: process.env.GODSPEED_ACCESS_TOKEN,device:device.id });
+  const service = await createService({ root, mediaRoot: process.env.GODSPEED_MEDIA_ROOT, host: process.env.GODSPEED_BIND || '127.0.0.1', port: Number(process.env.GODSPEED_PORT || 47831), webPort: process.env.GODSPEED_WEB_PORT || undefined, token: process.env.GODSPEED_ACCESS_TOKEN,device:device.id });
   // At start, and on any later tick that finds the old shared name as the owner.
   const claim=service.scheduler.claimLegacy=async()=>{if(await claimLegacyOwner(service.store,device))console.log('This machine ('+device.id+') now runs the routines the old shared name "local" ran');};
   try{await claim();}catch(error){console.error('The routines of the old shared name "local" could not be taken over: '+error.message);}
-  console.log('Godspeed Mission Control candidate listening on port ' + service.address.port);
+  console.log('Godspeed Mission Control candidate listening on port ' + service.address.port + (service.webAddress ? ', and for its web address on port ' + service.webAddress.port : ''));
   for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, async () => { await service.close(); process.exit(0); });
 }
