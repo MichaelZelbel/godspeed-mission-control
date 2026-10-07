@@ -263,8 +263,18 @@ export class Domains {
         const mySlots=new Map(of('fact_slots',true).map(s=>[s.attribute,s])),theirSlots=new Map(of('fact_slots').map(s=>[s.attribute,s])),myClaims=of('claims',true);
         const move=(type,r,extra={})=>{const next=this.store.prepare(type,{subject_type:'self',subject_id:null,contact_id:null,merged_from_contact_id:source.id,...extra},r);next.references=this.query.references(type,next);return next;};
         const answered=c=>((mySlots.get(c.attribute)||theirSlots.get(c.attribute))?.cardinality||c.cardinality)!=='many'&&claimHolds(c,today)&&myClaims.some(x=>x.attribute===c.attribute&&claimHolds(x,today));
-        const changes=[...[...theirSlots.values()].map(s=>mySlots.has(s.attribute)?this.store.prepare('fact_slots',{removed_at:now},s):move('fact_slots',s)),
-          ...of('claims').map(c=>answered(c)?move('claims',c,{valid_to:today,closure_evidence:{source_type:'merge',source_id:source.id,quote:null}}):move('claims',c))];
+        // Their sections come too: one you lack becomes yours as it is, one you
+        // have already stays yours. A fact that sat in a private section of
+        // theirs and lands under a section of yours that is not private is
+        // hidden from assistants, so nothing private becomes readable. Until
+        // 7 October 2026 the sections stayed on the merged card and its
+        // private facts reached every assistant.
+        const mySections=new Map(this.query.rows('profile_categories').filter(c=>!c.contact_id).map(c=>[c.slug,c])),theirSections=this.query.rows('profile_categories').filter(c=>c.contact_id===source.id);
+        const privateSlugs=new Set(theirSections.filter(c=>c.visibility_scope==='private').map(c=>c.slug)),isPrivate=slug=>(mySections.get(slug)||theirSections.find(c=>c.slug===slug))?.visibility_scope==='private';
+        const hide=c=>privateSlugs.has(theirSlots.get(c.attribute)?.category_slug)&&!isPrivate((mySlots.get(c.attribute)||theirSlots.get(c.attribute)).category_slug)?{ai_visibility:'hidden'}:{};
+        const sections=theirSections.map(s=>{if(mySections.has(s.slug))return this.store.prepare('profile_categories',{removed_at:now},s);const next=this.store.prepare('profile_categories',{contact_id:null,merged_from_contact_id:source.id},s);next.references=this.query.references('profile_categories',next);return next;});
+        const changes=[...sections,...[...theirSlots.values()].map(s=>mySlots.has(s.attribute)?this.store.prepare('fact_slots',{removed_at:now},s):move('fact_slots',s)),
+          ...of('claims').map(c=>answered(c)?move('claims',c,{valid_to:today,closure_evidence:{source_type:'merge',source_id:source.id,quote:null},...hide(c)}):move('claims',c,hide(c)))];
         const aliases=[source.name,...source.aliases||[]].map(alias=>this.store.prepare('user_self_aliases',{alias,source_contact_id:source.id}));
         this.store.commit([...changes,...aliases,this.store.prepare('contacts',{merged_into:'self',removed_at:new Date().toISOString()},source)]);return {success:true,merged_into_self:true};
       });
