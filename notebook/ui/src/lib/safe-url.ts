@@ -36,17 +36,29 @@ export function safeExternalUrl(raw: unknown): string | null {
  * The src for an embedded frame or media element: http(s) only, anything else
  * becomes about:blank. Stricter than safeExternalUrl because a frame loads
  * without a click.
+ *
+ * A note's own attachments are served from this app at a relative URL
+ * (`/api/media/file/...`), so a relative URL that stays on this origin is
+ * allowed too; until 7 October 2026 only an absolute http(s) URL passed, and
+ * every note PDF, video and audio embed rendered blank. A protocol-relative
+ * `//other.example` resolves off-site and is still refused.
  */
 export function safeEmbedSrc(raw: unknown): string {
   if (typeof raw !== "string") return "about:blank";
   const value = raw.trim();
   if (value === "about:blank") return value;
+  const origin = typeof location !== "undefined" ? location.origin : null;
+  let parsed: URL;
   try {
-    const parsed = new URL(value);
-    return parsed.protocol === "https:" || parsed.protocol === "http:" ? value : "about:blank";
+    parsed = new URL(value, origin ?? undefined);
   } catch {
     return "about:blank";
   }
+  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return "about:blank";
+  // An absolute http(s) URL the author wrote in full keeps working; a relative
+  // URL only when it resolves to this app's own origin.
+  if (/^https?:\/\//i.test(value)) return value;
+  return origin && parsed.origin === origin ? value : "about:blank";
 }
 
 /** Open a stored URL in a new tab, or do nothing when it is not safe to. */
