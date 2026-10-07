@@ -335,7 +335,8 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       if(route==='/api/chat/stop'&&req.method==='POST'){const input=JSON.parse(await body(req));chatRequests.get(input.id)?.abort();return send(res,200,{ok:true});}
       if (route.startsWith('/api/functions/') && req.method === 'POST') {
         const name=route.slice('/api/functions/'.length),input=JSON.parse(await body(req));
-        const isChat=['note-chat','collection-chat','conversation-chat'].includes(name),id=input.request_id;
+        // A chat summary is read-only (Domains.summarizeChat): no message, receipt or retained conversation.
+        const isChat=['note-chat','collection-chat','conversation-chat'].includes(name)&&input.mode!=='summarize',id=isChat?input.request_id:undefined;
         if(isChat&&id&&(!/^[a-f0-9-]{36}$/.test(id)||chatRequests.has(id)))throw new Error('Invalid chat request');
         const receiptId=isChat&&id?'chat-request-'+id:null,requestHash=hash({name,input}),previous=receiptId?store.get('command_receipts',receiptId):null;
         if(previous){if(previous.request_hash!==requestHash)throw Error('Chat retry differs from the retained request');if(previous.state==='verified')return send(res,200,{data:previous.result,error:null});throw Error('This interrupted chat request needs review before replay');}
