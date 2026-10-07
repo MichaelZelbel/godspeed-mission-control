@@ -76,8 +76,12 @@ export function restore(store,mediaRoot,source,{deviceConfig=false}={}){
     const target=path.resolve(source,entry.path);
     if(!target.startsWith(path.resolve(source)+path.sep)||hash(fs.readFileSync(target))!==entry.sha256)throw new Error('Backup integrity mismatch');
   }
-  // Only read: the backup itself is never written (Store.inspect).
-  const verified=Store.inspect(source);if(verified.problems.length||verified.records.size!==manifest.records)throw new Error('Backup reference validation failed');
+  // Only read: the backup itself is never written (Store.inspect). A problem
+  // the backup already carried (a reference that arrived by sync, an Obsidian
+  // duplicated uid) is restored and reported, not refused, so a notebook that
+  // kept working with it can still be restored (7 October 2026). The record
+  // count must still match the manifest, and the bytes were checked above.
+  const verified=Store.inspect(source);if(verified.records.size!==manifest.records)throw new Error('Backup record count differs from its manifest');
   if(fs.existsSync(mediaRoot)&&fs.readdirSync(mediaRoot).length)throw new Error('Restore requires empty media storage');
   if(deviceConfig&&fs.existsSync(path.join(source,'device-config')))for(const name of fs.readdirSync(path.join(source,'device-config')))if(fs.existsSync(path.join(store.state,name)))throw new Error('Restore device settings only to an unconfigured candidate');
   const count=store.restore(source);
@@ -96,6 +100,9 @@ export function restoreSeparateCopy(store,source){
     const file=name.startsWith('media/')?path.join(media,name.slice(6)):path.join(workspace,name);
     if(hash(fs.readFileSync(file))!==entry.sha256)throw Error('Restored copy differs from the verified backup');compared++;
   }
-  const result={verified:true,workspace,media,records,compared_files:compared,excluded_files:excluded,source,at:new Date().toISOString()};
+  // The restored copy matches the backup byte for byte (verified above); any
+  // reference or duplicate-uid problem it carried is reported here, not a reason
+  // to refuse the restore (7 October 2026).
+  const result={verified:true,workspace,media,records,problems:target.problems.map(p=>({file:p.file||null,error:p.error})),compared_files:compared,excluded_files:excluded,source,at:new Date().toISOString()};
   atomic(path.join(destination,'verification.json'),JSON.stringify(result,null,2));return result;
 }

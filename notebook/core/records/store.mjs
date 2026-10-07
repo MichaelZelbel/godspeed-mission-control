@@ -263,6 +263,24 @@ export class Store {
       }
     }
   }
+  // The writer lock, waited for synchronously at a moment that must not be
+  // thrown away (a backup's snapshot): a save or a sync round holding it now is
+  // over in moments, like sync's lockSoon. Retries acquisition for a bounded
+  // time, then gives up as withLock would. Only acquisition is retried; once
+  // the work has started its failure is never repeated (7 October 2026: a
+  // backup threw its whole copy away when anything held the lock at the
+  // snapshot).
+  withLockSoon(fn,{timeoutMs=30000}={}){
+    const deadline=Date.now()+timeoutMs;
+    for(;;){
+      let entered=false;
+      try{return this.withLock(()=>{entered=true;return fn();});}
+      catch(error){
+        if(entered||error.code!=='WRITER_BUSY'||Date.now()>=deadline)throw error;
+        sleep(25+Math.floor(Math.random()*25));
+      }
+    }
+  }
   // Where a record's file is now, or where a new one would be written.
   file(record) {
     if (!this.records) this.scan();
@@ -674,17 +692,24 @@ export class Store {
     if (errors.length) throw new Error('Reference validation failed: ' + JSON.stringify(errors));
     const {targets,moved}=this.planPaths(records,{removeKeys,forced:paths,proposed,cascade});records=[...records,...moved];
     const fileAt=record=>path.join(this.recordsRoot,...targets.get(record.type+'/'+record.id).split('/')),written=new Set(records.map(fileAt)),relative=file=>posix(path.relative(this.root,file));
-    // The old file of a moved or removed record goes first: on a file system
-    // that ignores case, renaming plan.md to Plan.md would otherwise delete
-    // the file it had just written.
-    // Nor is a file deleted that another record still holds: a conversion
+    // A file deleted that another record still holds is left: a conversion
     // writes in groups, and a later group may still be reading from there.
     const batch=new Set([...records.map(r=>r.type+'/'+r.id),...removeKeys]),held=file=>{const k=this.keyOfFile?.get(file);return k!==undefined&&!batch.has(k);};
-    const items=[],dropped=new Set(),drop=file=>{if(!file||written.has(file)||held(file)||dropped.has(file)||!fs.existsSync(file))return;dropped.add(file);items.push({file:relative(file),delete:true});};
+    const deletes=[],dropped=new Set(),drop=file=>{if(!file||written.has(file)||held(file)||dropped.has(file)||!fs.existsSync(file))return;dropped.add(file);deletes.push({file:relative(file),delete:true});};
     for(const record of records)drop(this.fileOf.get(record.type+'/'+record.id));
     for(const key of removeKeys)drop(this.fileOf.get(key));
-    for(const record of records)items.push({file:relative(fileAt(record)),text:encode(record)});
-    for(const item of files){if(!durable(item.file))throw Error('File is outside durable state');items.push({file:item.file,text:item.text});}
+    const writes=records.map(record=>({file:relative(fileAt(record)),text:encode(record)}));
+    for(const item of files){if(!durable(item.file))throw Error('File is outside durable state');writes.push({file:item.file,text:item.text});}
+    // A record's new file is written before its old one is deleted, so a save
+    // interrupted part-way never leaves a record with no file at all and no
+    // history copy (7 October 2026: a multi-record move that died mid-write lost
+    // the records whose old file was deleted before their new one was written).
+    // The exception is a delete whose file this same transaction writes again
+    // under another spelling (a rename by letter case): on a file system that
+    // ignores case that delete must still go first, or it would remove what was
+    // just written.
+    const writeKeys=new Set(writes.map(w=>nameKey(w.file))),recase=item=>writeKeys.has(nameKey(item.file));
+    const items=[...deletes.filter(recase),...writes,...deletes.filter(item=>!recase(item))];
     const staged=this.stage(items);
     this.publish(staged);this.prune(staged.manifest.filter(item=>item.delete).map(item=>path.resolve(this.root,item.file)));this.refreshView(records,removeKeys,targets,checked);
   }
@@ -797,7 +822,14 @@ export class Store {
   publish({dir,manifest,made}){
     try{this.applyTransaction(dir,manifest);}
     catch(error){
-      if(!error.crash)try{this.rollBack(dir,manifest,made);}catch{}
+      let rolledBack=false;
+      if(!error.crash)try{this.rollBack(dir,manifest,made);rolledBack=true;}catch{}
+      // A failed save whose rollback also failed must not be left prepared for
+      // recover() to replay forward: a save the caller was told failed would
+      // then reappear. It is set aside instead, kept and reported (7 October
+      // 2026). A crash (the program dying half-way, error.crash) is left
+      // prepared on purpose, for recover() to judge by staleness.
+      if(!error.crash&&!rolledBack)try{this.setAside(dir,'a failed save could not be rolled back, so it was set aside rather than replayed');}catch{}
       // What this store holds may no longer be what is on disk.
       this.invalidate();if(this.watching)for(const item of manifest){const {name}=this.target(item);if(isRecordPath(name))this.touched(name.slice(recordsFolder.length+1));}
       throw error;
@@ -863,11 +895,16 @@ export class Store {
       if(name.startsWith('.completed-')||finished(dir)){this.discardCompletedTransaction(dir);continue;}
       if(fs.existsSync(path.join(dir,'prepared')))pending.push({dir,name,order:preparedOrder(dir)});
     }
+    if(!pending.length)return;
     pending.sort((a,b)=>a.order.localeCompare(b.order)||a.name.localeCompare(b.name));
+    // The live records, so staleness can judge a prepared save by the record's
+    // identity and revision, not only by file. Refreshed after each replay, so
+    // a later prepared save sees the earlier one's effect.
+    this.scan();
     for(const {dir} of pending){
       let manifest=null;try{manifest=JSON.parse(fs.readFileSync(path.join(dir,'manifest.json'),'utf8'));}catch{}
       const stale=Array.isArray(manifest)?this.staleness(dir,manifest):'its list of files cannot be read';
-      if(stale)this.setAside(dir,stale);else this.applyTransaction(dir,manifest);
+      if(stale)this.setAside(dir,stale);else{this.applyTransaction(dir,manifest);this.scan(true);}
     }
   }
   // Why replaying a prepared transaction would change more than it meant to,
@@ -890,6 +927,25 @@ export class Store {
       else{const before=readOrNull(path.join(dir,i+'.before'));allow(key,before?hash(before):!item.delete&&legacyCommit&&isRecordPath(name)?MISSING:undefined);}
     }
     for(const {name,file} of targets)if(!states.get(nameKey(name)).has(stateOf(file)))return name+' was changed after this save was prepared';
+    // A save must not be replayed over a newer save of the same record. When the
+    // record it would write has since moved to a third file, every file this
+    // names reads as missing or as it left it, so the file check above passes
+    // and the old page would come back beside the new, two files with one uid
+    // (a Duplicate UUID that stops sync). So, by identity: if the record this
+    // would write lives now at a higher revision, it was saved again since this
+    // was prepared and this is stale (7 October 2026).
+    if(this.records)for(let i=0;i<manifest.length;i++){
+      const item=manifest[i];if(item.delete)continue;
+      let record=null;try{record=decode(fs.readFileSync(path.join(dir,item.staged),'utf8'),targets[i].file);}catch{continue;}
+      if(record.type==='record_history')continue;
+      const key=this.keyOfUid.get(record.uid),live=key&&this.records.get(key);
+      // Already exactly this save (its hash) means a replay that changes nothing;
+      // otherwise a live record at the same revision or higher is a different,
+      // newer save of the record, and replaying this one would put the old page
+      // back beside it: two files with one uid. A lower live revision is the
+      // record this save was based on, not yet applied, so it still replays.
+      if(live&&live._hash!==hash(encode(record))&&Number(live.revision)>=Number(record.revision))return targets[i].name+' names a record that was saved again after this save was prepared';
+    }
     return null;
   }
   // Kept, never deleted, out of the recovery namespace, and reported until
@@ -968,7 +1024,7 @@ export class Store {
     fs.mkdirSync(destination, { recursive: true });
     const roots=[...durableRoots,...durableFiles,'conflicts'],copied=new Map();let at;
     for(const name of roots)copyInto(this.root,destination,name,copied);
-    this.withLock(()=>{
+    this.withLockSoon(()=>{
       this.recover();const seen=new Set();
       for(const name of roots)copyInto(this.root,destination,name,copied,seen);
       for(const name of copied.keys())if(!seen.has(name)){fs.rmSync(path.join(destination,...name.split('/')),{force:true});copied.delete(name);}
@@ -993,11 +1049,20 @@ export class Store {
     view.scan(); return view;
   }
   restore(source) {
-    if (this.scan().size) throw new Error('Restore requires an empty workspace');
+    // Empty destination: not only no record, but no durable file of any kind at
+    // a path the restore would write, so an owner's own page (no uid) with a
+    // backup file's name is never overwritten without a copy (7 October 2026:
+    // the check counted records only and missed owner pages).
+    if (this.scan().size || this.entries.size) throw new Error('Restore requires an empty workspace');
     for(const name of [...durableRoots.filter(r=>r!==recordsFolder),...durableFiles])if(fs.existsSync(path.join(this.root,name)))throw new Error('Restore requires empty durable state');
     const manifest = JSON.parse(fs.readFileSync(path.join(source, 'backup.json'), 'utf8')); if (manifest.format !== 1) throw new Error('Unsupported backup format');
     return this.withLock(() => {
-      const checked=Store.inspect(source);if(checked.problems.length)throw new Error('Backup records need review');
+      // A problem the backup already carried (a reference that arrived by sync,
+      // an Obsidian-duplicated uid) is restored faithfully and left among the
+      // store's reported problems, not refused: a notebook kept working with it,
+      // so its backup must be restorable (7 October 2026). Its bytes and record
+      // count are still verified by the caller (archives.restore).
+      const checked=Store.inspect(source);
       // A backup from before 2026-10-05 holds records/; its files go to notebook/.
       const legacy=checked.recordsRoot!==path.join(checked.root,recordsFolder),as=relative=>legacy?relative.replace(new RegExp('^'+legacyRecordsFolder+'/'),recordsFolder+'/'):relative;
       const items=[];const visit=(relative)=>{
@@ -1007,7 +1072,7 @@ export class Store {
       };
       for(const name of [...durableRoots,...durableFiles,'conflicts',...(legacy?[legacyRecordsFolder]:[])])if(fs.existsSync(path.join(source,name)))visit(name);
       this.publishFiles(items);
-      this.scan(); if (this.problems.length) throw new Error('Restored records need review'); return this.records.size;
+      this.scan(); return this.records.size;
     });
   }
 }
