@@ -445,6 +445,8 @@ export class Domains {
       }
       if(name==='collection-chat'){
         const validKeys=new Set((context.collection?.field_schema||[]).map(f=>f.key));
+        const shownItems=new Map((context.items||[]).map(i=>[i.id,i]));
+        let keptTruncated=false;
         const changes=[...(structured.items_created||[]),...(structured.item_updates||[])].map(raw=>{
           // Models also answer {id?, <field>: value} instead of {id?, data:{...}}.
           // Read as nothing, that saved an empty "Untitled" item while the reply
@@ -452,14 +454,22 @@ export class Domains {
           const change=raw&&typeof raw.data==='object'&&raw.data!==null?raw:{id:raw?.id,data:Object.fromEntries(Object.entries(raw||{}).filter(([key])=>key!=='id'))};
           const old=change.id?collectionWriteSnapshot(context).find(i=>i.id===change.id):null;if(change.id&&!old)throw new Error('Assistant requested a row outside this collection');
           if(Object.keys(change.data||{}).some(k=>!validKeys.has(k)))throw new Error('Assistant requested an unknown collection field');
+          // A long text field is cut to ~600 chars in the prompt copy. Saving the
+          // model's copy of such a field stored the cut text (ending in an
+          // ellipsis) as the whole value: a 2,234-char description became 601
+          // (DM4, 7 October 2026). As note chat refuses to rewrite a note it saw
+          // only in part, drop any field the model was shown only truncated and
+          // keep the real value; the note chat fix (0e7a8b0) never reached here.
+          if(old){const shown=shownItems.get(old.id);if(shown?.context_truncated)for(const key of Object.keys(change.data||{}))if(JSON.stringify(shown.data?.[key])!==JSON.stringify(old.data?.[key])){delete change.data[key];keptTruncated=true;}}
           if(!old&&!Object.values(change.data||{}).some(v=>v!==null&&v!==''))throw new Error('The assistant tried to add an item without any values; nothing was added');
           return {old,change};
-        });
+        }).filter(({old,change})=>!old||Object.keys(change.data||{}).length);
         // All of them or none, in one transaction. Until 6 October 2026 they
         // were saved one by one, so a third book the collection refused left
         // the first two saved, with no reply to say so.
         if(changes.length)this.store.transaction(view=>{const query=new this.query.constructor(view);for(const {old,change} of changes)query.execute({table:'collection_items',operation:old?'update':'insert',values:{...(old?{}:{collection_id:input.collection_id}),data:{...old?.data,...change.data}},filters:old?[['eq','id',old.id]]:[],expected:old?{[old.id]:old._hash}:{},assistant:true});});
         for(const {old} of changes)tool_results.push({tool:old?'update_collection_item':'create_collection_item',success:true});
+        if(keptTruncated&&!tool_results.length)content='That field is longer than I can read at once, so I did not overwrite it. Ask me for one exact change to it, such as replacing a specific sentence.';
       }
       const opened=structured.operation_results?.find(r=>r.type==='coach_talks'&&r.status==='open');
       const saved = await this.store.saveAsync('conversation_messages', { content, role: 'assistant', talk_id:opened?.id||input.talk_id||null,note_id: input.note_id || null, contact_id: input.contact_id || null, person_id:input.contact_id||null, conversation_id: input.conversation_id || null },undefined,{signal});
