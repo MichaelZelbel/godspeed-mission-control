@@ -116,12 +116,27 @@ export class Review {
       if(existing)linked={type:'contact_group_memberships',id:existing.id};else save('contact_group_memberships',{group_id:group.id,contact_id:p.contact_id,status:p.default_status||group.stages?.[0]?.id||'new'});
     }
     else if(type==='connect_note_person')save('person_documents',{contact_id:p.contact_id,note_id:p.note_id});
+    // Menerio's duplicate finder and relationship adjudicator, kept waiting by
+    // the import. Keep carries out the merge, as the person page's merge does,
+    // and confirms the evidence, which changes nothing. Until 7 October 2026
+    // Keep answered "Unsupported review suggestion" for both.
+    else if(type==='merge_duplicate_person'){
+      const keep=this.store.get('contacts',p.keep_contact_id);if(!keep||keep.removed_at)throw Error('The person to keep is missing. Merge them on the People page instead.');
+      const sources=[...new Set(Array.isArray(p.merge_contact_ids)?p.merge_contact_ids:Array.isArray(p.contact_ids)?p.contact_ids:[])].filter(id=>id&&id!==keep.id);
+      if(!sources.length)throw Error('This suggestion names no one to merge. Remove it instead.');
+      for(const id of sources){
+        const source=this.store.get('contacts',id);if(!source)throw Error('A person to merge is missing. Merge them on the People page instead.');
+        if(source.uid!==keep.uid)this.store.structural('contacts',source.id,'merge',{target:keep.id});
+      }
+      primaryId=keep.id;linked={type:'contacts',id:keep.id};
+    }else if(type==='adjudicate_relationship'){}
+    else if(type==='resolve_relationship_conflict')throw Error('Choose which role to keep on the suggestion itself.');
     else throw new Error('Unsupported review suggestion '+type);
     const receipt=[...changed].map(([key,record])=>({type:record.type,id:record.id,before:before.get(key)||null,after_hash:this.store.get(record.type,record.id)._hash}));
     // Duplicate facts were not written by this suggestion, and must stay.
     receipt.push(...targets.filter(t=>t.shared));
     const primary=receipt.find(t=>t.id===primaryId)||receipt[0]||linked,targetType=primary?.type==='claims'?'claim':primary?.type;
-    return this.store.save('review_queue',{id:item.id,status:'kept',applied_at:new Date().toISOString(),undo_receipt_version:1,undo_supported:type!=='media_conflict',applied_targets:receipt,target_entity_id:primary?.id,target_entity_type:targetType});
+    return this.store.save('review_queue',{id:item.id,status:'kept',applied_at:new Date().toISOString(),undo_receipt_version:1,undo_supported:!['media_conflict','merge_duplicate_person'].includes(type),applied_targets:receipt,target_entity_id:primary?.id,target_entity_type:targetType});
   }
   rollback(item){
     return this.store.transaction(store=>{
