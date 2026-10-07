@@ -4,7 +4,7 @@ import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { Store, atomic, decode, hash, identityIds } from '../records/store.mjs';
 import { identityPlan, identities, readBlobs } from './identity.mjs';
-import { shared,durableRoots,durableFiles,devicePrivatePaths,recordsFolder,isRecordPath } from '../file-policy.mjs';
+import { shared,durableRoots,durableFiles,devicePrivatePaths,recordsFolder,isRecordPath,deletableTypes } from '../file-policy.mjs';
 import { candidate, isReadable, key as nameKey } from '../records/layout.mjs';
 import {validateAssistantFiles} from '../assistant-files.mjs';
 import {resolveSavedConflict} from '../conflicts.mjs';
@@ -275,7 +275,7 @@ export class FileSync {
     let gone;try{gone=this.names(['--literal-pathspecs','diff','--name-only','-z','--no-renames','--diff-filter=D','HEAD','--',recordsFolder]);}catch{return;}
     if(!gone.length)return;
     this.store.scan();
-    const records=this.decodedAt('HEAD',gone).filter(r=>!this.store.keyOfUid.has(r.uid));
+    const records=this.decodedAt('HEAD',gone).filter(r=>!this.store.keyOfUid.has(r.uid)&&!deletableTypes.has(r.type));
     if(!records.length)return;
     const live=liveCounts(this.store.records.values());for(const [type,n] of liveCounts(records))live.set(type,(live.get(type)||0)+n);
     const many=tooManyRemoved(records,live);if(many)throw new Error(many+'; nothing was uploaded. Restore the files, or remove the records in the notebook');
@@ -422,7 +422,7 @@ export class FileSync {
       let merged=new Store(dir);
       const lost=()=>[...this.store.records.keys()].filter(key=>!merged.records.has(key));
       const proven=key=>[...merged.records.values()].some(r=>r.uid===this.store.records.get(key).uid&&[...(r.former_ids||[]),...(r.aliases||[])].includes(this.store.records.get(key).id));
-      const unproven=lost().filter(key=>!proven(key));
+      const deletable=key=>deletableTypes.has(key.split('/')[0]),unproven=lost().filter(key=>!proven(key)&&!deletable(key));
       if(unproven.length){
         const many=tooManyRemoved(unproven.map(key=>this.store.records.get(key)),liveCounts(this.store.records.values()));
         if(many)throw new Error('Remote '+many[0].toLowerCase()+many.slice(1));
@@ -447,7 +447,7 @@ export class FileSync {
       validateAssistantFiles(dir);
       if(merged.problems.length)throw new Error('The merged reference graph needs review');
       const removed=lost();
-      if(removed.some(key=>!proven(key)))throw new Error('Remote removal without a tombstone or proven rename needs review: '+removed.join(', '));
+      if(removed.some(key=>!proven(key)&&!deletable(key)))throw new Error('Remote removal without a tombstone or proven rename needs review: '+removed.join(', '));
       // A record is brought in where the merge put it, so a rename on another
       // machine renames the file here, and every machine names it the same.
       const inside=(store,file)=>path.relative(store.recordsRoot,file).split(path.sep).join('/'),recordFiles=store=>new Set([...store.fileOf.values()].map(file=>path.relative(store.root,file).split(path.sep).join('/')));

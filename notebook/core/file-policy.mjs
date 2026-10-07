@@ -21,4 +21,11 @@ export function devicePrivate(name){const value=String(name).split('\\').join('/
 // same question.
 export function durable(name){return !name.split('/').some(p=>p==='..'||p.startsWith('.')||/^(secrets|node_modules)$/i.test(p))&&(durableRoots.some(root=>name.startsWith(root+'/'))||durableFiles.includes(name));}
 export function shared(name){return durable(name)&&!devicePrivate(name);}
+// Bookkeeping a machine may delete outright: the scheduler prunes old run
+// receipts and the earlier versions of jobs (jobs/scheduler.mjs prune), which
+// nothing reads. Their removal travels as a removal, never turned into a
+// tombstone and never asked about on the other machines. Until 7 October 2026
+// sync wrote every pruned receipt back as a tombstone, which the next prune
+// removed again, every round.
+export const deletableTypes=new Set(['job_receipts','record_history']);
 export function isRecordPath(name){return String(name).split('\\').join('/').startsWith(recordsFolder+'/');}
