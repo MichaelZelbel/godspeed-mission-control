@@ -150,7 +150,10 @@ unit_text() {
 answers() {
   local attempt
   for attempt in $(seq 1 60); do
-    if "$node" -e 'fetch("http://127.0.0.1:"+process.argv[1]+"/health").then(r=>process.exit(r.ok?0:1),()=>process.exit(1))' "$GODSPEED_PORT" 2>/dev/null; then return 0; fi
+    # The notebook's own /health (notebook/server/main.mjs), not merely any HTTP answer on the
+    # port: JSON with ok:true, record format 1 and a version string. The old "r.ok" check passed
+    # for anything on the port, so a stale or foreign process could hide a failed switch-over.
+    if "$node" -e 'fetch("http://127.0.0.1:"+process.argv[1]+"/health").then(r=>r.ok?r.json():Promise.reject()).then(h=>process.exit(h&&h.ok===true&&h.format===1&&typeof h.version==="string"?0:1),()=>process.exit(1))' "$GODSPEED_PORT" 2>/dev/null; then return 0; fi
     sleep 2
   done
   return 1
@@ -269,6 +272,26 @@ if systemd_here; then
   fi
 fi
 
+# Before the new version is wired in, keep a checked backup of the knowledge and media
+# (release-contract.md line 15), using the previous notebook's own backup command. Only on an
+# upgrade: a first install has nothing to back up yet. Until 7 October 2026 the new version's
+# init and wire-assistant ran with no backup and no way back. Added 7 October 2026.
+upgrading=""
+backup_dir=""
+before=$(cat "$state/version" 2>/dev/null || true)
+if [ -n "$before" ]; then
+  upgrading=1
+  backup_dir="$state/backups/$(date -u +%Y%m%d-%H%M%S)-$before"
+  backup_cli="$state/versions/$before/notebook/bin/godspeed.mjs"
+  [ -f "$backup_cli" ] || backup_cli="$version/notebook/bin/godspeed.mjs"
+  if "$node" "$backup_cli" backup "$backup_dir" >/dev/null 2>&1; then
+    echo "A backup of your knowledge and media was made at: $backup_dir" >&2
+  else
+    echo 'The pre-upgrade backup could not be made, so the upgrade was not started.' >&2
+    exit 1
+  fi
+fi
+
 "$node" "$version/notebook/bin/godspeed.mjs" init
 # Joining: a mission control that is its own Git repository carries the notebook in it.
 if [ ! -f "$root/.godspeed/sync-config.json" ] && git -C "$root" remote get-url origin >/dev/null 2>&1; then
@@ -280,7 +303,7 @@ import fs from 'node:fs';import path from 'node:path';
 fs.writeFileSync(path.join(process.env.GODSPEED_WORKSPACE,'.godspeed/assistant.json'),JSON.stringify({verified:true,executable:process.argv[2],home:process.env.HERMES_HOME}),{mode:0o600});
 NODE
 "$node" "$version/notebook/scripts/native-start-script.mjs" "$state/start.mjs" "$version/notebook/scripts/supervise.mjs"
-before=$(cat "$state/version" 2>/dev/null || true)
+# "before" is read above, before the new version's init could change anything.
 if [ -n "$before" ] && [ "$before" != "$(basename "$version")" ]; then printf '%s\n' "$before" > "$state/previous-version"; fi
 basename "$version" > "$state/version"
 previous=$(cat "$state/previous-version" 2>/dev/null || true)
@@ -322,7 +345,22 @@ esac
 if [ -n "$started" ]; then
   if ! answers; then
     if [ "$started" = system ]; then logs="journalctl -u $SERVICE -n 50"; else logs="journalctl --user -u $SERVICE -n 50"; fi
-    echo "The notebook did not answer after it was started. What it said is shown by: $logs" >&2
+    # The new version did not answer. On an upgrade, put the version that ran before back, so
+    # the server is not left on a broken notebook with no way home: until 7 October 2026 it
+    # exited here with the new version switched in and the previous one stopped. Added 7 Oct 2026.
+    if [ -n "$upgrading" ] && [ -n "$before" ] && [ "$before" != "$(basename "$version")" ] && [ -f "$state/versions/$before/notebook/scripts/supervise.mjs" ]; then
+      echo "The new notebook did not answer, so the version that ran before is being put back. What the new one said is shown by: $logs" >&2
+      "$node" "$version/notebook/scripts/native-start-script.mjs" "$state/start.mjs" "$state/versions/$before/notebook/scripts/supervise.mjs"
+      printf '%s\n' "$before" > "$state/version"
+      if [ "$started" = system ]; then as_root systemctl restart "$SERVICE"; else systemctl --user restart "$SERVICE" >/dev/null 2>&1 || true; fi
+      if answers; then
+        echo "The previous notebook is running again; the upgrade was not applied. Your data backup is at: $backup_dir" >&2
+      else
+        echo "The previous notebook did not come back either. Start it by hand: '$node' '$state/start.mjs'. Your data backup is at: $backup_dir" >&2
+      fi
+    else
+      echo "The notebook did not answer after it was started. What it said is shown by: $logs${backup_dir:+. Your data backup is at: $backup_dir}" >&2
+    fi
     exit 1
   fi
   # This version and the one before it stay; older ones, and the full download of the
