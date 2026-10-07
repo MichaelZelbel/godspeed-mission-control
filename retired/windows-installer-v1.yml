@@ -1,3 +1,8 @@
+# RETIRED 2026-10-07, when version 2 became main. This built version 1's GodspeedSetup.exe from a
+# kit-bootstrap vX tag named in install-godspeed.sh and published it as the latest release, every
+# night. Version 2's installers are built with kit-bootstrap's windows/build-full-alpha.ps1 and
+# published from installers/ (README.md); kept here, outside .github/workflows, so it never runs.
+#
 name: windows installer
 # Windows readers get the same code as macOS and Linux readers, always.
 #

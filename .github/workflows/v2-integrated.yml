@@ -12,7 +12,7 @@ name: Integrated Godspeed v2
 on:
   push:
     branches: [codex/godspeed-v2-completeness]
-    paths: [.github/workflows/v2-integrated.yml, 'notebook/**', 'docker/full-candidate/**', 'docker/rootfs/**', 'docker/test/**', install-godspeed.sh]
+    paths: [.github/workflows/v2-integrated.yml, 'notebook/**', 'docker/full-candidate/**', 'docker/rootfs/**', 'docker/test/**', install-godspeed.sh, install-godspeed-dev.sh]
   workflow_dispatch:
 permissions:
   contents: read
