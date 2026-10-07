@@ -1,5 +1,5 @@
 import {visibleRows} from '../core/visibility.mjs';
-import {toolScope} from '../core/api-keys.mjs';
+import {toolScope,scopedQuery} from '../core/api-keys.mjs';
 import {topicDefinitions,topicToolNames,topicTool} from './topic-tools.mjs';
 import {assistantMutationContext,assertAssistantTable} from '../core/assistant-mutations.mjs';
 import {memoryDefinitions,memoryToolNames,memoryTool,searchNotes,relatedTo,readFile} from './memory-tools.mjs';
@@ -46,6 +46,8 @@ export function rememberRead(store,notes){const seen=versionsOf(store);for(const
 // from the owner or the installation's own assistant (api-keys.mjs).
 export async function mcp(input,{store,query,index,domains,scopes,delegated=false}){
   const id=input.id??null,owner=store,seen=notes=>rememberRead(owner,notes);let result;
+  // A key reads through its own view: what its scopes cover (api-keys.mjs).
+  query=scopedQuery(query,scopes);
   try{
     if(input.method==='initialize')result={protocolVersion:'2025-03-26',capabilities:{tools:{}},serverInfo:{name:'godspeed-mission-control',version:'0.1.0-alpha.1'}};
     else if(input.method==='notifications/initialized')return null;

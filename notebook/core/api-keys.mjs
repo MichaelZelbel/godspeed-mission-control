@@ -22,6 +22,28 @@ export class ApiKeys {
     const id=name.slice('mc-api-keys/'.length);this.write(this.rows().map(r=>r.id===id?{...r,is_active:false,revoked_at:new Date().toISOString()}:r));return {revoked:true};
   }
 }
+// What a key may read follows what a record is, wherever a tool reads it:
+// a fact about the owner needs "profile", a fact about someone else
+// "contacts", and "world" covers every fact; a note the coach, the journal, a
+// habit check, a goal, an obligation or the morning brief wrote needs
+// "actions" as well as "notes". Until 7 October 2026 scope followed the table
+// a tool read, so a key holding only "notes" read facts through search_brain,
+// and every check-in through the note tools. The key's view of the records
+// (scopedQuery) is what every tool of that call reads.
+const personalSource=/^(coach|journal|habit|health|headache|goal|due|obligation|morning-brief)/;
+export const personalNote=note=>!!(note.goal_id||note.work_id||(Array.isArray(note.habit_ids)&&note.habit_ids.length)||personalSource.test(String(note.source_app||'')));
+const factAllowed=(scopes,row)=>{const about=row.subject_type||row.subject_kind;return scopes.includes('world')||(about==='self'?scopes.includes('profile'):about==='contact'&&scopes.includes('contacts'));};
+export function scopedQuery(query,scopes){
+  if(!Array.isArray(scopes))return query;
+  const view=Object.create(query),rows=query.rows;
+  view.rows=function(table){
+    const all=rows.call(this,table);
+    if(table==='notes'&&!scopes.includes('actions'))return all.filter(note=>!personalNote(note));
+    if(['claims','profile_facts','world_claims','fact_slots'].includes(table))return all.filter(row=>factAllowed(scopes,row));
+    return all;
+  };
+  return view;
+}
 export function toolScope(name,args){
   if(['list_contact_topics','get_contact_topic_history','create_contact_topic','update_contact_topic','discuss_contact_topic','archive_contact_topic','reopen_contact_topic','undo_contact_topic_event'].includes(name))return 'contacts';
   if(name==='personal_operation')return 'actions';
