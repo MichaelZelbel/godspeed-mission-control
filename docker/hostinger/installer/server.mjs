@@ -1,5 +1,6 @@
 import http from 'node:http';
 import net from 'node:net';
+import dns from 'node:dns';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -65,8 +66,31 @@ async function readBounded(response, limit = CALLBACK_REPLY_MAX) {
   } finally { try { await reader.cancel(); } catch { /* already closed */ } }
   return Buffer.concat(parts).toString('utf8');
 }
+// A hostname's A and AAAA records. Returns [] when the name definitively does not exist (so a
+// bogus hostname is refused) and throws on a transient resolver failure (so a real deploy is
+// not failed on a DNS blip). Added 7 October 2026 for the /api/ready source check.
+async function defaultResolveHost(hostname) {
+  const settled = await Promise.allSettled([dns.promises.resolve4(hostname), dns.promises.resolve6(hostname)]);
+  const ips = settled.flatMap(r => r.status === 'fulfilled' ? r.value : []);
+  if (ips.length) return ips;
+  if (settled.every(r => r.status === 'rejected' && ['ENOTFOUND', 'ENODATA'].includes(r.reason?.code))) return [];
+  throw new Error('Callback hostname could not be resolved');
+}
+// Compare two IP strings by value (IPv6 expanded to its full form), ignoring notation.
+function canonIP(value) {
+  const ip = plainIP(value);
+  if (!ip) return null;
+  if (!net.isIPv6(ip)) return ip;
+  try {
+    const [head, tail = ''] = ip.split('::');
+    const h = head ? head.split(':') : [], t = tail ? tail.split(':') : [];
+    const full = [...h, ...Array(Math.max(0, 8 - h.length - t.length)).fill('0'), ...t];
+    return full.map(x => (parseInt(x || '0', 16) & 0xffff).toString(16).padStart(4, '0')).join(':');
+  } catch { return ip; }
+}
+const sameAddress = (a, b) => { const x = canonIP(a); return !!x && x === canonIP(b); };
 
-export function createInstaller({ directory, origin, fetcher = fetch, now = Date.now, testing = false, hostnameFile, coordinatorProxy, allowedOrigins = [] }) {
+export function createInstaller({ directory, origin, fetcher = fetch, now = Date.now, testing = false, hostnameFile, coordinatorProxy, allowedOrigins = [], verifyCallbackHost = !testing, resolveHost = defaultResolveHost }) {
   if (!testing && !origin.startsWith('https://')) throw new Error('HTTPS required');
   fs.mkdirSync(directory, { recursive: true, mode: 0o700 }); fs.chmodSync(directory, 0o700);
   const apiOrigin = new URL(origin).origin;
@@ -177,6 +201,18 @@ export function createInstaller({ directory, origin, fetcher = fetch, now = Date
         if (!job || expired(job) || !equal(job.callbackHash, digest(key))) return send(res, 401, { error: 'Installation authorization was not accepted.' });
         const data = await input(req);
         if (!/^srv[0-9]+\.hstgr\.cloud$/.test(data.hostname || '') && !(testing && data.hostname === 'localhost')) return send(res, 400, { error: 'The server address could not be verified.' });
+        // The callback secret travels inside the Compose link (the buyer's browser, and
+        // Hostinger), so a stranger who scraped it must not bind the job to a server that is
+        // not the one the claimed hostname points to. Require the callback's source address to
+        // be one the hostname resolves to. A transient DNS failure is allowed (the real server
+        // retries for ~15 minutes); a name that does not resolve at all is refused. Disable with
+        // GODSPEED_INSTALL_VERIFY_HOST=0 if a deployment's DNS makes it impractical.
+        if (verifyCallbackHost && !(testing && data.hostname === 'localhost')) {
+          let okHost;
+          try { const addrs = await resolveHost(data.hostname); okHost = addrs.length > 0 && addrs.some(ip => sameAddress(ip, clientAddress(req))); }
+          catch { okHost = true; }
+          if (!okHost) return send(res, 403, { error: 'This installation can only be claimed from its own server.' });
+        }
         if (job.hostname && job.hostname !== data.hostname) return send(res, 409, { error: 'This installation is already assigned to a different server.' });
         // The first callback binds the server and its setup code; a later one cannot change either.
         if (!job.bootstrap && !/^[a-f0-9]{64}$/.test(data.setup || '')) return send(res, 400, { error: 'The server did not send its setup code.' });
@@ -200,7 +236,7 @@ export function createInstaller({ directory, origin, fetcher = fetch, now = Date
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const installer = createInstaller({ directory: process.env.GODSPEED_INSTALL_STATE || '/var/lib/godspeed-installer', origin: process.env.GODSPEED_INSTALL_ORIGIN || 'https://srv1069233.hstgr.cloud/godspeed-install', coordinatorProxy: process.env.GODSPEED_INSTALL_PROXY });
+  const installer = createInstaller({ directory: process.env.GODSPEED_INSTALL_STATE || '/var/lib/godspeed-installer', origin: process.env.GODSPEED_INSTALL_ORIGIN || 'https://srv1069233.hstgr.cloud/godspeed-install', coordinatorProxy: process.env.GODSPEED_INSTALL_PROXY, verifyCallbackHost: process.env.GODSPEED_INSTALL_VERIFY_HOST !== '0' });
   const bind = process.env.GODSPEED_INSTALL_BIND || '127.0.0.1';
   if (!bind) throw new Error('Docker network address could not be detected');
   installer.server.listen(Number(process.env.GODSPEED_INSTALL_PORT || 8794), bind);

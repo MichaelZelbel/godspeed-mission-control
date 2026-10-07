@@ -198,3 +198,32 @@ test('many IPv6 addresses from one /64 count as one client', async () => {
     assert.equal((await f.request('/api/start', { body: {}, from: '203.0.113.77' })).status, 201);
   } finally { await f.close(); }
 });
+
+test('a callback is only accepted from an address the claimed hostname resolves to', async () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'godspeed-installer-dns-'));
+  // The hostname srv123456.hstgr.cloud "resolves" to 203.0.113.9 only; everything else is NXDOMAIN.
+  const resolveHost = async hostname => { if (hostname === 'srv123456.hstgr.cloud') return ['203.0.113.9']; if (hostname === 'srv777777.hstgr.cloud') throw new Error('temporary DNS failure'); return []; };
+  const service = createInstaller({ directory, origin: 'http://127.0.0.1/godspeed-install', testing: true, verifyCallbackHost: true, resolveHost, fetcher: async () => { throw Error('offline'); } });
+  try {
+    await new Promise(r => service.server.listen(0, '127.0.0.1', r));
+    const base = 'http://127.0.0.1:' + service.server.address().port + '/godspeed-install';
+    const h = { Origin: 'http://127.0.0.1', 'content-type': 'application/json' };
+    const ready = async (from, hostname) => {
+      const ticket = await (await fetch(base + '/api/start', { method: 'POST', headers: h, body: '{}' })).json();
+      const job = service.jobs.get(ticket.id);
+      return (await fetch(base + '/api/ready/' + ticket.id, { method: 'POST', headers: { ...h, authorization: 'Bearer ' + job.callback, 'X-Forwarded-For': from }, body: JSON.stringify({ hostname, setup: 'a'.repeat(64) }) })).status;
+    };
+    // A stranger who scraped the secret, calling from an address the hostname does not point to.
+    assert.equal(await ready('198.51.100.7', 'srv123456.hstgr.cloud'), 403);
+    // The real server, calling from its own address.
+    assert.equal(await ready('203.0.113.9', 'srv123456.hstgr.cloud'), 202);
+    // A hostname that resolves to nothing cannot be claimed from anywhere.
+    assert.equal(await ready('203.0.113.9', 'srv888888.hstgr.cloud'), 403);
+    // A transient DNS failure does not block a genuine deploy (the server retries anyway).
+    assert.equal(await ready('203.0.113.9', 'srv777777.hstgr.cloud'), 202);
+  } finally {
+    await new Promise(r => service.server.close(r));
+    if (!path.resolve(directory).startsWith(path.resolve(os.tmpdir()) + path.sep + 'godspeed-installer-dns-')) throw Error('Unsafe fixture cleanup');
+    fs.rmSync(directory, { recursive: true });
+  }
+});
