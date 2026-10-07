@@ -99,7 +99,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   const remote = !['127.0.0.1', '::1', 'localhost'].includes(host);
   if (remote && !token) throw new Error('Remote access requires a candidate token');
   const auth = new WebAuth(store.state, { token, remote, now: authNow });
-  const menerioImport=new MenerioImport(store,mediaRoot,()=>index.rebuild());
+  const menerioImport=new MenerioImport(store,mediaRoot,()=>index.rebuild(),{beat});
   const telegramConnection=new TelegramConnection();
   const chatRequests=new Map(),recoveryRunner=new RecoveryRunner(store),backupRunner=new BackupRunner(store,mediaRoot);let dictationBusy=false;
   const loginLinks=new Map();
