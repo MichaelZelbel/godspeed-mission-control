@@ -47,7 +47,8 @@ const fs = require('fs');
 const path = require('path');
 const L = require(path.join(__dirname, 'mc-cards.js'));
 
-const GODSPEED = L.godspeedRoot(__filename);
+function createGoalCommands({root=L.godspeedRoot(__filename),goalStore,workStore}={}) {
+const GODSPEED = root;
 const DIR = path.join(GODSPEED, 'goals');
 const DIAG = path.join(DIR, 'diagnoses');
 const PLAYBOOKS = path.join(DIR, 'playbooks');
@@ -59,7 +60,7 @@ const IMPORTANCE = ['core', 'high', 'normal'];
 const ENERGY = ['low', 'medium', 'high'];
 const ORDER = ['ID', 'KIND', 'STATUS', 'AREA', 'TITLE', 'OWN WORDS', 'MEASURE', 'LEAD', 'DEADLINE', 'SERVES', 'DEPENDS ON',
   'PROTECTED', 'OWNER', 'IMPORTANCE', 'ENERGY', 'RESOURCES', 'CADENCE', 'REVIEW', 'SOURCE', 'FILED', 'NOTE'];
-const S = L.store(DIR, ORDER);
+const S = goalStore || L.store(DIR, ORDER);
 const { die, say, oneLine, flag, today, q } = L;
 const MACHINE = L.machineWords(GODSPEED);
 
@@ -244,7 +245,7 @@ cmds.read = (a) => {
 };
 
 const BET_RE = /^(\S+) (-?\d+(?:\.\d+)?) -> (-?\d+(?:\.\d+)?)(?: "(.*)")?$/;
-const WORK = L.store(path.join(GODSPEED, 'work'), []);   // read only: goals never writes work cards
+const WORK = workStore || L.store(path.join(GODSPEED, 'work'), []);   // read only: goals never writes work cards
 function betsOf(c) {
   return c.log.filter(l => l.event === 'BET').map(l => {
     const m = l.rest.match(BET_RE);
@@ -796,8 +797,15 @@ cmds.help = () => say(`mc-goals: the register of what you want, and the choice o
   attention [--date D] [--active 3] [--json] [--record]   which goals get attention today and why (weightless bands)
   list [--all] [--kind K] [--json] | show <id> | tree | check`);
 
+return {cmds,plan,parseLead,judge};
+}
+module.exports={createGoalCommands};
+if(require.main===module){
+const {cmds}=createGoalCommands();
+const {die}=L;
 const a = L.parseArgs(process.argv.slice(2));
 L.alias(a, 'his-words', 'own-words');
 const cmd = a._.shift() || 'help';
 if (!cmds[cmd]) die(`unknown command ${cmd}; try help`);
 cmds[cmd](a);
+}

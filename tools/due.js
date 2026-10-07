@@ -77,6 +77,7 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 
+function createDueCommands({root,commandArgs=process.argv.slice(2),date}={}) {
 // ---------------------------------------------------------------- where is the mission control
 function readDeviceEnv(name) {
   const f = path.join(os.homedir(), ".godspeed", "device.env");
@@ -92,7 +93,7 @@ function readDeviceEnv(name) {
 // --godspeed and its value are pulled OUT of the list before anything else looks at it. Left in, the
 // very first thing a person types (mc-due --godspeed /somewhere check) reads "--godspeed" as the command
 // and quietly runs the list instead, which looks like it worked.
-const raw = process.argv.slice(2);
+const raw = root ? ['--godspeed',root,...commandArgs] : commandArgs;
 const args = [];
 let godspeed = "";
 for (let i = 0; i < raw.length; i++) {
@@ -125,6 +126,7 @@ const EVENTS_DIR = path.join(godspeed, "world", "events");
 // Everything is YYYY-MM-DD and UTC. A date that means two different days on two of your computers
 // is how a monthly job runs twice, or never.
 function today() {
+  if(date)return date;
   const o = (process.env.GODSPEED_TODAY || "").trim();
   if (/^\d{4}-\d{2}-\d{2}$/.test(o)) return o;
   return new Date().toISOString().slice(0, 10);
@@ -282,6 +284,7 @@ function slugs() {
 }
 const CACHE = new Map();
 function parseFile(slug) {
+  if (!/^[a-z0-9][a-z0-9-]{0,59}$/.test(slug || "")) return null;
   if (CACHE.has(slug)) return CACHE.get(slug);
   const p = filePath(slug);
   const text = readText(p);
@@ -570,6 +573,10 @@ function growWindows(day, notes) {
       added += 1;
     }
     if (added) {
+      if ((o.head['CALENDAR-MARKER'] || '').trim()) {
+        logLine(o, day, 'the prior calendar entry stays as a record of its window; this window needs its own');
+        o.head['CALENDAR-MARKER'] = '';
+      }
       applyEvents(o);
       logLine(o, day, "the next window opened: " + windowWords(newest));
       save(o);
@@ -603,8 +610,8 @@ function keepReadmeCurrent(notes) {
 
 function roll(day) { const notes = []; keepReadmeCurrent(notes); migrateLegacy(notes); adoptKeys(day, notes); growWindows(day, notes); return notes; }
 
-function load(day) {
-  roll(day);
+function load(day,mutate=true) {
+  if(mutate)roll(day);
   const rows = [];
   for (const slug of slugs()) {
     const o = parseFile(slug);
@@ -968,6 +975,11 @@ function cmdTarget(day) {
     }
   }
   logLine(o, day, old ? "you moved the day you would like it done from " + old + " to " + what : "you would like it done by " + what);
+  const marker = (o.head["CALENDAR-MARKER"] || "").trim();
+  if (marker && old !== what) {
+    console.log("CALENDAR: " + (old && old > day ? "take out the entry " : "the past entry stays as a record: ") + marker + "; the new day needs one entry after your approval.");
+    o.head["CALENDAR-MARKER"] = "";
+  }
   save(o);
   console.log("Moved " + slug + ": you would like it done by " + what + (s.to ? ", and the last day is still " + s.to : "") + ".");
   return 0;
@@ -1029,11 +1041,11 @@ function cmdCheck(day) {
   return problems ? 1 : 0;
 }
 
-function cmdState(day) {
-  const rows = load(day).map((r) => {
+function stateRows(day=today(),mutate=false) {
+  return load(day,mutate).map((r) => {
     const last = r.o.strips.filter((s) => s.state !== "open").sort((a, b) => (a.closed < b.closed ? -1 : 1)).pop();
     return {
-      slug: r.slug, title: r.title, state: r.band === "unopened" ? "unopened" : r.strip ? "open" : r.band,
+      slug: r.slug, title: r.title, band:r.band, attention:!!r.strip&&sayable(r,day), sentence:r.strip?sentence(r,day):null, state: r.band === "unopened" ? "unopened" : r.strip ? "open" : r.band,
       firstDay: r.strip ? r.strip.from : "", lastDay: r.strip ? r.strip.to : "",
       ...(r.strip && aimOf(r.strip) ? { targetDay: aimOf(r.strip) } : {}),
       doneWhen: (r.o.head["DONE-WHEN"] || "").trim(), closedOn: last ? last.closed : "", closedBy: last ? last.by : "",
@@ -1041,6 +1053,9 @@ function cmdState(day) {
       selfCheck: (r.o.head["SELF-CHECK"] || "").trim().toLowerCase() || "none",
     };
   });
+  }
+function cmdState(day) {
+  const rows=stateRows(day,true);
   if (has("--json")) { console.log(JSON.stringify(rows)); return 0; }
   for (const r of rows) console.log(r.state.toUpperCase().padEnd(9) + r.slug + (r.closedBy && r.state !== "open" ? "  (" + r.closedBy + ")" : ""));
   return 0;
@@ -1050,6 +1065,35 @@ function cmdState(day) {
 const README = "# due - the things with a day\n\n**This room starts empty, and an empty one costs you nothing.** It fills the first time you tell\nyour mission control about something with a day attached: a day you would like it done by, or a\nlast day before it costs you (Chapter 27). If you never do, you have an empty folder and you have\nlost nothing.\n\n## Why this is not a reminder\n\nA calendar reminder fires on a date and knows nothing else. It cannot tell whether you already did\nthe thing, so it goes off afterwards, and after that happens a few times you stop reading\nreminders. Then one of them stops on its last occurrence whether or not the job got done, and that\nis the one that mattered.\n\nEverything in here is built to fix both halves of that.\n\n## Three dates, and you usually need only one\n\nEvery thing in here can carry up to three dates:\n\n- **The day you can start.** Optional. If you leave it out, it is the day you add the thing.\n- **The day you would like it done.** A target, soft, like a date in a calendar. Missing it costs\n  you nothing.\n- **The day it starts costing you.** A deadline, hard: after it there is a fee, a fine, a lost\n  chance.\n\nIt needs at least a target or a deadline. Many people only ever need the target.\n\n| What it has | What your mission control does |\n|---|---|\n| **A deadline only** | The window below: quiet at first, louder as the last day comes. After the last day your brief mentions it twice more, three days apart, then waits for your word; it stays open until you close it or drop it. |\n| **A target only** | Nothing until that day. One mention on the day. Once it has passed it never gets louder: the next morning it asks you once, \"A new date, or as soon as you can?\" A new date becomes the new target. \"As soon as you can\", or no answer at all, keeps it open with a gentle line in your brief about once a week, until you finish it or drop it. |\n| **Both** (a tax return: aim for the end of January, must by the end of February) | The deadline's window, plus one mention on the target day. After the target it says you are past it and names the deadline. It does not ask for a new date, because the deadline decides. |\n| **Repeating** | A new window each time. The target sits at the same place inside every window. |\n\nIn your morning's three places, a target you have passed comes after every deadline, and it never\ngets louder than that one line. It is a wish you gave yourself, not a bill.\n\n## The window, for a deadline\n\nA deadline holds **the first day you can do the thing, and the last day you still can.** Not a due\ndate. A window.\n\nHow loud your mission control gets follows how much of the window is left, as a fraction:\n\n| Left of the window | Your mission control |\n|---|---|\n| more than half | says it once when the window opens, then at most monthly |\n| half to a quarter | a line in your brief about every fortnight |\n| a quarter to a tenth | its own line, near the top, about weekly |\n| the loud days at the end: a tenth of the window, never fewer than three days and never more than fourteen | every morning |\n\n**One rule, whether the window is a week or a year.** That is the whole reason you can have a\nhundred of these. There is nothing to tune per item, and if a thing feels like it needs its own\nsetting, the window is wrong rather than the rule. A target adds no setting either: every target\nbehaves the same way.\n\n## What a file looks like\n\nOne file per thing, named however you like:\n\n```\ndue/car-service.md\n\nTITLE:          Car service before the warranty runs out\nDONE-WHEN:      The car has been serviced at a garage the warranty accepts.\nCOST-IF-MISSED: The warranty ends. A gearbox after that is mine to pay for.\nSELF-CHECK:     none\nSELF-CHECK-ARG:\nREPEATS:        yearly\nLINK:           https://example.com/book-a-service\nSOURCE:         me, 2026-08-29\n\n## Windows\nSTRIP: 2026-09-01 2027-02-28\n\n## Log\n- 2026-08-29 created, window 2026-09-01 to 2027-02-28\n```\n\nA target is one more word on the window line. A present to buy before a birthday, with no\ndeadline at all, reads `STRIP: 2026-04-20 - target 2026-05-10`: from the 20th of April, aiming for\nthe 10th of May, and the `-` says there is no last day. With both, it is\n`STRIP: 2026-10-01 2027-02-28 target 2027-01-31`. When you give a new day after missing one, it is\nwritten beside the old one as `moved 2027-02-10`.\n\nPlain text. Read it, edit it, delete it. The program writes the same shape you would.\n\n**A repeating thing is ONE file that grows a new window each time**, never one file per occurrence.\nThat is what keeps a hundred of these at a hundred files instead of thousands.\n\n## The four questions, asked once\n\nWhen you add one, answer four things and never be asked again:\n\n1. What is true when this is finished?\n2. Is there a day after which this costs you something, or is it a day you would like to have it\n   done by? (Or both. And if you cannot start yet, from when.)\n3. What does it cost you if it slips? Only asked when there is a deadline: a target costs nothing.\n4. **How could your mission control tell you did it, without asking you?**\n\nThe fourth is the one that matters and the one everybody skips. Some things can answer it. A key is\nreplaced when the date in `secrets/expires.txt` moves. A backup happened if the file is newer than\nthe window. Those close themselves and never nag you again after you act, which is exactly the\nfailure that kills every reminder app.\n\nMost things cannot answer it, and **that is a fine answer**. Nobody can tell your mission control that you\nsubmitted a timesheet into somebody else's website. Those say so and wait for you to say the word.\nAsk the question anyway, every time, because knowing which kind a thing is changes what you build\naround it.\n\n## No date, not eligible\n\n`mc-due add` refuses anything that has neither a target nor a deadline, in those words. That\nrefusal is the only thing between this folder and a to-do app you stop maintaining. \"Someday\" is\nnot a target; \"by the 10th of May\" is.\n\n## Three states, and only three\n\n**open, done, dropped.** Done can happen by itself when there is a self check. **Dropped only ever\ncomes from you**, which is why the command makes you type `--yes`.\n\n**Done is never written in here.** A file in this room is the plan. When a thing is finished,\nthat is something that happened, so it goes where the things that happened go: a small file in\n`world/events/` that says `closes: [due/car-service]` and, on an `evidence:` line, what shows it\n(your words, a receipt, a commit). A drop is the same with `drops:`. Everything that asks \"is this\nstill open\" works it out from those, so there is only one place the answer can live and nothing\ncan disagree with it. Why: in the mission control this kit comes from, a post was approved and\npublished in a working session, the memory wrote that down the same day, and the deadline file\nkept saying open, so the morning brief told its owner for five mornings that the finished work was\nwaiting. `mc-due done` and `mc-due drop` write the event for you, and when your assistant finishes\none of these with you in a session it closes it before the session ends.\n\nSomething whose window closed without being done **stays open**. Nothing tidies it away, because\nfor a deadline \"nobody got to it\" is the failure, not a quiet success. It does stop shouting:\nyour brief mentions it twice more, three days apart, and then waits for your word, because the\nlikeliest reason is that you did it and forgot to say so. The full list keeps showing it.\n\n## Your keys are already in here\n\nIf you have `secrets/expires.txt` from Chapter 31, `mc-due` reads it and treats each key as one of\nthese. You never write a date in two places, and there is one thing nagging you rather than two\nthat disagree. Moving the date in that file is still the off switch, and it is now also the proof:\nmoving it forward is what replacing a key looks like from outside, so the reminder closes itself.\n\n## You do not need a calendar\n\nNot for any of this. If you do have one, your assistant can add **one entry per thing**, and one is\nthe whole rule. For a deadline it goes on the day your mission control starts being loud, not on the day the thing dies, and\nthe death date goes in the title so the single entry says both. For a target it goes on the target\nday, and a thing with both gets the target-day entry with the deadline in its title. Never two\nentries about one date: the day they disagree with each other you stop believing either.\n\nIt comes out again when you finish, as long as the day has not passed yet. That is the part that\nmakes one entry safe, because otherwise an entry you already acted on sits there being wrong. A day\nthat has already gone by is left alone: it is a record of what happened.\n\nYou can also go the other way and add one from your phone, by writing an event that says\n`mission control: from 1 Feb`. **The calendar never decides when you get nagged and never knows whether you\nacted.**\n\n## The commands\n\n```\nmc-due                     everything, loudest first\nmc-due today               at most three, which is what your morning brief reads\nmc-due add <name> ...      make one: --target, --to (the deadline), or both\nmc-due target <name> D     a new day you would like it done (or: asap, as soon as you can)\nmc-due done <name>         you did it (an event in world/events/ says so)\nmc-due drop <name> --yes   call it off; nothing is deleted\nmc-due check               run the self checks, close what is provably done\nmc-due state               which are open, and what closed the others\n```\n\nThe card is `procedures/what-runs-out-and-when.md` in the kit. Chapter 27.\n";
 // readme:end
 
+function entryDay(strip) {
+  const target = aimOf(strip);if (target) return target;
+  if (!isDate(strip.from) || !isDate(strip.to)) return null;
+  return addDays(strip.to, -(loudDays(daysBetween(strip.from, strip.to) + 1) - 1));
+}
+function cmdMarker(day) {
+ const slug=args[1];
+ if(slug==='--needed'){
+  for(const row of load(day,false)){
+   if(!row.strip||(row.o.head['CALENDAR-MARKER']||'').trim())continue;
+   const date=entryDay(row.strip);if(!date)continue;
+   console.log([row.slug,date,row.strip.to||'-',row.o.head.LINK||'-',row.o.head.TITLE||row.slug,...(aimOf(row.strip)?[aimOf(row.strip)]:[])].join('\t'));
+  }return 0;
+ }
+ if(slug==='--stale'){
+  for(const name of slugs()){
+   const plan=parseFile(name),id=(plan?.head['CALENDAR-MARKER']||'').trim();
+   if(!id||currentWindow(plan,day))continue;
+   const last=plan.strips.at(-1),date=last&&entryDay(last);
+   if(date&&date>day)console.log([name,id,date].join('\t'));
+  }return 0;
+ }
+ const plan=parseFile(slug);if(!plan){console.log('No obligation with that slug.');return 1;}
+ const id=has('--clear')?'':argOf('--set','');
+ if(!has('--clear')&&(!id||/[\r\n\t]/.test(id))){console.log('Calendar event identity must be a single line.');return 1;}
+ plan.head['CALENDAR-MARKER']=id;if(!save(plan))return 1;
+ console.log('Marker for '+slug+' is now: '+(id||'(none)'));return 0;
+}
+function run() {
 const day = today();
 const cmd = args[0] && !args[0].startsWith("-") ? args[0] : "";
 let rc = 0;
@@ -1062,6 +1106,13 @@ switch (cmd) {
   case "drop": rc = cmdDrop(); break;
   case "check": rc = cmdCheck(day); break;
   case "state": rc = cmdState(day); break;
+  case "marker": rc = cmdMarker(day); break;
   default: console.log("I do not know \"" + cmd + "\"."); help(); rc = 1;
 }
-process.exit(rc);
+return rc;
+}
+function recordSaid(selected,day=today()) {for(const r of load(day,false).filter(r=>selected.includes(r.slug))){if(r.o.said.some(x=>x.date===day&&x.channel==='brief'))continue;r.o.said.push({date:day,channel:'brief'});logLine(r.o,day,'SAID brief');save(r.o);}}
+return {run,stateRows,recordSaid};
+}
+module.exports={createDueCommands};
+if(require.main===module)process.exit(createDueCommands().run());

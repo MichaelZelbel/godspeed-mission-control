@@ -1,0 +1,12 @@
+{
+  "name": "godspeed-coach",
+  "version": "0.2.0",
+  "description": "Recurring coaching talks and daily habits for Godspeed Mission Control: it opens the talk on your messenger at the time you chose, and you track habits in one spoken line. An add-on for Teach It Once.",
+  "license": "MIT",
+  "type": "module",
+  "bin": { "godspeed-coach": "bin/godspeed-coach.mjs" },
+  "files": ["bin", "lib", "skill", "hermes", "README.md", "LICENSE"],
+  "engines": { "node": ">=22" },
+  "scripts": { "test": "node --test \"test/*.test.mjs\"" },
+  "repository": { "type": "git", "url": "https://github.com/MichaelZelbel/godspeed-coach.git" }
+}

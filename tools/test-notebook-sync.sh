@@ -103,6 +103,11 @@ GODSPEED_NOTEBOOK_MIRROR=1
 ' "$W/mc-nomirror" > "$W/home-nomirror/.godspeed/device.env"
 rc=0; out="$(HOME="$W/home-nomirror" USERPROFILE="$W/home-nomirror" GODSPEED_NOTEBOOK_MIRROR="" MENERIO_API_KEY="test-key" sh "$W/bin-nomirror/mc-notebook-sync" --verbose 2>&1)" || rc=$?
 echo "$out" | grep -q "UP RAN" && echo "$out" | grep -q "DOWN RAN" && ok "  and with GODSPEED_NOTEBOOK_MIRROR=1 in device.env both directions run" || bad "  the yes in device.env was not honoured" "$out"
+# A mission control that runs Godspeed v2's notebook (it has a folder sync) needs no copy (6 October 2026).
+mkdir -p "$W/mc-nomirror/.godspeed" && printf '{"repository":"folder"}' > "$W/mc-nomirror/.godspeed/sync-config.json"
+rc=0; out="$(HOME="$W/home-nomirror" USERPROFILE="$W/home-nomirror" GODSPEED_NOTEBOOK_MIRROR="" MENERIO_API_KEY="test-key" sh "$W/bin-nomirror/mc-notebook-sync" --verbose 2>&1)" || rc=$?
+[ "$rc" = "0" ] && ! echo "$out" | grep -q "UP RAN" && ! echo "$out" | grep -q "DOWN RAN" && ok "  and where v2's notebook runs, nothing is copied either way" || bad "  a v2 mission control was still copied" "$out"
+rm -f "$W/mc-nomirror/.godspeed/sync-config.json"
 
 # 9c. The copy program itself honours the answer, so typing it by hand cannot undo a "no".
 mkdir -p "$W/home-hand/.godspeed" "$W/mc-hand"

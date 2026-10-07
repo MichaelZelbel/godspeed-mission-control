@@ -1,0 +1,29 @@
+import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import http from 'node:http';
+import {Store} from '../core/records/store.mjs';import {QueryService} from '../core/query.mjs';import {leadCommand} from '../core/lead-commands.mjs';import {monthlyMeasurements} from '../core/lead-measurements.mjs';import {lead} from '../core/lead.mjs';
+// Its sources are local fixture servers, which the product itself refuses to read (core/outbound-fetch.mjs).
+process.env.GODSPEED_OUTBOUND_ALLOW_LOCAL='1';
+function fixture(){const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-monthly-progress-'))),query=new QueryService(store),goal=store.save('goals',{title:'Fictional source-aware public work',status:'adopted'});return {store,query,goal};}
+function configure(f,url,rungs){leadCommand(f,['configure',JSON.stringify({monthly:{enabled:true,day:1,rungs:rungs||[{id:'fictional-reader-count',title:'Fictional observed readership',goal_id:f.goal.id,url,kind:'numeric',value_path:'counts.readers'}]}})]);return f.store.get('settings','lead');}
+async function source(t,body){let count=0;const server=http.createServer((req,res)=>{count++;if(body.status)res.statusCode=body.status;res.end(typeof body.value==='string'?body.value:JSON.stringify(body.value));});await new Promise(r=>server.listen(0,'127.0.0.1',r));t.after(()=>new Promise(r=>server.close(r)));return {url:'http://127.0.0.1:'+server.address().port,count:()=>count};}
+test('monthly measurements read actual source bytes before the already-used daily cap, and repeat quietly',async t=>{
+ const f=fixture(),server=await source(t,{value:{counts:{readers:7}}});configure(f,server.url);const day=new Intl.DateTimeFormat('en-CA',{timeZone:'UTC'}).format(new Date());f.store.save('lead_entries',{delivery_day:day,status:'ready'});
+ const result=await lead({id:'fictional-capped-day'},{...f,provider:async()=>{throw Error('No new daily draft should run');}});assert.equal(result.silent,true);
+ const measurement=f.query.rows('lead_measurements')[0];assert.equal(measurement.value,7);assert.equal(measurement.state,'verified');assert.ok(f.store.get('watch_observations',measurement.source_id).content.includes('readers'));assert.equal(f.store.list('notifications').length,0);
+ await lead({id:'fictional-month-repeat'},{...f,provider:null});assert.equal(server.count(),1);assert.equal(f.query.rows('lead_measurements').length,1);assert.deepEqual(f.store.list('lead_runs')[0].measurement_ids,[measurement.id]);
+});
+test('an unavailable source and a numeric string remain UNVERIFIED with no fabricated zero',async t=>{
+ const f=fixture(),bad=await source(t,{status:503,value:'Fictional unavailable source'}),settings=configure(f,bad.url);const missing=await monthlyMeasurements({...f,settings,day:'2026-10-04'});assert.equal(missing[0].state,'UNVERIFIED');assert.equal(missing[0].value,null);assert.match(missing[0].reason,/503/);
+ const malformed=await source(t,{value:{counts:{readers:'0'}}}),changed=configure(f,malformed.url);const unmeasured=await monthlyMeasurements({...f,settings:changed,day:'2026-10-04'});assert.equal(unmeasured[0].state,'UNVERIFIED');assert.equal(unmeasured[0].value,null);assert.ok(unmeasured[0].source_hash);
+});
+test('a repeated idea counts among returned results without the owner name, with source scope and prior measurements retained',async t=>{
+ const f=fixture(),phrase='Retain the original source date',server=await source(t,{value:{results:[{text:phrase+' before trusting an answer.'},{text:'A different idea.'},{text:'Someone else says: '+phrase}]}}),settings=configure(f,server.url,[{id:'fictional-citations',title:'Fictional repeated idea',goal_id:f.goal.id,url:server.url,kind:'citation-matches',items_path:'results',text_path:'text',phrase}]);
+ const first=(await monthlyMeasurements({...f,settings,day:'2026-10-04'}))[0],second=(await monthlyMeasurements({...f,settings,day:'2026-11-01'}))[0];assert.equal(first.value,2);assert.equal(first.returned_results,3);assert.equal(first.scope,'returned-results-only');assert.equal(first.matches[0].quote,phrase);assert.equal(second.previous_id,first.id);assert.equal(f.query.rows('lead_measurements').length,2);
+});
+test('goal pause or configuration change during a source read prevents publishing stale progress',async()=>{
+ const f=fixture(),settings=configure(f,'https://example.invalid/fictional-progress');await assert.rejects(monthlyMeasurements({...f,settings,day:'2026-10-04',readSource:async url=>{f.store.save('goals',{id:f.goal.id,status:'paused'});return {url,content:'{"counts":{"readers":4}}',fetched_at:new Date().toISOString()};}}),/changed during measurement/);assert.equal(f.query.rows('lead_measurements').length,0);
+});
+test('unadopted goals and unsafe value paths cannot enable measurement; the chosen monthly day is respected',async()=>{
+ const f=fixture();f.store.save('goals',{id:f.goal.id,status:'provisional'});assert.throws(()=>configure(f,'https://example.invalid/fictional-progress'),/adopted goal/);f.store.save('goals',{id:f.goal.id,status:'adopted'});
+ assert.throws(()=>configure(f,'https://example.invalid/fictional-progress',[{id:'bad-path',title:'Fictional unsafe field',goal_id:f.goal.id,url:'https://example.invalid',kind:'numeric',value_path:'__proto__.value'}]),/value path/);
+ const settings=configure(f,'https://example.invalid/fictional-progress');settings.monthly.day=15;assert.deepEqual(await monthlyMeasurements({...f,settings,day:'2026-10-04',readSource:async()=>{throw Error('Not due');}}),[]);
+});

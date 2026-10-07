@@ -1,0 +1,12 @@
+{
+  "name": "godspeed-headache",
+  "version": "0.2.0",
+  "description": "A headache diary you talk to, for Godspeed Mission Control: say when it started, how bad, where, what you took and when it ended, and mission control keeps the log and finds the pattern. An add-on for Teach It Once.",
+  "license": "MIT",
+  "type": "module",
+  "bin": { "godspeed-headache": "bin/godspeed-headache.mjs" },
+  "files": ["bin", "lib", "skill", "hermes", "README.md", "LICENSE"],
+  "engines": { "node": ">=22" },
+  "scripts": { "test": "node --test \"test/*.test.mjs\"" },
+  "repository": { "type": "git", "url": "https://github.com/MichaelZelbel/godspeed-headache.git" }
+}

@@ -1,0 +1,12 @@
+{
+  "name": "godspeed-journal",
+  "version": "0.4.0",
+  "description": "Interstitial journaling for Godspeed Mission Control: say what you are starting and what done means, and mission control checks it when you finish. An add-on for Teach It Once.",
+  "license": "MIT",
+  "type": "module",
+  "bin": { "godspeed-journal": "bin/godspeed-journal.mjs" },
+  "files": ["bin", "lib", "skill", "hermes", "README.md", "LICENSE"],
+  "engines": { "node": ">=22" },
+  "scripts": { "test": "node --test \"test/*.test.mjs\"" },
+  "repository": { "type": "git", "url": "https://github.com/MichaelZelbel/godspeed-journal.git" }
+}

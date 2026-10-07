@@ -1,0 +1,13 @@
+ARG BASE_IMAGE
+FROM ${BASE_IMAGE}
+USER root
+COPY --chown=hermes:hermes . /opt/godspeed/kit/
+RUN test "$(node --version)" = "v22.19.0" && chmod 755 /opt/godspeed/kit/docker/full-candidate/entrypoint.sh
+ARG REVISION
+ARG BASE_IMAGE
+ARG VERIFIED_BASE
+# The same settings as Dockerfile, over a base that may have been built before they changed.
+ENV GODSPEED_FILE_HERMES=0 GODSPEED_REVISION=${REVISION}
+LABEL org.opencontainers.image.title="Godspeed Mission Control Full Alpha" org.opencontainers.image.revision="${REVISION}" org.opencontainers.image.version="2.0.0-alpha.1" godspeed.cached-base="${VERIFIED_BASE}"
+ENTRYPOINT ["/opt/godspeed/kit/docker/full-candidate/entrypoint.sh"]
+CMD []

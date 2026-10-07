@@ -1,0 +1,245 @@
+import { useQuery, useMutation, useQueryClient, type QueryClient } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { deleteProfileSection } from "@/lib/profile-section-delete";
+import { useAuth } from "@/contexts/AuthContext";
+import { showToast } from "@/lib/toast";
+
+export interface ProfileCategory {
+  id: string;
+  user_id: string;
+  name: string;
+  slug: string;
+  icon: string | null;
+  description: string | null;
+  sort_order: number;
+  is_default: boolean;
+  visibility_scope: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AgentInstruction {
+  id: string;
+  user_id: string;
+  instruction: string;
+  applies_to: string;
+  is_active: boolean;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProfileView {
+  id: string;
+  user_id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  included_scopes: string[];
+  created_at: string;
+}
+
+const DEFAULT_CATEGORIES = [
+  { name: "Identity & Basics", slug: "identity", icon: "user", description: "Full name, pronouns, languages, nationality", sort_order: 0, visibility_scope: "all" },
+  { name: "Location & Living", slug: "location", icon: "map-pin", description: "Current city, timezone, living situation", sort_order: 1, visibility_scope: "personal" },
+  { name: "Professional Life", slug: "professional", icon: "briefcase", description: "Job, company, industry, skills", sort_order: 2, visibility_scope: "professional" },
+  { name: "Education", slug: "education", icon: "graduation-cap", description: "Degrees, certifications, learning style", sort_order: 3, visibility_scope: "professional" },
+  { name: "Relationships & Family", slug: "relationships", icon: "heart", description: "Partner, children, close family", sort_order: 4, visibility_scope: "personal" },
+  { name: "Contact & Communication", slug: "communication", icon: "message-circle", description: "Email, phone, handles, tone and humor style", sort_order: 5, visibility_scope: "all" },
+  { name: "Personality & Values", slug: "personality", icon: "compass", description: "Type indicators, core values, philosophy", sort_order: 6, visibility_scope: "all" },
+  { name: "Principles & Operating System", slug: "principles", icon: "book-open", description: "Personal rules, codex vitae, frameworks", sort_order: 7, visibility_scope: "all" },
+  { name: "Health & Wellness", slug: "health", icon: "activity", description: "Medical, allergies, fitness, sleep", sort_order: 8, visibility_scope: "health" },
+  { name: "Hobbies & Interests", slug: "hobbies", icon: "palette", description: "Active hobbies, creative pursuits", sort_order: 9, visibility_scope: "personal" },
+  { name: "Food & Drink", slug: "food", icon: "utensils", description: "Cuisines, dietary style, cooking", sort_order: 10, visibility_scope: "personal" },
+  { name: "Music & Entertainment", slug: "entertainment", icon: "music", description: "Genres, movies, books, gaming", sort_order: 11, visibility_scope: "personal" },
+  { name: "Travel & Experiences", slug: "travel", icon: "plane", description: "Countries, bucket list, travel style", sort_order: 12, visibility_scope: "personal" },
+  { name: "Digital Life", slug: "digital", icon: "monitor", description: "Social profiles, tools, tech stack", sort_order: 13, visibility_scope: "all" },
+  { name: "Financial", slug: "financial", icon: "wallet", description: "Goals, investment style, budget", sort_order: 14, visibility_scope: "private" },
+  { name: "Goals & Aspirations", slug: "goals", icon: "target", description: "Short-term, long-term, anti-goals", sort_order: 15, visibility_scope: "all" },
+  { name: "Preferences & Quirks", slug: "preferences", icon: "sliders-horizontal", description: "Morning/night, introvert/extrovert, pet peeves", sort_order: 16, visibility_scope: "all" },
+];
+
+/**
+ * The dashboard and sidebar read completeness from `profile-summary`, a
+ * separate query over the same tables; refresh it with the list.
+ */
+function invalidateProfile(qc: QueryClient, key: string) {
+  qc.invalidateQueries({ queryKey: [key] });
+  qc.invalidateQueries({ queryKey: ["profile-summary"] });
+}
+
+export function useProfile() {
+  const { user } = useAuth();
+  const qc = useQueryClient();
+  const userId = user?.id;
+
+  const categoriesQuery = useQuery({
+    queryKey: ["profile-categories", userId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("profile_categories")
+        .select("*")
+        .eq("user_id", userId!)
+        .is("contact_id", null)
+        .order("sort_order");
+      if (error) throw error;
+      return data as ProfileCategory[];
+    },
+    enabled: !!userId,
+  });
+
+  const instructionsQuery = useQuery({
+    queryKey: ["agent-instructions", userId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("agent_instructions")
+        .select("*")
+        .eq("user_id", userId!)
+        .order("sort_order");
+      if (error) throw error;
+      return data as AgentInstruction[];
+    },
+    enabled: !!userId,
+  });
+
+  const viewsQuery = useQuery({
+    queryKey: ["profile-views", userId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("profile_views")
+        .select("*")
+        .eq("user_id", userId!)
+        .order("created_at");
+      if (error) throw error;
+      return data as ProfileView[];
+    },
+    enabled: !!userId,
+  });
+
+  const seedDefaults = useMutation({
+    mutationFn: async () => {
+      const rows = DEFAULT_CATEGORIES.map((c) => ({
+        ...c,
+        user_id: userId!,
+        is_default: true,
+      }));
+      const { error } = await supabase.from("profile_categories").insert(rows);
+      if (error) throw error;
+    },
+    onSuccess: () => invalidateProfile(qc, "profile-categories"),
+    onError: (error: Error) => showToast.error(error?.message || "Could not create the default sections"),
+  });
+
+  const upsertCategory = useMutation({
+    mutationFn: async (cat: Partial<ProfileCategory> & { id?: string }) => {
+      if (cat.id) {
+        const { error } = await supabase.from("profile_categories").update(cat).eq("id", cat.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from("profile_categories").insert({ ...cat, user_id: userId! } as any);
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => {
+      invalidateProfile(qc, "profile-categories");
+      showToast.success("Category saved");
+    },
+    onError: (error: Error) => showToast.error(error?.message || "Could not save the category"),
+  });
+
+  const deleteCategory = useMutation({
+    mutationFn: async (id: string) => {
+      await deleteProfileSection(supabase, id);
+    },
+    onSuccess: () => {
+      invalidateProfile(qc, "profile-categories");
+      // Facts filed in a deleted section fall back to "Other"; nothing is deleted.
+      invalidateProfile(qc, "profile-facts");
+      showToast.success("Category deleted");
+    },
+    onError: (error: Error) => showToast.error(error?.message || "Could not delete the category"),
+  });
+
+  const upsertInstruction = useMutation({
+    mutationFn: async (inst: Partial<AgentInstruction> & { id?: string }) => {
+      if (inst.id) {
+        const { error } = await supabase.from("agent_instructions").update(inst).eq("id", inst.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from("agent_instructions").insert({ ...inst, user_id: userId! } as any);
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => {
+      invalidateProfile(qc, "agent-instructions");
+      showToast.success("Instruction saved");
+    },
+    onError: (error: Error) => showToast.error(error?.message || "Could not save the instruction"),
+  });
+
+  const deleteInstruction = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("agent_instructions").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      invalidateProfile(qc, "agent-instructions");
+      showToast.success("Instruction deleted");
+    },
+    onError: (error: Error) => showToast.error(error?.message || "Could not delete the instruction"),
+  });
+
+  const upsertView = useMutation({
+    mutationFn: async (view: Partial<ProfileView> & { id?: string }) => {
+      if (view.id) {
+        const { error } = await supabase.from("profile_views").update({
+          name: view.name,
+          description: view.description,
+          included_scopes: view.included_scopes,
+        }).eq("id", view.id);
+        if (error) throw error;
+      } else {
+        const slug = (view.name ?? "custom").trim().toLowerCase().replace(/[^a-z0-9]+/g, "-");
+        const { error } = await supabase.from("profile_views").insert({
+          user_id: userId!,
+          name: view.name!,
+          slug,
+          description: view.description ?? null,
+          included_scopes: view.included_scopes ?? ["all"],
+        });
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["profile-views"] });
+      showToast.success("View saved");
+    },
+    onError: (error: Error) => showToast.error(error?.message || "Could not save the view"),
+  });
+
+  const deleteView = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("profile_views").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["profile-views"] });
+      showToast.success("View deleted");
+    },
+    onError: (error: Error) => showToast.error(error?.message || "Could not delete the view"),
+  });
+
+  return {
+    categories: categoriesQuery.data ?? [],
+    instructions: instructionsQuery.data ?? [],
+    views: viewsQuery.data ?? [],
+    isLoading: categoriesQuery.isLoading,
+    seedDefaults,
+    upsertCategory,
+    deleteCategory,
+    upsertInstruction,
+    deleteInstruction,
+    upsertView,
+    deleteView,
+  };
+}

@@ -15,6 +15,12 @@ on:
   pull_request:
     paths: ["docker/**", "server/**", "computer/**", ".github/workflows/docker.yml", ".dockerignore"]
   workflow_dispatch:
+    inputs:
+      edition:
+        description: Image to build and publish
+        type: choice
+        options: [full, telegram, hostinger, hostinger-automatic]
+        default: full
 
 permissions:
   contents: read
@@ -24,6 +30,7 @@ env:
 
 jobs:
   test:
+    if: github.event_name != 'workflow_dispatch' || inputs.edition == 'telegram'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -84,3 +91,73 @@ jobs:
           severity: CRITICAL,HIGH
           ignore-unfixed: true
           exit-code: "0"
+
+  full:
+    if: github.event_name == 'workflow_dispatch' && inputs.edition == 'full'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22.19.0'
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build complete application on the GitHub runner
+        run: docker build --build-arg REVISION="$GITHUB_SHA" -f docker/full-candidate/Dockerfile -t godspeed-full-test .
+      - name: Verify packaged server and fresh browser setup
+        run: bash docker/full-candidate/test.sh godspeed-full-test
+      # Never :latest. That tag is the stable channel: docker/compose.yaml on main pulls it, so a
+      # preview pushed there reaches every stable reader on their next update (it did, until
+      # 2026-10-06). Only the publish job above, on main, moves :latest.
+      - name: Publish the exact tested image
+        id: publish-full
+        run: |
+          for tag in full-alpha full-sha-${GITHUB_SHA}; do
+            docker tag godspeed-full-test "$IMAGE:$tag"
+            docker push "$IMAGE:$tag"
+          done
+          digest=$(docker image inspect "$IMAGE:full-sha-${GITHUB_SHA}" --format '{{index .RepoDigests 0}}')
+          echo "ref=$digest" >> "$GITHUB_OUTPUT"
+          printf 'Published complete tested image: `%s`\n' "$digest" >> "$GITHUB_STEP_SUMMARY"
+      - uses: sigstore/cosign-installer@v4.1.2
+      - name: Sign the tested complete image
+        run: cosign sign --yes "${{ steps.publish-full.outputs.ref }}"
+      - name: Save verification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: full-image-verification
+          path: docker/full-candidate/evidence/
+          retention-days: 14
+
+  hostinger:
+    if: github.event_name == 'workflow_dispatch' && (inputs.edition == 'hostinger' || inputs.edition == 'hostinger-automatic')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22.19.0'
+      - name: Verify the public Hostinger deployment without using the existing VPS
+        run: |
+          if [ '${{ inputs.edition }}' = 'hostinger-automatic' ]; then
+            bash docker/hostinger/test-automatic.sh
+          else
+            bash docker/hostinger/test.sh
+          fi
+      - name: Save verification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hostinger-install-verification
+          path: docker/hostinger/evidence/
+          retention-days: 14

@@ -1,0 +1,87 @@
+name: Integrated Godspeed v2
+# The version 2 image: tested on every change, published only from the v2 branch.
+#
+# Until 6 October 2026 a manual run from any branch published an image, the registry login
+# came before the tests ran, and nothing was signed or scanned. Now a run from any other
+# branch tests and stops; the checkout keeps no token; the login, the push, a keyless
+# signature (as docker.yml signs the main image) and a scan for known vulnerabilities
+# (reported, not blocking, as in docker.yml) come after every test has passed.
+#
+# Actions are named by tag, not yet by commit hash: the hashes were not looked up when
+# this changed (no network on the machine that wrote it).
+on:
+  push:
+    branches: [codex/godspeed-v2-completeness]
+    paths: [.github/workflows/v2-integrated.yml, 'notebook/**', 'docker/full-candidate/**', 'docker/rootfs/**', 'docker/test/**', install-godspeed.sh]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  native-linux:
+    # The Linux installer for real on a fresh Ubuntu with systemd and sudo: a first install,
+    # an upgrade that keeps the machine's name, and a restart after the notebook is killed
+    # (notebook/test/native-install-linux.sh). Until 6 October 2026 no run ever did this.
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install, upgrade and recover
+        run: bash notebook/test/native-install-linux.sh
+  image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: read
+      packages: write
+      id-token: write   # the keyless signature
+    env:
+      IMAGE: ghcr.io/michaelzelbel/godspeed-mission-control
+      PUBLISH: ${{ github.ref == 'refs/heads/codex/godspeed-v2-completeness' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.19.0'
+      - name: Original folder and integrated core checks
+        run: node --test notebook/test/starter-workspace.test.mjs notebook/test/assistant-starter-wiring.test.mjs notebook/test/computer-wiring-on-existing-server.test.mjs notebook/test/windows-command-files.test.mjs notebook/test/final-core-contracts.test.mjs notebook/test/telegram-replies.test.mjs notebook/test/native-runtime.test.mjs
+      - name: Installers and setup, without Docker
+        run: |
+          node --test notebook/test/native-installer.test.mjs notebook/test/native-start-script.test.mjs notebook/test/setup-code.test.mjs notebook/test/native-web-address.test.mjs notebook/test/server-address.test.mjs notebook/test/web-door.test.mjs
+          bash docker/full-candidate/test-package-update.sh
+          python3 docker/test/test-telegram-setup.py
+      - name: Build the integrated version
+        run: docker build --build-arg REVISION="$GITHUB_SHA" -f docker/full-candidate/Dockerfile -t godspeed-v2-test .
+      - name: Fresh installed server and browser check
+        run: bash docker/full-candidate/test.sh godspeed-v2-test
+      - uses: docker/login-action@v3
+        if: env.PUBLISH == 'true'
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish separate version 2 image
+        id: publish
+        if: env.PUBLISH == 'true'
+        run: |
+          docker tag godspeed-v2-test "$IMAGE:v2-sha-$GITHUB_SHA"
+          docker push "$IMAGE:v2-sha-$GITHUB_SHA"
+          digest=$(docker image inspect "$IMAGE:v2-sha-$GITHUB_SHA" --format '{{index .RepoDigests 0}}')
+          echo "ref=$digest" >> "$GITHUB_OUTPUT"
+          printf 'Published tested image: `%s`\n' "$digest" >> "$GITHUB_STEP_SUMMARY"
+      - uses: sigstore/cosign-installer@v4.1.2
+        if: env.PUBLISH == 'true'
+      - name: Sign the published image
+        if: env.PUBLISH == 'true'
+        run: cosign sign --yes "${{ steps.publish.outputs.ref }}"
+      - name: Scan the published image
+        if: env.PUBLISH == 'true'
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ steps.publish.outputs.ref }}
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "0"

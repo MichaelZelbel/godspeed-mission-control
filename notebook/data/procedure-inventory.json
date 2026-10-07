@@ -1,0 +1,282 @@
+[
+  {
+    "name": "sync",
+    "classification": "superseded",
+    "operation": "file-sync",
+    "reason": "One file reconciler, every minute and after saves; no database-row sync.",
+    "activation": "Owner enables a schedule; one declared runner; outward actions need a specific approval."
+  },
+  {
+    "name": "sync-bot",
+    "classification": "superseded",
+    "operation": "file-sync",
+    "reason": "Bot and notebook use the same workspace; no second private clone.",
+    "activation": "Owner enables a schedule; one declared runner; outward actions need a specific approval."
+  },
+  {
+    "name": "browser-post",
+    "classification": "optional connector",
+    "operation": "browser-post",
+    "reason": "Approved computer helper and explicit posting permission.",
+    "activation": "Owner enables a schedule; one declared runner; outward actions need a specific approval."
+  },
+  {
+    "name": "kanbero-import",
+    "classification": "optional connector",
+    "operation": "board-export",
+    "reason": "A chosen task-board connector reads work and receipts; no company agents are installed.",
+    "activation": "Owner enables a schedule; one declared runner; outward actions need a specific approval."
+  },
+  {
+    "name": "spend-guard",
+    "classification": "optional connector",
+    "operation": "spend-guard",
+    "reason": "Read a chosen provider balance; thresholds are configured by the owner.",
+    "activation": "Owner enables a schedule; one declared runner; outward actions need a specific approval."
+  },
+  {
+    "name": "do-you-copy",
+    "classification": "included",
+    "operation": "attention-review",
+    "reason": "One reminder for a pending approval, with durable deduplication.",
+    "activation": "Owner enables a schedule; one declared runner; outward actions need a specific approval."
+  },
+  {
+    "name": "menerio-keepalive",
+    "classification": "superseded",
+    "operation": "file-runtime",
+    "reason": "The file runtime needs no PowerSync service.",
+    "activation": "Owner enables a schedule; one declared runner; outward actions need a specific approval."
+  },
+  {
+    "name": "disk-watchdog",
+    "classification": "included",
+    "operation": "disk-check",
+    "reason": "Read actual candidate filesystem free space without model usage.",
+    "activation": "Owner enables a schedule; one declared runner; outward actions need a specific approval."
+  },
+  {
+    "name": "paperclip-backup-prune",
+    "classification": "separately owned",
+    "operation": "company",
+    "reason": "Paperclip is a separate company-agent system.",
+    "activation": "Owner enables a schedule; one declared runner; outward actions need a specific approval."
+  },
+  {
+    "name": "domain-watch",
+    "classification": "optional connector",
+    "operation": "domain-watch",
+    "reason": "Read owner-selected authoritative domain registration endpoints; do not buy domains.",
+    "activation": "Owner enables a schedule; one declared runner; outward actions need a specific approval."
+  },
+  {
+    "name": "claude-upgrade",
+    "classification": "superseded",
+    "operation": "candidate-update",
+    "reason": "Pinned candidate upgrades and rollback replace unpinned nightly runtime changes.",
+    "activation": "Owner enables a schedule; one declared runner; outward actions need a specific approval."
+  },
+  {
+    "name": "health-table",
+    "classification": "included",
+    "operation": "health-summary",
+    "reason": "Aggregate file-backed health observations, episodes and medication days.",
+    "activation": "Owner enables a schedule; one declared runner; outward actions need a specific approval."
+  },
+  {
+    "name": "portfolio",
+    "classification": "included",
+    "operation": "portfolio",
+    "reason": "Check owner-selected public links and save dated results.",
+    "activation": "Owner enables a schedule; one declared runner; outward actions need a specific approval."
+  },
+  {
+    "name": "transcript-sync",
+    "classification": "superseded",
+    "operation": "file-conversations",
+    "reason": "Conversation state and immutable snapshots are already durable files.",
+    "activation": "Owner enables a schedule; one declared runner; outward actions need a specific approval."
+  },
+  {
+    "name": "fresh-posts",
+    "classification": "optional connector",
+    "operation": "lead",
+    "reason": "Read selected public sources or the explicitly paired browser; save observed posts, not invented ones.",
+    "activation": "Owner enables a schedule; one declared runner; outward actions need a specific approval."
+  },
+  {
+    "name": "next-action",
+    "classification": "included",
+    "operation": "goal-decision",
+    "reason": "Compare action, alternative and status quo using goals and actual outcomes.",
+    "activation": "Owner enables a schedule; one declared runner; outward actions need a specific approval."
+  },
+  {
+    "name": "prompt-harvest",
+    "classification": "included",
+    "operation": "memory-capture",
+    "reason": "Capture explicitly supplied transcripts with credential redaction; never sweep other accounts.",
+    "activation": "Owner enables a schedule; one declared runner; outward actions need a specific approval."
+  },
+  {
+    "name": "snapshot-for-ownward",
+    "classification": "separately owned",
+    "operation": "company",
+    "reason": "Company handovers remain with the owning company.",
+    "activation": "Owner enables a schedule; one declared runner; outward actions need a specific approval."
+  },
+  {
+    "name": "connections",
+    "classification": "included",
+    "operation": "connection-check",
+    "reason": "Make a real read through each configured connector and save success or failure.",
+    "activation": "Owner enables a schedule; one declared runner; outward actions need a specific approval."
+  },
+  {
+    "name": "due-check",
+    "classification": "superseded",
+    "operation": "deadline-reminder",
+    "reason": "Independent deadline reminder and file-backed recurrence.",
+    "activation": "Owner enables a schedule; one declared runner; outward actions need a specific approval."
+  },
+  {
+    "name": "topic-watch",
+    "classification": "superseded",
+    "operation": "watch",
+    "reason": "One owner-selected topic registry and source reader.",
+    "activation": "Owner enables a schedule; one declared runner; outward actions need a specific approval."
+  },
+  {
+    "name": "brief-judges",
+    "classification": "included",
+    "operation": "brief-review",
+    "reason": "Judge the saved brief against current sources and voice; preserve critique.",
+    "activation": "Owner enables a schedule; one declared runner; outward actions need a specific approval."
+  },
+  {
+    "name": "ownward-handover",
+    "classification": "separately owned",
+    "operation": "company",
+    "reason": "Company output is produced by its owning system.",
+    "activation": "Owner enables a schedule; one declared runner; outward actions need a specific approval."
+  },
+  {
+    "name": "selftest",
+    "classification": "included",
+    "operation": "selftest",
+    "reason": "Validate records, references, index and pending receipts.",
+    "activation": "Owner enables a schedule; one declared runner; outward actions need a specific approval."
+  },
+  {
+    "name": "exa-monitor-test",
+    "classification": "optional connector",
+    "operation": "watch",
+    "reason": "Optional search provider comparison uses dated source receipts.",
+    "activation": "Owner enables a schedule; one declared runner; outward actions need a specific approval."
+  },
+  {
+    "name": "brief-morning",
+    "classification": "included",
+    "operation": "morning-brief",
+    "reason": "Write from current user data; delivery is an explicitly configured connector.",
+    "activation": "Owner enables a schedule; one declared runner; outward actions need a specific approval."
+  },
+  {
+    "name": "devops-bridge",
+    "classification": "superseded",
+    "operation": "goal-work",
+    "reason": "Local assistant and durable work queue replace the private headless bridge.",
+    "activation": "Owner enables a schedule; one declared runner; outward actions need a specific approval."
+  },
+  {
+    "name": "bot-probe",
+    "classification": "included",
+    "operation": "conversation-review",
+    "reason": "Compare the last delivered message with its saved conversation record.",
+    "activation": "Owner enables a schedule; one declared runner; outward actions need a specific approval."
+  },
+  {
+    "name": "hermes-backup-prune",
+    "classification": "superseded",
+    "operation": "candidate-backup",
+    "reason": "Candidate upgrades retain verified backups; no private Hermes-home cleanup.",
+    "activation": "Owner enables a schedule; one declared runner; outward actions need a specific approval."
+  },
+  {
+    "name": "job-check",
+    "classification": "included",
+    "operation": "job-check",
+    "reason": "Detect failed, interrupted, missing or overdue routine receipts.",
+    "activation": "Owner enables a schedule; one declared runner; outward actions need a specific approval."
+  },
+  {
+    "name": "work",
+    "classification": "included",
+    "operation": "goal-work",
+    "reason": "Complete useful authorized work and save the actual deliverable.",
+    "activation": "Owner enables a schedule; one declared runner; outward actions need a specific approval."
+  },
+  {
+    "name": "watch",
+    "classification": "included",
+    "operation": "watch",
+    "reason": "Read selected sources, save observations and surface meaningful change.",
+    "activation": "Owner enables a schedule; one declared runner; outward actions need a specific approval."
+  },
+  {
+    "name": "attention-pull",
+    "classification": "included",
+    "operation": "attention-review",
+    "reason": "Prioritize near deadlines and prepared user actions; silence is valid.",
+    "activation": "Owner enables a schedule; one declared runner; outward actions need a specific approval."
+  },
+  {
+    "name": "lead",
+    "classification": "included",
+    "operation": "lead",
+    "reason": "Prepare a grounded post or reply; never publish automatically.",
+    "activation": "Owner enables a schedule; one declared runner; outward actions need a specific approval."
+  },
+  {
+    "name": "memory-daily",
+    "classification": "included",
+    "operation": "profiling",
+    "reason": "Source-quoted proposals go to the review queue.",
+    "activation": "Owner enables a schedule; one declared runner; outward actions need a specific approval."
+  },
+  {
+    "name": "brief-rehearsal",
+    "classification": "included",
+    "operation": "brief-rehearsal",
+    "reason": "Run actual source preparation, drafting, factual and delivery gates without delivery.",
+    "activation": "Owner enables a schedule; one declared runner; outward actions need a specific approval."
+  },
+  {
+    "name": "radar",
+    "classification": "included",
+    "operation": "radar",
+    "reason": "At most one evidence-based proposal from configured sources.",
+    "activation": "Owner enables a schedule; one declared runner; outward actions need a specific approval."
+  },
+  {
+    "name": "memory-review",
+    "classification": "included",
+    "operation": "memory-review",
+    "reason": "Propose stale or conflicting fact corrections without deleting knowledge.",
+    "activation": "Owner enables a schedule; one declared runner; outward actions need a specific approval."
+  },
+  {
+    "name": "audit",
+    "classification": "included",
+    "operation": "audit",
+    "reason": "Validate system state and goal outcomes, then prepare corrections.",
+    "activation": "Owner enables a schedule; one declared runner; outward actions need a specific approval."
+  },
+  {
+    "name": "outside-ai-check",
+    "classification": "included",
+    "operation": "memory-capture",
+    "reason": "Import owner-supplied conversations from other assistants; no account scraping.",
+    "activation": "Owner enables a schedule; one declared runner; outward actions need a specific approval."
+  }
+]

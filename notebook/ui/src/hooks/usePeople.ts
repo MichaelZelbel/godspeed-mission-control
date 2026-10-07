@@ -1,0 +1,313 @@
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
+import { showToast } from "@/lib/toast";
+import { usePeopleSync } from "@/hooks/usePeopleSync";
+
+export interface Person {
+  id: string;
+  user_id: string;
+  name: string;
+  notes: string | null;
+  tags: string[];
+  aliases: string[];
+  app_mappings: Record<string, { display_name?: string }>;
+  metadata: Record<string, unknown>;
+  merged_into: string | null;
+  is_favorite: boolean;
+  last_viewed_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// `is_sensitive` is selected (and used elsewhere via a cast) but not part of
+// the formal Person shape yet - preserved as-is from the pre-extraction query.
+const PEOPLE_COLUMNS =
+  "id, user_id, name, notes, tags, aliases, app_mappings, metadata, merged_into, created_at, updated_at, is_sensitive, is_favorite, last_viewed_at";
+
+const FIVE_MINUTES_MS = 5 * 60 * 1000;
+
+/**
+ * Pure throttle decision for useTouchPersonViewed: skip re-touching
+ * last_viewed_at if the loaded row was already touched within 5 minutes.
+ * An unparseable or missing timestamp always allows the touch through.
+ */
+export function shouldTouchViewed(lastViewedAt: string | null, now: Date): boolean {
+  if (!lastViewedAt) return true;
+  const lastMs = new Date(lastViewedAt).getTime();
+  if (Number.isNaN(lastMs)) return true;
+  return now.getTime() - lastMs >= FIVE_MINUTES_MS;
+}
+
+/**
+ * Full touch decision including the loaded-row gate: a row that isn't in the
+ * cache yet is NOT "never viewed" - on a fresh page load the contacts query
+ * hasn't resolved, and touching blind would bypass the 5-minute throttle on
+ * every reload. Only a genuinely loaded row may be touched.
+ */
+export function shouldTouchLoadedPerson(
+  person: { last_viewed_at?: string | null } | undefined,
+  now: Date,
+): boolean {
+  if (!person) return false;
+  return shouldTouchViewed(person.last_viewed_at ?? null, now);
+}
+
+export interface ContactPage {
+  rows: Person[];
+  total: number;
+  next: { name: string; id: string } | null;
+}
+
+function normalizePerson(d: Person): Person {
+  return { ...d, aliases: d.aliases || [], app_mappings: d.app_mappings || {},
+    is_favorite: d.is_favorite ?? false, last_viewed_at: d.last_viewed_at ?? null };
+}
+
+export function flattenContactPages(pages: ContactPage[]): Person[] {
+  // A contact renamed across the cursor between requests can occur twice.
+  return [...new Map(pages.flatMap((page) => page.rows).map((row) => [row.id, normalizePerson(row)])).values()];
+}
+
+/** Update list pages and independently loaded detail rows together. */
+export function updateContactCache(old: unknown, id: string, changes: Partial<Person>): unknown {
+  const update = (row: Person) => row.id === id ? { ...row, ...changes } : row;
+  if (Array.isArray(old)) return old.map(update);
+  if (!old || typeof old !== "object") return old;
+  if ("pages" in old && Array.isArray(old.pages)) {
+    return { ...old, pages: old.pages.map((page: ContactPage) => ({ ...page, rows: page.rows.map(update) })) };
+  }
+  if ("id" in old) return update(old as Person);
+  return old;
+}
+
+export function usePeople(search = "", options: { enabled?: boolean; excludeId?: string } = {}) {
+  const { user } = useAuth();
+  const query = useInfiniteQuery({
+    queryKey: ["contacts", user?.id, "pages", search.trim(), options.excludeId ?? null],
+    enabled: !!user && options.enabled !== false,
+    initialPageParam: null as ContactPage["next"],
+    queryFn: async ({ pageParam, signal }) => {
+      const { data, error } = await (supabase as any).rpc("search_contacts_page", {
+        search_text: search.trim(), after_name: pageParam?.name ?? null,
+        after_id: pageParam?.id ?? null, page_size: 50,
+        exclude_contact_id: options.excludeId ?? null,
+      }).abortSignal(signal);
+      if (error) throw error;
+      return data as ContactPage;
+    },
+    getNextPageParam: (page) => page.next ?? undefined,
+  });
+  return { ...query, data: flattenContactPages(query.data?.pages ?? []),
+    total: query.data?.pages.at(-1)?.total ?? 0 };
+}
+
+/**
+ * Favorites and recently viewed people, fetched on their own so the tree's
+ * Favorites and Recent sections are complete from the first render, however
+ * far down the name-sorted pages those people sit.
+ */
+export function usePinnedPeople(recentLimit = 15) {
+  const { user } = useAuth();
+  const query = useQuery<Person[]>({
+    queryKey: ["contacts", user?.id, "pinned", recentLimit],
+    enabled: !!user,
+    queryFn: async ({ signal }) => {
+      const base = () => (supabase as any).from("contacts").select(PEOPLE_COLUMNS)
+        .eq("user_id", user!.id).is("merged_into", null);
+      const [favorites, recent] = await Promise.all([
+        base().eq("is_favorite", true).order("name").abortSignal(signal),
+        base().not("last_viewed_at", "is", null).order("last_viewed_at", { ascending: false })
+          .limit(recentLimit).abortSignal(signal),
+      ]);
+      if (favorites.error) throw favorites.error;
+      if (recent.error) throw recent.error;
+      return [...new Map([...favorites.data, ...recent.data].map((row: Person) => [row.id, normalizePerson(row)])).values()];
+    },
+  });
+  return { ...query, data: query.data ?? [] };
+}
+
+export function usePerson(id: string | null) {
+  const { user } = useAuth();
+  return useQuery<Person | null>({
+    queryKey: ["contacts", user?.id, "person", id],
+    enabled: !!user && !!id,
+    queryFn: async ({ signal }) => {
+      const { data, error } = await (supabase as any).from("contacts")
+        .select(PEOPLE_COLUMNS).eq("user_id", user!.id).eq("id", id)
+        .is("merged_into", null).abortSignal(signal).maybeSingle();
+      if (error) throw error;
+      return data ? normalizePerson(data) : null;
+    },
+  });
+}
+
+export function useCreatePerson() {
+  const qc = useQueryClient();
+  const { user } = useAuth();
+  const { triggerPeopleSync } = usePeopleSync();
+
+  return useMutation({
+    mutationFn: async (name: string) => {
+      // Returns the created row so callers (e.g. "Add person here" in the group
+      // tree) can chain a membership insert on the new id.
+      const { data, error } = await (supabase as any)
+        .from("contacts")
+        .insert({
+          user_id: user!.id,
+          name: name.trim(),
+          aliases: [],
+          app_mappings: {},
+        })
+        .select()
+        .single();
+      if (error) throw error;
+      return data as Person;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["contacts"] });
+      qc.invalidateQueries({ queryKey: ["world-entities"] });
+      triggerPeopleSync();
+      showToast.success("Person added");
+    },
+    onError: (e: any) => showToast.error(e.message),
+  });
+}
+
+export function useUpdatePerson() {
+  const qc = useQueryClient();
+  const { triggerPeopleSync } = usePeopleSync();
+
+  return useMutation({
+    mutationFn: async ({
+      id,
+      ...updates
+    }: Partial<Pick<Person, "name" | "notes" | "aliases" | "app_mappings">> & { id: string }) => {
+      const { error } = await supabase
+        .from("contacts")
+        .update(updates as any)
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["contacts"] });
+      // Other caches embed the contact's name: group member tables join
+      // contacts(name, aliases), and World lists every person. With a
+      // five-minute staleTime and a persisted cache, a rename kept showing the
+      // old name there.
+      qc.invalidateQueries({ queryKey: ["contact_group_memberships"] });
+      qc.invalidateQueries({ queryKey: ["world-entities"] });
+      triggerPeopleSync();
+    },
+    onError: (e: any) => showToast.error(e.message),
+  });
+}
+
+export function useDeletePerson() {
+  const qc = useQueryClient();
+  const { triggerPeopleSync, deleteEntityFile } = usePeopleSync();
+
+  return useMutation({
+    mutationFn: async (id: string) => {
+      // Delete the row first: if this fails the person still exists, so the
+      // mirrored vault file must still exist too. Removing the file first
+      // (as this once did) orphaned the mirror whenever the DB delete threw.
+      const { error } = await supabase.from("contacts").delete().eq("id", id);
+      if (error) throw error;
+      // Now retire the mirrored vault file - the sync log still knows its
+      // path. Best-effort; the sweep's retire pass is the backstop.
+      const affectedGroupIds = await deleteEntityFile("person", id);
+      return affectedGroupIds;
+    },
+    onSuccess: (affectedGroupIds) => {
+      qc.invalidateQueries({ queryKey: ["contacts"] });
+      // Member tables of the person's former groups need a refresh now that
+      // the memberships cascaded away.
+      triggerPeopleSync({ groups: affectedGroupIds });
+      // The DB cascades this person's contact_group_memberships rows, but
+      // the aggregate membership query that powers the People tree's group
+      // counts never hears about it on its own - with a 5-minute staleTime,
+      // no focus refetch, and a 24h persister, stale counts would otherwise
+      // linger for the rest of the session.
+      qc.invalidateQueries({ queryKey: ["contact_group_memberships"] });
+      qc.invalidateQueries({ queryKey: ["world-entities"] });
+      showToast.success("Person removed");
+    },
+    // Both callers only pass onSuccess; a refused delete used to close the
+    // confirm dialog with the person still there and nothing said.
+    onError: (e: Error) => showToast.error(e?.message ?? "Could not remove the person"),
+  });
+}
+
+export function useToggleFavoritePerson() {
+  const qc = useQueryClient();
+  const { user } = useAuth();
+  const { triggerPeopleSync } = usePeopleSync();
+
+  return useMutation({
+    mutationFn: async ({ id, isFavorite }: { id: string; isFavorite: boolean }) => {
+      const { error } = await (supabase as any)
+        .from("contacts")
+        .update({ is_favorite: isFavorite })
+        .eq("id", id);
+      if (error) throw error;
+      return { id, isFavorite };
+    },
+    onMutate: async ({ id, isFavorite }) => {
+      const queryKey = ["contacts", user?.id];
+      // The People tree also shows group members from the membership query,
+      // which carries each member's row: its star has to follow too.
+      const membersKey = ["contact_group_memberships", "all", user?.id];
+      await qc.cancelQueries({ queryKey });
+      await qc.cancelQueries({ queryKey: membersKey });
+      const previous = [...qc.getQueriesData({ queryKey }), ...qc.getQueriesData({ queryKey: membersKey })];
+      qc.setQueriesData({ queryKey }, (old: unknown) => updateContactCache(old, id, { is_favorite: isFavorite }));
+      qc.setQueriesData({ queryKey: membersKey }, (old: unknown) =>
+        Array.isArray(old)
+          ? old.map((m) => (m?.contacts?.id === id ? { ...m, contacts: { ...m.contacts, is_favorite: isFavorite } } : m))
+          : old,
+      );
+      return { previous, queryKey, membersKey };
+    },
+    onError: (e: any, _vars, context) => {
+      context?.previous.forEach(([key, data]) => qc.setQueryData(key, data));
+      showToast.error(e.message ?? "Failed to update favorite");
+    },
+    onSettled: (_data, _err, _vars, context) => {
+      qc.invalidateQueries({ queryKey: context?.queryKey ?? ["contacts", user?.id] });
+      qc.invalidateQueries({ queryKey: context?.membersKey ?? ["contact_group_memberships", "all"] });
+    },
+    onSuccess: () => triggerPeopleSync(),
+  });
+}
+
+export function useTouchPersonViewed() {
+  const qc = useQueryClient();
+  const { user } = useAuth();
+
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const queryKey = ["contacts", user?.id];
+      const people = qc.getQueryData<Person[]>(queryKey);
+      const person = qc.getQueryData<Person>([...queryKey, "person", id]) ?? people?.find((p) => p.id === id);
+      if (!shouldTouchLoadedPerson(person, new Date())) {
+        return null;
+      }
+      const lastViewedAt = new Date().toISOString();
+      const { error } = await (supabase as any)
+        .from("contacts")
+        .update({ last_viewed_at: lastViewedAt })
+        .eq("id", id);
+      if (error) throw error;
+      return { id, lastViewedAt };
+    },
+    onSuccess: (result) => {
+      if (!result) return;
+      qc.setQueriesData({ queryKey: ["contacts", user?.id] }, (old: unknown) =>
+        updateContactCache(old, result.id, { last_viewed_at: result.lastViewedAt }));
+      // A person opened from a link may not be in any cached list yet.
+      qc.invalidateQueries({ queryKey: ["contacts", user?.id, "pinned"] });
+    },
+  });
+}

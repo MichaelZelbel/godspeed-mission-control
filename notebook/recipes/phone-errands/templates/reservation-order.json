@@ -1,0 +1,13 @@
+{
+  "job_id": "restaurant-YYYYMMDD-HHMM",
+  "mode": "live",
+  "to_number": "+49...",
+  "contact": "the place, as the person named it",
+  "goal": "what the call must achieve, in one sentence",
+  "name": "the person's name",
+  "opening": "Hello, this is the AI assistant of <name>. I'd like to reserve a table.",
+  "date": "YYYY-MM-DD",
+  "time": "HH:MM",
+  "party_size": 2,
+  "allowed_changes": "what may be accepted instead if the first ask is unavailable, or: nothing"
+}

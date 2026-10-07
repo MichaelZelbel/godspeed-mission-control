@@ -1,0 +1,1437 @@
+import { useState, useMemo, useEffect, useCallback, useRef } from "react";
+import { useQueryClient, useQuery } from "@tanstack/react-query";
+import { OFFLINE_CORE } from "@/lib/flags";
+import { localNoteUpdatedAt, upsertNotesLocal } from "@/sync/local-replica";
+
+import { SEOHead } from "@/components/SEOHead";
+import {
+  useNotes,
+  useNote,
+  useCreateNote,
+  useUpdateNote,
+  useIlikeSearch,
+  useSemanticSearch,
+  Note,
+  SemanticSearchResult,
+} from "@/hooks/useNotes";
+import { NoteList } from "@/components/notes/NoteList";
+import { NoteTree } from "@/components/notes/NoteTree";
+import { GlobalAIChatFAB } from "@/components/chat/GlobalAIChatFAB";
+import { useSidebar } from "@/components/ui/sidebar";
+import { NoteEditor } from "@/components/notes/NoteEditor";
+
+
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Separator } from "@/components/ui/separator";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import {
+  Plus,
+  Search,
+  X,
+  
+  FileText,
+  
+  Trash2,
+  ChevronDown,
+  ChevronRight,
+  ChevronLeft,
+  Filter,
+  Check,
+  Sparkles,
+  Type,
+  Image,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+  Hash,
+  User,
+  FolderPlus,
+  LayoutGrid,
+  Loader2,
+} from "lucide-react";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { supabase } from "@/integrations/supabase/client";
+import { showToast } from "@/lib/toast";
+import { dbErrorMessage, functionErrorMessage } from "@/lib/function-error";
+import { useSearchParams, useParams, useNavigate, useLocation } from "react-router-dom";
+import { cn } from "@/lib/utils";
+import { brandLogo } from "@/lib/brand-assets";
+import { escapeLike, pgOrValue } from "@/lib/postgrest";
+
+
+type SearchMode = "semantic" | "exact";
+type SearchScope = "all" | "notes" | "media";
+type SortField = "updated_at" | "created_at" | "title" | "manual";
+type SortDirection = "asc" | "desc";
+
+const sortLabels: Record<SortField, string> = {
+  updated_at: "Last Edited",
+  created_at: "Date Created",
+  title: "Title",
+  manual: "Manual",
+};
+
+const defaultDirections: Record<SortField, SortDirection> = {
+  updated_at: "desc",
+  created_at: "desc",
+  title: "asc",
+  manual: "desc",
+};
+
+const SORT_STORAGE_KEY = "menerio:notelist:sort";
+
+export default function Notes() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const params = useParams();
+  const urlNoteId = params["*"] || undefined;
+  const navigate = useNavigate();
+  const location = useLocation();
+  const queryClient = useQueryClient();
+  const isMobile = useIsMobile();
+  const {setOpen:setMenuOpen}=useSidebar();
+  const [chatOpen,setChatOpen]=useState(false);
+  const [treeCollapsed,setTreeCollapsed]=useState(()=>window.localStorage.getItem("godspeed:notes-tree-collapsed")==="true");
+  const toggleTree=()=>setTreeCollapsed(v=>{window.localStorage.setItem("godspeed:notes-tree-collapsed",String(!v));return !v;});
+  const chatVisibility=useCallback((open:boolean)=>{setChatOpen(open);if(open){setMenuOpen(false);if(window.innerWidth<1200)setTreeCollapsed(true);}},[setMenuOpen]);
+
+  
+  const [selectedId, setSelectedId] = useState<string | null>(urlNoteId || null);
+  const [searchMode, setSearchMode] = useState(false);
+  const [showLocalGraph, setShowLocalGraph] = useState(false);
+
+  // The URL is the source of the open note. selectNote() always writes it, so
+  // mirroring it back both ways is safe. Only following it when it named a
+  // note meant that the browser's Back button (or the sidebar's "Notes" link)
+  // changed the URL to /dashboard/notes while the old note stayed open, and
+  // on a phone the list never came back.
+  useEffect(() => {
+    setSelectedId(urlNoteId ?? null);
+  }, [urlNoteId]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [entityFilter, setEntityFilter] = useState<string | null>(null);
+  const [searchType, setSearchType] = useState<SearchMode>("semantic");
+  const [searchScope, setSearchScope] = useState<SearchScope>("all");
+  const [semanticResults, setSemanticResults] = useState<SemanticSearchResult[] | null>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [topicFilter, setTopicFilter] = useState<string | null>(null);
+  const [personFilter, setPersonFilter] = useState<string | null>(null);
+  const [metaTypeFilter, setMetaTypeFilter] = useState<string | null>(null);
+  const [activeFolderPath, setActiveFolderPath] = useState<string | null>("");
+  const [newFolderPath, setNewFolderPath] = useState("");
+  
+  const [sortField, setSortField] = useState<SortField>(() => {
+    try {
+      const raw = localStorage.getItem(SORT_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed?.field && parsed.field in defaultDirections) return parsed.field as SortField;
+      }
+    } catch { /* ignore */ }
+    return "updated_at";
+  });
+  const [sortDirection, setSortDirection] = useState<SortDirection>(() => {
+    try {
+      const raw = localStorage.getItem(SORT_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed?.direction === "asc" || parsed?.direction === "desc") return parsed.direction;
+      }
+    } catch { /* ignore */ }
+    return "desc";
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(SORT_STORAGE_KEY, JSON.stringify({ field: sortField, direction: sortDirection }));
+    } catch { /* ignore */ }
+  }, [sortField, sortDirection]);
+
+  // isError was previously discarded, which meant a failed notes query left the
+  // last good list on screen with nothing to say it was stale.
+  const {
+    data: allNotes = [],
+    isLoading: loadingAll,
+    isError: allNotesFailed,
+  } = useNotes("all");
+  const { data: favNotes = [] } = useNotes("favorites");
+  const { data: trashNotes = [] } = useNotes("trash");
+  const createNote = useCreateNote();
+  const updateNote = useUpdateNote();
+  const ilikeSearch = useIlikeSearch();
+  const semanticSearch = useSemanticSearch();
+  const [confirmState, setConfirmState] = useState<{
+    title: string;
+    description: string;
+    confirmLabel?: string;
+    destructive?: boolean;
+    onConfirm: () => void | Promise<void>;
+  } | null>(null);
+  // Replaces window.prompt(): browsers suppress prompts inside embedded/preview
+  // frames, which made rename / new-folder silently do nothing.
+  const [promptState, setPromptState] = useState<{
+    title: string;
+    description?: string;
+    confirmLabel?: string;
+    onSubmit: (value: string) => void | Promise<void>;
+  } | null>(null);
+  const [promptValue, setPromptValue] = useState("");
+
+  const openPrompt = useCallback((state: {
+    title: string;
+    description?: string;
+    confirmLabel?: string;
+    initialValue?: string;
+    onSubmit: (value: string) => void | Promise<void>;
+  }) => {
+    setPromptValue(state.initialValue ?? "");
+    setPromptState({
+      title: state.title,
+      description: state.description,
+      confirmLabel: state.confirmLabel,
+      onSubmit: state.onSubmit,
+    });
+  }, []);
+
+  const { data: savedFolders = [] } = useQuery({
+    queryKey: ["note-folders"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("note_folders" as any)
+        .select("path")
+        .order("path", { ascending: true });
+      if (error) throw error;
+      return ((data || []) as unknown as Array<{ path: string }>).map((f) => f.path);
+    },
+    staleTime: 30_000,
+  });
+
+  const refreshFolders = useCallback(async () => {
+    await queryClient.invalidateQueries({ queryKey: ["note-folders"] });
+  }, [queryClient]);
+
+  /**
+   * Turn any failure into a message the user can act on. A network failure
+   * ("Failed to fetch") used to surface as a silent no-op or a bare technical
+   * string, which is what made a brief backend outage look like a broken app.
+   */
+  const folderErrorMessage = useCallback((err: unknown, action: string) => {
+    const message = err instanceof Error ? err.message : String(err ?? "");
+    if (/failed to fetch|network|timeout|fetch failed/i.test(message)) {
+      return `Couldn't reach the server, so ${action} was not applied. Please try again.`;
+    }
+    return message || `Could not ${action}`;
+  }, []);
+
+  /** Single atomic RPC call; either the whole folder operation applies or none of it does. */
+  const callFolderRpc = useCallback(async (
+    fn: "create_note_folder" | "rename_note_folder" | "move_note_folder" | "reconcile_note_folders",
+    args: Record<string, string>,
+  ) => {
+    const { data, error } = await supabase.rpc(fn as any, args as any);
+    if (error) throw new Error(error.message);
+    return data;
+  }, []);
+
+  const folderPaths = useMemo(() => {
+    return [...new Set([
+      ...savedFolders,
+      ...allNotes.map((n) => n.folder_path || "").filter(Boolean),
+    ])].sort((a, b) => a.localeCompare(b));
+  }, [allNotes, savedFolders]);
+
+  const createFolderAtPath = useCallback(async (path: string) => {
+    const normalized = path.replace(/^\/+|\/+$/g, "").replace(/\/+/g, "/").trim();
+    if (!normalized) return;
+    try {
+      await callFolderRpc("create_note_folder", { p_path: normalized });
+      await refreshFolders();
+      setActiveFolderPath(normalized);
+      showToast.success(`Folder "${normalized}" created`);
+    } catch (err) {
+      showToast.error(folderErrorMessage(err, "creating the folder"));
+    }
+  }, [callFolderRpc, folderErrorMessage, refreshFolders]);
+
+  const createFolder = useCallback(async () => {
+    const rawPath = newFolderPath.replace(/^\/+|\/+$/g, "").replace(/\/+/g, "/").trim();
+    const path = activeFolderPath && rawPath && !rawPath.includes("/") ? `${activeFolderPath}/${rawPath}` : rawPath;
+    if (!path) return;
+    setNewFolderPath("");
+    await createFolderAtPath(path);
+  }, [activeFolderPath, createFolderAtPath, newFolderPath]);
+
+
+  // Opening a note is a history step, so Back undoes it. With every open
+  // replacing the entry, Back on a phone (where the note covers the list)
+  // left Notes altogether instead of returning to the list. Re-selecting the
+  // open note and closing one still replace, so no duplicate entries pile up.
+  const selectNote = useCallback((id: string | null) => {
+    setSelectedId(id);
+    if (id) {
+      if (id === urlNoteId) return;
+      navigate(`/dashboard/notes/${id}`, { state: { openedFromNotes: true } });
+    } else {
+      navigate("/dashboard/notes", { replace: true });
+    }
+  }, [navigate, urlNoteId]);
+
+  // The phone's "Notes" button steps back when the note was opened from the
+  // list, so the list comes back and the history does not grow.
+  const closeNoteOnMobile = useCallback(() => {
+    if ((location.state as { openedFromNotes?: boolean } | null)?.openedFromNotes) navigate(-1);
+    else selectNote(null);
+  }, [location.state, navigate, selectNote]);
+
+  const handleCreate = useCallback(async () => {
+    try {
+      const note = await createNote.mutateAsync({ title: "", content: "", folder_path: activeFolderPath || "" });
+      setSearchMode(false);
+      selectNote(note.id);
+    } catch (err) {
+      showToast.error(folderErrorMessage(err, "creating the note"));
+    }
+  }, [activeFolderPath, createNote, folderErrorMessage, selectNote]);
+
+  // Detect "empty" notes: no meaningful title and no meaningful body content.
+  // Strips HTML tags, empty markdown headings/list bullets/horizontal rules and all
+  // whitespace (incl. &nbsp;) so notes that contain only invisible editor scaffolding
+  // still count as empty. Notes with embedded images/videos keep markup and survive.
+  const emptyNotes = useMemo(() => {
+    return allNotes.filter((n) => {
+      const title = (n.title || "").trim().toLowerCase();
+      const titleEmpty = !title || title === "untitled";
+      // A list row carries the first 400 characters; a longer note is not empty.
+      const listRow = n as { content_preview?: string; content_length?: number };
+      if (n.content == null && (listRow.content_length ?? 0) > 400) return false;
+      const bodyText = String(n.content ?? listRow.content_preview ?? "")
+        .replace(/<[^>]*>/g, " ")
+        .replace(/^#+\s*$/gm, "")
+        .replace(/^[-*+]\s*$/gm, "")
+        .replace(/^[-*_]{3,}\s*$/gm, "")
+        .replace(/&nbsp;/gi, "")
+        .replace(/[\s\u00A0]+/g, "");
+      return titleEmpty && bodyText.length === 0;
+    });
+  }, [allNotes]);
+
+  const [isTrashingEmpty, setIsTrashingEmpty] = useState(false);
+  const handleTrashEmptyNotes = useCallback(async () => {
+    if (emptyNotes.length === 0 || isTrashingEmpty) return;
+    const count = emptyNotes.length;
+    setConfirmState({
+      title: `Move ${count} empty note${count === 1 ? "" : "s"} to Trash?`,
+      description: `These notes have no title and no content. You can restore them from the Trash filter.`,
+      confirmLabel: "Move to Trash",
+      destructive: true,
+      onConfirm: async () => {
+        setIsTrashingEmpty(true);
+        try {
+          const ids = emptyNotes.map((n) => n.id);
+          const { error } = await supabase
+            .from("notes")
+            .update({ is_trashed: true, trashed_at: new Date().toISOString() })
+            .in("id", ids);
+          if (error) throw error;
+          if (selectedId && ids.includes(selectedId)) selectNote(null);
+          await queryClient.invalidateQueries({ queryKey: ["notes"] });
+          showToast.success(`Moved ${ids.length} empty note${ids.length === 1 ? "" : "s"} to Trash`);
+        } catch (err) {
+          showToast.error(dbErrorMessage(err, "Could not move the empty notes to Trash. Please try again."));
+        } finally {
+          setIsTrashingEmpty(false);
+        }
+      },
+    });
+  }, [emptyNotes, isTrashingEmpty, selectedId, selectNote, queryClient]);
+
+  const handleCreateInFolder = useCallback(async (folderPath: string) => {
+    setActiveFolderPath(folderPath);
+    try {
+      const note = await createNote.mutateAsync({ title: "", content: "", folder_path: folderPath || "" });
+      setSearchMode(false);
+      selectNote(note.id);
+    } catch (err) {
+      showToast.error(folderErrorMessage(err, "creating the note"));
+    }
+  }, [createNote, folderErrorMessage, selectNote]);
+
+  const handleCreateFolderInFolder = useCallback((folderPath: string) => {
+    openPrompt({
+      title: folderPath ? `New folder in "${folderPath}"` : "New folder",
+      description: "Enter a name for the new folder.",
+      confirmLabel: "Create folder",
+      onSubmit: async (value) => {
+        const normalizedName = value.replace(/^\/+|\/+$/g, "").replace(/\/+/g, "/").trim();
+        if (!normalizedName) return;
+        await createFolderAtPath(folderPath ? `${folderPath}/${normalizedName}` : normalizedName);
+      },
+    });
+  }, [createFolderAtPath, openPrompt]);
+
+  const handleMoveNote = useCallback((noteId: string, folderPath: string) => {
+    const normalizedTarget = (folderPath || "").replace(/^\/+|\/+$/g, "");
+    const current = allNotes.find((n) => n.id === noteId);
+    const currentFolder = (current?.folder_path || "").replace(/^\/+|\/+$/g, "");
+    if (current && currentFolder === normalizedTarget) {
+      setActiveFolderPath(normalizedTarget);
+      return;
+    }
+    updateNote.mutate(
+      { id: noteId, folder_path: normalizedTarget },
+      {
+        onSuccess: () => {
+          const target = normalizedTarget || "All Notes";
+          showToast.batched.success(`note:move:${target}`, (n) =>
+            n === 1 ? `Moved to ${target}` : `${n} notes moved to ${target}`,
+          );
+        },
+      },
+    );
+    setActiveFolderPath(normalizedTarget);
+  }, [allNotes, updateNote]);
+
+  const handleRenameFolder = useCallback((oldPath: string) => {
+    if (!oldPath) return;
+    const currentName = oldPath.split("/").pop() || oldPath;
+    openPrompt({
+      title: "Rename folder",
+      description: `Renaming "${oldPath}" also updates every subfolder and note inside it.`,
+      confirmLabel: "Rename",
+      initialValue: currentName,
+      onSubmit: async (value) => {
+        const newName = value.replace(/\//g, "").trim();
+        if (!newName || newName === currentName) return;
+        const parent = oldPath.includes("/") ? oldPath.split("/").slice(0, -1).join("/") : "";
+        const newPath = parent ? `${parent}/${newName}` : newName;
+        try {
+          // Single transaction on the server: folder rows + note paths move
+          // together, so a failure can no longer leave a half-renamed tree.
+          await callFolderRpc("rename_note_folder", { p_old_path: oldPath, p_new_path: newPath });
+          await refreshFolders();
+          await queryClient.invalidateQueries({ queryKey: ["notes"] });
+          if (activeFolderPath === oldPath || activeFolderPath?.startsWith(oldPath + "/")) {
+            setActiveFolderPath(newPath + activeFolderPath.slice(oldPath.length));
+          }
+          showToast.success("Folder renamed");
+        } catch (err) {
+          showToast.error(folderErrorMessage(err, "renaming the folder"));
+        }
+      },
+    });
+  }, [activeFolderPath, callFolderRpc, folderErrorMessage, openPrompt, queryClient, refreshFolders]);
+
+  const handleMoveFolder = useCallback(async (sourcePath: string, targetParentPath: string) => {
+    if (!sourcePath) return;
+    if (sourcePath === targetParentPath) return;
+    if (targetParentPath === sourcePath || targetParentPath.startsWith(sourcePath + "/")) {
+      showToast.error("Can't move a folder into itself");
+      return;
+    }
+    const name = sourcePath.split("/").pop() || sourcePath;
+    const newPath = targetParentPath ? `${targetParentPath}/${name}` : name;
+    if (newPath === sourcePath) return;
+    try {
+      await callFolderRpc("move_note_folder", {
+        p_source_path: sourcePath,
+        p_target_parent_path: targetParentPath || "",
+      });
+      await refreshFolders();
+      await queryClient.invalidateQueries({ queryKey: ["notes"] });
+      if (activeFolderPath === sourcePath || activeFolderPath?.startsWith(sourcePath + "/")) {
+        setActiveFolderPath(newPath + activeFolderPath.slice(sourcePath.length));
+      }
+      showToast.success(targetParentPath ? `Moved to ${targetParentPath}` : "Moved to All Notes");
+    } catch (err) {
+      showToast.error(folderErrorMessage(err, "moving the folder"));
+    }
+  }, [activeFolderPath, callFolderRpc, folderErrorMessage, queryClient, refreshFolders]);
+
+  const handleDeleteFolder = useCallback(async (path: string) => {
+    if (!path) return;
+    const affectedNotes = allNotes.filter(
+      (n) => n.folder_path === path || (n.folder_path || "").startsWith(path + "/")
+    );
+    const subfolderCount = folderPaths.filter((p) => p !== path && p.startsWith(path + "/")).length;
+    const parts: string[] = [];
+    if (affectedNotes.length > 0) parts.push(`${affectedNotes.length} note${affectedNotes.length === 1 ? "" : "s"} will be moved to Trash`);
+    if (subfolderCount > 0) parts.push(`${subfolderCount} subfolder${subfolderCount === 1 ? "" : "s"} will be deleted`);
+    const detail = parts.length ? ` ${parts.join(". ")}.` : " This folder is empty.";
+    setConfirmState({
+      title: `Delete folder "${path}"?`,
+      description: `${detail} Notes can be restored from the Trash filter.`,
+      confirmLabel: "Delete folder",
+      destructive: true,
+      onConfirm: async () => {
+        try {
+          // Filtered on the server, not by the ids this page happens to
+          // hold: the list can lag the server or be missing rows, and every
+          // note under the folder must go to Trash with it. A folder whose
+          // notes stayed behind would leave them reachable only by search.
+          // RLS limits the update to the caller's own notes.
+          const { count: trashedCount, error: nErr } = await supabase
+            .from("notes" as any)
+            .update({ is_trashed: true, trashed_at: new Date().toISOString() }, { count: "exact" })
+            .eq("is_trashed", false)
+            .or(`folder_path.eq.${pgOrValue(path)},folder_path.like.${pgOrValue(escapeLike(path) + "/%")}`);
+          if (nErr) throw nErr;
+          const movedCount = trashedCount ?? affectedNotes.length;
+          if (selectedId && affectedNotes.some((n) => n.id === selectedId)) selectNote(null);
+          const { error: fErr } = await supabase
+            .from("note_folders" as any)
+            .delete()
+            .or(`path.eq.${pgOrValue(path)},path.like.${pgOrValue(escapeLike(path) + "/%")}`);
+          if (fErr) throw fErr;
+          await refreshFolders();
+          await queryClient.invalidateQueries({ queryKey: ["notes"] });
+          if (activeFolderPath === path || activeFolderPath?.startsWith(path + "/")) {
+            const parent = path.includes("/") ? path.split("/").slice(0, -1).join("/") : "";
+            setActiveFolderPath(parent || null);
+          }
+          showToast.success(
+            movedCount > 0
+              ? `Folder deleted, ${movedCount} note${movedCount === 1 ? "" : "s"} moved to Trash`
+              : "Folder deleted"
+          );
+        } catch (err) {
+          showToast.error(dbErrorMessage(err, "Could not delete the folder. Please try again."));
+        }
+      },
+    });
+  }, [activeFolderPath, allNotes, folderPaths, queryClient, refreshFolders, selectedId, selectNote]);
+
+  const handleRestoreNote = useCallback(async (noteId: string) => {
+    try {
+      const { error } = await supabase
+        .from("notes")
+        .update({ is_trashed: false, trashed_at: null })
+        .eq("id", noteId);
+      if (error) throw error;
+      await queryClient.invalidateQueries({ queryKey: ["notes"] });
+      showToast.batched.success("note:restore", (n) =>
+        n === 1 ? "Note restored" : `${n} notes restored`,
+      );
+    } catch (err) {
+      showToast.error(dbErrorMessage(err, "Could not restore the note. Please try again."));
+    }
+  }, [queryClient]);
+
+  const handleDeleteNotePermanently = useCallback((noteId: string) => {
+    const target = allNotes.find((n) => n.id === noteId) || trashNotes.find((n) => n.id === noteId);
+    const title = target?.title?.trim() || "Untitled";
+    setConfirmState({
+      title: `Delete "${title}" permanently?`,
+      description: "This note and its attachments will be removed forever. This action cannot be undone.",
+      confirmLabel: "Delete permanently",
+      destructive: true,
+      onConfirm: async () => {
+        try {
+          const { error } = await supabase.from("notes").delete().eq("id", noteId);
+          if (error) throw error;
+          if (selectedId === noteId) selectNote(null);
+          await queryClient.invalidateQueries({ queryKey: ["notes"] });
+          showToast.batched.success("note:delete-permanent", (n) =>
+            n === 1 ? "Note deleted permanently" : `${n} notes deleted permanently`,
+          );
+        } catch (err) {
+          showToast.error(dbErrorMessage(err, "Could not delete the note. Please try again."));
+        }
+      },
+    });
+  }, [allNotes, trashNotes, selectedId, selectNote, queryClient]);
+
+  // Handle ?action=create from external "+ New Note" buttons (header, deep links).
+  // Use a ref-guard so the effect fires exactly once per occurrence of action=create,
+  // regardless of how many times handleCreate's identity changes due to mutation state.
+  const createTriggerRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (searchParams.get("action") !== "create") {
+      createTriggerRef.current = null;
+      return;
+    }
+    // Use the raw search string as a fingerprint so re-navigating to the same URL re-triggers.
+    const fingerprint = searchParams.toString();
+    if (createTriggerRef.current === fingerprint) return;
+    createTriggerRef.current = fingerprint;
+
+    // Strip the param synchronously, then run create on the next tick so React-Router
+    // commits the URL change before the mutation kicks off (avoids race with re-mounts).
+    setSearchParams({}, { replace: true });
+    queueMicrotask(() => {
+      handleCreate();
+    });
+  }, [searchParams, handleCreate, setSearchParams]);
+
+  const counts = {
+    all: allNotes.length,
+    favorites: favNotes.length,
+    trash: trashNotes.length,
+  };
+
+  // `type` lets the Smart button search in the mode it just switched to: its
+  // click handler still sees this render's searchType ("exact"), so without
+  // it switching back to Smart ran only the keyword search.
+  const handleSearch = useCallback(
+    (q: string, type: SearchMode = searchType) => {
+      setSearchQuery(q);
+      setSemanticResults(null);
+      if (!q.trim()) return;
+      ilikeSearch.mutate(q);
+      if (type === "semantic") {
+        if (debounceRef.current) clearTimeout(debounceRef.current);
+        debounceRef.current = setTimeout(() => {
+          semanticSearch.mutate(
+            { query: q, scope: searchScope },
+            { onSuccess: (data) => setSemanticResults(data.results as SemanticSearchResult[]) }
+          );
+        }, 300);
+      }
+    },
+    [ilikeSearch, semanticSearch, searchType, searchScope]
+  );
+
+  useEffect(() => {
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+  }, []);
+
+  // ?q=... opens the search with that text (the topic chips on an analysed
+  // image link here). The param is consumed so Back does not re-run it.
+  useEffect(() => {
+    const q = searchParams.get("q");
+    if (!q) return;
+    setSearchMode(true);
+    handleSearch(q);
+    const next = new URLSearchParams(searchParams);
+    next.delete("q");
+    setSearchParams(next, { replace: true });
+  }, [searchParams, handleSearch, setSearchParams]);
+
+  const searchResults: SemanticSearchResult[] | null = useMemo(() => {
+    if (!searchMode || !searchQuery.trim()) return null;
+    if (searchType === "exact") return ilikeSearch.data || null;
+    return semanticResults || ilikeSearch.data || null;
+  }, [searchMode, searchQuery, searchType, semanticResults, ilikeSearch.data]);
+
+  const currentNotes = useMemo(() => {
+    let notes: (Note | SemanticSearchResult)[];
+    if (searchMode && searchResults) notes = searchResults;
+    else notes = allNotes;
+
+
+    if (entityFilter) {
+      notes = notes.filter((n) => n.entity_type === entityFilter);
+    }
+    if (topicFilter) {
+      notes = notes.filter((n) => {
+        const meta = n.metadata as Record<string, unknown> | null;
+        const topics = Array.isArray(meta?.topics) ? (meta.topics as string[]) : [];
+        return topics.includes(topicFilter);
+      });
+    }
+    if (personFilter) {
+      notes = notes.filter((n) => {
+        const meta = n.metadata as Record<string, unknown> | null;
+        const people = Array.isArray(meta?.people) ? (meta.people as string[]) : [];
+        // Check raw names and canonical names from matched_people
+        const matchedMap = new Map<string, string>();
+        if (Array.isArray(meta?.matched_people)) {
+          for (const m of meta.matched_people as Array<{ name: string; canonical_name: string }>) {
+            matchedMap.set(m.name.toLowerCase(), m.canonical_name);
+          }
+        }
+        return people.some((p) => {
+          const canonical = matchedMap.get(p.toLowerCase()) || p;
+          return canonical === personFilter || p === personFilter;
+        });
+      });
+    }
+    if (metaTypeFilter) {
+      notes = notes.filter((n) => {
+        const meta = n.metadata as Record<string, unknown> | null;
+        return meta?.type === metaTypeFilter;
+      });
+    }
+    // Sort: pinned first, then by selected field/direction (skip for "manual")
+    const sorted = [...notes].sort((a, b) => {
+      const aPinned = "is_pinned" in a && a.is_pinned ? 1 : 0;
+      const bPinned = "is_pinned" in b && b.is_pinned ? 1 : 0;
+      if (aPinned !== bPinned) return bPinned - aPinned;
+
+      if (sortField === "manual") return 0;
+
+      const dir = sortDirection === "asc" ? 1 : -1;
+      if (sortField === "title") {
+        return dir * (a.title || "").localeCompare(b.title || "");
+      }
+      const aRaw = (a as unknown as Record<string, unknown>)[sortField];
+      const bRaw = (b as unknown as Record<string, unknown>)[sortField];
+      const aTs = typeof aRaw === "string" ? new Date(aRaw).getTime() : 0;
+      const bTs = typeof bRaw === "string" ? new Date(bRaw).getTime() : 0;
+      return dir * (aTs - bTs);
+    });
+    return sorted;
+  }, [allNotes, searchMode, searchResults, entityFilter, topicFilter, personFilter, metaTypeFilter, sortField, sortDirection]);
+
+  // The open note is fetched as a single row so it is always fresh without
+  // refetching the whole (potentially very large) notes list. The list copy is
+  // only a fallback for the first paint / offline mode.
+  const { data: selectedNoteRow, isFetched: selectedNoteFetched, isError: selectedNoteFailed } = useNote(selectedId);
+  // Read and not there (or not readable): the empty state, not "Opening note…" forever.
+  const selectedNoteMissing = (selectedNoteFetched && !selectedNoteRow) || selectedNoteFailed;
+  const selectedNote = useMemo(() => {
+    if (!selectedId) return null;
+    // Only a copy holding the whole text may stand in for the open note: the
+    // list's copies carry a preview, and an editor started from a preview
+    // could save the shortened text over the note.
+    const whole = (n: Note | SemanticSearchResult | undefined) => (n && typeof n.content === "string" ? n : undefined);
+    const fallback =
+      whole(allNotes.find((n) => n.id === selectedId)) ||
+      whole(trashNotes.find((n) => n.id === selectedId)) ||
+      whole(favNotes.find((n) => n.id === selectedId)) ||
+      // Also check current search results (semantic/ilike may return notes not yet in cache)
+      (searchResults ?? []).find((n) => n.id === selectedId) ||
+      null;
+    if (!selectedNoteRow) return fallback;
+    if (!fallback) return selectedNoteRow;
+    // Prefer whichever copy is newer so a stale list entry can never clobber
+    // the freshly saved row (and vice-versa).
+    const rowTs = new Date(selectedNoteRow.updated_at || 0).getTime();
+    const fallbackTs = new Date(fallback.updated_at || 0).getTime();
+    return rowTs >= fallbackTs ? selectedNoteRow : fallback;
+  }, [selectedId, selectedNoteRow, allNotes, trashNotes, favNotes, searchResults]);
+
+  // Self-heal: on the local-first path a note can be opened (via the server
+  // single-row query or search) while the local SQLite replica is missing or
+  // behind on that row - which is why it could vanish from the tree's
+  // Favorites/Recent. Write the fresher server copy back into the replica.
+  useEffect(() => {
+    if (!OFFLINE_CORE || !selectedNoteRow) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const localTs = await localNoteUpdatedAt(selectedNoteRow.id);
+        if (cancelled) return;
+        const serverTs = new Date(selectedNoteRow.updated_at || 0).getTime();
+        if (localTs && new Date(localTs).getTime() >= serverTs) return;
+        await upsertNotesLocal([selectedNoteRow]);
+      } catch (error) {
+        console.warn("Local replica self-heal failed", error);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedNoteRow]);
+
+
+
+  
+
+  const exitSearch = () => {
+    setSearchMode(false);
+    setSearchQuery("");
+    setSemanticResults(null);
+  };
+
+  const clearAllFilters = () => {
+    setTopicFilter(null);
+    setPersonFilter(null);
+    setMetaTypeFilter(null);
+  };
+
+  const hasActiveMetaFilter = topicFilter || personFilter || metaTypeFilter;
+  const isSemanticLoading = searchType === "semantic" && semanticSearch.isPending;
+  const showingSemanticResults = searchType === "semantic" && semanticResults !== null;
+
+  // Vault insights aggregation
+  const TYPE_LABELS: Record<string, string> = {
+    observation: "Observation", task: "Task", idea: "Idea", reference: "Reference",
+    person_note: "Person Note", meeting_note: "Meeting Note", decision: "Decision", project: "Project",
+  };
+  const TYPE_COLORS: Record<string, string> = {
+    observation: "bg-slate-500/15 text-slate-600 dark:text-slate-400",
+    task: "bg-amber-500/15 text-amber-700 dark:text-amber-400",
+    idea: "bg-violet-500/15 text-violet-700 dark:text-violet-400",
+    reference: "bg-cyan-500/15 text-cyan-700 dark:text-cyan-400",
+    person_note: "bg-blue-500/15 text-blue-700 dark:text-blue-400",
+    meeting_note: "bg-rose-500/15 text-rose-700 dark:text-rose-400",
+    decision: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400",
+    project: "bg-indigo-500/15 text-indigo-700 dark:text-indigo-400",
+  };
+
+  const { topicCounts, peopleCounts, typeCounts, unclassifiedCount } = useMemo(() => {
+    const topics: Record<string, number> = {};
+    const people: Record<string, number> = {};
+    const types: Record<string, number> = {};
+    let unclassified = 0;
+    for (const note of allNotes) {
+      const meta = note.metadata as Record<string, unknown> | null;
+      if (!meta || !meta.type) { unclassified++; continue; }
+      if (Array.isArray(meta.topics)) for (const t of meta.topics as string[]) topics[t] = (topics[t] || 0) + 1;
+      // Normalize people names: use canonical_name from matched_people when available
+      const matchedMap = new Map<string, string>();
+      if (Array.isArray(meta.matched_people)) {
+        for (const m of meta.matched_people as Array<{ name: string; canonical_name: string }>) {
+          matchedMap.set(m.name.toLowerCase(), m.canonical_name);
+        }
+      }
+      if (Array.isArray(meta.people)) {
+        for (const p of meta.people as string[]) {
+          const canonical = matchedMap.get(p.toLowerCase()) || p;
+          people[canonical] = (people[canonical] || 0) + 1;
+        }
+      }
+      if (typeof meta.type === "string") types[meta.type] = (types[meta.type] || 0) + 1;
+    }
+    return {
+      topicCounts: Object.entries(topics).sort((a, b) => b[1] - a[1]),
+      peopleCounts: Object.entries(people).sort((a, b) => b[1] - a[1]),
+      typeCounts: Object.entries(types).sort((a, b) => b[1] - a[1]),
+      unclassifiedCount: unclassified,
+    };
+  }, [allNotes]);
+
+  const [isBackfilling, setIsBackfilling] = useState(false);
+  const handleBackfill = useCallback(async () => {
+    setIsBackfilling(true);
+    try {
+      const res = await supabase.functions.invoke("backfill-metadata", { body: {} });
+      if (res.error) throw res.error;
+      const data = res.data as { processed: number; total: number; message: string };
+      showToast.success(data.message);
+    } catch (err: unknown) {
+      showToast.error(await functionErrorMessage(err, "Could not classify the notes. Please try again."));
+    } finally {
+      setIsBackfilling(false);
+    }
+  }, []);
+
+  return (
+    <>
+    <div className={cn("flex",isMobile&&chatOpen?"min-h-[calc(100dvh-104px)] flex-col overflow-visible":"h-[calc(100dvh-104px)] overflow-hidden")}>
+      <SEOHead title="Notes - Godspeed Mission Control" noIndex />
+
+
+      {!isMobile&&treeCollapsed&&<div className="w-11 shrink-0 border-r border-border"><Button variant="ghost" size="icon" className="h-11 w-11" aria-label="Expand notes tree" title="Expand notes tree" onClick={toggleTree}><ChevronRight className="h-4 w-4"/></Button></div>}
+      {/* Note list panel */}
+      <div className={cn(
+        "shrink-0 border-r border-border flex-col bg-background min-w-0",
+        isMobile ? "w-full" : "w-72",
+        (isMobile && (selectedId||chatOpen)) || (!isMobile&&treeCollapsed) ? "hidden" : "flex"
+      )}>
+
+        {/* Header */}
+        <div className="flex flex-wrap items-center gap-1 px-3 py-2 border-b border-border shrink-0">
+          {!isMobile&&<Button variant="ghost" size="icon" className="h-11 w-11 shrink-0" aria-label="Collapse notes tree" title="Collapse notes tree" onClick={toggleTree}><ChevronLeft className="h-4 w-4"/></Button>}
+          <div className="flex flex-col text-sm font-semibold h-8 px-2 leading-tight">
+            <div className="flex items-center gap-1.5">
+              <FileText className="h-4 w-4" />
+              {searchMode ? "Search" : "Notes"}
+            </div>
+            <span className="text-[10px] text-foreground/80 font-normal">
+              {!searchMode && counts.all}
+            </span>
+          </div>
+
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant={entityFilter ? "secondary" : "ghost"}
+                size="icon"
+                className="h-8 w-8"
+                title="Filter by type"
+              >
+                <Filter className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-40">
+              <DropdownMenuItem onClick={() => setEntityFilter(null)} className="gap-2">
+                <span className="flex-1">All Types</span>
+                {!entityFilter && <Check className="h-3 w-3" />}
+              </DropdownMenuItem>
+              {["person", "event", "idea", "prompt", "document", "note"].map((t) => (
+                <DropdownMenuItem key={t} onClick={() => setEntityFilter(t)} className="gap-2">
+                  <span className="flex-1 capitalize">{t}</span>
+                  {entityFilter === t && <Check className="h-3 w-3" />}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 gap-1.5 px-2 text-xs"
+                title="Sort notes"
+              >
+                <ArrowUpDown className="h-3.5 w-3.5" />
+                {!chatOpen&&<span className="hidden sm:inline">{sortLabels[sortField]}</span>}
+                {sortField !== "manual" && (
+                  sortDirection === "asc"
+                    ? <ArrowUp className="h-3 w-3" />
+                    : <ArrowDown className="h-3 w-3" />
+                )}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-44">
+              {(Object.keys(sortLabels) as SortField[]).map((field) => (
+                <DropdownMenuItem
+                  key={field}
+                  onClick={() => {
+                    if (sortField === field && field !== "manual") {
+                      setSortDirection((d) => (d === "asc" ? "desc" : "asc"));
+                    } else {
+                      setSortField(field);
+                      setSortDirection(defaultDirections[field]);
+                    }
+                  }}
+                  className="gap-2"
+                >
+                  {sortField === field && field !== "manual" ? (
+                    sortDirection === "asc" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
+                  ) : (
+                    <span className="w-3" />
+                  )}
+                  <span className="flex-1">{sortLabels[field]}</span>
+                  {sortField === field && <Check className="h-3 w-3" />}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-8 w-8" title="New folder">
+                <FolderPlus className="h-4 w-4" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="start" className="w-72 p-3 space-y-3">
+              <p className="text-xs font-medium text-muted-foreground">Create folder</p>
+              <div className="flex gap-2">
+                <Input
+                  value={newFolderPath}
+                  onChange={(e) => setNewFolderPath(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") createFolder(); }}
+                  placeholder={activeFolderPath ? `${activeFolderPath}/New folder` : "Projects/Garden"}
+                  className="h-8 text-xs"
+                />
+                <Button size="sm" className="h-8" onClick={createFolder}>Add</Button>
+              </div>
+            </PopoverContent>
+          </Popover>
+
+          {/* Tags / Vault Insights popover */}
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                variant={hasActiveMetaFilter ? "secondary" : "ghost"}
+                size="icon"
+                className="h-8 w-8"
+                title="Tags & Insights"
+              >
+                <Hash className="h-4 w-4" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="start" className="w-72 p-0 max-h-[70vh] overflow-hidden">
+              <ScrollArea className="max-h-[70vh]">
+                <div className="p-3 space-y-1">
+                  {/* By Type */}
+                  <VaultSection label="By Type" icon={LayoutGrid} defaultOpen>
+                    <div className="flex flex-wrap gap-1">
+                      {typeCounts.map(([type, count]) => (
+                        <button
+                          key={type}
+                          onClick={() => setMetaTypeFilter(metaTypeFilter === type ? null : type)}
+                          className={cn(
+                            "text-[10px] px-2 py-1 rounded-full font-medium transition-all",
+                            TYPE_COLORS[type] || "bg-muted text-muted-foreground",
+                            metaTypeFilter === type && "ring-2 ring-primary ring-offset-1 ring-offset-background"
+                          )}
+                        >
+                          {TYPE_LABELS[type] || type} ({count})
+                        </button>
+                      ))}
+                      {typeCounts.length === 0 && (
+                        <p className="text-[10px] text-muted-foreground">No classified notes yet</p>
+                      )}
+                    </div>
+                  </VaultSection>
+
+                  <Separator />
+
+                  {/* Topics */}
+                  <VaultSection label="Topics" icon={Hash} defaultOpen>
+                    <div className="flex flex-wrap gap-1">
+                      {topicCounts.slice(0, 30).map(([topic, count]) => (
+                        <button
+                          key={topic}
+                          onClick={() => setTopicFilter(topicFilter === topic ? null : topic)}
+                          className={cn(
+                            "text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary font-medium transition-all hover:bg-primary/20",
+                            topicFilter === topic && "ring-2 ring-primary ring-offset-1 ring-offset-background bg-primary/20"
+                          )}
+                        >
+                          {topic} <span className="opacity-60">{count}</span>
+                        </button>
+                      ))}
+                      {topicCounts.length === 0 && (
+                        <p className="text-[10px] text-muted-foreground">No topics extracted yet</p>
+                      )}
+                    </div>
+                  </VaultSection>
+
+                  <Separator />
+
+                  {/* People */}
+                  <VaultSection label="People" icon={User}>
+                    <div className="space-y-0.5">
+                      {peopleCounts.slice(0, 20).map(([person, count]) => (
+                        <button
+                          key={person}
+                          onClick={() => setPersonFilter(personFilter === person ? null : person)}
+                          className={cn(
+                            "flex items-center gap-2 w-full text-left px-2 py-1 rounded-md text-xs hover:bg-accent/50 transition-colors",
+                            personFilter === person && "bg-accent"
+                          )}
+                        >
+                          <User className="h-3 w-3 text-violet-500 shrink-0" />
+                          <span className="flex-1 truncate">{person}</span>
+                          <span className="text-[10px] text-muted-foreground">{count}</span>
+                        </button>
+                      ))}
+                      {peopleCounts.length === 0 && (
+                        <p className="text-[10px] text-muted-foreground px-2">No people mentioned yet</p>
+                      )}
+                    </div>
+                  </VaultSection>
+
+                  {/* Classify button */}
+                  {unclassifiedCount > 0 && (
+                    <>
+                      <Separator />
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full gap-1.5 text-xs h-8"
+                        onClick={handleBackfill}
+                        disabled={isBackfilling}
+                      >
+                        {isBackfilling ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+                        Classify unclassified vault notes ({unclassifiedCount})
+                      </Button>
+                    </>
+                  )}
+
+                  {/* Trash empty notes */}
+                  {emptyNotes.length > 0 && (
+                    <>
+                      <Separator />
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full gap-1.5 text-xs h-8"
+                        onClick={handleTrashEmptyNotes}
+                        disabled={isTrashingEmpty}
+                      >
+                        {isTrashingEmpty ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                        Trash {emptyNotes.length} empty note{emptyNotes.length === 1 ? "" : "s"}
+                      </Button>
+                    </>
+                  )}
+                </div>
+              </ScrollArea>
+            </PopoverContent>
+          </Popover>
+
+          <div className="flex-1" />
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            onClick={() => setSearchMode(!searchMode)}
+            title="Search"
+          >
+            <Search className="h-4 w-4" />
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                disabled={createNote.isPending}
+                title="New"
+              >
+                <Plus className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-44">
+              <DropdownMenuItem onClick={handleCreate} disabled={createNote.isPending}>
+                <FileText className="h-4 w-4 mr-2" /> New Note
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleCreateFolderInFolder("")}>
+                <FolderPlus className="h-4 w-4 mr-2" /> New Folder
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+
+        {/* Search bar */}
+        {searchMode && (
+          <div className="px-3 py-2 border-b border-border shrink-0 space-y-2">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+              <Input aria-label="Search notes"
+                value={searchQuery}
+                onChange={(e) => handleSearch(e.target.value)}
+                placeholder={searchType === "semantic" ? "Smart search…" : "Exact search…"}
+                className="pl-8 pr-8 h-8 text-sm"
+                autoFocus
+              />
+              <button aria-label="Close search"
+                onClick={exitSearch}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant={searchType === "semantic" ? "secondary" : "ghost"}
+                    size="sm"
+                    className={cn(
+                      "h-6 px-2 text-[10px] gap-1",
+                      searchType === "semantic" && "bg-primary/10 text-primary hover:bg-primary/15"
+                    )}
+                    onClick={() => {
+                      setSearchType("semantic");
+                      setSemanticResults(null);
+                      if (searchQuery.trim()) handleSearch(searchQuery, "semantic");
+                    }}
+                  >
+                    <Sparkles className="h-3 w-3" />
+                    Smart
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="text-xs">AI-powered semantic search</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant={searchType === "exact" ? "secondary" : "ghost"}
+                    size="sm"
+                    className="h-6 px-2 text-[10px] gap-1"
+                    onClick={() => {
+                      setSearchType("exact");
+                      setSemanticResults(null);
+                      if (searchQuery.trim()) ilikeSearch.mutate(searchQuery);
+                    }}
+                  >
+                    <Type className="h-3 w-3" />
+                    Exact
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="text-xs">Keyword matching</TooltipContent>
+              </Tooltip>
+
+              {/* Search scope - only visible in semantic mode */}
+              {searchType === "semantic" && (
+                <>
+                  <span className="text-muted-foreground/40 text-[10px]">|</span>
+                  {(["all", "notes", "media"] as SearchScope[]).map((s) => (
+                    <Button
+                      key={s}
+                      variant={searchScope === s ? "secondary" : "ghost"}
+                      size="sm"
+                      className="h-6 px-2 text-[10px] gap-1"
+                      onClick={() => {
+                        setSearchScope(s);
+                        setSemanticResults(null);
+                        if (searchQuery.trim()) {
+                          semanticSearch.mutate(
+                            { query: searchQuery, scope: s },
+                            { onSuccess: (data) => setSemanticResults(data.results as SemanticSearchResult[]) }
+                          );
+                        }
+                      }}
+                    >
+                      {s === "media" && <Image className="h-3 w-3" />}
+                      {s === "notes" && <FileText className="h-3 w-3" />}
+                      {s === "all" && <Search className="h-3 w-3" />}
+                      {s === "all" ? "All" : s === "notes" ? "Notes" : "Media"}
+                    </Button>
+                  ))}
+                </>
+              )}
+
+              <div className="flex-1" />
+              {isSemanticLoading && (
+                <span className="text-[10px] text-muted-foreground animate-pulse flex items-center gap-1">
+                  <Sparkles className="h-2.5 w-2.5" /> Thinking…
+                </span>
+              )}
+              {showingSemanticResults && !isSemanticLoading && (
+                <span className="text-[10px] text-primary flex items-center gap-1">
+                  <Sparkles className="h-2.5 w-2.5" /> AI results
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Active filter indicators */}
+        {hasActiveMetaFilter && (
+          <div className="px-3 py-1.5 border-b border-border shrink-0 flex items-center gap-1.5 flex-wrap">
+            {topicFilter && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary font-medium inline-flex items-center gap-1">
+                #{topicFilter}
+                <button aria-label="Clear topic filter" onClick={() => setTopicFilter(null)}><X className="h-2.5 w-2.5" /></button>
+              </span>
+            )}
+            {personFilter && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-violet-500/10 text-violet-700 dark:text-violet-400 font-medium inline-flex items-center gap-1">
+                @{personFilter}
+                <button aria-label="Clear person filter" onClick={() => setPersonFilter(null)}><X className="h-2.5 w-2.5" /></button>
+              </span>
+            )}
+            {metaTypeFilter && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground font-medium inline-flex items-center gap-1">
+                {metaTypeFilter.replace("_", " ")}
+                <button aria-label="Clear type filter" onClick={() => setMetaTypeFilter(null)}><X className="h-2.5 w-2.5" /></button>
+              </span>
+            )}
+            <button onClick={clearAllFilters} className="text-[10px] text-muted-foreground hover:text-foreground ml-auto">
+              Clear all
+            </button>
+          </div>
+        )}
+
+        {/* A list that failed to load says so, instead of showing the last
+            good copy as though it were current. */}
+        {allNotesFailed && (
+          <div className="mx-2 mb-2 rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-xs text-muted-foreground">
+            Could not load your notes just now. What is shown may be out of date.
+          </div>
+        )}
+
+        {/* Note list */}
+        {loadingAll ? (
+          <div className="p-4 space-y-3">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="space-y-2">
+                <Skeleton className="h-4 w-3/4" />
+                <Skeleton className="h-3 w-full" />
+                <Skeleton className="h-3 w-1/2" />
+              </div>
+            ))}
+          </div>
+        ) : searchMode ? (
+          <NoteList
+            notes={currentNotes}
+            selectedId={selectedId}
+            onSelect={selectNote}
+            showSimilarity={searchMode && showingSemanticResults}
+            onTopicClick={(topic) => setTopicFilter(topicFilter === topic ? null : topic)}
+            onCreateNote={handleCreate}
+            emptyVariant="search"
+          />
+        ) : (
+          <NoteTree
+            notes={currentNotes}
+            folderPaths={folderPaths}
+            selectedId={selectedId}
+            activeFolderPath={activeFolderPath}
+            onSelectNote={selectNote}
+            onSelectFolder={setActiveFolderPath}
+            onCreateNoteInFolder={handleCreateInFolder}
+            onCreateFolderInFolder={handleCreateFolderInFolder}
+            onMoveNote={handleMoveNote}
+            onRenameFolder={handleRenameFolder}
+            onMoveFolder={handleMoveFolder}
+            onDeleteFolder={handleDeleteFolder}
+            onRestoreNote={handleRestoreNote}
+            onDeleteNotePermanently={handleDeleteNotePermanently}
+            sortField={sortField === "manual" ? "updated_at" : sortField}
+            sortDirection={sortDirection}
+            favoriteNotes={favNotes}
+            trashedNotes={trashNotes}
+          />
+
+        )}
+      </div>
+
+      <GlobalAIChatFAB embedded noteTitle={selectedNote?.title||undefined} onOpenChange={chatVisibility}/>
+      {/* Right panel - editor */}
+      <div className={cn(
+        "flex-1 min-h-0 min-w-0 flex-col",
+        isMobile&&chatOpen&&"h-[60dvh] min-h-[420px] shrink-0 flex-none",
+        isMobile && !selectedId ? "hidden" : "flex"
+      )}>
+        {selectedNote ? (
+          <>
+            {isMobile && (
+              <div className="flex items-center gap-1 px-2 py-1.5 border-b border-border shrink-0">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 gap-1 px-2 text-xs"
+                  onClick={closeNoteOnMobile}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                  Notes
+                </Button>
+              </div>
+            )}
+            <div className="flex-1 min-h-0 min-w-0">
+              <NoteEditor
+                key={selectedNote.id}
+                note={selectedNote}
+                chatOpen={chatOpen}
+                onNoteDeleted={() => selectNote(null)}
+                showLocalGraph={showLocalGraph}
+                onToggleLocalGraph={() => setShowLocalGraph(prev => !prev)}
+                onNoteSelect={selectNote}
+              />
+            </div>
+          </>
+        ) : selectedId && !selectedNoteMissing ? (
+          <div className="flex items-center justify-center h-full text-sm text-muted-foreground" role="status">Opening note…</div>
+        ) : (
+          <div className="flex flex-col items-center justify-center h-full text-center p-8">
+            <div className="mb-4">
+              <img src={brandLogo} alt="" className="h-16 w-16 object-contain" />
+            </div>
+            <h3 className="text-lg font-semibold font-display mb-2">
+              No note open
+            </h3>
+            <p className="text-sm text-muted-foreground max-w-sm mb-6">
+              Select a note to view it, or create a new one to start capturing your thoughts.
+            </p>
+            <Button onClick={handleCreate} disabled={createNote.isPending} className="gap-2">
+              <Plus className="h-4 w-4" /> New Note
+            </Button>
+          </div>
+        )}
+
+      </div>
+    </div>
+    <AlertDialog
+      open={!!confirmState}
+      onOpenChange={(open) => { if (!open) setConfirmState(null); }}
+    >
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>{confirmState?.title}</AlertDialogTitle>
+          <AlertDialogDescription>{confirmState?.description}</AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            className={confirmState?.destructive ? "bg-destructive text-destructive-foreground hover:bg-destructive/90" : undefined}
+            onClick={async () => {
+              const action = confirmState?.onConfirm;
+              setConfirmState(null);
+              if (action) await action();
+            }}
+          >
+            {confirmState?.confirmLabel || "Confirm"}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    <AlertDialog
+      open={!!promptState}
+      onOpenChange={(open) => { if (!open) setPromptState(null); }}
+    >
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>{promptState?.title}</AlertDialogTitle>
+          {promptState?.description && (
+            <AlertDialogDescription>{promptState.description}</AlertDialogDescription>
+          )}
+        </AlertDialogHeader>
+        <Input
+          autoFocus
+          value={promptValue}
+          onChange={(e) => setPromptValue(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              const action = promptState?.onSubmit;
+              const value = promptValue.trim();
+              setPromptState(null);
+              if (action && value) void action(value);
+            }
+          }}
+          placeholder="Folder name"
+        />
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={async () => {
+              const action = promptState?.onSubmit;
+              const value = promptValue.trim();
+              setPromptState(null);
+              if (action && value) await action(value);
+            }}
+          >
+            {promptState?.confirmLabel || "Save"}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
+  );
+}
+
+function VaultSection({ label, icon: Icon, defaultOpen = false, children }: { label: string; icon: any; defaultOpen?: boolean; children: React.ReactNode }) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <Collapsible open={open} onOpenChange={setOpen}>
+      <CollapsibleTrigger className="flex items-center gap-1.5 w-full py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors">
+        {open ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+        <Icon className="h-3.5 w-3.5" />
+        <span>{label}</span>
+      </CollapsibleTrigger>
+      <CollapsibleContent className="pb-1">
+        {children}
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}

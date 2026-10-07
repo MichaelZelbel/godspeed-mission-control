@@ -4,6 +4,7 @@
 # and reports "command not found: git\r". Force LF so an edit made on Windows
 # can never ship that.
 * text=auto eol=lf
+installers export-ignore
 *.sh text eol=lf
 *.md text eol=lf
 # The two Windows launchers in tools/ are the one exception. cmd.exe reads a .cmd file

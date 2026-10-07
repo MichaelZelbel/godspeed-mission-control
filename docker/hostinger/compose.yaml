@@ -1,0 +1,51 @@
+# Godspeed Mission Control for a fresh Hostinger Docker VPS.
+# Before Deploy, fill the two environment fields in Docker Manager:
+# GODSPEED_HOST: your VPS hostname, for example srv123456.hstgr.cloud (no https://).
+# GODSPEED_SETUP_CODE: at least 32 random letters and digits (let your password manager make
+#   them), saved there. Whoever enters this code first becomes the owner of the server.
+# After Deploy, open https://YOUR_VPS_HOSTNAME and use that code to create your account.
+# Save the recovery code shown during account creation. No email service is required.
+# Then the page offers to connect a Telegram bot; its key stays on this server.
+name: godspeed-mission-control
+services:
+  godspeed:
+    image: ghcr.io/michaelzelbel/godspeed-mission-control@sha256:c3706e1c1e69d796a666c3682a4b5bb629749e5ab679d2c63e1683cf5f46344e
+    restart: unless-stopped
+    # A small init as process 1 collects the programs the assistant leaves behind. The image's
+    # own entrypoint replaces the one that did, and until 7 October 2026 they piled up as zombies.
+    init: true
+    environment:
+      GODSPEED_ACCESS_TOKEN: ${GODSPEED_SETUP_CODE:?Choose and save a private setup code}
+      GODSPEED_DEVICE: vps
+      GODSPEED_COMPUTER: "off"
+    volumes:
+      - godspeed-data:/opt/data/full-candidate
+    expose:
+      - "47831"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+  https:
+    image: caddy:2.10.2-alpine@sha256:4c6e91c6ed0e2fa03efd5b44747b625fec79bc9cd06ac5235a779726618e530d
+    restart: unless-stopped
+    command: ["caddy", "reverse-proxy", "--from", "${GODSPEED_HOST:?Enter your VPS hostname without https://}", "--to", "godspeed:47831"]
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - godspeed-certificates:/data
+      - godspeed-proxy-config:/config
+    depends_on:
+      godspeed:
+        condition: service_healthy
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+volumes:
+  godspeed-data: {}
+  godspeed-certificates: {}
+  godspeed-proxy-config: {}

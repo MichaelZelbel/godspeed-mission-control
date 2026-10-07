@@ -1,0 +1,237 @@
+/**
+ * World rows translated into the three words Mission Control and the book both use:
+ * entity, event, claim.
+ *
+ * Pure on purpose: no Deno APIs, so a Node test runner can import it. The same
+ * reason `mc-source.ts` is pure.
+ *
+ * The slug is computed here and nowhere else. Mission Control names its files after it,
+ * so if both sides computed it separately they would drift and Mission Control would
+ * write a second file for a thing it already had.
+ */
+
+export interface WorldEntity {
+  id: string;
+  slug: string;
+  kind: string;
+  name: string;
+  aliases: string[];
+  description: string | null;
+  updated_at: string;
+}
+
+export interface WorldEvent {
+  id: string;
+  slug: string;
+  title: string;
+  description: string | null;
+  date: string | null;
+  end_date: string | null;
+  participants: string[];
+  category: string | null;
+  updated_at: string;
+}
+
+export interface WorldClaim {
+  id: string;
+  subject_kind: string;
+  subject_id: string | null;
+  category: string | null;
+  attribute: string;
+  value: string;
+  object_id: string | null;
+  valid_from: string | null;
+  valid_to: string | null;
+  origin: string;
+  rank: string;
+  written_by: "human" | "machine";
+  evidence_quote: string | null;
+  /** certain | likely | unsure. */
+  confidence: string | null;
+  /** one = a second live value is a contradiction. many = several are normal. */
+  cardinality: string | null;
+  /** When to DOUBT this fact, as opposed to when it stopped being true. */
+  review_by: string | null;
+  /** note | moment | manual | ai. Says what source_ref points at. */
+  source_kind: string | null;
+  /** The id of the note this fact came from, when source_kind is 'note'. */
+  source_ref: string | null;
+  updated_at: string;
+}
+
+/** Everything a machine wrote carries an origin that says so. */
+export const HUMAN_ORIGINS = new Set(["user_manual"]);
+
+export function writtenBy(origin?: string | null): "human" | "machine" {
+  return HUMAN_ORIGINS.has((origin ?? "").trim().toLowerCase()) ? "human" : "machine";
+}
+
+// Unicode combining marks. After NFKD an accented letter is a plain letter
+// followed by one of these, so dropping them turns "Müller" into "Muller"
+// instead of "Mller".
+const COMBINING_FIRST = 0x0300;
+const COMBINING_LAST = 0x036f;
+
+function stripAccents(text: string): string {
+  return text
+    .normalize("NFKD")
+    .split("")
+    .filter((ch) => {
+      const code = ch.charCodeAt(0);
+      return code < COMBINING_FIRST || code > COMBINING_LAST;
+    })
+    .join("");
+}
+
+/**
+ * A filename-safe short id for a name. Returns an empty string when the name
+ * has nothing a filename can carry, for example a name written entirely in
+ * Chinese. The caller decides what to do then, because only the caller has the
+ * record id that makes a fallback unique.
+ */
+export function slugify(name?: string | null): string {
+  return stripAccents(name ?? "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+/, "")
+    .replace(/-+$/, "");
+}
+
+/** A slug that is never empty and never collides, even for an unnamed row. */
+export function slugWithFallback(name: string | null | undefined, id: string, prefix: string): string {
+  const slug = slugify(name);
+  if (slug) return slug;
+  return `${prefix}-${String(id || "").slice(0, 8) || "unknown"}`;
+}
+
+/** The date part of a timestamp, which is what an event file is named after. */
+export function dateOnly(value?: string | null): string | null {
+  if (!value) return null;
+  const match = String(value).match(/^(\d{4}-\d{2}-\d{2})/);
+  return match ? match[1] : null;
+}
+
+export function toWorldEntity(row: Record<string, any>): WorldEntity {
+  return {
+    id: row.id,
+    slug: slugWithFallback(row.name, row.id, "entity"),
+    kind: row.kind || "other",
+    name: row.name ?? "",
+    aliases: Array.isArray(row.aliases) ? row.aliases.filter(Boolean) : [],
+    description: row.description ?? null,
+    updated_at: row.updated_at ?? row.created_at ?? "",
+  };
+}
+
+export function toWorldEvent(row: Record<string, any>): WorldEvent {
+  const date = dateOnly(row.happened_at);
+  return {
+    id: row.id,
+    slug: `${date ?? "undated"}-${slugWithFallback(row.title, row.id, "event")}`,
+    title: row.title ?? "",
+    description: row.description ?? null,
+    date,
+    end_date: dateOnly(row.happened_end),
+    participants: row.person_id ? [row.person_id] : [],
+    category: row.category ?? null,
+    updated_at: row.updated_at ?? row.created_at ?? "",
+  };
+}
+
+export function toWorldClaim(row: Record<string, any>): WorldClaim {
+  return {
+    id: row.id,
+    subject_kind: row.subject_kind ?? "self",
+    subject_id: row.subject_id ?? null,
+    category: row.category ?? null,
+    attribute: row.attribute ?? "",
+    value: row.value ?? "",
+    object_id: row.object_id ?? null,
+    valid_from: dateOnly(row.valid_from),
+    valid_to: dateOnly(row.valid_to),
+    origin: row.origin ?? "unverified",
+    rank: row.rank ?? "normal",
+    written_by: writtenBy(row.origin),
+    evidence_quote: row.evidence_quote ?? null,
+    // The three fields the 2026-09-01 widening added. This mapper is an
+    // allowlist, so a column added to world_claims reaches Mission Control only when
+    // it is named here: the view carried cardinality for a day before anyone
+    // noticed the mirror still had none.
+    confidence: row.confidence ?? null,
+    cardinality: row.cardinality ?? null,
+    review_by: dateOnly(row.review_by),
+    source_kind: row.source_kind ?? null,
+    source_ref: row.source_ref ?? null,
+    updated_at: row.updated_at ?? row.created_at ?? "",
+  };
+}
+
+/**
+ * `updated_since` makes a rerun cheap. A value that is not a timestamp is
+ * refused rather than ignored, because ignoring it would quietly return the
+ * whole world to a caller who asked for one day of it.
+ */
+export function parseUpdatedSince(raw?: string | null): { value: string | null; error: string | null } {
+  if (raw === null || raw === undefined || raw.trim() === "") return { value: null, error: null };
+  const text = raw.trim();
+  const stamp = /^\d{4}-\d{2}-\d{2}$/.test(text) ? `${text}T00:00:00Z` : text;
+  const parsed = new Date(stamp);
+  if (Number.isNaN(parsed.getTime())) {
+    return { value: null, error: `updated_since must be a date or timestamp, got "${raw}"` };
+  }
+  return { value: parsed.toISOString(), error: null };
+}
+
+/** A page size a caller cannot use to ask for everything at once by accident. */
+export function parseLimit(raw?: string | null, fallback = 500, max = 2000): number {
+  const n = parseInt(raw ?? "", 10);
+  if (!Number.isFinite(n) || n <= 0) return fallback;
+  return Math.min(n, max);
+}
+
+/** PostgREST's row cap per response on Supabase. A window larger than this is read in pages. */
+export const SERVER_PAGE_CAP = 1000;
+
+/**
+ * Read `limit` rows starting at `offset`, in pages the server will actually
+ * return. `parseLimit` allows up to 2000, but a single `.range()` is cut to
+ * 1000 rows without a word, and a client paging until it gets a short page
+ * stopped at 1000 and never saw the rest.
+ *
+ * Stops on an empty page or once `limit` rows are in hand. A server cap below
+ * the page size only means more pages, never a silent cut.
+ */
+export async function readWindow<T>(
+  fetchRange: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: unknown }>,
+  offset: number,
+  limit: number,
+  pageSize = SERVER_PAGE_CAP,
+): Promise<T[]> {
+  const out: T[] = [];
+  let from = offset;
+  while (out.length < limit) {
+    const want = Math.min(pageSize, limit - out.length);
+    const { data, error } = await fetchRange(from, from + want - 1);
+    if (error) throw error;
+    const rows = data ?? [];
+    if (rows.length === 0) break;
+    out.push(...rows.slice(0, limit - out.length));
+    from += rows.length;
+  }
+  return out;
+}
+
+/**
+ * The PostgREST filter that keeps a world_claims row away from people the
+ * mirror must not name. The claim arm of world_claims reads agent_facts, so it
+ * never holds such a row; the relationship arm reads contact_relationships
+ * directly, and a relationship from or to a hidden or sensitive person would
+ * put that person's id and label into a git repository. Null when there is
+ * nobody to leave out.
+ */
+export function relationshipExclusionFilter(excludedContactIds: string[]): string | null {
+  const ids = [...new Set(excludedContactIds.filter(Boolean))];
+  if (ids.length === 0) return null;
+  const list = `(${ids.join(",")})`;
+  return `and(or(subject_id.is.null,subject_id.not.in.${list}),or(object_id.is.null,object_id.not.in.${list}))`;
+}

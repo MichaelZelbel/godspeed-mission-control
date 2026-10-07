@@ -415,6 +415,12 @@ async function testConnection(key) {
 // ================================================================ the run
 async function main() {
   const godspeed = nb.findGodspeed(godspeedArg);
+  // A mission control that runs Godspeed v2 has its own notebook under the name `notebook`.
+  // Wiring Menerio in under that name would take it over (6 October 2026), so nothing is changed.
+  if (godspeed && fs.existsSync(path.join(godspeed, ".godspeed", "sync-config.json"))) {
+    if (!refreshOnly) console.log("This mission control runs Godspeed v2, whose own notebook is connected as `notebook`. Menerio was not wired in.");
+    return 0;
+  }
   const k = nb.menerioKey(godspeed);
 
   if (refreshOnly) {                      // never a word, never a failure: a schedule runs this

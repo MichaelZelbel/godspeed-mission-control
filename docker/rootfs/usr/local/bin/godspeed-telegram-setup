@@ -24,7 +24,17 @@
 #
 # Who owns the bot: the first person to write to it in a private chat, the same
 # rule the terminal setup uses (its "send it any message; hi will do"), unless
-# GODSPEED_TELEGRAM_OWNER names a numeric Telegram id or an @username.
+# GODSPEED_TELEGRAM_OWNER names a numeric Telegram id or an @username. When
+# GODSPEED_TELEGRAM_START_CODE is set, only "/start <that code>" can take it: the
+# one-click server's web page shows the bot's link with that code to its signed-in
+# owner, because a bot's name can be found in Telegram's search by anybody.
+#
+# Two flows. The default is the plain Docker image's: collect answers, run the
+# installer, restart the s6 gateway. GODSPEED_TG_FLOW=notebook is the one-click
+# Hostinger server, where the notebook is already installed: it asks the brain,
+# GitHub (a sign-in only), the reader's city, their briefing as a file and their
+# goal, hands the answers to GODSPEED_TG_FINISH, and leaves starting the gateway
+# to the container's supervisor (docker/full-candidate/telegram-runner.mjs).
 #
 # Run by the s6 service godspeed-telegram-setup, as the assistant's account. Exits
 # 0 when setup is done or there is nothing for it to do, so the service sleeps.
@@ -32,6 +42,7 @@
 # ~/.godspeed/telegram-setup.json, and finished sign-ins are never asked again.
 # The token is never printed and never logged.
 # =============================================================================
+import hmac
 import html
 import json
 import os
@@ -52,6 +63,10 @@ except ImportError:  # pragma: no cover - Windows test runs
 HOME = os.environ.get("HOME") or os.path.expanduser("~")
 TOKEN = os.environ.get("GODSPEED_TELEGRAM_TOKEN", "").strip()
 OWNER_WANTED = os.environ.get("GODSPEED_TELEGRAM_OWNER", "").strip()
+START_CODE = os.environ.get("GODSPEED_TELEGRAM_START_CODE", "").strip()
+FLOW = os.environ.get("GODSPEED_TG_FLOW", "installer")
+WORKSPACE = os.environ.get("GODSPEED_WORKSPACE", "")
+FINISH = shlex.split(os.environ.get("GODSPEED_TG_FINISH", ""))
 API = os.environ.get("GODSPEED_TELEGRAM_API", "https://api.telegram.org").rstrip("/")
 STATE_FILE = os.environ.get("GODSPEED_TG_STATE", os.path.join(HOME, ".godspeed", "telegram-setup.json"))
 LOG_FILE = os.environ.get("GODSPEED_TG_LOG", os.path.join(HOME, "logs", "godspeed-telegram-setup.log"))
@@ -63,9 +78,27 @@ GODSPEED = os.environ.get("GODSPEED") or os.path.join(HOME, "godspeed")
 TZ = os.environ.get("TZ", "Europe/Berlin")
 SIGNIN_MINUTES = 16          # the device codes last fifteen
 SETUP_MINUTES = 45
+BRIEFING_MAX = 1024 * 1024   # a briefing is a page or two of text
 
 WINDOWS_EXE = "https://github.com/MichaelZelbel/godspeed-mission-control/releases/latest/download/GodspeedSetup.exe"
 ONE_LINER = "https://raw.githubusercontent.com/MichaelZelbel/godspeed-mission-control/main/install-godspeed.sh"
+if FLOW == "notebook":
+    # The one-click server is version 2; the latest release and main are still version 1, so a
+    # reader sent there got the other product (until 6 October 2026). Send them to version 2's
+    # PUBLISHED installers instead.
+    #
+    # NOT GODSPEED_REVISION, the commit the image was built from: a commit's installers/ folder
+    # is filled by a LATER commit, so the build at b327fe0 carried the previous product's
+    # installers (pinning 5961989, ~69 commits behind), and linking to the build commit served
+    # that stale product to every reader. Fixed 7 October 2026.
+    #
+    # GODSPEED_INSTALLER_REF pins a release tag or a known-good commit when the image sets one;
+    # otherwise the v2 branch, whose installers/ folder always holds the current published pair.
+    _ref = os.environ.get("GODSPEED_INSTALLER_REF", "").strip() or "codex/godspeed-v2-completeness"
+    if ".." in _ref or not re.fullmatch(r"[0-9A-Za-z][0-9A-Za-z._/-]{0,99}", _ref):
+        _ref = "codex/godspeed-v2-completeness"
+    WINDOWS_EXE = "https://github.com/MichaelZelbel/godspeed-mission-control/raw/%s/installers/GodspeedSetup.exe" % _ref
+    ONE_LINER = "https://raw.githubusercontent.com/MichaelZelbel/godspeed-mission-control/%s/installers/install-godspeed.sh" % _ref
 
 
 SECRETS = []   # keys the reader sent, masked in every log line like the bot token
@@ -139,10 +172,12 @@ def write_telegram_env(user_id, chat_id):
         pass
 
 
-def run(cmd, timeout=120, stdin_text=None):
-    """A quiet command: (exit code, output). A missing program is exit 127."""
+def run(cmd, timeout=120, stdin_text=None, env=None, new_session=False):
+    """A quiet command: (exit code, output). A missing program is exit 127. new_session
+    leaves it no terminal, so a program that asks for a secret reads it from stdin_text."""
     try:
-        p = subprocess.run(cmd, input=stdin_text, capture_output=True, text=True, timeout=timeout)
+        p = subprocess.run(cmd, input=stdin_text, capture_output=True, text=True, timeout=timeout, env=env,
+                           start_new_session=new_session)
         return p.returncode, (p.stdout or "") + (p.stderr or "")
     except FileNotFoundError:
         return 127, ""
@@ -178,6 +213,17 @@ def tg(method, http_timeout=30, **params):
     return data.get("result")
 
 
+def download(file_id, limit):
+    """A file the reader sent, as bytes, or None when it is larger than limit."""
+    path = tg("getFile", file_id=file_id).get("file_path", "")
+    try:
+        with urllib.request.urlopen("%s/file/bot%s/%s" % (API, TOKEN, path), timeout=60) as r:
+            data = r.read(limit + 1)
+    except (urllib.error.URLError, OSError) as e:
+        raise TelegramError("download: %s" % getattr(e, "reason", e))
+    return None if len(data) > limit else data
+
+
 def keyboard(buttons):
     if not buttons:
         return None
@@ -190,6 +236,7 @@ class Chat:
     def __init__(self, st):
         self.st = st
         self.refused = {}
+        self.hinted = {}
         self.question = None        # (text, buttons) to show again on /start
 
     # sending
@@ -234,6 +281,14 @@ class Chat:
         save_state(self.st)
         return events
 
+    def confirm(self):
+        """Tells Telegram every message so far was read, so the gateway that reads the bot
+        next does not answer the setup's last reply a second time."""
+        try:
+            tg("getUpdates", offset=self.st.get("offset"), timeout=0, allowed_updates=["message", "callback_query"])
+        except TelegramError as e:
+            log("could not mark the last messages read (%s)" % e)
+
     def _event(self, u):
         if "callback_query" in u:
             cq = u["callback_query"]
@@ -257,18 +312,23 @@ class Chat:
             return None
         who, chat = m.get("from", {}), m["chat"]
         if not self.st.get("owner_id"):
-            if not self._may_claim(who):
-                self._refuse(chat.get("id"))
+            if not self._may_claim(who, m.get("text") or ""):
+                if START_CODE:
+                    self._hint(chat.get("id"))
+                else:
+                    self._refuse(chat.get("id"))
                 return None
             self.st.update(owner_id=who["id"], chat_id=chat["id"],
                            owner_name=who.get("first_name") or who.get("username") or "there")
             save_state(self.st)
             log("owner: Telegram id %s" % who["id"])
-            return ("claimed", m.get("text", ""))
+            return ("claimed", "/start" if START_CODE else m.get("text", ""))
         if not self._is_owner(who, chat):
             self._refuse(chat.get("id"))
             return None
         self.last_text_id = m.get("message_id")   # so a key the reader sent can be deleted
+        if m.get("document"):
+            return ("document", m["document"])
         return ("text", (m.get("text") or "").strip())
 
     def delete_last_text(self):
@@ -279,11 +339,28 @@ class Chat:
                 log("could not delete the message with the key (%s)" % e)
             self.last_text_id = None
 
-    def _may_claim(self, who):
+    def _may_claim(self, who, text=""):
+        if START_CODE:
+            # Telegram sends "/start <code>" when the bot is opened from a link carrying it.
+            m = re.match(r"^/start(?:@\w+)?\s+(\S+)\s*$", text)
+            if not m or not hmac.compare_digest(m.group(1).encode(), START_CODE.encode()):
+                return False
         if not OWNER_WANTED:
             return True
         want = OWNER_WANTED.lstrip("@").lower()
         return str(who.get("id")) == want or (who.get("username") or "").lower() == want
+
+    def _hint(self, chat_id):
+        """Before anybody owns the bot: how its owner takes it, said at most once a minute."""
+        if not chat_id or time.time() - self.hinted.get(chat_id, 0) < 60:
+            return
+        self.hinted[chat_id] = time.time()
+        try:
+            tg("sendMessage", chat_id=chat_id,
+               text="To set me up, open me with the button on your Godspeed page. Its link carries a "
+                    "one-time code that makes you my owner.")
+        except TelegramError:
+            pass
 
     def _is_owner(self, who, chat):
         return self.st.get("owner_id") and who.get("id") == self.st["owner_id"] \
@@ -308,6 +385,9 @@ class Chat:
                 if kind == "button" and any(value == d for d, _ in buttons):
                     self.question = None
                     return value
+                if kind == "document":
+                    self.send("Please answer the question above with a message, not a file.")
+                    continue
                 if kind in ("text", "claimed"):
                     low = value.lower()
                     if low.startswith("/start"):
@@ -320,7 +400,7 @@ class Chat:
                     if free_text and value:
                         self.question = None
                         return value
-                    self.send("Tap one of the buttons above, please.")
+                    self.send("Tap one of the buttons above, please." if buttons else "Send it as a message, please.")
 
 
 # --- The sign-ins ----------------------------------------------------------------------------
@@ -515,11 +595,11 @@ def find_zone(text):
     return None
 
 
-def ask_zone(chat):
+def ask_zone(chat, first=None):
     """Whose 06:00: the reader's city, as the zone Hermes' clock and schedules run on."""
     here = TZ if find_zone(TZ) else "Europe/Berlin"
     city = here.split("/")[-1].replace("_", " ")
-    prompt = "Whose 06:00? Send me the city you live in, like London or New York, or tap %s." % esc(city)
+    prompt = (first or "Whose 06:00? Send me the city you live in, like London or New York, or tap %s.") % esc(city)
     while True:
         a = chat.ask(prompt, [("tz:keep", city)], free_text=True)
         if a == "tz:keep":
@@ -682,8 +762,11 @@ def brain_key(chat, slug):
         SECRETS.append(key)
         chat.send("Thanks, I deleted your message. Checking the key with %s..." % esc(name))
         run(HERMES + ["auth", "remove", slug, "godspeed-setup"], timeout=60)   # a key tried before
-        rc, _ = run(HERMES + ["auth", "add", slug, "--type", "api-key", "--api-key", key,
-                              "--label", "godspeed-setup"], timeout=60)
+        # The key goes in on standard input. As --api-key it was on the command line, where
+        # every account on the server can read it in the process list (until 6 October 2026).
+        # Without --api-key Hermes asks for it, and with no terminal it reads the answer there.
+        rc, _ = run(HERMES + ["auth", "add", slug, "--type", "api-key", "--label", "godspeed-setup"],
+                    timeout=60, stdin_text=key + "\n", new_session=True)
         use_model(slug, default_model(slug))
         ok, why = proof() if rc == 0 else (False, "the key could not be stored")
         log("brain: %s: %s" % (slug, "answers" if ok else why[:200]))
@@ -698,8 +781,9 @@ def step_github(chat):
         login = github_login()
         chat.send("Step 2 of 3: GitHub is already connected%s." % (" as " + esc(login) if login else ""))
     else:
-        chat.send("<b>Step 2 of 3: GitHub.</b> That is where your folder is kept, private to you. "
-                  "One moment, I am asking GitHub for a sign-in code.")
+        chat.send("<b>Step 2 of 3: GitHub.</b> %s One moment, I am asking GitHub for a sign-in code."
+                  % ("Your backup will be kept there later, private to you. Nothing is copied there yet."
+                     if FLOW == "notebook" else "That is where your folder is kept, private to you."))
         device_signin(
             chat, "GitHub",
             # No --skip-ssh-key: the image's gh (Debian's 2.46) does not know it and stops with its
@@ -783,11 +867,141 @@ def fresh_repo_name(login):
     return "godspeed-%d" % int(time.time())
 
 
+# --- The one-click server: the notebook is installed already --------------------------------
+# What Teach It Once's server route asks after the two sign-ins: the reader's city, their
+# briefing from Chapter 1 as a file, and their goal. Nothing is installed; the answers go to
+# GODSPEED_TG_FINISH, which files the goal and the clock the way the notebook's own setup does.
+
+ROOT_FILES = {"agents.md", "claude.md", "readme.md", "decisions.md", "procedures.md"}
+
+
+def briefing_name(sent):
+    """The name a sent briefing is kept under, at the top of the folder."""
+    name = os.path.basename((sent or "").replace("\\", "/")).strip()
+    stem, ext = os.path.splitext(name)
+    stem = re.sub(r"\s*\(\d+\)$", "", stem)            # what-my-ai-knew (1).md, a second download
+    stem = re.sub(r"[^A-Za-z0-9._ -]+", "-", stem).strip(" .-")
+    if not stem or (stem + ext).lower() in ROOT_FILES:  # never over the instruction sheet
+        return "what-my-ai-knew" + (ext.lower() or ".md")
+    return stem + ext.lower()
+
+
+def keep_briefing(name, text):
+    path = os.path.join(WORKSPACE, name)
+    tmp = path + ".part"
+    with open(tmp, "w", encoding="utf-8", newline="\n") as f:
+        f.write(text if text.endswith("\n") else text + "\n")
+    os.replace(tmp, path)
+    log("briefing: kept as %s (%d characters)" % (name, len(text)))
+    return name
+
+
+def briefing_from_file(doc):
+    """(saved name, None) or (None, what to tell the reader)."""
+    name = briefing_name(doc.get("file_name") or "")
+    if not name.endswith((".md", ".txt", ".markdown")):
+        return None, "I can keep a text file, one ending in .md or .txt. Send that one, or tap Later."
+    if (doc.get("file_size") or 0) > BRIEFING_MAX:
+        return None, "That file is over 1 MB, much longer than a briefing. Send a shorter one, or tap Later."
+    try:
+        data = download(doc["file_id"], BRIEFING_MAX)
+    except TelegramError as e:
+        log("briefing: could not fetch the file (%s)" % e)
+        return None, "Telegram did not give me the file. Send it once more, please."
+    if data is None:
+        return None, "That file is over 1 MB, much longer than a briefing. Send a shorter one, or tap Later."
+    try:
+        text = data.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        return None, "That file is not plain text. Send the .md file itself, or tap Later."
+    return keep_briefing(name, text), None
+
+
+def ask_briefing(chat):
+    later = [("brief:later", "Later")]
+    prompt = ("Now your briefing: the file that tells me who you are. If you follow Teach It Once, it is "
+              "<code>what-my-ai-knew.md</code>. Tap the paperclip and send it to me as a file, or paste its text.")
+    chat.question = (prompt, later)
+    chat.send(prompt, later)
+    while True:
+        events = chat.poll(50)
+        for i, (kind, value) in enumerate(events):
+            if kind == "button" and value == "brief:later":
+                chat.question = None
+                chat.send("All right. Send it to me whenever you like and ask me to keep it.")
+                return ""
+            if kind == "document":
+                saved, why = briefing_from_file(value)
+                if saved:
+                    chat.question = None
+                    chat.send("Thanks. I keep it as <code>%s</code>, at the top of my folder." % esc(saved))
+                    return saved
+                chat.send(why)
+            elif kind in ("text", "claimed"):
+                if value.lower().startswith("/start"):
+                    chat.send(prompt, later)
+                elif len(value) >= 200:
+                    # Telegram cuts a long paste into several messages, sent one right after the other,
+                    # so they can come in this same batch or in the next seconds.
+                    parts = [value] + [v for k, v in events[i + 1:] if k == "text"]
+                    while True:
+                        more = [v for k, v in chat.poll(3) if k == "text"]
+                        if not more:
+                            break
+                        parts += more
+                    chat.question = None
+                    saved = keep_briefing("what-my-ai-knew.md", "\n".join(parts))
+                    chat.send("Thanks. I keep your text as <code>%s</code>, at the top of my folder." % saved)
+                    return saved
+                else:
+                    chat.send("Send the file with the paperclip, paste its whole text, or tap Later.")
+
+
+def ask_goal(chat):
+    prompt = "Last one: your goal. What do you want my help with first? One or two sentences will do."
+    while True:
+        goal = " ".join(chat.ask(prompt, [], free_text=True).split())
+        if len(goal) <= 600:
+            return goal
+        prompt = "That is a lot for one goal. Send me the heart of it, in one or two sentences."
+
+
+def step_about_you(chat):
+    st = chat.st
+    if "tz" not in st:
+        chat.send("<b>Step 3 of 3: your city, your briefing and your goal.</b>")
+        st["tz"] = ask_zone(chat, "Which city do you live in? Then \"seven in the morning\" means your seven. "
+                                  "Send me its name, like London or New York, or tap %s.")
+        save_state(st)
+    if "briefing" not in st:
+        st["briefing"] = ask_briefing(chat)
+        save_state(st)
+    if "goal" not in st:
+        st["goal"] = ask_goal(chat)
+        save_state(st)
+
+
+def step_finish(chat):
+    """The answers, filed by the notebook's own code: the goal, the clock, Telegram for routines."""
+    st = chat.st
+    env = {k: v for k, v in os.environ.items() if not k.startswith("GODSPEED_TELEGRAM_")}
+    payload = json.dumps({"timezone": st.get("tz"), "goal": st.get("goal")})
+    while True:
+        rc, out = run(FINISH, timeout=300, stdin_text=payload, env=env)
+        if rc == 0:
+            log("finish: goal and clock filed")
+            return
+        reason = next((l.strip() for l in reversed(ANSI.sub("", out).splitlines()) if l.strip()), "no reason given")
+        log("finish: stopped (exit %s): %s" % (rc, reason))
+        chat.ask("I could not file your goal and your city. What it said: %s\n\nNothing is lost. Tap Try "
+                 "again." % esc(reason[:400]), [("finish:retry", "Try again")])
+
+
 def step_install(chat):
     """The installer, unchanged, with the answers in its environment and no keyboard."""
     st = chat.st
     env = dict(os.environ)
-    for k in ("GODSPEED_TELEGRAM_TOKEN", "GODSPEED_TELEGRAM_OWNER"):
+    for k in ("GODSPEED_TELEGRAM_TOKEN", "GODSPEED_TELEGRAM_OWNER", "GODSPEED_TELEGRAM_START_CODE"):
         env.pop(k, None)
     # The brain is set up and proved already (step_brain), so the installer's own ChatGPT
     # sign-in is skipped: for any other provider it would wait fifteen minutes for a code
@@ -866,10 +1080,15 @@ def step_hand_over(chat):
     if st.get("tz"):
         rc, _ = run(HERMES + ["config", "set", "timezone", st["tz"]], timeout=60)
         log("hand-over: Hermes' clock set to %s (exit %s)" % (st["tz"], rc))
-    rc, _ = run(HERMES + ["gateway", "restart"], timeout=180)
-    if rc != 0:
-        rc, _ = run(HERMES + ["gateway", "start"], timeout=180)
-    log("hand-over: Telegram written to Hermes' settings; gateway restart exit %s" % rc)
+    if FLOW == "notebook":
+        # The container's supervisor starts the gateway once this program has finished,
+        # so the two never read the bot at the same time.
+        log("hand-over: Telegram written to Hermes' settings; the supervisor starts the gateway")
+    else:
+        rc, _ = run(HERMES + ["gateway", "restart"], timeout=180)
+        if rc != 0:
+            rc, _ = run(HERMES + ["gateway", "start"], timeout=180)
+        log("hand-over: Telegram written to Hermes' settings; gateway restart exit %s" % rc)
     first = ("Your Godspeed Mission Control is set up, and this is its chat. Write to me here from "
              "anywhere: try \"what is in my folder?\"")
     # Sent the way the morning brief and the alerts will be sent, which proves that road.
@@ -878,7 +1097,9 @@ def step_hand_over(chat):
     if rc != 0:
         log("hand-over: hermes send did not deliver (exit %s); sending directly" % rc)
         chat.send(esc(first))
-    rc, url = run(["git", "-C", GODSPEED, "remote", "get-url", "origin"], timeout=30)
+    # On the one-click server the folder is the notebook's, not the installer's ~/godspeed.
+    folder = WORKSPACE if FLOW == "notebook" and WORKSPACE else GODSPEED
+    rc, url = run(["git", "-C", folder, "remote", "get-url", "origin"], timeout=30)
     url = url.strip() if rc == 0 else ""
     if url.startswith("https://github.com/"):
         chat.send(
@@ -899,7 +1120,9 @@ def main():
     st = load_state()
     if st.get("done"):
         return 0
-    if env_has("TELEGRAM_BOT_TOKEN="):
+    # On the one-click server the supervisor runs this or the gateway, never both, and the
+    # web page clears Hermes' Telegram lines when a different bot is connected.
+    if FLOW != "notebook" and env_has("TELEGRAM_BOT_TOKEN="):
         log("Hermes already has a Telegram bot (the terminal setup connected it); the chat setup stays out of its way")
         return 0
     if not re.match(r"^[0-9]+:[A-Za-z0-9_-]+$", TOKEN):
@@ -914,28 +1137,40 @@ def main():
             if e.code in (401, 404):
                 log("Telegram does not accept GODSPEED_TELEGRAM_TOKEN. Check it against BotFather's message, "
                     "fix it in the server's settings and restart the container.")
+                st["problem"] = "refused"     # the web page says so
+                save_state(st)
                 return 0
             log("could not reach Telegram (%s); trying again in 30 seconds" % e)
             time.sleep(30)
+    st.pop("problem", None)
+    st["bot_id"] = me.get("id")
+    save_state(st)
     log("waiting for the first message to @%s" % me.get("username", "your bot"))
     chat = Chat(st)
     if not st.get("owner_id"):
         while not st.get("owner_id"):
             chat.poll(50)
+        steps = ("2. Sign in to GitHub, where your backup will be kept later.\n"
+                 "3. Your city, your briefing and your goal.\n\n") if FLOW == "notebook" else (
+                 "2. Connect GitHub. That is where your folder is kept, private to you.\n"
+                 "3. A few quick questions.\n\n")
         chat.send(
             "Hi %s. I am your Godspeed Mission Control, running on your own server.\n\n"
             "Three short steps and I am ready, about ten minutes:\n"
             "1. Choose my brain: the AI company I think with. You pay it directly.\n"
-            "2. Connect GitHub. That is where your folder is kept, private to you.\n"
-            "3. A few quick questions.\n\n"
-            "From now on I answer only you." % esc(st.get("owner_name", "there")))
+            "%sFrom now on I answer only you." % (esc(st.get("owner_name", "there")), steps))
     else:
         chat.send("I restarted, and I am picking up where we were.")
     step_brain(chat)
     step_github(chat)
-    step_questions(chat)
-    step_install(chat)
+    if FLOW == "notebook":
+        step_about_you(chat)
+        step_finish(chat)
+    else:
+        step_questions(chat)
+        step_install(chat)
     step_hand_over(chat)
+    chat.confirm()
     st["done"] = True
     save_state(st)
     log("done: the bot belongs to the assistant now")

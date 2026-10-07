@@ -1,0 +1,200 @@
+import { parseModelJson, runChat } from "./llm-router.ts";
+import { canonicalLabel, relationshipKind } from "./relationship-canonical.ts";
+import {
+  RELATIONSHIP_ADJUDICATION_PROMPT,
+  RELATIONSHIP_EVIDENCE_RECOVERY_PROMPT,
+} from "./llm-defaults.ts";
+
+export const RELATIONSHIP_ADJUDICATION_VERSION = "2026-08-09.1";
+
+export type EntityKind = "real_person" | "public_person" | "organization" | "product" | "fictional_character" | "avatar" | "role" | "unclear";
+export type AdjudicationOutcome = "keep" | "reject" | "review";
+
+export interface RelationshipCandidate {
+  personA: string;
+  personB: string;
+  label: string;
+  inverseLabel?: string | null;
+  sourceQuote: string;
+  sourceContext?: string;
+}
+
+export interface RelationshipAdjudication {
+  outcome: AdjudicationOutcome;
+  reason: string;
+  canonicalLabel: string | null;
+  inverseLabel: string | null;
+  personAKind: EntityKind;
+  personBKind: EntityKind;
+  personallyRelevant: boolean;
+  relationshipSupported: boolean;
+  incidentalOrTransactional: boolean;
+  fictionalOrRoleplay: boolean;
+  confidence: number;
+}
+
+const NON_PERSON_WORDS = /\b(company|corporation|platform|product|app|software|service|project|team|department|brand|server|bot|assistant|avatar|character|role|protagonist|anime|manga|novel|game)\b/i;
+
+// The roles this judge accepts are the roles relationship-canonical.ts knows,
+// personal and professional alike. A private 29-entry list here rejected
+// cousin, grandmother, aunt, step- and in-law roles, doctor, therapist and
+// co-founder with confidence 1, and profile-lint then deleted such rows while
+// the bulk keep archived them.
+function isSupportedRole(label: string): boolean {
+  return relationshipKind(label) !== "other";
+}
+
+function clampConfidence(value: unknown): number {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.max(0, Math.min(1, number)) : 0;
+}
+
+function kind(value: unknown): EntityKind {
+  const allowed: EntityKind[] = ["real_person", "public_person", "organization", "product", "fictional_character", "avatar", "role", "unclear"];
+  return allowed.includes(value as EntityKind) ? value as EntityKind : "unclear";
+}
+
+function deterministicRejection(candidate: RelationshipCandidate): RelationshipAdjudication | null {
+  const label = canonicalLabel(candidate.label);
+  const quote = candidate.sourceQuote.trim();
+  if (!quote) return rejected("No exact source quote was supplied", label);
+  if (!isSupportedRole(label)) return rejected(`Unsupported relationship role: ${label || candidate.label}`, label);
+  if (candidate.personA.trim().toLowerCase() === candidate.personB.trim().toLowerCase()) return rejected("A person cannot have a relationship with the same identity", label);
+  if (NON_PERSON_WORDS.test(`${candidate.personA} ${candidate.personB}`) && NON_PERSON_WORDS.test(candidate.sourceContext || quote)) {
+    return rejected("At least one endpoint is described as a non-person entity, avatar, fictional character, or role", label);
+  }
+  return null;
+}
+
+function rejected(reason: string, label: string): RelationshipAdjudication {
+  return {
+    outcome: "reject", reason, canonicalLabel: label || null, inverseLabel: null,
+    personAKind: "unclear", personBKind: "unclear", personallyRelevant: false,
+    relationshipSupported: false, incidentalOrTransactional: false,
+    fictionalOrRoleplay: false, confidence: 1,
+  };
+}
+
+export async function adjudicateRelationship(args: {
+  db: any;
+  userId: string;
+  candidate: RelationshipCandidate;
+  /** Called when the LLM judge itself could not be reached (credit limit, network, 5xx). */
+  onJudgeUnavailable?: (error: unknown) => void;
+  /** Note, job and stage stamped onto the usage row when a pipeline pays for the judgement. */
+  attribution?: { noteId?: string | null; jobId?: string | null; revision?: string | null; stage?: string | null };
+}): Promise<RelationshipAdjudication> {
+  const deterministic = deterministicRejection(args.candidate);
+  if (deterministic) return deterministic;
+
+  try {
+    const result = await runChat({
+      db: args.db,
+      userId: args.userId,
+      ...args.attribution,
+      callSite: "relationship.adjudication",
+      defaults: { provider: "openrouter", model: "deepseek/deepseek-v4-flash", systemPrompt: RELATIONSHIP_ADJUDICATION_PROMPT, temperature: 0, maxTokens: 2000 },
+      messages: [{ role: "user", content: JSON.stringify(args.candidate) }],
+      callOptions: { response_format: { type: "json_object" } },
+      // Billed to the profile owner so the call is in the ledger and repeat-guarded.
+    });
+    if (!result.content.trim()) {
+      throw new Error("Relationship adjudication returned empty content");
+    }
+    const parsed = parseModelJson<Record<string, unknown>>(result.content);
+    if (!parsed || typeof parsed !== "object") throw new Error("Relationship adjudication returned no JSON object");
+    const aKind = kind(parsed.person_a_kind);
+    const bKind = kind(parsed.person_b_kind);
+    const supported = parsed.relationship_supported === true;
+    const relevant = parsed.personally_relevant === true;
+    const fictional = parsed.fictional_or_roleplay === true || [aKind, bKind].some((v) => ["fictional_character", "avatar", "role"].includes(v));
+    const nonPerson = [aKind, bKind].some((v) => !["real_person", "public_person"].includes(v));
+    let outcome: AdjudicationOutcome = ["keep", "reject", "review"].includes(String(parsed.outcome)) ? parsed.outcome as AdjudicationOutcome : "review";
+    if (fictional || nonPerson || !supported || !relevant || parsed.incidental_or_transactional === true) outcome = outcome === "review" && !fictional && !supported ? "review" : "reject";
+    return {
+      outcome,
+      reason: String(parsed.reason || "Evidence adjudicated"),
+      canonicalLabel: canonicalLabel(String(parsed.canonical_label || args.candidate.label)) || null,
+      inverseLabel: parsed.inverse_label ? canonicalLabel(String(parsed.inverse_label)) : null,
+      personAKind: aKind,
+      personBKind: bKind,
+      personallyRelevant: relevant,
+      relationshipSupported: supported,
+      incidentalOrTransactional: parsed.incidental_or_transactional === true,
+      fictionalOrRoleplay: fictional,
+      confidence: clampConfidence(parsed.confidence),
+    };
+  } catch (error) {
+    console.error("[relationship-adjudicator] failed closed", error);
+    args.onJudgeUnavailable?.(error);
+    return {
+      outcome: "review", reason: "Automated evidence review was unavailable", canonicalLabel: canonicalLabel(args.candidate.label) || null,
+      inverseLabel: null, personAKind: "unclear", personBKind: "unclear", personallyRelevant: false,
+      relationshipSupported: false, incidentalOrTransactional: false, fictionalOrRoleplay: false, confidence: 0,
+    };
+  }
+}
+
+export function exactQuoteExists(noteContent: string, quote: string): boolean {
+  const normalize = (value: string) => value.replace(/\s+/g, " ").trim().toLocaleLowerCase();
+  const needle = normalize(quote);
+  return needle.length >= 4 && normalize(noteContent).includes(needle);
+}
+
+export async function recoverRelationshipEvidence(args: {
+  db: any;
+  userId: string;
+  noteTitle: string;
+  noteContent: string;
+  personA: string;
+  personB: string;
+  label: string;
+  /** Called when the LLM itself could not be reached — "unavailable" is not "no evidence". */
+  onJudgeUnavailable?: (error: unknown) => void;
+}): Promise<{ sourceQuote: string; sourceContext: string } | null> {
+  const content = args.noteContent.slice(0, 60_000);
+  try {
+    const result = await runChat({
+      db: args.db,
+      userId: args.userId,
+      callSite: "relationship.evidence_recovery",
+      defaults: {
+        provider: "openrouter",
+        model: "deepseek/deepseek-v4-flash",
+        temperature: 0,
+        maxTokens: 2000,
+        systemPrompt: RELATIONSHIP_EVIDENCE_RECOVERY_PROMPT,
+      },
+      messages: [{
+        role: "user",
+        content: `Note title: ${args.noteTitle}\nProposed relationship: ${args.personA} is ${args.label} of ${args.personB}\n\nSource note:\n${content}`,
+      }],
+      // Billed to the profile owner so the call is in the ledger and repeat-guarded.
+    });
+    if (!result.content.trim()) {
+      throw new Error("Relationship evidence recovery returned empty content");
+    }
+    const quoteMatch = result.content.match(/<SOURCE_QUOTE>([\s\S]*?)<\/SOURCE_QUOTE>/i);
+    const contextMatch = result.content.match(/<SOURCE_CONTEXT>([\s\S]*?)<\/SOURCE_CONTEXT>/i);
+    const sourceQuote = String(quoteMatch?.[1] || "").trim();
+    const sourceContext = String(contextMatch?.[1] || "").trim();
+    if (!exactQuoteExists(content, sourceQuote)) return null;
+    return {
+      sourceQuote,
+      sourceContext: exactQuoteExists(content, sourceContext) ? sourceContext : sourceQuote,
+    };
+  } catch (error) {
+    console.error("[relationship-evidence-recovery] failed closed", error);
+    args.onJudgeUnavailable?.(error);
+    return null;
+  }
+}
+
+export function noteContentHash(content: string): string {
+  let hash = 2166136261;
+  for (let i = 0; i < content.length; i += 1) {
+    hash ^= content.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(16).padStart(8, "0");
+}

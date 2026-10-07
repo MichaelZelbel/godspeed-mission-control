@@ -52,6 +52,13 @@ if [ -z "$GODSPEED" ] || [ ! -d "$GODSPEED" ]; then
   exit 0
 fi
 
+# A mission control with Godspeed v2's notebook in it (a folder sync is set up) needs no copy:
+# that notebook reads these files itself, and since 6 October 2026 it is the memory, not
+# Menerio. Copying on would only keep writing into a memory nobody asks any more.
+if [ -f "$GODSPEED/.godspeed/sync-config.json" ] && [ "${GODSPEED_NOTEBOOK_SYNC_ANYWAY:-}" != 1 ]; then
+  exit 0
+fi
+
 # One run at a time. The hourly job and a save can land in the same second, and two
 # uploads of the same new file race into two notes. mkdir is the atomic primitive that
 # exists everywhere, including Git Bash on Windows, where flock does not.

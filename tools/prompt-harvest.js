@@ -306,7 +306,7 @@ function main() {
 
   /* Pull first. The harvester skips a prompt whose exact text is already in ANY machine's
    * file, so a current clone is what stops two machines archiving the same thing twice. */
-  const pulled = run('git', ['pull', '--rebase', '--autostash', 'origin', 'main']);
+  const pulled = pullOrUndo();
   if (!pulled || pulled.status !== 0) say('pull failed (offline is fine): ' + String((pulled && pulled.stderr) || '').slice(0, 200));
 
   const h = run(py.cmd, py.pre.concat([collector, '--godspeed', GODSPEED, 'archive']));
@@ -345,12 +345,24 @@ function main() {
   if (!p || p.status !== 0) {
     // Somebody else pushed while we worked. Rebase onto them and try once more; a second
     // failure is left alone, because the next run picks the commit up anyway.
-    run('git', ['pull', '--rebase', '--autostash', 'origin', 'main']);
+    pullOrUndo();
     p = run('git', ['push', 'origin', 'main']);
   }
   if (!p || p.status !== 0) { say('push did not go through; the commit is local and the next run will carry it'); return 0; }
   say('pushed');
   return 0;
+}
+
+/* A pull whose rebase stops on a conflict is undone at once. Left in place, it kept the folder
+ * mid-rebase with conflict markers in a notebook file, so the notebook could neither read that
+ * note nor sync until a person finished the rebase (6 October 2026, envy). */
+function pullOrUndo() {
+  const pulled = run('git', ['pull', '--rebase', '--autostash', 'origin', 'main']);
+  if (pulled && pulled.status !== 0) {
+    const git = path.join(GODSPEED, '.git');
+    if (fs.existsSync(path.join(git, 'rebase-merge')) || fs.existsSync(path.join(git, 'rebase-apply'))) run('git', ['rebase', '--abort']);
+  }
+  return pulled;
 }
 
 process.exit(main());

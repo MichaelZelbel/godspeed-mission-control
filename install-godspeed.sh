@@ -1,50 +1,30 @@
 #!/usr/bin/env bash
-# =============================================================================
-# Teach It Once - set up Godspeed Mission Control on this Mac or Linux computer, in one line.
+# Main's shared installer, followed by the integrated notebook connection.
 #
-#   curl -fsSL https://raw.githubusercontent.com/MichaelZelbel/godspeed-mission-control/main/install-godspeed.sh | bash
-#
-# On Windows, download GodspeedSetup.exe from the releases page and double-click it
-# instead. Different front door, same promise: one thing to run, no decisions.
-#
-# It works out for itself what this computer needs:
-#   none here yet    -> makes one from starter-godspeed/ in this kit, the folder the
-#                       book walks you through chapter by chapter
-#   one already      -> brings it up to date and re-checks the wiring
-#
-# It also installs what is missing underneath (Git, Node.js, Hermes) and
-# gives every machine you own one shared memory.
-#
-# Safe to run as many times as you like. It never deletes anything you wrote.
-#
-# Options are passed straight through, so this also works:
-#   curl -fsSL <this url> | bash -s -- --godspeed ~/my-folder
-#   curl -fsSL <this url> | bash -s -- --repo https://github.com/you/your-godspeed.git
-#
-# This file is deliberately tiny. The work lives in kit-bootstrap, the small
-# public repository that holds the install steps shared with the other kits, so
-# the same code is not maintained in two places:
-# https://github.com/MichaelZelbel/kit-bootstrap
-# =============================================================================
-set -uo pipefail
-
-# The pin is an immutable TAG, never the moving v2 branch: this book's readers get
-# exactly the code that passed its end-to-end runs, and the pin only moves by a
-# deliberate edit here. KB_BRANCH pins the library the engine fetches for
-# itself, or the entry file would be pinned while its insides floated.
-ENGINE="https://raw.githubusercontent.com/MichaelZelbel/kit-bootstrap/v2.18/setup-godspeed.sh"
-STARTER="https://github.com/MichaelZelbel/godspeed-mission-control.git"
-KB_BRANCH="v2.18"
+# THIS IS THE DEVELOPMENT INSTALLER: it installs the newest commit of the v2 branch,
+# so two runs a day apart can install different code. Readers use the published one,
+# installers/install-godspeed.sh attached to the release with its checksum, which names
+# one exact commit (README.md, "Linux or Mac").
+set -euo pipefail
+# The shared installer adds Hermes here; keep it visible to the notebook hook.
+export PATH="$HOME/.local/bin:$PATH"
+ENGINE=https://raw.githubusercontent.com/MichaelZelbel/kit-bootstrap/180321af33ca98e7afbc572f993320290eb7466a/setup-godspeed.sh
+STARTER=https://github.com/MichaelZelbel/godspeed-mission-control.git
+KB_BRANCH=180321af33ca98e7afbc572f993320290eb7466a
 export KB_BRANCH
-
-SCRIPT="$(curl -fsSL "$ENGINE")" || SCRIPT=""
-if [ -z "$SCRIPT" ]; then
-  echo "[stop] I could not download the setup program from:" >&2
-  echo "       $ENGINE" >&2
-  echo "       Check this computer can reach the internet, then run the line again." >&2
-  exit 1
-fi
-
-# The word after the script is what bash reports as $0, so give it a real name:
-# it turns up in messages, and "bash" would tell the reader nothing.
-exec bash -c "$SCRIPT" setup-godspeed --starter-repo "$STARTER" "$@"
+root=${GODSPEED_V2_INSTALL_DIR:-$HOME/godspeed-v2}
+args=("$@")
+for ((i=0;i<$#;i++)); do
+  if [ "${args[i]}" = --beside ]; then export GODSPEED_INTEGRATED_BESIDE=1; fi
+  if [ "${args[i]}" = --godspeed ]; then root=${args[i+1]:?Name the Godspeed folder}; fi
+done
+# The branch's newest commit, named exactly and resolved before anything is installed,
+# so the hook and the code it installs are the same version.
+GODSPEED_PRODUCT_REF=${GODSPEED_PRODUCT_REF:-$(git ls-remote https://github.com/MichaelZelbel/godspeed-mission-control.git refs/heads/codex/godspeed-v2-completeness | cut -f1)}
+[[ "$GODSPEED_PRODUCT_REF" =~ ^[0-9a-f]{40}$ ]] || { echo 'The development version could not be found on GitHub.' >&2; exit 1; }
+export GODSPEED_PRODUCT_REF
+echo "Development installer: version 2 at commit $GODSPEED_PRODUCT_REF (readers use the release installer)." >&2
+SCRIPT=$(curl -fsSL "$ENGINE")
+bash -c "$SCRIPT" setup-godspeed --starter-repo "$STARTER" --godspeed "$root" "$@"
+hook=$(curl -fsSL "https://raw.githubusercontent.com/MichaelZelbel/godspeed-mission-control/$GODSPEED_PRODUCT_REF/notebook/scripts/install-native-notebook.sh")
+bash -c "$hook" install-native-notebook "$root"

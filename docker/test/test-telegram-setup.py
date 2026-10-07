@@ -66,7 +66,10 @@ if a[:3] == ["config", "set", "model.default"]:
 if a[:2] == ["auth", "remove"]:
     st["keys"].pop(a[2], None); save(); sys.exit(0)
 if a[:2] == ["auth", "add"] and "api-key" in a:
-    st["keys"][a[2]] = a[a.index("--api-key") + 1]; save(); print("Added %s credential" % a[2]); sys.exit(0)
+    # What hermes_cli/auth_commands.py does: --api-key, or else it asks, and with no
+    # terminal the answer is read from standard input.
+    key = a[a.index("--api-key") + 1] if "--api-key" in a else sys.stdin.readline().strip()
+    st["keys"][a[2]] = key; save(); print("Added %s credential" % a[2]); sys.exit(0)
 if a[:2] == ["chat", "--oneshot"]:
     # The proof question: ChatGPT answers only on the models the plan may use, a key only when good.
     p = st.get("provider")
@@ -134,13 +137,26 @@ subprocess.run(["git", "-C", g, "remote", "add", "origin", origin], check=True)
 print("   ok: done")
 '''
 
+FAKE_FINISH = r'''
+import json, os, sys
+d = os.environ["FAKE_DIR"]
+runs = os.path.join(d, "finish-runs.json")
+seen = json.load(open(runs)) if os.path.exists(runs) else []
+seen.append({"input": json.loads(sys.stdin.read() or "{}"), "token": os.environ.get("GODSPEED_TELEGRAM_TOKEN"),
+             "code": os.environ.get("GODSPEED_TELEGRAM_START_CODE")})
+json.dump(seen, open(runs, "w"))
+if os.environ.get("FAKE_FINISH_FAIL_FIRST") and len(seen) == 1:
+    print("The notebook folder is busy right now", file=sys.stderr); sys.exit(1)
+print("Filed the goal and the clock")
+'''
 
-def scenario_run(name, scenario, extra_env=None, env_file=None, timeout=120):
+
+def scenario_run(name, scenario, extra_env=None, env_file=None, timeout=120, prepare=None):
     tmp = tempfile.mkdtemp(prefix="tg-setup-")
     home, fakes = os.path.join(tmp, "home"), os.path.join(tmp, "fake")
     os.makedirs(home)
     os.makedirs(fakes)
-    for fname, body in (("hermes.py", FAKE_HERMES), ("gh.py", FAKE_GH), ("setup.py", FAKE_SETUP)):
+    for fname, body in (("hermes.py", FAKE_HERMES), ("gh.py", FAKE_GH), ("setup.py", FAKE_SETUP), ("finish.py", FAKE_FINISH)):
         with open(os.path.join(fakes, fname), "w") as f:
             f.write(body)
     if env_file is not None:
@@ -155,9 +171,16 @@ def scenario_run(name, scenario, extra_env=None, env_file=None, timeout=120):
                GODSPEED_TG_HERMES="%s %s" % (py, shlex.quote(fwd(os.path.join(fakes, "hermes.py")))),
                GODSPEED_TG_GH="%s %s" % (py, shlex.quote(fwd(os.path.join(fakes, "gh.py")))),
                GODSPEED_TG_SETUP="%s %s" % (py, shlex.quote(fwd(os.path.join(fakes, "setup.py")))),
+               GODSPEED_TG_FINISH="%s %s" % (py, shlex.quote(fwd(os.path.join(fakes, "finish.py")))),
+               GODSPEED_WORKSPACE=os.path.join(tmp, "workspace"),
                HERMES_HOME=os.path.join(home, ".hermes"), GODSPEED=os.path.join(home, "godspeed"),
                FAKE_DIR=fakes, TZ="Europe/Berlin")
+    os.makedirs(os.path.join(tmp, "workspace"))
+    if prepare:
+        prepare(os.path.join(tmp, "workspace"))
     env.pop("GODSPEED_TELEGRAM_OWNER", None)
+    env.pop("GODSPEED_TELEGRAM_START_CODE", None)
+    env.pop("GODSPEED_TG_FLOW", None)
     env.pop("KB_SIGNIN_SKIP", None)
     env.update(extra_env or {})
     print("== %s" % name)
@@ -183,7 +206,9 @@ def scenario_run(name, scenario, extra_env=None, env_file=None, timeout=120):
          "runs": json.loads(read(fakes, "setup-runs.json") or "[]"),
          "hermes": read(fakes, "hermes-calls"), "gh": read(fakes, "gh-calls"),
          "hermes_sent": read(fakes, "hermes-sent"), "env_extra": env,
-         "hstate": json.loads(read(fakes, "hermes-state.json") or "{}")}
+         "hstate": json.loads(read(fakes, "hermes-state.json") or "{}"),
+         "finish": json.loads(read(fakes, "finish-runs.json") or "[]"),
+         "workspace": os.path.join(tmp, "workspace")}
     if rc != 0:
         print(out[-3000:])
     return r
@@ -377,7 +402,176 @@ def test_key_provider():
     check("every message with a key is deleted from the chat", len(r["fake"].deleted) == 3)
     check("no key is in the log, the output or any message the bot sent",
           all(k not in r["log"] and k not in r["out"] and not any_has(to_anna, k) for k in (good, bad)))
+    check("and no key is on a command line, where the process list shows it",
+          all(k not in r["hermes"] for k in (good, bad)))
     check("the installer's own ChatGPT sign-in is skipped", r["runs"] and r["runs"][-1].get("KB_SIGNIN_SKIP") == "1")
+
+
+CODE = "fictionalStartCode0123456789abcd"
+ONE_CLICK = {"GODSPEED_TG_FLOW": "notebook", "GODSPEED_TELEGRAM_START_CODE": CODE}
+
+
+def test_one_click_names():
+    print("== the name a sent briefing is kept under")
+    m = load("tg_setup_names", PROGRAM)
+    check("a second download's (1) is dropped, the name kept",
+          [m.briefing_name(x) for x in ("what-my-ai-knew (1).md", "what-my-ai-knew.md", "C:\\Users\\a\\notes.TXT",
+                                        "AGENTS.md", "../../etc/passwd.md", "")] ==
+          ["what-my-ai-knew.md", "what-my-ai-knew.md", "notes.txt", "what-my-ai-knew.md", "passwd.md", "what-my-ai-knew.md"])
+
+
+def test_one_click_happy():
+    briefing = "# What my AI knew\n\nAnna is a fictional nurse in London who runs before work.\n"
+    r = scenario_run("the one-click server: the link's code, two sign-ins, city, briefing, goal", {
+        "users": USERS,
+        "start": [{"from": 999, "text": "/start"}, {"from": 999, "text": "/start guessed"},
+                  {"from": 111, "text": "/start " + CODE}],
+        "rules": [
+            {"when": "Hi Anna", "do": [{"from": 999, "text": "/start " + CODE}]},
+            {"when": "Which AI should I think with", "do": [{"from": 111, "press": "openai-codex"}]},
+            {"when": "Which city do you live in", "do": [{"from": 111, "text": "London"}]},
+            {"when": "Now your briefing", "do": [{"from": 111, "document": {"file_name": "what-my-ai-knew (1).md",
+                                                                           "content": briefing}}]},
+            {"when": "Last one: your goal", "do": [{"from": 111, "text": "Run a  half marathon\nin May."}]},
+        ]}, extra_env=dict(ONE_CLICK, GODSPEED_REVISION=REVISION), prepare=backed_up)
+    to_anna, to_eve = r["to"](111), r["to"](999)
+    check("it finishes, exit 0", r["rc"] == 0)
+    check("only the link's code takes the bot", r["state"].get("owner_id") == 111 and r["state"].get("bot_id") == 42)
+    check("before that, a Start without the code is told where the link is",
+          sum("open me with the button on your Godspeed page" in t for t in to_eve) == 1)
+    check("the code works once: after the owner, the same link is refused",
+          to_eve[-1:] == ["This assistant belongs to someone else."])
+    check("the welcome names the three steps of this server",
+          any_has(to_anna, "Hi Anna", "Sign in to GitHub, where your backup will be kept later",
+                  "Your city, your briefing and your goal"))
+    check("the ChatGPT and GitHub codes arrive, and git is set up",
+          any_has(to_anna, "<code>ABCD-12345</code>") and any_has(to_anna, "<code>1A2B-3C4D</code>")
+          and any_has(to_anna, "Nothing is copied there yet") and "auth setup-git" in r["gh"])
+    check("no repository, morning brief or world question, and no installer",
+          not any_has(to_anna, "already have a Mission Control") and not any_has(to_anna, "morning brief")
+          and not any_has(to_anna, "one line about the world") and r["runs"] == [])
+    kept = os.path.join(r["workspace"], "what-my-ai-knew.md")
+    check("the briefing file is kept at the top of the folder, under its own name",
+          os.path.exists(kept) and open(kept, encoding="utf-8").read() == briefing
+          and any_has(to_anna, "I keep it as <code>what-my-ai-knew.md</code>"))
+    zone = "Europe/London"
+    fin = r["finish"]
+    check("the goal and the city go to the notebook once, and the bot's key does not",
+          len(fin) == 1 and fin[0]["input"] == {"timezone": zone, "goal": "Run a half marathon in May."}
+          and fin[0]["token"] is None and fin[0]["code"] is None)
+    check("the bot goes to Hermes, and Hermes' clock is the city's",
+          "TELEGRAM_BOT_TOKEN=%s" % TOKEN in r["env"] and "TELEGRAM_ALLOWED_USERS=111" in r["env"]
+          and "config set timezone %s" % zone in r["hermes"])
+    check("the gateway is left to the container's supervisor", "gateway" not in r["hermes"])
+    check("the first message goes the brief's road (hermes send)", "this is its chat" in r["hermes_sent"])
+    check("setup is marked done", r["state"].get("done") is True)
+    check("neither the key nor the start code is in any log",
+          all(x not in r["log"] and x not in r["out"] for x in (TOKEN, CODE)))
+    # Version 2's PUBLISHED installers, never the build commit (GODSPEED_REVISION) whose own
+    # installers/ folder still held the previous product, and never version 1's latest release.
+    check("another computer is sent to version 2's published installers, not the build commit",
+          any_has(to_anna, "codex/godspeed-v2-completeness/installers/GodspeedSetup.exe",
+                  "codex/godspeed-v2-completeness/installers/install-godspeed.sh",
+                  "--repo https://github.com/anna/notebook.git")
+          and not any_has(to_anna, REVISION) and not any_has(to_anna, "releases/latest"))
+
+
+REVISION = "0123456789abcdef0123456789abcdef01234567"
+
+
+def backed_up(workspace):
+    """The notebook's folder already has its backup on GitHub."""
+    subprocess.run(["git", "init", "-q", workspace], check=True)
+    subprocess.run(["git", "-C", workspace, "remote", "add", "origin", "https://github.com/anna/notebook.git"], check=True)
+
+
+def test_one_click_snags():
+    long_text = "I am a fictional teacher in Leeds. " * 8
+    r = scenario_run("the one-click server: Start without the link, a PDF, a pasted briefing, a long goal, a stop", {
+        "users": USERS,
+        "start": [{"from": 111, "text": "/start"}],
+        "rules": [
+            {"when": "open me with the button", "do": [{"from": 111, "text": "/start " + CODE}]},
+            {"when": "Which AI should I think with", "do": [{"from": 111, "press": "openrouter"}]},
+            {"when": "Send me your OpenRouter API key", "do": [{"from": 111, "text": "sk-or-good-0123456789abcdef"}]},
+            {"when": "Which city do you live in", "do": [{"from": 111, "press": "tz:keep"}]},
+            {"when": "Now your briefing", "do": [{"from": 111, "document": {"file_name": "briefing.pdf", "hex": "25504446"}}]},
+            {"when": "I can keep a text file", "do": [{"from": 111, "text": long_text},
+                                                      {"from": 111, "text": "Second part of the same paste."}]},
+            {"when": "Last one: your goal", "do": [{"from": 111, "text": "x" * 700}]},
+            {"when": "That is a lot for one goal", "do": [{"from": 111, "text": "Teach one evening class."}]},
+            {"when": "I could not file your goal", "do": [{"from": 111, "press": "finish:retry"}]},
+        ]}, extra_env=dict(ONE_CLICK, FAKE_FINISH_FAIL_FIRST="1"))
+    to_anna = r["to"](111)
+    kept = os.path.join(r["workspace"], "what-my-ai-knew.md")
+    check("it finishes, exit 0", r["rc"] == 0)
+    check("Start without the link gets the hint, and the link then works", r["state"].get("owner_id") == 111)
+    check("a file that is not text is said, and nothing is kept from it",
+          any_has(to_anna, "I can keep a text file") and not os.path.exists(os.path.join(r["workspace"], "briefing.pdf")))
+    check("a pasted briefing in two messages is kept whole",
+          os.path.exists(kept) and open(kept, encoding="utf-8").read() ==
+          long_text.strip() + "\nSecond part of the same paste.\n")
+    check("an overlong goal is asked again", any_has(to_anna, "That is a lot for one goal"))
+    fin = r["finish"]
+    check("a stop is said with its reason, and Try again files the answers",
+          any_has(to_anna, "I could not file your goal", "The notebook folder is busy right now")
+          and len(fin) == 2 and fin[1]["input"]["goal"] == "Teach one evening class."
+          and fin[1]["input"]["timezone"] == "Europe/Berlin")
+    check("setup is marked done", r["state"].get("done") is True)
+    r = scenario_run("the one-click server: the briefing comes later", {
+        "users": USERS,
+        "start": [{"from": 111, "text": "/start " + CODE}],
+        "rules": [
+            {"when": "Which AI should I think with", "do": [{"from": 111, "press": "openai-codex"}]},
+            {"when": "Which city do you live in", "do": [{"from": 111, "press": "tz:keep"}]},
+            {"when": "Now your briefing", "do": [{"from": 111, "press": "brief:later"}]},
+            {"when": "Last one: your goal", "do": [{"from": 111, "text": "Sleep eight hours."}]},
+        ]}, extra_env=ONE_CLICK)
+    check("Later skips the briefing and setup still finishes",
+          r["rc"] == 0 and r["state"].get("done") is True and r["state"].get("briefing") == ""
+          and any_has(r["to"](111), "Send it to me whenever you like") and len(r["finish"]) == 1)
+
+
+def links_for(env):
+    """WINDOWS_EXE and ONE_LINER the program computes for a given environment (offline)."""
+    keys = ("GODSPEED_TG_FLOW", "GODSPEED_REVISION", "GODSPEED_INSTALLER_REF")
+    old = {k: os.environ.get(k) for k in keys}
+    try:
+        for k in keys:
+            os.environ.pop(k, None)
+        os.environ.update({k: v for k, v in env.items() if v is not None})
+        m = load("tg_links_%d" % time.time_ns(), PROGRAM)
+        return m.WINDOWS_EXE, m.ONE_LINER
+    finally:
+        for k, v in old.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+
+
+def test_one_click_links():
+    print("== the install links for another computer never point at the build commit")
+    build = REVISION  # the image's GODSPEED_REVISION, the commit it was built from
+    # Default: the published v2 branch, whose installers/ folder always holds the current pair.
+    exe, sh = links_for({"GODSPEED_TG_FLOW": "notebook", "GODSPEED_REVISION": build})
+    check("notebook default points at the v2 branch installers, not the build commit",
+          "codex/godspeed-v2-completeness/installers/GodspeedSetup.exe" in exe
+          and "codex/godspeed-v2-completeness/installers/install-godspeed.sh" in sh
+          and build not in exe and build not in sh and "releases/latest" not in exe)
+    # A deployment may pin a release tag or a known-good commit; the build commit stays unused.
+    exe, sh = links_for({"GODSPEED_TG_FLOW": "notebook", "GODSPEED_REVISION": build, "GODSPEED_INSTALLER_REF": "v2.6.0"})
+    check("a pinned installer ref is honoured, and the build commit is still not used",
+          "/raw/v2.6.0/installers/GodspeedSetup.exe" in exe and "/v2.6.0/installers/install-godspeed.sh" in sh
+          and build not in exe and build not in sh)
+    # A ref that tries to climb out of installers/ is refused and falls back to the branch.
+    exe, sh = links_for({"GODSPEED_TG_FLOW": "notebook", "GODSPEED_INSTALLER_REF": "../../etc/passwd"})
+    check("a ref that tries to climb out is refused and falls back to the branch",
+          "codex/godspeed-v2-completeness/installers/" in exe and ".." not in exe and ".." not in sh)
+    # Version 1 (the plain terminal flow) is unchanged: the release asset and main.
+    exe, sh = links_for({})
+    check("the plain (non-notebook) flow is unchanged: the release asset and main",
+          exe.endswith("releases/latest/download/GodspeedSetup.exe") and sh.endswith("/main/install-godspeed.sh"))
 
 
 def test_nothing_to_do():
@@ -397,6 +591,10 @@ if __name__ == "__main__":
     test_snags()
     test_found_repo()
     test_key_provider()
+    test_one_click_names()
+    test_one_click_happy()
+    test_one_click_snags()
+    test_one_click_links()
     test_nothing_to_do()
     print()
     if FAILS:
