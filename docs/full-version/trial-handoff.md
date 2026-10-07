@@ -7,11 +7,15 @@
 - Open this folder in VS Code or Codex: `C:/godspeed/work/trials/godspeed-v2`.
 - Windows notebook: http://127.0.0.1:49175/dashboard
 - Development VPS notebook: https://srv1069233.hstgr.cloud:48443/dashboard
-- Windows download: https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-06-2/GodspeedSetup.exe
-- Linux download: https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-06-2/install-godspeed.sh
-- Source, manifests and checksums: https://github.com/MichaelZelbel/godspeed-mission-control/releases/tag/godspeed-v2-integrated-2026-10-06-2
+- Windows download: https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-07-1/GodspeedSetup.exe
+- Linux download: https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-07-1/install-godspeed.sh
+- Source, manifests and checksums: https://github.com/MichaelZelbel/godspeed-mission-control/releases/tag/godspeed-v2-integrated-2026-10-07-1
 - One-click Hostinger installation: https://srv1069233.hstgr.cloud/godspeed-install
 - Separate branch: https://github.com/MichaelZelbel/godspeed-mission-control/tree/codex/godspeed-v2-completeness
+
+## 7 October 2026 release
+
+`godspeed-v2-integrated-2026-10-07-1` installs product b327fe0963de2bfb333c8b514836271b523406cf: the review and fix wave of 6 to 7 October (`docs/full-version/review-2026-10-06.md`), plus a prompt scrubber that removes Telegram bot tokens and other common token shapes. The Windows installer is built from kit-bootstrap 39d91427605953d08f5f1486140ee17fa719c19a (branch `codex/godspeed-v2-native-integration`, the first-install fix). The Linux installer names that same product commit. The server and Hostinger image is ghcr.io/michaelzelbel/godspeed-mission-control@sha256:c3706e1c1e69d796a666c3682a4b5bb629749e5ab679d2c63e1683cf5f46344e (`v2-sha-b327fe0`), which passed the Linux install, upgrade and recovery test and the image tests in GitHub run 37556717097.
 
 The previous Windows notebook on port 49171 is retained but is superseded. The new folder contains the complete original starter layout, AGENTS.md and CLAUDE.md, original tools, and skills discoverable by Claude and Codex. Its original operating manual is preserved. The integrated memory connection is named notebook, as required by the original Keep a Note skill. VS Code terminal settings point to the separate assistant installation. The fresh Windows notebook still needs a model account connected in Settings for its own web chat; opening it in Codex uses Codex's account.
 

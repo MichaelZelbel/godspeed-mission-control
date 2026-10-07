@@ -6,11 +6,11 @@ The current edition stays on `main`. These installers set up version 2 separatel
 
 ## Windows
 
-[Download GodspeedSetup.exe](https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-06-2/GodspeedSetup.exe), then run it.
+[Download GodspeedSetup.exe](https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-07-1/GodspeedSetup.exe), then run it.
 
 This uses Godspeed's original setup wizard and shared installer, then connects the integrated notebook. On a PC that already has Godspeed, the wizard selects a separate installation by default. The notebook opens at [http://127.0.0.1:47831/dashboard](http://127.0.0.1:47831/dashboard). Connect your own model account in Settings to use the assistant. The installer is unsigned.
 
-The executable is also [committed on this branch](installers/GodspeedSetup.exe). The [download page](https://github.com/MichaelZelbel/godspeed-mission-control/releases/tag/godspeed-v2-integrated-2026-10-06-2) lists the same file and its checksums.
+The executable is also [committed on this branch](installers/GodspeedSetup.exe). The [download page](https://github.com/MichaelZelbel/godspeed-mission-control/releases/tag/godspeed-v2-integrated-2026-10-07-1) lists the same file and its checksums.
 
 ## Linux or Mac
 
@@ -19,8 +19,8 @@ This uses main's shared native installer for Git, Node.js, Hermes and the origin
 Download this release's installer, check that it is the published file, and run it:
 
 ```bash
-curl -fsSLO https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-06-2/install-godspeed.sh
-echo "c3d4bb54cb438d7aacd962200cb91c63053d4e98e51f1d8d2c1630fea33ca503  install-godspeed.sh" | sha256sum -c - && bash install-godspeed.sh
+curl -fsSLO https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-07-1/install-godspeed.sh
+echo "c7d5928baea09765f79cd997ce7e869fd10c3b63f2357a600142a0c0d9cda318  install-godspeed.sh" | sha256sum -c - && bash install-godspeed.sh
 ```
 
 On a Mac, write `shasum -a 256 -c -` where it says `sha256sum -c -`. The check refuses any other file, and the installer names one exact version of the notebook, so every reader of this release gets the same notebook.

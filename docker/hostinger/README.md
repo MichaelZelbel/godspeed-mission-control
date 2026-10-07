@@ -10,10 +10,11 @@ Hostinger's supported purchase link is:
 
 Current purchase and install link, including Michael's saved Hostinger referral:
 
-[Install Godspeed Mission Control on Hostinger](https://www.hostinger.com/docker-hosting?compose_url=https%3A%2F%2Fraw.githubusercontent.com%2FMichaelZelbel%2Fgodspeed-mission-control%2Fc7d7dabb958d8b3d609915aa725cbc1e83aa9b93%2Fdocker%2Fhostinger%2Fcompose.yaml&REFERRALCODE=GHNMICHAEJC8#pricing)
+[Install Godspeed Mission Control on Hostinger](https://www.hostinger.com/docker-hosting?compose_url=https%3A%2F%2Fraw.githubusercontent.com%2FMichaelZelbel%2Fgodspeed-mission-control%2Ff3dba17c12650d4bfa5b8c9d2adb6cef95afd3c6%2Fdocker%2Fhostinger%2Fcompose.yaml&REFERRALCODE=GHNMICHAEJC8#pricing)
 
 The link names the commit whose `compose.yaml` pins the current image
-(`v2-sha-20cdd7b`, digest `351e8a16…`). Until 6 October 2026 it named `a759dc8`, an
+(`v2-sha-b327fe0`, digest `c3706e1c…`, since 7 October 2026; before that `v2-sha-20cdd7b`,
+digest `351e8a16…`). Until 6 October 2026 it named `a759dc8`, an
 older file with an older image, so the button installed a version this page no longer
 described. Whenever `compose.yaml` pins a new image, point this link at the commit that
 made that change.
