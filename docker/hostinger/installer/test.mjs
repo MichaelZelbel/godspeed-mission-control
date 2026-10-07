@@ -129,6 +129,72 @@ test('installations nobody deploys expire within the hour, so a script cannot ke
     assert.equal((await f.request('/api/start', { body: {}, from: '203.0.113.9' })).status, 201);
     for (const id of waiting) assert.equal(f.service().jobs.has(id), false);
     assert.equal(f.service().jobs.has(deployed.id), true);
-    assert.equal(fs.readdirSync(path.join(f.directory, 'jobs')).length, 2);
+    // Only the job files; the per-address limits ledger (limits.json) also lives here now.
+    assert.equal(fs.readdirSync(path.join(f.directory, 'jobs')).filter(n => /^[a-f0-9]{64}\.json$/.test(n)).length, 2);
+  } finally { await f.close(); }
+});
+
+test('a claimed server flooding the callback reply cannot grow the coordinator memory', async () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'godspeed-installer-bodycap-'));
+  const MB = 1024 * 1024; let calls = 0;
+  // Stands in for an attacker's own srvN.hstgr.cloud sending 8 MB where a one-line
+  // invitation belongs. No outbound network: the stream is generated here.
+  const fetcher = async () => {
+    calls++;
+    let sent = 0; const chunk = new Uint8Array(MB).fill(32);
+    return new Response(new ReadableStream({ pull(c) { if (sent >= 8 * MB) return c.close(); sent += MB; c.enqueue(chunk); } }), { status: 200, headers: { 'content-type': 'application/json' } });
+  };
+  const service = createInstaller({ directory, origin: 'http://127.0.0.1/godspeed-install', testing: true, fetcher });
+  try {
+    await new Promise(r => service.server.listen(0, '127.0.0.1', r));
+    const base = 'http://127.0.0.1:' + service.server.address().port + '/godspeed-install';
+    const h = { Origin: 'http://127.0.0.1', 'content-type': 'application/json' };
+    const ticket = await (await fetch(base + '/api/start', { method: 'POST', headers: h, body: '{}' })).json();
+    const job = service.jobs.get(ticket.id);
+    const bound = await fetch(base + '/api/ready/' + ticket.id, { method: 'POST', headers: { ...h, authorization: 'Bearer ' + job.callback }, body: JSON.stringify({ hostname: 'localhost', setup: 'a'.repeat(64) }) });
+    assert.equal(bound.status, 202);
+    const status = await fetch(base + '/api/status/' + ticket.id, { headers: { authorization: 'Bearer ' + ticket.key } });
+    assert.equal(status.status, 200);
+    // The oversized reply is rejected, so no owner URL is adopted; the next poll just retries.
+    assert.deepEqual(await status.json(), { state: 'starting' });
+    assert.ok(calls >= 1);
+    // The coordinator is still answering after the flood, i.e. it did not run out of memory.
+    assert.equal((await fetch(base + '/health')).status, 200);
+  } finally {
+    await new Promise(r => service.server.close(r));
+    if (!path.resolve(directory).startsWith(path.resolve(os.tmpdir()) + path.sep + 'godspeed-installer-bodycap-')) throw Error('Unsafe fixture cleanup');
+    fs.rmSync(directory, { recursive: true });
+  }
+});
+
+test('per-address limits survive a restart, and fetching your own compose does not clear the cap', async () => {
+  const f = await fixture();
+  try {
+    const made = [];
+    for (let i = 0; i < 5; i++) { const r = await f.request('/api/start', { body: {}, from: '203.0.113.50' }); assert.equal(r.status, 201); made.push(r.data); }
+    // Self-fetching every Compose link used to exempt the jobs from the undeployed cap.
+    for (const t of made) { const p = new URL(new URL(t.checkout).searchParams.get('compose_url')).pathname.replace('/godspeed-install', ''); assert.equal((await f.request(p)).status, 200); }
+    assert.equal((await f.request('/api/start', { body: {}, from: '203.0.113.50' })).status, 429);
+    // The limits are persisted to the volume, not held only in memory.
+    const ledger = JSON.parse(fs.readFileSync(path.join(f.directory, 'jobs', 'limits.json'), 'utf8'));
+    assert.equal(ledger.starts.length, 5); assert.equal(typeof ledger.salt, 'string');
+    // A restart (the old way to reset the counters) still finds the address at its cap.
+    await f.restart();
+    assert.equal((await f.request('/api/start', { body: {}, from: '203.0.113.50' })).status, 429);
+    // A different address is unaffected.
+    assert.equal((await f.request('/api/start', { body: {}, from: '198.51.100.9' })).status, 201);
+  } finally { await f.close(); }
+});
+
+test('many IPv6 addresses from one /64 count as one client', async () => {
+  const f = await fixture();
+  try {
+    let created = 0;
+    for (let i = 1; i <= 8; i++) if ((await f.request('/api/start', { body: {}, from: '2001:db8:1:2::' + i.toString(16) })).status === 201) created++;
+    assert.equal(created, 5);   // the whole /64 is one client: five undeployed, then blocked
+    assert.equal((await f.request('/api/start', { body: {}, from: '2001:db8:1:2:ffff::9' })).status, 429);
+    // A different /64, and an IPv4 address, are their own clients.
+    assert.equal((await f.request('/api/start', { body: {}, from: '2001:db8:9:9::1' })).status, 201);
+    assert.equal((await f.request('/api/start', { body: {}, from: '203.0.113.77' })).status, 201);
   } finally { await f.close(); }
 });

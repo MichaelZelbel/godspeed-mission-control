@@ -33,6 +33,38 @@ export function clientAddress(req) {
   for (let i = hops.length - 1; i >= 0; i--) { if (!hops[i]) break; if (!isProxy(hops[i])) return hops[i]; }
   return peer;
 }
+// For the limits, an IPv6 client is its whole /64 network: a single customer is handed a
+// /64, so one address and its neighbours must count as one (otherwise a script walks a /64
+// for free). IPv4 stands alone. Added 7 October 2026.
+export function clientGroup(ip) {
+  if (!ip || !net.isIPv6(ip)) return ip || 'unknown';
+  try {
+    const [head, tail = ''] = ip.split('::');
+    const h = head ? head.split(':') : [], t = tail ? tail.split(':') : [];
+    const full = [...h, ...Array(Math.max(0, 8 - h.length - t.length)).fill('0'), ...t];
+    return full.slice(0, 4).map(x => (parseInt(x || '0', 16) & 0xffff).toString(16)).join(':') + '::/64';
+  } catch { return ip; }
+}
+// A claimed server's callback reply is read with a hard cap. A 64 MB reply under the
+// service's MemoryMax=96M crashed the Restart=on-failure coordinator, and the job persisted
+// so each restart re-crashed (fixed 7 October 2026). The real reply is a one-line invitation.
+const CALLBACK_REPLY_MAX = 8 * 1024;
+async function readBounded(response, limit = CALLBACK_REPLY_MAX) {
+  const declared = Number(response.headers.get('content-length'));
+  if (Number.isFinite(declared) && declared > limit) throw new Error('Reply too large');
+  if (!response.body) { const text = await response.text(); if (text.length > limit) throw new Error('Reply too large'); return text; }
+  const reader = response.body.getReader(); let size = 0; const parts = [];
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > limit) throw new Error('Reply too large');
+      parts.push(Buffer.from(value.buffer, value.byteOffset, value.byteLength));
+    }
+  } finally { try { await reader.cancel(); } catch { /* already closed */ } }
+  return Buffer.concat(parts).toString('utf8');
+}
 
 export function createInstaller({ directory, origin, fetcher = fetch, now = Date.now, testing = false, hostnameFile, coordinatorProxy, allowedOrigins = [] }) {
   if (!testing && !origin.startsWith('https://')) throw new Error('HTTPS required');
@@ -41,13 +73,28 @@ export function createInstaller({ directory, origin, fetcher = fetch, now = Date
   const approved = new Set([apiOrigin, 'https://godspeedmissioncontrol.com', 'https://godspeedmissioncontrol.lovable.app', ...allowedOrigins]);
   const jobs = new Map(), busy = new Map(); let created = [], starts = [];
   const file = id => path.join(directory, id + '.json');
-  // The client address is kept in memory for the limits only, never on disk.
-  const write = job => { const temp = file(job.id) + '.tmp'; fs.writeFileSync(temp, JSON.stringify(job, (key, value) => key === 'address' ? undefined : value), { mode: 0o600 }); fs.renameSync(temp, file(job.id)); };
+  // The per-address limits must survive a restart: an attacker used to reset them by
+  // crashing the service (Restart=on-failure). They live in the private volume, keyed by a
+  // salted hash of the client's /64 (IPv6) or address (IPv4), never the address itself. A
+  // job's own "address" field is that same salted id, so a reloaded job still counts toward
+  // its address's cap. Added 7 October 2026.
+  const limitsFile = path.join(directory, 'limits.json');
+  let salt = '';
+  try { const saved = JSON.parse(fs.readFileSync(limitsFile, 'utf8')); if (typeof saved.salt === 'string') salt = saved.salt; if (Array.isArray(saved.starts)) starts = saved.starts.filter(s => s && typeof s.address === 'string' && s.at > now() - 86400000); } catch { /* first run or unreadable: start fresh */ }
+  salt ||= randomBytes(16).toString('hex');
+  const addressId = req => digest(salt + '\0' + clientGroup(clientAddress(req)));
+  const saveLimits = () => { const temp = limitsFile + '.tmp'; fs.writeFileSync(temp, JSON.stringify({ salt, starts }), { mode: 0o600 }); fs.renameSync(temp, limitsFile); };
+  const write = job => { const temp = file(job.id) + '.tmp'; fs.writeFileSync(temp, JSON.stringify(job), { mode: 0o600 }); fs.renameSync(temp, file(job.id)); };
+  // "deployed" governs expiry: a Compose file Hostinger fetched is kept its full day.
+  // "bound" governs the undeployed cap: only the authenticated hostname callback counts, so
+  // fetching your own Compose link no longer buys an exemption from the per-address cap.
   const deployed = job => !!(job.fetched || job.hostname || job.state !== 'waiting');
+  const bound = job => !!(job.hostname || job.state === 'starting' || job.state === 'ready');
   const expired = job => job.created + TTL < now() || (!deployed(job) && job.created + UNDEPLOYED_TTL < now());
   for (const name of fs.readdirSync(directory)) if (/^[a-f0-9]{64}\.json$/.test(name)) {
     const job = JSON.parse(fs.readFileSync(path.join(directory, name), 'utf8')); jobs.set(job.id, job);
   }
+  saveLimits();
   function clean() {
     for (const [id, job] of jobs) if (expired(job)) { jobs.delete(id); fs.unlinkSync(file(id)); }
   }
@@ -70,7 +117,10 @@ export function createInstaller({ directory, origin, fetcher = fetch, now = Date
       });
       if (response.status === 409) { job.url = target + '/login'; job.state = 'ready'; write(job); return; }
       if (!response.ok) return;
-      const invitation = await response.json();
+      // Read at most a few KB: a claimed server that floods the reply cannot grow the
+      // coordinator's memory. An oversized reply throws and is caught below, so the next
+      // poll simply retries. (7 October 2026)
+      const invitation = JSON.parse(await readBounded(response));
       if (!/^\/setup#invite=[a-f0-9]{64}$/.test(invitation.path)) return;
       job.url = target + invitation.path; job.state = 'ready'; write(job);
     } catch { /* HTTPS may still be starting. The next poll retries without redeploying. */ }
@@ -100,11 +150,11 @@ export function createInstaller({ directory, origin, fetcher = fetch, now = Date
       }
       if (route === BASE + '/api/start' && req.method === 'POST') {
         if (!requestOrigin || !approved.has(requestOrigin) && !(testing && /^http:\/\/(127\.0\.0\.1|localhost):[0-9]+$/.test(requestOrigin))) return send(res, 403, { error: 'Open the Godspeed installation page to continue.' });
-        await input(req); clean(); const at = now(), address = digest(clientAddress(req));
+        await input(req); clean(); const at = now(), address = addressId(req);
         created = created.filter(t => t > at - 60000); starts = starts.filter(s => s.at > at - 86400000);
-        if ([...jobs.values()].filter(j => j.address === address && !deployed(j)).length >= PER_ADDRESS || starts.filter(s => s.address === address).length >= PER_ADDRESS_DAY) return send(res, 429, { error: 'This connection has started several installations. Finish one of them, or try again later.' });
+        if ([...jobs.values()].filter(j => j.address === address && !bound(j)).length >= PER_ADDRESS || starts.filter(s => s.address === address).length >= PER_ADDRESS_DAY) return send(res, 429, { error: 'This connection has started several installations. Finish one of them, or try again later.' });
         if (jobs.size >= MOST || created.length >= PER_MINUTE) return send(res, 429, { error: 'Installations are busy. Please try again in one minute.' });
-        created.push(at); starts.push({ address, at });
+        created.push(at); starts.push({ address, at }); saveLimits();
         const composeKey = secret(), browserKey = secret(), callback = secret();
         // No setup code here: the server makes its own and sends it with the callback.
         const job = { id: secret(), created: at, state: 'waiting', address, composeHash: digest(composeKey), browserHash: digest(browserKey), callbackHash: digest(callback), callback };
