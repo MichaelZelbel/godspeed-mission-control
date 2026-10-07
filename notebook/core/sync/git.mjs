@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { Store, atomic, decode, hash, identityIds } from '../records/store.mjs';
+import { Store, atomic, decode, encode, hash, identityIds } from '../records/store.mjs';
 import { identityPlan, identities, readBlobs } from './identity.mjs';
 import { shared,durableRoots,durableFiles,devicePrivatePaths,recordsFolder,isRecordPath,deletableTypes } from '../file-policy.mjs';
 import { candidate, isReadable, key as nameKey } from '../records/layout.mjs';
@@ -456,7 +456,22 @@ export class FileSync {
         const mine=this.store.records.get(key),at=inside(merged,merged.fileOf.get(key));paths.set(key,at);
         return mine?._hash!==r._hash||!this.store.fileOf.has(key)||inside(this.store,this.store.fileOf.get(key))!==at;
       }).map(([,r])=>{const value={...r};delete value._hash;return value;});
-      if(batch.length||removed.length)this.store.commit(batch,{removeKeys:removed,paths:new Map(batch.map(r=>[r.type+'/'+r.id,paths.get(r.type+'/'+r.id)]))});
+      // A record's file written since this round read it (Obsidian, an
+      // assistant: programs that take no lock) keeps that write, and the
+      // merged version is kept for review, as for a document below. Until
+      // 7 October 2026 the merged version replaced it and the edit was gone.
+      const outside=new Set();
+      for(const key of [...batch.map(r=>r.type+'/'+r.id),...removed]){
+        const seen=this.store.records.get(key),file=this.store.fileOf.get(key);if(!seen||!file)continue;
+        let now=null,same=false;try{now=fs.readFileSync(file);same=hash(encode(decode(now.toString('utf8'),file)))===seen._hash;}catch{}
+        if(same)continue;
+        outside.add(key);
+        const name=posix(path.relative(this.store.root,file)),id=hash(name).slice(0,24),result=merged.records.get(key);
+        let before=null;try{before=this.gitBytes(['cat-file','blob',localHead+':'+name]);}catch{}
+        atomic(path.join(this.store.root,'conflicts',id+'.json'),JSON.stringify(reviewItem(id,name,{base:before,local:now,remote:result?encode(result):null},remoteCommit,{reason:'Written on this machine while the other machines\' edits were merged'}),null,2));
+      }
+      const taken=batch.filter(r=>!outside.has(r.type+'/'+r.id)),gonePaths=removed.filter(key=>!outside.has(key));
+      if(taken.length||gonePaths.length)this.store.commit(taken,{removeKeys:gonePaths,paths:new Map(taken.map(r=>[r.type+'/'+r.id,paths.get(r.type+'/'+r.id)]))});
       // Everything else is a document: the owner's files, and pages in the
       // notebook folder that are not records. A program that does not take
       // the workspace lock (an assistant writing its journal, an editor) may
