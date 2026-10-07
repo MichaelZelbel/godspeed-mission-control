@@ -429,7 +429,13 @@ export class FileSync {
           const read=stage=>stages.includes(stage)?this.gitBytes(['show',':'+stage+':'+name],dir):null;
           const id=hash(name).slice(0,24),saved=path.join(this.store.root,'conflicts',id+'.json');
           const previous=fs.existsSync(saved)?JSON.parse(fs.readFileSync(saved,'utf8')):null;
-          if(previous?.resolved_at&&previous.remote_commit===remoteCommit){
+          // A decision holds while the other machines' version of this file is
+          // the one reviewed, whatever else they changed meanwhile. Until 7
+          // October 2026 it held only against that exact commit, and the same
+          // conflict came back as soon as another machine saved anything.
+          const theirs=read(3),reviewed=previous&&Object.hasOwn(previous,'remote')?(previous.remote===null?null:Buffer.from(previous.remote,previous.encoding==='base64'?'base64':'utf8')):undefined;
+          const unchanged=reviewed!==undefined&&(theirs===null?reviewed===null:reviewed!==null&&theirs.equals(reviewed));
+          if(previous?.resolved_at&&(previous.remote_commit===remoteCommit||unchanged)){
             const live=path.resolve(this.store.root,name),target=path.resolve(dir,name);
             if(!shared(name)||!live.startsWith(this.store.root+path.sep)||!target.startsWith(dir+path.sep))throw new Error('Invalid conflict path');
             atomic(target,fs.readFileSync(live));this.git(['--literal-pathspecs','add','--',name],dir);continue;
@@ -458,7 +464,8 @@ export class FileSync {
         const kept=[],open=[];
         for(const key of decision?.choice==='remote'?[]:unproven){
           const name=posix(path.relative(this.store.root,this.store.fileOf.get(key))),id=hash(name).slice(0,24),saved=path.join(this.store.root,'conflicts',id+'.json'),previous=readJson(saved);
-          if(decision||previous?.resolved_at&&previous.remote_commit===remoteCommit){kept.push(name);continue;}
+          // Removed there, as when it was reviewed: the decision holds.
+          if(decision||previous?.resolved_at&&(previous.remote_commit===remoteCommit||previous.remote===null)){kept.push(name);continue;}
           let before=null;try{before=this.gitBytes(['cat-file','blob',base+':'+name],dir);}catch{}
           atomic(saved,JSON.stringify(reviewItem(id,name,{base:before,local:fs.readFileSync(this.store.fileOf.get(key)),remote:null},remoteCommit,{reason:'Removed on another machine without a tombstone'}),null,2));open.push(name);
         }
