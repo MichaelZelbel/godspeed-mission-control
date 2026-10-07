@@ -179,6 +179,14 @@ export class FileSync {
       if(own.length||nested.length||large.length)write(policy+'# Kept on this machine\n'+own.map(l=>l+'\n').join('')+nested.map(n=>escape(n+'/')).join('')+large.map(escape).join(''));
     }
   }
+  // Files too large to upload, inside the notebook's own paths. Folder mode
+  // leaves them out of its change set; in plain knowledge mode the committed
+  // .gitignore un-ignores whole durable roots (!work/**), and that negation
+  // outranks .git/info/exclude, so a per-file ignore cannot hold one back. They
+  // are excluded from `git add` by pathspec and from the pending count instead,
+  // so one oversized local export stays here and no longer blocks every push
+  // for good (SY10, 7 October 2026). gitDir mode already keeps them out by ignore.
+  heavyLocalFiles(){return this.gitDir?[]:this.largeFiles();}
   nestedRepositories(){
     const found=[],walk=relative=>{let entries;try{entries=fs.readdirSync(path.join(this.store.root,relative),{withFileTypes:true});}catch{return;}
       for(const entry of entries){if(!entry.isDirectory()||entry.name==='node_modules'||entry.name.startsWith('.'))continue;const child=relative+'/'+entry.name;
@@ -227,7 +235,7 @@ export class FileSync {
     // tracks, so the rename never left this machine. Its old entry goes first.
     const respelled=this.respelled(this.names(['--literal-pathspecs','diff','--name-only','-z','--no-renames','--diff-filter=M','--',recordsFolder]));
     for(let i=0;i<respelled.length;i+=200)this.git(['--literal-pathspecs','rm','--cached','--quiet','--',...respelled.slice(i,i+200).map(([old])=>old)]);
-    this.git(['add','--',...roots]);
+    this.git(['add','--',...roots,...this.heavyLocalFiles().map(n=>':(exclude,literal)'+n)]);
     if(this.names(['diff','--cached','--name-only','-z','--diff-filter=d']).some(n=>!shared(n)&&n!=='.gitignore'))throw new Error('A private path was staged; sync stopped');
     if(this.git(['diff','--cached','--name-only']))this.git(['commit','-m','Save Godspeed Mission Control records'],undefined,{env:this.identity(),timeout:120000});
   }
@@ -310,11 +318,11 @@ export class FileSync {
         });
         if(networkError)throw networkError;
         this.git(['push',this.remote,'HEAD:refs/heads/'+this.branch]);
-        const pending=this.store.withLock(()=>new Set([
+        const pending=this.store.withLock(()=>{const heavy=new Set(this.heavyLocalFiles());return new Set([
           ...this.gitBytes(['diff','--name-only','-z']).toString('utf8').split('\0'),
           ...this.gitBytes(['diff','--cached','--name-only','-z']).toString('utf8').split('\0'),
           ...this.gitBytes(['ls-files','--others','--exclude-standard','-z']).toString('utf8').split('\0')
-        ].filter(name=>name&&(shared(name)||(name==='.gitignore'&&!this.gitDir)))).size);
+        ].filter(name=>name&&!heavy.has(name)&&(shared(name)||(name==='.gitignore'&&!this.gitDir)))).size;});
         this.last={state:pending?'pending':'synced',at:new Date().toISOString(),pending,...(pending?{detail:'New local edits will upload on the next synchronization cycle.'}:{})};
     }catch(error){this.last={state:this.pendingConflicts().length?'conflict':'pending',at:new Date().toISOString(),error:'Sync did not complete; local files remain available',detail:error.message==='Workspace is being written by another process'?'The assistant is saving its state.':String(error.message).split('\n')[0]};}
     atomic(path.join(this.store.state,'sync-status.json'),JSON.stringify(this.last,null,2));return this.last;
