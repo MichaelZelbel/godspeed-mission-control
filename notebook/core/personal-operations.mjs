@@ -260,10 +260,24 @@ export function validateConversationOperations(domains,input,operations){
   'work-retry-draft':/\b(?:retry|try again|wiederhole|erneut)\b[\s\S]*(?:draft|work|entwurf|aufgabe)/i,
   'work-record-observation':/\b(?:record|log|save|notiere|speichere)\b[\s\S]*(?:check|review|observation|result|prüfung|ergebnis)/i
  };
+ // What each operation does, in the words a person uses. A request that says
+ // not to do that ("Don't remind me", "Please don't pause", "Erinnere mich
+ // nicht") never authorises it; "Don't forget to remind me" still asks.
+ // Until 7 October 2026 only a few verbs counted as refused (remember, save,
+ // add...), and "Don't remind me to call Anna" made the reminder.
+ const verbs={'goal-add':'set|add|adopt|create|remember|lege|speichere','goal-change':'change|pause|resume|retire|close|complete|update|ändere|pausiere|beende','goal-outcome':'record|save|log|update|speichere|notiere',
+  'obligation-add':'remind|add|create|set|erinnere','obligation-complete':'complete|close|finish|mark|erledige|schließe','obligation-snooze':'snooze|postpone|move|delay|verschiebe',
+  'coach-open':'start|open|begin|starte|beginne|öffne','coach-reply':'reply|answer|tell|record|antworte|notiere','coach-close':'close|finish|end|beende|schließe',
+  'habit-agree':'agree|try|commit|stimme','habit-observe':'record|log|track|notiere','journal-add':'journal|write|record|log|notiere|schreibe','journal-switch':'enable|disable|turn|start|stop|switch|aktiviere|deaktiviere',
+  'health-add':'record|log|save|track|notiere|speichere','memory-confirm':'remember|save|correct|update|merke|speichere|korrigiere','memory-propose':'remember|save|merke|speichere',
+  'routine-change':'pause|resume|schedule|change|stop|start|move|pausiere|ändere|verschiebe','forecast-settle':'settle|record|resolve|log|notiere',
+  'work-allow-local':'allow|approve|authori[sz]e|erlaube|genehmige','work-retry-draft':'retry|try|redo|wiederhole','work-record-observation':'record|log|save|notiere|speichere'};
+ const refuses=type=>{const v=verbs[type];if(!v)return false;
+  return new RegExp("(?<!\\p{L})(?:do not|don.t|dont|never|must not|should not|niemals)(?!\\s+forget)\\s+(?:[\\p{L}']+\\s+){0,2}?(?:"+v+")",'iu').test(message)||new RegExp("(?<!\\p{L})(?:"+v+")\\p{L}*\\s+(?:(?:mich|mir|das|es|dies|ihn|sie|uns)\\s+)?nicht(?!\\p{L})",'iu').test(message);};
  for(const operation of operations){
   const quote=operation.source_quote;
   // A provider-selected substring cannot turn a refusal or hypothetical into permission.
-  if(!quote||!message.includes(quote)||!intents[operation.type]?.test(quote)||!intents[operation.type]?.test(message)||/\b(?:do not|don.t|never|must not|should not|nicht|niemals)\s+(?:remember|save|add|create|allow|approve|authori[sz]e|edit|change|write|speichere|erlaube)/i.test(message)||/\b(?:if I|suppose|hypothetically|for example|someone said|quoted|wenn ich|beispielsweise)\b/i.test(message))throw Object.assign(Error('A proposed change needs your explicit request.'),{code:'UNAUTHORIZED_OPERATION',operation_type:operation.type,source_quote_matches:typeof quote==='string'&&message.includes(quote)});
+  if(!quote||!message.includes(quote)||!intents[operation.type]?.test(quote)||!intents[operation.type]?.test(message)||refuses(operation.type)||/\b(?:do not|don.t|never|must not|should not|nicht|niemals)\s+(?:remember|save|add|create|allow|approve|authori[sz]e|edit|change|write|speichere|erlaube)/i.test(message)||/\b(?:if I|suppose|hypothetically|for example|someone said|quoted|wenn ich|beispielsweise)\b/i.test(message))throw Object.assign(Error('A proposed change needs your explicit request.'),{code:'UNAUTHORIZED_OPERATION',operation_type:operation.type,source_quote_matches:typeof quote==='string'&&message.includes(quote)});
   if(operation.type==='work-allow-local'){
    const note=domains.store.get('notes',operation.note_id),item=domains.store.get('work_items',operation.id);
    if(!note||!item||![note.id,note.title].filter(Boolean).some(name=>message.includes(name))||![item.id,item.title].filter(Boolean).some(name=>message.includes(name)))throw Error('Approval must identify the exact task and target note');
