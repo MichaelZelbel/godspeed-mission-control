@@ -779,6 +779,49 @@ rm -rf "$W/prompts/machine-runs"
 [ -z "$P63" ] && ok "63 bot tokens and other token shapes are removed, in both drawers, and prose is kept" \
   || bad "63 a token shape survived the scrubber, or prose was eaten" "$P63"
 
+# 64. The product's OWN key formats must be redacted, not stored in cleartext. All reached the
+#     committed archive before 2026-10-07: the prefixed keys (godspeed_<64 hex>, mnr_<48 hex>)
+#     are under STILL_RISKY's 40; a bare 32- or 64-char lowercase-hex blob (session cookie,
+#     login-link code, pairing key) is pure lowercase, which _looks_credential never fired on;
+#     and a "_SECRET"/"_KEY" suffix had no word boundary before it so the assignment pattern
+#     missed GODSPEED_NOTEBOOK_KEY= and WEBHOOK_SECRET=. Glued at run time so this file holds no
+#     key-shaped literal, and a 40-char commit SHA must still survive untouched.
+P64="$("$PY" - "$ARC" <<'PYEOF'
+import importlib.machinery, importlib.util, sys
+l = importlib.machinery.SourceFileLoader("pa", sys.argv[1])
+s = importlib.util.spec_from_loader("pa", l); m = importlib.util.module_from_spec(s); l.exec_module(m)
+hx = lambda n: ("0123456789abcdef" * 8)[:n]
+gkey = "godspeed" + "_" + hx(64)
+mkey = "mnr" + "_" + hx(48)
+sess = hx(64)
+cook = hx(32)
+cases = [  # (what was typed, the part that must not survive) in prompt AND answer
+    ("my notebook key is " + gkey + " please connect it", gkey),
+    ("export GODSPEED_NOTEBOOK_KEY=" + gkey, gkey),
+    ("MENERIO_API_KEY=" + mkey + " comes up empty", mkey),
+    ("use key " + mkey, mkey),
+    ("WEBHOOK_SECRET=" + hx(64), hx(64)),
+    ("the pairing code is " + sess, sess),
+    ("here is the session cookie " + cook + " paste it", cook),
+    ("FOO_SECRET=" + "Sup3r" + "SecretVal99", "Sup3rSecretVal99"),
+]
+for text, secret in cases:
+    out = m.scrub(text, [])[0] or ""
+    if secret in out:
+        print("FAIL prompt kept:", text[:30], "->", out[:70])
+    aout = m.scrub_answer(text, [])
+    if secret in aout:
+        print("FAIL answer kept:", text[:30], "->", aout[:70])
+# An ordinary 40-char git commit SHA is neither 32 nor 64 hex, so it must survive untouched.
+sha = hx(16) + hx(16) + hx(8)
+keep = "the commit " + sha + " broke the build"
+if m.scrub(keep, [])[0] != keep:
+    print("FAIL a 40-char commit SHA was redacted:", str(m.scrub(keep, [])[0])[:70])
+PYEOF
+)"
+[ -z "$P64" ] && ok "64 the product's own key formats are redacted, and a 40-char commit SHA is kept" \
+  || bad "64 an own-format key survived scrubbing, or a commit SHA was eaten" "$P64"
+
 echo
 echo "  $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ] || exit 1

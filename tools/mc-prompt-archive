@@ -193,6 +193,18 @@ SECRET_PATTERNS = [
     (re.compile(r"(?<![A-Za-z0-9])1//0[A-Za-z0-9_\-]{30,}"),         "[token removed]"),
     # A Discord bot token: three dot-separated parts, each too short to be caught alone.
     (re.compile(r"\b[MNO][A-Za-z0-9_\-]{23,27}\.[A-Za-z0-9_\-]{6}\.[A-Za-z0-9_\-]{27,}"), "[token removed]"),
+    # THIS PRODUCT'S OWN key formats. Every one reached the committed archive in cleartext
+    # until 2026-10-07, the one place a key must never land. The prefixed keys are shorter
+    # than STILL_RISKY's 40, and the bare-hex ones are pure lowercase, which _looks_credential
+    # (it wants upper AND lower AND a digit) never fired on. A scrubber that ships in a kit has
+    # to know the kit's own keys first.
+    (re.compile(r"\bgodspeed_[0-9a-f]{64}\b"),                       "[key removed]"),  # notebook API key
+    (re.compile(r"\bmnr_[0-9a-f]{48}\b"),                            "[key removed]"),  # MENERIO_API_KEY / connect key
+    # A bare 32- or 64-char lowercase-hex blob: a web-auth session cookie, an /api/login-link
+    # code, a device-pairing key or code. Bounded by non-hex and pinned to EXACTLY 32 or 64,
+    # so an ordinary 40-char git commit SHA (neither length) is left alone and its prompt kept.
+    (re.compile(r"(?<![0-9a-fA-F])[0-9a-f]{64}(?![0-9a-fA-F])"),     "[key removed]"),
+    (re.compile(r"(?<![0-9a-fA-F])[0-9a-f]{32}(?![0-9a-fA-F])"),     "[key removed]"),
     # A webhook URL is its own credential: whoever holds it can post.
     (re.compile(r"https://hooks\.slack\.com/services/[A-Za-z0-9/]+"), "[webhook removed]"),
     (re.compile(r"https://(?:ptb\.|canary\.)?discord(?:app)?\.com/api/webhooks/[0-9]+/[A-Za-z0-9_\-]+"),
@@ -205,7 +217,12 @@ SECRET_PATTERNS = [
     # value has spaces in it, so a pattern that stops at one is a pattern that leaks.
     (re.compile(r"(?i)\bauthorization\s*:.*"),                       "authorization: [removed]"),
     (re.compile(r"(?i)\b(bearer)\s+\S{8,}"),                         r"\1 [removed]"),
-    (re.compile(r"(?i)\b(api[_-]?key|secret|token|password|passwd|pwd)\s*[:=]\s*\S+"),
+    # NAME=VALUE / NAME: VALUE whose name ENDS in a credential word. The old pattern put a \b
+    # right before the word, but "_" is a word character, so a "_SECRET" / "_KEY" suffix had no
+    # boundary before it and never matched: GODSPEED_NOTEBOOK_KEY=, WEBHOOK_SECRET= and
+    # FOO_SECRET= all leaked their value (2026-10-07). Allow a leading [A-Za-z0-9_]* run and a
+    # bare "key"; keep the name, drop the value.
+    (re.compile(r"(?i)\b([A-Za-z0-9_]*(?:api[_-]?key|secret|token|password|passwd|pwd|key))\s*[:=]\s*\S+"),
      r"\1=[removed]"),
     # A password said in a sentence, in either language: "Dein Passwort ist das folgende:  X",
     # "my password is X". The pattern above wants the colon right after the word, so a
