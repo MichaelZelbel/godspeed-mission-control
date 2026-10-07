@@ -107,7 +107,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   // account is made through a private setup link the installer asks the local door for
   // (/api/login-link), so without a token nothing typed into the web door creates one.
   const web = webPort === undefined || webPort === null ? null : { port: Number(webPort), auth: new WebAuth(store.state, { token, remote: true, now: authNow }) };
-  const menerioImport=new MenerioImport(store,mediaRoot,()=>index.rebuild());
+  const menerioImport=new MenerioImport(store,mediaRoot,()=>index.rebuild(),{beat});
   const telegramConnection=new TelegramConnection();
   const chatRequests=new Map(),recoveryRunner=new RecoveryRunner(store),backupRunner=new BackupRunner(store,mediaRoot);let dictationBusy=false;
   const loginLinks=new Map();
@@ -222,7 +222,8 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         if(!auth.authorized(req)&&!accessKey)return send(res,401,{error:'Authentication required'});
         if(req.method!=='POST'){res.writeHead(405,{'Allow':'POST'});return res.end();}
         const input=JSON.parse(await body(req));if(accessKey&&input.method==='tools/call'&&!accessKey.scopes.includes(toolScope(input.params.name,input.params.arguments||{})))return send(res,403,{error:'This API key does not grant that capability'});
-        const response=await mcp(input,{store,query,index,domains,scopes:accessKey?.scopes,delegated:!!accessKey&&!apiKeys.installationAssistant(accessKey)});if(response===null){res.writeHead(202);return res.end();}return send(res,200,response);
+        const explain=error=>{const shown=userFacing(error,[store.root,store.state,mediaRoot,uiRoot,os.homedir(),os.tmpdir()]);if(!shown||error instanceof SyntaxError)console.error('Godspeed Mission Control: MCP '+String(input.params?.name||input.method)+' failed:',error);return shown||'Something went wrong on the server. The details are in its log.';};
+        const response=await mcp(input,{store,query,index,domains,scopes:accessKey?.scopes,delegated:!!accessKey&&!apiKeys.installationAssistant(accessKey),explain});if(response===null){res.writeHead(202);return res.end();}return send(res,200,response);
       }
       if(route==='/api/pair/keys'&&req.method==='GET')return send(res,200,{data:pairKeys.map(({id,created_at,revoked_at})=>({id,created_at,revoked_at:revoked_at||null}))});
       if(route==='/api/pair/revoke'&&req.method==='POST'){const input=JSON.parse(await body(req)),key=pairKeys.find(k=>k.id===input.id);if(!key)throw new Error('Choose a paired device to disconnect');key.revoked_at||=new Date().toISOString();savePairKeys();return send(res,200,{revoked:true});}
@@ -241,7 +242,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         atomic(path.join(mediaRoot,mapping.file),data);atomic(path.join(mediaRoot,hash(mapping.path)+'.mapping.json'),JSON.stringify(mapping));return send(res,200,{ok:true});
       }
       if (route === '/api/session') return send(res, 200, { user: { id: 'owner' }, profile: query.rows('profiles')[0] || { id: 'owner', display_name: auth.read().owner?.username || 'Owner' }, expires_at:auth.session(req)?.expires || null });
-      if (route === '/api/status') return query.withSnapshot(()=>{const installation=query.rows('settings').find(row=>row.id==='installation');return send(res, 200, { configured:!!installation,goalSetupComplete:query.rows('goals').some(g=>['active','adopted','paused','achieved','completed'].includes(g.status)),goals:query.rows('goals'),work:query.rows('work_items'),decisions:query.rows('decisions'),owner:installation?.owner,device,runtimeConfigured:!!domains.provider,sync:sync.last,mediaSync:mediaSync.last,kinds,problems: store.problems, lastScan: store.lastScan, lastIndex: index.lastRebuild, records: store.records.size, schedules: query.rows('jobs'), conflicts: sync.pendingConflicts().map(name=>{const c=JSON.parse(fs.readFileSync(path.join(store.root,'conflicts',name),'utf8'));return {id:c.id,kind:c.kind,path:c.path||c.type+'/'+c.record_id};}) });});
+      if (route === '/api/status') return query.withSnapshot(()=>{const installation=query.rows('settings').find(row=>row.id==='installation');return send(res, 200, { configured:!!installation,goalSetupComplete:query.rows('goals').some(g=>['active','adopted','paused','achieved','completed'].includes(g.status)),goals:query.rows('goals'),work:query.rows('work_items'),decisions:query.rows('decisions'),owner:installation?.owner,device,runtimeConfigured:!!domains.provider,sync:sync.last,mediaSync:mediaSync.last,kinds,problems: store.problems, lastScan: store.lastScan, lastIndex: index.lastRebuild, records: store.records.size, schedules: query.rows('jobs'), conflicts: sync.pendingConflicts().map(name=>{try{const c=JSON.parse(fs.readFileSync(path.join(store.root,'conflicts',name),'utf8'));return {id:c.id,kind:c.kind,path:c.path||c.type+'/'+c.record_id};}catch{return {id:name.replace(/\.json$/,''),kind:null,path:null,degraded:true};}}) });});
       if(route==='/api/personal')return query.withSnapshot(()=>send(res,200,{goals:query.rows('goals'),work:query.rows('work_items'),deadlines:query.rows('deadlines'),talks:query.rows('coach_talks'),habits:query.rows('habits'),journal:query.rows('journal'),health:query.rows('health_observations'),forecasts:query.rows('forecasts'),watch:query.rows('watch_topics'),jobs:query.rows('jobs')}));
       if(route==='/api/provider'&&req.method==='POST'){
         const input=JSON.parse(await body(req)),config={url:input.url,key:input.key,model:input.model};
@@ -344,7 +345,8 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       if(route==='/api/chat/stop'&&req.method==='POST'){const input=JSON.parse(await body(req));chatRequests.get(input.id)?.abort();return send(res,200,{ok:true});}
       if (route.startsWith('/api/functions/') && req.method === 'POST') {
         const name=route.slice('/api/functions/'.length),input=JSON.parse(await body(req));
-        const isChat=['note-chat','collection-chat','conversation-chat'].includes(name),id=input.request_id;
+        // A chat summary is read-only (Domains.summarizeChat): no message, receipt or retained conversation.
+        const isChat=['note-chat','collection-chat','conversation-chat'].includes(name)&&input.mode!=='summarize',id=isChat?input.request_id:undefined;
         if(isChat&&id&&(!/^[a-f0-9-]{36}$/.test(id)||chatRequests.has(id)))throw new Error('Invalid chat request');
         const receiptId=isChat&&id?'chat-request-'+id:null,requestHash=hash({name,input}),previous=receiptId?store.get('command_receipts',receiptId):null;
         if(previous){if(previous.request_hash!==requestHash)throw Error('Chat retry differs from the retained request');if(previous.state==='verified')return send(res,200,{data:previous.result,error:null});throw Error('This interrupted chat request needs review before replay');}
@@ -370,7 +372,9 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       // browser may keep them; without this it fetched 1.8 MB of script again
       // on every page load. index.html is always checked, so a new build shows.
       const cache = file.startsWith(path.join(uiRoot,'assets')+path.sep) ? 'public, max-age=31536000, immutable' : 'no-cache';
-      return sendFile(res, file, { 'Content-Type': mime, 'Cache-Control': cache, 'X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer' });
+      // Only the notebook itself may frame its pages: another site could show
+      // them in a frame made to look like something else (7 October 2026).
+      return sendFile(res, file, { 'Content-Type': mime, 'Cache-Control': cache, 'X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer','Content-Security-Policy':"frame-ancestors 'self'",'X-Frame-Options':'SAMEORIGIN' });
     } catch (e) {
       // A reply already under way cannot carry an error; it is cut off instead
       // (writing headers twice stopped the server until 6 October 2026).

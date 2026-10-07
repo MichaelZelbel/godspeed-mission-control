@@ -989,7 +989,14 @@ export class Store {
       if (action === 'remove') { const next = this.prepare(type, { removed_at: new Date().toISOString() }, old); this.commit([next]); return next; }
       if (action === 'merge') {
         const target = this.get(type, options.target); if (!target || old.uid === target.uid) throw new Error('Invalid merge target');
-        const changed = [...this.records.values()].filter(r => (r.references || []).some(ref => ref.uid === old.uid || (ref.type === type && ref.id === id)))
+        // A record merged into another answers through that one, and a removed
+        // one takes nothing in. Until 7 October 2026 a person could be merged
+        // twice, or into a tombstone, which hid them and everything moved to
+        // them. An imported person already marked as merged into this target
+        // may still be merged into it, which finishes that merge.
+        if(old.removed_at||old.merged_into&&!identityIds(target).concat(target.uid).includes(old.merged_into))throw new Error('This record was already merged or removed');
+        if(target.removed_at||target.merged_into)throw new Error('The record to merge into was itself merged or removed; merge into the record it went into');
+        let changed = [...this.records.values()].filter(r => (r.references || []).some(ref => ref.uid === old.uid || (ref.type === type && ref.id === id)))
           .map(r => {
             const patch = structuredClone(r);
             for (const ref of r.references) if (ref.field && (ref.uid === old.uid || (ref.type === type && ref.id === id))) {
@@ -999,16 +1006,76 @@ export class Store {
             }
             return this.prepare(r.type, { ...patch, references: r.references.map(ref => ref.uid === old.uid || (ref.type === type && ref.id === id) ? { ...ref, uid: target.uid, id: target.id } : ref) }, r);
           });
+        changed = changed.filter(r => r.uid !== old.uid && r.uid !== target.uid);
+        if (type === 'contacts') changed = this.personMergeChanges(old, target, changed);
         const tombstone = this.prepare(type, { removed_at: new Date().toISOString(), merged_into: target.uid }, old);
         // The merged record answers to the source's ids; a person merged into
         // another also keeps their name and nicknames as nicknames.
         const names = type === 'contacts' ? [old.name, ...(old.aliases || [])].filter(n => typeof n === 'string' && n.trim() && n !== target.name) : (old.aliases || []);
         const merged = this.prepare(type, { aliases: [...new Set([...(target.aliases || []), ...names])], former_ids: [...new Set([...(target.former_ids || []), ...identityIds(old)])], merged_sources: [...(target.merged_sources || []), old.uid] }, target);
         // The removed source retains its own id; aliases resolve by UUID provenance.
-        this.commit([...changed.filter(r => r.uid !== old.uid && r.uid !== target.uid), tombstone, merged]); return merged;
+        this.commit([...changed, tombstone, merged]); return merged;
       }
       throw new Error('Unknown structural operation');
     });
+  }
+  // What else a person merge changes, given the links already moved from the
+  // source to the target. The target keeps one membership per group, one
+  // section per slug, one setting per fact, one link per note or event, and
+  // one current value of a fact that holds one: where the target has one
+  // already, theirs stays and the source's goes, and the source's value
+  // becomes history on the day of the merge (as merge into yourself does). A
+  // private section stays private when the target's section of that name was
+  // not. A relationship between the two is gone. Waiting suggestions about the
+  // source are about the target now, and a duplicate-person suggestion this
+  // merge carried out is done. Until 7 October 2026 every link was kept: two
+  // memberships of one group, two current home cities.
+  personMergeChanges(old, target, changed) {
+    const now = new Date().toISOString(), mine = new Set(identityIds(target)), theirs = new Set(identityIds(old));
+    const holder = { contact_group_memberships: r => r.contact_id, profile_categories: r => r.contact_id, fact_slots: r => r.subject_type === 'contact' ? r.subject_id : null, person_documents: r => r.contact_id, moment_participants: r => r.person_id || r.contact_id };
+    const slot = { contact_group_memberships: r => r.group_id, profile_categories: r => r.slug, fact_slots: r => r.attribute, person_documents: r => r.note_id, moment_participants: r => r.moment_id };
+    const movedUids = new Set(changed.map(r => r.uid)), kept = new Map(), extra = [];
+    const keyOf = r => holder[r.type] && mine.has(holder[r.type](r)) ? r.type + '\0' + slot[r.type](r) : null;
+    for (const r of this.records.values()) if (!r.removed_at && !movedUids.has(r.uid)) { const key = keyOf(r); if (key && !kept.has(key)) kept.set(key, r); }
+    const drop = r => this.prepare(r.type, { removed_at: now }, this.records.get(r.type + '/' + r.id));
+    changed = changed.map(r => {
+      if (r.removed_at) return r;
+      if (r.type === 'contact_relationships' && r.source_type === 'contact' && r.target_type === 'contact' && mine.has(r.source_id) && mine.has(r.target_id)) return drop(r);
+      const key = keyOf(r); if (!key) return r;
+      const first = kept.get(key); if (!first) { kept.set(key, r); return r; }
+      if (r.type === 'profile_categories' && r.visibility_scope === 'private' && first.visibility_scope !== 'private') {
+        if (movedUids.has(first.uid)) first.visibility_scope = 'private';
+        else { const strict = this.prepare(first.type, { visibility_scope: 'private' }, first); extra.push(strict); kept.set(key, strict); }
+      }
+      return drop(r);
+    });
+    // One current value of a fact that holds one, the target's first.
+    let zone = [...this.records.values()].find(r => r.type === 'profiles' && !r.removed_at)?.timezone || 'UTC', today;
+    try { today = new Intl.DateTimeFormat('en-CA', { timeZone: zone }).format(new Date()); } catch { today = new Date().toISOString().slice(0, 10); }
+    const holds = c => (!c.valid_from || c.valid_from <= today) && (!c.valid_to || c.valid_to > today);
+    const single = c => (kept.get('fact_slots\0' + c.attribute)?.cardinality || c.cardinality) !== 'many';
+    const ofTarget = c => c.type === 'claims' && !c.removed_at && c.subject_type === 'contact' && mine.has(c.subject_id);
+    const answered = new Set([...this.records.values()].filter(c => ofTarget(c) && !movedUids.has(c.uid) && holds(c)).map(c => c.attribute));
+    for (const c of changed) if (ofTarget(c) && holds(c) && single(c)) {
+      if (answered.has(c.attribute)) Object.assign(c, { valid_to: today, closure_evidence: { source_type: 'merge', source_id: old.id, quote: null } });
+      else answered.add(c.attribute);
+    }
+    // Waiting suggestions name the target instead of the source.
+    const swap = (value, idish) => Array.isArray(value) ? (idish ? [...new Set(value.map(v => theirs.has(v) ? target.id : v))] : value.map(v => swap(v, false)))
+      : value && typeof value === 'object' ? Object.fromEntries(Object.entries(value).map(([k, v]) => [k, swap(v, /(^|_)ids?$/.test(k))]))
+      : idish && theirs.has(value) ? target.id : value;
+    for (const item of this.records.values()) {
+      if (item.type !== 'review_queue' || item.removed_at || !['pending', 'pending_review', 'auto_applied_unreviewed'].includes(item.status || 'pending_review')) continue;
+      const payload = swap(item.payload || {}, false), entity = ['contact', 'contacts'].includes(item.target_entity_type) && theirs.has(item.target_entity_id) ? target.id : item.target_entity_id;
+      if (JSON.stringify(payload) === JSON.stringify(item.payload || {}) && entity === item.target_entity_id) continue;
+      const patch = { payload, ...(entity !== item.target_entity_id ? { target_entity_id: entity } : {}) };
+      if (item.suggestion_type === 'merge_duplicate_person' && Array.isArray(payload.merge_contact_ids)) {
+        payload.merge_contact_ids = payload.merge_contact_ids.filter(id => id !== payload.keep_contact_id);
+        if (!payload.merge_contact_ids.length) Object.assign(patch, { status: 'kept', reviewed_at: now, applied_at: now, target_entity_type: 'contact', target_entity_id: payload.keep_contact_id });
+      }
+      extra.push(this.prepare('review_queue', patch, item));
+    }
+    return [...changed, ...extra];
   }
   // A backup holds the writer lock only for the moment that makes it one
   // consistent copy. Every durable file is copied first without the lock;

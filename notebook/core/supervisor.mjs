@@ -1,4 +1,4 @@
-import path from 'node:path';import {spawn} from 'node:child_process';import {hash,atomic} from './records/store.mjs';
+import fs from 'node:fs';import path from 'node:path';import {spawn} from 'node:child_process';import {hash,atomic} from './records/store.mjs';
 import {terminateOwnedTree} from './process-tree.mjs';
 import {HealthMonitor,STALL_AFTER} from './supervisor-health.mjs';
 export const RETRY_AFTER_FAILURES=10*60000;
@@ -17,7 +17,26 @@ export class Supervisor{
  // moment) must never end the supervisor and take the notebook down with it.
  // Until 7 October 2026 one failed write did exactly that on Windows.
  status(value){try{atomic(this.state,JSON.stringify({pid:process.pid,child_pid:this.child?.pid,at:new Date().toISOString(),restarts:this.restarts,health_failures:this.monitor.failures,failure_history:this.monitor.history,missing_runs:this.missingRuns,missing_run_check_error:this.missingError,...value}));}catch(error){console.error('Godspeed Mission Control supervisor: could not write its status file (continuing):',error.message);}}
- start(){this.launch();this.timer=setInterval(()=>{void this.check();},this.every);return this;}
+ // One supervisor per workspace. A second one (a login shortcut and a task
+ // both starting it) launched a second notebook, which could not take the
+ // port, and relaunched it for ever, rewriting the first one's status (7
+ // October 2026). It steps aside while the first is alive and its notebook
+ // answers for this workspace, and takes over from one that is gone.
+ start(){
+  const lock=path.join(this.root,'.godspeed','supervisor.lock');let other=null;
+  try{other=JSON.parse(fs.readFileSync(lock,'utf8'));}catch{}
+  const alive=pid=>{try{process.kill(pid,0);return true;}catch(error){return error.code==='EPERM';}};
+  if(Number.isInteger(other?.pid)&&other.pid!==process.pid&&alive(other.pid)){
+   void this.answering().then(up=>{if(!up)return this.begin(lock);console.error('Godspeed Mission Control supervisor: another supervisor (process '+other.pid+') already runs this workspace; this one stops.');this.exit(0);});
+   return this;
+  }
+  this.begin(lock);return this;
+ }
+ begin(lock){
+  try{atomic(lock,JSON.stringify({pid:process.pid,at:new Date().toISOString()}));this.lock=lock;}catch{}
+  this.launch();this.timer=setInterval(()=>{void this.check();},this.every);
+ }
+ async answering(){try{const response=await this.fetchImpl('http://127.0.0.1:'+this.port+'/health',{signal:AbortSignal.timeout(15000)}),health=await response.json();return response.ok&&health.instance===this.instance;}catch{return false;}}
  giveUp(reason){this.status({state:'needs_review',reason});clearInterval(this.timer);this.exit(1);}
  launch(){
   if(this.stopping)return;
@@ -60,6 +79,7 @@ export class Supervisor{
  }
  async stop(){
   this.stopping=true;clearInterval(this.timer);this.shutdown=this.terminate(this.child);
+  try{if(this.lock&&JSON.parse(fs.readFileSync(this.lock,'utf8')).pid===process.pid)fs.rmSync(this.lock,{force:true});}catch{}
   try{await this.shutdown;this.status({state:'stopped'});}catch{this.status({state:'needs_review',reason:'Owned process shutdown failed'});this.exit(1);}
  }
 }

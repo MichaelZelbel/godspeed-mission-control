@@ -88,7 +88,9 @@ export function identities(git, commit, files) {
 // `git` runs a git command and returns its output as a Buffer; it accepts
 // { input } for standard input. `mergeText` as for mergeRecords. `find(type,
 // id)` reads a record of this machine, for a type placed under its parent.
-export function identityPlan({ git, mergeText, find = () => undefined, base, local, remote, remoteCommit = remote }) {
+// `preferRemote`: on a first join the notebook joined keeps its own version of
+// a record both sides have (a fixed-id system record), as it keeps its files.
+export function identityPlan({ git, mergeText, find = () => undefined, base, local, remote, remoteCommit = remote, preferRemote = false }) {
   const changes = (from, to) => {
     const parts = git(['diff', '--name-status', '--no-renames', '-z', from, to, '--', recordsFolder]).toString('utf8').split('\0'), map = new Map();
     for (let i = 0; i + 1 < parts.length && parts[i]; i += 2) if (inNotebook(parts[i + 1])) map.set(parts[i + 1], parts[i][0]);
@@ -220,6 +222,24 @@ export function identityPlan({ git, mergeText, find = () => undefined, base, loc
     const records = list.filter(o => o.uid), documents = list.filter(o => o.document);
     // Two pages that are not records are the line merge's to settle.
     if (!records.length) continue;
+    // Two system records on one file have one type and one fixed id (the
+    // installation's settings, the processing settings), written on two
+    // machines before they met: one record created on both sides. One stays,
+    // this machine's (on a first join the notebook's), and the other is kept
+    // for review under the identity of the one that stayed, so choosing it
+    // replaces that one's values. Until 7 October 2026 the other was moved to
+    // "installation 2.md", which nothing reads, and one machine's settings
+    // were replaced without a word.
+    const recordOf = o => (place.get(o.uid).local || place.get(o.uid).remote)?.record;
+    if (!documents.length && records.length > 1 && records.every(o => { const r = recordOf(o); return r && !isReadable(r); })) {
+      const keep = (preferRemote ? records.find(o => !o.local) : records.find(o => o.local)) || records[0], kept = keep.local ? 'local' : 'remote', kept_ = recordOf(keep);
+      for (const o of records) if (o !== keep) {
+        const other = recordOf(o), side = kept === 'local' ? 'remote' : 'local', as = { text: encode({ ...other, uid: kept_.uid }) };
+        planned.add(o.uid); planned.add(keep.uid); finals.set(o.uid, null);
+        review(keep.file, { base: null, [kept]: place.get(keep.uid)[kept] || { text: encode(kept_) }, [side]: as }, kept);
+      }
+      continue;
+    }
     // A page that is not a record keeps its name; then a record both sides
     // still have there; then the one this machine already has there.
     const winner = documents.length ? null : records.find(o => finals.get(o.uid).deferred) || records.find(o => o.local) || [...records].sort((a, b) => a.uid.localeCompare(b.uid))[0];

@@ -71,16 +71,27 @@ export class SearchIndex {
         if (format) try { this.db.exec('VACUUM'); } catch {}
       }
     };
-    try { open(); } catch (error) { try { this.db?.close(); } catch {} if (fs.existsSync(this.file)) fs.renameSync(this.file, this.file + '.corrupt-' + Date.now()); for (const suffix of ['-wal', '-shm']) if (fs.existsSync(this.file + suffix)) fs.renameSync(this.file + suffix, this.file + '.corrupt-' + Date.now() + suffix); open(); this.recovered = true; this.fresh = true; }
-    this.statements();
-    // What the index holds, row by row: uid -> digest of what was indexed.
-    this.indexed = new Map(this.db.prepare('SELECT uid, digest FROM docs').all().map(row => [row.uid, row.digest]));
-    if (background) {
+    // The index holds nothing the notebook does not, so one that cannot be
+    // opened or read is set aside and built again. Until 7 October 2026 only
+    // a file whose first page did not read was: one damaged further in opened,
+    // then failed at the first read ("database disk image is malformed"), and
+    // the server could not start, on every restart.
+    const start = () => {
+      open(); this.statements();
+      // What the index holds, row by row: uid -> digest of what was indexed.
+      this.indexed = new Map(this.db.prepare('SELECT uid, digest FROM docs').all().map(row => [row.uid, row.digest]));
       // The server answers at once with what the index already holds; records
       // are brought up to date first (no file is read for them), then files.
-      this.syncRecords();
-      this.ready = this.rebuildBackground().catch(() => false);
-    } else this.rebuild();
+      if (background) this.syncRecords();
+    };
+    try { start(); } catch {
+      try { this.db?.close(); } catch {}
+      const at = Date.now();
+      for (const suffix of ['', '-wal', '-shm']) if (fs.existsSync(this.file + suffix)) fs.renameSync(this.file + suffix, this.file + '.corrupt-' + at + suffix);
+      start(); this.recovered = true; this.fresh = true;
+    }
+    if (background) this.ready = this.rebuildBackground().catch(() => false);
+    else this.rebuild();
   }
   statements() {
     this.find = this.db.prepare('SELECT rowid FROM docs WHERE uid=?');

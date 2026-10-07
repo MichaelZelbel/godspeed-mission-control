@@ -1,5 +1,6 @@
 import {visibleRows} from '../core/visibility.mjs';
-import {toolScope} from '../core/api-keys.mjs';
+import {retireShares} from '../core/shares.mjs';
+import {toolScope,scopedQuery} from '../core/api-keys.mjs';
 import {topicDefinitions,topicToolNames,topicTool} from './topic-tools.mjs';
 import {assistantMutationContext,assertAssistantTable} from '../core/assistant-mutations.mjs';
 import {memoryDefinitions,memoryToolNames,memoryTool,searchNotes,relatedTo,readFile} from './memory-tools.mjs';
@@ -44,8 +45,13 @@ const versionsOf=store=>{let seen=readVersions.get(store);if(!seen)readVersions.
 export function rememberRead(store,notes){const seen=versionsOf(store);for(const n of notes||[])if(n?.id&&typeof n._hash==='string'){seen.delete(n.id);seen.set(n.id,n._hash);}while(seen.size>20000)seen.delete(seen.keys().next().value);}
 // delegated: the call comes with a key the owner gave another program, not
 // from the owner or the installation's own assistant (api-keys.mjs).
-export async function mcp(input,{store,query,index,domains,scopes,delegated=false}){
+// `explain` turns an error into what the caller is told (server/main.mjs
+// userFacing): a refusal plainly, an internal failure without its insides.
+// Until 7 October 2026 an assistant was handed the raw text of any error.
+export async function mcp(input,{store,query,index,domains,scopes,delegated=false,explain=error=>error.message}){
   const id=input.id??null,owner=store,seen=notes=>rememberRead(owner,notes);let result;
+  // A key reads through its own view: what its scopes cover (api-keys.mjs).
+  query=scopedQuery(query,scopes);
   try{
     if(input.method==='initialize')result={protocolVersion:'2025-03-26',capabilities:{tools:{}},serverInfo:{name:'godspeed-mission-control',version:'0.1.0-alpha.1'}};
     else if(input.method==='notifications/initialized')return null;
@@ -96,17 +102,19 @@ export async function mcp(input,{store,query,index,domains,scopes,delegated=fals
       else if(name==='search_knowledge'){value=query.withSnapshot(()=>index.search(a.query).filter(r=>listableTypes.has(r.type)&&(!scopes||scopes.includes(toolScope('list_records',{type:r.type})))&&visibleRows(query,r.type).some(v=>v.id===r.id)));}
       // Hidden records leave first, then the limit counts (until 6 October 2026 five hidden notes ahead of three visible ones made a limit of 5 return none).
       else if(name==='list_records'){if(!listableTypes.has(String(a.type)))throw Error('list_records reads the owner\'s own content, not '+a.type+' records. Use the tool made for them.');const allowed=new Set(visibleRows(query,a.type).map(r=>r.id));value=query.execute({table:a.type,filters:a.filters||[]}).data.filter(r=>allowed.has(r.id)).slice(0,Math.max(0,Number(a.limit)||100));if(a.type==='notes')seen(value);}
-      else if(name==='save_record')value=query.execute({table:a.type,operation:a.value.id?'upsert':'insert',values:a.value,expected:a.value.id?{[a.value.id]:a.expected_hash}:{},assistant:true}).data;
+      // A note moved to Trash or removed is public no more, as on the screens'
+      // paths. Until 7 October 2026 an assistant's did stay public.
+      else if(name==='save_record'){value=query.execute({table:a.type,operation:a.value.id?'upsert':'insert',values:a.value,expected:a.value.id?{[a.value.id]:a.expected_hash}:{},assistant:true}).data;if(a.type==='notes'&&(a.value.is_trashed===true||a.value.removed_at))await retireShares(owner,(Array.isArray(value)?value:[value]).map(n=>n?.id));}
       else if(name==='capture_note'){const captured=await domains.invoke('quick-capture',a);value={...captured,id:captured.note.id,title:captured.note.title,folder_path:captured.note.folder_path||'',related:relatedTo({query,index},captured.note)};seen([owner.get('notes',captured.note.id)]);}
       else if(name==='personal_operation')value=await domains.invoke('personal-operation',a);
       else if(name==='write_fact')value=domains.writeFact(a);
       else if(name==='record_event')value=query.execute({table:'moments',operation:'insert',values:a}).data;
-      else if(name==='structural_change')value=a.type==='moments'&&['remove','display-name'].includes(a.action)?query.execute({table:'moments',operation:a.action==='remove'?'delete':'update',values:{title:a.options?.name},filters:[['eq','id',a.id]],expected:{[a.id]:a.expected_hash},assistant:true}).data:store.structural(a.type,a.id,a.action,{...a.options,target:a.options?.target||a.options?.target_id});
+      else if(name==='structural_change'){value=a.type==='moments'&&['remove','display-name'].includes(a.action)?query.execute({table:'moments',operation:a.action==='remove'?'delete':'update',values:{title:a.options?.name},filters:[['eq','id',a.id]],expected:{[a.id]:a.expected_hash},assistant:true}).data:store.structural(a.type,a.id,a.action,{...a.options,target:a.options?.target||a.options?.target_id});if(a.type==='notes'&&a.action==='remove')await retireShares(owner,[value?.id||a.id]);}
       else if(name==='review_suggestions')value=await domains.invoke('review-queue-bulk',a);
       else if(name==='validate_knowledge'){store.scan();value={problems:store.problems};}
       else throw new Error('Unknown tool');
       result={content:[{type:'text',text:typeof value==='string'?value:JSON.stringify(value)}]};
     }else return {jsonrpc:'2.0',id,error:{code:-32601,message:'Unknown method'}};
     return {jsonrpc:'2.0',id,result};
-  }catch(e){return input.method==='tools/call'?{jsonrpc:'2.0',id,result:{content:[{type:'text',text:e.message}],isError:true}}:{jsonrpc:'2.0',id,error:{code:-32602,message:e.message}};}
+  }catch(e){const text=explain(e);return input.method==='tools/call'?{jsonrpc:'2.0',id,result:{content:[{type:'text',text}],isError:true}}:{jsonrpc:'2.0',id,error:{code:-32602,message:text}};}
 }

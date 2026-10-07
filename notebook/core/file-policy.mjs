@@ -21,4 +21,17 @@ export function devicePrivate(name){const value=String(name).split('\\').join('/
 // same question.
 export function durable(name){return !name.split('/').some(p=>p==='..'||p.startsWith('.')||/^(secrets|node_modules)$/i.test(p))&&(durableRoots.some(root=>name.startsWith(root+'/'))||durableFiles.includes(name));}
 export function shared(name){return durable(name)&&!devicePrivate(name);}
+// Bookkeeping a machine may delete outright: the scheduler prunes old run
+// receipts and the earlier versions of jobs (jobs/scheduler.mjs prune), which
+// nothing reads. Their removal travels as a removal, never turned into a
+// tombstone and never asked about on the other machines. Until 7 October 2026
+// sync wrote every pruned receipt back as a tombstone, which the next prune
+// removed again, every round.
+export const deletableTypes=new Set(['job_receipts','record_history']);
+// A path Windows cannot hold: a part with <>:"\|?* or a control character,
+// one ending in a dot or a space, or a device name (CON, PRN, AUX, NUL, COM1
+// to COM9, LPT1 to LPT9, with any extension). The notebook names its own
+// pages so they never are (records/layout.mjs); a file made on a Mac or on
+// Linux can be, and Git on Windows cannot check it out.
+export function windowsInvalid(name){return String(name).split('/').some(part=>/[<>:"\\|?*\u0000-\u001f]/.test(part)||/[. ]$/.test(part)||/^(con|prn|aux|nul|com[1-9¹²³]|lpt[1-9¹²³])(\.|$)/i.test(part));}
 export function isRecordPath(name){return String(name).split('\\').join('/').startsWith(recordsFolder+'/');}

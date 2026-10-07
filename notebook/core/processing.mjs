@@ -34,10 +34,13 @@ export function recordJob(store, query, note, patch) {
 export class NoteProcessing {
   constructor({store, query, domains, device}) { this.store = store; this.query = query; this.domains = domains; this.device = device; this.status = {state: 'idle', last_run: null, last_error: null, processed_today: 0}; }
   owner() { return this.store.get('settings', 'installation')?.owner || null; }
-  // Notes waiting, oldest edit first; ready means past the quiet period.
+  // Notes waiting, oldest edit first; ready means past the quiet period. A
+  // note belongs to the time it was written: until 7 October 2026 the time of
+  // its last edit decided, so starring a note from before processing started
+  // made it a candidate, and it was processed and paid for again.
   candidates(settings = processingSettings(this.store), now = Date.now()) {
     const quiet = now - settings.quiet_minutes * 60000, jobs = new Map(this.query.rows('note_ai_jobs').filter(j => (j.pipeline || PIPELINE) === PIPELINE).map(j => [j.note_id, j]));
-    return visibleRows(this.query, 'notes').filter(n => !n.is_trashed && !n.removed_at && n.ai_visibility !== 'hidden' && String(n.updated_at || '') >= settings.since && String(n.content || '').trim().length + String(n.title || '').trim().length >= settings.min_chars)
+    return visibleRows(this.query, 'notes').filter(n => !n.is_trashed && !n.removed_at && n.ai_visibility !== 'hidden' && String(n.created_at || n.updated_at || '') >= settings.since && String(n.content || '').trim().length + String(n.title || '').trim().length >= settings.min_chars)
       .map(n => ({note: n, job: jobs.get(n.id), fingerprint: contentFingerprint(n)}))
       .filter(({job, fingerprint}) => !job || job.fingerprint !== fingerprint && !(job.state === 'failed' && job.desired_fingerprint === fingerprint && (job.attempts || 0) >= settings.max_attempts))
       .filter(({job}) => !job?.next_eligible_at || Date.parse(job.next_eligible_at) <= now)

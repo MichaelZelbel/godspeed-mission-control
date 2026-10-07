@@ -3,6 +3,7 @@ import path from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {Worker} from 'node:worker_threads';
 import {atomic} from '../core/records/store.mjs';
+import {beatWhile,HEARTBEAT_EVERY} from '../core/supervisor-health.mjs';
 const refuse=(message,status=400)=>Object.assign(new Error(message),{status});
 // A preview is a copy of somebody's account taken at a moment, and importing a
 // stale one would quietly write yesterday's version over today's. It is good for
@@ -10,9 +11,15 @@ const refuse=(message,status=400)=>Object.assign(new Error(message),{status});
 // count and the button can do nothing but refuse.
 const PREVIEW_GOOD_FOR_MS=86400000;
 const previewExpired=job=>job?.state==='ready'&&Date.now()-Date.parse(job.startedAt)>PREVIEW_GOOD_FOR_MS;
+// Longer than any import of a real account; past it a copy that is still
+// running no longer keeps the server's heartbeat moving.
+const IMPORT_LIMIT_MS=3*3600000;
 export class MenerioImport {
-  constructor(store,mediaRoot,onComplete=()=>{}){
-    this.store=store;this.mediaRoot=mediaRoot;this.onComplete=onComplete;
+  // `beat` moves the server's heartbeat. While an import runs the scheduler
+  // waits, so nothing else moves it, and until 7 October 2026 the supervisor
+  // took a large import's twelfth minute for a stall and restarted the server.
+  constructor(store,mediaRoot,onComplete=()=>{},{beat=null,beatEvery=HEARTBEAT_EVERY,Worker:WorkerClass=Worker}={}){
+    this.store=store;this.mediaRoot=mediaRoot;this.onComplete=onComplete;this.beat=beat;this.beatEvery=beatEvery;this.WorkerClass=WorkerClass;
     this.root=path.join(store.state,'menerio-import');fs.mkdirSync(this.root,{recursive:true,mode:0o700});
     this.file=path.join(this.root,'job.json');this.worker=null;
     if(fs.existsSync(this.file)){const job=this.read();if(['preparing','importing'].includes(job.state))this.save({...job,state:'failed',error:'The server restarted during the copy. Preview again to continue safely.'});}
@@ -46,7 +53,8 @@ export class MenerioImport {
       job={...job,state:'importing',progress:'Saving a backup before importing.'};mode='apply';
     }else throw refuse('Choose preview or import.');
     this.save(job);
-    this.worker=new Worker(new URL('./menerio-import-worker.mjs',import.meta.url),{workerData:{mode,root:this.store.root,device:this.store.device,mediaRoot:this.mediaRoot,jobRoot:path.join(this.root,job.id),prepared,credentials}});
+    this.worker=new this.WorkerClass(new URL('./menerio-import-worker.mjs',import.meta.url),{workerData:{mode,root:this.store.root,device:this.store.device,mediaRoot:this.mediaRoot,jobRoot:path.join(this.root,job.id),prepared,credentials}});
+    if(this.beat)void beatWhile(new Promise(resolve=>this.worker.once('exit',resolve)),this.beat,{limitMs:IMPORT_LIMIT_MS,every:this.beatEvery});
     this.worker.on('message',message=>{
       const current=this.read();if(current.id!==job.id)return;
       if(message.progress)this.save({...current,progress:message.progress});
