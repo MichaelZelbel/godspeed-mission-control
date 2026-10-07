@@ -1,6 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {hash} from '../records/store.mjs';
+import {QueryService} from '../query.mjs';
+import {visibleRows} from '../visibility.mjs';
 
 // Search by meaning, as an optional plug. Any service that answers the
 // OpenAI-style POST <address>/embeddings works: OpenRouter, OpenAI, a local
@@ -139,10 +141,22 @@ export class MeaningIndex {
     this.queryCache = new Map(); this.empty = new Set();
   }
   get ready() { return !!this.embed; }
+  // The records whose text may go to the embeddings service: what may reach
+  // a model (visibleRows), worked out again only when the notebook changed.
+  // Until 7 October 2026 every record the word index holds was sent, notes
+  // hidden from assistants, sensitive ones and private facts included. Word
+  // search, which stays on this machine, still holds them all.
+  shared() {
+    const store = this.index.store; store.scan();
+    if (this.sharedFor === store.records) return this.sharedUids;
+    const query = new QueryService(store), uids = query.withSnapshot(() => new Set([...MEANING_TYPES].flatMap(type => visibleRows(query, type).map(r => r.uid))));
+    this.sharedFor = store.records; this.sharedUids = uids; return uids;
+  }
   // Documents the index holds that meaning search covers, and their text.
   documents() {
     // Mission Control's own files too, never the verbatim prompt archive or the assistant's state.
-    return this.index.db.prepare(`SELECT d.uid, d.type, d.digest, f.title, f.body FROM docs d JOIN docs_fts f ON f.rowid=d.rowid WHERE d.type IN (${[...MEANING_TYPES].map(() => '?').join(',')}) OR (d.type='workspace_file' AND d.id NOT LIKE 'prompts/%' AND d.id NOT LIKE 'assistant-state/%')`).all(...MEANING_TYPES);
+    const shared = this.shared();
+    return this.index.db.prepare(`SELECT d.uid, d.type, d.digest, f.title, f.body FROM docs d JOIN docs_fts f ON f.rowid=d.rowid WHERE d.type IN (${[...MEANING_TYPES].map(() => '?').join(',')}) OR (d.type='workspace_file' AND d.id NOT LIKE 'prompts/%' AND d.id NOT LIKE 'assistant-state/%')`).all(...MEANING_TYPES).filter(d => d.type === 'workspace_file' || shared.has(d.uid));
   }
   pending() {
     const have = this.vectors.digests(this.space), docs = this.documents();
