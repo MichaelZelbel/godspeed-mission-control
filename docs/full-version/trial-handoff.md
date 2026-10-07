@@ -13,6 +13,10 @@
 - One-click Hostinger installation: https://srv1069233.hstgr.cloud/godspeed-install
 - Separate branch: https://github.com/MichaelZelbel/godspeed-mission-control/tree/codex/godspeed-v2-completeness
 
+## 7 October 2026, evening release: version 2 is main
+
+`godspeed-v2-integrated-2026-10-07-2` installs product 3ab5037e1754e9e11d3ff69933b49edbc92532ad, the commit that made version 2 `main` (Michael, 7 October: "we do not need the v1 version of godspeed anymore"). It adds both review waves of 6 and 7 October (`docs/full-version/review-2026-10-06.md`), the Linux installer's HTTPS address on a server, and a notebook that no longer re-reads every note every 20 seconds to learn what changed. It is the repository's latest release, so the releases page and `releases/latest` give version 2. The Windows installer is built from kit-bootstrap e62f38b, whose update stops the notebook by checking what still runs (an update on Michael's laptop was cancelled that evening with the notebook already stopped). `install-godspeed.sh` at the top of the repository is now the release's installer, which `godspeedmissioncontrol.com/install` hands on; the development installer is `install-godspeed-dev.sh`. Version 1's nightly Windows build is retired (`retired/windows-installer-v1.yml`). The Hostinger image is still `v2-sha-b327fe0` from the morning release.
+
 ## 7 October 2026 release
 
 `godspeed-v2-integrated-2026-10-07-1` installs product b327fe0963de2bfb333c8b514836271b523406cf: the review and fix wave of 6 to 7 October (`docs/full-version/review-2026-10-06.md`), plus a prompt scrubber that removes Telegram bot tokens and other common token shapes. The Windows installer is built from kit-bootstrap 39d91427605953d08f5f1486140ee17fa719c19a (branch `codex/godspeed-v2-native-integration`, the first-install fix). The Linux installer names that same product commit. The server and Hostinger image is ghcr.io/michaelzelbel/godspeed-mission-control@sha256:c3706e1c1e69d796a666c3682a4b5bb629749e5ab679d2c63e1683cf5f46344e (`v2-sha-b327fe0`), which passed the Linux install, upgrade and recovery test and the image tests in GitHub run 37556717097.

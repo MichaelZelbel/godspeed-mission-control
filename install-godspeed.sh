@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Main's shared installer, followed by the integrated notebook connection.
 set -euo pipefail
-export GODSPEED_PRODUCT_REF=b327fe0963de2bfb333c8b514836271b523406cf
+export GODSPEED_PRODUCT_REF=3ab5037e1754e9e11d3ff69933b49edbc92532ad
 # The shared installer adds Hermes here; keep it visible to the notebook hook.
 export PATH="$HOME/.local/bin:$PATH"
 ENGINE=https://raw.githubusercontent.com/MichaelZelbel/kit-bootstrap/180321af33ca98e7afbc572f993320290eb7466a/setup-godspeed.sh
@@ -16,5 +16,5 @@ for ((i=0;i<$#;i++)); do
 done
 SCRIPT=$(curl -fsSL "$ENGINE")
 bash -c "$SCRIPT" setup-godspeed --starter-repo "$STARTER" --godspeed "$root" "$@"
-hook=$(curl -fsSL https://raw.githubusercontent.com/MichaelZelbel/godspeed-mission-control/b327fe0963de2bfb333c8b514836271b523406cf/notebook/scripts/install-native-notebook.sh)
+hook=$(curl -fsSL https://raw.githubusercontent.com/MichaelZelbel/godspeed-mission-control/3ab5037e1754e9e11d3ff69933b49edbc92532ad/notebook/scripts/install-native-notebook.sh)
 bash -c "$hook" install-native-notebook "$root"
