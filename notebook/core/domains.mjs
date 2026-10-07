@@ -1,6 +1,6 @@
 import {momentDraft} from './moment-draft.mjs';
 import {NOTE_TYPES,processNote} from './proposals.mjs';
-import {NoteProcessing} from './processing.mjs';
+import {NoteProcessing,PIPELINE,contentFingerprint} from './processing.mjs';
 export {momentDraft,NOTE_TYPES};
 import {groupContext} from './group-context.mjs';
 import {noteConnections,linkSuggestions} from './related.mjs';
@@ -165,9 +165,30 @@ export class Domains {
         let processed=0;const errors=[];for(const source of pending)try{await this.invoke('analyze-media',{...source,note_id:source.note_id,storage_path:source.storage_path,media_type:source.file_type==='application/pdf'?'pdf':'image',original_filename:source.filename});processed++;}catch(e){errors.push({id:source.id,error:e.message});}
         return {processed,total:pending.length,failed:errors.length,errors,message:'Analyzed '+processed+' media items.'};
       }
-      const sources=name==='backfill-moment-profile-extraction'?this.query.rows('moments'):this.query.rows('notes');const results=[];
-      for(const source of sources)results.push(await this.invoke(name==='backfill-moment-profile-extraction'?'extract-moment-profile':'process-note',name==='backfill-moment-profile-extraction'?{moment_id:source.id}:{note_id:source.id}));
-      return {processed:results.length,total:sources.length,results,message:'Processed '+results.length+' source records.'};
+      // Classify (backfill-metadata), a person's Enrich and the import's
+      // profile step: the visible, untrashed notes or events (of one person,
+      // given contact_id) not done yet, newest first, at most `limit`, going
+      // on past one that fails; three failures in a row end the run. Until
+      // 7 October 2026 they took every note, trashed and hidden ones too,
+      // ignored the person and the limit, paid for done notes again, and the
+      // first hidden note stopped the run.
+      if(!this.provider)throw new Error('Choose and configure a model provider before analysis');
+      const limit=Math.max(1,Math.min(500,Number(input.limit)||200)),person=input.contact_id||null,newest=(a,b)=>String(b.updated_at||b.created_at||'').localeCompare(String(a.updated_at||a.created_at||''));
+      let sources,run;
+      if(name==='backfill-moment-profile-extraction'){
+        const theirs=person&&new Set(this.query.rows('moment_participants').filter(p=>(p.person_id||p.contact_id)===person).map(p=>p.moment_id));
+        sources=visibleRows(this.query,'moments').filter(m=>!person||theirs.has(m.id));run=m=>this.invoke('extract-moment-profile',{moment_id:m.id});
+      }else{
+        const documents=person&&new Set(this.query.rows('person_documents').filter(d=>d.contact_id===person).map(d=>d.note_id)),jobs=new Map(this.query.rows('note_ai_jobs').filter(j=>(j.pipeline||PIPELINE)===PIPELINE).map(j=>[j.note_id,j]));
+        const about=n=>!person||n.contact_id===person||documents.has(n.id)||(Array.isArray(n.metadata?.matched_people)&&n.metadata.matched_people.some(p=>p?.contact_id===person));
+        // Done: classified, for Classify; else processed for this very text (or imported as processed).
+        const done=n=>{if(name==='backfill-metadata')return !!n.metadata?.type;const job=jobs.get(n.id);return job?job.state==='completed'&&job.fingerprint===contentFingerprint(n):n.processing_status==='processed';};
+        sources=visibleRows(this.query,'notes').filter(n=>!n.is_trashed&&about(n)&&!done(n));run=n=>this.invoke('process-note',{note_id:n.id});
+      }
+      const results=[],errors=[];let inRow=0;
+      for(const source of sources.sort(newest).slice(0,limit)){try{results.push(await run(source));inRow=0;}catch(error){errors.push({id:source.id,error:error.message});if(++inRow>=3)break;}}
+      const remaining=sources.length-results.length-errors.length,kind=name==='backfill-moment-profile-extraction'?'events':'notes';
+      return {processed:results.length,total:sources.length,remaining,failed:errors.length,errors,results,message:'Processed '+results.length+' of '+sources.length+' '+kind+' waiting.'+(errors.length?' '+errors.length+' could not be processed.':'')+(remaining>0?' '+remaining+' are left for another run.':'')};
     }
     if(['ensure-token-allowance','moderate-content'].includes(name))return {allowed:true,approved:true,uses_own_provider:true,local_owner_policy:true};
     if(['generate-group-briefing','suggest-group-members','suggest-group-next-step'].includes(name)){
