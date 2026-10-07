@@ -2,7 +2,17 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { atomic,hash,safe } from '../records/store.mjs';
 export class MediaSync {
-  constructor(store,mediaRoot){this.store=store;this.root=mediaRoot;this.configPath=path.join(store.state,'pair.json');this.last=null;}
+  constructor(store,mediaRoot){this.store=store;this.root=mediaRoot;this.configPath=path.join(store.state,'pair.json');this.last=null;this.hashes=new Map();}
+  // The sha256 of a downloaded media file, cached by its size and mtime so an
+  // unchanged file is not re-read and re-hashed on every idle reconcile round.
+  // Re-hashing 200 MB of already-downloaded media stalled the server event loop
+  // for over a second every minute (SY12, 2026-10-07). A changed size or mtime
+  // recomputes it, so a real local change is still caught.
+  fileHash(file){
+    const stat=fs.statSync(file),cached=this.hashes.get(file);
+    if(cached&&cached.size===stat.size&&cached.mtimeMs===stat.mtimeMs)return cached.sha;
+    const sha=hash(fs.readFileSync(file));this.hashes.set(file,{size:stat.size,mtimeMs:stat.mtimeMs,sha});return sha;
+  }
   config(){return fs.existsSync(this.configPath)?JSON.parse(fs.readFileSync(this.configPath,'utf8')):null;}
   manifest(){return fs.readdirSync(this.root).filter(n=>n.endsWith('.mapping.json')).map(n=>JSON.parse(fs.readFileSync(path.join(this.root,n),'utf8')));}
   async pair(origin,code){
@@ -36,7 +46,7 @@ export class MediaSync {
           continue;
         }
         if(config.offline==='selected'&&!config.selected?.includes(mapping.path))continue;
-        if(fs.existsSync(path.join(this.root,safe(mapping.file)))){if(hash(fs.readFileSync(path.join(this.root,mapping.file)))!==mapping.sha256)throw new Error('Local media integrity mismatch');}
+        if(fs.existsSync(path.join(this.root,safe(mapping.file)))){if(this.fileHash(path.join(this.root,mapping.file))!==mapping.sha256)throw new Error('Local media integrity mismatch');}
         else {const bytes=Buffer.from(await(await this.request('/api/media/blob/'+encodeURIComponent(mapping.file))).arrayBuffer());if(hash(bytes)!==mapping.sha256)throw new Error('Downloaded media integrity mismatch');atomic(path.join(this.root,safe(mapping.file)),bytes);downloaded++;}
         const prior=local.find(m=>m.path===mapping.path);
         if(prior?.removed_at&&prior.sha256===mapping.sha256){await this.request('/api/media/tombstone',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(prior)});continue;}
