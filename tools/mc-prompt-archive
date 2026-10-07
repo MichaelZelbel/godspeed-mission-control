@@ -280,6 +280,25 @@ def scrub(text, terms):
     return t, None
 
 
+def scrub_project(value, terms):
+    """Clean the archived `project` field. For Claude Code and OpenCode it is the
+    working-directory basename, so a path like "C--work-AcmeCorp-migration" carried an
+    employer or client name straight into the one file built to keep such names out (the
+    no-confidential-names rule). Until 2026-10-07 it was stored with no scrub at all. Run
+    the same redaction as scrub(), but never drop the whole row over an odd-looking folder
+    name: blank that one field instead, because the prompt is still worth keeping."""
+    if not value:
+        return value
+    t = value
+    for rx, rep in SECRET_PATTERNS:
+        t = rx.sub(rep, t)
+    for term in terms:
+        t = re.sub(re.escape(term), "[name removed]", t, flags=re.I)
+    if _looks_credential(t):
+        return "[project removed]"
+    return t
+
+
 # --------------------------------------------------------------- the answers
 
 # What the AI showed back, kept beside what the person typed. "all" keeps every piece
@@ -905,7 +924,7 @@ def _harvest_locked(godspeed, dry, since, machine):
             continue
         seen.add(rid)
         row = {"id": rid, "at": rec["at"][:19], "machine": machine, "tool": rec["tool"],
-               "project": rec["project"], "text": clean}
+               "project": scrub_project(rec["project"], terms), "text": clean}
         if rec.get("channel"):
             row["channel"] = rec["channel"]  # which door: desktop, cli or telegram
         if ans:
@@ -1076,6 +1095,15 @@ def cmd_rescrub(godspeed, dry):
                 r["text"] = clean
                 changed += 1
                 file_changed = True
+            # The project field is the working-directory basename and can carry a client or
+            # employer name too, so the day a name is added to the list it must be cleaned out
+            # of what is already stored, not only out of the text beside it.
+            if r.get("project"):
+                cp = scrub_project(r["project"], terms)
+                if cp != r["project"]:
+                    r["project"] = cp
+                    changed += 1
+                    file_changed = True
             # The answer is rescrubbed with the answer rule (lose the line, keep the
             # reply), or the redact list would clean the prompts and leave the same
             # name sitting in every answer beside them.
@@ -1141,9 +1169,14 @@ def cmd_sources(godspeed, machine):
     print("what this machine (%s) can see, and whether the archive has it:" % machine)
     if off:
         print("  (switched off by your choice, so not read at all: %s)" % ", ".join(off))
+    # The grouping key above stays raw so the counts are exact, but the name is PRINTED, so a
+    # bot profile that carries a client name is redacted on the way out, the same pass the
+    # stored project field gets. The counts here never reach the repository; this is only tidy.
+    terms = redact_terms()
     leaks = []
     for key in sorted(total, key=lambda k: -total[k]):
-        name = key[0] + ("/" + key[1] if key[1] else "")
+        shown = scrub_project(key[1], terms) if key[1] else ""
+        name = key[0] + ("/" + shown if shown else "")
         n, h = total[key], have.get(key, 0)
         print("  %-28s %6d typed   %6d archived   newest %s"
               % (name, n, h, newest.get(key) or "undated"))

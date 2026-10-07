@@ -822,6 +822,39 @@ PYEOF
 [ -z "$P64" ] && ok "64 the product's own key formats are redacted, and a 40-char commit SHA is kept" \
   || bad "64 an own-format key survived scrubbing, or a commit SHA was eaten" "$P64"
 
+# 65. The archive `project` field is the working-directory basename for Claude Code and
+#     OpenCode, so a path like C--work-AcmeCorp-migration carried a client name straight into
+#     the one file whose job is to keep such names out (the no-confidential-names rule). Until
+#     2026-10-07 it was stored with no scrub and no redact pass at all. The prompt body here is
+#     clean, so only the folder name can leak: it must be redacted before the row is written.
+rm -f "$W/prompts/archive/"*.jsonl
+mkdir -p "$W/home65/.claude/projects/C--work-AcmeCorp-migration"
+printf '%s\n' '{"type":"user","entrypoint":"cli","timestamp":"2026-10-05T09:00:00Z","message":{"content":"plan the data migration for next week"}}' \
+  > "$W/home65/.claude/projects/C--work-AcmeCorp-migration/m.jsonl"
+( export HOME="$W/home65" GODSPEED_HOME="$W/home65" USERPROFILE="$W/home65" \
+         GODSPEED_PROMPT_SOURCES="claude" GODSPEED_REDACT_TERMS="AcmeCorp"
+  cd "$W" && "$PY" "$ARC" --godspeed "$W" archive ) >"$W/p65.out" 2>&1
+A65="$(cat "$W/prompts/archive/"*.jsonl 2>/dev/null)"
+if echo "$A65" | grep -q "AcmeCorp"; then
+  bad "65 a client name in the project field reached the repository" "$A65"
+elif echo "$A65" | grep -qF '"project": "C--work-[name removed]-migration"'; then
+  ok "65 the project field is scrubbed through the redact list before it is stored"
+else
+  bad "65 the project field was not cleaned as expected" "$A65"
+fi
+
+# 66. Rescrub cleans the project field of rows ALREADY stored, for the day a name is added to
+#     the list too late, the same promise it keeps for the text and the answer beside it.
+printf '%s\n' '{"id":"cafef00dcafef00d","at":"2026-10-05T09:00:00","machine":"test","tool":"claude-code","project":"C--work-AcmeCorp-migration","text":"an already-stored prompt with a clean body"}' \
+  >> "$W/prompts/archive/test-2026-10.jsonl"
+( export HOME="$W/home66" GODSPEED_HOME="$W/home66" USERPROFILE="$W/home66" GODSPEED_REDACT_TERMS="AcmeCorp"
+  cd "$W" && "$PY" "$ARC" --godspeed "$W" rescrub ) >"$W/p66.out" 2>&1
+A66="$(cat "$W/prompts/archive/"*.jsonl 2>/dev/null)"
+echo "$A66" | grep -q "AcmeCorp" \
+  && bad "66 rescrub left a client name in a stored project field" "$A66" \
+  || ok "66 rescrub cleans the project field of already-stored rows"
+rm -f "$W/prompts/archive/"*.jsonl
+
 echo
 echo "  $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ] || exit 1
