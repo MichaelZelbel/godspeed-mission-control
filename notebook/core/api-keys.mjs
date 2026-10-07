@@ -3,10 +3,19 @@ import path from 'node:path';
 import {randomBytes,randomUUID} from 'node:crypto';
 import {atomic,hash} from './records/store.mjs';
 export class ApiKeys {
-  constructor(store){this.file=path.join(store.state,'api-keys.json');}
+  constructor(store){this.state=store.state;this.file=path.join(store.state,'api-keys.json');}
   rows(){return fs.existsSync(this.file)?JSON.parse(fs.readFileSync(this.file,'utf8')):[];}
   write(rows){atomic(this.file,JSON.stringify(rows));fs.chmodSync(this.file,0o600);}
   authenticate(token){return this.rows().find(k=>k.is_active&&(!k.expires_at||Date.parse(k.expires_at)>Date.now())&&k.hash===hash(token));}
+  // On a server the installation's own assistant reaches /mcp with a key of its
+  // own (wire-assistant.mjs keeps it in assistant-mcp.json). Every other key is
+  // one the owner gave another program: delegated, it acts within its scopes
+  // and never as the owner (personal-operations.mjs).
+  installationAssistant(row){
+    if(!row)return false;
+    let key=null;try{key=JSON.parse(fs.readFileSync(path.join(this.state,'assistant-mcp.json'),'utf8')).key;}catch{}
+    return typeof key==='string'&&key.length>0&&row.hash===hash(key);
+  }
   invoke(name,input){
     if(name==='mc-api-keys')return {keys:this.rows().map(({hash,...k})=>k)};
     if(name==='mc-api-keys/generate'){const scopes=input.scopes||[];if(!input.name?.trim()||!scopes.length||scopes.some(s=>!['profile','notes','contacts','actions','media','stats','world','collections'].includes(s)))throw new Error('Choose a key name and supported scopes');const token='godspeed_'+randomBytes(32).toString('hex'),row={id:randomUUID(),name:input.name,scopes,hash:hash(token),key_prefix:token.slice(0,17),created_at:new Date().toISOString(),expires_at:input.expires_at||null,is_active:true};this.write([...this.rows(),row]);return {api_key:token,id:row.id};}

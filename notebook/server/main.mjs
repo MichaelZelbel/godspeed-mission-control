@@ -213,7 +213,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         if(!auth.authorized(req)&&!accessKey)return send(res,401,{error:'Authentication required'});
         if(req.method!=='POST'){res.writeHead(405,{'Allow':'POST'});return res.end();}
         const input=JSON.parse(await body(req));if(accessKey&&input.method==='tools/call'&&!accessKey.scopes.includes(toolScope(input.params.name,input.params.arguments||{})))return send(res,403,{error:'This API key does not grant that capability'});
-        const response=await mcp(input,{store,query,index,domains,scopes:accessKey?.scopes});if(response===null){res.writeHead(202);return res.end();}return send(res,200,response);
+        const response=await mcp(input,{store,query,index,domains,scopes:accessKey?.scopes,delegated:!!accessKey&&!apiKeys.installationAssistant(accessKey)});if(response===null){res.writeHead(202);return res.end();}return send(res,200,response);
       }
       if(route==='/api/pair/keys'&&req.method==='GET')return send(res,200,{data:pairKeys.map(({id,created_at,revoked_at})=>({id,created_at,revoked_at:revoked_at||null}))});
       if(route==='/api/pair/revoke'&&req.method==='POST'){const input=JSON.parse(await body(req)),key=pairKeys.find(k=>k.id===input.id);if(!key)throw new Error('Choose a paired device to disconnect');key.revoked_at||=new Date().toISOString();savePairKeys();return send(res,200,{revoked:true});}

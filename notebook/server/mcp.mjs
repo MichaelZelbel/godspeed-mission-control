@@ -32,7 +32,9 @@ const definitions=[
 const readVersions=new WeakMap();
 const versionsOf=store=>{let seen=readVersions.get(store);if(!seen)readVersions.set(store,seen=new Map());return seen;};
 export function rememberRead(store,notes){const seen=versionsOf(store);for(const n of notes||[])if(n?.id&&typeof n._hash==='string'){seen.delete(n.id);seen.set(n.id,n._hash);}while(seen.size>20000)seen.delete(seen.keys().next().value);}
-export async function mcp(input,{store,query,index,domains,scopes}){
+// delegated: the call comes with a key the owner gave another program, not
+// from the owner or the installation's own assistant (api-keys.mjs).
+export async function mcp(input,{store,query,index,domains,scopes,delegated=false}){
   const id=input.id??null,owner=store,seen=notes=>rememberRead(owner,notes);let result;
   try{
     if(input.method==='initialize')result={protocolVersion:'2025-03-26',capabilities:{tools:{}},serverInfo:{name:'godspeed-mission-control',version:'0.1.0-alpha.1'}};
@@ -42,7 +44,7 @@ export async function mcp(input,{store,query,index,domains,scopes}){
     else if(input.method==='tools/call'){
       const {name,arguments:a={}}=input.params||{};let value;
       if(memoryToolNames.includes(name)){
-        const scoped=Object.assign(Object.create(Object.getPrototypeOf(domains)),domains,{toolScope:type=>toolScope('save_record',{type})});
+        const scoped=Object.assign(Object.create(Object.getPrototypeOf(domains)),domains,{toolScope:type=>toolScope('save_record',{type}),delegated:!!delegated});
         value=await memoryTool(name,a,{store,query,index,domains,seen,scopes},expected=>assistantMutationContext({store,query,domains:scoped,scopes},{...a,expected},name));
         return {jsonrpc:'2.0',id,result:{content:[{type:'text',text:typeof value==='string'?value:JSON.stringify(value)}]}};
       }
@@ -54,7 +56,7 @@ export async function mcp(input,{store,query,index,domains,scopes}){
       // Refused before anything is read, in plain words (the guard's commit refuses them too).
       if(['save_record','structural_change'].includes(name))assertAssistantTable(String(a.type||''),name);
       if(['save_record','update_note','capture_note','personal_operation','write_fact','record_event','structural_change','review_suggestions',...topicToolNames.filter(n=>!n.startsWith('list_')&&!n.startsWith('get_'))].includes(name)){
-        domains=Object.assign(Object.create(Object.getPrototypeOf(domains)),domains,{toolScope:type=>toolScope('save_record',{type})});
+        domains=Object.assign(Object.create(Object.getPrototypeOf(domains)),domains,{toolScope:type=>toolScope('save_record',{type}),delegated:!!delegated});
         ({store,query,domains}=assistantMutationContext({store,query,domains,scopes},a,name));
       }
       if(topicToolNames.includes(name))value=topicTool(name,a,{store,query});

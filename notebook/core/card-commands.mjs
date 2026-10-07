@@ -48,7 +48,22 @@ export function nativeCardRows(store,type){
   return [{...store.get(type,card.f.ID),...values(card,kind),legacy_fields:card.f,legacy_log:card.log,legacy_source:path.relative(store.root,path.join(folder,name)).replaceAll('\\','/'),created_at:card.f.FILED||new Date(0).toISOString(),_hash:hash(text)}];
  });
 }
-export function cardCommand(store,{card,args}){
+// What a card command may do in the record runtime, for everyone, and in either
+// runtime for a key the owner gave another program: read and file goals,
+// forecasts and work. Running a card's check (`work verify`), leasing or
+// reporting work for a runner, and recording the owner's approval stay with the
+// owner and the installation's own assistant. Until 7 October 2026 the original
+// runtime handed a key's arguments to the tools as they came: a key limited to
+// "actions" filed a work item whose check was a shell command, ran it with
+// `work verify`, and wrote "approved" on an outward item in the owner's name.
+const cardVerbs={goals:['help','file','change','progress','read','bets','settle','question','answer','attention','diagnose','playbook','list','show','tree','check'],forecast:['help','file','revise','resolve','flag','list','due','show','score','check'],work:['help','file','list','next','show','cancel','stale','sweep','tick','check']};
+const ownerFlags=['--godspeed','--approved-by','--approved-by-him','--check-command','--command','--runner'];
+// A check is a command the owner's own work runner runs later (`work verify` in
+// mc-work-run), so a key may not file one either.
+const delegatedFlags=[...ownerFlags,'--check'];
+const flagged=(args,flags)=>args.some(a=>flags.some(flag=>a===flag||a.startsWith(flag+'=')));
+export function cardCommand(store,{card,args},{delegated=false}={}){
+ if(delegated&&(!Array.isArray(args)||!cardVerbs[card]?.includes(args[0])||args.some(a=>typeof a!=='string')||flagged(args,delegatedFlags)))throw Error('A key given to another program can read and file goals, forecasts and work. Running a check, taking or reporting work and approving stay with the owner and their own assistant.');
  if(process.env.GODSPEED_ORIGINAL_RUNTIME==='on'){
   if(!table[card]||!Array.isArray(args)||args.some(a=>typeof a!=='string'||a==='--godspeed'||a.startsWith('--godspeed=')))throw Error('Choose an original Godspeed card command');
   boundedArguments(args);
@@ -58,8 +73,7 @@ export function cardCommand(store,{card,args}){
   if(run.status!==0)throw Error(String(run.stderr||run.stdout||'Godspeed command failed').slice(0,600));
   return {result:run.stdout.trim()};
  }
- const allowed={goals:['help','file','change','progress','read','bets','settle','question','answer','attention','diagnose','playbook','list','show','tree','check'],forecast:['help','file','revise','resolve','flag','list','due','show','score','check'],work:['help','file','list','next','show','cancel','stale','sweep','tick','check']};
- if(!allowed[card]?.includes(args?.[0])||args.some(a=>typeof a!=='string'||a.length>20000)||args.some(a=>['--godspeed','--approved-by','--approved-by-him','--check-command','--command','--runner'].includes(a)))throw Error('Unsupported personal card command');
+ if(!Array.isArray(args)||!cardVerbs[card]?.includes(args[0])||args.some(a=>typeof a!=='string'||a.length>20000)||flagged(args,ownerFlags))throw Error('Unsupported personal card command');
  boundedArguments(args);
  for(const row of store.list('goals'))for(const entry of row.legacy_log||[])if(['DIAGNOSIS','REFUTED','PLAYBOOK'].includes(entry.event)&&entry.rest){const relative=entry.rest.split(/[:,]/)[0];if(!/^goals\/(?:diagnoses|playbooks)\/[A-Za-z0-9_.-]+\.md$/.test(relative))throw Error('Goal evidence must identify a projected local file');localPath(store.root,relative);}
  // The command runs on a disposable projection of the cards (goals, work,
