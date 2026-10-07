@@ -83,11 +83,20 @@ BRIEFING_MAX = 1024 * 1024   # a briefing is a page or two of text
 WINDOWS_EXE = "https://github.com/MichaelZelbel/godspeed-mission-control/releases/latest/download/GodspeedSetup.exe"
 ONE_LINER = "https://raw.githubusercontent.com/MichaelZelbel/godspeed-mission-control/main/install-godspeed.sh"
 if FLOW == "notebook":
-    # The one-click server is version 2, and the latest release and main are version 1, so a
-    # reader sent there got the other product (until 6 October 2026). Version 2's published
-    # installers, from the commit this server was built from (GODSPEED_REVISION in its image).
-    _ref = os.environ.get("GODSPEED_REVISION", "")
-    _ref = _ref if re.fullmatch(r"[0-9a-f]{40}", _ref) else "codex/godspeed-v2-completeness"
+    # The one-click server is version 2; the latest release and main are still version 1, so a
+    # reader sent there got the other product (until 6 October 2026). Send them to version 2's
+    # PUBLISHED installers instead.
+    #
+    # NOT GODSPEED_REVISION, the commit the image was built from: a commit's installers/ folder
+    # is filled by a LATER commit, so the build at b327fe0 carried the previous product's
+    # installers (pinning 5961989, ~69 commits behind), and linking to the build commit served
+    # that stale product to every reader. Fixed 7 October 2026.
+    #
+    # GODSPEED_INSTALLER_REF pins a release tag or a known-good commit when the image sets one;
+    # otherwise the v2 branch, whose installers/ folder always holds the current published pair.
+    _ref = os.environ.get("GODSPEED_INSTALLER_REF", "").strip() or "codex/godspeed-v2-completeness"
+    if ".." in _ref or not re.fullmatch(r"[0-9A-Za-z][0-9A-Za-z._/-]{0,99}", _ref):
+        _ref = "codex/godspeed-v2-completeness"
     WINDOWS_EXE = "https://github.com/MichaelZelbel/godspeed-mission-control/raw/%s/installers/GodspeedSetup.exe" % _ref
     ONE_LINER = "https://raw.githubusercontent.com/MichaelZelbel/godspeed-mission-control/%s/installers/install-godspeed.sh" % _ref
 

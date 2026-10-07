@@ -467,12 +467,13 @@ def test_one_click_happy():
     check("setup is marked done", r["state"].get("done") is True)
     check("neither the key nor the start code is in any log",
           all(x not in r["log"] and x not in r["out"] for x in (TOKEN, CODE)))
-    # Version 2's installers at this server's own commit, never version 1's latest release.
-    check("another computer is sent to version 2's installers, of this server's version",
-          any_has(to_anna, "godspeed-mission-control/raw/%s/installers/GodspeedSetup.exe" % REVISION,
-                  "godspeed-mission-control/%s/installers/install-godspeed.sh" % REVISION,
+    # Version 2's PUBLISHED installers, never the build commit (GODSPEED_REVISION) whose own
+    # installers/ folder still held the previous product, and never version 1's latest release.
+    check("another computer is sent to version 2's published installers, not the build commit",
+          any_has(to_anna, "codex/godspeed-v2-completeness/installers/GodspeedSetup.exe",
+                  "codex/godspeed-v2-completeness/installers/install-godspeed.sh",
                   "--repo https://github.com/anna/notebook.git")
-          and not any_has(to_anna, "releases/latest"))
+          and not any_has(to_anna, REVISION) and not any_has(to_anna, "releases/latest"))
 
 
 REVISION = "0123456789abcdef0123456789abcdef01234567"
@@ -531,6 +532,48 @@ def test_one_click_snags():
           and any_has(r["to"](111), "Send it to me whenever you like") and len(r["finish"]) == 1)
 
 
+def links_for(env):
+    """WINDOWS_EXE and ONE_LINER the program computes for a given environment (offline)."""
+    keys = ("GODSPEED_TG_FLOW", "GODSPEED_REVISION", "GODSPEED_INSTALLER_REF")
+    old = {k: os.environ.get(k) for k in keys}
+    try:
+        for k in keys:
+            os.environ.pop(k, None)
+        os.environ.update({k: v for k, v in env.items() if v is not None})
+        m = load("tg_links_%d" % time.time_ns(), PROGRAM)
+        return m.WINDOWS_EXE, m.ONE_LINER
+    finally:
+        for k, v in old.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+
+
+def test_one_click_links():
+    print("== the install links for another computer never point at the build commit")
+    build = REVISION  # the image's GODSPEED_REVISION, the commit it was built from
+    # Default: the published v2 branch, whose installers/ folder always holds the current pair.
+    exe, sh = links_for({"GODSPEED_TG_FLOW": "notebook", "GODSPEED_REVISION": build})
+    check("notebook default points at the v2 branch installers, not the build commit",
+          "codex/godspeed-v2-completeness/installers/GodspeedSetup.exe" in exe
+          and "codex/godspeed-v2-completeness/installers/install-godspeed.sh" in sh
+          and build not in exe and build not in sh and "releases/latest" not in exe)
+    # A deployment may pin a release tag or a known-good commit; the build commit stays unused.
+    exe, sh = links_for({"GODSPEED_TG_FLOW": "notebook", "GODSPEED_REVISION": build, "GODSPEED_INSTALLER_REF": "v2.6.0"})
+    check("a pinned installer ref is honoured, and the build commit is still not used",
+          "/raw/v2.6.0/installers/GodspeedSetup.exe" in exe and "/v2.6.0/installers/install-godspeed.sh" in sh
+          and build not in exe and build not in sh)
+    # A ref that tries to climb out of installers/ is refused and falls back to the branch.
+    exe, sh = links_for({"GODSPEED_TG_FLOW": "notebook", "GODSPEED_INSTALLER_REF": "../../etc/passwd"})
+    check("a ref that tries to climb out is refused and falls back to the branch",
+          "codex/godspeed-v2-completeness/installers/" in exe and ".." not in exe and ".." not in sh)
+    # Version 1 (the plain terminal flow) is unchanged: the release asset and main.
+    exe, sh = links_for({})
+    check("the plain (non-notebook) flow is unchanged: the release asset and main",
+          exe.endswith("releases/latest/download/GodspeedSetup.exe") and sh.endswith("/main/install-godspeed.sh"))
+
+
 def test_nothing_to_do():
     r = scenario_run("a token Telegram refuses", {"users": USERS, "start": []},
                      extra_env={"GODSPEED_TELEGRAM_TOKEN": "123:wrong"}, timeout=30)
@@ -551,6 +594,7 @@ if __name__ == "__main__":
     test_one_click_names()
     test_one_click_happy()
     test_one_click_snags()
+    test_one_click_links()
     test_nothing_to_do()
     print()
     if FAILS:
