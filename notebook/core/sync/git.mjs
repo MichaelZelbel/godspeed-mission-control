@@ -117,7 +117,8 @@ export class FileSync {
     const files=[['local',local],['base',base],['remote',remote]].map(([key,text])=>{const file=path.join(dir,key);fs.writeFileSync(file,text);return file;});
     try{return this.gitBytes(['merge-file','-p','-q',...files]).toString('utf8');}catch{return null;}
   }
-  pendingConflicts(){const dir=path.join(this.store.root,'conflicts');return fs.existsSync(dir)?fs.readdirSync(dir).filter(n=>n.endsWith('.json')&&!JSON.parse(fs.readFileSync(path.join(dir,n),'utf8')).resolved_at):[];}
+  // A conflict file that does not read is still waiting (and shown as damaged): it never throws the list away.
+  pendingConflicts(){const dir=path.join(this.store.root,'conflicts');return fs.existsSync(dir)?fs.readdirSync(dir).filter(n=>{if(!n.endsWith('.json'))return false;try{return !JSON.parse(fs.readFileSync(path.join(dir,n),'utf8')).resolved_at;}catch{return true;}}):[];}
   async verifyRemote(remoteUrl){
     const match=String(remoteUrl).match(/^(?:https:\/\/github\.com\/|git@github\.com:)([\w.-]+)\/([\w.-]+?)(?:\.git)?\/?$/);if(!match)throw new Error('Use a GitHub repository address without embedded credentials');
     const response=await fetch('https://api.github.com/repos/'+match[1]+'/'+match[2],{headers:{Accept:'application/vnd.github+json'},signal:AbortSignal.timeout(15000)});
