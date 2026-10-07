@@ -660,7 +660,9 @@ export class FileSync {
         const key=p.reference?.uid&&this.store.keyOfUid.get(p.reference.uid),name=key&&this.store.fileOf.has(key)?posix(path.relative(this.store.root,this.store.fileOf.get(key))):p.name;
         if(!name||items.has(name))continue;
         const live=path.join(this.store.root,...name.split('/'));
-        items.set(name,reviewItem(hash('check\0'+name+'\0'+remoteHead).slice(0,24),name,{base:blob(base,name),local:fs.existsSync(live)?fs.readFileSync(live):null,remote:blob(target,name)},remoteHead,{kept:'local',reason:p.reference?'The other machines removed this while a record here still refers to it':p.error}));
+        // A copy of a record (two files with one identity) is marked so: its
+        // review is about the copy's own file, never the record it copies.
+        items.set(name,reviewItem(hash('check\0'+name+'\0'+remoteHead).slice(0,24),name,{base:blob(base,name),local:fs.existsSync(live)?fs.readFileSync(live):null,remote:blob(target,name)},remoteHead,{kept:'local',reason:p.reference?'The other machines removed this while a record here still refers to it':p.error,...(p.copy_of?{copy_of:p.copy_of}:{})}));
       }
       for(const item of items.values())this.saveReview(item);
       throw Object.assign(new Error('The other machines\' notebook changes would leave '+problems.length+' problem'+(problems.length===1?'':'s')+' here ('+problems[0].error+'); they were not taken, and what to look at is kept for review'),{code:'REVIEW'});
@@ -689,7 +691,7 @@ export class FileSync {
     const problems=[],uids=new Map(),records=new Map(),aliases=new Map();
     for(const {name,record} of entries.values()){
       const key=record.type+'/'+record.id;
-      if(uids.has(record.uid))problems.push({key:'uid:'+record.uid,name,error:'Duplicate UUID'});
+      if(uids.has(record.uid))problems.push({key:'uid:'+record.uid,name,error:'Duplicate UUID',copy_of:uids.get(record.uid)});
       uids.set(record.uid,name);records.set(key,{name,record});
       if(!record.removed_at)for(const alias of identityIds(record)){const id=record.type+'/'+alias.toLowerCase();if(aliases.has(id)&&aliases.get(id)!==key)problems.push({key:'alias:'+id,name,error:'Ambiguous alias'});aliases.set(id,key);}
     }

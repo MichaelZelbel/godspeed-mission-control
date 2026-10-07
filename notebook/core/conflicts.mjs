@@ -7,10 +7,16 @@ function retained(store,id){
   safe(id);const file=path.join(store.root,'conflicts',id+'.json');
   return {file,conflict:JSON.parse(fs.readFileSync(file,'utf8'))};
 }
+// A review of a copy: a second file with the identity of a record (a page
+// duplicated in Obsidian that the owner's Git brought). It is about that
+// file alone. Until 7 October 2026 the identity led to the original, so
+// keeping this machine's version (no copy) removed the original note, and
+// taking the other version wrote the copy over it.
+const isCopy=conflict=>conflict.kind==='git'&&(!!conflict.copy_of||conflict.reason==='Duplicate UUID');
 // The record a saved file conflict is about, found by the uid in any of its
 // versions: its file may have been renamed since the conflict was saved.
 function conflictRecord(store,conflict){
-  if(conflict.kind!=='git'||conflict.encoding==='base64'||!isRecordPath(conflict.path))return null;
+  if(conflict.kind!=='git'||conflict.encoding==='base64'||!isRecordPath(conflict.path)||isCopy(conflict))return null;
   store.scan();
   for(const text of [conflict.local,conflict.remote,conflict.base]){
     if(typeof text!=='string')continue;
@@ -67,6 +73,8 @@ export function resolveSavedConflict(store,{id,choice,text,expected_hash},{assis
     // Until 6 October 2026 a removal could not be chosen at all.
     const removal=(selected===null||selected===undefined)&&conflict.kind==='git'&&['local','remote'].includes(choice)&&Object.hasOwn(conflict,choice);
     if(!removal&&(selected===null||selected===undefined))throw Error('A missing retained version cannot replace a saved file');
+    // A copy cannot be taken as it is: two files with one identity stop every save.
+    if(isCopy(conflict)&&['remote','merged'].includes(choice))throw Error('This page is a copy of '+(conflict.copy_of||'another page')+' with the same identity, so it cannot be taken as it is. Keep this machine\'s version, and delete the copy on the machine that made it.');
     if(!removal&&choice!=='current'&&conflict.encoding==='base64'){
       if(choice==='merged')throw Error('Choose a retained binary version; text merging is unavailable for binary files');
       selected=Buffer.from(selected,'base64');if(hash(selected)!==conflict.digests?.[choice])throw Error('Retained binary conflict version failed its integrity check');
@@ -75,7 +83,10 @@ export function resolveSavedConflict(store,{id,choice,text,expected_hash},{assis
     // of current is an acknowledgement and never rewrites that file.
     const resolved={...conflict,resolved_at:new Date().toISOString(),choice,reviewed_hash:currentHash,reviewed_encoding:before&&(before.includes(0)||!Buffer.from(before.toString('utf8')).equals(before))?'base64':'utf8'};
     resolved.reviewed_current=before?before.toString(resolved.reviewed_encoding):null;
-    if(removal){
+    // Keeping this machine's version of a copy changes no record: a copy here
+    // is only its own file, deleted when there is none on this machine's side.
+    if(isCopy(conflict)){if(removal&&before)store.publishFiles([{file:conflict.path,delete:true}]);}
+    else if(removal){
       const record=before&&isRecordPath(conflict.path)&&isRecord(before,target)?decode(before.toString('utf8'),target):null;
       if(record?.type==='moments')throw Error('Events are append-only; add a correction event');
       if(record)store.commit([store.prepare(record.type,{removed_at:record.removed_at||new Date().toISOString()},store.get(record.type,record.id))]);
