@@ -1,4 +1,4 @@
-# Testing a Skill (Chapter 16)
+# Testing a Skill (Chapter 19)
 
 Three tests that show how much a skill can do without the conversation
 that built it, then a check for decision skills and a way to keep what

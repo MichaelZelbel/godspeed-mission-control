@@ -1,7 +1,7 @@
-# About-You Template (Chapters 1 and 3)
+# About-You Template (Chapters 1 and 4)
 
 In Chapter 1 the AI you already use writes a short briefing about you under five headings,
-and Chapter 3 files it into `profile/about-me.md`. This template is the **fallback**: use it
+and Chapter 4 files it into `profile/about-me.md`. This template is the **fallback**: use it
 if you are new to AI tools or the briefing came back thin or empty.
 
 It uses the same five headings. Write it straight into `profile/about-me.md` in your
@@ -16,11 +16,11 @@ anything that shapes your time.]
 
 ## The people who matter
 [The handful your assistant should know, by role: team, clients, family.
-Note who to loop in on what. Chapter 5 gives them a file of their own.]
+Note who to loop in on what. Chapter 6 gives them a file of their own.]
 
 ## What I am focused on now
 [Live priorities and the projects actually on your plate this month, with
-deadlines. Chapter 6 gives these a file of their own.]
+deadlines. Chapter 7 gives these a file of their own.]
 
 ## How I like to be helped
 [Answer first then why? Short bullets or full prose? Blunt or gentle? Ask

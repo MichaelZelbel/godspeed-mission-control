@@ -1,4 +1,4 @@
-# The monthly question: are you still working somewhere else? (Chapter 24)
+# The monthly question: are you still working somewhere else? (Chapter 27)
 
 You did not stop using your old AI. Almost nobody does. ChatGPT stays on the
 phone, or there is one project on the web you never moved, and everything you
@@ -49,7 +49,7 @@ two at once gets you a muddle rather than a saving.
 2. Read the answer and correct it before you keep it. Choose which details
    may travel, and leave guesses and open questions visible. Save it as a
    file.
-3. In a session with your folder attached, file it the way Chapter 3 filed the
+3. In a session with your folder attached, file it the way Chapter 4 filed the
    first one, and ask for only what is new to be added.
 
 ## The one line that keeps this honest

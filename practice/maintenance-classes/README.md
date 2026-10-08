@@ -2,13 +2,13 @@
 
 Use this in a disposable mission control, separate from your real profile and notebook. Robin runs a bicycle repair shop; these are invented inputs. Historical output quoted in the book came from actual earlier runs against fictional material. The revised setup below is not itself a new successful run.
 
-Chapter 22 prints a request that does steps 1 to 4 for you.
+Chapter 25 quotes a morning brief written from these files.
 
 1. Use the Hermes installation from Chapter 2. Copy the kit's `starter-godspeed/` contents, including dot files, into a new sibling folder named `robin-practice`. Do not merge with an existing folder or change your real mission control.
 2. Copy this folder's `what-my-ai-knew.md` into the practice mission control's top level. Copy `inbox/workshop-notes.md` into its `inbox/`.
 3. Import the summary into exactly four profile files: `profile/about-me.md`, `profile/people.md`, `profile/projects.md` and `profile/voice.md`. Keep the original summary as the source and the unanswered questions in `inbox/`. Proposed behavior rules need your confirmation before they enter `rules/`. The lack of workshop capacity is a gap, not a number to invent.
 4. Copy the kit's `skills/prepare-a-decision/` folder into the practice mission control's `skills/`. Read its `SKILL.md` to confirm it arrived.
 5. Open the practice mission control in Hermes. Check the full working path and read the four profile files, workshop note and decision skill. These exercises name the skill explicitly; copying a folder alone does not test automatic skill discovery.
-6. Use `procedures/morning-brief-setup.md` for the Chapter 22 brief. Chapter 23 prints the steps for the one-time investigation: check the starting material, then save one run. Confirm its time zone, single next run, output and stop state.
+6. Use `procedures/morning-brief-setup.md` for the Chapter 25 brief. Chapter 26 shows how to hand over the one-time investigation. Confirm its time zone, single next run, output and stop state.
 
 The investigation output is `investigations/robin-maintenance-once.md` inside the practice mission control. A missing-source repeat uses a second practice copy and another output name. Never put fictional deadlines, people or research into your live mission control to test this.

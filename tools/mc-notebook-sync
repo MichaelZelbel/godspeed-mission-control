@@ -2,7 +2,7 @@
 # mc-notebook-sync — keep your notebook and your mission control current with each other, by itself.
 #
 # WHAT THIS IS FOR. Your mission control is a folder of text files on your computer. Your notebook
-# (Chapter 28) is the thing that can search those files by meaning instead of by exact
+# is the thing that can search those files by meaning instead of by exact
 # word. For that to be useful it has to hold a current copy, and until something ran on
 # a schedule, it only ever held whatever was true the last time somebody typed a command.
 #
@@ -194,8 +194,8 @@ fi
 # IT FOLLOWS THE SAME ANSWER AS THE ARROW UP (2026-09-20, second round of test readers).
 # Pulling your own facts onto your own disk sends nothing anywhere, and for one afternoon
 # it therefore ran whatever the reader had answered. Both readers found it only in the
-# chapter's last section, as "one more thing comes to you unasked", in a mission control whose Chapter
-# 17 is about nothing happening unasked. A reader who says no gets a notebook and nothing
+# chapter's last section, as "one more thing comes to you unasked", in a mission control whose chapter
+# on limits is about nothing happening unasked. A reader who says no gets a notebook and nothing
 # moving in the background in either direction. One switch, one sentence to explain.
 #
 # AND IT SAVES WHAT IT BROUGHT, ON ONE COMPUTER (2026-10-01). Nothing ever committed the

@@ -1,4 +1,4 @@
-# The notebook (Chapter 28)
+# The notebook (Menerio)
 
 The folder is what you teach: context, skills, rules, edited at your desk, one home on your
 disk. The notebook is what you live: notes born out in the world, written from whatever device

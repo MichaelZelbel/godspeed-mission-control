@@ -1,9 +1,9 @@
 # menerio
 
-Optional. Chapter 28, "Give Your Mission Control a Notebook". Everything else in the book works
-without this folder.
+Optional. The book's own notebook is built into Godspeed (Chapters 13 and 14); this folder
+connects Menerio, a separate online notebook. Everything in the book works without this folder.
 
-Menerio is the notebook. It can do two jobs for your mission control. The first comes with the
+Menerio is that notebook. It can do two jobs for your mission control. The first comes with the
 connection. The second is a separate choice, and it is yours.
 
 1. **It holds the notes you write out in the world.** On the phone, in a hallway, in a shop.

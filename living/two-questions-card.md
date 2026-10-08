@@ -1,4 +1,4 @@
-# The Two-Questions Card (Chapter 20)
+# The Two-Questions Card (Chapter 23)
 
 A clear answer with a source link can look like research without being research. Before you
 act on an answer, find out whether the assistant read a source, and whether that source
@@ -56,5 +56,5 @@ qualified clinician; the assistant can prepare the questions and sources.
 ## For jobs that run while you are away
 
 The prepared result should show what was done, what supports the answer and what still needs
-a decision, with a link to each supporting page. The Chapter 25 watchdog prompt already asks
-for that link.
+a decision, with a link to each supporting page. The watchdog prompt in
+`procedures/watchdog-setup.md` already asks for that link.

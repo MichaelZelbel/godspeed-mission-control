@@ -180,6 +180,6 @@ mc-goals settle [--dry-run]                   the verdicts, seven days after eac
 mc-goals list | show <id> | tree | check
 ```
 
-Chapter 6 of the book is the idea behind this folder; the chapter on the daily decision is where
+Chapter 7 of the book is the idea behind this folder; Chapter 8, on the daily round, is where
 `mc-decide` puts it to work. The two rooms next door are `forecasts/` (what your mission control expects to
 happen) and `work/` (what it is doing about it).

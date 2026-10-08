@@ -1,6 +1,6 @@
 # My projects and priorities
 
-<!-- Chapter 6, as a file. Priorities on top (they are tie-breakers, not
+<!-- Chapter 7, as a file. Priorities on top (they are tie-breakers, not
      tasks). One block per live project below; archive blocks to the
      bottom when a project ends. -->
 

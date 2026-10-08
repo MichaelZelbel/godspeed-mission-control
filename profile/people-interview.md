@@ -1,4 +1,4 @@
-# People Interview (Chapter 5)
+# People Interview (Chapter 6)
 
 Improves `profile/people.md` by letting your assistant interview you, starting from the
 people your briefing already mentions, instead of you staring at a blank file.
@@ -6,7 +6,7 @@ people your briefing already mentions, instead of you staring at a blank file.
 ## Before you start
 
 A fresh session in your mission control (Chapter 2), with `profile/about-me.md` already
-filled from your reviewed briefing (Chapters 1 and 3).
+filled from your reviewed briefing (Chapters 1 and 4).
 
 ## The prompt
 
@@ -40,7 +40,7 @@ work brings people up.
 1. **Their role** in your life or work.
 2. **One or two practical preferences or facts** that change how you deal with them.
 3. **Any current agreement, problem or unfinished conversation.** The part that goes stale,
-   and what Chapter 10 keeps up to date.
+   and what Chapter 11 keeps up to date.
 
 What they said, what you agreed and what you have seen are worth more than a long account
 of their personality.
@@ -48,7 +48,7 @@ of their personality.
 ## The privacy line
 
 Keep only what the work needs. For other people, **write only what you would be comfortable
-with them reading over your shoulder.** Chapter 17 turns this into a rule your assistant has
+with them reading over your shoulder.** Chapter 20 turns this into a rule your assistant has
 to follow.
 
 ## Check what was saved

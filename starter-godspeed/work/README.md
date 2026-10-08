@@ -96,5 +96,5 @@ mc-work block <id> --needs ... | unblock <id> --why ... | cancel <id> --why ...
 mc-work tick | next | list | show <id> | check
 ```
 
-Chapter 24 of the book is the idea behind this folder: progress written down, and the difference
-between saying a thing is done and showing it. The rooms next door are `goals/` and `forecasts/`.
+Chapters 3, 8 and 27 of the book are the idea behind this folder: progress written down, and the
+difference between saying a thing is done and showing it. The rooms next door are `goals/` and `forecasts/`.

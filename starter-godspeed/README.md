@@ -3,7 +3,7 @@
 This folder is your personal AI system. The book's installer (Chapter 2)
 lays everything inside `starter-godspeed` into your `godspeed` folder for you,
 and Appendix D is the map of every folder in it.
-Point your assistant at the result. Chapter 3 of the book walks through
+Point your assistant at the result. Chapter 4 of the book walks through
 the layout; Parts II and III fill it up.
 
 **The folder names answer one question: when does your assistant read this?**
@@ -21,28 +21,28 @@ What is here. Thirteen names, and they are the whole system:
 
 - `AGENTS.md`: your AI's operating manual. How to work in this folder, and the
   short list of your rules. Hermes reads it by name at the start of every
-  conversation, so nothing needs installing. Chapter 17 is where you write
+  conversation, so nothing needs installing. Chapter 20 is where you write
   your own rules into it. (The one-line `CLAUDE.md` beside it is a signpost
-  for a developer tool; Chapter 4 explains it, and Hermes never reads it.)
+  for a developer tool; Chapter 40 explains it, and Hermes never reads it.)
 - `profile/`: who you are, your people, your projects, your voice. The
   Part II files. You write these.
 - `rules/`: one file per rule, holding the whole story of why you gave it.
   Eight are pre-loaded, and they are your red lines. The one-line version of
   each is written into `AGENTS.md` by `mc-compile-rules`, which is the
   only rules text your assistant reads every session. You edit the files; you
-  never edit that block. Chapter 17.
+  never edit that block. Chapter 20.
 - `skills/`: one folder per recipe, each with a `SKILL.md` inside. A few are
   here from day one. `next-action` decides what your mission control does about your goals
-  each day, and `work-item` carries out one piece of that work. Chapter 7
+  each day, and `work-item` carries out one piece of that work. Chapter 8
   shows them working; you never have to read them. `keep-a-note` is what runs
-  when you say "make a note": it files the note in your Menerio notebook,
-  links it and tells you where it went (Chapter 28). Without Menerio it saves
+  when you say "make a note": it files the note in your notebook,
+  links it and tells you where it went (Chapter 13). Without the notebook's tools it saves
   into its own files. `morning-brief` is the starter for the short message your
   assistant can send you each morning, so a brief you switched on in setup has
-  something real in it from the first day; Chapter 22 shows how to make it your
+  something real in it from the first day; Chapter 25 shows how to make it your
   own. The
   installer has already told Hermes where this room is, so a recipe you put
-  here is found without you naming it. Chapters 12 to 14 fill it further, and
+  here is found without you naming it. Chapters 15 to 17 fill it further, and
   the five starter recipes are in the kit download beside this folder, ready
   to copy in when you want them. The hidden `.claude/skills/` is a link the
   installer points at this room, never a second home.
@@ -50,20 +50,20 @@ What is here. Thirteen names, and they are the whole system:
 - `decisions.md`: append-only log of real decisions.
 - `inbox/`: notes that need clarification, writing samples and material you
   want kept untouched. Clear facts are filed during the conversation instead
-  (Chapter 9). When a doubt is settled, the original capture moves to
+  (Chapter 10). When a doubt is settled, the original capture moves to
   `archives/filed-captures/`, a folder your assistant makes the first time it
   needs it.
 - `observations/`: what your assistant works out about you and writes down
   itself, one file per fact, with a page called `MEMORY.md` that it
   reads at the start of a session and that tells it where everything goes.
   You write `profile/`, it writes this. It starts empty and fills up on its
-  own. Chapter 9.
+  own. Chapter 10.
 - `prompts/`: what you typed to an AI. **Your assistant never reads this
   folder on its own**, it only searches it when you ask, and that rule is
   what makes it safe to keep. Two drawers, each with its own README:
   `prompts/library/` holds the prompts you keep and paste into other
   tools, and `prompts/archive/` is the optional log of your conversations,
-  empty unless you switched collection on. Chapters 13 and 37.
+  empty unless you switched collection on. Chapters 16 and 38.
 - `goals/`: what you want, one card each, and who gets attention today. An
   outcome, a strategy or project meant to produce one, or a protected
   commitment. A new idea is filed **provisional** and is never worked on until

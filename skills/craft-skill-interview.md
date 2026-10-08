@@ -1,4 +1,4 @@
-# Craft-Skill Interview Prompt (Chapter 15)
+# Craft-Skill Interview Prompt (Chapter 18)
 
 Find skills for your own work by getting interviewed. The assistant reads
 your profile and work records first and asks only about what they cannot
@@ -52,4 +52,4 @@ authorise them.
 4. Give it a job in a fresh conversation and read the result before
    adding anything you explained during the interview.
 
-Chapter 16 tests the finished skill.
+Chapter 19 tests the finished skill.

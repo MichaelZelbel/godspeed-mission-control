@@ -1,4 +1,4 @@
-# The Mirror Test (Chapter 10)
+# The Mirror Test (Chapter 11)
 
 One prompt. Run it when you want to choose your next task, and whenever the answers start
 feeling slightly off-target.

@@ -48,7 +48,7 @@ or `n` to switch it off. Everything else stays as it is.
 **With the Telegram setup:** the bot asks during setup. To change it later, run the
 install line in a terminal on the server, as above.
 
-**With a morning brief you scheduled yourself** (Chapter 22, or the cron line in
+**With a morning brief you scheduled yourself** (with `morning-brief-setup.md`, or the cron line in
 `where-it-runs.md`): add this sentence to the end of the job's prompt:
 
 ```

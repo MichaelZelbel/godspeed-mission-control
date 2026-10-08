@@ -55,8 +55,8 @@ you search, so write it for the version of you who has forgotten this file exist
 
 - **Ask.** "Save that prompt in my prompts library, call it cover-art, and write
   a purpose line for it."
-- **The Chapter 1 briefing prompt.** Chapter 24 saves it here as
-  `bring-your-context-with-you.md`, so the weekly review can remind you to bring
+- **The Chapter 1 briefing prompt.** The kit's `procedures/outside-ai-check.md` saves it here
+  as `bring-your-context-with-you.md`, so the weekly review (Chapter 27) can remind you to bring
   new background over from another AI tool.
 
 ## How to get things out
@@ -67,7 +67,7 @@ this folder and, if you switched collection on, the log next door in
 
 ## An online copy, if you want one
 
-Chapter 37 gives a prompt a web copy you can reach from another device or share.
+Chapter 38 gives a prompt a web copy you can reach from another device or share.
 Remove private details before it goes online. When you bring a revised version
 back, compare it with the file here and decide which copy your changes start in.
 

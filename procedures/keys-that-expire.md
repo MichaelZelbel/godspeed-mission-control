@@ -1,6 +1,6 @@
-# When a key runs out, and how to find out before it does (Chapters 20 and 31)
+# When a key runs out, and how to find out before it does
 
-Chapter 31 locked your keys inside your folder, so connecting a service once
+If your keys are locked inside your folder, connecting a service once
 connects it on every computer you own. This card is the part that comes after:
 a key is not just a thing you own, it is a thing with a lifespan.
 
@@ -23,7 +23,7 @@ mc-check-keys
 It asks four questions in order and answers each one in plain words:
 
 1. Does your folder carry any keys? (No is a fine answer. Everything up to
-   Chapter 20 works with none.)
+   Chapter 30 works with none.)
 2. Can this computer open them?
 3. **Would a program you start right now actually get them?** This is the one
    nothing else asks. On Windows it reads the list every new program inherits;
@@ -108,7 +108,7 @@ the only place it exists.
 
 ## Wiring it into the brief you already have
 
-Open `skills/morning-brief/SKILL.md`, the recipe you wrote in Chapter 22, and paste
+Open `skills/morning-brief/SKILL.md`, your morning brief's recipe (Chapter 25), and paste
 this into the session:
 
 ```
@@ -126,9 +126,9 @@ Then check it now rather than in two months. Put a made-up line in
 with a practice output path (the recipe never writes a second brief for the
 same day), see the line appear, and take it out again.
 
-## If you have done Chapter 27, skip the wiring above
+## If you have done Chapter 30, skip the wiring above
 
-Chapter 27 builds one daily check over everything in your life with a last day, and
+Chapter 30 builds one daily check over everything in your life with a last day, and
 it reads this very file as one of its sources. So a key is in the same list as your
 tax return, with the same rhythm worked out from the same rule, and you never write
 a date in two places.
@@ -185,7 +185,7 @@ Help me load the replacement through a masked local input or the existing encryp
 
 *[Copy prompt](https://querino.ai/prompts/write-down-when-a-key-dies)*
 
-## Prove the check by breaking it (Chapter 20)
+## Prove the check by breaking it
 
 A check you have only ever seen pass has told you nothing. It might be working.
 It might be looking at the wrong thing, or at nothing at all.

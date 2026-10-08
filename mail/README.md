@@ -5,11 +5,11 @@ about it.
 
 There are three levels, and you can stop at any of them:
 
-1. **Paste.** Copy an email into the conversation. Nothing is connected. Chapter 14.
+1. **Paste.** Copy an email into the conversation. Nothing is connected. Chapter 17.
 2. **Forward.** Give your mission control its own address and forward the messages you choose.
-   [mc-address.md](mc-address.md), Chapter 29.
+   [mc-address.md](mc-address.md), Chapter 31.
 3. **Connect.** Let your mission control search your Gmail, read a message you pick, and save draft replies
-   in Gmail's Drafts folder. Chapter 30.
+   in Gmail's Drafts folder. Chapter 32.
 
 **Connecting Gmail: ask for it.** Tell your assistant *Connect Gmail for me*. The mission control fetches a
 small free mail program (Himalaya), and a window opens on your computer. In that window you type
@@ -31,7 +31,7 @@ and press Send yourself. Saving a draft you asked for needs no extra approval.
 
 **One connection, several assistants.** Every assistant on the computer where you connected uses
 the same connection: Claude Code, Codex, Hermes, and Claude Desktop once it has been restarted.
-A second computer does not get your Gmail by copying the mission control folder; see Chapter 31.
+A second computer does not get your Gmail by copying the mission control folder; see Chapter 33.
 
 ## What protects you, and what does not
 

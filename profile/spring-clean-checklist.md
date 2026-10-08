@@ -1,4 +1,4 @@
-# Spring-Clean Checklist (Chapter 10)
+# Spring-Clean Checklist (Chapter 11)
 
 Your mission control keeps its notes current while it helps you. Use this card whenever
 answers start feeling slightly off-target, to check that it is doing so.
@@ -28,7 +28,7 @@ The recommendation should now rest on current notes, with few or no open questio
 
 - **Any time answers drift off-target:** the mirror test and this card.
 - **Between conversations:** nothing checks unless a scheduled job does. The morning brief
-  (Chapter 22) and the weekly review (Chapter 24) can check for changes while you are away.
+  (Chapter 25) and the weekly review (Chapter 27) can check for changes while you are away.
 
 ## Why this is the ownership move
 

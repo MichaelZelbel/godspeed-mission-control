@@ -1,4 +1,4 @@
-# Red Lines Interview (Chapter 17)
+# Red Lines Interview (Chapter 20)
 
 The printed red lines are a safe start. This prompt makes them yours: your
 assistant interviews you, one question at a time, then rewrites the rule

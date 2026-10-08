@@ -1,6 +1,6 @@
 # Add a coding project to your mission control
 
-Requests from Chapter 4 of Teach It Once. Use your assistant with access to your mission control folder.
+Requests from Chapter 40 of Teach It Once. Use your assistant with access to your mission control folder.
 
 ## Add a project
 

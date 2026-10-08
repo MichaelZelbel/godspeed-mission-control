@@ -2,7 +2,7 @@
 # The two sync arrows and their runner: what must stay quiet, and what must never happen.
 #
 # WHY THIS FILE IS HERE. tools/notebook-sync.py, tools/world-pull.py and mc-notebook-sync
-# are what Chapter 28 means by the notebook keeping itself current. They run unattended,
+# are how the notebook keeps itself current. They run unattended,
 # on a schedule, on machines whose owner never asked to see them, and that shape carries
 # two promises the rest of the kit does not:
 #

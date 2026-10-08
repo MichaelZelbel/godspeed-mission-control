@@ -1,4 +1,4 @@
-# The Register (Chapter 21)
+# The Register (Chapter 24)
 
 The automation rule: **never run a procedure you cannot see and stop.**
 
@@ -87,15 +87,15 @@ complete.
 
 | Card | What it leaves running | Chapter |
 |---|---|---|
-| `morning-brief-setup.md` | a brief that arrives every morning | 22 |
-| `weekly-review-setup.md` | a review that keeps its own appointment | 24 |
-| `watchdog-setup.md` | a patrol on something you used to check by hand | 25 |
-| `research-watch-setup.md` | one daily job for every research question you keep open | 26 |
-| `outside-ai-check.md` | the monthly question about AIs you use elsewhere | 24 |
-| `ai-subscription-review.md` | the monthly money line | 24 |
-| `keys-that-expire.md` | the record of when each key dies | 20, 31 |
-| `what-runs-out-and-when.md` | one daily check over everything with a day | 27 |
-| `safety-net-setup.md` | version history and an off-machine copy | 18 |
+| `morning-brief-setup.md` | a brief that arrives every morning | 25 |
+| `weekly-review-setup.md` | a review that keeps its own appointment | 27 |
+| `watchdog-setup.md` | a patrol on something you used to check by hand | 28 |
+| `research-watch-setup.md` | one daily job for every research question you keep open | 29 |
+| `outside-ai-check.md` | the monthly question about AIs you use elsewhere | 27 |
+| `ai-subscription-review.md` | the monthly money line | 27 |
+| `keys-that-expire.md` | the record of when each key dies | not in the book |
+| `what-runs-out-and-when.md` | one daily check over everything with a day | 30 |
+| `safety-net-setup.md` | version history and an off-machine copy | 21 |
 
 The daily check over everything with a day is the one most likely to be
 missing, because it has no block of its own: it runs inside the morning
@@ -104,7 +104,7 @@ runs `mc-due`.
 
 ## The quarterly audit
 
-Do it in the same sitting as the spring-clean from Chapter 10. Walk the
+Do it in the same sitting as the spring-clean from Chapter 11. Walk the
 register in both directions:
 
 1. **Downwards:** everything `hermes cron list` shows must have a

@@ -1,4 +1,4 @@
-# Capture Checklist (Chapter 9)
+# Capture Checklist (Chapter 10)
 
 Pocket card. Tell your mission control once, during the work you are doing, and it saves
 the fact for next time.
@@ -24,13 +24,13 @@ Not every sentence deserves a permanent record.
 - Say **who and what**, not just what. "Budget doubled" will confuse you both in a month.
 - **A hint stays a hint.** A possibility is saved as a possibility, never as an agreed job.
 - **Private line:** keep passwords and access keys out of these conversations. A note about
-  another person needs only the detail the work requires (Chapter 19).
+  another person needs only the detail the work requires (Chapter 22).
 
 ## Where unclear notes wait
 
 Unclear notes wait in `inbox/`, for example a deadline that could belong to two projects.
 Your mission control finishes filing one when the answer becomes clear, and the weekly review
-(Chapter 24) files what is clear and asks about the rest. Writing samples and other material
+(Chapter 27) files what is clear and asks about the rest. Writing samples and other material
 you want kept untouched can stay in `inbox/` too.
 
 ## Check that the note survives
@@ -46,4 +46,4 @@ not enough.
 
 ## From your phone
 
-Once Chapter 32 connects a Telegram chat to your server, you can say the same things there.
+Once your server has its Telegram chat (Chapter 2's server route), you can say the same things there.

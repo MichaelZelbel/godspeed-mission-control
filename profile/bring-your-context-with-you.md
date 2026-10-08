@@ -1,4 +1,4 @@
-# Bring your context with you (Chapters 1 and 3)
+# Bring your context with you (Chapters 1 and 4)
 
 Your folder should not start empty. Whatever AI you have been using already knows things
 about you: who you work with, what you are focused on, how you like to be helped. This gets
@@ -57,7 +57,7 @@ Give me this briefing as a downloadable Markdown file named what-my-ai-knew.md. 
 Save it on your computer as `what-my-ai-knew.md`. Chapter 2 moves it into your `godspeed`
 folder.
 
-## Step 4: file it into your mission control (Chapter 3)
+## Step 4: file it into your mission control (Chapter 4)
 
 In your mission control, ask:
 
@@ -72,6 +72,6 @@ and the original briefing stays as the source.
 
 ## Do it again later
 
-If you keep using that other AI, Chapter 24 saves the Step 1 prompt, and only that prompt, in
-`prompts/library/bring-your-context-with-you.md`. The weekly review then reminds you on the
-first review of each month; `procedures/outside-ai-check.md` is that reminder as a file.
+If you keep using that other AI, `procedures/outside-ai-check.md` saves the Step 1 prompt, and
+only that prompt, in `prompts/library/bring-your-context-with-you.md`. The weekly review
+(Chapter 27) then reminds you on the first review of each month.
