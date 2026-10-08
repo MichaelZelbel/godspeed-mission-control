@@ -135,6 +135,12 @@ test('one fixed name per kind of fact: the newest value of a one-at-a-time fact 
     assert.equal(now.claims[0].two_answers,undefined);
     const all=await call('get_claims',{subject_type:'self',attribute:'location',mode:'history'});
     assert.deepEqual(all.claims.map(c=>c.value).sort(),['Fictional Middle Town','Fictional New Town','Fictional Old Town'],'asked by an old name, every value it ever had');
+    file('owner--app-usage--2026-09-01.md',{subject:'owner',attribute:'app-usage',value:'fictional dating app',valid_from:'2026-09-01'});
+    fs.writeFileSync(path.join(world,'fields.json'),JSON.stringify({fields:[
+      {name:'lives-in',one:true,aliases:['location','current-city','city']},{name:'age',one:true,aliases:['age']},
+      {name:'hobbies',one:false,aliases:['hobby']}]}));
+    file('owner--age--2026-09-11.md',{subject:'owner',attribute:'age',value:'55',valid_from:'2026-09-11'});
+    assert.deepEqual((await call('get_claims',{subject_type:'self',attribute:'age'})).claims.map(c=>c.value),['55'],'a listed kind is found by its names only, not inside app-usage');
     const hobbies=await call('get_claims',{subject_type:'self',attribute:'hobbies'});
     assert.deepEqual(hobbies.claims.map(c=>c.value).sort(),['fictional chess','fictional go'],'a many-at-a-time fact keeps every value');
     service.store.save('claims',{subject_type:'self',attribute:'location',value:'Fictional Other Town',confidence:'likely',valid_from:'2026-09-30'});

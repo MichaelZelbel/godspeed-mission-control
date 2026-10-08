@@ -304,8 +304,11 @@ function getClaims(a, ctx) {
     if (things.length) ids = new Set(things.map(e => e.id));
     else { try { ids = new Set([personFor(query, {name: a.subject_name}).id]); } catch (error) { if (/^Several/.test(error.message)) throw error; byName = n; } }
   }
-  const attribute = norm(a.attribute).replace(/[\s-]+/g, '_'), fields = fieldList(ctx.store.root), asked = a.attribute ? fields.canonical(a.attribute) : null;
-  const rows = facts(query).filter(f => (!a.subject_type || f.subject_type === a.subject_type) && (!ids || ids.has(f.subject_id)) && (!byName || norm(f.subject_name) === byName) && (!attribute || fields.canonical(f.attribute) === asked || norm(f.attribute).replace(/[\s-]+/g, '_').includes(attribute) || norm(f.label).replace(/[\s-]+/g, '_').includes(attribute))
+  const attribute = norm(a.attribute).replace(/[\s-]+/g, '_'), fields = fieldList(ctx.store.root), asked = a.attribute ? fields.canonical(a.attribute) : null,
+    // A kind of fact the list names (world/fields.json) is found by its names only: "age" no
+    // longer finds app-usage and image-concept, which only contain the letters (2026-10-08).
+    listedKind = a.attribute ? fields.one(a.attribute) : undefined;
+  const rows = facts(query).filter(f => (!a.subject_type || f.subject_type === a.subject_type) && (!ids || ids.has(f.subject_id)) && (!byName || norm(f.subject_name) === byName) && (!attribute || fields.canonical(f.attribute) === asked || listedKind === undefined && (norm(f.attribute).replace(/[\s-]+/g, '_').includes(attribute) || norm(f.label).replace(/[\s-]+/g, '_').includes(attribute)))
     && (mode === 'history' || (mode === 'changed_since' ? f.valid_from >= a.since || f.valid_to >= a.since : holds(f, day))))
     .sort((x, y) => String(y.valid_from || '').localeCompare(String(x.valid_from || '')));
   return {mode, count: rows.length, claims: rows.slice(0, count(a.limit, 1, 500, 100)).map(f => factView(f, label))};
