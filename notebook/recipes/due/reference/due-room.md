@@ -2,7 +2,7 @@
 
 **This room starts empty, and an empty one costs you nothing.** It fills the first time you tell
 your mission control about something with a day attached: a day you would like it done by, or a
-last day before it costs you (Chapter 27). If you never do, you have an empty folder and you have
+last day before it costs you (Chapter 30). If you never do, you have an empty folder and you have
 lost nothing.
 
 ## Why this is not a reminder
@@ -138,7 +138,7 @@ likeliest reason is that you did it and forgot to say so. The full list keeps sh
 
 ## Your keys are already in here
 
-If you have `secrets/expires.txt` from Chapter 31, `mc-due` reads it and treats each key as one of
+If you have `secrets/expires.txt`, the list of when each key runs out, `mc-due` reads it and treats each key as one of
 these. You never write a date in two places, and there is one thing nagging you rather than two
 that disagree. Moving the date in that file is still the off switch, and it is now also the proof:
 moving it forward is what replacing a key looks like from outside, so the reminder closes itself.
@@ -172,4 +172,4 @@ mc-due check               run the self checks, close what is provably done
 mc-due state               which are open, and what closed the others
 ```
 
-The card is `procedures/what-runs-out-and-when.md` in the kit. Chapter 27.
+The card is `procedures/what-runs-out-and-when.md` in the kit. Chapter 30.

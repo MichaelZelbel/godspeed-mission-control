@@ -1,12 +1,12 @@
 ---
 name: morning-brief
-description: Write today's morning brief into brief/YYYY-MM-DD.md, the short message that reaches the person each morning when they switched it on in setup. The starter version every mission control ships with; Chapter 22 of the book shows how to replace it with your own. Use when the morning brief job runs, or when the person asks for "today's brief", "my brief" or "the brief again".
+description: Write today's morning brief into brief/YYYY-MM-DD.md, the short message that reaches the person each morning when they switched it on in setup. The starter version every mission control ships with; Chapter 25 of the book shows how to replace it with your own. Use when the morning brief job runs, or when the person asks for "today's brief", "my brief" or "the brief again".
 ---
 
 # Morning brief (starter)
 
 This is the starter version. It exists so that a person who said yes to a morning brief
-gets a real one from the first morning, before they have shaped it. Chapter 22 of the book
+gets a real one from the first morning, before they have shaped it. Chapter 25 of the book
 replaces it with the person's own; when they ask you to change what goes into their brief,
 edit this file, and from then on it is theirs.
 
