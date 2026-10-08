@@ -610,5 +610,13 @@
       "Installed 0103579 automatic fictional cycles delivered exactly one approaching and one overdue notice, closed on separate saved note revision 4 and advanced recurrence once to October 11. Later ticks retained one open child and no extra notices. Normal overdue notice and next occurrence opened. Snooze input did not persist; explicit-save correction is source-only. Paired and no-obligation acceptance remain required. Evidence development-0103579-automatic-overdue-delivery-ui.txt and development-0103579-obligation-postclosure-quiet.json."
     ],
     "target_test": "Exercise reminders through its installed entry point and check actual results after restart"
+  },
+  "function:get-graph-data": {
+    "status": "verified working",
+    "evidence": [
+      "2026-10-08: product 6f8ad5e on the production server (srv1328602, Michael's real notebook): the whole graph (limit 200) answered 200 in 0.13 to 0.2 s with 248 nodes (48 people) and 857 edges (229 links, 459 similar notes, 169 people); one note's neighbourhood (his most linked note, 58 links) in 0.2 to 0.8 s.",
+      "2026-10-08: product 6f8ad5e installed on envy by GodspeedSetup-Full-Alpha.exe (kitCommit 6f8ad5e, health ok): Chrome showed the Note Graph screen with 246 nodes and 857 edges, no console errors, no Lexicon entry in the menu; whole graph 0.34 s, one note's neighbourhood 0.8 to 2 s while Windows Defender scanned the new install.",
+      "2026-10-08: on a copy of the real notebook (1,793 notes, 293 people) with a watching store, as the server runs it: whole graph 0.4 s (200 notes), 0.5 s (1,000); a note's neighbourhood 0.2 to 0.3 s. test/note-graph.test.mjs covers links, similar notes, people, hidden, trashed and mirrored notes."
+    ]
   }
 }
