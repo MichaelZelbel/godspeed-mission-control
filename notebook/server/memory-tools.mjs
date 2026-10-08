@@ -207,7 +207,14 @@ async function searchBrain(a, ctx) {
     const aboutOwner = f => f.subject_type === 'self' || f.object_type === 'self' || f.subject_type === 'contact' && !f.object_type;
     const related = asked.length ? all.filter(f => holds(f, day) && isRelationshipFact(f) && relationshipKinds(f.relationship || f.value).some(k => asked.includes(k))
       && (named.size ? named.has(f.subject_id) || named.has(f.object_id) : aboutOwner(f))).sort((x, y) => closeness(x.relationship || x.value) - closeness(y.relationship || y.value)) : [];
-    claims = [...new Map([...related, ...ranked].map(f => [f.id, f])).values()];
+    // Asked for a kind of fact by one of its names ("where do I live" is
+    // lives-in), its current values come first under whatever name each was
+    // filed: an imported "location: Krefeld" holds no word of the question.
+    // Not for a question about how people are related, where "name" in "my
+    // wife's name" would bring the owner's full name first (8 October 2026).
+    const fields = fieldList(ctx.store.root), kinds = asked.length ? [] : fields.asked(text);
+    const ofKind = kinds.length ? all.filter(f => holds(f, day) && !f.object_type && kinds.includes(fields.canonical(f.attribute)) && (named.size ? named.has(f.subject_id) : f.subject_type === 'self')) : [];
+    claims = [...new Map([...related, ...ofKind, ...ranked].map(f => [f.id, f])).values()];
     shownAsClaims = new Set(claims.slice(0, limit).map(f => f.id));
   }
   if (include.includes('note')) ({hits, mode, note} = await noteHits(ctx, text, {limit: 50}));
@@ -411,17 +418,22 @@ async function write(name, a, ctx, guarded) {
     if (a.valid_to) throw Error('add_claim records what is true now; valid_to is not accepted');
     const quote = String(a.evidence_quote || '').trim();
     if (quote.length < 10) throw Error('Give evidence_quote: the exact sentence the fact came from, at least 10 characters');
-    const value = required(a.value, 'the value'), attribute = norm(required(a.attribute, 'the attribute')).replace(/[^\p{L}\p{N}]+/gu, '_').replace(/^_|_$/g, '');
+    const value = required(a.value, 'the value'), given = norm(required(a.attribute, 'the attribute')).replace(/[^\p{L}\p{N}]+/gu, '_').replace(/^_|_$/g, '');
     if (a.valid_from && !isDay(a.valid_from)) throw Error('Give valid_from as YYYY-MM-DD');
+    // A kind the list names is one fact under its fixed name, whatever name it
+    // was given or filed under before (core/fields.mjs).
+    const fields = fieldList(ctx.store.root), listed = fields.listed(given), attribute = listed ? fields.canonical(given) : given;
     const type = a.subject_type || 'self';
     const subject = type === 'contact' ? personFor(query, {contact_id: a.subject_id, name: a.subject_name}) : type === 'entity' ? pick(entities(query), {id: a.subject_id, name: a.subject_name}, 'thing') : null;
     const subjectId = subject?.id || null, day = a.valid_from || today(ctx);
-    const same = query.rows('claims').filter(c => c.subject_type === type && (c.subject_id || null) === subjectId && c.attribute === attribute), slot = query.rows('fact_slots').find(s => s.subject_type === type && (s.subject_id || null) === subjectId && s.attribute === attribute);
+    const same = query.rows('claims').filter(c => c.subject_type === type && (c.subject_id || null) === subjectId && (listed ? fields.canonical(c.attribute) === attribute : c.attribute === attribute)), slot = query.rows('fact_slots').find(s => s.subject_type === type && (s.subject_id || null) === subjectId && s.attribute === attribute);
     const typed = same.filter(c => holds(c, day) && /^user/.test(c.origin || '') && norm(c.value) !== norm(value));
-    if (typed.length && (slot?.cardinality || 'one') !== 'many') {
+    if (typed.length && (listed ? fields.one(attribute) : (slot?.cardinality || 'one') !== 'many')) {
       const proposal = guarded({}).query.execute({table: 'review_queue', operation: 'insert', values: {title: attribute.replace(/_/g, ' ') + ': ' + value, suggestion_type: 'add_claim', status: 'pending_review', origin: 'ai', description: quote, source_note_id: a.source_note_id || null,
         payload: {label: a.attribute, value, attribute, subject_type: type, subject_id: subjectId, ...(type === 'contact' ? {contact_id: subjectId} : {}), source_type: a.source_note_id ? 'note' : 'assistant', source_id: a.source_note_id || null, valid_from: a.valid_from || null}}, assistant: true}).data;
-      return {outcome: 'waiting_for_review', review_id: (Array.isArray(proposal) ? proposal[0] : proposal)?.id, message: 'The owner typed "' + typed.map(c => c.value).join('", "') + '" himself, so the new value waits in his Review instead of replacing it'};
+      // Only values the assistant may see are quoted back to it.
+      const shown = new Set(visibleRows(query, 'claims').map(c => c.id)), quoted = typed.filter(c => shown.has(c.id)).map(c => c.value);
+      return {outcome: 'waiting_for_review', review_id: (Array.isArray(proposal) ? proposal[0] : proposal)?.id, message: (quoted.length ? 'The owner typed "' + quoted.join('", "') + '" himself' : 'The owner entered this fact himself') + ', so the new value waits in his Review instead of replacing it'};
     }
     const expected = Object.fromEntries([...same, ...(slot ? [slot] : [])].map(r => [r.type + '/' + r.id, r._hash]));
     const result = guarded(expected).domains.writeFact({subject_type: type, ...(type === 'contact' ? {contact_id: subjectId} : type === 'entity' ? {entity_id: subjectId} : {}), attribute, label: a.attribute, value, valid_from: a.valid_from, evidence_quote: quote,

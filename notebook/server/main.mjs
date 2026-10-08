@@ -21,6 +21,7 @@ import { restore } from '../core/archives.mjs';
 import {RecoveryRunner} from '../core/recovery-runner.mjs';
 import {BackupRunner} from '../core/backup-runner.mjs';
 import {BackupSchedule} from '../core/backup-schedule.mjs';
+import {FactClosing} from '../core/fact-closing.mjs';
 import {saveConversationState,retainCompletedConversation} from '../core/conversation-state.mjs';
 import { importExport } from '../core/import.mjs';
 import { kinds } from '../core/jobs/scheduler.mjs';
@@ -107,7 +108,11 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   // account is made through a private setup link the installer asks the local door for
   // (/api/login-link), so without a token nothing typed into the web door creates one.
   const web = webPort === undefined || webPort === null ? null : { port: Number(webPort), auth: new WebAuth(store.state, { token, remote: true, now: authNow }) };
-  const menerioImport=new MenerioImport(store,mediaRoot,()=>index.rebuild(),{beat});
+  // What is no longer true ends on its own (core/fact-closing.mjs): once a day
+  // on the machine that runs the routines, and soon after a Menerio import,
+  // which copies old values under their old names beside the new ones.
+  const factClosing=domains.factClosing=new FactClosing({store,query,device});
+  const menerioImport=new MenerioImport(store,mediaRoot,()=>{index.rebuild();factClosing.request();},{beat});
   const telegramConnection=new TelegramConnection();
   const chatRequests=new Map(),recoveryRunner=new RecoveryRunner(store),backupRunner=new BackupRunner(store,mediaRoot);let dictationBusy=false;
   const loginLinks=new Map();
@@ -406,6 +411,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   const processing=domains.processing=new NoteProcessing({store,query,domains,device});
   const processingTimer=setInterval(()=>{if(!menerioImport.mutating)void processing.tick().catch(()=>{});},60000);processingTimer.unref?.();
   const backupSchedule=new BackupSchedule({store,runner:backupRunner,device}),backupTimer=setInterval(()=>{if(!menerioImport.mutating)void backupSchedule.tick().catch(()=>{});},600000);backupTimer.unref?.();
+  const factTimer=setInterval(()=>{if(!menerioImport.mutating)void factClosing.tick().catch(()=>{});},600000);factTimer.unref?.();
   const interval = setInterval(() => { if (!menerioImport.mutating) void store.verify().then(()=>index.rebuildBackground()).catch(()=>{}); }, 600000);
   const jobs=setInterval(()=>{if(!menerioImport.mutating)scheduler.tick().catch(()=>{});},30000);
   const syncTimer=setInterval(()=>{if(!menerioImport.mutating&&fs.existsSync(path.join(store.state,'sync-config.json')))void syncRunner.run();},60000);
@@ -434,7 +440,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   const watchRoot=name=>{const folder=path.join(store.root,name);if(!watchers.has(name)&&fs.existsSync(folder))watchers.set(name,fs.watch(folder,{recursive:true},changed(name)));};
   for(const name of durableRoots)watchRoot(name);
   const rootWatcher=fs.watch(store.root,(event,name)=>{if(durableRoots.includes(name)){watchRoot(name);changed(name)(event,null);}else if(durableFiles.includes(name))changed('')(event,name);});
-  return { server, store, index, query, domains, scheduler, sync, mediaSync,address: server.address(), webAddress: webServer?.address() || null, close: async () => { if (webServer) await new Promise(resolve => webServer.close(resolve)); clearInterval(meaningTimer);clearInterval(processingTimer);clearInterval(backupTimer);stopIndexing();store.unwatch();await syncRunner.close();await menerioImport.close();rootWatcher.close();for(const watcher of watchers.values())watcher.close();clearTimeout(debounce);clearTimeout(indexDebounce);clearInterval(telegramTimer);clearInterval(interval);clearInterval(jobs);clearInterval(syncTimer);clearInterval(mediaTimer); await new Promise(resolve => server.close(resolve)); index.close(); } };
+  return { server, store, index, query, domains, scheduler, sync, mediaSync,address: server.address(), webAddress: webServer?.address() || null, close: async () => { if (webServer) await new Promise(resolve => webServer.close(resolve)); clearInterval(meaningTimer);clearInterval(processingTimer);clearInterval(backupTimer);clearInterval(factTimer);stopIndexing();store.unwatch();await syncRunner.close();await menerioImport.close();rootWatcher.close();for(const watcher of watchers.values())watcher.close();clearTimeout(debounce);clearTimeout(indexDebounce);clearInterval(telegramTimer);clearInterval(interval);clearInterval(jobs);clearInterval(syncTimer);clearInterval(mediaTimer); await new Promise(resolve => server.close(resolve)); index.close(); } };
 }
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const root = process.env.GODSPEED_WORKSPACE;

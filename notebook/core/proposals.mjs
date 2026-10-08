@@ -3,6 +3,7 @@ import {visibleRows} from './visibility.mjs';
 import {namedPeople} from './related.mjs';
 import {momentDraft} from './moment-draft.mjs';
 import {recordJob, contentFingerprint} from './processing.mjs';
+import {fieldList} from './fields.mjs';
 
 // What processing a note gives: tags and metadata on the note itself, its
 // people linked by name, and proposals for the review queue. Each proposal
@@ -20,6 +21,7 @@ export const CONTRACT = 'Return JSON {metadata:{type,topics,sentiment,summary,pe
   + 'metadata.type is one of ' + NOTE_TYPES.join(', ') + '; people are the names of people the note is about, as written; tags are 1-6 short lowercase topic words. '
   + 'Suggestions are only for durable facts worth remembering, never for the note\'s mere content. Each has an evidence_quote copied exactly from the note. Shapes by type: '
   + 'add_claim {label,value,attribute,category_slug,subject} where subject is "self" or the id of a supplied person (a fact about a person or about the owner); '
+  + 'a fact of a kind listed in fixed_names has exactly that name as its attribute, never another ("one at a time" means a new value replaces the old one); '
   + 'add_moment {title,description,happened_at YYYY-MM-DD,status one of past_fact,future_plan,ongoing,unknown,participants:[person id or name]} for an event with a date (resolve relative dates against today); '
   + 'add_contact {name,notes} for a person named in the note who is not among the supplied people; '
   + 'add_relationship {source_id,target_id,label} between two supplied people. '
@@ -39,7 +41,7 @@ function resolver(query) {
 }
 
 // One proposal in its kind's shape, or null.
-export function shapeProposal(s, {person, note, today, cites}) {
+export function shapeProposal(s, {person, note, today, cites, fields = fieldList()}) {
   if (!s || !KINDS.includes(s.type) || typeof s.evidence_quote !== 'string' || !cites(s.evidence_quote)) return null;
   const p = s.payload && typeof s.payload === 'object' ? s.payload : {}, base = {type: s.type, title: String(s.title || '').slice(0, 200), evidence_quote: s.evidence_quote, confidence: s.confidence ?? null};
   if (s.type === 'add_claim' || s.type === 'add_profile_entry') {
@@ -47,7 +49,9 @@ export function shapeProposal(s, {person, note, today, cites}) {
     if (!value || !label) return null;
     const who = p.subject && p.subject !== 'self' ? person(p.subject) : p.contact_id ? person(p.contact_id) : p.subject_type === 'contact' ? person(p.subject_id) : null;
     if ((p.subject && p.subject !== 'self' || p.contact_id) && !who) return null;
-    return {...base, title: base.title || label + ': ' + value, payload: {label, value, attribute: String(p.attribute || label).toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '_').replace(/^_|_$/g, ''), category_slug: p.category_slug || null,
+    // A listed kind under its fixed name, whatever the model called it (core/fields.mjs).
+    const given = String(p.attribute || label).toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '_').replace(/^_|_$/g, ''), attribute = fields.listed(given) ? fields.canonical(given) : given;
+    return {...base, title: base.title || label + ': ' + value, payload: {label, value, attribute, category_slug: p.category_slug || null,
       subject_type: who ? 'contact' : 'self', subject_id: who ? who.id : null, ...(who ? {contact_id: who.id} : {}), source_type: 'note', source_id: note.id, ...(p.valid_from ? {valid_from: p.valid_from} : {})}};
   }
   if (s.type === 'add_moment') {
@@ -84,10 +88,11 @@ export async function processNote(domains, input, {cites, factSuppressed, factSu
   // fact in a private section (a diagnosis) was sent with every processed note.
   const facts = visibleRows(query, 'profile_facts').filter(f => f.is_current && (f.subject_type === 'self' || people.some(p => p.id === f.contact_id))).slice(0, 80).map(f => ({subject: f.subject_type === 'self' ? 'self' : f.contact_id, label: f.label, value: f.value}));
   const media = visibleRows(query, 'media_analysis').filter(m => m.note_id === note.id).map(m => ({file: m.original_filename, description: m.description, text: String(m.extracted_text || '').slice(0, 4000)}));
-  const result = await domains.provider({kind: 'process-note', today, note: {id: note.id, title: note.title, text: String(note.content || '').slice(0, MAX_TEXT), folder: note.folder_path || null, tags: note.tags || []}, people, confirmed_facts: facts, media, contract: CONTRACT});
+  const fields = fieldList(store.root);
+  const result = await domains.provider({kind: 'process-note', today, note: {id: note.id, title: note.title, text: String(note.content || '').slice(0, MAX_TEXT), folder: note.folder_path || null, tags: note.tags || []}, people, confirmed_facts: facts, fixed_names: fields.promptLines(), media, contract: CONTRACT});
   const answer = typeof result === 'string' ? JSON.parse(result.replace(/^```(?:json)?\s*|\s*```$/g, '')) : result;
   if (!answer || typeof answer !== 'object' || !Array.isArray(answer.suggestions || [])) throw new Error('The assistant returned an invalid proposal list');
-  const raw = answer.suggestions || [], shaped = raw.map(s => shapeProposal(s, {person, note, today, cites: q => cites(note, q)}));
+  const raw = answer.suggestions || [], shaped = raw.map(s => shapeProposal(s, {person, note, today, cites: q => cites(note, q), fields}));
   // An answer that quotes words the note does not hold is not trusted at all. Proposals that are
   // only shaped wrong are left out on their own: until 6 October 2026 they also threw away the
   // note's tags and its people.

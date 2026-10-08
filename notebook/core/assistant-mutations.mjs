@@ -84,6 +84,11 @@ export function assistantMutationContext({store,query,domains,scopes},input,tool
   });
   return ownerStore.commit(records,options);
  };
- const guardedDomains=Object.assign(Object.create(Object.getPrototypeOf(domains)),domains,{store:guard,query:guardedQuery,assistant:true});
+ // Whether this assistant may change a record it did not name: one it may see
+ // and whose current version it read (writeFact asks before ending an older
+ // value filed under another name of the same kind; one it may not change is
+ // left to the owner's daily closing, core/fact-closing.mjs).
+ const mayChange=(type,record)=>{try{assertAssistantRecord(guardedQuery,type,record.id);}catch{return false;}const supplied=expected[type+'/'+record.id]||expected[record.id];return typeof supplied==='string'&&supplied===ownerStore.get(type,record.id)?._hash;};
+ const guardedDomains=Object.assign(Object.create(Object.getPrototypeOf(domains)),domains,{store:guard,query:guardedQuery,assistant:true,mayChange});
  return {store:guard,query:guardedQuery,domains:guardedDomains};
 }

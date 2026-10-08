@@ -15,8 +15,10 @@ const current=(query,attribute)=>query.rows('profile_facts').filter(f=>f.is_curr
 test('an undated imported value is current, so a new value replaces it',async t=>{
  const env=fixture(t);
  env.store.save('claims',{subject_type:'self',subject_id:null,attribute:'home_city',value:'Town A',valid_from:null,valid_to:null});
- env.domains.writeFact({label:'Home city',attribute:'home_city',value:'Town B'});assert.deepEqual(current(env.query,'home_city'),['Town B']);
- env.domains.writeFact({label:'Home city',attribute:'home_city',value:'Town A'});assert.deepEqual(current(env.query,'home_city'),['Town A']);
+ // "home city" is one of the names of lives-in (core/fields.mjs): the new value is filed under
+ // that fixed name and ends the imported one filed under the old name.
+ env.domains.writeFact({label:'Home city',attribute:'home_city',value:'Town B'});assert.deepEqual(current(env.query,'lives-in'),['Town B']);assert.deepEqual(current(env.query,'home_city'),[]);
+ env.domains.writeFact({label:'Home city',attribute:'home_city',value:'Town A'});assert.deepEqual(current(env.query,'lives-in'),['Town A']);
  assert.equal(env.query.rows('profile_facts').some(f=>f.has_conflict),false);
 });
 
@@ -28,10 +30,11 @@ test('merging a person into yourself leaves one current answer and one setting p
  env.domains.writeFact({label:'Shoe size',attribute:'shoe_size',value:'44',contact_id:twin.id});
  await env.domains.invoke('merge-contacts',{merge_into_self:true,source_contact_id:twin.id});
  const self=env.query.rows('profile_facts').filter(f=>f.subject_type==='self');
- assert.deepEqual(self.filter(f=>f.is_current&&f.attribute==='home_city').map(f=>f.value),['Town A']);
+ // Filed under the fixed name of its kind, lives-in (core/fields.mjs).
+ assert.deepEqual(self.filter(f=>f.is_current&&f.attribute==='lives-in').map(f=>f.value),['Town A']);
  assert.ok(self.some(f=>!f.is_current&&f.value==='Town Z'),'the other card\'s value is kept as history');
  assert.deepEqual(self.filter(f=>f.is_current&&f.attribute==='shoe_size').map(f=>f.value),['44']);
- assert.equal(env.query.rows('fact_slots').filter(s=>s.subject_type==='self'&&s.attribute==='home_city').length,1);
+ assert.equal(env.query.rows('fact_slots').filter(s=>s.subject_type==='self'&&s.attribute==='lives-in').length,1);
  assert.equal(env.query.rows('fact_slots').filter(s=>s.subject_type==='self'&&s.attribute==='shoe_size').length,1);
 });
 

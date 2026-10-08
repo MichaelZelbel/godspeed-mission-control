@@ -64,6 +64,8 @@ else if(command==='record'){
 }else if(command==='memory'&&verb==='lookup'){
   result=await domains.invoke('retrieve-memory',{query:rest.join(' ')});
 }else if(command==='world'&&verb==='claim')result=domains.writeFact(JSON.parse(fs.readFileSync(rest[0],'utf8')));
+// What is no longer true ends: the daily closing, by hand (core/fact-closing.mjs).
+else if(command==='world'&&verb==='close')result=await (await import('../core/fact-closing.mjs')).closeFacts({store,query,dryRun:args.includes('--dry-run')});
 else if(command==='world'&&verb==='event')result=store.save('moments',JSON.parse(fs.readFileSync(rest[0],'utf8')));
 else if(command==='backup')result=backup(store,media,path.resolve(verb));
 else if(command==='restore')result=restore(store,media,path.resolve(verb));
@@ -80,5 +82,5 @@ else if(command==='convert-notebook'){
   const {renamed=[],rewritten=[],problems,...summary}=outcome;
   result={...summary,renamed:renamed.length,rewritten:rewritten.length,...(problems?{problems}:{}),first_renames:renamed.slice(0,10).map(r=>r.from+' -> '+r.to),full_list:list};
 }
-else throw new Error('Commands: init, record list/get/save/merge/remove/display-name, memory search/lookup, world claim/event, backup, restore, import, export, validate, sync folder [PATH...], menerio chunks ARCHIVE_SOURCE_DIR, convert-notebook [--dry-run]');
+else throw new Error('Commands: init, record list/get/save/merge/remove/display-name, memory search/lookup, world claim/event/close [--dry-run], backup, restore, import, export, validate, sync folder [PATH...], menerio chunks ARCHIVE_SOURCE_DIR, convert-notebook [--dry-run]');
 console.log(JSON.stringify(result,null,2));

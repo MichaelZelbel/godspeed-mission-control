@@ -1,5 +1,6 @@
 import { hash,atomic,safe } from './records/store.mjs';
 import {QueryService,claimHolds} from './query.mjs';
+import {fieldList} from './fields.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 const NOT_UNDOABLE='Godspeed cannot tell exactly what this change did, so it cannot undo it. Correct it on the profile or person instead.';
@@ -8,7 +9,10 @@ export function factSubject(p){const subject_type=p.entity_id?'entity':p.contact
 export function factSuppressed(query,{subject_type,subject_id,attribute,value}){
   // The owner is the self subject, whether written as no id or as 'owner'.
   if(subject_type==='self'&&subject_id==='owner')subject_id=null;
-  return query.rows('ai_suggestion_suppressions').some(s=>s.subject_type===subject_type&&(s.subject_type==='self'&&s.subject_id==='owner'?null:s.subject_id||null)===(subject_id||null)&&key(s.attribute)===key(attribute)&&same(s.value)===same(value)||s.suppression_key===`${subject_type}:${subject_id||''}:${attribute}:${String(value).toLowerCase()}`);
+  // A value answered Never Again under one name of a kind is refused under all
+  // of them (core/fields.mjs): "location: X" blocked is "lives-in: X" blocked.
+  const fields=fieldList(query.store?.root),kind=fields.listed(attribute)?fields.canonical(attribute):null;
+  return query.rows('ai_suggestion_suppressions').some(s=>s.subject_type===subject_type&&(s.subject_type==='self'&&s.subject_id==='owner'?null:s.subject_id||null)===(subject_id||null)&&(key(s.attribute)===key(attribute)||!!kind&&fields.canonical(s.attribute)===kind)&&same(s.value)===same(value)||s.suppression_key===`${subject_type}:${subject_id||''}:${attribute}:${String(value).toLowerCase()}`);
 }
 // A suggestion applied before Godspeed kept undo receipts (the Menerio import)
 // records only what it pointed at. Undo removes that change where it is still
