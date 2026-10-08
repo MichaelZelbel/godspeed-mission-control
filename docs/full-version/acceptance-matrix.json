@@ -1,6 +1,6 @@
 {
   "format": 2,
-  "checked_at": "2026-10-06T12:38:34.542Z",
+  "checked_at": "2026-10-08T08:18:06.268Z",
   "complete": false,
   "items": [
     {
@@ -1323,7 +1323,7 @@
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
       "criterion": "Preserve wiki_page_sources fields, references, filtering and history through edits, conflict, rebuild and restoration",
-      "status": "explicitly deferred",
+      "status": "retired",
       "evidence": [],
       "required": false,
       "target_test": "Exercise wiki_page_sources through its installed entry point and check actual results after restart"
@@ -1339,7 +1339,7 @@
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
       "criterion": "Preserve wiki_pages fields, references, filtering and history through edits, conflict, rebuild and restoration",
-      "status": "explicitly deferred",
+      "status": "retired",
       "evidence": [],
       "required": false,
       "target_test": "Exercise wiki_pages through its installed entry point and check actual results after restart"
@@ -1355,7 +1355,7 @@
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
       "criterion": "Preserve wiki_revisions fields, references, filtering and history through edits, conflict, rebuild and restoration",
-      "status": "explicitly deferred",
+      "status": "retired",
       "evidence": [],
       "required": false,
       "target_test": "Exercise wiki_revisions through its installed entry point and check actual results after restart"
@@ -1486,8 +1486,8 @@
       "activation": "Explicit user choice; inspect installed schedules and settings",
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
-      "criterion": "Deferred graph/lexicon behavior",
-      "status": "explicitly deferred",
+      "criterion": "Lexicon behavior, retired with the Lexicon on 8 October 2026",
+      "status": "retired",
       "evidence": [],
       "required": false,
       "target_test": "Exercise backfill-wikilinks through its installed entry point and check actual results after restart"
@@ -1640,8 +1640,8 @@
       "activation": "Explicit user choice; inspect installed schedules and settings",
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
-      "criterion": "Deferred graph/lexicon behavior",
-      "status": "explicitly deferred",
+      "criterion": "Lexicon behavior, retired with the Lexicon on 8 October 2026",
+      "status": "retired",
       "evidence": [],
       "required": false,
       "target_test": "Exercise enrich-person-from-lexicon through its installed entry point and check actual results after restart"
@@ -1772,10 +1772,10 @@
       "activation": "Explicit user choice; inspect installed schedules and settings",
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
-      "criterion": "Deferred graph/lexicon behavior",
-      "status": "explicitly deferred",
+      "criterion": "Draw the whole graph and one note's neighbourhood from the saved notes: their [[links]], their closest notes and the people they name; hidden, trashed and mirrored notes only as the owner asks; nothing stored; on the real notebook in under a second.",
+      "status": "source only",
       "evidence": [],
-      "required": false,
+      "required": true,
       "target_test": "Exercise get-graph-data through its installed entry point and check actual results after restart"
     },
     {
@@ -2140,8 +2140,8 @@
       "activation": "Explicit user choice; inspect installed schedules and settings",
       "permissions": "Authenticated owner; outward changes require exact approval",
       "dependencies": [],
-      "criterion": "Deferred graph/lexicon behavior",
-      "status": "explicitly deferred",
+      "criterion": "Lexicon behavior, retired with the Lexicon on 8 October 2026",
+      "status": "retired",
       "evidence": [],
       "required": false,
       "target_test": "Exercise wiki-ingest through its installed entry point and check actual results after restart"

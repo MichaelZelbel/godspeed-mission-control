@@ -62,15 +62,15 @@ test('names other records already use get " 2", " 3", and a page the owner wrote
   edit(store,'notes',one.id,{content:'still here'});assert.equal(inNotebook(store,one),'Ideas/Plan 2.md','A numbered name that still fits stays');
 });
 
-test('people, groups, facts, moments, Lexicon pages, collections and things each have their folder; bookkeeping goes to the system folder',()=>{
+test('people, groups, facts, moments, collections and things each have their folder; bookkeeping goes to the system folder',()=>{
   const store=new Store(temp()),person=store.save('contacts',{name:'Ada Lovelace',notes:'Mathematician'}),group=store.save('contact_groups',{name:'Book club',description:'Monthly'});
   const fact=store.save('claims',{attribute:'home_city',value:'London',valid_from:'1815-12-10'}),old=store.save('claims',{attribute:'home_city',value:'Paris',valid_from:'1800-01-01',valid_to:'1815-12-10'});
-  const moment=store.save('moments',{title:'First program',happened_at:'1843-09-01T00:00:00Z',description:'Notes on the engine'}),page=store.save('wiki_pages',{title:'Analytical Engine',content:'A machine.\n'});
+  const moment=store.save('moments',{title:'First program',happened_at:'1843-09-01T00:00:00Z',description:'Notes on the engine'});
   const books=store.save('collections',{name:'Books'}),item=store.save('collection_items',{collection_id:books.id,title:'Sketch of the engine',data:{year:1843}}),thing=store.save('entities',{name:'Royal Society'});
   const topic=store.save('contact_topics',{title:'Ask about the engine',contact_id:person.id}),review=store.save('weekly_reviews',{week_start:'2026-09-28',week_end:'2026-10-04',review_data:{themes:[]}});
   const settings=store.save('settings',{id:'installation',owner:'local'}),message=store.save('conversation_messages',{role:'user',content:'hi'});
-  assert.deepEqual([person,group,fact,old,moment,page,books,item,thing,topic,review,settings,message].map(r=>inNotebook(store,r)),[
-    'People/Ada Lovelace.md','Groups/Book club.md','Facts/home city - London.md','Facts/Earlier/home city - Paris.md','Timeline/1843-09-01 First program.md','Lexicon/Analytical Engine.md',
+  assert.deepEqual([person,group,fact,old,moment,books,item,thing,topic,review,settings,message].map(r=>inNotebook(store,r)),[
+    'People/Ada Lovelace.md','Groups/Book club.md','Facts/home city - London.md','Facts/Earlier/home city - Paris.md','Timeline/1843-09-01 First program.md',
     'Collections/Books.md','Collections/Books/Sketch of the engine.md','World/Royal Society.md','Topics/Ask about the engine.md','Reviews/Week of 2026-09-28.md','_system/settings/installation.json','_system/conversation_messages/'+message.id+'.json']);
   assert.match(fs.readFileSync(store.file(person),'utf8'),/^---\nid: ada-lovelace-[0-9a-f]{8}\ntype: person\nname: Ada Lovelace\n[\s\S]*\n---\nMathematician$/);
   // Renamed, removed or merged, a person's file follows.

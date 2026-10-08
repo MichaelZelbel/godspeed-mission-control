@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from "react";
-import { useNoteNeighborhood, GraphNode, GraphEdge } from "@/hooks/useGraphData";
-import { useNoteConnections } from "@/hooks/useGraphData";
+import { useNavigate } from "react-router-dom";
+import { useNoteNeighborhood } from "@/hooks/useGraphData";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
@@ -11,7 +11,6 @@ import {
   FileText,
   Sparkles,
   Users,
-  Hash,
   ArrowRight,
   Plus,
   Loader2,
@@ -32,23 +31,22 @@ const TYPE_COLORS: Record<string, string> = {
 
 const EDGE_STYLES: Record<string, { dash: number[]; color: string }> = {
   semantic: { dash: [2, 3], color: "hsl(220, 14%, 55%)" },
-  shared_person: { dash: [6, 3], color: "hsl(340, 60%, 55%)" },
-  shared_topic: { dash: [6, 3], color: "hsl(205, 78%, 50%)" },
+  mentions_person: { dash: [], color: "hsl(340, 60%, 55%)" },
   manual_link: { dash: [], color: "hsl(220, 70%, 45%)" },
 };
 
 const CONNECTION_TYPE_ICONS: Record<string, typeof Link2> = {
   manual_link: Link2,
   semantic: Sparkles,
-  shared_person: Users,
-  shared_topic: Hash,
+  mentions_person: Users,
 };
 
+// What the graph's three kinds of edges are (core/graph.mjs): a [[link]],
+// a note with similar words, and a person the note names.
 const CONNECTION_TYPE_LABELS: Record<string, string> = {
-  manual_link: "Manual links",
-  semantic: "AI-discovered",
-  shared_person: "Shared people",
-  shared_topic: "Shared topics",
+  manual_link: "Links",
+  semantic: "Similar notes",
+  mentions_person: "People",
 };
 
 interface LocalGraphPanelProps {
@@ -66,8 +64,20 @@ export function LocalGraphPanel({
   onClose,
   onLinkToNote,
 }: LocalGraphPanelProps) {
-  const { data: graphData, isLoading } = useNoteNeighborhood(noteId, 2);
-  const { data: connections = [] } = useNoteConnections(noteId);
+  const { data: graphData, isLoading, isError } = useNoteNeighborhood(noteId, 2);
+  const navigate = useNavigate();
+  // A person is drawn as "contact:<id>" and opens on the People page.
+  const open = useCallback((id: string) => {
+    if (id.startsWith("contact:")) navigate(`/dashboard/people/${id.slice("contact:".length)}`);
+    else onNavigate(id);
+  }, [navigate, onNavigate]);
+  // This note's own edges in the graph: the list below the drawing. Until
+  // 8 October 2026 it read stored connections, which held only the links
+  // the editor had saved since the move from Menerio.
+  const connections = useMemo(
+    () => (graphData?.edges ?? []).filter((e) => e.source === noteId || e.target === noteId),
+    [graphData, noteId],
+  );
   const graphRef = useRef<any>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [panelWidth, setPanelWidth] = useState(320);
@@ -168,7 +178,7 @@ export function LocalGraphPanel({
   const grouped = useMemo(() => {
     const groups: Record<string, typeof connections> = {};
     for (const c of connections) {
-      const t = c.connection_type;
+      const t = c.type;
       if (!groups[t]) groups[t] = [];
       groups[t].push(c);
     }
@@ -209,6 +219,10 @@ export function LocalGraphPanel({
         {isLoading ? (
           <div className="flex items-center justify-center" style={{ height: graphHeight }}>
             <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+          </div>
+        ) : isError && !graphData ? (
+          <div role="alert" className="flex items-center justify-center text-xs text-muted-foreground px-3 text-center" style={{ height: graphHeight }}>
+            The graph of this note could not be loaded.
           </div>
         ) : graphNodes.length === 0 ? (
           <div className="flex items-center justify-center text-xs text-muted-foreground" style={{ height: graphHeight }}>
@@ -264,7 +278,7 @@ export function LocalGraphPanel({
             }}
             linkWidth={(link: any) => Math.max(0.5, (link.strength || 0.5) * 2)}
             onNodeClick={(node: any) => {
-              onNavigate(node.id);
+              open(node.id);
             }}
             onNodeHover={(node: any) => {
               const el = containerRef.current?.querySelector("canvas");
@@ -314,15 +328,12 @@ export function LocalGraphPanel({
                 </h5>
                 <div className="space-y-0.5">
                   {items.map((conn) => {
-                    const linkedId =
-                      conn.source_note_id === noteId
-                        ? conn.target_note_id
-                        : conn.source_note_id;
+                    const linkedId = conn.source === noteId ? conn.target : conn.source;
                     const linkedTitle = noteMap.get(linkedId) || "Untitled";
                     return (
                       <button
                         key={conn.id}
-                        onClick={() => onNavigate(linkedId)}
+                        onClick={() => open(linkedId)}
                         className="w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-accent transition-colors group"
                       >
                         <FileText className="h-3 w-3 text-muted-foreground shrink-0" />
@@ -345,7 +356,7 @@ export function LocalGraphPanel({
             <div className="text-center py-4">
               <Link2 className="h-5 w-5 mx-auto mb-2 text-muted-foreground/30" />
               <p className="text-[10px] text-muted-foreground">
-                No connections yet. Use [[wikilinks]] or let AI discover links.
+                No connections yet. Link another note by writing its title in [[double brackets]].
               </p>
             </div>
           )}

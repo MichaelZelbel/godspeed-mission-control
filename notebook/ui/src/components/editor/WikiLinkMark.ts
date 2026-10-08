@@ -23,7 +23,6 @@ export const WikiLinkMark = Mark.create({
         parseHTML: (element) => element.getAttribute("data-slug"),
         renderHTML: (attributes) => ({
           "data-slug": attributes.slug,
-          href: `/lexicon/${attributes.slug}`,
           class: "wiki-link",
           title: attributes.slug,
         }),
@@ -32,11 +31,11 @@ export const WikiLinkMark = Mark.create({
   },
 
   parseHTML() {
-    return [{ tag: "a[data-slug]" }];
+    return [{ tag: "a[data-slug]" }, { tag: "span[data-slug]" }];
   },
 
   renderHTML({ HTMLAttributes }) {
-    return ["a", mergeAttributes(HTMLAttributes), 0];
+    return ["span", mergeAttributes(HTMLAttributes), 0];
   },
 
   addCommands() {

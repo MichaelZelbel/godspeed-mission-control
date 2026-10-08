@@ -41,7 +41,6 @@ const layouts = {
     name: r => [text(r.attribute).replaceAll('_', ' ').trim(), text(r.value).trim()].filter(Boolean).join(' - '),
   },
   moments: { word: 'moment', folder: () => 'Timeline', name: r => [day(r.happened_at), text(r.title).trim()].filter(Boolean).join(' '), body: 'description', first: ['title', 'happened_at', 'happened_end', 'category'] },
-  wiki_pages: { word: 'lexicon page', folder: () => 'Lexicon', name: r => r.title, body: 'content', first: ['title', 'slug', 'page_type', 'summary'] },
   collections: { word: 'collection', folder: () => 'Collections', name: r => r.name, body: 'description', first: ['name', 'slug'] },
   // Items sit in a folder named after their collection, so renaming a
   // collection moves its items.

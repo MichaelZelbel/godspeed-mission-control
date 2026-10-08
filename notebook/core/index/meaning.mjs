@@ -12,7 +12,7 @@ import {visibleRows} from '../visibility.mjs';
 // notebook does not. Without a connection, search stays word-only and says so.
 
 // What is embedded: the things a person asks about.
-export const MEANING_TYPES = new Set(['notes', 'contacts', 'moments', 'entities', 'claims', 'collection_items', 'wiki_pages', 'media_analysis', 'note_chunks', 'contact_topics']);
+export const MEANING_TYPES = new Set(['notes', 'contacts', 'moments', 'entities', 'claims', 'collection_items', 'media_analysis', 'note_chunks', 'contact_topics']);
 const CHUNK = 1500, OVERLAP = 200, MAX_CHUNKS = 40, BATCH = 64;
 
 export function embeddingConfig(state) {

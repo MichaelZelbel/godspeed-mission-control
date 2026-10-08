@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { useGraphData, GraphNode, GraphEdge } from "@/hooks/useGraphData";
+import { useGraphData, DEFAULT_GRAPH_OPTIONS, GraphNode, GraphEdge } from "@/hooks/useGraphData";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -122,7 +122,7 @@ interface BridgeNotesHighlighterProps {
 
 export function BridgeNotesHighlighter({ compact }: BridgeNotesHighlighterProps) {
   const navigate = useNavigate();
-  const { data: graphData } = useGraphData({ limit: 500 });
+  const { data: graphData } = useGraphData(DEFAULT_GRAPH_OPTIONS);
 
   const bridgeNotes = useMemo(() => {
     if (!graphData || graphData.nodes.length < 3) return [];
@@ -187,7 +187,7 @@ interface TopicClustersViewProps {
 
 export function TopicClustersView({ onFilterCluster }: TopicClustersViewProps) {
   const navigate = useNavigate();
-  const { data: graphData } = useGraphData({ limit: 500 });
+  const { data: graphData } = useGraphData(DEFAULT_GRAPH_OPTIONS);
 
   const clusters = useMemo(() => {
     if (!graphData || graphData.nodes.length < 3) return [];
@@ -260,7 +260,7 @@ export function TopicClustersView({ onFilterCluster }: TopicClustersViewProps) {
 
 /** Bridge note IDs for highlighting in the global graph */
 export function useBridgeNoteIds(): Set<string> {
-  const { data: graphData } = useGraphData({ limit: 500 });
+  const { data: graphData } = useGraphData(DEFAULT_GRAPH_OPTIONS);
   return useMemo(() => {
     if (!graphData || graphData.nodes.length < 3) return new Set<string>();
     const bc = computeBetweenness(graphData.nodes, graphData.edges);

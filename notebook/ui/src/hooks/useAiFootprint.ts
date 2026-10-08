@@ -8,7 +8,7 @@ import { invalidateFactViews, retractFact } from "@/hooks/useFacts";
  * the prefixes the pages actually query under (hyphenated).
  */
 function invalidateDerivedData(qc: QueryClient) {
-  for (const key of ["wiki-pages", "wiki-page", "note-connections"]) {
+  for (const key of ["note-connections", "graph-data", "note-neighborhood"]) {
     qc.invalidateQueries({ queryKey: [key] });
   }
   invalidateFactViews(qc);
@@ -30,7 +30,6 @@ export interface FootprintFact {
 }
 
 export interface AiFootprint {
-  wikiPages: Array<{ id: string; title: string; slug: string; sourceLinkId: string }>;
   /** Facts whose source is this note (claims with source_type 'note'). */
   profileEntries: FootprintFact[];
   connections: Array<{
@@ -53,11 +52,7 @@ export function machineFootprintRows<T extends { source_type?: string | null; or
 
 export async function fetchAiFootprint(noteId: string): Promise<AiFootprint> {
   const id = noteId;
-  const [wikiRes, factRes, connSrcRes, connTgtRes] = await Promise.all([
-    (supabase as any)
-      .from("wiki_page_sources")
-      .select("id, wiki_page_id, wiki_pages:wiki_page_id(id, title, slug)")
-      .eq("note_id", id),
+  const [factRes, connSrcRes, connTgtRes] = await Promise.all([
     (supabase as any)
       .from("profile_facts")
       .select("claim_id, subject_type, subject_id, attribute, value, label, category_slug, source_type, origin, rank")
@@ -74,17 +69,8 @@ export async function fetchAiFootprint(noteId: string): Promise<AiFootprint> {
   // Throw rather than report an empty footprint: callers (the hide-from-AI
   // flow, the footprint dialog) treat "nothing derived" as "nothing to clean
   // up", so a failed read silently skipped the cleanup offer.
-  const failed = wikiRes.error || factRes.error || connSrcRes.error || connTgtRes.error;
+  const failed = factRes.error || connSrcRes.error || connTgtRes.error;
   if (failed) throw failed;
-
-  const wikiPages = (wikiRes.data ?? [])
-    .filter((r: any) => r.wiki_pages)
-    .map((r: any) => ({
-      id: r.wiki_pages.id,
-      title: r.wiki_pages.title,
-      slug: r.wiki_pages.slug,
-      sourceLinkId: r.id,
-    }));
 
   const factRows = machineFootprintRows((factRes.data ?? []) as any[]);
   const names = await subjectNames(factRows);
@@ -117,7 +103,7 @@ export async function fetchAiFootprint(noteId: string): Promise<AiFootprint> {
     })),
   ];
 
-  return { wikiPages, profileEntries, connections };
+  return { profileEntries, connections };
 }
 
 /** Names of the people and World entries the facts are about. A failed lookup only loses the name. */
@@ -161,7 +147,7 @@ export function useRemoveFootprintItem(noteId: string | null) {
       kind,
       id,
     }: {
-      kind: "wiki" | "profile" | "connection";
+      kind: "profile" | "connection";
       id: string;
     }) => {
       if (kind === "profile") {
@@ -173,8 +159,7 @@ export function useRemoveFootprintItem(noteId: string | null) {
         await removeFootprintFact(fact);
         return;
       }
-      const table = kind === "wiki" ? "wiki_page_sources" : "note_connections";
-      const { error } = await (supabase as any).from(table).delete().eq("id", id);
+      const { error } = await (supabase as any).from("note_connections").delete().eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -191,14 +176,6 @@ export function useRemoveAllFootprint(noteId: string | null) {
   return useMutation({
     mutationFn: async (footprint: AiFootprint) => {
       const calls: Promise<any>[] = [];
-      if (footprint.wikiPages.length) {
-        calls.push(
-          (supabase as any)
-            .from("wiki_page_sources")
-            .delete()
-            .in("id", footprint.wikiPages.map((w) => w.sourceLinkId)),
-        );
-      }
       if (footprint.connections.length) {
         calls.push(
           (supabase as any)

@@ -20,7 +20,7 @@ Git sync stages only declared record roots and never databases, media or credent
 
 The scheduler owner is explicit. Pairing sets the VPS owner; an unreachable VPS never transfers ownership. Jobs record attempted and verified outcomes and fail closed for outward actions without permission. Provider credentials are optional local configuration, never synced.
 
-Amended 2026-10-05: records a person reads (notes, people, groups, facts, moments, Lexicon pages, collections and their items) are Markdown files named after their titles, in readable folders, with plain YAML frontmatter, and the rest is JSON in `notebook/_system/`. Identity stays in the file (`id`, `uid`), never in its name, so a display-name change now renames the file but still not the record. Sync merges renamed records by UUID. See `file-format.md` and `sync-contract.md`.
+Amended 2026-10-05: records a person reads (notes, people, groups, facts, moments, collections and their items) are Markdown files named after their titles, in readable folders, with plain YAML frontmatter, and the rest is JSON in `notebook/_system/`. Identity stays in the file (`id`, `uid`), never in its name, so a display-name change now renames the file but still not the record. Sync merges renamed records by UUID. See `file-format.md` and `sync-contract.md`.
 
 ## Alternatives and consequences
 

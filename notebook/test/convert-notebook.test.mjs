@@ -49,7 +49,7 @@ test('the converter turns an old workspace into readable files, keeps every reco
   assert.equal(at('contact_groups',ids.club),'Groups/Book club.md');assert.equal(at('moments',ids.moved),'Timeline/2025-01-01 Moved to Berlin.md');
   assert.equal(at('collections',ids.books),'Collections/Books.md');
   assert.deepEqual(readable(root),['A'.repeat(200)+'.md','CON_.md','Collections/Books.md','Collections/Books/Dune 2.md','Collections/Books/Dune.md','Dots.md','Facts/Earlier/city - Hamburg.md','Facts/city - Berlin.md',
-    'Folder with colon/Backslash and pipe.md','Groups/Book club.md','Leading/slash/Leading slash.md','Lexicon/Personal AI.md','People/Ada Lovelace 2.md','People/Ada Lovelace.md','People/Jos\u00e9 M\u00fcller-Schmidt.md',
+    'Folder with colon/Backslash and pipe.md','Groups/Book club.md','Leading/slash/Leading slash.md','People/Ada Lovelace 2.md','People/Ada Lovelace.md','People/Jos\u00e9 M\u00fcller-Schmidt.md',
     'Projects/2026/Q4/\u{1F389} Launch party.md','Projects/Duplicate 2.md','Projects/Duplicate 3.md','Projects/Duplicate.md','Projects/Q3Q4 plan draft v2.md','Projects/duplicate 4.md','README.md',
     'Timeline/2025-01-01 Moved to Berlin.md','Trailing dots.md','Trash/Projects/Thrown away.md','Untitled 2.md','Untitled 3.md','Untitled.md','World/Acme Robotics.md','escape/Outside.md','hidden notes.md',
     '\u00c4rger/\u00d6lung/Gr\u00fc\u00dfe aus M\u00fcnchen.md','\u00dcnicode decomposed.md',path.basename(note(16))].sort(),'Only readable pages outside the system folder, and no empty old folders');

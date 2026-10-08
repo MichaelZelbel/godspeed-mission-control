@@ -77,7 +77,7 @@ export function RichTextEditor({
         const display = match.match(/data-display-text="([^"]*)"/i)?.[1] || "";
         const slug = toWikiSlug(target);
         const label = (display || target).replace(/&quot;/g, '"').replace(/&amp;/g, "&").trim() || slug;
-        return `<a class="wiki-link" data-slug="${slug}" href="/lexicon/${slug}">${label}</a>`;
+        return `<span class="wiki-link" data-slug="${slug}">${label}</span>`;
       },
     );
     // Defensively strip target="_blank" from anchors that resolve to internal hosts,
@@ -169,9 +169,7 @@ export function RichTextEditor({
     const target = event.target as HTMLElement;
     const wikiLink = target.closest?.(".wiki-link") as HTMLAnchorElement | null;
     if (wikiLink) {
-      // Internal Lexicon link: never open a new browser window. Allow modifier
-      // keys / middle-click to behave normally so users can still force a new
-      // tab if they want to.
+      // A [[link]]: handled by onWikiLinkClick when given, never as a browser link.
       if (event.defaultPrevented) return;
       if (event.button !== 0) return;
       if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;

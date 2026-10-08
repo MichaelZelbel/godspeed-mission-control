@@ -23,15 +23,17 @@ export function keyTerms(note, limit = 12) {
 
 // Notes most like this one. With the search index: its key terms, any of
 // them, ranked by BM25. Without one (a bare test fixture): shared key terms.
-export function relatedNotes(query, note, {index, limit = 6} = {}) {
+// The note graph asks for hundreds of notes at once and passes the notes it
+// may show (`pool`, by id), so the visible notes are not worked out each time.
+export function relatedNotes(query, note, {index, limit = 6, pool = null} = {}) {
   const terms = keyTerms(note);
   if (!terms.length) return [];
-  const notes = new Map(visibleRows(query, 'notes').filter(n => !n.is_trashed && n.id !== note.id).map(n => [n.id, n]));
+  const notes = pool || new Map(visibleRows(query, 'notes').filter(n => !n.is_trashed).map(n => [n.id, n]));
   let ranked = [];
-  if (index?.searchAny) ranked = index.searchAny(terms, {types: ['notes'], limit: limit * 4}).filter(r => notes.has(r.id)).map(r => ({note: notes.get(r.id), score: -r.rank, snippet: r.snippet}));
+  if (index?.searchAny) ranked = index.searchAny(terms, {types: ['notes'], limit: limit * 4}).filter(r => r.id !== note.id && notes.has(r.id)).map(r => ({note: notes.get(r.id), score: -r.rank, snippet: r.snippet}));
   else {
     const mine = new Set(terms);
-    ranked = [...notes.values()].map(n => ({note: n, score: keyTerms(n, 30).filter(t => mine.has(t)).length})).filter(r => r.score > 0).sort((a, b) => b.score - a.score);
+    ranked = [...notes.values()].filter(n => n.id !== note.id).map(n => ({note: n, score: keyTerms(n, 30).filter(t => mine.has(t)).length})).filter(r => r.score > 0).sort((a, b) => b.score - a.score);
   }
   const best = ranked[0]?.score || 1;
   return ranked.slice(0, limit).map(({note: n, score, snippet}) => ({id: n.id, title: n.title, similarity: Math.max(0.05, Math.min(1, score / best)), metadata: n.metadata || null, created_at: n.created_at, ...(snippet ? {snippet} : {})}));

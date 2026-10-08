@@ -1,4 +1,4 @@
-import { BookOpen, Link2, Loader2, Trash2, User, X } from "lucide-react";
+import { Link2, Loader2, Trash2, User, X } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -24,7 +24,7 @@ interface Props {
 /**
  * Retroactive overview of everything an AI pipeline previously derived from
  * a note. Shown when the user hides a note from AI, so they can clean up any
- * Lexicon contributions, People profile fields and Knowledge-Graph edges
+ * People profile fields and note links
  * that the note already created.
  */
 export function AiFootprintDialog({ noteId, open, onOpenChange }: Props) {
@@ -33,7 +33,6 @@ export function AiFootprintDialog({ noteId, open, onOpenChange }: Props) {
   const removeAll = useRemoveAllFootprint(noteId);
 
   const total =
-    (data?.wikiPages.length ?? 0) +
     (data?.profileEntries.length ?? 0) +
     (data?.connections.length ?? 0);
 
@@ -66,42 +65,12 @@ export function AiFootprintDialog({ noteId, open, onOpenChange }: Props) {
           </div>
         ) : total === 0 ? (
           <div className="py-10 text-center text-sm text-muted-foreground">
-            Nothing to clean up - this note hasn’t contributed to Lexicon,
-            People profiles, or the Knowledge Graph yet.
+            Nothing to clean up - this note hasn’t contributed to People
+            profiles or note links yet.
           </div>
         ) : (
           <ScrollArea className="max-h-[55vh] pr-3">
             <div className="space-y-6">
-              {data!.wikiPages.length > 0 && (
-                <section>
-                  <h3 className="mb-2 flex items-center gap-2 text-sm font-medium">
-                    <BookOpen className="h-4 w-4" /> Lexicon pages (
-                    {data!.wikiPages.length})
-                  </h3>
-                  <ul className="space-y-1">
-                    {data!.wikiPages.map((w) => (
-                      <li
-                        key={w.sourceLinkId}
-                        className="flex items-center justify-between rounded-md border bg-card px-3 py-2 text-sm"
-                      >
-                        <span className="truncate">{w.title}</span>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 px-2 text-xs"
-                          onClick={() =>
-                            removeItem.mutate({ kind: "wiki", id: w.sourceLinkId })
-                          }
-                          disabled={removeItem.isPending}
-                        >
-                          <X className="mr-1 h-3 w-3" /> Unlink
-                        </Button>
-                      </li>
-                    ))}
-                  </ul>
-                </section>
-              )}
-
               {data!.profileEntries.length > 0 && (
                 <section>
                   <h3 className="mb-2 flex items-center gap-2 text-sm font-medium">

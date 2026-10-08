@@ -88,7 +88,6 @@ export function DashboardSidebar() {
       items: [
         { title: "Notes", url: "/dashboard/notes", icon: FileText },
         { title: "Note Graph", url: "/dashboard/graph", icon: Network },
-        { title: "Lexicon", url: "/lexicon", icon: BookOpen },
       ],
     },
     people: {

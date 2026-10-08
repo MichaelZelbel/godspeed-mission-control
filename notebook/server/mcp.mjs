@@ -9,12 +9,12 @@ const schema={type:'object',properties:{},additionalProperties:true};
 // the owner's own content, each a type whose visibility rule (visibility.mjs)
 // actually hides records about a hidden person, a private section or a sensitive
 // subject. Bookkeeping and link types (record_history, notifications,
-// review_queue, contact_topic_events, note_connections, wiki_revisions,
+// review_queue, contact_topic_events, note_connections,
 // receipts, embeddings, conversation_messages, settings, jobs and the control
 // tables) have no such rule, so visibleRows returns them all, and until
 // 7 October 2026 a hidden note's content came back inside record_history.snapshot
 // or notifications.body. Topics, facts and reviews have their own filtered tools.
-export const listableTypes=new Set(['notes','note_folders','contacts','contact_groups','contact_group_memberships','contact_relationships','entities','claims','fact_slots','profile_categories','moments','moment_participants','moment_entities','collections','collection_items','collection_item_folders','wiki_pages','comments','goals','work_items','deadlines','habits','forecasts','journal','coach_talks','health_observations','action_items','contact_topics','weekly_reviews','media_analysis']);
+export const listableTypes=new Set(['notes','note_folders','contacts','contact_groups','contact_group_memberships','contact_relationships','entities','claims','fact_slots','profile_categories','moments','moment_participants','moment_entities','collections','collection_items','collection_item_folders','comments','goals','work_items','deadlines','habits','forecasts','journal','coach_talks','health_observations','action_items','contact_topics','weekly_reviews','media_analysis']);
 const definitions=[
   ...topicDefinitions,
   ...memoryDefinitions,
@@ -26,7 +26,7 @@ const definitions=[
   {name:'personal_operation',description:'Apply an explicitly requested goal, obligation, coach, habit, journal, health, memory, forecast or routine operation. Read current IDs first. Never approve an outward action.',inputSchema:schema},
   {name:'search_knowledge',description:'Search the rebuildable index of user records.',inputSchema:{type:'object',properties:{query:{type:'string'}},required:['query']}},
   {name:'list_records',description:'Read file-backed notes, contacts, profile facts, world views, collections, timeline, media metadata, reviews, comments, goals or work.',inputSchema:{type:'object',properties:{type:{type:'string'},filters:{type:'array'},limit:{type:'integer'}},required:['type']}},
-  {name:'save_record',description:'Save one note, person, thing, timeline entry, collection or item, Lexicon page, action or review suggestion with optimistic conflict detection. Preserve its id and hash for edits. Use review suggestions for AI-inferred facts; settings, shares, approvals, routines and assistant instructions stay with the owner.',inputSchema:{type:'object',properties:{type:{type:'string'},value:{type:'object'},expected_hash:{type:'string'}},required:['type','value']}},
+  {name:'save_record',description:'Save one note, person, thing, timeline entry, collection or item, action or review suggestion with optimistic conflict detection. Preserve its id and hash for edits. Use review suggestions for AI-inferred facts; settings, shares, approvals, routines and assistant instructions stay with the owner.',inputSchema:{type:'object',properties:{type:{type:'string'},value:{type:'object'},expected_hash:{type:'string'}},required:['type','value']}},
   {name:'capture_note',description:'Capture the user\'s note once in a durable Markdown file, preserving the chosen folder, tags and related-note links.',inputSchema:{type:'object',properties:{title:{type:'string'},content:{type:'string'},folder_path:{type:'string'},tags:{type:'array',items:{type:'string'}},related:{type:'array',items:{type:'string'}}},required:['content']}},
   {name:'write_fact',description:'Record a confirmed fact and close earlier single-valued claims. AI inference must instead create a pending review_queue record.',inputSchema:schema},
   {name:'record_event',description:'Append a timeline event. Earlier events are never replaced.',inputSchema:schema},

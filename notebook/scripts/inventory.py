@@ -48,7 +48,7 @@ lines += ['','## Record domains','']+[f'- [ ] `{t}`: read/write, references, res
 lines += ['','## Processing functions','']+[f'- [ ] `{f}`: port processing, provider refusal and saved results.' for f in functions]
 lines += ['','## Personal procedures','']+[f'- [ ] `{j["id"]}`: classify included, connector, superseded or separately owned with rationale.' for j in jobs]
 lines += ['','## Recipes','']+[f'- [ ] `{s["name"]}`: reusable instructions or explicit ownership classification.' for s in skills]
-lines += ['','## Permitted deferrals','','- Lexicon','- Note graph','', '## Release isolation','',
+lines += ['','## Retired','','- Lexicon (8 October 2026)','', '## Release isolation','',
           '- No personal records, account identifiers, credentials or company output in the candidate.',
           '- Mac remains outside this Windows/VPS build request; existing stable installer is untouched.']
 (out/'capabilities.md').write_text('\n'.join(lines)+'\n',encoding='utf-8')

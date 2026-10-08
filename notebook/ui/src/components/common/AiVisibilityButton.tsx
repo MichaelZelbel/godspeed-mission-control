@@ -32,7 +32,7 @@ interface Props {
 
 /**
  * Unified visibility toggle for any AI-touched entity.
- *  - Eye + "AI"     = visible to AI (Lexicon, People, Graph, AI Chat, MCP)
+ *  - Eye + "AI"     = visible to AI (People, AI Chat, MCP)
  *  - EyeOff + "Hidden" = hidden from all AI surfaces
  *
  * For `kind="person"` this flips `is_sensitive` (which also cascades to
@@ -69,7 +69,6 @@ export function AiVisibilityButton({ kind, id, hidden, className, iconOnly = fal
               try {
                 const fp = await fetchAiFootprint(id);
                 const total =
-                  fp.wikiPages.length +
                   fp.profileEntries.length +
                   fp.connections.length;
                 if (total > 0) setFootprintOpen(true);
@@ -87,10 +86,10 @@ export function AiVisibilityButton({ kind, id, hidden, className, iconOnly = fal
   const tooltip = optimistic
     ? kind === "person"
       ? "Hidden from AI. Linked notes & moments are hidden too. Click to make visible."
-      : "Hidden from AI: excluded from Lexicon, People, Knowledge Graph, AI Chat and MCP. Local search still finds it. Click to make visible."
+      : "Hidden from AI: excluded from People, the Note Graph, AI Chat and MCP. Local search still finds it. Click to make visible."
     : kind === "person"
       ? "Visible to AI. Click to hide this person and everything linked to them from all AI features."
-      : "Visible to AI: used in Lexicon, People profiles, Knowledge Graph, AI Chat, and MCP clients. Click to hide.";
+      : "Visible to AI: used in People profiles, the Note Graph, AI Chat, and MCP clients. Click to hide.";
 
   const Icon = pending ? Loader2 : optimistic ? EyeOff : Eye;
   const label = optimistic ? "Hidden" : "AI";

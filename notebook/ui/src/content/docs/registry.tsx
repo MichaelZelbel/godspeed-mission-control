@@ -105,7 +105,6 @@ const searchAndOrganise: DocPage = {
 
       <h2 id="smart-search">Smart Search (Semantic)</h2>
       <p>Toggle <strong>"Smart Search"</strong> to switch from keyword matching to AI-powered semantic search. Instead of exact words, it finds notes by meaning. For example, searching "meeting outcomes" will surface notes about decisions made in meetings, even if those exact words don't appear.</p>
-      <Callout type="tip">Smart Search uses the same vector embeddings that power your Note Graph - every note is automatically vectorised when created or updated.</Callout>
 
       <h2 id="filters">Filters & Sorting</h2>
       <p>Use the filter and sort controls to narrow results:</p>
@@ -197,16 +196,16 @@ const knowledgeGraph: DocPage = {
   content: () => (
     <>
       <h2 id="overview">Overview</h2>
-      <p>The Note Graph is a visual map of your notes and how they relate. Open it from the sidebar under <strong>Note Graph</strong>. Each node is a note; each edge is a connection the AI discovered or you created manually.</p>
-      <p>It draws your 200 most recent notes. Files copied in from a connected Mission Control are left out, so they never crowd out your own notes; turn on <strong>Show Mission Control files</strong> under Display to include them.</p>
+      <p>The Note Graph is a visual map of your notes and how they relate. Open it from the sidebar under <strong>Note Graph</strong>. Each dot is a note or a person; each line is a link you wrote, a similar note, or a person a note names.</p>
+      <p>It draws up to 200 notes: the ones with the most links first, then the newest. It is worked out from your notes each time you open it, so there is nothing to rebuild and nothing runs in the background. Files copied in from a connected Mission Control are left out, so they never crowd out your own notes; turn on <strong>Show Mission Control files</strong> under Display to include them.</p>
       <Callout type="tip">Click any node to navigate to that note. Hover to highlight its direct connections.</Callout>
 
       <h2 id="connection-types">Connection Types</h2>
-      <p>Connections are created in three ways:</p>
+      <p>There are three kinds of lines:</p>
       <ul>
-        <li><strong>Semantic</strong> - the AI detects similar meaning between two notes</li>
-        <li><strong>Metadata</strong> - shared tags, topics, or people</li>
-        <li><strong>Manual</strong> - you link notes with <code>[[wikilinks]]</code> or via the suggested links panel</li>
+        <li><strong>Links</strong> - you link a note by writing its title in <code>[[double brackets]]</code>, or a person by their name</li>
+        <li><strong>Similar notes</strong> - two notes share their most telling words</li>
+        <li><strong>People</strong> - a note names a person; the person is one dot that all those notes point to</li>
       </ul>
 
       <h2 id="local-graph">Local Graph</h2>
@@ -217,7 +216,6 @@ const knowledgeGraph: DocPage = {
       <ul>
         <li><strong>Topic clusters</strong> - groups of notes that form natural communities</li>
         <li><strong>Bridge notes</strong> - notes that connect otherwise separate clusters</li>
-        <li><strong>Orphan notes</strong> - notes with no connections (you can link them or mark as standalone)</li>
       </ul>
 
       <h2 id="export-graph">Export</h2>
@@ -489,35 +487,6 @@ const githubSync: DocPage = {
   ),
 };
 
-const lexicon: DocPage = {
-  slug: "lexicon",
-  title: "Lexicon",
-  description: "Build durable, reviewed knowledge pages from your notes and links.",
-  category: "Knowledge",
-  headings: [
-    { id: "what-it-is", title: "What It Is" },
-    { id: "pages-and-sources", title: "Pages & Sources" },
-    { id: "wikilinks", title: "Wikilinks & Backlinks" },
-    { id: "health-check", title: "Health Check" },
-  ],
-  searchText: "lexicon wiki pages knowledge synthesis sources backlinks wikilinks lint health check concepts entities",
-  content: () => (
-    <>
-      <h2 id="what-it-is">What It Is</h2>
-      <p>The Lexicon is where Godspeed Mission Control turns scattered notes into durable knowledge pages for concepts, people, projects, sources, and synthesis pages.</p>
-
-      <h2 id="pages-and-sources">Pages & Sources</h2>
-      <p>Lexicon pages can cite the notes they were built from, so you can move from a clean summary back to the original evidence whenever needed.</p>
-
-      <h2 id="wikilinks">Wikilinks & Backlinks</h2>
-      <p>Use Obsidian-style <code>[[wikilinks]]</code> to connect Lexicon pages. Backlinks show which pages reference the current topic and help you navigate related knowledge.</p>
-
-      <h2 id="health-check">Health Check</h2>
-      <p>The Lexicon health check can surface broken links, orphan pages, stale pages, and possible contradictions so your knowledge base stays coherent over time.</p>
-    </>
-  ),
-};
-
 // ── Your Profile ──
 
 const profilePage: DocPage = {
@@ -662,7 +631,7 @@ const settingsAccount: DocPage = {
       </ul>
 
       <h2 id="api-keys">API Keys</h2>
-      <p>Generate API keys in <strong>Settings → API Keys</strong> to access Godspeed Mission Control's Mission Control API. Each key has configurable scopes (profile, notes, contacts, actions, graph, media, stats, world, lexicon, collections) and can be revoked at any time.</p>
+      <p>Generate API keys in <strong>Settings → API Keys</strong> to access Godspeed Mission Control's Mission Control API. Each key has configurable scopes (profile, notes, contacts, actions, media, stats, world, collections) and can be revoked at any time.</p>
       <CodeBlock code={`curl -H "Authorization: Bearer mnr_abc123..." \\\n  https://your-project.supabase.co/functions/v1/mc-api-notes`} language="bash" title="Using Mission Control API" />
       <p><code>GET /mc-api-notes/search?q=…</code> searches by meaning and by text at once. Add <code>source_app=godspeed</code> or <code>source_app=native</code> to narrow it and <code>limit</code> (up to 50) to size it. The response says <code>mode: "semantic+text"</code>, or <code>"text_only"</code> when no AI credits are left.</p>
       <p>The same keys connect AI assistants over MCP: copy the server address from <strong>Settings → MCP</strong> exactly as shown (Streamable HTTP, nothing appended) and send the key as <code>Authorization: Bearer mnr_…</code>; clients that cannot set headers can add <code>?key=mnr_…</code> to the address instead. The same tab has a setup prompt and the tool list. An assistant can call <code>list_note_folders</code> to see your folders, then <code>capture_note</code> with a title, folder and tags to file a note where it belongs; <code>[[Exact Title]]</code> in the text links it to another note. Notes mirrored from a mission control folder rank below your own notes in every search and are marked as godspeed files in MCP results.</p>
@@ -782,7 +751,6 @@ export const allDocs: DocPage[] = [
   appIntegrations,
   messagingIntegrations,
   githubSync,
-  lexicon,
   collections,
   profilePage,
   dailyWorkflow,
@@ -824,7 +792,6 @@ export const docCategories: DocCategory[] = [
     name: "Knowledge",
     slug: "knowledge",
     pages: [
-      { slug: "lexicon", title: "Lexicon" },
       { slug: "collections", title: "Collections" },
     ],
   },

@@ -397,7 +397,7 @@ export interface WriteFactBody {
   category_slug?: string | null;
   valid_from?: string | null;
   is_pinned?: boolean;
-  source_type?: "note" | "moment" | "manual" | "ai" | "lexicon" | null;
+  source_type?: "note" | "moment" | "manual" | "ai" | null;
   source_id?: string | null;
 }
 

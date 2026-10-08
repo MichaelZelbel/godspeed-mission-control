@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {createHash} from 'node:crypto';
 import {Store,atomic,encode,hash} from './records/store.mjs';
-import {QueryService,tables} from './query.mjs';
+import {QueryService,tables,retiredTables} from './query.mjs';
 import {mediaObjectName} from './media-names.mjs';
 
 const secretColumns=new Set(['access_token','refresh_token','github_token','bot_token','webhook_secret','webhook_url','channel_token','start_page_token','share_token','pairing_code','key_hash','key_prefix','token_hash','token_prefix','auth','password','credentials','code_challenge','caller_hash','user_code']);
@@ -99,7 +99,7 @@ export function stageAccount(bundle,destination,{disposable=false}={}){
   for(const table of manifest.tables){
     const rows=JSON.parse(fs.readFileSync(path.join(bundle,'source',table.name+'.json')));
     // Unsupported screens still retain all of their source records in the archive.
-    if(!tables.has(table.name)||deferredTables.has(table.name)||table.name.endsWith('_connections')||['connected_apps','shared_notes','user_mcp_servers'].includes(table.name)){if(rows.length)archived.push({table:table.name,count:rows.length,reason:deferredTables.has(table.name)?'Graph and chunk data retained in the source archive; graph screen is not available yet':'Source-only feature or connection configuration retained without activation'});continue;}
+    if(!tables.has(table.name)||deferredTables.has(table.name)||table.name.endsWith('_connections')||['connected_apps','shared_notes','user_mcp_servers'].includes(table.name)){if(rows.length)archived.push({table:table.name,count:rows.length,reason:deferredTables.has(table.name)?'The note graph is worked out from the notes themselves; stored connections and chunks stay in the source archive':retiredTables.has(table.name)?'The Lexicon is not part of the notebook; its pages stay in the source archive':'Source-only feature or connection configuration retained without activation'});continue;}
     for(const row of rows){
       const sourceId=stableId(table.name,row,table.primaryKey),id=table.name==='profiles'?'owner':sourceId;
       const value={...row,id,uid:sourceId,user_id:'owner',aliases:row.aliases||[],former_ids:[...new Set([...(row.former_ids||[]),...(id!==sourceId?[sourceId]:[])])],metadata:{...row.metadata,menerio_source_user:manifest.sourceUser,menerio_source_id:sourceId,menerio_source_table:table.name}};

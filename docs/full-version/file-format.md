@@ -12,13 +12,14 @@ The notebook is the folder `notebook/` of the mission control (it was `records/`
 | `entities` | `World/` | name | `description` | `entity` |
 | `claims` (facts) | `Facts/`; `Facts/Earlier/` once closed (`valid_to`) | `<attribute> - <value>` | none | `fact` |
 | `moments` | `Timeline/` | `<YYYY-MM-DD> <title>` | `description` | `moment` |
-| `wiki_pages` (Lexicon) | `Lexicon/` | title | `content` | `lexicon page` |
 | `collections` | `Collections/` | name | `description` | `collection` |
 | `collection_items` | `Collections/<collection name>/` | title, else its first text value | none | `collection item` |
 | `contact_topics` | `Topics/` | title | none | `topic` |
 | `weekly_reviews` | `Reviews/` | `Week of <week_start>` | none | `weekly review` |
 
-Why these: they are what the notebook shows as pages (Notes, People, Groups, Timeline, World, Lexicon, Collections), each with a title of its own. Folders and the field names below follow Menerio where Menerio had them (`People/`, `Groups/`, the note's own folder, `id`, `title`, `name`, `created`, `modified`, `tags`, `aliases`, `favorite`, `pinned`, `sensitive`). An item sits under its collection's name because that is how a person looks for it; renaming the collection moves its items.
+Why these: they are what the notebook shows as pages (Notes, People, Groups, Timeline, World, Collections), each with a title of its own. Folders and the field names below follow Menerio where Menerio had them (`People/`, `Groups/`, the note's own folder, `id`, `title`, `name`, `created`, `modified`, `tags`, `aliases`, `favorite`, `pinned`, `sensitive`). An item sits under its collection's name because that is how a person looks for it; renaming the collection moves its items.
+
+The Lexicon (Menerio's wiki pages, `Lexicon/`) was retired on 8 October 2026 at Michael's request, so that every kind of record is one the notebook shows and lets its owner edit. His 296 pages, their sources and revisions were moved to `archives/notebook-lexicon-2026-10-08/` in his mission control, and an import from Menerio leaves them in its source archive.
 
 A page looks like this:
 
@@ -60,7 +61,7 @@ The frontmatter starts with `id`, the friendly `type`, the type's own fields (a 
 `notebook/_system/<type>/<id>.json` holds every record a person does not read as a page, one JSON file per record, named by its id as before 2026-10-05. Its name does not start with a dot, because sync never carries dot folders; in an alphabetical list it sorts before the pages, as one folder apart. What goes there, and why:
 
 - Bookkeeping: `record_history` (earlier versions), `jobs`, `job_receipts`, `command_receipts`, `work_tool_receipts`, `settings`, `import_mappings`, `approvals`, `notifications`, `connector_status`, `embeddings`, `review_queue` and its bulk jobs, AI job state (`note_ai_jobs`, `media_analysis`, `gdrive_imports` and the like), `conversation_messages` and `note_conversations`, `event_corrections`.
-- Links between records: group memberships, moment participants and entities, relationships, note connections, person documents, note attachments, Lexicon page sources and revisions, contact topic events. Their identity is the pair of records they join, so they have no title of their own; the pages they join are readable.
+- Links between records: group memberships, moment participants and entities, relationships, note connections, person documents, note attachments, contact topic events. Their identity is the pair of records they join, so they have no title of their own; the pages they join are readable.
 - Settings of the notebook itself: `profiles`, `profile_categories`, `fact_slots` (how facts are labelled and shown), `user_self_aliases`, `collection_templates`, suggestion preferences.
 - The assistant's working records: `goals`, `decisions`, `forecasts`, `work_items`, `deadlines`, `habits`, `journal`, `coach_talks`, `health_*`, `watch_*`, `lead_*`, `radar_*`. The mission control keeps its readable form of these in its own folders (`goals/`, `work/`, `due/`, `journal/`, `coach/`, `forecasts/`).
 - Any type not in the table above.

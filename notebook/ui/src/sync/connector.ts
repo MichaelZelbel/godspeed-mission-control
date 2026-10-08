@@ -5,7 +5,7 @@ import {
   UpdateType,
 } from "@powersync/web";
 import { supabase } from "@/integrations/supabase/client";
-import { captureNoteWithLexicon } from "@/lib/note-ai-enrollment";
+import { captureNote } from "@/lib/note-capture";
 import { POWERSYNC_URL } from "./config";
 import { dependentGroups, readRecovery, recoveryBatchId, writeRecovery, withRecoveryLock, type FailureKind, type RecoveryBatch } from "./recovery";
 
@@ -129,7 +129,7 @@ export class SupabaseConnector implements PowerSyncBackendConnector {
       const data = op.opData ?? {};
       if (op.table === "notes" && data.user_id && !data.source_app && !data.is_external
           && !data.is_trashed && data.ai_visibility !== "hidden") {
-        await captureNoteWithLexicon(record, authorization);
+        await captureNote(record, authorization);
         return;
       }
       // A PUT only ever creates a row. Local creates are the only intended

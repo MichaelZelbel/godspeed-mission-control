@@ -44,7 +44,7 @@ const TOOL_CATEGORIES: ToolCategory[] = [
     category: "Notes",
     blurb: "Capture, search, and manage thoughts.",
     tools: [
-      { name: "search_brain", desc: "Preferred search. Your dated facts, notes and Lexicon pages in one call, each result labelled by kind." },
+      { name: "search_brain", desc: "Preferred search. Your dated facts and notes in one call, each result labelled by kind." },
       { name: "search_notes", desc: "Semantic search across all notes by meaning. Your own notes rank above mirrored godspeed files; filter with source: native or godspeed." },
       { name: "get_note", desc: "Read one note's full content by ID or exact title, before editing it." },
       { name: "list_recent_notes", desc: "Recent notes, filterable by type, topic, person, or date." },
@@ -125,26 +125,6 @@ const TOOL_CATEGORIES: ToolCategory[] = [
       { name: "update_collection_item", desc: "Update an existing collection item." },
       { name: "list_collection_items", desc: "Search and list items within a collection." },
       { name: "search_all_collections", desc: "Search items across every collection at once." },
-    ],
-  },
-  {
-    category: "Lexicon",
-    blurb: "Durable, synthesized knowledge pages.",
-    tools: [
-      { name: "lexicon_search", desc: "Search Lexicon pages by title, slug, or content." },
-      { name: "lexicon_get_page", desc: "Read a full Lexicon page with sources and backlinks." },
-      { name: "lexicon_create_page", desc: "Create a reviewed Lexicon page." },
-      { name: "lexicon_update_page", desc: "Update a reviewed Lexicon page." },
-      { name: "lexicon_run_lint", desc: "Run the Lexicon health check (broken links, orphans, drift, contradictions)." },
-    ],
-  },
-  {
-    category: "Knowledge graph",
-    blurb: "Connections between notes.",
-    tools: [
-      { name: "get_connected_notes", desc: "Notes linked to a given note." },
-      { name: "find_path", desc: "Find a path of connections between two notes." },
-      { name: "get_clusters", desc: "Topic clusters across the knowledge graph." },
     ],
   },
   {
@@ -273,7 +253,7 @@ export function MCPConnectionManager() {
 **Step 3: Save behavior rules.** Ask my permission, then append the following to your **global / user-level** instructions file (e.g. \`~/.claude/CLAUDE.md\`, \`GEMINI.md\`, \`AGENTS.md\`, or your tool's user-scope rules) so they apply in every future session:
 
 - At the start of a session that needs personal context, call \`get_user_profile\` once to personalize, and honor any \`agent_instructions\` it returns.
-- When I reference something I "remember," "wrote down," or "captured," or ask "what do I know about X," call \`search_brain\` (my dated facts, notes and Lexicon pages in one call) before answering. Don't answer from memory alone.
+- When I reference something I "remember," "wrote down," or "captured," or ask "what do I know about X," call \`search_brain\` (my dated facts and notes in one call) before answering. Don't answer from memory alone.
 - When I share a new fact, decision, idea, or meeting note worth keeping, call \`capture_note\` without asking. Give it a clear \`title\`, and call \`list_note_folders\` first so it goes in the folder of mine that fits (\`folder_path\`). Confirm before saving long-form content. If it clearly fits a user collection, prefer \`add_collection_item\`.
 - For things that happened at a point in time (meetings, milestones), prefer \`create_moment_with_ai\`.
 - After any write, end with a one-line confirmation of what was saved and where. Never invent note ids, titles, or dates.

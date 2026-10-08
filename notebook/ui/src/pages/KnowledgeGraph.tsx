@@ -1,11 +1,9 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { SEOHead } from "@/components/SEOHead";
-import { useGraphData, GraphNode, GraphEdge } from "@/hooks/useGraphData";
-import { OrphanNotesDetector } from "@/components/graph/OrphanNotesDetector";
+import { useGraphData, DEFAULT_GRAPH_OPTIONS, GraphNode, GraphEdge } from "@/hooks/useGraphData";
 import { BridgeNotesHighlighter, TopicClustersView, useBridgeNoteIds } from "@/components/graph/GraphAnalytics";
 import { GraphExportButton } from "@/components/graph/GraphExport";
-import { RebuildGraphButton } from "@/components/graph/RebuildGraphButton";
 import { dbErrorMessage } from "@/lib/function-error";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -82,7 +80,7 @@ function edgeReason(edge: { type: string; strength: number; metadata?: any }): s
       return `similar content (${pct}%)`;
     }
     case "manual_link":
-      return "manual link";
+      return "linked with [[ ]]";
     default:
       return edge.type.replace("_", " ");
   }
@@ -145,12 +143,12 @@ export default function KnowledgeGraph() {
     labelMode: "auto",
   });
 
-  // Fetch graph data from edge function. Minimum strength is deliberately not
-  // part of the request: edges are filtered by it below, and sending it made
-  // every 0.1 step of the slider a new get-graph-data call that reset the
-  // canvas to "Building graph…".
+  // The graph is worked out on the server from the notes (core/graph.mjs).
+  // Minimum strength is deliberately not part of the request: edges are
+  // filtered by it below, and sending it made every 0.1 step of the slider a
+  // new get-graph-data call that reset the canvas to "Building graph…".
   const { data: graphData, isLoading, isError, error: graphError, refetch: refetchGraph } = useGraphData({
-    limit: 200,
+    ...DEFAULT_GRAPH_OPTIONS,
     include_hidden: filters.showHiddenFromAi,
     include_godspeed: filters.showMissionControl,
   });
@@ -595,7 +593,6 @@ export default function KnowledgeGraph() {
             )}
           </div>
           <GraphExportButton />
-          <RebuildGraphButton />
 
           <Button
             variant={showFilters ? "secondary" : "outline"}
@@ -631,10 +628,9 @@ export default function KnowledgeGraph() {
                   </h3>
                   <div className="space-y-2">
                     {[
-                      { key: "showManualLink", label: "Manual Links", color: EDGE_STYLES.manual_link.color },
-                      { key: "showSemantic", label: "Semantic", color: EDGE_STYLES.semantic.color },
-                      { key: "showSharedPerson", label: "Shared Person", color: EDGE_STYLES.shared_person.color },
-                      { key: "showSharedTopic", label: "Shared Topic", color: EDGE_STYLES.shared_topic.color },
+                      { key: "showManualLink", label: "Links", color: EDGE_STYLES.manual_link.color },
+                      { key: "showSemantic", label: "Similar notes", color: EDGE_STYLES.semantic.color },
+                      { key: "showSharedPerson", label: "People", color: EDGE_STYLES.mentions_person.color },
                     ].map(({ key, label, color }) => (
                       <div key={key} className="flex items-center gap-2">
                         <Switch
@@ -764,7 +760,6 @@ export default function KnowledgeGraph() {
               </TabsContent>
 
               <TabsContent value="analytics" className="flex-1 overflow-y-auto p-3 space-y-4 mt-0">
-                <OrphanNotesDetector compact />
                 <BridgeNotesHighlighter compact />
                 <TopicClustersView />
               </TabsContent>
@@ -789,7 +784,7 @@ export default function KnowledgeGraph() {
             <div className="flex flex-col items-center justify-center h-full text-muted-foreground gap-2">
               <FileText className="h-8 w-8" />
               <p className="text-sm">No nodes to display.</p>
-              <p className="text-xs">Create notes and let the AI find connections.</p>
+              <p className="text-xs">Link notes by writing a title in [[double brackets]]; similar notes and the people they name connect on their own.</p>
             </div>
           ) : (
             <>
@@ -898,7 +893,7 @@ export default function KnowledgeGraph() {
                 <h3 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">
                   Connections ({selectedNodeEdges.length})
                 </h3>
-                {["manual_link", "mentions_person", "semantic", "shared_person", "shared_topic"].map((type) => {
+                {["manual_link", "mentions_person", "semantic"].map((type) => {
                   const ofType = selectedNodeEdges.filter((e) => e.type === type);
                   if (ofType.length === 0) return null;
                   // Group reasons (e.g., dedupe "via Xihui" mentions)
@@ -1007,19 +1002,15 @@ export default function KnowledgeGraph() {
         <span className="font-semibold uppercase tracking-wider shrink-0">Edges:</span>
         <div className="flex items-center gap-1 shrink-0">
           <div className="w-4 border-t-2 border-solid" style={{ borderColor: EDGE_STYLES.manual_link.color }} />
-          <span>Manual</span>
+          <span>Link</span>
         </div>
         <div className="flex items-center gap-1 shrink-0">
           <div className="w-4 border-t-2 border-dotted" style={{ borderColor: EDGE_STYLES.semantic.color }} />
-          <span>Semantic</span>
+          <span>Similar</span>
         </div>
         <div className="flex items-center gap-1 shrink-0">
-          <div className="w-4 border-t-2 border-dashed" style={{ borderColor: EDGE_STYLES.shared_person.color }} />
+          <div className="w-4 border-t-2 border-solid" style={{ borderColor: EDGE_STYLES.mentions_person.color }} />
           <span>Person</span>
-        </div>
-        <div className="flex items-center gap-1 shrink-0">
-          <div className="w-4 border-t-2 border-dashed" style={{ borderColor: EDGE_STYLES.shared_topic.color }} />
-          <span>Topic</span>
         </div>
       </div>
     </div>

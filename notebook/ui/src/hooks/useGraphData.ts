@@ -1,4 +1,4 @@
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -25,17 +25,6 @@ export interface GraphData {
   edges: GraphEdge[];
 }
 
-export interface NoteConnection {
-  id: string;
-  source_note_id: string;
-  target_note_id: string;
-  connection_type: string;
-  strength: number;
-  metadata: Record<string, unknown>;
-  created_at: string;
-  updated_at: string;
-}
-
 export interface GraphDataOptions {
   limit?: number;
   min_strength?: number;
@@ -47,6 +36,12 @@ export interface GraphDataOptions {
   /** Include notes mirrored from a mission control folder; left out by default. */
   include_godspeed?: boolean;
 }
+
+/**
+ * What the Note Graph screen asks for first. Its side panels (bridge notes,
+ * clusters) ask with the same options, so the screen makes one request.
+ */
+export const DEFAULT_GRAPH_OPTIONS: GraphDataOptions = { limit: 200, include_hidden: false, include_godspeed: false };
 
 /**
  * The query for the full graph, shared by the hook and by callers that need
@@ -91,38 +86,5 @@ export function useNoteNeighborhood(noteId: string | null, hops = 2) {
       return res.data as GraphData;
     },
     staleTime: 60_000,
-  });
-}
-
-/** Fetch connections for a specific note from the database directly */
-export function useNoteConnections(noteId: string | null) {
-  const { user } = useAuth();
-
-  return useQuery<NoteConnection[]>({
-    queryKey: ["note-connections", noteId, user?.id],
-    enabled: !!user && !!noteId,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("note_connections" as any)
-        .select("*")
-        .eq("user_id", user!.id)
-        .or(`source_note_id.eq.${noteId},target_note_id.eq.${noteId}`)
-        .order("strength", { ascending: false });
-      if (error) throw error;
-      return (data as unknown as NoteConnection[]) || [];
-    },
-  });
-}
-
-/** Manually trigger connection computation for a note */
-export function useComputeConnections() {
-  return useMutation({
-    mutationFn: async (noteId: string) => {
-      const res = await supabase.functions.invoke("compute-connections", {
-        body: { note_id: noteId },
-      });
-      if (res.error) throw res.error;
-      return res.data;
-    },
   });
 }

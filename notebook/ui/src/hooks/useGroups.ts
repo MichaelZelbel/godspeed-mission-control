@@ -32,18 +32,6 @@ const slugify = (value: string) =>
 const isUuid = (value: string) =>
   /^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,180}$/.test(value);
 
-const groupWikiSkeleton = (group: Pick<ContactGroupRow, "name" | "purpose">) => `# ${group.name}
-
-## Purpose
-${group.purpose || ""}
-
-## Members
-_Synced automatically from contact_group_memberships._
-
-## Insights
-_Synthesized from notes mentioning members._
-`;
-
 function isTemplateCreateInput(input: CreateGroupInput): input is { templateId: string; name?: string } {
   return "templateId" in input;
 }
@@ -149,22 +137,6 @@ export function useCreateGroup() {
       }
       if (!group) throw lastError ?? new Error("Could not create group");
 
-      // The wiki page is a best-effort side effect: a failure here must not
-      // roll back a successfully created group. Log + toast, then carry on.
-      const { error: wikiError } = await supabase.from("wiki_pages").insert({
-        user_id: user.id,
-        slug: `group-${group.slug}`,
-        page_type: "group",
-        title: group.name,
-        summary: group.purpose,
-        metadata: { group_id: group.id },
-        content: groupWikiSkeleton(group),
-      });
-
-      if (wikiError) {
-        console.error("Group wiki page insert failed", wikiError);
-        showToast.error("Group created; wiki page failed");
-      }
       return group;
     },
     onSuccess: (group) => {

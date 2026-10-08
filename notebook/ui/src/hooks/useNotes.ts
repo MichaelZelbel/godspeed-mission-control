@@ -13,7 +13,7 @@ import { isLocalFirstActive, useLocalFirstActive } from "@/sync/sync-health";
 import { getDb } from "@/sync/db";
 import { rowToNote, toSqliteValue, type NoteRow } from "@/sync/notes-mapping";
 import { broadcastInvalidation } from "@/lib/query-sync";
-import { captureNoteWithLexicon } from "@/lib/note-ai-enrollment";
+import { captureNote } from "@/lib/note-capture";
 import { nextDuplicateTitle } from "@/lib/duplicate-entity";
 
 
@@ -260,7 +260,7 @@ export function useCreateNote() {
   return useMutation({
     mutationFn: async (input: NoteInsert = {}) => {
       if (isLocalFirstActive()) return createNoteLocal(user!.id, input);
-      return await captureNoteWithLexicon({ ...input, id: crypto.randomUUID(), user_id: user!.id }) as Note;
+      return await captureNote({ ...input, id: crypto.randomUUID(), user_id: user!.id }) as Note;
     },
     onSuccess: (note) => {
       qc.invalidateQueries({ queryKey: ["notes"] });
@@ -373,8 +373,8 @@ export function useUpdateNote() {
         broadcastInvalidation([["note", note.id]]);
       }
 
-      // Relevant writes enqueue analysis and update enrolled Lexicon jobs in
-      // the same server transaction, including uploads from offline clients.
+      // Relevant writes enqueue analysis in the same server transaction,
+      // including uploads from offline clients.
     },
   });
 }
@@ -490,7 +490,7 @@ export function useDuplicateNote() {
         is_trashed: false,
       };
 
-      return await captureNoteWithLexicon({ ...insertRow, id: crypto.randomUUID() }) as Note;
+      return await captureNote({ ...insertRow, id: crypto.randomUUID() }) as Note;
     },
     onSuccess: (note) => {
       qc.invalidateQueries({ queryKey: ["notes"] });

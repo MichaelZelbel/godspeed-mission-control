@@ -4,6 +4,7 @@ import {NoteProcessing,PIPELINE,contentFingerprint} from './processing.mjs';
 export {momentDraft,NOTE_TYPES};
 import {groupContext} from './group-context.mjs';
 import {noteConnections,linkSuggestions} from './related.mjs';
+import {graphData} from './graph.mjs';
 import { slug, hash } from './records/store.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -228,7 +229,8 @@ export class Domains {
       const review_data=reviewData(json(await this.provider({kind:name,notes:weekNotes(notes),max_tokens:8000,context:fileContext(this.store),contract:'Return JSON {week_summary,themes:[{name,note_count,synthesis}],open_loops:[{action_item,source_note_title,captured_date,urgency}],connections:[{note_title_1,note_title_2,connection_description}],gaps:string[],people_summary:[{name,interaction_count,latest_context}],stats:{total_notes,by_type_counts,most_active_day}}. All list fields must be arrays, never a plain string. Use only supplied sources.'})));
       return this.store.save('weekly_reviews',{week_start:start,week_end:end,review_data});
     }
-    if(['get-graph-data','backfill-wikilinks','enrich-person-from-lexicon','wiki-ingest'].includes(name))throw new Error('Lexicon and note graph are deferred in this candidate');
+    // The note graph, worked out from the notes when asked (graph.mjs).
+    if(name==='get-graph-data')return graphData(this.query,input,{index:this.index});
     if(['find-connections','suggest-connections','compute-connections'].includes(name)){
       // One note's connections, read-only (related.mjs). The daily dashboard
       // card asks without a note: the newest note stands in.

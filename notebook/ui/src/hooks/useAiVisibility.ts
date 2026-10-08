@@ -10,9 +10,8 @@ export type AiKind = "notes" | "contacts" | "moments" | "collection_items" | "ac
  *
  * When `hidden`:
  *  - The item is excluded from all MCP tool responses.
- *  - It is skipped by the Lexicon ingestion pipeline.
  *  - It does NOT contribute to People profile enrichment.
- *  - It is not rendered as a node in the Knowledge Graph.
+ *  - It is not drawn in the Note Graph unless asked.
  *  - It is not used as context by the in-app AI chat or daily digest.
  *  - Embeddings ARE still generated so the user can find the note via local
  *    semantic / keyword search - only AI-facing surfaces filter it out.
@@ -38,7 +37,7 @@ export function useToggleAiVisibility(kind: AiKind) {
       qc.invalidateQueries({ queryKey: ["ai_hidden_counts"] });
       showToast.success(
         visibility === "hidden"
-          ? "Hidden from AI - excluded from Lexicon, People, Graph, AI Chat & MCP"
+          ? "Hidden from AI - excluded from People, Graph, AI Chat & MCP"
           : "Visible to AI again"
       );
     },

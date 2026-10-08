@@ -16,6 +16,7 @@ const CollectionSchema=lazy(()=>import('./pages/CollectionSchema')),CollectionTe
 const Timeline=lazy(()=>import('./pages/TimelinePage')),Media=lazy(()=>import('./pages/MediaLibrary')),Review=lazy(()=>import('./pages/ReviewQueue'));
 const Groups=lazy(()=>import('./pages/Groups')),GroupDetail=lazy(()=>import('./pages/GroupDetail')),Actions=lazy(()=>import('./pages/Actions'));
 const Activity=lazy(()=>import('./pages/ActivityPage')),WeeklyReview=lazy(()=>import('./pages/WeeklyReview'));
+const KnowledgeGraph=lazy(()=>import('./pages/KnowledgeGraph'));
 const Control=lazy(()=>import('./local/Control'));
 const ImportMenerio=lazy(()=>import('./local/ImportMenerio'));
 const Home=lazy(()=>import('./local/Home'));
@@ -40,6 +41,6 @@ export default function App(){return <ThemeProvider attribute="class" defaultThe
   <Route path="/dashboard/actions" element={<Actions/>}/><Route path="/dashboard/activity" element={<Activity/>}/><Route path="/dashboard/review" element={<WeeklyReview/>}/>
   <Route path="/collections" element={<Collections/>}/><Route path="/collections/templates" element={<CollectionTemplates/>}/>
   <Route path="/collections/:slug/schema" element={<CollectionSchema/>}/><Route path="/collections/:slug/:itemId" element={<CollectionDetail/>}/><Route path="/collections/:slug" element={<CollectionDetail/>}/>
-  <Route path="/lexicon/*" element={<p>Lexicon is not available in this test installation yet.</p>}/><Route path="/dashboard/graph" element={<p>Note graph is not available in this test installation yet.</p>}/>
+  <Route path="/dashboard/graph" element={<KnowledgeGraph/>}/>
   <Route path="*" element={<p>This page is unavailable in this test installation.</p>}/>
 </Route></Routes></AuthProvider></BrowserRouter></TooltipProvider></ThemeProvider>;}

@@ -1,12 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useReviewQueue, type ReviewItem, type WikiRevisionReviewItem } from "@/hooks/useReviewQueue";
+import { useReviewQueue, type ReviewItem } from "@/hooks/useReviewQueue";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -37,7 +36,6 @@ import {
 
   Inbox,
   User,
-  BookOpen,
   Eye,
   RotateCcw,
   Users2,
@@ -73,16 +71,6 @@ const truncateText = (text: string | null | undefined, length = 200) => {
   return value.length > length ? `${value.slice(0, length)}…` : value;
 };
 
-const buildLineDiff = (before: string | null, after: string) => {
-  const oldLines = (before || "").split("\n").filter((line) => line.trim());
-  const newLines = after.split("\n").filter((line) => line.trim());
-  const oldSet = new Set(oldLines);
-  const newSet = new Set(newLines);
-  const removed = oldLines.filter((line) => !newSet.has(line)).slice(0, 3);
-  const added = newLines.filter((line) => !oldSet.has(line)).slice(0, 3);
-  return { removed, added };
-};
-
 export default function ReviewQueue() {
   const { user } = useAuth();
   // ?contact_id=<id> comes from a person's "N pending profile suggestions"
@@ -91,49 +79,11 @@ export default function ReviewQueue() {
   const contactFilter = searchParams.get("contact_id");
   // Waiting is the queue the sidebar counts; Kept keeps earlier Keeps reachable for Roll Back.
   const [view, setView] = useState<"waiting" | "kept">("waiting");
-  const { items, wikiRevisions: allWikiRevisions, isLoading, updateStatus, pendingCount } = useReviewQueue(contactFilter, view);
-  const wikiRevisions = view === "waiting" ? allWikiRevisions : [];
+  const { items, isLoading, updateStatus, pendingCount } = useReviewQueue(contactFilter, view);
   const queryClient = useQueryClient();
-  const [selectedWikiRevision, setSelectedWikiRevision] = useState<WikiRevisionReviewItem | null>(null);
-  const [rollbackWikiRevision, setRollbackWikiRevision] = useState<WikiRevisionReviewItem | null>(null);
   const refreshReviewQueues = () => {
     queryClient.invalidateQueries({ queryKey: ["review-queue"] });
     queryClient.invalidateQueries({ queryKey: ["review-queue-count"] });
-    queryClient.invalidateQueries({ queryKey: ["wiki-revision-review-queue"] });
-    queryClient.invalidateQueries({ queryKey: ["wiki-revision-review-count"] });
-    queryClient.invalidateQueries({ queryKey: ["wiki-pages"] });
-    queryClient.invalidateQueries({ queryKey: ["wiki-revisions"] });
-  };
-
-  const handleWikiLooksGood = async (revision: WikiRevisionReviewItem) => {
-    const { error } = await supabase
-      .from("wiki_revisions" as any)
-      .update({ status: "reviewed", reviewed_at: new Date().toISOString() })
-      .eq("id", revision.id);
-    if (error) {
-      showToast.error("Could not review Lexicon update: " + error.message);
-      return;
-    }
-    refreshReviewQueues();
-    showToast.success("Lexicon update reviewed");
-  };
-
-  const rollbackWikiRevisionById = async (revisionId: string) => {
-    const { error } = await supabase.rpc("wiki_rollback_revision" as any, { p_revision_id: revisionId });
-    if (error) throw error;
-  };
-
-  const handleWikiRollback = async () => {
-    if (!rollbackWikiRevision) return;
-    try {
-      await rollbackWikiRevisionById(rollbackWikiRevision.id);
-    } catch (error: any) {
-      showToast.error("Could not roll back Lexicon update: " + (error.message || "Unknown error"));
-      return;
-    }
-    setRollbackWikiRevision(null);
-    refreshReviewQueues();
-    showToast.success("Rolled back");
   };
 
   const createSuppression = async (item: ReviewItem) => {
@@ -908,7 +858,7 @@ export default function ReviewQueue() {
 
 
 
-  const hasReviewItems = items.length + (contactFilter ? 0 : wikiRevisions.length) > 0;
+  const hasReviewItems = items.length > 0;
   const clearContactFilter = () => {
     const next = new URLSearchParams(searchParams);
     next.delete("contact_id");
@@ -917,13 +867,12 @@ export default function ReviewQueue() {
   const combinedReviewItems = useMemo(
     () =>
       [
-        ...(contactFilter ? [] : wikiRevisions.map((revision) => ({ kind: "wiki" as const, created_at: revision.created_at, revision }))),
         ...items
           .filter((item) => !contactFilter || (item.payload as { contact_id?: string } | null)?.contact_id === contactFilter)
           // Kept changes sort by when they were kept, so the latest Keep is the first to undo.
           .map((item) => ({ kind: "review" as const, created_at: view === "kept" ? item.applied_at || item.created_at : item.created_at, item })),
       ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()),
-    [items, wikiRevisions, contactFilter, view],
+    [items, contactFilter, view],
   );
 
   // Paginate to keep the DOM small even with thousands of pending items.
@@ -1029,80 +978,6 @@ export default function ReviewQueue() {
       ) : (
         <div className="space-y-3">
           {pageItems.map((entry) => {
-            if (entry.kind === "wiki") {
-              const { revision } = entry;
-              const diff = buildLineDiff(revision.previous_content, revision.new_content);
-              return (
-                <Card key={`wiki-${revision.id}`} className="transition-all hover:shadow-lg">
-                <CardHeader className="pb-2">
-                  <div className="flex items-start gap-3">
-                    <BookOpen className="h-5 w-5 mt-0.5 text-primary" />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <Badge variant={revision.change_type === "created" ? "default" : "secondary"} className={revision.change_type === "created" ? "text-[10px] bg-success text-success-foreground" : "text-[10px]"}>
-                          {revision.change_type}
-                        </Badge>
-                        <CardTitle className="text-base">
-                          <Link to={`/lexicon/${revision.page_slug}`} className="hover:text-primary">
-                            {revision.page_title}
-                          </Link>
-                        </CardTitle>
-                        {revision.source_note && (
-                          <Link
-                            to={`/dashboard/notes/${revision.source_note_id}`}
-                            className="text-xs text-muted-foreground hover:text-foreground"
-                          >
-                            via {truncateText(revision.source_note.title, 42)}
-                          </Link>
-                        )}
-                      </div>
-                      {revision.change_summary && (
-                        <CardDescription className="mt-1">{revision.change_summary}</CardDescription>
-                      )}
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {revision.change_type === "created" ? (
-                    <p className="text-sm text-muted-foreground">{truncateText(revision.new_content)}</p>
-                  ) : (
-                    <div className="space-y-1 text-sm">
-                      {diff.removed.length === 0 && diff.added.length === 0 ? (
-                        <p className="text-muted-foreground">Updated content</p>
-                      ) : (
-                        <>
-                          {diff.removed.map((line) => <p key={`old-${line}`} className="text-destructive">− {truncateText(line, 160)}</p>)}
-                          {diff.added.map((line) => <p key={`new-${line}`} className="text-success">+ {truncateText(line, 160)}</p>)}
-                        </>
-                      )}
-                    </div>
-                  )}
-                  <div className="flex items-center justify-between gap-3 flex-wrap">
-                    <Button size="sm" variant="ghost" onClick={() => setSelectedWikiRevision(revision)}>
-                      <Eye className="h-4 w-4 mr-1" />
-                      View diff
-                    </Button>
-                    <div className="flex gap-2">
-                      {/* No per-page "Never Again" for Lexicon edits: unlike profile
-                          suggestions (which write ai_suggestion_suppressions), the wiki
-                          ingest pipeline has no suppression mechanism to honor it yet, so
-                          a "Never Again" here would be an empty promise identical to Roll
-                          Back. Tracked as a backend follow-up (lock a page from AI edits). */}
-                      <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => setRollbackWikiRevision(revision)}>
-                        <RotateCcw className="h-4 w-4 mr-1" />
-                        Undo
-                      </Button>
-                      <Button size="sm" onClick={() => handleWikiLooksGood(revision)}>
-                        <Check className="h-4 w-4 mr-1" />
-                        Keep
-                      </Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-              );
-            }
-
             const { item } = entry;
             const config = typeConfig[item.suggestion_type] || typeConfig.link_note;
             const Icon = config.icon;
@@ -1329,43 +1204,6 @@ export default function ReviewQueue() {
         </div>
       )}
 
-
-      <Dialog open={!!selectedWikiRevision} onOpenChange={(open) => !open && setSelectedWikiRevision(null)}>
-        <DialogContent className="max-w-5xl">
-          <DialogHeader>
-            <DialogTitle>Lexicon revision diff</DialogTitle>
-          </DialogHeader>
-          {selectedWikiRevision && (
-            <div className="grid gap-4 md:grid-cols-2 max-h-[70vh] overflow-y-auto">
-              <div className="rounded-lg border border-border bg-muted/40 p-3">
-                <p className="text-xs font-medium text-muted-foreground mb-2">Before</p>
-                <pre className="whitespace-pre-wrap text-sm font-sans">{selectedWikiRevision.previous_content || ""}</pre>
-              </div>
-              <div className="rounded-lg border border-border bg-muted/40 p-3">
-                <p className="text-xs font-medium text-muted-foreground mb-2">After</p>
-                <pre className="whitespace-pre-wrap text-sm font-sans">{selectedWikiRevision.new_content}</pre>
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
-
-      <AlertDialog open={!!rollbackWikiRevision} onOpenChange={(open) => !open && setRollbackWikiRevision(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Roll back this change?</AlertDialogTitle>
-            <AlertDialogDescription>
-              The Lexicon page will be restored to its previous content.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleWikiRollback} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-              Roll back
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
 
       <AlertDialog open={!!bulkConfirm} onOpenChange={(open) => !open && setBulkConfirm(null)}>
         <AlertDialogContent>

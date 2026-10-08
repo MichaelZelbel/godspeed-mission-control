@@ -28,24 +28,6 @@ export interface ReviewItem {
   source_note?: { title: string } | null;
 }
 
-export interface WikiRevisionReviewItem {
-  id: string;
-  user_id: string;
-  wiki_page_id: string | null;
-  page_slug: string;
-  page_title: string;
-  change_type: "created" | "updated";
-  previous_content: string | null;
-  new_content: string;
-  source_note_id: string | null;
-  change_summary: string | null;
-  status: "applied";
-  created_at: string;
-  reviewed_at: string | null;
-  rolled_back_at: string | null;
-  source_note?: { id: string; title: string } | null;
-}
-
 /**
  * @param contactId Only the suggestions about one person (a person page's
  * "N pending profile suggestions" link). Filtered in the database: filtering
@@ -78,24 +60,6 @@ export function useReviewQueue(contactId: string | null = null, view: "waiting" 
     staleTime: 30_000,
   });
 
-  const { data: wikiRevisions = [], isLoading: isLoadingWikiRevisions } = useQuery({
-    queryKey: ["wiki-revision-review-queue", user?.id],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("wiki_revisions" as any)
-        .select("*, source_note:notes!wiki_revisions_source_note_id_fkey(id,title)")
-        .eq("status", "applied")
-        .in("change_type", ["created", "updated"])
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return (data || []) as unknown as WikiRevisionReviewItem[];
-    },
-    enabled: !!user,
-    // No polling on the heavy list (both full page texts per row); the
-    // count badge in useReviewQueueCount refreshes instead.
-    staleTime: 30_000,
-  });
-
   const updateStatus = useMutation({
     mutationFn: async ({ id, status, extra }: { id: string; status: "kept" | "removed" | "blocked" | "pending_review" | "auto_applied_unreviewed"; extra?: Record<string, unknown> }) => {
       const { error } = await supabase
@@ -114,21 +78,18 @@ export function useReviewQueue(contactId: string | null = null, view: "waiting" 
 
   return {
     items,
-    wikiRevisions,
-    isLoading: isLoading || isLoadingWikiRevisions,
+    isLoading,
     pendingCount,
     updateStatus,
   };
 }
 
 /**
- * The badge number only: two head:true counts, polled once a minute.
+ * The badge number only: one head:true count, polled once a minute.
  *
  * The sidebar is mounted on every signed-in page. It used to call
  * useReviewQueue() for this number, which also fetched up to 500 queue rows
- * with their payloads on every mount and, every 60 s, every unreviewed
- * Lexicon revision with both full page texts (previous_content and
- * new_content), with no limit. Those only matter on the Review Queue page.
+ * with their payloads on every mount. Those only matter on the Review Queue page.
  */
 export function useReviewQueueCount(): number {
   const { user } = useAuth();
@@ -148,20 +109,5 @@ export function useReviewQueueCount(): number {
     refetchInterval: 60_000,
   });
 
-  const { data: wikiRevisionCount = 0 } = useQuery({
-    queryKey: ["wiki-revision-review-count", user?.id],
-    queryFn: async () => {
-      const { count, error } = await supabase
-        .from("wiki_revisions" as any)
-        .select("id", { count: "exact", head: true })
-        .eq("status", "applied")
-        .in("change_type", ["created", "updated"]);
-      if (error) throw error;
-      return count || 0;
-    },
-    enabled: !!user,
-    refetchInterval: 60_000,
-  });
-
-  return pendingCount + wikiRevisionCount;
+  return pendingCount;
 }

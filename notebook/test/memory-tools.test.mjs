@@ -21,7 +21,6 @@ async function setup(){
   const note=s.save('notes',{title:'Climbing plans',content:'Ani wants to try the fictional north wall next spring.'});
   const lease=s.save('notes',{title:'Fictional lease',content:'See the attached PDF.'});
   s.save('note_chunks',{note_id:lease.id,chunk_index:1,content:'The fictional tenant pays 950 euros a month, notice period three months.',references:[{type:'notes',id:lease.id,uid:lease.uid,field:'note_id'}]});
-  s.save('wiki_pages',{title:'Fictional bouldering',slug:'fictional-bouldering',page_type:'concept',content:'Bouldering is climbing without ropes on short walls.'});
   s.save('agent_instructions',{title:'Language',content:'Answer in German when written to in German.'});
   const books=s.save('collections',{name:'Fictional reading list',slug:'reading-list',field_schema:[{key:'title',label:'Title',type:'text',primary:true},{key:'status',label:'Status',type:'select',indexable:true,options:['to read','done']},{key:'finished',label:'Finished',type:'date',indexable:true}],agent_instructions:'One item per book.'});
   service.index.rebuild?.();
@@ -63,12 +62,12 @@ test('facts: a quote is required, an older value is closed, one the owner typed 
   }finally{await service.close();}
 });
 
-test('search_brain finds facts, notes (also through their documents) and Lexicon pages in one call',async()=>{
+test('search_brain finds facts and notes (also through their documents) in one call',async()=>{
   const {service,call,lease}=await setup();
   try{
     await call('add_claim',{subject_type:'self',attribute:'climbing grade',value:'fictional 6a',evidence_quote:'I climb fictional 6a routes.'});
     const text=await call('search_brain',{query:'climbing'});
-    assert.match(text,/\[claim\] you, climbing grade: fictional 6a/);assert.match(text,/Title: Climbing plans/);assert.match(text,/\[lexicon\] Fictional bouldering/);
+    assert.match(text,/\[claim\] you, climbing grade: fictional 6a/);assert.match(text,/Title: Climbing plans/);assert.doesNotMatch(text,/lexicon/i,'the Lexicon is no part of the notebook (8 October 2026)');
     const lease950=await call('search_brain',{query:'notice period',include:['note']});
     assert.match(lease950,new RegExp('ID: '+lease.id));assert.match(lease950,/Found in: attached document/);
     const notes=await call('search_notes',{query:'notice period'});
@@ -123,7 +122,7 @@ test('a timeline entry from a plain description, with its people resolved by nic
 test('every tool has the key permission a caller expects, and records that had none now do',()=>{
   for(const [name,scope] of [['search_brain','notes'],['get_user_profile','profile'],['search_contacts','contacts'],['log_interaction','contacts'],['add_claim','world'],['get_claims','world'],['add_collection_item','collections'],['get_stats','stats']])assert.equal(toolScope(name,{}),scope,name);
   // Until 6 October 2026 these record types had no permission at all, so every key was refused them.
-  for(const [type,scope] of [['goals','actions'],['work_items','actions'],['deadlines','actions'],['habits','actions'],['wiki_pages','notes']])assert.equal(toolScope('list_records',{type}),scope,type);
+  for(const [type,scope] of [['goals','actions'],['work_items','actions'],['deadlines','actions'],['habits','actions']])assert.equal(toolScope('list_records',{type}),scope,type);
 });
 
 test('Mission Control\'s own files are searched with the notes and read whole; the prompt archive never',async()=>{

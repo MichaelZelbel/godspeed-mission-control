@@ -28,10 +28,10 @@ export function assertAssistantLinks(query,type,value,seen=new Set(),historicalT
 export const controlTables=new Set(['mcp_preferences','approvals','shared_notes','permissions','user_roles','agent_instructions','mcp_api_tokens','user_mcp_servers','connected_apps','discord_connections','gdrive_connections','github_connections','godspeed_connections','telegram_connections','import_mappings','gdrive_imports','github_sync_log','jobs','job_receipts','work_tool_receipts','command_receipts','settings','notification_preferences','ai_suggestion_preferences','record_history','embeddings','profiles']);
 const operationTables=new Set(['jobs','settings','command_receipts']);
 // What the generic save_record writes: the owner's notes, people, things,
-// timeline, collections, Lexicon pages and actions, and proposed facts as
+// timeline, collections and actions, and proposed facts as
 // review items. Facts themselves go through write_fact and review; goals,
 // routines and health through personal_operation.
-export const assistantRecordTables=new Set(['notes','note_folders','note_connections','comments','contacts','contact_interactions','contact_relationships','contact_groups','contact_group_memberships','person_documents','entities','moments','moment_participants','moment_entities','collections','collection_items','collection_item_folders','wiki_pages','wiki_page_sources','action_items','review_queue']);
+export const assistantRecordTables=new Set(['notes','note_folders','note_connections','comments','contacts','contact_interactions','contact_relationships','contact_groups','contact_group_memberships','person_documents','entities','moments','moment_participants','moment_entities','collections','collection_items','collection_item_folders','action_items','review_queue']);
 const instructionsRefused='Only the owner changes the instructions assistants follow. Tell them what you would change.';
 export function assertAssistantTable(type,toolName){
  if(type==='agent_instructions')throw Error(instructionsRefused);

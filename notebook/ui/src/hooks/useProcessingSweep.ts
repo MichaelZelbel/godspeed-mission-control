@@ -1,13 +1,12 @@
 import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { retryLexiconEnrollments } from "@/lib/note-ai-enrollment";
 import { useAuth } from "@/contexts/AuthContext";
 
 const SWEEP_INTERVAL_MS = 5 * 60_000;
 
 // When this page last swept, per account. DashboardLayout is mounted by three
-// separate route trees (/dashboard, /collections, /lexicon), so moving between
+// separate route trees (/dashboard, /collections), so moving between
 // them remounts this hook; so did every hourly token refresh, because the
 // effect depended on the session object. Each remount fired a sweep 5 s later.
 const lastSweepAt = new Map<string, number>();
@@ -42,8 +41,6 @@ export function useProcessingSweep() {
       if (Date.now() - last < SWEEP_INTERVAL_MS / 2) return;
       lastSweepAt.set(userId, Date.now());
       try {
-        await retryLexiconEnrollments(userId);
-        if (cancelled) return;
         const { data, error } = await supabase.functions.invoke("sweep-note-processing", {
           body: { limit: 10 },
         });

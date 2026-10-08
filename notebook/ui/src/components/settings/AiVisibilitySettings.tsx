@@ -13,7 +13,7 @@ import { showToast } from "@/lib/toast";
  * Currently exposes:
  *  - `hide_sensitive_from_ai` - when a person is marked sensitive,
  *    automatically hide all linked notes/moments/action_items from AI
- *    features (Lexicon, People, Knowledge Graph, AI Chat, MCP).
+ *    features (People, Note Graph, AI Chat, MCP).
  */
 export function AiVisibilitySettings() {
   const { user } = useAuth();
@@ -66,9 +66,8 @@ export function AiVisibilitySettings() {
         </CardTitle>
         <CardDescription>
           Control which of your data the AI is allowed to see. Hidden items are
-          excluded from Lexicon ingestion, People profile enrichment, the
-          Knowledge Graph, AI Chat, and MCP clients. Your local search still
-          finds them.
+          excluded from People profile enrichment, the Note Graph, AI Chat,
+          and MCP clients. Your local search still finds them.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -103,8 +102,8 @@ export function AiVisibilitySettings() {
             Use the <span className="font-mono">AI / Hidden</span> button on
             any note, person, moment or collection item to toggle visibility.
             When you hide a note for the first time, a footprint dialog opens
-            so you can clean up Lexicon contributions, profile entries, and
-            graph edges that were derived earlier.
+            so you can clean up profile entries and note links that were
+            derived earlier.
           </p>
         </div>
       </CardContent>

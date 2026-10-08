@@ -46,7 +46,6 @@ export function legacyWorkspace({ root = fs.mkdtempSync(path.join(os.tmpdir(), '
   row('claims', { subject_type: 'contact', subject_id: ada.id, attribute: 'city', value: 'Hamburg', valid_from: '2020-01-01', valid_to: '2025-01-01' });
   const moved = row('moments', { title: 'Moved to Berlin', happened_at: '2025-01-01T09:00:00Z', description: 'With all the books', person_id: ada.id });
   row('moment_participants', { moment_id: moved.id, contact_id: ada.id });
-  row('wiki_pages', { title: 'Personal AI', slug: 'personal-ai', content: 'A page about personal AI.\n', page_type: 'concept' });
   const books = row('collections', { name: 'Books', description: 'What I read' });
   row('collection_items', { collection_id: books.id, title: 'Dune', data: { author: 'Frank Herbert' } });
   row('collection_items', { collection_id: books.id, title: 'Dune', data: { author: 'Brian Herbert' } });

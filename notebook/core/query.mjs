@@ -11,6 +11,12 @@ const inventory = JSON.parse(fs.readFileSync(fileURLToPath(new URL('../../docs/f
 export const tables = new Set(inventory.dependencies.flatMap(d => d.tables).filter(t => t !== 'note-attachments'));
 for (const table of ['goals', 'jobs', 'job_receipts', 'settings', 'permissions', 'decisions', 'habits', 'journal', 'deadlines', 'comments', 'notifications', 'note_conversations', 'import_mappings','record_history','event_corrections','embeddings']) tables.add(table);
 for(const table of ['health_episodes','medications','health_observations','watch_topics','watch_observations','outside_numbers','subscriptions','forecasts','work_items','coach_talks','connector_status','work_tool_receipts','approvals','command_receipts'])tables.add(table);
+// The Lexicon's records (Menerio's wiki pages, their sources and revisions)
+// are no part of the notebook since 8 October 2026: Michael's decision, so
+// that every kind of record is one the notebook shows and lets him edit.
+// An import from Menerio leaves them in its source archive.
+export const retiredTables = new Set(['wiki_pages', 'wiki_page_sources', 'wiki_revisions']);
+for (const table of retiredTables) tables.delete(table);
 const views = new Set(['world_entities', 'world_events', 'world_claims', 'profile_facts', 'v_ai_allowance_current','coach_talks','habits','journal']);
 for(const table of ['watch_candidates','watch_runs','watch_findings'])tables.add(table);
 for(const table of ['lead_entries','lead_runs','lead_examples','lead_positions','lead_contacts','lead_market','radar_decisions','radar_trials','radar_trial_results'])tables.add(table);
@@ -407,7 +413,8 @@ export class QueryService {
     return await this.store.withLockAsync(() => this.store.snapshot(() => this.execute({ ...request, holdingLock: true })), { timeoutMs, signal });
   }
   rpc(name, args = {}) {
-    if (name === 'capture_note_with_lexicon') return this.store.save('notes', { ...args._note, user_id: 'owner' });
+    // A page loaded before 8 October 2026 still asks by the Lexicon-era name.
+    if (name === 'capture_note' || name === 'capture_note_with_lexicon') return this.store.save('notes', { ...args._note, user_id: 'owner' });
     if (name === 'search_contacts_page') {
       // The next page starts after the last one by the same comparison that
       // sorted it. Until 6 October 2026 it was cut by character codes instead,

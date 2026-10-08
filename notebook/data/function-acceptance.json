@@ -13,6 +13,7 @@
  "enrich-people":"Prepare evidence-quoted changes for the exact visible person; retain existing confirmed facts and make ungrounded suggestions fail.",
  "ensure-token-allowance":"Permit the authenticated owner's configured provider use without inventing a cloud allowance or charging an unrelated account.",
  "extract-moment-profile":"Propose claims from a specific saved event with its exact quote, correct person and date; review acceptance retains event history.",
+ "get-graph-data":"Draw the whole graph and one note's neighbourhood from the saved notes: their [[links]], their closest notes and the people they name; hidden, trashed and mirrored notes only as the owner asks; nothing stored; on the real notebook in under a second.",
  "find-connections":"Offer reviewable links between distinct saved people and notes using actual mention evidence; unchanged rerun is deduplicated.",
  "gdrive-proxy":"Verify the chosen read-only Drive account; paginate selected folders/files; preserve settings on restart; expired access refreshes or creates one reconnect request.",
  "gdrive-sync":"Read selected changed Drive files into notes and verified media mappings; unchanged files remain untouched; new remote versions preserve previous local content for review.",

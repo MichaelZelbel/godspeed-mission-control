@@ -16,8 +16,8 @@ const str = {type: 'string'}, num = {type: 'number'}, bool = {type: 'boolean'}, 
 const object = (properties, required = []) => ({type: 'object', properties, required});
 const who = {contact_id: {type: 'string', description: 'Exact person id'}, name: {type: 'string', description: 'Name or nickname; a name several people share is refused with their ids'}};
 export const memoryDefinitions = [
-  {name: 'search_brain', description: 'Preferred default search. Searches facts (claim), notes (note) and Lexicon pages (lexicon) by words and, when connected, by meaning, in one call. A claim is a dated fact; prefer it over a note sentence when they disagree and say how old it is. A claim marked TWO ANSWERS has two current values: report both. Use get_note(id) for a whole note.',
-    inputSchema: object({query: str, include: {type: 'array', items: {enum: ['claim', 'note', 'lexicon']}}, limit: num, offset: num, as_of: {type: 'string', description: 'YYYY-MM-DD; omit for today'}, view: {enum: ['snippet', 'metadata']}, threshold: num}, ['query'])},
+  {name: 'search_brain', description: 'Preferred default search. Searches facts (claim) and notes (note) by words and, when connected, by meaning, in one call. A claim is a dated fact; prefer it over a note sentence when they disagree and say how old it is. A claim marked TWO ANSWERS has two current values: report both. Use get_note(id) for a whole note.',
+    inputSchema: object({query: str, include: {type: 'array', items: {enum: ['claim', 'note']}}, limit: num, offset: num, as_of: {type: 'string', description: 'YYYY-MM-DD; omit for today'}, view: {enum: ['snippet', 'metadata']}, threshold: num}, ['query'])},
   {name: 'get_user_profile', description: 'The owner\'s profile: facts by category, the people closest to them, and the instructions they left for assistants. Call it at the start of a conversation.',
     inputSchema: object({categories: strings, detail: {enum: ['curated', 'full']}, include_instructions: bool, include_notes: bool, scope: str})},
   {name: 'search_contacts', description: 'Find people by name, nickname, company or relationship. Returns their contact_id.', inputSchema: object({query: str, relationship: str, limit: num})},
@@ -39,7 +39,6 @@ export const memoryDefinitions = [
   {name: 'search_moments', description: 'Search timeline entries by words and meaning.', inputSchema: object({query: str, limit: num}, ['query'])},
   {name: 'search_entities', description: 'Search the owner\'s World of things that are not people (companies, places, products) by name, nickname, description or type.', inputSchema: object({query: str, entity_type: str, limit: num})},
   {name: 'get_entity_context', description: 'One thing in the World: its facts, timeline entries and notes that name it.', inputSchema: object({id_or_name: str, include_history: bool}, ['id_or_name'])},
-  {name: 'lexicon_search', description: 'Search Lexicon pages (topic, concept and person pages) by title or content.', inputSchema: object({query: str, page_type: str, limit: num}, ['query'])},
   {name: 'list_collections', description: 'Every collection with its slug, description, item count and the instructions for capturing into it.', inputSchema: object({})},
   {name: 'get_collection_schema', description: 'A collection\'s fields (key, label, type, options) and capture instructions. Read it before adding or updating items.', inputSchema: object({slug: str}, ['slug'])},
   {name: 'list_collection_items', description: 'Items of one collection, filtered by words (quotes, OR, -word), status (its first indexable choice or text field) and dates (its first indexable date field).',
@@ -187,10 +186,10 @@ const noteBlock = (h, i, view, text) => h.file ? ['[note] --- Result ' + i + ' -
   ...(h.via ? ['Found in: ' + h.via] : []), ...(view === 'metadata' ? [] : ['Match: ' + excerpt(h, text)])].join('\n');
 
 async function searchBrain(a, ctx) {
-  const text = required(a.query, 'words to search for'), include = Array.isArray(a.include) && a.include.length ? a.include : ['claim', 'note', 'lexicon'];
+  const text = required(a.query, 'words to search for'), include = Array.isArray(a.include) && a.include.length ? a.include : ['claim', 'note'];
   const limit = count(a.limit, 1, 50, 10), offset = count(a.offset, 0, 1000, 0), day = isDay(a.as_of) ? a.as_of : today(ctx), threshold = Number.isFinite(Number(a.threshold)) ? Number(a.threshold) : 0.3;
   const {query, index} = ctx, parts = [];
-  let claims = [], hits = [], pages = [], mode = 'words', note = null;
+  let claims = [], hits = [], mode = 'words', note = null;
   // A meaning match on a short fact is only kept when it is close; word matches always are.
   const close = r => r.matched !== 'meaning' || (r.similarity ?? 1) >= threshold;
   let shownAsClaims = new Set();
@@ -214,18 +213,13 @@ async function searchBrain(a, ctx) {
   if (include.includes('note')) ({hits, mode, note} = await noteHits(ctx, text, {limit: 50}));
   // A world claim shown as a fact is not listed again as a file.
   if (shownAsClaims.size) hits = hits.filter(h => !h.file || !shownAsClaims.has(h.file));
-  if (include.includes('lexicon') && offset === 0) {
-    const found = await index.searchHybrid(text, {limit: 30, types: ['wiki_pages']}), byId = new Map(live(visibleRows(query, 'wiki_pages')).map(p => [p.id, p]));
-    pages = found.rows.filter(close).map(r => ({page: byId.get(r.id), snippet: r.snippet})).filter(p => p.page).slice(0, limit);
-  }
   const shown = hits.slice(offset, offset + limit), label = labeler(query);
   ctx.seen?.(shown.filter(h => !h.file).map(h => h.note));
-  parts.push('Found ' + claims.length + ' claim(s), ' + hits.length + ' note(s) [' + mode + '] and ' + pages.length + ' Lexicon page(s).' + (hits.length ? ' Showing notes ' + (shown.length ? offset + 1 : 0) + '-' + (offset + shown.length) + ' (has_more: ' + (offset + limit < hits.length) + ').' : '') + (note ? ' ' + note : ''));
+  parts.push('Found ' + claims.length + ' claim(s) and ' + hits.length + ' note(s) [' + mode + '].' + (hits.length ? ' Showing notes ' + (shown.length ? offset + 1 : 0) + '-' + (offset + shown.length) + ' (has_more: ' + (offset + limit < hits.length) + ').' : '') + (note ? ' ' + note : ''));
   for (const f of claims.slice(0, limit)) parts.push('[claim] ' + label(f) + ', ' + (f.label || f.attribute) + ': ' + f.value + (f.two_answers ? '   TWO ANSWERS: ' + f.two_answers.join(' | ') : '')
     + '\n    ' + (f.valid_from ? f.valid_from + ' to ' + (f.valid_to || 'now') : 'undated') + ' · ' + (f.confidence || 'confirmed') + ' · id ' + f.id
     + (f.evidence_quote ? '\n    "' + clip(f.evidence_quote, 240) + '"' : '') + (f.source_type === 'note' && f.source_id ? '\n    from note ' + f.source_id : ''));
   shown.forEach((h, i) => parts.push(noteBlock(h, offset + i + 1, a.view, text)));
-  for (const {page, snippet} of pages) parts.push('[lexicon] ' + page.title + (page.page_type ? ' (' + page.page_type + ')' : '') + ' · id ' + page.id + '\n    ' + clip(snippet ? snippet.replace(/[[\]]/g, '') : page.summary || page.content, 400));
   if (offset + limit < hits.length) parts.push('More notes: run again with offset=' + (offset + limit) + '.');
   if (claims.length > limit) parts.push((claims.length - limit) + ' more claim(s) not shown: run again with include=["claim"] and a higher limit.');
   return parts.join('\n\n');
@@ -329,7 +323,7 @@ function stats(ctx) {
   return {notes: notes.length, by_type: Object.fromEntries(tally(notes.map(n => n.metadata?.type || 'untyped'))), top_topics: tally(notes.flatMap(n => [...new Set([...(n.tags || []), ...(n.metadata?.topics || [])].map(norm).filter(Boolean))])).slice(0, 15).map(([topic, n]) => ({topic, notes: n})),
     top_people: tally(notes.flatMap(n => [...new Set((n.metadata?.matched_people || []).map(m => m.canonical_name || m.name).filter(Boolean))])).slice(0, 15).map(([name, n]) => ({name, notes: n})),
     changed_last_7_days: within(7), changed_last_30_days: within(30), people: people(query).length, current_facts: facts(query).filter(f => holds(f, day)).length,
-    timeline_entries: live(visibleRows(query, 'moments')).length, collections: live(visibleRows(query, 'collections')).length, lexicon_pages: live(visibleRows(query, 'wiki_pages')).length};
+    timeline_entries: live(visibleRows(query, 'moments')).length, collections: live(visibleRows(query, 'collections')).length};
 }
 async function searchMoments(a, ctx) {
   const {query, index} = ctx, byId = new Map(live(visibleRows(query, 'moments')).map(m => [m.id, m])), found = await index.searchHybrid(required(a.query, 'words to search for'), {limit: 60, types: ['moments']});
@@ -351,13 +345,6 @@ function entityContext(a, ctx) {
     facts: facts(query).filter(f => f.subject_type === 'entity' && f.subject_id === e.id && (a.include_history || holds(f, day))).map(f => factView(f, label)),
     timeline: live(visibleRows(query, 'moments')).filter(m => ids.has(m.id)).slice(0, 15).map(m => ({moment_id: m.id, title: m.title, happened_at: m.happened_at})),
     notes: live(visibleRows(query, 'notes')).filter(n => !n.is_trashed && pattern.some(x => norm((n.title || '') + ' ' + (n.content || '')).includes(x))).slice(0, 12).map(n => ({note_id: n.id, title: n.title}))};
-}
-async function lexiconSearch(a, ctx) {
-  const {query, index} = ctx, n = norm(a.query), rows = live(visibleRows(query, 'wiki_pages')).filter(p => !a.page_type || p.page_type === a.page_type);
-  const exact = rows.filter(p => norm(p.title).includes(n) || norm(p.slug).includes(n));
-  const found = (await index.searchHybrid(required(a.query, 'words to search for'), {limit: 30, types: ['wiki_pages']})).rows.filter(r => r.matched !== 'meaning' || (r.similarity ?? 1) >= 0.3), snippets = new Map(found.map(r => [r.id, r.snippet]));
-  return [...new Map([...exact, ...found.map(r => rows.find(p => p.id === r.id)).filter(Boolean)].map(p => [p.id, p])).values()].slice(0, count(a.limit, 1, 50, 10))
-    .map(p => ({page_id: p.id, title: p.title, slug: p.slug || null, page_type: p.page_type || null, summary: p.summary ? clip(p.summary, 300) : null, match: snippets.get(p.id)?.replace(/[[\]]/g, '') || clip(p.content, 300)}));
 }
 
 // Collections, by slug.
@@ -485,7 +472,6 @@ export async function memoryTool(name, a, ctx, guarded) {
   if (name === 'search_brain') return searchBrain(a, ctx);
   if (name === 'search_moments') return searchMoments(a, ctx);
   if (name === 'search_entities') return searchEntities(a, ctx);
-  if (name === 'lexicon_search') return lexiconSearch(a, ctx);
   if (name === 'search_all_collections') return searchCollections(a, ctx);
   return query.withSnapshot(() => {
     if (name === 'get_user_profile') return userProfile(a, ctx);
