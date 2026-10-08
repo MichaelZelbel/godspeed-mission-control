@@ -237,7 +237,7 @@ async function gmail(c, method, p, body) {
 }
 
 function need(c) {
-  if (!c.GMAIL_REFRESH_TOKEN) throw new Error("gmail: not connected. When the person wants it, they ask their assistant \"Connect Gmail for me\" (Chapter 30). Until then, they can paste an email or forward it to the mission control's address.");
+  if (!c.GMAIL_REFRESH_TOKEN) throw new Error("gmail: not connected. When the person wants it, they ask their assistant \"Connect Gmail for me\" (Chapter 32). Until then, they can paste an email or forward it to the mission control's address.");
 }
 
 // ============================================================ reading
@@ -807,7 +807,7 @@ function state() {
 
 async function status() {
   const c = credentials();
-  if (!c.GMAIL_REFRESH_TOKEN) return { account: "gmail", state: "not connected", note: "Optional. When you want it, ask your assistant \"Connect Gmail for me\" (Chapter 30). Until then, paste an email or forward it to the mission control's address." };
+  if (!c.GMAIL_REFRESH_TOKEN) return { account: "gmail", state: "not connected", note: "Optional. When you want it, ask your assistant \"Connect Gmail for me\" (Chapter 32). Until then, paste an email or forward it to the mission control's address." };
   try {
     const prof = await gmail(c, "GET", "/profile");
     return { account: "gmail", address: prof.emailAddress, state: canDraft(c) ? "connected" : "reading only",

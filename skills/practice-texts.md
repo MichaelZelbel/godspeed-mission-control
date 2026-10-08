@@ -1,4 +1,4 @@
-# Practice Texts (Chapters 12, 13 and 16)
+# Practice Texts (Chapters 15 and 16)
 
 Two fictional texts for testing your **Summarize for me** skill, or any
 skill that takes pasted text. Each has known facts you can check the
@@ -15,7 +15,7 @@ answer against.
 4. Keep each text with its answer. When you change the skill, try the
    same text again in a fresh session and compare the results.
 
-## Text 1: the gym newsletter (used in Chapters 12 and 13)
+## Text 1: the gym newsletter (used in Chapters 15 and 16)
 
 ```
 Hi everyone, hope you are all doing great and enjoying the summer so far!
@@ -39,7 +39,7 @@ What a good run finds: under Money and deadlines, re-confirm the
 direct-debit mandate in the member portal by the 31st, or pay a 5 euro
 fee.
 
-## Text 2: the property manager's letter (used in Chapter 16)
+## Text 2: the property manager's letter (a second text to practise on)
 
 ```
 Dear residents, as announced in spring the house facade will be

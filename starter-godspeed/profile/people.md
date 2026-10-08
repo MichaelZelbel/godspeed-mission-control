@@ -1,6 +1,6 @@
 # My people
 
-<!-- One block per person who shows up in your decisions (Chapter 5).
+<!-- One block per person who shows up in your decisions (Chapter 6).
      Three things each: who they are to you, what matters about them,
      the current thing between you. Specific beats complete. -->
 

@@ -20,7 +20,7 @@ that rule is the only reason this drawer is safe to have.
 Collection is optional, and the setup the book teaches leaves it off. On a
 computer getting its first mission control, the installer copies nothing until
 you tick a tool on its **Your conversations** page, or name it after `--sources`
-on macOS and Linux (Chapters 2 and 31). With collection off, this drawer stays
+on macOS and Linux (Chapters 2 and 33). With collection off, this drawer stays
 empty and nothing is broken. Use `prompts/library/` next door instead, and save
 the prompts you care about as you go.
 
@@ -61,7 +61,7 @@ working or the commands it ran. Lines that look like a password are removed, and
 a reply longer than about twenty thousand characters is cut short with a marker
 saying so. That filter catches recognised patterns only, and private facts do not
 all look like passwords, so review this drawer before it goes to a remote backup
-(Chapter 18).
+(Chapter 21).
 
 ## How to look something up
 

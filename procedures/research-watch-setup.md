@@ -1,4 +1,4 @@
-# Research Watch Setup (Chapter 26)
+# Research Watch Setup (Chapter 29)
 
 A research watch keeps one open question alive between searches: whether a
 tool still fits, whether a feature has arrived, whether a better choice has

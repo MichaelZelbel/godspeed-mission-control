@@ -1,4 +1,4 @@
-# Voice Extraction (Chapter 8)
+# Voice Extraction (Chapter 9)
 
 Fills `profile/voice.md`. You do not describe your voice. You show it with a few samples,
 and your assistant proposes rules you can accept or correct.
@@ -55,4 +55,4 @@ samples when a different kind of message comes along.
 ## The boundary
 
 It drafts, you send. A sentence can sound exactly like you and still promise something you
-never agreed to, so read it before it leaves the house (Chapter 20).
+never agreed to, so read it before it leaves the house (Chapter 23).

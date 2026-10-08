@@ -3,7 +3,7 @@
 Nineteen small programs. The installer puts them on your computer. **They are not
 part of your mission control folder, and that is deliberate.**
 
-Chapter 3 says your mission control is a folder of text files and that nothing in it needs a
+Chapter 4 says your mission control is a folder of text files and that nothing in it needs a
 terminal. That stays true. These are software, like your assistant is software, so
 they live where software lives on your computer and they write into the folder from
 the outside.
@@ -24,8 +24,8 @@ the outside.
   text you actually saw, so you can later ask "what was that answer again" as well
   as "what did I type".
 
-Together they are the program Chapter 3 and Chapter 37 mean when they say
-*"a program fills it"*.
+Together they are the program that fills the optional `prompts/archive/` drawer
+(Chapters 2 and 38).
 
 The third one is the only one here you type yourself.
 
@@ -34,7 +34,7 @@ The third one is the only one here you type yourself.
   your whole rulebook at the start of every session without reading a page per
   rule. You edit the files; you never edit the block. It refuses to write past
   4,000 characters, which is fifteen to twenty rules, and tells you which of your
-  lines are longest instead. That refusal is the point of it. Chapter 17.
+  lines are longest instead. That refusal is the point of it. Chapter 20.
 
 The installer gives it a launcher, so the command is:
 
@@ -53,7 +53,7 @@ The fourth one you also type yourself, and it answers a question nothing else as
   they are really **on this computer**, which is a different question from whether
   they are in the folder. It also reads `secrets/expires.txt` and tells you if one
   of them is about to run out. It never prints a key: names, dates and counts only.
-  Chapters 20 and 31.
+  The card is `procedures/keys-that-expire.md`.
 
 The installer gives it a launcher, so the command is:
 
@@ -78,7 +78,7 @@ The fifth is the one you will type most often.
   For a deadline, how loud your mission control gets follows how much of the window
   is left, so one rule covers a job you have a week for and one you have a year for.
   A target alone is quiet until its day, asks once if it passes, and then waits
-  gently. Chapter 27.
+  gently. Chapter 30.
 
 The installer gives it a launcher, so the command is:
 
@@ -94,7 +94,7 @@ mc-due check               close whatever can prove itself done
 Two things about it are worth knowing before you use it. It **refuses anything
 with neither a target nor a deadline**, in those words, which is the only thing between
 this and a to-do app you abandon. And it reads `secrets/expires.txt` as one of
-its sources, so the key dates from Chapter 31 are in the same list as everything
+its sources, so your key dates are in the same list as everything
 else and there is one thing nagging you rather than two that disagree.
 
 It needs no Google account and no calendar, and nothing in the program can reach
@@ -109,7 +109,7 @@ The sixth you type when a fact changes, or your assistant types it for you.
   also say what it depends on, with a `rests_on: [subject/attribute]` line at the top,
   and is then found even when the old value is paraphrased. A line that carries the date
   the fact ended is history and is never reported. It changes nothing: you decide whether
-  a line is stale or is history. The same chapter as the pull below.
+  a line is stale or is history. Chapter 14.
 
 The installer gives it a launcher, so the command is:
 
@@ -122,7 +122,7 @@ Run it in your mission control folder. The idea is from Rich Schefren's open-sou
 does this with a graph database; here it is a search over text files, which is what a
 mission control is made of.
 
-- **`check-brief.js`** is the bouncer for the morning brief (Chapter 22). Before a
+- **`check-brief.js`** is the bouncer for the morning brief (Chapter 25). Before a
   brief is written or sent, it reads the text and refuses a file path where the
   thing itself should be ("open skills/x.md and paste it" is a dead errand on a
   phone), "read it" with nothing to read, a link or a line to post that a brief of
@@ -168,7 +168,7 @@ one of the others is not installed.
   mission control never works on it and may ask you one clarifying question about it in seven
   days. Your silence is never a yes. Every change keeps its reason, and reaches
   the plans underneath it. `mc-goals attention` says which goals get attention
-  today and **why on every row**, with no score anywhere in it. Chapter 6.
+  today and **why on every row**, with no score anywhere in it. Chapter 7.
   An outcome can also name **one weekly number** (`LEAD:`), a step before its
   MEASURE: `mc-goals read` records a reading (READ), every move of the goal bets
   on the number (BET, copied onto the card by `mc-goals bets`), and seven days
@@ -180,12 +180,12 @@ one of the others is not installed.
   invented precision, a forecast with no reference class, and a revision that
   would overwrite history. `mc-forecast score` counts each question once and puts
   the score beside the plain historical baseline the forecast named, which is the
-  only comparison that means anything. Chapter 20.
+  only comparison that means anything. Chapter 23.
 - **`work.js`** (`mc-work`) tracks what your mission control is doing, and keeps three states
   apart that a to-do list treats as one: dispatched, attempted, and verified. Only
   verified closes an item, and "the runner said it did it" is not verified. A
   duplicate trigger files nothing twice; anything that reaches somebody else waits
-  for your own words. Chapter 24.
+  for your own words. Chapters 3 and 8.
 
 ```
 mc-goals attention          who gets attention today, and why
@@ -230,7 +230,7 @@ Run `mc-decide --dry-run` any time to see the plan without deciding anything.
   your `rules/machine-words.txt` bans. It is what lets "we found out X" close a work
   item without a person reading it first.
 
-The last four belong to Chapter 28, "Give Your Godspeed a Notebook". **None of them does
+The last four are for Menerio, a separate online notebook. **None of them does
 anything unless you connect Menerio**, and a reader who never connects it can ignore all four.
 
 - **`menerio-connect.js`** (`mc-menerio-connect`) connects your notebook **once**, for every
@@ -274,7 +274,7 @@ mc-search --limit 3 --json invoice reminder
   connections made the older way) and `mc-mail-wire.js` (telling each assistant about the tool).
   Email is optional: the installer tells every assistant about the tool and connects nothing,
   and with nothing connected it only says `not connected`. `mc-mail connect agentmail` gives
-  your mission control its own address (Chapter 29). Gmail (Chapter 30) is connected when you ask your
+  your mission control its own address (Chapter 31). Gmail (Chapter 32) is connected when you ask your
   assistant *Connect Gmail for me*: the mission control fetches Himalaya 2.1.0 (pinned by its SHA-256 in
   `mc-mail-himalaya.json`), and you type a Google app password in a window of your own
   computer, never in a chat. Then any assistant on that computer can search, read a message and
@@ -370,8 +370,8 @@ machine.
 ## The honest limit
 
 They can only harvest from an AI tool that keeps your conversations as files on
-your own computer, which means a terminal tool: Chapters 32 and 36. Claude Desktop,
-the desk from Chapter 2, keeps no such store. If that is your only tool, this finds
+your own computer, which means a terminal tool: Chapters 37 and 40. Claude Desktop
+keeps no such store. If that is your only tool, this finds
 nothing, `prompts/archive/` stays empty, and nothing is broken. Use
 `prompts/library/` next door and save the prompts you care about as you go.
 

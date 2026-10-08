@@ -1,4 +1,4 @@
-# One notebook, every assistant (Chapter 28)
+# One notebook, every assistant (Menerio)
 
 MCP is a standard socket. Any AI tool that speaks it can read the same notebook. You connect
 Menerio **once**, with one key, and every way you use your mission control has it: Hermes, Claude Code and

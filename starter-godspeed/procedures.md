@@ -49,7 +49,7 @@ Off-switch: pause Radar in routine controls.
 Last checked: 2026-10-04, source regressions use actual local HTTP bytes and check quote rejection, novelty, blind-run warnings and credential exclusion. Installed execution, verdict lifecycle and separate trial implementation remain required.
 
 <!--
-The register (Chapter 21). One block per procedure.
+The register (Chapter 24). One block per procedure.
 
 The rule: never run a procedure you cannot see and stop. No procedure
 exists unless it has a block in this file, and that includes the ones

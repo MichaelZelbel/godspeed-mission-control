@@ -1,15 +1,14 @@
 #!/bin/bash
 # Give your assistant a phone number.
 #
-# Chapter 32 put your assistant on a machine that never sleeps, and it can send
+# The server setup put your assistant on a machine that never sleeps, and it can send
 # you a brief every morning. What it cannot do is hear you. This script fixes
 # that. It installs Hermes, an agent that reads the same folder your assistant
 # already uses and answers you on Telegram, so you can hand it a job while you
 # are waiting at a bus stop.
 #
 # YOU PROBABLY DO NOT NEED TO RUN THIS ON ITS OWN. The one-line installer in
-# this folder covers Chapters 32 and 33 together, and does everything below as
-# part of it:
+# this folder does everything below as part of it:
 #
 #     curl -fsSL https://raw.githubusercontent.com/MichaelZelbel/godspeed-mission-control/main/server/install.sh | bash
 #
@@ -17,7 +16,7 @@
 # want the Hermes half, or something broke and you want to run just this part
 # again. It is the same steps, in the same order.
 #
-# Run it as the `ai` user you made in Chapter 32, never as root:
+# Run it as the `ai` user made when the server was set up, never as root:
 #
 #     bash install-hermes.sh
 #
@@ -60,12 +59,12 @@ die()  { printf '\n   STOPPED: %s\n\n' "$1" >&2; exit 1; }
 # --------------------------------------------------------------------------
 say "Checking where you are running this"
 
-[ "$(id -u)" -eq 0 ] && die "You are root. Chapter 32 gave your assistant its own
+[ "$(id -u)" -eq 0 ] && die "You are root. The server setup gave your assistant its own
    account for a reason: the account you log in with can destroy the machine, and
    your assistant does not need that. Log in as that user and run this again."
 
 [ -d "$GODSPEED" ] || die "No folder at $GODSPEED. That folder is your assistant's memory,
-   the one Chapter 32 put on this machine. Set GODSPEED=/path/to/it and run this again."
+   the one the server setup put on this machine. Set GODSPEED=/path/to/it and run this again."
 
 ok "running as $(whoami), folder found at $GODSPEED"
 
@@ -110,7 +109,7 @@ fi
 # own package tool. Two things it cannot bring are curl and git, because they
 # have to be installed by the administrator of the machine.
 #
-# And here is the part that catches people. Chapter 32 gave your assistant its
+# And here is the part that catches people. The server setup gave your assistant its
 # own account ON PURPOSE, with no power to install software. That is the whole
 # point of that account. So when the Hermes installer notices git is missing and
 # tries `sudo apt install git`, it is refused, exactly as it should be. Nothing
@@ -134,7 +133,7 @@ if [ -n "$MISSING" ]; then
   die "this machine is missing:$MISSING
 
    Your assistant's account is not allowed to install software, which is correct
-   and is why Chapter 32 made it that way. Log out, log back in as the admin
+   and is why the server setup made it that way. Log out, log back in as the admin
    account you were given with the machine, and run this one line:
 
        sudo apt update && sudo apt install -y$PACKAGES

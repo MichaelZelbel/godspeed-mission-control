@@ -1,6 +1,6 @@
 # Match an installed mission control to this companion kit
 
-These are instructions for the assistant carrying out the Chapter 2 request. The installers supply the programs and the current public starter. This guide brings an existing mission control's shared instructions into agreement with this kit's `starter-godspeed/`; it is not a replacement installer.
+These are instructions for the assistant carrying out a request to match an installed mission control to this kit. The installers supply the programs and the current public starter. This guide brings an existing mission control's shared instructions into agreement with this kit's `starter-godspeed/`; it is not a replacement installer.
 
 1. Confirm the mission control's path (normally `~/godspeed`, `C:\Users\<you>\godspeed` or `/home/ai/godspeed`). Read its `AGENTS.md` and `rules/`, and the kit's `starter-godspeed/AGENTS.md` and `starter-godspeed/rules/`. Save a local recovery copy of every file you will change, for example as a Git commit, and upload nothing.
 2. Leave the persona block alone. If `AGENTS.md` has a paragraph between `<!-- persona:begin` and `persona:end -->`, keep it exactly as it is: it holds the name and character the user chose. If there is none, copy the kit's block, markers included, to the top of the file.

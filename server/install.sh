@@ -2,7 +2,7 @@
 # =============================================================================
 # Teach It Once - the always-on server, in one line.
 #
-# Chapters 32 and 33 of the book. This puts your folder on a machine that never
+# This puts your folder on a machine that never
 # sleeps, runs Hermes there as a service that starts with the machine, connects
 # your Telegram bot to it, and puts the morning brief on Hermes' own clock.
 #
@@ -35,7 +35,7 @@
 # morning brief on the clock (opt-in); whether it may tell Michael the install
 # worked (opt-in, default no, asked once). Plus two codes. What only you can do
 # afterwards: paste server/open-the-door.sh, then point the Hermes app on your
-# computer at the server (Chapter 33).
+# computer at the server.
 #
 # The by-hand version of all of this is in server/setup.md, for when something
 # breaks and you want to know what it did.
@@ -101,8 +101,8 @@ unset LIB
 # /sethome would otherwise write. So three lines in ~/.hermes/.env are the whole
 # connection, and the reader's id comes from the bot's own message log after one
 # "hi" from their phone, the way the other kits do it. No web page, no /sethome.
-# Until 2026-09-06 this installer left Telegram to Chapter 33's web page, and the
-# reader ended Chapter 32 with a running Hermes they could not talk to.
+# Until 2026-09-06 this installer left Telegram to the door's web page, and the
+# reader ended the server chapter with a running Hermes they could not talk to.
 # The token is never printed and never logged; it only ever travels in the URL of
 # a curl call whose errors are discarded.
 telegram_api() { curl -fsS -m 15 "https://api.telegram.org/bot$1/$2" 2>/dev/null; }
@@ -243,7 +243,7 @@ if kb_is_root; then
   ok "a C++ compiler is here, for the one part of Hermes that is built on the machine"
 
   # age locks the mission control's credentials and the Gmail app password (the book's Chapters
-  # 28 to 30). The assistant's account cannot install it later, so root does it here. Until
+  # 31 and 32). The assistant's account cannot install it later, so root does it here. Until
   # 2026-09-30 only the Docker image had it, and connecting Gmail on a plain server stopped after
   # the app password was typed, with advice (run the installer again) that could not help.
   if ! command -v age >/dev/null 2>&1 || ! command -v age-keygen >/dev/null 2>&1; then
@@ -628,7 +628,7 @@ bash "$KIT_DIR/server/create-private-repo.sh" "$GODSPEED" "${KB_REPO_NAME:-}" \
 GODSPEED_REPO="$(git -C "$GODSPEED" remote get-url origin 2>/dev/null || true)"
 
 # --- The morning brief, only if asked for -------------------------------------
-# Chapter 22's job is a good first job for a reader who has been through Part V,
+# Chapter 25's job is a good first job for a reader who has been through Part V,
 # and noise for one whose server is the first machine in the system. So it is
 # opt-in, and the default is no (Michael, 2026-09-05). KB_MORNING_BRIEF=yes|no
 # set in the environment skips the question; with no terminal the answer is no.
@@ -659,7 +659,7 @@ if [ "${KB_MORNING_BRIEF:-}" != "yes" ] && [ "${KB_MORNING_BRIEF:-}" != "no" ]; 
    It arrives at 06:00 $BRIEF_ZONE time, the time zone this server is set to.
    At first it is short, because your assistant knows little about you yet;
    it grows with what you tell it. You can change what goes into it at any
-   time just by telling your assistant (Chapter 22 of the book shows how).
+   time just by telling your assistant (Chapter 25 of the book shows how).
 
    Say no if you do not want it yet. Nothing is sent, and you can switch it
    on later by running this same install line again.
@@ -897,7 +897,7 @@ fi
 # --- What is left, and only you can do it ------------------------------------
 say "What is left, and only you can do it"
 # When this block prints, the reader is back at the administrator's prompt: the
-# hand-over ran the assistant's phase and returned. The book's next chapter does
+# hand-over ran the assistant's phase and returned. The door does
 # everything below from a web page, so this text sends the reader there and not
 # into the terminal: one more pasted line as root, then a browser and the app.
 # (Until 2026-09-06 it sent them into `su - ai`, `hermes gateway setup` and a
@@ -929,10 +929,10 @@ T
   ;;
 esac)
 
-   What is left is the book's next chapter, which puts this server on your
-   desk. Only one more line is typed here.
+   What is left puts this server on your desk. Only one more line is typed
+   here.
 
-   1. As the administrator, paste the book's second line. It puts this server
+   1. As the administrator, paste this second line. It puts this server
       on your private Tailscale network (make a free account at tailscale.com
       first), runs Hermes' own web page as a service, and prints the page's
       address, a username and a password:

@@ -10,11 +10,11 @@ every session, is not a log. It is a pile of old orders being taken as new ones.
 Two drawers. Each has its own README with the detail.
 
 - **`library/`** is the shelf: the prompts you keep and paste into other tools, one file
-  each. You put things here on purpose. Chapters 13 and 37.
+  each. You put things here on purpose. Chapters 16 and 38.
 - **`archive/`** is the log, and it is optional: if you switched on conversation
   collection, what you typed to the assistants on this computer, and what they answered,
   in date order, filled by a program and never by you. The setup the book teaches leaves
-  collection off, so an empty drawer is normal. Chapters 31 and 37.
+  collection off, so an empty drawer is normal. Chapters 2 and 38.
 
 ## How this is different from `skills/`
 

@@ -102,5 +102,5 @@ mc-forecast resolve <id> --outcome yes|no|void --evidence "..." [--value N]
 mc-forecast list | due | show <id> | score | check
 ```
 
-Chapter 20 of the book is the idea behind this folder: the outside view, and a number you keep
+Chapter 23 of the book is the idea behind this folder: the outside view, and a number you keep
 score on. The rooms next door are `goals/` and `work/`.

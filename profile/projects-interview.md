@@ -1,4 +1,4 @@
-# Projects and Priorities Interview (Chapter 6)
+# Projects and Priorities Interview (Chapter 7)
 
 Keeps `profile/projects.md` useful: your mission control reads the work you already have,
 names the project that deserves attention and offers help with the next step.
@@ -70,5 +70,5 @@ For the project that matters now, name the one thing most likely holding it back
 ## Keeping it true
 
 When you finish a project or put one on hold, tell your mission control during the work. It
-updates the project list and keeps the earlier decision with its date and reason. Chapter 10
+updates the project list and keeps the earlier decision with its date and reason. Chapter 11
 is the routine; Part V hands it to jobs that run on their own.

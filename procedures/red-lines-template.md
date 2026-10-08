@@ -1,4 +1,4 @@
-# House Rules and Red Lines (Chapter 17)
+# House Rules and Red Lines (Chapter 20)
 
 Your red lines are the short list of things your AI may never do without
 your explicit yes, plus the habits that keep it from lying to you politely.
@@ -72,7 +72,7 @@ you save them, and there is no second copy anywhere that could quietly hold
 last month's wording.
 
 That is the whole install, and it is why the next section is a test rather
-than a checklist. The book's thirty-second PELICAN test (Chapter 17) tells
+than a checklist. A thirty-second check, the PELICAN test, tells
 you whether the rules are in the room before you throw anything at them.
 
 Ask your assistant to add this temporary line at the top of `AGENTS.md`,
@@ -93,7 +93,7 @@ assistant to remove the test line and start a fresh session.
 
 One note for developers: a project inside `dev/` with its own `AGENTS.md`
 gets rules of its own, and a session started inside that project runs under
-those alone. Chapter 4 shows exactly which files each tool reads from where.
+those alone. Chapter 40 shows exactly which files each tool reads from where.
 
 ## Test with live ammunition before you trust it
 

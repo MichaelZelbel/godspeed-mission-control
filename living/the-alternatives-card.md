@@ -1,4 +1,4 @@
-# The Alternatives Card (Chapter 20)
+# The Alternatives Card (Chapter 23)
 
 There is a card next to this one with two questions that check whether an answer is true.
 This card checks a plan. A plan is an answer too, and plans are usually too hopeful.

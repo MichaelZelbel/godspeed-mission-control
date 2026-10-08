@@ -37,7 +37,7 @@
 //              quotes, so a text without them would reach you unjudged.
 //   deadline   a line that talks about something still open in due/ anywhere but in
 //              mc-due's own lines or under a Deadlines heading. mc-due today decides
-//              what is said about those and on which morning (Chapter 27).
+//              what is said about those and on which morning (Chapter 30).
 //
 // WHY THE LAST ONE (2026-09-30). In the practice run for targets, the brief was told in
 // its recipe, in plain words, that the deadline lines are the only place it speaks about

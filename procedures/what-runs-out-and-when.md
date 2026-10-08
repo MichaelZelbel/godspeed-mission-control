@@ -1,4 +1,4 @@
-# What runs out, and when (Chapter 27)
+# What runs out, and when (Chapter 30)
 
 You already know the failure. A reminder goes off about something you did last
 week. You dismiss it. A month later one goes off about something you have not
@@ -224,7 +224,7 @@ five separate reminders you will scroll past.
 
 ## Wiring it into the brief you already have
 
-Open the chat in your mission control, the one whose brief you set up in Chapter 22,
+Open the chat in your mission control, the one whose brief you set up in Chapter 25,
 and paste this:
 
 ```
@@ -247,18 +247,18 @@ target never turns up as "overdue" further down.
 
 ## Your keys are already in this list
 
-If you did Chapter 31 you have `secrets/expires.txt`, with a line per key and the
+If you keep `secrets/expires.txt` (see `keys-that-expire.md`), with a line per key and the
 date it dies. **`mc-due` reads that same file.** Each key becomes one of these,
 with a window running from the day your mission control first learned the date to the date
 itself.
 
 So you never write a date in two places, and you have one thing nagging you
 rather than two that disagree. Changing the date in `secrets/expires.txt` is
-still the off switch it was in Chapter 31, and it is now also the proof: moving
+still the off switch `keys-that-expire.md` describes, and it is now also the proof: moving
 it forward is what replacing a key looks like from the outside, so the reminder
 closes itself.
 
-If you took the key paragraph in Chapter 31's card and pasted it into your
+If you took the key paragraph from `keys-that-expire.md` and pasted it into your
 morning brief recipe, you can take it back out now. One thing, one place.
 
 ## If you do have a calendar
@@ -308,7 +308,7 @@ block of its own. The prompt above adds one line to the morning brief's block
 in `procedures.md` saying it now runs `mc-due`. **One line, not one per
 deadline**, because there is one job here however long the list gets.
 
-## Prove it by breaking it (Chapter 20 again)
+## Prove it by breaking it
 
 Two minutes, today, while nothing is urgent, in a practice mission control
 rather than your real list: add `--godspeed` and the practice folder's path to
@@ -335,5 +335,5 @@ installed before then, update once. On Windows, open the Start menu and click
 curl -fsSL https://teachitonce.com/install | bash
 ```
 
-On a server from Chapter 32, run that chapter's installer line again, as
+On a server built with the kit's `server/install.sh`, run that installer line again, as
 `root`. Your folder and your earlier choices stay as they are.

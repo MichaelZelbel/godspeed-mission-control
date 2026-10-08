@@ -4,7 +4,7 @@ Your assistant fills this folder as you tell it useful facts and things that hap
 It works without a Menerio account. The instructions in `AGENTS.md` tell the assistant to
 save and search these records, using the formats below.
 
-Menerio is an optional online notebook (Chapter 28). You connect it once, through the
+Menerio is an optional online notebook. You connect it once, through the
 installer or with `mc-menerio-connect`. That gives you the notebook and copies nothing.
 Copying between your mission control and Menerio is a separate choice. The installer asks, and the
 default is no. On a yes, your mission control's text files, this folder included, are copied up so they
@@ -117,7 +117,7 @@ city claim gets an end date. A guess about why the person moved belongs in `obse
 Once Menerio is connected and you have said yes to copying, the import runs by itself: when
 you save a change, and once an hour. It brings down the people, events and facts Menerio
 keeps, not your notes or their attachments; to take the notes themselves, ask your assistant
-for a separate export (Chapter 28). To look at what it would do, or to run it by hand:
+for a separate export (Chapter 13). To look at what it would do, or to run it by hand:
 
 ```
 python3 ~/.local/bin/world-pull.py                    # dry run, shows what it would write

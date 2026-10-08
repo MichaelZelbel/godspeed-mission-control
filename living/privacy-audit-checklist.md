@@ -1,4 +1,4 @@
-# The Privacy Audit (Chapter 19)
+# The Privacy Audit (Chapter 22)
 
 Where your information is kept, and where it goes when an assistant reads it. Run it before
 the first upload to a backup or any other destination, and again when you add a connection.
@@ -54,9 +54,9 @@ remove.
       your account with that provider.
 - [ ] Credentials sit in the supported secret store or sign-in system, never in ordinary
       notes or prompts.
-- [ ] If you connect your mailbox (Chapter 30), the text of each message your mission control
+- [ ] If you connect your mailbox (Chapter 32), the text of each message your mission control
       reads goes to the model provider. Forwarding single messages to its own address
-      (Chapter 29) shares less.
+      (Chapter 31) shares less.
 
 ## Removing a detail
 

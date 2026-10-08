@@ -1,6 +1,6 @@
-# The Skill Interview (Chapter 13)
+# The Skill Interview (Chapter 16)
 
-Adapt the summary skill you saved in Chapter 12 to your own preferences.
+Adapt the summary skill you saved in Chapter 15 to your own preferences.
 The assistant interviews you, then updates the same file.
 
 Open a session in your mission control and paste:

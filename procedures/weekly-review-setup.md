@@ -1,4 +1,4 @@
-# Weekly Review Setup (Chapter 24)
+# Weekly Review Setup (Chapter 27)
 
 The procedure that keeps the rest of the system true. It reads your
 profile files and your `inbox/`, does the filing itself, reports every
@@ -36,7 +36,7 @@ What each part carries:
 1. "On the first run, say there is no earlier review" is the most
    important line in the recipe. A review that quietly invents your week
    is worse than no review, and missing records are not a week of no work.
-2. Chapter 9's filing, running itself now. Each clear capture becomes the
+2. Chapter 10's filing, running itself now. Each clear capture becomes the
    smallest update to its proper file, and the original moves to
    `archives/filed-captures/`, so your own words are never lost. Every move
    is reported as source, destination and exact change.
@@ -44,11 +44,11 @@ What each part carries:
    writing samples and open import questions. A proposed behavior rule waits
    there until you confirm it, then goes into `rules/` through
    `mc-compile-rules`.
-4. The snapshot before filing (Chapter 18), so any move can be undone. If no
+4. The snapshot before filing (Chapter 21), so any move can be undone. If no
    snapshot can be made, it only proposes.
-5. Chapter 10's mirror test, automated: contradictory source lines, caught
+5. Chapter 11's mirror test, automated: contradictory source lines, caught
    by the thing that reads them side by side every week.
-6. Your priorities from Chapter 6, cashed in as one priority to protect in
+6. Your priorities from Chapter 7, cashed in as one priority to protect in
    the coming week, beside progress toward your recorded goals.
 7. The once-a-month line: a reminder, not a question, that your other
    AIs have been listening too and the saved prompt brings that background
