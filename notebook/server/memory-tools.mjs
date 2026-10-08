@@ -6,6 +6,7 @@ import {relatedNotes} from '../core/related.mjs';
 import {STOPWORDS} from '../core/index/stopwords.mjs';
 import {privateFile as markedPrivate} from '../core/context.mjs';
 import {retireShares} from '../core/shares.mjs';
+import {linkFacts, worldFacts, relationshipsAsked, relationshipKinds, isRelationshipFact, closeness, ownerRelationships} from '../core/world-facts.mjs';
 
 // Menerio's tool names and arguments, answered from the notebook. Mission
 // Control's skills, routines and memory benchmark called these names for
@@ -81,11 +82,14 @@ function personFor(query, a) { return pick(people(query), {id: a.contact_id, nam
 function entities(query) { return live(visibleRows(query, 'entities')); }
 
 // Facts with their labels and categories, and which have two current answers.
-function facts(query) {
-  const rows = live(visibleRows(query, 'profile_facts')), day = new Intl.DateTimeFormat('en-CA', {timeZone: query.rows('profiles')[0]?.timezone || 'UTC'}).format(new Date());
+// The notebook's own claims, the links between people and Mission Control's
+// world claims (core/world-facts.mjs): one set, so every tool reads the same.
+function facts(query) { return query.withSnapshot(() => factsNow(query)); }
+function factsNow(query) {
+  const own = live(visibleRows(query, 'profile_facts')), rows = [...own, ...linkFacts(query), ...worldFacts(query, own)], day = new Intl.DateTimeFormat('en-CA', {timeZone: query.rows('profiles')[0]?.timezone || 'UTC'}).format(new Date());
   const groups = new Map();
   for (const f of rows) if (holds(f, day)) { const k = f.subject_type + '|' + (f.subject_id || '') + '|' + f.attribute; groups.set(k, [...(groups.get(k) || []), f]); }
-  return rows.map(f => { const same = f.cardinality !== 'many' && holds(f, day) ? groups.get(f.subject_type + '|' + (f.subject_id || '') + '|' + f.attribute) || [] : []; return same.length > 1 ? {...f, two_answers: same.map(x => x.value)} : f; });
+  return rows.map(f => { const same = f.cardinality !== 'many' && holds(f, day) ? [...new Set((groups.get(f.subject_type + '|' + (f.subject_id || '') + '|' + f.attribute) || []).map(x => x.value))] : []; return same.length > 1 ? {...f, two_answers: same} : f; });
 }
 function subjectNames(query) {
   return new Map([...query.rows('contacts').map(p => [p.id, p.name]), ...query.rows('entities').map(e => [e.id, e.name])]);
@@ -93,7 +97,7 @@ function subjectNames(query) {
 const factView = (f, label) => ({id: f.id, subject: label(f), attribute: f.attribute, label: f.label || f.attribute, value: f.value, valid_from: f.valid_from || null, valid_to: f.valid_to || null,
   confidence: f.confidence || null, ...(f.category_name ? {section: f.category_name} : {}), ...(f.evidence_quote ? {evidence_quote: clip(f.evidence_quote, 300)} : {}), ...(f.source_type === 'note' && f.source_id ? {source_note_id: f.source_id} : {}),
   ...(f.two_answers ? {two_answers: f.two_answers, warning: 'TWO ANSWERS: report every value, never pick one'} : {})});
-const labeler = query => { const n = subjectNames(query); return f => f.subject_type === 'self' ? 'you' : n.get(f.subject_id) || f.subject_type; };
+const labeler = query => { const n = subjectNames(query); return f => f.subject_type === 'self' ? 'you' : n.get(f.subject_id) || f.subject_name || f.subject_type; };
 
 // Notes found by a search, whatever was hit: a note, a passage read out of
 // its PDF, or the description of one of its pictures.
@@ -187,11 +191,27 @@ async function searchBrain(a, ctx) {
   let claims = [], hits = [], pages = [], mode = 'words', note = null;
   // A meaning match on a short fact is only kept when it is close; word matches always are.
   const close = r => r.matched !== 'meaning' || (r.similarity ?? 1) >= threshold;
+  let shownAsClaims = new Set();
   if (include.includes('claim') && offset === 0) {
-    const found = await index.searchHybrid(text, {limit: 80, types: ['claims']}), byId = new Map(facts(query).map(f => [f.id, f]));
-    claims = found.rows.filter(close).map(r => byId.get(r.id)).filter(f => f && holds(f, day));
+    // A fact is a few words, so any asked word may be the one that matters,
+    // the rarest first (any). Until 8 October 2026 every word had to be in it:
+    // nothing held both "wife" and "name", the search fell back to any word,
+    // and "name" brought a page of "Full name" facts.
+    const all = facts(query), byId = new Map(all.map(f => [f.id, f]));
+    const found = await index.searchHybrid(text, {limit: 200, types: ['claims', 'workspace_file'], any: true});
+    const ranked = found.rows.filter(close).map(r => byId.get(r.id)).filter(f => f && holds(f, day));
+    // Asked how someone is related ("my wife", "Xihui's lover", "meine Frau"),
+    // the facts that say it come first, in whatever words they say it.
+    const asked = relationshipsAsked(text), said = norm(text), named = new Set(people(query).filter(p => names(p).some(n => n.length >= 3 && new RegExp('(^|[^\\p{L}\\p{N}])' + escape(n) + '($|[^\\p{L}\\p{N}])', 'u').test(said))).map(p => p.id));
+    const aboutOwner = f => f.subject_type === 'self' || f.object_type === 'self' || f.subject_type === 'contact' && !f.object_type;
+    const related = asked.length ? all.filter(f => holds(f, day) && isRelationshipFact(f) && relationshipKinds(f.relationship || f.value).some(k => asked.includes(k))
+      && (named.size ? named.has(f.subject_id) || named.has(f.object_id) : aboutOwner(f))).sort((x, y) => closeness(x.relationship || x.value) - closeness(y.relationship || y.value)) : [];
+    claims = [...new Map([...related, ...ranked].map(f => [f.id, f])).values()];
+    shownAsClaims = new Set(claims.slice(0, limit).map(f => f.id));
   }
   if (include.includes('note')) ({hits, mode, note} = await noteHits(ctx, text, {limit: 50}));
+  // A world claim shown as a fact is not listed again as a file.
+  if (shownAsClaims.size) hits = hits.filter(h => !h.file || !shownAsClaims.has(h.file));
   if (include.includes('lexicon') && offset === 0) {
     const found = await index.searchHybrid(text, {limit: 30, types: ['wiki_pages']}), byId = new Map(live(visibleRows(query, 'wiki_pages')).map(p => [p.id, p]));
     pages = found.rows.filter(close).map(r => ({page: byId.get(r.id), snippet: r.snippet})).filter(p => p.page).slice(0, limit);
@@ -218,11 +238,13 @@ function userProfile(a, ctx) {
   const categories = new Map(query.rows('profile_categories').filter(c => !c.contact_id).map(c => [c.slug, c]));
   const sections = new Map();
   for (const f of chosen) { const slug = f.category_slug || 'other'; if (!sections.has(slug)) sections.set(slug, {name: categories.get(slug)?.name || f.category_name || 'Other', slug, entries: []}); sections.get(slug).entries.push({label: f.label || f.attribute, value: f.value, ...(f.valid_from ? {valid_from: f.valid_from} : {}), ...(f.two_answers ? {two_answers: f.two_answers} : {})}); }
-  const close = people(query).filter(p => CLOSE.test(String(p.relationship || ''))).map(p => ({name: p.name, relationship: p.relationship, contact_id: p.id}));
+  // From the links between people and the dated facts first; a card's own
+  // word only for someone nothing else speaks about (core/world-facts.mjs).
+  const related = ownerRelationships(query, facts(query), day, word => CLOSE.test(word));
   const instructions = a.include_instructions === false ? undefined : live(visibleRows(query, 'agent_instructions')).filter(i => i.is_active !== false).map(i => ({title: i.title || i.name || null, instruction: i.content || i.instruction || i.instructions || i.text || '', ...(i.scope ? {scope: i.scope} : {})}));
   return {profile: {name: profile.display_name || null, also_called: query.rows('user_self_aliases').map(r => r.alias).filter(Boolean), timezone: ctx.store.get('settings', 'installation')?.timezone || profile.timezone || null,
     categories: [...sections.values()], detail: a.detail === 'full' ? 'full' : 'curated', ...(a.detail === 'full' ? {} : {left_out: own.length - chosen.length + ' more facts: detail "full" or search_brain'})},
-    relationships: {structured: close}, ...(instructions ? {agent_instructions: instructions} : {})};
+    relationships: {structured: related.current, ...(related.former.length ? {former: related.former} : {})}, ...(instructions ? {agent_instructions: instructions} : {})};
 }
 
 function searchContacts(a, {query}) {
@@ -264,12 +286,24 @@ function contactProfile(a, ctx) {
 function getClaims(a, ctx) {
   const {query} = ctx, day = today(ctx), mode = a.mode || 'current', label = labeler(query);
   if (mode === 'changed_since' && !isDay(a.since)) throw Error('Give since as YYYY-MM-DD for mode changed_since');
-  let subject = null;
-  if (a.subject_type === 'contact' && (a.subject_id || a.subject_name)) subject = personFor(query, {contact_id: a.subject_id, name: a.subject_name});
-  if (a.subject_type === 'entity' && (a.subject_id || a.subject_name)) subject = pick(entities(query), {id: a.subject_id, name: a.subject_name}, 'thing');
-  if (!a.subject_type && a.subject_id) subject = people(query).find(p => p.id === a.subject_id) || entities(query).find(e => e.id === a.subject_id) || null;
+  // Whose facts, by id or by name. Several cards with exactly the asked name
+  // are taken together: one person kept twice is far likelier than two people
+  // with one name, and either way every fact is shown with its subject. A name
+  // without a type is a person, else a thing, else a world claim's subject.
+  // Until 8 October 2026 a name without a type was ignored and every fact came back.
+  let ids = null, byName = null;
+  const exact = a.subject_name && !a.subject_id && a.subject_type !== 'entity' && a.subject_type !== 'self' ? people(query).filter(p => names(p).includes(norm(a.subject_name))) : [];
+  if (exact.length) ids = new Set(exact.map(p => p.id));
+  else if (a.subject_type === 'contact' && (a.subject_id || a.subject_name)) ids = new Set([personFor(query, {contact_id: a.subject_id, name: a.subject_name}).id]);
+  else if (a.subject_type === 'entity' && (a.subject_id || a.subject_name)) ids = new Set([pick(entities(query), {id: a.subject_id, name: a.subject_name}, 'thing').id]);
+  else if (!a.subject_type && a.subject_id) ids = new Set([a.subject_id]);
+  else if (!a.subject_type && a.subject_name) {
+    const n = norm(a.subject_name), things = entities(query).filter(e => norm(e.name) === n);
+    if (things.length) ids = new Set(things.map(e => e.id));
+    else { try { ids = new Set([personFor(query, {name: a.subject_name}).id]); } catch (error) { if (/^Several/.test(error.message)) throw error; byName = n; } }
+  }
   const attribute = norm(a.attribute).replace(/[\s-]+/g, '_');
-  const rows = facts(query).filter(f => (!a.subject_type || f.subject_type === a.subject_type) && (!subject || f.subject_id === subject.id) && (!attribute || norm(f.attribute).replace(/[\s-]+/g, '_').includes(attribute) || norm(f.label).replace(/[\s-]+/g, '_').includes(attribute))
+  const rows = facts(query).filter(f => (!a.subject_type || f.subject_type === a.subject_type) && (!ids || ids.has(f.subject_id)) && (!byName || norm(f.subject_name) === byName) && (!attribute || norm(f.attribute).replace(/[\s-]+/g, '_').includes(attribute) || norm(f.label).replace(/[\s-]+/g, '_').includes(attribute))
     && (mode === 'history' || (mode === 'changed_since' ? f.valid_from >= a.since || f.valid_to >= a.since : holds(f, day))))
     .sort((x, y) => String(y.valid_from || '').localeCompare(String(x.valid_from || '')));
   return {mode, count: rows.length, claims: rows.slice(0, count(a.limit, 1, 500, 100)).map(f => factView(f, label))};

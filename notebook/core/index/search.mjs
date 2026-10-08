@@ -49,8 +49,12 @@ export function queryWords(query) {
 }
 // The terms of a query: what is separated by spaces. A term of several words
 // ("excluded-marker", "v2.18", "jean-luc") is those words in that order.
+// An English possessive or contraction is its word: "wife's" is "wife",
+// "What's" is "What". Until 8 October 2026 "wife's" became the phrase
+// "wife s", which almost nothing contains.
+const CLITIC = /['’´`](s|re|ve|ll|d|m|t)?$/i;
 export function queryTerms(query) {
-  return String(query || '').split(/\s+/).map(queryWords).filter(words => words.length).slice(0, 12);
+  return String(query || '').split(/\s+/).map(term => term.replace(/[?!.,;:)\]}"”]+$/u, '').replace(CLITIC, '')).map(queryWords).filter(words => words.length).slice(0, 12);
 }
 
 export class SearchIndex {
@@ -281,7 +285,9 @@ export class SearchIndex {
   // Ranked word search. Every word must appear; a word may be the start of
   // a longer one. When that finds little, words are also looked for inside
   // longer words, and failing all of that, any of the words will do.
-  search(query, { limit = 200, types = null } = {}) {
+  // any: a document holding any of the words, those with the rarest first
+  // (bm25), instead of one holding all of them; for short facts.
+  search(query, { limit = 200, types = null, any = false } = {}) {
     // Common words go, unless the query is nothing but common words.
     const all = queryTerms(query), meaningful = all.filter(t => t.length > 1 || !STOPWORDS.has(t[0].toLowerCase()));
     const terms = meaningful.length ? meaningful : all, words = terms.flat();
@@ -291,7 +297,7 @@ export class SearchIndex {
       FROM docs_fts JOIN docs d ON d.rowid = docs_fts.rowid WHERE docs_fts MATCH ?${typeFilter} ORDER BY rank LIMIT ?`).all(match, ...typeArgs, limit);
     const quote = w => '"' + w.replaceAll('"', '""') + '"';
     const quoted = terms.map(t => t.length === 1 ? quote(t[0]) + '*' : quote(t.join(' ')));
-    let rows = run(quoted.join(' AND '));
+    let rows = run(quoted.join(any ? ' OR ' : ' AND '));
     if (rows.length < Math.min(limit, 20) && terms.every(t => t.length === 1) && words.every(w => w.length >= 3)) {
       // Inside longer words (German compounds): slower, so only when needed.
       const seen = new Set(rows.map(r => r.uid)), like = words.map(() => "(docs_fts.title || ' ' || docs_fts.body) LIKE ? ESCAPE '\\'").join(' AND ');
@@ -314,8 +320,8 @@ export class SearchIndex {
   }
   // Words and, when a meaning service is connected (this.meaning, meaning.mjs),
   // meaning: one ranked list. Says which it used.
-  async searchHybrid(query, { limit = 50, types = null } = {}) {
-    const words = this.search(query, { limit: Math.max(limit, 100), types });
+  async searchHybrid(query, { limit = 50, types = null, any = false } = {}) {
+    const words = this.search(query, { limit: Math.max(limit, 100), types, any });
     if (!this.meaning?.ready) return { rows: words.slice(0, limit), mode: 'words', note: 'Searching by words only: no meaning service is connected.' };
     let meanings = [];
     try { meanings = await this.meaning.search(query, { limit: Math.max(limit, 100), types }); }
