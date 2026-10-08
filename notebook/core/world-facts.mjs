@@ -203,3 +203,43 @@ export function ownerRelationships(query, facts, day, cardCounts = word => relat
     return {current: list.filter(e => !e.ended).map(view), former: list.filter(e => e.ended).map(view)};
   });
 }
+
+// One fixed name per kind of fact (world/fields.json in the mission control, D-298, 2026-10-08):
+// per kind a `name`, the `aliases` it has been written under and `one` when it has one current
+// value at a time. "Where he lives" had been written as `location`, `current-city` and `Current
+// city`, each read as its own fact. Read again only when the file changed.
+const fieldSlug = s => String(s ?? '').trim().toLowerCase().replace(/[^a-z0-9/äöüß-]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+const fieldCache = new Map();
+export function fieldList(root) {
+  const file = path.join(root || '.', 'world', 'fields.json');
+  let stat = null; try { stat = fs.statSync(file); } catch {}
+  const sig = stat ? stat.mtimeMs + ':' + stat.size : 'none', held = fieldCache.get(file);
+  if (held?.sig === sig) return held.list;
+  let data = {}; if (stat) try { data = JSON.parse(fs.readFileSync(file, 'utf8')); } catch {}
+  const byAlias = new Map(), one = new Map();
+  for (const f of data.fields || []) { const name = fieldSlug(f.name); one.set(name, !!f.one); for (const a of [f.name, ...(f.aliases || [])]) byAlias.set(fieldSlug(a), name); }
+  const list = {canonical: a => byAlias.get(fieldSlug(a)) || fieldSlug(a), one: a => one.get(byAlias.get(fieldSlug(a)))};
+  fieldCache.set(file, {sig, list});
+  return list;
+}
+
+// The newest dated value of a one-at-a-time fact is its value: an older open value under any of
+// its names and from any store is read as ended that day (what is stored is changed by the
+// engine's world_fields.py, never here). Two values dated the same day stay, as two answers.
+export function newestOnly(rows, fields, day) {
+  const holds = f => (!f.valid_from || f.valid_from <= day) && (!f.valid_to || f.valid_to > day);
+  const key = f => (f.subject_type === 'self' ? 'self' : f.subject_type + '|' + (f.subject_id || norm(f.subject_name))) + '|' + fields.canonical(f.attribute);
+  const groups = new Map();
+  for (const f of rows) if (!f.object_type && fields.one(f.attribute) && holds(f)) groups.set(key(f), [...(groups.get(key(f)) || []), f]);
+  const ends = new Map();
+  for (const group of groups.values()) {
+    if (new Set(group.map(f => norm(f.value))).size < 2) continue;
+    const dated = group.filter(f => f.valid_from);
+    if (!dated.length) continue;
+    const top = dated.map(f => f.valid_from).sort().at(-1), newest = dated.filter(f => f.valid_from === top);
+    // Two values the newest day both stay (two answers); what is older than both ends.
+    const tops = new Set(newest.map(f => norm(f.value)));
+    for (const f of group) if (!tops.has(norm(f.value)) && (f.valid_from || '') < top) ends.set(f, top);
+  }
+  return rows.map(f => ends.has(f) ? {...f, valid_to: ends.get(f), superseded: true} : fields.one(f.attribute) ? {...f, cardinality: 'one'} : f);
+}

@@ -115,3 +115,31 @@ test('the chat answers with the assistant home\'s own model; the notebook\'s mod
   const none=await run(bare,{});
   assert.deepEqual(none.args.slice(none.args.indexOf('--model'),none.args.indexOf('--model')+2),['--model','fictional/small']);assert.equal(none.env.OPENAI_API_KEY,'fictional-key');
 });
+
+test('one fixed name per kind of fact: the newest value of a one-at-a-time fact is its value, under any name and from either store',async()=>{
+  const {service,call}=await setup();
+  try{
+    const root=service.store.root,world=path.join(root,'world');
+    fs.writeFileSync(path.join(world,'fields.json'),JSON.stringify({fields:[
+      {name:'lives-in',one:true,aliases:['location','current-city','city']},
+      {name:'hobbies',one:false,aliases:['hobby']}]}));
+    const file=(name,fields)=>fs.writeFileSync(path.join(world,'claims',name),'---\n'+Object.entries(fields).map(([k,v])=>k+': '+v).join('\n')+'\n---\n');
+    file('owner--location--undated.md',{subject:'owner',attribute:'location',value:'Fictional Old Town',origin:'menerio'});
+    file('owner--current-city--2026-03-01.md',{subject:'owner',attribute:'current-city',value:'Fictional Middle Town',valid_from:'2026-03-01'});
+    service.store.save('claims',{subject_type:'self',attribute:'city',value:'Fictional New Town',confidence:'likely',valid_from:'2026-09-30'});
+    file('owner--hobby--2026-01-01.md',{subject:'owner',attribute:'hobby',value:'fictional chess',valid_from:'2026-01-01'});
+    file('owner--hobbies--2026-09-01.md',{subject:'owner',attribute:'hobbies',value:'fictional go',valid_from:'2026-09-01'});
+    service.index.rebuild();
+    const now=await call('get_claims',{subject_type:'self',attribute:'lives-in'});
+    assert.deepEqual(now.claims.map(c=>c.value),['Fictional New Town'],'asked by its fixed name, the newest value under any name');
+    assert.equal(now.claims[0].two_answers,undefined);
+    const all=await call('get_claims',{subject_type:'self',attribute:'location',mode:'history'});
+    assert.deepEqual(all.claims.map(c=>c.value).sort(),['Fictional Middle Town','Fictional New Town','Fictional Old Town'],'asked by an old name, every value it ever had');
+    const hobbies=await call('get_claims',{subject_type:'self',attribute:'hobbies'});
+    assert.deepEqual(hobbies.claims.map(c=>c.value).sort(),['fictional chess','fictional go'],'a many-at-a-time fact keeps every value');
+    service.store.save('claims',{subject_type:'self',attribute:'location',value:'Fictional Other Town',confidence:'likely',valid_from:'2026-09-30'});
+    const tie=await call('get_claims',{subject_type:'self',attribute:'lives-in'});
+    assert.deepEqual(tie.claims.map(c=>c.value).sort(),['Fictional New Town','Fictional Other Town'],'two values the same day both stay');
+    assert.ok(tie.claims.every(c=>c.two_answers?.length===2),'and are shown as two answers');
+  }finally{await service.close();}
+});

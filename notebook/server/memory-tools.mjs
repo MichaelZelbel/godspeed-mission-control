@@ -6,7 +6,7 @@ import {relatedNotes} from '../core/related.mjs';
 import {STOPWORDS} from '../core/index/stopwords.mjs';
 import {privateFile as markedPrivate} from '../core/context.mjs';
 import {retireShares} from '../core/shares.mjs';
-import {linkFacts, worldFacts, relationshipsAsked, relationshipKinds, isRelationshipFact, closeness, ownerRelationships} from '../core/world-facts.mjs';
+import {linkFacts, worldFacts, relationshipsAsked, relationshipKinds, isRelationshipFact, closeness, ownerRelationships, fieldList, newestOnly} from '../core/world-facts.mjs';
 
 // Menerio's tool names and arguments, answered from the notebook. Mission
 // Control's skills, routines and memory benchmark called these names for
@@ -86,10 +86,12 @@ function entities(query) { return live(visibleRows(query, 'entities')); }
 // world claims (core/world-facts.mjs): one set, so every tool reads the same.
 function facts(query) { return query.withSnapshot(() => factsNow(query)); }
 function factsNow(query) {
-  const own = live(visibleRows(query, 'profile_facts')), rows = [...own, ...linkFacts(query), ...worldFacts(query, own)], day = new Intl.DateTimeFormat('en-CA', {timeZone: query.rows('profiles')[0]?.timezone || 'UTC'}).format(new Date());
-  const groups = new Map();
-  for (const f of rows) if (holds(f, day)) { const k = f.subject_type + '|' + (f.subject_id || '') + '|' + f.attribute; groups.set(k, [...(groups.get(k) || []), f]); }
-  return rows.map(f => { const same = f.cardinality !== 'many' && holds(f, day) ? [...new Set((groups.get(f.subject_type + '|' + (f.subject_id || '') + '|' + f.attribute) || []).map(x => x.value))] : []; return same.length > 1 ? {...f, two_answers: same} : f; });
+  const day = new Intl.DateTimeFormat('en-CA', {timeZone: query.rows('profiles')[0]?.timezone || 'UTC'}).format(new Date()), fields = fieldList(query.store.root);
+  const own = live(visibleRows(query, 'profile_facts')), rows = newestOnly([...own, ...linkFacts(query), ...worldFacts(query, own)], fields, day);
+  // Two answers are two current values of one kind of fact, whatever name each was filed under.
+  const kind = f => f.subject_type + '|' + (f.subject_id || '') + '|' + fields.canonical(f.attribute), groups = new Map();
+  for (const f of rows) if (holds(f, day)) groups.set(kind(f), [...(groups.get(kind(f)) || []), f]);
+  return rows.map(f => { const same = f.cardinality !== 'many' && holds(f, day) ? [...new Set((groups.get(kind(f)) || []).map(x => x.value))] : []; return same.length > 1 ? {...f, two_answers: same} : f; });
 }
 function subjectNames(query) {
   return new Map([...query.rows('contacts').map(p => [p.id, p.name]), ...query.rows('entities').map(e => [e.id, e.name])]);
@@ -302,8 +304,8 @@ function getClaims(a, ctx) {
     if (things.length) ids = new Set(things.map(e => e.id));
     else { try { ids = new Set([personFor(query, {name: a.subject_name}).id]); } catch (error) { if (/^Several/.test(error.message)) throw error; byName = n; } }
   }
-  const attribute = norm(a.attribute).replace(/[\s-]+/g, '_');
-  const rows = facts(query).filter(f => (!a.subject_type || f.subject_type === a.subject_type) && (!ids || ids.has(f.subject_id)) && (!byName || norm(f.subject_name) === byName) && (!attribute || norm(f.attribute).replace(/[\s-]+/g, '_').includes(attribute) || norm(f.label).replace(/[\s-]+/g, '_').includes(attribute))
+  const attribute = norm(a.attribute).replace(/[\s-]+/g, '_'), fields = fieldList(ctx.store.root), asked = a.attribute ? fields.canonical(a.attribute) : null;
+  const rows = facts(query).filter(f => (!a.subject_type || f.subject_type === a.subject_type) && (!ids || ids.has(f.subject_id)) && (!byName || norm(f.subject_name) === byName) && (!attribute || fields.canonical(f.attribute) === asked || norm(f.attribute).replace(/[\s-]+/g, '_').includes(attribute) || norm(f.label).replace(/[\s-]+/g, '_').includes(attribute))
     && (mode === 'history' || (mode === 'changed_since' ? f.valid_from >= a.since || f.valid_to >= a.since : holds(f, day))))
     .sort((x, y) => String(y.valid_from || '').localeCompare(String(x.valid_from || '')));
   return {mode, count: rows.length, claims: rows.slice(0, count(a.limit, 1, 500, 100)).map(f => factView(f, label))};
