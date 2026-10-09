@@ -140,6 +140,15 @@ print("   ok: done")
 FAKE_FINISH = r'''
 import json, os, sys
 d = os.environ["FAKE_DIR"]
+if sys.argv[1:] == ["connect"]:
+    # What the notebook's connect prints: the first round's state, or the refusal Settings shows.
+    runs = os.path.join(d, "connect-runs.json")
+    seen = json.load(open(runs)) if os.path.exists(runs) else []
+    seen.append({"input": json.loads(sys.stdin.read() or "{}"), "token": os.environ.get("GODSPEED_TELEGRAM_TOKEN")})
+    json.dump(seen, open(runs, "w"))
+    if os.environ.get("FAKE_CONNECT_FAIL_FIRST") and len(seen) == 1:
+        print("This repository is publicly readable. Choose a private repository for your knowledge", file=sys.stderr); sys.exit(1)
+    print(json.dumps({"state": "synced"})); sys.exit(0)
 runs = os.path.join(d, "finish-runs.json")
 seen = json.load(open(runs)) if os.path.exists(runs) else []
 seen.append({"input": json.loads(sys.stdin.read() or "{}"), "token": os.environ.get("GODSPEED_TELEGRAM_TOKEN"),
@@ -208,6 +217,7 @@ def scenario_run(name, scenario, extra_env=None, env_file=None, timeout=120, pre
          "hermes_sent": read(fakes, "hermes-sent"), "env_extra": env,
          "hstate": json.loads(read(fakes, "hermes-state.json") or "{}"),
          "finish": json.loads(read(fakes, "finish-runs.json") or "[]"),
+         "connect": json.loads(read(fakes, "connect-runs.json") or "[]"),
          "workspace": os.path.join(tmp, "workspace")}
     if rc != 0:
         print(out[-3000:])
@@ -429,6 +439,7 @@ def test_one_click_happy():
         "rules": [
             {"when": "Hi Anna", "do": [{"from": 999, "text": "/start " + CODE}]},
             {"when": "Which AI should I think with", "do": [{"from": 111, "press": "openai-codex"}]},
+            {"when": "already have a Mission Control", "do": [{"from": 111, "press": "have:no"}]},
             {"when": "Which city do you live in", "do": [{"from": 111, "text": "London"}]},
             {"when": "Now your briefing", "do": [{"from": 111, "document": {"file_name": "what-my-ai-knew (1).md",
                                                                            "content": briefing}}]},
@@ -447,9 +458,11 @@ def test_one_click_happy():
     check("the ChatGPT and GitHub codes arrive, and git is set up",
           any_has(to_anna, "<code>ABCD-12345</code>") and any_has(to_anna, "<code>1A2B-3C4D</code>")
           and any_has(to_anna, "Nothing is copied there yet") and "auth setup-git" in r["gh"])
-    check("no repository, morning brief or world question, and no installer",
-          not any_has(to_anna, "already have a Mission Control") and not any_has(to_anna, "morning brief")
-          and not any_has(to_anna, "one line about the world") and r["runs"] == [])
+    check("asked once whether a Mission Control is on GitHub; no is a fresh start, nothing is connected",
+          sum("already have a Mission Control on another computer, kept on GitHub" in t for t in to_anna) == 1
+          and r["connect"] == [] and any_has(to_anna, "Step 3 of 3: your city, your briefing and your goal"))
+    check("no morning brief or world question, and no installer",
+          not any_has(to_anna, "morning brief") and not any_has(to_anna, "one line about the world") and r["runs"] == [])
     kept = os.path.join(r["workspace"], "what-my-ai-knew.md")
     check("the briefing file is kept at the top of the folder, under its own name",
           os.path.exists(kept) and open(kept, encoding="utf-8").read() == briefing
@@ -457,7 +470,7 @@ def test_one_click_happy():
     zone = "Europe/London"
     fin = r["finish"]
     check("the goal and the city go to the notebook once, and the bot's key does not",
-          len(fin) == 1 and fin[0]["input"] == {"timezone": zone, "goal": "Run a half marathon in May."}
+          len(fin) == 1 and fin[0]["input"] == {"timezone": zone, "goal": "Run a half marathon in May.", "joined": False}
           and fin[0]["token"] is None and fin[0]["code"] is None)
     check("the bot goes to Hermes, and Hermes' clock is the city's",
           "TELEGRAM_BOT_TOKEN=%s" % TOKEN in r["env"] and "TELEGRAM_ALLOWED_USERS=111" in r["env"]
@@ -494,6 +507,7 @@ def test_one_click_snags():
             {"when": "open me with the button", "do": [{"from": 111, "text": "/start " + CODE}]},
             {"when": "Which AI should I think with", "do": [{"from": 111, "press": "openrouter"}]},
             {"when": "Send me your OpenRouter API key", "do": [{"from": 111, "text": "sk-or-good-0123456789abcdef"}]},
+            {"when": "already have a Mission Control", "do": [{"from": 111, "press": "have:no"}]},
             {"when": "Which city do you live in", "do": [{"from": 111, "press": "tz:keep"}]},
             {"when": "Now your briefing", "do": [{"from": 111, "document": {"file_name": "briefing.pdf", "hex": "25504446"}}]},
             {"when": "I can keep a text file", "do": [{"from": 111, "text": long_text},
@@ -523,6 +537,7 @@ def test_one_click_snags():
         "start": [{"from": 111, "text": "/start " + CODE}],
         "rules": [
             {"when": "Which AI should I think with", "do": [{"from": 111, "press": "openai-codex"}]},
+            {"when": "already have a Mission Control", "do": [{"from": 111, "text": "No, start fresh"}]},
             {"when": "Which city do you live in", "do": [{"from": 111, "press": "tz:keep"}]},
             {"when": "Now your briefing", "do": [{"from": 111, "press": "brief:later"}]},
             {"when": "Last one: your goal", "do": [{"from": 111, "text": "Sleep eight hours."}]},
@@ -530,6 +545,42 @@ def test_one_click_snags():
     check("Later skips the briefing and setup still finishes",
           r["rc"] == 0 and r["state"].get("done") is True and r["state"].get("briefing") == ""
           and any_has(r["to"](111), "Send it to me whenever you like") and len(r["finish"]) == 1)
+
+
+def test_one_click_existing():
+    r = scenario_run("the one-click server: a Mission Control already on GitHub is brought in", {
+        "users": USERS,
+        "start": [{"from": 111, "text": "/start " + CODE}],
+        "rules": [
+            {"when": "Which AI should I think with", "do": [{"from": 111, "press": "openai-codex"}]},
+            {"when": "already have a Mission Control", "do": [{"from": 111, "press": "have:yes"}]},
+            {"when": "Send me its address", "do": [{"from": 111, "text": "github.com/anna/nope"}]},
+            {"when": "I cannot open", "do": [{"from": 111, "text": "https://github.com/anna/mission"}]},
+            {"when": "I could not connect", "do": [{"from": 111, "press": "join:retry"}]},
+            {"when": "Which city do you live in", "do": [{"from": 111, "text": "London"}]},
+        ]}, extra_env=dict(ONE_CLICK, FAKE_GH_REPOS="anna/mission", FAKE_CONNECT_FAIL_FIRST="1"), prepare=backed_up)
+    to_anna = r["to"](111)
+    check("it finishes, exit 0", r["rc"] == 0)
+    check("it asks, after GitHub, whether a Mission Control is already on GitHub",
+          0 < next((i for i, t in enumerate(to_anna) if "already have a Mission Control" in t), -1)
+          and any_has(to_anna[:next(i for i, t in enumerate(to_anna) if "already have a Mission Control" in t)], "GitHub is connected as anna"))
+    check("an address it cannot open is said, and asked again", any_has(to_anna, "I cannot open github.com/anna/nope"))
+    check("a refusal is said with its reason, and Try again connects",
+          any_has(to_anna, "I could not connect <b>anna/mission</b>", "publicly readable")
+          and [c["input"] for c in r["connect"]] == [{"repository": "https://github.com/anna/mission.git"}] * 2
+          and all(c["token"] is None for c in r["connect"]))
+    check("one plain sentence says it is connected and the briefing and goal are skipped",
+          any_has(to_anna, "Your Mission Control from GitHub is connected and its pages are here, so I skip the "
+                           "questions about your briefing and your goal."))
+    check("only the city is asked, no briefing and no goal",
+          any_has(to_anna, "Step 3 of 3: your city.") and not any_has(to_anna, "Now your briefing")
+          and not any_has(to_anna, "your goal. What do you want"))
+    fin = r["finish"]
+    check("the clock goes to the notebook, marked as brought in, with no goal",
+          len(fin) == 1 and fin[0]["input"] == {"timezone": "Europe/London", "goal": None, "joined": True})
+    check("it does not offer to install itself on the computer that already has it",
+          not any_has(to_anna, "Want me on your computer too"))
+    check("setup is marked done", r["state"].get("done") is True and r["state"].get("existing") == "anna/mission")
 
 
 def links_for(env):
@@ -594,6 +645,7 @@ if __name__ == "__main__":
     test_one_click_names()
     test_one_click_happy()
     test_one_click_snags()
+    test_one_click_existing()
     test_one_click_links()
     test_nothing_to_do()
     print()
