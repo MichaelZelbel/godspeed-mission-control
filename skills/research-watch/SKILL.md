@@ -9,7 +9,7 @@ Read AGENTS.md first. Work only in the requested mission control. Read instructi
 
 ## Set up a watch
 
-When asked to set up a watch, create watch/<short-name>/ with a simple lowercase name. Put requirements.md in it, in the format below, and create empty candidates/, results/, findings.md and log.md beside it. Fill sources and criteria with the specific pages and requirements agreed with the user, in plain language. Setting up writes these files only: do not research and do not schedule anything. Later changes update this same requirements.md.
+When asked to set up a watch, create watch/<short-name>/ with a simple lowercase name. Put requirements.md in it, in the format below, and create empty candidates/, results/, findings.md and log.md beside it. Fill sources and criteria with the specific pages and requirements agreed with the user, in plain language. Setting up writes these files and researches nothing; the one routine below is the only schedule it may make. Later changes update this same requirements.md.
 
 ```yaml
 ---
@@ -38,6 +38,16 @@ Background: <relevant information that changes no current decision>
 Read at most 5 source pages per run. No account edits or publishing.
 ```
 
+### One routine for the checks
+
+When the user names a rhythm for the checks ("every Sunday", "once a week", "every morning"), set every_days one day shorter than that rhythm and at least 1 (6 for once a week, 1 for every day), so each run of the routine finds the question due. Then look at the existing routines first. If one named `research watches` already exists, it checks every due watch: keep it and add nothing. Otherwise make one routine named `research watches` at the day and time the user named, in their time zone (with no time named, 06:30, before a morning brief), with this mission control's folder as its working folder and this prompt:
+
+```
+Read AGENTS.md, then follow skills/research-watch/SKILL.md for the due watches in watch/. Write results only; send nothing externally.
+```
+
+Add its row to procedures.md. Show the user the routine, its next run, when this question is next checked, and how to pause it. With no rhythm named, ask for one in a single short question; never make a routine on a rhythm the user did not give.
+
 ## Find work
 
 Read watch/*/requirements.md. Process only status: active. Required fields are name, status, every_days, retry_days and time_zone. This starter uses UTC dates for all timing; require time_zone: UTC and positive integer day intervals. For invalid or incomplete requirements, do not research. Save a failed result and an open failed-check finding describing the configuration error. Preserve any earlier last_success and use a one-day retry until the configuration is corrected. If files cannot be written, report that failure directly; do not claim it was logged.
@@ -53,7 +63,7 @@ If nothing is due, report "Nothing due" and stop. Do not write a success for a w
 
 Read all its requirements, existing candidates, findings and prior result before fetching sources. If no successful result exists, perform a first baseline check. Do not invent an earlier state. Read only the named sources, at most 5 pages and 10 minutes per watch. If that limit prevents required coverage, record partial, not success. Do not claim a search snippet is a full page check.
 
-For each source record its exact URL or practice path, check time, whether it loaded, and the relevant claim or short excerpt. Separate what a source says from what was tested. A claim from documentation is not a test in the user's account. If a source fails, preserve its error and the last known result as old evidence. Do not mark old evidence freshly checked.
+For each source record, in this run's result file, its exact URL or practice path, check time, whether it loaded, and the relevant claim or short excerpt, so the next check compares with what it said. Separate what a source says from what was tested. A claim from documentation is not a test in the user's account. If a source fails, preserve its error and the last known result as old evidence. Do not mark old evidence freshly checked.
 
 Compare relevant evidence with the last successful result and the criteria. On the first run, identify useful baseline findings without calling them new announcements. Later, only changed evidence or a changed decision deserves a new finding.
 

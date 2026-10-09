@@ -26,7 +26,12 @@ in a single short question; suggest the moment they usually think about the week
 ## Every review
 
 1. Read AGENTS.md, the page about the person, their people in the notebook, `profile/`,
-   `decisions.md`, `goals/`, `inbox/` and the latest earlier review in `reviews/`. Use dated work
+   `decisions.md`, `goals/`, `inbox/` and the latest earlier review in `reviews/`. Read the
+   notebook with its tools, where the person's facts, people and notes are kept: `get_user_profile`
+   for their facts and the people closest to them, `search_contacts` and `search_brain` for the
+   people and projects this week touched. A notebook that holds them is not an empty mission
+   control, even while the files in `profile/` are still the starter's templates. Without the
+   notebook tools, read `world/` and say the notebook was not reached. Use dated work
    records or version history for comparisons. On the first run, say there is no earlier review;
    describe what is there now and never invent last week.
 2. File only clear factual news waiting in `inbox/`. For each one, make the smallest supported
