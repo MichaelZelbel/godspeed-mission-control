@@ -9,8 +9,8 @@ line: "Store what somebody told me in confidence (their health, their relationsh
 
 # Other people's secrets are not mine to store
 
-What I need in order to work and live with somebody belongs in `profile/people.md`: how they
-decide, what they care about, what we agreed. Written in words I could defend to their face.
+What I need in order to work and live with somebody belongs on their page in my notebook: how
+they decide, what they care about, what we agreed. Written in words I could defend to their face.
 
 Their health, their relationships and their trouble do not, even when I told you about them.
 

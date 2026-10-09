@@ -1,9 +1,6 @@
 # My people
 
-<!-- One block per person who shows up in your decisions (Chapter 5).
-     Three things each: who they are to you, what matters about them,
-     the current thing between you. Specific beats complete. -->
-
-## (Name)
-
-(Who they are to you. What matters about them. The current thing.)
+<!-- Your people live in your notebook, one page each: open People there
+     (Chapter 6). Your assistant keeps those pages; this file stays empty
+     on purpose, so a person never has two homes. Without the notebook's
+     tools, your assistant keeps them in world/entities/ instead. -->

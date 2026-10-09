@@ -1,11 +1,11 @@
 ---
 name: keep-a-note
-description: File a note in the person's Menerio notebook when they say "make a note", "note that", "write this down", "remember this for my notebook" or anything like it. Picks the folder, gives it a title, links it to the notes it belongs with, and reports the title, the folder and the links in three short lines. Needs the `notebook` tools; without them the note goes into the mission control's own files and the reply says so.
+description: File a note in the person's notebook when they say "make a note", "note that", "write this down", "remember this for my notebook" or anything like it. Picks the folder, gives it a title, links it to the notes it belongs with, and reports the title, the folder and the links in three short lines. Needs the `notebook` tools; without them the note goes into the mission control's own files and the reply says so.
 ---
 
 ## What this is
 
-The person keeps a notebook in Menerio and does not want to keep it by hand. They say one
+The person keeps a notebook and does not want to keep it by hand. They say one
 sentence, from a desk or from a chat on a phone, and expect what a good assistant would do:
 the note filed where such things live, linked to what it belongs with, and a short reply
 saying where it went. A note dropped at the top level with no links and the reply "Noted."
@@ -52,7 +52,7 @@ is meant, ask which, with the two most likely titles.
 
 ## Without the notebook
 
-The mission control works without Menerio. Save the note the way `AGENTS.md` says: a fact or an event
+The mission control works without the notebook's tools. Save the note the way `AGENTS.md` says: a fact or an event
 about the person's life goes in `world/` in the format of `world/README.md`; anything else
 goes in `inbox/` as one file. Then report in two lines: what you saved and where, and that
 the notebook is not connected on this computer.

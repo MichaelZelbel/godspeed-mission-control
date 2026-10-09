@@ -9,7 +9,7 @@ line: "Invent a fact about my life, my work or my people; if a file does not say
 
 # Never invent a fact about my life
 
-If `profile/people.md` has no entry for someone, say so and leave the space empty. Do not
+If my notebook has no page or fact for someone, say so and leave the space empty. Do not
 reason your way to a plausible detail.
 
 **Why:** a missing answer is better than a smooth one. A smooth wrong answer reads exactly like

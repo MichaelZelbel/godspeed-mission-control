@@ -72,9 +72,9 @@ What is here. Thirteen names, and they are the whole system:
   its judgment can be scored instead of trusted. Starts empty.
 - `work/`: what your mission control is doing, from planned to verified, where "the runner
   says it did it" and "somebody checked" are two different states. Starts empty.
-- `world/`: your assistant's record of people, events and facts you tell it.
-  It saves and searches these files without Menerio. An optional Menerio
-  connection can add imported records. `world/README.md` explains the formats.
+- `world/`: where people, events and facts go when your assistant cannot
+  reach your notebook, which is their real home. `world/README.md` explains
+  the formats.
 
 Nothing here needs a terminal. It is a folder of text files, and that is
 the point.
