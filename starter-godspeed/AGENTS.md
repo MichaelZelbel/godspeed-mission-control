@@ -114,6 +114,10 @@ If it contradicts something you believe about me, the file wins.
   preserving the other entries. Do not make me include this routine
   bookkeeping in my request. Before removing a local copy, check for changes
   that have not reached GitHub and ask me first.
+- **Programming goes to a helper.** Code work in a project under `dev/` goes to
+  a coding helper (Claude Code: `coder`; Codex: `spawn_agent`; Hermes:
+  `delegate_task`) with the folder, the goal and what it needs from here, while
+  you stay with me. It works only in that project and reports back.
 - **What you work out about me goes in `observations/`.** One file per fact,
   with a one-line description at the top so a session can tell whether to open
   it. Read `observations/MEMORY.md` at the
@@ -276,12 +280,8 @@ do the safe part (for example: prepare the draft) and ask.
 
 ## The ceiling
 
-An assistant reads only so much of this file. Hermes reads at least 20,000
-characters, more with a large-context model, and the exact number moves with
-the model. Past the limit it keeps the beginning and the end and drops the
-middle; older versions did that silently, newer ones leave a note in the gap
-and a warning, and either way the assistant runs with a hole in its own
-instructions that nobody chose. Keep this file under 19,000 characters, the
-book's working ceiling, and check the allowance your installed version is
-configured with: a lower one needs a smaller file. Reference material goes
-into its own file, with a one-line pointer here.
+Keep this file under 19,000 characters, and under your installed version's
+allowance if that is lower. Past its limit (Hermes reads at least 20,000
+characters) an assistant drops the middle of this file and runs with a hole in
+its own instructions. Reference material goes into its own file, with a
+one-line pointer here.
