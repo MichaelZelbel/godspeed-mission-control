@@ -1,4 +1,4 @@
-import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';
+import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import {createHash} from 'node:crypto';
 import {createService} from '../server/main.mjs';
 import {titleFromContent} from '../core/note-title.mjs';
 
@@ -121,6 +121,27 @@ test('a note given no title is named by its first words, and the answer calls li
   assert.deepEqual(third.linked.map(n=>n.title).sort(),['Dr. Aydin says magnesium is fine','Greta\'s tip for my sleep']);
   assert.deepEqual(service.store.get('notes',third.id).related,[aydin.id]);
   assert.deepEqual(third.links_to_no_note,['No such note']);
+});
+
+test('the starter manual says what the live run needed, and still fits under the ceiling Hermes reads',()=>{
+  const manual=fs.readFileSync(new URL('../../starter-godspeed/AGENTS.md',import.meta.url),'utf8');
+  // server/install-hermes.sh warns from 19,000 characters; past 20,000 Hermes drops the middle.
+  assert.ok([...manual].length<19000,'AGENTS.md is '+[...manual].length+' characters');
+  for(const said of [/will NOT fire\s+until the gateway is started/,/never from `procedures\.md`/,/`save_record` type `collections`/,/"How I like to be helped" and "My hard limits"/,
+    /`mc-goals file --kind/,/never write a card by hand/,/never make one of its\s+files yourself/,/`mc-work file --what "\.\.\." --done-when/,/--check "<a\s+line that exits 0/])assert.match(manual,said);
+  assert.doesNotMatch(manual,/[–—]/,'no long dashes');
+  // research-watch ships in the starter now, with its hashes; the kit's copy is the same text.
+  const starter=fs.readFileSync(new URL('../../starter-godspeed/skills/research-watch/SKILL.md',import.meta.url),'utf8');
+  assert.equal(starter,fs.readFileSync(new URL('../../skills/research-watch/SKILL.md',import.meta.url),'utf8'));
+  assert.match(starter,/make one routine named `research watches`/);
+  const hashes=fs.readFileSync(new URL('../../starter-godspeed/skills/research-watch/.shipped-sha256',import.meta.url),'utf8');
+  for(const name of ['research-watch','morning-brief','weekly-review','keep-a-note']){
+    const text=fs.readFileSync(new URL('../../starter-godspeed/skills/'+name+'/SKILL.md',import.meta.url),'utf8').replaceAll('\r','');
+    const digest=createHash('sha256').update(text).digest('hex');
+    assert.match(fs.readFileSync(new URL('../../starter-godspeed/skills/'+name+'/.shipped-sha256',import.meta.url),'utf8'),new RegExp(digest),name+' ships its own hash');
+    assert.ok(JSON.parse(fs.readFileSync(new URL('../data/recipe-revisions.json',import.meta.url),'utf8'))[name+'/SKILL.md'].includes(digest),name+' is a known revision');
+  }
+  assert.ok(hashes.trim().split('\n').length>=2,'the earlier kit version is known too');
 });
 
 test('titles from first words',()=>{
