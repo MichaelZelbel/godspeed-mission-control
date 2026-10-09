@@ -7,16 +7,16 @@ import { findMissionControl, appHome } from "../lib/paths.mjs";
 import { now, localParts, addDays } from "../lib/clock.mjs";
 import { loadSettings, setSetting, DEFAULTS } from "../lib/settings.mjs";
 import { listAreas, findArea, isTalkDay, addArea, setAreaField, nextTalkDay, AREA_FIELDS } from "../lib/areas.mjs";
-import { openTalk, readTalk, setTalkState, setFollowUp, addSaid, talkDates, talkFile } from "../lib/talks.mjs";
+import { openTalk, readTalk, setTalkState, setFollowUp, addSaid, setShown, talkDates, talkFile } from "../lib/talks.mjs";
 import { addHabit, listHabits, findHabit, track, setStatus, stats, askedOn, answerOn } from "../lib/habits.mjs";
 import { readTable } from "../lib/auto.mjs";
 import { brief, habitLine } from "../lib/brief.mjs";
 import { gate, NO_WAKE } from "../lib/gate.mjs";
 import { dueTick } from "../lib/tick.mjs";
-import { contextBlock } from "../lib/context.mjs";
+import { contextBlock, waitingTalks } from "../lib/context.mjs";
 import { commitCoach, syncInBackground, pullQuietly } from "../lib/sync.mjs";
 
-const FLAGS = new Set(["json", "yes", "no-hermes", "no-claude", "all"]);
+const FLAGS = new Set(["json", "yes", "no-hermes", "no-claude", "all", "scheduled"]);
 function parseArgs(argv) {
   const pos = []; const f = {};
   for (let i = 0; i < argv.length; i++) {
@@ -202,8 +202,14 @@ const commands = {
     out(hs.map((h) => habitLine(h, today)).join("\n") || "No active habits.", hs.map((h) => ({ habit: h.slug, ...stats(h, today, 7) })));
   },
   context() {
-    const c = contextBlock(mcDir, s, at);
+    // --scheduled (or GODSPEED_SCHEDULED_RUN): a routine is reading this, not a conversation with
+    // them, so a talk waiting for the chat stays waiting.
+    const scheduled = Boolean(f.scheduled || process.env.GODSPEED_SCHEDULED_RUN);
+    const waiting = waitingTalks(mcDir, s, at, { scheduled });
+    const c = contextBlock(mcDir, s, at, { scheduled });
     if (c) process.stdout.write(c + "\n");
+    for (const { area, ymd } of waiting) { try { setShown(area, ymd, at.toISOString().replace(/\.\d+Z$/, "Z")); } catch { /* shown again next turn */ } }
+    if (waiting.length) saved("talk brought up in the chat");
   },
   tick() {
     pullQuietly(mcDir, syncMode);

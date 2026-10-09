@@ -18,7 +18,7 @@ export function readTalk(area, ymd) {
   const d = parseDoc(fs.readFileSync(f, "utf8"));
   return {
     ymd, file: f, state: (d.head.STATE || "opened").toLowerCase(), opened: d.head.OPENED || "",
-    followUp: d.head["FOLLOW-UP"] || "", sections: d.sections,
+    followUp: d.head["FOLLOW-UP"] || "", shown: d.head.SHOWN || "", sections: d.sections,
     answered: Boolean((d.sections["What you said"] || d.sections["What he said"] || "").trim()),
   };
 }
@@ -57,6 +57,9 @@ function rewrite(area, ymd, fn) {
 export const setTalkState = (area, ymd, state) => rewrite(area, ymd, (t) => setHead(t, "STATE", state));
 export const setFollowUp = (area, ymd, iso) => rewrite(area, ymd, (t) => setHead(t, "FOLLOW-UP", iso));
 export const addSaid = (area, ymd, line) => rewrite(area, ymd, (t) => appendToSection(t, "What you said", line));
+// Without a messenger the opening reached nobody's phone. SHOWN is when the [godspeed-coach] block
+// first put it in front of the assistant in a conversation with them, so it is brought up once.
+export const setShown = (area, ymd, iso) => rewrite(area, ymd, (t) => setHead(t, "SHOWN", iso));
 
 // A talk opens between its moment and six hours after it, once. A server that was down all evening
 // does not open Sunday's talk at three in the morning.
