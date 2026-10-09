@@ -11,6 +11,7 @@ import path from 'node:path';
 import { Review,factSubject,factSuppressed } from './review.mjs';
 import {claimHolds} from './query.mjs';
 import {fieldList} from './fields.mjs';
+import {titleFromContent} from './note-title.mjs';
 import {assertAssistantRecord} from './assistant-mutations.mjs';
 import { fileContext } from './context.mjs';
 import {Connectors} from './connectors.mjs';
@@ -154,7 +155,8 @@ export class Domains {
       // filed in a private section or kept off the assistant's list was
       // given to the assistant again.
       const kept=(key,fallback)=>input[key]!==undefined&&input[key]!==null?input[key]:oldSlot?.[key]??fallback;
-      // The list decides one or many for every kind it names; the slot or the writer only for the rest.
+      // The list decides one or many for every kind it names; the slot or the writer only for the
+      // rest. An assistant's add_claim asks for many on a kind with no slot yet (memory-tools.mjs).
       const cardinality = listed ? (fields.one(attribute) ? 'one' : 'many') : oldSlot?.cardinality || input.cardinality || 'one';
       const slot = this.store.prepare('fact_slots', { subject_type, subject_id, contact_id: input.contact_id || null, attribute, label: input.label||oldSlot?.label||input.attribute||attribute, category_slug: input.category_slug||oldSlot?.category_slug||kinSlot?.category_slug||null, cardinality, show_to_agent: kept('show_to_agent',true)!==false, is_pinned: kept('is_pinned',kinSlot?.is_pinned??false)===true }, oldSlot);
       // What this value ends: every current one of a one-at-a-time fact, the one it corrects of a
@@ -319,7 +321,9 @@ export class Domains {
       if(typeof folder!=='string'||folder.length>240||folder.includes('\\')||folder.startsWith('/')||folder.split('/').some(part=>part==='.'||part==='..'))throw Error('Choose a relative notebook folder');
       if(!Array.isArray(tags)||tags.length>30||tags.some(tag=>typeof tag!=='string'||!tag.trim()||tag.length>80))throw Error('Use a list of short tags');
       if(!Array.isArray(related)||related.length>30||related.some(id=>typeof id!=='string'||!visibleRows(this.query,'notes').some(note=>note.id===id)))throw Error('Choose visible related notes');
-      return { note: this.store.save('notes', { title: input.title || 'Captured note', content: input.content || input.text || input.url || '', folder_path:folder,tags,related,source_app: input.source_app || 'capture' }) };
+      // A note given no title is named by its first words (core/note-title.mjs), never "Captured note".
+      const content=input.content || input.text || input.url || '',title=String(input.title||'').trim()||titleFromContent(content,{fallbackDate:new Date().toISOString().slice(0,10)});
+      return { note: this.store.save('notes', { title, content, folder_path:folder,tags,related,source_app: input.source_app || 'capture' }) };
     }
     if (name === 'merge-contacts') {
       if (input.merge_into_self) return this.store.withLock(()=>{

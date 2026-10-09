@@ -15,7 +15,11 @@ edit this file, and from then on it is theirs.
 Read today's decision record first, `routines/next-action/YYYY-MM-DD/decision.md` for today,
 if there is one: its "For you today" section is the daily round's choice. Then read
 `AGENTS.md`, everything in `profile/`, the current files in `work/` and `goals/`,
-`decisions.md`, and `inbox/`. Read the previous brief in `brief/` if there is one. Use the
+`decisions.md`, and `inbox/`. Read the person's notebook too, where their facts, their people
+and their notes are kept: call `get_user_profile` (their facts and the people closest to them)
+and `search_brain` for the people, projects and dates the files above name. Without the
+notebook tools, read `world/` instead and say in the brief that the notebook was not reached.
+Read the previous brief in `brief/` if there is one. Use the
 current date in the time zone the morning job runs in. Do not invent change over time when
 there is no earlier record.
 
@@ -41,8 +45,9 @@ Keep the normal body under 200 words. Separate what the files say from what you 
 Name important gaps plainly. Write short plain sentences, without long dashes. Send nothing,
 buy nothing, make no commitments.
 
-**When the folder is still nearly empty** (the profile files are the starter's templates and
-there is no work yet), say so in one friendly line, then ask the one question that would help
+**When the folder is still nearly empty** (the profile files are the starter's templates, the
+notebook holds no facts or people about them, and there is no work yet), say so in one friendly
+line, then ask the one question that would help
 most, which the person can answer in a sentence of their own, such as "What are you working
 on this week?" Never hand them a form with blanks to fill. A short honest brief beats an
 invented one.

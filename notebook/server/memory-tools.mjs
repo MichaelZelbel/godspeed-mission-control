@@ -26,7 +26,7 @@ export const memoryDefinitions = [
   {name: 'get_person_notes', description: 'Notes that name one person, newest first.', inputSchema: object({...who, limit: num})},
   {name: 'get_claims', description: 'Dated facts. mode current = true today, history = everything including ended facts, changed_since = started or ended after since.',
     inputSchema: object({subject_type: {enum: ['self', 'contact', 'entity']}, subject_id: str, subject_name: str, attribute: str, mode: {enum: ['current', 'history', 'changed_since']}, since: str, limit: num})},
-  {name: 'add_claim', description: 'Record a fact about the owner, a person or a thing that is true now (or since valid_from). An older value of a single-valued fact is closed with an end date, never deleted; one the owner typed himself is not overwritten but put in his Review for him to decide. Requires evidence_quote. Relationships between people are not facts.',
+  {name: 'add_claim', description: 'Record a fact about the owner, a person or a thing that is true now (or since valid_from): something that is true about them, not a rule or a preference for how to help. A kind of fact with one value at a time (where someone lives, their employer, their birthday) closes its older value with an end date, never deleted; any other kind keeps every value, unless the owner\'s own facts of that kind hold one at a time. A value the owner typed himself is not overwritten but put in his Review for him to decide. Requires evidence_quote. Relationships between people are not facts.',
     inputSchema: object({subject_type: {enum: ['self', 'contact', 'entity']}, subject_id: str, subject_name: str, attribute: str, value: str, evidence_quote: str, confidence: {enum: ['certain', 'likely', 'unsure']}, valid_from: str, valid_to: str, source_note_id: str}, ['subject_type', 'attribute', 'value'])},
   {name: 'create_moment_with_ai', description: 'Create a timeline entry from a plain description; the model works out title, date and status, then it is saved. Hints override what the model guessed.',
     inputSchema: object({description: str, happened_at: str, title_hint: str, status_hint: {enum: ['past_fact', 'future_plan', 'ongoing', 'unknown']}, participant_names: strings, person_name: str, entity_names: strings, category_hint: str, impact_level_hint: num, confidence_date_hint: num, confidence_truth_hint: num, document_ids: strings}, ['description'])},
@@ -39,11 +39,11 @@ export const memoryDefinitions = [
   {name: 'search_moments', description: 'Search timeline entries by words and meaning.', inputSchema: object({query: str, limit: num}, ['query'])},
   {name: 'search_entities', description: 'Search the owner\'s World of things that are not people (companies, places, products) by name, nickname, description or type.', inputSchema: object({query: str, entity_type: str, limit: num})},
   {name: 'get_entity_context', description: 'One thing in the World: its facts, timeline entries and notes that name it.', inputSchema: object({id_or_name: str, include_history: bool}, ['id_or_name'])},
-  {name: 'list_collections', description: 'Every collection with its slug, description, item count and the instructions for capturing into it.', inputSchema: object({})},
+  {name: 'list_collections', description: 'Every collection with its slug, description, item count and the instructions for capturing into it. A new collection is made with save_record, type collections.', inputSchema: object({})},
   {name: 'get_collection_schema', description: 'A collection\'s fields (key, label, type, options) and capture instructions. Read it before adding or updating items.', inputSchema: object({slug: str}, ['slug'])},
   {name: 'list_collection_items', description: 'Items of one collection, filtered by words (quotes, OR, -word), status (its first indexable choice or text field) and dates (its first indexable date field).',
     inputSchema: object({collection_slug: str, search: str, status: str, date_from: str, date_to: str, sort: {enum: ['recent', 'oldest', 'updated']}, limit: num}, ['collection_slug'])},
-  {name: 'add_collection_item', description: 'Add an item to a collection using the field keys from get_collection_schema.', inputSchema: object({collection_slug: str, data: {type: 'object'}}, ['collection_slug', 'data'])},
+  {name: 'add_collection_item', description: 'Add an item to a collection using the field keys (or their labels) from get_collection_schema.', inputSchema: object({collection_slug: str, data: {type: 'object'}}, ['collection_slug', 'data'])},
   {name: 'update_collection_item', description: 'Change fields of one collection item; fields not given stay as they are.', inputSchema: object({item_id: str, data: {type: 'object'}}, ['item_id', 'data'])},
   {name: 'search_all_collections', description: 'Search every collection at once.', inputSchema: object({query: str, limit: num}, ['query'])},
 ];
@@ -368,10 +368,19 @@ function matcher(search) {
   const groups = String(search || '').split(/\s+OR\s+/).map(part => { const terms = [...part.matchAll(/(-?)"([^"]+)"|(-?)(\S+)/g)].map(m => ({not: !!(m[1] || m[3]), text: norm(m[2] || m[4])})).filter(t => t.text); return terms; }).filter(g => g.length);
   return text => !groups.length || groups.some(g => g.every(t => text.includes(t.text) !== t.not));
 }
+// The item's values under the collection's field keys. A value given under a
+// field's label ("Time of day" for time_of_day) is that field's: an assistant
+// that made the collection from the person's words names its columns so.
+const fieldKey = s => String(s ?? '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
 function checkFields(collection, data) {
   if (!data || typeof data !== 'object' || Array.isArray(data)) throw Error('Give data as an object of field keys and values');
-  const keys = new Set((collection.field_schema || []).map(f => f.key)), unknown = Object.keys(data).filter(k => !keys.has(k));
+  const schema = collection.field_schema || [], keys = new Set(schema.map(f => f.key)), out = {}, unknown = [];
+  for (const [k, v] of Object.entries(data)) {
+    const field = keys.has(k) ? null : schema.find(f => fieldKey(f.key) === fieldKey(k) || fieldKey(f.label) === fieldKey(k));
+    if (keys.has(k)) out[k] = v; else if (field && !(field.key in data)) out[field.key] = v; else unknown.push(k);
+  }
   if (unknown.length) throw Error('Unknown field ' + unknown.join(', ') + ' in ' + collection.slug + '; its fields are ' + [...keys].join(', '));
+  return out;
 }
 function listItems(a, {query}) {
   const c = collectionFor(query, a.collection_slug), schema = c.field_schema || [], match = matcher(a.search);
@@ -428,7 +437,10 @@ async function write(name, a, ctx, guarded) {
     const subjectId = subject?.id || null, day = a.valid_from || today(ctx);
     const same = query.rows('claims').filter(c => c.subject_type === type && (c.subject_id || null) === subjectId && (listed ? fields.canonical(c.attribute) === attribute : c.attribute === attribute)), slot = query.rows('fact_slots').find(s => s.subject_type === type && (s.subject_id || null) === subjectId && s.attribute === attribute);
     const typed = same.filter(c => holds(c, day) && /^user/.test(c.origin || '') && norm(c.value) !== norm(value));
-    if (typed.length && (listed ? fields.one(attribute) : (slot?.cardinality || 'one') !== 'many')) {
+    // A kind the list does not name, filed by an assistant with no slot for it yet, keeps every
+    // value: until 9 October 2026 it was one at a time, so the second `hard_limit` an assistant
+    // filed from a briefing ended the first. A slot the owner's own facts made keeps its setting.
+    if (typed.length && (listed ? fields.one(attribute) : (slot?.cardinality || 'many') !== 'many')) {
       const proposal = guarded({}).query.execute({table: 'review_queue', operation: 'insert', values: {title: attribute.replace(/_/g, ' ') + ': ' + value, suggestion_type: 'add_claim', status: 'pending_review', origin: 'ai', description: quote, source_note_id: a.source_note_id || null,
         payload: {label: a.attribute, value, attribute, subject_type: type, subject_id: subjectId, ...(type === 'contact' ? {contact_id: subjectId} : {}), source_type: a.source_note_id ? 'note' : 'assistant', source_id: a.source_note_id || null, valid_from: a.valid_from || null}}, assistant: true}).data;
       // Only values the assistant may see are quoted back to it.
@@ -436,7 +448,7 @@ async function write(name, a, ctx, guarded) {
       return {outcome: 'waiting_for_review', review_id: (Array.isArray(proposal) ? proposal[0] : proposal)?.id, message: (quoted.length ? 'The owner typed "' + quoted.join('", "') + '" himself' : 'The owner entered this fact himself') + ', so the new value waits in his Review instead of replacing it'};
     }
     const expected = Object.fromEntries([...same, ...(slot ? [slot] : [])].map(r => [r.type + '/' + r.id, r._hash]));
-    const result = guarded(expected).domains.writeFact({subject_type: type, ...(type === 'contact' ? {contact_id: subjectId} : type === 'entity' ? {entity_id: subjectId} : {}), attribute, label: a.attribute, value, valid_from: a.valid_from, evidence_quote: quote,
+    const result = guarded(expected).domains.writeFact({subject_type: type, ...(type === 'contact' ? {contact_id: subjectId} : type === 'entity' ? {entity_id: subjectId} : {}), attribute, label: a.attribute, value, valid_from: a.valid_from, evidence_quote: quote, ...(listed ? {} : {cardinality: 'many'}),
       source_type: a.source_note_id ? 'note' : 'assistant', source_id: a.source_note_id || null, origin: 'assistant'});
     const fact = result.facts?.[0] || {};
     return {outcome: fact.outcome, claim_id: fact.claimId || null, closed_earlier_values: fact.closed || 0, subject: subject ? subject.name : 'you', attribute, value};
@@ -463,17 +475,17 @@ async function write(name, a, ctx, guarded) {
     return {moment_id: saved.id, title, happened_at: d.happened_at, ...(d.happened_end ? {happened_end: d.happened_end} : {}), status: d.status, participants: found.map(p => p.name), ...(unknown.length ? {not_in_people: unknown} : {})};
   }
   if (name === 'add_collection_item') {
-    const c = collectionFor(query, a.collection_slug); checkFields(c, a.data);
-    if (!Object.values(a.data).some(v => v !== null && v !== '' && !(Array.isArray(v) && !v.length))) throw Error('Give at least one value');
-    const saved = guarded({}).query.execute({table: 'collection_items', operation: 'insert', values: {collection_id: c.id, data: a.data}, assistant: true}).data, item = Array.isArray(saved) ? saved[0] : saved;
+    const c = collectionFor(query, a.collection_slug), data = checkFields(c, a.data);
+    if (!Object.values(data).some(v => v !== null && v !== '' && !(Array.isArray(v) && !v.length))) throw Error('Give at least one value');
+    const saved = guarded({}).query.execute({table: 'collection_items', operation: 'insert', values: {collection_id: c.id, data}, assistant: true}).data, item = Array.isArray(saved) ? saved[0] : saved;
     return {item_id: item.id, collection_slug: c.slug, title: query.rows('collection_items').find(i => i.id === item.id)?.title || null};
   }
   if (name === 'update_collection_item') {
     const item = live(visibleRows(query, 'collection_items')).find(i => i.id === a.item_id);
     if (!item) throw Error('No visible collection item has the id ' + a.item_id);
-    const c = store.get('collections', item.collection_id); checkFields(c, a.data);
-    guarded({['collection_items/' + item.id]: item._hash}).query.execute({table: 'collection_items', operation: 'update', values: {data: {...item.data, ...a.data}}, filters: [['eq', 'id', item.id]], expected: {[item.id]: item._hash}, assistant: true});
-    return {item_id: item.id, collection_slug: c.slug, updated: Object.keys(a.data)};
+    const c = store.get('collections', item.collection_id), data = checkFields(c, a.data);
+    guarded({['collection_items/' + item.id]: item._hash}).query.execute({table: 'collection_items', operation: 'update', values: {data: {...item.data, ...data}}, filters: [['eq', 'id', item.id]], expected: {[item.id]: item._hash}, assistant: true});
+    return {item_id: item.id, collection_slug: c.slug, updated: Object.keys(data)};
   }
   throw Error('Unknown tool');
 }

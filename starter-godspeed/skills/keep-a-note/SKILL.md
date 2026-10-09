@@ -29,9 +29,11 @@ is the failure this recipe exists to prevent.
    "she hinted" apart from "she promised". Below the text add one line,
    `Related: [[Exact Title]], [[Exact Title]]`, using the exact titles from step 3. Leave the
    line out when there is nothing to link.
-5. **Save it once.** Call `capture_note` with `title`, `folder_path`, `tags` (two to five
-   plain words) and `content`. Do not call it twice. If the answer names related notes you
-   had not found, you may mention them in your reply; do not save again.
+5. **Save it once.** Call `capture_note` with `title` (always: never leave it out), `folder_path`,
+   `tags` (two to five plain words), `content` and `related` (the ids or exact titles of the
+   notes from step 3). Do not call it twice. The answer's `linked` lists the links that were
+   saved. Notes under `similar_not_linked` only look alike: they are not linked, and you never
+   call them linked; do not save again.
 6. **Report.** Exactly this shape, in the language the person used, nothing before it and
    nothing after it:
 
@@ -41,8 +43,10 @@ is the failure this recipe exists to prevent.
    Tags: <tag>, <tag>, <tag>.
    ```
 
-   No ids, no tool names, no "let me know if". If the person's sentence held a thing to do
-   or a date, add one fourth line that says so and offers nothing else.
+   "Linked to" names only the notes in the answer's `linked`, never one you meant to link and
+   never one the answer lists as only alike. No ids, no tool names, no "let me know if". If
+   the person's sentence held a thing to do or a date, add one fourth line that says so and
+   offers nothing else.
 
 ## Moving and fixing
 
