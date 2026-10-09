@@ -32,9 +32,11 @@
 # Two flows. The default is the plain Docker image's: collect answers, run the
 # installer, restart the s6 gateway. GODSPEED_TG_FLOW=notebook is the one-click
 # Hostinger server, where the notebook is already installed: it asks the brain,
-# GitHub (a sign-in only), the reader's city, their briefing as a file and their
-# goal, hands the answers to GODSPEED_TG_FINISH, and leaves starting the gateway
-# to the container's supervisor (docker/full-candidate/telegram-runner.mjs).
+# GitHub (a sign-in only), whether a Mission Control is already on GitHub (a yes
+# connects it through GODSPEED_TG_FINISH connect and skips the briefing and the
+# goal), the reader's city, their briefing as a file and their goal, hands the
+# answers to GODSPEED_TG_FINISH, and leaves starting the gateway to the
+# container's supervisor (docker/full-candidate/telegram-runner.mjs).
 #
 # Run by the s6 service godspeed-telegram-setup, as the assistant's account. Exits
 # 0 when setup is done or there is nothing for it to do, so the service sleeps.
@@ -966,13 +968,83 @@ def ask_goal(chat):
         prompt = "That is a lot for one goal. Send me the heart of it, in one or two sentences."
 
 
+def connect_existing(spec):
+    """(sync state, None) once the mission control on GitHub is connected, or (None, why). The
+    notebook's own code connects it, the way Settings' "Connect record sync" does, with the GitHub
+    sign-in of step 2; its first round brings the pages here."""
+    payload = json.dumps({"repository": "https://github.com/%s.git" % spec})
+    env = {k: v for k, v in os.environ.items() if not k.startswith("GODSPEED_TELEGRAM_")}
+    rc, out = run(FINISH + ["connect"], timeout=900, stdin_text=payload, env=env)
+    lines = [l.strip() for l in ANSI.sub("", out).splitlines() if l.strip()]
+    if rc == 0:
+        try:
+            return json.loads(lines[-1]).get("state") or "pending", None
+        except (IndexError, ValueError, AttributeError):
+            return "pending", None
+    return None, lines[-1] if lines else "no reason given"
+
+
+def step_existing(chat):
+    """The plain Docker setup asks whether a Mission Control already exists; so does this one. A yes
+    connects it and skips the briefing and the goal, which it already holds."""
+    st = chat.st
+    login = st.get("login") or github_login()
+    if "existing" not in st:
+        a = chat.ask("Do you already have a Mission Control on another computer, kept on GitHub?",
+                     [("have:no", "No, start fresh"), ("have:yes", "Yes, I have one")])
+        st["existing"] = "" if a == "have:no" else None
+        save_state(st)
+    prompt = "Send me its address. It looks like %s" % esc("https://github.com/%s/godspeed" % (login or "you"))
+    while st.get("existing") != "" and not st.get("joined"):
+        if not st.get("existing"):
+            a = chat.ask(prompt, [("have:no", "Start fresh instead")], free_text=True)
+            if a == "have:no":
+                st["existing"] = ""
+                break
+            spec = normalise_repo(a, login)
+            if not spec or not repo_exists(spec):
+                prompt = ("I cannot open %s with your GitHub account. Check the address and send it again, "
+                          "or start fresh." % esc(a))
+                continue
+            st["existing"] = spec
+            save_state(st)
+        chat.send("One moment, I am bringing in your Mission Control from GitHub.")
+        state, why = connect_existing(st["existing"])
+        log("existing: %s: %s" % (st["existing"], state or why[:200]))
+        if state:
+            st["joined"] = True
+            save_state(st)
+            chat.send("Your Mission Control from GitHub is connected%s, so I skip the questions about "
+                      "your briefing and your goal." % (" and its pages are here" if state == "synced"
+                                                        else ", and its pages arrive within a few minutes"))
+            break
+        a = chat.ask("I could not connect <b>%s</b>. What it said: %s\n\nNothing is lost. Tap Try again, "
+                     "send another address, or start fresh." % (esc(st["existing"]), esc(why[:400])),
+                     [("join:retry", "Try again"), ("have:no", "Start fresh instead")], free_text=True)
+        if a == "have:no":
+            st["existing"] = ""
+        elif a != "join:retry":
+            spec = normalise_repo(a, login)
+            if spec and repo_exists(spec):
+                st["existing"] = spec
+            else:
+                st["existing"] = None
+                prompt = ("I cannot open %s with your GitHub account. Check the address and send it again, "
+                          "or start fresh." % esc(a))
+        save_state(st)
+
+
 def step_about_you(chat):
     st = chat.st
+    joined = bool(st.get("joined"))
     if "tz" not in st:
-        chat.send("<b>Step 3 of 3: your city, your briefing and your goal.</b>")
+        chat.send("<b>Step 3 of 3: your city.</b>" if joined else
+                  "<b>Step 3 of 3: your city, your briefing and your goal.</b>")
         st["tz"] = ask_zone(chat, "Which city do you live in? Then \"seven in the morning\" means your seven. "
                                   "Send me its name, like London or New York, or tap %s.")
         save_state(st)
+    if joined:
+        return
     if "briefing" not in st:
         st["briefing"] = ask_briefing(chat)
         save_state(st)
@@ -985,7 +1057,7 @@ def step_finish(chat):
     """The answers, filed by the notebook's own code: the goal, the clock, Telegram for routines."""
     st = chat.st
     env = {k: v for k, v in os.environ.items() if not k.startswith("GODSPEED_TELEGRAM_")}
-    payload = json.dumps({"timezone": st.get("tz"), "goal": st.get("goal")})
+    payload = json.dumps({"timezone": st.get("tz"), "goal": st.get("goal"), "joined": bool(st.get("joined"))})
     while True:
         rc, out = run(FINISH, timeout=300, stdin_text=payload, env=env)
         if rc == 0:
@@ -1101,7 +1173,8 @@ def step_hand_over(chat):
     folder = WORKSPACE if FLOW == "notebook" and WORKSPACE else GODSPEED
     rc, url = run(["git", "-C", folder, "remote", "get-url", "origin"], timeout=30)
     url = url.strip() if rc == 0 else ""
-    if url.startswith("https://github.com/"):
+    # A reader who brought in the Mission Control they have already has it on that computer.
+    if url.startswith("https://github.com/") and not st.get("joined"):
         chat.send(
             "Want me on your computer too? Same folder, same memory.\n\n"
             "<b>Windows:</b> download and run %s\nWhere it asks for \"Address of a mission control you "
@@ -1164,6 +1237,7 @@ def main():
     step_brain(chat)
     step_github(chat)
     if FLOW == "notebook":
+        step_existing(chat)
         step_about_you(chat)
         step_finish(chat)
     else:

@@ -82,6 +82,31 @@ export async function useFolderRepository(store,paths,{branch='main',remote='ori
   return {...config,remote:url};
 }
 
+// The installers' join (`godspeed sync folder` with no paths), run once when a
+// computer was set up from a mission control that is already on GitHub. Two
+// kinds of repository arrive here. An owner's own mission control repository
+// tracks its programs and settings beside the notebook, and sessions and jobs
+// commit there (envy and x30, D-288 and D-289): it carries the notebook in
+// folder mode, which commits only notebook/. A copy a notebook made through
+// Settings (Connect record sync), on the server or on a first computer, tracks
+// nothing but what that connection syncs, and nothing else commits all of it.
+// Until 8 October 2026 the installer joined that copy in folder mode too: it
+// was refused, because its ignore file lets FULL-ALPHA.md and assistant-state/
+// through (Settings syncs them), and had it passed, this computer would have
+// sent nothing but notebook/. Such a copy is now connected the way Settings
+// connects it, with the same full list.
+export async function joinRepository(store,options={}){
+  const probe=new FileSync(store,options);
+  if(!fs.existsSync(path.join(store.root,'.git')))throw new Error('This folder has no repository of its own');
+  if(probe.folder||probe.gitDir||probe.foreignRepository())return useFolderRepository(store,undefined,options);
+  probe.folderReady();
+  // The address as the clone was given it, before any rewriting Git's settings ask for.
+  const url=probe.git(['config','--get','remote.'+probe.remote+'.url']);await probe.verifyRemote(url);
+  probe.initialize(url);probe.lineEndingsAsCommitted();
+  const config={enabled:true};atomic(path.join(store.state,'sync-config.json'),JSON.stringify(config));
+  return {...config,remote:url};
+}
+
 export class FileSync {
   constructor(store,{branch='main',remote='origin',largeFile=50*1024*1024}={}) {
     if(!/^[\w/.-]+$/.test(branch)||branch.startsWith('-')||!/^\w+$/.test(remote))throw new Error('Invalid sync configuration');
@@ -146,6 +171,28 @@ export class FileSync {
   foreignRepository(){
     if(!fs.existsSync(path.join(this.store.root,'.git')))return false;
     return this.gitBytes(['ls-files','-z']).toString('utf8').split('\0').some(name=>name&&name!=='.gitignore'&&!shared(name));
+  }
+  // A copy cloned while Git wrote Windows line endings (Git for Windows ships
+  // core.autocrlf=true, and the installer clones before anything is set) has
+  // every text file on disk with CRLF while the repository holds LF. Once
+  // connected, this folder reads files as they are (initialize), and a
+  // document the other machines changed then met a local copy that differed
+  // only in its line endings: kept for review as an edit made here, never
+  // taken. Each tracked file that differs from what is committed in nothing
+  // but that is given back exactly as committed, once, when the folder joins.
+  lineEndingsAsCommitted(){
+    const entries=this.names(['ls-files','-s','-z']).map(line=>line.match(/^100(?:644|755) ([0-9a-f]+) 0\t([\s\S]+)$/)).filter(m=>m&&shared(m[2]));
+    if(!entries.length)return 0;
+    const blobs=readBlobs((args,options)=>this.gitBytes(args,undefined,options),entries.map(m=>m[1]));let restored=0;
+    entries.forEach((m,i)=>{
+      const blob=blobs[i],file=path.join(this.store.root,...m[2].split('/'));let now;try{now=fs.readFileSync(file);}catch{return;}
+      if(!blob||now.equals(blob)||!now.includes(13))return;
+      if(Buffer.from(now.toString('latin1').replace(/\r\n/g,'\n'),'latin1').equals(blob)){atomic(file,blob);restored++;}
+    });
+    // Git's record of each file it checked out is brought up to date, so it
+    // does not read the files it was given back as changed.
+    if(restored)try{this.git(['update-index','-q','--refresh']);}catch{}
+    return restored;
   }
   // The ignore file is derived from the policy, so it is rewritten whenever the
   // policy has moved on rather than only when sync is first configured. An

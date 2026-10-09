@@ -47,8 +47,11 @@ Telegram itself; a wrong key is said at once. Then the page shows **Open @yourbo
 Telegram**, and a QR code for a phone. That link carries a one-time code: only the person who
 opens the bot from it becomes its owner, so a stranger who finds the bot in Telegram's search
 gets nothing. Press **Start**, and setup carries on as a chat: which AI (ChatGPT by a sign-in
-code, or another provider by its key), a GitHub sign-in code, your city, your briefing as a
-file, and your goal. Then the bot belongs to your assistant, and its first message arrives.
+code, or another provider by its key), a GitHub sign-in code, whether you already have a
+Mission Control on GitHub, your city, your briefing as a file, and your goal. If you already
+have one, you send its address instead: the server connects it the way Settings' **Connect
+record sync** does, brings its pages in, and skips the briefing and the goal. Then the bot
+belongs to your assistant, and its first message arrives.
 
 - **The key stays on this server.** It goes from your browser to your server only, is kept in
   the data volume at `/opt/data/full-candidate/telegram` (readable only by the assistant's
