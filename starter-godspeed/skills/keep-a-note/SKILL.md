@@ -16,10 +16,11 @@ is the failure this recipe exists to prevent.
 1. **Check the tools.** You need `list_note_folders`, `search_notes` (or `search_brain`) and
    `capture_note` from the connection named `notebook`. If they are missing, skip to
    "Without the notebook" below.
-2. **Look at the folders.** Call `list_note_folders`. Pick the folder this note belongs in.
-   If none fits, choose ONE new folder with a plain name a person would use, such as
-   `Health`, `Work`, `People`, `Ideas`, `Home`, at most two levels deep. Never pick or create
-   anything under `godspeed`: that tree is a program's copy of this folder.
+2. **Look at the folders.** Call `list_note_folders`. Pick the folder this note belongs in by
+   its subject. If none fits, choose ONE new folder with a plain name a person would use, such as
+   `Health`, `Work`, `People`, `Ideas`, `Home`, at most two levels deep. A holding place is
+   never a note's home: not `inbox`, not `From your routines`, and never anything under
+   `godspeed`, which is a program's copy of this folder.
 3. **Find what it belongs with.** Search the notebook for the people, things and topics in
    the note, with `source` set to `native` where the tool offers it, so you see notes the
    person wrote and not copies of mission control files. Keep at most three notes that are truly related.

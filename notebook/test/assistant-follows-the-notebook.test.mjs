@@ -130,12 +130,20 @@ test('the starter manual says what the live run needed, and still fits under the
   // server/install-hermes.sh warns from 19,000 characters; past 20,000 Hermes drops the middle.
   assert.ok([...manual].length<19000,'AGENTS.md is '+[...manual].length+' characters');
   for(const said of [/will NOT fire\s+until the gateway is started/,/never from `procedures\.md`/,/`save_record` type `collections`/,/"How I like to be helped" and "My hard limits"/,
-    /`mc-goals file --kind/,/never write a card by hand/,/never make one of its\s+files yourself/,/`mc-work file --what "\.\.\." --done-when/,/--check "<a\s+line that exits 0/])assert.match(manual,said);
+    /`mc-goals file --kind/,/never write a card by hand/,/never make one of its\s+files yourself/,/`mc-work file --what "\.\.\." --done-when/,/--check "<a\s+line that exits 0/,
+    // Live run of 9 October 2026: the assistant answered its own questions, filed a "(?)" item as a
+    // fact, never reached the research-watch recipe, and switched the brief on as a plain prompt.
+    /end your reply with the question and stop/,/Never answer it yourself/,/marked \(\?\) or "not\s+sure" is an open question for `inbox\/`, never a fact/,
+    /never the day you file it/,/`skills\/research-watch\/SKILL\.md`/,/routine for a recipe gets the recipe\s+attached \(`skills: \["<name>"\]`/,/use the routine's own `run`/])assert.match(manual,said);
+  const brief=fs.readFileSync(new URL('../../starter-godspeed/skills/morning-brief/SKILL.md',import.meta.url),'utf8');
+  for(const said of [/## Switching it on/,/`skills: \["morning-brief"\]`/,/never write a brief by hand in the chat/,/`date \+%F`/,/Your final answer is the brief itself, word for word/])assert.match(brief,said);
   assert.doesNotMatch(manual,/[–—]/,'no long dashes');
   // research-watch ships in the starter now, with its hashes; the kit's copy is the same text.
   const starter=fs.readFileSync(new URL('../../starter-godspeed/skills/research-watch/SKILL.md',import.meta.url),'utf8');
   assert.equal(starter,fs.readFileSync(new URL('../../skills/research-watch/SKILL.md',import.meta.url),'utf8'));
   assert.match(starter,/make one routine named `research watches`/);
+  assert.match(starter,/`skills: \["research-watch"\]`/);assert.match(starter,/^description: Keep researching a question for the person/m);
+  assert.match(starter,/answer exactly `\[SILENT\]` and nothing else; any other answer never contains `\[SILENT\]`/);
   const hashes=fs.readFileSync(new URL('../../starter-godspeed/skills/research-watch/.shipped-sha256',import.meta.url),'utf8');
   for(const name of ['research-watch','morning-brief','weekly-review','keep-a-note']){
     const text=fs.readFileSync(new URL('../../starter-godspeed/skills/'+name+'/SKILL.md',import.meta.url),'utf8').replaceAll('\r','');
@@ -152,4 +160,14 @@ test('titles from first words',()=>{
   assert.equal(titleFromContent('buy milk'),'Buy milk');
   assert.equal(titleFromContent('   ',{fallbackDate:'2026-10-09'}),'Note of 2026-10-09');
   assert.ok(titleFromContent('word '.repeat(40)).split(' ').length<=8);
+});
+
+// Live run of 9 October 2026: every note went to a folder called inbox, and the companion kit's
+// email recipe read profile/people.md, an empty file since people live in the notebook.
+test('a note goes into a topic folder, and the email recipe reads the sender\'s notebook page',()=>{
+  for(const file of ['../../starter-godspeed/skills/keep-a-note/SKILL.md','../recipes/keep-a-note/SKILL.md','../reusable-recipes/keep-a-note/SKILL.md'])
+    assert.match(fs.readFileSync(new URL(file,import.meta.url),'utf8'),/A holding place is\s+never a note's home: not `inbox`, not `From your routines`/,file);
+  const email=fs.readFileSync(new URL('../../skills/answer-email-my-way.md',import.meta.url),'utf8');
+  assert.match(email,/search_contacts, then get_contact_context/);assert.doesNotMatch(email,/people\.md/);
+  assert.match(email,/Give me the draft in your reply/);
 });

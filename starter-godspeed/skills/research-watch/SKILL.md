@@ -1,6 +1,6 @@
 ---
 name: research-watch
-description: Check saved research questions against named sources, preserving failures and avoiding repeated findings.
+description: Keep researching a question for the person ("keep researching this", "watch this question", "check it every Sunday") - set up the question and the sources they trust, run a first check that saves what each source said, then check again on a rhythm and tell only what is new. Also runs the due checks when the research watches routine fires.
 ---
 
 # Research watch
@@ -40,7 +40,7 @@ Read at most 5 source pages per run. No account edits or publishing.
 
 ### One routine for the checks
 
-When the user names a rhythm for the checks ("every Sunday", "once a week", "every morning"), set every_days one day shorter than that rhythm and at least 1 (6 for once a week, 1 for every day), so each run of the routine finds the question due. Then look at the existing routines first. If one named `research watches` already exists, it checks every due watch: keep it and add nothing. Otherwise make one routine named `research watches` at the day and time the user named, in their time zone (with no time named, 06:30, before a morning brief), with this mission control's folder as its working folder and this prompt:
+When the user names a rhythm for the checks ("every Sunday", "once a week", "every morning"), set every_days one day shorter than that rhythm and at least 1 (6 for once a week, 1 for every day), so each run of the routine finds the question due. Then look at the existing routines first. If one named `research watches` already exists, it checks every due watch: keep it and add nothing. Otherwise make one routine named `research watches` at the day and time the user named, in their time zone (with no time named, 06:30, before a morning brief), with this recipe attached (Hermes' cronjob tool: `skills: ["research-watch"]`), this mission control's folder as its working folder and this prompt:
 
 ```
 Read AGENTS.md, then follow skills/research-watch/SKILL.md for the due watches in watch/. Write results only; send nothing externally.
@@ -71,7 +71,7 @@ Update candidates/<simple-option-name>.md with supported claims, source dates an
 
 ## Save results and prevent duplicates
 
-Create results/YYYY-MM-DDTHH-MM-SSZ.md with a unique suffix if needed. Include Question, Coverage, Findings, Recommendation, Gaps and Next check. This file records every attempted run, including quiet and failed runs.
+Create results/YYYY-MM-DDTHH-MM-SSZ.md with a unique suffix if needed, named from the clock (`date -u +%Y-%m-%dT%H-%M-%SZ` in the terminal), never from memory. Include Question, Coverage, Findings, Recommendation, Gaps and Next check. This file records every attempted run, including quiet and failed runs.
 
 Maintain findings.md as a list of records. Each needs id, priority (urgent/useful/background), state (open/resolved), first_seen, last_checked, source and plain text. Give each distinct source-and-claim combination a stable id; search existing records before assigning a new id. The same unchanged claim keeps its id and only updates last_checked. A URL alone is not the id: that page can contain a later different claim. Link a changed claim to the older finding rather than overwriting history.
 
@@ -82,7 +82,7 @@ attempt=<UTC timestamp> | status=<success/partial/failed> | outcome=<baseline/ch
 
 Success requires every required source checked within the run limits. Only success advances last_success. Partial or failed preserves the previous last_success and sets retry_on to today's UTC date plus retry_days. Preserve successful partial findings even if another source failed. An interrupted run without a completed line remains due on the next invocation.
 
-Return a short run summary: watches checked, changed findings, unread required sources and next check dates. Quiet checks remain in files. Never equate a failed check with unchanged evidence.
+Return a short run summary: watches checked, changed findings, unread required sources and next check dates. Quiet checks remain in files. Never equate a failed check with unchanged evidence. When the routine runs this recipe and every watch it checked was quiet, with every source read, answer exactly `[SILENT]` and nothing else; any other answer never contains `[SILENT]`.
 
 ## Delivery and stopping
 
