@@ -94,7 +94,10 @@ export function supersededValues(store, query) {
     if (!fields.one(name)) continue;
     const person = c.subject_type === 'contact' ? follow(byId.get(c.subject_id)) : null;
     const subject = c.subject_type === 'self' ? 'self' : c.subject_type === 'contact' ? 'contact:' + (person?.id || c.subject_id) : c.subject_type + ':' + c.subject_id;
-    add(subject + '|' + name, {kind: 'claim', id: c.id, value: String(c.value), day: dayOf(c.valid_from), label: 'notebook fact ' + c.attribute});
+    // A value filed without a start since 9 October 2026 (domains.mjs writeFact) keeps the day it was
+    // recorded, and that day is what it was known to hold by: it decides as its start did before.
+    // One with neither (Menerio's undated imports) still decides nothing.
+    add(subject + '|' + name, {kind: 'claim', id: c.id, value: String(c.value), day: dayOf(c.valid_from) || dayOf(c.recorded_on), label: 'notebook fact ' + c.attribute});
   }
   const steps = [];
   for (const [group, recs] of [...groups].sort(([a], [b]) => a.localeCompare(b))) {

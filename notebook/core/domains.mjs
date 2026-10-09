@@ -133,13 +133,21 @@ export class Domains {
       // daily closing (fact-closing.mjs).
       const seen = c => { if (!this.assistant) return true; try { assertAssistantRecord(this.query,'claims',c.id); return true; } catch { return false; } };
       const all = [...theirs.filter(r => r.attribute === attribute), ...kin].filter(seen);
-      const valid_from = input.valid_from || new Intl.DateTimeFormat('en-CA', { timeZone: this.query.rows('profiles')[0]?.timezone || 'UTC' }).format(new Date());
-      const current=c=>claimHolds(c,valid_from),closure_evidence={source_type:input.source_type||'manual',source_id:input.source_id||null,quote:input.evidence_quote||null};
+      // A value given without a "since when" has no known start: it is stored with none, and the day
+      // it was recorded is kept beside it (recorded_on). Until 9 October 2026 the recording day was
+      // stored as its start, so a fact filed from a briefing ("lives in Easton") seemed to begin on the
+      // day it was filed, and a later "we moved to Clifton on 1 June" could never end it: both stayed
+      // current. Nothing undated decides (D-298): a value with no start holds on any day, so a later
+      // value of a one-at-a-time kind ends it on that value's own date. What this value ends, it ends
+      // on its start, or on the day it was recorded when it has none.
+      const today = new Intl.DateTimeFormat('en-CA', { timeZone: this.query.rows('profiles')[0]?.timezone || 'UTC' }).format(new Date());
+      const valid_from = input.valid_from || null, asOf = valid_from || today;
+      const current=c=>claimHolds(c,asOf),closure_evidence={source_type:input.source_type||'manual',source_id:input.source_id||null,quote:input.evidence_quote||null};
       const target=input.replaces_claim_id?all.find(c=>c.id===input.replaces_claim_id):null;
       if(input.replaces_claim_id&&(!target||!current(target)||target._hash!==input.replaces_claim_hash))throw Error('The fact selected for correction changed; reload before replacing it');
       const sameValue=all.filter(r=>String(r.value??'').toLowerCase()===value.toLowerCase()),existing=sameValue.find(current)||sameValue[0];
       if (existing&&(current(existing)||input.origin==='review_queue')) {
-        const changed=target&&target.id!==existing.id&&current(existing)?[this.store.prepare('claims',{valid_to:valid_from,closure_evidence},target)]:[];
+        const changed=target&&target.id!==existing.id&&current(existing)?[this.store.prepare('claims',{valid_to:asOf,closure_evidence},target)]:[];
         if(changed.length)this.store.commit(changed);
         return { ok: true, facts: [{ attribute, outcome: current(existing) ? 'already_recorded' : 'history_not_revived', claimId: existing.id,closed:changed.length }] };
       }
@@ -162,8 +170,8 @@ export class Domains {
       // What this value ends: every current one of a one-at-a-time fact, the one it corrects of a
       // many. An assistant ends one it was not asked to correct only when it read that version.
       const changed = all.filter(c => current(c) && (slot.cardinality!=='many'||c.id===input.replaces_claim_id) && (!this.assistant||c.id===input.replaces_claim_id||this.mayChange?.('claims',c)))
-        .map(c => this.store.prepare('claims', { valid_to: valid_from,closure_evidence }, c));
-      const claim = this.store.prepare('claims', { subject_type, subject_id, attribute, value, valid_from, valid_to: null, confidence: 'confirmed', cardinality: slot.cardinality, source_type: input.source_type || 'manual', source_id: input.source_id || null, evidence_quote: input.evidence_quote || null, origin: input.origin || 'user_manual' });
+        .map(c => this.store.prepare('claims', { valid_to: asOf,closure_evidence }, c));
+      const claim = this.store.prepare('claims', { subject_type, subject_id, attribute, value, valid_from, recorded_on: today, valid_to: null, confidence: 'confirmed', cardinality: slot.cardinality, source_type: input.source_type || 'manual', source_id: input.source_id || null, evidence_quote: input.evidence_quote || null, origin: input.origin || 'user_manual' });
       for (const r of [slot, claim]) r.references = this.query.references(r.type, r);
       this.store.commit([...changed, slot, claim]); return { ok: true, facts: [{ attribute, outcome: 'inserted', claimId: claim.id, closed: changed.length }] };
     });

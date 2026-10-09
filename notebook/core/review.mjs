@@ -32,8 +32,10 @@ function unreceiptedChanges(item,store){
     const removed=new Set(gone.map(c=>c.id)),slots=query.rows('fact_slots'),reopened=[];
     for(const claim of gone){
       const rest=claims.filter(c=>key(c.attribute)===key(claim.attribute)&&!removed.has(c.id)),single=(slots.find(s=>s.subject_type===subject_type&&(s.subject_id||null)===subject_id&&s.attribute===claim.attribute)?.cardinality||claim.cardinality)!=='many';
-      if(!claim.valid_from||!single||rest.some(c=>claimHolds(c,today)))continue;
-      const before=rest.filter(c=>c.valid_to===claim.valid_from);
+      // A value filed without a start ended the one before it on the day it was recorded.
+      const began=claim.valid_from||claim.recorded_on;
+      if(!began||!single||rest.some(c=>claimHolds(c,today)))continue;
+      const before=rest.filter(c=>c.valid_to===began);
       if(before.length>1)throw Error('Two earlier values of this fact ended the day it began, so Godspeed cannot tell which one to bring back. Correct it on the profile instead.');
       if(before.length){const next=store.prepare('claims',{valid_to:null},before[0]);delete next.closure_evidence;reopened.push(next);}
     }

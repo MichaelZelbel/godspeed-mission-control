@@ -178,7 +178,8 @@ export function ownerRelationships(query, facts, day, cardCounts = word => relat
     const add = (contactId, name, word, from, f = null) => {
       if (!word || !name) return;
       const k = contactId || 'name:' + norm(name), e = entries.get(k) || {name, contact_id: contactId || null, words: [], from: []};
-      if (!e.words.some(w => norm(w.word) === norm(word))) e.words.push({word, day: f?.valid_from || null, ended: !!f && !holds(f) || formerRelationship(word)});
+      // A fact filed without a start counts from the day it was recorded, as in newestOnly.
+      if (!e.words.some(w => norm(w.word) === norm(word))) e.words.push({word, day: f?.valid_from || f?.recorded_on || null, ended: !!f && !holds(f) || formerRelationship(word)});
       if (!e.from.includes(from)) e.from.push(from);
       entries.set(k, e);
     };
@@ -216,20 +217,23 @@ export const worldFiles = dir => readFolder(dir);
 // its names and from any store is read as ended that day. What is stored is ended by the
 // notebook's daily closing (core/fact-closing.mjs) and, on a mission control that has it, the
 // engine's world_fields.py. Two values dated the same day stay, as two answers.
+// A notebook value filed without a start keeps the day it was recorded (recorded_on), and that day
+// stands for its start here, as in the daily closing.
 export function newestOnly(rows, fields, day) {
   const holds = f => (!f.valid_from || f.valid_from <= day) && (!f.valid_to || f.valid_to > day);
+  const since = f => f.valid_from || f.recorded_on || null;
   const key = f => (f.subject_type === 'self' ? 'self' : f.subject_type + '|' + (f.subject_id || norm(f.subject_name))) + '|' + fields.canonical(f.attribute);
   const groups = new Map();
   for (const f of rows) if (!f.object_type && fields.one(f.attribute) && holds(f)) groups.set(key(f), [...(groups.get(key(f)) || []), f]);
   const ends = new Map();
   for (const group of groups.values()) {
     if (new Set(group.map(f => norm(f.value))).size < 2) continue;
-    const dated = group.filter(f => f.valid_from);
+    const dated = group.filter(since);
     if (!dated.length) continue;
-    const top = dated.map(f => f.valid_from).sort().at(-1), newest = dated.filter(f => f.valid_from === top);
+    const top = dated.map(since).sort().at(-1), newest = dated.filter(f => since(f) === top);
     // Two values the newest day both stay (two answers); what is older than both ends.
     const tops = new Set(newest.map(f => norm(f.value)));
-    for (const f of group) if (!tops.has(norm(f.value)) && (f.valid_from || '') < top) ends.set(f, top);
+    for (const f of group) if (!tops.has(norm(f.value)) && (since(f) || '') < top) ends.set(f, top);
   }
   return rows.map(f => ends.has(f) ? {...f, valid_to: ends.get(f), superseded: true} : fields.one(f.attribute) ? {...f, cardinality: 'one'} : f);
 }
