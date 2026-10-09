@@ -61,9 +61,16 @@ contains "mc-goals reads the goals of the folder it is run in" "$out" "No goals 
 out="$(cd "$TMP" && hermes_shell bash "$HERE/mc-work-run" --godspeed "$TMP/godspeed" --dry-run 2>&1)"
 contains "mc-work-run finds the work register beside it" "$out" "nothing runnable now"
 missing "  and does not call it missing" "$out" "not installed"
-out="$(cd "$TMP" && hermes_shell bash "$HERE/mc-decide" --godspeed "$TMP/godspeed" --date 2026-10-09 --dry-run 2>&1)"
+mkdir -p "$TMP/godspeed/due"
+printf 'TITLE: Paint the fence\nDONE-WHEN: painted\nCOST-IF-MISSED: rust\nSELF-CHECK: none\n\n## Windows\n\nSTRIP: 2026-10-01 2026-10-12\n' > "$TMP/godspeed/due/fence.md"
+out="$(cd "$TMP" && GODSPEED_TODAY=2026-10-09 hermes_shell bash "$HERE/mc-decide" --godspeed "$TMP/godspeed" --date 2026-10-09 --dry-run 2>&1)"
 contains "mc-decide gets an attention plan from mc-goals" "$out" "Attention for 2026-10-09"
 contains "  and a list of the work from mc-work" "$(cat "$TMP/godspeed/routines/next-action/2026-10-09/tick.txt" 2>/dev/null)" "no open work"
+# An mc-due on the path may be another program (the notebook's refuses --godspeed); the one beside
+# mc-decide is the one it asks. Here the path's mc-due is section 1's stand-in.
+due="$(cat "$TMP/godspeed/routines/next-action/2026-10-09/due.txt" 2>/dev/null)"
+contains "  and today's deadlines from the due.js beside it" "$due" "Paint the fence"
+missing "  not from whatever mc-due is on the path" "$due" "ran due.js"
 
 # 4. The others still read as shell.
 for f in mc-run mc-decide mc-work-run; do bash -n "$HERE/$f" && ok "$f reads as bash" || bad "$f does not read as bash"; done

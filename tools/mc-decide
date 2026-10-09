@@ -154,7 +154,12 @@ fi
 # same way: one reads the environment, the other takes it as an option. A loop that pretended
 # otherwise is exactly how the wrong folder got read in the first place.
 neighbour() { case " $MISSING " in *" $1 "*) : ;; *) MISSING="$MISSING $1" ;; esac; }
-if command -v mc-due >/dev/null 2>&1; then
+# The deadlines program beside this one comes first (2026-10-09). An `mc-due` found on the path
+# can be the notebook's, which belongs to one folder and refuses --godspeed, so the day was
+# decided with no deadlines at all and nothing said so.
+if [ -f "$HERE/due.js" ]; then
+  GODSPEED_ROOT="$GODSPEED" "$NODE" "$HERE/due.js" --godspeed "$GODSPEED" today > "$RUNDIR/due.txt" 2>/dev/null || true
+elif command -v mc-due >/dev/null 2>&1; then
   GODSPEED_ROOT="$GODSPEED" mc-due --godspeed "$GODSPEED" today > "$RUNDIR/due.txt" 2>/dev/null || true
 else neighbour mc-due; fi
 if command -v mc-attention >/dev/null 2>&1; then
