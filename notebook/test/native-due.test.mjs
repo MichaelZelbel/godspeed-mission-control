@@ -30,3 +30,17 @@ test('safe completion check rolls exactly once and does not reuse old proof for 
  const d=await domains.invoke('personal-operation',{type:'obligation-add',title:'Practice',start_at:'2020-01-01T00:00:00Z',due_at:'2020-01-02T00:00:00Z',recurrence:{days:7},completion_check:{type:'note-contains',note_id:note.id,text:'Practice complete'}});
  store.save('notes',{id:note.id,content:'Practice complete'});remind({}, {store,query});assert.equal(store.get('deadlines',d.id).status,'closed');assert.equal(store.list('deadlines').length,2);remind({}, {store,query});assert.equal(store.list('deadlines').length,2);
 });
+// 9 October 2026: an assistant wrote a deadline by hand (KIND:, TARGET-DATE:, no STRIP line) and the
+// notebook showed it as closed. A due file the plan cannot be read from needs a look, by its file
+// name, is said in the reminders, and is never rewritten.
+test('a due file without readable dates needs a look and is never closed',()=>{
+ const {store,query}=fixture(),file=path.join(store.root,'due','present.md');fs.mkdirSync(path.dirname(file),{recursive:true});
+ const text='ID: present\nKIND: target (not costly deadline)\nTITLE: Fictional present, bought and wrapped\nTARGET-DATE: 2026-10-08\nSELF-CHECK: none\n';fs.writeFileSync(file,text);
+ const [row]=query.rows('deadlines');
+ assert.equal(row.status,'needs-a-look');assert.notEqual(row.status,'closed');
+ assert.match(row.problem,/no STRIP line/);assert.equal(row.native_file,'due/present.md');
+ assert.match(row.sentence,/^due\/present\.md \(Fictional present, bought and wrapped\): it has no STRIP line/);
+ const reminded=remind({}, {store,query});assert.equal(reminded.silent,false);
+ assert.match(store.get('notes',reminded.record_id).content,/due\/present\.md/);
+ assert.equal(fs.readFileSync(file,'utf8'),text,'the hand-written file is left as it was');
+});
