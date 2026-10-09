@@ -47,7 +47,7 @@ done
 # MSYS_NO_PATHCONV=1, so Git Bash no longer turns /c/... into C:/... for node.exe or git.exe, and
 # node then looked for C:\c\... and found nothing: the attention plan came back empty. cygpath
 # exists only in the shells of Windows, and the C:/ form it gives works in bash there too.
-winpath() { if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else printf '%s\n' "$1"; fi; }
+winpath() { if [ -n "$1" ] && command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else printf '%s\n' "$1"; fi; }
 looks_like_godspeed() { [ -d "${1:-}/rules" ] || [ -d "${1:-}/observations" ]; }
 if [ -z "$GODSPEED" ]; then GODSPEED="${GODSPEED_ROOT:-}"; fi
 if [ -z "$GODSPEED" ] || ! looks_like_godspeed "$GODSPEED"; then

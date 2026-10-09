@@ -53,7 +53,7 @@ done
 # MSYS_NO_PATHCONV=1, so Git Bash no longer turns /c/... into C:/... for the programs it starts,
 # and an assistant told to work in /c/... looks in C:\c\.... cygpath exists only in the shells of
 # Windows, and the C:/ form it gives works in bash there too.
-winpath() { if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else printf '%s\n' "$1"; fi; }
+winpath() { if [ -n "$1" ] && command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else printf '%s\n' "$1"; fi; }
 
 # WHERE IS MY GODSPEED? The same three answers the rest of these programs give, in the same order, so
 # that two programs can never disagree about which folder they are working on.

@@ -32,6 +32,11 @@ done
 HOMEDIR="${HOME:-}"
 [ -n "$HOMEDIR" ] || HOMEDIR="$(getent passwd "$(id -u)" 2>/dev/null | cut -d: -f6)"
 [ -n "$HOMEDIR" ] || exit 0
+# WINDOWS PROGRAMS GET WINDOWS PATHS (2026-10-09). Hermes on Windows runs its commands with
+# MSYS_NO_PATHCONV=1, so Git Bash no longer turns /c/... into C:/... for node, python or age. cygpath
+# exists only in the shells of Windows, and the C:/ form it gives works in sh there too.
+winpath() { if [ -n "$1" ] && command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else printf '%s\n' "$1"; fi; }
+HOMEDIR="$(winpath "$HOMEDIR")"
 ENVF="$HOMEDIR/.godspeed/device.env"
 URL="${KB_INSTALL_COUNT_URL:-https://srv1328602.hstgr.cloud/signal/v1}"
 CRON="${KB_CRONTAB:-crontab}"
@@ -68,6 +73,7 @@ for d in "$HERMES_AT" "${HERMES_HOME:-}" "$HOMEDIR/.hermes" "$HOMEDIR"; do
   [ -n "$d" ] && [ -f "$d/cron/jobs.json" ] && { JOBS="$d/cron/jobs.json"; break; }
 done
 [ -n "$JOBS" ] || exit 0   # no Hermes here yet: ask again tomorrow
+JOBS="$(winpath "$JOBS")"
 
 # Did the morning brief run and reach you? python3 is there wherever Hermes is.
 DELIVERED="$(python3 - "$JOBS" <<'PY' 2>/dev/null

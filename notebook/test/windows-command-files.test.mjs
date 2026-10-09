@@ -91,3 +91,30 @@ test('every wrapper the wiring writes for a folder under an umlaut carries only 
   const result=spawnSync('cmd.exe',['/d','/c',path.join(assistant,'bin','mc-compile-rules.cmd')],{encoding:'utf8',windowsHide:true});
   assert.equal(result.status,0,result.stdout+result.stderr);
 });
+
+// Hermes' terminal on Windows is Git Bash, and Hermes starts it with MSYS_NO_PATHCONV=1 and
+// MSYS2_ARG_CONV_EXCL=*, so Git Bash no longer turns /c/... into C:\... for node.exe. Until
+// 9 October 2026 every command there failed: a command written only as a .cmd does not exist for
+// a shell, and the kit's launchers handed node /c/... ("Cannot find module", and mc-work-run said
+// "mc-work is not installed"). Each command now also has a shell form that works with those settings.
+function gitBash(){
+  const local=process.env.LOCALAPPDATA||'',files=process.env.ProgramFiles||'C:\Program Files';
+  for(const candidate of [process.env.HERMES_GIT_BASH_PATH,path.join(local,'hermes','git','bin','bash.exe'),path.join(files,'Git','bin','bash.exe'),path.join(local,'Programs','Git','bin','bash.exe')])if(candidate&&fs.existsSync(candidate))return candidate;
+  return null;
+}
+test('every command the wiring writes runs by its plain name in Hermes\' Windows terminal',windows,t=>{
+  const bash=gitBash();if(!bash)return t.skip('Git Bash is not on this computer');
+  const base=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-shell-')),root=path.join(base,'workspace'),assistant=path.join(base,'assistant'),bin=path.join(assistant,'bin');installStarter(root);
+  const script=fileURLToPath(new URL('../scripts/wire-assistant.mjs',import.meta.url));
+  execFileSync(process.execPath,[script,assistant],{env:{...process.env,GODSPEED_WORKSPACE:root,GODSPEED_PORT:'41994',GODSPEED_DEVICE:'local'},windowsHide:true});
+  for(const name of fs.readdirSync(bin).filter(n=>n.endsWith('.cmd')).map(n=>n.slice(0,-4)))assert.ok(fs.existsSync(path.join(bin,name)),name+' has a shell form beside its .cmd');
+  const env={...process.env,PATH:bin+';'+path.dirname(process.execPath)+';'+process.env.PATH,MSYS_NO_PATHCONV:'1',MSYS2_ARG_CONV_EXCL:'*',GODSPEED_WORKSPACE:root,GODSPEED_ROOT:root,GODSPEED_DIR:root,HERMES_HOME:assistant,HOME:base};
+  const run=command=>{const r=spawnSync(bash,['-c',command],{cwd:root,env,encoding:'utf8',windowsHide:true});return {status:r.status,out:r.stdout+r.stderr};};
+  for(const command of ['mc-compile-rules','mc-goals list','mc-due list','mc-check-keys --help','mc-work-run --dry-run','godspeed-coach help']){
+    const r=run(command);
+    assert.doesNotMatch(r.out,/Cannot find module|command not found|not installed/,command+': '+r.out);
+    assert.equal(r.status,0,command+': '+r.out);
+  }
+  assert.match(run('mc-work-run --dry-run').out,/nothing runnable now/);
+  assert.match(fs.readFileSync(path.join(bin,'mc-goals'),'utf8'),/personal-command\.mjs' 'goals' "\$@"/,'in Hermes\' terminal mc-goals is the notebook\'s, as on Linux and a Mac');
+});

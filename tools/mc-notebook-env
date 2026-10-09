@@ -17,11 +17,17 @@ set -u
 HOMEDIR="${HOME:-}"
 [ -n "$HOMEDIR" ] || HOMEDIR="$(getent passwd "$(id -u)" 2>/dev/null | cut -d: -f6)"
 [ -n "$HOMEDIR" ] || exit 0
+# WINDOWS PROGRAMS GET WINDOWS PATHS (2026-10-09). Hermes on Windows runs its commands with
+# MSYS_NO_PATHCONV=1, so Git Bash no longer turns /c/... into C:/... for node, python or age. cygpath
+# exists only in the shells of Windows, and the C:/ form it gives works in sh there too.
+winpath() { if [ -n "$1" ] && command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else printf '%s\n' "$1"; fi; }
+HOMEDIR="$(winpath "$HOMEDIR")"
 
 GODSPEED="${1:-}"
 if [ -z "$GODSPEED" ] && [ -r "$HOMEDIR/.godspeed/device.env" ]; then
   GODSPEED="$(sed -n 's/^[[:space:]]*GODSPEED_DIR=//p' "$HOMEDIR/.godspeed/device.env" | head -1)"
 fi
+GODSPEED="$(winpath "$GODSPEED")"
 [ -n "$GODSPEED" ] && [ -d "$GODSPEED" ] || exit 0
 
 KEY="${GODSPEED_AGE_KEY:-$HOMEDIR/.godspeed/age-key.txt}"
