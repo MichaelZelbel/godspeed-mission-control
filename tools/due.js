@@ -1179,6 +1179,8 @@ switch (cmd) {
   case "check": rc = cmdCheck(day); break;
   case "state": rc = cmdState(day); break;
   case "marker": rc = cmdMarker(day); break;
+  // The notebook's due recipe tells the assistant `mc-due help` shows the installed contract.
+  case "help": help(); break;
   default: console.log("I do not know \"" + cmd + "\"."); help(); rc = 1;
 }
 return rc;

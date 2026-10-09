@@ -328,6 +328,9 @@ out="$(w "$OUT" node "$HERE/due.js" list)"
 contains "with nothing else to go on, a scheduled job still finds device.env's" "$out" "DECOY"
 out="$(w "$W" GODSPEED_ROOT="$WP" node "$HERE/due.js" --godspeed "$(P "$DEC")" list)"
 contains "--godspeed beats everything" "$out" "DECOY"
+out="$(w "$W" node "$HERE/due.js" help)"; rc=$?
+contains "mc-due help prints how to use it (the notebook's due recipe points there)" "$out" "mc-due --godspeed PATH"
+check "  and is not an unknown command" "$rc" "0"
 rm -f "$H/.godspeed/device.env"
 out="$(w "$OUT" node "$HERE/due.js" list)"; rc=$?
 contains "nowhere to look: it says so" "$out" "I could not find your mission control folder"
