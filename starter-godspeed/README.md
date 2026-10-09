@@ -40,7 +40,9 @@ What is here. Thirteen names, and they are the whole system:
   into its own files. `morning-brief` is the starter for the short message your
   assistant can send you each morning, so a brief you switched on in setup has
   something real in it from the first day; Chapter 25 shows how to make it your
-  own. The
+  own. `research-watch` keeps one open question alive between searches: it
+  checks the sources you name on the rhythm you name, keeps what each one said
+  and brings back only what changed (Chapter 29). The
   installer has already told Hermes where this room is, so a recipe you put
   here is found without you naming it. Chapters 15 to 17 fill it further, and
   the five starter recipes are in the kit download beside this folder, ready
