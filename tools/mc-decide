@@ -43,6 +43,11 @@ while [ $# -gt 0 ]; do
   esac
 done
 
+# WINDOWS PROGRAMS GET WINDOWS PATHS (2026-10-09). Hermes on Windows runs its commands with
+# MSYS_NO_PATHCONV=1, so Git Bash no longer turns /c/... into C:/... for node.exe or git.exe, and
+# node then looked for C:\c\... and found nothing: the attention plan came back empty. cygpath
+# exists only in the shells of Windows, and the C:/ form it gives works in bash there too.
+winpath() { if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else printf '%s\n' "$1"; fi; }
 looks_like_godspeed() { [ -d "${1:-}/rules" ] || [ -d "${1:-}/observations" ]; }
 if [ -z "$GODSPEED" ]; then GODSPEED="${GODSPEED_ROOT:-}"; fi
 if [ -z "$GODSPEED" ] || ! looks_like_godspeed "$GODSPEED"; then
@@ -59,11 +64,13 @@ if [ -z "$GODSPEED" ] || ! looks_like_godspeed "$GODSPEED"; then
   echo "mc-decide: I could not find your mission control. Run this inside it, or pass --godspeed /path/to/godspeed." >&2
   exit 2
 fi
+GODSPEED="$(winpath "$GODSPEED")"
 cd "$GODSPEED" || exit 2
 export PATH="$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
 [ -n "$TODAY" ] || TODAY="${GODSPEED_TODAY:-$(date -u +%Y-%m-%d)}"
 [ -n "$RUNDIR" ] || RUNDIR="$GODSPEED/routines/next-action/$TODAY"
-HERE="$(cd "$(dirname "$0")" && pwd)"
+RUNDIR="$(winpath "$RUNDIR")"
+HERE="$(winpath "$(cd "$(dirname "$0")" && pwd)")"
 
 # FIND NODE BY RUNNING IT, NEVER BY FINDING IT. A schedule starts a job with almost none of your
 # environment, and on Windows there is a stub on the path called python3 that exists and only
@@ -81,7 +88,7 @@ MISSING=""
 reg() {
   local name="$1"; shift
   local bin="$HERE/$name.js"
-  [ -f "$bin" ] || bin="$HOME/.local/bin/$name.js"
+  [ -f "$bin" ] || bin="$(winpath "$HOME/.local/bin/$name.js")"
   if [ ! -f "$bin" ]; then
     case " $MISSING " in *" mc-$name "*) : ;; *) MISSING="$MISSING mc-$name" ;; esac
     return 1
