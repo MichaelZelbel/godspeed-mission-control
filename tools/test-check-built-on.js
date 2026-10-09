@@ -6,6 +6,7 @@
 //
 // Run: node tools/test-check-built-on.js
 'use strict';
+require('./test-guard.cjs'); // never a real mission control (test-guard.bash says why)
 const { execFileSync } = require('child_process');
 const fs = require('fs');
 const os = require('os');

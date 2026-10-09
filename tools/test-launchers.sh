@@ -10,6 +10,7 @@
 # Runs in a throwaway folder with its own HOME and a short PATH, so nothing installed on this
 # computer is used. Usage: bash tools/test-launchers.sh
 set -uo pipefail
+. "$(dirname "$0")/test-guard.bash"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 NODE=""
 for c in node nodejs /usr/local/bin/node /usr/bin/node; do
@@ -19,7 +20,7 @@ done
 NODE_DIR="$(dirname "$(command -v "$NODE")")"
 
 TMP="$(mktemp -d)"
-trap 'rm -rf "$TMP"' EXIT
+trap 'rm -rf "$TMP" "$TEST_GUARD_HOME"' EXIT
 mkdir -p "$TMP/home" "$TMP/bin" "$TMP/godspeed/rules"
 SHORT="$TMP/bin:$NODE_DIR:/usr/bin:/bin"
 # A folder written the way a Windows program can read it.

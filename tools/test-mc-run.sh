@@ -11,6 +11,7 @@
 # Runs in a throwaway folder with its own HOME, so no assistant on this computer is ever started.
 # Usage: bash tools/test-mc-run.sh
 set -uo pipefail
+. "$(dirname "$0")/test-guard.bash"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 NODE=""
 for c in node nodejs /usr/local/bin/node /usr/bin/node; do
@@ -20,7 +21,7 @@ done
 NODE="$(command -v "$NODE")"
 
 TMP="$(mktemp -d)"
-trap 'rm -rf "$TMP"' EXIT
+trap 'rm -rf "$TMP" "$TEST_GUARD_HOME"' EXIT
 G="$TMP/godspeed"; B="$TMP/bin"; L="$TMP/log"
 mkdir -p "$G/rules" "$G/skills/big" "$B" "$L" "$TMP/home"
 "$NODE" -e 'process.stdout.write("---\nname: big\ndescription: a long recipe\n---\n"+"Read every line of this. ".repeat(1700)+"\nTHE END OF THE RECIPE\n")' > "$G/skills/big/SKILL.md"

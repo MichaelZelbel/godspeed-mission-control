@@ -17,6 +17,7 @@
 #
 # Usage: bash tools/test-prompt-archive.sh
 set -u
+. "$(dirname "$0")/test-guard.bash"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ARC="$HERE/mc-prompt-archive"
 PY_BIN="${PYTHON:-python3}"; command -v "$PY_BIN" >/dev/null 2>&1 || PY_BIN=python
@@ -33,7 +34,7 @@ bad() { echo "  FAIL $1"; FAIL=$((FAIL+1)); [ -n "${2:-}" ] && echo "       $2";
 # and with the fixture inside the kit's own checkout it reached that checkout instead: it pulled
 # and left a rebase of the branch half done.
 W="$(mktemp -d)/archive-test"; mkdir -p "$W/observations" "$W/home"
-trap 'rm -rf "$(dirname "$W")"' EXIT
+trap 'rm -rf "$(dirname "$W")" "$TEST_GUARD_HOME"' EXIT
 # Point the bot reader at nothing, for every case that is not about it. On a machine that runs
 # bots this suite would otherwise find the REAL ones and archive real chats into a throwaway
 # folder. Cases 24 onward set this to their own fixture. A test that reads live data is not a

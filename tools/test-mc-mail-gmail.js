@@ -25,6 +25,7 @@
  * Usage: node tools/test-mc-mail-gmail.js
  */
 "use strict";
+require('./test-guard.cjs'); // never a real mission control (test-guard.bash says why)
 const fs = require("fs");
 const os = require("os");
 const path = require("path");

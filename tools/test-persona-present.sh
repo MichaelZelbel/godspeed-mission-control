@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # The starter AGENTS.md ships a marked persona paragraph naming Godspeed Mission Control.
 set -u
+. "$(dirname "$0")/test-guard.bash"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 f="$ROOT/starter-godspeed/AGENTS.md"
 fail=0

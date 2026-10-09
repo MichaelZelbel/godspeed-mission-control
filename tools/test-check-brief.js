@@ -3,6 +3,7 @@
 // link-less read instructions are refused, Sources lines are exempt.
 // No dependencies. Run: node tools/test-check-brief.js
 'use strict';
+require('./test-guard.cjs'); // never a real mission control (test-guard.bash says why)
 const { execFileSync } = require('child_process');
 const path = require('path');
 

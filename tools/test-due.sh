@@ -7,9 +7,10 @@
 # Runs inside a throwaway mission control. Needs node only.
 # Usage: bash tools/test-due.sh
 set -uo pipefail
+. "$(dirname "$0")/test-guard.bash"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 TMP="$(mktemp -d)"
-trap 'rm -rf "$TMP"' EXIT
+trap 'rm -rf "$TMP" "$TEST_GUARD_HOME"' EXIT
 G="$TMP/godspeed"
 mkdir -p "$G/due" "$G/world/events" "$G/rules"
 : > "$G/AGENTS.md"
