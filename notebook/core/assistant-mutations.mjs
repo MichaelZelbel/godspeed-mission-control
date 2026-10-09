@@ -37,7 +37,12 @@ export function assertAssistantTable(type,toolName){
  if(type==='agent_instructions')throw Error(instructionsRefused);
  if(controlTables.has(type)&&!(toolName==='personal_operation'&&operationTables.has(type)))throw Error('This record controls what assistants may see or do. Only the owner changes it.');
  // A changed moment is kept as a correction of it (query.mjs).
- if(toolName==='save_record'&&!assistantRecordTables.has(type)&&type!=='event_corrections')throw Error('save_record cannot write '+type+' records. Use the tool made for them.');
+ // The refusal names what to call instead: until 9 October 2026 it said "Use the tool made
+ // for them", and for a collection there is none; save_record with type collections it is.
+ if(toolName==='save_record'&&!assistantRecordTables.has(type)&&type!=='event_corrections'){
+  const instead=/^(claims?|facts?|profile_facts|fact_slots|world_claims)$/.test(type)?' A fact goes in with add_claim.':/^(goals?|work_items?|deadlines?|habits?|forecasts?|journal|coach_talks?|health_observations?|routines?)$/.test(type)?' Goals, deadlines, habits, health and routines change through personal_operation.':'';
+  throw Error('save_record cannot write '+type+' records. It writes these types: notes, contacts (people), entities (things), moments (timeline), collections, collection_items, action_items, review_queue (suggestions), note_folders, comments.'+instead);
+ }
 }
 // Records a key's scopes cover beyond toolScope's prefixes. Anything else
 // a key cannot write.

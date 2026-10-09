@@ -54,11 +54,17 @@ test('facts: a quote is required, an older value is closed, one the owner typed 
     assert.equal(moved.closed_earlier_values,1);
     assert.deepEqual((await call('get_claims',{subject_type:'self',attribute:'lives-in'})).claims.map(c=>c.value),['Fictional City']);
     assert.deepEqual((await call('get_claims',{subject_type:'self',attribute:'lives-in',mode:'history'})).claims.map(c=>c.value),['Fictional City','Fictional Town']);
-    service.domains.writeFact({contact_id:ana.id,attribute:'favorite_food',label:'Favorite food',value:'Fictional soup',origin:'user_manual'});
-    const waiting=await call('add_claim',{subject_type:'contact',subject_name:'Ani',attribute:'favorite_food',value:'Fictional pasta',evidence_quote:'Ani said she now loves fictional pasta.'});
+    // One value at a time (employer, core/fields.mjs): the owner's own stays and the new one waits.
+    service.domains.writeFact({contact_id:ana.id,attribute:'employer',label:'Employer',value:'Fictional Soup Kitchen',origin:'user_manual'});
+    const waiting=await call('add_claim',{subject_type:'contact',subject_name:'Ani',attribute:'employer',value:'Fictional Pasta Bar',evidence_quote:'Ani said she now works at the fictional pasta bar.'});
     assert.equal(waiting.outcome,'waiting_for_review');
-    assert.deepEqual((await call('get_contact_profile',{name:'Ani'})).sections.flatMap(s=>s.facts.map(f=>f.value)).filter(v=>/Fictional (soup|pasta)/.test(v)),['Fictional soup']);
-    assert.ok(service.query.rows('review_queue').some(r=>r.payload?.value==='Fictional pasta'&&r.status==='pending_review'));
+    assert.deepEqual((await call('get_contact_profile',{name:'Ani'})).sections.flatMap(s=>s.facts.map(f=>f.value)).filter(v=>/Fictional (Soup|Pasta)/.test(v)),['Fictional Soup Kitchen']);
+    assert.ok(service.query.rows('review_queue').some(r=>r.payload?.value==='Fictional Pasta Bar'&&r.status==='pending_review'));
+    // A kind the list does not name keeps every value: the owner's stays, the new one goes beside it.
+    service.domains.writeFact({contact_id:ana.id,attribute:'favorite_food',label:'Favorite food',value:'Fictional soup',origin:'user_manual'});
+    const beside=await call('add_claim',{subject_type:'contact',subject_name:'Ani',attribute:'favorite_food',value:'Fictional pasta',evidence_quote:'Ani said she now loves fictional pasta.'});
+    assert.equal(beside.outcome,'inserted');assert.equal(beside.closed_earlier_values,0);
+    assert.deepEqual((await call('get_claims',{subject_type:'contact',subject_name:'Ani',attribute:'favorite_food'})).claims.map(c=>c.value).sort(),['Fictional pasta','Fictional soup']);
   }finally{await service.close();}
 });
 

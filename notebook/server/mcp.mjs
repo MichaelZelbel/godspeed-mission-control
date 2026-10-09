@@ -5,6 +5,8 @@ import {topicDefinitions,topicToolNames,topicTool} from './topic-tools.mjs';
 import {assistantMutationContext,assertAssistantTable} from '../core/assistant-mutations.mjs';
 import {memoryDefinitions,memoryToolNames,memoryTool,searchNotes,relatedTo,readFile} from './memory-tools.mjs';
 import {notebookAddress} from '../core/notebook-address.mjs';
+import {linkTargets} from '../core/graph.mjs';
+import {recordType,existingPerson,samePersonAnswer,collectionShape} from './save-record.mjs';
 const schema={type:'object',properties:{},additionalProperties:true};
 // The record types list_records and search_knowledge may return to an assistant:
 // the owner's own content, each a type whose visibility rule (visibility.mjs)
@@ -28,8 +30,8 @@ const definitions=[
   {name:'personal_operation',description:'Apply an explicitly requested goal, obligation, coach, habit, journal, health, memory, forecast or routine operation. Read current IDs first. Never approve an outward action.',inputSchema:schema},
   {name:'search_knowledge',description:'Search the rebuildable index of user records.',inputSchema:{type:'object',properties:{query:{type:'string'}},required:['query']}},
   {name:'list_records',description:'Read file-backed notes, contacts, profile facts, world views, collections, timeline, media metadata, reviews, comments, goals or work.',inputSchema:{type:'object',properties:{type:{type:'string'},filters:{type:'array'},limit:{type:'integer'}},required:['type']}},
-  {name:'save_record',description:'Save one note, person, thing, timeline entry, collection or item, action or review suggestion with optimistic conflict detection. Preserve its id and hash for edits. Use review suggestions for AI-inferred facts; settings, shares, approvals, routines and assistant instructions stay with the owner.',inputSchema:{type:'object',properties:{type:{type:'string'},value:{type:'object'},expected_hash:{type:'string'}},required:['type','value']}},
-  {name:'capture_note',description:'Capture the user\'s note once in a durable Markdown file, preserving the chosen folder, tags and related-note links.',inputSchema:{type:'object',properties:{title:{type:'string'},content:{type:'string'},folder_path:{type:'string'},tags:{type:'array',items:{type:'string'}},related:{type:'array',items:{type:'string'}}},required:['content']}},
+  {name:'save_record',description:'Save one note, person, thing, timeline entry, collection or item, action or review suggestion with optimistic conflict detection. Preserve its id and hash for edits. type is notes, contacts (a person: name, relationship, notes), entities, moments, collections, collection_items, action_items or review_queue. A new collection: type collections, value {name, description, field_schema: [{label, type}]}, one entry per column (type text, number, date, select with options, boolean, url); the first column is each item\'s title; then add items with add_collection_item. A person whose name already has a page is not added twice: the answer is that page, unless same_name_is_another_person is true. Use review suggestions for AI-inferred facts; settings, shares, approvals, routines and assistant instructions stay with the owner.',inputSchema:{type:'object',properties:{type:{type:'string'},value:{type:'object'},expected_hash:{type:'string'},same_name_is_another_person:{type:'boolean',description:'Only for a new person who is not the one already in the notebook under the same name'}},required:['type','value']}},
+  {name:'capture_note',description:'Capture the user\'s note once in a durable Markdown file, preserving the chosen folder, tags and related-note links. Give it a short title a person would search for. related takes the ids (or exact titles) of the notes to link. The answer\'s linked lists the links that were saved; similar_not_linked lists notes that look alike but are not linked.',inputSchema:{type:'object',properties:{title:{type:'string'},content:{type:'string'},folder_path:{type:'string'},tags:{type:'array',items:{type:'string'}},related:{type:'array',items:{type:'string'}}},required:['content']}},
   {name:'write_fact',description:'Record a confirmed fact and close earlier single-valued claims. AI inference must instead create a pending review_queue record.',inputSchema:schema},
   {name:'record_event',description:'Append a timeline event. Earlier events are never replaced.',inputSchema:schema},
   {name:'structural_change',description:'Rename, change a name, merge or remove a user-requested record. Read every affected record first. Supply expected_hash for the source and expected keyed by type/id for every other changed record, including incoming links and a merge target.',inputSchema:{type:'object',properties:{type:{type:'string'},id:{type:'string'},action:{enum:['display-name','rename','merge','remove']},expected_hash:{type:'string'},expected:{type:'object'},options:{type:'object'}},required:['type','id','action','expected_hash']}},
@@ -71,6 +73,8 @@ export async function mcp(input,{store,query,index,domains,scopes,delegated=fals
       if(name==='update_note'&&a.note_id&&!a.id)a.id=a.note_id;
       // Menerio's update_note took no version: the one this server last showed is the one read.
       if(name==='update_note'&&a.id&&!a.expected_hash){const current=visibleRows(query,'notes').find(n=>n.id===a.id);if(current)a.expected_hash=versionsOf(owner).get(a.id)||current._hash;}
+      // "collection", "Contact" or "people" names the type it means (save-record.mjs).
+      if(['save_record','structural_change','list_records'].includes(name)&&a.type!==undefined)a.type=recordType(a.type);
       // Refused before anything is read, in plain words (the guard's commit refuses them too).
       if(['save_record','structural_change'].includes(name))assertAssistantTable(String(a.type||''),name);
       if(['save_record','update_note','capture_note','personal_operation','write_fact','record_event','structural_change','review_suggestions',...topicToolNames.filter(n=>!n.startsWith('list_')&&!n.startsWith('get_'))].includes(name)){
@@ -108,8 +112,37 @@ export async function mcp(input,{store,query,index,domains,scopes,delegated=fals
       else if(name==='list_records'){if(!listableTypes.has(String(a.type)))throw Error('list_records reads the owner\'s own content, not '+a.type+' records. Use the tool made for them.');const allowed=new Set(visibleRows(query,a.type).map(r=>r.id));value=query.execute({table:a.type,filters:a.filters||[]}).data.filter(r=>allowed.has(r.id)).slice(0,Math.max(0,Number(a.limit)||100));if(a.type==='notes')seen(value);}
       // A note moved to Trash or removed is public no more, as on the screens'
       // paths. Until 7 October 2026 an assistant's did stay public.
-      else if(name==='save_record'){value=query.execute({table:a.type,operation:a.value.id?'upsert':'insert',values:a.value,expected:a.value.id?{[a.value.id]:a.expected_hash}:{},assistant:true}).data;if(a.type==='notes'&&(a.value.is_trashed===true||a.value.removed_at))await retireShares(owner,(Array.isArray(value)?value:[value]).map(n=>n?.id));}
-      else if(name==='capture_note'){const captured=await domains.invoke('quick-capture',a);value={...captured,id:captured.note.id,title:captured.note.title,folder_path:captured.note.folder_path||'',related:relatedTo({query,index},captured.note)};seen([owner.get('notes',captured.note.id)]);}
+      else if(name==='save_record'){
+        const fresh=!a.value.id,same=fresh&&a.type==='contacts'&&a.same_name_is_another_person!==true?existingPerson(query,a.value):null;
+        if(same)value=[samePersonAnswer(same)];
+        else{
+          const values=fresh&&a.type==='collections'?collectionShape(a.value):a.value;
+          value=query.execute({table:a.type,operation:fresh?'insert':'upsert',values,expected:fresh?{}:{[a.value.id]:a.expected_hash},assistant:true}).data;
+          if(a.type==='notes'&&(a.value.is_trashed===true||a.value.removed_at))await retireShares(owner,(Array.isArray(value)?value:[value]).map(n=>n?.id));
+        }
+      }
+      else if(name==='capture_note'){
+        // A related note named by its exact title is that note (an assistant
+        // knows the titles it found, not always their ids).
+        // One that names no note it can see is left out and named in the answer.
+        const notes=visibleRows(query,'notes').filter(n=>!n.is_trashed),unknown=[];
+        if(Array.isArray(a.related))a.related=[...new Set(a.related.flatMap(ref=>{
+          if(typeof ref!=='string'||notes.some(n=>n.id===ref))return [ref];
+          const titled=notes.filter(n=>String(n.title||'').trim().toLowerCase()===ref.trim().toLowerCase());
+          if(titled.length===1)return [titled[0].id];unknown.push(ref);return [];
+        }))];
+        const captured=await domains.invoke('quick-capture',a),note=captured.note;
+        // What the answer calls linked is only what was saved: the notes in related and
+        // the notes its [[links]] name. On 9 October 2026 an assistant reported the
+        // notes this answer called "related", which were only alike, as links it had made.
+        const byTitle=new Map(notes.map(n=>[String(n.title||'').trim().toLowerCase(),n])),linked=new Map();
+        for(const id of note.related||[]){const n=notes.find(x=>x.id===id);if(n)linked.set(n.id,{id:n.id,title:n.title});}
+        for(const target of linkTargets(note.content)){const n=byTitle.get(target.toLowerCase());if(n&&n.id!==note.id)linked.set(n.id,{id:n.id,title:n.title});else if(!n)unknown.push(target);}
+        const similar=relatedTo({query,index},note).filter(r=>!linked.has(r.id)&&r.id!==note.id);
+        value={...captured,id:note.id,title:note.title,folder_path:note.folder_path||'',linked:[...linked.values()],...(unknown.length?{links_to_no_note:unknown}:{}),similar_not_linked:similar,
+          about_links:linked.size?'Only the notes in linked are linked to this note.':'This note is linked to no other note. The notes in similar_not_linked only look alike; they are not linked.'};
+        seen([owner.get('notes',note.id)]);
+      }
       else if(name==='personal_operation')value=await domains.invoke('personal-operation',a);
       else if(name==='write_fact')value=domains.writeFact(a);
       else if(name==='record_event')value=query.execute({table:'moments',operation:'insert',values:a}).data;
