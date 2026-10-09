@@ -55,11 +55,11 @@ hs() { "$NODE" "$HERE/search.js" --godspeed "$H" "$@" 2>&1; }
 
 echo "== mc-search: the notebook first, the files always =="
 
-# 1. The launcher is the two lines every other launcher here is.
-if [ "$(sed -n 2p "$HERE/mc-search")" = 'exec node "$(dirname "$0")/search.js" "$@"' ] && sh -n "$HERE/mc-search"; then
+# 1. The launcher is the one every other launcher here is.
+if [ "$(tail -n 1 "$HERE/mc-search")" = 'exec node "$HERE/search.js" "$@"' ] && sh -n "$HERE/mc-search"; then
   ok "the launcher starts search.js from the folder it sits in"
 else
-  bad "the mc-search launcher is not the usual two lines"
+  bad "the mc-search launcher is not the usual one"
 fi
 
 # ---- the stand-in notebook -----------------------------------------------------------------

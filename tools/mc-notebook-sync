@@ -37,6 +37,12 @@ done
 HOMEDIR="${HOME:-}"
 [ -n "$HOMEDIR" ] || HOMEDIR="$(getent passwd "$(id -u)" 2>/dev/null | cut -d: -f6)"
 [ -n "$HOMEDIR" ] || HOMEDIR=/tmp
+# WINDOWS PROGRAMS GET WINDOWS PATHS (2026-10-09). Hermes on Windows runs its commands with
+# MSYS_NO_PATHCONV=1, and that reaches this program too (a save Hermes makes runs the hook that
+# starts it), so Git Bash no longer turns /c/... into C:/... for node, python or age. cygpath
+# exists only in the shells of Windows, and the C:/ form it gives works in sh there too.
+winpath() { if [ -n "$1" ] && command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else printf '%s\n' "$1"; fi; }
+HOMEDIR="$(winpath "$HOMEDIR")"
 
 LOG="$HOMEDIR/.godspeed/notebook-sync.log"
 mkdir -p "$HOMEDIR/.godspeed" 2>/dev/null || true
@@ -47,6 +53,7 @@ say() { [ -n "$VERBOSE" ] && echo "$*"; echo "$(date 2>/dev/null) $*" >> "$LOG" 
 if [ -z "$GODSPEED" ] && [ -r "$HOMEDIR/.godspeed/device.env" ]; then
   GODSPEED="$(sed -n 's/^[[:space:]]*GODSPEED_DIR=//p' "$HOMEDIR/.godspeed/device.env" | head -1)"
 fi
+GODSPEED="$(winpath "$GODSPEED")"
 if [ -z "$GODSPEED" ] || [ ! -d "$GODSPEED" ]; then
   say "no mission control folder recorded on this computer, nothing to do"
   exit 0
@@ -122,7 +129,7 @@ if [ -z "${MENERIO_API_KEY:-}" ]; then
   exit 0
 fi
 
-SELF_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+SELF_DIR="$(winpath "$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)")"
 
 # A KEY YOU REPLACED HAS TO REACH HERMES TOO. Every other assistant only NAMES the key and
 # reads it fresh from the store. Hermes' desktop app is started from an icon, never from a

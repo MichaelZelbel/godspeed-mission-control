@@ -1,2 +1,5 @@
 #!/bin/sh
-exec node "$(dirname "$0")/due.js" "$@"
+# On Windows, node.exe needs this folder written C:/..., and Hermes switches off the
+# translation that would do it (MSYS_NO_PATHCONV=1). cygpath exists only in the shells of Windows.
+HERE="$(dirname "$0")"; command -v cygpath >/dev/null 2>&1 && HERE="$(cygpath -m "$HERE")"
+exec node "$HERE/due.js" "$@"

@@ -40,12 +40,21 @@ export function importCardFiles(store,kind){
   const saved=store.save(table[kind],incoming,old?._hash);store.save('import_mappings',{id,source_path:incoming.legacy_source,source_hash:hash(text),record_type:table[kind],record_id:saved.id,record_hash:saved._hash});imported++;
  }return {imported};
 }
+// When a card was filed: its FILED day, else the record's own, else the day its file was written,
+// else nothing. Until 9 October 2026 a card written by hand, with no FILED line, showed as filed on
+// 1 January 1970.
+export function filedAt(card,stored,file){
+ if(/^\d{4}-\d{2}-\d{2}/.test(card.f.FILED||'')&&!Number.isNaN(Date.parse(card.f.FILED)))return card.f.FILED;
+ if(stored?.created_at)return stored.created_at;
+ try{const stat=fs.statSync(file),at=stat.birthtimeMs>0?stat.birthtimeMs:stat.mtimeMs;return at>0?new Date(at).toISOString():null;}catch{return null;}
+}
 export function nativeCardRows(store,type){
  const kind=Object.keys(table).find(k=>table[k]===type);if(!kind)return null;
  const folder=path.join(store.root,kind==='forecast'?'forecasts':kind);if(!fs.existsSync(folder))return [];
  return fs.readdirSync(folder).filter(n=>n.endsWith('.md')&&n!=='README.md').flatMap(name=>{
-  const text=fs.readFileSync(path.join(folder,name),'utf8'),card=parseCard(text);if(!card.f.ID)return [];
-  return [{...store.get(type,card.f.ID),...values(card,kind),legacy_fields:card.f,legacy_log:card.log,legacy_source:path.relative(store.root,path.join(folder,name)).replaceAll('\\','/'),created_at:card.f.FILED||new Date(0).toISOString(),_hash:hash(text)}];
+  const file=path.join(folder,name),text=fs.readFileSync(file,'utf8'),card=parseCard(text);if(!card.f.ID)return [];
+  const stored=store.get(type,card.f.ID);
+  return [{...stored,...values(card,kind),legacy_fields:card.f,legacy_log:card.log,legacy_source:path.relative(store.root,file).replaceAll('\\','/'),created_at:filedAt(card,stored,file),_hash:hash(text)}];
  });
 }
 // What a card command may do in the record runtime, for everyone, and in either

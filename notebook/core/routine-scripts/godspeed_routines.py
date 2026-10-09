@@ -255,7 +255,7 @@ def work(c):
 
 
 DUE_TAGS = ("RUNNING OUT", "SOON", "ON THE WAY", "PLENTY OF TIME", "NOT YET", "AIMING FOR",
-            "TARGET TODAY", "WHEN YOU CAN", "DONE", "CALLED OFF")
+            "TARGET TODAY", "WHEN YOU CAN", "DONE", "CALLED OFF", "NEEDS A LOOK")
 
 
 def due(c):

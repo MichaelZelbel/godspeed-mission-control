@@ -27,6 +27,14 @@ test('Hermes startup diagnostics do not become model JSON',()=>{
   assert.equal(hermesResponse('Warning: Unknown toolsets: none\n\n\x1b[2m  ⚠ tirith security scanner enabled but not available — command scanning will use pattern matching only\x1b[0m\n{"reply":"hello"}\n'),'{"reply":"hello"}');
   assert.equal(hermesResponse('{"reply":"Warning: keep this actual response"}'),'{"reply":"Warning: keep this actual response"}');
 });
+// The three waiting lines that ended chat replies in the live run of 9 October 2026.
+test('Hermes\' waiting lines never reach a chat reply, and lines like them that belong to it stay',()=>{
+  for(const line of ['  [tool] ( ˘⌣˘)♡ brainstorming...','  [tool] (⊙_⊙) ruminating...','  [tool] ヽ(>∀<☆)☆ mulling...'])
+    assert.equal(hermesResponse('Saved: "Captured note" in Health.\n\nI left your original briefing unchanged.\n'+line+'\n'),'Saved: "Captured note" in Health.\n\nI left your original briefing unchanged.',line);
+  assert.equal(hermesResponse('First part.\n(◔_◔) pondering…\nSecond part.'),'First part.\nSecond part.','one in the middle goes too');
+  for(const kept of ['- reviewing...','Still thinking...','I am pondering...','[tool] terminal: ls','Step 2... done'])
+    assert.equal(hermesResponse('Answer.\n'+kept),'Answer.\n'+kept,kept);
+});
 test('Hermes failures distinguish context, usage and sign-in without exposing diagnostics',()=>{
  const secret='synthetic-private-credential';
  for(const [diagnostic,expected] of [['Context length exceeded: 413,274 tokens. Cannot compress further.',/context limit/],['rate_limit_exceeded',/usage limit/],['AuthenticationError: token expired',/needs sign-in/],['unclassified process failure',/diagnostics/]]){

@@ -21,14 +21,24 @@ fs.cpSync(path.join(kit,'tools'),commandHome,{recursive:true});
 for(const name of fs.readdirSync(commandHome).filter(n=>n.startsWith('mc-')&&!path.extname(n))){
   const wrapper=path.join(commandHome,name),source=fs.readFileSync(wrapper,'utf8');
   if(process.platform!=='win32')fs.chmodSync(wrapper,0o700);
-  const target=source.match(/exec node "\$\(dirname "\$0"\)\/([^"\n]+)"/);
+  const target=source.match(/exec node "(?:\$\(dirname "\$0"\)|\$HERE)\/([^"\n]+)"/);
   if(process.platform==='win32'&&target)atomic(wrapper+'.cmd',cmd(at=>'set "GODSPEED_ROOT='+at(root)+'"\r\nset "GODSPEED_DIR='+at(root)+'"\r\n"'+at(process.execPath)+'" "%~dp0'+target[1]+'" %*\r\n'));
   else if(process.platform==='win32'&&source.startsWith('#!/usr/bin/env python3'))atomic(wrapper+'.cmd','@echo off\r\npython "%~dp0'+name+'" %*\r\n');
   else if(process.platform==='win32')atomic(wrapper+'.cmd',cmd(at=>'set "GODSPEED_ROOT='+at(root)+'"\r\nset "GODSPEED_DIR='+at(root)+'"\r\nset "PATH='+at(path.dirname(process.execPath))+';%PATH%"\r\nset "GODSPEED_BASH="\r\nfor /f "delims=" %%G in (\'where git.exe 2^>nul\') do if exist "%%~dpG..\\bin\\bash.exe" set "GODSPEED_BASH=%%~dpG..\\bin\\bash.exe"\r\nif not defined GODSPEED_BASH (echo Git Bash is required for this Godspeed command. & exit /b 1)\r\n"%GODSPEED_BASH%" "%~dp0'+name+'" %*\r\n'));
 }
+// The assistant's terminal is a shell on every system (Git Bash on Windows), and a shell never runs
+// a .cmd by its plain name: until 9 October 2026 a command written only as a .cmd on Windows was
+// missing in Hermes' terminal, and mc-goals, mc-work, mc-forecast, mc-due and mc-mail there ran
+// the kit's own copies instead of the notebook's (Linux and a Mac always ran the notebook's). So
+// every command gets a shell form on every system too, with its paths written C:/... on Windows:
+// Hermes switches off Git Bash's own translation of paths for the programs it starts
+// (MSYS_NO_PATHCONV=1), and that form needs none.
+const posix=p=>process.platform==='win32'?p.replaceAll('\\','/'):p;
+const quote=s=>"'"+posix(s).replaceAll("'","'\\''")+"'";
+const shellCommand=(file,words,after='')=>{atomic(file,'#!/bin/sh\nexec '+words.map(quote).join(' ')+' "$@"'+after+'\n');if(process.platform!=='win32')fs.chmodSync(file,0o700);};
 const rulesScript=path.join(kit,'tools/compile-rules.js');
 if(process.platform==='win32')atomic(path.join(commandHome,'mc-compile-rules.cmd'),cmd(at=>'"'+at(process.execPath)+'" "'+at(rulesScript)+'" --godspeed "'+at(root)+'" %*\r\n'));
-else {const rulesCommand=path.join(commandHome,'mc-compile-rules');atomic(rulesCommand,'#!/bin/sh\nexec '+[process.execPath,rulesScript,'--godspeed',root].map(s=>"'"+s.replaceAll("'","'\\''")+"'").join(' ')+' "$@"\n');fs.chmodSync(rulesCommand,0o700);}
+shellCommand(path.join(commandHome,'mc-compile-rules'),[process.execPath,rulesScript,'--godspeed',root]);
 // Developer assistants opened on this folder reach the same integrated memory.
 const mcpFile=path.join(root,'.mcp.json'),mcp=JSON.parse(fs.readFileSync(mcpFile,'utf8').replace(/^\uFEFF/,''));
 mcp.mcpServers??={};
@@ -74,12 +84,12 @@ if(missing.length)atomic(ignoreFile,ignores.replace(/\n*$/,'\n')+missing.join('\
 for(const command of (process.env.GODSPEED_ORIGINAL_RUNTIME==='on'?['mail']:['goals','work','forecast','due','subs','watch','mail'])){
  const bin=path.join(home,'bin','mc-'+command),script=command==='mail'?path.join(kit,'tools','mc-mail.js'):path.join(kit,'notebook','bin','personal-command.mjs'),args=command==='mail'?[]:[command];
  if(process.platform==='win32')atomic(bin+'.cmd',cmd(at=>'"'+at(process.execPath)+'" "'+at(script)+'" '+args.join(' ')+' %*\r\n'));
- else {atomic(bin,'#!/bin/sh\nexec '+[process.execPath,script,...args].map(s=>"'"+s.replaceAll("'","'\\''")+"'").join(' ')+' "$@"\n');fs.chmodSync(bin,0o700);}
+ shellCommand(bin,[process.execPath,script,...args]);
 }
 {
  const script=path.join(kit,'third-party/addons/mc-video/bin/mc-video.mjs'),bin=path.join(home,'bin','mc-video');
  if(process.platform==='win32')atomic(bin+'.cmd',cmd(at=>'"'+at(process.execPath)+'" "'+at(script)+'" %* --godspeed "'+at(root)+'"\r\n'));
- else {atomic(bin,'#!/bin/sh\nexec '+[process.execPath,script].map(s=>"'"+s.replaceAll("'","'\\''")+"'").join(' ')+' "$@" --godspeed '+"'"+root.replaceAll("'","'\\''")+"'"+'\n');fs.chmodSync(bin,0o700);}
+ shellCommand(bin,[process.execPath,script],' --godspeed '+quote(root));
 }
 for(const [addon,skill] of [['coach','coach'],['journal','interstitial-journal'],['headache','headache-tracker']]){
  const source=path.join(kit,'third-party/addons/godspeed-'+addon);
@@ -90,10 +100,8 @@ for(const [addon,skill] of [['coach','coach'],['journal','interstitial-journal']
  installSkillTree(store,path.join(source,'skill',skill),path.join(home,'skills',skill));
  const script=path.join(source,'bin/godspeed-'+addon+'.mjs'),bin=path.join(home,'bin','godspeed-'+addon);
  if(process.platform==='win32')atomic(bin+'.cmd',cmd(at=>'"'+at(process.execPath)+'" "'+at(script)+'" %* --godspeed "'+at(root)+'"\r\n'));
- // The assistant's terminal is a shell on every system (Git Bash on Windows), and the coach's
- // talk brief tells it to type `godspeed-coach ...`: a shell never runs a .cmd by that name.
- const posix=p=>process.platform==='win32'?p.replaceAll('\\','/'):p;
- atomic(bin,'#!/bin/sh\nexec '+[process.execPath,script].map(s=>"'"+posix(s).replaceAll("'","'\\''")+"'").join(' ')+' "$@" --godspeed '+"'"+posix(root).replaceAll("'","'\\''")+"'"+'\n');if(process.platform!=='win32')fs.chmodSync(bin,0o700);
+ // The coach's talk brief tells the assistant to type `godspeed-coach ...` in that shell.
+ shellCommand(bin,[process.execPath,script],' --godspeed '+quote(root));
 }
 let text=fs.existsSync(file)?fs.readFileSync(file,'utf8').replace(/^\uFEFF/,''):`terminal:\n  cwd: ${JSON.stringify(root)}\nskills:\n  external_dirs: [${JSON.stringify(path.join(root,'skills'))}]\nmemory:\n  memory_enabled: false\n`;
 if(!/^plugins:/m.test(text))text+='\nplugins:\n  enabled: ["godspeed-coach", "godspeed-journal", "godspeed-headache"]\n';

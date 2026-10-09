@@ -50,8 +50,10 @@ export function lastRunWords(job,options={}){
  return job.last_outcome?'Last run: '+job.last_outcome:'';
 }
 
+// A routine that wakes often only to look (the coach's two) comes with its real rhythm in words
+// (rhythm, next_talk; notebook/core/starting-routines.mjs), and that is what its row says.
 export function routineRow(job,options={}){
  const paused=!!job.paused,schedule=job.native?scheduleWords(job.schedule):(job.interval_ms?'every '+Math.round(job.interval_ms/60000)+' minutes':'');
- const next=paused?'Paused. Nothing runs until you resume it.':job.next_run?'Next run '+whenWords(job.next_run,options)+'.':'';
- return {name:job.title||job.kind||'Routine',what:job.what||'',when:schedule?'Runs '+schedule+'.':'',next,last:lastRunWords(job,options),paused};
+ const next=paused?'Paused. Nothing runs until you resume it.':job.next_talk?'Next talk '+whenWords(job.next_talk,options)+'.':job.next_run?'Next run '+whenWords(job.next_run,options)+'.':'';
+ return {name:job.title||job.kind||'Routine',what:job.what||'',when:job.rhythm||(schedule?'Runs '+schedule+'.':''),next,last:lastRunWords(job,options),paused};
 }

@@ -69,11 +69,11 @@ MCP="" out="$(run "$KEY1")"
 contains "a computer without Claude Code is told so, not told it was connected" "$out" "Claude Code   not installed. That is fine. If you ever use it"
 [ -f "$B/godspeed/.mcp.json" ] && ok "  and the mission control still gets its .mcp.json" || bad "  .mcp.json was not written" "$out"
 
-# 1. The launcher is the two lines every other launcher here is.
-if [ "$(sed -n 2p "$HERE/mc-menerio-connect")" = 'exec node "$(dirname "$0")/menerio-connect.js" "$@"' ] && sh -n "$HERE/mc-menerio-connect"; then
+# 1. The launcher is the one every other launcher here is.
+if [ "$(tail -n 1 "$HERE/mc-menerio-connect")" = 'exec node "$HERE/menerio-connect.js" "$@"' ] && sh -n "$HERE/mc-menerio-connect"; then
   ok "the launcher starts menerio-connect.js from the folder it sits in"
 else
-  bad "the mc-menerio-connect launcher is not the usual two lines"
+  bad "the mc-menerio-connect launcher is not the usual one"
 fi
 
 # ---- the stand-in notebook -----------------------------------------------------------------

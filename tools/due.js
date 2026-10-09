@@ -186,7 +186,11 @@ const ASAP_GAP = 7;
 const WORDS = {
   red: "RUNNING OUT", orange: "SOON", yellow: "ON THE WAY", green: "PLENTY OF TIME",
   unopened: "NOT YET", aiming: "AIMING FOR", target: "TARGET TODAY", asap: "WHEN YOU CAN",
+  unreadable: "NEEDS A LOOK",
 };
+// What is said about a file that needs a look, in the list, in the brief and in the notebook.
+const lookSentence = (r) => fileOf(r) + (r.title !== r.slug ? " (" + r.title + ")" : "") + ": " + r.problem +
+  ". Its dates are not being watched until it is fixed.";
 
 // HOW LONG THE LOUD PHASE IS, in days, and it is the only place that decides.
 //
@@ -317,10 +321,34 @@ function parseFile(slug) {
     if (m && !(m[1] in head)) head[m[1]] = m[2].trim();
   }
   const o = { slug, path: p, text, head, strips, log, said };
+  o.problem = strips.some(readableStrip) ? "" : strips.length
+    ? "its STRIP line does not hold dates I can read"
+    : "it has no STRIP line, so I cannot tell its dates";
   applyEvents(o);
   CACHE.set(slug, o);
   return o;
 }
+// A window this program can place in time: a start, and a deadline or a target after it.
+function readableStrip(s) {
+  if (!isDate(s.from)) return false;
+  if (s.to) return isDate(s.to) && s.to >= s.from;
+  const aim = aimOf(s);
+  return isDate(aim) && aim >= s.from;
+}
+// A FILE I CANNOT READ NEEDS A LOOK, AND IS NEVER DONE (2026-10-09). An assistant wrote a deadline
+// by hand with lines of its own invention (KIND:, TARGET-DATE:) and no STRIP line. With no window
+// to be open, it was listed as DONE, and the notebook showed it as closed: a birthday present
+// nobody had bought, quietly finished. A file with no window I can read, an empty one, or one
+// whose name I cannot use is now listed as needing a look, by its file name, and nothing here
+// ever writes to it.
+function unreadable(slug) {
+  const p = filePath(slug);
+  const problem = !/^[a-z0-9][a-z0-9-]{0,59}$/.test(slug || "")
+    ? "its file name is not one I can use (small letters, digits and dashes only)"
+    : !readText(p).trim() ? "it is empty" : "I could not read it";
+  return { slug, path: p, text: "", head: {}, strips: [], log: [], said: [], dropped: null, problem };
+}
+const fileOf = (r) => "due/" + r.slug + ".md";
 
 // ---------------------------------------------------------------- the events: the only "is it done"
 let EVENTS = null;
@@ -552,7 +580,7 @@ function adoptKeys(day, notes) {
 function growWindows(day, notes) {
   for (const slug of slugs()) {
     const o = parseFile(slug);
-    if (!o || !o.strips.length || o.dropped) continue;
+    if (!o || !o.strips.length || o.dropped || o.problem) continue;
     const rep = repeatOf(o.head["REPEATS"]);
     if (!rep) continue;
     // COUNTED FROM THE FIRST WINDOW, NEVER FROM THE ONE BEFORE. Stepping from the previous one is
@@ -615,8 +643,12 @@ function load(day,mutate=true) {
   if(mutate)roll(day);
   const rows = [];
   for (const slug of slugs()) {
-    const o = parseFile(slug);
-    if (!o) continue;
+    const o = parseFile(slug) || unreadable(slug);
+    if (o.problem && !o.dropped) {
+      rows.push({ o, slug, title: o.head["TITLE"] || slug, band: "unreadable", strip: null, left: null, missed: 0,
+                  lastSaid: null, problem: o.problem });
+      continue;
+    }
     const cur = currentWindow(o, day);
     rows.push({
       o, slug, title: o.head["TITLE"] || slug,
@@ -798,9 +830,18 @@ function cmdList(day, capped) {
       logLine(r.o, day, "SAID brief");
       save(r.o);
     }
+    // A file that needs a look is said every morning until it is fixed, after the three, and is
+    // never written to: there is no window in it to say anything about.
+    show = show.concat(rows.filter((r) => r.problem));
   }
   if (!show.length) { console.log("Nothing needs saying today."); return 0; }
   for (const r of show) {
+    if (r.problem) {
+      console.log(WORDS.unreadable.padEnd(15) + lookSentence(r));
+      if (!capped) console.log("               to fix it, move the file out of due/, then:  mc-due add " + (/^[a-z0-9][a-z0-9-]{0,59}$/.test(r.slug) ? r.slug : "<name>") +
+        " --title \"...\" --target YYYY-MM-DD (or --to YYYY-MM-DD) --done-when \"...\"");
+      continue;
+    }
     if (!r.strip) { console.log((r.o.dropped ? "CALLED OFF     " : "DONE      ") + r.title); continue; }
     console.log(WORDS[r.band].padEnd(15) + sentence(r, day));
     // In the full list the question comes with its two answers, so the assistant knows what to
@@ -907,6 +948,7 @@ function cmdDone(day) {
   roll(day);
   const o = parseFile(slug);
   if (!o) { console.log("You have nothing called " + slug + ". Type mc-due to see the list."); return 1; }
+  if (o.problem) { console.log("due/" + slug + ".md needs a look: " + o.problem + ". Nothing was changed."); return 1; }
   const cur = currentWindow(o, day);
   if (!cur) { console.log("Nothing was open on " + slug + "."); return 0; }
   // Your word is the evidence, plus whatever you or your assistant name as showing it.
@@ -937,6 +979,7 @@ function cmdTarget(day) {
   roll(day);
   const o = parseFile(slug);
   if (!o) { console.log("You have nothing called " + slug + ". Type mc-due to see the list."); return 1; }
+  if (o.problem) { console.log("due/" + slug + ".md needs a look: " + o.problem + ". Nothing was changed."); return 1; }
   const cur = currentWindow(o, day);
   if (!cur) { console.log("Nothing is open on " + slug + ", so there is no day to move."); return 1; }
   const s = cur.strip, old = aimOf(s);
@@ -1002,8 +1045,8 @@ function cmdDrop() {
     text: (o.head["TITLE"] || slug) + ": called off.",
   });
   if (!rel) { console.log("I could not write it down, so nothing was dropped."); return 1; }
-  logLine(o, today(), "dropped (" + rel + ")");
-  save(o);
+  // A file that needs a look is not rewritten: the event alone calls it off.
+  if (!o.problem) { logLine(o, today(), "dropped (" + rel + ")"); save(o); }
   console.log("Dropped " + slug + ". Nothing will mention it again; the file stays as history.");
   return 0;
 }
@@ -1011,10 +1054,10 @@ function cmdDrop() {
 function cmdCheck(day) {
   const notes = roll(day);
   for (const n of notes) notes.length && console.log("  " + n);
-  let closed = 0, problems = 0;
+  let closed = 0, problems = 0, looks = 0;
   for (const slug of slugs()) {
-    const o = parseFile(slug);
-    if (!o) { console.log("  I could not read due/" + slug + ".md"); problems++; continue; }
+    const o = parseFile(slug) || unreadable(slug);
+    if (o.problem && !o.dropped) { console.log("  due/" + slug + ".md needs a look: " + o.problem + "."); looks++; continue; }
     if (repeatOf(o.head["REPEATS"]) === undefined) {
       console.log("  due/" + slug + ".md says it repeats \"" + o.head["REPEATS"] + "\", which I cannot turn into a period.");
       problems++;
@@ -1038,12 +1081,18 @@ function cmdCheck(day) {
   for (const f of UNPROVEN) { console.log("  " + f + " says it closes something but not what shows it, so it closes nothing."); problems++; }
   const n = slugs().length;
   console.log("Looked at " + n + " thing" + (n === 1 ? "" : "s") + " with a last day. " +
-    closed + " closed " + (closed === 1 ? "itself" : "themselves") + ", " + problems + " need a look.");
-  return problems ? 1 : 0;
+    closed + " closed " + (closed === 1 ? "itself" : "themselves") + ", " + (problems + looks) + " need a look.");
+  // 3 when the only thing wrong is files that need a look: they are said in the list, the morning
+  // and the notebook, so whatever runs the check before its reminders carries on and says them.
+  return problems ? 1 : looks ? 3 : 0;
 }
 
 function stateRows(day=today(),mutate=false) {
   return load(day,mutate).map((r) => {
+    // Never closed and never open: nothing about it can be known until it is fixed.
+    if (r.problem) return { slug: r.slug, title: r.title, band: r.band, attention: true, sentence: lookSentence(r),
+      state: "needs-a-look", problem: r.problem, file: fileOf(r), firstDay: "", lastDay: "", doneWhen: "", closedOn: "",
+      closedBy: "", selfCheck: "none" };
     const last = r.o.strips.filter((s) => s.state !== "open").sort((a, b) => (a.closed < b.closed ? -1 : 1)).pop();
     return {
       slug: r.slug, title: r.title, band:r.band, attention:!!r.strip&&sayable(r,day), sentence:r.strip?sentence(r,day):null, state: r.band === "unopened" ? "unopened" : r.strip ? "open" : r.band,
@@ -1058,7 +1107,7 @@ function stateRows(day=today(),mutate=false) {
 function cmdState(day) {
   const rows=stateRows(day,true);
   if (has("--json")) { console.log(JSON.stringify(rows)); return 0; }
-  for (const r of rows) console.log(r.state.toUpperCase().padEnd(9) + r.slug + (r.closedBy && r.state !== "open" ? "  (" + r.closedBy + ")" : ""));
+  for (const r of rows) console.log((r.state.toUpperCase() + " ").padEnd(9) + r.slug + (r.closedBy && r.state !== "open" ? "  (" + r.closedBy + ")" : "") + (r.problem ? "  (" + r.problem + ")" : ""));
   return 0;
 }
 
@@ -1089,6 +1138,7 @@ function cmdMarker(day) {
   }return 0;
  }
  const plan=parseFile(slug);if(!plan){console.log('No obligation with that slug.');return 1;}
+ if(plan.problem){console.log('due/'+slug+'.md needs a look: '+plan.problem+'. Nothing was changed.');return 1;}
  const id=has('--clear')?'':argOf('--set','');
  if(!has('--clear')&&(!id||/[\r\n\t]/.test(id))){console.log('Calendar event identity must be a single line.');return 1;}
  plan.head['CALENDAR-MARKER']=id;if(!save(plan))return 1;
@@ -1112,7 +1162,7 @@ switch (cmd) {
 }
 return rc;
 }
-function recordSaid(selected,day=today()) {for(const r of load(day,false).filter(r=>selected.includes(r.slug))){if(r.o.said.some(x=>x.date===day&&x.channel==='brief'))continue;r.o.said.push({date:day,channel:'brief'});logLine(r.o,day,'SAID brief');save(r.o);}}
+function recordSaid(selected,day=today()) {for(const r of load(day,false).filter(r=>selected.includes(r.slug)&&!r.problem)){if(r.o.said.some(x=>x.date===day&&x.channel==='brief'))continue;r.o.said.push({date:day,channel:'brief'});logLine(r.o,day,'SAID brief');save(r.o);}}
 return {run,stateRows,recordSaid};
 }
 module.exports={createDueCommands};

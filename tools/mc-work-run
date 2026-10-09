@@ -68,6 +68,11 @@ while [ $# -gt 0 ]; do
   esac
 done
 
+# WINDOWS PROGRAMS GET WINDOWS PATHS (2026-10-09). Hermes on Windows runs its commands with
+# MSYS_NO_PATHCONV=1, so Git Bash no longer turns /c/... into C:/... for node.exe or git.exe, and
+# this said "mc-work is not installed" while it sat right beside it. cygpath exists only in the
+# shells of Windows, and the C:/ form it gives works in bash there too.
+winpath() { if [ -n "$1" ] && command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else printf '%s\n' "$1"; fi; }
 looks_like_godspeed() { [ -d "${1:-}/rules" ] || [ -d "${1:-}/observations" ]; }
 if [ -z "$GODSPEED" ]; then GODSPEED="${GODSPEED_ROOT:-}"; fi
 if [ -z "$GODSPEED" ] || ! looks_like_godspeed "$GODSPEED"; then
@@ -84,11 +89,12 @@ if [ -z "$GODSPEED" ] || ! looks_like_godspeed "$GODSPEED"; then
   echo "mc-work-run: I could not find your mission control. Run this inside it, or pass --godspeed /path/to/godspeed." >&2
   exit 2
 fi
+GODSPEED="$(winpath "$GODSPEED")"
 cd "$GODSPEED" || exit 2
 export PATH="$PATH:$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin"  # after the caller's own PATH, so a test (or a mission control) that names its own programs is obeyed; cron's short PATH still finds the rest
 [ -n "$TODAY" ] || TODAY="${GODSPEED_TODAY:-$(date -u +%Y-%m-%d)}"
 RUNDIR="$GODSPEED/routines/work/$TODAY"
-HERE="$(cd "$(dirname "$0")" && pwd)"
+HERE="$(winpath "$(cd "$(dirname "$0")" && pwd)")"
 ts() { date -u +%H:%M:%SZ; }
 log() { echo "$(ts) $*"; }
 
@@ -103,7 +109,7 @@ MISSING=""
 reg() {
   local name="$1"; shift
   local bin="$HERE/$name.js"
-  [ -f "$bin" ] || bin="$HOME/.local/bin/$name.js"
+  [ -f "$bin" ] || bin="$(winpath "$HOME/.local/bin/$name.js")"
   if [ ! -f "$bin" ]; then
     case " $MISSING " in *" mc-$name "*) : ;; *) MISSING="$MISSING mc-$name" ;; esac
     return 1

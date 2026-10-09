@@ -5,7 +5,7 @@ import {nativeRows} from './native-personal.mjs';
 import {dueRows} from './native-due.mjs';
 import {assertAssistantRecord,assertAssistantLinks} from './assistant-mutations.mjs';
 import {nativeJobs,NativeScheduler} from './native-scheduler.mjs';
-import {readMachineRecord} from './starting-routines.mjs';
+import {readMachineRecord,coachRoutineTimes} from './starting-routines.mjs';
 import {nativeCardRows} from './card-commands.mjs';
 
 const inventory = JSON.parse(fs.readFileSync(fileURLToPath(new URL('../../docs/full-version/source-inventory.json', import.meta.url)), 'utf8'));
@@ -155,7 +155,7 @@ export class QueryService {
     // routines that run beside them (NativeScheduler.recordKinds). Until 6 October 2026 only
     // Hermes' were listed, so a watch or radar routine could be neither seen nor paused.
     // The routines a first goal started say in a sentence what they do (starting-routines.mjs).
-    if(table==='jobs'&&this.nativeHermesHome){if(!this.snapshotDepth)this.store.scan();const what=new Map((readMachineRecord(this.store)?.jobs||[]).map(j=>[j.id,j.what]));return [...nativeJobs(this.nativeHermesHome,this.store.device).map(j=>what.get(j.id)?{...j,what:what.get(j.id)}:j),...this.store.list('jobs').filter(j=>NativeScheduler.recordKinds.includes(j.kind))];}
+    if(table==='jobs'&&this.nativeHermesHome){if(!this.snapshotDepth)this.store.scan();const what=new Map((readMachineRecord(this.store)?.jobs||[]).map(j=>[j.id,j.what]));return [...nativeJobs(this.nativeHermesHome,this.store.device).map(j=>({...j,...(what.get(j.id)?{what:what.get(j.id)}:{}),...coachRoutineTimes(j,this.store.root)})),...this.store.list('jobs').filter(j=>NativeScheduler.recordKinds.includes(j.kind))];}
     if(this.nativeHermesHome&&['goals','forecasts','work_items'].includes(table))return nativeCardRows(this.store,table);
     if(!this.snapshotDepth)this.store.scan();
     // Records of one type come from the store's per-type lists: filtering all

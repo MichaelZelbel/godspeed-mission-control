@@ -49,8 +49,18 @@ export function hermesProvider({executable='hermes',home,cwd,model,provider,sour
 export function childFailure(error,timeoutMs,unstarted){
   return new Error({ABORTED:'Reply stopped',TIMEOUT:providerTimeoutMessage(timeoutMs),OUTPUT_LIMIT:'Assistant output exceeded its limit'}[error.code]||unstarted);
 }
+// Hermes' waiting line: "  [tool] ( ˘⌣˘)♡ brainstorming...", a face and one word ending in dots.
+// It is the program waiting, never part of the answer, and until 9 October 2026 it ended replies
+// in the notebook's chat. A line counts only if its face has no plain letters or digits, and it
+// either starts with [tool] or its face has a sign beyond plain ASCII, so "- reviewing..." stays.
+export function waitingLine(line){
+  const m=/^\s*(\[tool\]\s*)?(.*?)\s+[a-z]+(?:\.\.\.|…)\s*$/u.exec(line);
+  if(!m||!m[2]||/[A-Za-z0-9]/.test(m[2]))return false;
+  return !!m[1]||/[^\x00-\x7f]/.test(m[2]);
+}
 export function hermesResponse(output){
-  return output.replace(/\x1b\[[0-9;]*m/g,'').replace(/^Warning: Unknown toolsets: none\r?\n\s*/,'').replace(/^\s*⚠ tirith security scanner enabled but not available[^\n]*\r?\n\s*/,'').trim();
+  return output.replace(/\x1b\[[0-9;]*m/g,'').replace(/^Warning: Unknown toolsets: none\r?\n\s*/,'').replace(/^\s*⚠ tirith security scanner enabled but not available[^\n]*\r?\n\s*/,'')
+    .split(/\r?\n/).filter(line=>!waitingLine(line)).join('\n').trim();
 }
 export function hermesFailureMessage(diagnostic){
   if(/context length exceeded|context_length_exceeded|maximum context length|cannot compress further|(?:model )?input exceeds (?:the )?context (?:window|limit)/i.test(diagnostic))return 'The AI request exceeded the model context limit. Reduce the selected source scope before retrying.';

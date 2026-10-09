@@ -245,6 +245,53 @@ GODSPEED_TODAY=2026-01-10 d >/dev/null
 contains "a repeating target grows its next window once the target passed" "$(cat "$G/due/bins.md")" "STRIP: 2026-01-12 - target 2026-01-16"
 contains "the passed one stays as soon as you can until then" "$(GODSPEED_TODAY=2026-01-10 d)" "WHEN YOU CAN   BINS"
 
+# --- a file I cannot read needs a look, and is never done (2026-10-09) -------------------------------
+# A live run: the assistant wrote a deadline by hand with lines of its own (KIND:, TARGET-DATE:) and
+# no STRIP line, and the list said DONE and the notebook said closed.
+U="$TMP/unreadable"; mkdir -p "$U/due" "$U/rules"; : > "$U/AGENTS.md"
+cat > "$U/due/present.md" <<'HAND'
+ID: present
+KIND: target (not costly deadline)
+TITLE: Birthday present for Priya, bought and wrapped
+TARGET-DATE: 2026-10-08
+SELF-CHECK: none
+FINISHED-WHEN: "Bought and wrapped"
+HAND
+printf 'TITLE: Garbled\nSTRIP: soon later\n' > "$U/due/garbled.md"
+: > "$U/due/empty.md"
+printf 'TITLE: Fine\nDONE-WHEN: x\nCOST-IF-MISSED: y\nSELF-CHECK: none\n\n## Windows\n\nSTRIP: 2026-10-01 2026-12-31\n' > "$U/due/fine.md"
+printf 'TITLE: Spaces\nSTRIP: 2026-10-01 2026-12-31\n' > "$U/due/With Spaces.md"
+BEFORE="$(cat "$U/due/present.md")"
+u() { GODSPEED_TODAY=2026-10-09 GODSPEED_ROOT="$U" node "$HERE/due.js" --godspeed "$U" "$@"; }
+out="$(u)"
+missing "a hand-written file with no STRIP line is never DONE" "$out" "DONE"
+contains "  it needs a look, by its file name" "$out" "NEEDS A LOOK   due/present.md (Birthday present for Priya, bought and wrapped): it has no STRIP line"
+contains "  and the list says how to fix it" "$out" "mc-due add present --title"
+contains "a STRIP line without dates needs a look too" "$out" "due/garbled.md (Garbled): its STRIP line does not hold dates I can read"
+contains "an empty file needs a look" "$out" "due/empty.md: it is empty"
+contains "a file whose name cannot be used is not hidden" "$out" "due/With Spaces.md: its file name is not one I can use"
+contains "the readable one reads as before" "$out" "Fine: 84 days left"
+out="$(u today)"
+contains "the morning's list says it too" "$out" "NEEDS A LOOK   due/present.md"
+out="$(u state)"
+contains "its state is needs-a-look, not closed" "$out" "NEEDS-A-LOOK present"
+missing "  and nothing reads as closed" "$out" "CLOSED"
+json="$(u state --json)"
+contains "the notebook's rows carry the state" "$json" '"state":"needs-a-look"'
+contains "  and the reason" "$json" '"problem":"it has no STRIP line, so I cannot tell its dates"'
+out="$(u check)"; rc=$?
+contains "the check names each file" "$out" "due/present.md needs a look"
+check "  and says only files need a look (3)" "$rc" "3"
+out="$(u done present)"; rc=$?
+contains "saying done on it changes nothing" "$out" "needs a look"
+check "  and fails" "$rc" "1"
+check "the hand-written file is never rewritten" "$(cat "$U/due/present.md")" "$BEFORE"
+u drop present --yes >/dev/null
+out="$(u)"
+contains "called off, it is quiet" "$out" "CALLED OFF"
+missing "  and no longer needs a look" "$out" "due/present.md (Birthday"
+check "  and the file is still not rewritten" "$(cat "$U/due/present.md")" "$BEFORE"
+
 # --- your due/README.md: brought up to date only if you never changed it ----------------------------
 KIT="$(cd "$HERE/.." && pwd)"
 EMBED="$(node -e '

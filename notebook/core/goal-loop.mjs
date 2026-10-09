@@ -105,7 +105,9 @@ export async function work(job,{store,query,provider}){
  }catch(error){await store.waitForWriter();store.withLock(()=>{const current=store.get('work_items',item.id);if(current?.state==='cancelled')return;store.commit([store.prepare('work_items',{state:applied?'needs_review':'failed',error:error.message,retry_after:new Date(Date.now()+60000*2**((item.attempts||0)+1)).toISOString()},current)]);});throw error;}
 }
 export function remind(job,{store,query},now=Date.now()){
- if(query.rows('deadlines').some(d=>d.native_file))dueCommand(store,['check']);
+ // The check answers 3 when the only thing wrong is a due file that needs a look; that file is said
+ // below, so the reminders still run (9 October 2026).
+ if(query.rows('deadlines').some(d=>d.native_file))try{dueCommand(store,['check']);}catch(error){if(error.status!==3)throw error;}
  for(const d of query.rows('deadlines').filter(d=>d.status==='open'&&!d.native_file&&d.completion_check?.type==='note-contains')){
   const check=d.completion_check,note=store.get('notes',check.note_id);
   if(note&&!note.is_trashed&&note._hash!==d.completion_baseline_hash&&note.content.includes(check.text)&&Date.parse(note.updated_at)>=Date.parse(d.start_at||d.created_at))personalOperation({store,query},{type:'obligation-complete',id:d.id,evidence:'Local note '+note.id+' revision '+note.revision+' contains the agreed completion text'});
