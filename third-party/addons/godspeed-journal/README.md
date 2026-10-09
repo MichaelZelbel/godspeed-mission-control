@@ -26,7 +26,7 @@ you don't need this folder.
 
 1. Your mission control from the book (or a folder holding an `AGENTS.md`), on Windows, macOS or
    Linux, and Node.js 22 or newer.
-2. Hermes (Chapter 32), if you want check-ins and the evening list delivered to a messenger.
+2. Hermes on a messenger such as Telegram, if you want check-ins and the evening list delivered there.
    Without it, entries still save; there is just no nudge.
 
 ## Install
@@ -197,7 +197,7 @@ not be read. A line with `"kind":"mention"` and `text` plus `at` or `date` adds 
 
 Your mission control cannot see your screen, and it never will; it only knows what you tell it,
 in your own words, when you say it. Check-ins and the evening list need your assistant reachable
-on a messenger (Chapter 32); without one, entries still save, there is just no nudge. Counted
+on a messenger such as Telegram; without one, entries still save, there is just no nudge. Counted
 time only knows what your entries say: a break you took without mentioning it counts as time on
 the task, up to four hours, and a task you went back to without saying so counts nothing until
 you do.

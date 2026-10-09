@@ -14,7 +14,7 @@ mission control does this through a paid service. This add-on does not, for thre
 ## If you want them anyway
 
 Pick a service yourself, read its price page, and create a key with a spending limit if the
-service offers one. Then teach your mission control the job the way Chapter 15 teaches any job: tell your
+service offers one. Then teach your mission control the job the way Chapter 18 teaches any job: tell your
 assistant which service, where the key is kept, the most one clip may cost, and that it must
 show you the prompt before it sends it. Put that in a recipe of your own, next to
 `video-finishing`.

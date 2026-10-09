@@ -139,7 +139,7 @@ async function stepHermes(mcDir, f, bin) {
   const envPath = run("hermes", [...hp, "config", "env-path"]).stdout.trim().split("\n").pop();
   const envText = envPath && fs.existsSync(envPath) ? fs.readFileSync(envPath, "utf8") : "";
   if (tick === "other-host") ok(`Check-ins and the evening list already come from ${s.tick_host}; this computer only saves entries.`);
-  else if (!telegramConfigured(tgConfig, envText)) warn("Check-ins need your assistant on a messenger (Chapter 32). Entries still work.");
+  else if (!telegramConfigured(tgConfig, envText)) warn("Check-ins need your assistant on a messenger, such as Telegram. Entries still work.");
   else {
     fs.mkdirSync(path.join(home, "scripts"), { recursive: true });
     const script = path.join(home, "scripts", "godspeed-journal-tick.sh");

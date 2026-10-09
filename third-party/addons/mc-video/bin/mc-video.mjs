@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// mc-video: let your mission control finish your videos. An add-on for "Teach It Once", Chapter 35.
+// mc-video: let your mission control finish your videos. An add-on for "Teach It Once", Chapter 36.
 //
 //   mc-video setup [--godspeed <folder>] [--yes]   install or update, then prove it works
 //   mc-video captions <clip>                  burn captions in your one look

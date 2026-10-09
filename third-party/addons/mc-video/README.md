@@ -1,6 +1,6 @@
 # mc-video
 
-**Let your mission control finish your videos.** An add-on for [the mission control](https://github.com/MichaelZelbel/godspeed-mission-control) from [*Teach It Once*](https://leanpub.com/teachitonce), Chapter 35.
+**Let your mission control finish your videos.** An add-on for [the mission control](https://github.com/MichaelZelbel/godspeed-mission-control) from [*Teach It Once*](https://leanpub.com/teachitonce), Chapter 36.
 You record and cut. Then you tell your assistant "caption this and make a vertical version",
 or "put a title card in front of it", and it does the finishing on your own computer: captions
 in your one look, a 9:16 cut for Reels, TikTok and Shorts, and animated slides and overlays
@@ -95,6 +95,6 @@ Pages: [setup/2-first-captions.md](setup/2-first-captions.md),
 This is the video finishing the author's own mission control does for his posts, with his fonts, his
 project files and his paid clip service taken out. Two of his videos went through all of it in
 September 2026. The whole story, including what the mission control does not do, is in *Teach It Once*,
-Chapter 35.
+Chapter 36.
 
 MIT. Use it, change it, share it.

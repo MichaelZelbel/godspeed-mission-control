@@ -11,7 +11,7 @@ ask you before it does something.
 - **Node.js 22 or newer.** Type `node -v`. If the number starts below 22, install the current
   version from https://nodejs.org and open a new terminal.
 
-This add-on is for your laptop or desktop, not the server from Chapter 32. Video work is heavy,
+This add-on is for your laptop or desktop, not a server. Video work is heavy,
 your footage is on your computer, and you want to watch the result where you made it.
 
 ## What the setup offers to install, and asks first
