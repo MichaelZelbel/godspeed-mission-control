@@ -192,9 +192,13 @@ if [ -s "$RUNDIR/decision.md" ] && ! grep -q "did not finish and wrote no record
   fi
 fi
 
+# mc-run is started with bash below, so it only has to be there, not be executable (2026-10-09).
+# The notebook runs this file from its own copy of the kit, which git writes without the
+# executable bit on Linux and on a Mac, and the routines' daily round there stopped with
+# "mc-run is not installed" unless an older mc-run sat in ~/.local/bin.
 RUNNER="$HERE/mc-run"
-[ -x "$RUNNER" ] || RUNNER="$HOME/.local/bin/mc-run"
-[ -x "$RUNNER" ] || { echo "mc-decide: mc-run is not installed, so no recipe could be carried out." >&2; exit 3; }
+[ -f "$RUNNER" ] || RUNNER="$HOME/.local/bin/mc-run"
+[ -f "$RUNNER" ] || { echo "mc-decide: mc-run is not installed, so no recipe could be carried out." >&2; exit 3; }
 
 PROMPT="Today is $TODAY (UTC). The run folder is $RUNDIR and it already holds settle.txt (each
 goal's weekly number and the verdicts on earlier moves; read it first), attention.txt (the goal
