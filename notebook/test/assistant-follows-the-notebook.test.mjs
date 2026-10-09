@@ -57,6 +57,8 @@ test('a collection made the way the tool describes it, items given by label, and
   // "person" and "Note" name contacts and notes.
   assert.equal(one(await call('save_record',{type:'person',value:{name:'Fictional Greta',relationship:'friend'}})).name,'Fictional Greta');
   assert.equal(one(await call('save_record',{type:'Note',value:{title:'Fictional plain note',content:'Text.'}})).title,'Fictional plain note');
+  assert.deepEqual((await call('list_records',{type:'collection'})).map(c=>c.name),['Supplements']);
+  assert.deepEqual((await call('list_records',{type:'people'})).map(c=>c.name),['Fictional Greta']);
 });
 
 test('the same person saved twice is one page; a second person with the same name only when asked',async t=>{

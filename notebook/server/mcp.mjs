@@ -74,7 +74,7 @@ export async function mcp(input,{store,query,index,domains,scopes,delegated=fals
       // Menerio's update_note took no version: the one this server last showed is the one read.
       if(name==='update_note'&&a.id&&!a.expected_hash){const current=visibleRows(query,'notes').find(n=>n.id===a.id);if(current)a.expected_hash=versionsOf(owner).get(a.id)||current._hash;}
       // "collection", "Contact" or "people" names the type it means (save-record.mjs).
-      if(['save_record','structural_change','list_records'].includes(name)&&a.type!==undefined)a.type=recordType(a.type);
+      if(['save_record','structural_change','list_records'].includes(name)&&a.type!==undefined)a.type=recordType(a.type,name==='list_records'?listableTypes:undefined);
       // Refused before anything is read, in plain words (the guard's commit refuses them too).
       if(['save_record','structural_change'].includes(name))assertAssistantTable(String(a.type||''),name);
       if(['save_record','update_note','capture_note','personal_operation','write_fact','record_event','structural_change','review_suggestions',...topicToolNames.filter(n=>!n.startsWith('list_')&&!n.startsWith('get_'))].includes(name)){

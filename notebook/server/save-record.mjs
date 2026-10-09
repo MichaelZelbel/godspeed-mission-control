@@ -8,11 +8,20 @@ import {assistantRecordTables} from '../core/assistant-mutations.mjs';
 // could not be made. The singular, a capital or a space names the same type.
 const extra = {person: 'contacts', people: 'contacts', persons: 'contacts', thing: 'entities', things: 'entities', event: 'moments', events: 'moments', timeline: 'moments', review: 'review_queue', reviews: 'review_queue', suggestion: 'review_queue', suggestions: 'review_queue', review_suggestion: 'review_queue', folder: 'note_folders', folders: 'note_folders'};
 const singular = table => table.endsWith('ies') ? table.slice(0, -3) + 'y' : table.endsWith('s') ? table.slice(0, -1) : null;
-const names = new Map(Object.entries(extra));
-for (const table of assistantRecordTables) { names.set(table, table); const one = singular(table); if (one && !names.has(one)) names.set(one, table); }
-export function recordType(type) {
+const nameMaps = new WeakMap();
+function namesFor(tables) {
+  let names = nameMaps.get(tables);
+  if (!names) {
+    names = new Map(Object.entries(extra).filter(([, table]) => tables.has(table)));
+    for (const table of tables) { names.set(table, table); const one = singular(table); if (one && !names.has(one)) names.set(one, table); }
+    nameMaps.set(tables, names);
+  }
+  return names;
+}
+// tables: the types the calling tool takes (save_record's by default; list_records passes its own).
+export function recordType(type, tables = assistantRecordTables) {
   const plain = String(type ?? '').trim().toLowerCase().replace(/[\s-]+/g, '_');
-  return names.get(plain) || plain;
+  return namesFor(tables).get(plain) || plain;
 }
 
 // The same person saved twice was two pages ("Jo Okafor" and "Jo Okafor 2",
