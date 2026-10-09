@@ -168,6 +168,96 @@ print("ok")`;
  assert.equal(run.status,0,run.stderr);assert.equal(run.stdout.trim(),'ok');
 });
 
+// 9 October 2026, a live run on Windows: the reader's whole message from the daily round was Hermes'
+// "File-mutation verifier" block, which Hermes appends after the model's real line; the other answer
+// of that day ended with the model's own "Verified: ..." note and began with a line Hermes printed.
+// These are those two answers, word for word.
+const LIVE_MOVES='For you today: ship list `ship-list-2026-10-09` (refreshed, same card, no second card) — 3 moves ready: (1) file 50-name pitch list; (2) portfolio audit file; (3) cold-email draft approval only (send blocked). Plus the weekly LEAD question (confirm this week\'s pitch count; recorded 0 on your word). Nothing ships until you reply.\n\n⚠️ File-mutation verifier: 1 file(s) were NOT modified this turn despite any wording above that may suggest otherwise. Run `git status` or `read_file` to confirm.\n  • `/workspace/routines/next-action/2026-10-09/moves.md` — [write_file] Failed to write file: mkdir: cannot create directory ‘/workspace’: Permission denied\n';
+const LIVE_ANSWER='\u{1f527} Auto-repaired tool name: \'file_files\' -> \'write_file\'\nFor you today: ship-list card `ship-list-2026-10-09` — 3 lines to approve: (1) build 50-name pitch list file; (2) portfolio audit vs board-game checklist; (3) approve cold-email template.\n\nVerified: decision.md and moves.md written, all 3 blocks have NOW/AFTER/BET/WHO/UNDONE/APPLY; playbook current; `mc-check-moves` not installed (checked by eye).\n';
+const LIVE_DECISION='# Decision 2026-10-09\n## For you today\nShip-list card `ship-list-2026-10-09` refreshed (same file). (1) build 50-name pitch list file; (2) portfolio audit; (3) approve cold-email template.\n## Not done and why\nnothing\n';
+test('the daily round\'s line is never a Hermes trailer or the model\'s note after it',{skip:!havePython&&'no Python here'},()=>{
+ const code=`import sys,json;sys.path.insert(0,${JSON.stringify(fileURLToPath(new URL('../core/routine-scripts/',import.meta.url)))});from godspeed_routines import for_you,strip_trailers
+cases=json.loads(sys.stdin.read())
+print(json.dumps([for_you(a,d) for a,d in cases]+[strip_trailers(cases[0][0])]))`;
+ const verifierOnly='⚠️ File-mutation verifier: 1 file(s) were NOT modified this turn despite any wording above that may suggest otherwise.\n  • `/workspace/x.md` — [write_file] Failed';
+ const cases=[
+  [LIVE_MOVES,LIVE_DECISION],
+  [LIVE_ANSWER,LIVE_DECISION],
+  // Only the trailer, or the model's own note: the decision's own section speaks.
+  [verifierOnly,LIVE_DECISION],
+  ['Verified: decision.md written; the moves check printed OK.',LIVE_DECISION],
+  // A reply Hermes replaced because the model looped is no line either.
+  ['⚠️ **Response Stopped — Repetition Detected**\n\nThe model fell into a repetition loop while writing this response.\n\n→ Switch to a different model with `/model`',LIVE_DECISION],
+  // "I changed nothing." is a sentence, not the recipe's ending: the section speaks.
+  ['I changed nothing.','# Decision\n## For you today\nOne question: is the race still on 19 April?\n'],
+  // A day with nothing for the person stays silent whatever the answer says.
+  [LIVE_MOVES,'# Decision\n## For you today\nnothing today, because the playbook comes first\n'],
+ ];
+ const run=spawnSync(python,['-c',code],{input:JSON.stringify(cases),encoding:'utf8',env:{...process.env,PYTHONIOENCODING:'utf-8'}});
+ assert.equal(run.status,0,run.stderr);const got=JSON.parse(run.stdout);
+ assert.match(got[0],/^ship list `ship-list-2026-10-09` \(refreshed, same card, no second card\) — 3 moves ready: .+ Nothing ships until you reply\.$/);
+ assert.match(got[1],/^ship-list card `ship-list-2026-10-09` — 3 lines to approve: .+ approve cold-email template\.$/);
+ const section='Ship-list card `ship-list-2026-10-09` refreshed (same file). (1) build 50-name pitch list file; (2) portfolio audit; (3) approve cold-email template.';
+ assert.equal(got[2],section);assert.equal(got[3],section);assert.equal(got[4],section);
+ assert.equal(got[5],'One question: is the race still on 19 April?');
+ assert.equal(got[6],'');
+ for(const line of got)assert.doesNotMatch(line,/verifier|Auto-repaired|Verified:|Repetition|\/workspace/);
+ assert.doesNotMatch(got.at(-1),/File-mutation verifier/);assert.match(got.at(-1),/Nothing ships until you reply\.$/,'stripping keeps the real line');
+});
+
+test('a routine\'s note never holds a Hermes trailer, and one that is only a trailer is no note',()=>{
+ assert.equal(finalReply(agentRun(LIVE_MOVES)),LIVE_MOVES.split('\n\n⚠')[0]);
+ assert.equal(finalReply(scriptRun('Your brief is ready.\n\n⚠️ File-mutation verifier: 1 file(s) were NOT modified this turn.\n  • `/workspace/a.md` — [write_file] Failed')),'Your brief is ready.');
+ assert.equal(finalReply(agentRun('⚠️ File-mutation verifier: 1 file(s) were NOT modified this turn.\n  • `/workspace/a.md` — [write_file] Failed')),null);
+ assert.equal(finalReply(agentRun('⚠️ **Response Stopped — Repetition Detected**\n\nThe model fell into a repetition loop.\n\n→ Or resend your message')),null);
+ assert.equal(finalReply(agentRun('\u{1f527} Auto-repaired tool name: \'a\' -> \'b\'\nThree findings are new.')),'Three findings are new.');
+});
+
+// 9 October 2026, the same run: the morning choice ran out of time, and a work item failed its
+// check; both reached nobody but the Routines list. Each now says so in one line, the way any of
+// the daily round's lines reaches the person, and the Routines list still says the run failed.
+test('a daily round that went wrong tells the person in one line, once a day, and the Routines list says it failed',{skip:(!havePython||!bash)&&'no Python or bash here'},t=>{
+ const {root,home}=scriptFixture(t),fake=path.join(root,'.fake-assistant');fs.mkdirSync(fake,{recursive:true});
+ // An assistant that stops before writing anything, as the free model did after 25 minutes.
+ fs.writeFileSync(path.join(fake,'hermes'),'#!/usr/bin/env bash\ncat >/dev/null\necho "Upstream idle timeout exceeded" >&2\nexit 1\n',{mode:0o755});
+ const settings=path.join(home,'scripts','godspeed-routines.json');fs.writeFileSync(settings,JSON.stringify({...JSON.parse(fs.readFileSync(settings,'utf8')),hermes:path.join(fake,'hermes')}));
+ const run=runScript(home,'godspeed-daily-round-choose.py');
+ assert.equal(run.status,0,run.stderr);
+ assert.equal(run.stdout.trim(),'This morning\'s daily round did not finish, so nothing was decided today.');
+ const status=JSON.parse(fs.readFileSync(path.join(home,'godspeed-routines-status.json'),'utf8'));
+ assert.equal(status.decide.failed,'This morning\'s daily round did not finish, so nothing was decided today.');
+ // Hermes records the run as having worked; the row says it failed, with the same sentence.
+ jobsFile(home,[{id:'choose',name:'Daily round: choose today\'s work',script:'godspeed-daily-round-choose.py',deliver:'local',last_run_at:new Date().toISOString(),last_status:'ok'}]);
+ const query=new QueryService(new Store(root));query.nativeHermesHome=home;
+ const row=routineRow(query.rows('jobs').find(j=>j.id==='choose'),{timeZone:'Europe/Berlin'});
+ assert.match(row.last,/and it failed: This morning's daily round did not finish, so nothing was decided today\.$/);
+ // On a computer the line becomes a note in "From your routines", like any other line.
+ const store=new Store(root,{device:'pc'}),jobs=[{id:'choose',name:'Daily round: choose today\'s work',deliver:'local'}];
+ saveRoutineResults(store,{home,jobs});output(home,'choose','2099-01-01_05-30-00.md',scriptRun(run.stdout.trim()));
+ assert.deepEqual(saveRoutineResults(store,{home,jobs}).map(n=>n.content),['This morning\'s daily round did not finish, so nothing was decided today.']);
+ // A second run the same day that fails the same way says nothing new, and the row still says it failed.
+ const again=runScript(home,'godspeed-daily-round-choose.py');assert.equal(again.status,0,again.stderr);assert.equal(again.stdout,'');
+ assert.match(routineRow(query.rows('jobs').find(j=>j.id==='choose'),{timeZone:'Europe/Berlin'}).last,/and it failed: /);
+ // A row whose run is not the one that wrote the record (an old failure) is Hermes' own.
+ jobsFile(home,[{id:'choose',name:'Daily round: choose today\'s work',script:'godspeed-daily-round-choose.py',last_run_at:'2026-01-01T05:30:00+01:00',last_status:'ok'}]);
+ assert.match(routineRow(query.rows('jobs').find(j=>j.id==='choose'),{timeZone:'Europe/Berlin'}).last,/and it worked\.$/);
+});
+
+test('a piece of the daily round\'s work that failed its check is said in one line',{skip:!havePython&&'no Python here'},t=>{
+ const {home}=scriptFixture(t);
+ // mc-work-run's own log lines (tools/mc-work-run), as the routine reads them.
+ const log=['08:00:01Z W-1 taken (learn): How do people who reached two new clients get there?','  verified: no','08:04:00Z W-1 attempted, not verified (verify exit 2)','08:04:02Z W-2 taken (make): Draft the pitch email','08:05:00Z W-2 failed: the assistant ended (exit 1) without a RESULT line','08:06:00Z W-3 taken (make): Write the price list','08:07:00Z W-3 verified','08:07:01Z run end: 3 taken, 2 attempted, 1 verified'].join('\n');
+ const code=`import sys,json,types;sys.path.insert(0,${JSON.stringify(path.join(home,'scripts'))})
+import godspeed_routines as g
+g.bash=lambda:"bash"
+g.run=lambda args,c,env,timeout=None:types.SimpleNamespace(returncode=0,stdout=sys.stdin.read(),stderr="")
+print(json.dumps(g.work(g.config())))`;
+ const run=spawnSync(python,['-c',code],{cwd:path.join(home,'scripts'),input:log,encoding:'utf8',env:{...process.env,PYTHONIOENCODING:'utf-8'}});
+ assert.equal(run.status,0,run.stderr);
+ assert.deepEqual(JSON.parse(run.stdout).split('\n'),['Today\'s work did not pass its check, so it is not done yet: "How do people who reached two new clients get there?".','Today\'s work could not be finished, so it is not done yet: "Draft the pitch email".']);
+ const status=JSON.parse(fs.readFileSync(path.join(home,'godspeed-routines-status.json'),'utf8'));assert.match(status.work.failed,/did not pass its check/);
+});
+
 // 9 October 2026, a live run: the Weekly check-in row said "Runs every 15 minutes.", which is only
 // how often it looks whether a talk is due. It says the talk's day and time, and the next talk.
 test('Settings > Routines gives the coach routines their real rhythm, not the 15-minute look',t=>{

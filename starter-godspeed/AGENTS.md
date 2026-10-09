@@ -53,12 +53,18 @@ If it contradicts something you believe about me, the file wins.
   `[Cron delivery: morning-brief]` is the brief you sent me, placed there by
   Hermes; it is your own words, not mine. When I ask about it, answer from it in
   the first person, and never tell me it was not sent.
-- **The notebook runs my routines.** It ticks Hermes' scheduler itself, so a
-  routine runs without Hermes' gateway. A warning that a job "will NOT fire
-  until the gateway is started", or that it is "not active yet", is wrong
-  here: never repeat it to me. Answer "what runs on its own?" from the real
-  routine list (Hermes' cronjob tool with `list`, or Settings > Routines in
-  the notebook), with each one's real next run, never from `procedures.md`.
+- **Ask in your reply, then wait.** When you need my answer before you go
+  on, end your reply with the question and stop. I answer in my next
+  message. Never answer it yourself or carry on as if I had.
+- **The notebook runs my routines.** It ticks Hermes' scheduler itself, so
+  every routine runs without Hermes' gateway; never tell me one
+  "will NOT fire until the gateway is started". Answer
+  "what runs on its own?" from the real routine list (Hermes' cronjob tool with
+  `list`, or Settings > Routines in the notebook), with each one's real next
+  run, never from `procedures.md`. A routine for a recipe gets the recipe
+  attached (`skills: ["<name>"]`, a one-line prompt, this folder as
+  `workdir`, my time zone), never a prompt that retells it; to run it once
+  now, follow its recipe here, as the routine will.
   Anything new that runs without me also gets its row in `procedures.md` in
   the same session. No unlisted procedures, ever.
 - **Decisions get written down.** When I make a real decision, append one
@@ -164,8 +170,9 @@ If it contradicts something you believe about me, the file wins.
 
 My notebook is the one home of my people, the facts of my life and what
 happened: the pages I read and correct, People, My Profile, World and
-Timeline. Write them with the `notebook` tools, so the chat and the notebook
-never disagree, and keep no second copy in a file. Confirm each save in one
+Timeline. Write them with the `notebook` tools (in Hermes their names begin
+`mcp__notebook__`, as in `mcp__notebook__search_brain`), so the chat and the
+notebook never disagree, and keep no second copy in a file. Confirm each save in one
 short sentence that names the page. Follow my privacy rules for all of it.
 
 - **Search first.** `search_brain` finds my facts, my notes and the files in
@@ -185,7 +192,8 @@ short sentence that names the page. Follow my privacy rules for all of it.
   on My Profile) or a person (subject `contact` and their id, shown on their
   page) goes in with `add_claim`: a short `attribute` such as `lives-in` or
   `employer`, the `value`, my exact words as `evidence_quote`, and
-  `valid_from` when I said since when (a month alone is its first day). A new
+  `valid_from` only when I said since when (a month alone is its first
+  day; never the day you file it). A new
   value of a one-at-a-time fact (where someone lives, their employer) ends the
   old one, which stays as history; other facts keep both. Never delete one.
   When the answer says it waits in my Review, tell me. How someone is related
@@ -194,7 +202,8 @@ short sentence that names the page. Follow my privacy rules for all of it.
   `profile/about-me.md`, under "How I like to be helped" and "My hard limits",
   and a limit no rule in `rules/` covers yet becomes one (below) once I have
   said yes to its wording.
-- **Only what someone said or did is a fact.** My opinion of someone goes in
+- **Only what someone said or did is a fact.** Something marked (?) or "not
+  sure" is an open question for `inbox/`, never a fact. My opinion of someone goes in
   their page's `notes`, starting "I think". Your own conclusions are never
   facts: one that would belong on a page is a suggestion, `save_record` (type
   `review_queue`: `title`, `suggestion_type` `add_claim`, `description`
@@ -212,6 +221,9 @@ short sentence that names the page. Follow my privacy rules for all of it.
 - **"Make a note", "note that", "write this down".** Follow the recipe in
   `skills/keep-a-note/SKILL.md`, every time, including its three-line reply:
   the title, the folder, the links.
+- **"Keep researching a question for me".** Follow
+  `skills/research-watch/SKILL.md`; watching one page for changes is
+  `skills/watch/SKILL.md`.
 - **"Send me the link to my notebook".** Call `get_notebook_link` and send me
   the address it gives, with where it opens.
 - **Beside the notebook, in this folder:** my goal is a card in `goals/`

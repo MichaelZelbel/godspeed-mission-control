@@ -2,6 +2,7 @@
 // Test for tools/judge-brief.js with stand-in judges: no assistant is called.
 // Run: node tools/test-judge-brief.js
 'use strict';
+require('./test-guard.cjs'); // never a real mission control (test-guard.bash says why)
 const j = require('./judge-brief.js');
 let failures = 0;
 function check(name, ok, detail) {

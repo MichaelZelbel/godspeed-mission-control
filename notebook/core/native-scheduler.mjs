@@ -9,7 +9,7 @@ import {beatWhile,HEARTBEAT_EVERY} from './supervisor-health.mjs';
 import {LEGACY_DEVICE} from './device-id.mjs';
 import {starterBorn} from './starter-workspace.mjs';
 import {setHermesTimezone} from './hermes-config.mjs';
-import {FLAG,STARTING_ROUTINES,routineFiles,writeRoutineFiles,prepareCheckIn,saveRoutineResults,readMachineRecord,writeMachineRecord,telegramInHermes} from './starting-routines.mjs';
+import {FLAG,STARTING_ROUTINES,routineFiles,writeRoutineFiles,prepareCheckIn,saveRoutineResults,readMachineRecord,writeMachineRecord,telegramInHermes,routineStatus} from './starting-routines.mjs';
 const skills={'goal-decision':'next-action','goal-work':'work-item','morning-brief':'morning-brief',coaching:'coach','habit-check':'coach',journal:'interstitial-journal',headache:'headache-tracker'};
 // Hermes' own record of its jobs, as it wrote it.
 export function hermesJobs(home){
@@ -18,9 +18,10 @@ export function hermesJobs(home){
  return jobs.filter(j=>j&&typeof j==='object');
 }
 // When a routine last ran and how it went is Hermes' own record (last_run_at, last_status,
-// last_error); until 8 October 2026 the Routines list showed neither.
+// last_error); until 8 October 2026 the Routines list showed neither. A daily round that told the
+// person it went wrong is shown as failed (starting-routines.mjs, routineStatus).
 export function nativeJobs(home,device='local'){
- return hermesJobs(home).map(j=>({id:j.id,title:j.name||j.id,kind:j.skill||j.name||'Hermes task',owner:device,paused:j.enabled===false,state:j.state||j.last_status||'pending',next_run:j.next_run_at,last_run_at:j.last_run_at||null,last_status:j.last_status||null,last_error:typeof j.last_error==='string'?j.last_error.slice(0,500):null,schedule:j.schedule_display||null,deliver:j.deliver||null,created_at:j.created_at,interval_ms:j.schedule?.seconds?j.schedule.seconds*1000:null,native:true,_hash:hash(j)}));
+ return hermesJobs(home).map(j=>({id:j.id,title:j.name||j.id,kind:j.skill||j.name||'Hermes task',owner:device,paused:j.enabled===false,state:j.state||j.last_status||'pending',next_run:j.next_run_at,last_run_at:j.last_run_at||null,last_status:j.last_status||null,last_error:typeof j.last_error==='string'?j.last_error.slice(0,500):null,...routineStatus(home,j),schedule:j.schedule_display||null,deliver:j.deliver||null,created_at:j.created_at,interval_ms:j.schedule?.seconds?j.schedule.seconds*1000:null,native:true,_hash:hash(j)}));
 }
 const RETRY_STARTING=3600000;
 // "05:16": once a day at that time in the owner's timezone.
@@ -174,6 +175,17 @@ export class NativeScheduler{
  // run on another machine it would sit in that machine's Hermes and never run
  // (or run beside the owner's). Until 6 October 2026 nothing said so.
  requireOwner(action){if(!this.owns())throw Error('Routines run on the machine named '+this.owner()+'. '+action+' there, or choose this machine to run the routines.');}
+ // "Run now" from the notebook answers at once and the run goes on in the background (until
+ // 9 October 2026 the request waited for the whole run, and a routine that runs a model for
+ // minutes outlived the caller: Node's fetch gave up after 300 seconds). A wrong id or a machine
+ // that does not run the routines is still said at once. The run's result reaches the person the
+ // way a scheduled one does, and Settings > Routines shows it when it ends.
+ startRun(id){
+  this.requireOwner('Run the routine');
+  if(id&&!nativeJobs(this.home,this.device).some(j=>j.id===id))throw Error('Choose an existing Hermes task');
+  const run=this.runNow(id);this.running=run;run.catch(()=>{}).finally(()=>{if(this.running===run)this.running=null;});
+  return {started:true,...(id?{id}:{})};
+ }
  async runNow(id){
   this.requireOwner('Run the routine');
   const work=id?(()=>{if(!nativeJobs(this.home,this.device).some(j=>j.id===id))throw Error('Choose an existing Hermes task');return this.command(['run',id],{timeout:this.tickLimit});})():this.command(['tick'],{timeout:this.tickLimit});

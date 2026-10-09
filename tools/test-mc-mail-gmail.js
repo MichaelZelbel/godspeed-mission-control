@@ -25,6 +25,7 @@
  * Usage: node tools/test-mc-mail-gmail.js
  */
 "use strict";
+require('./test-guard.cjs'); // never a real mission control (test-guard.bash says why)
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
@@ -342,6 +343,11 @@ async function main() {
   fs.writeFileSync(path.join(HERMES, "config.yaml"), "model: x\nmcp_servers:\n  notebook:\n    url: https://mcp.menerio.com\n");
   fs.writeFileSync(path.join(GODSPEED, ".mcp.json"), JSON.stringify({ mcpServers: { notebook: { type: "http", url: "https://mcp.menerio.com" } } }));
   process.env.CODEX_HOME = CODEX; process.env.HERMES_HOME = HERMES;
+  // The entry starts ~/.local/bin/mc-mail.js, as the installer puts it there; this throwaway home
+  // gets its own (test-guard.cjs). Until 9 October 2026 this check passed only on a computer whose
+  // real home had one, and the wiring also reached that computer's own Claude Desktop settings.
+  fs.mkdirSync(path.join(os.homedir(), ".local", "bin"), { recursive: true });
+  fs.copyFileSync(path.join(__dirname, "mc-mail.js"), path.join(os.homedir(), ".local", "bin", "mc-mail.js"));
   const W1 = require("./mc-mail-wire.js").wire({ godspeed: GODSPEED });
   const W2 = require("./mc-mail-wire.js").wire({ godspeed: GODSPEED });
   const mcpj = JSON.parse(fs.readFileSync(path.join(GODSPEED, ".mcp.json"), "utf8"));

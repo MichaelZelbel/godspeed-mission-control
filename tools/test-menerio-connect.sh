@@ -20,6 +20,7 @@
 #
 # Usage: bash tools/test-menerio-connect.sh
 set -u
+. "$(dirname "$0")/test-guard.bash"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 NODE=""
 for c in node nodejs /usr/local/bin/node /usr/bin/node; do
@@ -34,7 +35,7 @@ lacks()    { case "$2" in *"$3"*) bad "$1" "should not contain [$3]";; *) ok "$1
 
 W="$HERE/.tmp-connect-test.$$"; rm -rf "$W"; mkdir -p "$W"
 STUB_PID=""
-trap '[ -n "$STUB_PID" ] && kill "$STUB_PID" 2>/dev/null; rm -rf "$W"' EXIT
+trap '[ -n "$STUB_PID" ] && kill "$STUB_PID" 2>/dev/null; rm -rf "$W" "$TEST_GUARD_HOME"' EXIT
 
 FULL_PATH="$PATH"
 SAFE_PATH="$(dirname "$NODE"):/usr/bin:/bin"

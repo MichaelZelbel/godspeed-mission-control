@@ -4,8 +4,9 @@
 # has fewer, passes. Runs in a throwaway godspeed root.
 # Usage: bash tools/test-check-moves.sh
 set -uo pipefail
+. "$(dirname "$0")/test-guard.bash"
 HERE="$(cd "$(dirname "$0")" && pwd)"
-TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
+TMP="$(mktemp -d)"; trap 'rm -rf "$TMP" "$TEST_GUARD_HOME"' EXIT
 D=2026-09-24; RUN="$TMP/routines/next-action/$D"
 mkdir -p "$RUN" "$TMP/goals" "$TMP/work/plans"
 cat > "$RUN/attention.txt" <<'EOF'

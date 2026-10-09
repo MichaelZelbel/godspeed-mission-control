@@ -6,7 +6,7 @@ import {ApiKeys} from '../core/api-keys.mjs';
 import {installSkillTree} from '../core/packaged-skills.mjs';
 import {commandFile} from './windows-command-file.mjs';
 import {starterBorn} from '../core/starter-workspace.mjs';
-import {withTimezone} from '../core/hermes-config.mjs';
+import {withTimezone,godspeedHermesSettings,CRON_PROVIDER} from '../core/hermes-config.mjs';
 const root=process.env.GODSPEED_WORKSPACE,home=process.argv[2];if(!root||!home)throw new Error('Choose the candidate workspace and isolated assistant home');
 const store=new Store(root),port=Number(process.env.GODSPEED_PORT||47831),file=path.join(home,'config.yaml');fs.mkdirSync(home,{recursive:true});
 const kit=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..');
@@ -81,7 +81,12 @@ for(const folder of ['.claude','.agents']){
 const ignoreFile=path.join(root,'.gitignore');let ignores=fs.readFileSync(ignoreFile,'utf8');
 const missing=['/.godspeed/','/.codex/','/.vscode/','/.agents/','/.claude/skills','/.claude/settings.local.json'].filter(entry=>!ignores.split(/\r?\n/).includes(entry));
 if(missing.length)atomic(ignoreFile,ignores.replace(/\n*$/,'\n')+missing.join('\n')+'\n');
-for(const command of (process.env.GODSPEED_ORIGINAL_RUNTIME==='on'?['mail']:['goals','work','forecast','due','subs','watch','mail'])){
+// With the original assistant, mc-goals, mc-work, mc-forecast and mc-due are the kit's own commands
+// (copied from tools/ above). mc-watch and mc-subs have no such command, and until 9 October 2026
+// they were not installed there at all: the watch and subscription-review recipes name them, and
+// a live run's routine reported "mc-watch not available". They write the notebook's own records
+// on every installation.
+for(const command of (process.env.GODSPEED_ORIGINAL_RUNTIME==='on'?['mail','watch','subs']:['goals','work','forecast','due','subs','watch','mail'])){
  const bin=path.join(home,'bin','mc-'+command),script=command==='mail'?path.join(kit,'tools','mc-mail.js'):path.join(kit,'notebook','bin','personal-command.mjs'),args=command==='mail'?[]:[command];
  if(process.platform==='win32')atomic(bin+'.cmd',cmd(at=>'"'+at(process.execPath)+'" "'+at(script)+'" '+args.join(' ')+' %*\r\n'));
  shellCommand(bin,[process.execPath,script,...args]);
@@ -146,5 +151,15 @@ if(process.env.GODSPEED_COMPUTER==='on'){
 // read "every weekday at seven" from the chat on the server's clock, usually UTC. Only for a
 // mission control made from the starter, and only where no zone was chosen yet.
 if(starterBorn(root))text=withTimezone(text,store.get('settings','installation')?.timezone);
+// What the assistant of a mission control made from the starter needs from Hermes, found by a live
+// run of the book's prompts on 9 October 2026 (hermes-config.mjs says why for each): no Hermes
+// memory beside the notebook, no clarify tool in a chat nobody can answer it in, the notebook's
+// tools offered directly, and a scheduler Hermes knows is running. An adopted mission control is
+// the owner's and keeps its assistant as it was.
+if(starterBorn(root)){
+ text=godspeedHermesSettings(text);
+ const provider=path.join(home,'plugins',CRON_PROVIDER,'__init__.py'),source=fs.readFileSync(path.join(kit,'notebook','assistant-files','godspeed-cron-provider.py'),'utf8').replace(/\r\n/g,'\n');
+ if(!fs.existsSync(provider)||fs.readFileSync(provider,'utf8')!==source){fs.mkdirSync(path.dirname(provider),{recursive:true});atomic(provider,source);}
+}
 atomic(file,text);fs.chmodSync(file,0o600);
 console.log(JSON.stringify({wired:true,isolated:true,port}));

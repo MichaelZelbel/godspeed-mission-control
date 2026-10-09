@@ -6,6 +6,7 @@
 # Runs in a throwaway godspeed root; never touches a real work/.
 # Usage: bash tools/test-work-run.sh   (from a checkout of this kit)
 set -uo pipefail
+. "$(dirname "$0")/test-guard.bash"
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 NODE=""
@@ -15,7 +16,7 @@ done
 [ -n "$NODE" ] || { echo "FAIL: no node on this box"; exit 1; }
 
 TMP="$(mktemp -d)"
-trap 'rm -rf "$TMP"' EXIT
+trap 'rm -rf "$TMP" "$TEST_GUARD_HOME"' EXIT
 mkdir -p "$TMP/rules" "$TMP/bin" "$TMP/goals/playbooks" "$TMP/skills/work-item" "$TMP/research"
 : > "$TMP/AGENTS.md"
 printf 'receipt\n' > "$TMP/rules/machine-words.txt"

@@ -9,9 +9,11 @@ Each routine runs the original programs of the mission control, never a copy of 
 
   decide      mc-decide, the daily round's morning choice (the next-action recipe). Prints the
               decision's one line for the person, or nothing when there is nothing for them or
-              when a morning brief still to come today will open with that line.
+              when a morning brief still to come today will open with that line. A round that
+              did not finish says so in one line, the way any other line reaches the person.
   work        mc-work-run, the daily round's work (the work-item recipe). Prints one sentence for
-              each finished piece the person will open, or nothing.
+              each finished piece the person will open, one for each piece whose check failed,
+              or nothing.
   due         mc-due check and mc-due today. Prints the reminders that need saying today, or
               nothing, and nothing at all on a day a morning brief carries them.
   coach-gate  godspeed-coach gate: the talk brief when a talk is due, else {"wakeAgent": false}.
@@ -19,6 +21,13 @@ Each routine runs the original programs of the mission control, never a copy of 
 
 Printing nothing is Hermes' silence: nothing is sent and no note is saved. A failure exits non-zero
 with one plain sentence, which the notebook's Routines list shows as the last run.
+
+A daily round that went wrong is not such a failure (9 October 2026, a live run: the morning choice
+ran out of time, a work item failed its check, and both reached nobody, because a failed script
+reaches only the Routines list). Its one plain sentence is printed like any other line, so it
+reaches the person the way their lines do (a note in "From your routines" on a computer, Telegram
+on a server), and it is kept in godspeed-routines-status.json beside Hermes' own record, from which
+the Routines list still says that the run failed (starting-routines.mjs, routineStatus).
 """
 import json
 import os
@@ -70,6 +79,10 @@ def environment(c, day):
         "GODSPEED_RUNNER": "hermes", "GODSPEED_SCHEDULED_RUN": "1", "GODSPEED_NODE": c["node"],
         "GODSPEED_COACH_DIR": c["root"], "GODSPEED_COACH_SCRIPT": c["coach"], "GODSPEED_COACH_APP": c["coach_app"],
         "GODSPEED_COACH_GIT_SYNC": "off", "GODSPEED_JOURNAL_GIT_SYNC": "off",
+        # Hermes appends a "File-mutation verifier" block to an answer whose write failed; in a
+        # routine nobody reads the answer but these programs, and on 9 October 2026 that block was
+        # all the person got from the daily round. The run's files are checked by the programs.
+        "HERMES_FILE_MUTATION_VERIFIER": "0",
     })
     return env
 
@@ -127,12 +140,68 @@ def fail(sentence, result=None):
     sys.exit(1)
 
 
+STATUS = "godspeed-routines-status.json"
+
+
+def remember(c, kind, failed=None):
+    """What this run of a daily-round routine came to, beside Hermes' own record: the Routines list
+    shows a run that printed its failure as failed (starting-routines.mjs, routineStatus)."""
+    path = os.path.join(c["home"], STATUS)
+    try:
+        with open(path, encoding="utf-8") as f:
+            status = json.load(f)
+        if not isinstance(status, dict):
+            status = {}
+    except Exception:
+        status = {}
+    status[kind] = {"at": datetime.now(timezone.utc).isoformat(), "failed": failed}
+    try:
+        tmp = path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(status, f, indent=1)
+        os.replace(tmp, path)
+    except OSError:
+        pass
+
+
+def tell(c, kind, sentence, result=None):
+    """A daily round that went wrong: one plain sentence for the person, printed like any line of
+    theirs, and kept as this run's failure. The detail stays in the run's own files."""
+    if result is not None:
+        lines = [l for l in ((result.stderr or "") + "\n" + (result.stdout or "")).splitlines() if l.strip()]
+        if lines:
+            sys.stderr.write(lines[-1].strip()[:300] + "\n")
+    remember(c, kind, sentence)
+    return sentence
+
+
 SILENT = re.compile(r"^\[?\s*silent\s*\]?$|^no[_ ]reply$", re.I)
 
 
 def silent(text):
     lines = [l.strip() for l in text.strip().splitlines() if l.strip()]
     return not lines or bool(SILENT.match(text.strip())) or bool(SILENT.match(lines[0])) or bool(SILENT.match(lines[-1]))
+
+
+# What Hermes itself adds to an answer, which is never the person's line (9 October 2026: the daily
+# round's whole message was Hermes' "File-mutation verifier" block). Each pattern removes a whole
+# block: the verifier's header and its bullet lines, a repaired tool name Hermes printed, a notice
+# that replaced a reply the model never finished, and a network notice.
+TRAILERS = [
+    re.compile(r"^[ \t]*(?:⚠️?[ \t]*)?File-mutation verifier:.*(?:\n[ \t]+(?:•|-|\*).*)*", re.M),
+    re.compile(r"^[ \t]*\U0001f527[ \t]*Auto-repaired tool name:.*$", re.M),
+    # These replace an unfinished reply and run to its end.
+    re.compile(r"^[ \t]*⚠️?[ \t]*(?:No reply:|\*\*Response Stopped|\*\*No visible answer)[\s\S]*", re.M),
+    re.compile(r"^[ \t]*\U0001f501[ \t]*Response dominated by repeated text.*$", re.M),
+    re.compile(r"^[ \t]*\[System: [^\]]*\][ \t]*$", re.M),
+]
+
+
+def strip_trailers(text):
+    text = str(text or "").replace("\r\n", "\n")
+    for pattern in TRAILERS:
+        text = pattern.sub("", text)
+    return re.sub(r"\n{3,}", "\n\n", text).strip()
 
 
 def section(markdown, title):
@@ -146,14 +215,36 @@ NOTHING = re.compile(r"^\W*(?:for you today\W*)?nothing\b", re.I)
 CARD_ID = re.compile(r"\s+(?:\(?(?=[A-Za-z][\w-]*\d)[A-Za-z]\w*(?:-\w+){2,}\)?|nothing)\W*$", re.I)
 
 
+MARKER = re.compile(r"^\W*for you today\W*", re.I)
+# The recipe's own ending: the card's id, or the word nothing after the sentence ("... April? nothing").
+# "I changed nothing." is a sentence, not that ending.
+ENDING = re.compile(r"(?:\s\(?(?=[A-Za-z][\w-]*\d)[A-Za-z]\w*(?:-\w+){2,}\)?|[.?!:;)]\s+nothing)\W*$", re.I)
+
+
+def one_line(text):
+    return " ".join(str(text or "").split())
+
+
 def for_you(answer, decision):
-    """The decision's one line for the person, or "" when there is nothing for them today."""
+    """The decision's one line for the person, or "" when there is nothing for them today.
+
+    It comes from what the round decided, never from what Hermes or the model added after it: the
+    answer's own "For you today" paragraph, else its last paragraph when that ends the way the
+    recipe asks (the card's id or the word nothing), else the decision's "For you today" section.
+    Until 9 October 2026 it was simply the answer's last paragraph, and that was Hermes' verifier
+    block in one live run and the model's own "Verified: ..." note in another."""
     record = section(decision, "For you today")
     first = next((l.strip() for l in record.splitlines() if l.strip()), "")
     if first and NOTHING.search(first):
         return ""
-    paragraphs = [p.strip() for p in re.split(r"\n\s*\n", answer.strip()) if p.strip()]
-    line = " ".join((paragraphs[-1] if paragraphs else first).split())
+    paragraphs = [p.strip() for p in re.split(r"\n\s*\n", strip_trailers(answer)) if p.strip()]
+    marked = [p for p in paragraphs if MARKER.match(p)]
+    if marked:
+        line = MARKER.sub("", one_line(marked[-1]), count=1)
+    elif paragraphs and ENDING.search(" " + one_line(paragraphs[-1])):
+        line = one_line(paragraphs[-1])
+    else:
+        line = one_line(strip_trailers(record))
     if not line or silent(line) or NOTHING.search(line):
         return ""
     return CARD_ID.sub("", line).strip()
@@ -203,12 +294,29 @@ def brief_today(c, day):
     return ran, later
 
 
+def told_today(c, kind, day, sentence):
+    """Whether this very sentence already reached the person today (a second run by hand, a
+    catch-up after the computer slept): a failure is said once a day, like any line."""
+    try:
+        with open(os.path.join(c["home"], STATUS), encoding="utf-8") as f:
+            last = (json.load(f) or {}).get(kind) or {}
+    except Exception:
+        return False
+    return last.get("failed") == sentence and local_day(last.get("at"), c) == day
+
+
+def went_wrong(c, kind, day, sentence, result=None):
+    already = told_today(c, kind, day, sentence)
+    tell(c, kind, sentence, result)
+    return "" if already else sentence
+
+
 def decide(c):
     day = today(c)
     env = environment(c, day)
     shell = bash()
     if not shell:
-        fail("The daily round needs Git Bash on this computer, and it was not found.")
+        return went_wrong(c, "decide", day, "The daily round needs Git Bash on this computer, and it was not found, so nothing was decided today.")
     rundir = os.path.join(c["root"], "routines", "next-action", day)
     names = [os.path.join(rundir, "answer.txt"), os.path.join(rundir, "answer-moves.txt")]
     stamp = lambda p: os.stat(p).st_mtime_ns if os.path.isfile(p) else None
@@ -216,10 +324,11 @@ def decide(c):
     try:
         r = run([shell, posix(os.path.join(c["tools"], "mc-decide")), "--godspeed", posix(c["root"]), "--date", day], c, env)
     except subprocess.TimeoutExpired:
-        fail("The daily round took longer than its hour this morning and was stopped.")
+        return went_wrong(c, "decide", day, "This morning's daily round took longer than its hour and was stopped, so nothing was decided today.")
     decision = read(os.path.join(rundir, "decision.md"))
     if not decision.strip() or "did not finish and wrote no record of its own" in decision:
-        fail("This morning's daily round did not finish, so nothing was decided today.", r)
+        return went_wrong(c, "decide", day, "This morning's daily round did not finish, so nothing was decided today.", r)
+    remember(c, "decide")
     # Only an answer this run wrote: a day already decided (a catch-up after the computer slept,
     # a second run by hand) was said already, and is never said twice.
     answers = [p for p in names if stamp(p) is not None and stamp(p) != before[p]]
@@ -232,18 +341,43 @@ def decide(c):
     return "" if later and not ran else line
 
 
+def register_what(c, env, item):
+    """The WHAT of a work item, from the register (mc-work show), or ""."""
+    try:
+        r = run([c["node"], os.path.join(c["tools"], "work.js"), "show", item, "--godspeed", c["root"]], c, env, timeout=120)
+    except Exception:
+        return ""
+    m = re.search(r"^WHAT:\s*(.+)$", r.stdout or "", re.M)
+    return short(m.group(1)) if m else ""
+
+
+def short(what):
+    what = " ".join(str(what or "").split())
+    return what[:140].rsplit(" ", 1)[0].rstrip(",;:") + "..." if len(what) > 140 else what
+
+
 def work(c):
     day = today(c)
     env = environment(c, day)
     shell = bash()
     if not shell:
-        fail("The daily round needs Git Bash on this computer, and it was not found.")
+        return went_wrong(c, "work", day, "The daily round's work needs Git Bash on this computer, and it was not found, so nothing was worked on today.")
     try:
         r = run([shell, posix(os.path.join(c["tools"], "mc-work-run")), "--godspeed", posix(c["root"]), "--date", day, "--budget", "1200"], c, env)
     except subprocess.TimeoutExpired:
-        fail("The daily round's work took longer than its hour and was stopped.")
+        return went_wrong(c, "work", day, "The daily round's work took longer than its hour and was stopped.")
     if r.returncode != 0:
-        fail("The daily round's work could not start.", r)
+        return went_wrong(c, "work", day, "The daily round's work could not start today.", r)
+    # A piece whose check failed, or that could not be finished, is said too, in one line each
+    # (9 October 2026: a failed check reached nobody). The detail is on the item in the register.
+    unfinished = []
+    taken = dict(re.findall(r"^\S+ (\S+) taken \([^)\n]*\): (.+)$", r.stdout, re.M))
+    for item in dict.fromkeys(re.findall(r"^\S+ (\S+) (?:attempted, not verified|failed:)", r.stdout, re.M)):
+        what = short(taken.get(item, "")) or register_what(c, env, item)
+        checked = re.search(r"^\S+ " + re.escape(item) + r" attempted, not verified", r.stdout, re.M)
+        sentence = "Today's work " + ("did not pass its check" if checked else "could not be finished") + ", so it is not done yet"
+        unfinished.append(sentence + (': "' + what + '".' if what else "."))
+    remember(c, "work", " ".join(unfinished) if unfinished else None)
     said = []
     for item in re.findall(r"^\S+ (\S+) verified$", r.stdout, re.M):
         lines = [l for l in read(os.path.join(c["root"], "routines", "work", day, item, "answer.txt")).splitlines() if l.startswith("SAY:")]
@@ -251,7 +385,7 @@ def work(c):
             continue
         url = re.search(re.escape(item) + r" published: (https://\S+)", r.stdout)
         said.append(lines[-1][4:].strip() + (" " + url.group(1) if url else ""))
-    return "\n".join(said)
+    return "\n".join(said + unfinished)
 
 
 DUE_TAGS = ("RUNNING OUT", "SOON", "ON THE WAY", "PLENTY OF TIME", "NOT YET", "AIMING FOR",

@@ -2,6 +2,7 @@
 // Tests for tools/observed-state.js (mc-observed-state). A local web server stands in for the
 // hourly copy on GitHub. No dependencies. Run: node tools/test-observed-state.js
 'use strict';
+require('./test-guard.cjs'); // never a real mission control (test-guard.bash says why)
 const { execFile } = require('child_process');
 const fs = require('fs');
 const http = require('http');

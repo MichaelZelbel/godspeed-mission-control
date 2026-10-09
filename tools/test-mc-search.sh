@@ -15,6 +15,7 @@
 #
 # Usage: bash tools/test-mc-search.sh
 set -u
+. "$(dirname "$0")/test-guard.bash"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 NODE=""
 for c in node nodejs /usr/local/bin/node /usr/bin/node; do
@@ -31,7 +32,7 @@ lacks()    { case "$2" in *"$3"*) bad "$1" "should not contain [$3]: $2";; *) ok
 # and a Windows program, and .gitignore already covers tools/.tmp-*.
 W="$HERE/.tmp-search-test.$$"; rm -rf "$W"; mkdir -p "$W/home/.godspeed"
 STUB_PID=""
-trap '[ -n "$STUB_PID" ] && kill "$STUB_PID" 2>/dev/null; rm -rf "$W"' EXIT
+trap '[ -n "$STUB_PID" ] && kill "$STUB_PID" 2>/dev/null; rm -rf "$W" "$TEST_GUARD_HOME"' EXIT
 
 # A home with nothing in it, so the key on the computer running the tests is never found.
 # USERPROFILE is what Node calls home on Windows; HOME is what it calls home everywhere else.

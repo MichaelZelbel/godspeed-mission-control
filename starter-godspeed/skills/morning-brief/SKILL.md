@@ -1,6 +1,6 @@
 ---
 name: morning-brief
-description: Write today's morning brief into brief/YYYY-MM-DD.md, the short message that reaches the person each morning when they switched it on in setup. The starter version every mission control ships with; Chapter 25 of the book shows how to replace it with your own. Use when the morning brief job runs, or when the person asks for "today's brief", "my brief" or "the brief again".
+description: Write today's morning brief into brief/YYYY-MM-DD.md, the short message that reaches the person each morning when they switched it on in setup. The starter version every mission control ships with; Chapter 25 of the book shows how to replace it with your own. Use when the morning brief job runs, when the person asks for "today's brief", "my brief" or "the brief again", and when they ask to switch the morning brief on.
 ---
 
 # Morning brief (starter)
@@ -19,9 +19,10 @@ if there is one: its "For you today" section is the daily round's choice. Then r
 and their notes are kept: call `get_user_profile` (their facts and the people closest to them)
 and `search_brain` for the people, projects and dates the files above name. Without the
 notebook tools, read `world/` instead and say in the brief that the notebook was not reached.
-Read the previous brief in `brief/` if there is one. Use the
-current date in the time zone the morning job runs in. Do not invent change over time when
-there is no earlier record.
+Read the previous brief in `brief/` if there is one. Today is the date the terminal gives
+(`date +%F`, in the time zone the morning job runs in), also when the brief runs in the
+evening: never name a brief for another day. Do not invent change over time when there is no
+earlier record.
 
 ## What to write
 
@@ -65,3 +66,23 @@ urgent on your own. This section does not count toward the 200 words.
 Run `mc-check-brief` on the finished file and fix what it refuses, without dropping anything
 important. Keep urgent unfinished work and failed-check notices visible after the normal body;
 they are exempt from the word limit. If a check fails, say so in the brief.
+
+## Your answer
+
+Your final answer is the brief itself, word for word as the file holds it, and nothing else:
+it is what reaches the person. When no new brief was written today, say that in one line.
+
+## Switching it on
+
+When the person asks for the morning brief to run every morning, look at the routine list first
+(Hermes' cronjob tool, `list`): a routine that already runs this recipe is kept, not doubled.
+Otherwise make one with Hermes' cronjob tool: `action: create`, the name `Morning brief`, the
+time they named in their time zone (with none named, 07:00), this recipe attached
+(`skills: ["morning-brief"]`), this mission control's folder as `workdir`, and the prompt
+`Follow the morning-brief recipe for this mission control.` Never write a prompt that retells
+the recipe. To run it once now, follow this recipe yourself, right here, exactly as the routine
+will (the same reading, the same notebook calls, the same checks, today's date), and show the
+brief you wrote. Never start the routine's own `run` from the chat for this: Hermes runs it in
+the background and its answer never comes back to the chat. Add its row to `procedures.md`, and tell
+the person when the next one comes, that it appears in the notebook under "From your routines"
+(on a server, in their chat), and how to pause it (Settings > Routines).

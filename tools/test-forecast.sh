@@ -4,6 +4,7 @@
 # baseline it named. Runs in a throwaway godspeed root; never touches the real forecasts/.
 # Usage: bash tools/test-forecast.sh   (from a checkout of this kit)
 set -uo pipefail
+. "$(dirname "$0")/test-guard.bash"
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 NODE=""
@@ -13,7 +14,7 @@ done
 [ -n "$NODE" ] || { echo "FAIL: no node on this box"; exit 1; }
 
 TMP="$(mktemp -d)"
-trap 'rm -rf "$TMP"' EXIT
+trap 'rm -rf "$TMP" "$TEST_GUARD_HOME"' EXIT
 mkdir -p "$TMP/rules" "$TMP/bin"
 : > "$TMP/AGENTS.md"
 cp "$HERE/forecast.js" "$TMP/bin/"

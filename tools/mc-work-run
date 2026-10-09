@@ -164,9 +164,13 @@ if [ "$DRY" -eq 1 ]; then
   exit 0
 fi
 
+# mc-run is started with bash below, so it only has to be there, not be executable (2026-10-09).
+# The notebook runs this file from its own copy of the kit, which git writes without the
+# executable bit on Linux and on a Mac, and the routines' daily round there stopped with
+# "mc-run is not installed" unless an older mc-run sat in ~/.local/bin.
 RUNNER="$HERE/mc-run"
-[ -x "$RUNNER" ] || RUNNER="$HOME/.local/bin/mc-run"
-[ -x "$RUNNER" ] || { echo "mc-work-run: mc-run is not installed, so no recipe could be carried out." >&2; exit 3; }
+[ -f "$RUNNER" ] || RUNNER="$HOME/.local/bin/mc-run"
+[ -f "$RUNNER" ] || { echo "mc-work-run: mc-run is not installed, so no recipe could be carried out." >&2; exit 3; }
 
 # The newest file for a goal in a folder, by name (they carry the date), or nothing.
 newest() { ls -1 "$1"/"$2"-*.md 2>/dev/null | sort | tail -1; }

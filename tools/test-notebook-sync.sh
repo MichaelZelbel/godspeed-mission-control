@@ -14,6 +14,7 @@
 #
 # Usage: bash tools/test-notebook-sync.sh
 set -u
+. "$(dirname "$0")/test-guard.bash"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 PY="${PYTHON:-python3}"
 command -v "$PY" >/dev/null 2>&1 && "$PY" -c "pass" >/dev/null 2>&1 || PY=python
@@ -23,7 +24,7 @@ ok()  { echo "  ok   $1"; PASS=$((PASS+1)); }
 bad() { echo "  FAIL $1"; FAIL=$((FAIL+1)); [ -n "${2:-}" ] && echo "       $2"; }
 
 W="$HERE/.tmp-notebook-test.$$"; rm -rf "$W"; mkdir -p "$W"
-trap 'rm -rf "$W"' EXIT
+trap 'rm -rf "$W" "$TEST_GUARD_HOME"' EXIT
 
 echo "== the notebook sync: quiet for most readers, honest for the rest =="
 
@@ -378,7 +379,7 @@ open(sys.argv[1], "w").write(str(srv.server_address[1]))
 srv.serve_forever()
 STUBEOF
 "$PY" "$W/stub.py" "$W/stub.port" & STUB_PID=$!
-trap 'kill "$STUB_PID" 2>/dev/null; rm -rf "$W"' EXIT
+trap 'kill "$STUB_PID" 2>/dev/null; rm -rf "$W" "$TEST_GUARD_HOME"' EXIT
 for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do [ -s "$W/stub.port" ] && break; sleep 0.25; done
 if [ -s "$W/stub.port" ]; then
   BASE="http://127.0.0.1:$(cat "$W/stub.port")"
