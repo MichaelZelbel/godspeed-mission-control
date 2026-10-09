@@ -128,27 +128,65 @@ function hermesHome() {
   for (const d of spots) if (fs.existsSync(path.join(d, "config.yaml"))) return d;
   return "";
 }
-function hermes(check) {
-  const dir = hermesHome();
-  if (!dir) return "";
+// THE NOTEBOOK'S OWN HERMES (8 October 2026). A mission control with the notebook (version 2) runs
+// the assistant in a profile of its own, named in assistant.json: on Windows in the setup's state
+// folder (...\Godspeed Mission Control Full Alpha State\hermes-profile), on a Mac, Linux or a
+// server in the mission control's .godspeed folder. Until this date `mc-mail setup` wired only the
+// default profile, so on a Windows version 2 install the assistant the reader talks to had the
+// notebook tool and no mail tool.
+const samePath = (a, b) => process.platform === "win32" ? path.resolve(a).toLowerCase() === path.resolve(b).toLowerCase() : path.resolve(a) === path.resolve(b);
+function notebookHermesHomes(godspeed) {
+  const files = [];
+  if (process.env.GODSPEED_ASSISTANT_CONFIG) files.push(process.env.GODSPEED_ASSISTANT_CONFIG);
+  if (godspeed) files.push(path.join(godspeed, ".godspeed", "assistant.json"));
+  if (process.platform === "win32" && process.env.LOCALAPPDATA) files.push(path.join(process.env.LOCALAPPDATA, "Godspeed Mission Control Full Alpha State", "assistant.json"));
+  const out = [];
+  for (const f of files) {
+    let d = null;
+    try { d = JSON.parse(fs.readFileSync(f, "utf8").replace(/^﻿/, "")); } catch (e) { continue; }
+    if (!d || !d.home || !fs.existsSync(path.join(d.home, "config.yaml"))) continue;
+    // An assistant set up for another mission control on this computer is that one's business.
+    if (d.workspace && godspeed && !samePath(d.workspace, godspeed)) continue;
+    if (!out.some(h => samePath(h, d.home))) out.push(path.resolve(d.home));
+  }
+  return out;
+}
+function hermesOne(dir, check, label, entry) {
   const file = path.join(dir, "config.yaml");
   const before = readIf(file) || "";
   const m = before.match(/^\s{2}mc-mail:\s*\r?\n((?:\s{4}.*\r?\n?)*)/m);
   if (m) {
-    const cmd = ((m[1].match(/^\s{4}command:\s*(.+)$/m) || [])[1] || "").trim().replace(/^["']|["']$/g, "");
+    let cmd = ((m[1].match(/^\s{4}command:\s*(.+)$/m) || [])[1] || "").trim();
+    try { cmd = /^"/.test(cmd) ? JSON.parse(cmd) : cmd.replace(/^'|'$/g, ""); } catch (e) { cmd = cmd.replace(/^["']|["']$/g, ""); }
     const args = [...m[1].matchAll(/^\s{6}-\s*(.+)$/mg)].map(x => { const v = x[1].trim(); try { return JSON.parse(v); } catch (e) { return v.replace(/^'|'$/g, ""); } });
-    return report("Hermes", { command: cmd, args }, os.homedir(), check);
+    return report(label, { command: cmd, args }, os.homedir(), check);
   }
-  if (check) return "Hermes: the mail tool is not added yet";
+  if (check) return label + ": the mail tool is not added yet";
   const eol = /\r\n/.test(before) ? "\r\n" : "\n";
-  const lines = [`  ${NAME}:`, `    command: ${ENTRY.command}`, "    args:", ...ENTRY.args.map(a => "      - " + JSON.stringify(a))];
+  const q = v => /^[\w.-]+$/.test(v) ? v : JSON.stringify(v);
+  const lines = [`  ${NAME}:`, `    command: ${q(entry.command)}`, "    args:", ...entry.args.map(a => "      - " + JSON.stringify(a))];
+  if (entry.env) lines.push("    env:", ...Object.entries(entry.env).map(([k, v]) => `      ${k}: ${JSON.stringify(v)}`));
   let after;
   const mm = before.match(/^mcp_servers:[ \t]*(\{\})?[ \t]*\r?$/m);
   if (mm && mm[1]) after = before.replace(mm[0], "mcp_servers:" + eol + lines.join(eol));
   else if (mm) after = before.replace(mm[0], mm[0] + eol + lines.join(eol));
   else after = before.replace(/\s*$/, eol) + "mcp_servers:" + eol + lines.join(eol) + eol;
   write(file, readIf(file), after);
-  return "Hermes: added the mail tool (config.yaml; it is used from the next conversation)";
+  return label + ": added the mail tool (config.yaml; it is used from the next conversation)";
+}
+function hermes(check, godspeed = "", tool = "") {
+  const out = [];
+  const plain = hermesHome();
+  if (plain) out.push(hermesOne(plain, check, "Hermes", ENTRY));
+  // The notebook's profile never travels, so its entry names this computer's own Node and tool, and
+  // says which mission control it belongs to: Hermes hands a tool only a few settings of its own.
+  for (const dir of notebookHermesHomes(godspeed)) {
+    if (plain && samePath(dir, plain)) continue;
+    const entry = { command: process.execPath, args: [tool || installed(), "mcp"] };
+    if (godspeed) entry.env = { GODSPEED_DIR: godspeed };
+    out.push(hermesOne(dir, check, "Hermes (the assistant your notebook set up)", entry));
+  }
+  return out.join("\n");
 }
 
 // Claude Desktop's own list. Installed from claude.ai it lives in %APPDATA%\Claude; installed
@@ -186,14 +224,14 @@ function wire({ check = false, godspeed = "", desktop = false } = {}) {
   const lines = [];
   let failed = false;
   const tool = fs.existsSync(installed()) ? installed() : path.join(__dirname, "mc-mail.js");
-  const parts = [claudeCode(godspeed, check), codex(check), hermes(check)];
+  const parts = [claudeCode(godspeed, check), codex(check), hermes(check, godspeed, tool)];
   if (desktop || check) parts.push(claudeDesktop(check, tool));
   for (const line of parts.join("\n").split("\n")) {
     if (!line) continue;
     if (/\(failed\)/.test(line)) failed = true;
     lines.push(line);
   }
-  if (!check) lines.push("Email itself stays off until you connect it: ask your assistant \"Connect Gmail for me\" (Chapter 30) for your mailbox, mc-mail connect agentmail (Chapter 29) for the mission control's own address.");
+  if (!check) lines.push("Email itself stays off until you connect it: ask your assistant \"Connect Gmail for me\" (Chapter 32) for your mailbox, mc-mail connect agentmail (Chapter 31) for the mission control's own address.");
   return { lines, failed };
 }
 

@@ -37,6 +37,7 @@ const path = require("path");
 const http = require("http");
 const crypto = require("crypto");
 const { spawnSync } = require("child_process");
+const A = require("./mc-mail-age.js");
 
 const SCOPE_READ = "https://www.googleapis.com/auth/gmail.readonly";
 const SCOPE_COMPOSE = "https://www.googleapis.com/auth/gmail.compose";
@@ -89,38 +90,59 @@ function findGodspeed() {
 }
 
 // ============================================================ the locked store
+// An age the person installed comes first; mc-mail's own pinned copy (mc-mail-age.js) after it.
+// GODSPEED_MAIL_AGE_ONLY_FETCHED=1 is for the tests: only mc-mail's own copy counts.
 function findAge(name) {
+  const own = A.local(name);
+  if (process.env.GODSPEED_MAIL_AGE_ONLY_FETCHED === "1") return own;
   const h = os.homedir(), exe = process.platform === "win32" ? ".exe" : "";
   const dirs = ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/snap/bin", path.join(h, "bin"), path.join(h, ".local", "bin"),
     path.join(h, "AppData", "Local", "Microsoft", "WinGet", "Links"), "C:\\Program Files\\age"];
   for (const d of dirs) { const p = path.join(d, name + exe); if (fs.existsSync(p)) return p; }
+  if (own) return own;
   const r = spawnSync(name, ["--version"], { encoding: "utf8" });
   return r.error ? "" : name;
 }
+// Makes sure age is here before a key is locked or opened, fetching the pinned copy once.
+async function readyAge(say = () => {}) {
+  if (findAge("age") && findAge("age-keygen")) return;
+  await A.ensure(say);
+}
+const NO_AGE = "the small program called age, which locks your key away, is not on this computer yet. Run the same mc-mail command in a terminal again: it fetches age by itself. Nothing was changed.";
+
+// The assistant's old mail folder: until 8 October 2026 the notebook sent its assistant to
+// <mission control>/.godspeed/device-home instead of your home folder (assistant-files.mjs).
+const oldHome = godspeed => godspeed ? path.join(godspeed, ".godspeed", "device-home", ".godspeed") : "";
 function storePaths() {
   const godspeed = findGodspeed();
+  const key = process.env.GODSPEED_AGE_KEY || path.join(home(), ".godspeed", "age-key.txt");
+  // A key the assistant made in its old folder still opens the store, if it could not be moved.
+  const old = godspeed && !process.env.GODSPEED_AGE_KEY ? path.join(oldHome(godspeed), "age-key.txt") : "";
   return { godspeed, store: godspeed ? path.join(godspeed, "secrets", "mc-secrets.env.age") : "",
-    key: process.env.GODSPEED_AGE_KEY || path.join(home(), ".godspeed", "age-key.txt") };
+    key, keys: [key, old].filter((k, i, a) => k && a.indexOf(k) === i) };
 }
 function readStore() {
-  const { store, key } = storePaths();
+  const { store, keys } = storePaths();
   if (!store) return { lines: null, why: "no mission control folder found" };
   // A mission control that never kept a credential has no store yet. That is an empty store, not a locked
   // one: the first connection makes it (and this computer's key, if it has none).
   if (!fs.existsSync(store)) return { lines: [], why: "" };
-  if (!fs.existsSync(key)) return { lines: null, why: "this computer cannot open your mission control's locked store" };
+  const here = keys.filter(k => fs.existsSync(k));
+  if (!here.length) return { lines: null, why: "this computer cannot open your mission control's locked store" };
   const age = findAge("age");
-  if (!age) return { lines: null, why: "the small program called age is not on this computer" };
-  const r = spawnSync(age, ["-d", "-i", key, store], { encoding: "utf8", maxBuffer: 8e6 });
-  if (r.status !== 0) return { lines: null, why: "the key on this computer does not open your mission control's store" };
-  return { lines: r.stdout.split(/\r?\n/), why: "" };
+  if (!age) return { lines: null, why: "the small program called age, which opens your locked keys, is not on this computer yet (mc-mail fetches it the next time it runs in a terminal)" };
+  for (const k of here) {
+    const r = spawnSync(age, ["-d", "-i", k, store], { encoding: "utf8", maxBuffer: 8e6 });
+    if (r.status === 0) return { lines: r.stdout.split(/\r?\n/), why: "" };
+  }
+  return { lines: null, why: "the key on this computer does not open your mission control's store" };
 }
 // Change some NAME=value lines and leave every other line exactly as it was.
 function writeStore(changes) {
   const { godspeed, store, key } = storePaths();
   if (!godspeed) throw new Error("no mission control folder found, so there is nowhere to keep the connection");
   const age = findAge("age"), keygen = findAge("age-keygen");
-  if (!age || !keygen) throw new Error("the small program called age is not on this computer. Ask your assistant to install age (the installer fetches it only with the notebook), then try again.");
+  if (!age || !keygen) throw new Error(NO_AGE);
   if (!fs.existsSync(key)) {
     // No key and a store that exists: somebody else's lock, never to be written over.
     if (fs.existsSync(store)) throw new Error("this computer has no key to your mission control's locked store yet. Run the mission control installer on it first.");
@@ -159,9 +181,34 @@ function writeStore(changes) {
 // server, if you have one) get the connection on their next pull, the way `godspeed connect menerio`
 // does it. Best effort: a mission control that is not a git repository, or has no remote, is fine, and a
 // failed push is said in one line. Nothing else in the mission control is committed.
+//
+// NOT ON A MISSION CONTROL WITH THE NOTEBOOK (version 2, the one the book's second edition
+// installs; FULL-ALPHA.md marks it). There a key stays on the computer it was typed on: the book
+// promises that passwords and keys never go into the private GitHub copy, and the notebook's own
+// sync leaves secrets/ out for that reason. Until 8 October 2026 this still committed and pushed
+// the locked store whenever the folder was its own repository with a remote, which is what a
+// computer that joined by its GitHub address is. Now nothing is committed there, and the folder's
+// ignore file is told to leave secrets/ alone, unless the owner already keeps files in secrets/
+// under version control on purpose (an older setup that shares its keys that way).
+const SHARED_HERE = "kept on this computer only, and never sent to your GitHub copy";
+const keepsKeysHere = godspeed => fs.existsSync(path.join(godspeed, "FULL-ALPHA.md"));
+function keepOutOfGit(godspeed, store) {
+  if (!fs.existsSync(path.join(godspeed, ".git"))) return;
+  const git = (...a) => spawnSync("git", ["-C", godspeed, ...a], { encoding: "utf8", windowsHide: true });
+  const rel = path.relative(godspeed, store).split(path.sep).join("/");
+  const folder = rel.split("/")[0];
+  if ((git("ls-files", "--", folder).stdout || "").trim()) return;
+  if (git("check-ignore", "-q", "--", rel).status === 0) return;
+  const file = path.join(godspeed, ".gitignore");
+  let text = "";
+  try { text = fs.readFileSync(file, "utf8"); } catch (e) { /* no ignore file yet */ }
+  fs.writeFileSync(file, (text ? text.replace(/\s*$/, "\n") : "") + "\n# Locked keys stay on the computer they were typed on (mc-mail).\n/" + folder + "/\n");
+}
 function shareStore(why) {
   const { godspeed, store } = storePaths();
-  if (!godspeed || !store || !fs.existsSync(path.join(godspeed, ".git"))) return "";
+  if (!godspeed || !store) return "";
+  if (keepsKeysHere(godspeed)) { try { keepOutOfGit(godspeed, store); } catch (e) { /* the key is still not committed */ } return SHARED_HERE; }
+  if (!fs.existsSync(path.join(godspeed, ".git"))) return "";
   const git = (...a) => spawnSync("git", ["-C", godspeed, ...a], { encoding: "utf8" });
   const rel = path.relative(godspeed, store).split(path.sep).join("/");
   git("add", "--", rel);
@@ -171,6 +218,41 @@ function shareStore(why) {
   const p = git("push", "-q");
   return p.status === 0 ? "saved and sent with your mission control, so your other computers get it on their next pull"
     : "saved in your mission control's history; sending it failed, so push your mission control the way you usually do";
+}
+
+// ONE MAIL FOLDER FOR THE TERMINAL AND THE ASSISTANT (8 October 2026). Until then the notebook gave
+// its assistant a mail folder of its own (<mission control>/.godspeed/device-home), while mc-mail in a
+// terminal used your home folder, so a connection made in one was invisible to the other. Both use
+// your home folder now (assistant-files.mjs). What the assistant kept in the old folder is moved here
+// once, piece by piece, and never over something that is already here; a key left behind because
+// both places had one still opens the store (storePaths). Returns what was moved.
+function adoptOldHome() {
+  if (process.env.GODSPEED_MAIL_HOME) return [];
+  const old = oldHome(findGodspeed());
+  if (!old || !fs.existsSync(old)) return [];
+  const here = path.join(os.homedir(), ".godspeed"), moved = [];
+  const move = (from, to) => {
+    if (!fs.existsSync(from) || fs.existsSync(to)) return;
+    fs.mkdirSync(path.dirname(to), { recursive: true, mode: 0o700 });
+    try { fs.renameSync(from, to); }
+    catch (e) {
+      // Another drive, or a file in use: copy under a temporary name first, so a copy that
+      // stopped half way is never taken for the real thing.
+      const tmp = to + ".moving";
+      try { fs.rmSync(tmp, { recursive: true, force: true }); fs.cpSync(from, tmp, { recursive: true }); fs.renameSync(tmp, to); }
+      catch (e2) { try { fs.rmSync(tmp, { recursive: true, force: true }); } catch (e3) { /* */ } return; }
+      try { fs.rmSync(from, { recursive: true, force: true }); } catch (e4) { /* the copy here is the one used */ }
+    }
+    moved.push(path.relative(here, to));
+  };
+  move(path.join(old, "age-key.txt"), path.join(here, "age-key.txt"));
+  const mail = path.join(old, "mail");
+  let names = [];
+  try { names = fs.readdirSync(mail); } catch (e) { /* no mail kept there */ }
+  for (const n of names) move(path.join(mail, n), path.join(here, "mail", n));
+  // The Gmail folder is made private to this account again in its new place (mc-mail-imap.js ensureBase).
+  if (moved.includes(path.join("mail", "imap"))) { try { fs.unlinkSync(path.join(here, "mail", "imap", ".acl")); } catch (e) { /* */ } }
+  return moved;
 }
 
 // The locked store first, because it is the one place a reconnect or a disconnect writes: a
@@ -237,7 +319,7 @@ async function gmail(c, method, p, body) {
 }
 
 function need(c) {
-  if (!c.GMAIL_REFRESH_TOKEN) throw new Error("gmail: not connected. When the person wants it, they ask their assistant \"Connect Gmail for me\" (Chapter 30). Until then, they can paste an email or forward it to the mission control's address.");
+  if (!c.GMAIL_REFRESH_TOKEN) throw new Error("gmail: not connected. When the person wants it, they ask their assistant \"Connect Gmail for me\" (Chapter 32). Until then, they can paste an email or forward it to the mission control's address.");
 }
 
 // ============================================================ reading
@@ -807,7 +889,7 @@ function state() {
 
 async function status() {
   const c = credentials();
-  if (!c.GMAIL_REFRESH_TOKEN) return { account: "gmail", state: "not connected", note: "Optional. When you want it, ask your assistant \"Connect Gmail for me\" (Chapter 30). Until then, paste an email or forward it to the mission control's address." };
+  if (!c.GMAIL_REFRESH_TOKEN) return { account: "gmail", state: "not connected", note: "Optional. When you want it, ask your assistant \"Connect Gmail for me\" (Chapter 32). Until then, paste an email or forward it to the mission control's address." };
   try {
     const prof = await gmail(c, "GET", "/profile");
     return { account: "gmail", address: prof.emailAddress, state: canDraft(c) ? "connected" : "reading only",
@@ -820,4 +902,4 @@ async function status() {
 }
 
 module.exports = { findAge, readDeviceEnv, shareStore, findGodspeed, credentials, state, attachment, openBrowser, search, read, draft, listDrafts, proposeSend, approve, reject, pending, tidy, connect, disconnect, status,
-  authorize, writeStore, readStore, buildRaw, SCOPE_READ, SCOPE_COMPOSE };
+  authorize, writeStore, readStore, storePaths, readyAge, adoptOldHome, buildRaw, SCOPE_READ, SCOPE_COMPOSE };

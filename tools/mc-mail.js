@@ -198,6 +198,19 @@ async function startConnect() {
     command: c.self, command_if_the_terminal_is_logged_in_as_root: c.user !== 'root' ? c.root : undefined };
 }
 
+// ------------------------------------------------------------------------- before anything runs
+// Two things every run settles first, quietly. The mail folder the notebook's assistant used to
+// keep apart is moved to the home folder, so the assistant and a terminal see one connection
+// (mc-mail-gmail.js adoptOldHome). And age, which locks every key, is fetched once when a key is
+// about to be locked or opened and this computer has none (mc-mail-age.js). Nothing is fetched
+// on a computer that has nothing locked and is not connecting.
+async function prepare({ connecting = false, say = () => {} } = {}) {
+  try { G.adoptOldHome(); } catch (e) { /* the old folder stays where it is and is still read */ }
+  const { store } = G.storePaths();
+  if (!connecting && !(store && fs.existsSync(store)) && !I.locked()) return;
+  try { await G.readyAge(say); } catch (e) { if (connecting) throw e; /* reading: the status says why */ }
+}
+
 // ----------------------------------------------------------------------------------- MCP server
 const ACCOUNT = { type: 'string', enum: ['gmail', 'godspeed', 'gmail-oauth'], description: '"gmail" is the person\'s own mailbox (the default), "godspeed" the mission control\'s own separate address. Never use one when the person meant the other.' };
 const TOOLS = [
@@ -254,7 +267,7 @@ function mcp() {
   });
   // When the assistant (or the SSH line from a paired desktop) closes, finish what was asked and
   // leave, instead of lingering on a server with nobody on the other end.
-  let inflight = 0, ended = false;
+  let inflight = 0, ended = false, prepared = null;
   const done = () => { if (ended && inflight === 0) process.stdout.write('', () => process.exit(0)); };
   process.stdin.on('end', () => { ended = true; done(); });
   async function handle(raw) {
@@ -276,6 +289,8 @@ function mcp() {
       return send({ jsonrpc: '2.0', id, result: { tools: TOOLS.filter(t => legacy || !t.legacy).map(({ run, legacy: l, ...t }) => t) } });
     }
     if (method === 'tools/call') {
+      prepared = prepared || prepare({ say: s => process.stderr.write('mc-mail: ' + s + '\n') }).catch(() => {});
+      await prepared;
       const tool = TOOLS.find(t => t.name === (params && params.name));
       if (!tool) return send({ jsonrpc: '2.0', id, error: { code: -32602, message: 'unknown tool' } });
       try {
@@ -384,6 +399,9 @@ async function main(argv) {
   if (cmd === 'mcp') { const r = require('./mc-mail-pair.js').route(); return r ? require('./mc-mail-pair.js').relay(r) : mcp(); }
   const print = o => console.log(typeof o === 'string' ? o : JSON.stringify(o, null, 1));
   try {
+    if (cmd !== 'setup' && cmd !== 'pair' && cmd !== 'gmail-state') {
+      await prepare({ connecting: cmd === 'connect' && ['agentmail', 'gmail-imap'].includes(args[0]), say: s => console.log(s) });
+    }
     const paired = (!cmd || cmd === 'status') && require('./mc-mail-pair.js').route();
     if (paired) {
       const pr = require('./mc-mail-pair.js').probe(paired);
