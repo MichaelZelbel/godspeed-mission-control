@@ -73,7 +73,9 @@ else if(command==='import')result=importExport(query,JSON.parse(fs.readFileSync(
 else if(command==='export')result={format:1,records:[...store.scan().values()].map(r=>{const copy={...r};delete copy._hash;return copy;})};
 else if(command==='validate')result={problems:store.scan()&&store.problems};
 else if(command==='menerio'&&verb==='chunks')result=(await import('../core/menerio-chunks.mjs')).importOrphanChunks(store,path.resolve(rest[0]));
-else if(command==='sync'&&verb==='folder')result=await (await import('../core/sync/git.mjs')).useFolderRepository(store,rest);
+// Named paths: folder mode with those paths. None (what the installers run when they
+// join a computer to a mission control already on GitHub): joinRepository decides.
+else if(command==='sync'&&verb==='folder'){const sync=await import('../core/sync/git.mjs');result=rest.length?await sync.useFolderRepository(store,rest):await sync.joinRepository(store);}
 else if(command==='convert-notebook'){
   // The whole list can run to thousands of lines: it goes to a file, the
   // summary to the screen.
