@@ -7,11 +7,27 @@
 - Open this folder in VS Code or Codex: `C:/godspeed/work/trials/godspeed-v2`.
 - Windows notebook: http://127.0.0.1:49175/dashboard
 - Development VPS notebook: https://srv1069233.hstgr.cloud:48443/dashboard
-- Windows download: https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-07-1/GodspeedSetup.exe
-- Linux download: https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-07-1/install-godspeed.sh
-- Source, manifests and checksums: https://github.com/MichaelZelbel/godspeed-mission-control/releases/tag/godspeed-v2-integrated-2026-10-07-1
+- Windows download: https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-09-1/GodspeedSetup.exe
+- Linux download: https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-09-1/install-godspeed.sh
+- Source, manifests and checksums: https://github.com/MichaelZelbel/godspeed-mission-control/releases/tag/godspeed-v2-integrated-2026-10-09-1
 - One-click Hostinger installation: https://srv1069233.hstgr.cloud/godspeed-install
 - Separate branch: https://github.com/MichaelZelbel/godspeed-mission-control/tree/codex/godspeed-v2-completeness
+
+## 9 October 2026 release: the book's second edition
+
+`godspeed-v2-integrated-2026-10-09-1` installs product cbfc71c58b66f3f8f4fa9613b6ae74c70b7499fc, the head of `release/second-edition`, the version *Teach It Once* (second edition) describes. The Windows installer is built from kit-bootstrap c91da3a4aa2a1c71f123548ca1aaef08366dcf90 (branch `fix/second-edition-installer`, two commits on e62f38b): the notebook's own Hermes on Windows gets the mail tool, and the setup's Ready page says it installs Hermes. The Linux and Mac installer names the same product commit and takes the shared installer from that same kit-bootstrap commit; until this release it still took 180321a of 4 October, and the new one also installs GitHub's `gh` on Mac and Linux for Connect record sync.
+
+What is new for a reader, since `godspeed-v2-integrated-2026-10-07-2`:
+
+- The first goal starts the routines the book promises: "Daily round: choose today's work" at 05:30, "Daily round: do the work" at 10:00 and 16:00, "Deadline reminders" at 08:00, a "Weekly check-in" about the goal on Sundays at 18:00 and "Coach reminders and habit check". Settings > Routines says what each does and when it really runs.
+- The notebook keeps people, facts and events, one page per person; every fact has one fixed name per kind, a newer value ends the older one, an undated fact gives way to a later dated one, and links between people and Mission Control's world claims are read.
+- A computer signs in to GitHub from Connect record sync and checks its private repository; the mail add-on works on a computer and keeps its key there.
+- A second device joins cleanly, the one-click setup's chat can join a mission control already on GitHub, and the server runs the routines.
+- The weekly review and the research watch come with every new mission control; the assistant follows the notebook (collections, titled notes, only saved links), and the brief and the review read it.
+- On Windows every kit command works inside the assistant's terminal (Hermes starts Git Bash without its path translation), and the daily round's recipe goes to Hermes on standard input, because it is longer than a Windows command line.
+- Smaller: `mc-due` reads and writes the mission control it is working in, a deadline file that cannot be read needs a look instead of counting as done, `mc-due help` and `mc-check-brief --help` print how to use them, Hermes' waiting lines are kept out of the notebook chat, earlier copies of packaged recipes are kept outside the recipes folder, the note graph is worked out from the notes again (the Lexicon is retired), and the bundled add-ons name the second edition's chapters.
+
+The Hostinger one-click image is still `v2-sha-b327fe0`; it moves when this release's commit is pushed to `codex/godspeed-v2-completeness` and its tested image is pinned in `docker/hostinger/compose.yaml` and `docker/hostinger/installer/compose.mjs`.
 
 ## 7 October 2026, evening release: version 2 is main
 
