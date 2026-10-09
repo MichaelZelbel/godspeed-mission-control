@@ -14,12 +14,16 @@ export class MediaSync {
     const sha=hash(fs.readFileSync(file));this.hashes.set(file,{size:stat.size,mtimeMs:stat.mtimeMs,sha});return sha;
   }
   config(){return fs.existsSync(this.configPath)?JSON.parse(fs.readFileSync(this.configPath,'utf8')):null;}
+  // The name of the server this machine is paired with, which the routine owner is set to when
+  // the server runs the routines, or null when it is not paired. A pairing made before
+  // 9 October 2026 did not keep the name; only a server named 'vps' made pairing codes then.
+  server(){const config=this.config();if(!config)return null;return typeof config.device==='string'&&/^[a-z0-9][a-z0-9-]{0,39}$/.test(config.device)?config.device:'vps';}
   manifest(){return fs.readdirSync(this.root).filter(n=>n.endsWith('.mapping.json')).map(n=>JSON.parse(fs.readFileSync(path.join(this.root,n),'utf8')));}
   async pair(origin,code){
     const url=new URL(origin);if(url.protocol!=='https:'&&!['localhost','127.0.0.1'].includes(url.hostname))throw new Error('Pairing requires HTTPS');
     const response=await fetch(new URL('/api/pair/claim',url),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code}),signal:AbortSignal.timeout(15000)});
     const result=await response.json();if(!response.ok)throw new Error(result.error||'Pairing failed');
-    atomic(this.configPath,JSON.stringify({origin:url.origin,key:result.key,offline:'all'}));fs.chmodSync(this.configPath,0o600);return {paired:true};
+    atomic(this.configPath,JSON.stringify({origin:url.origin,key:result.key,offline:'all',...(typeof result.device==='string'?{device:result.device}:{})}));fs.chmodSync(this.configPath,0o600);return {paired:true};
   }
   async request(route,options={}){
     const config=this.config();if(!config)throw new Error('Pair this device with a candidate VPS first');
