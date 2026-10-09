@@ -907,7 +907,8 @@ export default function ReviewQueue() {
       <div>
         <h1 className="text-2xl font-bold font-display">Review AI Changes</h1>
         <p className="text-muted-foreground text-sm mt-1">
-          {BRAND.name} automatically added these insights from your notes. Keep what looks right, remove what does not, or block things you never want added again.
+          {BRAND.name} found these in your notes. Nothing is added until you press Keep. Roll Back sets a waiting one aside or undoes a kept one, and Never Again also stops it from being suggested again.
+          {items.some((item) => item.status === "auto_applied_unreviewed") && " Suggestions brought in from Menerio were already added there; Keep confirms them."}
         </p>
         <div className="flex gap-1 mt-3">
           {(["waiting", "kept"] as const).map((option) => (
