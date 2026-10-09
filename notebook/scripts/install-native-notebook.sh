@@ -482,6 +482,10 @@ fi
 import fs from 'node:fs';import path from 'node:path';
 fs.writeFileSync(path.join(process.env.GODSPEED_WORKSPACE,'.godspeed/assistant.json'),JSON.stringify({verified:true,executable:process.argv[2],home:process.env.HERMES_HOME}),{mode:0o600});
 NODE
+# The mail tool in the Hermes this notebook uses, after wire-assistant.mjs gave it the notebook tool.
+# The shared installer wires only the default Hermes; one set up beside it had no mail tool until
+# 8 October 2026. Never stops an install: email is optional.
+GODSPEED_DIR="$root" "$node" "$version/tools/mc-mail.js" setup >/dev/null 2>&1 || true
 "$node" "$version/notebook/scripts/native-start-script.mjs" "$state/start.mjs" "$version/notebook/scripts/supervise.mjs"
 # "before" is read above, before the new version's init could change anything.
 if [ -n "$before" ] && [ "$before" != "$(basename "$version")" ]; then printf '%s\n' "$before" > "$state/previous-version"; fi

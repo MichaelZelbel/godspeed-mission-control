@@ -17,6 +17,7 @@ import {assistantEnvironment} from '../core/assistant-files.mjs';
 import { FileSync } from '../core/sync/git.mjs';
 import {conflictView,resolveSavedConflict} from '../core/conflicts.mjs';
 import { SyncRunner } from '../core/sync/runner.mjs';
+import {GitHubSignIn,connectRecordSync} from '../core/sync/github-sign-in.mjs';
 import { restore } from '../core/archives.mjs';
 import {RecoveryRunner} from '../core/recovery-runner.mjs';
 import {BackupRunner} from '../core/backup-runner.mjs';
@@ -74,6 +75,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   // Meaning search, when a service is connected (Settings, or GODSPEED_EMBEDDINGS_*).
   const connectMeaning=config=>{index.meaning=new MeaningIndex(index,{config});};
   connectMeaning(embeddingConfig(store.state));
+  const githubSignIn=new GitHubSignIn();
   const syncRunner=new SyncRunner(root,{onResult:result=>{sync.last=result;atomic(path.join(store.state,'sync-status.json'),JSON.stringify(result));}});
   const providerPath=path.join(store.state,'provider.json');
   if(!provider&&fs.existsSync(providerPath))provider=modelProvider(JSON.parse(fs.readFileSync(providerPath,'utf8')));
@@ -258,8 +260,10 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         return send(res,200,{connected:true});
       }
       if(route==='/api/sync/configure'&&req.method==='POST'){
-        const input=JSON.parse(await body(req));return send(res,200,{status:await syncRunner.configure(input.url)});
+        // A computer not yet signed in to GitHub signs in once, then the same check runs again (github-sign-in.mjs).
+        const input=JSON.parse(await body(req));return send(res,200,await connectRecordSync({url:input.url,configure:url=>syncRunner.configure(url),signIn:githubSignIn}));
       }
+      if(route==='/api/sync/sign-in'&&req.method==='GET')return send(res,200,{signIn:githubSignIn.status()});
       if(route==='/api/sync/run'&&req.method==='POST')return send(res,200,{status:await syncRunner.run()});
       // "server": the server this computer is paired with, whatever it is called, or this machine
       // when it is the server (the one that makes pairing codes). Until 9 October 2026 the button
@@ -446,7 +450,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   const watchRoot=name=>{const folder=path.join(store.root,name);if(!watchers.has(name)&&fs.existsSync(folder))watchers.set(name,fs.watch(folder,{recursive:true},changed(name)));};
   for(const name of durableRoots)watchRoot(name);
   const rootWatcher=fs.watch(store.root,(event,name)=>{if(durableRoots.includes(name)){watchRoot(name);changed(name)(event,null);}else if(durableFiles.includes(name))changed('')(event,name);});
-  return { server, store, index, query, domains, scheduler, sync, mediaSync,address: server.address(), webAddress: webServer?.address() || null, close: async () => { if (webServer) await new Promise(resolve => webServer.close(resolve)); clearInterval(meaningTimer);clearInterval(processingTimer);clearInterval(backupTimer);clearInterval(factTimer);stopIndexing();store.unwatch();await syncRunner.close();await menerioImport.close();rootWatcher.close();for(const watcher of watchers.values())watcher.close();clearTimeout(debounce);clearTimeout(indexDebounce);clearInterval(telegramTimer);clearInterval(interval);clearInterval(jobs);clearInterval(syncTimer);clearInterval(mediaTimer); await new Promise(resolve => server.close(resolve)); index.close(); } };
+  return { server, store, index, query, domains, scheduler, sync, mediaSync,address: server.address(), webAddress: webServer?.address() || null, close: async () => { if (webServer) await new Promise(resolve => webServer.close(resolve)); clearInterval(meaningTimer);clearInterval(processingTimer);clearInterval(backupTimer);clearInterval(factTimer);stopIndexing();store.unwatch();githubSignIn.close();await syncRunner.close();await menerioImport.close();rootWatcher.close();for(const watcher of watchers.values())watcher.close();clearTimeout(debounce);clearTimeout(indexDebounce);clearInterval(telegramTimer);clearInterval(interval);clearInterval(jobs);clearInterval(syncTimer);clearInterval(mediaTimer); await new Promise(resolve => server.close(resolve)); index.close(); } };
 }
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const root = process.env.GODSPEED_WORKSPACE;

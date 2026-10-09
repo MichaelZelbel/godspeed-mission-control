@@ -1,6 +1,7 @@
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import fs from 'node:fs';
+import os from 'node:os';
 import {atomic} from './records/store.mjs';
 const notebook=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 // What the assistant and its tools may see of this server's environment.
@@ -30,9 +31,27 @@ export function passedEnvironment(env=process.env){
 // leaves which one a program reads to chance.
 const named=(env,name)=>{const key=Object.keys(env).find(k=>k.toUpperCase()===name);return key===undefined?undefined:env[key];};
 const without=(env,names)=>Object.fromEntries(Object.entries(env).filter(([k])=>!names.includes(k.toUpperCase())));
+// Mail and video live where a terminal on this computer keeps them, so what the
+// person sets up in a terminal (as the book teaches: a key is never typed into
+// the chat) is what the assistant finds. Until 8 October 2026 the assistant was
+// sent to folders of its own inside the mission control: GODSPEED_MAIL_HOME
+// <folder>/.godspeed/device-home and GODSPEED_VIDEO_HOME <folder>/.godspeed/video,
+// while `mc-mail` and `mc-video setup` in a terminal used the home folder. A key
+// connected in a terminal was then invisible to the assistant, and so was the
+// video kit. Mail is no longer redirected at all; mc-mail moves what an assistant
+// kept in the old folder to the home folder once (mc-mail-gmail.js adoptOldHome).
+// Video cannot be moved (its Python environment remembers where it was made), so
+// an assistant that set it up in the old folder keeps using it until the home
+// folder has one of its own.
+const userHome=env=>(process.platform==='win32'?named(env,'USERPROFILE'):named(env,'HOME'))||os.homedir();
+export function videoHome(workspace,env=process.env){
+  if(named(env,'GODSPEED_VIDEO_HOME'))return {};
+  const old=path.join(workspace,'.godspeed','video');
+  return !fs.existsSync(path.join(userHome(env),'.mc-video'))&&fs.existsSync(old)?{GODSPEED_VIDEO_HOME:old}:{};
+}
 export function assistantEnvironment({home,workspace,env=process.env}={}){
   const path_=named(env,'PATH'),pythonPath=named(env,'PYTHONPATH');env=without(passedEnvironment(env),['PATH','PYTHONPATH']);
-  return {...env,HERMES_HOME:home,GODSPEED_DIR:workspace,GODSPEED_ROOT:workspace,GODSPEED_VIDEO_HOME:path.join(workspace,".godspeed","video"),GODSPEED_MAIL_HOME:path.join(workspace,".godspeed","device-home"),GODSPEED_WORKSPACE:workspace,GODSPEED_FILE_HERMES:env.GODSPEED_ORIGINAL_RUNTIME==='on'?'0':'1',GODSPEED_NODE:process.execPath,GODSPEED_HEADACHE_DIR:workspace,GODSPEED_HEADACHE_SCRIPT:path.resolve(notebook,'../third-party/addons/godspeed-headache/bin/godspeed-headache.mjs'),GODSPEED_HEADACHE_GIT_SYNC:'off',GODSPEED_COACH_DIR:workspace,GODSPEED_JOURNAL_DIR:workspace,GODSPEED_COACH_SCRIPT:path.resolve(notebook,'../third-party/addons/godspeed-coach/bin/godspeed-coach.mjs'),GODSPEED_JOURNAL_SCRIPT:path.resolve(notebook,'../third-party/addons/godspeed-journal/bin/godspeed-journal.mjs'),GODSPEED_COACH_GIT_SYNC:'off',GODSPEED_JOURNAL_GIT_SYNC:'off',PATH:[path.join(home,'bin'),path_].filter(Boolean).join(path.delimiter),GODSPEED_ASSISTANT_PUBLISHER:path.join(notebook,'scripts','save-assistant-state.mjs'),PYTHONPATH:[path.join(notebook,'assistant-files'),pythonPath].filter(Boolean).join(path.delimiter)};
+  return {...env,HERMES_HOME:home,GODSPEED_DIR:workspace,GODSPEED_ROOT:workspace,...videoHome(workspace,env),GODSPEED_WORKSPACE:workspace,GODSPEED_FILE_HERMES:env.GODSPEED_ORIGINAL_RUNTIME==='on'?'0':'1',GODSPEED_NODE:process.execPath,GODSPEED_HEADACHE_DIR:workspace,GODSPEED_HEADACHE_SCRIPT:path.resolve(notebook,'../third-party/addons/godspeed-headache/bin/godspeed-headache.mjs'),GODSPEED_HEADACHE_GIT_SYNC:'off',GODSPEED_COACH_DIR:workspace,GODSPEED_JOURNAL_DIR:workspace,GODSPEED_COACH_SCRIPT:path.resolve(notebook,'../third-party/addons/godspeed-coach/bin/godspeed-coach.mjs'),GODSPEED_JOURNAL_SCRIPT:path.resolve(notebook,'../third-party/addons/godspeed-journal/bin/godspeed-journal.mjs'),GODSPEED_COACH_GIT_SYNC:'off',GODSPEED_JOURNAL_GIT_SYNC:'off',PATH:[path.join(home,'bin'),path_].filter(Boolean).join(path.delimiter),GODSPEED_ASSISTANT_PUBLISHER:path.join(notebook,'scripts','save-assistant-state.mjs'),PYTHONPATH:[path.join(notebook,'assistant-files'),pythonPath].filter(Boolean).join(path.delimiter)};
 }
 export function assistantProfiles(store){
   const directory=path.join(store.root,'assistant-state');if(!fs.existsSync(directory))return [];
