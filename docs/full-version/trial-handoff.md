@@ -7,11 +7,20 @@
 - Open this folder in VS Code or Codex: `C:/godspeed/work/trials/godspeed-v2`.
 - Windows notebook: http://127.0.0.1:49175/dashboard
 - Development VPS notebook: https://srv1069233.hstgr.cloud:48443/dashboard
-- Windows download: https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-09-1/GodspeedSetup.exe
-- Linux download: https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-09-1/install-godspeed.sh
-- Source, manifests and checksums: https://github.com/MichaelZelbel/godspeed-mission-control/releases/tag/godspeed-v2-integrated-2026-10-09-1
+- Windows download: https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-10-1/GodspeedSetup.exe
+- Linux download: https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-10-1/install-godspeed.sh
+- Source, manifests and checksums: https://github.com/MichaelZelbel/godspeed-mission-control/releases/tag/godspeed-v2-integrated-2026-10-10-1
 - One-click Hostinger installation: https://srv1069233.hstgr.cloud/godspeed-install
 - Separate branch: https://github.com/MichaelZelbel/godspeed-mission-control/tree/codex/godspeed-v2-completeness
+
+## 10 October 2026 release: programming goes to a coding helper
+
+`godspeed-v2-integrated-2026-10-10-1` installs product 1180348988a8df07923f16693dfd0a42cf99965a, main after the second edition's release. The Windows installer is built from the same kit-bootstrap c91da3a4aa2a1c71f123548ca1aaef08366dcf90, and the Linux and Mac installer takes its shared installer from that commit too.
+
+What is new for a reader, since `godspeed-v2-integrated-2026-10-09-1`:
+
+- The starter carries `.claude/agents/coder.md`, and its manual says programming goes to a coding helper (Claude Code: `coder`; Codex: `spawn_agent`; Hermes: `delegate_task`). The conversation keeps the mission control's context; the helper works, tests and commits only in the project under `dev/`, pushes only when the manual allows uploads, stops before anything outward, and reports back. Claude Code delegates to it by itself. An existing install gets the file when it runs this release's installer (the notebook's setup adds missing starter files); its own `AGENTS.md` is never replaced, so the manual's new line reaches it only through `setup/match-edition.md`.
+- On Linux, a routine run written in the same instant as the notebook's first look is no longer skipped (the file clock can trail the system clock by a few milliseconds; the first look now allows two seconds). The one-click image of 9 October already had this fix.
 
 ## 9 October 2026 release: the book's second edition
 
