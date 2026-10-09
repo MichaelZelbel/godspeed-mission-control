@@ -21,7 +21,7 @@ fs.cpSync(path.join(kit,'tools'),commandHome,{recursive:true});
 for(const name of fs.readdirSync(commandHome).filter(n=>n.startsWith('mc-')&&!path.extname(n))){
   const wrapper=path.join(commandHome,name),source=fs.readFileSync(wrapper,'utf8');
   if(process.platform!=='win32')fs.chmodSync(wrapper,0o700);
-  const target=source.match(/exec node "\$\(dirname "\$0"\)\/([^"\n]+)"/);
+  const target=source.match(/exec node "(?:\$\(dirname "\$0"\)|\$HERE)\/([^"\n]+)"/);
   if(process.platform==='win32'&&target)atomic(wrapper+'.cmd',cmd(at=>'set "GODSPEED_ROOT='+at(root)+'"\r\nset "GODSPEED_DIR='+at(root)+'"\r\n"'+at(process.execPath)+'" "%~dp0'+target[1]+'" %*\r\n'));
   else if(process.platform==='win32'&&source.startsWith('#!/usr/bin/env python3'))atomic(wrapper+'.cmd','@echo off\r\npython "%~dp0'+name+'" %*\r\n');
   else if(process.platform==='win32')atomic(wrapper+'.cmd',cmd(at=>'set "GODSPEED_ROOT='+at(root)+'"\r\nset "GODSPEED_DIR='+at(root)+'"\r\nset "PATH='+at(path.dirname(process.execPath))+';%PATH%"\r\nset "GODSPEED_BASH="\r\nfor /f "delims=" %%G in (\'where git.exe 2^>nul\') do if exist "%%~dpG..\\bin\\bash.exe" set "GODSPEED_BASH=%%~dpG..\\bin\\bash.exe"\r\nif not defined GODSPEED_BASH (echo Git Bash is required for this Godspeed command. & exit /b 1)\r\n"%GODSPEED_BASH%" "%~dp0'+name+'" %*\r\n'));
