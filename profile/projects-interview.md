@@ -6,7 +6,7 @@ names the project that deserves attention and offers help with the next step.
 ## The prompt
 
 ```
-Read profile/about-me.md, profile/people.md and profile/projects.md. Use the project list to find relevant drafts, results and recent updates you can access. Read those before asking me for a progress report. Treat practice examples as fiction and keep them out of my real project list.
+Read profile/about-me.md, the people pages in my notebook and profile/projects.md. Use the project list to find relevant drafts, results and recent updates you can access. Read those before asking me for a progress report. Treat practice examples as fiction and keep them out of my real project list.
 
 Give me a short picture of the active work and the next useful step you could help complete. Distinguish agreed deadlines, estimates, current evidence and missing information.
 

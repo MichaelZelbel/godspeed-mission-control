@@ -38,6 +38,7 @@ import { MenerioImport } from './menerio-import.mjs';
 import {TelegramConnection} from './telegram-connect.mjs';
 import {nativeAgent} from '../core/native-agent.mjs';
 import {NativeScheduler} from '../core/native-scheduler.mjs';
+import {notebookAddress} from '../core/notebook-address.mjs';
 import {visibleRows} from '../core/visibility.mjs';
 import {NoteProcessing} from '../core/processing.mjs';
 import {mediaObjectName,mediaFileName} from '../core/media-names.mjs';
@@ -392,6 +393,8 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   const listen = (server, port, host) => new Promise((resolve, reject) => { server.once('error', reject); server.listen(port, host, resolve); });
   const server = http.createServer(handle(remote, auth));
   await listen(server, port, host);
+  // The link an assistant gives when asked for the notebook (get_notebook_link), with the port this door really has.
+  domains.notebookAddress = () => notebookAddress({ port: server.address().port });
   // Only the HTTPS proxy on this machine reaches the web door. A door that cannot open
   // (its port taken) leaves the notebook running for everything on this machine; the
   // installer's check of the web address then says so.

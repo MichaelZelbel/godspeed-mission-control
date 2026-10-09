@@ -1,17 +1,14 @@
-# world - your life as data
+# world - your life as data, when the notebook is not connected
 
-Your assistant fills this folder as you tell it useful facts and things that happened.
-It works without a Menerio account. The instructions in `AGENTS.md` tell the assistant to
-save and search these records, using the formats below.
+Your people, the facts of your life and what happened live in your notebook: its People,
+My Profile, World and Timeline pages. Your assistant writes them there with the notebook's
+tools (`AGENTS.md`, "My notebook"), so this folder is not their home and keeps no second copy.
 
-Menerio is an optional online notebook. You connect it once, through the
-installer or with `mc-menerio-connect`. That gives you the notebook and copies nothing.
-Copying between your mission control and Menerio is a separate choice. The installer asks, and the
-default is no. On a yes, your mission control's text files, this folder included, are copied up so they
-can be searched by meaning, and the people, events and facts Menerio knows arrive here as
-files marked `origin: menerio`, as a safety copy. The files that came down are not sent back
-up. That connection is
-specifically for Menerio, not a general connection to Evernote, OneNote or Obsidian.
+This folder is the plain-file fallback. An assistant on a computer where the notebook's
+tools are not connected saves people, events and facts here instead, in the formats below.
+They are not lost: the notebook's search, which your assistant uses, reads the facts in
+`claims/` and every file here, though the notebook's pages show only what is in the notebook.
+Whatever the notebook, this is also where a finished deadline is written down (below).
 
 Everything here is one small text file, so a script can answer questions like "what changed about
 Peter this year" without an AI model and without the internet. The AI only steps in when language
@@ -34,8 +31,8 @@ Every file carries an `origin:` line, and it decides who may write to it.
 
 - `origin: mission control` means you or your assistant wrote it locally. The pull never touches it and never
   deletes it.
-- `origin: menerio` means Menerio wrote it and this is a copy. It is rewritten on every
-  pull, so an edit made here is lost at the next one. **Fix the fact in Menerio instead.**
+- `origin: menerio` means an older Menerio connection wrote it and this is a copy. That
+  connection rewrote it on every pull, so **fix the fact in the notebook instead.**
 
 A file with no `origin:` line at all counts as `origin: mission control`, so anything you write by hand is
 safe by default.
@@ -112,28 +109,15 @@ and close the old claim with `valid_to`; keep the old file. Tell the user what y
 For example, a confirmed move becomes a dated event and a new current-city claim. The earlier
 city claim gets an end date. A guess about why the person moved belongs in `observations/`.
 
-### Optional: import from Menerio
+### Moving in from Menerio
 
-Once Menerio is connected and you have said yes to copying, the import runs by itself: when
-you save a change, and once an hour. It brings down the people, events and facts Menerio
-keeps, not your notes or their attachments; to take the notes themselves, ask your assistant
-for a separate export (Chapter 13). To look at what it would do, or to run it by hand:
+Notes, people, facts and timeline entries from Menerio, an older notes app, are brought into
+the notebook itself, not into this folder: the notebook's Settings has "Import from Menerio".
+Files here marked `origin: menerio` came from an older connection that copied Menerio's
+records into this folder; correct those facts in the notebook.
 
-```
-python3 ~/.local/bin/world-pull.py                    # dry run, shows what it would write
-python3 ~/.local/bin/world-pull.py --apply            # write the files
-python3 ~/.local/bin/world-pull.py --apply --commit   # write them and save them in the history
-```
-
-The automatic import saves what it brought in your mission control's history, in a commit of its
-own, and nothing else; it never pushes. If you use Menerio on more than one computer, let one of
-them keep the facts: add `GODSPEED_WORLD_KEEPER=0` to `~/.godspeed/device.env` on every other
-one. They still send their changes up, and they get the facts through git like any other file.
-Two computers saving their own copy of the same fact would collide in git.
-
-To find a record, your assistant runs `mc-search <words>`. When your mission control is copied to
-Menerio, it asks Menerio first. When it is not, or when Menerio cannot be reached, it
-searches these files, so your facts are found either way.
+To find a record, your assistant searches the notebook, which reads these files too. Without
+the notebook it runs `mc-search <words>`, which searches the files here.
 
 You can also write these files by hand, or let your assistant write them. The formats above are
 the whole contract.

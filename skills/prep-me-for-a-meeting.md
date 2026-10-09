@@ -3,7 +3,7 @@ name: prep-me-for-a-meeting
 description: Prepare a meeting brief from recorded facts and explicit assumptions.
 ---
 
-Prepare a brief for the meeting I name, using the invite or notes I supply and the relevant profile and project files. Keep it under one page.
+Prepare a brief for the meeting I name, using the invite or notes I supply, each person's page in my notebook (search_contacts, then get_contact_context) and the relevant profile and project files. Keep it under one page.
 
 1. State the meeting's documented purpose. If you infer an additional purpose or motive, label it as an inference and explain its basis.
 2. Summarize the relevant recorded facts about the people. Say when you have no information about someone. Do not claim to know their private intentions.

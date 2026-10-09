@@ -62,7 +62,7 @@ folder.
 In your mission control, ask:
 
 ```
-Read what-my-ai-knew.md and file the useful parts into profile/about-me.md, profile/people.md, profile/projects.md and profile/voice.md. Use the meaning of the headings, not their exact spelling. Keep unanswered questions in inbox/. Keep the original file. Add the source and today’s date to what you import. Show me what you changed; do not fill gaps by guessing.
+Read what-my-ai-knew.md and file the useful parts into profile/about-me.md, profile/projects.md and profile/voice.md, and each person into my notebook, one page each. Use the meaning of the headings, not their exact spelling. Keep unanswered questions in inbox/. Keep the original file. Add the source and today’s date to what you import. Show me what you changed; do not fill gaps by guessing.
 ```
 
 *[Copy prompt](https://querino.ai/prompts/file-my-import-into-the-folders)*

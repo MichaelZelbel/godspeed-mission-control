@@ -345,16 +345,17 @@ const reviewQueue: DocPage = {
 
       <h2 id="suggestion-types">Suggestion Types</h2>
       <ul>
-        <li><strong>Add to People</strong> - a person was mentioned who isn't in your contacts yet. Accepting takes you to the People page with the name pre-filled.</li>
+        <li><strong>Add to People</strong> - a person was mentioned who isn't in your People yet. Keep adds them to People under that name, or links the suggestion to the person who already has it.</li>
         <li><strong>Profile Fact</strong> - a stable fact about you or a contact was detected and can be saved to the relevant profile.</li>
         <li><strong>Relationship</strong> - a connection between people was detected and can be reviewed before saving.</li>
       </ul>
 
       <h2 id="accepting-and-dismissing">Accepting & Dismissing</h2>
-      <p>Each suggestion card has two buttons:</p>
+      <p>Nothing is added until you press Keep. Each suggestion card has three buttons:</p>
       <ul>
-        <li><strong>Accept</strong> - opens the appropriate dialog or navigates to the right page with data pre-filled.</li>
-        <li><strong>Dismiss</strong> - hides the suggestion permanently. You can always create the event or contact manually later.</li>
+        <li><strong>Keep</strong> - makes the change: adds the person, saves the fact, links the note.</li>
+        <li><strong>Roll Back</strong> - sets a waiting suggestion aside, or undoes one you kept.</li>
+        <li><strong>Never Again</strong> - does the same and stops it from being suggested again. You can always add the person or fact yourself later.</li>
       </ul>
       <p>The pending count badge in the sidebar lets you know at a glance how many suggestions are waiting.</p>
     </>

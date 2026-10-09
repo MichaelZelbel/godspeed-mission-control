@@ -4,6 +4,7 @@ import {toolScope,scopedQuery} from '../core/api-keys.mjs';
 import {topicDefinitions,topicToolNames,topicTool} from './topic-tools.mjs';
 import {assistantMutationContext,assertAssistantTable} from '../core/assistant-mutations.mjs';
 import {memoryDefinitions,memoryToolNames,memoryTool,searchNotes,relatedTo,readFile} from './memory-tools.mjs';
+import {notebookAddress} from '../core/notebook-address.mjs';
 const schema={type:'object',properties:{},additionalProperties:true};
 // The record types list_records and search_knowledge may return to an assistant:
 // the owner's own content, each a type whose visibility rule (visibility.mjs)
@@ -18,6 +19,7 @@ export const listableTypes=new Set(['notes','note_folders','contacts','contact_g
 const definitions=[
   ...topicDefinitions,
   ...memoryDefinitions,
+  {name:'get_notebook_link',description:'The web address where the owner opens this notebook in a browser, and where it opens. Give it when they ask for the link to their notebook.',inputSchema:{type:'object',properties:{}}},
   {name:'list_note_folders',description:'List visible notebook folders and their note counts before filing a note.',inputSchema:schema},
   {name:'search_notes',description:'Find visible, untrashed notes by words and, when connected, by meaning, including text read out of their attached documents. Returns ids, titles, folders, a matching excerpt and current revision hashes. source native leaves out mirrored Mission Control files, godspeed keeps only them.',inputSchema:{type:'object',properties:{query:{type:'string'},source:{enum:['native','all','godspeed']},limit:{type:'integer'},offset:{type:'integer'},view:{enum:['snippet','metadata']}},required:['query']}},
   {name:'get_note',description:'Read one visible, untrashed note by id (or exact title) including its current hash, before editing it; or a Mission Control file by the path a search returned.',inputSchema:{type:'object',properties:{note:{type:'string',description:'Note id (preferred) or exact title'},id:{type:'string'}}}},
@@ -76,6 +78,8 @@ export async function mcp(input,{store,query,index,domains,scopes,delegated=fals
         ({store,query,domains}=assistantMutationContext({store,query,domains,scopes},a,name));
       }
       if(topicToolNames.includes(name))value=topicTool(name,a,{store,query});
+      // Each machine's notebook knows its own address (core/notebook-address.mjs); the server passes the port it listens on.
+      else if(name==='get_notebook_link')value=(domains.notebookAddress||notebookAddress)();
       else if(name==='list_note_folders')value=query.withSnapshot(()=>{
         const notes=visibleRows(query,'notes').filter(n=>!n.is_trashed),folders=new Map(visibleRows(query,'note_folders').map(f=>[f.folder_path||f.path||'',0]));
         for(const note of notes){const folder=note.folder_path||'';folders.set(folder,(folders.get(folder)||0)+1);}

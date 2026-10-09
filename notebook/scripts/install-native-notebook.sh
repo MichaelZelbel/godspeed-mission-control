@@ -428,6 +428,9 @@ if [ -n "$web_host" ]; then
   fi
 fi
 web_address=${web_site:+https://$web_site}
+# The notebook gives this address to an assistant asked for the link to it (core/notebook-address.mjs,
+# the tool get_notebook_link); start.mjs keeps it. Worked out again on every run, never kept from before.
+if [ -n "$web_address" ]; then export GODSPEED_WEB_ADDRESS="$web_address"; else unset GODSPEED_WEB_ADDRESS; fi
 
 # Stop the notebook before its folder and its assistant are changed, and start the one
 # that ran before again if the installation stops before it is switched over.

@@ -19,13 +19,14 @@ decisions. Read this file first, every session.
 ## Who I am
 
 Read `profile/about-me.md` before helping me with anything. It is short on
-purpose. If it contradicts something you believe about me, the file wins.
+purpose: the one-page summary of me. The details are in my notebook (below).
+If it contradicts something you believe about me, the file wins.
 
 ## How to work here
 
-- **Profile first.** My people are in `profile/people.md`, my projects and
-  priorities in `profile/projects.md`, my writing voice in `profile/voice.md`.
-  Use them without being asked.
+- **Profile first.** My people are in my notebook, one page each (below), my
+  projects and priorities in `profile/projects.md`, my writing voice in
+  `profile/voice.md`. Use them without being asked.
 - **Pull first, push when done, once I have approved it.** When I have
   approved a private remote and future uploads to it, with the exclusions we
   reviewed, run `git pull --rebase` before real work, and commit and push the
@@ -39,6 +40,15 @@ purpose. If it contradicts something you believe about me, the file wins.
   application's settings, so check it in a fresh session rather than assuming
   the file is enough. When I do name a skill, run its file exactly. When I
   correct the same thing twice, add the correction to the skill file.
+- **A recipe from the book's kit.** When I name a skill that is not in
+  `skills/`, fetch it from the companion kit yourself, save it as
+  `skills/<name>/SKILL.md` and tell me what you saved. `answer-email-my-way`,
+  `plan-my-day`, `prep-me-for-a-meeting`, `draft-my-update` and
+  `summarize-for-me` are single files, at
+  `https://raw.githubusercontent.com/MichaelZelbel/godspeed-mission-control/main/skills/<name>.md`.
+  `prepare-a-decision` and `research-watch` are folders: fetch
+  `.../main/skills/<name>/SKILL.md` and any file beside it. The kit's list is
+  `https://github.com/MichaelZelbel/godspeed-mission-control/tree/main/skills`.
 - **The morning brief is yours.** A message in my chat that starts
   `[Cron delivery: morning-brief]` is the brief you sent me, placed there by
   Hermes; it is your own words, not mine. When I ask about it, answer from it in
@@ -50,11 +60,12 @@ purpose. If it contradicts something you believe about me, the file wins.
   line to `decisions.md` with the date and the why. Never edit old lines.
 - **Save useful updates during the conversation.** When I tell you a useful
   fact, agreement or decision, file it while we work; do not wait for a
-  separate capture or sorting request. Life facts go to `world/` as described
-  below, and the short profile entry changes when the fact changes current
-  work. Keep my reported words apart from your advice, and never carry a
-  proposal of yours forward as something I said or decided. Check the saved
-  result and confirm it in one short sentence. A rule I state goes to `rules/`
+  separate capture or sorting request. People, facts and events go into my
+  notebook as described below, and `profile/about-me.md` changes too when the
+  fact changes who I am or what I do now. Keep my reported words apart from
+  your advice, and never carry a proposal of yours forward as something I
+  said or decided. Check the saved result and confirm it in one short
+  sentence. A rule I state goes to `rules/`
   through `mc-compile-rules`; a preference you inferred is not a rule.
 - **`inbox/` holds what is not settled.** One file per capture: open
   questions, writing samples and material I asked you to leave untouched. When
@@ -79,7 +90,7 @@ purpose. If it contradicts something you believe about me, the file wins.
   claim background work that did not run.
 - **Practice stays separate.** Fictional people and projects in the companion
   kit, examples, `practice/` and tests are never facts about me. Keep them out
-  of my profile, `world/`, goals and project list, and never use them as
+  of my profile, my notebook, goals and project list, and never use them as
   evidence for a personal answer. A practice exercise uses its own folder.
 - **Maintain the project list yourself.** When I ask you to add a project,
   it goes in `dev/` inside this mission control. Check for an existing copy,
@@ -106,7 +117,7 @@ purpose. If it contradicts something you believe about me, the file wins.
   file it at once as adopted (`mc-goals file ... --status adopted --source "<my
   words, and the date>"`) and tell me the card's name. Something I merely said I
   want, in passing, is not a goal and is never filed as one; a fact about my life
-  goes to `world/`, a wish goes nowhere unless I ask. When I say "park this idea",
+  goes into my notebook, a wish goes nowhere unless I ask. When I say "park this idea",
   file it **provisional**: you never work on it, you may ask me one clarifying
   question about it in seven days and never a second while the first is
   unanswered, and my silence is not a yes. When I change my mind, record it with
@@ -121,19 +132,6 @@ purpose. If it contradicts something you believe about me, the file wins.
   when I ask about a prompt I once used, or an answer I half remember, or when you
   need to know how something I built was made. Saved prompts are in
   `prompts/library/`, the log is in `prompts/archive/`.
-- **Keep my life record in `world/`, with or without Menerio.** When I tell
-  you a useful fact or something that happened, read `world/README.md` and
-  save it in the format there. Search existing records first; reuse people
-  and avoid duplicates. Mark locally written records `origin: mission control`, keep the
-  source and date, and confirm what you saved in one short sentence. Keep
-  events as history. When a fact changes, close the old claim with its end
-  date and add the new one; do not erase the old value. Do not invent a date
-  or promote an inference to a confirmed fact. Keep uncertain interpretations
-  in `observations/`. Search `world/` when a question depends on my life.
-  `profile/` remains the short briefing; `world/` holds the detailed record.
-  Records marked `origin: menerio` are imported copies: correct those in
-  Menerio. Connecting Menerio is optional and is never required for local
-  capture or retrieval. Follow my privacy rules for everything you save.
 - **A day I give you is a target or a deadline, and you ask which.** When I ask
   you to keep track of something with a day, ask once: "Is there a day after
   which this costs you something, or is it a day you'd like to have it done
@@ -150,19 +148,58 @@ purpose. If it contradicts something you believe about me, the file wins.
   "<my words or a commit>"` before you stop, so my brief never shows it again.
   Never ask me to confirm it later. Never close one on a guess.
 
-## Finding things, and my notebook
+## My notebook
 
-- **Search before you say it is not here.** To find anything in this folder,
-  run `mc-search <words>`. It asks my notebook first when my mission control is copied
-  there, searches the files here when it cannot, and says on its last line
-  which of the two it did. Open the files it names. Only then may you tell me
-  that something is not in my mission control. If the command is missing, search the
-  files yourself.
+My notebook is the one home of my people, the facts of my life and what
+happened: the pages I read and correct, People, My Profile, World and
+Timeline. Write them with the `notebook` tools, so the chat and the notebook
+never disagree, and keep no second copy in a file. Confirm each save in one
+short sentence that names the page. Follow my privacy rules for all of it.
+
+- **Search first.** `search_brain` finds my facts, my notes and the files in
+  this folder in one call; `search_contacts` finds a person. Search before you
+  answer about my life, before you ask me, and before you add anything, so
+  nobody and nothing is there twice. Only then may you say it is not there.
+- **One page per person.** Someone I tell you a few things about, or ask you
+  to start a page for, whom `search_contacts` does not find, is added with
+  `save_record` (type `contacts`: `name`, their `relationship` to me, short
+  practical `notes`). Not everyone I mention gets a page. A new name goes on
+  the same person with `structural_change` (`display-name`, with the `_hash`
+  that `list_records` gives for them), so old notes still lead to them.
+  Remove someone only when I ask, the same way with `remove`, never by
+  deleting a file.
+- **Facts with their day and source.** A fact about me (subject `self`, shown
+  on My Profile) or a person (subject `contact` and their id, shown on their
+  page) goes in with `add_claim`: a short `attribute` such as `lives-in` or
+  `employer`, the `value`, my exact words as `evidence_quote`, and
+  `valid_from` when I said since when (a month alone is its first day). A new
+  value ends the old one, which stays as history; never delete it. When the
+  answer says it waits in my Review, tell me. How someone is related to me
+  goes on their page, not in a fact.
+- **Only what someone said or did is a fact.** My opinion of someone goes in
+  their page's `notes`, starting "I think". Your own conclusions are never
+  facts: one that would belong on a page is a suggestion, `save_record` (type
+  `review_queue`: `title`, `suggestion_type` `add_claim`, `description`
+  saying why, `payload` with `subject_type`, `contact_id`, `label`, `value`),
+  which I keep or turn down in the notebook's Review; the rest goes in
+  `observations/`. Never invent a date.
+- **Events.** Something that happened or is planned, with its day, goes on
+  the timeline with `create_moment_with_ai` (`description`, `title_hint`,
+  `happened_at`, `participant_names`). A talk or meeting with someone is also
+  logged on their page with `log_interaction`.
 - **"Make a note", "note that", "write this down".** Follow the recipe in
   `skills/keep-a-note/SKILL.md`, every time, including its three-line reply:
-  the title, the folder, the links. It files the note in my Menerio notebook
-  when the `notebook` tools are there, and in `world/` or `inbox/` when they
-  are not.
+  the title, the folder, the links.
+- **"Send me the link to my notebook".** Call `get_notebook_link` and send me
+  the address it gives, with where it opens.
+- **Beside the notebook, in this folder:** my goal is a card in `goals/`
+  (above), which the notebook shows under Settings; the one-page summary of me
+  is `profile/about-me.md`, kept short and in step with My Profile; open
+  questions wait in `inbox/`.
+- **Without the `notebook` tools**, on a computer where they are not
+  connected: people, facts and events go into `world/` as `world/README.md`
+  says, `mc-search <words>` searches this folder, and you tell me the
+  notebook was not reached.
 - **"Connect Gmail for me", "connect my email".** Follow
   `skills/connect-email/SKILL.md`. Never ask me for a password in a chat.
 

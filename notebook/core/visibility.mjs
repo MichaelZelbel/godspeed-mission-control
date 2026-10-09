@@ -14,6 +14,23 @@ function privateFacts(query){
   const slot=s=>!!s&&sections.has(s.category_slug+'|'+(s.subject_type==='contact'?s.subject_id||'':''));
   return {slot,claim:c=>slot(slots.get(c.subject_type+'|'+(c.subject_id||'')+'|'+c.attribute))};
 }
+// Whether a text names one of these people, by a name or nickname of at least three
+// letters, as get_person_notes finds the notes about someone (server/memory-tools.mjs).
+// The answer for each version of a note is kept while the hidden people stay the same.
+const norm=s=>String(s??'').normalize('NFC').toLowerCase().replace(/\s+/g,' ').trim();
+const escape=s=>s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+let mentionCache={key:null,seen:new Map()};
+function mentions(people){
+  const names=[...new Set(people.flatMap(p=>[p.name,...(Array.isArray(p.aliases)?p.aliases:[])]).filter(n=>typeof n==='string').map(norm).filter(n=>n.length>=3))];
+  if(!names.length)return ()=>false;
+  const pattern=new RegExp('(^|[^\\p{L}\\p{N}])('+names.map(escape).join('|')+')(?=$|[^\\p{L}\\p{N}])','iu');
+  if(mentionCache.key!==pattern.source)mentionCache={key:pattern.source,seen:new Map()};
+  const seen=mentionCache.seen;
+  return (r,text)=>{
+    const key=r.type+'/'+r.id+'/'+(r._hash||'');if(r._hash&&seen.has(key))return seen.get(key);
+    const found=pattern.test(text);if(r._hash){if(seen.size>50000)seen.clear();seen.set(key,found);}return found;
+  };
+}
 export function visibleRows(query,type){
   return query.withSnapshot(()=>{
   const rows=query.rows(type),hideSensitive=query.rows('mcp_preferences')[0]?.hide_sensitive_from_ai!==false;
@@ -26,8 +43,14 @@ export function visibleRows(query,type){
   const blocked=r=>{for(let hops=0;r;hops++){if(closed(r))return true;if(!r.merged_into||r.merged_into==='self')return false;if(hops>5)return true;r=byId.get(r.merged_into)||byUid.get(r.merged_into);}return false;};
   const blockedPeople=new Set(people.filter(blocked).map(r=>r.id)),duplicates=new Set(people.filter(r=>r.merged_into).map(r=>r.id));
   const blockedEntities=new Set(query.rows('entities').filter(r=>r.ai_visibility==='hidden'||hideSensitive&&r.is_sensitive).map(r=>r.id));
-  const blockedNotes=new Set([...query.rows('person_documents').filter(r=>blockedPeople.has(r.contact_id)).map(r=>r.note_id),...query.rows('notes').filter(r=>blockedPeople.has(r.contact_id)||r.ai_visibility==='hidden'||hideSensitive&&r.is_sensitive).map(r=>r.id)]);
-  const blockedMoments=new Set(query.rows('moment_participants').filter(r=>blockedPeople.has(r.person_id||r.contact_id)).map(r=>r.moment_id));
+  // A note or a timeline entry that names a hidden or sensitive person, in its words or
+  // in the people processing found in it (metadata.matched_people), is hidden with them,
+  // as the setting "Auto-hide content linked to sensitive people" says. Until 8 October
+  // 2026 only the ones linked to them were, and a note that named them reached the model.
+  const named=blockedPeople.size?mentions(people.filter(r=>blockedPeople.has(r.id))):()=>false;
+  const blockedNotes=new Set([...query.rows('person_documents').filter(r=>blockedPeople.has(r.contact_id)).map(r=>r.note_id),...query.rows('notes').filter(r=>blockedPeople.has(r.contact_id)||r.ai_visibility==='hidden'||hideSensitive&&r.is_sensitive
+    ||(r.metadata?.matched_people||[]).some(m=>blockedPeople.has(m?.contact_id))||named(r,(r.title||'')+'\n'+(r.content||''))).map(r=>r.id)]);
+  const blockedMoments=new Set([...query.rows('moment_participants').filter(r=>blockedPeople.has(r.person_id||r.contact_id)).map(r=>r.moment_id),...query.rows('moments').filter(r=>named(r,(r.title||'')+'\n'+(r.description||''))).map(r=>r.id)]);
   const blockedGoals=new Set(query.rows('goals').filter(r=>r.ai_visibility==='hidden'||hideSensitive&&r.is_sensitive||r.visibility_scope==='private').map(r=>r.id));
   const blockedCollections=new Set(query.rows('collections').filter(r=>r.ai_visibility==='hidden'||hideSensitive&&r.is_sensitive||r.visibility_scope==='private').map(r=>r.id));
   // A group's sensitivity is set on its About card (GroupDetail.tsx): normal, sensitive or private.
