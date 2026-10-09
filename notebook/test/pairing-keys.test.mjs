@@ -16,7 +16,7 @@ test('a media pairing key reaches only the media routes, and the owner can revok
  const cookie=(await call('/api/auth/setup',{input:{username:'owner-test',password:'correct horse battery staple',invite}})).cookie.split(';')[0];
  const code=(await call('/api/pair/create',{cookie})).data.code,key=(await call('/api/pair/claim',{input:{code}})).data.key;assert.ok(key);
  assert.equal((await call('/api/media/manifest',{method:'GET',key})).status,200);
- for(const route of ['/api/query','/api/pair/create','/api/conflicts/resolve','/api/sync/configure','/api/export','/api/functions/mc-api-keys','/api/backup'])assert.equal((await call(route,{key,input:{table:'notes'}})).status,401,route);
+ for(const route of ['/api/query','/api/pair/create','/api/conflicts/resolve','/api/sync/configure','/api/sync/sign-in','/api/export','/api/functions/mc-api-keys','/api/backup'])assert.equal((await call(route,{key,input:{table:'notes'}})).status,401,route);
  const mcp=await fetch(base+'/mcp',{method:'POST',headers:{'Content-Type':'application/json','X-Godspeed-Pair-Key':key},body:JSON.stringify({jsonrpc:'2.0',id:1,method:'tools/list'})});assert.equal(mcp.status,401);
  const listed=(await call('/api/pair/keys',{method:'GET',cookie})).data.data;assert.equal(listed.length,1);assert.ok(!JSON.stringify(listed).includes(key));
  assert.equal((await call('/api/pair/keys',{method:'GET',key})).status,401);
