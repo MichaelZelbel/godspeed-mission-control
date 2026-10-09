@@ -285,7 +285,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         return send(res,200,{ok:true});
       }
       if(route==='/api/setup'&&req.method==='POST'){const input=JSON.parse(await body(req));return send(res,200,{...await scheduler.configure({...input,owner:mediaSync.server()||device}),results:await scheduler.tick()});}
-      if(route==='/api/jobs/run'&&req.method==='POST'){const input=JSON.parse(await body(req));return send(res,200,{results:originalRuntime?await scheduler.runNow(input.id):await scheduler.tick()});}
+      if(route==='/api/jobs/run'&&req.method==='POST'){const input=JSON.parse(await body(req));if(originalRuntime)return send(res,202,scheduler.startRun(input.id));return send(res,200,{results:await scheduler.tick()});}
       if(route==='/api/connections/recheck'&&req.method==='POST'){await jobExecutor(provider,query)({kind:'connection-check',id:'manual-connection-check',manual:true},{store,settings:store.get('settings','installation')||{}});return send(res,200,{connections:query.rows('connector_status').map(({id,ok,status,checked_at})=>({id,ok,status,checked_at}))});}
       if(route==='/api/jobs/update'&&req.method==='POST'){const input=JSON.parse(await body(req));return send(res,200,{data:originalRuntime?await scheduler.control(input):await controlRoutine(store,input,{device})});}
       if(route==='/api/jobs/add'&&req.method==='POST'){const input=JSON.parse(await body(req));return send(res,200,{data:originalRuntime?await scheduler.control(input,{enable:true}):await controlRoutine(store,input,{enable:true,device})});}

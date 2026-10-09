@@ -175,6 +175,17 @@ export class NativeScheduler{
  // run on another machine it would sit in that machine's Hermes and never run
  // (or run beside the owner's). Until 6 October 2026 nothing said so.
  requireOwner(action){if(!this.owns())throw Error('Routines run on the machine named '+this.owner()+'. '+action+' there, or choose this machine to run the routines.');}
+ // "Run now" from the notebook answers at once and the run goes on in the background (until
+ // 9 October 2026 the request waited for the whole run, and a routine that runs a model for
+ // minutes outlived the caller: Node's fetch gave up after 300 seconds). A wrong id or a machine
+ // that does not run the routines is still said at once. The run's result reaches the person the
+ // way a scheduled one does, and Settings > Routines shows it when it ends.
+ startRun(id){
+  this.requireOwner('Run the routine');
+  if(id&&!nativeJobs(this.home,this.device).some(j=>j.id===id))throw Error('Choose an existing Hermes task');
+  const run=this.runNow(id);this.running=run;run.catch(()=>{}).finally(()=>{if(this.running===run)this.running=null;});
+  return {started:true,...(id?{id}:{})};
+ }
  async runNow(id){
   this.requireOwner('Run the routine');
   const work=id?(()=>{if(!nativeJobs(this.home,this.device).some(j=>j.id===id))throw Error('Choose an existing Hermes task');return this.command(['run',id],{timeout:this.tickLimit});})():this.command(['tick'],{timeout:this.tickLimit});
