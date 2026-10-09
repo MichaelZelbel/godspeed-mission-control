@@ -13,6 +13,7 @@ Version 2 is the current edition, here on `main`. Its installers set up a new, s
 - A second computer or a server joins the mission control you already have, and the server runs the routines.
 - A weekly review and a research watch come with every new mission control.
 - On Windows, the mission control's own commands work inside the assistant's chat.
+- The assistant asks its questions in the chat and waits for your answer, keeps what you tell it in the notebook instead of a memory of its own, and reads the notebook directly, so the morning brief knows you. The daily round tells you what it decided, or that it could not finish.
 - Smaller fixes: deadlines are always read from the mission control you are working in, a deadline file that cannot be read is shown as needing a look, Settings shows when the weekly check-in really runs, and the chat no longer shows the assistant's waiting lines.
 
 ## Windows
