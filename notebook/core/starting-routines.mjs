@@ -164,7 +164,9 @@ export function saveRoutineResults(store,{home,jobs,messenger=false,now=Date.now
   for(const name of fs.readdirSync(folder).filter(n=>/^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}\.md$/.test(n)).sort()){
    if(progress.jobs[job.id]&&name<=progress.jobs[job.id])continue;
    const file=path.join(folder,name);progress.jobs[job.id]=name;
-   if(fs.statSync(file).mtimeMs<since)continue;
+   // A file's time comes from the system's coarse clock and can trail Date.now() by a few milliseconds,
+   // so a run written right after the first look could read as older and be lost: allow two seconds.
+   if(fs.statSync(file).mtimeMs<since-2000)continue;
    const reply=finalReply(fs.readFileSync(file,'utf8'));if(!reply)continue;
    const id='routine-result-'+hash(job.id+'/'+name).slice(0,20);if(store.get('notes',id))continue;
    const [day,time]=name.slice(0,-3).split('_');
