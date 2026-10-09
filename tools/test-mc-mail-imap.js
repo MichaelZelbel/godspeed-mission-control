@@ -63,7 +63,7 @@ async function main() {
   fs.mkdirSync(GODSPEED, { recursive: true });
   fs.writeFileSync(path.join(GODSPEED, "AGENTS.md"), "# test godspeed\n");
   for (const k of Object.keys(process.env)) if (/^GMAIL_|^AGENTMAIL_|^GODSPEED_MAIL_/.test(k)) delete process.env[k];
-  Object.assign(process.env, { GODSPEED_MAIL_HOME: HOME, GODSPEED_DIR: GODSPEED, GODSPEED_AGE_KEY: path.join(HOME, ".godspeed", "no-store-key"), GODSPEED_MAIL_IMAP_TIMEOUT_MS: "20000" });
+  Object.assign(process.env, { GODSPEED_MAIL_HOME: HOME, GODSPEED_DIR: GODSPEED, GODSPEED_ROOT: GODSPEED, GODSPEED_AGE_KEY: path.join(HOME, ".godspeed", "no-store-key"), GODSPEED_MAIL_IMAP_TIMEOUT_MS: "20000" });
 
   const F = require("./test-mc-mail-imap-fixture.js");
   const f = await F.start();

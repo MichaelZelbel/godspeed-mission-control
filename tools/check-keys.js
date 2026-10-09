@@ -41,10 +41,29 @@ function readDeviceEnv(name) {
   const f = path.join(os.homedir(), ".godspeed", "device.env");
   try {
     for (const line of fs.readFileSync(f, "utf8").split(/\r?\n/)) {
-      const m = line.match(new RegExp("^\\s*" + name + "=(.*)$"));
-      if (m) return m[1].trim();
+      const m = line.match(new RegExp("^\\s*(?:export\\s+)?" + name + "=(.*)$"));
+      if (m) return m[1].trim().replace(/^["']|["']$/g, "");
     }
   } catch (e) { /* no device.env is normal on a mission control somebody made by hand */ }
+  return "";
+}
+// The order mc-due, mc-goals and mc-work use: the mission control your assistant was started in
+// (GODSPEED_ROOT, GODSPEED_WORKSPACE), the one you are standing in or below, GODSPEED_DIR, and last
+// the one this computer was joined to (~/.godspeed/device.env). Until 9 October 2026 GODSPEED_DIR and
+// device.env came first, so on a computer joined to one mission control, a check typed inside
+// another checked the first one's keys.
+const looksLikeGodspeed = (d) => !!d && ["AGENTS.md", "profile", "rules", "observations"].some((n) => fs.existsSync(path.join(d, n)));
+const isFolder = (d) => { try { return !!d && fs.statSync(d).isDirectory(); } catch (e) { return false; } };
+function findGodspeed() {
+  for (const d of [process.env.GODSPEED_ROOT, process.env.GODSPEED_WORKSPACE]) if (looksLikeGodspeed(d)) return d;
+  let d = process.cwd();
+  for (let i = 0; i < 6; i++) {
+    if (looksLikeGodspeed(d)) return d;
+    const up = path.dirname(d);
+    if (up === d) break;
+    d = up;
+  }
+  for (const d of [process.env.GODSPEED_DIR, readDeviceEnv("GODSPEED_DIR")]) if (isFolder(d)) return d;
   return "";
 }
 
@@ -58,7 +77,7 @@ for (let i = 0; i < args.length; i++) {
     process.exit(0);
   }
 }
-if (!godspeed) godspeed = process.env.GODSPEED_DIR || readDeviceEnv("GODSPEED_DIR") || process.cwd();
+if (!godspeed) godspeed = findGodspeed() || process.cwd();
 godspeed = path.resolve(godspeed);
 
 // ---------------------------------------------------------------- finding `age`

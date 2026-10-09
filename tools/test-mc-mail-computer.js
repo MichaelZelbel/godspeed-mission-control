@@ -62,7 +62,7 @@ async function main() {
   const W = fs.mkdtempSync(path.join(os.tmpdir(), "godspeed mail computer "));   // a space, on purpose
   const HOME = path.join(W, "home"), GS = path.join(W, "godspeed");
   fs.mkdirSync(HOME, { recursive: true }); fs.mkdirSync(GS, { recursive: true }); fs.writeFileSync(path.join(GS, "AGENTS.md"), "# test\n");
-  Object.assign(process.env, gitEnv, { GODSPEED_MAIL_HOME: HOME, GODSPEED_DIR: GS, GODSPEED_MAIL_AGE_ONLY_FETCHED: "1" });
+  Object.assign(process.env, gitEnv, { GODSPEED_MAIL_HOME: HOME, GODSPEED_DIR: GS, GODSPEED_ROOT: GS, GODSPEED_MAIL_AGE_ONLY_FETCHED: "1" });
   delete process.env.GODSPEED_AGE_KEY;
   const A = require("./mc-mail-age.js"), G = require("./mc-mail-gmail.js");
   console.log("mc-mail on a computer");
@@ -99,17 +99,17 @@ async function main() {
   const GS2 = path.join(W, "owner-keeps-secrets"); fs.mkdirSync(path.join(GS2, "secrets"), { recursive: true });
   fs.writeFileSync(path.join(GS2, "AGENTS.md"), "x\n"); fs.writeFileSync(path.join(GS2, "FULL-ALPHA.md"), "x\n"); fs.writeFileSync(path.join(GS2, "secrets", "README.md"), "mine\n");
   git(GS2, "init", "-q", "-b", "main"); git(GS2, "add", "-A"); git(GS2, "commit", "-q", "-m", "start");
-  process.env.GODSPEED_DIR = GS2; G.writeStore({ AGENTMAIL_READ_KEY: "k2" }); G.shareStore("x");
+  process.env.GODSPEED_DIR = process.env.GODSPEED_ROOT = GS2; G.writeStore({ AGENTMAIL_READ_KEY: "k2" }); G.shareStore("x");
   ok("9b an owner who keeps secrets/ in Git keeps their ignore file as it was, and the key is not committed", !fs.existsSync(path.join(GS2, ".gitignore")) && git(GS2, "log", "--oneline").stdout.trim().split("\n").length === 1);
   // Without the notebook: shared as before.
   const GS3 = path.join(W, "first-edition"), remote3 = path.join(W, "github3.git");
   fs.mkdirSync(GS3, { recursive: true }); fs.writeFileSync(path.join(GS3, "AGENTS.md"), "x\n");
   git(W, "init", "-q", "--bare", remote3); git(GS3, "init", "-q", "-b", "main"); git(GS3, "remote", "add", "origin", remote3);
   git(GS3, "add", "-A"); git(GS3, "commit", "-q", "-m", "start"); git(GS3, "push", "-q", "-u", "origin", "main");
-  process.env.GODSPEED_DIR = GS3; G.writeStore({ AGENTMAIL_READ_KEY: "k3" });
+  process.env.GODSPEED_DIR = process.env.GODSPEED_ROOT = GS3; G.writeStore({ AGENTMAIL_READ_KEY: "k3" });
   const said3 = G.shareStore("mc-mail: connect");
   ok("10 a mission control without the notebook shares its locked store as it always did", /sent with your mission control/.test(said3) && git(remote3, "ls-tree", "-r", "--name-only", "main").stdout.includes("secrets/mc-secrets.env.age"), said3);
-  process.env.GODSPEED_DIR = GS;
+  process.env.GODSPEED_DIR = process.env.GODSPEED_ROOT = GS;
 
   // 3. One mail folder for the assistant and a terminal.
   const H2 = path.join(W, "home2"), GS4 = path.join(W, "notebook folder");
@@ -120,7 +120,7 @@ async function main() {
   fs.writeFileSync(path.join(old, "mail", "imap", "state.json"), JSON.stringify({ address: "sam@example.com", state: "ready" }));
   fs.writeFileSync(path.join(old, "mail", "imap", ".acl"), "owner-only\n");
   fs.writeFileSync(path.join(old, "mail", "drafts.json"), "{}");
-  const moved = child(`const G=require("./mc-mail-gmail.js");console.log(JSON.stringify(G.adoptOldHome()));`, { HOME_DIR: H2, GODSPEED_DIR: GS4 });
+  const moved = child(`const G=require("./mc-mail-gmail.js");console.log(JSON.stringify(G.adoptOldHome()));`, { HOME_DIR: H2, GODSPEED_DIR: GS4, GODSPEED_ROOT: GS4 });
   const here = path.join(H2, ".godspeed");
   ok("11 what the assistant kept in its old folder is moved to the home folder a terminal uses",
     fs.existsSync(path.join(here, "age-key.txt")) && fs.existsSync(path.join(here, "mail", "imap", "state.json")) && fs.existsSync(path.join(here, "mail", "drafts.json")) && !fs.existsSync(path.join(old, "mail", "imap")), moved.stdout + moved.stderr);
@@ -128,7 +128,7 @@ async function main() {
   // Both places have one: the home folder's is kept, the old one is left untouched.
   fs.mkdirSync(path.join(old, "mail", "imap"), { recursive: true });
   fs.writeFileSync(path.join(old, "mail", "imap", "state.json"), JSON.stringify({ address: "older@example.com" }));
-  child(`require("./mc-mail-gmail.js").adoptOldHome();`, { HOME_DIR: H2, GODSPEED_DIR: GS4 });
+  child(`require("./mc-mail-gmail.js").adoptOldHome();`, { HOME_DIR: H2, GODSPEED_DIR: GS4, GODSPEED_ROOT: GS4 });
   ok("13 nothing is moved over something already in the home folder", JSON.parse(fs.readFileSync(path.join(here, "mail", "imap", "state.json"), "utf8")).address === "sam@example.com" && fs.existsSync(path.join(old, "mail", "imap", "state.json")));
   // A store locked with the old folder's key, while the home folder has a different key: it still opens.
   const H3 = path.join(W, "home3"), GS5 = path.join(W, "two keys"), old5 = path.join(GS5, ".godspeed", "device-home", ".godspeed");
@@ -136,7 +136,7 @@ async function main() {
   const keygen = path.join(dir, "age-keygen" + EXE);
   spawnSync(keygen, ["-o", path.join(old5, "age-key.txt")]); spawnSync(keygen, ["-o", path.join(H3, ".godspeed", "age-key.txt")]);
   const both = child(`(async()=>{const G=require("./mc-mail-gmail.js");await G.readyAge();process.env.GODSPEED_AGE_KEY=${JSON.stringify(path.join(old5, "age-key.txt"))};G.writeStore({AGENTMAIL_READ_KEY:"old"});delete process.env.GODSPEED_AGE_KEY;G.adoptOldHome();console.log(JSON.stringify(G.readStore()));})();`,
-    { HOME_DIR: H3, GODSPEED_DIR: GS5, GODSPEED_MAIL_AGE_ONLY_FETCHED: "1", GODSPEED_MAIL_HOME: null });
+    { HOME_DIR: H3, GODSPEED_DIR: GS5, GODSPEED_ROOT: GS5, GODSPEED_MAIL_AGE_ONLY_FETCHED: "1", GODSPEED_MAIL_HOME: null });
   ok("14 a store locked with a key the assistant made in its old folder still opens", /AGENTMAIL_READ_KEY=old/.test(both.stdout), both.stdout + both.stderr);
 
   // 4. mc-mail setup wires the notebook's own Hermes too. Every settings folder is a temporary one.
@@ -147,7 +147,7 @@ async function main() {
   const notebookEntry = "terminal:\n  cwd: \"x\"\nmcp_servers:\n  notebook:\n    url: http://127.0.0.1:47831/mcp\n";
   fs.writeFileSync(path.join(profile, "config.yaml"), notebookEntry);
   fs.writeFileSync(path.join(GS6, ".godspeed", "assistant.json"), "﻿" + JSON.stringify({ verified: true, home: profile, workspace: GS6 }));
-  const tmpAll = { HOME_DIR: H4, GODSPEED_DIR: GS6, LOCALAPPDATA: path.join(W, "local"), APPDATA: path.join(W, "roaming"), CODEX_HOME: path.join(W, "no-codex") };
+  const tmpAll = { HOME_DIR: H4, GODSPEED_DIR: GS6, GODSPEED_ROOT: GS6, LOCALAPPDATA: path.join(W, "local"), APPDATA: path.join(W, "roaming"), CODEX_HOME: path.join(W, "no-codex") };
   const run1 = child(`require("./mc-mail.js").main(["setup"]);`, tmpAll);
   const cfg = fs.readFileSync(path.join(profile, "config.yaml"), "utf8");
   ok("15 mc-mail setup adds the mail tool to the notebook's Hermes and keeps its notebook tool", /Hermes \(the assistant your notebook set up\): added the mail tool/.test(run1.stdout) && /^  mc-mail:$/m.test(cfg) && /^  notebook:\n    url: http:\/\/127\.0\.0\.1:47831\/mcp$/m.test(cfg) && cfg.includes("GODSPEED_DIR: " + JSON.stringify(GS6)), run1.stdout + run1.stderr + cfg);
@@ -157,7 +157,7 @@ async function main() {
 
   // 5. The first connect, without a terminal: age is fetched before anything is asked.
   const H5 = path.join(W, "home5"); fs.mkdirSync(H5, { recursive: true });
-  const first = child(`require("./mc-mail.js").main(["connect","agentmail"]);`, { HOME_DIR: H5, GODSPEED_DIR: GS, GODSPEED_MAIL_AGE_ARCHIVE: pinned, GODSPEED_MAIL_AGE_ONLY_FETCHED: "1" });
+  const first = child(`require("./mc-mail.js").main(["connect","agentmail"]);`, { HOME_DIR: H5, GODSPEED_DIR: GS, GODSPEED_ROOT: GS, GODSPEED_MAIL_AGE_ARCHIVE: pinned, GODSPEED_MAIL_AGE_ONLY_FETCHED: "1" });
   ok("18 connect agentmail fetches age first and only then needs the person at a terminal", fs.existsSync(path.join(H5, ".godspeed", "mail", "age", "age" + EXE)) && /this needs you at a terminal/.test(first.stderr) && !/age is not on this computer/.test(first.stdout + first.stderr), first.stdout + first.stderr);
 
   try { fs.rmSync(W, { recursive: true, force: true }); } catch (e) { /* Windows may hold a file a moment longer */ }
