@@ -35,7 +35,9 @@ export function hermesProvider({executable='hermes',home,cwd,model,provider,sour
       }
       const {attachments,signal:ignoredSignal,timeout_ms:ignoredBudget,...prompt}=input;
       // Classify known failures without persisting or exposing private diagnostics.
-      const result=await runChild(executable,args,{cwd,env:assistantEnvironment({home,workspace:cwd}),input:JSON.stringify(prompt),timeoutMs,maxBytes:1024*1024,signal,spawnProcess}).catch(error=>{throw childFailure(error,timeoutMs,'The AI connection could not start');});
+      // The notebook's own one-turn calls are not a conversation with the person: a coach talk
+      // waiting for their chat must not be used up here (godspeed-coach lib/context.mjs).
+      const result=await runChild(executable,args,{cwd,env:{...assistantEnvironment({home,workspace:cwd}),GODSPEED_SCHEDULED_RUN:'1'},input:JSON.stringify(prompt),timeoutMs,maxBytes:1024*1024,signal,spawnProcess}).catch(error=>{throw childFailure(error,timeoutMs,'The AI connection could not start');});
       const text=hermesResponse(result.stdout);
       if(result.code===0&&text)return text;
       throw new Error(hermesFailureMessage(result.stderr+'\n'+text));

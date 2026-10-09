@@ -12,6 +12,16 @@ export function adoptedMissionControl(root, starter=defaultStarter) {
   return fs.existsSync(path.join(root,'AGENTS.md'))&&fs.existsSync(rules)&&!starterRules.some(name=>fs.existsSync(path.join(rules,name)));
 }
 
+// Made from this starter, which is what a reader's installation is: its operating manual, at least
+// one of the starter's own rules, and the two recipes the daily round runs. An adopted mission
+// control (the owner's own, often live on several machines) is never one, and neither is a folder
+// that only looks empty. Only a starter-born mission control gets the routines a first goal starts.
+export function starterBorn(root, starter=defaultStarter) {
+  if(adoptedMissionControl(root,starter)||!fs.existsSync(path.join(root,'AGENTS.md')))return false;
+  const starterRules=fs.existsSync(path.join(starter,'rules'))?fs.readdirSync(path.join(starter,'rules')):[];
+  return starterRules.some(name=>fs.existsSync(path.join(root,'rules',name)))&&['next-action','work-item'].every(skill=>fs.existsSync(path.join(root,'skills',skill,'SKILL.md')));
+}
+
 // Version 2 extends the complete main-branch starter. Existing user files win.
 export function installStarter(root, starter=defaultStarter) {
   // Rules and profile are what the owner told their mission control. In an

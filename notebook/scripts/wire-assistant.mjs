@@ -5,6 +5,8 @@ import {Store,atomic} from '../core/records/store.mjs';
 import {ApiKeys} from '../core/api-keys.mjs';
 import {installSkillTree} from '../core/packaged-skills.mjs';
 import {commandFile} from './windows-command-file.mjs';
+import {starterBorn} from '../core/starter-workspace.mjs';
+import {withTimezone} from '../core/hermes-config.mjs';
 const root=process.env.GODSPEED_WORKSPACE,home=process.argv[2];if(!root||!home)throw new Error('Choose the candidate workspace and isolated assistant home');
 const store=new Store(root),port=Number(process.env.GODSPEED_PORT||47831),file=path.join(home,'config.yaml');fs.mkdirSync(home,{recursive:true});
 const kit=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..');
@@ -88,7 +90,10 @@ for(const [addon,skill] of [['coach','coach'],['journal','interstitial-journal']
  installSkillTree(store,path.join(source,'skill',skill),path.join(home,'skills',skill));
  const script=path.join(source,'bin/godspeed-'+addon+'.mjs'),bin=path.join(home,'bin','godspeed-'+addon);
  if(process.platform==='win32')atomic(bin+'.cmd',cmd(at=>'"'+at(process.execPath)+'" "'+at(script)+'" %* --godspeed "'+at(root)+'"\r\n'));
- else {atomic(bin,'#!/bin/sh\nexec '+[process.execPath,script].map(s=>"'"+s.replaceAll("'","'\\''")+"'").join(' ')+' "$@" --godspeed '+"'"+root.replaceAll("'","'\\''")+"'"+'\n');fs.chmodSync(bin,0o700);}
+ // The assistant's terminal is a shell on every system (Git Bash on Windows), and the coach's
+ // talk brief tells it to type `godspeed-coach ...`: a shell never runs a .cmd by that name.
+ const posix=p=>process.platform==='win32'?p.replaceAll('\\','/'):p;
+ atomic(bin,'#!/bin/sh\nexec '+[process.execPath,script].map(s=>"'"+posix(s).replaceAll("'","'\\''")+"'").join(' ')+' "$@" --godspeed '+"'"+posix(root).replaceAll("'","'\\''")+"'"+'\n');if(process.platform!=='win32')fs.chmodSync(bin,0o700);
 }
 let text=fs.existsSync(file)?fs.readFileSync(file,'utf8').replace(/^\uFEFF/,''):`terminal:\n  cwd: ${JSON.stringify(root)}\nskills:\n  external_dirs: [${JSON.stringify(path.join(root,'skills'))}]\nmemory:\n  memory_enabled: false\n`;
 if(!/^plugins:/m.test(text))text+='\nplugins:\n  enabled: ["godspeed-coach", "godspeed-journal", "godspeed-headache"]\n';
@@ -129,5 +134,9 @@ if(process.env.GODSPEED_COMPUTER==='on'){
   if(section)text=text.replace(section[0],section[0].replace(/\n+$/,'\n')+computerTool);
   else text+=`\nmcp_servers:\n${computerTool}`;
 }
+// Hermes' own clock follows the reader's (hermes-config.mjs): until 8 October 2026 a Linux server
+// read "every weekday at seven" from the chat on the server's clock, usually UTC. Only for a
+// mission control made from the starter, and only where no zone was chosen yet.
+if(starterBorn(root))text=withTimezone(text,store.get('settings','installation')?.timezone);
 atomic(file,text);fs.chmodSync(file,0o600);
 console.log(JSON.stringify({wired:true,isolated:true,port}));
