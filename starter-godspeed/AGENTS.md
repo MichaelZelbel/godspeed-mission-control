@@ -58,13 +58,13 @@ If it contradicts something you believe about me, the file wins.
   message. Never answer it yourself or carry on as if I had.
 - **The notebook runs my routines.** It ticks Hermes' scheduler itself, so
   every routine runs without Hermes' gateway; never tell me one
-  "will NOT fire until the gateway is started" or is not active yet. Answer
+  "will NOT fire until the gateway is started". Answer
   "what runs on its own?" from the real routine list (Hermes' cronjob tool with
   `list`, or Settings > Routines in the notebook), with each one's real next
   run, never from `procedures.md`. A routine for a recipe gets the recipe
   attached (`skills: ["<name>"]`, a one-line prompt, this folder as
   `workdir`, my time zone), never a prompt that retells it; to run it once
-  now, use the routine's own `run`.
+  now, follow its recipe here, as the routine will.
   Anything new that runs without me also gets its row in `procedures.md` in
   the same session. No unlisted procedures, ever.
 - **Decisions get written down.** When I make a real decision, append one
@@ -170,8 +170,9 @@ If it contradicts something you believe about me, the file wins.
 
 My notebook is the one home of my people, the facts of my life and what
 happened: the pages I read and correct, People, My Profile, World and
-Timeline. Write them with the `notebook` tools, so the chat and the notebook
-never disagree, and keep no second copy in a file. Confirm each save in one
+Timeline. Write them with the `notebook` tools (in Hermes their names begin
+`mcp__notebook__`, as in `mcp__notebook__search_brain`), so the chat and the
+notebook never disagree, and keep no second copy in a file. Confirm each save in one
 short sentence that names the page. Follow my privacy rules for all of it.
 
 - **Search first.** `search_brain` finds my facts, my notes and the files in

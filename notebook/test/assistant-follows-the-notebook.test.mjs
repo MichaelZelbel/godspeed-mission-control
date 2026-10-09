@@ -134,9 +134,9 @@ test('the starter manual says what the live run needed, and still fits under the
     // Live run of 9 October 2026: the assistant answered its own questions, filed a "(?)" item as a
     // fact, never reached the research-watch recipe, and switched the brief on as a plain prompt.
     /end your reply with the question and stop/,/Never answer it yourself/,/marked \(\?\) or "not\s+sure" is an open question for `inbox\/`, never a fact/,
-    /never the day you file it/,/`skills\/research-watch\/SKILL\.md`/,/routine for a recipe gets the recipe\s+attached \(`skills: \["<name>"\]`/,/use the routine's own `run`/])assert.match(manual,said);
+    /never the day you file it/,/`skills\/research-watch\/SKILL\.md`/,/routine for a recipe gets the recipe\s+attached \(`skills: \["<name>"\]`/,/to run it once\s+now, follow its recipe here, as the routine will/])assert.match(manual,said);
   const brief=fs.readFileSync(new URL('../../starter-godspeed/skills/morning-brief/SKILL.md',import.meta.url),'utf8');
-  for(const said of [/## Switching it on/,/`skills: \["morning-brief"\]`/,/never write a brief by hand in the chat/,/`date \+%F`/,/Your final answer is the brief itself, word for word/])assert.match(brief,said);
+  for(const said of [/## Switching it on/,/`skills: \["morning-brief"\]`/,/follow this recipe yourself, right here, exactly as the routine\s+will/,/Never start the routine's own `run` from the chat/,/`date \+%F`/,/Your final answer is the brief itself, word for word/])assert.match(brief,said);
   assert.doesNotMatch(manual,/[–—]/,'no long dashes');
   // research-watch ships in the starter now, with its hashes; the kit's copy is the same text.
   const starter=fs.readFileSync(new URL('../../starter-godspeed/skills/research-watch/SKILL.md',import.meta.url),'utf8');

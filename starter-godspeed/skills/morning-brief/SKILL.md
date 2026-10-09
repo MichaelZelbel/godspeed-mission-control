@@ -80,7 +80,9 @@ Otherwise make one with Hermes' cronjob tool: `action: create`, the name `Mornin
 time they named in their time zone (with none named, 07:00), this recipe attached
 (`skills: ["morning-brief"]`), this mission control's folder as `workdir`, and the prompt
 `Follow the morning-brief recipe for this mission control.` Never write a prompt that retells
-the recipe, and never write a brief by hand in the chat. To run it once now, use the routine's
-own `run` with its job id, then show what it wrote. Add its row to `procedures.md`, and tell
+the recipe. To run it once now, follow this recipe yourself, right here, exactly as the routine
+will (the same reading, the same notebook calls, the same checks, today's date), and show the
+brief you wrote. Never start the routine's own `run` from the chat for this: Hermes runs it in
+the background and its answer never comes back to the chat. Add its row to `procedures.md`, and tell
 the person when the next one comes, that it appears in the notebook under "From your routines"
 (on a server, in their chat), and how to pause it (Settings > Routines).
