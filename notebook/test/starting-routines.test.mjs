@@ -1,7 +1,7 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';
 import {fileURLToPath} from 'node:url';import {execFileSync,spawnSync} from 'node:child_process';
 import {Store} from '../core/records/store.mjs';import {NativeScheduler} from '../core/native-scheduler.mjs';import {installStarter} from '../core/starter-workspace.mjs';
-import {finalReply,saveRoutineResults,RESULTS_FOLDER,routineFiles} from '../core/starting-routines.mjs';
+import {finalReply,saveRoutineResults,RESULTS_FOLDER,routineFiles,prepareCheckIn,coachRoutineTimes} from '../core/starting-routines.mjs';import {QueryService} from '../core/query.mjs';
 import {withTimezone} from '../core/hermes-config.mjs';
 import {routineRow,scheduleWords} from '../ui/src/local/routine-row.mjs';
 
@@ -142,7 +142,7 @@ test('deadline reminders say nothing on a day a morning brief carries the dates,
 const bash=process.platform==='win32'?['C:\\Program Files\\Git\\bin\\bash.exe','C:\\Program Files (x86)\\Git\\bin\\bash.exe'].find(f=>fs.existsSync(f)):spawnSync('bash',['--version']).status===0;
 test('the daily round\'s morning choice runs mc-decide and tells the person its one line',{skip:(!havePython||!bash)&&'no Python or bash here'},t=>{
  const {root,home}=scriptFixture(t),fake=path.join(root,'.fake-assistant');fs.mkdirSync(fake,{recursive:true});
- fs.writeFileSync(path.join(fake,'hermes'),'#!/usr/bin/env bash\n# A stand-in for the assistant: writes the record the next-action recipe writes.\nprompt="$2"\ndir="$(printf \'%s\\n\' "$prompt" | sed -n \'s/^.*The run folder is \\([^ ]*\\) and it.*$/\\1/p\' | head -1)"\n[ -n "$dir" ] || dir="$(printf \'%s\\n\' "$prompt" | sed -n \'s/^.*Today.s decision in \\([^ ]*\\) is written.*$/\\1/p\' | head -1)"\nprintf \'# Decision\\n\\n## For you today\\nOne question: is the race still on 19 April?\\n\' > "$dir/decision.md"\nprintf \'Is your race still on 19 April? nothing\\n\'\n',{mode:0o755});
+ fs.writeFileSync(path.join(fake,'hermes'),'#!/usr/bin/env bash\n# A stand-in for the assistant: writes the record the next-action recipe writes.\n# The recipe comes on standard input (mc-run, 9 October 2026: on Windows it is longer than a command line).\ncase " $* " in *" --query-file - "*) ;; *) echo "the prompt did not come on standard input: $*" >&2; exit 9 ;; esac\nprompt="$(cat)"\ndir="$(printf \'%s\\n\' "$prompt" | sed -n \'s/^.*The run folder is \\([^ ]*\\) and it.*$/\\1/p\' | head -1)"\n[ -n "$dir" ] || dir="$(printf \'%s\\n\' "$prompt" | sed -n \'s/^.*Today.s decision in \\([^ ]*\\) is written.*$/\\1/p\' | head -1)"\nprintf \'# Decision\\n\\n## For you today\\nOne question: is the race still on 19 April?\\n\' > "$dir/decision.md"\nprintf \'Is your race still on 19 April? nothing\\n\'\n',{mode:0o755});
  const settings=path.join(home,'scripts','godspeed-routines.json');fs.writeFileSync(settings,JSON.stringify({...JSON.parse(fs.readFileSync(settings,'utf8')),hermes:path.join(fake,'hermes')}));
  const run=runScript(home,'godspeed-daily-round-choose.py');
  assert.equal(run.status,0,run.stderr);
@@ -166,4 +166,23 @@ for answer,decision,want in cases:
 print("ok")`;
  const run=spawnSync(python,['-c',code],{encoding:'utf8',env:{...process.env,PYTHONIOENCODING:'utf-8'}});
  assert.equal(run.status,0,run.stderr);assert.equal(run.stdout.trim(),'ok');
+});
+
+// 9 October 2026, a live run: the Weekly check-in row said "Runs every 15 minutes.", which is only
+// how often it looks whether a talk is due. It says the talk's day and time, and the next talk.
+test('Settings > Routines gives the coach routines their real rhythm, not the 15-minute look',t=>{
+ const root=temporary(t,'coach-rhythm'),home=path.join(root,'.hermes');installStarter(root);
+ prepareCheckIn(root,{timezone:'Europe/Berlin',delivery:'notebook',goal:'fictional-goal',now:new Date('2026-10-09T10:00:00Z')});
+ const now=new Date('2026-10-09T12:00:00Z'),gate={title:'Weekly check-in',schedule:'*/15 * * * *'},tick={title:'Coach reminders and habit check',schedule:'*/15 * * * *'};
+ assert.deepEqual(coachRoutineTimes(gate,root,{now}),{rhythm:'Runs every Sunday at 18:00.',next_talk:'2026-10-11T16:00:00.000Z'});
+ assert.deepEqual(coachRoutineTimes(tick,root,{now}),{rhythm:'Checks every 15 minutes for a due reminder or habit question.'});
+ assert.deepEqual(coachRoutineTimes({title:'Deadline reminders',schedule:'0 8 * * *'},root,{now}),{});
+ const options={now:now.getTime(),timeZone:'Europe/Berlin'},row=routineRow({...gate,native:true,...coachRoutineTimes(gate,root,{now}),next_run:'2026-10-09T14:15:00+02:00'},options);
+ assert.equal(row.when,'Runs every Sunday at 18:00.');assert.equal(row.next,'Next talk Sunday 11 October at 18:00.');
+ assert.equal(routineRow({...tick,native:true,...coachRoutineTimes(tick,root,{now})},options).when,'Checks every 15 minutes for a due reminder or habit question.');
+ // The rows the page is given carry it.
+ fs.mkdirSync(path.join(home,'cron'),{recursive:true});fs.writeFileSync(path.join(home,'cron','jobs.json'),JSON.stringify({jobs:[{id:'gate',name:'Weekly check-in',schedule_display:'*/15 * * * *'},{id:'tick',name:'Coach reminders and habit check',schedule_display:'*/15 * * * *'}]}));
+ const query=new QueryService(new Store(root));query.nativeHermesHome=home;const rows=query.rows('jobs');
+ assert.equal(rows.find(j=>j.id==='gate').rhythm,'Runs every Sunday at 18:00.');
+ assert.match(rows.find(j=>j.id==='tick').rhythm,/^Checks every 15 minutes/);
 });

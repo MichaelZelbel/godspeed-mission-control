@@ -3,10 +3,10 @@ import os from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {hash,atomic} from './records/store.mjs';
-import {addArea,findArea} from '../../third-party/addons/godspeed-coach/lib/areas.mjs';
+import {addArea,findArea,listAreas,rhythmWords,nextTalkDay} from '../../third-party/addons/godspeed-coach/lib/areas.mjs';
 import {loadSettings as coachSettings,saveSettings as saveCoach} from '../../third-party/addons/godspeed-coach/lib/settings.mjs';
-import {localParts,addDays} from '../../third-party/addons/godspeed-coach/lib/clock.mjs';
-import {TALK_PROMPT,NOTEBOOK_TALK_JOB,NOTEBOOK_TICK_JOB} from '../../third-party/addons/godspeed-coach/lib/setup.mjs';
+import {localParts,addDays,zonedToUtc} from '../../third-party/addons/godspeed-coach/lib/clock.mjs';
+import {TALK_PROMPT,NOTEBOOK_TALK_JOB,NOTEBOOK_TICK_JOB,TALK_JOB,TICK_JOB} from '../../third-party/addons/godspeed-coach/lib/setup.mjs';
 
 // The routines a reader's first goal starts (Teach It Once, Chapters 3, 5, 8, 24, 25 and 30): the
 // daily round, deadline reminders and a weekly check-in. Until 8 October 2026 the first goal
@@ -72,6 +72,24 @@ export function prepareCheckIn(root,{timezone,delivery,goal,now=new Date()}){
  saveCoach(root,{...settings,timezone,talk_delivery:delivery==='telegram'?'messenger':'chat',tick_host:os.hostname()});
  if(findArea(root,CHECK_IN.slug))return null;
  return addArea(root,{...CHECK_IN,starts:addDays(localParts(now,timezone).date,1),serves:goal||'',preparation:CHECK_IN_PREPARATION});
+}
+
+// WHEN THE TWO COACH ROUTINES REALLY RUN, for Settings > Routines. Both wake every 15 minutes to
+// look, and until 9 October 2026 their rows said exactly that ("Runs every 15 minutes."), so the
+// weekly check-in read as a talk every quarter of an hour. The check-in's row now says the day and
+// time of its talks, from the coach's areas, and the next talk; the reminders say what they look for.
+// {rhythm, next_talk} for those two jobs, {} for any other.
+export function coachRoutineTimes(job,root,{now=new Date()}={}){
+ const name=String(job.title||''),every=/^\*\/(\d+) \* \* \* \*$/.exec(String(job.schedule||'').trim());
+ if(name===NOTEBOOK_TICK_JOB||name===TICK_JOB)return every?{rhythm:'Checks every '+every[1]+' minutes for a due reminder or habit question.'}:{};
+ if(name!==NOTEBOOK_TALK_JOB&&name!==TALK_JOB)return {};
+ let areas=[];try{areas=listAreas(root).filter(a=>a.on&&a.rhythm);}catch{}
+ if(!areas.length)return {};
+ areas.sort((a,b)=>(b.slug===CHECK_IN.slug)-(a.slug===CHECK_IN.slug)||a.slug.localeCompare(b.slug));
+ const words=areas.length===1?rhythmWords(areas[0]):areas.map(a=>rhythmWords(a)+' for '+a.title).reduce((all,one,i,list)=>all+(i===0?'':i===list.length-1?' and ':', ')+one,'');
+ const timezone=coachSettings(root).timezone||'UTC',today=localParts(now,timezone).date;
+ const moments=areas.map(a=>{for(let from=today,i=0;i<2;i++,from=addDays(from,1)){const day=nextTalkDay(a,from);if(!day)return null;const at=zonedToUtc(day,a.time,timezone);if(at>now)return at;}return null;}).filter(Boolean).sort((a,b)=>a-b);
+ return {rhythm:'Runs '+words+'.',...(moments.length?{next_talk:moments[0].toISOString()}:{})};
 }
 
 // The person-facing reply of one Hermes run document (cron/output/<job>/<time>.md), or null when it
