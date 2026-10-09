@@ -27,6 +27,14 @@ const git = (mcDir, args) => run("git", ["-C", mcDir, ...args], { shell: false }
 const HOOK_MATCH = "godspeed-coach";
 export const TALK_JOB = "coach-talks";
 export const TICK_JOB = "coach-tick";
+// The same two schedules under the names the notebook gives them when a reader's first goal starts
+// the weekly check-in (notebook/core/starting-routines.mjs). Setup counts either name as there, so
+// running it later never adds a second talk schedule beside the first.
+export const NOTEBOOK_TALK_JOB = "Weekly check-in";
+export const NOTEBOOK_TICK_JOB = "Coach reminders and habit check";
+export const hasTalkJob = (list) => list.includes(TALK_JOB) || list.includes(NOTEBOOK_TALK_JOB);
+export const hasTickJob = (list) => list.includes(TICK_JOB) || list.includes(NOTEBOOK_TICK_JOB);
+export const NO_MESSENGER = "No messenger here, so a talk that is due is opened anyway and waits in your chat: your assistant brings it up the next time you write to it.";
 export const TALK_PROMPT = "You are opening a coaching talk. The brief above, from the coach's gate script, names the area, holds what was prepared and ends with how to open it. Follow those steps. Your final answer is sent to them as it is: the opening only, or exactly [SILENT] when the command says the talk is already open.";
 
 export function claudeHookMerge(text, command) {
@@ -132,19 +140,27 @@ async function stepHermes(mcDir, f, bin) {
   const envPath = run("hermes", [...hp, "config", "env-path"]).stdout.trim().split("\n").pop();
   const envText = envPath && fs.existsSync(envPath) ? fs.readFileSync(envPath, "utf8") : "";
   if (where === "other-host") ok(`Talks and the habit check already come from ${s.tick_host}; this computer only reads and writes.`);
-  else if (!telegramConfigured(tgRun.status === 0 ? tgRun.stdout : "", envText)) warn("Talks need your assistant on a messenger (Chapter 32). Tracking habits still works.");
   else {
+    // Until 8 October 2026 a computer without Telegram got no talks at all ("Talks need your
+    // assistant on a messenger"), while the book promised that a talk waits in the chat. Now the
+    // talk opens at its time either way: with a messenger it is sent there, exactly as before;
+    // without one it is kept on this computer and the [godspeed-coach] block brings it up the next
+    // time they write (lib/context.mjs).
+    const messenger = telegramConfigured(tgRun.status === 0 ? tgRun.stdout : "", envText);
+    const deliver = messenger ? "telegram" : "local";
+    setSetting(mcDir, "talk_delivery", messenger ? "messenger" : "chat");
+    if (!messenger) ok(NO_MESSENGER);
     fs.mkdirSync(path.join(home, "scripts"), { recursive: true });
     fs.writeFileSync(path.join(home, "scripts", "coach-talk-gate.sh"), gateScript(bin, mcDir), { mode: 0o755 });
     fs.writeFileSync(path.join(home, "scripts", "coach-tick.sh"), tickScript(bin, mcDir), { mode: 0o755 });
     const list = run("hermes", [...hp, "cron", "list"]).stdout;
-    if (!list.includes(TALK_JOB)) {
-      const c = run("hermes", [...hp, "cron", "create", "*/15 * * * *", TALK_PROMPT, "--name", TALK_JOB, "--script", "coach-talk-gate.sh", "--deliver", "telegram", "--failure-deliver", "local", "--workdir", mcDir]);
+    if (!hasTalkJob(list)) {
+      const c = run("hermes", [...hp, "cron", "create", "*/15 * * * *", TALK_PROMPT, "--name", TALK_JOB, "--script", "coach-talk-gate.sh", "--deliver", deliver, "--failure-deliver", "local", "--workdir", mcDir]);
       if (c.status === 0) ok("talks: checked every 15 minutes, the model runs only when one is due");
       else warn(`could not schedule the talks: ${c.stderr.trim() || c.stdout.trim()}`);
     } else ok("talk schedule already there");
-    if (!list.includes(TICK_JOB)) {
-      const c = run("hermes", [...hp, "cron", "create", "*/15 * * * *", "--no-agent", "--script", "coach-tick.sh", "--deliver", "telegram", "--failure-deliver", "local", "--name", TICK_JOB]);
+    if (!hasTickJob(list)) {
+      const c = run("hermes", [...hp, "cron", "create", "*/15 * * * *", "--no-agent", "--script", "coach-tick.sh", "--deliver", deliver, "--failure-deliver", "local", "--name", TICK_JOB]);
       if (c.status === 0) ok("habit check and follow-ups: every 15 minutes, silent when nothing is due");
       else warn(`could not schedule the habit check: ${c.stderr.trim() || c.stdout.trim()}`);
     } else ok("habit check schedule already there");
@@ -233,8 +249,8 @@ export async function check(mcDir, f = {}) {
     line(/godspeed-coach/.test(run("hermes", [...hp, "plugins", "list", "--plain"]).stdout), "Hermes plugin", "hermes plugins enable godspeed-coach");
     if (s.tick_host === os.hostname()) {
       const list = run("hermes", [...hp, "cron", "list"]).stdout;
-      line(list.includes(TALK_JOB), "talk schedule", "run godspeed-coach setup again");
-      line(list.includes(TICK_JOB), "habit check schedule", "run godspeed-coach setup again");
+      line(hasTalkJob(list), "talk schedule", "run godspeed-coach setup again");
+      line(hasTickJob(list), "habit check schedule", "run godspeed-coach setup again");
     }
     line(!/false/i.test(run("hermes", [...hp, "config", "get", "stt.enabled"]).stdout), "voice messages transcribed", "hermes config set stt.enabled true");
   }

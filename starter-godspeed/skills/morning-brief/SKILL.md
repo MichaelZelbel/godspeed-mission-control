@@ -12,7 +12,9 @@ edit this file, and from then on it is theirs.
 
 ## What to read
 
-Read `AGENTS.md`, everything in `profile/`, the current files in `work/` and `goals/`,
+Read today's decision record first, `routines/next-action/YYYY-MM-DD/decision.md` for today,
+if there is one: its "For you today" section is the daily round's choice. Then read
+`AGENTS.md`, everything in `profile/`, the current files in `work/` and `goals/`,
 `decisions.md`, and `inbox/`. Read the previous brief in `brief/` if there is one. Use the
 current date in the time zone the morning job runs in. Do not invent change over time when
 there is no earlier record.
@@ -25,13 +27,16 @@ given and never touch today's real brief.
 
 Write, in plain words:
 
-1. **What changed** since the last brief, from the files, not from memory.
-2. **Useful work you prepared**: a short draft or a set of questions, when the files support
+1. **The one thing that needs them today**, first: the "For you today" section of today's
+   decision record, in its own words, with the choice laid out. When the record says nothing
+   needs them today, say that in one line with its reason. When there is no record for today,
+   leave this part out. The daily round already chose; never choose a second time here.
+2. **What changed** since the last brief, from the files, not from memory.
+3. **Useful work you prepared**: a short draft or a set of questions, when the files support
    one. Give the full text to copy inside the brief, in double quotes. Never send the person
    to a file path; a phone cannot open one.
-3. **The one decision that needs them**, if there is one, with the choice laid out.
 
-Leave out any part that has nothing real in it; never invent a decision to fill the third.
+Leave out any part that has nothing real in it; never invent a decision to fill the first.
 Keep the normal body under 200 words. Separate what the files say from what you recommend.
 Name important gaps plainly. Write short plain sentences, without long dashes. Send nothing,
 buy nothing, make no commitments.

@@ -55,6 +55,13 @@ that starts "From your coach: yesterday at ... I opened your ... talk").
    or book anything; a money talk never moves money, buys or signs up for anything; a relationships
    talk never contacts anyone for them and raises romance only when they do.
 
+## A talk waiting in the chat
+
+Without a messenger the opening reached no phone. The first time the [godspeed-coach] block shows
+it as a **waiting talk**, answer their message first, then bring the talk up in a short sentence
+or two that make sense on their own and end with its one question. Say it once; the block says so
+only in that one reply. Their answer continues it, as above.
+
 ## Closing a talk
 
 When a decision forms (a change, an experiment, a direction), say it back in a short sentence

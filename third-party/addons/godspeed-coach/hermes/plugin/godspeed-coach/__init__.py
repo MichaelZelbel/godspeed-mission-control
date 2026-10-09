@@ -34,6 +34,10 @@ def on_pre_llm_call(**kwargs):
         mc_dir = _mission_control()
         if mc_dir:
             args += ["--godspeed", mc_dir]
+        # A scheduled run is not a conversation with them: a talk waiting for the chat (no
+        # messenger) must not be used up by a routine nobody reads.
+        if str(kwargs.get("platform") or "") == "cron" or os.environ.get("GODSPEED_SCHEDULED_RUN"):
+            args.append("--scheduled")
         r = subprocess.run(args, capture_output=True, text=True, timeout=5)
         out = (r.stdout or "").strip()
         return {"context": out} if out else None
