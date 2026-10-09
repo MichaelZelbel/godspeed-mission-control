@@ -292,6 +292,52 @@ contains "called off, it is quiet" "$out" "CALLED OFF"
 missing "  and no longer needs a look" "$out" "due/present.md (Birthday"
 check "  and the file is still not rewritten" "$(cat "$U/due/present.md")" "$BEFORE"
 
+# --- which mission control, without --godspeed (9 October 2026) ----------------------------------
+# A live run: on a computer whose ~/.godspeed/device.env named one mission control, the chat of another
+# (Hermes stands in its own folder; the notebook sets GODSPEED_ROOT, GODSPEED_DIR and GODSPEED_WORKSPACE
+# to it) typed `mc-due list` and got the first one's deadlines, because device.env was read first.
+# `mc-due add` would have filed the reader's reminder there too. The order is now mc-goals' order.
+echo "which mission control"
+P() { if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else printf '%s' "$1"; fi; }
+H="$TMP/home"; DEC="$TMP/decoy"; W="$TMP/reader"; OUT="$TMP/nowhere"
+mkdir -p "$H/.godspeed" "$DEC/due" "$DEC/rules" "$W/due" "$W/rules" "$W/notes/deep" "$TMP/not-one" "$OUT"
+: > "$W/AGENTS.md"
+printf 'TITLE: DECOY deadline of another mission control\nDONE-WHEN: never\nCOST-IF-MISSED: none\nSELF-CHECK: none\n\n## Windows\n\nSTRIP: 2026-10-01 2026-12-01\n' > "$DEC/due/decoy-thing.md"
+printf 'TITLE: Reader own deadline\nDONE-WHEN: done\nCOST-IF-MISSED: a fee\nSELF-CHECK: none\n\n## Windows\n\nSTRIP: 2026-10-01 2026-12-01\n' > "$W/due/reader-thing.md"
+printf 'GODSPEED_DIR=%s\n' "$(P "$DEC")" > "$H/.godspeed/device.env"
+# No --godspeed, no inherited GODSPEED_*: only what each case sets.
+w() { (cd "$1" && shift && env -u GODSPEED_ROOT -u GODSPEED_DIR -u GODSPEED_WORKSPACE HOME="$H" USERPROFILE="$(P "$H")" GODSPEED_TODAY=2026-10-09 "$@"); }
+WP="$(P "$W")"
+out="$(w "$W" GODSPEED_ROOT="$WP" GODSPEED_DIR="$WP" GODSPEED_WORKSPACE="$WP" node "$HERE/due.js" list)"
+contains "the chat of a mission control lists its own deadlines" "$out" "Reader own deadline"
+missing "  not those of the one device.env names" "$out" "DECOY"
+w "$W" GODSPEED_ROOT="$WP" GODSPEED_DIR="$WP" GODSPEED_WORKSPACE="$WP" node "$HERE/due.js" add priya --title "Present for Priya" --target 2026-10-20 --done-when "bought" >/dev/null
+check "  and mc-due add files the new one there" "$( [ -f "$W/due/priya.md" ] && echo here)" "here"
+check "  and never in the other one" "$( [ -f "$DEC/due/priya.md" ] && echo there || echo absent)" "absent"
+out="$(w "$W/notes/deep" node "$HERE/due.js" list)"
+contains "standing inside a mission control with no environment: that one, not device.env" "$out" "Reader own deadline"
+out="$(w "$DEC" GODSPEED_ROOT="$WP" node "$HERE/due.js" list)"
+contains "the mission control the assistant was started in comes before the folder it stands in" "$out" "Reader own deadline"
+out="$(w "$W" GODSPEED_ROOT="$(P "$TMP/not-one")" node "$HERE/due.js" list)"
+contains "a GODSPEED_ROOT that is no mission control is passed over" "$out" "Reader own deadline"
+out="$(w "$OUT" GODSPEED_WORKSPACE="$WP" node "$HERE/due.js" list)"
+contains "GODSPEED_WORKSPACE alone names the assistant's mission control too" "$out" "Reader own deadline"
+out="$(w "$OUT" GODSPEED_DIR="$WP" node "$HERE/due.js" list)"
+contains "outside any mission control, GODSPEED_DIR comes before device.env" "$out" "Reader own deadline"
+out="$(w "$OUT" node "$HERE/due.js" list)"
+contains "with nothing else to go on, a scheduled job still finds device.env's" "$out" "DECOY"
+out="$(w "$W" GODSPEED_ROOT="$WP" node "$HERE/due.js" --godspeed "$(P "$DEC")" list)"
+contains "--godspeed beats everything" "$out" "DECOY"
+out="$(w "$W" node "$HERE/due.js" help)"; rc=$?
+contains "mc-due help prints how to use it (the notebook's due recipe points there)" "$out" "mc-due --godspeed PATH"
+check "  and is not an unknown command" "$rc" "0"
+rm -f "$H/.godspeed/device.env"
+out="$(w "$OUT" node "$HERE/due.js" list)"; rc=$?
+contains "nowhere to look: it says so" "$out" "I could not find your mission control folder"
+check "  and fails" "$rc" "1"
+out="$(w "$W" sh "$HERE/mc-due" today)"
+contains "the mc-due launcher, run inside a mission control, reads it" "$out" "Reader own deadline"
+
 # --- your due/README.md: brought up to date only if you never changed it ----------------------------
 KIT="$(cd "$HERE/.." && pwd)"
 EMBED="$(node -e '

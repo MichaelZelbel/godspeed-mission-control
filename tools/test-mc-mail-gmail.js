@@ -53,7 +53,7 @@ const keygen = findBin("age-keygen");
 if (!keygen) { console.log("SKIP: age-keygen is not on this computer, so the locked store cannot be tested"); process.exit(1); }
 spawnSync(keygen, ["-o", path.join(HOME, ".godspeed", "age-key.txt")]);
 fs.writeFileSync(path.join(HOME, ".godspeed", "device.env"), "GODSPEED_DIR=" + GODSPEED + "\n");
-Object.assign(process.env, { GODSPEED_MAIL_HOME: HOME, GODSPEED_DIR: GODSPEED, GODSPEED_AGE_KEY: path.join(HOME, ".godspeed", "age-key.txt") });
+Object.assign(process.env, { GODSPEED_MAIL_HOME: HOME, GODSPEED_DIR: GODSPEED, GODSPEED_ROOT: GODSPEED, GODSPEED_AGE_KEY: path.join(HOME, ".godspeed", "age-key.txt") });
 for (const k of Object.keys(process.env)) if (/^GMAIL_|^AGENTMAIL_/.test(k)) delete process.env[k];
 
 // ------------------------------------------------------------------ the stand-in for Google

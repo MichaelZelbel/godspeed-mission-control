@@ -22,8 +22,11 @@ TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 mkdir -p "$TMP/home" "$TMP/bin" "$TMP/godspeed/rules"
 SHORT="$TMP/bin:$NODE_DIR:/usr/bin:/bin"
-# What Hermes gives every command it runs on Windows.
-hermes_shell() { HOME="$TMP/home" PATH="$SHORT" MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' "$@"; }
+# A folder written the way a Windows program can read it.
+P() { if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else printf '%s' "$1"; fi; }
+# What Hermes gives every command it runs on Windows. USERPROFILE too: node finds the home folder
+# there on Windows, and the home of whoever runs this test is not part of it.
+hermes_shell() { HOME="$TMP/home" USERPROFILE="$(P "$TMP/home")" PATH="$SHORT" MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' "$@"; }
 
 PASS=0; FAIL=0
 ok()  { PASS=$((PASS+1)); printf '  ok   %s\n' "$1"; }
@@ -56,6 +59,48 @@ contains "mc-due reads the deadlines" "$out" "Nothing with a last day yet"
 missing "  and node found its program" "$out" "Cannot find module"
 out="$(cd "$TMP/godspeed" && hermes_shell sh "$HERE/mc-goals" list 2>&1)"
 contains "mc-goals reads the goals of the folder it is run in" "$out" "No goals on the register yet"
+
+# 2b. The chat of a mission control on a computer joined to ANOTHER one (9 October 2026). Hermes
+#     stands in the chat's own folder and the notebook names it in GODSPEED_ROOT, GODSPEED_DIR and
+#     GODSPEED_WORKSPACE; ~/.godspeed/device.env names the other. mc-due listed the other one's
+#     deadlines and `mc-due add` filed into it, while mc-goals and mc-work read the right one.
+#     The other commands a chat types that look for a mission control (mc-check-keys, mc-search,
+#     mc-mail) had the same order and are checked here too.
+C="$TMP/chat"; O="$TMP/other"
+mkdir -p "$C/due" "$C/rules" "$C/observations" "$O/due" "$O/rules" "$O/observations" "$TMP/home/.godspeed"
+: > "$C/AGENTS.md"; : > "$O/AGENTS.md"
+printf 'TITLE: Deadline of the other mission control\nDONE-WHEN: never\nCOST-IF-MISSED: none\nSELF-CHECK: none\n\n## Windows\n\nSTRIP: 2026-10-01 2026-12-01\n' > "$O/due/other.md"
+printf '# Bird\n\nThe chat mission control keeps a note about a kingfisher.\n' > "$C/observations/bird.md"
+printf '# Fish\n\nThe other mission control keeps a note about a pike.\n' > "$O/observations/fish.md"
+printf 'GODSPEED_DIR=%s\n' "$(P "$O")" > "$TMP/home/.godspeed/device.env"
+CP="$(P "$C")"
+chat() { (cd "$C" && GODSPEED_ROOT="$CP" GODSPEED_DIR="$CP" GODSPEED_WORKSPACE="$CP" GODSPEED_NOTEBOOK_MIRROR=0 hermes_shell "$@"); }
+out="$(chat sh "$HERE/mc-due" list 2>&1)"
+contains "in the chat, mc-due reads the chat's own deadlines" "$out" "Nothing with a last day yet"
+missing "  not those of the mission control this computer was joined to" "$out" "other mission control"
+chat sh "$HERE/mc-due" add present --title "Present for Priya" --target 2026-12-20 --done-when "bought" >/dev/null 2>&1
+[ -f "$C/due/present.md" ] && ok "  and mc-due add files into the chat's own mission control" || bad "  and mc-due add files into the chat's own mission control"
+[ -f "$O/due/present.md" ] && bad "  never into the other one" || ok "  never into the other one"
+out="$(chat sh "$HERE/mc-check-keys" 2>&1)"
+contains "mc-check-keys checks the chat's own mission control" "$(printf '%s' "$out" | tr '\\' '/')" "Your mission control folder: $CP"
+out="$(chat sh "$HERE/mc-search" --local kingfisher 2>&1)"
+contains "mc-search searches the chat's own mission control" "$out" "observations/bird.md"
+out="$(chat sh "$HERE/mc-search" --local pike 2>&1)"
+missing "  and not the other one" "$out" "observations/fish.md"
+out="$(chat "$NODE" -e 'console.log(require(process.argv[1]).findGodspeed())' "$(P "$HERE/mc-mail-gmail.js")" 2>&1)"
+contains "mc-mail keeps its keys in the chat's own mission control" "$(printf '%s' "$out" | tr '\\' '/')" "$CP"
+# Standing in a mission control with no environment at all, as a person in a terminal does.
+out="$(cd "$C" && hermes_shell sh "$HERE/mc-due" list 2>&1)"
+missing "a person standing in a mission control gets its deadlines, not device.env's" "$out" "other mission control"
+out="$(cd "$C" && hermes_shell sh "$HERE/mc-search" --local pike 2>&1)"
+missing "  and mc-search searches it, not device.env's" "$out" "observations/fish.md"
+out="$(cd "$C" && hermes_shell sh "$HERE/mc-check-keys" 2>&1)"
+contains "  and mc-check-keys checks it" "$(printf '%s' "$out" | tr '\\' '/')" "Your mission control folder: $CP"
+out="$(cd "$C" && hermes_shell "$NODE" -e 'console.log(require(process.argv[1]).findGodspeed())' "$(P "$HERE/mc-mail-gmail.js")" 2>&1)"
+contains "  and mc-mail uses its keys" "$(printf '%s' "$out" | tr '\\' '/')" "$CP"
+out="$(cd "$TMP" && hermes_shell sh "$HERE/mc-due" list 2>&1)"
+contains "outside any mission control, device.env's is still found (a scheduled job)" "$out" "other mission control"
+rm -f "$TMP/home/.godspeed/device.env"
 
 # 3. The two runners, which call node themselves.
 out="$(cd "$TMP" && hermes_shell bash "$HERE/mc-work-run" --godspeed "$TMP/godspeed" --dry-run 2>&1)"

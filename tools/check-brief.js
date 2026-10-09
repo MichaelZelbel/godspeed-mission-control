@@ -346,8 +346,17 @@ function check(text, earlier, day, root) {
     deadlineFaults(text, root, day));
 }
 
+const USAGE =
+  'mc-check-brief - is this morning brief something a person on a phone can act on?\n' +
+  '  mc-check-brief <file>                a brief about to be written or sent ("-" reads it from stdin)\n' +
+  '  mc-check-brief <file> --history DIR  the folder of earlier briefs (default: the file\'s own folder\n' +
+  '                                       when its name starts with a date, else brief/)\n' +
+  'Silent with exit 0 when the brief passes; exit 1 and what to change when it does not.\n';
+
 function main(argv) {
   const args = argv.slice(2);
+  // Until 9 October 2026 --help was read as the name of the brief, and the answer was "no such file".
+  if (args.includes('--help') || args.includes('-h')) { process.stdout.write(USAGE); return 0; }
   const hi = args.indexOf('--history');
   let dir = null;
   if (hi >= 0) { dir = args[hi + 1]; args.splice(hi, 2); }

@@ -54,7 +54,7 @@ PORT="$(cat "$W/port")"
 export GODSPEED_MAIL_AGENTMAIL_API="http://127.0.0.1:$PORT" GODSPEED_MAIL_AGENTMAIL_INBOX="godspeed@agentmail.to" AGENTMAIL_READ_KEY="test-key"
 # A home and a mission control of its own, so no case can read the locked store of the computer it runs on.
 mkdir -p "$W/home/.godspeed" "$W/godspeed"; : > "$W/godspeed/AGENTS.md"
-export GODSPEED_MAIL_HOME="$W/home" GODSPEED_DIR="$W/godspeed" GODSPEED_AGE_KEY="$W/home/.godspeed/no-such-key"
+export GODSPEED_MAIL_HOME="$W/home" GODSPEED_DIR="$W/godspeed" GODSPEED_ROOT="$W/godspeed" GODSPEED_AGE_KEY="$W/home/.godspeed/no-such-key"
 unset GMAIL_REFRESH_TOKEN GMAIL_CLIENT_ID GMAIL_CLIENT_SECRET
 
 mcp() {  # feed newline-delimited JSON-RPC, give the server a moment, collect its answers

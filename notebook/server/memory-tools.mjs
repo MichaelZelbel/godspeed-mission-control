@@ -26,7 +26,7 @@ export const memoryDefinitions = [
   {name: 'get_person_notes', description: 'Notes that name one person, newest first.', inputSchema: object({...who, limit: num})},
   {name: 'get_claims', description: 'Dated facts. mode current = true today, history = everything including ended facts, changed_since = started or ended after since.',
     inputSchema: object({subject_type: {enum: ['self', 'contact', 'entity']}, subject_id: str, subject_name: str, attribute: str, mode: {enum: ['current', 'history', 'changed_since']}, since: str, limit: num})},
-  {name: 'add_claim', description: 'Record a fact about the owner, a person or a thing that is true now (or since valid_from): something that is true about them, not a rule or a preference for how to help. A kind of fact with one value at a time (where someone lives, their employer, their birthday) closes its older value with an end date, never deleted; any other kind keeps every value, unless the owner\'s own facts of that kind hold one at a time. A value the owner typed himself is not overwritten but put in his Review for him to decide. Requires evidence_quote. Relationships between people are not facts.',
+  {name: 'add_claim', description: 'Record a fact about the owner, a person or a thing that is true now (or since valid_from): something that is true about them, not a rule or a preference for how to help. A kind of fact with one value at a time (where someone lives, their employer, their birthday) closes its older value with an end date, never deleted; any other kind keeps every value, unless the owner\'s own facts of that kind hold one at a time. A value the owner typed himself is not overwritten but put in his Review for him to decide. Requires evidence_quote. Give valid_from when the words say since when ("moved on 1 June"); without it the start is unknown, and a later value with a date ends it on that date. Relationships between people are not facts.',
     inputSchema: object({subject_type: {enum: ['self', 'contact', 'entity']}, subject_id: str, subject_name: str, attribute: str, value: str, evidence_quote: str, confidence: {enum: ['certain', 'likely', 'unsure']}, valid_from: str, valid_to: str, source_note_id: str}, ['subject_type', 'attribute', 'value'])},
   {name: 'create_moment_with_ai', description: 'Create a timeline entry from a plain description; the model works out title, date and status, then it is saved. Hints override what the model guessed.',
     inputSchema: object({description: str, happened_at: str, title_hint: str, status_hint: {enum: ['past_fact', 'future_plan', 'ongoing', 'unknown']}, participant_names: strings, person_name: str, entity_names: strings, category_hint: str, impact_level_hint: num, confidence_date_hint: num, confidence_truth_hint: num, document_ids: strings}, ['description'])},
@@ -95,7 +95,9 @@ function factsNow(query) {
 function subjectNames(query) {
   return new Map([...query.rows('contacts').map(p => [p.id, p.name]), ...query.rows('entities').map(e => [e.id, e.name])]);
 }
+// A fact filed without a start has none; the day it was recorded says since when it is known.
 const factView = (f, label) => ({id: f.id, subject: label(f), attribute: f.attribute, label: f.label || f.attribute, value: f.value, valid_from: f.valid_from || null, valid_to: f.valid_to || null,
+  ...(!f.valid_from && f.recorded_on ? {recorded_on: f.recorded_on} : {}),
   confidence: f.confidence || null, ...(f.category_name ? {section: f.category_name} : {}), ...(f.evidence_quote ? {evidence_quote: clip(f.evidence_quote, 300)} : {}), ...(f.source_type === 'note' && f.source_id ? {source_note_id: f.source_id} : {}),
   ...(f.two_answers ? {two_answers: f.two_answers, warning: 'TWO ANSWERS: report every value, never pick one'} : {})});
 const labeler = query => { const n = subjectNames(query); return f => f.subject_type === 'self' ? 'you' : n.get(f.subject_id) || f.subject_name || f.subject_type; };
@@ -224,7 +226,7 @@ async function searchBrain(a, ctx) {
   ctx.seen?.(shown.filter(h => !h.file).map(h => h.note));
   parts.push('Found ' + claims.length + ' claim(s) and ' + hits.length + ' note(s) [' + mode + '].' + (hits.length ? ' Showing notes ' + (shown.length ? offset + 1 : 0) + '-' + (offset + shown.length) + ' (has_more: ' + (offset + limit < hits.length) + ').' : '') + (note ? ' ' + note : ''));
   for (const f of claims.slice(0, limit)) parts.push('[claim] ' + label(f) + ', ' + (f.label || f.attribute) + ': ' + f.value + (f.two_answers ? '   TWO ANSWERS: ' + f.two_answers.join(' | ') : '')
-    + '\n    ' + (f.valid_from ? f.valid_from + ' to ' + (f.valid_to || 'now') : 'undated') + ' · ' + (f.confidence || 'confirmed') + ' · id ' + f.id
+    + '\n    ' + (f.valid_from ? f.valid_from + ' to ' + (f.valid_to || 'now') : (f.valid_to ? 'start unknown, to ' + f.valid_to : 'undated') + (f.recorded_on ? ', recorded ' + f.recorded_on : '')) + ' · ' + (f.confidence || 'confirmed') + ' · id ' + f.id
     + (f.evidence_quote ? '\n    "' + clip(f.evidence_quote, 240) + '"' : '') + (f.source_type === 'note' && f.source_id ? '\n    from note ' + f.source_id : ''));
   shown.forEach((h, i) => parts.push(noteBlock(h, offset + i + 1, a.view, text)));
   if (offset + limit < hits.length) parts.push('More notes: run again with offset=' + (offset + limit) + '.');
@@ -310,8 +312,8 @@ function getClaims(a, ctx) {
     // longer finds app-usage and image-concept, which only contain the letters (2026-10-08).
     listedKind = a.attribute ? fields.one(a.attribute) : undefined;
   const rows = facts(query).filter(f => (!a.subject_type || f.subject_type === a.subject_type) && (!ids || ids.has(f.subject_id)) && (!byName || norm(f.subject_name) === byName) && (!attribute || fields.canonical(f.attribute) === asked || listedKind === undefined && (norm(f.attribute).replace(/[\s-]+/g, '_').includes(attribute) || norm(f.label).replace(/[\s-]+/g, '_').includes(attribute)))
-    && (mode === 'history' || (mode === 'changed_since' ? f.valid_from >= a.since || f.valid_to >= a.since : holds(f, day))))
-    .sort((x, y) => String(y.valid_from || '').localeCompare(String(x.valid_from || '')));
+    && (mode === 'history' || (mode === 'changed_since' ? (f.valid_from || f.recorded_on) >= a.since || f.valid_to >= a.since : holds(f, day))))
+    .sort((x, y) => String(y.valid_from || y.recorded_on || '').localeCompare(String(x.valid_from || x.recorded_on || '')));
   return {mode, count: rows.length, claims: rows.slice(0, count(a.limit, 1, 500, 100)).map(f => factView(f, label))};
 }
 

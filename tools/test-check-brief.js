@@ -30,6 +30,16 @@ function expect(name, input, wantCode, wantInOutput) {
   }
 }
 
+// 9 October 2026: --help was taken for the name of a brief ("ENOENT ... --help").
+for (const flag of ['--help', '-h']) {
+  let r;
+  try { r = { code: 0, out: execFileSync('node', [script, flag], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }) }; }
+  catch (e) { r = { code: e.status, out: String(e.stdout || '') + String(e.stderr || '') }; }
+  const ok = r.code === 0 && r.out.includes('mc-check-brief <file>') && !/ENOENT/.test(r.out);
+  console.log((ok ? 'PASS' : 'FAIL') + '  ' + flag + ' prints how to use it, and is not read as a file');
+  if (!ok) { failures++; console.log('  got exit ' + r.code + ' and:\n    ' + r.out.split('\n').join('\n    ')); }
+}
+
 expect('a brief with full text and a link passes',
   'To act: pick one line below and post it.\n' +
   'Here in Europe, we are still proudly writing the AI rulebook. ;-)\n' +

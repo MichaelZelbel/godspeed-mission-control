@@ -53,7 +53,9 @@
  *   mc-due drop <name> --yes  call it off: an event too, and nothing is deleted
  *   mc-due check              run the self checks, close what is provably done
  *   mc-due state [--json]     open or not, for every one, and what closed it
- *   mc-due --godspeed PATH         work on a mission control somewhere else
+ *   mc-due --godspeed PATH         work on a mission control somewhere else (without it: the one
+ *                                  your assistant was started in, else the one you are standing in;
+ *                                  see "where is the mission control" below)
  *
  * DONE IS SOMETHING THAT HAPPENED, SO IT LIVES WITH THE THINGS THAT HAPPENED. A file in due/ is the
  * plan: what, the window, what finished means. Whether a window is finished is never written in it.
@@ -77,19 +79,46 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 
-function createDueCommands({root,commandArgs=process.argv.slice(2),date}={}) {
 // ---------------------------------------------------------------- where is the mission control
+// The order mc-goals, mc-work and mc-forecast use (mc-cards.js), so every command a chat types reads
+// and writes the same mission control:
+//   1. --godspeed PATH, said out loud
+//   2. the mission control your assistant was started in (GODSPEED_ROOT, GODSPEED_WORKSPACE: the
+//      notebook sets both for its assistant)
+//   3. the mission control you are standing in, or the first one above it
+//   4. GODSPEED_DIR
+//   5. the mission control this computer was joined to, in ~/.godspeed/device.env, for a job the
+//      schedule starts with almost no environment
+// Until 9 October 2026 device.env came FIRST. On a computer joined to one mission control, the chat of
+// another (it stands in its own folder and the notebook names it in the environment) listed the
+// first one's deadlines, and `mc-due add` filed the new one there.
+const looksLikeGodspeed = (d) => !!d && ["AGENTS.md", "profile", "rules", "observations"].some((n) => fs.existsSync(path.join(d, n)));
+const isFolder = (d) => { try { return !!d && fs.statSync(d).isDirectory(); } catch (e) { return false; } };
 function readDeviceEnv(name) {
   const f = path.join(os.homedir(), ".godspeed", "device.env");
   try {
     for (const line of fs.readFileSync(f, "utf8").split(/\r?\n/)) {
-      const m = line.match(new RegExp("^\\s*" + name + "=(.*)$"));
-      if (m) return m[1].trim();
+      const m = line.match(new RegExp("^\\s*(?:export\\s+)?" + name + "=(.*)$"));
+      if (m) return m[1].trim().replace(/^["']|["']$/g, "");
     }
   } catch (e) { /* no device.env is normal on a mission control somebody made by hand */ }
   return "";
 }
+function findGodspeed() {
+  for (const d of [process.env.GODSPEED_ROOT, process.env.GODSPEED_WORKSPACE]) if (looksLikeGodspeed(d)) return path.resolve(d);
+  // Walk up from here. Somebody sitting in their own folder should not have to say where it is.
+  let d = process.cwd();
+  for (let i = 0; i < 6; i++) {
+    if (looksLikeGodspeed(d)) return d;
+    const up = path.dirname(d);
+    if (up === d) break;
+    d = up;
+  }
+  for (const d of [process.env.GODSPEED_DIR, readDeviceEnv("GODSPEED_DIR")]) if (isFolder(d)) return path.resolve(d);
+  return "";
+}
 
+function createDueCommands({root,commandArgs=process.argv.slice(2),date}={}) {
 // --godspeed and its value are pulled OUT of the list before anything else looks at it. Left in, the
 // very first thing a person types (mc-due --godspeed /somewhere check) reads "--godspeed" as the command
 // and quietly runs the list instead, which looks like it worked.
@@ -101,18 +130,7 @@ for (let i = 0; i < raw.length; i++) {
   if (raw[i] === "-h" || raw[i] === "--help") { help(); process.exit(0); }
   args.push(raw[i]);
 }
-if (!godspeed) godspeed = readDeviceEnv("GODSPEED_DIR");
-if (!godspeed) godspeed = process.env.GODSPEED_DIR || "";
-if (!godspeed) {
-  // Walk up from here. Somebody sitting in their own folder should not have to say where it is.
-  let d = process.cwd();
-  for (let i = 0; i < 6; i++) {
-    if (fs.existsSync(path.join(d, "AGENTS.md")) || fs.existsSync(path.join(d, "profile"))) { godspeed = d; break; }
-    const up = path.dirname(d);
-    if (up === d) break;
-    d = up;
-  }
-}
+if (!godspeed) godspeed = findGodspeed();
 if (!godspeed || !fs.existsSync(godspeed)) {
   console.log("I could not find your mission control folder.");
   console.log("Run this from inside it, or say where it is:  mc-due --godspeed /path/to/your/godspeed");
@@ -788,6 +806,9 @@ function help() {
   mc-due state [--json]          open or not, for every one, and what closed it
   mc-due --godspeed PATH              a mission control somewhere else
 
+Without --godspeed it works on the mission control your assistant was started in, else the one
+you are standing in, else GODSPEED_DIR, else the one this computer was joined to.
+
 How loud a deadline gets comes from how much of the window is left, and from nothing else:
 quiet through the first half, then a quarter, then a tenth, then every day. One rule, whether
 the window is a week or a year. Nothing to tune. A target alone is quiet until its day, says
@@ -1158,6 +1179,8 @@ switch (cmd) {
   case "check": rc = cmdCheck(day); break;
   case "state": rc = cmdState(day); break;
   case "marker": rc = cmdMarker(day); break;
+  // The notebook's due recipe tells the assistant `mc-due help` shows the installed contract.
+  case "help": help(); break;
   default: console.log("I do not know \"" + cmd + "\"."); help(); rc = 1;
 }
 return rc;

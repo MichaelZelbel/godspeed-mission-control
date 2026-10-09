@@ -28,19 +28,24 @@ function readDeviceEnv(name) {
   return "";
 }
 
-// The same order mc-due uses: what you said, what the installer wrote down, what the
-// environment says, and last a walk up from where you are sitting.
+// The same order mc-due, mc-goals and mc-work use: what you said (--godspeed), the mission control
+// your assistant was started in (GODSPEED_ROOT, GODSPEED_WORKSPACE), the one you are standing in or
+// below, GODSPEED_DIR, and last the one this computer was joined to (~/.godspeed/device.env). Until
+// 9 October 2026 device.env came first, so on a computer joined to one mission control, mc-search in
+// the chat of another searched the first one.
+const looksLikeGodspeed = (d) => !!d && ["AGENTS.md", "profile", "rules", "observations"].some((n) => fs.existsSync(path.join(d, n)));
 function findGodspeed(explicit) {
-  let godspeed = explicit || readDeviceEnv("GODSPEED_DIR") || process.env.GODSPEED_DIR || "";
+  let godspeed = explicit || [process.env.GODSPEED_ROOT, process.env.GODSPEED_WORKSPACE].find(looksLikeGodspeed) || "";
   if (!godspeed) {
     let d = process.cwd();
     for (let i = 0; i < 6; i++) {
-      if (fs.existsSync(path.join(d, "AGENTS.md")) || fs.existsSync(path.join(d, "profile"))) { godspeed = d; break; }
+      if (looksLikeGodspeed(d)) { godspeed = d; break; }
       const up = path.dirname(d);
       if (up === d) break;
       d = up;
     }
   }
+  if (!godspeed) godspeed = [process.env.GODSPEED_DIR, readDeviceEnv("GODSPEED_DIR")].find((d) => { try { return !!d && fs.statSync(d).isDirectory(); } catch (e) { return false; } }) || "";
   if (!godspeed) return "";
   godspeed = path.resolve(godspeed);
   try { return fs.statSync(godspeed).isDirectory() ? godspeed : ""; } catch (e) { return ""; }

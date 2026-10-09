@@ -74,18 +74,21 @@ function readDeviceEnv(name) {
     return m ? m[1].trim().replace(/^["']|["']$/g, "") : "";
   } catch (e) { return ""; }
 }
-// What you said, what the installer wrote down, then a walk up from here. Each is used only
-// if the folder really exists: a GODSPEED_DIR mangled on its way through a shell is skipped, not
-// believed.
+// The order mc-due, mc-goals and mc-work use: the mission control your assistant was started in
+// (GODSPEED_ROOT, GODSPEED_WORKSPACE), the one you are standing in or below, GODSPEED_DIR, and last
+// what the installer wrote down (~/.godspeed/device.env). Until 9 October 2026 device.env came before
+// the folder you stand in, so mc-mail typed inside one mission control on a computer joined to another
+// used the other one's store. Each is used only if it really is a mission control: a GODSPEED_DIR
+// mangled on its way through a shell is skipped, not believed.
 function findGodspeed() {
-  for (const h of [process.env.GODSPEED_DIR, readDeviceEnv("GODSPEED_DIR")]) {
-    if (h && fs.existsSync(path.join(h, "AGENTS.md"))) return path.resolve(h);
-  }
+  const mc = (h) => !!h && fs.existsSync(path.join(h, "AGENTS.md"));
+  for (const h of [process.env.GODSPEED_ROOT, process.env.GODSPEED_WORKSPACE]) if (mc(h)) return path.resolve(h);
   let d = process.cwd();
   for (let i = 0; i < 6; i++) {
-    if (fs.existsSync(path.join(d, "AGENTS.md"))) return d;
+    if (mc(d)) return d;
     const up = path.dirname(d); if (up === d) break; d = up;
   }
+  for (const h of [process.env.GODSPEED_DIR, readDeviceEnv("GODSPEED_DIR")]) if (mc(h)) return path.resolve(h);
   return "";
 }
 
