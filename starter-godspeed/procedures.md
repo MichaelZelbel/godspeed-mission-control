@@ -1,17 +1,88 @@
 # Procedures: everything that runs on its own
 
+## The routines your first goal starts
+
+The first time you give your mission control a goal, in the notebook's "Start with one goal" form
+or in the chat, it starts three routines on the computer that runs your routines, on your own
+clock. It does this once on each computer that runs your routines: if you add a server later and
+let it run the routines, the server gets the same three, and your computer's stop. A routine you
+later remove stays removed, and a computer whose assistant already had routines of its own gets
+none of these.
+
+All of them are listed in your notebook under Settings > Routines, each with what it does, when it
+runs next, when it last ran and whether that worked. "Pause" there stops one until you press
+"Resume". You can also ask in the chat: "Pause the deadline reminders", "Move the weekly check-in
+to Saturday at six".
+
+Where the results go: on a server with Telegram, to your Telegram chat. On your own computer, to
+your notebook, in the folder "From your routines", one note per run; a run with nothing to say
+leaves no note. The computer has to be on for a routine to run; one it missed runs once when the
+computer is back.
+
+### Daily round
+
+Does: every morning it picks the work for today on up to three of your goals and files it (the
+next-action recipe, run by mc-decide). Twice a day it does that work, one piece at a time, and
+checks each result (the work-item recipe, run by mc-work-run).
+Rhythm: "Daily round: choose today's work" every day at 05:30; "Daily round: do the work" every
+day at 10:00 and 16:00. Your time zone.
+Lands: the day's record in routines/next-action/<date>/decision.md and the work in work/. You get
+the record's one line for you ("For you today"), or nothing on a day that needs nothing from you.
+With a morning brief switched on, the brief opens with that line instead, so you get it once.
+Lives: Hermes' schedule on the computer that runs your routines, working in this folder.
+May: read this folder, research on the web, write files here. Anything that reaches another
+person, costs money or signs you up waits for your yes.
+Off-switch: Pause "Daily round: choose today's work" and "Daily round: do the work" under
+Settings > Routines, or pause the goal.
+Last checked: 2026-10-09, made by a real Hermes from the notebook's first-goal setup on a test
+computer; the morning choice run end to end with a stand-in for the model. A real day's run with
+a model is still to be watched.
+
+### Deadline reminders
+
+Does: runs mc-due check, which closes what proves itself done, then mc-due today, and tells you
+the dates that need a mention today: at most three, the most pressing first.
+Rhythm: every day at 08:00, your time zone. Silent on a day with nothing to say.
+Lands: a message to you (Telegram, or a note in "From your routines" on a computer). With a
+morning brief switched on, the reminders say nothing and your dates are in the brief's
+"Deadlines and targets" section instead, so no date comes twice in a morning.
+Lives: Hermes' schedule on the computer that runs your routines. No model is used.
+May: read due/ and write the closing of a thing that proved itself done.
+Off-switch: Pause "Deadline reminders" under Settings > Routines.
+Last checked: 2026-10-09, run once by a real Hermes on a test computer with a practice date and no
+morning brief, and its reply kept as a note; quiet on a day the brief carries the dates.
+
+### Weekly check-in
+
+Does: a short coaching talk about your goal, which your mission control starts. It is the coach
+area "Weekly check-in" (coach/weekly-check-in/), gentle in tone, and it serves your first goal.
+"Coach reminders and habit check" sends the one reminder after a talk you did not answer, and the
+evening habit check once you agree on a habit.
+Rhythm: Sundays at 18:00 your time, from the Sunday after your first goal. Both are looked at every
+15 minutes; the talk starts a model only when it is due.
+Lands: on a server, in Telegram. On your own computer the talk waits for you: the next time you
+write in the chat, your assistant brings it up. The talk's record is in
+coach/weekly-check-in/talks/.
+Lives: Hermes' schedule on the computer that runs your routines.
+May: read what the talk's area may read, and write the talk's record and habits you agree to.
+Off-switch: Pause "Weekly check-in" under Settings > Routines, or say "Pause the weekly
+check-in".
+Last checked: 2026-10-09, both schedules run once by a real Hermes on a test computer (no talk due,
+so both stayed quiet); the talk waiting in the chat tested without Telegram. A talk opened by a
+model is still to be watched.
+
 ## Notebook service and private file synchronization
 
 The installer can start a separate notebook service at sign-in on Windows or through the isolated Docker Compose project on a server. Its supervisor checks the notebook identity and scheduler progress, restarts only its own unhealthy notebook process, and stops retrying after five failed restarts. The installed stop command or stopping the separate Compose project turns it off.
 
 Once private file synchronization is explicitly configured, the notebook checks it once a minute and after a durable file change. Automatic, manual and notebook connector requests share one synchronization worker. Slow Git network requests run in that worker without holding the local writer lock. Local commits and incoming changes retain the lock, and edits made during upload remain pending for the next cycle. Stopping the notebook terminates the synchronization process tree. File conflicts keep the original and both edited versions; a binary file retains exact bytes and can be resolved by choosing a saved version.
 
-These are installation mechanisms, not adopted personal goals. Personal routines become scheduled only through the saved goal setup and routine controls; their owner, next run and pause state remain visible there. No routine is claimed tested merely because this description is packaged.
+These are installation mechanisms, not adopted personal goals. Personal routines are the three above, which your first goal starts, and the ones you add in the chat or under Settings > Routines; their owner, next run, last run and pause state remain visible there. No routine is claimed tested merely because this description is packaged.
 
 ## Goal decisions and approved local work
 
 Does: consumes adopted goals, saved decisions, exact local approvals and checked results. Decisions receive the latest actual report and the current saved deliverable; earlier defects remain history. Selecting the identical completed local edit gets one bounded correction, then fails without queuing another write if repeated. Waiting uses the newest decision by date rather than filename, so unchanged evidence stays quiet until its next check. When the user selects waiting for a separate report, a verified local change remains waiting until an actual later report or a changed goal direction is saved.
-Rhythm: not scheduled by this template; the saved routine controls determine cadence, time zone, owner and pause state.
+Rhythm: with the original assistant, the daily round above runs it; the saved routine controls determine cadence, time zone, owner and pause state.
 Lands: goal decisions, work results, tool evidence and forecasts in the notebook.
 Lives: the notebook scheduler in the selected installation.
 May: read visible knowledge and change only the approved local target. An approved worker must deliver the result without requesting the same approval again. Each attempt distinguishes required source reads from producing the result. A premature result gets one missing-read correction; repeated failures retain their receipts and stop before changing the target. After model calls, result and failure recording wait for an active file writer to finish without repeating the task or holding the writer lock during the model request.
@@ -21,7 +92,7 @@ Last checked: 2026-10-04, source regressions check required source selection, bo
 ## Morning briefing and rehearsal
 
 Does: collects selected obligations, watch observations and health records, reads the complete morning note method, checks the written note, and allows one correction before delivery. A rehearsal uses a retained separate copy, including file date evidence for native obligation checks.
-Rhythm: not scheduled by this template; enable only through the saved routine controls.
+Rhythm: not started by your first goal; switch it on in the chat ("Switch on my morning brief") or under Settings > Routines. It opens with the daily round's line for today and carries your dates.
 Lands: checked notes and check receipts; rehearsal copies remain in the installation's private runtime folder.
 Lives: the notebook scheduler in the selected installation.
 May: collect enabled sources, save a checked notebook note and mark included watch findings shown. Rehearsals may change their own copies and send nothing.
