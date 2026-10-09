@@ -50,7 +50,7 @@ export function toolScope(name,args){
   if(['search_knowledge','validate_knowledge','get_stats'].includes(name))return 'stats';
   // Menerio's names (server/memory-tools.mjs).
   if(['search_brain','list_recent','list_recent_notes','trash_note'].includes(name))return 'notes';
-  if(name==='get_user_profile')return 'profile';
+  if(['get_user_profile','get_notebook_link'].includes(name))return 'profile';
   if(['search_contacts','get_contact_context','get_contact_profile','get_person_notes','log_interaction'].includes(name))return 'contacts';
   if(['get_claims','add_claim','create_moment_with_ai','search_moments','search_entities','get_entity_context'].includes(name))return 'world';
   if(['list_collections','get_collection_schema','list_collection_items','add_collection_item','update_collection_item','search_all_collections'].includes(name))return 'collections';

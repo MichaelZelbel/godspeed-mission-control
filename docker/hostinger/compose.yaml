@@ -18,6 +18,8 @@ services:
       GODSPEED_ACCESS_TOKEN: ${GODSPEED_SETUP_CODE:?Choose and save a private setup code}
       GODSPEED_DEVICE: vps
       GODSPEED_COMPUTER: "off"
+      # The address the assistant gives when asked for the link to the notebook.
+      GODSPEED_WEB_ADDRESS: https://${GODSPEED_HOST:?Enter your VPS hostname without https://}
     volumes:
       - godspeed-data:/opt/data/full-candidate
     expose:

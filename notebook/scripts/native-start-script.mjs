@@ -11,7 +11,9 @@ import {fileURLToPath} from 'node:url';
 // for (SIGTERM or SIGINT, passed on to the notebook) still ends cleanly.
 // GODSPEED_WEB_PORT and GODSPEED_HOST are a server's: its web door, and the name its web
 // address has, which a later installation keeps (install-native-notebook.sh).
-export const NAMES=['GODSPEED_WORKSPACE','GODSPEED_ORIGINAL_RUNTIME','GODSPEED_PORT','GODSPEED_BIND','HERMES_HOME','GODSPEED_DEVICE','GODSPEED_MEDIA_ROOT','GODSPEED_WEB_PORT','GODSPEED_HOST'];
+// GODSPEED_WEB_ADDRESS is that whole address, which the notebook gives an assistant asked
+// for the link to it (core/notebook-address.mjs).
+export const NAMES=['GODSPEED_WORKSPACE','GODSPEED_ORIGINAL_RUNTIME','GODSPEED_PORT','GODSPEED_BIND','HERMES_HOME','GODSPEED_DEVICE','GODSPEED_MEDIA_ROOT','GODSPEED_WEB_PORT','GODSPEED_HOST','GODSPEED_WEB_ADDRESS'];
 
 export function startScript({node,supervise,env}){
   return `import {spawn} from 'node:child_process';import os from 'node:os';
