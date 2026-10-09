@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {atomic,decode,hash,safe} from './records/store.mjs';
 import {durable,isRecordPath} from './file-policy.mjs';
+import {skillHistory} from './packaged-skills.mjs';
 
 function retained(store,id){
   safe(id);const file=path.join(store.root,'conflicts',id+'.json');
@@ -116,7 +117,7 @@ export function resolveSavedConflict(store,{id,choice,text,expected_hash},{assis
       }else{
         if(typeof selected!=='string'&&!Buffer.isBuffer(selected))throw Error('Choose a saved file or provide merged text');
         if(conflict.kind==='assistant-skill'){
-          atomic(path.join(store.root,'skills/package-history',hash(target),currentHash+'.txt'),before);atomic(target,selected);
+          atomic(path.join(skillHistory(store),hash(target),currentHash+'.txt'),before);atomic(target,selected);
         }else store.publishFiles([{file:conflict.path,text:selected}]);
       }
     }

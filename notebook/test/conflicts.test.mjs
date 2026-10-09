@@ -61,7 +61,7 @@ test('assistant method resolution preserves the reviewed current file and reject
   assert.throws(()=>resolveSavedConflict(store,{id:view.id,choice:'remote',expected_hash:view.current_hash},options),/changed again/);
   const current=conflictView(store,view.id,options);resolveSavedConflict(store,{id:view.id,choice:'local',expected_hash:current.current_hash},options);
   assert.equal(fs.readFileSync(target,'utf8'),'Older customized method');
-  assert.equal(fs.readFileSync(path.join(store.root,'skills/package-history',hash(target),current.current_hash+'.txt'),'utf8'),'Changed method during review');
+  assert.equal(fs.readFileSync(path.join(store.state,'skill-history',hash(target),current.current_hash+'.txt'),'utf8'),'Changed method during review');
 });
 test('merging a conflict cannot rename a record or rewrite an event',()=>{
   const store=fixture(),note=store.save('notes',{title:'Fictional identity',content:'Saved'});
