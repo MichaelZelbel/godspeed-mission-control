@@ -29,8 +29,11 @@ bad() { echo "  FAIL $1"; FAIL=$((FAIL+1)); [ -n "${2:-}" ] && echo "       $2";
 # memory/. It made a memory/ until 2026-08-29, which is why this suite stayed green through the
 # eight days both tools were unable to find a real godspeed at all (see the note in prompt-harvest.js).
 # A fixture that is kinder than the world is a fixture that cannot fail.
-W="$HERE/.tmp-archive-test.$$"; rm -rf "$W"; mkdir -p "$W/observations" "$W/home"
-trap 'rm -rf "$W"' EXIT
+# The fixture lives OUTSIDE the kit (2026-10-09). The harvest runs git in the folder it is given,
+# and with the fixture inside the kit's own checkout it reached that checkout instead: it pulled
+# and left a rebase of the branch half done.
+W="$(mktemp -d)/archive-test"; mkdir -p "$W/observations" "$W/home"
+trap 'rm -rf "$(dirname "$W")"' EXIT
 # Point the bot reader at nothing, for every case that is not about it. On a machine that runs
 # bots this suite would otherwise find the REAL ones and archive real chats into a throwaway
 # folder. Cases 24 onward set this to their own fixture. A test that reads live data is not a
