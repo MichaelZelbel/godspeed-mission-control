@@ -92,6 +92,23 @@ export function coachRoutineTimes(job,root,{now=new Date()}={}){
  return {rhythm:'Runs '+words+'.',...(moments.length?{next_talk:moments[0].toISOString()}:{})};
 }
 
+// What Hermes itself adds to a reply, which is never what the routine said to the person
+// (9 October 2026, a live run: the daily round's whole note was Hermes' "File-mutation verifier"
+// block). The same list as godspeed_routines.py TRAILERS: the verifier's header with its bullet
+// lines, a repaired tool name Hermes printed, a notice that replaced a reply the model never
+// finished (to the end of the reply), and a network notice.
+const TRAILERS=[
+ /^[ \t]*(?:⚠️?[ \t]*)?File-mutation verifier:.*(?:\n[ \t]+(?:•|-|\*).*)*/gm,
+ /^[ \t]*\u{1f527}[ \t]*Auto-repaired tool name:.*$/gmu,
+ /^[ \t]*⚠️?[ \t]*(?:No reply:|\*\*Response Stopped|\*\*No visible answer)[\s\S]*/m,
+ /^[ \t]*\u{1f501}[ \t]*Response dominated by repeated text.*$/gmu,
+ /^[ \t]*\[System: [^\]\n]*\][ \t]*$/gm,
+];
+export function stripTrailers(text){
+ let out=String(text||'').replace(/\r\n/g,'\n');
+ for(const pattern of TRAILERS)out=out.replace(pattern,'');
+ return out.replace(/\n{3,}/g,'\n\n').trim();
+}
 // The person-facing reply of one Hermes run document (cron/output/<job>/<time>.md), or null when it
 // was silent, failed or said nothing. Hermes keeps it there and sends it nowhere when the delivery
 // is "local", which is every routine on a computer without a messenger.
@@ -101,10 +118,23 @@ export function finalReply(text){
  const response=text.lastIndexOf('\n## Response\n\n');
  if(response!==-1)reply=text.slice(response+'\n## Response\n\n'.length);
  else if(/^\*\*Mode:\*\* no_agent/m.test(text)){const cut=text.indexOf('\n---\n\n');if(cut!==-1)reply=text.slice(cut+'\n---\n\n'.length);}
- reply=reply?.trim();if(!reply||reply==='(No response generated)')return null;
+ reply=stripTrailers(reply);if(!reply||reply==='(No response generated)')return null;
  const lines=reply.split('\n').map(l=>l.trim()).filter(Boolean);
  if(SILENT.test(reply)||SILENT.test(lines[0])||SILENT.test(lines.at(-1)))return null;
  return reply;
+}
+
+// A daily-round routine that went wrong prints its one sentence for the person like any other line
+// (godspeed_routines.py, tell), so Hermes records the run as having worked. Its own record beside
+// Hermes' says it failed, and Settings > Routines says so: {last_status, last_error} for the row
+// of that run, {} otherwise. Only the record written by that very run counts.
+export const ROUTINE_STATUS='godspeed-routines-status.json';
+export function routineStatus(home,job){
+ const routine=STARTING_ROUTINES.find(r=>r.script===job?.script);if(!routine||!job.last_run_at)return {};
+ let status;try{status=JSON.parse(fs.readFileSync(path.join(home,ROUTINE_STATUS),'utf8'))?.[routine.key];}catch{return {};}
+ const ran=Date.parse(job.last_run_at),at=Date.parse(status?.at);
+ if(!status?.failed||!Number.isFinite(ran)||!Number.isFinite(at)||Math.abs(ran-at)>10*60000)return {};
+ return {last_status:'error',last_error:String(status.failed).slice(0,500)};
 }
 const runWords=(day,time)=>new Intl.DateTimeFormat('en-GB',{day:'numeric',month:'long',year:'numeric',timeZone:'UTC'}).format(new Date(day+'T00:00:00Z'))+', '+time.slice(0,5).replace('-',':');
 
