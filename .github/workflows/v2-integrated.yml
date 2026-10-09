@@ -53,6 +53,11 @@ jobs:
           node --test notebook/test/native-installer.test.mjs notebook/test/native-start-script.test.mjs notebook/test/setup-code.test.mjs notebook/test/native-web-address.test.mjs notebook/test/server-address.test.mjs notebook/test/web-door.test.mjs
           bash docker/full-candidate/test-package-update.sh
           python3 docker/test/test-telegram-setup.py
+      - name: Docker Hub images through Google's mirror (Docker Hub limits GitHub's shared runners; images stay pinned by digest)
+        run: |
+          f=/etc/docker/daemon.json; [ -s "$f" ] || echo '{}' | sudo tee "$f" >/dev/null
+          sudo jq '. + {"registry-mirrors": ["https://mirror.gcr.io"]}' "$f" > /tmp/daemon.json && sudo mv /tmp/daemon.json "$f"
+          sudo systemctl restart docker && docker info --format '{{json .RegistryConfig.Mirrors}}'
       - name: Build the integrated version
         run: docker build --build-arg REVISION="$GITHUB_SHA" -f docker/full-candidate/Dockerfile -t godspeed-v2-test .
       - name: Fresh installed server and browser check
