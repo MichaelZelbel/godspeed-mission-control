@@ -26,7 +26,7 @@ export const memoryDefinitions = [
   {name: 'get_person_notes', description: 'Notes that name one person, newest first.', inputSchema: object({...who, limit: num})},
   {name: 'get_claims', description: 'Dated facts. mode current = true today, history = everything including ended facts, changed_since = started or ended after since.',
     inputSchema: object({subject_type: {enum: ['self', 'contact', 'entity']}, subject_id: str, subject_name: str, attribute: str, mode: {enum: ['current', 'history', 'changed_since']}, since: str, limit: num})},
-  {name: 'add_claim', description: 'Record a fact about the owner, a person or a thing that is true now (or since valid_from): something that is true about them, not a rule or a preference for how to help. A kind of fact with one value at a time (where someone lives, their employer, their birthday) closes its older value with an end date, never deleted; any other kind keeps every value. A value the owner typed himself is not overwritten but put in his Review for him to decide. Requires evidence_quote. Relationships between people are not facts.',
+  {name: 'add_claim', description: 'Record a fact about the owner, a person or a thing that is true now (or since valid_from): something that is true about them, not a rule or a preference for how to help. A kind of fact with one value at a time (where someone lives, their employer, their birthday) closes its older value with an end date, never deleted; any other kind keeps every value, unless the owner\'s own facts of that kind hold one at a time. A value the owner typed himself is not overwritten but put in his Review for him to decide. Requires evidence_quote. Relationships between people are not facts.',
     inputSchema: object({subject_type: {enum: ['self', 'contact', 'entity']}, subject_id: str, subject_name: str, attribute: str, value: str, evidence_quote: str, confidence: {enum: ['certain', 'likely', 'unsure']}, valid_from: str, valid_to: str, source_note_id: str}, ['subject_type', 'attribute', 'value'])},
   {name: 'create_moment_with_ai', description: 'Create a timeline entry from a plain description; the model works out title, date and status, then it is saved. Hints override what the model guessed.',
     inputSchema: object({description: str, happened_at: str, title_hint: str, status_hint: {enum: ['past_fact', 'future_plan', 'ongoing', 'unknown']}, participant_names: strings, person_name: str, entity_names: strings, category_hint: str, impact_level_hint: num, confidence_date_hint: num, confidence_truth_hint: num, document_ids: strings}, ['description'])},
@@ -437,9 +437,10 @@ async function write(name, a, ctx, guarded) {
     const subjectId = subject?.id || null, day = a.valid_from || today(ctx);
     const same = query.rows('claims').filter(c => c.subject_type === type && (c.subject_id || null) === subjectId && (listed ? fields.canonical(c.attribute) === attribute : c.attribute === attribute)), slot = query.rows('fact_slots').find(s => s.subject_type === type && (s.subject_id || null) === subjectId && s.attribute === attribute);
     const typed = same.filter(c => holds(c, day) && /^user/.test(c.origin || '') && norm(c.value) !== norm(value));
-    // Only a one-at-a-time kind replaces the owner's value; any kind the list does not name keeps
-    // every value (core/domains.mjs writeFact), so a new one goes beside his.
-    if (typed.length && listed && fields.one(attribute)) {
+    // A kind the list does not name, filed by an assistant with no slot for it yet, keeps every
+    // value: until 9 October 2026 it was one at a time, so the second `hard_limit` an assistant
+    // filed from a briefing ended the first. A slot the owner's own facts made keeps its setting.
+    if (typed.length && (listed ? fields.one(attribute) : (slot?.cardinality || 'many') !== 'many')) {
       const proposal = guarded({}).query.execute({table: 'review_queue', operation: 'insert', values: {title: attribute.replace(/_/g, ' ') + ': ' + value, suggestion_type: 'add_claim', status: 'pending_review', origin: 'ai', description: quote, source_note_id: a.source_note_id || null,
         payload: {label: a.attribute, value, attribute, subject_type: type, subject_id: subjectId, ...(type === 'contact' ? {contact_id: subjectId} : {}), source_type: a.source_note_id ? 'note' : 'assistant', source_id: a.source_note_id || null, valid_from: a.valid_from || null}}, assistant: true}).data;
       // Only values the assistant may see are quoted back to it.
@@ -447,7 +448,7 @@ async function write(name, a, ctx, guarded) {
       return {outcome: 'waiting_for_review', review_id: (Array.isArray(proposal) ? proposal[0] : proposal)?.id, message: (quoted.length ? 'The owner typed "' + quoted.join('", "') + '" himself' : 'The owner entered this fact himself') + ', so the new value waits in his Review instead of replacing it'};
     }
     const expected = Object.fromEntries([...same, ...(slot ? [slot] : [])].map(r => [r.type + '/' + r.id, r._hash]));
-    const result = guarded(expected).domains.writeFact({subject_type: type, ...(type === 'contact' ? {contact_id: subjectId} : type === 'entity' ? {entity_id: subjectId} : {}), attribute, label: a.attribute, value, valid_from: a.valid_from, evidence_quote: quote,
+    const result = guarded(expected).domains.writeFact({subject_type: type, ...(type === 'contact' ? {contact_id: subjectId} : type === 'entity' ? {entity_id: subjectId} : {}), attribute, label: a.attribute, value, valid_from: a.valid_from, evidence_quote: quote, ...(listed ? {} : {cardinality: 'many'}),
       source_type: a.source_note_id ? 'note' : 'assistant', source_id: a.source_note_id || null, origin: 'assistant'});
     const fact = result.facts?.[0] || {};
     return {outcome: fact.outcome, claim_id: fact.claimId || null, closed_earlier_values: fact.closed || 0, subject: subject ? subject.name : 'you', attribute, value};

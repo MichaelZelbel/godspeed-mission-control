@@ -155,11 +155,9 @@ export class Domains {
       // filed in a private section or kept off the assistant's list was
       // given to the assistant again.
       const kept=(key,fallback)=>input[key]!==undefined&&input[key]!==null?input[key]:oldSlot?.[key]??fallback;
-      // The list decides one or many for every kind it names. Any other kind keeps every value
-      // unless its writer asks for one at a time: until 9 October 2026 it was one at a time, so an
-      // assistant's second `hard_limit` from a briefing ended the first. A slot's stored "one" is
-      // that old default, never a choice (the screens only ever set "many", "Both are true").
-      const cardinality = listed ? (fields.one(attribute) ? 'one' : 'many') : input.cardinality === 'one' ? 'one' : 'many';
+      // The list decides one or many for every kind it names; the slot or the writer only for the
+      // rest. An assistant's add_claim asks for many on a kind with no slot yet (memory-tools.mjs).
+      const cardinality = listed ? (fields.one(attribute) ? 'one' : 'many') : oldSlot?.cardinality || input.cardinality || 'one';
       const slot = this.store.prepare('fact_slots', { subject_type, subject_id, contact_id: input.contact_id || null, attribute, label: input.label||oldSlot?.label||input.attribute||attribute, category_slug: input.category_slug||oldSlot?.category_slug||kinSlot?.category_slug||null, cardinality, show_to_agent: kept('show_to_agent',true)!==false, is_pinned: kept('is_pinned',kinSlot?.is_pinned??false)===true }, oldSlot);
       // What this value ends: every current one of a one-at-a-time fact, the one it corrects of a
       // many. An assistant ends one it was not asked to correct only when it read that version.
