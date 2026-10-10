@@ -17,6 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Slider } from "@/components/ui/slider";
 import { Textarea } from "@/components/ui/textarea";
 import ImportanceSlider from "./ImportanceSlider";
+import { filledOnOpen, mergeSuggestion } from "./moment-form.mjs";
 
 export interface TimelineContact {
   id: string;
@@ -56,7 +57,6 @@ interface AddEventDialogProps {
   onOpenChange?: (open: boolean) => void;
 }
 
-const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 const AI_FALLBACK = "The suggestion could not be made. Try again.";
 
 export default function AddEventDialog({ people, onCreated, editEvent, open: controlledOpen, onOpenChange }: AddEventDialogProps) {
@@ -82,6 +82,11 @@ export default function AddEventDialog({ people, onCreated, editEvent, open: con
   const [suggestedNewPeople, setSuggestedNewPeople] = useState<string[]>([]);
   const [selectedNewPeople, setSelectedNewPeople] = useState<string[]>([]);
   const [suggestionApplied, setSuggestionApplied] = useState(false);
+  // How many fields the last suggestion filled; 0 means everything was already filled in.
+  const [suggestionFilled, setSuggestionFilled] = useState(0);
+  // Fields the person has filled in, which a suggestion leaves alone (moment-form.mjs).
+  const [filled, setFilled] = useState(() => filledOnOpen(null));
+  const markFilled = (field: "title" | "dateStart" | "dateEnd" | "status" | "impactLevel" | "confDate" | "confTruth") => setFilled((f) => (f[field] ? f : { ...f, [field]: true }));
   const [aiLoading, setAiLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -108,30 +113,32 @@ export default function AddEventDialog({ people, onCreated, editEvent, open: con
       setConfTruth(5);
       setMatchedPeople([]);
     }
+    setFilled(filledOnOpen(editEvent));
     setSuggestedNewPeople([]);
     setSelectedNewPeople([]);
     setSuggestionApplied(false);
   }, [open, editEvent, today]);
 
+  // A suggestion fills only the fields the person has not filled in yet; it
+  // used to replace them all, so a chosen start date became "yesterday".
   const applyDraft = (draft: MomentDraft) => {
-    setTitle(draft.title || title);
-    setDateStart(draft.happened_at || dateStart);
-    setDateEnd(draft.happened_end || "");
-    setStatus(["past_fact", "future_plan", "ongoing", "unknown"].includes(draft.status) ? draft.status : "unknown");
-    setImpactLevel(clamp(Number(draft.impact_level) || 2, 1, 4));
-    setConfDate(clamp(Number(draft.confidence_date) || 5, 0, 10));
-    setConfTruth(clamp(Number(draft.confidence_truth) || 5, 0, 10));
-
-    const matched: string[] = [];
-    const unmatched: string[] = [];
-    for (const name of draft.participants || []) {
-      const found = people.find((p) => p.name.toLowerCase() === name.toLowerCase());
-      if (found) matched.push(found.id);
-      else unmatched.push(name);
-    }
-    setMatchedPeople((prev) => Array.from(new Set([...prev, ...matched])));
-    setSuggestedNewPeople(Array.from(new Set(unmatched)));
-    setSelectedNewPeople(Array.from(new Set(unmatched)));
+    const merged = mergeSuggestion(
+      { title, dateStart, dateEnd, status, impactLevel, confDate, confTruth, matchedPeople },
+      filled,
+      draft,
+      people,
+    );
+    setTitle(merged.form.title);
+    setDateStart(merged.form.dateStart);
+    setDateEnd(merged.form.dateEnd);
+    setStatus(merged.form.status);
+    setImpactLevel(merged.form.impactLevel);
+    setConfDate(merged.form.confDate);
+    setConfTruth(merged.form.confTruth);
+    setMatchedPeople(merged.form.matchedPeople);
+    setSuggestedNewPeople(merged.newPeople);
+    setSelectedNewPeople(merged.newPeople);
+    setSuggestionFilled(merged.changed.length + merged.newPeople.length);
     setSuggestionApplied(true);
   };
 
@@ -300,27 +307,27 @@ export default function AddEventDialog({ people, onCreated, editEvent, open: con
             {aiLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
             Suggest title and other values
           </Button>
-          {suggestionApplied && <p className="text-xs text-muted-foreground">Suggestions applied - review and edit below.</p>}
+          {suggestionApplied && <p className="text-xs text-muted-foreground">{suggestionFilled > 0 ? "Suggestions applied - review and edit below." : "The suggestion left every field as it was."}</p>}
         </div>
-        <div className="space-y-2"><Label>Title *</Label><Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Short title for this moment" /></div>
+        <div className="space-y-2"><Label>Title *</Label><Input value={title} onChange={(e) => { setTitle(e.target.value); markFilled("title"); }} placeholder="Short title for this moment" /></div>
         <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-2"><Label>Start Date *</Label><Input type="date" value={dateStart} onChange={(e) => setDateStart(e.target.value)} /></div>
-          <div className="space-y-2"><Label>End Date</Label><Input type="date" value={dateEnd} onChange={(e) => setDateEnd(e.target.value)} /></div>
+          <div className="space-y-2"><Label>Start Date *</Label><Input type="date" value={dateStart} onChange={(e) => { setDateStart(e.target.value); markFilled("dateStart"); }} /></div>
+          <div className="space-y-2"><Label>End Date</Label><Input type="date" value={dateEnd} onChange={(e) => { setDateEnd(e.target.value); markFilled("dateEnd"); }} /></div>
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-2">
             <Label>Status</Label>
-            <Select value={status} onValueChange={setStatus}>
+            <Select value={status} onValueChange={(v) => { setStatus(v); markFilled("status"); }}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="past_fact">Past Fact</SelectItem><SelectItem value="future_plan">Future Plan</SelectItem><SelectItem value="ongoing">Ongoing</SelectItem><SelectItem value="unknown">Unknown</SelectItem>
               </SelectContent>
             </Select>
           </div>
-          <div className="space-y-2"><Label>Confidence (Date): {confDate}</Label><Slider value={[confDate]} onValueChange={([v]) => setConfDate(v)} min={0} max={10} step={1} /></div>
+          <div className="space-y-2"><Label>Confidence (Date): {confDate}</Label><Slider value={[confDate]} onValueChange={([v]) => { setConfDate(v); markFilled("confDate"); }} min={0} max={10} step={1} /></div>
         </div>
-        <ImportanceSlider value={impactLevel} onChange={setImpactLevel} />
-        <div className="space-y-2"><Label>Confidence (Truth): {confTruth}</Label><Slider value={[confTruth]} onValueChange={([v]) => setConfTruth(v)} min={0} max={10} step={1} /></div>
+        <ImportanceSlider value={impactLevel} onChange={(v) => { setImpactLevel(v); markFilled("impactLevel"); }} />
+        <div className="space-y-2"><Label>Confidence (Truth): {confTruth}</Label><Slider value={[confTruth]} onValueChange={([v]) => { setConfTruth(v); markFilled("confTruth"); }} min={0} max={10} step={1} /></div>
         {people.length > 0 && <div className="space-y-2"><Label className="text-xs">People</Label><PeopleMultiSelect people={people} value={matchedPeople} onChange={setMatchedPeople} /></div>}
         {suggestedNewPeople.length > 0 && <div className="space-y-2"><Label className="text-xs text-muted-foreground">Add new people (not yet in your list)</Label><div className="space-y-1.5">{suggestedNewPeople.map((name) => <label key={name} className="flex items-center gap-2 cursor-pointer"><Checkbox checked={selectedNewPeople.includes(name)} onCheckedChange={(checked) => setSelectedNewPeople((prev) => checked ? [...prev, name] : prev.filter((n) => n !== name))} /><span className="text-sm">{name}</span></label>)}</div></div>}
       </div>
