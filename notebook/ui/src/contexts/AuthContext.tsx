@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { hydrateFileChats } from '@/local/file-chat';
 import { hydrateFilePreferences } from '@/local/file-preferences';
 import { toast } from 'sonner';
+import { signedInState } from './session-state.mjs';
 export type AppRole = 'free' | 'premium' | 'premium_gift' | 'admin';
 const Context = createContext<any>(null);
 export async function authRequest(route:string, body?:any) {
@@ -25,7 +26,8 @@ export function AuthProvider({children}: {children:React.ReactNode}) {
       if(!status.signed_in)throw Object.assign(new Error('Sign in to continue.'),{status:401,code:status.session_expired?'SESSION_EXPIRED':'SIGN_IN_REQUIRED'});
       const data=await authRequest('/api/session');
       if(!active.current) { await hydrateFileChats(); await hydrateFilePreferences(); }
-      if(mounted.current&&started===generation.current) { active.current=true;setState({loading:false,user:data.user,session:{user:data.user,access_token:'local-session'},profile:data.profile,role:'premium',roleLoading:false,authError:'',expired:false}); }
+      // signedInState keeps an unchanged user's identity (session-state.mjs says why).
+      if(mounted.current&&started===generation.current) { active.current=true;setState((s:any)=>signedInState(s,data.user,data.profile)); }
     } catch(e:any) {
       if(!mounted.current||started!==generation.current)return;
       if(e.status===401) {
@@ -44,6 +46,9 @@ export function AuthProvider({children}: {children:React.ReactNode}) {
       return response;
     };
     window.fetch=watched;
+    // The notebook has no live change feed, so this clock is how changes the assistant, Telegram or
+    // another computer made reach screens that are open. A refetch keeps what is on screen until the
+    // new answer arrives, and an unchanged session keeps its user object, so nothing reloads or blanks.
     const timer=setInterval(()=>{if(active.current){refreshSession();client.invalidateQueries();}},30000);
     const focus=()=>{if(active.current)refreshSession();};window.addEventListener('focus',focus);
     return ()=>{mounted.current=false;clearInterval(timer);window.removeEventListener('focus',focus);if(window.fetch===watched)window.fetch=original;};
