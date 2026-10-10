@@ -1,5 +1,6 @@
 import {createHash} from 'node:crypto';
 import {identifier,checkedUser} from './migration.mjs';
+import {isoTimestamps} from './timestamps.mjs';
 
 export class MenerioSource {
   constructor({project,token,apiKey,user}={}){
@@ -34,7 +35,9 @@ export class MenerioSource {
   order(table){return table.primaryKey.map(k=>'s.'+identifier(k)).join(',');}
   async fingerprint(table,where){const rows=await this.sql('select count(*)::int as count,md5(coalesce(string_agg(md5(to_jsonb(s)::text),\'\' order by '+this.order(table)+'),\'\')) as digest from public.'+identifier(table.name)+' s where '+where);return rows[0];}
   async fingerprints(entries){return this.sql(entries.map(({table,where})=>"select '"+table.name+"' as name,count(*)::int as count,md5(coalesce(string_agg(md5(to_jsonb(s)::text),'' order by "+this.order(table)+"),'')) as digest from public."+identifier(table.name)+' s where '+where).join(' union all '));}
-  async page(table,where,offset,size){return this.sql('select s.* from public.'+identifier(table.name)+' s where '+where+' order by '+this.order(table)+' limit '+Number(size)+' offset '+Number(offset));}
+  // The query service answers in Postgres' text form ("2026-10-05 00:00:00+00"); rows are
+  // copied with ISO timestamps, as Menerio's own service handed them out (timestamps.mjs).
+  async page(table,where,offset,size){const rows=await this.sql('select s.* from public.'+identifier(table.name)+' s where '+where+' order by '+this.order(table)+' limit '+Number(size)+' offset '+Number(offset));return Array.isArray(rows)?rows.map(isoTimestamps):rows;}
   async media(all){
     const columns=await this.sql("select column_name from information_schema.columns where table_schema='storage' and table_name='objects'");const names=new Set(columns.map(c=>c.column_name));
     const owner=names.has('owner_id')?'s.owner_id::text':names.has('owner')?'s.owner::text':"''";

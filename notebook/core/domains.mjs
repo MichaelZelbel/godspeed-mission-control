@@ -1,4 +1,5 @@
 import {momentDraft} from './moment-draft.mjs';
+import {momentDates} from './timestamps.mjs';
 import {NOTE_TYPES,processNote} from './proposals.mjs';
 import {NoteProcessing,PIPELINE,contentFingerprint} from './processing.mjs';
 export {momentDraft,NOTE_TYPES};
@@ -434,7 +435,7 @@ export class Domains {
         if (this.query.rows('review_queue').some(r => r.fingerprint === fingerprint)) continue;
         // A fact the person answered with Never Again is not proposed again.
         if (['add_profile_entry','add_claim'].includes(suggestion.type)&&factSuppressed(this.query,{...factSubject(suggestion.payload||{}),value:String(suggestion.payload?.value||'').trim()})) continue;
-        saved.push(this.store.save('review_queue', { title: suggestion.title || 'Review suggestion', suggestion_type: suggestion.type, payload: suggestion.payload || {}, description: suggestion.evidence_quote || null, source_note_id: input.note_id || null, fingerprint, status: 'pending_review', origin: 'ai', confidence_score: suggestion.confidence || null }));
+        saved.push(this.store.save('review_queue', { title: suggestion.title || 'Review suggestion', suggestion_type: suggestion.type, payload: suggestion.type === 'add_moment' ? momentDates(suggestion.payload || {}) : suggestion.payload || {}, description: suggestion.evidence_quote || null, source_note_id: input.note_id || null, fingerprint, status: 'pending_review', origin: 'ai', confidence_score: suggestion.confidence || null }));
       }
       return { success: true, suggestions: saved.map(r=>({...r,...r.payload,review_id:r.id})), processed: saved.length,created:0,linked:0,message:'Saved '+saved.length+' proposals for review.' };
     }

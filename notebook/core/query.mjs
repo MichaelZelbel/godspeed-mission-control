@@ -7,6 +7,7 @@ import {assertAssistantRecord,assertAssistantLinks} from './assistant-mutations.
 import {nativeJobs,NativeScheduler} from './native-scheduler.mjs';
 import {readMachineRecord,coachRoutineTimes} from './starting-routines.mjs';
 import {nativeCardRows} from './card-commands.mjs';
+import {momentDates} from './timestamps.mjs';
 
 const inventory = JSON.parse(fs.readFileSync(fileURLToPath(new URL('../../docs/full-version/source-inventory.json', import.meta.url)), 'utf8'));
 export const tables = new Set(inventory.dependencies.flatMap(d => d.tables).filter(t => t !== 'note-attachments'));
@@ -167,7 +168,8 @@ export class QueryService {
       const values=ofType(type).filter(r=>!r.removed_at);if(type==='deadlines')values.push(...dueRows(this.store));
       if(type!=='moments'){memo.set(type,values);return values;}
       const byMoment=new Map();for(const c of ofType('event_corrections')){let l=byMoment.get(c.moment_id);if(!l)byMoment.set(c.moment_id,l=[]);l.push(c);}
-      const corrected=values.map(original=>{const corrections=(byMoment.get(original.id)||[]).slice().sort((a,b)=>a.sequence-b.sequence||a.id.localeCompare(b.id));return corrections.reduce((r,c)=>({...r,...c.patch,_hash:c._hash}),original);}).filter(r=>!r.removed_at);
+      // Dates as ISO 8601, the shape the Menerio screens read (timestamps.mjs).
+      const corrected=values.map(original=>{const corrections=(byMoment.get(original.id)||[]).slice().sort((a,b)=>a.sequence-b.sequence||a.id.localeCompare(b.id));return momentDates(corrections.reduce((r,c)=>({...r,...c.patch,_hash:c._hash}),original));}).filter(r=>!r.removed_at);
       memo.set(type,corrected);return corrected;
     };
     const get=(type,id)=>this.store.records.get(type+'/'+id)||ofType(type).find(r=>(r.former_ids||[]).includes(id))||ofType(type).find(r=>(r.aliases||[]).includes(id));
@@ -330,7 +332,9 @@ export class QueryService {
             // advance this display timestamp. It is not authored content.
             if(operation==='delete'||Object.entries(patch).some(([key,next])=>!(table==='contacts'&&key==='conversation_updated_at')&&!same(old[key],next)&&(!base||!same(old[key],base[key]))))this.store.conflict(table,patch,old,base);
           }
-          const payload = operation === 'delete' ? { removed_at: new Date().toISOString() } : operation === 'update' ? values : value;
+          const given = operation === 'delete' ? { removed_at: new Date().toISOString() } : operation === 'update' ? values : value;
+          // A moment's dates are kept as ISO 8601 whoever writes them (timestamps.mjs).
+          const payload = table === 'moments' ? momentDates(given) : given;
           if(table==='moments'&&old){
             const correction=this.store.prepare('event_corrections',{moment_id:old.id,patch:payload,sequence:this.store.list('event_corrections').filter(c=>c.moment_id===old.id).length+1,references:[{type:'moments',id:old.id,uid:old.uid}]});
             return correction;
