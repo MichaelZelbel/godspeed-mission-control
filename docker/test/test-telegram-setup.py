@@ -483,8 +483,8 @@ def test_one_click_happy():
     # Version 2's PUBLISHED installers, never the build commit (GODSPEED_REVISION) whose own
     # installers/ folder still held the previous product, and never version 1's latest release.
     check("another computer is sent to version 2's published installers, not the build commit",
-          any_has(to_anna, "codex/godspeed-v2-completeness/installers/GodspeedSetup.exe",
-                  "codex/godspeed-v2-completeness/installers/install-godspeed.sh",
+          any_has(to_anna, "/main/installers/GodspeedSetup.exe",
+                  "/main/installers/install-godspeed.sh",
                   "--repo https://github.com/anna/notebook.git")
           and not any_has(to_anna, REVISION) and not any_has(to_anna, "releases/latest"))
 
@@ -604,21 +604,21 @@ def links_for(env):
 def test_one_click_links():
     print("== the install links for another computer never point at the build commit")
     build = REVISION  # the image's GODSPEED_REVISION, the commit it was built from
-    # Default: the published v2 branch, whose installers/ folder always holds the current pair.
+    # Default: main, whose installers/ folder always holds the current published pair.
     exe, sh = links_for({"GODSPEED_TG_FLOW": "notebook", "GODSPEED_REVISION": build})
-    check("notebook default points at the v2 branch installers, not the build commit",
-          "codex/godspeed-v2-completeness/installers/GodspeedSetup.exe" in exe
-          and "codex/godspeed-v2-completeness/installers/install-godspeed.sh" in sh
+    check("notebook default points at main's installers, not the build commit",
+          "/main/installers/GodspeedSetup.exe" in exe
+          and "/main/installers/install-godspeed.sh" in sh
           and build not in exe and build not in sh and "releases/latest" not in exe)
     # A deployment may pin a release tag or a known-good commit; the build commit stays unused.
     exe, sh = links_for({"GODSPEED_TG_FLOW": "notebook", "GODSPEED_REVISION": build, "GODSPEED_INSTALLER_REF": "v2.6.0"})
     check("a pinned installer ref is honoured, and the build commit is still not used",
           "/raw/v2.6.0/installers/GodspeedSetup.exe" in exe and "/v2.6.0/installers/install-godspeed.sh" in sh
           and build not in exe and build not in sh)
-    # A ref that tries to climb out of installers/ is refused and falls back to the branch.
+    # A ref that tries to climb out of installers/ is refused and falls back to main.
     exe, sh = links_for({"GODSPEED_TG_FLOW": "notebook", "GODSPEED_INSTALLER_REF": "../../etc/passwd"})
-    check("a ref that tries to climb out is refused and falls back to the branch",
-          "codex/godspeed-v2-completeness/installers/" in exe and ".." not in exe and ".." not in sh)
+    check("a ref that tries to climb out is refused and falls back to main",
+          "/main/installers/" in exe and ".." not in exe and ".." not in sh)
     # Version 1 (the plain terminal flow) is unchanged: the release asset and main.
     exe, sh = links_for({})
     check("the plain (non-notebook) flow is unchanged: the release asset and main",

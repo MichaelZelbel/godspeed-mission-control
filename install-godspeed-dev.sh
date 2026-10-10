@@ -18,9 +18,9 @@ for ((i=0;i<$#;i++)); do
   if [ "${args[i]}" = --beside ]; then export GODSPEED_INTEGRATED_BESIDE=1; fi
   if [ "${args[i]}" = --godspeed ]; then root=${args[i+1]:?Name the Godspeed folder}; fi
 done
-# The branch's newest commit, named exactly and resolved before anything is installed,
+# main's newest commit (version 2 is developed on main since 9 October 2026), named exactly and resolved before anything is installed,
 # so the hook and the code it installs are the same version.
-GODSPEED_PRODUCT_REF=${GODSPEED_PRODUCT_REF:-$(git ls-remote https://github.com/MichaelZelbel/godspeed-mission-control.git refs/heads/codex/godspeed-v2-completeness | cut -f1)}
+GODSPEED_PRODUCT_REF=${GODSPEED_PRODUCT_REF:-$(git ls-remote https://github.com/MichaelZelbel/godspeed-mission-control.git refs/heads/main | cut -f1)}
 [[ "$GODSPEED_PRODUCT_REF" =~ ^[0-9a-f]{40}$ ]] || { echo 'The development version could not be found on GitHub.' >&2; exit 1; }
 export GODSPEED_PRODUCT_REF
 echo "Development installer: version 2 at commit $GODSPEED_PRODUCT_REF (readers use the release installer)." >&2

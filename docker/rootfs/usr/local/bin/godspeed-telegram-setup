@@ -95,10 +95,11 @@ if FLOW == "notebook":
     # that stale product to every reader. Fixed 7 October 2026.
     #
     # GODSPEED_INSTALLER_REF pins a release tag or a known-good commit when the image sets one;
-    # otherwise the v2 branch, whose installers/ folder always holds the current published pair.
-    _ref = os.environ.get("GODSPEED_INSTALLER_REF", "").strip() or "codex/godspeed-v2-completeness"
+    # otherwise main, whose installers/ folder always holds the current published pair (version 2
+    # is developed on main since 9 October 2026; until then it was codex/godspeed-v2-completeness).
+    _ref = os.environ.get("GODSPEED_INSTALLER_REF", "").strip() or "main"
     if ".." in _ref or not re.fullmatch(r"[0-9A-Za-z][0-9A-Za-z._/-]{0,99}", _ref):
-        _ref = "codex/godspeed-v2-completeness"
+        _ref = "main"
     WINDOWS_EXE = "https://github.com/MichaelZelbel/godspeed-mission-control/raw/%s/installers/GodspeedSetup.exe" % _ref
     ONE_LINER = "https://raw.githubusercontent.com/MichaelZelbel/godspeed-mission-control/%s/installers/install-godspeed.sh" % _ref
 

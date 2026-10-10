@@ -11,7 +11,7 @@
 - Linux download: https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-10-1/install-godspeed.sh
 - Source, manifests and checksums: https://github.com/MichaelZelbel/godspeed-mission-control/releases/tag/godspeed-v2-integrated-2026-10-10-1
 - One-click Hostinger installation: https://srv1069233.hstgr.cloud/godspeed-install
-- Separate branch: https://github.com/MichaelZelbel/godspeed-mission-control/tree/codex/godspeed-v2-completeness
+- Development branch: https://github.com/MichaelZelbel/godspeed-mission-control/tree/main
 
 ## 10 October 2026 release: programming goes to a coding helper
 
