@@ -1,5 +1,5 @@
 name: Integrated Godspeed v2
-# The version 2 image: tested on every change, published only from the v2 branch.
+# The version 2 image: tested on every change, published only from main.
 #
 # Until 6 October 2026 a manual run from any branch published an image, the registry login
 # came before the tests ran, and nothing was signed or scanned. Now a run from any other
@@ -7,11 +7,14 @@ name: Integrated Godspeed v2
 # signature (as docker.yml signs the main image) and a scan for known vulnerabilities
 # (reported, not blocking, as in docker.yml) come after every test has passed.
 #
+# Since 9 October 2026 version 2 is developed on main, so main publishes; until then it was
+# codex/godspeed-v2-completeness, which no longer builds an image.
+#
 # Actions are named by tag, not yet by commit hash: the hashes were not looked up when
 # this changed (no network on the machine that wrote it).
 on:
   push:
-    branches: [codex/godspeed-v2-completeness]
+    branches: [main]
     paths: [.github/workflows/v2-integrated.yml, 'notebook/**', 'docker/full-candidate/**', 'docker/rootfs/**', 'docker/test/**', install-godspeed.sh, install-godspeed-dev.sh]
   workflow_dispatch:
 permissions:
@@ -38,7 +41,7 @@ jobs:
       id-token: write   # the keyless signature
     env:
       IMAGE: ghcr.io/michaelzelbel/godspeed-mission-control
-      PUBLISH: ${{ github.ref == 'refs/heads/codex/godspeed-v2-completeness' }}
+      PUBLISH: ${{ github.ref == 'refs/heads/main' }}
     steps:
       - uses: actions/checkout@v4
         with:
