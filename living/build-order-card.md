@@ -99,8 +99,10 @@ stopped. Each line names the kit files that chapter uses.
 - [ ] Chapter 40, optional: Use Your Mission Control for Coding Projects. Kit:
       `coding/project-setup.md`, `starter-godspeed/dev/README.md` and
       `starter-godspeed/.gitignore`.
+- [ ] Chapter 41, optional: Let Your Mission Control Be Your Wingman. Not in the kit: the
+      `godspeed-wingman` add-on at https://github.com/MichaelZelbel/godspeed-wingman.
 
 ## Closing
 
-- [ ] Chapter 41: Keep the Jobs That Move Your Life Forward. No new kit file: your mission
+- [ ] Chapter 42: Keep the Jobs That Move Your Life Forward. No new kit file: your mission
       control's `procedures.md` and `decisions.md`.
