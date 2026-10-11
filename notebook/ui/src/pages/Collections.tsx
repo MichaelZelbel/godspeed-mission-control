@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { LayoutGrid, Plus, Sparkles, type LucideIcon } from "lucide-react";
+import { ChevronDown, LayoutGrid, Plus, Sparkles, type LucideIcon } from "lucide-react";
 import { z } from "zod";
 import { toast } from "sonner";
 import { SEOHead } from "@/components/SEOHead";
@@ -8,6 +8,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,6 +22,7 @@ import { AICollectionDialog } from "@/components/collections/AICollectionDialog"
 import { BRAND } from "@/lib/brand";
 import { dbErrorMessage } from "@/lib/function-error";
 import { LoadErrorState } from "@/components/collections/LoadErrorState";
+import { lastEntryDays, shelve } from "@/lib/tracker-shelf";
 
 type Collection = Database["public"]["Tables"]["collections"]["Row"];
 // itemCount is null when the count could not be read: "0 items" would be a
@@ -261,6 +263,10 @@ export default function Collections() {
   const [isLoading, setIsLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+  // The latest entry day of each tracker (D-321); null when it could not be
+  // read, and then no tracker is folded away as resting on a guess.
+  const [lastWhen, setLastWhen] = useState<Record<string, string> | null>({});
+  const [restingOpen, setRestingOpen] = useState(false);
   const userId = user?.id;
 
   useEffect(() => {
@@ -309,8 +315,21 @@ export default function Collections() {
         });
 
       const countById = new Map<string, number | null>(counts);
+      // A tracker is a collection with a tracker card; its entries' days say
+      // whether it is resting.
+      const trackerIds = rows.filter((collection) => (collection as { tracker?: unknown }).tracker).map((collection) => collection.id);
+      let days: Record<string, string> | null = {};
+      if (trackerIds.length) {
+        const { data: entries, error: entriesError } = await supabase
+          .from("collection_items")
+          .select("collection_id, data")
+          .in("collection_id", trackerIds)
+          .eq("user_id", userId);
+        days = entriesError ? null : lastEntryDays(entries ?? []);
+      }
       if (!cancelled) {
         setCollections(rows.map((collection) => ({ ...collection, itemCount: countById.get(collection.id) ?? null })));
+        setLastWhen(days);
         setIsLoading(false);
       }
     };
@@ -320,6 +339,11 @@ export default function Collections() {
   }, [userId, refreshKey]);
 
   const hasCollections = useMemo(() => collections.length > 0, [collections.length]);
+  const shelf = useMemo(() => {
+    const sorted = shelve(collections, lastWhen ?? {}, new Date());
+    return lastWhen ? sorted : { ...sorted, trackers: [...sorted.trackers, ...sorted.resting], resting: [] };
+  }, [collections, lastWhen]);
+  const hasTrackers = shelf.trackers.length + shelf.resting.length > 0;
 
   return (
     <div className="w-full max-w-6xl">
@@ -353,8 +377,40 @@ export default function Collections() {
       ) : collections.length === 0 ? (
         <EmptyCollectionsState onNewBlank={() => setDialogOpen(true)} onCreateWithAI={() => setAiDialogOpen(true)} onBrowseTemplates={() => navigate("/collections/templates")} />
       ) : (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {collections.map((collection) => <CollectionCard key={collection.id} collection={collection} />)}
+        <div className="space-y-8">
+          {hasTrackers && (
+            <section className="space-y-3" aria-labelledby="trackers-heading">
+              <h2 id="trackers-heading" className="text-lg font-bold font-display">Trackers</h2>
+              {shelf.trackers.length > 0 && (
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+                  {shelf.trackers.map((collection) => <CollectionCard key={collection.id} collection={collection} />)}
+                </div>
+              )}
+              {shelf.resting.length > 0 && (
+                <Collapsible open={restingOpen} onOpenChange={setRestingOpen} className="space-y-3">
+                  <CollapsibleTrigger asChild>
+                    <button type="button" className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground">
+                      Resting ({shelf.resting.length})
+                      <ChevronDown className={cn("h-4 w-4 transition-transform", restingOpen && "rotate-180")} />
+                    </button>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+                      {shelf.resting.map((collection) => <CollectionCard key={collection.id} collection={collection} />)}
+                    </div>
+                  </CollapsibleContent>
+                </Collapsible>
+              )}
+            </section>
+          )}
+          {shelf.others.length > 0 && (
+            <section className="space-y-3" aria-labelledby={hasTrackers ? "collections-heading" : undefined}>
+              {hasTrackers && <h2 id="collections-heading" className="text-lg font-bold font-display">Collections</h2>}
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+                {shelf.others.map((collection) => <CollectionCard key={collection.id} collection={collection} />)}
+              </div>
+            </section>
+          )}
         </div>
       )}
       <NewCollectionDialog open={dialogOpen} onOpenChange={setDialogOpen} />
