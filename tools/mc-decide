@@ -23,6 +23,9 @@
 # ONCE A DAY, ON LINUX or a Mac, in your schedule (`crontab -e`), early enough that the morning
 # message can read what it decided:
 #        10 4 * * *  $HOME/.local/bin/mc-decide >> $HOME/.godspeed/decide.log 2>&1
+# IT ENDS WITH ONE LINE: "decided <day>" and exit 0, or "NOT decided <day>" and exit 1 when the
+# assistant did not finish (the record then says so), or "decided <day>, but the assistant did
+# not finish" and exit 1 when it wrote the record and stopped before its answer.
 set -uo pipefail
 
 GODSPEED=""; DRY=0; TODAY=""; RUNDIR=""; TIMEOUT=1500; EXTRA=""
@@ -38,7 +41,7 @@ while [ $# -gt 0 ]; do
     # else's copy.
     --extra-prompt-file) EXTRA="$2"; shift 2 ;;
     --dry-run) DRY=1; shift ;;
-    -h|--help) sed -n '2,24p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,28p' "$0"; exit 0 ;;
     *) echo "mc-decide: I do not know the argument $1" >&2; exit 2 ;;
   esac
 done
@@ -181,8 +184,9 @@ fi
 # own "it did not run" record does not count as a decision, so a retry after a failure decides.
 # One exception: a day whose moves are short (see below) and were never sent back is finished,
 # not decided again, so running mc-decide a second time by hand completes the moves.
+STANDIN="did not finish and wrote no record of its own"
 ALREADY=0
-if [ -s "$RUNDIR/decision.md" ] && ! grep -q "did not finish and wrote no record of its own" "$RUNDIR/decision.md"; then
+if [ -s "$RUNDIR/decision.md" ] && ! grep -q "$STANDIN" "$RUNDIR/decision.md"; then
   if [ -f "$HERE/check-moves.js" ] && [ ! -s "$RUNDIR/answer-moves.txt" ]      && ! GODSPEED_ROOT="$GODSPEED" "$NODE" "$HERE/check-moves.js" --godspeed "$GODSPEED" --date "$TODAY" >/dev/null 2>&1; then
     ALREADY=1
     echo "$TODAY is already decided; its moves are short, so only they are finished now."
@@ -210,12 +214,17 @@ take only what fits in two minutes), the day's moves and their one ship-list car
 save what you changed. Your final answer is the 'For you today' section in one plain sentence,
 plus the card id or the word nothing."
 
+# Every answer this run asks an assistant for is named here, so the end can tell whether each one
+# came back (see "A RUN WHOSE ASSISTANT DID NOT FINISH" at the bottom).
+ASKED=""
 if [ "$ALREADY" -eq 1 ]; then :
 elif [ -n "$EXTRA" ] && [ -f "$EXTRA" ]; then
+  ASKED="answer.txt"
   bash "$RUNNER" next-action --godspeed "$GODSPEED" --cwd "$GODSPEED" --prompt-file "$EXTRA" --prompt "$PROMPT" \
     --timeout "$TIMEOUT" --out "$RUNDIR/answer.txt" \
     --allowed-tools "Bash Read Grep Glob Write Edit WebSearch WebFetch" || true
 else
+  ASKED="answer.txt"
   bash "$RUNNER" next-action --godspeed "$GODSPEED" --cwd "$GODSPEED" --prompt "$PROMPT" --timeout "$TIMEOUT" \
     --out "$RUNDIR/answer.txt" \
     --allowed-tools "Bash Read Grep Glob Write Edit WebSearch WebFetch" || true
@@ -239,6 +248,7 @@ move that needs a yes on today's ship list card (refresh it, do not file a secon
 republish the moves page, file the APPLY and MAKE items, update the Moves and For you today
 sections of decision.md, and run the check again until it prints OK. Your final answer is the
 'For you today' section in one plain sentence."
+    ASKED="$ASKED answer-moves.txt"
     bash "$RUNNER" next-action --godspeed "$GODSPEED" --cwd "$GODSPEED" ${EXTRA:+--prompt-file "$EXTRA"} --prompt "$FIX" \
       --timeout "$TIMEOUT" --out "$RUNDIR/answer-moves.txt" \
       --allowed-tools "Bash Read Grep Glob Write Edit WebSearch WebFetch" || true
@@ -281,5 +291,26 @@ if [ -d "$GODSPEED/.git" ] && command -v git >/dev/null 2>&1; then
     git -C "$GODSPEED" commit -q -m "Decision $TODAY" >/dev/null 2>&1 || true
     git -C "$GODSPEED" remote get-url origin >/dev/null 2>&1 && git -C "$GODSPEED" push -q origin HEAD >/dev/null 2>&1 || true
   fi
+fi
+
+# A RUN WHOSE ASSISTANT DID NOT FINISH IS A FAILED RUN (2026-10-11). On 8, 9, 10 and 11 October
+# the assistant on Mission Control's server could not start at all. The record above was written
+# each day, as it should be, and then this said "decided" and ended with 0, so the schedule's job
+# check read four good runs and nobody heard for four days. The record stays (it is the honest
+# one) and is saved, but the run now says NOT decided and fails, so whatever started it knows the
+# same morning. An assistant that wrote the record and then ran out of time before its answer
+# (26 September) did decide the day and still did not finish: that is said, and fails, too.
+UNFINISHED=""
+for a in $ASKED; do
+  [ -n "$UNFINISHED" ] && break
+  grep -q '[^[:space:]]' "$RUNDIR/$a" 2>/dev/null || UNFINISHED="$a"
+done
+if grep -q "$STANDIN" "$RUNDIR/decision.md" 2>/dev/null; then
+  echo "NOT decided $TODAY: the assistant did not finish (see $RUNDIR/answer.txt.stderr)"
+  exit 1
+fi
+if [ -n "$UNFINISHED" ]; then
+  echo "decided $TODAY, but the assistant did not finish (see $RUNDIR/$UNFINISHED.stderr): $RUNDIR/decision.md"
+  exit 1
 fi
 echo "decided $TODAY: $RUNDIR/decision.md"
