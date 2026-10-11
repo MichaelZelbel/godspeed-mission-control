@@ -1,4 +1,10 @@
-#!/usr/bin/env python3
+#!/bin/sh
+''''true; d=$(dirname "$0"); command -v cygpath >/dev/null 2>&1 && d=$(cygpath -m "$d"); if command -v node >/dev/null 2>&1 && [ -f "$d/prompt-harvest.js" ]; then exec node "$d/prompt-harvest.js" --collector "$@"; fi; for p in python3 python; do command -v $p >/dev/null 2>&1 && exec $p "$d/$(basename "$0")" "$@"; done; echo "mc-prompt-archive needs Python 3, or Node.js beside prompt-harvest.js" >&2; exit 1 #'''
+# The line above is for a shell and is an ordinary string to Python. Run by name (a Mac, Linux,
+# Git Bash on Windows, the assistant's terminal), this file starts prompt-harvest.js beside it,
+# which finds a Python that works on this computer, Hermes' own included, and runs this file
+# with it. Until 2026-10-12 the first line was `#!/usr/bin/env python3`, and a Windows PC with
+# no Python of its own (every reader's: the setup brings Git, Node and Hermes) could not run it.
 """mc-prompt-archive - put what you actually typed into your mission control, so any AI can search it.
 
 WHY THIS FILE EXISTS. You should be able to ask any of your assistants about a prompt you
@@ -93,7 +99,7 @@ LEGACY_DEFAULT_SOURCES = ("claude", "codex", "hermes")
 
 def device_env_value(name):
     """One value from ~/.godspeed/device.env. Read here as well as by the launcher,
-    because this program is also run directly (`godspeed prompts archive`), where
+    because this program is also run directly (`mc-prompt-archive archive`), where
     nothing has loaded that file into the environment first."""
     p = os.path.join(home_dir(), ".godspeed", "device.env")
     if not os.path.isfile(p):
@@ -112,13 +118,20 @@ def device_env_value(name):
 
 
 def enabled_sources():
-    """Which AI tools this machine's owner said may be read.
+    """Which AI tools have their OLDER chats brought in: everything said there, from before
+    this computer started saving new chats as well as after.
+
+    WHAT CHANGED ON 2026-10-12 (Michael: "It is a bug, right? So fix the bug."). Until then this
+    list decided whether a tool was read at all, and the book tells every reader to leave every
+    box unticked (Windows) or to pass --sources "" (a Mac or Linux), because the boxes read as
+    being about OLD chats. So no reader's new conversations were ever saved either, and their
+    assistant had nothing to look back at. Now every tool this program can read is read for
+    new chats (see archive_since), and this list answers the one question the boxes ask: are
+    the chats from before also brought in?
 
     The installer records the choice as GODSPEED_PROMPT_SOURCES in ~/.godspeed/device.env
-    (the environment wins, so a test or a one-off run can override it). No line
-    at all means the sources every machine read before there was a choice, and
-    nothing added since. An EMPTY line means none: a person who unticked every
-    box made a decision, not a mistake.
+    (the environment wins, so a test or a one-off run can override it). No line at all means
+    the sources every machine read before there was a choice. An EMPTY line means none.
     """
     v = os.environ.get("GODSPEED_PROMPT_SOURCES")
     if v is None:
@@ -132,17 +145,114 @@ def enabled_sources():
     return {s.strip().lower() for s in v.split(",") if s.strip()}
 
 
+def archive_switched_off():
+    """The one way to stop this computer saving chats at all, for a person who insists:
+    GODSPEED_PROMPT_ARCHIVE=off in ~/.godspeed/device.env. No installer page offers it."""
+    v = os.environ.get("GODSPEED_PROMPT_ARCHIVE")
+    if v is None:
+        v = device_env_value("GODSPEED_PROMPT_ARCHIVE") or ""
+    return v.strip().lower() in ("off", "0", "no", "false", "none")
+
+
+_STAMP = re.compile(r"^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2}(?::\d{2})?)(?:\.\d+)?\s*(Z|[+-]\d{2}:?\d{2})?$")
+
+
+def utc19(at):
+    """A timestamp as 'YYYY-MM-DDTHH:MM:SS' in UTC, so two can be compared as text. The tools
+    write UTC (with a Z, or bare); one written with an offset is moved to UTC. '' when unknown."""
+    m = _STAMP.match((at or "").strip())
+    if not m:
+        return ""
+    clock = m.group(2) if len(m.group(2)) == 8 else m.group(2) + ":00"
+    try:
+        t = datetime.strptime(m.group(1) + "T" + clock, "%Y-%m-%dT%H:%M:%S")
+    except ValueError:
+        return ""
+    off = m.group(3)
+    if off and off != "Z":
+        sign = 1 if off[0] == "+" else -1
+        hh, mm = int(off[1:3]), int(off[-2:])
+        from datetime import timedelta
+        t = t - sign * timedelta(hours=hh, minutes=mm)
+    return t.strftime("%Y-%m-%dT%H:%M:%S")
+
+
+def archive_since(record=False):
+    """From when on this computer saves every new chat, as utc19 text.
+
+    GODSPEED_PROMPT_SINCE in ~/.godspeed/device.env. The installer writes it when it installs or
+    updates; a computer that has none (an update this program arrived by, the one-click server)
+    gets it written on its first real harvest, with the time of that run. Everything a tool
+    holds from before this moment stays out unless the tool's older chats are brought in
+    (enabled_sources); everything after it is saved. None when it is unknown and not recorded."""
+    v = os.environ.get("GODSPEED_PROMPT_SINCE")
+    if v is None:
+        v = device_env_value("GODSPEED_PROMPT_SINCE")
+    if v and utc19(v):
+        return utc19(v)
+    if not record:
+        return None
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    p = os.path.join(home_dir(), ".godspeed", "device.env")
+    try:
+        os.makedirs(os.path.dirname(p), exist_ok=True)
+        lead = ""
+        if os.path.isfile(p):
+            with io.open(p, "rb") as fh:
+                body = fh.read()
+            if body and not body.endswith(b"\n"):
+                lead = "\n"
+        with io.open(p, "a", encoding="utf-8", newline="\n") as fh:
+            fh.write("%sGODSPEED_PROMPT_SINCE=%s\n" % (lead, now))
+    except (IOError, OSError) as e:
+        print("  NOTE: could not write GODSPEED_PROMPT_SINCE to %s (%s); new chats are saved "
+              "from this run on all the same" % (p, e))
+    return utc19(now)
+
+
+def _find_up(start):
+    """The mission control the person is standing in: this folder or one above it that holds the
+    archive drawer (prompts/archive) or declares its layout. Stronger than looks_like_godspeed on
+    purpose: any project may have a rules/ folder, only a mission control has this drawer."""
+    try:
+        d = os.path.abspath(start)
+    except Exception:
+        return None
+    while True:
+        if os.path.isdir(os.path.join(d, "prompts", "archive")) \
+                or os.path.isfile(os.path.join(d, "scripts", "config", "mc-layout.json")):
+            return d
+        up = os.path.dirname(d)
+        if up == d:
+            return None
+        d = up
+
+
 def godspeed_root(argv_godspeed=None):
+    """Which mission control to read and write, in this order: --godspeed; GODSPEED_DIR or
+    GODSPEED_WORKSPACE in the environment (the assistant's terminal has both); the mission
+    control the current folder is in; GODSPEED_DIR in ~/.godspeed/device.env; then the usual
+    places. Until 2026-10-12 the device file and the current folder were never asked, so on a
+    reader's computer, where the folder is ~/godspeed-v2, `mc-prompt-archive search` looked in
+    ~/godspeed, found no drawer, and answered "nothing matches" for chats that were there."""
     if argv_godspeed:
         return os.path.abspath(argv_godspeed)
-    env = os.environ.get("GODSPEED_DIR")
-    if env:
-        return os.path.abspath(env)
+    for name in ("GODSPEED_DIR", "GODSPEED_WORKSPACE"):
+        env = os.environ.get(name)
+        if env:
+            return os.path.abspath(env)
+    here_now = _find_up(os.getcwd())
+    if here_now:
+        return here_now
+    recorded = device_env_value("GODSPEED_DIR")
+    if recorded and os.path.isdir(recorded):
+        return os.path.abspath(recorded)
     here = os.path.dirname(os.path.abspath(__file__))
     cand = os.path.abspath(os.path.join(here, "..", ".."))
     if looks_like_godspeed(cand):
         return cand
-    for c in ("/root/godspeed", os.path.expanduser("~/godspeed"), "C:\\godspeed"):
+    for c in ("/root/godspeed", os.path.expanduser("~/godspeed"), os.path.expanduser("~/godspeed-v2"),
+              "C:\\godspeed"):
         if looks_like_godspeed(c):
             return c
     return cand
@@ -615,6 +725,28 @@ def running_hermes_homes():
     return sorted(set(out))
 
 
+def assistant_homes(godspeed=None):
+    """The Hermes home named by each assistant.json this computer has (the "home" field)."""
+    files = []
+    if os.environ.get("GODSPEED_ASSISTANT_CONFIG"):
+        files.append(os.environ["GODSPEED_ASSISTANT_CONFIG"])
+    if os.environ.get("LOCALAPPDATA"):
+        files.append(os.path.join(os.environ["LOCALAPPDATA"], "Godspeed Mission Control Full Alpha State",
+                                  "assistant.json"))
+    if godspeed:
+        files.append(os.path.join(godspeed, ".godspeed", "assistant.json"))
+    out = []
+    for f in files:
+        try:
+            with io.open(f, encoding="utf-8-sig") as fh:
+                home = json.load(fh).get("home")
+        except Exception:
+            continue
+        if home:
+            out.append(home)
+    return out
+
+
 def hermes_homes(godspeed=None):
     """EVERY place on this machine where Hermes keeps a store of conversations.
 
@@ -648,6 +780,14 @@ def hermes_homes(godspeed=None):
         candidates.append(os.environ["HERMES_HOME"])
     if os.environ.get("LOCALAPPDATA"):
         candidates.append(os.path.join(os.environ["LOCALAPPDATA"], "hermes"))
+        # The reader's own Godspeed assistant on Windows (2026-10-12): the setup gives it a Hermes
+        # home of its own, and "Open the Windows assistant" and the notebook's chat both talk to
+        # it there. Nothing else on the PC names that folder, so no chat with it was ever saved.
+        candidates.append(os.path.join(os.environ["LOCALAPPDATA"],
+                                       "Godspeed Mission Control Full Alpha State", "hermes-profile"))
+    # Wherever the assistant's own settings say its home is: the Windows setup writes them in its
+    # state folder, the one-click server and the notebook in <mission control>/.godspeed/.
+    candidates += assistant_homes(godspeed)
     if system:
         candidates.append(SERVER_HERMES_HOME)
     candidates.append(os.path.join(home_dir(), ".hermes"))
@@ -677,7 +817,9 @@ def _default_store_label(hermes):
     parts = norm.split("/")
     if len(parts) >= 2 and parts[-2] == "profiles":
         return parts[-1]
-    if norm.endswith("/.godspeed/integrated-runtime/hermes"):
+    if norm.endswith("/.godspeed/integrated-runtime/hermes") \
+            or norm.endswith("/Godspeed Mission Control Full Alpha State/hermes-profile") \
+            or norm == "/opt/data/full-candidate/hermes":
         return "godspeed"
     return "default"
 
@@ -874,31 +1016,51 @@ def human_turns_opencode(db):
         yield cur
 
 
-def harvest(godspeed):
-    """Every source the person has switched ON. A source that is off is not read at
-    all, rather than read-and-discarded: the promise to the person is that this
-    program does not open that tool's files, not that it forgets what it saw."""
+def _all_turns(godspeed):
+    """(source, turn) for every tool this program can read on this computer."""
     home = home_dir()
-    on = enabled_sources()
-    if "claude" in on:
-        yield from human_turns_claude(glob.glob(os.path.join(home, ".claude", "projects", "*", "*.jsonl")))
-    if "codex" in on:
-        codex = os.path.join(home, ".codex", "sessions")
-        yield from human_turns_codex([os.path.join(r, f) for r, _d, fs in os.walk(codex)
-                                      for f in fs if f.endswith(".jsonl")])
-    if "hermes" in on:
-        # Overridable so a test can point it at a fixture. A path compiled into the code is a
-        # path no test can reach, which is exactly how the "dir" bug above survived.
-        yield from human_turns_hermes(os.environ.get("GODSPEED_TELEGRAM_TRANSCRIPT") or TELEGRAM_TRANSCRIPT)
-        # Kept alongside the line above rather than replacing it: that file carries chat from
-        # before the current store existed, and the two overlap harmlessly because a prompt is
-        # recognised by its text, so whichever reader reaches it first is the only one that counts.
-        # Every Hermes home on this machine, not the first one found (2026-10-11, see
-        # hermes_homes). A conversation copied into a second store is the same text, so it has
-        # the same id and is archived once.
-        yield from human_turns_hermes_store(hermes_homes(godspeed))
-    if "opencode" in on:
-        yield from human_turns_opencode(opencode_db())
+    for rec in human_turns_claude(glob.glob(os.path.join(home, ".claude", "projects", "*", "*.jsonl"))):
+        yield "claude", rec
+    codex = os.path.join(home, ".codex", "sessions")
+    for rec in human_turns_codex([os.path.join(r, f) for r, _d, fs in os.walk(codex)
+                                  for f in fs if f.endswith(".jsonl")]):
+        yield "codex", rec
+    # Overridable so a test can point it at a fixture. A path compiled into the code is a
+    # path no test can reach, which is exactly how the "dir" bug above survived.
+    for rec in human_turns_hermes(os.environ.get("GODSPEED_TELEGRAM_TRANSCRIPT") or TELEGRAM_TRANSCRIPT):
+        yield "hermes", rec
+    # Kept alongside the line above rather than replacing it: that file carries chat from
+    # before the current store existed, and the two overlap harmlessly because a prompt is
+    # recognised by its text, so whichever reader reaches it first is the only one that counts.
+    # Every Hermes home on this machine, not the first one found (2026-10-11, see
+    # hermes_homes). A conversation copied into a second store is the same text, so it has
+    # the same id and is archived once.
+    for rec in human_turns_hermes_store(hermes_homes(godspeed)):
+        yield "hermes", rec
+    for rec in human_turns_opencode(opencode_db()):
+        yield "opencode", rec
+
+
+def harvest(godspeed, record_since=False):
+    """Every exchange this computer saves: all of a tool's chats when its older chats are
+    brought in (enabled_sources), and otherwise every chat from archive_since() on.
+
+    Since 2026-10-12 a NEW chat is always saved, whatever the installer's boxes said, because
+    those boxes only ever asked about old chats (see enabled_sources). A tool whose older chats
+    stay out is still opened, and only what was said there from the moment this computer began
+    saving is taken; an exchange whose time cannot be read is left out with them, since it
+    cannot be shown to be new. GODSPEED_PROMPT_ARCHIVE=off reads nothing at all."""
+    if archive_switched_off():
+        return
+    history = enabled_sources()
+    since = archive_since(record=record_since)
+    for source, rec in _all_turns(godspeed):
+        if source in history:
+            yield rec
+            continue
+        at = utc19(rec.get("at"))
+        if since and at and at >= since:
+            yield rec
 
 
 # --------------------------------------------------------------------- storage
@@ -998,7 +1160,11 @@ def _harvest_locked(godspeed, dry, since, machine):
     seen = load_seen(godspeed)
     buckets, added, dropped, dupes = {}, 0, 0, 0
     patch = {}
-    for rec in harvest(godspeed):
+    if archive_switched_off():
+        print("saving chats is switched off on this computer (GODSPEED_PROMPT_ARCHIVE=off in "
+              "~/.godspeed/device.env), so nothing was read")
+        return 0
+    for rec in harvest(godspeed, record_since=not dry):
         if since and (rec["at"] or "")[:10] < since:
             continue
         rid = hashlib.sha256(("%s|%s" % (rec["tool"], rec["text"])).encode("utf-8")).hexdigest()[:16]
@@ -1048,8 +1214,10 @@ def _harvest_locked(godspeed, dry, since, machine):
         print("  %d earlier prompt%s got %s answer attached"
               % (healed, "" if healed == 1 else "s", "its" if healed == 1 else "their"))
     off = sorted(set(SUPPORTED_SOURCES) - enabled_sources())
+    since = archive_since()
     if off:
-        print("  not read, by your choice: %s" % ", ".join(off))
+        print("  chats from before %s not brought in, by your choice: %s (new ones are saved)"
+              % ((since or "today")[:10], ", ".join(off)))
     if dropped:
         print("  %d dropped: still looked like a credential after scrubbing" % dropped)
     if not terms:
@@ -1136,7 +1304,7 @@ def cmd_backfill(godspeed, dry):
         left = len(wanted) - updated
         if left:
             print("  %d still have no answer here: the transcript is gone, or lives on "
-                  "another machine - run `godspeed prompts backfill` there too" % left)
+                  "another machine - run `mc-prompt-archive backfill` there too" % left)
         if updated and not dry:
             print("Commit prompts/archive/ so every machine gets the answers.")
         return 0
@@ -1265,17 +1433,24 @@ def cmd_sources(godspeed, machine):
     # Said out loud here so its silence reads as the person's choice, not as a leak:
     # the selftest that runs this command must not alarm on a decision.
     off = sorted(set(SUPPORTED_SOURCES) - enabled_sources())
+    since = archive_since()
+    if archive_switched_off():
+        print("saving chats is switched off on this computer (GODSPEED_PROMPT_ARCHIVE=off in "
+              "~/.godspeed/device.env), so nothing here is read.")
+        return 0
+    older = ("older chats left out by your choice (only those from %s on are saved): %s"
+             % ((since or "the next harvest")[:10], ", ".join(off))) if off else ""
 
     if not total:
-        if off:
-            print("switched off by your choice, so not read at all: %s" % ", ".join(off))
-        print("this machine has no readable AI session logs, so there is nothing here to archive.")
+        if older:
+            print(older)
+        print("this machine has no new AI chats to archive yet.")
         return 0
 
     print("what this machine (%s) can see, and whether the archive has it:" % machine)
-    if off:
-        print("  (switched off by your choice, so not read at all: %s)" % ", ".join(off))
-    if "hermes" in enabled_sources():
+    if older:
+        print("  (%s)" % older)
+    if True:
         homes = hermes_homes(godspeed)
         if homes:
             print("  (Hermes conversations read from: %s)" % ", ".join(homes))
@@ -1316,12 +1491,12 @@ def cmd_sources(godspeed, machine):
     for name, n in leaks:
         print("PROMPT SOURCE LOST: %d prompt%s typed into '%s' on this machine, and not one of "
               "them is in the archive. Everything you say there is being thrown away. Run "
-              "`godspeed prompts archive` here and read what it says."
+              "`mc-prompt-archive archive` here and read what it says."
               % (n, "" if n == 1 else "s", name))
     for name, n, last_have, last in stale:
         print("PROMPT SOURCE LOST: '%s' on this machine stopped reaching the archive on %s: "
               "%d prompt%s typed there since, up to %s, are not in it. Run "
-              "`godspeed prompts archive` here and read what it says."
+              "`mc-prompt-archive archive` here and read what it says."
               % (name, last_have, n, "" if n == 1 else "s", last))
     return 1 if (leaks or stale) else 0
 
@@ -1340,7 +1515,7 @@ def all_rows(godspeed):
 
 def cmd_search(godspeed, terms, limit):
     if not terms:
-        sys.stderr.write("usage: godspeed prompts search <term> [<term>...]\n"); return 1
+        sys.stderr.write("usage: mc-prompt-archive search <term> [<term>...]\n"); return 1
     low = [t.lower() for t in terms]
     hits, total = [], 0
     for r in all_rows(godspeed):
@@ -1359,7 +1534,8 @@ def cmd_search(godspeed, terms, limit):
     if not hits and not lib:
         print("nothing you have typed to any AI matches %s." % " + ".join(terms))
         print("That is a checked absence, not an error. The archive covers what has been")
-        print("harvested so far: run `godspeed prompts archive` on a machine to add its history.")
+        print("saved so far, in %s. On a computer whose chats are missing, run" % godspeed)
+        print("`mc-prompt-archive archive` there.")
         return 0
 
     if lib:
@@ -1367,7 +1543,7 @@ def cmd_search(godspeed, terms, limit):
         for name, body in lib[:limit]:
             purpose = re.search(r"^purpose:\s*\"?(.+?)\"?$", body, re.M)
             print("  %s%s" % (name, " - " + purpose.group(1) if purpose else ""))
-            print("     read it: godspeed prompts get %s" % name)
+            print("     read it: mc-prompt-archive get %s" % name)
         print("")
 
     hits.sort(key=lambda h: (-h[0], -h[1], h[2].get("at", "")))
@@ -1399,7 +1575,7 @@ def cmd_search(godspeed, terms, limit):
 
 def cmd_get(godspeed, args):
     if not args:
-        sys.stderr.write("usage: godspeed prompts get <name>\n"); return 1
+        sys.stderr.write("usage: mc-prompt-archive get <name>\n"); return 1
     want = args[0].lower().removesuffix(".md")
     for f in library_files(godspeed):
         if os.path.basename(f)[:-3].lower() == want:
@@ -1412,7 +1588,7 @@ def cmd_get(godspeed, args):
         for f in part:
             print("  %s" % os.path.basename(f)[:-3])
         return 1
-    print("no saved prompt called '%s'. Try: godspeed prompts search %s" % (args[0], args[0]))
+    print("no saved prompt called '%s'. Try: mc-prompt-archive search %s" % (args[0], args[0]))
     return 1
 
 
@@ -1485,7 +1661,7 @@ def main(argv):
         return cmd_rescrub(godspeed, dry)
     if cmd == "backfill":
         return cmd_backfill(godspeed, dry)
-    sys.stderr.write("usage: godspeed prompts archive | search <term> | get <name> | stats | sources | rescrub | backfill\n")
+    sys.stderr.write("usage: mc-prompt-archive archive | search <term> | get <name> | stats | sources | rescrub | backfill\n")
     return 1
 
 

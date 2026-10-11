@@ -232,13 +232,16 @@ SRC_RC=$?
   && ok "28 sources fails and names the bot whose prompts reach none of the archive" \
   || bad "28 an entirely unarchived source was reported as healthy" "rc=$SRC_RC $(cat "$W/src.out")"
 
-# --- 29 to 31: the person's choice of sources is OBEYED ---------------------------------
+# --- 29 to 31: the person's choice of OLDER chats is obeyed ------------------------------
 #
 # WHY THESE EXIST. Until 2026-08-11 this collector read every source it knew, on every
-# machine, with nothing anywhere asking the person. The installer now shows what it found
-# and records the choice as GODSPEED_PROMPT_SOURCES (environment, or ~/.godspeed/device.env for a
-# scheduled run that has no environment). A source switched off must not be READ at all,
-# and its silence must read as the person's choice, never as a leak.
+# machine, with nothing anywhere asking the person. The installer then recorded a choice as
+# GODSPEED_PROMPT_SOURCES (environment, or ~/.godspeed/device.env for a scheduled run). Since
+# 2026-10-12 that choice is about one thing only: whether a tool's chats from BEFORE this
+# computer began saving are brought in. New chats are always saved (74 onward). A tool whose
+# older chats stay out must keep them out, and that must read as the person's choice, never
+# as a leak. The fixtures below are dated July and August 2026, long before any start time a
+# run here records, so they are "older chats".
 
 # 29. Codex logs exist on the machine, but only claude is enabled.
 mkdir -p "$W/home/.codex/sessions"
@@ -252,8 +255,8 @@ echo "$P" | grep -q "stay out" && bad "29 a switched-off source was read anyway"
   || ok "29 a source switched off is not read at all"
 echo "$P" | grep -q "less salesy" && ok "29b the source that stayed on is still read" \
   || bad "29b switching one source off silenced another" "$(cat "$W/pick.out")"
-grep -q "not read, by your choice: codex, hermes, opencode" "$W/pick.out" \
-  && ok "29c the harvest says out loud what it left alone" \
+grep -q "not brought in, by your choice: codex, hermes, opencode (new ones are saved)" "$W/pick.out" \
+  && ok "29c the harvest says which older chats it left out, and that new ones are saved" \
   || bad "29c the restriction happened in silence" "$(cat "$W/pick.out")"
 
 # 30. `sources` treats off as a decision: exit 0, and the off list is printed so the
@@ -261,7 +264,7 @@ grep -q "not read, by your choice: codex, hermes, opencode" "$W/pick.out" \
 ( export HOME="$W/home" GODSPEED_HOME="$W/home" GODSPEED_PROMPT_SOURCES="claude"
   "$PY" "$ARC" --godspeed "$W" sources ) >"$W/pick2.out" 2>&1
 PICK_RC=$?
-[ "$PICK_RC" -eq 0 ] && grep -q "switched off by your choice" "$W/pick2.out" \
+[ "$PICK_RC" -eq 0 ] && grep -q "older chats left out by your choice" "$W/pick2.out" \
   && ok "30 sources calls an off source a choice, not a leak" \
   || bad "30 an off source alarmed or went unmentioned" "rc=$PICK_RC $(cat "$W/pick2.out")"
 
@@ -274,7 +277,7 @@ printf 'GODSPEED_PROMPT_SOURCES=claude\n' >> "$W/home/.godspeed/device.env"
 ( unset GODSPEED_PROMPT_SOURCES
   export HOME="$W/home" GODSPEED_HOME="$W/home"
   cd "$W" && "$PY" "$ARC" --godspeed "$W" --dry-run archive ) >"$W/pick3.out" 2>&1
-grep -q "not read, by your choice: codex, hermes, opencode" "$W/pick3.out" \
+grep -q "not brought in, by your choice: codex, hermes, opencode" "$W/pick3.out" \
   && ok "31 the choice recorded on the device is obeyed with no environment" \
   || bad "31 device.env was ignored" "$(cat "$W/pick3.out")"
 
@@ -684,13 +687,13 @@ if echo "$OC1" | grep -q "two metres" && ! echo "$OCA" | grep -q "hidden opencod
 else
   bad "58 OpenCode answers leaked machinery or landed on the wrong question" "$OCA"
 fi
-# 59. Not ticked means not opened.
+# 59. Not ticked: OpenCode's older chats stay out.
 rm -f "$W/prompts/archive/"*.jsonl
 ( export HOME="$W/home" GODSPEED_HOME="$W/home" GODSPEED_PROMPT_SOURCES="claude" GODSPEED_OPENCODE_DB="$OC"
   cd "$W" && "$PY" "$ARC" --godspeed "$W" archive ) >/dev/null 2>&1
 cat "$W/prompts/archive/"*.jsonl 2>/dev/null | grep -q "hedge height" \
   && bad "59 OpenCode was read on a machine where it was switched off" \
-  || ok "59 OpenCode switched off is not read"
+  || ok "59 OpenCode's older chats stay out where they were not brought in"
 # 60. A machine that never recorded a choice keeps reading what it always read, and does NOT
 #     start reading OpenCode behind its owner's back just because this program learned how.
 rm -f "$W/prompts/archive/"*.jsonl
@@ -1019,6 +1022,218 @@ PYEOF
 )"
 [ "$N73" = "1 godspeed" ] && ok "73 a store reached through two homes is read once, under its profile's name" \
   || bad "73 a store reached through two homes was listed wrong" "$N73"
+
+# --- 74 to 90: every NEW chat is saved, on every reader's computer (2026-10-12) ---------------
+#
+# WHY THESE EXIST. The book tells every reader to leave the installer's "Your conversations"
+# boxes unticked, or to pass --sources "" on a Mac or Linux, because those boxes read as being
+# about old chats. Until 2026-10-12 an unticked box meant the tool was never read at all, so no
+# reader ever had a single conversation saved, and their assistant had nothing to look back at.
+# Fresh test installs of each reader route found it. Michael: "It is a bug, right? So fix the
+# bug." Now a new chat is always saved, the boxes decide only whether OLDER chats come in too,
+# and the commands the assistant is told to use work where readers are.
+echo "== every new chat is saved; the boxes only decide about older ones"
+H7="$W/home74"; G7="$W/mc74"
+mkdir -p "$H7/.godspeed" "$H7/.claude/projects/p74" "$H7/.codex/sessions" "$G7/observations" "$G7/prompts/archive"
+J7="$H7/.claude/projects/p74/s.jsonl"
+printf '%s\n' \
+  '{"type":"user","timestamp":"2026-08-01T09:00:00Z","message":{"content":"an old claude chat about the hazel hedge"}}' \
+  '{"type":"user","timestamp":"2026-09-01T09:00:00Z","message":{"content":"a new claude chat about the Larkspur invoice"}}' \
+  '{"type":"assistant","timestamp":"2026-09-01T09:00:05Z","message":{"content":[{"type":"text","text":"The Larkspur invoice is number 112."}]}}' > "$J7"
+printf '%s\n' \
+  '{"timestamp":"2026-08-02T10:00:00Z","payload":{"role":"user","content":"an old codex chat about the rowan tree"}}' \
+  '{"timestamp":"2026-09-02T10:00:00+02:00","payload":{"role":"user","content":"a new codex chat about the Quince report"}}' \
+  > "$H7/.codex/sessions/s.jsonl"
+run74() { ( unset GODSPEED_PROMPT_SOURCES GODSPEED_PROMPT_SINCE GODSPEED_PROMPT_ARCHIVE
+  export HOME="$H7" GODSPEED_HOME="$H7" USERPROFILE="$H7" "$@"
+  cd "$W" && "$PY" "$ARC" --godspeed "$G7" archive ); }
+A74() { cat "$G7/prompts/archive/"*.jsonl 2>/dev/null; }
+
+# 74. The book's line (--sources "" or every box unticked): new chats from every tool are saved,
+#     with their answers; older ones stay out.
+printf 'GODSPEED_PROMPT_SOURCES=\nGODSPEED_PROMPT_SINCE=2026-08-15T00:00:00Z\n' > "$H7/.godspeed/device.env"
+run74 >"$W/r74.out" 2>&1
+A74 | grep 'Larkspur' | grep -q '"answer": "The Larkspur invoice is number 112."' \
+  && ok "74 with every box unticked, a new Claude Code chat is saved with its answer" \
+  || bad "74 a new chat was not saved where the book's setup leaves every box unticked" "$(cat "$W/r74.out")"
+A74 | grep -q 'Quince report' && ok "74b a new Codex chat is saved too (its time written with an offset)" \
+  || bad "74b the new Codex chat was not saved" "$(cat "$W/r74.out")"
+A74 | grep -q 'hazel hedge\|rowan tree' && bad "74c a chat from before the computer began saving came in unticked" "$(A74)" \
+  || ok "74c chats from before the computer began saving stay out when their box was unticked"
+
+# 75. A ticked tool brings its older chats in as well; the others still only their new ones.
+rm -f "$G7/prompts/archive/"*.jsonl
+printf 'GODSPEED_PROMPT_SOURCES=claude\nGODSPEED_PROMPT_SINCE=2026-08-15T00:00:00Z\n' > "$H7/.godspeed/device.env"
+run74 >"$W/r75.out" 2>&1
+A74 | grep -q 'hazel hedge' && A74 | grep -q 'Larkspur' && A74 | grep -q 'Quince' && ! A74 | grep -q 'rowan tree' \
+  && ok "75 a ticked tool brings its older chats in; an unticked one only its new ones" \
+  || bad "75 ticked and unticked tools were not told apart" "$(cat "$W/r75.out") $(A74)"
+
+# 76. A computer with no start time on record (an update the harvester arrived by, the one-click
+#     server) records the time of its first real run, and a dry run records nothing.
+rm -f "$G7/prompts/archive/"*.jsonl
+printf 'GODSPEED_PROMPT_SOURCES=\n' > "$H7/.godspeed/device.env"
+( unset GODSPEED_PROMPT_SOURCES GODSPEED_PROMPT_SINCE; export HOME="$H7" GODSPEED_HOME="$H7" USERPROFILE="$H7"
+  cd "$W" && "$PY" "$ARC" --godspeed "$G7" --dry-run archive ) >/dev/null 2>&1
+grep -q '^GODSPEED_PROMPT_SINCE=' "$H7/.godspeed/device.env" && bad "76 a dry run wrote a start time" \
+  || ok "76 a dry run records no start time"
+run74 >"$W/r76.out" 2>&1
+grep -Eq '^GODSPEED_PROMPT_SINCE=20[0-9]{2}-[0-9]{2}-[0-9]{2}T[0-9:]{8}Z$' "$H7/.godspeed/device.env" \
+  && ok "76b the first real run records when this computer began saving" \
+  || bad "76b no start time was recorded" "$(cat "$H7/.godspeed/device.env")"
+[ -z "$(A74)" ] && ok "76c everything typed before that first run stays out" \
+  || bad "76c older chats came in on the first run of an unticked computer" "$(A74)"
+NOW="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+sleep 1
+printf '%s\n' "{\"type\":\"user\",\"timestamp\":\"$(date -u -d '+1 minute' +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -v+1M +%Y-%m-%dT%H:%M:%SZ)\",\"message\":{\"content\":\"typed after the start about the Mallow budget\"}}" >> "$J7"
+run74 >/dev/null 2>&1
+A74 | grep -q 'Mallow budget' && ok "76d a chat typed after the first run is saved by the next" \
+  || bad "76d a chat after the recorded start was not saved" "$(cat "$H7/.godspeed/device.env") $(A74)"
+
+# 77. The switch for someone who insists: nothing is read.
+rm -f "$G7/prompts/archive/"*.jsonl
+printf 'GODSPEED_PROMPT_SOURCES=claude\nGODSPEED_PROMPT_ARCHIVE=off\n' > "$H7/.godspeed/device.env"
+run74 >"$W/r77.out" 2>&1
+[ -z "$(A74)" ] && grep -q 'switched off on this computer' "$W/r77.out" \
+  && ok "77 GODSPEED_PROMPT_ARCHIVE=off saves nothing and says so" \
+  || bad "77 the off switch did not stop the archive" "$(cat "$W/r77.out") $(A74)"
+
+# 78 to 80. Search finds the right folder: the one you stand in, then the one the device file
+#     names. A reader's folder is ~/godspeed-v2, and search used to look only in ~/godspeed.
+rm -f "$G7/prompts/archive/"*.jsonl
+printf 'GODSPEED_PROMPT_SOURCES=claude\n' > "$H7/.godspeed/device.env"
+run74 >/dev/null 2>&1
+mkdir -p "$G7/notes/deep"
+S78="$( unset GODSPEED_DIR GODSPEED_WORKSPACE; export HOME="$H7" GODSPEED_HOME="$H7" USERPROFILE="$H7"
+  cd "$G7/notes/deep" && "$PY" "$ARC" search Larkspur 2>&1 )"
+echo "$S78" | grep -q 'new claude chat about the Larkspur' && ok "78 search from a folder inside the mission control finds it" \
+  || bad "78 search ignored the mission control it was standing in" "$S78"
+printf 'GODSPEED_DIR=%s\n' "$( (command -v cygpath >/dev/null && cygpath -m "$G7") || echo "$G7")" >> "$H7/.godspeed/device.env"
+E79="$(dirname "$W")/elsewhere"; mkdir -p "$E79"
+S79="$( unset GODSPEED_DIR GODSPEED_WORKSPACE; export HOME="$H7" GODSPEED_HOME="$H7" USERPROFILE="$H7"
+  cd "$E79" && "$PY" "$ARC" search Larkspur 2>&1 )"
+echo "$S79" | grep -q 'new claude chat about the Larkspur' && ok "79 search from anywhere else finds the folder ~/.godspeed/device.env names" \
+  || bad "79 search did not read GODSPEED_DIR from the device file" "$S79"
+S80="$( unset GODSPEED_DIR GODSPEED_WORKSPACE; export HOME="$H7" GODSPEED_HOME="$H7" USERPROFILE="$H7"
+  cd "$E79" && "$PY" "$ARC" search nothing-like-this-anywhere 2>&1 )"
+echo "$S80" | grep -q 'mc-prompt-archive archive' && ! echo "$S80" | grep -q 'godspeed prompts' \
+  && ok "80 a miss names a command readers have (mc-prompt-archive), never the author's own" \
+  || bad "80 the miss named a command readers do not have" "$S80"
+
+# 81 and 82. The reader's own Godspeed assistant on Windows keeps its chats in a Hermes home of its
+#     own; and any home an assistant.json names. Both are read without being told.
+H81="$W/home81"; L81="$W/lad81"; HP81="$L81/Godspeed Mission Control Full Alpha State/hermes-profile"
+mkdir -p "$H81/.godspeed" "$HP81" "$W/mc81/prompts/archive"
+echo 'model: {}' > "$HP81/config.yaml"
+"$PY" - "$HP81/state.db" "$W/assist82/state.db" <<'PYEOF'
+import sqlite3, sys, os
+for db, words in ((sys.argv[1], "the Calathea plant food"), (sys.argv[2], "the Lupin seed order")):
+    os.makedirs(os.path.dirname(db), exist_ok=True)
+    con = sqlite3.connect(db)
+    con.execute("CREATE TABLE sessions (id TEXT, source TEXT)")
+    con.execute("CREATE TABLE messages (session_id TEXT, role TEXT, content TEXT, timestamp REAL)")
+    con.execute("INSERT INTO sessions VALUES ('s1','desktop')")
+    con.execute("INSERT INTO messages VALUES ('s1','user','Which was " + words + "?',1790000000)")
+    con.execute("INSERT INTO messages VALUES ('s1','assistant','It was the one you picked.',1790000005)")
+    con.commit()
+PYEOF
+mkdir -p "$W/mc81/.godspeed"
+printf '{"verified":true,"home":"%s"}\n' "$( (command -v cygpath >/dev/null && cygpath -m "$W/assist82") || echo "$W/assist82")" > "$W/mc81/.godspeed/assistant.json"
+printf 'GODSPEED_PROMPT_SOURCES=-\nGODSPEED_PROMPT_SINCE=2026-08-15T00:00:00Z\n' > "$H81/.godspeed/device.env"
+( unset GODSPEED_HERMES_HOME HERMES_HOME GODSPEED_PROMPT_SOURCES
+  export HOME="$H81" GODSPEED_HOME="$H81" USERPROFILE="$H81" GODSPEED_HERMES_NO_SYSTEM=1 \
+         LOCALAPPDATA="$( (command -v cygpath >/dev/null && cygpath -w "$L81") || echo "$L81")" \
+         GODSPEED_TELEGRAM_TRANSCRIPT="$W/none.jsonl"
+  cd "$W" && "$PY" "$ARC" --godspeed "$W/mc81" archive ) >"$W/r81.out" 2>&1
+A81="$(cat "$W/mc81/prompts/archive/"*.jsonl 2>/dev/null)"
+echo "$A81" | grep 'Calathea' | grep -q '"project": "godspeed"' \
+  && ok "81 the Windows assistant's own Hermes (\"Open the Windows assistant\") is read, as the mission control's assistant" \
+  || bad "81 the Windows assistant's chats were not saved" "$(cat "$W/r81.out") $A81"
+echo "$A81" | grep -q 'Lupin seed' && ok "82 a Hermes home named in .godspeed/assistant.json is read" \
+  || bad "82 the home assistant.json names was not read" "$(cat "$W/r81.out") $A81"
+
+# 83 to 85. The command runs where a reader is: by name through the harvester (which finds a Python
+#     that works, Hermes' own included), and on Windows through its .cmd.
+if command -v node >/dev/null 2>&1; then
+  B83="$W/bin83"; mkdir -p "$B83"; cp "$ARC" "$HERE/prompt-harvest.js" "$HERE/mc-prompt-archive.cmd" "$B83/"; chmod +x "$B83/mc-prompt-archive"
+  NODE_DIR83="$(dirname "$(command -v node)")"
+  S83="$( unset GODSPEED_DIR GODSPEED_WORKSPACE; export HOME="$H7" GODSPEED_HOME="$H7" USERPROFILE="$H7"
+    cd "$G7" && MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' "$B83/mc-prompt-archive" search Larkspur 2>&1 )"
+  echo "$S83" | grep -q 'new claude chat about the Larkspur' && ok "83 mc-prompt-archive runs by name, the way the assistant's terminal runs it" \
+    || bad "83 mc-prompt-archive by name did not search" "$S83"
+  # A computer whose only Python is Hermes' own: a real venv where the Windows setup's Hermes keeps
+  # it, and a PATH with node and none of the usual Pythons.
+  V84="$W/lad84/Godspeed Mission Control Full Alpha State/hermes-runtime/hermes-agent/venv"
+  if "$PY" -m venv --without-pip "$V84" >/dev/null 2>&1; then
+    S84="$( unset GODSPEED_DIR GODSPEED_WORKSPACE GODSPEED_PYTHON; export HOME="$H7" GODSPEED_HOME="$H7" USERPROFILE="$H7"
+      export LOCALAPPDATA="$( (command -v cygpath >/dev/null && cygpath -w "$W/lad84") || echo "$W/lad84")"
+      cd "$G7" && PATH="$NODE_DIR83" "$(command -v node)" "$B83/prompt-harvest.js" --collector search Larkspur 2>&1 )"
+    VPY84="$V84/bin/python3"; [ -x "$VPY84" ] || VPY84="$V84/Scripts/python.exe"
+    if PATH="$NODE_DIR83" command -v python3 >/dev/null 2>&1 || PATH="$NODE_DIR83" command -v python >/dev/null 2>&1; then
+      echo "  --   84 skipped: node shares its folder with a Python here, so 'Hermes' Python only' cannot be staged"
+    elif ! ( export LOCALAPPDATA="$( (command -v cygpath >/dev/null && cygpath -w "$W/lad84") || echo "$W/lad84")"; "$VPY84" -c 1 ) >/dev/null 2>&1; then
+      echo "  --   84 skipped: a venv of this Python does not run once LOCALAPPDATA moves (the Microsoft Store Python)"
+    else
+      echo "$S84" | grep -q 'new claude chat about the Larkspur' && ok "84 with no Python on the PATH, Hermes' own Python runs it" \
+        || bad "84 Hermes' own Python was not found" "$S84"
+    fi
+  else
+    echo "  --   84 skipped: this Python cannot make a venv"
+  fi
+  if command -v cmd >/dev/null 2>&1 && command -v cygpath >/dev/null 2>&1; then
+    S85="$( unset GODSPEED_DIR GODSPEED_WORKSPACE; export HOME="$H7" GODSPEED_HOME="$H7" USERPROFILE="$(cygpath -w "$H7")"
+      cd "$G7" && cmd //c "$(cygpath -w "$B83/mc-prompt-archive.cmd")" search Larkspur 2>&1 )"
+    echo "$S85" | grep -q 'new claude chat about the Larkspur' && ok "85 mc-prompt-archive.cmd runs it from cmd and PowerShell" \
+      || bad "85 mc-prompt-archive.cmd did not search" "$S85"
+  else
+    grep -q 'prompt-harvest.js" --collector' "$HERE/mc-prompt-archive.cmd" && ok "85 mc-prompt-archive.cmd hands over to the harvester (checked as text; no cmd here)" \
+      || bad "85 mc-prompt-archive.cmd is missing or wrong"
+  fi
+
+  # 86 to 88. The harvest on a reader's new computer: a git folder with no first commit and no git
+  #     name. It must succeed quietly, keep the archive, and touch nothing in git; and once there is
+  #     a first commit it commits under the notebook's name and sends it to the backup, where a
+  #     second machine's copy finds it.
+  R86="$W/fresh86"; mkdir -p "$R86/home/.godspeed" "$R86/home/.claude/projects/p" "$R86/mc/prompts/archive" "$R86/mc/observations"
+  cp "$J7" "$R86/home/.claude/projects/p/s.jsonl"
+  printf 'GODSPEED_PROMPT_SOURCES=claude\n' > "$R86/home/.godspeed/device.env"
+  git -C "$R86/mc" init -q
+  : > "$R86/empty.gitconfig"
+  harv86() { ( export HOME="$R86/home" USERPROFILE="$R86/home" GODSPEED_HOME="$R86/home" GODSPEED_DIR="$R86/mc" \
+      GODSPEED_MACHINE=newpc GIT_CONFIG_GLOBAL="$R86/empty.gitconfig" GIT_CONFIG_NOSYSTEM=1
+      unset GIT_AUTHOR_NAME GIT_COMMITTER_NAME GIT_AUTHOR_EMAIL GIT_COMMITTER_EMAIL EMAIL
+      node "$HERE/prompt-harvest.js" --verbose "$@" 2>&1 ); }
+  O86="$(harv86)"; RC86=$?
+  [ "$RC86" -eq 0 ] && ! echo "$O86" | grep -qi 'identity unknown\|commit failed' && grep -rqs Larkspur "$R86/mc/prompts/archive/" \
+    && ok "86 on a new computer with no backup yet the harvest succeeds quietly and the archive is kept" \
+    || bad "86 the harvest failed or complained on a folder with no first commit" "rc=$RC86 $O86"
+  [ -z "$(git -C "$R86/mc" status --porcelain --untracked-files=no 2>/dev/null)" ] \
+    && ok "86b and it stages nothing in git" || bad "86b it staged files in a folder with no first commit" "$(git -C "$R86/mc" status --short)"
+  git init -q --bare "$R86/backup.git"
+  git -C "$R86/mc" -c user.name=T -c user.email=t@example.com commit -q --allow-empty -m "Save Godspeed Mission Control records"
+  git -C "$R86/mc" remote add origin "$R86/backup.git"
+  git -C "$R86/mc" push -q origin HEAD:main 2>/dev/null
+  rm -f "$R86/home/.godspeed/prompt-harvest-last"
+  O87="$(harv86)"; RC87=$?
+  [ "$RC87" -eq 0 ] && git -C "$R86/mc" log -1 --format='%an|%s' | grep -q '^Godspeed Mission Control|Archive the prompts typed on newpc$' \
+    && ok "87 with a first commit and still no git name, it commits under the notebook's name" \
+    || bad "87 the commit failed or came out wrong" "rc=$RC87 $O87 $(git -C "$R86/mc" log -2 --format='%an %s')"
+  git -C "$R86/backup.git" log main --format=%s 2>/dev/null | grep -q 'Archive the prompts typed on newpc' \
+    && ok "87b and sends it to the backup" || bad "87b nothing reached the backup" "$O87"
+  git clone -q -b main "$R86/backup.git" "$R86/second" 2>/dev/null
+  S88="$( unset GODSPEED_DIR GODSPEED_WORKSPACE; export HOME="$W/home-second" GODSPEED_HOME="$W/home-second" USERPROFILE="$W/home-second"
+    cd "$R86/second" && "$PY" "$ARC" search Larkspur 2>&1 )"
+  echo "$S88" | grep -q 'new claude chat about the Larkspur' && echo "$S88" | grep -q 'newpc/claude-code' \
+    && ok "88 a second machine's copy of the backup finds the chat, by the folder it stands in" \
+    || bad "88 the second machine could not find the chat" "$S88"
+else
+  echo "  --   83-88 skipped: node is not on this machine"
+fi
+
+# 89. The starter tells the reader's assistant to look before saying it does not remember.
+grep -qF -- '- When you cannot recall an earlier conversation, run `mc-prompt-archive search <words>` before saying you don'"'"'t know.' "$HERE/../starter-godspeed/AGENTS.md" \
+  && ok "89 the starter AGENTS.md tells the assistant to search the archive when it cannot recall a conversation" \
+  || bad "89 the starter AGENTS.md lacks the archive line"
 
 echo
 echo "  $PASS passed, $FAIL failed"

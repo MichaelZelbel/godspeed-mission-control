@@ -31,6 +31,8 @@
  *   mc-prompt-harvest --verbose    say what happened
  *   mc-prompt-harvest --no-push    harvest and commit only
  *   mc-prompt-harvest --once-a-day do nothing if it already ran today on this computer
+ *   node prompt-harvest.js --collector <args>   run mc-prompt-archive with a Python that works
+ *                                  here (what `mc-prompt-archive` and its .cmd do; see below)
  */
 
 'use strict';
@@ -40,6 +42,26 @@ const os = require('os');
 const path = require('path');
 
 const ARGS = process.argv.slice(2);
+
+/* --collector: RUN mc-prompt-archive, NOTHING ELSE (2026-10-12). `mc-prompt-archive search ...`
+ * is the command a reader's assistant types when it cannot recall an earlier conversation, and
+ * it is a Python program. A reader's Windows PC has no Python on its PATH (the setup brings Git,
+ * Node and Hermes), so it could not be run there at all. Its first line hands it here, and so
+ * does mc-prompt-archive.cmd; this finds a Python that works (Hermes' own included) and runs the
+ * collector with the arguments unchanged. It returns before the device file below is loaded
+ * into the environment: the collector reads that file itself, and a GODSPEED_DIR put into its
+ * environment would outrank the folder the person is standing in. */
+if (ARGS[0] === '--collector') {
+  const collector = path.join(__dirname, 'mc-prompt-archive');
+  const py = findPython(deviceEnvValue('GODSPEED_PYTHON'));
+  if (!py) {
+    process.stderr.write('mc-prompt-archive: no working Python on this computer (none on the PATH, '
+      + 'and no Hermes with its own). Install Python 3, or set GODSPEED_PYTHON in ~/.godspeed/device.env.\n');
+    process.exit(1);
+  }
+  const r = spawnSync(py.cmd, py.pre.concat([collector], ARGS.slice(1)), { stdio: 'inherit', windowsHide: true });
+  process.exit(r.status === null ? 1 : r.status);
+}
 const VERBOSE = ARGS.includes('--verbose') || ARGS.includes('-v');
 const NO_PUSH = ARGS.includes('--no-push');
 const ONCE_A_DAY = ARGS.includes('--once-a-day');
@@ -107,13 +129,14 @@ function looksLikeGodspeed(p) {
 function findGodspeed() {
   /* Said out loud beats inferred. Only the shape of the answer is checked: a GODSPEED_DIR that
    * names something which is not a directory at all is a typo worth reporting, not obeyed. */
-  const told = process.env.GODSPEED_DIR;
+  const told = process.env.GODSPEED_DIR || process.env.GODSPEED_WORKSPACE;
   if (told) {
     try { if (fs.statSync(told).isDirectory()) return path.resolve(told); } catch (_) {}
     warn('GODSPEED_DIR is set to "' + told + '", which is not a folder I can open. Fix it in '
        + '~/.godspeed/device.env, or unset it and I will look in the usual places.');
   }
-  const cands = [path.join(os.homedir(), 'godspeed'), '/root/godspeed', 'C:\\godspeed'];
+  const cands = [path.join(os.homedir(), 'godspeed'), path.join(os.homedir(), 'godspeed-v2'),
+                 '/root/godspeed', 'C:\\godspeed'];
   for (const c of cands) if (looksLikeGodspeed(c)) return path.resolve(c);
   const up = path.resolve(__dirname, '..');
   return looksLikeGodspeed(up) ? up : null;
@@ -143,15 +166,63 @@ function run(cmd, args, opts) {
 /* A python that exists AND runs. `py` on Windows and `python3` on Linux are the usual
  * answers, but Windows also ships a fake `python` that only opens the Microsoft Store, so
  * "the command resolved" is not the same as "the command works". Each candidate is asked to
- * print its version before it is trusted. */
-function findPython() {
-  const cands = [[process.env.GODSPEED_PYTHON, []], ['python3', []], ['python', []], ['py', ['-3']]];
+ * print its version before it is trusted. (A function declaration, and it runs nothing that
+ * needs the folder, because --collector calls it before anything below is set up.) */
+function findPython(told) {
+  const cands = [[process.env.GODSPEED_PYTHON || told, []], ['python3', []], ['python', []], ['py', ['-3']]]
+    .concat(hermesPythons().map((p) => [p, []]));
   for (const [cmd, pre] of cands) {
     if (!cmd) continue;
-    const r = run(cmd, pre.concat(['-c', 'print(1)']), { timeout: 30000 });
+    const r = spawnSync(cmd, pre.concat(['-c', 'import sqlite3; print(1)']),
+      { encoding: 'utf8', timeout: 30000, windowsHide: true });
     if (r && r.status === 0 && String(r.stdout || '').trim() === '1') return { cmd, pre };
   }
   return null;
+}
+
+/* HERMES BRINGS ITS OWN PYTHON (2026-10-12). Every reader has Hermes, and Hermes runs in a Python
+ * of its own that is not on the PATH. On a reader's Windows PC it is the only Python there is,
+ * so it is the last place looked: where the assistant's settings say Hermes was installed
+ * (assistant.json, which the Windows setup and the server write), then where Hermes installs
+ * itself on each system. */
+function hermesPythons() {
+  const roots = [];
+  const local = process.env.LOCALAPPDATA;
+  const state = local ? path.join(local, 'Godspeed Mission Control Full Alpha State') : null;
+  const configs = [process.env.GODSPEED_ASSISTANT_CONFIG, state && path.join(state, 'assistant.json')];
+  for (const g of [process.env.GODSPEED_DIR, process.env.GODSPEED_WORKSPACE, deviceEnvValue('GODSPEED_DIR')]) {
+    if (g) configs.push(path.join(g, '.godspeed', 'assistant.json'));
+  }
+  for (const c of configs) {
+    if (!c) continue;
+    try {
+      const a = JSON.parse(fs.readFileSync(c, 'utf8'));
+      if (a.sourceRoot) roots.push(a.sourceRoot);
+      if (a.executable) roots.push(path.join(path.dirname(path.dirname(a.executable)), 'hermes-agent'));
+    } catch (_) {}
+  }
+  if (state) roots.push(path.join(state, 'hermes-runtime', 'hermes-agent'));
+  if (local) roots.push(path.join(local, 'hermes', 'hermes-agent'));
+  roots.push(path.join(os.homedir(), '.hermes', 'hermes-agent'));
+  const out = [];
+  for (const r of roots) {
+    out.push(path.join(r, 'venv', 'Scripts', 'python.exe'), path.join(r, '.venv', 'Scripts', 'python.exe'),
+             path.join(r, 'venv', 'bin', 'python3'), path.join(r, '.venv', 'bin', 'python3'));
+  }
+  out.push('/opt/hermes/.venv/bin/python3');
+  return out.filter((p, i) => out.indexOf(p) === i && fs.existsSync(p));
+}
+
+/* One value from ~/.godspeed/device.env, read without putting the file into the environment. */
+function deviceEnvValue(name) {
+  let txt = '';
+  try { txt = fs.readFileSync(path.join(os.homedir(), '.godspeed', 'device.env'), 'utf8'); } catch (_) { return null; }
+  let v = null;
+  for (const line of txt.split(/\r?\n/)) {
+    const m = /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/.exec(line);
+    if (m && m[1] === name && !/^\s*#/.test(line)) v = m[2].trim().replace(/^["']|["']$/g, '');
+  }
+  return v;
 }
 
 function today() { return new Date().toISOString().slice(0, 10); }
@@ -242,7 +313,7 @@ function receipt(fields) {
 function readHarvestOutput(out) {
   const s = String(out || '');
   const n = /archived\s+(\d+)\s+prompt/i.exec(s);
-  const skipped = /not read, by your choice:\s*(.+)/i.exec(s);
+  const skipped = /(?:not read|not brought in), by your choice:\s*(.+)/i.exec(s);
   return {
     added: n ? Number(n[1]) : 0,
     skipped: skipped ? skipped[1].trim().split(/[,\s]+/).filter(Boolean) : []
@@ -331,23 +402,38 @@ function main() {
    * a harvest that fires while you are mid-edit can never carry your unfinished work into a
    * commit you did not write. The receipt lives inside this path on purpose. */
   const rel = path.join('prompts', 'archive');
+  /* A FRESH MISSION CONTROL HAS NOTHING TO COMMIT TO YET (2026-10-12). A new reader's folder is
+   * a git folder with no first commit and, on a new computer, no git name: its backup is set up
+   * later in the book, and that first commit is the backup's. Until then every hourly run here
+   * failed with "Author identity unknown". What was archived is complete and searchable in the
+   * folder already; it is saved with everything else by the backup's first commit. So the run
+   * stops here, successfully, and touches nothing in git. */
+  const head = run('git', ['rev-parse', '--verify', '-q', 'HEAD']);
+  if (!head || head.status !== 0) {
+    say('archived here; this mission control has no backup yet, so it is saved with the backup\'s first commit');
+    return 0;
+  }
   run('git', ['add', '--', rel]);
   const dirty = run('git', ['status', '--porcelain', '--', rel]);
   if (!String((dirty && dirty.stdout) || '').trim()) { say('nothing new to commit'); return 0; }
   if (receiptOnlyAndSavedToday(rel, dirty.stdout)) { say('nothing new to commit (this machine\'s receipt is already saved today)'); return 0; }
 
   const machine = MACHINE;
-  const c = run('git', ['commit', '-m', 'Archive the prompts typed on ' + machine, '--', rel]);
+  const c = run('git', ['commit', '-m', 'Archive the prompts typed on ' + machine, '--', rel], { env: commitEnv() });
   if (!c || c.status !== 0) { warn('commit failed: ' + String((c && (c.stderr || c.stdout)) || '').slice(0, 200)); return 1; }
   say('committed');
 
   if (NO_PUSH) return 0;
-  let p = run('git', ['push', 'origin', 'main']);
+  const origin = run('git', ['remote', 'get-url', 'origin']);
+  if (!origin || origin.status !== 0) { say('no backup to send it to yet; the commit is kept here'); return 0; }
+  // HEAD:main rather than main: a folder whose first commit the notebook made on a branch git
+  // called master still sends to the backup's main, which is where the notebook sends too.
+  let p = run('git', ['push', 'origin', 'HEAD:main']);
   if (!p || p.status !== 0) {
     // Somebody else pushed while we worked. Rebase onto them and try once more; a second
     // failure is left alone, because the next run picks the commit up anyway.
     pullOrUndo();
-    p = run('git', ['push', 'origin', 'main']);
+    p = run('git', ['push', 'origin', 'HEAD:main']);
   }
   if (!p || p.status !== 0) { say('push did not go through; the commit is local and the next run will carry it'); return 0; }
   say('pushed');
@@ -385,8 +471,21 @@ function receiptOnlyAndSavedToday(rel, porcelain) {
 /* A pull whose rebase stops on a conflict is undone at once. Left in place, it kept the folder
  * mid-rebase with conflict markers in a notebook file, so the notebook could neither read that
  * note nor sync until a person finished the rebase (6 October 2026, envy). */
+/* The name a commit is made under. The person's own when git has one; otherwise the name the
+ * notebook signs its own commits with (notebook/core/sync/git.mjs), because a reader's new
+ * computer has no git name and a commit without one fails. */
+function commitEnv() {
+  const name = run('git', ['config', 'user.name']), email = run('git', ['config', 'user.email']);
+  const has = (r) => r && r.status === 0 && String(r.stdout || '').trim();
+  if (has(name) && has(email)) return process.env;
+  return Object.assign({}, process.env, {
+    GIT_AUTHOR_NAME: 'Godspeed Mission Control', GIT_AUTHOR_EMAIL: 'godspeed@localhost',
+    GIT_COMMITTER_NAME: 'Godspeed Mission Control', GIT_COMMITTER_EMAIL: 'godspeed@localhost'
+  });
+}
+
 function pullOrUndo() {
-  const pulled = run('git', ['pull', '--rebase', '--autostash', 'origin', 'main']);
+  const pulled = run('git', ['pull', '--rebase', '--autostash', 'origin', 'main'], { env: commitEnv() });
   if (pulled && pulled.status !== 0) {
     const git = path.join(GODSPEED, '.git');
     if (fs.existsSync(path.join(git, 'rebase-merge')) || fs.existsSync(path.join(git, 'rebase-apply'))) run('git', ['rebase', '--abort']);
