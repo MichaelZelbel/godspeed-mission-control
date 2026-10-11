@@ -36,7 +36,7 @@ export function nativeRows(store,type){
  if(type==='journal')return readEntries(store.root,journalSettings(store.root),{days:3650}).map(e=>({id:'journal-'+hash(e),uid:hash(e).slice(0,32),...e,content:e.words,created_at:e.at,type}));
  return [];
 }
-function rememberFile(store,file){if(fs.existsSync(file)){const content=fs.readFileSync(file);atomic(path.join(store.root,'coach','history',hash(file)+'-'+hash(content)+'.txt'),content);}}
+export function rememberFile(store,file){if(fs.existsSync(file)){const content=fs.readFileSync(file);atomic(path.join(store.root,'coach','history',hash(file)+'-'+hash(content)+'.txt'),content);}}
 export function nativeOperation(store,input){
  const timezone=store.get('settings','installation')?.timezone||'UTC',day=localParts(new Date(),timezone).date;
  if(input.type==='coach-open'){

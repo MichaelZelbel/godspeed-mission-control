@@ -11,6 +11,7 @@ import {radarCommand} from './radar-lifecycle.mjs';
 import {localParts,addDays,zonedToUtc,now as clockNow} from '../../third-party/addons/godspeed-coach/lib/clock.mjs';
 import {trackerOperation,TRACKER_OPERATIONS} from './tracker-operations.mjs';
 import {proposalState,card,findTracker} from './trackers.mjs';
+import {isHabitRef} from './habit-trackers.mjs';
 import {nextCalendarRun} from './jobs/calendar.mjs';
 import {resumeChanges} from './jobs/routine-control.mjs';
 import {readTable} from '../../third-party/addons/godspeed-coach/lib/auto.mjs';
@@ -70,7 +71,9 @@ function nativeArguments(input){
  if(type==='obligation-complete')required(input.evidence,'Completion evidence');
  if(type==='obligation-snooze')date(input.until,'New target');
 }
-const outsideRecords=(domains,op)=>NATIVE.includes(op.type)||op.type==='routine-change'&&!!domains.nativeScheduler||process.env.GODSPEED_ORIGINAL_RUNTIME==='on'&&['goal-add','goal-change','goal-outcome','forecast-settle'].includes(op.type)||['obligation-complete','obligation-snooze'].includes(op.type)&&dueRows(domains.store).some(d=>d.id===op.id);
+// A habit's day is written to the coach's own file, as habit-observe writes it (habit-trackers.mjs).
+const habitTrack=(domains,op)=>['track','tracker-correct'].includes(op.type)&&isHabitRef(domains.store,op.tracker);
+const outsideRecords=(domains,op)=>NATIVE.includes(op.type)||habitTrack(domains,op)||op.type==='routine-change'&&!!domains.nativeScheduler||process.env.GODSPEED_ORIGINAL_RUNTIME==='on'&&['goal-add','goal-change','goal-outcome','forecast-settle'].includes(op.type)||['obligation-complete','obligation-snooze'].includes(op.type)&&dueRows(domains.store).some(d=>d.id===op.id);
 // The same domains, reading and writing a staged view of the store.
 const staged=(domains,store)=>{const query=new domains.query.constructor(store);query.nativeHermesHome=domains.query.nativeHermesHome;return Object.assign(Object.create(Object.getPrototypeOf(domains)),domains,{store,query});};
 // A copy of the records to try a change on, without the workspace lock and
@@ -315,7 +318,9 @@ export function validateConversationOperations(domains,input,operations){
   if(['track','tracker-correct'].includes(operation.type)){
    // Only an existing tracker, by its id or one of its names; an ordinary
    // collection of the same name is never one (trackers.mjs).
-   if(!card(domains.store.get('collections',String(operation.tracker??'')))&&!findTracker(domains.store,operation.tracker).candidates.length)throw Error('No tracker called '+operation.tracker);
+   if(!card(domains.store.get('collections',String(operation.tracker??'')))&&!findTracker(domains.store,operation.tracker).candidates.length&&!isHabitRef(domains.store,operation.tracker))throw Error('No tracker called '+operation.tracker);
+   // A habit tracked as done while he says it was not, as habit-observe refuses it.
+   if(habitTrack(domains,operation)&&(operation.answer??(operation.type==='track'?'done':undefined))==='done'&&/\b(?:did not|didn.t|haven.t|have not|not done|skipped|nicht|nein)\b/i.test(message))throw Error('Habit completion contradicts the actual user reply');
    if(operation.type==='track'&&typeof operation.new_name==='string'&&operation.new_name.trim()&&!message.toLocaleLowerCase().includes(operation.new_name.trim().toLocaleLowerCase()))throw Error('A new name must be one you used');
   }
   if(['tracker-hold','track','tracker-correct'].includes(operation.type)){

@@ -40,7 +40,7 @@ function buildChatContext(query,input){
   // Every tracker and every open tracker question, with their ids: without them
   // the model cannot name a tracker or answer a question's yes (D-321). Read
   // through query.rows, so from this context's one snapshot of the vault.
-  const reader={list:type=>query.rows(type).filter(r=>!r.removed_at),get:(type,id)=>query.rows(type).find(r=>r.id===id)||null};
+  const reader={root:query.store.root,list:type=>query.rows(type).filter(r=>!r.removed_at),get:(type,id)=>query.rows(type).find(r=>r.id===id)||null};
   const tracked=trackerOperation({store:reader,query},{type:'tracker-list'});context.personal.trackers=tracked.trackers;context.personal.tracker_questions=tracked.pending;
   for(const type of ['notes','contacts','entities','world_claims','moments','profile_facts','goals','media_analysis']){
     const selected=pick(type,type==='notes'?8:4);context[type]=selected.rows;context.retrieval.counts[type]=selected.total;
