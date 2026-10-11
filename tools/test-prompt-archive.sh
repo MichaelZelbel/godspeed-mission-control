@@ -466,7 +466,9 @@ for sid, role, txt in (("d1", "user", "typed into the desktop app about the gard
 con.commit(); con.close()
 PYEOF
 ( export HOME="$W/home3" GODSPEED_HOME="$W/home3" GODSPEED_PROMPT_SOURCES="hermes" GODSPEED_TELEGRAM_TRANSCRIPT="$W/none.jsonl"
-  unset GODSPEED_HERMES_HOME; export HERMES_HOME="$HH3"
+  # The server-wide places stay out (2026-10-11): every home is read now, not the first, so on
+  # a server this case would otherwise read that server's real chats into the fixture.
+  unset GODSPEED_HERMES_HOME; export HERMES_HOME="$HH3" GODSPEED_HERMES_NO_SYSTEM=1
   mkdir -p "$W/home3" "$W/godspeed3/prompts/archive" && cd "$W/godspeed3" && "$PY" "$ARC" --godspeed "$W/godspeed3" archive ) >"$W/win.out" 2>&1
 B3="$(cat "$W/godspeed3/prompts/archive/"*.jsonl 2>/dev/null)"
 echo "$B3" | grep -q "garden fence"   && ok "51 HERMES_HOME with the default profile's state.db at its root is read (the Windows shape)"   || bad "51 the Windows-shaped store was not read" "$(cat "$W/win.out")"
@@ -886,6 +888,105 @@ PYEOF
 )"
 [ -z "$P67" ] && ok "67 a GitHub URL or deep path is kept whole, and a real long secret still drops" \
   || bad "67 the still-risky guard mis-fired on a URL/path, or stopped catching a secret" "$P67"
+
+# --- 68 to 73: TWO Hermes installs on one machine, both read, nothing twice (2026-10-11) ------
+#
+# WHY THESE EXIST. The reader took the FIRST Hermes home it found. On 2026-10-07 the server's
+# Mission Control chat moved to a second Hermes whose home is inside the mission control
+# (.godspeed/integrated-runtime/hermes), while the company desks stayed in the old home. The old
+# one was found first, so four days of Telegram chat reached no archive, and every daily run said
+# "ok, 0 added". The new store also carries copies of conversations the old one already gave the
+# archive, so reading both must not file anything twice. And `sources`, the morning guard, said
+# nothing: it never opened the new store, and a store that is partly archived looked healthy.
+HOLD="$W/hermes-old"; G4="$W/godspeed4"; HNEW="$G4/.godspeed/integrated-runtime/hermes"
+mkdir -p "$HOLD/profiles/godspeed" "$HNEW" "$G4/prompts/archive" "$W/home4"
+"$PY" - "$HOLD" "$HNEW" <<'PYEOF'
+import sqlite3, sys, os
+from datetime import datetime, timezone
+old_home, new_home = sys.argv[1], sys.argv[2]
+def ts(day, hour):
+    return datetime(2026, 10, day, hour, 0, tzinfo=timezone.utc).timestamp()
+def store(path, rows):
+    con = sqlite3.connect(path)
+    con.execute("CREATE TABLE sessions (id TEXT, source TEXT)")
+    con.execute("CREATE TABLE messages (session_id TEXT, role TEXT, content TEXT, timestamp REAL)")
+    for sid, src in sorted({(r[0], r[1]) for r in rows}):
+        con.execute("INSERT INTO sessions VALUES (?,?)", (sid, src))
+    for sid, _src, role, txt, t in rows:
+        con.execute("INSERT INTO messages VALUES (?,?,?,?)", (sid, role, txt, t))
+    con.commit(); con.close()
+before = [
+    ("o1", "telegram", "user",      "before the move: what colour is the shed door", ts(5, 9)),
+    ("o1", "telegram", "assistant", "the shed door is blue", ts(5, 9)),
+]
+store(os.path.join(old_home, "profiles", "godspeed", "state.db"), before)
+# The new home holds a copy of that old conversation, as the real one does, and the new chat.
+store(os.path.join(new_home, "state.db"), [(("n0",) + r[1:]) for r in before] + [
+    ("n1", "telegram", "user",      "after the move: remind me to oil the shed hinge", ts(10, 18)),
+    ("n1", "telegram", "assistant", "noted, the hinge on Saturday", ts(10, 18)),
+    ("n2", "cron",     "user",      "a scheduled job's prompt in the new home", ts(10, 19)),
+])
+PYEOF
+# The day before the fix: only the old home is read, so only the old chat reaches the archive.
+( export HOME="$W/home4" GODSPEED_HOME="$W/home4" GODSPEED_PROMPT_SOURCES="hermes" \
+         GODSPEED_HERMES_HOME="$HOLD" GODSPEED_TELEGRAM_TRANSCRIPT="$W/none.jsonl"
+  cd "$G4" && "$PY" "$ARC" --godspeed "$G4" archive ) >"$W/two0.out" 2>&1
+# 68. The guard must now see the second home on its own and fail, although the store it finds
+#     there is partly archived (its copy of the old chat is in the archive).
+( export HOME="$W/home4" GODSPEED_HOME="$W/home4" GODSPEED_PROMPT_SOURCES="hermes" \
+         GODSPEED_HERMES_NO_SYSTEM=1 HERMES_HOME="$HOLD" GODSPEED_TELEGRAM_TRANSCRIPT="$W/none.jsonl"
+  unset GODSPEED_HERMES_HOME; "$PY" "$ARC" --godspeed "$G4" sources ) >"$W/two-src0.out" 2>&1
+TS0=$?
+[ "$TS0" -ne 0 ] && grep -q "^PROMPT SOURCE LOST:.*hermes/godspeed.*stopped reaching the archive" "$W/two-src0.out" \
+  && ok "68 sources finds the mission control's own Hermes and fails: its newest chat reaches no archive" \
+  || bad "68 a second Hermes home whose new chat is unarchived was reported as healthy" "rc=$TS0 $(cat "$W/two-src0.out")"
+# Now the real harvest, finding both homes by itself (HERMES_HOME names the old one, the new one is
+# found inside the mission control), with the server-wide places switched off so this test never
+# reads a real server's chats.
+two_run() {
+  ( export HOME="$W/home4" GODSPEED_HOME="$W/home4" GODSPEED_PROMPT_SOURCES="hermes" \
+           GODSPEED_HERMES_NO_SYSTEM=1 HERMES_HOME="$HOLD" GODSPEED_TELEGRAM_TRANSCRIPT="$W/none.jsonl"
+    unset GODSPEED_HERMES_HOME; cd "$G4" && "$PY" "$ARC" --godspeed "$G4" "$@" )
+}
+two_run archive >"$W/two1.out" 2>&1
+B4="$(cat "$G4/prompts/archive/"*.jsonl 2>/dev/null)"
+# 69. The bug itself: the chat in the second home is archived, with its answer and its door.
+R4="$(echo "$B4" | grep '"text": "after the move: remind me to oil the shed hinge"')"
+if echo "$R4" | grep -q '"channel": *"telegram"' && echo "$R4" | grep -q '"answer": *"noted, the hinge on Saturday"' \
+   && echo "$R4" | grep -q '"project": *"godspeed"'; then
+  ok "69 a chat in the second Hermes home is archived, with its answer, as the mission control's chat"
+else
+  bad "69 the second Hermes home was not read, or its row is wrong" "$(cat "$W/two1.out") | $R4"
+fi
+# 70. The copy of the old conversation in the new store is the same prompt, so it is not filed again.
+N_OLD="$(echo "$B4" | grep -c '"text": "before the move: what colour is the shed door"')"
+[ "$N_OLD" = "1" ] && ok "70 a conversation present in both homes is archived once" \
+  || bad "70 a conversation present in both homes was archived $N_OLD times" "$B4"
+# 71. The source filter still holds in the new home: a scheduled job is not a person.
+echo "$B4" | grep -q "a scheduled job's prompt in the new home" \
+  && bad "71 a cron session in the second home was filed as a person's prompt" \
+  || ok "71 the second home's scheduled jobs stay out, as in the first"
+# 72. A second run adds nothing, and the guard is quiet once both homes are archived.
+L1="$(cat "$G4/prompts/archive/"*.jsonl | wc -l)"
+two_run archive >"$W/two2.out" 2>&1
+L2="$(cat "$G4/prompts/archive/"*.jsonl | wc -l)"
+two_run sources >"$W/two-src1.out" 2>&1; TS1=$?
+[ "$L1" = "$L2" ] && [ "$TS1" -eq 0 ] \
+  && ok "72 a second harvest of both homes adds nothing, and sources is green" \
+  || bad "72 a rerun added rows ($L1 -> $L2) or sources still fails (rc=$TS1)" "$(cat "$W/two-src1.out")"
+# 73. One store reached through two homes (a gateway whose HERMES_HOME is one profile's folder,
+#     like the server's watchdog) is read once, under that profile's name.
+N73="$("$PY" - "$ARC" "$HOLD" <<'PYEOF'
+import importlib.machinery, importlib.util, os, sys
+l = importlib.machinery.SourceFileLoader("pa", sys.argv[1])
+s = importlib.util.spec_from_loader("pa", l); m = importlib.util.module_from_spec(s); l.exec_module(m)
+old = sys.argv[2]
+st = m.hermes_stores([old, os.path.join(old, "profiles", "godspeed")])
+print(len(st), ",".join(lbl for lbl, _ in st))
+PYEOF
+)"
+[ "$N73" = "1 godspeed" ] && ok "73 a store reached through two homes is read once, under its profile's name" \
+  || bad "73 a store reached through two homes was listed wrong" "$N73"
 
 echo
 echo "  $PASS passed, $FAIL failed"

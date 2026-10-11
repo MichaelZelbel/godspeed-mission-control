@@ -582,50 +582,127 @@ MACHINE_BANNER = re.compile(r"^\[[A-Z][A-Z0-9 ]{2,}")
 SPEAKER_LABEL = re.compile(r"^\[[A-Z][A-Za-z ]{0,20}\]\s*")
 
 
-def hermes_home():
-    """Where Hermes keeps its own store of conversations.
+SERVER_HERMES_HOME = "/home/hermes/.hermes"
+
+
+def _is_hermes_home(path):
+    return bool(path) and (os.path.isfile(os.path.join(path, "state.db"))
+                           or os.path.isdir(os.path.join(path, "profiles")))
+
+
+def running_hermes_homes():
+    """The HERMES_HOME of every Hermes running on this machine right now (Linux only).
+
+    A gateway started by systemd is told its home in its unit file, and nothing else on the
+    machine records it. Reading it off the running process means a Hermes nobody told this
+    program about is still found: the exact case of 2026-10-07 below. Processes of other users
+    are unreadable unless this runs as root, which the server's daily harvest does."""
+    out = []
+    for env_file in glob.glob("/proc/[0-9]*/environ"):
+        try:
+            with open(env_file, "rb") as fh:
+                data = fh.read()
+        except (IOError, OSError):
+            continue
+        for kv in data.split(b"\0"):
+            if kv.startswith(b"HERMES_HOME="):
+                out.append(kv[len(b"HERMES_HOME="):].decode("utf-8", "replace"))
+    return sorted(set(out))
+
+
+def hermes_homes(godspeed=None):
+    """EVERY place on this machine where Hermes keeps a store of conversations.
 
     Hermes is the assistant this book teaches from Chapter 2 (since 2026-09-02), and every
-    conversation you have with it, on the desktop app or in a terminal, lives in a small
-    sqlite database in Hermes' own folder and nowhere else. That folder is HERMES_HOME when
-    Hermes is told one (the Windows desktop app sets it to %LOCALAPPDATA%/hermes), else
-    the platform default. The DEFAULT profile keeps its store at the root of that folder as
+    conversation you have with it, on the desktop app, in a terminal or on Telegram, lives in
+    a small sqlite database in Hermes' own folder and nowhere else. That folder is HERMES_HOME
+    when Hermes is told one (the Windows desktop app sets it to %LOCALAPPDATA%/hermes, Godspeed
+    runs its own assistant in <mission control>/.godspeed/integrated-runtime/hermes), else the
+    platform default. The DEFAULT profile keeps its store at the root of that folder as
     state.db; every other profile keeps its own under profiles/<name>/state.db.
 
-    GODSPEED_HERMES_HOME wins so a test can point at a fixture. Then HERMES_HOME, then the
-    Windows default, then a server-wide install, then this user's own, then nothing at all,
-    which is the correct answer on a computer that never ran Hermes.
+    WHY ALL OF THEM AND NOT THE FIRST ONE (2026-10-11). This returned the first folder that
+    existed. On 2026-10-07 the server's Mission Control chat moved to a second Hermes with its
+    own home inside the mission control, while the company desks stayed in the old one. The
+    old home was found first, so the new one was never opened: four days of Telegram chat
+    reached no archive, and every daily run reported "ok, 0 added". A machine can run several
+    Hermes installs at once, so every home is read, and one reached twice through two names
+    (a link, or a home given as both HERMES_HOME and its default) is read once.
+
+    GODSPEED_HERMES_HOME wins so a test can point at a fixture (several, separated by the
+    system's path separator). GODSPEED_HERMES_NO_SYSTEM=1 leaves out the server-wide install
+    and the running processes, so a test of the search order run on a server never reads that
+    server's real chats. Nothing found is the correct answer on a computer that never ran Hermes.
     """
     env = os.environ.get("GODSPEED_HERMES_HOME")
     if env:
-        return env
+        return [p for p in env.split(os.pathsep) if p]
+    system = os.environ.get("GODSPEED_HERMES_NO_SYSTEM", "") not in ("1", "true", "yes")
     candidates = []
     if os.environ.get("HERMES_HOME"):
         candidates.append(os.environ["HERMES_HOME"])
     if os.environ.get("LOCALAPPDATA"):
         candidates.append(os.path.join(os.environ["LOCALAPPDATA"], "hermes"))
-    candidates += ["/home/hermes/.hermes", os.path.join(home_dir(), ".hermes")]
+    if system:
+        candidates.append(SERVER_HERMES_HOME)
+    candidates.append(os.path.join(home_dir(), ".hermes"))
+    if godspeed:
+        candidates.append(os.path.join(godspeed, ".godspeed", "integrated-runtime", "hermes"))
+    if system:
+        candidates += running_hermes_homes()
+    out, seen = [], set()
     for c in candidates:
-        if os.path.isfile(os.path.join(c, "state.db")) or os.path.isdir(os.path.join(c, "profiles")):
-            return c
-    return None
-
-
-def hermes_stores(hermes):
-    """Every (label, path) pair of a Hermes session store under one home: the default
-    profile's state.db at the root, labelled 'default', then profiles/<name>/state.db."""
-    if not hermes:
-        return []
-    out = []
-    root = os.path.join(hermes, "state.db")
-    if os.path.isfile(root):
-        out.append(("default", root))
-    for db in sorted(glob.glob(os.path.join(hermes, "profiles", "*", "state.db"))):
-        out.append((os.path.basename(os.path.dirname(db)), db))
+        if not _is_hermes_home(c):
+            continue
+        real = os.path.normcase(os.path.realpath(c))
+        if real in seen:
+            continue
+        seen.add(real)
+        out.append(c)
     return out
 
 
-def human_turns_hermes_store(hermes):
+def _default_store_label(hermes):
+    """What to call the store at the root of a Hermes home.
+
+    'default' for an ordinary home. A home that is itself one profile's folder (a gateway
+    started with HERMES_HOME=.../profiles/watchdog) is that profile. Godspeed's own runtime is
+    the mission control's assistant, which the archive has always called 'godspeed'."""
+    norm = os.path.normpath(os.path.abspath(hermes)).replace("\\", "/").rstrip("/")
+    parts = norm.split("/")
+    if len(parts) >= 2 and parts[-2] == "profiles":
+        return parts[-1]
+    if norm.endswith("/.godspeed/integrated-runtime/hermes"):
+        return "godspeed"
+    return "default"
+
+
+def hermes_stores(homes):
+    """Every (label, path) pair of a Hermes session store under the given homes: each home's
+    default profile's state.db at its root, then profiles/<name>/state.db. A store reached
+    from two homes (a profile folder that is also a gateway's own HERMES_HOME) is listed once."""
+    if not homes:
+        return []
+    if isinstance(homes, str):
+        homes = [homes]
+    out, seen = [], set()
+    for hermes in homes:
+        found = []
+        root = os.path.join(hermes, "state.db")
+        if os.path.isfile(root):
+            found.append((_default_store_label(hermes), root))
+        for db in sorted(glob.glob(os.path.join(hermes, "profiles", "*", "state.db"))):
+            found.append((os.path.basename(os.path.dirname(db)), db))
+        for label, db in found:
+            real = os.path.normcase(os.path.realpath(db))
+            if real in seen:
+                continue
+            seen.add(real)
+            out.append((label, db))
+    return out
+
+
+def human_turns_hermes_store(homes):
     """Everything you typed to EVERY chat bot on this machine, from the bots' own store.
 
     WHY THIS EXISTS. This used to harvest exactly one bot, and only because a separate
@@ -653,9 +730,9 @@ def human_turns_hermes_store(hermes):
     answer the machinery, not the person, so they must never leak backward onto a real turn.
     """
     import sqlite3  # only needed here, and only on a machine that runs Hermes
-    if not hermes:
+    if not homes:
         return
-    for bot, db in hermes_stores(hermes):
+    for bot, db in hermes_stores(homes):
         try:
             # Read-only, so a live bot writing to the same database is never disturbed.
             con = sqlite3.connect("file:" + db.replace("?", "%3f") + "?mode=ro", uri=True)
@@ -694,8 +771,10 @@ def human_turns_hermes_store(hermes):
                 # "tool" says which assistant this was said to, "project" which profile of it,
                 # and "channel" through which door: desktop, cli or telegram. Until 2026-09-02
                 # every entry from this store said "telegram", which was a lie for a desktop chat.
+                # "store" is never written to the archive; it lets `sources` tell apart two
+                # stores that share a label (two homes each with a 'default' profile).
                 cur = {"tool": "hermes", "project": bot, "channel": channel, "at": at,
-                       "text": txt, "answers": []}
+                       "text": txt, "answers": [], "store": db}
             elif cur is not None and txt:
                 cur["answers"].append(txt)
         if cur:
@@ -809,7 +888,10 @@ def harvest(godspeed):
         # Kept alongside the line above rather than replacing it: that file carries chat from
         # before the current store existed, and the two overlap harmlessly because a prompt is
         # recognised by its text, so whichever reader reaches it first is the only one that counts.
-        yield from human_turns_hermes_store(hermes_home())
+        # Every Hermes home on this machine, not the first one found (2026-10-11, see
+        # hermes_homes). A conversation copied into a second store is the same text, so it has
+        # the same id and is archived once.
+        yield from human_turns_hermes_store(hermes_homes(godspeed))
     if "opencode" in on:
         yield from human_turns_opencode(opencode_db())
 
@@ -1151,14 +1233,26 @@ def cmd_sources(godspeed, machine):
     Exit 0 = every source this machine has is represented, 1 = at least one is not.
     """
     seen = load_seen(godspeed)
-    have, total, newest = {}, {}, {}
+    terms = redact_terms()
+    have, total, newest, newest_have = {}, {}, {}, {}
+    missing_dates = {}
     for rec in harvest(godspeed):
-        key = (rec["tool"], rec["project"] if rec["tool"] in ("telegram", "hermes") else "")
+        # A Hermes source is one STORE, not one label: two homes can each have a 'default'
+        # profile, and merging their counts would let a store nobody archives hide behind one
+        # that is archived (2026-10-11).
+        key = (rec["tool"], rec["project"] if rec["tool"] in ("telegram", "hermes") else "",
+               rec.get("store", ""))
         rid = hashlib.sha256(("%s|%s" % (rec["tool"], rec["text"])).encode("utf-8")).hexdigest()[:16]
         total[key] = total.get(key, 0) + 1
+        at = (rec["at"] or "")[:10]
         if rid in seen:
             have[key] = have.get(key, 0) + 1
-        at = (rec["at"] or "")[:10]
+            if at > newest_have.get(key, ""):
+                newest_have[key] = at
+        elif at and scrub(rec["text"], terms)[0] is not None:
+            # Only a prompt the harvest WOULD write counts as missing: one dropped for still
+            # looking like a credential is missing on purpose, for ever.
+            missing_dates.setdefault(key, []).append(at)
         if at > newest.get(key, ""):
             newest[key] = at
 
@@ -1176,26 +1270,55 @@ def cmd_sources(godspeed, machine):
     print("what this machine (%s) can see, and whether the archive has it:" % machine)
     if off:
         print("  (switched off by your choice, so not read at all: %s)" % ", ".join(off))
+    if "hermes" in enabled_sources():
+        homes = hermes_homes(godspeed)
+        if homes:
+            print("  (Hermes conversations read from: %s)" % ", ".join(homes))
     # The grouping key above stays raw so the counts are exact, but the name is PRINTED, so a
     # bot profile that carries a client name is redacted on the way out, the same pass the
     # stored project field gets. The counts here never reach the repository; this is only tidy.
-    terms = redact_terms()
-    leaks = []
+    leaks, stale = [], []
+    labels = {}
+    for key in total:
+        labels[key[:2]] = labels.get(key[:2], 0) + 1
     for key in sorted(total, key=lambda k: -total[k]):
         shown = scrub_project(key[1], terms) if key[1] else ""
         name = key[0] + ("/" + shown if shown else "")
+        if labels[key[:2]] > 1 and key[2]:
+            name += " (%s)" % os.path.dirname(key[2])
         n, h = total[key], have.get(key, 0)
         print("  %-28s %6d typed   %6d archived   newest %s"
               % (name, n, h, newest.get(key) or "undated"))
         if h == 0:
             leaks.append((name, n))
+            continue
+        # THE SHAPE OF 2026-10-07. A store that holds old conversations the archive already
+        # has, and new ones it does not, looks healthy to the test above: something of it is
+        # archived. So the newest prompt typed there is compared with the newest archived. A
+        # source whose last two days and more reach nothing has stopped reaching the drawer,
+        # whatever its history says; a day's lag is only the daily harvest not having run yet.
+        last_have = newest_have.get(key, "")
+        later = sorted(d for d in missing_dates.get(key, []) if d > last_have)
+        if last_have and later:
+            try:
+                gap = (datetime.strptime(later[-1], "%Y-%m-%d")
+                       - datetime.strptime(last_have, "%Y-%m-%d")).days
+            except ValueError:
+                gap = 0
+            if gap >= 2:
+                stale.append((name, len(later), last_have, later[-1]))
 
     for name, n in leaks:
         print("PROMPT SOURCE LOST: %d prompt%s typed into '%s' on this machine, and not one of "
               "them is in the archive. Everything you say there is being thrown away. Run "
               "`godspeed prompts archive` here and read what it says."
               % (n, "" if n == 1 else "s", name))
-    return 1 if leaks else 0
+    for name, n, last_have, last in stale:
+        print("PROMPT SOURCE LOST: '%s' on this machine stopped reaching the archive on %s: "
+              "%d prompt%s typed there since, up to %s, are not in it. Run "
+              "`godspeed prompts archive` here and read what it says."
+              % (name, last_have, n, "" if n == 1 else "s", last))
+    return 1 if (leaks or stale) else 0
 
 
 def all_rows(godspeed):
