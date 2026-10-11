@@ -366,7 +366,10 @@ def work(c):
         r = run([shell, posix(os.path.join(c["tools"], "mc-work-run")), "--godspeed", posix(c["root"]), "--date", day, "--budget", "1200"], c, env)
     except subprocess.TimeoutExpired:
         return went_wrong(c, "work", day, "The daily round's work took longer than its hour and was stopped.")
-    if r.returncode != 0:
+    # Exit 4 (since 11 October 2026) is a run that went through in which an assistant did not
+    # finish an item; that item is said below like any other that could not be finished. Only
+    # 1 to 3 mean the work never started.
+    if r.returncode not in (0, 4):
         return went_wrong(c, "work", day, "The daily round's work could not start today.", r)
     # A piece whose check failed, or that could not be finished, is said too, in one line each
     # (9 October 2026: a failed check reached nobody). The detail is on the item in the register.

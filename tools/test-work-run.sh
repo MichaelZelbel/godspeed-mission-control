@@ -120,12 +120,18 @@ missing "  nothing was published" "$OUT" "published:"
 # --- an assistant that dies, or never says what it did, is a failure with a gap ------------------------------
 rm -f "$TMP/card-argv.txt"
 OUT="$(FAKE_MODE=exit1 run --only W-20260915-03 2>&1)"
+# 2026-10-11: the run itself fails too, so a schedule's job check hears of it the same day. Exit
+# 4, not 1: the notebook's daily round reads 1 to 3 as "could not start".
+check "an assistant that dies fails the run with exit 4" "$?" "4"
+contains "  and the run says so in its last line" "$(printf '%s\n' "$OUT" | tail -1)" "NOT finished: 1 of 1 assistant run(s) ended without a RESULT line"
 check "  the item is failed" "$(status_of W-20260915-03)" "failed"
 contains "  with the reason and a retry day" "$(cat "$TMP/work/W-20260915-03.md")" "retry on 2026-09-16"
 contains "  named in the run" "$OUT" "without a RESULT line"
 OUT="$(run --only W-20260915-03 2>&1)"
 contains "  and it is not hammered the same day" "$OUT" "not runnable now"
 OUT="$(GODSPEED_TODAY=2026-09-16 FAKE_MODE=failed run --only W-20260915-03 2>&1)"
+check "  a FAILED line is the assistant's own finished answer, so the run went through" "$?" "0"
+missing "  and is not called NOT finished" "$OUT" "NOT finished"
 check "  on the retry day a FAILED line is a failure with its reason" "$(status_of W-20260915-03)" "failed"
 contains "  the reason is the assistant's own" "$(cat "$TMP/work/W-20260915-03.md")" "the shop needs a login this machine does not have"
 
@@ -186,6 +192,14 @@ contains "the limit stops the run after one" "$OUT" "1 item(s) is the limit"
 OUT="$(run --budget 0 2>&1)"
 contains "a spent budget starts nothing" "$OUT" "used of a 0s budget"
 check "  and took nothing" "$(grep -c "taken (" <<< "$OUT")" "0"
+
+# --- an assistant that ends well but never says what it did fails the run too -------------------------------------
+hw file --what "Say what you did" --done-when "research/said.md exists" --key said --source test >/dev/null
+NID="$(grep -l 'KEY: said' "$TMP/work"/W-*.md | head -1 | xargs basename | sed 's/.md$//')"
+OUT="$(FAKE_MODE=noresult run --only "$NID" 2>&1)"
+check "an answer with no RESULT line fails the run with exit 4" "$?" "4"
+check "  and the item is failed" "$(status_of "$NID")" "failed"
+contains "  the run still ends with its count" "$OUT" "1 taken, 0 attempted, 0 verified"
 
 echo
 echo "$PASS passed, $FAIL failed"

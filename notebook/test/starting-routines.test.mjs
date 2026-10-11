@@ -250,12 +250,16 @@ test('a piece of the daily round\'s work that failed its check is said in one li
  const code=`import sys,json,types;sys.path.insert(0,${JSON.stringify(path.join(home,'scripts'))})
 import godspeed_routines as g
 g.bash=lambda:"bash"
-g.run=lambda args,c,env,timeout=None:types.SimpleNamespace(returncode=0,stdout=sys.stdin.read(),stderr="")
+g.run=lambda args,c,env,timeout=None:types.SimpleNamespace(returncode=4,stdout=sys.stdin.read(),stderr="")
 print(json.dumps(g.work(g.config())))`;
+ // Exit 4: mc-work-run's own code since 11 October 2026 for a run in which an assistant did not finish (W-2 here).
  const run=spawnSync(python,['-c',code],{cwd:path.join(home,'scripts'),input:log,encoding:'utf8',env:{...process.env,PYTHONIOENCODING:'utf-8'}});
  assert.equal(run.status,0,run.stderr);
  assert.deepEqual(JSON.parse(run.stdout).split('\n'),['Today\'s work did not pass its check, so it is not done yet: "How do people who reached two new clients get there?".','Today\'s work could not be finished, so it is not done yet: "Draft the pitch email".']);
  const status=JSON.parse(fs.readFileSync(path.join(home,'godspeed-routines-status.json'),'utf8'));assert.match(status.work.failed,/did not pass its check/);
+ // Exit 1 to 3 is a run that never started, and says only that.
+ const never=spawnSync(python,['-c',code.replace('returncode=4','returncode=1')],{cwd:path.join(home,'scripts'),input:'',encoding:'utf8',env:{...process.env,PYTHONIOENCODING:'utf-8'}});
+ assert.equal(never.status,0,never.stderr);assert.equal(JSON.parse(never.stdout),'The daily round\'s work could not start today.');
 });
 
 // 9 October 2026, a live run: the Weekly check-in row said "Runs every 15 minutes.", which is only

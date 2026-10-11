@@ -47,6 +47,11 @@
 #   --publish-cmd "<cmd>"   a command that turns a finished file into an https page and prints
 #                           the address; run as: <cmd> <file> --title "<what>"
 #   --dry-run               list what would run; take nothing, run nothing, write nothing
+#
+# EXIT CODES: 0 the run went through (an item the assistant reported as FAILED, or whose check
+# said not yet, is an honest outcome, not a failed run); 1 no Node.js or no register; 2 a wrong
+# argument or no mission control; 3 no mc-run; 4 the run went through, but at least one assistant
+# ended without its RESULT line (it crashed, ran out of time, or never said what it did).
 set -uo pipefail
 
 EXTRA_TOOLS=""; APPLY_TOOLS=""; GODSPEED=""; DRY=0; TODAY=""; MAX=2; BUDGET=2700; ITEM_TIMEOUT=1500; ONLY=""; EXTRA=""; PUBLISH_CMD=""
@@ -63,7 +68,7 @@ while [ $# -gt 0 ]; do
     --extra-prompt-file) EXTRA="$2"; shift 2 ;;
     --publish-cmd) PUBLISH_CMD="$2"; shift 2 ;;
     --dry-run) DRY=1; shift ;;
-    -h|--help) sed -n '2,45p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,54p' "$0"; exit 0 ;;
     *) echo "mc-work-run: I do not know the argument $1" >&2; exit 2 ;;
   esac
 done
@@ -180,7 +185,7 @@ field() { printf '%s\n' "$1" | sed -n "s/^$2: //p" | head -1; }
 path_in() { printf '%s\n' "$1" | grep -oE '[A-Za-z0-9_][A-Za-z0-9_./-]*/[A-Za-z0-9_./-]+\.(md|csv|json|txt|html)' | head -1; }
 
 START="$(date +%s)"
-N=0; DONE=0; VERIFIED=0
+N=0; DONE=0; VERIFIED=0; UNFINISHED=0
 while IFS=$'\t' read -r ID KIND WHAT; do
   [ -n "$ID" ] || continue
   [ "$N" -lt "$MAX" ] || { log "stopping: $MAX item(s) is the limit for one run"; break; }
@@ -263,6 +268,7 @@ while IFS=$'\t' read -r ID KIND WHAT; do
     WHY="the assistant ended (exit $RC) without a RESULT line; its output is in routines/work/$TODAY/$ID/answer.txt"
     reg work attempt "$ID" --runner "$RUNNER_NAME" --failed "$WHY" 2>&1 | sed 's/^/  /'
     log "$ID failed: $WHY"
+    UNFINISHED=$((UNFINISHED + 1))
     continue
   fi
   case "$RESULT_LINE" in
@@ -363,3 +369,15 @@ fi
 [ -n "$MISSING" ] && log "not on this computer:$MISSING"
 log "run end: $N taken, $DONE attempted, $VERIFIED verified"
 rm -f "$RUNDIR_TOUCHED" 2>/dev/null || true
+
+# AN ASSISTANT THAT DID NOT FINISH FAILS THE RUN (2026-10-11). Each such item was already recorded
+# as failed above, with its retry day; but the run itself ended with 0, so a schedule that runs
+# this every day could not tell a run whose assistant could not even start from a good one. That
+# is how the daily decision beside this one crashed four days running (8 to 11 October) unheard.
+# Exit 4, not 1: the notebook's daily round reads 1 to 3 as "could not start" and drops the lines
+# of the items that did get done.
+if [ "$UNFINISHED" -gt 0 ]; then
+  log "NOT finished: $UNFINISHED of $N assistant run(s) ended without a RESULT line"
+  exit 4
+fi
+exit 0

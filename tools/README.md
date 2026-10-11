@@ -211,13 +211,17 @@ mc-work tick                dead leases, due retries, stale plans
 ```
 
 Run `mc-decide --dry-run` any time to see the plan without deciding anything.
+When the assistant does not finish, `mc-decide` still writes an honest record
+saying so, then prints `NOT decided` and exits 1, so a schedule that watches
+exit codes hears about it the same morning.
 
 - **`mc-work-run`** carries out what `mc-decide` filed for the mission control itself, one item
   per assistant run, twice a day. It takes the next runnable item under a lease,
   hands the assistant the item, the goal, how that goal is won (the playbook) and
   the newest diagnosis, records what the assistant says as ATTEMPTED, and runs the
   item's own CHECK: only that check makes it VERIFIED. A finished piece becomes a
-  page and one card, through the ledger's own door. Its recipe ships in the starter
+  page and one card, through the ledger's own door. An assistant that ends without
+  its RESULT line fails its item and the run (exit 4). Its recipe ships in the starter
   mission control too, at `skills/work-item/SKILL.md`; add two lines:
 
 ```
