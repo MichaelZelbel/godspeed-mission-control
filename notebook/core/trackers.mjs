@@ -24,7 +24,7 @@ export function findTracker(store,name){const n=norm(name),candidates=trackers(s
 // question for the same name that replaced it, its 24 hours, or a tracker of
 // that name made another way.
 export function proposalState(store,p,now=new Date()){
- if(!p)return 'missing';
+ if(!p||p.removed_at)return 'missing';
  const all=trackers(store);if(all.some(c=>c.tracker.proposal_id===p.id))return 'created';
  if(store.list('tracker_proposals').some(o=>o.id!==p.id&&(o.replaces||[]).includes(p.id)))return 'dropped';
  if(!(now-Date.parse(p.created_at)<=HOLD_MS))return 'expired';

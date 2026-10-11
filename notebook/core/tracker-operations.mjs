@@ -16,7 +16,11 @@ export function trackerOperation(domains,input){
  if(type==='tracker-hold'){
   const name=String(input.name||'').trim();if(!name)throw Error('Say what to track');
   if(findTracker(store,name).candidates.length)throw Error('There is already a tracker called '+name+'; track it instead');
-  const cadence=input.cadence==='any'?'any':'daily',field_schema=schemaFor({unit:input.unit,fields:input.fields,cadence}),shape={name,field_schema};
+  // "track sauna" names no number, unit or column: something that happened, counted each time
+  // and as often as it happens (the design's "a tracker with no number"). Until the bot's
+  // rehearsal on 12 October 2026 it became "one number, once a day".
+  const happened=!has(input)&&!input.unit&&input.fields===undefined;
+  const cadence=input.cadence?(input.cadence==='any'?'any':'daily'):happened?'any':'daily',field_schema=schemaFor({unit:input.unit,fields:happened?[]:input.fields,cadence}),shape={name,field_schema};
   // A tracker with no columns of its own counts each time: "track sauna" is itself the
   // entry, held like a number would be, so the yes counts it (design: nothing he said is lost).
   const counting=!field_schema.some(f=>!['when','note'].includes(f.key));

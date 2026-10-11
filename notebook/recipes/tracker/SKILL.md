@@ -22,7 +22,8 @@ Every tracker is a collection in the notebook. You never create one without the 
    `"new_name":"Waist"` and the tracker's hash, `"expected":{"collections/<id>":"<hash>"}`.
    Two trackers could fit: ask which, write nothing.
 3. No tracker fits: `{"type":"tracker-hold","name":"<Name>","unit":"<unit or omit>","value":<number>}`.
-   Name the talk only when it obviously fits, as the coach area is called (a body measurement:
+   Something that happened, with no number ("track sauna"): only `{"type":"tracker-hold","name":"Sauna"}`;
+   it becomes a tracker that counts each time. Name the talk only when it obviously fits, as the coach area is called (a body measurement:
    `"talk":"health"`).
 4. They say yes to an open question: `{"type":"tracker-create","proposal_id":"<id>"}`, with any change
    they asked for ("call it Waist": `"name":"Waist"`).

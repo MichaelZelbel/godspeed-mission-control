@@ -94,6 +94,21 @@ test('a counting tracker keeps the time he said it, so the yes counts it and the
   assert.equal(again.operation_results[0].reply,'Tracked: Sauna, 2nd time this month.');
 });
 
+test('"track sauna" with no number, unit or columns is a tracker that counts each time',async()=>{
+  const {store,domains}=fixture();
+  // What the bot sent in the rehearsal on 12 October 2026: only the name.
+  const held=await say(domains,'track sauna',[{type:'tracker-hold',name:'Sauna'}]);
+  assert.equal(held.operation_results[0].reply,"Start a new tracker called Sauna, counting each time, as often as you like? I've kept this one for today.");
+  // A number makes it a one-number tracker, as before.
+  const belly=await say(domains,'track belly 92',[{type:'tracker-hold',name:'Belly',value:92}]);
+  assert.match(belly.operation_results[0].reply,/^Start a new tracker called Belly, one number, once a day\?/);
+  // A removed question is never answered.
+  const sauna=store.list('tracker_proposals').find(p=>p.name==='Sauna');
+  store.save('tracker_proposals',{id:sauna.id,removed_at:new Date().toISOString()},sauna._hash);
+  assert.equal(proposalState(store,store.get('tracker_proposals',sauna.id),new Date()),'missing');
+  await assert.rejects(say(domains,'yes',[{type:'tracker-create',proposal_id:sauna.id}]),/expired/);
+});
+
 test('a tracker names its coaching talk by the area\'s own name, and nothing else',async()=>{
   const {store,domains}=fixture();
   const r=await say(domains,'I want to track invoices sent',[{type:'tracker-create',name:'Invoices',unit:'invoices',talk:'work'}]);
