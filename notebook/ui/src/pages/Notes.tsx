@@ -854,16 +854,11 @@ export default function Notes() {
       )}>
 
         {/* Header */}
-        <div className="flex flex-wrap items-center gap-1 px-3 py-2 border-b border-border shrink-0">
-          {!isMobile&&<Button variant="ghost" size="icon" className="h-11 w-11 shrink-0" aria-label="Collapse notes tree" title="Collapse notes tree" onClick={toggleTree}><ChevronLeft className="h-4 w-4"/></Button>}
-          <div className="flex flex-col text-sm font-semibold h-8 px-2 leading-tight">
-            <div className="flex items-center gap-1.5">
-              <FileText className="h-4 w-4" />
-              {searchMode ? "Search" : "Notes"}
-            </div>
-            <span className="text-[10px] text-foreground/80 font-normal">
-              {!searchMode && counts.all}
-            </span>
+        <div className="flex flex-nowrap items-center gap-0.5 px-2 py-1 border-b border-border shrink-0" aria-label="Notes navigation">
+          {!isMobile && <Button variant="ghost" size="icon" className="h-8 w-6 shrink-0" aria-label="Collapse notes tree" title="Collapse notes tree" onClick={toggleTree}><ChevronLeft className="h-4 w-4" /></Button>}
+          <div className="flex shrink-0 items-center gap-1 px-1 text-xs font-medium tabular-nums text-muted-foreground" title={`${searchMode ? "Search notes" : "Notes"}: ${counts.all}`}>
+            <FileText className="h-3.5 w-3.5" aria-hidden="true" />
+            <span aria-label={`${counts.all} notes`}>{counts.all}</span>
           </div>
 
           <DropdownMenu>
@@ -871,8 +866,9 @@ export default function Notes() {
               <Button
                 variant={entityFilter ? "secondary" : "ghost"}
                 size="icon"
-                className="h-8 w-8"
+                className="h-8 w-7 shrink-0 max-sm:h-11 max-sm:w-11"
                 title="Filter by type"
+                aria-label="Filter by type"
               >
                 <Filter className="h-4 w-4" />
               </Button>
@@ -894,17 +890,12 @@ export default function Notes() {
             <DropdownMenuTrigger asChild>
               <Button
                 variant="ghost"
-                size="sm"
-                className="h-8 gap-1.5 px-2 text-xs"
-                title="Sort notes"
+                size="icon"
+                className="h-8 w-7 shrink-0 max-sm:h-11 max-sm:w-11"
+                title={`Sort by ${sortLabels[sortField]}${sortField === "manual" ? "" : sortDirection === "asc" ? ": ascending" : ": descending"}`}
+                aria-label={`Sort notes by ${sortLabels[sortField]}${sortField === "manual" ? "" : sortDirection === "asc" ? ", ascending" : ", descending"}`}
               >
-                <ArrowUpDown className="h-3.5 w-3.5" />
-                {!chatOpen&&<span className="hidden sm:inline">{sortLabels[sortField]}</span>}
-                {sortField !== "manual" && (
-                  sortDirection === "asc"
-                    ? <ArrowUp className="h-3 w-3" />
-                    : <ArrowDown className="h-3 w-3" />
-                )}
+                {sortField === "manual" ? <ArrowUpDown className="h-4 w-4" /> : sortDirection === "asc" ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />}
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="w-44">
@@ -935,7 +926,7 @@ export default function Notes() {
 
           <Popover>
             <PopoverTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-8 w-8" title="New folder">
+              <Button variant="ghost" size="icon" className="hidden h-8 w-7 shrink-0 sm:inline-flex" title="New folder" aria-label="New folder">
                 <FolderPlus className="h-4 w-4" />
               </Button>
             </PopoverTrigger>
@@ -960,8 +951,9 @@ export default function Notes() {
               <Button
                 variant={hasActiveMetaFilter ? "secondary" : "ghost"}
                 size="icon"
-                className="h-8 w-8"
+                className="h-8 w-7 shrink-0 max-sm:h-11 max-sm:w-11"
                 title="Tags & Insights"
+                aria-label="Tags and insights"
               >
                 <Hash className="h-4 w-4" />
               </Button>
@@ -1081,9 +1073,11 @@ export default function Notes() {
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8"
+            className="h-8 w-7 shrink-0 max-sm:h-11 max-sm:w-11"
             onClick={() => setSearchMode(!searchMode)}
-            title="Search"
+            title="Search notes"
+            aria-label="Search notes"
+            aria-pressed={searchMode}
           >
             <Search className="h-4 w-4" />
           </Button>
@@ -1092,9 +1086,10 @@ export default function Notes() {
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-8 w-8"
+                className="h-8 w-7 shrink-0 max-sm:h-11 max-sm:w-11"
                 disabled={createNote.isPending}
-                title="New"
+                title="New note or folder"
+                aria-label="New note or folder"
               >
                 <Plus className="h-4 w-4" />
               </Button>

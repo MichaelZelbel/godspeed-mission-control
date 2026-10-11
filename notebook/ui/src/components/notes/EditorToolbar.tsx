@@ -40,6 +40,8 @@ import { useElementWidth } from "@/hooks/useElementWidth";
 
 interface EditorToolbarProps {
   editor: Editor | null;
+  /** Pinned action before the scrollable formatting and note controls. */
+  leadingAction?: React.ReactNode;
   /** Quick-action icon buttons rendered right before the overflow menu (e.g. Favorite, Pin, AI Chat). */
   quickActions?: React.ReactNode;
   /** Overflow / "more" menu rendered at the far right (typically a DropdownMenu trigger). */
@@ -48,7 +50,7 @@ interface EditorToolbarProps {
   onInsertWikilink?: () => void;
 }
 
-export function EditorToolbar({ editor, quickActions, noteActions, onInsertWikilink }: EditorToolbarProps) {
+export function EditorToolbar({ editor, leadingAction, quickActions, noteActions, onInsertWikilink }: EditorToolbarProps) {
   // Force re-render on every editor transaction so reactive reads like
   // `editor.can().undo()`, `editor.can().redo()`, and `editor.isActive(...)`
   // reflect live state instead of being frozen at mount time (which kept
@@ -117,7 +119,10 @@ export function EditorToolbar({ editor, quickActions, noteActions, onInsertWikil
 
   return (
     <div className="shrink-0">
-      <div className="flex items-center border-b border-border bg-background px-2 py-1">
+      <div className="flex min-w-0 items-center border-b border-border bg-background px-2 py-1">
+        {leadingAction && <div className="mr-1 flex shrink-0 items-center">{leadingAction}</div>}
+        <div className="min-w-0 flex-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <div className="flex min-w-[18rem] items-center">
         <div ref={formattingRef} className="flex min-w-0 flex-1 items-center gap-0.5 overflow-hidden">
           {visibleGroups.map((id, i) => (
             <Fragment key={id}>
@@ -176,6 +181,8 @@ export function EditorToolbar({ editor, quickActions, noteActions, onInsertWikil
             </div>
           </>
         )}
+        </div>
+        </div>
       </div>
 
       {/* Contextual table toolbar */}

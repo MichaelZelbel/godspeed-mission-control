@@ -84,7 +84,6 @@ import {
   Network,
   Code2,
   MessageSquare,
-  ArrowLeft,
   Share2,
   Globe,
   LinkIcon,
@@ -1454,17 +1453,29 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
     }
   }, [editor, sourceMode, sourceText, note, saveContentNow, triggerGitHubSync, resolveWikilinks, setEditorContentWithAttachments]);
 
+  const chatAction = !note.is_trashed && (
+    <Button
+      type="button"
+      size="icon"
+      className={cn("h-8 w-8 shrink-0 max-sm:h-11 max-sm:w-11", showChat && "ring-2 ring-inset ring-primary-foreground/40")}
+      title={showChat ? "Close Godspeed chat" : "Chat with Godspeed"}
+      aria-label={showChat ? "Close Godspeed chat" : "Chat with Godspeed"}
+      aria-pressed={showChat}
+      aria-expanded={showChat}
+      onClick={() => window.dispatchEvent(new Event("godspeed:toggle-note-chat"))}
+    >
+      <MessageSquare className="h-4 w-4" aria-hidden="true" />
+    </Button>
+  );
+
   return (
     <div className="flex h-full">
     <div className="flex flex-col h-full flex-1 min-w-0">
-      {!note.is_trashed && <div className="px-4 py-1.5 border-b border-border shrink-0 bg-background">
-        <Button variant="ghost" className={cn("h-11 gap-2 px-2",showChat&&"bg-accent text-accent-foreground")} aria-expanded={showChat} onClick={()=>window.dispatchEvent(new Event("godspeed:toggle-note-chat"))}>
-          <ArrowLeft className="h-4 w-4 hidden sm:block" aria-hidden="true"/><MessageSquare className="h-4 w-4" aria-hidden="true"/>{showChat?'Close Godspeed chat':'Chat with Godspeed'}
-        </Button>
-      </div>}
       {/* Action toolbar - only for trashed/source-mode/external notes; for normal notes, actions are merged into the formatting toolbar below */}
       {(note.is_trashed || sourceMode || note.is_external) && (
-        <div className="flex items-center gap-1 px-4 py-2 border-b border-border bg-background shrink-0">
+        <div className="flex min-w-0 items-center gap-1 px-2 py-1 border-b border-border bg-background shrink-0">
+          {chatAction}
+          <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [&>button]:shrink-0">
           {sharedNote?.is_active && (
             <Badge variant="outline" className="h-6 gap-1 text-xs text-muted-foreground">
               <Globe className="h-3 w-3" /> Shared
@@ -1494,6 +1505,7 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
               )}
             </>
           )}
+          </div>
         </div>
       )}
 
@@ -1539,6 +1551,7 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
       {!note.is_trashed && !sourceMode && !note.is_external && (
         <EditorToolbar
           editor={editor}
+          leadingAction={chatAction}
           onInsertWikilink={() => {
             const pos = editor?.state.selection.from ?? 0;
             handleOpenAutocomplete(pos);
