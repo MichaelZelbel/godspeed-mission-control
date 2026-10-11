@@ -1,4 +1,4 @@
-import fs from 'node:fs';import path from 'node:path';import {fileURLToPath} from 'node:url';import {hash,atomic} from './records/store.mjs';
+import fs from 'node:fs';import {durable} from './file-policy.mjs';import path from 'node:path';import {fileURLToPath} from 'node:url';import {hash,atomic} from './records/store.mjs';
 const normalized=bytes=>{const text=bytes.toString('utf8');return hash(!text.includes('\0')&&Buffer.from(text,'utf8').equals(bytes)?text.replaceAll('\r',''):bytes);};
 // In an adopted mission control the owner's skills are the originals the
 // packaged recipes were made from, so the owner's copy wins: a skill folder the
@@ -40,7 +40,11 @@ export function installSkillTree(store,source,target,{adopted=false}={}){
   if(old&&normalized(old)!==digest&&previous[key]!==normalized(old)&&!(known[path.basename(target)+'/'+relative.replaceAll('\\','/')]||[]).includes(normalized(old))){
    if(adopted)continue;
    const incoming=path.join(skillUpdates(store),path.basename(target),digest,relative);atomic(incoming,bytes);conflicts++;const id='skill-upgrade-'+hash([dest,digest]);
-   const within=dest.startsWith(store.root+path.sep),conflict={id,kind:within?'git':'assistant-skill',path:within?path.relative(store.root,dest).replaceAll('\\','/'):null,title:'Review edited '+path.basename(target)+' skill',local:old.toString('utf8'),remote:bytes.toString('utf8'),target:within?undefined:dest,at:new Date().toISOString()};
+   // A recipe in the workspace's own durable files (skills/) is reviewed as a file of the
+   // workspace. One elsewhere is the assistant's own: the bot's Hermes home lies inside the
+   // workspace but under .godspeed/, and until 12 October 2026 its review was filed as a
+   // workspace file there, which the review then refused to settle (not durable state).
+   const inWorkspace=path.relative(store.root,dest).replaceAll('\\','/'),within=dest.startsWith(store.root+path.sep)&&durable(inWorkspace),conflict={id,kind:within?'git':'assistant-skill',path:within?inWorkspace:null,title:'Review edited '+path.basename(target)+' skill',local:old.toString('utf8'),remote:bytes.toString('utf8'),target:within?undefined:dest,at:new Date().toISOString()};
    const conflictFile=path.join(store.root,'conflicts',id+'.json');if(!fs.existsSync(conflictFile))atomic(conflictFile,JSON.stringify(conflict,null,2));continue;
   }
   if(!old||normalized(old)!==digest){if(old)atomic(path.join(skillHistory(store),path.basename(target),normalized(old),relative),old);atomic(dest,bytes);updated++;}previous[key]=digest;
