@@ -8,7 +8,9 @@ import {subscriptionCommand} from './subscriptions.mjs';
 import {watchCommand,addWatchTopic} from './watch-commands.mjs';
 import {leadCommand} from './lead-commands.mjs';
 import {radarCommand} from './radar-lifecycle.mjs';
-import {localParts,addDays,zonedToUtc} from '../../third-party/addons/godspeed-coach/lib/clock.mjs';
+import {localParts,addDays,zonedToUtc,now as clockNow} from '../../third-party/addons/godspeed-coach/lib/clock.mjs';
+import {trackerOperation,TRACKER_OPERATIONS} from './tracker-operations.mjs';
+import {proposalState} from './trackers.mjs';
 import {nextCalendarRun} from './jobs/calendar.mjs';
 import {resumeChanges} from './jobs/routine-control.mjs';
 import {readTable} from '../../third-party/addons/godspeed-coach/lib/auto.mjs';
@@ -28,6 +30,8 @@ routine-change {id,paused?,calendar?:{time:HH:MM,weekdays?:[0..6]}}; forecast-se
 work-allow-local {id,note_id}: allow the selected work to edit exactly this local note, preserving its current revision as the precondition.
 work-retry-draft {id}: explicitly retry a failed or interrupted local draft, preserving all prior attempts and versions. Never retry an applied or outward action.
 work-record-observation {id,evidence,passed:boolean,value?:number}: record the user's actual reported check for the exact selected observation task. Failed checks are evidence, not successful outcomes. Never invent a value or infer completion from a draft.
+tracker-hold {name,unit?,cadence?:daily|any,fields?:[{key,label,type:number|text|boolean}],talk?:health|work-money|relationships,value?,data?,note?,on?:YYYY-MM-DD,at?:HH:MM}: the user says "track <something>" and no supplied tracker has that name or clearly means it. It asks once; it creates nothing.
+tracker-create {proposal_id?,name?,unit?,cadence?,fields?,talk?}: the user says yes to a supplied pending tracker question (pass its proposal_id; carry any change he asked for, such as another name or unit), or explicitly asks to set up a tracker with its columns.
 Every operation MUST contain source_quote. Copy the entire current user message exactly into that field, including the request verb. Without it, no operation can run. Use supplied IDs; ask to resolve ambiguity. ISO dates must include timezone. No outward actions or credentials. Never claim a change persisted until the operation succeeds.`;
 const required=(value,label)=>{if(typeof value!=='string'||!value.trim())throw Error(label+' is required');return value.trim();};
 const date=(value,label)=>{required(value,label);if(!Number.isFinite(Date.parse(value))||!/(Z|[+-]\d\d:\d\d)$/.test(value))throw Error(label+' needs an ISO date with timezone');return new Date(value).toISOString();};
@@ -131,6 +135,8 @@ export function personalOperation(domains,input){
   if(type==='habit-agree')store.save('jobs',{id:'habit-check-'+result.id,kind:'habit-check',habit_id:result.id,owner:store.get('settings','installation')?.owner||store.device,paused:false,next_run:date(input.check_at,'Next check-in'),interval_ms:7*86400000,state:'pending'});
   return result;
  }
+ // Trackers (D-321): collections with a tracker card, in tracker-operations.mjs.
+ if(TRACKER_OPERATIONS.includes(type))return trackerOperation(domains,input);
  const old=table=>{const r=store.get(table,required(input.id,'Record ID'));if(!r||r.removed_at)throw Error('Record does not exist');if(input.expected&&input.expected!==r._hash)store.conflict(table,input,r);return r;};
  if(type==='work-record-observation'){
   const item=old('work_items'),evidence=required(input.evidence,'Reported check evidence');
@@ -258,7 +264,10 @@ export function validateConversationOperations(domains,input,operations){
   'forecast-settle':/\b(?:settle|record|resolve|log|notiere)\b[\s\S]*(?:forecast|prediction|prognose)/i,
   'work-allow-local':/\b(?:allow|approve|authori[sz]e|erlaube|genehmige)\b[\s\S]*(?:edit|change|update|write|note|ändern|notiz)/i,
   'work-retry-draft':/\b(?:retry|try again|wiederhole|erneut)\b[\s\S]*(?:draft|work|entwurf|aufgabe)/i,
-  'work-record-observation':/\b(?:record|log|save|notiere|speichere)\b[\s\S]*(?:check|review|observation|result|prüfung|ergebnis)/i
+  'work-record-observation':/\b(?:record|log|save|notiere|speichere)\b[\s\S]*(?:check|review|observation|result|prüfung|ergebnis)/i,
+  // "track" is the spoken word, never "log" (D-261, D-321).
+  'tracker-hold':/\btrack(?:e|en|ing)?\b/i,
+  'tracker-create':/^\s*(?:yes|yeah|yep|yup|sure|ok(?:ay)?|go ahead|do it|start it|ja|jo|klar|mach(?: das)?)\b|\b(?:i want to track|start tracking|new tracker|make a tracker|create a tracker|ich will .* tracken)\b/i
  };
  // What each operation does, in the words a person uses. A request that says
  // not to do that ("Don't remind me", "Please don't pause", "Erinnere mich
@@ -271,7 +280,8 @@ export function validateConversationOperations(domains,input,operations){
   'habit-agree':'agree|try|commit|stimme','habit-observe':'record|log|track|notiere','journal-add':'journal|write|record|log|notiere|schreibe','journal-switch':'enable|disable|turn|start|stop|switch|aktiviere|deaktiviere',
   'health-add':'record|log|save|track|notiere|speichere','memory-confirm':'remember|save|correct|update|merke|speichere|korrigiere','memory-propose':'remember|save|merke|speichere',
   'routine-change':'pause|resume|schedule|change|stop|start|move|pausiere|ändere|verschiebe','forecast-settle':'settle|record|resolve|log|notiere',
-  'work-allow-local':'allow|approve|authori[sz]e|erlaube|genehmige','work-retry-draft':'retry|try|redo|wiederhole','work-record-observation':'record|log|save|notiere|speichere'};
+  'work-allow-local':'allow|approve|authori[sz]e|erlaube|genehmige','work-retry-draft':'retry|try|redo|wiederhole','work-record-observation':'record|log|save|notiere|speichere',
+  'tracker-hold':'track|tracke','tracker-create':'track|create|start|make'};
  const refuses=type=>{const v=verbs[type];if(!v)return false;
   return new RegExp("(?<!\\p{L})(?:do not|don.t|dont|never|must not|should not|niemals)(?!\\s+forget)\\s+(?:[\\p{L}']+\\s+){0,2}?(?:"+v+")",'iu').test(message)||new RegExp("(?<!\\p{L})(?:"+v+")\\p{L}*\\s+(?:(?:mich|mir|das|es|dies|ihn|sie|uns)\\s+)?nicht(?!\\p{L})",'iu').test(message);};
  for(const operation of operations){
@@ -297,6 +307,15 @@ export function validateConversationOperations(domains,input,operations){
     if(![row.id,row.name,row.title,...(row.aliases||[])].filter(Boolean).some(name=>message.toLocaleLowerCase().includes(name.toLocaleLowerCase())))throw Error('The request must identify the person or thing whose fact is being saved');
    }
   }
+  if(['tracker-hold','track'].includes(operation.type)){
+   // The number saved must be a number he said, as a number of its own (a 9 is
+   // not in "92"); "92,5" may arrive as 92.5.
+   const said=v=>v===undefined||v===null||v===''||[String(v),String(v).replace('.',',')].some(x=>new RegExp('(?<![\\d.,])'+x.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'(?!\\d|[.,]\\d)').test(message));
+   if(!said(operation.value)||Object.values(operation.data||{}).some(v=>typeof v==='number'&&!said(v)))throw Error('A tracked value must be one you said');
+   // Another day needs his word for it.
+   if(operation.on&&!/\b(?:yesterday|gestern|vorgestern|today|heute|tomorrow|morgen|on \w+|am \w+|last \w+|letzten? \w+|\d{1,2}[./]\d{1,2}|\d{4}-\d\d-\d\d|\d{1,2}(?:st|nd|rd|th)?\s+[a-z]+|monday|tuesday|wednesday|thursday|friday|saturday|sunday|montag|dienstag|mittwoch|donnerstag|freitag|samstag|sonntag)\b/i.test(message))throw Error('Say which day if it was not today');
+  }
+  if(operation.type==='tracker-create'&&operation.proposal_id&&proposalState(domains.store,domains.store.get('tracker_proposals',operation.proposal_id),clockNow())!=='pending')throw Error('That question has expired. Say it again and I will ask once more.');
   if(operation.type==='work-record-observation'){
    const item=domains.store.get('work_items',operation.id);
    if(!item||![item.id,item.title].filter(Boolean).some(name=>message.includes(name))||!message.includes(operation.evidence)||operation.value!==undefined&&!message.includes(String(operation.value)))throw Error('A reported check must identify its exact task and supplied evidence');

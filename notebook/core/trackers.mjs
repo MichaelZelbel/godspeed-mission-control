@@ -15,6 +15,21 @@ export const trackers=store=>store.list('collections').filter(card);
 // Only a collection with a card is ever a tracker: an ordinary "Belly" or
 // "Movies & TV" collection is never matched and never changed.
 export function findTracker(store,name){const n=norm(name),candidates=trackers(store).filter(c=>[c.name,...(c.tracker.names||[])].some(x=>norm(x)===n));return {match:candidates.length===1?candidates[0]:null,candidates};}
+// A held first entry ("track belly 92" for a tracker that does not exist yet) is
+// a tracker_proposals record, written once and never changed: over MCP an
+// assistant may change an existing record only with its current hash, and the
+// "yes" that answers it names none. So what became of it is read here, from what
+// was written after it: a tracker made from it (its card names it), a newer
+// question for the same name that replaced it, its 24 hours, or a tracker of
+// that name made another way.
+export function proposalState(store,p,now=new Date()){
+ if(!p)return 'missing';
+ const all=trackers(store);if(all.some(c=>c.tracker.proposal_id===p.id))return 'created';
+ if(store.list('tracker_proposals').some(o=>o.id!==p.id&&(o.replaces||[]).includes(p.id)))return 'dropped';
+ if(!(now-Date.parse(p.created_at)<=HOLD_MS))return 'expired';
+ if(all.some(c=>[c.name,...(c.tracker.names||[])].some(x=>norm(x)===norm(p.name))))return 'dropped';
+ return 'pending';
+}
 export const entries=(store,c)=>store.list('collection_items').filter(i=>i.collection_id===c.id).sort((a,b)=>String(a.data?.when).localeCompare(String(b.data?.when))||String(a.created_at).localeCompare(String(b.created_at)));
 const dayMs=day=>Date.parse(day+'T00:00:00Z');
 export function trackerStatus(store,c,now=new Date()){const last=entries(store,c).at(-1),day=String(last?.data?.when||c.created_at||'').slice(0,10);return (now-dayMs(day))/86400000>REST_DAYS?'resting':'active';}
