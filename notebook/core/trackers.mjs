@@ -69,7 +69,7 @@ const ordinal=n=>n+(n%100>=11&&n%100<=13?'th':['th','st','nd','rd'][n%10]||'th')
 export function holdQuestion(p,today){
  const fields=(p.field_schema||[]).filter(f=>!['when','note'].includes(f.key)),one=fields.length===1&&fields[0].type==='number'?fields[0]:null;
  const shape=one?'one number'+(one.unit?' in '+one.unit:''):fields.length?'with '+fields.map(f=>f.label).join(', '):'counting each time';
- const kept=p.entry?(one&&p.entry.data[one.key]!==undefined?" I've kept the "+fmt(p.entry.data[one.key])+' for ':" I've kept this entry for ")+(p.entry.when.slice(0,10)===today?'today':longDay(p.entry.when.slice(0,10)))+'.':'';
+ const kept=p.entry?(one&&p.entry.data[one.key]!==undefined?" I've kept the "+fmt(p.entry.data[one.key])+' for ':" I've kept this one for ")+(p.entry.when.slice(0,10)===today?'today':longDay(p.entry.when.slice(0,10)))+'.':'';
  return 'Start a new tracker called '+p.name+', '+shape+', '+(p.cadence==='any'?'as often as you like':'once a day')+'?'+kept;
 }
 export function createdReply(c,entry){

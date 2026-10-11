@@ -17,7 +17,10 @@ export function trackerOperation(domains,input){
   const name=String(input.name||'').trim();if(!name)throw Error('Say what to track');
   if(findTracker(store,name).candidates.length)throw Error('There is already a tracker called '+name+'; track it instead');
   const cadence=input.cadence==='any'?'any':'daily',field_schema=schemaFor({unit:input.unit,fields:input.fields,cadence}),shape={name,field_schema};
-  const entry=has(input)?{when:whenFor({on:input.on,at:input.at,cadence},now,zone),data:entryData(shape,input)}:null;
+  // A tracker with no columns of its own counts each time: "track sauna" is itself the
+  // entry, held like a number would be, so the yes counts it (design: nothing he said is lost).
+  const counting=!field_schema.some(f=>!['when','note'].includes(f.key));
+  const entry=has(input)||counting?{when:whenFor({on:input.on,at:input.at,cadence},now,zone),data:entryData(shape,input)}:null;
   // An earlier open question for the same name is replaced by this one; it is
   // named here rather than changed (proposalState in trackers.mjs).
   const replaces=store.list('tracker_proposals').filter(o=>norm(o.name)===norm(name)&&proposalState(store,o,now)==='pending').map(o=>o.id);

@@ -82,6 +82,18 @@ test('a number he did not say, a future day, or a quoted track writes nothing',a
   assert.equal(store.list('tracker_proposals').length,0);
 });
 
+test('a counting tracker keeps the time he said it, so the yes counts it and the next is the second',async()=>{
+  const {store,domains}=fixture();
+  const held=await say(domains,'track sauna',[{type:'tracker-hold',name:'Sauna',cadence:'any',fields:[]}]);
+  assert.equal(held.operation_results[0].reply,"Start a new tracker called Sauna, counting each time, as often as you like? I've kept this one for today.");
+  const [p]=store.list('tracker_proposals');
+  const created=await say(domains,'yes',[{type:'tracker-create',proposal_id:p.id}]);
+  assert.equal(created.operation_results[0].reply,'Tracked: Sauna. From now on just say "track sauna".');
+  const [sauna]=trackers(store);assert.equal(entries(store,sauna).length,1);
+  const again=await say(domains,'track sauna again',[{type:'track',tracker:sauna.id}]);
+  assert.equal(again.operation_results[0].reply,'Tracked: Sauna, 2nd time this month.');
+});
+
 test('a tracker names its coaching talk by the area\'s own name, and nothing else',async()=>{
   const {store,domains}=fixture();
   const r=await say(domains,'I want to track invoices sent',[{type:'tracker-create',name:'Invoices',unit:'invoices',talk:'work'}]);
@@ -166,5 +178,5 @@ test('tracker-list gives each tracker with its hashes, and the live questions',a
   assert.equal(list.trackers.length,1);assert.equal(list.trackers[0].hash,store.get('collections',belly.id)._hash);
   assert.equal(list.trackers[0].today.hash,entries(store,belly)[0]._hash);assert.equal(list.trackers[0].recent.length,1);
   assert.equal(list.trackers[0].last.id,entries(store,belly)[0].id);
-  assert.deepEqual(list.pending.map(p=>p.name),['Sauna']);assert.match(list.pending[0].question,/^Start a new tracker called Sauna, counting each time, as often as you like\?$/);
+  assert.deepEqual(list.pending.map(p=>p.name),['Sauna']);assert.match(list.pending[0].question,/^Start a new tracker called Sauna, counting each time, as often as you like\? I've kept this one for today\.$/);
 });
