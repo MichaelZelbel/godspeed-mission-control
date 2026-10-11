@@ -1,6 +1,6 @@
 ---
 name: headache-tracker
-description: Headache and migraine tracker you talk to. Use when the person says "track headache ...", or says they have or had a headache or migraine, how bad it is, where it hurts, what it feels like, that they took a painkiller or other medicine for it, or that it is over ("headache since 6:30, right side, pounding, took two Thomapyrin", "Kopfschmerzen seit halb sieben", "headache over", "Kopfweh ist weg"); when the [godspeed-headache] block shows an open headache and the message follows up on it; when they correct or delete a logged headache; and when they ask how often they have headaches, what the pattern is, or how many painkiller days they had.
+description: Headache and migraine tracker you talk to. Use when the person says they have or had a headache or migraine, how bad it is, where it hurts, what it feels like, that they took a painkiller or other medicine for it, or that it is over ("headache since 6:30, right side, pounding, took two Thomapyrin", "Kopfschmerzen seit halb sieben", "headache over", "Kopfweh ist weg"); when the [godspeed-headache] block shows an open headache and the message follows up on it; when they correct or delete a tracked headache; and when they ask how often they have headaches, what the pattern is, or how many painkiller days they had.
 ---
 
 ## What this is
@@ -10,15 +10,27 @@ message, what is happening; you turn it into one `godspeed-headache` command and
 line. The value is the pattern across months, and a pattern only exists if logging costs them
 nothing. So: no questionnaire, no menu, no lecture. Save, confirm, be quiet.
 
-"Track headache ..." or "track a pill" is the same as saying it without "track": the person
-dictates, and speech recognition hears "track" reliably where it turns "log" into "look". In your
-own replies say "tracked" rather than "logged", so the word they hear back is the word they can say.
+A message that starts with "track" ("track headache since 6:30", "track a pill") reaches you
+through the tracker recipe when this mission control has one, and it means the same as the
+sentence without "track": the person dictates, and speech recognition hears "track" reliably where
+it turns "log" into "look". In your own replies say "tracked" rather than "logged", so the word
+they hear back is the word they can say.
+
+Where the mission control has the notebook, every headache is one row of its Headaches tracker,
+and every pill taken with no headache going on is a row of its own; the command reads and writes
+those rows. A change the person makes to a row in the notebook is what the command reads next.
 
 ## Save first, always
 
 Run the command BEFORE writing any reply, with the person's words verbatim in `--words` and
 `--source telegram-voice`, `telegram` or `desk`. A voice message arrives as its transcript; read
 misheard medicine names generously (Tomapyrin = Thomapyrin).
+
+Words that run over more than one line go in a file, never on the command line: write them
+with your file tool, exactly as they arrived, to a file of their own somewhere temporary (never
+inside the headache diary), and pass `--words-file <file>` in place of `--words`. No shell can
+cut or change what is in a file. If the command answers that it reached godspeed-headache cut
+short, nothing was saved: save it again with `--words-file`.
 
 **A headache that is going on now:**
 
@@ -39,7 +51,7 @@ because it still counts as a painkiller day):
 
 **It is over:** `godspeed-headache end [--at <time>] --words "<verbatim>"`
 
-**Logged by mistake / "delete that":** `godspeed-headache cancel [--episode <id>]`
+**Tracked by mistake / "delete that":** `godspeed-headache cancel [--episode <id>]`
 
 `set`, `end`, `cancel` and `med` act on the open headache unless `--episode <id>` names another;
 the ids are in the [godspeed-headache] block, and `godspeed-headache list --days 7 --json` shows recent ones.

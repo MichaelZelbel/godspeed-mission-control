@@ -29,6 +29,7 @@ def _bin():
 
 def on_pre_llm_call(**kwargs):
     try:
+        # The Godspeed notebook names the command it ships (GODSPEED_HEADACHE_SCRIPT) and its node.
         script = os.environ.get("GODSPEED_HEADACHE_SCRIPT")
         args = [os.environ.get("GODSPEED_NODE", "node"), script, "context"] if script else [_bin(), "context"]
         mc_dir = _mission_control()

@@ -29,3 +29,29 @@ test('the tracker recipe is listed, and an unedited earlier journal or coach rec
   assert.ok(revisions['coach/SKILL.md'].includes('70704119ef404a19a6d92b058f7adb7e42a8f64fd94ad28912933b55372c979b'));
   for(const name of ['tracker','interstitial-journal','coach'])assert.ok(revisions[name+'/SKILL.md'].includes(digest(read('../recipes/'+name+'/SKILL.md'))),name+' ships a known revision');
 });
+
+// Step 2 (D-321): only the tracker recipe claims a message that starts with "track". The coach and
+// the headache tracker keep their own words ("did head lifts", "headache since 6:30") and get
+// "track ..." handed on by the tracker recipe.
+test('the coach and headache recipes no longer claim "track", and their vendored copies are what ships',()=>{
+  for(const name of ['coach','headache-tracker']){
+    const text=read('../recipes/'+name+'/SKILL.md'),description=text.match(/^description: (.*)$/m)[1];
+    assert.doesNotMatch(description,/"track /i,name+' no longer claims track');
+    assert.match(text,/starts with "track"/,name+' says where track goes');
+  }
+  assert.match(read('../recipes/coach/SKILL.md').match(/^description: (.*)$/m)[1],/"did head lifts", "head lifts done", "Kopfheben erledigt"/);
+  assert.match(read('../recipes/headache-tracker/SKILL.md').match(/^description: (.*)$/m)[1],/"headache over", "Kopfweh ist weg"/);
+  assert.equal(read('../recipes/headache-tracker/SKILL.md'),read('../../third-party/addons/godspeed-headache/skill/headache-tracker/SKILL.md'));
+  assert.equal(read('../recipes/coach/SKILL.md'),read('../../third-party/addons/godspeed-coach/skill/coach/SKILL.md'));
+  const revisions=JSON.parse(read('../data/recipe-revisions.json'));
+  // The texts shipped until 12 October 2026, which the bot's home and the workspace may still hold.
+  assert.ok(revisions['coach/SKILL.md'].includes('00d0540e750f300be679461b625225655837069818a5ce17e9a5b0f6ca7810ee'));
+  assert.ok(revisions['headache-tracker/SKILL.md'].includes('a817b4a2f7c3c00ac2792cff4b0d23450332dd8607ad9e4eccc15c577757363b'));
+  for(const name of ['coach','headache-tracker'])assert.ok(revisions[name+'/SKILL.md'].includes(digest(read('../recipes/'+name+'/SKILL.md'))),name+' ships a known revision');
+});
+
+// The headache add-on writes the notebook's record files itself (its lib/notebook.mjs), with a
+// copy of the notebook's YAML module: the two must never drift apart.
+test('the headache add-on carries the notebook\'s own YAML module',()=>{
+  assert.equal(read('../../third-party/addons/godspeed-headache/lib/yaml.mjs'),read('../core/records/yaml.mjs'));
+});

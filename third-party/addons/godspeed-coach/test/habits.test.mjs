@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { addHabit, listHabits, findHabit, track, answerOn, askedOn, dueOn, stats, verdict, setStatus, readHabit, parseDays, daysWords } from "../lib/habits.mjs";
+import { addHabit, listHabits, findHabit, track, untrack, answerOn, askedOn, dueOn, stats, verdict, setStatus, readHabit, parseDays, daysWords } from "../lib/habits.mjs";
+import fs from "node:fs";
+import { fileURLToPath } from "node:url";
 import { addDays } from "../lib/clock.mjs";
 import { tmpMission, area } from "./helpers.mjs";
 
@@ -95,4 +97,33 @@ test("struggling: under half of at least five answered days in the last two week
   assert.equal(verdict(h, "2026-10-04"), "struggling");
   const s = stats(h, "2026-10-04", 14);
   assert.equal(s.applicable, 6); assert.equal(s.done, 1); assert.equal(s.no, 5);
+});
+
+// "Delete the last walk to work" (D-321): a day tracked by mistake is taken back, line and all, so
+// the file is exactly what it was. An older answer that day comes back; "asked" lines stay.
+test("a tracked day is taken back: the newest answer goes, an older one and asked stay", () => {
+  const mc = mission();
+  let h = lifts(mc);
+  h = track(h, "2026-09-29", "asked", "tick", "");
+  const before = fs.readFileSync(h.file, "utf8");
+  h = track(h, "2026-09-29", "done", "telegram", "did head lifts");
+  h = untrack(h, "2026-09-29");
+  assert.equal(fs.readFileSync(h.file, "utf8"), before, "the file is as it was");
+  assert.equal(answerOn(h, "2026-09-29"), null);
+  assert.equal(askedOn(h, "2026-09-29"), true);
+  h = track(h, "2026-09-30", "done", "telegram", "yes");
+  h = track(h, "2026-09-30", "no", "telegram", "actually no");
+  h = untrack(h, "2026-09-30");
+  assert.equal(answerOn(h, "2026-09-30"), "done");
+  assert.throws(() => untrack(h, "2026-10-01"), /No answer is tracked for 2026-10-01/);
+});
+
+// One listener owns "track" (D-321): the tracker recipe takes a message that starts with it and
+// records the habit itself, so the coach no longer names "track ..." among its own triggers.
+test("the coach recipe no longer claims messages that start with track", () => {
+  const text = fs.readFileSync(fileURLToPath(new URL("../skill/coach/SKILL.md", import.meta.url)), "utf8").replace(/\r/g, "");
+  const description = text.match(/^description: (.*)$/m)[1];
+  assert.doesNotMatch(description, /"track /i);
+  assert.match(description, /"did head lifts", "head lifts done", "Kopfheben erledigt"/);
+  assert.match(text, /starts with "track" belongs to the tracker recipe/);
 });

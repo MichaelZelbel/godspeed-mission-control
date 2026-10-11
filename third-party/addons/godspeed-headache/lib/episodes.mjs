@@ -84,9 +84,13 @@ export const openEpisodes = (entries) => episodesFrom(entries).episodes.filter((
 
 // Which episode a follow-up means: the one named, else the newest open one. A pill or a detail
 // said without naming anything belongs to the headache that is going on now.
-export function resolveEpisode(entries, ref, { includeClosed = false } = {}) {
-  const { episodes } = episodesFrom(entries);
-  if (ref) return episodes.find((e) => e.id === ref) || null;
+export function resolveEpisode(entries, ref, opts = {}) {
+  return resolveFrom(episodesFrom(entries).episodes, ref, opts);
+}
+// The same, from headaches already worked out (the notebook's rows, lib/rows.mjs). A row he made
+// in the notebook by hand has no id of its own, so its row id names it.
+export function resolveFrom(episodes, ref, { includeClosed = false } = {}) {
+  if (ref) return episodes.find((e) => e.id === ref || e.item === ref) || null;
   const open = episodes.filter((e) => e.open);
   if (open.length) return open[open.length - 1];
   return includeClosed ? episodes[episodes.length - 1] || null : null;

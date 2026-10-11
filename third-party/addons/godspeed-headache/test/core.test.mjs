@@ -186,6 +186,24 @@ test("a pill said with a headache still going was taken now, with a finished one
   assert.equal(JSON.parse(r.stdout).episode.meds[0].taken, "2026-09-27T04:30:00.000Z");
 });
 
+test("a pill keeps the person's words, once, with a headache open or not, from --words or --words-file", async () => {
+  const { readEntries } = await import("../lib/store.mjs");
+  const dir = mc();
+  const said = "Took two Thomapyrin.\nThe first one did nothing.";
+  let r = cli(dir, "2026-09-27T07:10:00Z", "med", "Thomapyrin Intensiv", "--dose", "2 tablets", "--words", said, "--source", "telegram");
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(cli(dir, "2026-09-27T07:20:00Z", "start", "--at", "07:00", "--words", "Kopfweh").status, 0);
+  const file = path.join(dir, "said.txt"); fs.writeFileSync(file, said);
+  r = cli(dir, "2026-09-27T07:30:00Z", "med", "--med", "Ibuprofen: 400 mg", "--med", "Coffee", "--words-file", file);
+  assert.equal(r.status, 0, r.stderr);
+  const meds = readEntries(dir).filter((e) => e.kind === "med").map((e) => [e.med, e.episode || null, e.words, e.source]);
+  assert.deepEqual(meds.sort((a, b) => a[0].localeCompare(b[0])), [
+    ["Coffee", "h-20260927-0700", "", "cli"],
+    ["Ibuprofen", "h-20260927-0700", said, "cli"],
+    ["Thomapyrin Intensiv", null, said, "telegram"],
+  ]);
+});
+
 test("a pill with no headache open is still saved", () => {
   const dir = mc();
   const r = cli(dir, "2026-09-27T07:10:00Z", "med", "Thomapyrin Intensiv", "--dose", "1 tablet");

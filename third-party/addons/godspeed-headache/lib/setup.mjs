@@ -76,10 +76,34 @@ async function stepSettings(mcDir, f) {
   }
   const readme = path.join(mcDir, "routines", "headache", "README.md");
   if (!fs.existsSync(readme)) {
-    fs.writeFileSync(readme, "# headache\n\nYour headache diary. Every file under entries/ is one thing you said: a headache starting, a detail, a pill, an end. Nothing is ever edited; a headache is computed from the entries that name it.\n`godspeed-headache list` shows the headaches, `godspeed-headache patterns` what they have in common. The settings are in settings.json.\n");
+    // With the notebook's Headaches tracker the headaches are its rows (lib/diary.mjs).
+    const { openDiary } = await import("./diary.mjs"), { readmeText } = await import("./migrate.mjs");
+    if (openDiary(mcDir, loadSettings(mcDir)).kind === "notebook") fs.writeFileSync(readme, readmeText("", ""));
+    else fs.writeFileSync(readme, "# headache\n\nYour headache diary. Every file under entries/ is one thing you said: a headache starting, a detail, a pill, an end. Nothing is ever edited; a headache is computed from the entries that name it.\n`godspeed-headache list` shows the headaches, `godspeed-headache patterns` what they have in common. The settings are in settings.json.\n");
     written.push(readme);
   }
   return { written, failed: false };
+}
+
+// PowerShell picks a .ps1 over a .cmd of the same name in the same folder, and under the
+// Restricted or AllSigned policy it refuses the .ps1 instead of falling back to the .cmd. So the
+// PowerShell launcher is written only where every PowerShell on this computer would run it.
+const RUNS_LOCAL_SCRIPTS = new Set(["unrestricted", "remotesigned", "bypass"]);
+export function ps1Allowed(policies) {
+  return policies.length > 0 && policies.every((p) => RUNS_LOCAL_SCRIPTS.has(String(p.policy).trim().toLowerCase()));
+}
+
+// The policy a new PowerShell window gets, so the one this process may have been started with
+// (PSExecutionPolicyPreference, which Claude Code sets to Bypass for its own shells) is left out.
+export function powershellPolicies() {
+  const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => k.toLowerCase() !== "psexecutionpolicypreference"));
+  const found = [];
+  for (const exe of ["powershell.exe", "pwsh.exe"]) {
+    const r = spawnSync(exe, ["-NoProfile", "-NonInteractive", "-Command", "Get-ExecutionPolicy"], { encoding: "utf8", env, timeout: 30000, windowsHide: true });
+    if (r.error && r.error.code === "ENOENT") continue;
+    found.push({ exe, policy: r.status === 0 ? r.stdout.trim() : "unknown" });
+  }
+  return found;
 }
 
 function stepCommand() {
@@ -91,15 +115,24 @@ function stepCommand() {
   }
   const dir = P.binDir();
   fs.mkdirSync(dir, { recursive: true });
-  for (const l of P.launchers(app)) { const f = path.join(dir, l.name); fs.rmSync(f, { force: true }); fs.writeFileSync(f, l.body, { mode: l.mode }); }
+  const policies = isWin ? powershellPolicies() : [];
+  const ps1 = isWin && ps1Allowed(policies);
+  const ps1File = path.join(dir, "godspeed-headache.ps1");
+  // Only a .ps1 this installer wrote is ever removed; one the person wrote is theirs.
+  if (isWin && !ps1 && fs.existsSync(ps1File) && fs.readFileSync(ps1File, "utf8").includes(P.LAUNCHER_STAMP)) fs.rmSync(ps1File, { force: true });
+  for (const l of P.launchers(app, process.platform, { ps1 })) { const f = path.join(dir, l.name); fs.rmSync(f, { force: true }); fs.writeFileSync(f, l.body, { mode: l.mode }); }
+  if (ps1) ok("PowerShell gets its own launcher, so words with line breaks arrive whole");
+  else if (isWin && policies.length) warn(`PowerShell runs no scripts on this computer (${policies.map((p) => `${p.exe}: ${p.policy}`).join(", ")}), so from PowerShell the command goes through cmd.exe, which cannot carry a line break. Words with line breaks then need --words-file <file>. Set-ExecutionPolicy -Scope CurrentUser RemoteSigned, then this setup again, lifts that.`);
   if (P.onPath(dir)) ok(`godspeed-headache is ready to type (${dir})`);
   else warn(`${dir} is not on this terminal's PATH. Open a new terminal; if godspeed-headache is still unknown, use ${path.join(dir, isWin ? "godspeed-headache.cmd" : "godspeed-headache")}`);
   return path.join(dir, "godspeed-headache");
 }
 
 async function stepHermes(mcDir, f) {
+  // --no-hermes means Hermes is not even asked for its version.
+  if (f["no-hermes"]) return { skipped: true };
   const hv = run("hermes", ["--version"]);
-  if (f["no-hermes"] || (hv.status !== 0 && !f["hermes-profile"])) return { skipped: true };
+  if (hv.status !== 0 && !f["hermes-profile"]) return { skipped: true };
   say("Hermes: the open headache before every turn");
   const hp = hermesArgs(f["hermes-profile"]);
   const cfgPath = run("hermes", [...hp, "config", "path"]).stdout.trim().split("\n").pop();
@@ -167,10 +200,15 @@ export async function check(mcDir, f = {}) {
   const s = loadSettings(mcDir);
   line(fs.existsSync(path.join(P.binDir(), isWin ? "godspeed-headache.cmd" : "godspeed-headache")), "godspeed-headache command", "run godspeed-headache setup again", true);
   line(P.onPath(P.binDir()), "command folder on PATH", "open a new terminal, or add " + P.binDir() + " to your PATH");
+  if (isWin) line(fs.existsSync(path.join(P.binDir(), "godspeed-headache.ps1")), "PowerShell launcher (words with line breaks arrive whole)", "PowerShell runs no scripts here, so from PowerShell pass words with line breaks with --words-file <file>");
   const problems = validateSettings(s);
   line(problems.length === 0, "settings", problems.join(" "), true);
   line(fs.existsSync(path.join(P.skillsRoom(mcDir), P.RECIPE, "SKILL.md")), "recipe", "run godspeed-headache setup again", true);
   if (s.daily_table) line(fs.existsSync(s.daily_table), "daily health table", `${s.daily_table} not found; the pattern report skips the comparison`);
+  {
+    const { openDiary } = await import("./diary.mjs");
+    line(true, openDiary(mcDir, s).kind === "notebook" ? "diary: the notebook's Headaches tracker" : "diary: the entry files in routines/headache/entries");
+  }
   const probe = path.join(mcDir, "routines", "headache", ".write-probe");
   try {
     fs.mkdirSync(path.dirname(probe), { recursive: true });

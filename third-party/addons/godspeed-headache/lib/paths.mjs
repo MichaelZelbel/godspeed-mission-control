@@ -62,11 +62,71 @@ export function onPath(dir, envPath = process.env.PATH || "", platform = process
   return envPath.split(sep).filter(Boolean).some((p) => norm(p) === norm(dir));
 }
 
-export function launchers(appDir, platform = process.platform) {
-  const script = path.join(appDir, "bin", "godspeed-headache.mjs");
-  const out = [{ name: "godspeed-headache", body: `#!/bin/sh\nexec node "${script.replace(/\\/g, "/")}" "$@"\n`, mode: 0o755 }];
-  if (platform === "win32") out.push({ name: "godspeed-headache.cmd", body: `@echo off\r\nnode "${script}" %*\r\n`, mode: 0o644 });
+export const LAUNCHER_STAMP = "Written by godspeed-headache setup.";
+
+// One launcher per shell, each built so the person's words arrive exactly as given (lib/argv.mjs):
+// - sh (Linux, macOS, and Git Bash on Windows). On Windows, Git Bash rewrites any argument that
+//   starts with / into a Windows path when it starts node, so "/ right side" would arrive as
+//   "C:/Program Files/Git/ right side"; that rewriting is switched off for this one call.
+// - .cmd (cmd.exe). It cannot carry a line break, so it marks where its arguments end and the
+//   command refuses a line that was cut.
+// - .ps1 (PowerShell, which picks it over the .cmd in the same folder), only when ps1 is true:
+//   PowerShell refuses every .ps1 under a Restricted or AllSigned policy instead of falling back
+//   to the .cmd, so setup writes it only where PowerShell runs it (setup.mjs, ps1Allowed).
+export function launchers(appDir, platform = process.platform, { ps1 = false } = {}) {
+  // Joined the way the launcher's own system joins paths, whichever computer writes it.
+  const script = (platform === "win32" ? path.win32 : path.posix).join(appDir, "bin", "godspeed-headache.mjs");
+  const posix = script.replace(/\\/g, "/");
+  if (platform !== "win32") return [{ name: "godspeed-headache", body: `#!/bin/sh\nexec node "${posix}" "$@"\n`, mode: 0o755 }];
+  // What the two switches held before is passed along, and node puts it back before it starts
+  // anything (lib/argv.mjs, restoreShellEnv): git hooks run in Git Bash too, and they may count
+  // on the rewriting this switches off.
+  const out = [{
+    name: "godspeed-headache",
+    body: [
+      "#!/bin/sh",
+      `# ${LAUNCHER_STAMP} Git Bash rewrites an argument that starts with / into a Windows path when`,
+      "# it starts node; that is switched off for this one call, so the words arrive as they were given.",
+      'export GODSPEED_HEADACHE_PATHCONV_WAS="${MSYS_NO_PATHCONV+x}${MSYS_NO_PATHCONV-}"',
+      'export GODSPEED_HEADACHE_ARGCONV_WAS="${MSYS2_ARG_CONV_EXCL+x}${MSYS2_ARG_CONV_EXCL-}"',
+      `MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' exec node "${posix}" "$@"`,
+      "",
+    ].join("\n"),
+    mode: 0o755,
+  }];
+  out.push({
+    name: "godspeed-headache.cmd",
+    body: [
+      "@echo off",
+      `rem ${LAUNCHER_STAMP} cmd.exe stops reading a command line at its first line break`,
+      "rem and drops the rest. The line as it was given, and a marker after the arguments, let",
+      "rem godspeed-headache see that and refuse instead of saving half of it.",
+      "setlocal EnableDelayedExpansion",
+      'set "GODSPEED_HEADACHE_CMDLINE=!CMDCMDLINE!"',
+      "setlocal DisableDelayedExpansion",
+      "set GODSPEED_HEADACHE_LAUNCHER=cmd",
+      `node "${script}" %* --end-of-cmd-args`,
+      "",
+    ].join("\r\n"),
+    mode: 0o644,
+  });
+  if (ps1) out.push({ name: "godspeed-headache.ps1", body: ps1Launcher(script, "godspeed-headache"), mode: 0o644 });
   return out;
+}
+
+// PowerShell turns an unquoted a,b into a list; it reaches a .cmd as "a,b", so it is handed over
+// that way here too, never as "a b".
+function ps1Launcher(script, name) {
+  // A byte order mark, so Windows PowerShell 5.1 reads a path with an umlaut in it correctly.
+  return "\ufeff" + [
+    `# ${LAUNCHER_STAMP} PowerShell runs this file in place of ${name}.cmd next to it.`,
+    "# The arguments reach node as one base64 string, so no line break, quote, $ or % in them is",
+    "# changed or cut on the way (cmd.exe stops at the first line break and drops the rest).",
+    "$argvJson = ConvertTo-Json -Compress -InputObject @($args | ForEach-Object { if ($_ -is [array]) { @($_ | ForEach-Object { [string]$_ }) -join ',' } else { [string]$_ } })",
+    `& node '${script.replace(/'/g, "''")}' --argv-base64 ([Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($argvJson)))`,
+    "exit $LASTEXITCODE",
+    "",
+  ].join("\r\n");
 }
 
 export function copyDir(src, dst, { skip = () => false } = {}) {

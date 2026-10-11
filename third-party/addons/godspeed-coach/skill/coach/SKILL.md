@@ -1,6 +1,6 @@
 ---
 name: coach
-description: Recurring coaching talks and daily habits. Use when a coaching talk is due (the talk job's brief says COACH TALK DUE), when the [godspeed-coach] block shows an open talk and the person's message continues it, when they answer the evening habit check (yes / no / skip), when they track a habit ("track head lifts", "did head lifts", "head lifts done", "Kopfheben erledigt"), when a journal entry clearly names an active habit, when they want a new habit or to pause, graduate or drop one, when they want a new coaching talk ("a weekly health talk on Sundays at seven"), when they say "let's do the health talk now" or name any coach area, and when they change a talk's day, time, tone or rhythm.
+description: Recurring coaching talks and daily habits. Use when a coaching talk is due (the talk job's brief says COACH TALK DUE), when the [godspeed-coach] block shows an open talk and the person's message continues it, when they answer the evening habit check (yes / no / skip), when they say they did a habit ("did head lifts", "head lifts done", "Kopfheben erledigt"), when a journal entry clearly names an active habit, when they want a new habit or to pause, graduate or drop one, when they want a new coaching talk ("a weekly health talk on Sundays at seven"), when they say "let's do the health talk now" or name any coach area, and when they change a talk's day, time, tone or rhythm.
 ---
 
 ## What this is
@@ -87,8 +87,12 @@ way ("What changed: nothing yet, they want to think about it") and mark it held.
 
 ## Tracking a habit
 
-They say "track stretching", "did stretching", "stretching done", answer the evening check with
-"yes", "no", "skip" or "yes no", or write a journal entry that clearly names an active habit.
+They say "did stretching", "stretching done", answer the evening check with "yes", "no", "skip"
+or "yes no", or write a journal entry that clearly names an active habit.
+
+A message that starts with "track" belongs to the tracker recipe when this mission control has
+one: it records "track stretching" itself, through the notebook, and nothing more is needed here.
+Without a tracker recipe, "track stretching" means "did stretching".
 
 - One habit: `godspeed-coach habit track "<their words>" --source <telegram | telegram-voice | desk | journal> --words "<verbatim>"`.
   Add `--answer no` or `--answer skip` when they say so, `--date yesterday` for yesterday.

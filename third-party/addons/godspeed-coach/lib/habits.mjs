@@ -115,6 +115,24 @@ export function track(habit, ymd, answer, source = "cli", words = "") {
   return readHabit(habit.file);
 }
 
+// Takes back the newest answer of a day ("delete the last walk to work", D-321): that one line goes,
+// so the file is as it was before it was tracked. An older answer of the same day counts again, and
+// an "asked" line is never removed: it records the evening check, not an answer.
+export function untrack(habit, ymd) {
+  const lines = fs.readFileSync(habit.file, "utf8").split("\n");
+  const start = lines.findIndex((l) => l.trim() === "## Days");
+  let end = lines.findIndex((l, j) => j > start && l.startsWith("## "));
+  if (end === -1) end = lines.length;
+  for (let j = end - 1; start !== -1 && j > start; j--) {
+    const m = lines[j].match(LINE);
+    if (!m || m[1] !== ymd || !ANSWERS.includes(m[2])) continue;
+    lines.splice(j, 1);
+    fs.writeFileSync(habit.file, lines.join("\n"));
+    return readHabit(habit.file);
+  }
+  throw new Error(`No answer is tracked for ${ymd}.`);
+}
+
 export const answerOn = (habit, ymd) => habit.log[ymd]?.answer || null;
 export const askedOn = (habit, ymd) => Boolean(habit.log[ymd]?.asked);
 

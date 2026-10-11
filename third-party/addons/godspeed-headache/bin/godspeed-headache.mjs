@@ -7,15 +7,19 @@ import { findMissionControl } from "../lib/paths.mjs";
 import { now, localParts } from "../lib/clock.mjs";
 import { resolveTime } from "../lib/when.mjs";
 import { loadSettings, setSetting, DEFAULTS } from "../lib/settings.mjs";
-import { writeEntry, readEntries } from "../lib/store.mjs";
-import { episodesFrom, resolveEpisode, newEpisodeId, normSide, normQuality, parsePain, parseMed } from "../lib/episodes.mjs";
+import { openDiary } from "../lib/diary.mjs";
+import { resolveFrom, newEpisodeId, normSide, normQuality, parsePain, parseMed } from "../lib/episodes.mjs";
 import { describe, dailyRollup, patterns, renderPatterns, dayOf } from "../lib/report.mjs";
 import { contextBlock } from "../lib/context.mjs";
 import { commitHeadache, syncInBackground } from "../lib/sync.mjs";
 import { addDays } from "../lib/when.mjs";
+import { decodeArgv, readWordsFile, restoreShellEnv, startedFromGitBash, gitBashPath, LAUNCHER_ENV, CMDLINE_ENV } from "../lib/argv.mjs";
 
 const REPEATABLE = new Set(["symptom", "trigger", "med"]);
-const FLAGS = new Set(["json", "csv", "yes", "no-hermes", "no-claude"]);
+// The values that name a file or folder. From Git Bash these are turned into Windows paths;
+// the person's words never are (lib/argv.mjs).
+const PATH_FLAGS = ["godspeed", "words-file", "extra-skills-dir"];
+const FLAGS = new Set(["json", "csv", "yes", "no-hermes", "no-claude", "dry-run"]);
 function parseArgs(argv) {
   const pos = []; const f = { symptom: [], trigger: [], med: [] };
   for (let i = 0; i < argv.length; i++) {
@@ -33,28 +37,49 @@ function parseArgs(argv) {
   return { pos, f };
 }
 
-const [cmd = "help", ...rest] = process.argv.slice(2);
+// The launchers say how they handed the arguments over (lib/argv.mjs). The markers are read once
+// and taken out of the environment, so a program this one starts (the background sync) never
+// mistakes itself for something the .cmd launcher started.
+const launched = decodeArgv(process.argv.slice(2), process.env);
+const fromGitBash = startedFromGitBash(process.env);
+delete process.env[LAUNCHER_ENV]; delete process.env[CMDLINE_ENV];
+restoreShellEnv(process.env);
+const [cmd = "help", ...rest] = launched.argv;
 const { pos, f, error: argError } = parseArgs(rest);
 const QUIET = cmd === "context";
 function die(msg) { if (QUIET) process.exit(0); console.error(msg); process.exit(1); }
+if (launched.error) die(launched.error);
 if (argError) die(argError);
+if (fromGitBash) for (const k of PATH_FLAGS) if (typeof f[k] === "string") f[k] = gitBashPath(f[k]);
+// Words that hold a line break or a quote travel safest in a file: no shell reads a file's
+// contents, so nothing on the way can cut or change them.
+if (f["words-file"] !== undefined) {
+  if (f.words !== undefined) die("Give the words once: either --words or --words-file, not both.");
+  try { f.words = readWordsFile(f["words-file"]); } catch (e) { die(e.message); }
+}
 
 const mcDir = findMissionControl({ arg: f.godspeed });
 if (!mcDir && !["help", "setup"].includes(cmd)) die("Could not find your mission control folder. Run this from inside it, or add --godspeed <folder>.");
 const s = mcDir ? loadSettings(mcDir) : { ...DEFAULTS };
 const rawSync = process.env.GODSPEED_HEADACHE_GIT_SYNC;
 const syncMode = ["auto", "commit", "off"].includes(rawSync) ? rawSync : s.git_sync;
-const at = now();
 const tz = s.timezone;
+// Which diary this mission control keeps: the notebook's Headaches tracker or the entry files
+// (lib/diary.mjs). In the notebook a time said as "now" is kept to the minute, as he says times.
+const diary = mcDir && !["help", "setup", "_sync"].includes(cmd) ? openDiary(mcDir, s) : null;
+const at = diary?.kind === "notebook" ? new Date(Math.floor(now().getTime() / 60000) * 60000) : now();
 const out = (human, json) => console.log(f.json ? JSON.stringify(json) : human);
 const when = (spec, opts = {}) => { try { return resolveTime(spec, { tz, now: at, ...opts }); } catch (e) { die(e.message); } };
 
 // Everything one command writes is saved first and synced once, in the background, so the
 // person's words are safe before anything slow happens.
+// The notebook's rows reach the other machines with the notebook's own sync.
 function saveAll(list, label) {
-  list.forEach((entry, i) => writeEntry(mcDir, s, { source: f.source || "cli", ...entry }, at, i));
-  syncInBackground(mcDir, `headache: ${label}`, syncMode);
+  try { diary.save(list.map((entry) => ({ source: f.source || "cli", ...entry, at: at.toISOString() })), at); }
+  catch (e) { die(`godspeed-headache: ${e.message}`); }
+  if (diary.kind === "files") syncInBackground(mcDir, `headache: ${label}`, syncMode);
 }
+const log = () => diary.log();
 
 function details() {
   const d = {};
@@ -73,19 +98,19 @@ function medEntries(episode, defaultTaken) {
 }
 
 function needEpisode(opts) {
-  const ep = resolveEpisode(readEntries(mcDir), f.episode, opts);
+  const ep = resolveFrom(log().episodes, f.episode, opts);
   if (!ep) die(f.episode ? `No headache called ${f.episode}.` : "No headache is open. Start one first, or log a finished one with: godspeed-headache log --from 06:30 --to 09:30");
   return ep;
 }
 
-const show = (id) => episodesFrom(readEntries(mcDir)).episodes.find((e) => e.id === id);
+const show = (id) => log().episodes.find((e) => e.id === id);
 
 const commands = {
   start() {
     const start = when(f.at || f.from || "now");
     if (start > at) die("That start time is in the future.");
     const p = localParts(start, tz);
-    const id = newEpisodeId(p.date, p.hm, readEntries(mcDir));
+    const id = newEpisodeId(p.date, p.hm, log().episodes.map((e) => ({ episode: e.id })));
     const list = [{ kind: "start", episode: id, start: start.toISOString(), ...details(), words: f.words || "" }];
     // A pill said with a headache that is still going was taken now ("just took two"); with a
     // finished one logged afterwards, at its start unless a time was said.
@@ -118,12 +143,14 @@ const commands = {
     const name = pos.join(" ").trim();
     if (name) f.med.unshift(name);
     if (!f.med.length) die('Say what you took: godspeed-headache med "Thomapyrin Intensiv" --dose "2 tablets"');
-    const eps = episodesFrom(readEntries(mcDir)).episodes;
-    const ep = f.episode ? eps.find((e) => e.id === f.episode) : eps.filter((e) => e.open).at(-1);
+    const eps = log().episodes;
+    const ep = f.episode ? resolveFrom(eps, f.episode) : eps.filter((e) => e.open).at(-1);
     if (f.episode && !ep) die(`No headache called ${f.episode}.`);
     // A pill with no headache open is still saved: it is a painkiller day, which is what the
-    // overuse count needs.
-    saveAll(medEntries(ep?.id, null), `med ${f.med.join(", ")}`);
+    // overuse count needs. The person's words go with the first pill, once, as said.
+    const meds = medEntries(ep?.id, null);
+    if (f.words && meds.length) meds[0].words = f.words;
+    saveAll(meds, `med ${f.med.join(", ")}`);
     out(ep ? `Saved: ${describe(show(ep.id), tz, at)}` : `Saved: ${f.med.join(", ")} at ${localParts(f.taken ? when(f.taken) : at, tz).hm}, no headache open.`, { ok: true, episode: ep ? show(ep.id) : null });
   },
   end() {
@@ -141,24 +168,23 @@ const commands = {
     out(`Removed from the log: ${describe(ep, tz, at)}`, { ok: true, cancelled: ep.id });
   },
   open() {
-    const eps = episodesFrom(readEntries(mcDir)).episodes.filter((e) => e.open);
+    const eps = log().episodes.filter((e) => e.open);
     out(eps.map((e) => `${e.id}: ${describe(e, tz, at)}`).join("\n") || "No headache open.", eps);
   },
   list() {
     const days = Number(f.days || 30);
     const from = addDays(localParts(at, tz).date, -(days - 1));
-    const log = episodesFrom(readEntries(mcDir));
-    const eps = log.episodes.filter((e) => dayOf(e.start, tz) >= from);
+    const eps = log().episodes.filter((e) => dayOf(e.start, tz) >= from);
     out(eps.map((e) => describe(e, tz, at)).join("\n") || `No headache tracked in the last ${days} days.`, eps);
   },
   patterns() {
-    const r = patterns(episodesFrom(readEntries(mcDir)), s, at, { days: Number(f.days || 90) });
+    const r = patterns(log(), s, at, { days: Number(f.days || 90) });
     out(renderPatterns(r), r);
   },
   daily() {
     const days = Number(f.days || 3650);
     const to = localParts(at, tz).date;
-    const rows = dailyRollup(episodesFrom(readEntries(mcDir)), tz, at, { from: f.from || addDays(to, -(days - 1)), to: f.to || to });
+    const rows = dailyRollup(log(), tz, at, { from: f.from || addDays(to, -(days - 1)), to: f.to || to });
     if (f.csv) {
       const cols = ["date", "headache_min", "headache_max_pain", "headache_episodes", "painkiller_doses"];
       return console.log([cols.join(","), ...rows.map((r) => cols.map((c) => r[c] ?? "").join(","))].join("\n"));
@@ -166,7 +192,7 @@ const commands = {
     out(rows.map((r) => `${r.date}: ${r.headache_min} min, pain ${r.headache_max_pain ?? "-"}, ${r.painkiller_doses} doses`).join("\n") || "Nothing logged.", rows);
   },
   context() {
-    const c = contextBlock(episodesFrom(readEntries(mcDir)).episodes, s, at);
+    const c = contextBlock(log().episodes, s, at);
     if (!c) return;
     if (f.hook === "claude") return console.log(JSON.stringify({ hookSpecificOutput: { hookEventName: "UserPromptSubmit", additionalContext: c } }));
     process.stdout.write(c + "\n");
@@ -181,6 +207,14 @@ const commands = {
       return console.log(`Changed: ${key} = ${v.join(" ")}`);
     }
     die("godspeed-headache config [show | set <key> <value>]");
+  },
+  // Moves the entry files into the notebook's Headaches tracker, checks every headache and every
+  // day before and after, and only then puts the old files away (lib/migrate.mjs).
+  async migrate() {
+    const { migrate, renderMigration } = await import("../lib/migrate.mjs");
+    const r = migrate(mcDir, s, at, { dryRun: !!f["dry-run"] });
+    out(renderMigration(r), r);
+    if (!r.ok) process.exitCode = 1;
   },
   async setup() { const { setup } = await import("../lib/setup.mjs"); process.exitCode = await setup(f); },
   async check() { const { check } = await import("../lib/setup.mjs"); process.exitCode = await check(mcDir, f); },
