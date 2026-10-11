@@ -1,8 +1,7 @@
 # The prompt log
 
-If you switched on conversation collection, this drawer keeps what you typed to
-the AI assistants on this computer, and what they answered, so nothing is lost.
-One file per month.
+This drawer keeps what you type to the AI assistants on your computers, and what
+they answered, so nothing is lost. One file per month.
 
 This drawer is not for reading. It is for looking things up. Months from now you
 will want to know how you got some result you liked, and the answer is the words
@@ -15,23 +14,21 @@ it read the log every session it would drown in old requests and treat them as
 things you want done now. The house rule in `AGENTS.md` says so in one line, and
 that rule is the only reason this drawer is safe to have.
 
-## The honest limit
+## What goes in, and from when
 
-Collection is optional, and the setup the book teaches leaves it off. On a
-computer getting its first mission control, the installer copies nothing until
-you tick a tool on its **Your conversations** page, or name it after `--sources`
-on macOS and Linux (Chapters 2 and 33). With collection off, this drawer stays
-empty and nothing is broken. Use `prompts/library/` next door instead, and save
-the prompts you care about as you go.
+Every new conversation is saved, from the moment Godspeed was installed or
+updated on that computer: a program copies the conversation text that supported
+assistants keep as files there (Hermes, your own mission control's assistant
+included, Claude Code, Codex and OpenCode) once a day, and on a one-click server
+every hour. Chats from before that moment stay out, unless you ticked a tool on
+the installer's **Your conversations** page or named it after `--sources` on a
+Mac or Linux: then that tool's older chats are brought in too. The program cannot
+reach chats that live only in a browser or an online account, so the log never
+holds every conversation you have had with an AI.
 
-When it is on, a program copies the conversation text that supported assistants
-keep as files on this computer: Hermes, Claude Code, Codex and OpenCode. It
-cannot reach chats that live only in a browser or an online account, so the log
-never holds every conversation you have had with an AI.
-
-To stop collecting, ask your assistant to disable that one job (on Windows it is
-the Task Scheduler entry **Godspeed prompt archive**) and to check that it is off.
-Deleting a file in here does not stop the job.
+To stop one computer saving at all, add the line `GODSPEED_PROMPT_ARCHIVE=off` to
+`.godspeed/device.env` in your home folder on that computer. Deleting a file in
+here does not stop it.
 
 ## One file per machine, and why that matters
 
@@ -66,7 +63,9 @@ all look like passwords, so review this drawer before it goes to a remote backup
 ## How to look something up
 
 Ask your assistant. "Search my prompt log for the one about the invoice
-reminder." It searches both drawers, your words and the answers, and shows you
-what it found.
+reminder." It runs `mc-prompt-archive search invoice reminder`, which searches
+both drawers, your words and the answers, and shows you what it found. Your
+assistant does the same by itself when it cannot recall an earlier
+conversation.
 
 Nothing here yet.

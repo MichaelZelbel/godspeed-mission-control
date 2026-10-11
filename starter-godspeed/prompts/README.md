@@ -11,10 +11,10 @@ Two drawers. Each has its own README with the detail.
 
 - **`library/`** is the shelf: the prompts you keep and paste into other tools, one file
   each. You put things here on purpose. Chapters 16 and 38.
-- **`archive/`** is the log, and it is optional: if you switched on conversation
-  collection, what you typed to the assistants on this computer, and what they answered,
-  in date order, filled by a program and never by you. The setup the book teaches leaves
-  collection off, so an empty drawer is normal. Chapters 2 and 38.
+- **`archive/`** is the log: what you type to the assistants on your computers, and what
+  they answered, in date order, filled by a program and never by you, from the day
+  Godspeed was installed on each computer. Older chats come in only for the tools you
+  ticked when you installed it. Chapters 2 and 38.
 
 ## How this is different from `skills/`
 

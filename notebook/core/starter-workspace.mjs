@@ -46,3 +46,23 @@ export function installStarter(root, starter=defaultStarter) {
   };
   copyMissing(starter,root);
 }
+
+// The line the starter's manual carries since 12 October 2026, so a reader's assistant looks in the
+// conversation archive before it says it does not remember. A new folder gets it with the starter's
+// AGENTS.md; a reader's existing manual is never replaced, so it is added there once: below the
+// manual's own word about prompts/ when that is there, else at the end. Only a starter-born mission
+// control is touched (an adopted one is its owner's own manual), and a note in the machine's own
+// state folder (never synced) means it is added once and never again, even if its owner deletes it.
+export const ARCHIVE_LINE='- When you cannot recall an earlier conversation, run `mc-prompt-archive search <words>` before saying you don\'t know.';
+export function addArchiveLine(root,state=path.join(root,'.godspeed'),starter=defaultStarter){
+  const manual=path.join(root,'AGENTS.md'),flag=path.join(state,'archive-line-added');
+  if(!fs.existsSync(manual)||fs.existsSync(flag)||!starterBorn(root,starter))return false;
+  const mark=()=>{fs.mkdirSync(state,{recursive:true});fs.writeFileSync(flag,new Date().toISOString()+'\n');};
+  let text=fs.readFileSync(manual,'utf8');
+  if(text.includes('mc-prompt-archive search')){mark();return false;}
+  const eol=text.includes('\r\n')?'\r\n':'\n',lines=text.split(/\r?\n/);
+  const at=lines.findIndex(line=>line.startsWith('- **Never load `prompts/`.**'));
+  if(at>=0){let end=at+1;while(end<lines.length&&/^ {2}\S/.test(lines[end]))end++;lines.splice(end,0,ARCHIVE_LINE);text=lines.join(eol);}
+  else text=text.replace(/\s*$/,'')+eol+eol+ARCHIVE_LINE+eol;
+  fs.writeFileSync(manual,text);mark();return true;
+}

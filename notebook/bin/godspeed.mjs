@@ -13,7 +13,7 @@ import { execFileSync } from 'node:child_process';
 import {assistantProfiles,selectAssistantProfile} from '../core/assistant-files.mjs';
 import {installSkillTree} from '../core/packaged-skills.mjs';
 import {planWorkspaceMove,moveWorkspace,undoWorkspaceMove} from '../core/workspace-move.mjs';
-import {installStarter,adoptedMissionControl} from '../core/starter-workspace.mjs';
+import {installStarter,adoptedMissionControl,addArchiveLine} from '../core/starter-workspace.mjs';
 import {machineDevice} from '../core/device-id.mjs';
 const args=process.argv.slice(2),root=process.env.GODSPEED_WORKSPACE;if(!root)throw new Error('Set GODSPEED_WORKSPACE to your candidate workspace');
 if(args[0]==='workspace-move'){
@@ -31,6 +31,7 @@ if(command==='init'){
   seed(store);
   const adopted=adoptedMissionControl(root);
   installStarter(root);
+  addArchiveLine(root,store.state);
   const addons=fileURLToPath(new URL('../../third-party/addons/',import.meta.url));
   const recipes=fileURLToPath(new URL('../recipes/',import.meta.url));
   for(const [name,recipe] of [['godspeed-coach','coach'],['godspeed-journal','interstitial-journal'],['mc-phone','phone-errands'],['mc-video','video-finishing']]){
