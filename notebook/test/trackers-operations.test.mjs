@@ -82,6 +82,13 @@ test('a number he did not say, a future day, or a quoted track writes nothing',a
   assert.equal(store.list('tracker_proposals').length,0);
 });
 
+test('a tracker names its coaching talk by the area\'s own name, and nothing else',async()=>{
+  const {store,domains}=fixture();
+  const r=await say(domains,'I want to track invoices sent',[{type:'tracker-create',name:'Invoices',unit:'invoices',talk:'work'}]);
+  assert.match(r.operation_results[0].reply,/Your work talk will read it\.$/);assert.equal(trackers(store)[0].tracker.talk,'work');
+  await assert.rejects(say(domains,'I want to track naps',[{type:'tracker-create',name:'Naps',unit:'min',talk:'../health'}]),/coaching talk/);
+});
+
 test('a German decimal comma is the number he said',async()=>{
   const {store,domains}=fixture();
   await say(domains,'track Bauch 92,5',[{type:'tracker-hold',name:'Bauch',unit:'cm',value:92.5}]);

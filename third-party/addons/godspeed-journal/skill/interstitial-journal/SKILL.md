@@ -1,6 +1,6 @@
 ---
 name: interstitial-journal
-description: Interstitial journaling. Use when the person tells their journal what they are starting, what done means, what they finished, a note between tasks, or answers a journal check-in; when a message starts with "journal", "j:", "track", "log:" or "Tagebuch"; when the [godspeed-journal] block shows an open task and the person replies to it; when they bring up a task the block lists as closed from the record, or say it is not done; or when they ask to change how the journal behaves ("stop the check-ins", "longer feedback", "journal in German").
+description: Interstitial journaling. Use when the person tells their journal what they are starting, what done means, what they finished, a note between tasks, or answers a journal check-in; when a message starts with "journal", "j:", "log:" or "Tagebuch"; when the [godspeed-journal] block shows an open task and the person replies to it; when they bring up a task the block lists as closed from the record, or say it is not done; or when they ask to change how the journal behaves ("stop the check-ins", "longer feedback", "journal in German").
 ---
 
 ## What this is
@@ -15,12 +15,11 @@ is the failure this recipe exists to prevent.
 
 ## Is this an entry?
 
-- It is when the message starts with journal, j:, track, log:, Tagebuch (any case, spoken or
+- It is when the message starts with journal, j:, log:, Tagebuch (any case, spoken or
   typed), or when it answers the check-in or the evening list shown in the [godspeed-journal] block.
-- "Track" is there because dictation software often hears "log" as "look" or "love". It is shared
-  with the other trackers: "track headache ..." belongs to the headache tracker, and "track" plus
-  a habit Mission Control coaches ("track head lifts") belongs to that habit. Anything else after
-  "track" is a journal entry.
+- "Track" belongs to the tracker recipe since 11 October 2026 (D-321). A message that starts with
+  "track" is never a journal entry, even when it reads like a task ("track starting the video edit"):
+  leave it to the tracker recipe.
 - When `prefix_required` is false in the settings line, it is also an entry when the message
   plainly narrates a switch between tasks ("done with the invoice, now the video").
 - Anything else is ordinary conversation; this recipe does not apply.

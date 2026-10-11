@@ -73,6 +73,8 @@ test('the question and the first reply say exactly what will happen',()=>{
   const c={name:'Belly',field_schema:proposal.field_schema,tracker:{names:['Belly'],cadence:'daily',talk:'health'}};
   assert.equal(createdReply(c,{data:{when:'2026-10-11',value:92}}),'Tracked: Belly 92 cm. From now on just say "track belly" and the number. Your health talk will read it.');
   assert.equal(createdReply({...c,tracker:{...c.tracker,talk:null}},null),'Belly is ready. Say "track belly" and the number.');
+  // A talk is a coaching area by the name the person gave it.
+  assert.equal(createdReply({...c,tracker:{...c.tracker,talk:'work'}},null),'Belly is ready. Say "track belly" and the number. Your work talk will read it.');
   assert.deepEqual(entryData(c,{value:'92,5',note:'after dinner'}),{value:92.5,note:'after dinner'});
   assert.throws(()=>entryData(c,{}),/value/);
 });

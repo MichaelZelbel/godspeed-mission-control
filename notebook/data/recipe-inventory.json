@@ -303,5 +303,10 @@
     "name": "work-item",
     "classification": "source only",
     "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details."
+  },
+  {
+    "name": "tracker",
+    "classification": "source only",
+    "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details."
   }
 ]

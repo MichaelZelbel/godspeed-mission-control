@@ -6,8 +6,9 @@ import {now as clockNow,addDays} from '../../third-party/addons/godspeed-coach/l
 import {visibleRows} from './visibility.mjs';
 export const TRACKER_OPERATIONS=['tracker-hold','tracker-create','track','tracker-correct','tracker-list'];
 const tz=store=>store.get('settings','installation')?.timezone||'UTC';
-const TALKS=['health','work-money','relationships'];
-const talkOf=value=>{if(value===undefined||value===null||value==='')return null;if(!TALKS.includes(value))throw Error('Choose the health, work-money or relationships talk, or none');return value;};
+// The coaching talk that reads a tracker, by its area's name (coach/<area>/: health, work,
+// relationships, or one the person added), or none.
+const talkOf=value=>{if(value===undefined||value===null||value==='')return null;if(typeof value!=='string'||!/^[a-z][a-z0-9-]{0,39}$/.test(value))throw Error('Name the coaching talk by its area, such as health, or none');return value;};
 const has=input=>input.value!==undefined&&input.value!==null&&input.value!==''||Object.keys(input.data||{}).length>0;
 export function trackerOperation(domains,input){
  // The coach's clock: the real time, or GODSPEED_NOW for a rehearsal with a frozen clock.

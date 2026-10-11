@@ -8,7 +8,8 @@ import {localParts,addDays} from '../../third-party/addons/godspeed-coach/lib/cl
 export const HOLD_MS=86400000,REST_DAYS=30;
 const MONTHS=['January','February','March','April','May','June','July','August','September','October','November','December'];
 const WEEKDAYS=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
-const TALKS={health:'health','work-money':'work and money',relationships:'relationships'};
+// A talk is a coaching area by its own name (coach/<area>/), as the person named it.
+const talkWords=talk=>talk==='work-money'?'work and money':String(talk).replaceAll('-',' ');
 export const norm=s=>String(s??'').normalize('NFKC').toLocaleLowerCase().replace(/\s+/g,' ').trim();
 export const card=c=>c&&!c.removed_at&&c.tracker&&typeof c.tracker==='object'?c.tracker:null;
 export const trackers=store=>store.list('collections').filter(card);
@@ -72,7 +73,7 @@ export function holdQuestion(p,today){
  return 'Start a new tracker called '+p.name+', '+shape+', '+(p.cadence==='any'?'as often as you like':'once a day')+'?'+kept;
 }
 export function createdReply(c,entry){
- const fields=own(c),one=fields.length===1&&fields[0].type==='number'?fields[0]:null,say='"track '+norm(c.name)+'"'+(one?' and the number':''),talk=TALKS[c.tracker?.talk]?' Your '+TALKS[c.tracker.talk]+' talk will read it.':'';
+ const fields=own(c),one=fields.length===1&&fields[0].type==='number'?fields[0]:null,say='"track '+norm(c.name)+'"'+(one?' and the number':''),talk=c.tracker?.talk?' Your '+talkWords(c.tracker.talk)+' talk will read it.':'';
  if(!entry)return c.name+' is ready. Say '+say+'.'+talk;
  return 'Tracked: '+c.name+(one?' '+fmt(entry.data[one.key])+unitOf(one):'')+'. From now on just say '+say+'.'+talk;
 }
