@@ -30,9 +30,10 @@ export function proposalState(store,p,now=new Date()){
  if(all.some(c=>[c.name,...(c.tracker.names||[])].some(x=>norm(x)===norm(p.name))))return 'dropped';
  return 'pending';
 }
-export const entries=(store,c)=>store.list('collection_items').filter(i=>i.collection_id===c.id).sort((a,b)=>String(a.data?.when).localeCompare(String(b.data?.when))||String(a.created_at).localeCompare(String(b.created_at)));
+// `items` lets a caller that reads many trackers list the notebook's items once.
+export const entries=(store,c,items=store.list('collection_items'))=>items.filter(i=>i.collection_id===c.id).sort((a,b)=>String(a.data?.when).localeCompare(String(b.data?.when))||String(a.created_at).localeCompare(String(b.created_at)));
 const dayMs=day=>Date.parse(day+'T00:00:00Z');
-export function trackerStatus(store,c,now=new Date()){const last=entries(store,c).at(-1),day=String(last?.data?.when||c.created_at||'').slice(0,10);return (now-dayMs(day))/86400000>REST_DAYS?'resting':'active';}
+export function trackerStatus(store,c,now=new Date(),its=entries(store,c)){const last=its.at(-1),day=String(last?.data?.when||c.created_at||'').slice(0,10);return (now-dayMs(day))/86400000>REST_DAYS?'resting':'active';}
 // "92,5" is how a German keyboard, and German dictation, writes 92.5.
 export function toNumber(value){const n=typeof value==='number'?value:Number(String(value??'').trim().replace(/^(-?\d+),(\d+)$/,'$1.$2'));if(String(value??'').trim()===''||!Number.isFinite(n))throw Error('Expected a number, got "'+value+'"');return n;}
 export const dayOf=(now,tz)=>localParts(now,tz).date;

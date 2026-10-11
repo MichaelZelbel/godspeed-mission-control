@@ -5,6 +5,7 @@ import {visibleRows} from './visibility.mjs';
 import {fileContext} from './context.mjs';
 import {retrieveNoteWindows} from './retrieval-windows.mjs';
 import {explicitNoteCapture} from './chat-intent.mjs';
+import {trackerOperation} from './tracker-operations.mjs';
 // Full write baselines stay outside the enumerable prompt object.
 const writeSnapshots=new WeakMap();
 export const collectionWriteSnapshot=context=>writeSnapshots.get(context)||[];
@@ -36,6 +37,11 @@ function buildChatContext(query,input){
   };
   const context={...fileContext(query.store,10000),retrieval:{method:'keyword selection; only supplied records are available',counts:{}}};
   context.personal={goals:visibleRows(query,'goals').slice(-20),work:visibleRows(query,'work_items').slice(-20),deadlines:visibleRows(query,'deadlines').filter(d=>d.status!=='closed').slice(-20),talks:visibleRows(query,'coach_talks').slice(-5),habits:visibleRows(query,'habits').slice(-10),journal:visibleRows(query,'journal').slice(-5),health:visibleRows(query,'health_observations').filter(h=>Date.parse(h.observed_at)>=Date.now()-7*86400000).slice(-10),forecasts:visibleRows(query,'forecasts').slice(-10),jobs:query.rows('jobs')};
+  // Every tracker and every open tracker question, with their ids: without them
+  // the model cannot name a tracker or answer a question's yes (D-321). Read
+  // through query.rows, so from this context's one snapshot of the vault.
+  const reader={list:type=>query.rows(type).filter(r=>!r.removed_at),get:(type,id)=>query.rows(type).find(r=>r.id===id)||null};
+  const tracked=trackerOperation({store:reader,query},{type:'tracker-list'});context.personal.trackers=tracked.trackers;context.personal.tracker_questions=tracked.pending;
   for(const type of ['notes','contacts','entities','world_claims','moments','profile_facts','goals','media_analysis']){
     const selected=pick(type,type==='notes'?8:4);context[type]=selected.rows;context.retrieval.counts[type]=selected.total;
   }

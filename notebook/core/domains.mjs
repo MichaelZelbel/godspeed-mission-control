@@ -19,6 +19,7 @@ import {Connectors} from './connectors.mjs';
 import {visibleRows,knowledgeContext} from './visibility.mjs';
 import {chatContext,chatAttachments,retrievedContext,collectionWriteSnapshot,noteWriteSnapshot} from './chat-context.mjs';
 import {personalOperation,conversationOperations,validateConversationOperations,operationContract} from './personal-operations.mjs';
+import {TRACKER_OPERATIONS} from './tracker-operations.mjs';
 import {explicitNoteCapture} from './chat-intent.mjs';
 import {importGoalFiles} from './legacy-goals.mjs';
 import {commandWords} from './card-commands.mjs';
@@ -503,7 +504,15 @@ export class Domains {
       // left out is said to be left out.
       let collectionUnasked=false;
       if(name==='collection-chat'&&(hypothetical||/\b(?:do not|don.t|never|must not|should not|nicht|niemals)\s+(?:add|create|change|edit|update|remove|delete|rename|mark|set|move|fix|correct|replace)\b/i.test(requested)||! /^(?:(?:please|bitte)\s+|(?:can|could|would)\s+you\s+(?:please\s+)?)?(?:add|create|change|edit|update|remove|delete|rename|mark|set|move|fix|correct|replace|erstell\w*|ändere|bearbeite|ergänze|lösche|benenne|markiere|setze)\b/i.test(requested.trim()))){collectionUnasked=!!(structured.items_created?.length||structured.item_updates?.length);delete structured.items_created;delete structured.item_updates;}
-      if(name==='conversation-chat'&&structured.operations?.length)structured.operation_results=conversationOperations(this,input,structured.operations.filter(op=>!(input.retained_coach_reply&&op.type==='coach-reply'&&op.id===input.talk_id)));
+      if(name==='conversation-chat'&&structured.operations?.length){
+        const ran=structured.operations.filter(op=>!(input.retained_coach_reply&&op.type==='coach-reply'&&op.id===input.talk_id));
+        structured.operation_results=conversationOperations(this,input,ran);
+        // A tracker's answer is the server's line ("Tracked: 91 cm, down 1 since
+        // Monday."), never the model's guess at the numbers (D-321). The model's
+        // own words stay after it only when it also did something else.
+        const said=ran.map((op,i)=>TRACKER_OPERATIONS.includes(op.type)?structured.operation_results[i]?.reply:null).filter(r=>typeof r==='string'&&r);
+        if(said.length)structured.reply=said.join(' ')+(ran.some(op=>!TRACKER_OPERATIONS.includes(op.type))&&structured.reply?' '+structured.reply:'');
+      }
       if(name==='note-chat'){
         const request=String(input.message||input.messages?.filter(m=>m.role==='user').at(-1)?.content||'').trim();
         const edit=/^(?:(?:please|bitte)\s+|(?:can|could|would)\s+you\s+(?:please\s+)?)?(?:edit|revise|change|update|rewrite|replace|correct|fix|translate|append|insert|add|rename|mark|delete|remove|trash|move|verschiebe|schreibe|ändere|bearbeite|korrigiere|ergänze|lösche)\b/i.test(request);

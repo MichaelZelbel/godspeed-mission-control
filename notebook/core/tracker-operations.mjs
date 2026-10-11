@@ -82,9 +82,9 @@ export function trackerOperation(domains,input){
   const days=input.days===undefined?0:Number(input.days);if(!Number.isInteger(days)||days<0||days>366)throw Error('Choose a number of days from 0 to 366');
   const talk=input.talk===undefined?null:talkOf(input.talk),today=dayOf(now,zone),from=days?addDays(today,-(days-1)):null;
   const visible=new Set(visibleRows(query,'collections').map(r=>r.id));
-  const list=trackers(store).filter(c=>visible.has(c.id)).map(c=>{
-   const all=entries(store,c),made=[...all].sort((a,b)=>String(a.updated_at).localeCompare(String(b.updated_at))||String(a.created_at).localeCompare(String(b.created_at))).at(-1),todays=all.filter(i=>String(i.data?.when).slice(0,10)===today).at(-1);
-   return {id:c.id,name:c.name,names:c.tracker.names||[c.name],cadence:c.tracker.cadence==='any'?'any':'daily',talk:c.tracker.talk||null,specialist:c.tracker.specialist||null,status:trackerStatus(store,c,now),hash:c._hash,
+  const items=store.list('collection_items'),list=trackers(store).filter(c=>visible.has(c.id)).map(c=>{
+   const all=entries(store,c,items),made=[...all].sort((a,b)=>String(a.updated_at).localeCompare(String(b.updated_at))||String(a.created_at).localeCompare(String(b.created_at))).at(-1),todays=all.filter(i=>String(i.data?.when).slice(0,10)===today).at(-1);
+   return {id:c.id,name:c.name,names:c.tracker.names||[c.name],cadence:c.tracker.cadence==='any'?'any':'daily',talk:c.tracker.talk||null,specialist:c.tracker.specialist||null,status:trackerStatus(store,c,now,all),hash:c._hash,
     fields:own(c).map(({key,label,type,unit})=>({key,label,type,...(unit?{unit}:{})})),
     last:made?{id:made.id,when:made.data?.when,data:made.data,hash:made._hash}:null,today:todays?{id:todays.id,hash:todays._hash}:null,
     ...(from?{recent:all.filter(i=>String(i.data?.when).slice(0,10)>=from).map(i=>({id:i.id,when:i.data?.when,data:i.data,hash:i._hash}))}:{})};
