@@ -574,7 +574,12 @@ TELEGRAM_TRANSCRIPT = "/var/lib/mc-telegram/transcript.jsonl"
 # square brackets, and a human does not. So a name label like "[Sam] ..." survives, and so does
 # a quote wrapper like '[Replying to: "x"]', because those are your own words with a label
 # glued on the front. The label comes off below, so a search for the first word you typed finds it.
-MACHINE_BANNER = re.compile(r"^\[[A-Z][A-Z0-9 ]{2,}")
+#
+# ONE TAG IS NOT SHOUTED (2026-10-11). Hermes files what a scheduled job or a webhook sends into
+# a chat as a turn in the person's role, opening "[Cron delivery: coach-tick]" or "[Webhook
+# delivery: mc-notice]". 28 of them were in the archive as if typed, among them both of one
+# day's Telegram rows. They are matched by name, since a human does not write that either.
+MACHINE_BANNER = re.compile(r"^\[(?:[A-Z][A-Z0-9 ]{2,}|(?:Cron|Webhook) delivery\b)")
 
 # Some chat bridges glue the speaker's name in front of every message. It is not part of the
 # prompt, so it comes off. The machine-banner test above has already run, so a shouted tag is

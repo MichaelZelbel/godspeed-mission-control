@@ -925,6 +925,11 @@ store(os.path.join(new_home, "state.db"), [(("n0",) + r[1:]) for r in before] + 
     ("n1", "telegram", "user",      "after the move: remind me to oil the shed hinge", ts(10, 18)),
     ("n1", "telegram", "assistant", "noted, the hinge on Saturday", ts(10, 18)),
     ("n2", "cron",     "user",      "a scheduled job's prompt in the new home", ts(10, 19)),
+    # What a scheduled job sends INTO the chat arrives in his role; his reply to it is his.
+    ("n1", "telegram", "user",      "[Cron delivery: coach-tick]\nFrom your coach: neck exercise", ts(10, 20)),
+    ("n1", "telegram", "assistant", "the coach's own follow-up line", ts(10, 20)),
+    ("n1", "telegram", "user",      "done, ten head lifts", ts(10, 21)),
+    ("n1", "telegram", "user",      "[Webhook delivery: mc-notice]\nI found three new posts", ts(10, 22)),
 ])
 PYEOF
 # The day before the fix: only the old home is read, so only the old chat reaches the archive.
@@ -966,6 +971,14 @@ N_OLD="$(echo "$B4" | grep -c '"text": "before the move: what colour is the shed
 echo "$B4" | grep -q "a scheduled job's prompt in the new home" \
   && bad "71 a cron session in the second home was filed as a person's prompt" \
   || ok "71 the second home's scheduled jobs stay out, as in the first"
+# 71b. A job's delivery into the chat is the machine's words, his reply to it is his.
+if echo "$B4" | grep -q "Cron delivery\|Webhook delivery\|coach's own follow-up"; then
+  bad "71b a scheduled job's or webhook's delivery into the chat was filed as his prompt" "$B4"
+elif echo "$B4" | grep -q '"text": "done, ten head lifts"'; then
+  ok "71b a job's delivery into the chat stays out, and his reply to it is kept"
+else
+  bad "71b his reply to a delivery was lost with it" "$B4"
+fi
 # 72. A second run adds nothing, and the guard is quiet once both homes are archived.
 L1="$(cat "$G4/prompts/archive/"*.jsonl | wc -l)"
 two_run archive >"$W/two2.out" 2>&1
