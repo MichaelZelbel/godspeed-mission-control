@@ -1,10 +1,14 @@
 import {spawn} from 'node:child_process';
 import {TelegramRunner} from './telegram-runner.mjs';
 import {passedEnvironment} from '../../notebook/core/assistant-files.mjs';
+import {startPromptArchive} from './prompt-archive-runner.mjs';
 const children=[];let telegram=null;
 function start(file){const child=spawn(process.execPath,[file],{stdio:'inherit',env:process.env});children.push(child);child.on('exit',code=>{telegram?.end();for(const other of children)if(other!==child)other.kill('SIGTERM');process.exitCode=code||0;});return child;}
 if(process.env.GODSPEED_COMPUTER==='on')start('/opt/godspeed/kit/computer/relay.js');
 start('/opt/godspeed/kit/notebook/scripts/supervise.mjs');
+// Every hour the chats with the assistant (Telegram, the notebook's chat) go into the mission
+// control's conversation archive (prompt-archive-runner.mjs says why).
+const archive=startPromptArchive();
 // GODSPEED_TELEGRAM=on: the operator's own bot from the environment (the development server).
 // off: no Telegram. Anything else: the owner connects a bot from the web page (telegram-runner.mjs).
 if(process.env.GODSPEED_ORIGINAL_RUNTIME==='on'&&process.env.GODSPEED_TELEGRAM==='on'&&process.env.GODSPEED_CANDIDATE_BOT_TOKEN){
@@ -15,4 +19,4 @@ if(process.env.GODSPEED_ORIGINAL_RUNTIME==='on'&&process.env.GODSPEED_TELEGRAM==
 }else if(process.env.GODSPEED_ORIGINAL_RUNTIME==='on'&&process.env.GODSPEED_TELEGRAM!=='off'&&process.env.GODSPEED_TELEGRAM_DIR){
  telegram=new TelegramRunner({dir:process.env.GODSPEED_TELEGRAM_DIR}).begin();
 }
-for(const signal of ['SIGTERM','SIGINT'])process.on(signal,()=>{telegram?.end(signal);for(const child of children)child.kill(signal);});
+for(const signal of ['SIGTERM','SIGINT'])process.on(signal,()=>{archive?.stop();telegram?.end(signal);for(const child of children)child.kill(signal);});
