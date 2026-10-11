@@ -16,12 +16,21 @@ import {readEntries,writeEntry} from '../../third-party/addons/godspeed-journal/
 import {loadSettings as journalSettings,saveSettings as saveJournal} from '../../third-party/addons/godspeed-journal/lib/settings.mjs';
 import {readEntries as headacheEntries} from '../../third-party/addons/godspeed-headache/lib/store.mjs';
 import {episodesFrom} from '../../third-party/addons/godspeed-headache/lib/episodes.mjs';
+import {logFromRows} from '../../third-party/addons/godspeed-headache/lib/rows.mjs';
 import {visibleRows} from './visibility.mjs';
 import {currentHealth} from './health-inputs.mjs';
 import {loadSettings as headacheSettings,saveSettings as saveHeadache} from '../../third-party/addons/godspeed-headache/lib/settings.mjs';
 const iso=()=>new Date().toISOString();
+// The Headaches tracker (D-321): the collection whose tracker card names the headache specialist,
+// the oldest should there be two, as the add-on's own lib/notebook.mjs picks it. Once it exists its
+// rows are every headache; before, the add-on's entry files are.
+export const headacheTracker=store=>store.list('collections').filter(c=>c.tracker&&typeof c.tracker==='object'&&c.tracker.specialist==='headache').sort((a,b)=>String(a.created_at).localeCompare(String(b.created_at)))[0]||null;
+export function headacheLog(store,items){
+ const tracker=headacheTracker(store);if(!tracker)return {...episodesFrom(headacheEntries(store.root)),tracker:null};
+ return {...logFromRows((items||store.list('collection_items')).filter(i=>i.collection_id===tracker.id),headacheSettings(store.root).timezone),tracker};
+}
 export function nativeRows(store,type){
- if(['health_episodes','medications'].includes(type)){const data=episodesFrom(headacheEntries(store.root));if(type==='health_episodes')return data.episodes.map(e=>({...e,id:'headache-'+e.id,uid:hash(e.id),native_file:'routines/headache',onset_at:e.start,created_at:e.start,type,_hash:hash(e)}));return [...data.loose,...data.episodes.flatMap(e=>e.meds)].map(m=>({...m,id:'medication-'+hash(m),uid:hash(m),taken_at:m.taken,created_at:m.taken,type,_hash:hash(m)}));}
+ if(['health_episodes','medications'].includes(type)){const data=headacheLog(store),file=data.tracker?'notebook/Collections':'routines/headache';if(type==='health_episodes')return data.episodes.map(({item,...e})=>({...e,id:'headache-'+e.id,uid:hash(e.id),native_file:file,onset_at:e.start,created_at:e.start,type,_hash:hash(e)}));return [...data.loose.map(({item,...m})=>m),...data.episodes.flatMap(e=>e.meds)].map(m=>({...m,id:'medication-'+hash(m),uid:hash(m),taken_at:m.taken,created_at:m.taken,type,_hash:hash(m)}));}
  if(type==='coach_talks')return listAreas(store.root).flatMap(area=>talkDates(area).map(day=>{const talk=readTalk(area,day),content=fs.readFileSync(talk.file,'utf8');return {id:'talk-'+area.slug+'-'+day,uid:hash(talk.file).slice(0,32),area:area.slug,native_file:path.relative(store.root,talk.file).replaceAll('\\','/'),question:talk.sections['The opening']||'',replies:(talk.sections['What you said']||'').split('\n').filter(Boolean).map(content=>({content})),sources:talk.sections['What was read']||'',status:talk.state==='opened'?'open':'closed',created_at:talk.opened||day+'T00:00:00Z',_hash:hash(content),type};}));
  if(type==='habits')return listHabits(store.root).map(h=>({id:'habit-'+h.area+'-'+h.slug,uid:hash(h.file).slice(0,32),native_file:path.relative(store.root,h.file).replaceAll('\\','/'),title:h.title,area:h.area,status:h.status,agreement:h.agreed,talk_id:h.agreed.match(/\[talk:(.+?)\]/)?.[1]||null,check_at:parseDoc(fs.readFileSync(h.file,'utf8')).head['CHECK-AT']||null,observations:Object.entries(h.log).map(([at,o])=>({at,content:o.words,answer:o.answer})),_hash:hash(fs.readFileSync(h.file)),created_at:h.started+'T00:00:00Z',type}));
  if(type==='journal')return readEntries(store.root,journalSettings(store.root),{days:3650}).map(e=>({id:'journal-'+hash(e),uid:hash(e).slice(0,32),...e,content:e.words,created_at:e.at,type}));
