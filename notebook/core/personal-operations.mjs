@@ -10,7 +10,7 @@ import {leadCommand} from './lead-commands.mjs';
 import {radarCommand} from './radar-lifecycle.mjs';
 import {localParts,addDays,zonedToUtc,now as clockNow} from '../../third-party/addons/godspeed-coach/lib/clock.mjs';
 import {trackerOperation,TRACKER_OPERATIONS} from './tracker-operations.mjs';
-import {proposalState} from './trackers.mjs';
+import {proposalState,card,findTracker} from './trackers.mjs';
 import {nextCalendarRun} from './jobs/calendar.mjs';
 import {resumeChanges} from './jobs/routine-control.mjs';
 import {readTable} from '../../third-party/addons/godspeed-coach/lib/auto.mjs';
@@ -32,6 +32,9 @@ work-retry-draft {id}: explicitly retry a failed or interrupted local draft, pre
 work-record-observation {id,evidence,passed:boolean,value?:number}: record the user's actual reported check for the exact selected observation task. Failed checks are evidence, not successful outcomes. Never invent a value or infer completion from a draft.
 tracker-hold {name,unit?,cadence?:daily|any,fields?:[{key,label,type:number|text|boolean}],talk?:health|work-money|relationships,value?,data?,note?,on?:YYYY-MM-DD,at?:HH:MM}: the user says "track <something>" and no supplied tracker has that name or clearly means it. It asks once; it creates nothing.
 tracker-create {proposal_id?,name?,unit?,cadence?,fields?,talk?}: the user says yes to a supplied pending tracker question (pass its proposal_id; carry any change he asked for, such as another name or unit), or explicitly asks to set up a tracker with its columns.
+track {tracker,value?,data?,note?,on?,at?,new_name?}: the user tracks something a supplied tracker records. tracker is its id. When he used a new word for an existing tracker, pass it as new_name.
+tracker-correct {tracker,entry_id?,value?,data?,remove?:boolean}: the user corrects or removes an entry ("that was 91, not 92", "delete the last belly"). Without entry_id it is his most recent entry in that tracker.
+Never invent a tracker; never create one without his yes. Relay the operation's reply as the answer.
 Every operation MUST contain source_quote. Copy the entire current user message exactly into that field, including the request verb. Without it, no operation can run. Use supplied IDs; ask to resolve ambiguity. ISO dates must include timezone. No outward actions or credentials. Never claim a change persisted until the operation succeeds.`;
 const required=(value,label)=>{if(typeof value!=='string'||!value.trim())throw Error(label+' is required');return value.trim();};
 const date=(value,label)=>{required(value,label);if(!Number.isFinite(Date.parse(value))||!/(Z|[+-]\d\d:\d\d)$/.test(value))throw Error(label+' needs an ISO date with timezone');return new Date(value).toISOString();};
@@ -267,7 +270,9 @@ export function validateConversationOperations(domains,input,operations){
   'work-record-observation':/\b(?:record|log|save|notiere|speichere)\b[\s\S]*(?:check|review|observation|result|prüfung|ergebnis)/i,
   // "track" is the spoken word, never "log" (D-261, D-321).
   'tracker-hold':/\btrack(?:e|en|ing)?\b/i,
-  'tracker-create':/^\s*(?:yes|yeah|yep|yup|sure|ok(?:ay)?|go ahead|do it|start it|ja|jo|klar|mach(?: das)?)\b|\b(?:i want to track|start tracking|new tracker|make a tracker|create a tracker|ich will .* tracken)\b/i
+  'tracker-create':/^\s*(?:yes|yeah|yep|yup|sure|ok(?:ay)?|go ahead|do it|start it|ja|jo|klar|mach(?: das)?)\b|\b(?:i want to track|start tracking|new tracker|make a tracker|create a tracker|ich will .* tracken)\b/i,
+  'track':/\btrack(?:e|ed|en)?\b/i,
+  'tracker-correct':/\b(?:that was|it was|not \d|change|correct|fix|delete|remove|lösche|korrigiere|war)\b/i
  };
  // What each operation does, in the words a person uses. A request that says
  // not to do that ("Don't remind me", "Please don't pause", "Erinnere mich
@@ -281,7 +286,7 @@ export function validateConversationOperations(domains,input,operations){
   'health-add':'record|log|save|track|notiere|speichere','memory-confirm':'remember|save|correct|update|merke|speichere|korrigiere','memory-propose':'remember|save|merke|speichere',
   'routine-change':'pause|resume|schedule|change|stop|start|move|pausiere|ändere|verschiebe','forecast-settle':'settle|record|resolve|log|notiere',
   'work-allow-local':'allow|approve|authori[sz]e|erlaube|genehmige','work-retry-draft':'retry|try|redo|wiederhole','work-record-observation':'record|log|save|notiere|speichere',
-  'tracker-hold':'track|tracke','tracker-create':'track|create|start|make'};
+  'tracker-hold':'track|tracke','tracker-create':'track|create|start|make','track':'track|tracke','tracker-correct':'change|correct|fix|delete|remove|lösche|korrigiere'};
  const refuses=type=>{const v=verbs[type];if(!v)return false;
   return new RegExp("(?<!\\p{L})(?:do not|don.t|dont|never|must not|should not|niemals)(?!\\s+forget)\\s+(?:[\\p{L}']+\\s+){0,2}?(?:"+v+")",'iu').test(message)||new RegExp("(?<!\\p{L})(?:"+v+")\\p{L}*\\s+(?:(?:mich|mir|das|es|dies|ihn|sie|uns)\\s+)?nicht(?!\\p{L})",'iu').test(message);};
  for(const operation of operations){
@@ -307,7 +312,13 @@ export function validateConversationOperations(domains,input,operations){
     if(![row.id,row.name,row.title,...(row.aliases||[])].filter(Boolean).some(name=>message.toLocaleLowerCase().includes(name.toLocaleLowerCase())))throw Error('The request must identify the person or thing whose fact is being saved');
    }
   }
-  if(['tracker-hold','track'].includes(operation.type)){
+  if(['track','tracker-correct'].includes(operation.type)){
+   // Only an existing tracker, by its id or one of its names; an ordinary
+   // collection of the same name is never one (trackers.mjs).
+   if(!card(domains.store.get('collections',String(operation.tracker??'')))&&!findTracker(domains.store,operation.tracker).candidates.length)throw Error('No tracker called '+operation.tracker);
+   if(operation.type==='track'&&typeof operation.new_name==='string'&&operation.new_name.trim()&&!message.toLocaleLowerCase().includes(operation.new_name.trim().toLocaleLowerCase()))throw Error('A new name must be one you used');
+  }
+  if(['tracker-hold','track','tracker-correct'].includes(operation.type)){
    // The number saved must be a number he said, as a number of its own (a 9 is
    // not in "92"); "92,5" may arrive as 92.5.
    const said=v=>v===undefined||v===null||v===''||[String(v),String(v).replace('.',',')].some(x=>new RegExp('(?<![\\d.,])'+x.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'(?!\\d|[.,]\\d)').test(message));

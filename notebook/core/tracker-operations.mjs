@@ -1,8 +1,9 @@
 // The tracker operations (D-321), one path for the notebook's chat, MCP and the
 // Telegram bot: personalOperation hands these types here. The rules they share
 // are in trackers.mjs; this file reads and writes.
-import {norm,findTracker,proposalState,dayOf,whenFor,schemaFor,entryData,holdQuestion,createdReply} from './trackers.mjs';
-import {now as clockNow} from '../../third-party/addons/godspeed-coach/lib/clock.mjs';
+import {norm,card,trackers,findTracker,entries,trackerStatus,proposalState,dayOf,whenFor,schemaFor,entryData,holdQuestion,createdReply,instantReply,fmt,unitOf,longDay} from './trackers.mjs';
+import {now as clockNow,addDays} from '../../third-party/addons/godspeed-coach/lib/clock.mjs';
+import {visibleRows} from './visibility.mjs';
 export const TRACKER_OPERATIONS=['tracker-hold','tracker-create','track','tracker-correct','tracker-list'];
 const tz=store=>store.get('settings','installation')?.timezone||'UTC';
 const TALKS=['health','work-money','relationships'];
@@ -39,5 +40,77 @@ export function trackerOperation(domains,input){
   const entry=held?query.execute({table:'collection_items',operation:'insert',values:{collection_id:collection.id,data:{when:held.when,...held.data}}}).data[0]:null;
   return {collection_id:collection.id,entry_id:entry?.id||null,reply:createdReply(collection,entry)};
  }
+ if(type==='track'){
+  let c=resolve(store,input.tracker),under=false;
+  const word=typeof input.new_name==='string'?input.new_name.trim():'';
+  if(word){
+   if(findTracker(store,word).candidates.some(o=>o.id!==c.id))throw Error('Another tracker is already called '+word);
+   // "track waist 91" landed in Belly: Waist is now another name for it.
+   if(![c.name,...(c.tracker.names||[])].some(x=>norm(x)===norm(word)))c=query.execute({table:'collections',operation:'update',values:{tracker:{...c.tracker,names:[...(c.tracker.names||[c.name]),word]}},filters:[['eq','id',c.id]],expected:expectedOf(input,'collections',c.id)}).data[0];
+   under=norm(word)!==norm(c.name);
+  }
+  const cadence=c.tracker.cadence==='any'?'any':'daily',when=whenFor({on:input.on,at:input.at,cadence},now,zone),data=entryData(c,input),all=entries(store,c);
+  // A once-a-day tracker keeps one entry a day: a second one that day replaces
+  // the first, keeping its note unless a new one is given.
+  const same=cadence==='daily'?all.filter(i=>String(i.data?.when).slice(0,10)===when).at(-1):null;
+  if(same){
+   const entry=query.execute({table:'collection_items',operation:'update',values:{data:{...same.data,...data,when}},filters:[['eq','id',same.id]],expected:expectedOf(input,'collection_items',same.id)}).data[0];
+   return {collection_id:c.id,entry_id:entry.id,replaced:true,reply:(when===dayOf(now,zone)?"Today's ":longDay(when)+"'s ")+(oneNumber(c)?describe(c,same):c.name+' entry')+' is now '+describe(c,entry)+'.'};
+  }
+  const entry=query.execute({table:'collection_items',operation:'insert',values:{collection_id:c.id,data:{when,...data}}}).data[0];
+  // Waking a resting tracker needs no write: this entry makes it active.
+  const said=instantReply(c,all.filter(i=>String(i.data?.when)<=when),entry,now,zone);
+  return {collection_id:c.id,entry_id:entry.id,replaced:false,reply:under?'Tracked under '+c.name+': '+withoutName(c,said):said};
+ }
+ if(type==='tracker-correct'){
+  const c=resolve(store,input.tracker),all=entries(store,c);
+  // Without an entry id it is the last entry he made or changed.
+  const target=input.entry_id?all.find(i=>i.id===input.entry_id):[...all].sort((a,b)=>String(a.updated_at).localeCompare(String(b.updated_at))||String(a.created_at).localeCompare(String(b.created_at))).at(-1);
+  if(!target)throw Error(input.entry_id?'That entry is not in '+c.name:c.name+' has no entry yet');
+  const day=longDay(String(target.data?.when).slice(0,10)),expected=expectedOf(input,'collection_items',target.id);
+  if(input.remove===true){
+   query.execute({table:'collection_items',operation:'delete',filters:[['eq','id',target.id]],expected});
+   const what=describe(c,target);return {collection_id:c.id,entry_id:target.id,removed:true,reply:'Removed: '+c.name+(what?' '+what:'')+' of '+day+'.'};
+  }
+  const data=entryData(c,{value:input.value,data:input.data,note:input.note});if(!Object.keys(data).length)throw Error('Say what it should be instead');
+  const entry=query.execute({table:'collection_items',operation:'update',values:{data:{...target.data,...data}},filters:[['eq','id',target.id]],expected}).data[0];
+  return {collection_id:c.id,entry_id:entry.id,removed:false,reply:'Changed: '+c.name+' on '+day+' is now '+(describe(c,entry)||'as you said')+'.'};
+ }
+ if(type==='tracker-list'){
+  // Read only. What the chat and the bot need to name a tracker and to change an
+  // entry: ids, other names, columns, and the current hashes the MCP guard asks for.
+  const days=input.days===undefined?0:Number(input.days);if(!Number.isInteger(days)||days<0||days>366)throw Error('Choose a number of days from 0 to 366');
+  const talk=input.talk===undefined?null:talkOf(input.talk),today=dayOf(now,zone),from=days?addDays(today,-(days-1)):null;
+  const visible=new Set(visibleRows(query,'collections').map(r=>r.id));
+  const list=trackers(store).filter(c=>visible.has(c.id)).map(c=>{
+   const all=entries(store,c),made=[...all].sort((a,b)=>String(a.updated_at).localeCompare(String(b.updated_at))||String(a.created_at).localeCompare(String(b.created_at))).at(-1),todays=all.filter(i=>String(i.data?.when).slice(0,10)===today).at(-1);
+   return {id:c.id,name:c.name,names:c.tracker.names||[c.name],cadence:c.tracker.cadence==='any'?'any':'daily',talk:c.tracker.talk||null,specialist:c.tracker.specialist||null,status:trackerStatus(store,c,now),hash:c._hash,
+    fields:own(c).map(({key,label,type,unit})=>({key,label,type,...(unit?{unit}:{})})),
+    last:made?{id:made.id,when:made.data?.when,data:made.data,hash:made._hash}:null,today:todays?{id:todays.id,hash:todays._hash}:null,
+    ...(from?{recent:all.filter(i=>String(i.data?.when).slice(0,10)>=from).map(i=>({id:i.id,when:i.data?.when,data:i.data,hash:i._hash}))}:{})};
+  }).filter(t=>!talk||t.talk===talk&&t.status==='active');
+  const pending=store.list('tracker_proposals').filter(p=>proposalState(store,p,now)==='pending').map(p=>({id:p.id,name:p.name,created_at:p.created_at,question:holdQuestion(p,today)}));
+  return {trackers:list,pending};
+ }
  throw Error('Unsupported tracker operation: '+type);
 }
+// A tracker by its id, or by its name or another name. Two that fit: ask which.
+function resolve(store,ref){
+ const named=String(ref??'').trim();if(!named)throw Error('Say which tracker');
+ const byId=store.get('collections',named);if(card(byId))return byId;
+ const {match,candidates}=findTracker(store,named);if(match)return match;
+ if(candidates.length)throw Error('Which one: '+candidates.map(c=>c.name).sort().join(' or ')+'?');
+ throw Error('No tracker called '+named);
+}
+// The hash the caller read, for query.execute's own check; over MCP the guard
+// asks for it as well (assistant-mutations.mjs reads `expected` the same way).
+const expectedOf=(input,table,id)=>{const v=input.expected?.[table+'/'+id]??input.expected?.[id];return typeof v==='string'?{[id]:v}:{};};
+const own=c=>(c.field_schema||[]).filter(f=>!['when','note'].includes(f.key));
+const oneNumber=c=>{const f=own(c);return f.length===1&&f[0].type==='number'?f[0]:null;};
+// An entry in a few words: "92 cm", or "Hours 7, Quality 4", or nothing.
+function describe(c,entry){
+ const one=oneNumber(c);if(one)return fmt(entry.data?.[one.key])+unitOf(one);
+ return own(c).filter(f=>entry.data?.[f.key]!==undefined&&entry.data?.[f.key]!=='').map(f=>f.label+' '+(f.type==='number'?fmt(entry.data[f.key]):entry.data[f.key])).join(', ');
+}
+// "Tracked: Belly 90 cm." under "Tracked under Belly: " reads "90 cm."
+const withoutName=(c,reply)=>{const rest=reply.replace(/^Tracked: /,'');return rest.startsWith(c.name+', ')?rest.slice(c.name.length+2):rest.startsWith(c.name+' ')?rest.slice(c.name.length+1):rest;};
