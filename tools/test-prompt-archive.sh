@@ -606,6 +606,25 @@ if command -v node >/dev/null 2>&1 && [ -f "$HARV" ]; then
   [ -s "$R/home/.godspeed/prompt-harvest-godspeed" ] \
     && ok "50 a good run remembers its mission control, so a later blind run still has somewhere to report" \
     || bad "50 nothing remembered, so a mc-finding failure would be silent again"
+
+  # 50b-50c. AN EMPTY RUN COMMITS NOTHING ONCE TODAY'S RECEIPT IS SAVED (2026-10-11). The server
+  # harvests every hour now, and each run rewrote the receipt's time, so each made a commit that
+  # archived nothing. The day's first run still commits the receipt; later empty ones do not.
+  G="$W/emptyruns"; mkdir -p "$G/home" "$G/godspeed/observations" "$G/godspeed/prompts/archive"
+  ( cd "$G/godspeed" && git init -q && git config user.email t@t && git config user.name t \
+      && git add -A >/dev/null 2>&1; git commit -q --allow-empty -m start ) >/dev/null 2>&1
+  harv() { GODSPEED_MACHINE=testbox HOME="$G/home" USERPROFILE="$G/home" GODSPEED_DIR="$G/godspeed" node "$HARV" --no-push --verbose 2>&1; }
+  harv >/dev/null
+  n1="$(git -C "$G/godspeed" rev-list --count HEAD)"
+  [ "$n1" = "2" ] \
+    && ok "50b the day's first run commits its receipt" \
+    || bad "50b the first run made $n1 commits, expected the start and one receipt" "$(git -C "$G/godspeed" log --oneline)"
+  sleep 1   # a receipt rewritten within the same second is byte-identical and proves nothing
+  out2="$(harv)"
+  n2="$(git -C "$G/godspeed" rev-list --count HEAD)"
+  [ "$n2" = "$n1" ] && [ -z "$(git -C "$G/godspeed" status --porcelain)" ] \
+    && ok "50c a second empty run the same day commits nothing and leaves the folder clean" \
+    || bad "50c an empty run made a commit or left a change behind" "$out2 / $(git -C "$G/godspeed" status --porcelain)"
 else
   echo "  --   42-50 skipped: node or prompt-harvest.js not on this machine"
 fi

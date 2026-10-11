@@ -334,6 +334,7 @@ function main() {
   run('git', ['add', '--', rel]);
   const dirty = run('git', ['status', '--porcelain', '--', rel]);
   if (!String((dirty && dirty.stdout) || '').trim()) { say('nothing new to commit'); return 0; }
+  if (receiptOnlyAndSavedToday(rel, dirty.stdout)) { say('nothing new to commit (this machine\'s receipt is already saved today)'); return 0; }
 
   const machine = MACHINE;
   const c = run('git', ['commit', '-m', 'Archive the prompts typed on ' + machine, '--', rel]);
@@ -351,6 +352,34 @@ function main() {
   if (!p || p.status !== 0) { say('push did not go through; the commit is local and the next run will carry it'); return 0; }
   say('pushed');
   return 0;
+}
+
+/* A RUN THAT FOUND NOTHING COMMITS NOTHING, once the day's receipt is saved (2026-10-11).
+ * The server's harvest went from once a day to every hour so a Telegram exchange is searchable
+ * from the other machines within the hour. Each run rewrites the receipt's time, so every empty
+ * run made a commit of its own: 24 "Archive the prompts typed on vps" a day that archived
+ * nothing. The receipt is still committed once per day, which is all the check on the other side
+ * reads (it counts in days), and always when anything else in the archive changed or the run's
+ * outcome differs from the saved one. Otherwise the change is put back and nothing is committed. */
+function receiptOnlyAndSavedToday(rel, porcelain) {
+  const lines = String(porcelain || '').split('\n').map((l) => l.trim()).filter(Boolean);
+  const mine = path.posix.join(rel.split(path.sep).join('/'), 'status', MACHINE + '.json');
+  if (lines.length !== 1 || !lines[0].endsWith(mine)) return false;
+  const before = run('git', ['show', 'HEAD:' + mine]);
+  if (!before || before.status !== 0) return false;
+  let was, now;
+  try {
+    was = JSON.parse(before.stdout);
+    now = JSON.parse(fs.readFileSync(path.join(GODSPEED, mine), 'utf8'));
+  } catch (_) { return false; }
+  const day = (r) => String((r && r.at) || '').slice(0, 10);
+  const same = day(was) === day(now) && was.ok === now.ok && (was.error || null) === (now.error || null)
+    && Number(now.added || 0) === 0 && was.tool_version === now.tool_version
+    && was.godspeed === now.godspeed;
+  if (!same) return false;
+  run('git', ['reset', '-q', '--', mine]);
+  run('git', ['checkout', '--', mine]);
+  return true;
 }
 
 /* A pull whose rebase stops on a conflict is undone at once. Left in place, it kept the folder
