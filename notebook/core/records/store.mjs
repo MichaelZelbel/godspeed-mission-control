@@ -558,6 +558,13 @@ export class Store {
       folder_path: '', structured_fields: {}, related: [], ai_visibility: 'visible', ...record });
     return record;
   }
+  // The tombstone of a record the person asked to be gone (D-321): its identity and when it went,
+  // nothing it held. Committed, it also takes the record's history copies with it (commit).
+  purgeRecord(old) {
+    const now = new Date().toISOString();
+    return { format: 1, type: safe(old.type), id: safe(old.id), uid: safe(String(old.uid)), device: old.device || this.device, revision: (old.revision || 0) + 1,
+      created_at: old.created_at || now, updated_at: now, removed_at: now, purged: true, tags: [], aliases: [], references: [], metadata: {}, user_id: old.user_id || 'owner' };
+  }
   save(type, value, expectedHash) {
     return this.withLock(() => this.saveUnderLock(type,value,expectedHash));
   }
@@ -667,11 +674,15 @@ export class Store {
     // through prepare(): a merge, a conversion, a transaction's own objects.
     for(const record of records){safe(record.type);safe(record.id);safe(String(record.uid));}
     this.scan();
+    // A purge (purgeRecord) keeps nothing of the record: no history copy of its last version, and
+    // the copies of its earlier versions go too (D-321, "delete my cycle tracker").
+    const purged=new Set(records.filter(r=>r.removed_at&&r.purged===true).map(r=>r.uid));
+    if(purged.size)removeKeys=[...removeKeys,...[...this.records.values()].filter(r=>r.type==='record_history'&&purged.has(r.source_uid)).map(r=>'record_history/'+r.id)];
     if(this.watching)this.freshen([...records.flatMap(r=>[this.fileOf.get(r.type+'/'+r.id),this.fileOf.get(this.keyOfUid?.get(r.uid))]),...removeKeys.map(k=>this.fileOf.get(k))]);
     const history=[];
     for(const record of records){
       const old=this.records.get(record.type+'/'+record.id)||removeKeys.map(k=>this.records.get(k)).find(r=>r?.uid===record.uid);
-      if(old&&record.type!=='record_history'&&old._hash!==hash(encode(record))){
+      if(old&&record.type!=='record_history'&&!purged.has(record.uid)&&old._hash!==hash(encode(record))){
         const snapshot={...old};delete snapshot._hash;
         const id=old.uid+'-'+old.revision+'-'+old._hash.slice(0,12);
         if(!this.records.has('record_history/'+id)&&!records.some(r=>r.type==='record_history'&&r.id===id)){
