@@ -340,6 +340,66 @@ check "  changing it again leaves them too" "$(sed -n 's/^STATUS: //p' "$TMP/wor
 hg change lead-work --set "MEASURE=fifty readers" --why "a real change of the goal" >/dev/null 2>&1
 check "  while a change of the goal itself still marks its work stale" "$(sed -n 's/^STATUS: //p' "$TMP/work/$WP.md")" "stale"
 
+# --- research: what is known about winning a goal, kept current every night ----------------
+OUT="$(hg file --kind outcome --title "Strong at 90" --id rr-health --area health --status adopted --source "said it 2026-09-06" 2>&1)"
+check "adopting an outcome at filing makes its research folder" "$(test -f "$TMP/goals/research/rr-health/brief.md" && echo yes)" "yes"
+check "  with a days/ folder" "$(test -d "$TMP/goals/research/rr-health/days" && echo yes)" "yes"
+check "  and a RESEARCH line on the card" "$(grep -c '^- 2026-09-13 RESEARCH goals/research/rr-health' "$TMP/goals/rr-health.md")" "1"
+check "  the brief opens with the limit section, naming nothing yet" "$(grep -A1 '^## The limit now' "$TMP/goals/research/rr-health/brief.md" | tail -1)" "nothing named"
+check "  and has an Experiments section after Openings" "$(grep -A3 '^## Openings' "$TMP/goals/research/rr-health/brief.md" | grep -c '^## Experiments')" "1"
+OUT="$(hg research rr-health 2>&1)"; check "research prints the path and makes nothing twice" "$OUT" "goals/research/rr-health"
+OUT="$(hg file --kind outcome --title "Money idea" --id rr-money --area money --source "chat 2026-09-13" 2>&1)"
+check "a provisional outcome gets no research folder" "$(test -d "$TMP/goals/research/rr-money" && echo yes || echo no)" "no"
+OUT="$(hg change rr-money --set "STATUS=adopted" --why "he said yes on 2026-09-13" 2>&1)"
+check "adopting it later makes the folder" "$(test -f "$TMP/goals/research/rr-money/people.md" && echo yes)" "yes"
+OUT="$(hg file --kind strategy --title "Run three times a week" --id rr-runs --serves rr-health --status adopted --source x 2>&1)"
+OUT="$(hg research rr-runs 2>&1)"; check "research is refused for a strategy" "$?" "1"
+contains "  and points at the outcome it serves" "$OUT" "uses the research of the outcome it serves"
+check "a new folder is founding" "$(hg research rr-health --state 2>&1 | cut -d' ' -f2)" "founding;"
+
+# fill rr-health to the founding marks: 30 people (with CRLF endings), 5 cases, 10 claims
+R="$TMP/goals/research/rr-health"
+for i in $(seq 1 30); do printf 'PERSON: Person %s\r\nLINK: https://example.org/p%s\r\nWHY: leads the field\r\nLAST: never read\r\nOFFER: a measured report\r\nSTATUS: verified 2026-09-12\r\nHOT: no\r\n\r\n' "$i" "$i"; done >> "$R/people.md"
+for i in $(seq 1 5); do printf 'CASE: Case %s\nSTART: 54, desk job\nDID: ran three times a week\nRESULT: a marathon at 60\nSOURCE: https://example.org/c%s (read 2026-09-12)\n\n' "$i" "$i"; done >> "$R/cases.md"
+for i in $(seq 1 10); do printf 'CLAIM: Claim %s\nSTATUS: supported 2026-09-12\nSOURCE: https://example.org/s%s (read 2026-09-12)\nQUOTE: "a sentence"\nMEANS: keep doing it\n\n' "$i" "$i"; done >> "$R/claims.md"
+STATE="$(hg research rr-health --state 2>&1)"
+contains "CRLF people are counted like LF ones" "$STATE" "people 30 (30 verified, 0 hot)"
+check "founded with no day file is stale" "$(printf '%s' "$STATE" | cut -d' ' -f2)" "stale;"
+printf '# day\n' > "$R/days/2026-09-13.gap.md"
+check "a gap file never counts as a day" "$(hg research rr-health --state 2>&1 | cut -d' ' -f2)" "stale;"
+printf '# day\n' > "$R/days/2026-09-12.md"
+check "a day file from yesterday makes it current" "$(hg research rr-health --state 2>&1 | cut -d' ' -f2)" "current;"
+J="$(hg research rr-health --state --json 2>&1)"
+check "  --json carries the state and the last day" "$(printf '%s' "$J" | "$NODE" -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const p=JSON.parse(s);console.log(p.state+" "+p.last+" "+p.cases)})')" "current 2026-09-12 5"
+rm "$R/people.md"
+check "a deleted people.md reads as zero, not a crash" "$(hg research rr-health --state 2>&1 | cut -d' ' -f2)" "founding;"
+
+DUE="$(hg research --due --only rr-health,rr-money,rr-runs 2>&1)"
+contains "--due lists adopted outcomes not researched today" "$DUE" "rr-money founding never"
+contains "  with the mode each needs" "$DUE" "rr-health founding 2026-09-12"
+check "  never-researched goals come first" "$(printf '%s\n' "$DUE" | grep -n '^rr-money ' | cut -d: -f1)" "1"
+missing "  never a strategy" "$DUE" "rr-runs"
+contains "  and every other adopted outcome in this file is due too" "$(hg research --due 2>&1)" "rr-money"
+check "--only narrows the list" "$(hg research --due --only rr-health 2>&1 | cut -d' ' -f1 | tr '\n' ' ')" "rr-health "
+check "  and so does GODSPEED_RESEARCH_ONLY" "$(GODSPEED_RESEARCH_ONLY=rr-money hg research --due 2>&1 | cut -d' ' -f1 | tr '\n' ' ')" "rr-money "
+printf '# day\n' > "$R/days/2026-09-13.md"
+missing "a goal researched today is not due" "$(hg research --due 2>&1)" "rr-health"
+
+reasons() { hg attention --json 2>&1 | "$NODE" -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const p=JSON.parse(s);const r=p.active.concat(p.quiet).find(x=>x.id===process.argv[1]);console.log(r?r.reasons.join(" | "):"no row")})' "$1"; }
+pbstate() { hg attention --json 2>&1 | "$NODE" -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const p=JSON.parse(s);console.log(p.active.concat(p.quiet).find(r=>r.id===process.argv[1]).playbook)})' "$1"; }
+contains "attention says when research is still being founded" "$(reasons rr-money)" "its research is still being founded"
+
+# a challenge from the research makes a current playbook 'challenged'
+hg playbook rr-money >/dev/null 2>&1
+P="$TMP/goals/playbooks/rr-money.md"
+sed -i 's/^(.*)$/written./' "$P"
+hg playbook rr-money --current >/dev/null 2>&1
+check "the playbook is current before any challenge" "$(pbstate rr-money)" "current"
+"$NODE" -e 'const fs=require("fs");const p=process.argv[1];let t=fs.readFileSync(p,"utf8");t=t.replace(/## Challenges to the playbook\nnone\n/,"## Challenges to the playbook\n- lever 1 | price early beats free | https://example.org/x\n");fs.writeFileSync(p,t)' "$TMP/goals/research/rr-money/brief.md"
+check "a challenge in the brief makes the playbook challenged" "$(pbstate rr-money)" "challenged"
+contains "  and the row says why" "$(reasons rr-money)" "the research contradicts its playbook"
+contains "check notes a founding research folder" "$(hg check 2>&1)" "rr-money: research founding"
+
 echo
 echo "$PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

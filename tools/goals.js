@@ -47,6 +47,22 @@ const fs = require('fs');
 const path = require('path');
 const L = require(path.join(__dirname, 'mc-cards.js'));
 
+// blocks: the research files hold one block per person, case, claim or opening: a KEY: line
+// opens it, KEY: value lines fill it, a blank line closes it. Windows line endings are taken
+// out first, because these files are edited on Windows too and a \r once hid every person.
+function blocks(text, key) {
+  const out = [];
+  let cur = null;
+  for (const raw of String(text || '').replace(/\r/g, '').split('\n')) {
+    const line = raw.trimEnd();
+    if (!line.trim()) { cur = null; continue; }
+    const m = line.match(/^([A-Z][A-Z ]*[A-Z]):\s?(.*)$/);
+    if (m && m[1] === key) { cur = { [key]: m[2].trim() }; out.push(cur); continue; }
+    if (cur && m) cur[m[1]] = m[2].trim();
+  }
+  return out;
+}
+
 function createGoalCommands({root=L.godspeedRoot(__filename),goalStore,workStore}={}) {
 const GODSPEED = root;
 const DIR = path.join(GODSPEED, 'goals');
@@ -108,6 +124,7 @@ cmds.file = (a) => {
   const c = { id, f, log: [] };
   L.logLine(c, d, 'FILED', `${status} ${kind}, source: ${f.SOURCE}`);
   if (status === 'adopted') L.logLine(c, d, 'ADOPTED', `at filing, source: ${f.SOURCE}`);
+  if (status === 'adopted' && kind === 'outcome') scaffoldResearch(c, d);
   S.write(c);
   say(`${id}: ${status} ${kind} filed`);
   if (status === 'provisional') say(`  provisional: never acted on as a goal until adopted; at most one clarifying question in seven days`);
@@ -168,6 +185,7 @@ cmds.change = (a) => {
     changed.push(k);
   }
   if (!changed.length) { say(`${c.id}: nothing changed`); return; }
+  if (changed.includes('STATUS') && c.f.STATUS === 'adopted' && c.f.KIND === 'outcome') scaffoldResearch(c, d);
   S.write(c);
   // The weekly number is how the goal is judged, not what it is (2026-09-30, found by the final
   // review of D-266): propagating it marked every open item under the goal stale, so his yes on a
@@ -515,6 +533,7 @@ function playbookState(c, d) {
   if (/^STATUS: draft/m.test(text)) return 'draft';
   const m = text.match(/^REVIEW BY: (\d{4}-\d{2}-\d{2})/m);
   if (m && L.daysBetween(m[1], d || today()) > 0) return 'stale';
+  if (researchChallenges(c.id).length) return 'challenged';
   return 'current';
 }
 const PLAYBOOK_REASON = {
@@ -522,10 +541,11 @@ const PLAYBOOK_REASON = {
   draft: 'playbook is a draft, not yet filled in',
   refuted: 'its playbook was refuted: research it again before acting',
   stale: 'playbook past its review date',
+  challenged: 'the research contradicts its playbook: check the lever before acting on it',
 };
 // An outcome with no model of how it is won sits ahead of one that has one: the research is
 // the first work, and it is work the mission control can do alone.
-const playbookRank = (state) => ['none', 'draft', 'refuted', 'stale'].includes(state) ? 0 : 1; // a draft is a scaffold nobody filled: as unresearched as none
+const playbookRank = (state) => ['none', 'draft', 'refuted', 'stale', 'challenged'].includes(state) ? 0 : 1; // a draft is a scaffold nobody filled: as unresearched as none
 cmds.playbook = (a) => {
   const c = S.read(a._[0] || die('usage: mc-goals playbook <id> [--review-days 30] | --current | --refute --evidence "..."')) || die('no such goal');
   const d = a.date || today();
@@ -567,6 +587,108 @@ cmds.playbook = (a) => {
 };
 
 // ---------------------------------------------------------------------------
+// research: what the world knows about winning one outcome, kept current every night by the
+// goal-research recipe (run by mc-research). The playbook is the model of how the goal is won;
+// this folder is the evidence that keeps that model honest and the list of people and chances
+// the daily moves are made from. Only outcomes have one: a strategy or project uses the research
+// of the outcome it serves.
+// ---------------------------------------------------------------------------
+const RESEARCH = path.join(DIR, 'research');
+const researchRel = (id) => `goals/research/${id}`;
+const researchDir = (id) => path.join(RESEARCH, id);
+const FOUNDED = { people: 30, cases: 5, claims: 10 };
+const BRIEF_SECTIONS = ['## The limit now', '## What works now', '## What changed this week', '## What was proven wrong',
+  '## Who to reach and what we offer', '## Openings', '## Experiments', '## What we could do without asking',
+  '## Worth asking for', '## Challenges to the playbook'];
+const RESEARCH_FILES = {
+  'brief.md': (id, d) => `GOAL: ${id}\nUPDATED: ${d}\nSTATUS: founding\n` +
+    BRIEF_SECTIONS.map(h => `\n${h}\n${h === '## Challenges to the playbook' ? 'none' : h === '## The limit now' ? 'nothing named' : '(nothing yet)'}\n`).join(''),
+  'people.md': () => '# People\n\nThe top people of this field, one block each, a blank line between blocks.\nFields: PERSON, LINK, WHY, LAST, OFFER, STATUS (unverified | verified YYYY-MM-DD), HOT (yes | no).\n',
+  'cases.md': () => '# Cases\n\nPeople who reached this goal, best from a start like this person\'s, one block each.\nFields: CASE, START, DID, RESULT, SOURCE (url (read YYYY-MM-DD)).\n',
+  'claims.md': () => '# Claims\n\nWhat is known about how this goal is won, one block each.\nFields: CLAIM, STATUS (supported | contested | refuted, then the date), SOURCE, QUOTE, MEANS.\n',
+  'openings.md': () => '# Openings\n\nChances with a closing date, one block each.\nFields: OPENING, UNTIL (YYYY-MM-DD), SOURCE, MOVE, IDEA.\n',
+  'sources.md': () => '# Sources\n\nWhere this field\'s knowledge lives, one line each: "- <url> | <what it is> | <how often it changes>".\n',
+};
+function researchCounts(id, d) {
+  const dir = researchDir(id);
+  const people = blocks(L.readText(path.join(dir, 'people.md')), 'PERSON');
+  const day = d || today();
+  return {
+    people: people.length,
+    verified: people.filter(p => /^verified \d{4}-\d{2}-\d{2}$/.test(p.STATUS || '')).length,
+    hot: people.filter(p => p.HOT === 'yes').length,
+    cases: blocks(L.readText(path.join(dir, 'cases.md')), 'CASE').length,
+    claims: blocks(L.readText(path.join(dir, 'claims.md')), 'CLAIM').length,
+    openings: blocks(L.readText(path.join(dir, 'openings.md')), 'OPENING').filter(o => L.isoDate(o.UNTIL) && o.UNTIL >= day).length,
+  };
+}
+// The newest night that completed. A night that did not complete leaves <date>.gap.md, which
+// this never counts: a gap must never read as a quiet day.
+function lastDay(id) {
+  let names = [];
+  try { names = fs.readdirSync(path.join(researchDir(id), 'days')).filter(n => /^\d{4}-\d{2}-\d{2}\.md$/.test(n)).sort(); } catch (e) { /* no days yet */ }
+  return names.length ? names[names.length - 1].slice(0, 10) : null;
+}
+function researchState(c, d) {
+  if (!fs.existsSync(researchDir(c.id))) return 'none';
+  const n = researchCounts(c.id, d);
+  if (n.people < FOUNDED.people || n.cases < FOUNDED.cases || n.claims < FOUNDED.claims) return 'founding';
+  const ld = lastDay(c.id);
+  if (!ld || L.daysBetween(ld, d || today()) >= 2) return 'stale';
+  return 'current';
+}
+// Bullet lines under "## Challenges to the playbook" in the brief: research that contradicts a
+// lever the playbook rests on.
+function researchChallenges(id) {
+  const text = String(L.readText(path.join(researchDir(id), 'brief.md')) || '').replace(/\r/g, '');
+  const at = text.indexOf('\n## Challenges to the playbook');
+  if (at < 0) return [];
+  const body = text.slice(at + 1).split('\n').slice(1);
+  const out = [];
+  for (const line of body) { if (line.startsWith('## ')) break; if (line.trim().startsWith('- ')) out.push(line.trim()); }
+  return out;
+}
+function scaffoldResearch(c, d) {
+  const dir = researchDir(c.id);
+  if (fs.existsSync(dir)) return researchRel(c.id);
+  fs.mkdirSync(path.join(dir, 'days'), { recursive: true });
+  for (const [name, make] of Object.entries(RESEARCH_FILES)) fs.writeFileSync(path.join(dir, name), make(c.id, d), 'utf8');
+  L.logLine(c, d, 'RESEARCH', researchRel(c.id));
+  return researchRel(c.id);
+}
+const RESEARCH_REASON = {
+  none: 'no research folder: nothing keeps what is known about this goal current',
+  founding: 'its research is still being founded (people, cases or claims short)',
+  stale: 'its research has not completed a night for two days or more',
+};
+cmds.research = (a) => {
+  const d = a.date || today();
+  if (flag(a, 'due')) {
+    const only = list(a.only || process.env.GODSPEED_RESEARCH_ONLY || '');
+    const rows = S.all()
+      .filter(c => c.f.KIND === 'outcome' && isOpen(c) && (!only.length || only.includes(c.id)))
+      .map(c => { const st = researchState(c, d); return { id: c.id, mode: (st === 'none' || st === 'founding') ? 'founding' : 'daily', last: lastDay(c.id) }; })
+      .filter(r => r.last !== d)
+      .sort((x, y) => (x.last || '').localeCompare(y.last || '') || x.id.localeCompare(y.id));
+    if (flag(a, 'json')) { say(JSON.stringify(rows)); return; }
+    for (const r of rows) say(`${r.id} ${r.mode} ${r.last || 'never'}`);
+    return;
+  }
+  const c = S.read(a._[0] || die('usage: mc-goals research <id> [--state [--json]] | research --due [--only a,b] [--json]')) || die('no such goal');
+  if (c.f.KIND !== 'outcome') die(`${c.id} is a ${c.f.KIND}; research is kept for outcomes, and a ${c.f.KIND} uses the research of the outcome it serves (${list(c.f.SERVES)[0] || 'none named'})`);
+  if (flag(a, 'state')) {
+    const n = researchCounts(c.id, d);
+    const st = researchState(c, d);
+    if (flag(a, 'json')) { say(JSON.stringify(Object.assign({ id: c.id, state: st, last: lastDay(c.id) }, n))); return; }
+    say(`${c.id}: ${st}; people ${n.people} (${n.verified} verified, ${n.hot} hot), cases ${n.cases}, claims ${n.claims}, open openings ${n.openings}, last night ${lastDay(c.id) || 'never'}`);
+    return;
+  }
+  const rel = scaffoldResearch(c, d);
+  S.write(c);
+  say(rel);
+};
+
+// ---------------------------------------------------------------------------
 // attention: which goals deserve attention today, and why. Weightless. Reads, never writes,
 // unless --record.
 // ---------------------------------------------------------------------------
@@ -589,6 +711,7 @@ function plan(d, seats) {
     r.sinceProgress = daysSince(c, ['PROGRESS'], d);
     r.diagnosis = diagnosisState(c);
     if (c.f.KIND === 'outcome') r.playbook = playbookState(c, d);
+    if (c.f.KIND === 'outcome' && c.f.STATUS === 'adopted') r.research = researchState(c, d);
     r.question = openQ(c);
     // THE LOOP DECIDES WHO RESTS (2026-09-30). A goal whose moves are out in the world is waiting
     // for their verdicts and can rest a day; one with nothing in flight needs moves. Four goals
@@ -611,6 +734,7 @@ function plan(d, seats) {
     if (r.diagnosis === 'refuted') r.reasons.push('its constraint diagnosis was refuted: diagnose again before acting');
     if (r.diagnosis === 'claims a constraint without saying what would disprove it') r.reasons.push('diagnosis claims a constraint with no disconfirming condition');
     if (r.playbook && PLAYBOOK_REASON[r.playbook]) r.reasons.push(PLAYBOOK_REASON[r.playbook]);
+    if (r.research && RESEARCH_REASON[r.research]) r.reasons.push(RESEARCH_REASON[r.research]);
     if (r.sinceAttention === null) r.reasons.push('never looked at since filing');
     else if (r.sinceAttention >= 7) r.reasons.push(`not looked at for ${r.sinceAttention} days`);
     if (r.sinceProgress === null || r.sinceProgress >= 14) r.reasons.push(r.sinceProgress === null ? 'no progress recorded yet' : `no progress in ${r.sinceProgress} days`);
@@ -761,6 +885,8 @@ cmds.check = () => {
       if (pb === 'none') notes.push(`${c.id}: no playbook yet (mc-goals playbook ${c.id})`);
       if (pb === 'stale') notes.push(`${c.id}: playbook past its review date`);
       if (pb === 'refuted') notes.push(`${c.id}: playbook refuted, research again`);
+      const rs = researchState(c);
+      if (rs !== 'current') notes.push(`${c.id}: research ${rs}` + (rs === 'none' ? ` (mc-goals research ${c.id})` : ''));
     }
     for (const k of ['TITLE', 'MEASURE', 'OWN WORDS']) for (const [re, what] of MACHINE) if (c.f[k] && re.test(c.f[k])) problems.push(`${c.id}: ${k} carries ${what}`);
   }
@@ -790,6 +916,10 @@ cmds.help = () => say(`mc-goals: the register of what you want, and the choice o
   playbook <id> --current                 the sections are filled in; sets the review date (refused while a
                                           template placeholder remains)
   playbook <id> --refute --evidence "..." the model of success was wrong; the next plan asks for new research
+  research <id>                           makes goals/research/<id>/ (people, cases, claims, openings, sources,
+                                          brief, days/); made by itself when an outcome is adopted
+  research <id> --state [--json]          founding, stale or current, with the counts
+  research --due [--only a,b] [--json]    adopted outcomes not researched today, oldest first, with the mode
   read <id> <number> --where "..."        this week's reading of the goal's weekly number (LEAD)
   bets --moves <moves.md>                 copies each move's BET onto its goal (mc-decide runs it)
   settle [--date D] [--dry-run] [--json]  seven days after a move went live: worked, moved, flat, unread
@@ -799,7 +929,7 @@ cmds.help = () => say(`mc-goals: the register of what you want, and the choice o
 
 return {cmds,plan,parseLead,judge};
 }
-module.exports={createGoalCommands};
+module.exports={createGoalCommands,blocks};
 if(require.main===module){
 const {cmds}=createGoalCommands();
 const {die}=L;
