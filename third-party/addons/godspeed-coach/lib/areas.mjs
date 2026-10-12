@@ -28,6 +28,7 @@ export function parseRhythm(raw) {
 // model writes from. Handed "weekly sunday, 19:00", a model repeats the setting as it is.
 const ordinal = (n) => `${n}${n % 10 === 1 && n !== 11 ? "st" : n % 10 === 2 && n !== 12 ? "nd" : n % 10 === 3 && n !== 13 ? "rd" : "th"}`;
 export function rhythmWords(area) {
+  if (area.noTalk) return "with no talk";
   const r = area.rhythm;
   const at = `at ${area.time}`;
   if (!r) return `${at}, on a rhythm the coach cannot read ("${area.rhythmText}")`;
@@ -46,6 +47,9 @@ export function readArea(dir) {
     slug: path.basename(dir), dir, file, head: h, lists: d.lists, sections: d.sections,
     title: h.TITLE || path.basename(dir),
     rhythm: parseRhythm(h.RHYTHM), rhythmText: h.RHYTHM || "",
+    // An area made for a habit alone ("RHYTHM: none") has no talk: nothing opens, follows up or
+    // counts it as a talk, until a talk is set up for it.
+    noTalk: String(h.RHYTHM || "").trim().toLowerCase() === "none",
     time: /^\d\d:\d\d$/.test(h.TIME || "") ? h.TIME : "19:00",
     starts: /^\d{4}-\d{2}-\d{2}$/.test(h.STARTS || "") ? h.STARTS : null,
     on: (h.STATUS || "on").toLowerCase() === "on",
@@ -104,7 +108,7 @@ export const DEFAULT_PREPARATION = {
 
 const FIELD_CHECKS = {
   TITLE: (v) => (v.trim() ? null : "A title cannot be empty."),
-  RHYTHM: (v) => (parseRhythm(v) ? null : `"${v}" is not a rhythm. Say daily, weekly sunday, every 2 weeks friday or monthly 1.`),
+  RHYTHM: (v) => (parseRhythm(v) || String(v).trim().toLowerCase() === "none" ? null : `"${v}" is not a rhythm. Say daily, weekly sunday, every 2 weeks friday, monthly 1, or none for no talk.`),
   TIME: (v) => (/^([01]\d|2[0-3]):[0-5]\d$/.test(v) ? null : `"${v}" is not a time. Write it as HH:MM, for example 19:00.`),
   STARTS: (v) => (/^\d{4}-\d{2}-\d{2}$/.test(v) && !isNaN(Date.parse(v)) ? null : `"${v}" is not a date. Write it as YYYY-MM-DD.`),
   STATUS: (v) => (["on", "paused"].includes(v) ? null : "STATUS is on or paused."),
@@ -114,21 +118,47 @@ const FIELD_CHECKS = {
 };
 export const AREA_FIELDS = Object.keys(FIELD_CHECKS);
 
+const areaSlug = (name) => String(name || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 30);
+
 export function addArea(mcDir, { slug, title, rhythm, time = "19:00", starts, style = "compass", tone = "gentle", serves = "", limits = [], reads = [], preparation = "" }) {
-  const s = String(slug || title || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 30);
+  const s = areaSlug(slug || title);
   if (!s) throw new Error("An area needs a name, for example health.");
   const dir = path.join(coachDir(mcDir), s);
-  if (fs.existsSync(path.join(dir, "area.md"))) throw new Error(`There is already an area called ${s}. Change it instead.`);
-  const fields = { TITLE: title || s, RHYTHM: rhythm, TIME: time, STARTS: starts, STATUS: "on", STYLE: style, TONE: tone, SERVES: serves };
+  // An area a habit started with no talk gets its talk here, keeping its title unless a new one is
+  // given, and whatever MAY READ and LIMIT lines or sections it had; its habits stay where they are.
+  const before = readArea(dir);
+  if (before && !before.noTalk) throw new Error(`There is already an area called ${s}. Change it instead.`);
+  const fields = { TITLE: title || before?.title || s, RHYTHM: rhythm, TIME: time, STARTS: starts, STATUS: "on", STYLE: style, TONE: tone, SERVES: serves };
+  if (String(rhythm ?? "").trim().toLowerCase() === "none") throw new Error("A talk needs a rhythm: daily, weekly sunday, every 2 weeks friday or monthly 1.");
   for (const [k, v] of Object.entries(fields)) {
     const p = FIELD_CHECKS[k](String(v ?? ""));
     if (p) throw new Error(p);
   }
+  const kept = (key) => (before?.lists[key] || []);
   const head = [`AREA: ${s}`, ...Object.entries(fields).map(([k, v]) => `${k}: ${v}`.trimEnd()),
-    ...[].concat(reads).filter(Boolean).map((r) => `MAY READ: ${r}`), ...[].concat(limits).filter(Boolean).map((l) => `LIMIT: ${l}`)];
+    ...[...kept("MAY READ"), ...[].concat(reads).filter(Boolean)].map((r) => `MAY READ: ${r}`), ...[...kept("LIMIT"), ...[].concat(limits).filter(Boolean)].map((l) => `LIMIT: ${l}`)];
+  const others = Object.entries(before?.sections || {}).filter(([t, c]) => t !== "Preparation" && c).map(([t, c]) => `\n## ${t}\n\n${c}\n`).join("");
   fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(path.join(dir, "area.md"), `${head.join("\n")}\n\n## Preparation\n\n${preparation || DEFAULT_PREPARATION[style]}\n`);
+  fs.writeFileSync(path.join(dir, "area.md"), `${head.join("\n")}\n\n## Preparation\n\n${preparation || DEFAULT_PREPARATION[style]}\n${others}`);
   return readArea(dir);
+}
+
+// The area a new habit goes in. A habit can start on its own, on day one: when its area does not
+// exist yet, it is made with no talk (RHYTHM none). No talk is invented or scheduled; one is set up
+// only when they ask for it ("a weekly health talk on Sundays at seven"), with `area add`.
+// Returns the area and whether it was made now.
+export function habitArea(mcDir, name) {
+  const found = findArea(mcDir, name);
+  if (found) return { area: found, created: false };
+  const s = areaSlug(name);
+  if (!s) throw new Error("A habit needs an area, for example health.");
+  const dir = path.join(coachDir(mcDir), s);
+  if (fs.existsSync(path.join(dir, "area.md"))) return { area: readArea(dir), created: false };
+  fs.mkdirSync(dir, { recursive: true });
+  const title = s.split("-").map((w, i) => (i ? w : w.charAt(0).toUpperCase() + w.slice(1))).join(" ");
+  fs.writeFileSync(path.join(dir, "area.md"), [`AREA: ${s}`, `TITLE: ${title}`, "RHYTHM: none", "STATUS: on", "STYLE: compass", "TONE: gentle", "SERVES:", "",
+    "## Preparation", "", "This area has no talk yet: it holds habits. When they ask for a talk, `godspeed-coach area add` gives it one.", ""].join("\n"));
+  return { area: readArea(dir), created: true };
 }
 
 export function setAreaField(area, key, value) {

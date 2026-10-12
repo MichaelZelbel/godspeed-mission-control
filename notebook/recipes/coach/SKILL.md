@@ -114,9 +114,18 @@ records the habit itself in this same file; either way the day is tracked once.
 ## A new habit outside a talk
 
 "New habit: ten minutes of reading." If the request does not say what counts as done and on which
-days, ask both once, in one message. Then `habit add` and confirm in plain words, in a short
-sentence that makes sense on its own. If the command refuses because five are active, say which
-five and ask which one to pause or graduate first.
+days, ask both once, in one message. When it says both ("New habit for my health: ten minutes of
+stretching every evening. Done means ten minutes on the mat, every day."), ask nothing. Then:
+
+    godspeed-coach habit add <area> <slug> --title "<title>" --done-means "<what counts as done>" --days <daily | mon,wed,fri>
+
+The area is the part of life they named ("for my health": `health`), or the one that obviously
+fits. It does not have to exist: when it does not, the command makes it, with no talk. A habit
+never needs a talk, so never ask for a day or time, set up a talk, or offer one to start a habit;
+a talk comes only when they ask for one ("A new area" below). Confirm in plain words, in a short
+sentence that makes sense on its own: what the habit is, what counts as done and on which days.
+If the command refuses because five are active, say which five and ask which one to pause or
+graduate first.
 
 Graduating and "make it smaller, or drop it?" are offered only inside a talk, when the brief says
 so, never in the evening check and never on their own.
@@ -145,7 +154,8 @@ its output as it is:
     godspeed-coach area add <name> --title "<title>" --rhythm "<weekly sunday>" --time <19:00> --style <review|compass> --tone <gentle|direct>
 
 Rhythms: `daily`, `weekly <day>`, `every 2 weeks <day>`, `monthly <1 to 28>`. The first talk is
-tomorrow or later (`--starts <date>` for a specific day). If they name what the talk should look
+tomorrow or later (`--starts <date>` for a specific day). An area a habit made has no talk
+(`godspeed-coach areas` says "no talk"); the same `area add` gives it one, and its habits stay. If they name what the talk should look
 at ("my running app", "my calendar") or something it must never do, add them to
 `coach/<area>/area.md` as `MAY READ:` and `LIMIT:` lines under the header, and say so in the same
 confirmation.

@@ -100,3 +100,56 @@ test("habits: a tracked day is taken back with untrack", () => {
   assert.equal(cli(mc, T, "habit", "untrack", "head lifts", "--date", "yesterday").out, "Taken back: Face-down head lifts, 2026-09-28.");
   assert.equal(fs.readFileSync(file, "utf8"), before);
 });
+
+// The book's capture run of 12 October 2026 (Mission Control's D-321): on a brand-new mission
+// control, "New habit for my health: ten minutes of stretching every evening" started nothing,
+// because there was no area called health, and the assistant asked for a talk instead.
+test("a habit starts on day one: its area is made with no talk, and nothing schedules one", () => {
+  const mc = tmpMission({ "coach/settings.json": JSON.stringify({ timezone: "Europe/Berlin", git_sync: "off" }) });
+  const T = "2026-10-12T04:46:00Z"; // a Monday, 06:46 Berlin
+  assert.equal(cli(mc, T, "areas").out, "No areas yet.");
+  const started = cli(mc, T, "habit", "add", "health", "stretching", "--title", "Stretching", "--done-means", "ten minutes on the mat", "--days", "daily");
+  assert.equal(started.code, 0, started.err);
+  assert.equal(started.out, "Started: Stretching (stretching), daily, from 2026-10-12. New area: Health (health), with no talk.");
+  assert.match(fs.readFileSync(path.join(mc, "coach", "health", "area.md"), "utf8"), /^AREA: health\nTITLE: Health\nRHYTHM: none\nSTATUS: on\n/);
+  assert.equal(cli(mc, T, "areas").out, "health: Health, no talk");
+  // No talk is ever due, followed up or opened for it, on any day.
+  for (const day of ["2026-10-13", "2026-10-18", "2026-10-25"]) for (const hm of ["06:00", "17:00", "19:00"]) assert.equal(cli(mc, `${day}T${hm}:00Z`, "gate").out, '{"wakeAgent": false}', `${day} ${hm}`);
+  assert.equal(fs.existsSync(path.join(mc, "coach", "health", "talks")), false, "no talk record");
+  // The habit is tracked, taken back and answered, and the evening check asks about it at 21:00.
+  assert.equal(cli(mc, T, "habit", "track", "track stretching").out, "Tracked: Stretching, 2026-10-12, done.");
+  assert.equal(cli(mc, T, "habit", "track", "stretching", "--date", "yesterday").out, "Tracked: Stretching, 2026-10-11, done.", "a day before it started is still kept as said");
+  assert.equal(cli(mc, T, "habit", "untrack", "stretching").out, "Taken back: Stretching, 2026-10-11.");
+  assert.equal(cli(mc, T, "habit", "track", "stretching", "--answer", "no").out, "Tracked: Stretching, 2026-10-12, no.");
+  assert.equal(cli(mc, "2026-10-13T19:00:00Z", "tick").out, [
+    "From your coach: Stretching today? You planned this habit for every day, and nothing is tracked for today yet. You said it counts as done when: ten minutes on the mat.",
+    `Reply "yes" if you did it, "no" if you didn't, or "skip" if today shouldn't count, for example because you were ill. No reply is fine: the day stays blank and I won't ask about it again.`,
+  ].join("\n"));
+  assert.equal(cli(mc, "2026-10-13T19:05:00Z", "habit", "answer", "yes").out, "Tracked: Stretching done.");
+  // A second habit in the same area uses it; another part of life gets its own.
+  assert.match(cli(mc, T, "habit", "add", "health", "water", "--title", "Water", "--days", "daily").out, /^Started: Water \(water\), daily, from 2026-10-12\.$/);
+  assert.match(cli(mc, T, "habit", "add", "work", "inbox-zero", "--title", "Inbox zero", "--days", "mon,fri").out, /New area: Work \(work\), with no talk\.$/);
+  // Asked for a talk later, the same area gets one, and keeps its habits.
+  assert.equal(cli(mc, T, "area", "add", "health", "--title", "Health", "--rhythm", "weekly sunday", "--time", "19:00", "--style", "review").out,
+    "Added: Health (health), weekly sunday at 19:00, review, gentle. First talk: 2026-10-18.");
+  assert.match(cli(mc, T, "areas").out, /^health: Health, weekly sunday 19:00, review, gentle, next talk 2026-10-18$/m);
+  assert.equal(cli(mc, "2026-10-18T17:00:00Z", "gate").out.split("\n")[0], "COACH TALK DUE: Health (id for commands: health), 2026-10-18, 19:00 Europe/Berlin");
+  assert.match(cli(mc, T, "habit", "list").out, /stretching: Stretching \(health, daily, active\)/);
+  // Or a rhythm set on an area with no talk: the talk starts tomorrow.
+  assert.equal(cli(mc, T, "area", "set", "work", "RHYTHM", "weekly", "friday").out, "Changed: Work RHYTHM = weekly friday. Next talk: 2026-10-16.");
+});
+
+test("a refused habit leaves no area behind, and the cap of five is unchanged", () => {
+  const mc = mission(), T = "2026-10-12T10:00:00Z";
+  for (const n of ["a", "b", "c", "d", "e"]) assert.equal(cli(mc, T, "habit", "add", "health", `habit-${n}`, "--title", `Habit ${n}`).code, 0);
+  const sixth = cli(mc, T, "habit", "add", "sleep", "lights-out", "--title", "Lights out");
+  assert.equal(sixth.code, 1);
+  assert.match(sixth.err, /^Already 5 active habits: Habit a, Habit b, Habit c, Habit d, Habit e\. Pause or graduate one first\.$/);
+  assert.equal(fs.existsSync(path.join(mc, "coach", "sleep")), false, "no area was left behind");
+  assert.equal(cli(mc, T, "habit", "add", "health", "x", "--days", "someday").code, 1);
+  // An area that has a talk is used as it is: nothing about it changes.
+  const before = fs.readFileSync(path.join(mc, "coach", "health", "area.md"), "utf8");
+  assert.equal(cli(mc, T, "habit", "status", "habit-a", "paused").code, 0);
+  assert.match(cli(mc, T, "habit", "add", "health", "f", "--title", "F").out, /^Started: F \(f\), daily, from 2026-10-12\.$/);
+  assert.equal(fs.readFileSync(path.join(mc, "coach", "health", "area.md"), "utf8"), before);
+});

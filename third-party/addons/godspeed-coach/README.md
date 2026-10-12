@@ -61,6 +61,7 @@ Then ask your assistant for your first area: "I want a weekly health talk on Sun
 godspeed-coach areas                          # the areas and when each next talks
 godspeed-coach brief health                   # what the next health talk would start from
 godspeed-coach habit add health head-lifts --title "Face-down head lifts" --done-means "a few 10-second holds" --days daily
+                                              # an area that does not exist yet is made, with no talk
 godspeed-coach habit track "did head lifts"   # --answer no|skip, --date yesterday
 godspeed-coach habit answer yes no            # tonight's check, in the order it asked
 godspeed-coach habit list                     # --all for paused and graduated ones too

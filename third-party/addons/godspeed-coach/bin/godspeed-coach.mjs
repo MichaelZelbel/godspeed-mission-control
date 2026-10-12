@@ -6,7 +6,7 @@ import path from "node:path";
 import { findMissionControl, appHome } from "../lib/paths.mjs";
 import { now, localParts, addDays } from "../lib/clock.mjs";
 import { loadSettings, setSetting, DEFAULTS } from "../lib/settings.mjs";
-import { listAreas, findArea, isTalkDay, addArea, setAreaField, nextTalkDay, AREA_FIELDS } from "../lib/areas.mjs";
+import { listAreas, findArea, isTalkDay, addArea, setAreaField, nextTalkDay, habitArea, AREA_FIELDS } from "../lib/areas.mjs";
 import { openTalk, readTalk, setTalkState, setFollowUp, addSaid, setShown, talkDates, talkFile } from "../lib/talks.mjs";
 import { addHabit, listHabits, findHabit, track, untrack, lastAnsweredDay, setStatus, stats, askedOn, answerOn } from "../lib/habits.mjs";
 import { readTable } from "../lib/auto.mjs";
@@ -89,7 +89,7 @@ const commands = {
   areas() {
     const as = listAreas(mcDir);
     const next = (a) => { for (let i = 0; i < 400; i++) { const d = addDays(today, i); if (isTalkDay(a, d)) return d; } return null; };
-    out(as.map((a) => `${a.slug}: ${a.title}, ${a.rhythmText} ${a.time}, ${a.style}, ${a.tone}, ${a.on ? `next talk ${next(a) || "none"}` : "paused"}`).join("\n") || "No areas yet.", as.map((a) => ({ slug: a.slug, title: a.title, next: next(a) })));
+    out(as.map((a) => (a.noTalk ? `${a.slug}: ${a.title}, no talk` : `${a.slug}: ${a.title}, ${a.rhythmText} ${a.time}, ${a.style}, ${a.tone}, ${a.on ? `next talk ${next(a) || "none"}` : "paused"}`)).join("\n") || "No areas yet.", as.map((a) => ({ slug: a.slug, title: a.title, next: next(a), ...(a.noTalk ? { talk: false } : {}) })));
   },
   show() { const a = needArea(pos[0]); console.log(fs.readFileSync(a.file, "utf8")); },
   area() {
@@ -98,8 +98,10 @@ const commands = {
       // A new area starts tomorrow unless a date is given, so creating "Sundays at seven" on a
       // Sunday evening never opens a talk fifteen minutes later by surprise.
       try {
-        const a = addArea(mcDir, { slug: name, title: f.title, rhythm: f.rhythm, time: f.time || "19:00", starts: f.starts ? dateArg(f.starts) : addDays(today, 1), style: f.style || "compass", tone: f.tone || "gentle", serves: f.serves || "" });
-        saved(`area ${a.slug} added`);
+        // An area a habit made with no talk gets its talk here (lib/areas.mjs addArea).
+        const had = findArea(mcDir, name);
+        const a = addArea(mcDir, { slug: had?.noTalk ? had.slug : name, title: f.title, rhythm: f.rhythm, time: f.time || "19:00", starts: f.starts ? dateArg(f.starts) : addDays(today, 1), style: f.style || "compass", tone: f.tone || "gentle", serves: f.serves || "" });
+        saved(`area ${a.slug} ${had?.noTalk ? "has a talk now" : "added"}`);
         const first = nextTalkDay(a, a.starts);
         return out(`Added: ${a.title} (${a.slug}), ${a.rhythmText} at ${a.time}, ${a.style}, ${a.tone}. First talk: ${first || "none"}.`, { ok: true, area: a.slug, first });
       } catch (e) { die(e.message); }
@@ -108,10 +110,12 @@ const commands = {
       const a = needArea(name);
       if (!key || !v.length) die(`godspeed-coach area set <area> <${AREA_FIELDS.join("|")}> <value>`);
       try {
-        const b = setAreaField(a, key, v.join(" "));
+        let b = setAreaField(a, key, v.join(" "));
+        // An area that had no talk gets one from tomorrow when it is given a rhythm.
+        if (key.toUpperCase() === "RHYTHM" && b.rhythm && !b.starts) b = setAreaField(b, "STARTS", addDays(today, 1));
         saved(`area ${b.slug} ${key.toUpperCase()}`);
         const first = nextTalkDay(b, today > (b.starts || today) ? today : b.starts || today);
-        return out(`Changed: ${b.title} ${key.toUpperCase()} = ${v.join(" ")}. ${b.on ? `Next talk: ${first || "none"}.` : "Paused: no talks until it is on again."}`, { ok: true, next: first });
+        return out(`Changed: ${b.title} ${key.toUpperCase()} = ${v.join(" ")}. ${b.noTalk ? "It has no talk." : b.on ? `Next talk: ${first || "none"}.` : "Paused: no talks until it is on again."}`, { ok: true, next: b.noTalk ? null : first });
       } catch (e) { die(e.message); }
     }
     die("godspeed-coach area add <name> --title ... --rhythm ... | area set <area> <SETTING> <value>");
@@ -156,11 +160,21 @@ const commands = {
     if (sub === "add") {
       const [area, slug] = args;
       if (!f.title && !slug) die('godspeed-coach habit add <area> <slug> --title "..." --done-means "..." --days daily');
+      if (!area) die('Say the habit\'s area: godspeed-coach habit add <area> <slug> --title "..."');
+      // A habit starts on its own, on day one: an area it names that does not exist yet is made for
+      // it, with no talk (lib/areas.mjs habitArea). The five-habit cap and every other check stay
+      // addHabit's; when it refuses, an area made for it is taken away again.
+      let made = null;
       try {
-        const h = addHabit(mcDir, { area, slug, title: f.title || slug, doneMeans: f["done-means"] || "", days: f.days || "daily", agreed: f.agreed || "", auto: f.auto || "" }, today, s.max_habits);
+        const { area: a, created } = habitArea(mcDir, area);
+        made = created ? a : null;
+        const h = addHabit(mcDir, { area: a.slug, slug, title: f.title || slug, doneMeans: f["done-means"] || "", days: f.days || "daily", agreed: f.agreed || "", auto: f.auto || "" }, today, s.max_habits);
         saved(`habit ${h.slug} started`);
-        return out(`Started: ${h.title} (${h.slug}), ${h.daysText}, from ${h.started}.`, { ok: true, habit: h.slug });
-      } catch (e) { die(e.message); }
+        return out(`Started: ${h.title} (${h.slug}), ${h.daysText}, from ${h.started}.${made ? ` New area: ${made.title} (${made.slug}), with no talk.` : ""}`, { ok: true, habit: h.slug, area: a.slug, ...(made ? { area_created: true } : {}) });
+      } catch (e) {
+        if (made) fs.rmSync(made.dir, { recursive: true, force: true });
+        die(e.message);
+      }
     }
     if (sub === "track") {
       const words = args.join(" ").trim() || f.words;
