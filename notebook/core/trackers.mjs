@@ -5,6 +5,7 @@
 // and minute ("2026-10-11 06:30"). Resting and the 24-hour hold are worked out
 // when read, never by a job: nothing here may message anyone.
 import {localParts,addDays} from '../../third-party/addons/godspeed-coach/lib/clock.mjs';
+import {setupQuestion,lang,PERIOD_FLOWS} from './cycle.mjs';
 export const HOLD_MS=86400000,REST_DAYS=30;
 const MONTHS=['January','February','March','April','May','June','July','August','September','October','November','December'];
 const WEEKDAYS=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
@@ -54,10 +55,17 @@ export function schemaFor({unit,fields,cadence}){
  return [{key:'when',label:cadence==='any'?'When':'Day',type:cadence==='any'?'datetime':'date',primary:true},...own.map(f=>({...f,indexable:true})),{key:'note',label:'Note',type:'text'}];
 }
 const own=c=>(c.field_schema||[]).filter(f=>!['when','note'].includes(f.key));
+// A column with choices takes only its choices (the cycle tracker's flow and symptoms).
+function choice(f,v){
+ if(!Array.isArray(f.options)||!['select','multiselect'].includes(f.type))return v;
+ const items=f.type==='multiselect'?[].concat(v??[]):[v];
+ for(const x of items)if(!f.options.includes(x))throw Error(f.label+' is one of: '+f.options.join(', '));
+ return f.type==='multiselect'?[...new Set(items)]:v;
+}
 export function entryData(c,{value,data,note}){
  const fields=own(c),out={};
  if(value!==undefined&&value!==null&&value!==''){const f=fields.length===1?fields[0]:null;if(!f)throw Error('Say which column '+value+' belongs to');out[f.key]=f.type==='number'?toNumber(value):value;}
- for(const [k,v] of Object.entries(data||{})){const f=fields.find(x=>x.key===k);if(!f)throw Error('No column "'+k+'" in '+c.name);out[k]=f.type==='number'?toNumber(v):v;}
+ for(const [k,v] of Object.entries(data||{})){const f=fields.find(x=>x.key===k);if(!f)throw Error('No column "'+k+'" in '+c.name);out[k]=f.type==='number'?toNumber(v):choice(f,v);}
  if(fields.some(f=>f.type==='number')&&!fields.some(f=>out[f.key]!==undefined))throw Error('Say the value for '+c.name);
  if(note)out.note=String(note);return out;
 }
@@ -67,6 +75,8 @@ export const longDay=day=>{const d=new Date(dayMs(day));return d.getUTCDate()+' 
 const sinceDay=(day,today)=>{const gap=(dayMs(today)-dayMs(day))/86400000;return gap>0&&gap<7?WEEKDAYS[new Date(dayMs(day)).getUTCDay()]:longDay(day);};
 const ordinal=n=>n+(n%100>=11&&n%100<=13?'th':['th','st','nd','rd'][n%10]||'th');
 export function holdQuestion(p,today){
+ // The cycle tracker asks its own question, the design's words (cycle.mjs).
+ if(p.specialist==='cycle')return setupQuestion(lang(p.language),p.entry?{day:p.entry.when,period:PERIOD_FLOWS.has(p.entry.data?.flow),symptoms:p.entry.data?.symptoms||[]}:null,today);
  const fields=(p.field_schema||[]).filter(f=>!['when','note'].includes(f.key)),one=fields.length===1&&fields[0].type==='number'?fields[0]:null;
  const shape=one?'one number'+(one.unit?' in '+one.unit:''):fields.length?'with '+fields.map(f=>f.label).join(', '):'counting each time';
  const kept=p.entry?(one&&p.entry.data[one.key]!==undefined?" I've kept the "+fmt(p.entry.data[one.key])+' for ':" I've kept this one for ")+(p.entry.when.slice(0,10)===today?'today':longDay(p.entry.when.slice(0,10)))+'.':'';

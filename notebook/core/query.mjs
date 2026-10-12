@@ -25,7 +25,7 @@ for(const table of ['lead_entries','lead_runs','lead_examples','lead_positions',
 tables.add('lead_measurements');
 tables.add('lead_comparisons');
 // A "track" for a tracker that does not exist yet, held for its one yes (D-321).
-tables.add('tracker_proposals');
+tables.add('tracker_proposals');tables.add('tracker_deletions');
 const defaults = {
   // Postgres filled in status; an item saved without one would now be left
   // out by Actions' .neq("status", "dismissed"), since NULL <> x is not true.

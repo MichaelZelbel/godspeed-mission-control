@@ -13,6 +13,7 @@ import {trackerOperation,TRACKER_OPERATIONS} from './tracker-operations.mjs';
 import {proposalState,card,findTracker} from './trackers.mjs';
 import {isHabitRef} from './habit-trackers.mjs';
 import {headacheOperation,headacheArgs} from './headache-operation.mjs';
+import {cycleOperation} from './cycle-operations.mjs';
 import {nextCalendarRun} from './jobs/calendar.mjs';
 import {resumeChanges} from './jobs/routine-control.mjs';
 import {readTable} from '../../third-party/addons/godspeed-coach/lib/auto.mjs';
@@ -149,6 +150,8 @@ export function personalOperation(domains,input){
  if(TRACKER_OPERATIONS.includes(type))return trackerOperation(domains,input);
  // Headaches: the headache add-on, the one owner of the Headaches tracker (headache-operation.mjs).
  if(type==='headache')return headacheOperation(domains,input);
+ // The cycle tracker: a specialist on the tracker base (cycle-operations.mjs).
+ if(type==='cycle')return cycleOperation(domains,input);
  const old=table=>{const r=store.get(table,required(input.id,'Record ID'));if(!r||r.removed_at)throw Error('Record does not exist');if(input.expected&&input.expected!==r._hash)store.conflict(table,input,r);return r;};
  if(type==='work-record-observation'){
   const item=old('work_items'),evidence=required(input.evidence,'Reported check evidence');

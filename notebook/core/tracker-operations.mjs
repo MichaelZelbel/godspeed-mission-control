@@ -5,6 +5,8 @@ import {norm,card,trackers,findTracker,entries,trackerStatus,proposalState,dayOf
 import {now as clockNow,addDays} from '../../third-party/addons/godspeed-coach/lib/clock.mjs';
 import {visibleRows} from './visibility.mjs';
 import {habitTrackerList,habitOperation,isHabitRef,findHabits} from './habit-trackers.mjs';
+import {cycleOperation,cycleCreate} from './cycle-operations.mjs';
+import {CYCLE_WORDS} from './cycle.mjs';
 export const TRACKER_OPERATIONS=['tracker-hold','tracker-create','track','tracker-correct','tracker-list'];
 const tz=store=>store.get('settings','installation')?.timezone||'UTC';
 // The coaching talk that reads a tracker, by its area's name (coach/<area>/: health, work,
@@ -19,6 +21,8 @@ export function trackerOperation(domains,input){
  const {store,query}=domains,type=input.type,now=clockNow(),zone=tz(store);
  if(type==='tracker-hold'){
   const name=String(input.name||'').trim();if(!name)throw Error('Say what to track');
+  // "track period" (and "track Periode", "track cramps") belongs to the cycle tracker (D-321 step 4).
+  if(input.specialist==='cycle'||CYCLE_WORDS.test(name))return cycleOperation(domains,{...input,action:'track'});
   // A habit the coach keeps, or the headache tracker's word, is never a new tracker (the order of D-321).
   const habit=findHabits(store,name)[0];if(habit)throw Error(habit.title+' is a habit: track it with its id from tracker-list, and the coach records the day.');
   const existing=findTracker(store,name).candidates;if(existing.some(c=>c.tracker.specialist==='headache'))throw Error(HEADACHES);
@@ -41,6 +45,7 @@ export function trackerOperation(domains,input){
  if(type==='tracker-create'){
   let p=null;if(input.proposal_id){p=store.get('tracker_proposals',input.proposal_id);if(proposalState(store,p,now)!=='pending')throw Error('That question has expired. Say it again and I will ask once more.');}
   else if(!input.fields&&!input.unit)throw Error('Say which columns the tracker should have');
+  if(p?.specialist==='cycle')return cycleCreate(domains,p,input);
   const name=String(input.name||p?.name||'').trim();if(!name)throw Error('Say what the tracker is called');
   if(findTracker(store,name).candidates.length)throw Error('There is already a tracker called '+name);
   const cadence=input.cadence?(input.cadence==='any'?'any':'daily'):p?.cadence||'daily';
@@ -59,6 +64,7 @@ export function trackerOperation(domains,input){
  if(['track','tracker-correct'].includes(type)&&isHabitRef(store,input.tracker))return habitOperation(store,input,{now,zone,today:dayOf(now,zone),assistant:domains.assistant===true});
  if(type==='track'){
   let c=resolve(store,input.tracker),under=false;if(c.tracker.specialist==='headache')throw Error(HEADACHES);
+  if(c.tracker.specialist==='cycle')return cycleOperation(domains,{...input,action:input.data?.ended===true||input.ended===true?'over':'track'});
   const word=typeof input.new_name==='string'?input.new_name.trim():'';
   if(word){
    if(findTracker(store,word).candidates.some(o=>o.id!==c.id))throw Error('Another tracker is already called '+word);
@@ -102,7 +108,7 @@ export function trackerOperation(domains,input){
   const items=store.list('collection_items'),list=trackers(store).filter(c=>visible.has(c.id)).map(c=>{
    const all=entries(store,c,items),made=[...all].sort((a,b)=>String(a.updated_at).localeCompare(String(b.updated_at))||String(a.created_at).localeCompare(String(b.created_at))).at(-1),todays=all.filter(i=>String(i.data?.when).slice(0,10)===today).at(-1);
    return {id:c.id,name:c.name,names:c.tracker.names||[c.name],cadence:c.tracker.cadence==='any'?'any':'daily',talk:c.tracker.talk||null,specialist:c.tracker.specialist||null,status:trackerStatus(store,c,now,all),hash:c._hash,
-    fields:own(c).map(({key,label,type,unit})=>({key,label,type,...(unit?{unit}:{})})),
+    fields:own(c).map(({key,label,type,unit,options})=>({key,label,type,...(unit?{unit}:{}),...(options?{options}:{})})),
     last:made?{id:made.id,when:made.data?.when,data:made.data,hash:made._hash}:null,today:todays?{id:todays.id,hash:todays._hash}:null,
     ...(from?{recent:all.filter(i=>String(i.data?.when).slice(0,10)>=from).map(i=>({id:i.id,when:i.data?.when,data:i.data,hash:i._hash}))}:{})};
   }).concat(habitTrackerList(store,{today,from})).filter(t=>!talk||t.talk===talk&&t.status==='active');
