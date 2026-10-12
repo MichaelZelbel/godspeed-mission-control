@@ -44,7 +44,10 @@ she writes German, `"language":"en"` when she writes English.
 Steps 4, 5 and 6 change her tracker: pass `"expected":{"collections/<tracker.id>":"<tracker.hash>"}`
 from status with them.
 
-Reply with the operation's `reply` and nothing else.
+Reply with the operation's `reply`, word for word and whole, and nothing else. Never shorten,
+summarise or reword it: the setup question and every forecast carry sentences she must read (what the
+tracker is not for, where her entries go). The rehearsal of 12 October 2026 showed a reply cut down to
+"Start a cycle tracker? I've kept today as day 1."; that must never happen again.
 
 ## Never
 

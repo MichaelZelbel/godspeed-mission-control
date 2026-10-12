@@ -82,6 +82,8 @@ test('the cycle-tracker recipe claims the period and declines what it never answ
   assert.match(cycle,/\{"type":"cycle","action":"decline"\}/);assert.match(cycle,/\{"type":"cycle","action":"forecast"\}/);
   assert.match(cycle,/"confirm":"<request_id>","expected":<that map>/);
   assert.match(cycle,/never a message/);assert.doesNotMatch(cycle,/[–—]/,'no long dashes');
+  // The bot's rehearsal (12 October 2026) cut the setup question to its first and last sentence.
+  assert.match(cycle,/word for word and whole, and nothing else\. Never shorten,\nsummarise or reword it/);
   const tracker=read('../recipes/tracker/SKILL.md');
   assert.match(tracker,/load the cycle-tracker recipe/);assert.match(tracker,/Never `track` on the cycle tracker/);
   const inventory=JSON.parse(read('../data/recipe-inventory.json'));
