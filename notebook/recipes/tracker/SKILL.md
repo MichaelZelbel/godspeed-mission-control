@@ -1,6 +1,6 @@
 ---
 name: tracker
-description: Track anything the person names. Use for every message that starts with "track" (any case, typed or dictated, "Track:" too, also inside a German sentence), the habits, headaches and the period included, since this recipe hands those on; when they answer yes to "Start a new tracker called ...?"; when they ask to set up a tracker ("I want to track my sleep: hours and quality"); when they correct or delete a tracked entry ("that was 91, not 92", "delete the last belly", "delete the last walk to work"); and when they ask about something they track ("how has my belly changed this month?").
+description: Track anything the person names. Use for every message that starts with "track" (any case, typed or dictated, "Track:" too, also inside a German sentence), the habits, headaches, the period and food included, since this recipe hands those on; when they answer yes to "Start a new tracker called ...?"; when they ask to set up a tracker ("I want to track my sleep: hours and quality"); when they correct or delete a tracked entry ("that was 91, not 92", "delete the last belly", "delete the last walk to work"); and when they ask about something they track ("how has my belly changed this month?").
 ---
 
 # Tracker
@@ -25,8 +25,11 @@ Read the trackers first: `personal_operation {"type":"tracker-list"}`. Then, in 
 3. **The period or the cycle** ("track period", "track Periode", "track period over", or a cycle
    symptom such as "track cramps"): load the cycle-tracker recipe and do what it says; its `cycle`
    operation keeps her cycle tracker. Never `track` on the cycle tracker (`"specialist":"cycle"`).
-4. **One of the trackers' names or other names**: yours, below.
-5. **Anything else**: a new tracker, asked about once, below.
+4. **Food, a meal or something they ate or drank** ("track food, tofu with rice", "track lunch, two
+   eggs", "track usual breakfast"): load the food-tracker recipe and do what it says; its `food`
+   operation keeps their food tracker. Never `track` on the food tracker (`"specialist":"food"`).
+5. **One of the trackers' names or other names**: yours, below.
+6. **Anything else**: a new tracker, asked about once, below.
 
 The journal no longer takes "track".
 

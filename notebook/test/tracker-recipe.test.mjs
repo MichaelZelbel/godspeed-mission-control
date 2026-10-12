@@ -62,7 +62,7 @@ test('the tracker recipe takes every "track" and hands habits and headaches on',
   const tracker=read('../recipes/tracker/SKILL.md'),description=tracker.match(/^description: (.*)$/m)[1];
   assert.match(description,/every message that starts with "track"/);
   assert.doesNotMatch(description,/not a habit|not a headache/);
-  const order=['**An active habit**','**A headache, a pill or a pain level**','**The period or the cycle**','**One of the trackers\' names','**Anything else**'].map(x=>tracker.indexOf(x));
+  const order=['**An active habit**','**A headache, a pill or a pain level**','**The period or the cycle**','**Food, a meal or something they ate or drank**','**One of the trackers\' names','**Anything else**'].map(x=>tracker.indexOf(x));
   assert.ok(order.every(i=>i>0)&&order.every((i,n)=>!n||i>order[n-1]),'the hand-off order');
   assert.match(tracker,/\{"type":"track","tracker":"<its id>","words":"<their message>"\}/);
   assert.match(tracker,/load the headache-tracker recipe/);
@@ -92,4 +92,23 @@ test('the cycle-tracker recipe claims the period and declines what it never answ
   for(const name of ['tracker','cycle-tracker'])assert.ok(revisions[name+'/SKILL.md'].includes(digest(read('../recipes/'+name+'/SKILL.md'))),name+' ships a known revision');
   // The tracker text shipped until 12 October 2026 (e8eb43c) stays known, so an unedited copy is replaced.
   assert.ok(revisions['tracker/SKILL.md'].includes('670b19ada22060f4bf9f6e7e44bfee6ec6fe7507a636e5faa33f13c992583e85'));
+});
+
+// Step 5 (D-321): the food tracker has its own recipe, and the tracker recipe hands food to it, after the
+// cycle and before its own trackers.
+test('the food-tracker recipe claims food, keeps every number with the operation, and is listed',()=>{
+  const food=read('../recipes/food-tracker/SKILL.md'),description=food.match(/^description: (.*)$/m)[1],tracker=read('../recipes/tracker/SKILL.md');
+  assert.match(food,/^---\nname: food-tracker\n/);
+  for(const words of ['"track food, ..."','"track usual lunch"','"what did I eat today?"','"set my food target"','"stop showing calories"','"remember this as my usual lunch"','"the eggs were three"'])assert.ok(description.includes(words),words);
+  assert.match(food,/Work out calories, protein or a target yourself/);assert.match(food,/Guess the size of a pack, bowl, plate, glass or can/);
+  assert.match(food,/under 19, pregnant, breastfeeding, or who has or had an eating\s+disorder/);
+  assert.match(food,/"expected":\{"collection_items\/<id>":"<hash>"\}/);
+  assert.doesNotMatch(food,/[–—]/,'no long dashes');
+  assert.match(tracker,/load the food-tracker recipe/);assert.match(tracker,/Never `track` on the food tracker/);
+  assert.match(tracker.match(/^description: (.*)$/m)[1],/the period and food included/);
+  const inventory=JSON.parse(read('../data/recipe-inventory.json'));
+  assert.deepEqual(inventory.find(r=>r.name==='food-tracker'),{...inventory.find(r=>r.name==='tracker'),name:'food-tracker'});
+  const revisions=JSON.parse(read('../data/recipe-revisions.json'));
+  assert.ok(revisions['tracker/SKILL.md'].includes('b876984f2d8ad2f25ffda69c45ac2978cea74a9a86e840d863704e2d79f5b1a1'),'the tracker text shipped until today');
+  for(const name of ['tracker','food-tracker'])assert.ok(revisions[name+'/SKILL.md'].includes(digest(read('../recipes/'+name+'/SKILL.md'))),name+' ships a known revision');
 });

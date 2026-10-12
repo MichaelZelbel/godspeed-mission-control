@@ -313,5 +313,10 @@
     "name": "cycle-tracker",
     "classification": "source only",
     "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details."
+  },
+  {
+    "name": "food-tracker",
+    "classification": "source only",
+    "reason": "Portable recipe and shared record/runtime operations; no private incident prose or account details."
   }
 ]
