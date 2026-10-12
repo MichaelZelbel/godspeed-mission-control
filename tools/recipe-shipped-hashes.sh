@@ -4,12 +4,19 @@
 # older one, plus the version in the working tree. kit-bootstrap replaces a reader's copy only
 # when it matches one of these, so a recipe the reader edited is never touched. Run it after
 # changing a starter recipe and commit the result with the change.
+# A hash once committed stays listed (2026-10-13): git log --name-only names no file for a merge
+# commit, so a version only a merge produced (morning-brief's of 2026-10-09, listed by hand in
+# 983e4d0) dropped out on the next run, and a reader with that copy would have counted as edited.
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 sum() { if command -v sha256sum >/dev/null 2>&1; then sha256sum | cut -d' ' -f1; else shasum -a 256 | cut -d' ' -f1; fi; }
 for dir in starter-godspeed/skills/*/; do
   f="${dir}SKILL.md"; [ -f "$f" ] || continue
+  # The committed list, not the file on disk: a run between two edits must not keep the hash of a
+  # version that was never committed (and the write below truncates the file as the pipe starts).
+  listed="$(git show "HEAD:${dir}.shipped-sha256" 2>/dev/null | tr -d '\r' || true)"
   {
+    if [ -n "$listed" ]; then printf '%s\n' "$listed"; fi
     git log --follow --format='C %H' --name-only -- "$f" | awk '/^C /{c=$2; next} NF{print c, $0}' |
       while read -r c p; do git show "$c:$p" 2>/dev/null | tr -d '\r' | sum; done
     tr -d '\r' < "$f" | sum

@@ -1,6 +1,6 @@
 ---
 name: morning-brief
-description: Write today's morning brief into brief/YYYY-MM-DD.md, the short message that reaches the person each morning when they switched it on in setup. The starter version every mission control ships with; Chapter 25 of the book shows how to replace it with your own. Use when the morning brief job runs, when the person asks for "today's brief", "my brief" or "the brief again", and when they ask to switch the morning brief on.
+description: Write today's morning brief into brief/YYYY-MM-DD.md, the short message that reaches the person each morning when they switched it on in setup. The starter version every mission control ships with; Chapter 25 of the book shows how to replace it with your own. Use when the morning brief job runs, when the person asks for "today's brief", "my brief" or "the brief again", when they answer the brief's list of steps going out with "stop" or "stop" and a number, and when they ask to switch the morning brief on.
 ---
 
 # Morning brief (starter)
@@ -52,6 +52,37 @@ line, then ask the one question that would help
 most, which the person can answer in a sentence of their own, such as "What are you working
 on this week?" Never hand them a form with blanks to fill. A short honest brief beats an
 invented one.
+
+## Going out tonight
+
+Some steps go out on their own unless the person stops them: kinds of step they allowed once, in
+their own words, so they need no yes each time. This brief is where they see each one in time to
+stop it. Run `mc-work going-out --json`. When it lists nothing, or `mc-work` is not installed,
+leave this section out. Otherwise write it in the person's language, after the first part:
+
+    Going out at 8 pm unless you say stop:
+    1. <what changes where, in plain words> (<its goal, in plain words>)
+    2. ...
+    Reply "stop" to keep all of them back, or "stop" and a number for one.
+
+Number each line with its `n`, exactly as the list gives it, even when a number is skipped: the
+person's reply names that number. The time is each step's `at`, which is UTC: show it in the
+person's own time zone, the way they write times (8 pm, or 20:00), and when the steps go out at
+different times, give each line its own time. Write `what` as one plain sentence without file
+paths. This section does not count toward the 200 words.
+
+When the brief file holds the list, run `mc-work announce <id> <id> ...` with exactly the `id` of
+each line you showed, and no other: a step the person was never shown must never go out, and the
+mark is what lets a shown step go at its time (one never shown waits for the next morning). If it
+names a step it could not mark, take that line out of the brief before you answer. Never announce
+for a test brief or when no new brief was written today.
+
+**When they answer it.** "stop" (or "stopp", "halt", in their language) with no number keeps back
+every step of the day: `mc-work stop --today --words "<their words>"`. "stop 2" keeps back only
+line 2: find the `id` whose `n` is 2 in `mc-work going-out --json` and run
+`mc-work stop <id> --words "<their words>"` (for several numbers, once for each). Confirm in one
+plain sentence what is kept back. When nothing was going out, say "Nothing was going out today."
+and run nothing.
 
 ## Deadlines and targets
 
