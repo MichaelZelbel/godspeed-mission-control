@@ -4,7 +4,14 @@ Godspeed with the integrated notebook, for readers of [Teach It Once: Make AI yo
 
 Version 2 is the current edition, here on `main`. Its installers set up a new, separate folder. They do not move an existing version 1 Godspeed folder or your Menerio account.
 
-## New in this release (10 October 2026)
+## New in this release (12 October 2026)
+
+- Every new conversation is saved. What you type to the AI apps on your computer (Hermes, your mission control's own assistant, Claude Code, Codex and OpenCode) and what they answer goes into the conversation archive in `prompts/archive/`, from the day you install or update. The one-click server saves its Telegram chat every hour.
+- The "Your conversations" boxes and `--sources` decide one thing only: whether chats from before the install are brought in as well. Unticked, only new chats are saved.
+- When your assistant cannot recall an earlier conversation, it runs `mc-prompt-archive search` before saying it does not know. That search now works on Windows without a Python of your own, from cmd and PowerShell, and from any folder.
+- Trackers: say "track" and a number or a thing, and your mission control keeps the count.
+
+## New on 10 October 2026
 
 - Programming goes to a coding helper. When you ask your mission control to write or change code in one of your projects, it hands the work to a helper that works only in that project's folder, tests and saves it there, and reports back, so your conversation keeps its context. Claude Code does this by itself; the manual tells Codex and Hermes to do the same.
 - On Linux, a routine that ran in the same instant the notebook first looked at it is no longer overlooked.
@@ -23,11 +30,11 @@ Version 2 is the current edition, here on `main`. Its installers set up a new, s
 
 ## Windows
 
-[Download GodspeedSetup.exe](https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-10-1/GodspeedSetup.exe), then run it.
+[Download GodspeedSetup.exe](https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-12-1/GodspeedSetup.exe), then run it.
 
 This uses Godspeed's original setup wizard and shared installer, then connects the integrated notebook. On a PC that already has Godspeed, the wizard selects a separate installation by default. The notebook opens at [http://127.0.0.1:47831/dashboard](http://127.0.0.1:47831/dashboard). Connect your own model account in Settings to use the assistant. The installer is unsigned.
 
-The executable is also [committed in this repository](installers/GodspeedSetup.exe). The [download page](https://github.com/MichaelZelbel/godspeed-mission-control/releases/tag/godspeed-v2-integrated-2026-10-10-1) lists the same file and its checksums.
+The executable is also [committed in this repository](installers/GodspeedSetup.exe). The [download page](https://github.com/MichaelZelbel/godspeed-mission-control/releases/tag/godspeed-v2-integrated-2026-10-12-1) lists the same file and its checksums.
 
 ## Linux or Mac
 
@@ -36,8 +43,8 @@ This uses Godspeed's shared native installer for Git, Node.js, Hermes and the Go
 Download this release's installer, check that it is the published file, and run it:
 
 ```bash
-curl -fsSLO https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-10-1/install-godspeed.sh
-echo "b89e006aea7203a2387f31c6351ad165642fec132602bc082a96d62fa042c022  install-godspeed.sh" | sha256sum -c - && bash install-godspeed.sh
+curl -fsSLO https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-12-1/install-godspeed.sh
+echo "a35846f68d747bbdea3de85bb75d6c76ea02ef2f49d7e36891f60ed312cac0e0  install-godspeed.sh" | sha256sum -c - && bash install-godspeed.sh
 ```
 
 On a Mac, write `shasum -a 256 -c -` where it says `sha256sum -c -`. The check refuses any other file, and the installer names one exact version of the notebook, so every reader of this release gets the same notebook.

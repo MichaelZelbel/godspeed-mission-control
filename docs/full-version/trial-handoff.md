@@ -7,11 +7,26 @@
 - Open this folder in VS Code or Codex: `C:/godspeed/work/trials/godspeed-v2`.
 - Windows notebook: http://127.0.0.1:49175/dashboard
 - Development VPS notebook: https://srv1069233.hstgr.cloud:48443/dashboard
-- Windows download: https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-10-1/GodspeedSetup.exe
-- Linux download: https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-10-1/install-godspeed.sh
-- Source, manifests and checksums: https://github.com/MichaelZelbel/godspeed-mission-control/releases/tag/godspeed-v2-integrated-2026-10-10-1
+- Windows download: https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-12-1/GodspeedSetup.exe
+- Linux download: https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-12-1/install-godspeed.sh
+- Source, manifests and checksums: https://github.com/MichaelZelbel/godspeed-mission-control/releases/tag/godspeed-v2-integrated-2026-10-12-1
 - One-click Hostinger installation: https://srv1069233.hstgr.cloud/godspeed-install
 - Development branch: https://github.com/MichaelZelbel/godspeed-mission-control/tree/main
+
+## 12 October 2026 release: every new conversation is saved
+
+`godspeed-v2-integrated-2026-10-12-1` installs product 8d56d992446d4ccf57565b7c7cc43e8ae4ebbf70 (main after the 10 October release, plus the conversation archive fix). The Windows installer is built from kit-bootstrap 0eafb061d28a077b2d7c0cc83d0bd002fcb44444 (branch `codex/godspeed-v2-native-integration`: c91da3a plus "every new chat is saved" and the engine-folder command fix of main's b05e1e2), and the Linux and Mac installer takes its shared installer from that commit too.
+
+What is new for a reader, since `godspeed-v2-integrated-2026-10-10-1`:
+
+- Every new conversation is saved (Michael, 12 October: "It is a bug, right? So fix the bug."). The book tells readers to leave "Your conversations" unticked or to pass `--sources ""`, and an unticked tool was never read, so no reader had a conversation saved. Now the installer records once when the computer began saving (`GODSPEED_PROMPT_SINCE` in `~/.godspeed/device.env`; the harvest records it on its first run where no installer did), every chat from then on is saved, and the boxes or `--sources` decide only whether older chats come in too. `GODSPEED_PROMPT_ARCHIVE=off` in device.env stops one computer, with no page offering it. An update says so in one line.
+- The reader's own assistant on Windows is read (its Hermes home in the setup's state folder, and any home an `assistant.json` names).
+- The one-click server runs the harvest every hour against its own Hermes home (`docker/full-candidate/prompt-archive-runner.mjs`): the Telegram chat is saved, committed and sent once Connect record sync has made the backup. Older chats on a server stay out.
+- `mc-prompt-archive` starts through `prompt-harvest.js --collector`, which finds a working Python, Hermes' own included; `mc-prompt-archive.cmd` ships; search finds the mission control the person stands in, then device.env's `GODSPEED_DIR`; a folder with no first commit is archived without touching git, and a computer with no git name commits under the notebook's name.
+- The starter's manual says: "When you cannot recall an earlier conversation, run `mc-prompt-archive search <words>` before saying you don't know." `godspeed.mjs init` adds that line once to an existing starter-born manual.
+- Also released with it, from main: trackers (D-321), mc-decide and mc-work-run saying when their assistant did not finish, moments' dates, a steadier timeline.
+
+Checked before publishing: see the clean install run in mc-installer-clean-test (branch `release-2026-10-12`), the Integrated Godspeed v2 run on `release/2026-10-12-archive`, and the image test `docker/full-candidate/test-prompt-archive.sh`.
 
 ## 10 October 2026 release: programming goes to a coding helper
 
