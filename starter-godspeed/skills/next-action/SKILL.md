@@ -148,7 +148,7 @@ two or more of its levers are challenged, refute the playbook (`mc-goals playboo
 
 For each active outcome, and the strategies and projects under it (`mc-goals tree`):
 
-**First the playbook**, `goals/playbooks/<id>.md`: who has reached this outcome, what they do,
+**Then the playbook**, `goals/playbooks/<id>.md`: who has reached this outcome, what they do,
 in what order, what they track, where it fails, and which of those steps a mission control can do on its
 own. Read it before anything else about the goal.
 

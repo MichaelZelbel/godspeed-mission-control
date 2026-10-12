@@ -117,11 +117,12 @@ Then these sections, in this order, each a few short bullets with links:
 - `## What we could do without asking`: steps the cases took that fall inside the goal's standing
   permissions: its `MAY:` lines (`mc-goals may <id>`) and, for a goal with no MAY lines, the goal
   card's `ALLOWED:` line. The mission control can take these itself.
-- `## Worth asking for`: one standing permission the person could give in one sentence, a kind of
-  step the cases show works and at most how many a week (for example "send up to two replies a
-  week to people who ask about X"). Spending, signing up, buying, booking, cancelling, a first
-  message to someone never contacted and bulk email are never offered here; they always need a
-  fresh yes.
+- `## Worth asking for`: at most one step outside the goal's standing permissions (its `MAY:`
+  lines, or the card's `ALLOWED:` line where there are none) that the cases show works, and never
+  one already given. Write it as one standing permission the person could give in one sentence: the
+  kind of step and at most how many a week. Spending, signing up, buying, booking, cancelling, a
+  first message to someone never contacted, bulk email and anything on LinkedIn by automation are
+  never offered here; they always need a fresh yes.
 - `## Challenges to the playbook`: `none`, or the bullets from step 4.
 
 ## The day record
@@ -143,6 +144,6 @@ Then these sections, in this order, each a few short bullets with links:
 
 ## Finish
 
-Run `mc-check-research --goal <id> --date <today> --mode <mode>` and fix every PROBLEM line it
+Run `mc-check-research --goal <id> --date <today> --mode <mode> --fetch` and fix every PROBLEM line it
 prints. Your final answer is one plain sentence: the most useful thing you learned tonight for this
 goal, or "nothing new" and the number of searches you ran.
