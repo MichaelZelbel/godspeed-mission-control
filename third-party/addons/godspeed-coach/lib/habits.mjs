@@ -133,6 +133,13 @@ export function untrack(habit, ymd) {
   throw new Error(`No answer is tracked for ${ymd}.`);
 }
 
+// The day of the newest answer line in the file: the one he tracked or changed last.
+export function lastAnsweredDay(habit) {
+  const lines = fs.readFileSync(habit.file, "utf8").split("\n");
+  for (let j = lines.length - 1; j >= 0; j--) { const m = lines[j].match(LINE); if (m && ANSWERS.includes(m[2])) return m[1]; }
+  return null;
+}
+
 export const answerOn = (habit, ymd) => habit.log[ymd]?.answer || null;
 export const askedOn = (habit, ymd) => Boolean(habit.log[ymd]?.asked);
 

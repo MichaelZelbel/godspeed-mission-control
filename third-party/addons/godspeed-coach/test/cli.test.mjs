@@ -83,3 +83,20 @@ test("the gate and context never fail loudly, even without a mission control", (
   const c = cli(empty, "2026-10-04T17:00:00Z", "context");
   assert.equal(c.code, 0); assert.equal(c.out, "");
 });
+
+// "Delete the last head lifts", "undo that": the newest tracked day goes, so the habit file is as it
+// was; another day with --date. Nothing tracked yet is said plainly, and nothing changes.
+test("habits: a tracked day is taken back with untrack", () => {
+  const mc = mission();
+  const T = "2026-09-29T10:00:00Z";
+  cli(mc, T, "habit", "add", "health", "head-lifts", "--title", "Face-down head lifts", "--days", "daily");
+  const file = path.join(mc, "coach", "health", "habits", "head-lifts.md");
+  const before = fs.readFileSync(file, "utf8");
+  const none = cli(mc, T, "habit", "untrack", "head lifts");
+  assert.equal(none.code, 1); assert.match(none.err, /Nothing is tracked for Face-down head lifts yet\./);
+  cli(mc, T, "habit", "track", "head lifts", "--answer", "no", "--date", "yesterday");
+  cli(mc, T, "habit", "track", "did head lifts");
+  assert.equal(cli(mc, T, "habit", "untrack", "head lifts").out, "Taken back: Face-down head lifts, 2026-09-29.");
+  assert.equal(cli(mc, T, "habit", "untrack", "head lifts", "--date", "yesterday").out, "Taken back: Face-down head lifts, 2026-09-28.");
+  assert.equal(fs.readFileSync(file, "utf8"), before);
+});

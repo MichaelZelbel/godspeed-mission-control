@@ -125,5 +125,6 @@ test("the coach recipe no longer claims messages that start with track", () => {
   const description = text.match(/^description: (.*)$/m)[1];
   assert.doesNotMatch(description, /"track /i);
   assert.match(description, /"did head lifts", "head lifts done", "Kopfheben erledigt"/);
-  assert.match(text, /starts with "track" belongs to the tracker recipe/);
+  assert.match(text, /"Track stretching" means "did stretching"/);
+  assert.match(text, /godspeed-coach habit untrack/);
 });

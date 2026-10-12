@@ -8,7 +8,7 @@ import { now, localParts, addDays } from "../lib/clock.mjs";
 import { loadSettings, setSetting, DEFAULTS } from "../lib/settings.mjs";
 import { listAreas, findArea, isTalkDay, addArea, setAreaField, nextTalkDay, AREA_FIELDS } from "../lib/areas.mjs";
 import { openTalk, readTalk, setTalkState, setFollowUp, addSaid, setShown, talkDates, talkFile } from "../lib/talks.mjs";
-import { addHabit, listHabits, findHabit, track, setStatus, stats, askedOn, answerOn } from "../lib/habits.mjs";
+import { addHabit, listHabits, findHabit, track, untrack, lastAnsweredDay, setStatus, stats, askedOn, answerOn } from "../lib/habits.mjs";
 import { readTable } from "../lib/auto.mjs";
 import { brief, habitLine } from "../lib/brief.mjs";
 import { gate, NO_WAKE } from "../lib/gate.mjs";
@@ -172,6 +172,18 @@ const commands = {
       saved(`habit ${h.slug} ${d} ${ans}`);
       return out(`Tracked: ${h.title}, ${d}, ${ans}.`, { ok: true, habit: h.slug, date: d, answer: ans });
     }
+    if (sub === "untrack") {
+      // "Delete the last head lifts", "undo that": the newest tracked day, or the day --date names,
+      // is taken back, line and all (lib/habits.mjs untrack).
+      const words = args.join(" ").trim() || f.words;
+      if (!words) die('Say which habit: godspeed-coach habit untrack "head lifts"');
+      const h = needHabit(words, { includeInactive: true });
+      const d = f.date ? dateArg(f.date) : lastAnsweredDay(h);
+      if (!d) die(`Nothing is tracked for ${h.title} yet.`);
+      try { untrack(h, d); } catch (e) { die(e.message); }
+      saved(`habit ${h.slug} ${d} taken back`);
+      return out(`Taken back: ${h.title}, ${d}.`, { ok: true, habit: h.slug, date: d });
+    }
     if (sub === "answer") {
       // "yes no" to tonight's check, in the order it asked.
       const d = dateArg(f.date);
@@ -194,7 +206,7 @@ const commands = {
       saved(`habit ${h.slug} ${st}`);
       return out(`${h.title} is now ${st}.`, { ok: true });
     }
-    die("godspeed-coach habit add|track|answer|list|status");
+    die("godspeed-coach habit add|track|untrack|answer|list|status");
   },
   habits() {
     if (pos[0] !== "week") die("godspeed-coach habits week [<area>]");
