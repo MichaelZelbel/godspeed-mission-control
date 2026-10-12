@@ -108,7 +108,10 @@ export function trackerOperation(domains,raw){
    if(current===talk)return same(the+' already looks at '+yours+'.');
    if(current&&input.instead!==true)return same('Your '+trackerWords(c)+' is looked at by the '+talkWords(current)+' talk, and a tracker has one talk. Should the '+talkWords(talk)+' talk look at it instead?');
   }
-  const updated=query.execute({table:'collections',operation:'update',values:{tracker:{...c.tracker,talk:remove?null:talk}},filters:[['eq','id',c.id]],expected:expectedOf(input,'collections',c.id)}).data[0];
+  query.execute({table:'collections',operation:'update',values:{tracker:{...c.tracker,talk:remove?null:talk}},filters:[['eq','id',c.id]],expected:expectedOf(input,'collections',c.id)});
+  // The hash the next change needs is the saved card's: over MCP the update's own row still carried
+  // the old one (the capture of 12 October 2026), so it is read back, as the food tracker does.
+  const updated=store.get('collections',c.id);
   return {collection_id:c.id,talk:remove?null:talk,changed:true,tracker_hash:updated._hash,reply:remove?the+' no longer looks at '+yours+'.':the+' may now look at '+yours+(current?', instead of the '+talkWords(current)+' talk':'')+'.'};
  }
  // A habit's day is the coach's: its own track() on its own file (habit-trackers.mjs).

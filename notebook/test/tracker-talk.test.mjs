@@ -28,6 +28,8 @@ test('a talk that exists may be told to look at a tracker, and to stop again',as
  const on=await f.op({type:'tracker-talk',tracker:'sleep',talk:'health'});
  assert.equal(on.reply,'The health talk may now look at your sleep tracker.');
  assert.equal(on.changed,true);assert.equal(on.talk,'health');
+ // The tracker's new hash, for the next change (the capture of 12 October 2026 got the old one).
+ assert.equal(on.tracker_hash,trackers(f.store).find(x=>x.name==='Sleep')._hash);assert.notEqual(on.tracker_hash,c._hash);
  assert.equal(card(f,'Sleep').talk,'health');assert.deepEqual(await read(f,'health'),['Sleep']);
  // Everything else on the card stays as it was.
  const {talk:_a,...rest}=card(f,'Sleep'),{talk:_b,...was}=c.tracker;assert.deepEqual(rest,was);
@@ -86,7 +88,7 @@ test('the bot changes a tracker\'s talk over MCP only with the tracker\'s hash',
  const done=await call({type:'tracker-talk',tracker:listed.id,talk:'health',words,expected:{['collections/'+listed.id]:listed.hash}});
  assert.equal(done.error,false,done.text);assert.equal(JSON.parse(done.text).reply,'The health talk may now look at your sleep tracker.');
  const now=JSON.parse((await call({type:'tracker-list'})).text).trackers.find(x=>x.name==='Sleep');
- assert.equal(now.talk,'health');
+ assert.equal(now.talk,'health');assert.equal(JSON.parse(done.text).tracker_hash,now.hash,'the reply gives the hash the next change needs');
  const off=await call({type:'tracker-talk',tracker:now.id,talk:'health',remove:true,words:'The health talk no longer needs my sleep tracker.',expected:{['collections/'+now.id]:now.hash}});
  assert.equal(JSON.parse(off.text).reply,'The health talk no longer looks at your sleep tracker.');
 });
