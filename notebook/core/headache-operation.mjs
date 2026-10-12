@@ -13,6 +13,10 @@ import {longDay} from './trackers.mjs';
 export const HEADACHE_ACTIONS=['start','log','set','med','end','cancel'];
 const given=v=>v!==undefined&&v!==null&&v!=='';
 const medsOf=input=>[].concat(input.meds??[]).map(m=>typeof m==='string'?{med:m}:m).filter(m=>m&&typeof m.med==='string'&&m.med.trim());
+// A dose said as a word is written as its number: "one" is 1, "zwei Tabletten" 2 Tabletten (the
+// third recapture of 12 October 2026 answered "took ibuprofen one").
+const NUMBER_WORDS={one:1,two:2,three:3,four:4,five:5,six:6,seven:7,eight:8,nine:9,ten:10,eine:1,einen:1,eins:1,zwei:2,drei:3,vier:4,'fünf':5,sechs:6};
+const doseOf=dose=>String(dose).trim().replace(/^\p{L}+(?=\s|$)/u,w=>NUMBER_WORDS[w.toLocaleLowerCase()]!==undefined?String(NUMBER_WORDS[w.toLocaleLowerCase()]):w);
 // The command line the add-on is given: his words verbatim, every detail as its own flag.
 export function headacheArgs(input){
  const action=input.action;if(!HEADACHE_ACTIONS.includes(action))throw Error('Say what happened to the headache: started, more about it, a pill, over, or a mistake');
@@ -22,7 +26,7 @@ export function headacheArgs(input){
  flag('at',input.at);flag('from',input.from);flag('to',input.to);flag('pain',input.pain);flag('side',input.side);flag('quality',input.quality);
  for(const x of [].concat(input.symptoms??[]))flag('symptom',x);
  for(const x of [].concat(input.triggers??[]))flag('trigger',x);
- for(const m of medsOf(input))args.push('--med',m.med.trim()+(given(m.dose)?': '+String(m.dose).trim():''));
+ for(const m of medsOf(input))args.push('--med',m.med.trim()+(given(m.dose)?': '+doseOf(m.dose):''));
  flag('taken',input.taken);flag('episode',input.episode);
  const words=String(input.words??input.source_quote??'').trim();if(words)args.push('--words',words);
  args.push('--source',String(input.source_app||'notebook'));

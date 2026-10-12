@@ -20,6 +20,9 @@ const HEADACHES='The Headaches tracker is kept by the headache tracker: say it a
 // The food tracker's rows are worked out by its own operation from the food table (D-321 step 5).
 const FOOD='The food tracker is kept by the food operation: food {action:"track",items:[{food:<id from food search>,item,grams?,count?,unit?,assumed?}]}, as the food-tracker recipe says; never track.';
 const has=input=>input.value!==undefined&&input.value!==null&&input.value!==''||Object.keys(input.data||{}).length>0;
+// A new tracker's name is a title, "Belly", whatever case the person or the model wrote it in (the
+// third recapture of 12 October 2026: "Start a new tracker called belly"). A name with capitals stays.
+const titleOf=value=>{const s=String(value??'').trim();return s&&s===s.toLocaleLowerCase()?s.charAt(0).toLocaleUpperCase()+s.slice(1):s;};
 // The person's message, as an assistant passes it (`words`) or the chat quotes it (`source_quote`).
 const wordsOf=input=>String(input.words??input.source_quote??'').trim();
 export function trackerOperation(domains,raw){
@@ -29,7 +32,7 @@ export function trackerOperation(domains,raw){
  // (trackers.mjs entryOn). Every path below, habits, the cycle and food included, gets the day.
  const input=['tracker-hold','track'].includes(type)?{...raw,on:entryOn(raw,dayOf(now,zone),{assistant})}:raw;
  if(type==='tracker-hold'){
-  const name=String(input.name||'').trim();if(!name)throw Error('Say what to track');
+  const name=titleOf(input.name);if(!name)throw Error('Say what to track');
   // "track period" (and "track Periode", "track cramps") belongs to the cycle tracker (D-321 step 4).
   if(input.specialist==='cycle'||CYCLE_WORDS.test(name))return cycleOperation(domains,{...input,action:'track'});
   // A habit the coach keeps, or the headache tracker's word, is never a new tracker (the order of D-321).
@@ -68,7 +71,7 @@ export function trackerOperation(domains,raw){
   // Their yes is a message of its own, after the question (the capture run of 12 October 2026: the
   // bot asked and created in one turn, and a first entry was made that nobody said yes to).
   if(p){const said=wordsOf(input);if(assistant&&!said)throw Error("Pass the person's answer as words: only their yes to the question creates the tracker.");if(said&&p.words&&norm(said)===norm(p.words))throw Error('That is the message that asked for the tracker. Ask the question, and create it only when they answer yes.');}
-  const name=String(input.name||p?.name||'').trim();if(!name)throw Error('Say what the tracker is called');
+  const name=titleOf(input.name||p?.name);if(!name)throw Error('Say what the tracker is called');
   if(findTracker(store,name).candidates.length)throw Error('There is already a tracker called '+name);
   const cadence=input.cadence?(input.cadence==='any'?'any':'daily'):p?.cadence||'daily';
   // "Yes, but in inches" or "as often as I like" rebuilds the columns from the

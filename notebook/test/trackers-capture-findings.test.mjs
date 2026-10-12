@@ -195,16 +195,29 @@ test('a new habit on day one reaches the shelf, and "track stretching yesterday"
  assert.match(file,/- 2026-10-12 done \(notebook\) "track stretching"\n- 2026-10-12 no \(notebook\) "no stretching today"\n$/);
 });
 
-// The recapture of 12 October 2026: every new session's first call named the operation as action,
-// and was refused as "Unsupported personal operation: undefined"; the sleep tracker's quality column
-// was listed without its range.
-test('a tracker operation named as action is that operation, a missing type is said plainly, and a column keeps its range',async t=>{
+// The recaptures of 12 October 2026: every new session's first call named the operation as action and
+// was refused as "Unsupported personal operation: undefined"; taking it as the type (3dfd733) let the bot
+// skip the tracker recipe, and it then named trackers in lower case. The refusal now says what to do and
+// points to the recipe; a new tracker's name is a title whatever case it comes in; a column keeps its range.
+test('a call without a type is told to name it and read the recipe, a name is a title, and a column keeps its range',async t=>{
  const env=fixture(t);
- assert.deepEqual(ok(await call(env,{action:'tracker-list',words:'what do I track?'})),{trackers:[],pending:[]});
- assert.deepEqual(ok(await call(env,{operation:'tracker-list'})),{trackers:[],pending:[]});
- const none=await call(env,{action:'headache',at:'06:30'});
- assert.equal(none.error,true);assert.equal(none.text,'Name the operation as type, for example {"type":"tracker-list"}');
+ for(const args of [{action:'tracker-list',words:'what do I track?'},{operation:'tracker-list'},{action:'headache',at:'06:30'}]){
+  const r=await call(env,args);
+  assert.equal(r.error,true);assert.equal(r.text,'Name the operation as type, for example {"type":"tracker-list"}, and follow the recipe for it (a message that starts with "track": the tracker recipe)');
+ }
+ const sauna=ok(await call(env,{type:'tracker-hold',name:'sauna',words:'track sauna'}));
+ assert.equal(sauna.reply,"Start a new tracker called Sauna, counting each time, as often as you like? I've kept this one for today.");
+ assert.equal(ok(await call(env,{type:'tracker-create',proposal_id:sauna.proposal_id,words:'yes'})).reply,'Tracked: Sauna. From now on just say "track sauna".');
+ const kept=ok(await call(env,{type:'tracker-hold',name:'HRV',value:48,words:'track HRV 48'}));
+ assert.match(kept.reply,/^Start a new tracker called HRV,/,'a name with capitals stays as it is');
  const held=ok(await call(env,{type:'tracker-hold',name:'Sleep',fields:[{label:'Hours',type:'number',unit:'hours'},{label:'Quality',type:'number',min:1,max:5}],words:'I want to track my sleep: hours, and quality from 1 to 5'}));
  ok(await call(env,{type:'tracker-create',proposal_id:held.proposal_id,words:'yes'}));
- assert.deepEqual((await list(env)).trackers[0].fields,[{key:'hours',label:'Hours',type:'number',unit:'hours'},{key:'quality',label:'Quality',type:'number',min:1,max:5}]);
+ assert.deepEqual((await list(env)).trackers.find(x=>x.name==='Sleep').fields,[{key:'hours',label:'Hours',type:'number',unit:'hours'},{key:'quality',label:'Quality',type:'number',min:1,max:5}]);
+});
+
+// The third recapture: through the notebook's own headache operation, "took one ibuprofen" came back
+// as "took ibuprofen one". A dose said as a word is its number.
+test('a dose said as a word is passed to the headache tracker as its number',async()=>{
+ const {headacheArgs}=await import('../core/headache-operation.mjs');
+ assert.deepEqual(headacheArgs({action:'start',meds:[{med:'ibuprofen',dose:'one'},{med:'Aspirin',dose:'zwei Tabletten'},{med:'Thomapyrin',dose:'400 mg'},{med:'Paracetamol',dose:'an extra one'}]}).filter((x,i,all)=>all[i-1]==='--med'),['ibuprofen: 1','Aspirin: 2 Tabletten','Thomapyrin: 400 mg','Paracetamol: an extra one']);
 });
