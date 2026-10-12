@@ -33,7 +33,7 @@ git -C "$work/product" -c user.name=test -c user.email=test@example.invalid comm
 second=$(git -C "$work/product" rev-parse HEAD)
 git -C "$work/product" config uploadpack.allowAnySHA1InWant true
 git -C "$work/product" config uploadpack.allowFilter true
-install() { GODSPEED_PRODUCT_REPOSITORY="file://$work/product" GODSPEED_PRODUCT_REF="$1" bash "$here/notebook/scripts/install-native-notebook.sh" "$root"; }
+install() { GODSPEED_FOOD_TABLE=off GODSPEED_PRODUCT_REPOSITORY="file://$work/product" GODSPEED_PRODUCT_REF="$1" bash "$here/notebook/scripts/install-native-notebook.sh" "$root"; }
 answers() { for _ in $(seq 1 30); do curl -fsS http://127.0.0.1:47831/health >/dev/null 2>&1 && return 0; sleep 2; done; return 1; }
 
 echo '== a first installation, as the server called production'

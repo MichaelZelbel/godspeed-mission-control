@@ -473,6 +473,12 @@ if [ -n "$before" ]; then
 fi
 
 "$node" "$version/notebook/bin/godspeed.mjs" init
+# The food tracker's table (D-321 step 5): the German food table BLS 4.0, downloaded once and checked
+# against its pinned checksum, offline after that. Never a reason to stop the install: without it the
+# notebook tries once more when it starts. GODSPEED_FOOD_TABLE=off skips it.
+if [ "${GODSPEED_FOOD_TABLE:-}" != off ]; then
+  "$node" "$version/notebook/bin/godspeed.mjs" food-table install >/dev/null 2>&1 || echo 'The food table could not be downloaded now; the notebook tries again once when it starts.' >&2
+fi
 # Joining: a mission control that is its own Git repository carries the notebook in it.
 if [ ! -f "$root/.godspeed/sync-config.json" ] && git -C "$root" remote get-url origin >/dev/null 2>&1; then
   "$node" "$version/notebook/bin/godspeed.mjs" sync folder || echo 'The notebook was not joined to the repository; it works on this machine alone until it is.' >&2

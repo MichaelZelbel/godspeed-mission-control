@@ -44,6 +44,7 @@ import {visibleRows} from '../core/visibility.mjs';
 import {NoteProcessing} from '../core/processing.mjs';
 import {mediaObjectName,mediaFileName} from '../core/media-names.mjs';
 import {retireShares} from '../core/shares.mjs';
+import {installFoodTable,foodTableWanted} from '../core/food-table.mjs';
 
 // What the browser is told each built file is. A module script sent as
 // octet-stream is refused outright: the PDF reader's worker (.mjs) was, so
@@ -402,6 +403,11 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   await listen(server, port, host);
   // The link an assistant gives when asked for the notebook (get_notebook_link), with the port this door really has.
   domains.notebookAddress = () => notebookAddress({ port: server.address().port });
+  // The food tracker's table (D-321 step 5): a notebook without it (the Windows set-up and the
+  // one-click image do not run install-native-notebook.sh) fetches it once, a minute after it starts,
+  // in the background, checked against its pinned checksum. Never under the test runner, never with
+  // GODSPEED_FOOD_TABLE=off; a failure is one line in the log and nothing else.
+  if (foodTableWanted(store.state)) { const foodTableTimer = setTimeout(() => { void installFoodTable(store.state).catch(error => console.error('Godspeed Mission Control: the food table was not downloaded: ' + error.message)); }, 60000); foodTableTimer.unref?.(); }
   // Only the HTTPS proxy on this machine reaches the web door. A door that cannot open
   // (its port taken) leaves the notebook running for everything on this machine; the
   // installer's check of the web address then says so.

@@ -144,6 +144,9 @@ export async function installFoodTable(state,{fetcher,url=BLS.url,sha256=BLS.sha
  cache.delete(folder);
  return {installed:true,foods:converted.foods.length,sha256:got,bytes:zip.length,folder};
 }
+// Whether a starting notebook should fetch the table itself: it has none, it is not switched off, and
+// it is not a test (node --test marks its processes with NODE_TEST_CONTEXT).
+export const foodTableWanted=(state,env=process.env)=>env.GODSPEED_FOOD_TABLE!=='off'&&!env.NODE_TEST_CONTEXT&&!fs.existsSync(path.join(blsFolder(state),'foods.json'));
 // The table, read once per change of its file; null when it is not installed.
 const cache=new Map();
 export function foodTable(state){

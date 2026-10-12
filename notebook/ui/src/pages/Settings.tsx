@@ -25,8 +25,9 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Loader2, Eye, EyeOff, AlertTriangle, Trash2, User, Shield, CreditCard, Settings as SettingsIcon, Sparkles, Plug, MessageSquare, Brain, Import, Bell, Send, Gamepad2, Github, Key, Globe, HardDrive } from "lucide-react";
+import { Loader2, Eye, EyeOff, AlertTriangle, Trash2, User, Shield, CreditCard, Settings as SettingsIcon, Sparkles, Plug, MessageSquare, Brain, Import, Bell, Send, Gamepad2, Github, Key, Globe, HardDrive, Info } from "lucide-react";
 import { CreditsDisplay } from "@/components/settings/CreditsDisplay";
+import { AboutTab } from "@/components/settings/AboutTab";
 import { AppIntegrations } from "@/components/settings/AppIntegrations";
 import { SlackIntegration } from "@/components/settings/SlackIntegration";
 import { TelegramIntegration } from "@/components/settings/TelegramIntegration";
@@ -84,7 +85,7 @@ const ROLE_LABELS: Record<string, { label: string; description: string }> = {
 const SETTINGS_TABS = [
   "account", "godspeed", "import", "notifications", "ai-suggestions", "ai-visibility",
   "connections", "mcp", "integrations", "telegram", "discord", "singlefile", "github", "gdrive",
-  "apikeys", "credits", "subscription", "danger",
+  "apikeys", "credits", "subscription", "about", "danger",
 ];
 
 export default function Settings() {
@@ -236,6 +237,7 @@ export default function Settings() {
           <TabsTrigger value="apikeys" className="gap-1.5 text-xs"><Key className="h-3.5 w-3.5 hidden sm:block" /> API Keys</TabsTrigger>
           <TabsTrigger value="credits" className="gap-1.5 text-xs"><Sparkles className="h-3.5 w-3.5 hidden sm:block" /> Credits</TabsTrigger>
           <TabsTrigger value="subscription" className="gap-1.5 text-xs"><CreditCard className="h-3.5 w-3.5 hidden sm:block" /> Plan</TabsTrigger>
+          <TabsTrigger value="about" className="gap-1.5 text-xs"><Info className="h-3.5 w-3.5 hidden sm:block" /> About</TabsTrigger>
           <TabsTrigger value="danger" className="gap-1.5 text-xs text-destructive"><AlertTriangle className="h-3.5 w-3.5 hidden sm:block" /> Danger</TabsTrigger>
         </TabsList>
 
@@ -333,6 +335,10 @@ export default function Settings() {
         </TabsContent>
 
 
+
+        <TabsContent value="about">
+          <AboutTab />
+        </TabsContent>
 
         <TabsContent value="credits">
           <CreditsDisplay />
