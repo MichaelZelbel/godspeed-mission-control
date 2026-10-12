@@ -51,7 +51,7 @@ function starterFixture(t,{config=true}={}){
  if(config)fs.writeFileSync(path.join(home,'config.yaml'),'terminal:\n  cwd: "'+root.replaceAll('\\','/')+'"\nmcp_servers:\n  notebook:\n    url: http://127.0.0.1:47831/mcp\n');
  return {root,home};
 }
-const STARTING=[['Daily round: choose today\'s work','30 5 * * *','godspeed-daily-round-choose.py'],['Daily round: do the work','0 10,16 * * *','godspeed-daily-round-work.py'],['Deadline reminders','0 8 * * *','godspeed-deadline-reminders.py'],['Weekly check-in','*/15 * * * *','godspeed-coach-talks.py'],['Coach reminders and habit check','*/15 * * * *','godspeed-coach-reminders.py']];
+const STARTING=[['Nightly goal research','15 0 * * *','godspeed-goal-research.py'],['Daily round: choose today\'s work','30 5 * * *','godspeed-daily-round-choose.py'],['Daily round: do the work','0 10,16 * * *','godspeed-daily-round-work.py'],['Deadline reminders','0 8 * * *','godspeed-deadline-reminders.py'],['Weekly check-in','*/15 * * * *','godspeed-coach-talks.py'],['Coach reminders and habit check','*/15 * * * *','godspeed-coach-reminders.py']];
 
 test('a fresh mission control made from the starter starts the daily round, deadline reminders and the weekly check-in with its first goal',async t=>{
  const {root,home}=starterFixture(t),store=new Store(root,{device:'laptop-1'}),hermes=fakeHermes(home);
@@ -63,6 +63,8 @@ test('a fresh mission control made from the starter starts the daily round, dead
  for(const job of jobs){assert.equal(job.deliver,'local','a computer without Telegram keeps the result');assert.equal(job.failure_deliver,'local');assert.equal(job.workdir,root);}
  assert.equal(jobs.find(j=>j.name==='Weekly check-in').no_agent,false,'the talk is written by the assistant');assert.match(jobs.find(j=>j.name==='Weekly check-in').prompt,/opening a coaching talk/);
  for(const name of ['Daily round: choose today\'s work','Daily round: do the work','Deadline reminders','Coach reminders and habit check'])assert.equal(jobs.find(j=>j.name===name).no_agent,true,name+' runs the original program itself');
+ // The nightly goal research runs once a night at 00:15 in the reader's zone, before the 05:30 choice, with a two-hour budget.
+ {const names=jobs.map(j=>j.name);assert.ok(names.indexOf('Nightly goal research')<names.indexOf("Daily round: choose today's work"));}
  for(const call of hermes.calls)assert.equal(call.timezone,'America/New_York','in the reader\'s zone');
  assert.equal(hermes.calls[0].home,home,'in this installation\'s own Hermes');
  // The scripts Hermes runs, in its own scripts folder, pointing at this mission control.
@@ -84,8 +86,8 @@ test('a fresh mission control made from the starter starts the daily round, dead
  // Once only: setting up again, ticking, or removing a routine never makes one again.
  await scheduler.configure({goal:'A second fictional goal',timezone:'America/New_York'});
  hermes.write(jobs.filter(j=>j.name!=='Deadline reminders'));scheduler.lastTick=0;await scheduler.tick();
- assert.equal(hermes.jobs().length,4,'a routine the reader removed stays removed');
- assert.equal(hermes.calls.filter(c=>c.args[1]==='create').length,5);
+ assert.equal(hermes.jobs().length,5,'a routine the reader removed stays removed');
+ assert.equal(hermes.calls.filter(c=>c.args[1]==='create').length,6);
 });
 
 test('with Telegram the starting routines deliver there, and the coach talks there as before',async t=>{
@@ -130,7 +132,7 @@ test('a goal told in the chat starts the same routines at the next tick, on this
  assert.equal(store.get('settings','installation').owner,'pc-1');assert.equal(store.get('settings','installation').timezone,zone);
  assert.equal(hermes.calls.find(c=>c.args[1]==='create').timezone,zone);
  assert.match(fs.readFileSync(path.join(root,'coach','weekly-check-in','area.md'),'utf8'),/^SERVES: fictional-chat-goal$/m);
- scheduler.lastTick=0;await scheduler.tick();assert.equal(hermes.jobs().length,5,'and only once');
+ scheduler.lastTick=0;await scheduler.tick();assert.equal(hermes.jobs().length,6,'and only once');
  // A provisional idea is not a goal: it starts nothing.
  const other=starterFixture(t),otherStore=new Store(other.root,{device:'pc-2'}),otherHermes=fakeHermes(other.home);
  fileGoal(other.root,'--title','Only an idea');
@@ -144,7 +146,7 @@ test('a server that joins later and takes the routines over gets the starting ro
  const computer=starterFixture(t),pc=new Store(computer.root,{device:'pc-1'}),pcHermes=fakeHermes(computer.home);
  const pcScheduler=new NativeScheduler(pc,{home:computer.home,executable:'hermes',device:'pc-1',run:pcHermes.run});
  await pcScheduler.configure({goal:'Fictional goal from the computer',timezone:'Europe/Berlin'});
- assert.equal(pcHermes.jobs().length,5);
+ assert.equal(pcHermes.jobs().length,6);
  // The server's copy of the folder, as GitHub carries it: never the computer's own machine state.
  const serverRoot=fixture(t),serverHome=path.join(serverRoot,'.hermes-home');
  fs.cpSync(computer.root,serverRoot,{recursive:true,filter:source=>!['.godspeed','.hermes-home'].includes(path.basename(source))});
@@ -161,7 +163,7 @@ test('a server that joins later and takes the routines over gets the starting ro
  for(const call of serverHermes.calls.filter(c=>c.args[1]==='create'))assert.equal(call.timezone,'Europe/Berlin','on the reader\'s clock');
  assert.equal(readMachineRecord(server).state,'created');
  assert.equal(fs.readdirSync(path.join(serverRoot,'coach')).filter(n=>n==='weekly-check-in').length,1,'the one weekly check-in, not a second');
- serverScheduler.lastTick=0;await serverScheduler.tick();assert.equal(serverHermes.calls.filter(c=>c.args[1]==='create').length,5,'once');
+ serverScheduler.lastTick=0;await serverScheduler.tick();assert.equal(serverHermes.calls.filter(c=>c.args[1]==='create').length,6,'once');
  // The computer no longer runs them: its Hermes is not ticked.
  pc.save('settings',{id:'installation',owner:'vps'});pcScheduler.lastTick=0;const before=pcHermes.calls.length;await pcScheduler.tick();
  assert.equal(pcHermes.calls.length,before);
@@ -178,7 +180,7 @@ test('the routines are made on the machine that runs them, and a failed start is
  const result=await new NativeScheduler(store,{home,executable:'hermes',device:'laptop-1',run:hermes.run}).configure({goal:'Fictional paired goal',timezone:'Europe/Berlin',owner:'vps'});
  assert.equal(result.routines.state,'pending');assert.equal(hermes.jobs().length,0,'not in this laptop\'s Hermes');
  const server=new NativeScheduler(new Store(root,{device:'vps'}),{home,executable:'hermes',device:'vps',run:hermes.run});await server.tick();
- assert.equal(hermes.jobs().length,5,'the server makes them');
+ assert.equal(hermes.jobs().length,6,'the server makes them');
  // Hermes refusing one: the ones made are taken back, and the start waits an hour.
  const next=starterFixture(t),nextStore=new Store(next.root,{device:'pc'}),broken=fakeHermes(next.home,{fail:'Deadline reminders'});
  const failed=await new NativeScheduler(nextStore,{home:next.home,executable:'hermes',device:'pc',run:broken.run}).configure({goal:'Fictional goal',timezone:'Europe/Berlin'});

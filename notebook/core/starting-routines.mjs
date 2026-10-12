@@ -9,12 +9,12 @@ import {localParts,addDays,zonedToUtc} from '../../third-party/addons/godspeed-c
 import {TALK_PROMPT,NOTEBOOK_TALK_JOB,NOTEBOOK_TICK_JOB,TALK_JOB,TICK_JOB} from '../../third-party/addons/godspeed-coach/lib/setup.mjs';
 
 // The routines a reader's first goal starts (Teach It Once, Chapters 3, 5, 8, 24, 25 and 30): the
-// daily round, deadline reminders and a weekly check-in. Until 8 October 2026 the first goal
+// nightly goal research, the daily round, deadline reminders and a weekly check-in. Until 8 October 2026 the first goal
 // started nothing with the original assistant: setup filed the goal and saved the clock, and the
 // book's three routines never ran unless a reader built them by hand.
 //
 // They are Hermes jobs that run the mission control's own programs and recipes, the ones an owner's
-// schedule runs (mc-decide with the next-action recipe, mc-work-run with the work-item recipe,
+// schedule runs (mc-research with the goal-research recipe, mc-decide with the next-action recipe, mc-work-run with the work-item recipe,
 // mc-due, the coach), never replacements for them. NativeScheduler (native-scheduler.mjs) decides
 // when they are made; this file says what they are, writes the scripts Hermes runs, prepares the
 // coach's check-in, and keeps what a routine said on a computer where it would reach nobody.
@@ -28,6 +28,7 @@ export const CHECK_IN={slug:'weekly-check-in',title:'Weekly check-in',rhythm:'we
 const CHECK_IN_PREPARATION='Read the goals it serves and any other adopted goal (mc-goals list shows them), what the daily round did for them since the last talk (the decision records under routines/next-action/) and the last talk of this area. Choose one thing that moved or is stuck, in plain words. Then one question about it.';
 
 export const STARTING_ROUTINES=[
+ {key:'research',name:'Nightly goal research',schedule:'15 0 * * *',script:'godspeed-goal-research.py',what:'Every night at 00:15 it researches each of your goals, up to two hours in all: who leads the field, who got there from a start like yours, what was just proven wrong, and chances with a closing date. It reads and writes notes only and contacts nobody. It runs before the morning choice, so that has the news.'},
  {key:'decide',name:'Daily round: choose today\'s work',schedule:'30 5 * * *',script:'godspeed-daily-round-choose.py',what:'Every morning at 05:30 it picks today\'s work on your goals, up to three of them, and tells you the one thing that needs you, if there is one. With a morning brief switched on, the brief tells you instead.'},
  {key:'work',name:'Daily round: do the work',schedule:'0 10,16 * * *',script:'godspeed-daily-round-work.py',what:'At 10:00 and 16:00 it does the work the morning picked, one piece at a time, checks each result, and tells you when something is ready for you to read.'},
  {key:'due',name:'Deadline reminders',schedule:'0 8 * * *',script:'godspeed-deadline-reminders.py',what:'Every morning at 08:00 it tells you about the dates that need a mention today, and stays quiet on other days. With a morning brief switched on, your dates are in the brief instead.'},

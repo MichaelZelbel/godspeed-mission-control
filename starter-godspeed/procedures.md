@@ -3,9 +3,9 @@
 ## The routines your first goal starts
 
 The first time you give your mission control a goal, in the notebook's "Start with one goal" form
-or in the chat, it starts three routines on the computer that runs your routines, on your own
+or in the chat, it starts four routines on the computer that runs your routines, on your own
 clock. It does this once on each computer that runs your routines: if you add a server later and
-let it run the routines, the server gets the same three, and your computer's stop. A routine you
+let it run the routines, the server gets the same four, and your computer's stop. A routine you
 later remove stays removed, and a computer whose assistant already had routines of its own gets
 none of these.
 
@@ -18,6 +18,18 @@ Where the results go: on a server with Telegram, to your Telegram chat. On your 
 your notebook, in the folder "From your routines", one note per run; a run with nothing to say
 leaves no note. The computer has to be on for a routine to run; one it missed runs once when the
 computer is back.
+
+### Nightly goal research
+
+Does: every night it researches each of your goals that is due, for up to two hours in all: who
+leads the field, who got there from a start like yours, what is established and what was just
+proven wrong, and chances with a closing date (the goal-research recipe, run by mc-research). It
+only reads pages and writes files, and contacts nobody.
+Rhythm: every day at 00:15, your time zone, well before the daily round picks the day's work at
+05:30, so that choice already has the news.
+Lands: each goal's research folder and one-page brief under goals/research/. A night that fell
+short leaves a note saying so there, so a missing night never reads as a quiet one. It says
+nothing to you.
 
 ### Daily round
 

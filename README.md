@@ -26,7 +26,7 @@ Version 2 is the current edition, here on `main`. Its installers set up a new, s
 
 ## New on 9 October 2026, for the book's second edition
 
-- Your first goal starts three routines by itself: a daily round that picks the day's work and does it, deadline reminders, and a weekly check-in about the goal on Sundays.
+- Your first goal starts four routines by itself: a nightly research run on your goals, a daily round that picks the day's work and does it, deadline reminders, and a weekly check-in about the goal on Sundays.
 - The notebook keeps the people, facts and events you tell it about, one page per person. Each kind of fact has one fixed name, and a newer value ends the older one.
 - The note graph is back, worked out from your notes when you open it.
 - A computer can connect its own GitHub copy from Settings, and mail works on a computer too.

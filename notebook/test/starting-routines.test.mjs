@@ -280,3 +280,19 @@ test('Settings > Routines gives the coach routines their real rhythm, not the 15
  assert.equal(rows.find(j=>j.id==='gate').rhythm,'Runs every Sunday at 18:00.');
  assert.match(rows.find(j=>j.id==='tick').rhythm,/^Checks every 15 minutes/);
 });
+
+// The nightly goal research: the routine's script runs the original mc-research with the
+// two-hour budget on the reader's date, says nothing on a normal night, and says one line when
+// it could not start (here a stand-in mc-research that records how it was called).
+test('the nightly goal research runs mc-research with a two-hour budget and says nothing on a normal night',{skip:(!havePython||!bash)&&'no Python or bash here'},t=>{
+ const {root,home}=scriptFixture(t),fake=path.join(root,'.fake-tools');fs.mkdirSync(fake,{recursive:true});
+ const log=path.join(root,'research-call.txt').replaceAll(path.sep,'/');
+ fs.writeFileSync(path.join(fake,'mc-research'),'#!/usr/bin/env bash\nprintf \'%s\n\' "$*" > "'+log+'"\nexit 1\n',{mode:0o755});
+ const settings=path.join(home,'scripts','godspeed-routines.json');fs.writeFileSync(settings,JSON.stringify({...JSON.parse(fs.readFileSync(settings,'utf8')),tools:fake}));
+ const run=runScript(home,'godspeed-goal-research.py');
+ assert.equal(run.status,0,run.stderr);assert.equal(run.stdout,'','a night that fell short on a goal is a gap file, never a message');
+ const call=fs.readFileSync(log,'utf8');
+ assert.match(call,/--budget-minutes 120/);assert.match(call,new RegExp('--date '+berlinDay));
+ fs.writeFileSync(path.join(fake,'mc-research'),'#!/usr/bin/env bash\necho "mc-research: I could not find your mission control" >&2\nexit 2\n',{mode:0o755});
+ assert.match(runScript(home,'godspeed-goal-research.py').stdout,/could not start tonight/);
+});

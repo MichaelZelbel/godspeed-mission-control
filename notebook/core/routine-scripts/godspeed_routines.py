@@ -11,6 +11,9 @@ Each routine runs the original programs of the mission control, never a copy of 
               decision's one line for the person, or nothing when there is nothing for them or
               when a morning brief still to come today will open with that line. A round that
               did not finish says so in one line, the way any other line reaches the person.
+  research    mc-research, the nightly research on every adopted goal (the goal-research recipe),
+              at 00:15 with a two-hour budget, before the morning choice. It prints nothing: a
+              night that fell short leaves its own gap file in the goal's research folder.
   work        mc-work-run, the daily round's work (the work-item recipe). Prints one sentence for
               each finished piece the person will open, one for each piece whose check failed,
               or nothing.
@@ -341,6 +344,31 @@ def decide(c):
     return "" if later and not ran else line
 
 
+RESEARCH_MINUTES = 120
+
+
+def research(c):
+    """The nightly goal research: mc-research for every adopted goal that is due, within two hours.
+    It only reads pages and writes files, so it never says anything; a night that fell short (a
+    goal that did not fit, a check that failed) is a gap file in the goal's own research folder
+    and is read by the morning choice. Only a run that could not start is said."""
+    day = today(c)
+    env = environment(c, day)
+    shell = bash()
+    if not shell:
+        return went_wrong(c, "research", day, "The nightly goal research needs Git Bash on this computer, and it was not found, so no goal was researched tonight.")
+    try:
+        r = run([shell, posix(os.path.join(c["tools"], "mc-research")), "--godspeed", posix(c["root"]), "--date", day,
+                 "--budget-minutes", str(RESEARCH_MINUTES)], c, env, timeout=RESEARCH_MINUTES * 60 + 900)
+    except subprocess.TimeoutExpired:
+        return went_wrong(c, "research", day, "Tonight's goal research took longer than its time and was stopped.")
+    # 1 is a night that fell short on some goals (its gap files say which); 2 and 3 mean it never started.
+    if r.returncode in (2, 3):
+        return went_wrong(c, "research", day, "The nightly goal research could not start tonight.", r)
+    remember(c, "research")
+    return ""
+
+
 def register_what(c, env, item):
     """The WHAT of a work item, from the register (mc-work show), or ""."""
     try:
@@ -439,7 +467,7 @@ def coach(c, command):
 
 def main(kind):
     c = config()
-    out = {"decide": decide, "work": work, "due": due,
+    out = {"research": research, "decide": decide, "work": work, "due": due,
            "coach-gate": lambda c: coach(c, "gate"), "coach-tick": lambda c: coach(c, "tick")}[kind](c)
     if out:
         # UTF-8 whatever the console's code page: a curly quote must not end the run on Windows.
