@@ -148,11 +148,9 @@ If it contradicts something you believe about me, the file wins.
   you are doing about it, and only VERIFIED closes an item, never your own word
   that you did it. Each folder has a README with the format. Read them when the
   subject comes up; never load all three at the start of a session.
-- **Never load `prompts/`.** It is a log of what I have typed and what the AI
-  answered, plus a shelf of prompts I keep, not instructions to follow. Search it
-  when I ask about a prompt I once used, or an answer I half remember, or when you
-  need to know how something I built was made. Saved prompts are in
-  `prompts/library/`, the log is in `prompts/archive/`.
+- **Never load `prompts/`.** It holds what I typed and what the AI answered
+  (`prompts/archive/`) and prompts I keep (`prompts/library/`), not instructions.
+  Search it when I ask about an old prompt or answer, or how I built something.
 - When you cannot recall an earlier conversation, run `mc-prompt-archive search <words>` before saying you don't know.
 - **A day I give you is a target or a deadline, and you ask which.** When I ask
   you to keep track of something with a day, ask once: "Is there a day after

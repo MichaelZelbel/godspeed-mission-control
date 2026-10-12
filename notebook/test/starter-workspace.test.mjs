@@ -49,3 +49,14 @@ test('an existing reader\'s manual gets the archive line once, under its word ab
   assert.equal(addArchiveLine(adopted,path.join(adopted,'.godspeed'),starter),false);
   assert.equal(fs.readFileSync(path.join(adopted,'AGENTS.md'),'utf8'),'# Mine\n');
 });
+
+test('the archive line never pushes a manual past the 20,000 characters Hermes reads whole',()=>{
+  const starter=fileURLToPath(new URL('../../starter-godspeed/',import.meta.url));
+  const base=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-archive-long-')),root=path.join(base,'reader');
+  installStarter(root,starter);
+  const long='# Nova\n\n'+'x'.repeat(19950)+'\n';
+  fs.writeFileSync(path.join(root,'AGENTS.md'),long);
+  assert.equal(addArchiveLine(root,path.join(root,'.godspeed'),starter),false);
+  assert.equal(fs.readFileSync(path.join(root,'AGENTS.md'),'utf8'),long);
+  assert.ok(!fs.existsSync(path.join(root,'.godspeed','archive-line-added')),'a later update may still add it');
+});

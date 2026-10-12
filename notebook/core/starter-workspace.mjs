@@ -64,5 +64,8 @@ export function addArchiveLine(root,state=path.join(root,'.godspeed'),starter=de
   const at=lines.findIndex(line=>line.startsWith('- **Never load `prompts/`.**'));
   if(at>=0){let end=at+1;while(end<lines.length&&/^ {2}\S/.test(lines[end]))end++;lines.splice(end,0,ARCHIVE_LINE);text=lines.join(eol);}
   else text=text.replace(/\s*$/,'')+eol+eol+ARCHIVE_LINE+eol;
+  // Hermes drops the middle of a manual past 20,000 characters, so a manual this line would push
+  // over that is left as it is (and asked again on the next update, in case it got shorter).
+  if([...text].length>=20000)return false;
   fs.writeFileSync(manual,text);mark();return true;
 }
