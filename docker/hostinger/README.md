@@ -10,10 +10,10 @@ Hostinger's supported purchase link is:
 
 Current purchase and install link, including Michael's saved Hostinger referral:
 
-[Install Godspeed Mission Control on Hostinger](https://www.hostinger.com/docker-hosting?compose_url=https%3A%2F%2Fraw.githubusercontent.com%2FMichaelZelbel%2Fgodspeed-mission-control%2Ff5158b87bd2c251823163ca2dedc171950ae4b2a%2Fdocker%2Fhostinger%2Fcompose.yaml&REFERRALCODE=GHNMICHAEJC8#pricing)
+[Install Godspeed Mission Control on Hostinger](https://www.hostinger.com/docker-hosting?compose_url=https%3A%2F%2Fraw.githubusercontent.com%2FMichaelZelbel%2Fgodspeed-mission-control%2F6d07368a2c21d07ea3fc0e3a116a8d09ea5f179c%2Fdocker%2Fhostinger%2Fcompose.yaml&REFERRALCODE=GHNMICHAEJC8#pricing)
 
 The link names the commit whose `compose.yaml` pins the current image
-(`v2-sha-d457ded`, digest `4dc94340…`, since 12 October 2026; before that `v2-sha-da2098e`, digest `a67da492…`, from 10 October, then `v2-sha-c83b399`, digest `13232a90…`,
+(`v2-sha-d023277`, digest `8682ddd5…`, since the second release of 12 October 2026; before that `v2-sha-d457ded`, digest `4dc94340…`, from the first release of 12 October, then `v2-sha-da2098e`, digest `a67da492…`, from 10 October, then `v2-sha-c83b399`, digest `13232a90…`,
 from 9 October, the book's second edition, then
 `v2-sha-b327fe0`, digest `c3706e1c…`, from 7 October, and `v2-sha-20cdd7b`, digest `351e8a16…`). Until 6 October 2026 it named `a759dc8`, an
 older file with an older image, so the button installed a version this page no longer
