@@ -14,6 +14,7 @@ import {proposalState,card,findTracker} from './trackers.mjs';
 import {isHabitRef} from './habit-trackers.mjs';
 import {headacheOperation,headacheArgs} from './headache-operation.mjs';
 import {cycleOperation,cycleTracker,DELETE_MS} from './cycle-operations.mjs';
+import {foodOperation} from './food-operations.mjs';
 import {CYCLE_WORDS,PERIOD_WORDS,OVER_WORDS,FLOW_WORDS,WHERE_WORDS,SYMPTOMS} from './cycle.mjs';
 import {nextCalendarRun} from './jobs/calendar.mjs';
 import {resumeChanges} from './jobs/routine-control.mjs';
@@ -154,6 +155,8 @@ export function personalOperation(domains,input){
  if(type==='headache')return headacheOperation(domains,input);
  // The cycle tracker: a specialist on the tracker base (cycle-operations.mjs).
  if(type==='cycle')return cycleOperation(domains,input);
+ // The food tracker: a specialist on the tracker base (food-operations.mjs).
+ if(type==='food')return foodOperation(domains,input);
  const old=table=>{const r=store.get(table,required(input.id,'Record ID'));if(!r||r.removed_at)throw Error('Record does not exist');if(input.expected&&input.expected!==r._hash)store.conflict(table,input,r);return r;};
  if(type==='work-record-observation'){
   const item=old('work_items'),evidence=required(input.evidence,'Reported check evidence');

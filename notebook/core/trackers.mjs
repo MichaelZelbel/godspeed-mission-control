@@ -6,6 +6,7 @@
 // when read, never by a job: nothing here may message anyone.
 import {localParts,addDays} from '../../third-party/addons/godspeed-coach/lib/clock.mjs';
 import {setupQuestion,lang,PERIOD_FLOWS} from './cycle.mjs';
+import {setupQuestion as foodQuestion,questionText as foodAmounts,lang as foodLang} from './food.mjs';
 export const HOLD_MS=86400000,REST_DAYS=30;
 const MONTHS=['January','February','March','April','May','June','July','August','September','October','November','December'];
 const WEEKDAYS=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
@@ -77,6 +78,8 @@ const ordinal=n=>n+(n%100>=11&&n%100<=13?'th':['th','st','nd','rd'][n%10]||'th')
 export function holdQuestion(p,today){
  // The cycle tracker asks its own question, the design's words (cycle.mjs).
  if(p.specialist==='cycle')return setupQuestion(lang(p.language),p.entry?{day:p.entry.when,period:PERIOD_FLOWS.has(p.entry.data?.flow),symptoms:p.entry.data?.symptoms||[]}:null,today);
+ // The food tracker asks its own question, with the one about an unclear amount (food.mjs).
+ if(p.specialist==='food')return foodQuestion(foodLang(p.language),{questions:foodAmounts(foodLang(p.language),p.unclear||[]),kept:!!p.meal?.items?.length});
  const fields=(p.field_schema||[]).filter(f=>!['when','note'].includes(f.key)),one=fields.length===1&&fields[0].type==='number'?fields[0]:null;
  const shape=one?'one number'+(one.unit?' in '+one.unit:''):fields.length?'with '+fields.map(f=>f.label).join(', '):'counting each time';
  const kept=p.entry?(one&&p.entry.data[one.key]!==undefined?" I've kept the "+fmt(p.entry.data[one.key])+' for ':" I've kept this one for ")+(p.entry.when.slice(0,10)===today?'today':longDay(p.entry.when.slice(0,10)))+'.':'';

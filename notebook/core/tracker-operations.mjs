@@ -7,6 +7,8 @@ import {visibleRows} from './visibility.mjs';
 import {habitTrackerList,habitOperation,isHabitRef,findHabits} from './habit-trackers.mjs';
 import {cycleOperation,cycleCreate} from './cycle-operations.mjs';
 import {CYCLE_WORDS} from './cycle.mjs';
+import {foodOperation,foodCreate,foodSummary} from './food-operations.mjs';
+import {FOOD_WORDS} from './food.mjs';
 export const TRACKER_OPERATIONS=['tracker-hold','tracker-create','track','tracker-correct','tracker-list'];
 const tz=store=>store.get('settings','installation')?.timezone||'UTC';
 // The coaching talk that reads a tracker, by its area's name (coach/<area>/: health, work,
@@ -15,6 +17,8 @@ const talkOf=value=>{if(value===undefined||value===null||value==='')return null;
 // Headaches have their own tracker (D-321, step 3): the headache add-on keeps its rows, with its
 // rules for open headaches, pills and pain, so the generic track never writes them.
 const HEADACHES='The Headaches tracker is kept by the headache tracker: say it as a headache ("track headache since 6:30, right side") and use the headache operation or the headache-tracker recipe, never track.';
+// The food tracker's rows are worked out by its own operation from the food table (D-321 step 5).
+const FOOD='The food tracker is kept by the food operation: food {action:"track",items:[{food:<id from food search>,item,grams?,count?,unit?,assumed?}]}, as the food-tracker recipe says; never track.';
 const has=input=>input.value!==undefined&&input.value!==null&&input.value!==''||Object.keys(input.data||{}).length>0;
 export function trackerOperation(domains,input){
  // The coach's clock: the real time, or GODSPEED_NOW for a rehearsal with a frozen clock.
@@ -26,7 +30,10 @@ export function trackerOperation(domains,input){
   // A habit the coach keeps, or the headache tracker's word, is never a new tracker (the order of D-321).
   const habit=findHabits(store,name)[0];if(habit)throw Error(habit.title+' is a habit: track it with its id from tracker-list, and the coach records the day.');
   const existing=findTracker(store,name).candidates;if(existing.some(c=>c.tracker.specialist==='headache'))throw Error(HEADACHES);
+  if(existing.some(c=>c.tracker.specialist==='food'))throw Error(FOOD);
   if(existing.length)throw Error('There is already a tracker called '+name+'; track it instead');
+  // "track food", "track lunch, ..." belongs to the food tracker (D-321 step 5): its own question, its items.
+  if(input.specialist==='food'||FOOD_WORDS.test(name))return foodOperation(domains,{...input,action:'track'});
   // "track sauna" names no number, unit or column: something that happened, counted each time
   // and as often as it happens (the design's "a tracker with no number"). Until the bot's
   // rehearsal on 12 October 2026 it became "one number, once a day".
@@ -46,6 +53,7 @@ export function trackerOperation(domains,input){
   let p=null;if(input.proposal_id){p=store.get('tracker_proposals',input.proposal_id);if(proposalState(store,p,now)!=='pending')throw Error('That question has expired. Say it again and I will ask once more.');}
   else if(!input.fields&&!input.unit)throw Error('Say which columns the tracker should have');
   if(p?.specialist==='cycle')return cycleCreate(domains,p,input);
+  if(p?.specialist==='food')return foodCreate(domains,p,input);
   const name=String(input.name||p?.name||'').trim();if(!name)throw Error('Say what the tracker is called');
   if(findTracker(store,name).candidates.length)throw Error('There is already a tracker called '+name);
   const cadence=input.cadence?(input.cadence==='any'?'any':'daily'):p?.cadence||'daily';
@@ -65,6 +73,7 @@ export function trackerOperation(domains,input){
  if(type==='track'){
   let c=resolve(store,input.tracker),under=false;if(c.tracker.specialist==='headache')throw Error(HEADACHES);
   if(c.tracker.specialist==='cycle')return cycleOperation(domains,{...input,action:input.data?.ended===true||input.ended===true?'over':'track'});
+  if(c.tracker.specialist==='food'){if(Array.isArray(input.items)||input.preset)return foodOperation(domains,{...input,action:'track'});throw Error(FOOD);}
   const word=typeof input.new_name==='string'?input.new_name.trim():'';
   if(word){
    if(findTracker(store,word).candidates.some(o=>o.id!==c.id))throw Error('Another tracker is already called '+word);
@@ -86,7 +95,9 @@ export function trackerOperation(domains,input){
   return {collection_id:c.id,entry_id:entry.id,replaced:false,reply:under?'Tracked under '+c.name+': '+withoutName(c,said):said};
  }
  if(type==='tracker-correct'){
-  const c=resolve(store,input.tracker);if(c.tracker.specialist==='headache')throw Error(HEADACHES);const all=entries(store,c);
+  const c=resolve(store,input.tracker);if(c.tracker.specialist==='headache')throw Error(HEADACHES);
+  if(c.tracker.specialist==='food')return foodOperation(domains,{...input,action:'correct',grams:input.data?.grams??input.value});
+  const all=entries(store,c);
   // Without an entry id it is the last entry he made or changed.
   const target=input.entry_id?all.find(i=>i.id===input.entry_id):[...all].sort((a,b)=>String(a.updated_at).localeCompare(String(b.updated_at))||String(a.created_at).localeCompare(String(b.created_at))).at(-1);
   if(!target)throw Error(input.entry_id?'That entry is not in '+c.name:c.name+' has no entry yet');
@@ -110,7 +121,9 @@ export function trackerOperation(domains,input){
    return {id:c.id,name:c.name,names:c.tracker.names||[c.name],cadence:c.tracker.cadence==='any'?'any':'daily',talk:c.tracker.talk||null,specialist:c.tracker.specialist||null,status:trackerStatus(store,c,now,all),hash:c._hash,
     fields:own(c).map(({key,label,type,unit,options})=>({key,label,type,...(unit?{unit}:{}),...(options?{options}:{})})),
     last:made?{id:made.id,when:made.data?.when,data:made.data,hash:made._hash}:null,today:todays?{id:todays.id,hash:todays._hash}:null,
-    ...(from?{recent:all.filter(i=>String(i.data?.when).slice(0,10)>=from).map(i=>({id:i.id,when:i.data?.when,data:i.data,hash:i._hash}))}:{})};
+    ...(from?{recent:all.filter(i=>String(i.data?.when).slice(0,10)>=from).map(i=>({id:i.id,when:i.data?.when,data:i.data,hash:i._hash}))}:{}),
+    // The food tracker adds its days' totals and the target's last change, the one line its talk hears.
+    ...(c.tracker.specialist==='food'?{food:foodSummary(domains,c,{from,today})}:{})};
   }).concat(habitTrackerList(store,{today,from})).filter(t=>!talk||t.talk===talk&&t.status==='active');
   const pending=store.list('tracker_proposals').filter(p=>proposalState(store,p,now)==='pending').map(p=>({id:p.id,name:p.name,created_at:p.created_at,question:holdQuestion(p,today)}));
   return {trackers:list,pending};

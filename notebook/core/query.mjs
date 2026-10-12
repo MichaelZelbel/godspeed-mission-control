@@ -26,6 +26,8 @@ tables.add('lead_measurements');
 tables.add('lead_comparisons');
 // A "track" for a tracker that does not exist yet, held for its one yes (D-321).
 tables.add('tracker_proposals');tables.add('tracker_deletions');
+// A meal held for its one question about an amount, and her answer (D-321 step 5).
+tables.add('food_questions');
 const defaults = {
   // Postgres filled in status; an item saved without one would now be left
   // out by Actions' .neq("status", "dismissed"), since NULL <> x is not true.
