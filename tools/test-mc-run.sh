@@ -39,9 +39,19 @@ size="$(wc -c < "$G/skills/big/SKILL.md" | tr -d ' ')"
 
 # THE STAND-IN. It writes down every argument, the longest one, and what came on standard input,
 # then answers. As hermes it also prints Hermes' waiting line, which must not reach the answer.
+# Asked for its help, it answers like a Claude Code that knows --restricted, or (STAND_HELP=sources)
+# one that knows only --setting-sources, or (STAND_HELP=none) one that knows neither.
 for name in hermes claude codex; do
   cat > "$B/$name" <<STAND
 #!/bin/sh
+if [ "\$1" = --help ]; then
+  echo asked >> "$L/$name.help"
+  case "\${STAND_HELP:-restricted}" in
+    restricted) printf '  --restricted  Restricted mode\n  --setting-sources <sources>  Comma-separated list\n' ;;
+    sources) printf '  --setting-sources <sources>  Comma-separated list\n' ;;
+  esac
+  exit 0
+fi
 for a in "\$@"; do printf '[%s]\n' "\$a"; done > "$L/$name.args"
 longest=0; for a in "\$@"; do [ \${#a} -gt \$longest ] && longest=\${#a}; done; echo \$longest > "$L/$name.longest"
 cat > "$L/$name.stdin"
@@ -87,6 +97,65 @@ contains "claude still gets its tools" "$(cat "$L/claude.args")" "[--allowedTool
 contains "codex still reads standard input" "$(cat "$L/codex.args")" "[--skip-git-repo-check]
 [-]"
 check "the answer's last line is the assistant's, not Hermes' waiting line" "$(tail -n 1 "$G/out/hermes.txt")" "RESULT: done"
+
+# A LIST THAT LIMITS THE SHELL BINDS CLAUDE (2026-10-13). --allowedTools only adds approvals to the
+# computer's own settings, and on the server those allowed every command, so the first nightly
+# research ran its own shell. A list that names Bash(...) commands now starts claude with
+# --restricted (no settings files read, file tools kept in the folder), --tools (only what the list
+# names) and the mission control's .mcp.json; a list that grants the whole shell, and no list, do not.
+printf '{ "mcpServers": {} }\n' > "$G/.mcp.json"
+GW="$G"; command -v cygpath >/dev/null 2>&1 && GW="$(cygpath -m "$G")"
+LIMITED="Bash(mc-goals:*) Bash(ls:*) Read Write WebFetch mcp__notebook__search_brain"
+runl() { # runner help-kind list
+  rm -f "$L/$1.args" "$L/$1.help"
+  HOME="$TMP/home" PATH="$B:$PATH" GODSPEED_RUNNER="$1" STAND_HELP="$2" bash "$HERE/mc-run" big --godspeed "$G" \
+    --out "$G/out/l-$1.txt" --timeout 60 ${3:+--allowed-tools "$3"} 2> "$L/$1.err"
+}
+echo "-- a list that limits the shell"
+runl claude restricted "$LIMITED"; check "  it finished" "$?" "0"
+args="$(cat "$L/claude.args" 2>/dev/null)"
+contains "  claude runs restricted, so the computer's settings cannot add to the list" "$args" "[--restricted]"
+contains "  with only the tools the list names, and ToolSearch" "$args" "[--tools]
+[Bash,Read,Write,WebFetch,ToolSearch]"
+contains "  the mission control's own MCP servers are handed over" "$args" "[--mcp-config]
+[$GW/.mcp.json]"
+contains "  and the list follows, one word per pattern" "$args" "[--allowedTools]
+[Bash(mc-goals:*)]
+[Bash(ls:*)]
+[Read]
+[Write]
+[WebFetch]
+[mcp__notebook__search_brain]"
+contains "  the answer was kept" "$(cat "$G/out/l-claude.txt" 2>/dev/null)" "RESULT: done"
+runl claude sources "$LIMITED"
+args="$(cat "$L/claude.args" 2>/dev/null)"
+contains "a Claude Code without --restricted reads no settings files instead" "$args" "[--setting-sources]
+[]"
+missing "  and is not given --restricted" "$args" "[--restricted]"
+contains "  its MCP servers are handed over too" "$args" "[--mcp-config]"
+runl claude none "$LIMITED"; check "a Claude Code that knows neither still runs" "$?" "0"
+args="$(cat "$L/claude.args" 2>/dev/null)"
+missing "  without --restricted" "$args" "[--restricted]"
+missing "  without --setting-sources" "$args" "[--setting-sources]"
+contains "  and says the list is not binding" "$(cat "$L/claude.err" 2>/dev/null)" "cannot hold a run to its list of tools"
+for list in "Bash Read" "Bash(*) Read WebFetch" ""; do
+  runl claude restricted "$list"
+  args="$(cat "$L/claude.args" 2>/dev/null)"
+  what="a list that grants the whole shell ($list)"; [ -n "$list" ] || what="no list"
+  missing "$what: no --restricted" "$args" "[--restricted]"
+  missing "  no --tools" "$args" "[--tools]"
+  missing "  no --setting-sources" "$args" "[--setting-sources]"
+  missing "  no --mcp-config" "$args" "[--mcp-config]"
+  check "  and claude is not even asked what it knows" "$(test -f "$L/claude.help" && echo asked || echo not)" "not"
+done
+missing "no list: no --allowedTools either" "$(cat "$L/claude.args")" "[--allowedTools]"
+for name in hermes codex; do
+  runl "$name" restricted "$LIMITED"; check "$name with a limiting list still runs" "$?" "0"
+  contains "  and says the limits rest on the recipe's words" "$(cat "$L/$name.err" 2>/dev/null)" "held to its limits only by the recipe's own words"
+done
+runl hermes restricted "Bash Read"
+check "hermes with a whole-shell list says nothing about it" "$(cat "$L/hermes.err" 2>/dev/null)" ""
+rm -f "$G/.mcp.json"
 
 # WINDOWS: a real Windows program as hermes, with the two settings Hermes gives its commands.
 if command -v cygpath >/dev/null 2>&1; then

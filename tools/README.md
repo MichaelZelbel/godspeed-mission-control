@@ -206,7 +206,11 @@ mc-work going-out           what goes out today unless you say stop
   computer, through whichever assistant this machine has: Hermes, Claude Code or
   Codex. The recipe stays a recipe. The program that runs it is one line of
   configuration, so changing assistant does not turn every scheduled job into
-  rubble.
+  rubble. A list of tools (`--allowed-tools`) that names only some shell
+  commands, as the nightly research's does, binds Claude Code: it runs with
+  `--restricted`, so the settings on the computer cannot allow more, and its file
+  tools stay inside the mission control. Hermes and Codex take no such list; with
+  them a recipe's limits rest on its own words.
 - **`mc-decide`** is the one that ties them together, once a day. It moves time
   on the work tracker, works out the attention plan, lists the forecasts that have
   come due, then runs your `next-action` recipe with all of it in front of it. The

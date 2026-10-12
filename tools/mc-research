@@ -13,8 +13,14 @@
 # round, still fits. Goals that do not fit are named in the summary and the run exits 1.
 #
 # IT NEVER CONTACTS ANYONE AND NEVER SPENDS. The recipe only reads pages and writes files. With
-# claude that is enforced: the shell is limited to the checker and a few readers. Hermes and
-# Codex ignore the tool list, so there the read-only rule rests on the recipe's wording.
+# claude that is enforced: the shell is limited to the checker, the goals tool and two readers,
+# and mc-run makes that list binding (claude --restricted), so settings on the computer that allow
+# every command do not count for this run. Hermes and Codex take no tool list, so on a computer
+# that runs them the read-only rule rests on the recipe's wording alone.
+#
+# IT COMMITS ONLY ITS OWN FILES: the research folders, tonight's run folder (without the .tmp
+# answer of a run still going), and the goal cards and ideas that changed while it ran. Other jobs
+# write into goals/, ideas/ and routines/ too, and their half-written files are theirs to commit.
 #
 # RUN IT BY HAND:   mc-research            (or --only <id> for one goal, --dry-run to see the list)
 # ONCE A NIGHT, before your daily decision (crontab -e):
@@ -32,7 +38,7 @@ while [ $# -gt 0 ]; do
     --timeout-daily) TD="$2"; shift 2 ;;
     --timeout-founding) TF="$2"; shift 2 ;;
     --dry-run) DRY=1; shift ;;
-    -h|--help) sed -n '2,24p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,28p' "$0"; exit 0 ;;
     *) echo "mc-research: I do not know the argument $1" >&2; exit 2 ;;
   esac
 done
@@ -73,10 +79,36 @@ if [ "$DRY" -eq 1 ]; then echo "Due tonight ($TODAY):"; printf '%s\n' "${DUE:-no
 # The assistant gets /dev/null as its input: the list of goals is read from descriptor 3 below,
 # and an assistant that reads its standard input must never swallow the goals still to come.
 # claude gets only these tools, so a research night cannot reach out through the shell: Bash is
-# limited to the checker, the goals tool and three harmless readers. mc-run passes the list to
-# `claude --allowedTools` as separate words, so each Bash(...) pattern (no spaces inside) survives.
-# Hermes and Codex ignore the list; with them the read-only rule rests on the recipe's wording.
-TOOLS="Bash(mc-check-research:*) Bash(mc-goals:*) Bash(ls:*) Bash(wc:*) Bash(date:*) Read Grep Glob Write Edit WebSearch WebFetch"
+# limited to the checker, the goals tool and two harmless readers (no `date`: as root, `date -s`
+# sets the clock, and the prompt already says what day it is); the notebook may be searched and
+# read, never written. Because the list limits the shell, mc-run makes it binding (claude
+# --restricted): the computer's own settings cannot add to it, and the file tools stay inside the
+# mission control. mc-run passes the list as separate words, so each Bash(...) pattern survives.
+# Hermes and Codex take no list; with them the read-only rule rests on the recipe's wording.
+TOOLS="Bash(mc-check-research:*) Bash(mc-goals:*) Bash(ls:*) Bash(wc:*) Read Grep Glob Write Edit WebSearch WebFetch mcp__notebook__search_brain mcp__notebook__get_note"
+# An mc-run from before 2026-10-13 passes the list without binding it. Said in the summary, so a
+# night that was not held to its list never reads as one that was.
+grep -q -- '--restricted' "$RUNNER" 2>/dev/null || \
+  echo "note: tonight's research was not held to its list of tools, because $RUNNER is older than mc-research; update both together" >> "$SUMMARY"
+# What a night may commit: the research folders and tonight's run folder, and the goal cards and
+# ideas that changed while it ran. Other jobs write into goals/, ideas/ and routines/ as well, and
+# what they leave half-written is theirs to commit. So the cards and ideas are fingerprinted now
+# and again at the end, and only the ones that changed in between go into the night's commit.
+fingerprints() {
+  ( cd "$GODSPEED" 2>/dev/null || exit 0
+    for f in goals/*.md; do [ -f "$f" ] && cksum "$f"; done
+    [ -d ideas ] && find ideas -type f -exec cksum {} +
+  ) 2>/dev/null | LC_ALL=C sort
+}
+FP_BEFORE="$(fingerprints)"
+# The summary line is the answer's LAST paragraph: an assistant that worked with helpers writes
+# "the helpers are still working" before its one plain final sentence, and only that sentence is
+# the night's answer. At most 400 characters, never cut inside a letter.
+last_paragraph() {
+  "$NODE" -e 'const fs=require("fs");let t="";try{t=fs.readFileSync(process.argv[1],"utf8")}catch(e){}
+const p=t.replace(/\r/g,"").split(/\n[ \t]*\n/).map(s=>s.replace(/\s+/g," ").trim()).filter(Boolean);
+process.stdout.write(Array.from(p.length?p[p.length-1]:"").slice(0,400).join(""));' "$1"
+}
 recipe() { # prompt timeout out
   if [ -n "$EXTRA" ] && [ -f "$EXTRA" ]; then
     bash "$RUNNER" goal-research --godspeed "$GODSPEED" --cwd "$GODSPEED" --prompt-file "$EXTRA" --prompt "$1" \
@@ -136,15 +168,35 @@ Follow the goal-research recipe for exactly these gaps, in goals/research/$ID, a
   fi
   printf '%s\n' "$GAPS" > "$RUNDIR/$ID.check.txt"
   rm -f "$GAPFILE"
-  echo "$ID: done ($MODE): $(head -c 400 "$RUNDIR/$ID.answer.txt" 2>/dev/null | tr '\n' ' ')" >> "$SUMMARY"
+  echo "$ID: done ($MODE): $(last_paragraph "$RUNDIR/$ID.answer.txt")" >> "$SUMMARY"
 done 3<<< "$DUE"
 [ -n "$SKIPPED" ] && echo "skipped for time:$SKIPPED (they go first tomorrow)" >> "$SUMMARY"
 
 if [ -d "$GODSPEED/.git" ] && command -v git >/dev/null 2>&1; then
-  for d in goals ideas routines; do [ -d "$GODSPEED/$d" ] && git -C "$GODSPEED" add "$d" >/dev/null 2>&1; done
-  if ! git -C "$GODSPEED" diff --cached --quiet 2>/dev/null; then
-    git -C "$GODSPEED" commit -q -m "Research $TODAY" >/dev/null 2>&1 || true
-    git -C "$GODSPEED" remote get-url origin >/dev/null 2>&1 && git -C "$GODSPEED" push -q origin HEAD >/dev/null 2>&1 || true
+  # Every file is named one by one, read literally. (An exclude pattern is no help: git 2.53 adds
+  # nothing at all for `git add -A -- <one folder> ':(exclude)*.tmp'`.) A .tmp file is an answer
+  # still being written by a night started by hand beside this one, so it is left out.
+  gl() { git --literal-pathspecs -C "$GODSPEED" "$@"; }
+  OWN=()
+  own() { case "$1" in ''|*.tmp) ;; *) OWN+=("$1") ;; esac; }
+  for d in goals/research "routines/research/$TODAY"; do
+    [ -e "$GODSPEED/$d" ] || continue
+    while IFS= read -r -d '' f; do own "$f"; done < <(gl ls-files -z -m -o -d --exclude-standard -- "$d" 2>/dev/null)
+  done
+  while IFS= read -r p; do own "$p"; done < <(
+    LC_ALL=C comm -13 <(printf '%s\n' "$FP_BEFORE") <(fingerprints) | sed -E 's/^[0-9]+ [0-9]+ //')
+  if [ "${#OWN[@]}" -gt 0 ]; then
+    gl add -A -- "${OWN[@]}" >/dev/null 2>&1
+    # Only paths git knows can be named to the commit (one it ignores would stop the whole commit).
+    KNOWN=()
+    for p in "${OWN[@]}"; do
+      if gl ls-files --error-unmatch -- "$p" >/dev/null 2>&1 || gl cat-file -e "HEAD:$p" 2>/dev/null; then KNOWN+=("$p"); fi
+    done
+    if [ "${#KNOWN[@]}" -gt 0 ] && ! gl diff --cached --quiet -- "${KNOWN[@]}" 2>/dev/null; then
+      # The paths are named, so a file another job staged stays staged for that job's own commit.
+      gl commit -q -m "Research $TODAY" -- "${KNOWN[@]}" >/dev/null 2>&1 || true
+      gl remote get-url origin >/dev/null 2>&1 && gl push -q origin HEAD >/dev/null 2>&1 || true
+    fi
   fi
 fi
 cat "$SUMMARY"

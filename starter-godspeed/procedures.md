@@ -24,7 +24,9 @@ computer is back.
 Does: every night it researches each of your goals that is due, for up to two hours in all: who
 leads the field, who got there from a start like yours, what is established and what was just
 proven wrong, and chances with a closing date (the goal-research recipe, run by mc-research). It
-only reads pages and writes files, and contacts nobody.
+only reads pages and writes files, and contacts nobody. When Claude Code runs it, that is enforced:
+it gets only the tools it needs, whatever else your Claude Code settings allow. Hermes and Codex
+cannot be given such a list, so with them it rests on the recipe's own words.
 Rhythm: every day at 00:15, your time zone, well before the daily round picks the day's work at
 05:30, so that choice already has the news.
 Lands: each goal's research folder and one-page brief under goals/research/. A night that fell
