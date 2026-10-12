@@ -100,6 +100,19 @@ const cast=(a,v)=>typeof v!=='string'?v:typeof a==='number'&&v.trim()!==''&&Numb
 // 'done'), nor NULL < 5. Until 6 October 2026 neq, not and lt kept such rows.
 // condition() answers true, false or null for unknown; callers keep === true.
 const comparisons=new Set(['eq','neq','in','contains','overlaps','gt','gte','lt','lte','like','ilike']);
+// Each filter is a list of three: an operator, a column and a value. One of another shape, such as
+// {"field":"id","operator":"eq","value":...}, is refused in words; until 12 October 2026 it
+// reached condition() and failed as "object is not iterable", which an assistant is shown only as
+// "Something went wrong on the server" (the book's capture run, Finding 5).
+const filterHelp='Each filter is a list of three: an operator, a column and a value, for example ["eq","id","<id>"]';
+export function checkFilters(filters){
+  if(!Array.isArray(filters))throw new Error('filters is a list. '+filterHelp+'.');
+  for(const f of filters){
+    if(!Array.isArray(f)||f.length<2||typeof f[0]!=='string'||typeof f[1]!=='string')throw new Error(filterHelp+'; got '+String(JSON.stringify(f)).slice(0,120)+'.');
+    if(!['or','and','not','is'].includes(f[0])&&!comparisons.has(f[0]))throw new Error('Unsupported filter '+f[0]+'. '+filterHelp+'.');
+    if(f[0]==='not'&&(!Array.isArray(f[2])||typeof f[2][0]!=='string'))throw new Error('A "not" filter is ["not","<column>",["<operator>",<value>]].');
+  }
+}
 function condition(row, [op, key, value]) {
   if (op === 'or' || op === 'and') { const results = splitFilters(String(value)).map(part => filterExpression(row, part)), decisive = op === 'or'; return results.includes(decisive) ? decisive : results.includes(null) ? null : !decisive; }
   if (op === 'not') return negate(condition(row, [value[0], key, value[1]]));
@@ -298,6 +311,7 @@ export class QueryService {
   execute(request) {
     const { table, operation = 'select', values, filters = [], orders = [], selection = '*', options = {}, single = false, maybeSingle = false, expected = {}, baselines = {} } = request;
     if (!tables.has(table)) throw new Error('Unknown record domain ' + table);
+    checkFilters(filters);
     // A filter on an embedded column ("contact_groups.is_trashed") waits for
     // the join. Until 6 October 2026 it was checked against the row itself,
     // where that column never is, so a person's Groups tab was always empty.

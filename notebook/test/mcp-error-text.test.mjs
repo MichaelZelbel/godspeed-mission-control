@@ -23,4 +23,10 @@ test('MCP tool errors are told as the HTTP API tells them',async t=>{
   const refusal=await call('get_note',{note_id:'missing'});
   assert.equal(refusal.isError,true);
   assert.equal(refusal.content[0].text,'Choose a visible existing note');
+  // A filter of the wrong shape is the caller's mistake, said in words (the book's capture run of
+  // 12 October 2026 got "Something went wrong on the server" for it).
+  const filter=await call('list_records',{type:'collections',filters:[{field:'id',operator:'eq',value:'sleep-14a7be21'}]});
+  assert.equal(filter.isError,true);
+  assert.doesNotMatch(filter.content[0].text,/Something went wrong/);
+  assert.match(filter.content[0].text,/^Each filter is a list of three: an operator, a column and a value/);
 });
