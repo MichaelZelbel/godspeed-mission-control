@@ -29,9 +29,10 @@ export function dailyTime(at){const m=/^([01]?\d|2[0-3]):([0-5]\d)$/.exec(String
 // `hermes cron tick` runs every due job to the end before it returns (and has
 // already moved each job's next run on, so a killed run is lost for the day).
 // Hermes stops a job that goes quiet for ten minutes and gives a job's own
-// script an hour, so a tick gets two hours; past that it is stopped with all
-// it started, and its heartbeat stops with it.
-export const TICK_LIMIT=2*3600000;
+// script 9000 seconds (cron.script_timeout_seconds, hermes-config.mjs; the nightly goal research is
+// the longest script, up to 8100 seconds), so a tick gets two hours and forty-five minutes; past
+// that it is stopped with all it started, and its heartbeat stops with it.
+export const TICK_LIMIT=(2*60+45)*60000;
 // The notebook edits Hermes schedules; it never runs a second scheduler. The
 // notebook's own record routines that Hermes has no job for (the watch sweep,
 // radar preparation and application) run beside it in `records`.
@@ -120,10 +121,10 @@ export class NativeScheduler{
   if(flag?.state!=='created')await record({state:'created',first_device:this.device,created_at:at});
   return {state:'created',jobs};
  }
- async createStartingRoutines(delivery){
+ async createStartingRoutines(delivery,routines=STARTING_ROUTINES){
   const made=[];
   try{
-   for(const routine of STARTING_ROUTINES){
+   for(const routine of routines){
     const before=new Set(hermesJobs(this.home).map(j=>j.id));
     await this.command(['create',routine.schedule,...(routine.prompt?[routine.prompt]:['--no-agent']),'--name',routine.name,'--script',routine.script,'--deliver',delivery,'--failure-deliver','local','--workdir',this.store.root]);
     const job=hermesJobs(this.home).find(j=>!before.has(j.id)&&j.name===routine.name);
@@ -131,6 +132,20 @@ export class NativeScheduler{
     made.push({id:job.id,key:routine.key,name:routine.name,what:routine.what});
    }
   }catch(error){for(const job of made)await this.command(['remove',job.id]).catch(()=>{});throw error;}
+  return made;
+ }
+ // A routine added to the starting routines after a machine got its first ones (the nightly goal
+ // research, 13 October 2026) is made once on that machine too, when it is not in the machine's
+ // record of what it was offered: a routine the reader removed was offered, so it stays removed.
+ // A routine that needs a recipe waits until the mission control has it.
+ async addNewStartingRoutines(){
+  const root=this.store.root,here=readMachineRecord(this.store),installation=this.store.get('settings','installation');
+  if(here?.state!=='created'||!Array.isArray(here.jobs)||!installation?.timezone||!starterBorn(root))return [];
+  const offered=new Set(here.jobs.map(j=>j.key)),missing=STARTING_ROUTINES.filter(r=>!offered.has(r.key)&&(!r.needs||fs.existsSync(path.join(root,'skills',r.needs,'SKILL.md'))));
+  if(!missing.length)return [];
+  writeRoutineFiles(this.home,routineFiles({root,home:this.home,state:this.store.state,timezone:installation.timezone,hermes:this.executable}));
+  const made=await this.createStartingRoutines(here.delivery||'local',missing);
+  writeMachineRecord(this.store,{...here,jobs:[...here.jobs,...made]});
   return made;
  }
  // After every tick on the machine that runs the routines of a starter-born mission control: the
@@ -165,6 +180,7 @@ export class NativeScheduler{
   this.ticking=true;this.lastTick=Date.now();
   try{
    await this.startRoutines().catch(()=>null);
+   await this.addNewStartingRoutines().catch(()=>null);
    await beatWhile(this.command(['tick'],{timeout:this.tickLimit}),()=>this.onProgress?.(),{limitMs:this.tickLimit+60000,every:this.beatEvery});
    try{this.afterTick();}catch{}
   }

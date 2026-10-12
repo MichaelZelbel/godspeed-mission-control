@@ -93,8 +93,25 @@ while read -r ID MODE LAST <&3; do
   [ -n "$ID" ] || continue
   T="$TD"; [ "$MODE" = founding ] && T="$TF"
   # A goal starts only if its whole night (the timeout, plus the 900 seconds of the fix round) still fits.
-  if [ $(( $(date +%s) - START + T + 900 )) -gt $(( BUDGET * 60 )) ]; then SKIPPED="$SKIPPED $ID"; continue; fi
+  if [ $(( $(date +%s) - START + T + 900 )) -gt $(( BUDGET * 60 )) ]; then
+    SKIPPED="$SKIPPED $ID"
+    # Said in the goal's own folder too, so a short night is never read as a quiet one.
+    if [ -d "$GODSPEED/goals/research/$ID/days" ]; then
+      printf '# %s %s: skipped for time
+
+Written by mc-research. Tonight did not have time left for this goal, so it was not researched; it goes first tomorrow. This file does not count as a night.
+' "$ID" "$TODAY"         > "$GODSPEED/goals/research/$ID/days/$TODAY.gap.md"
+    fi
+    continue
+  fi
   g research "$ID" >/dev/null
+  # Written BEFORE the run and removed only when the check passes: a run that is killed part way
+  # (the computer slept, the scheduler stopped it) leaves this file, so the night is never read as done.
+  GAPFILE="$GODSPEED/goals/research/$ID/days/$TODAY.gap.md"
+  printf '# %s %s: started, not finished
+
+Written by mc-research before the run so that a killed night is never read as done. It is removed when the night passes its check.
+' "$ID" "$TODAY" > "$GAPFILE"
   BEFORE="$(count_people "$ID")"
   PROMPT="Today is $TODAY (UTC). Goal: $ID. Mode: $MODE. Its research folder is goals/research/$ID (last completed night: $LAST). Follow the goal-research recipe exactly for this one goal: update the files, rewrite brief.md with UPDATED: $TODAY, write goals/research/$ID/days/$TODAY.md, file the ideas the recipe asks for, and run mc-check-research --goal $ID --date $TODAY --mode $MODE --fetch until it prints OK. Your final answer is one plain sentence."
   recipe "$PROMPT" "$T" "$RUNDIR/$ID.answer.txt"
@@ -118,6 +135,7 @@ Follow the goal-research recipe for exactly these gaps, in goals/research/$ID, a
     }
   fi
   printf '%s\n' "$GAPS" > "$RUNDIR/$ID.check.txt"
+  rm -f "$GAPFILE"
   echo "$ID: done ($MODE): $(head -c 400 "$RUNDIR/$ID.answer.txt" 2>/dev/null | tr '\n' ' ')" >> "$SUMMARY"
 done 3<<< "$DUE"
 [ -n "$SKIPPED" ] && echo "skipped for time:$SKIPPED (they go first tomorrow)" >> "$SUMMARY"

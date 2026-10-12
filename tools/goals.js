@@ -721,7 +721,13 @@ function researchCounts(id, d) {
 // this never counts: a gap must never read as a quiet day.
 function lastDay(id) {
   let names = [];
-  try { names = fs.readdirSync(path.join(researchDir(id), 'days')).filter(n => /^\d{4}-\d{2}-\d{2}\.md$/.test(n)).sort(); } catch (e) { /* no days yet */ }
+  try {
+    const all = fs.readdirSync(path.join(researchDir(id), 'days'));
+    // A night with a gap file beside its day record is not done: mc-research writes the gap file
+    // BEFORE a goal's run and removes it only when the check passed, so a run that was killed
+    // leaves a day record that still reads as unfinished.
+    names = all.filter(n => /^\d{4}-\d{2}-\d{2}\.md$/.test(n) && !all.includes(n.slice(0, 10) + '.gap.md')).sort();
+  } catch (e) { /* no days yet */ }
   return names.length ? names[names.length - 1].slice(0, 10) : null;
 }
 function researchState(c, d) {

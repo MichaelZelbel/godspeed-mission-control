@@ -29,6 +29,7 @@ P="\$*"; [ -t 0 ] || P="\$P \$(cat)"
 GOAL="\$(printf '%s' "\$P" | sed -n 's/.*Goal: \([a-z0-9-]*\)\. Mode.*/\1/p' | head -1)"
 DAY="\$(printf '%s' "\$P" | sed -n 's/.*Today is \([0-9-]*\) (UTC).*/\1/p' | head -1)"
 echo "\$GOAL" >> "$TMP/ran"
+[ -f "$G/goals/research/\$GOAL/days/\$DAY.gap.md" ] && echo "\$GOAL" >> "$TMP/gap-during"
 grep -qx "\$GOAL" "$TMP/fail-these" 2>/dev/null && { echo "crashed"; exit 1; }
 R="$G/goals/research/\$GOAL"
 W="\$(printf 'word %.0s' \$(seq 1 160))"
@@ -118,6 +119,27 @@ OUT="$(HOME="$TMP/home" PATH="$B:$PATH" GODSPEED_RUNNER=claude bash "$HERE/mc-re
 check "a budget shorter than one night exits 1" "$?" "1"
 contains "  and names the goal it skipped" "$(cat "$G/routines/research/2026-10-15/summary.txt")" "skipped for time: money"
 check "  without starting it" "$(cat "$TMP/ran" 2>/dev/null | wc -l | tr -d ' ')" "0"
+
+# A gap file is written BEFORE each goal's run and removed when the night passes its check, so a run
+# that is killed part way is never read as done; a goal skipped for time gets one too.
+export GODSPEED_TODAY=2026-10-16
+rm -f "$TMP/ran" "$TMP/gap-during"
+OUT="$(HOME="$TMP/home" PATH="$B:$PATH" GODSPEED_RUNNER=claude bash "$HERE/mc-research" --godspeed "$G" --date 2026-10-16 --only money 2>&1)"
+check "a good night exits 0" "$?" "0"
+check "  the gap file was already there while the goal ran" "$(cat "$TMP/gap-during" 2>/dev/null | tr '
+' ' ')" "money "
+check "  and is gone once the night passed its check" "$(test -f "$G/goals/research/money/days/2026-10-16.gap.md" && echo still-there || echo gone)" "gone"
+check "  the night counts" "$(hg research money --state --json --date 2026-10-16 | "$NODE" -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).last))')" "2026-10-16"
+# A run killed mid-goal: the day record is there, the pre-written gap file is still beside it.
+export GODSPEED_TODAY=2026-10-17
+M="$G/goals/research/money/days"
+cp "$M/2026-10-16.md" "$M/2026-10-17.md"; printf '# money 2026-10-17: started, not finished
+' > "$M/2026-10-17.gap.md"
+check "a killed night does not count as a night" "$(hg research money --state --json --date 2026-10-17 | "$NODE" -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).last))')" "2026-10-16"
+contains "  and the goal is still due" "$(hg research --due --date 2026-10-17)" "money"
+rm -f "$TMP/ran"
+OUT="$(HOME="$TMP/home" PATH="$B:$PATH" GODSPEED_RUNNER=claude bash "$HERE/mc-research" --godspeed "$G" --date 2026-10-17 --only money --budget-minutes 5 2>&1)"
+contains "  a goal skipped for time says so in its own folder" "$(cat "$M/2026-10-17.gap.md")" "skipped for time"
 
 echo "$PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

@@ -117,6 +117,10 @@ export function configList(value){
 //   own built-in ticker under another name, which is how Hermes knows that jobs fire without its
 //   gateway (hermes_cli/cron.py, _builtin_gateway_liveness).
 export const CRON_PROVIDER='godspeed_notebook';
+// Hermes stops a cron job's script after cron.script_timeout_seconds (default 3600, one setting for
+// every job, no per-job flag). The nightly goal research may run 120 minutes plus its fix round
+// (8100 seconds), so Hermes gives scripts 9000 seconds; a larger value the owner chose stays.
+export const SCRIPT_TIMEOUT_SECONDS=9000;
 export function godspeedHermesSettings(text){
  let out=String(text||'');
  out=setConfigValue(out,['memory','memory_enabled'],'false');
@@ -127,6 +131,8 @@ export function godspeedHermesSettings(text){
  out=setConfigValue(out,['agent','disabled_toolsets'],'['+wanted.map(n=>JSON.stringify(n)).join(', ')+']');
  out=setConfigValue(out,['tools','tool_search','enabled'],'"off"');
  out=setConfigValue(out,['cron','provider'],CRON_PROVIDER);
+ const current=Number(readConfigValue(out,['cron','script_timeout_seconds']));
+ if(!(current>=SCRIPT_TIMEOUT_SECONDS))out=setConfigValue(out,['cron','script_timeout_seconds'],String(SCRIPT_TIMEOUT_SECONDS));
  return out;
 }
 

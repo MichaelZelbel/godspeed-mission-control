@@ -42,7 +42,8 @@ from datetime import datetime, timezone
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 NO_WAKE = '{"wakeAgent": false}'
-# Hermes gives a script one hour; the runs below stop five minutes before that.
+# Hermes gives a script 9000 seconds (cron.script_timeout_seconds, hermes-config.mjs); the daily
+# round's runs stop five minutes before one hour, and the nightly research (8100 seconds) is longer.
 LIMIT = 3300
 
 
@@ -362,9 +363,14 @@ def research(c):
                  "--budget-minutes", str(RESEARCH_MINUTES)], c, env, timeout=RESEARCH_MINUTES * 60 + 900)
     except subprocess.TimeoutExpired:
         return went_wrong(c, "research", day, "Tonight's goal research took longer than its time and was stopped.")
-    # 1 is a night that fell short on some goals (its gap files say which); 2 and 3 mean it never started.
+    # 2 and 3 mean it never started.
     if r.returncode in (2, 3):
         return went_wrong(c, "research", day, "The nightly goal research could not start tonight.", r)
+    # 1 is a night that fell short on some goals (each says so in its own research folder): shown
+    # as failed in the Routines list, with one plain sentence, but nothing is printed to the reader.
+    if r.returncode != 0:
+        remember(c, "research", "Tonight's goal research did not finish every goal; each one that fell short says so in its research folder.")
+        return ""
     remember(c, "research")
     return ""
 

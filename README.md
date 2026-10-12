@@ -24,9 +24,14 @@ Version 2 is the current edition, here on `main`. Its installers set up a new, s
 - Programming goes to a coding helper. When you ask your mission control to write or change code in one of your projects, it hands the work to a helper that works only in that project's folder, tests and saves it there, and reports back, so your conversation keeps its context. Claude Code does this by itself; the manual tells Codex and Hermes to do the same.
 - On Linux, a routine that ran in the same instant the notebook first looked at it is no longer overlooked.
 
+## New on 13 October 2026
+
+- A fourth routine joins the ones your first goal starts: a nightly research run on your goals, at 00:15 on your clock, before the daily round picks the day's work. It writes research files and ideas, and contacts nobody. A mission control that already has its routines gets this one too, once, unless you removed routines on purpose.
+- A research night that was cut off part way is no longer counted as done; its goal is researched again the next night. A goal that had no time left says so in its own research folder.
+
 ## New on 9 October 2026, for the book's second edition
 
-- Your first goal starts four routines by itself: a nightly research run on your goals, a daily round that picks the day's work and does it, deadline reminders, and a weekly check-in about the goal on Sundays.
+- Your first goal starts three routines by itself: a daily round that picks the day's work and does it, deadline reminders, and a weekly check-in about the goal on Sundays.
 - The notebook keeps the people, facts and events you tell it about, one page per person. Each kind of fact has one fixed name, and a newer value ends the older one.
 - The note graph is back, worked out from your notes when you open it.
 - A computer can connect its own GitHub copy from Settings, and mail works on a computer too.

@@ -1,6 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import path from 'node:path';import {fileURLToPath} from 'node:url';import {EventEmitter} from 'node:events';import {PassThrough} from 'node:stream';
 import {nativeAgent} from '../core/native-agent.mjs';import {NativeScheduler,nativeJobs} from '../core/native-scheduler.mjs';import {Store} from '../core/records/store.mjs';import {Domains} from '../core/domains.mjs';import {QueryService} from '../core/query.mjs';
-import {execFileSync} from 'node:child_process';import {installStarter,adoptedMissionControl} from '../core/starter-workspace.mjs';import {readMachineRecord} from '../core/starting-routines.mjs';import {runCommand} from '../core/child-process.mjs';
+import {execFileSync} from 'node:child_process';import {installStarter,adoptedMissionControl} from '../core/starter-workspace.mjs';import {readMachineRecord,writeMachineRecord} from '../core/starting-routines.mjs';import {runCommand} from '../core/child-process.mjs';
 const goalsTool=fileURLToPath(new URL('../../tools/goals.js',import.meta.url));
 // The chat files a goal with the original tool. It finds its mission control from GODSPEED_ROOT or the
 // folder it runs in, never from a flag, so both are this fixture's.
@@ -31,7 +31,7 @@ test('native setup files the goal using the original main tool and creates no re
 // A Hermes stand-in that keeps its jobs the way Hermes does (cron/jobs.json); every other command
 // runs for real (tools/goals.js files the goal).
 function fakeHermes(home,{fail}={}){
- const calls=[],file=path.join(home,'cron','jobs.json'),read=()=>fs.existsSync(file)?JSON.parse(fs.readFileSync(file,'utf8')).jobs:[],write=jobs=>{fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,JSON.stringify({jobs}));};
+ let serial=0;const calls=[],file=path.join(home,'cron','jobs.json'),read=()=>fs.existsSync(file)?JSON.parse(fs.readFileSync(file,'utf8')).jobs:[],write=jobs=>{fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,JSON.stringify({jobs}));};
  const run=async(exe,args,options={})=>{
   if(exe!=='hermes')return runCommand(exe,args,options);
   calls.push({args,timezone:options.env?.HERMES_TIMEZONE,home:options.env?.HERMES_HOME});
@@ -39,7 +39,7 @@ function fakeHermes(home,{fail}={}){
   if(verb==='create'){
    if(fail&&rest.includes(fail))throw Object.assign(Error('Command failed with exit code 1'),{stderr:'fictional refusal'});
    const flag=name=>{const i=rest.indexOf(name);return i===-1?null:rest[i+1];},noAgent=rest.includes('--no-agent'),prompt=noAgent?null:rest[1];
-   const jobs=read();jobs.push({id:'job'+(jobs.length+1),name:flag('--name'),schedule_display:rest[0],prompt,script:flag('--script'),no_agent:noAgent,deliver:flag('--deliver'),failure_deliver:flag('--failure-deliver'),workdir:flag('--workdir'),enabled:true,state:'scheduled',next_run_at:null,last_run_at:null,last_status:null});write(jobs);
+   const jobs=read();jobs.push({id:'job'+(++serial),name:flag('--name'),schedule_display:rest[0],prompt,script:flag('--script'),no_agent:noAgent,deliver:flag('--deliver'),failure_deliver:flag('--failure-deliver'),workdir:flag('--workdir'),enabled:true,state:'scheduled',next_run_at:null,last_run_at:null,last_status:null});write(jobs);
   }
   if(verb==='remove')write(read().filter(j=>j.id!==rest[0]));
   return {stdout:''};
@@ -193,4 +193,30 @@ test('notebook schedule controls call Hermes cron and reflect its job file',asyn
  const scheduler=new NativeScheduler(store,{home,executable:'hermes',run:async(exe,args)=>{calls.push({exe,args});return {stdout:''};}});
  await scheduler.control({id:'fixture',paused:true});assert.deepEqual(calls[0],{exe:'hermes',args:['cron','pause','fixture']});
  await scheduler.control({kind:'morning-brief',interval_ms:86400000},{enable:true});assert.ok(calls[1].args.includes('--skill'));assert.ok(calls[1].args.includes('morning-brief'));assert.equal(store.list('jobs').length,0);
+});
+
+test('a machine that got the first routines before the nightly research existed gets it once, and never again after the reader removed it',async t=>{
+ const {root,home}=starterFixture(t),store=new Store(root,{device:'laptop-1'}),hermes=fakeHermes(home);
+ const scheduler=new NativeScheduler(store,{home,executable:'hermes',device:'laptop-1',run:hermes.run});
+ await scheduler.configure({goal:'Fictional older goal',timezone:'Europe/Berlin'});
+ // An installation from before: no research routine, and no record that it was ever offered.
+ hermes.write(hermes.jobs().filter(j=>j.name!=='Nightly goal research'));
+ const here=readMachineRecord(store);writeMachineRecord(store,{...here,jobs:here.jobs.filter(j=>j.key!=='research')});
+ const creates=()=>hermes.calls.filter(c=>c.args[1]==='create').length,before=creates();
+ scheduler.lastTick=0;await scheduler.tick();
+ assert.equal(creates(),before+1,'made once');
+ assert.deepEqual(hermes.jobs().filter(j=>j.name==='Nightly goal research').map(j=>[j.schedule_display,j.script]),[['15 0 * * *','godspeed-goal-research.py']]);
+ assert.ok(readMachineRecord(store).jobs.some(j=>j.key==='research'),'and recorded as offered '+JSON.stringify(readMachineRecord(store).jobs.map(j=>j.key)));
+ assert.ok(fs.existsSync(path.join(home,'scripts','godspeed-goal-research.py')));
+ hermes.write(hermes.jobs().filter(j=>j.name!=='Nightly goal research'));
+ scheduler.lastTick=0;await scheduler.tick();
+ assert.equal(creates(),before+1,'a routine the reader removed stays removed');
+ // A mission control without the research recipe waits: nothing is made for a recipe it does not have.
+ const other=starterFixture(t),otherStore=new Store(other.root,{device:'laptop-2'}),otherHermes=fakeHermes(other.home),otherScheduler=new NativeScheduler(otherStore,{home:other.home,executable:'hermes',device:'laptop-2',run:otherHermes.run});
+ await otherScheduler.configure({goal:'Fictional second goal',timezone:'Europe/Berlin'});
+ otherHermes.write(otherHermes.jobs().filter(j=>j.name!=='Nightly goal research'));
+ const old=readMachineRecord(otherStore);writeMachineRecord(otherStore,{...old,jobs:old.jobs.filter(j=>j.key!=='research')});
+ fs.rmSync(path.join(other.root,'skills','goal-research'),{recursive:true,force:true});
+ const count=otherHermes.calls.filter(c=>c.args[1]==='create').length;otherScheduler.lastTick=0;await otherScheduler.tick();
+ assert.equal(otherHermes.calls.filter(c=>c.args[1]==='create').length,count);
 });

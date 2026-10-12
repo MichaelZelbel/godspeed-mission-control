@@ -1,7 +1,7 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';
 import {fileURLToPath} from 'node:url';import {execFileSync} from 'node:child_process';
 import {Store} from '../core/records/store.mjs';import {NativeScheduler} from '../core/native-scheduler.mjs';import {installStarter} from '../core/starter-workspace.mjs';
-import {godspeedHermesSettings,setConfigValue,readConfigValue,configList,CRON_PROVIDER} from '../core/hermes-config.mjs';
+import {SCRIPT_TIMEOUT_SECONDS,godspeedHermesSettings,setConfigValue,readConfigValue,configList,CRON_PROVIDER} from '../core/hermes-config.mjs';
 
 // What a live run of the book's prompts found on 9 October 2026 (a scratch Windows install, free
 // models, the notebook's own chat), each a thing any model would hit:
@@ -92,4 +92,19 @@ test('Run now answers at once and the routine runs on in the background',async t
  assert.throws(()=>scheduler.startRun('nope'),/Choose an existing Hermes task/,'a wrong id is said at once');
  store.save('settings',{id:'installation',owner:'vps'});
  assert.throws(()=>scheduler.startRun('brief'),/machine named vps/);
+});
+
+// Hermes stops a cron script at cron.script_timeout_seconds (3600 unless set), one setting for all
+// jobs. The nightly goal research may run 120 minutes plus a fix round, so the order below must hold:
+// the routine's own limit, then Hermes' script limit, then the notebook's limit for a whole tick.
+test("the research night fits inside Hermes' script limit, which fits inside the tick limit",async()=>{
+ assert.equal(readConfigValue(godspeedHermesSettings(''),['cron','script_timeout_seconds']),String(SCRIPT_TIMEOUT_SECONDS));
+ assert.equal(readConfigValue(godspeedHermesSettings('cron:\n  script_timeout_seconds: 3600\n'),['cron','script_timeout_seconds']),String(SCRIPT_TIMEOUT_SECONDS),'an existing install gets it too');
+ assert.equal(readConfigValue(godspeedHermesSettings('cron:\n  script_timeout_seconds: 20000\n'),['cron','script_timeout_seconds']),'20000','a larger value the owner chose stays');
+ const {TICK_LIMIT}=await import('../core/native-scheduler.mjs');
+ const python=fs.readFileSync(new URL('../core/routine-scripts/godspeed_routines.py',import.meta.url),'utf8');
+ const minutes=Number(/^RESEARCH_MINUTES = (\d+)/m.exec(python)[1]),own=minutes*60+900;
+ assert.equal(minutes,120);assert.equal(own,8100);
+ assert.ok(own<SCRIPT_TIMEOUT_SECONDS,'the routine stops itself before Hermes does');
+ assert.ok(SCRIPT_TIMEOUT_SECONDS*1000<TICK_LIMIT,'and Hermes stops it before the tick is killed');
 });
