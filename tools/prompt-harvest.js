@@ -309,11 +309,12 @@ function receipt(fields) {
 /* How many rows the collector added, and which sources it could read, taken from its own
  * output rather than counted again here - two counters disagreeing is a bug you only meet on
  * the machine you are not sitting at. It prints "archived N prompts" and, when a source was
- * skipped, "not read, by your choice: <names>". */
+ * skipped, "not read, by your choice: <names>" (since 2026-10-12: "chats from before <day> not
+ * brought in, by your choice: <names> (new ones are saved)"; the bracket is not a name). */
 function readHarvestOutput(out) {
   const s = String(out || '');
   const n = /archived\s+(\d+)\s+prompt/i.exec(s);
-  const skipped = /(?:not read|not brought in), by your choice:\s*(.+)/i.exec(s);
+  const skipped = /(?:not read|not brought in), by your choice:\s*([^(\n]+)/i.exec(s);
   return {
     added: n ? Number(n[1]) : 0,
     skipped: skipped ? skipped[1].trim().split(/[,\s]+/).filter(Boolean) : []
