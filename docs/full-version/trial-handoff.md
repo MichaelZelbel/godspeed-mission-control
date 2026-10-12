@@ -7,11 +7,24 @@
 - Open this folder in VS Code or Codex: `C:/godspeed/work/trials/godspeed-v2`.
 - Windows notebook: http://127.0.0.1:49175/dashboard
 - Development VPS notebook: https://srv1069233.hstgr.cloud:48443/dashboard
-- Windows download: https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-12-1/GodspeedSetup.exe
-- Linux download: https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-12-1/install-godspeed.sh
-- Source, manifests and checksums: https://github.com/MichaelZelbel/godspeed-mission-control/releases/tag/godspeed-v2-integrated-2026-10-12-1
+- Windows download: https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-12-2/GodspeedSetup.exe
+- Linux download: https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-12-2/install-godspeed.sh
+- Source, manifests and checksums: https://github.com/MichaelZelbel/godspeed-mission-control/releases/tag/godspeed-v2-integrated-2026-10-12-2
 - One-click Hostinger installation: https://srv1069233.hstgr.cloud/godspeed-install
 - Development branch: https://github.com/MichaelZelbel/godspeed-mission-control/tree/main
+
+## 12 October 2026, second release: the cycle and food trackers
+
+`godspeed-v2-integrated-2026-10-12-2` installs product e861fcca3da77f971f7362ed21af49d51e241473 (main after the first 12 October release: the cycle tracker, the food tracker with its food table, and the fixes of 12 October). The Windows installer is built from the same kit-bootstrap 0eafb061d28a077b2d7c0cc83d0bd002fcb44444 (branch `codex/godspeed-v2-native-integration`), and the Linux and Mac installer takes its shared installer from that commit too.
+
+What is new for a reader, since `godspeed-v2-integrated-2026-10-12-1` (Mission Control D-321, steps 4 and 5 and the fixes after them):
+
+- The cycle tracker (`core/cycle.mjs`, the `cycle` operation, the cycle-tracker recipe): "track period", "track period over", symptoms; a forecast only after two complete cycles, the fixed line "Not for contraception or for trying to conceive, and not a diagnosis." in every forecast, a fertile window or a diagnosis always declined, a heads-up line in the reader's own morning brief on request, and a delete she confirms that leaves no copy in the notebook.
+- The food tracker (`core/food*.mjs`, the `food` operation, the food-tracker recipe): the BLS 4.0 food table (`godspeed food-table install`, refused unless its SHA-256 is `12b7a6ba...`, kept in `.godspeed/food/bls-4.0/` with its CC BY 4.0 notice), fetched by the Linux and Mac installer after `init`, and by the notebook itself a minute after it starts where no installer did (the Windows setup and the one-click image); Open Food Facts for barcodes and brands; an optional target; Settings has an About tab naming the table, its licence and Open Food Facts.
+- The book capture's eight findings fixed (day words worked out in code, a tracker names a talk only when it exists, a column label kept as given, a call that names no operation sent to the recipe, the headache add-on 0.3.1, coach 0.2.5).
+- A talk that exists is told what it may look at and what it must never do (coach 0.2.6, `tracker-talk`), and a skipped habit day does not count (coach 0.2.7).
+
+Checked before publishing: PENDING.
 
 ## 12 October 2026 release: every new conversation is saved
 
