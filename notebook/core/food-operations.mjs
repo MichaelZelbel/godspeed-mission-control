@@ -69,7 +69,8 @@ export function foodOperation(domains,input){
  const weights=()=>weightsOf(store,zone);
  const target=all=>card.target?currentTarget(card,all,weights(),today):null;
  const leftFor=(all,day)=>{if(day!==today||!card.numbers)return null;const t=target(all);if(!t)return null;const done=totalsOf(all.filter(r=>String(r.data?.when).slice(0,10)===today));return {kcal:t.kcal-done.kcal,protein_g:t.protein_g-done.protein_g};};
- const insertRows=(tracker,items,when,meal)=>items.map(it=>query.execute({table:'collection_items',operation:'insert',values:{collection_id:tracker.id,data:rowOf(it,{when,meal})}}).data[0]);
+ // A meal's rows keep the order she named them in: each is one millisecond after the one before.
+ const insertRows=(tracker,items,when,meal)=>{const base=Date.now();return items.map((it,i)=>query.execute({table:'collection_items',operation:'insert',values:{collection_id:tracker.id,data:rowOf(it,{when,meal}),created_at:new Date(base+i).toISOString()}}).data[0]);};
 
  if(action==='search'){
   // Read only: the table's foods for each phrase, the foods she tracked before under those words, and
@@ -237,7 +238,7 @@ export function foodCreate(domains,p,input={}){
  }
  const items=p.meal.items.map((it,i)=>{const n=unclear.findIndex(u=>u.index===i);if(n<0)return it;const g=Number(answers[n]?.grams);if(!(g>0&&g<=5000))throw Error('An amount is a number of grams above 0, at most 5000');const u=unclear[n];return {...it,grams:u.unit?Math.round((u.count||1)*g*100)/100:g,assumed:false};});
  const {resolved}=resolveItems(items,{lookup,portionOf:()=>null});
- const made=resolved.map(it=>query.execute({table:'collection_items',operation:'insert',values:{collection_id:collection.id,data:rowOf(it,{when:p.meal.when,meal:p.meal.meal})}}).data[0]);
+ const base=Date.now(),made=resolved.map((it,i)=>query.execute({table:'collection_items',operation:'insert',values:{collection_id:collection.id,data:rowOf(it,{when:p.meal.when,meal:p.meal.meal}),created_at:new Date(base+i).toISOString()}}).data[0]);
  const day=p.meal.when.slice(0,10);
  return {collection_id:collection.id,entry_ids:made.map(r=>r.id),language:l,reply:trackReply(l,{items:resolved,numbers:!ed,day,today})+tail};
 }

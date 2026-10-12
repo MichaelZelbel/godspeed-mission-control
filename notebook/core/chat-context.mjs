@@ -7,6 +7,9 @@ import {retrieveNoteWindows} from './retrieval-windows.mjs';
 import {explicitNoteCapture} from './chat-intent.mjs';
 import {trackerOperation} from './tracker-operations.mjs';
 import {cycleOperation} from './cycle-operations.mjs';
+import {foodOperation} from './food-operations.mjs';
+import {productById} from './food-products.mjs';
+import {FOOD_WORDS} from './food.mjs';
 import {headacheLog} from './native-personal.mjs';
 import {contextBlock} from '../../third-party/addons/godspeed-headache/lib/context.mjs';
 import {loadSettings as headacheSettings} from '../../third-party/addons/godspeed-headache/lib/settings.mjs';
@@ -52,6 +55,21 @@ function buildChatContext(query,input){
   // Her cycle tracker (D-321 step 4): the open period, the cycles and what counts, the open questions
   // (an unusual cycle, a deletion), with ids and hashes; null when there is none.
   try{const status=cycleOperation({store:reader,query},{action:'status'});context.personal.cycle=status.tracker?status:null;}catch{context.personal.cycle=null;}
+  // Her food tracker (D-321 step 5): its open questions, today's rows and the target, and the food
+  // table's candidates for the words of her message, each with its id: the model chooses among them
+  // and never does a number itself. Only when the message is about food or a food question is open.
+  try{
+   const status=foodOperation({store:reader,query},{action:'status'}),open=status.tracker||status.proposals.length;
+   if(open||FOOD_WORDS.test(question)||/(?<!\p{L})track/iu.test(question)){
+    const skip=new Set('track tracke food meal breakfast lunch dinner snack essen frühstück mittagessen abendessen with and the some half one two three four five six seven eight nine ten slice slices piece pieces pack packs bowl bowls glass cup plate usual remember this as my what did eat today were was und mit ein eine einen zwei drei halbe scheibe scheiben packung schale glas tasse heute habe gegessen'.split(' '));
+    const words=(question.toLocaleLowerCase().match(/[\p{L}]{3,}/gu)||[]).filter(w=>!skip.has(w)),pairs=words.slice(1).map((w,i)=>words[i]+' '+w);
+    const queries=[...new Set([...pairs,...words])].slice(0,10);
+    const found=queries.length?foodOperation({store:reader,query},{action:'search',queries,limit:8}):{results:[]};
+    // A barcode she wrote was looked up before this (domains.mjs): its product is a candidate too.
+    const codes=[...new Set(question.match(/(?<!\d)\d{8,14}(?!\d)/g)||[])].map(code=>({query:code,before:[],foods:[],products:[productById(query.store.state||path.join(query.store.root,'.godspeed'),'off:'+code)].filter(Boolean)}));
+    context.personal.food={...(status.tracker?status:{tracker:null,proposals:status.proposals}),table:status.table,candidates:[...codes,...(found.results||[])]};
+   }else context.personal.food=null;
+  }catch{context.personal.food=null;}
   try{const log=headacheLog(reader),settings=headacheSettings(query.store.root);context.personal.headache={tracker:log.tracker?.id||null,open:contextBlock(log.episodes,settings,clockNow())||'No headache is open.'};}catch{context.personal.headache={tracker:null,open:'The headache tracker could not be read.'};}
   for(const type of ['notes','contacts','entities','world_claims','moments','profile_facts','goals','media_analysis']){
     const selected=pick(type,type==='notes'?8:4);context[type]=selected.rows;context.retrieval.counts[type]=selected.total;

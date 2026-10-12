@@ -14,7 +14,8 @@ import {proposalState,card,findTracker} from './trackers.mjs';
 import {isHabitRef} from './habit-trackers.mjs';
 import {headacheOperation,headacheArgs} from './headache-operation.mjs';
 import {cycleOperation,cycleTracker,DELETE_MS} from './cycle-operations.mjs';
-import {foodOperation} from './food-operations.mjs';
+import {foodOperation,foodTracker} from './food-operations.mjs';
+import {mealOf} from './food.mjs';
 import {CYCLE_WORDS,PERIOD_WORDS,OVER_WORDS,FLOW_WORDS,WHERE_WORDS,SYMPTOMS} from './cycle.mjs';
 import {nextCalendarRun} from './jobs/calendar.mjs';
 import {resumeChanges} from './jobs/routine-control.mjs';
@@ -40,8 +41,9 @@ tracker-create {proposal_id?,name?,unit?,cadence?,fields?,talk?}: the user says 
 track {tracker,value?,data?,note?,on?,at?,new_name?}: the user tracks something a supplied tracker records. tracker is its id. When he used a new word for an existing tracker, pass it as new_name.
 tracker-correct {tracker,entry_id?,value?,data?,remove?:boolean}: the user corrects or removes an entry ("that was 91, not 92", "delete the last belly"). Without entry_id it is his most recent entry in that tracker.
 Never invent a tracker; never create one without his yes. Relay the operation's reply as the answer.
-A message that starts with "track" goes, in this order: the name of a supplied habit tracker (specialist habit) is track {tracker:<its id>,answer?:done|no|skip}; a headache, a pill or a pain level is headache; the period, the cycle or a cycle symptom ("track period", "track Periode", "track cramps") is cycle; a supplied tracker's name or other name is track; only a name nothing supplied has is tracker-hold.
+A message that starts with "track" goes, in this order: the name of a supplied habit tracker (specialist habit) is track {tracker:<its id>,answer?:done|no|skip}; a headache, a pill or a pain level is headache; the period, the cycle or a cycle symptom ("track period", "track Periode", "track cramps") is cycle; food, a meal or something she ate or drank ("track food, ...", "track lunch, ...", "track usual breakfast") is food; a supplied tracker's name or other name is track; only a name nothing supplied has is tracker-hold.
 cycle {action:track|over|forecast|leave-out|count|heads-up|talk|decline|delete,flow?:spotting|light|medium|heavy|unspecified,pain?:0-3,pain_where?:[belly|back|head],symptoms?:[cramps|headache|bloating|breast tenderness|acne|low mood|irritable|low energy|poor sleep|cravings|digestion|discharge],note?,on?:YYYY-MM-DD,start?:YYYY-MM-DD,why?:outlier|pregnancy|breastfeeding|contraception,enabled?:boolean,talk?,confirm?,language}: her period and cycle; personal.cycle is her cycle tracker (null: none yet). track is a day ("track period, heavy, cramps 2"; a headache named as one of the day's symptoms is a symptom here): flow is the amount she said, unspecified when she says she has her period without an amount, left out for a day of symptoms only; with no cycle tracker it asks its setup question, and her yes is tracker-create with that question's id. "period over" is over. "when is my next period?" is forecast. Her answer to "Leave this one out of the forecast?": yes is leave-out, no is count. A cycle affected by pregnancy, breastfeeding or starting or stopping hormonal contraception is leave-out with why and start (the day it began; without start, the cycle she is in now). "tell me two days before my period" is heads-up {enabled:true}, stopping it {enabled:false}. "my health talk may read my cycle" is talk {talk:"health"}. "delete my cycle tracker" is delete; her yes to that question is delete {confirm:<personal.cycle.deletion.request_id>}. A question about a fertile window, ovulation, safe days, conceiving or avoiding pregnancy, contraception or a diagnosis is decline: never answer it yourself. Pass language. Relay the operation's reply as the answer.
+food {action:track|answer|remember|correct|today|target|settings|talk|search|status,items?:[{food,item,grams?,count?,unit?,assumed?}],meal?:breakfast|lunch|dinner|snack|none,preset?,question?,grams?,name?,entry_id?,remove?,totals?,sex?:female|male,age?,height_cm?,weight_kg?,activity?:sedentary|light|moderate|very|extra,goal?:lose|keep|gain,numbers?,eating_disorder?,pregnant?,breastfeeding?,talk?,on?:YYYY-MM-DD,at?:HH:MM,language}: what she eats; personal.food is her food tracker (null: none yet) with its open questions, and personal.food.candidates the food table's matches for her words, each with its id. track is a meal: one item per food, food is a candidate's id (choose the plain food she means; when none fits, ask her and write nothing), item her word for it, grams only when she said a weight, count and unit when she said pieces or a container ("half a pack": count 0.5, unit "pack"), and for a piece of a standard size or a food with no amount you may add your typical weight as grams with assumed:true; never assume the size of a pack, bowl, plate, glass or can: leave grams out and code asks her once. With no food tracker it asks its setup question; her yes is tracker-create with that question's id, with answers:[{grams}] when she gave the asked amounts in the same message, and eating_disorder:true when she says she has or had one. Her answer to an amount question is answer {grams} (the size of the whole pack, bowl or glass, or the grams of the item). "remember this as my usual lunch" is remember {name:"lunch"}; "track usual lunch" is track {preset:"lunch"}. "the eggs were three" is correct {item:"eggs",count:3}; "delete the eggs" is correct {item:"eggs",remove:true}. "what did I eat today?" is today, with totals:true when she asks for calories or totals. "set my food target" is target with what she said about herself (never guess her age, height, weight, activity or goal). "stop showing calories" is settings {numbers:false}; "show calories again" {numbers:true}; pregnancy, breastfeeding or an eating disorder she mentions go in settings or target as true. Pass language. Every number in the answer is the operation's: relay its reply as the answer, word for word.
 headache {action:start|log|set|med|end|cancel,at?,from?,to?,pain?,side?,quality?,symptoms?:[word],triggers?:[word],meds?:[{med,dose?}],taken?,episode?}: a headache or migraine, with or without "track". start: one going on now (at: when it began, as he said it: HH:MM, "yesterday HH:MM" or -30m); log: one already over (from and to); set: more about one (pain, side, what it feels like, a symptom, a trigger he named, a corrected time); med: a pill or other medicine; end: it is over (at, if he said when); cancel: it was a mistake. The open headaches are in personal.headache with their ids; without episode it is the open one. Pain is only a number he gave; never guess a trigger; never do clock sums.
 Every operation MUST contain source_quote. Copy the entire current user message exactly into that field, including the request verb. Without it, no operation can run. Use supplied IDs; ask to resolve ambiguity. ISO dates must include timezone. No outward actions or credentials. Never claim a change persisted until the operation succeeds.`;
 const required=(value,label)=>{if(typeof value!=='string'||!value.trim())throw Error(label+' is required');return value.trim();};
@@ -289,6 +291,56 @@ function cycleChecks(domains,message,op){
   else if(!/(?<!\p{L})(?:delete|remove|lösch\p{L}*|entfern\p{L}*)/iu.test(message)||!/(?<!\p{L})(?:cycle|period|tracker|zyklus|periode)/iu.test(message))throw Error('Say that you want your cycle tracker deleted');
  }
 }
+// What the food tracker writes must be what she said (D-321 step 5): every item a food she named, grams
+// and counts she said (a typical weight only when marked assumed), a unit and a meal she said; the
+// target's facts about her in her own words; the settings in words. A barcode is looked up by the chat
+// itself before the model answers, never by an operation here.
+const COUNT_WORDS=[[0.5,/(?<!\p{L})(?:half|halbe?[nrs]?)(?!\p{L})|½|0[.,]5/iu],[1,/./],[2,/(?<!\p{L})(?:two|zwei|both|beide|a couple)(?!\p{L})/iu],[3,/(?<!\p{L})(?:three|drei)(?!\p{L})/iu],[4,/(?<!\p{L})(?:four|vier)(?!\p{L})/iu],[5,/(?<!\p{L})(?:five|fünf)(?!\p{L})/iu],[6,/(?<!\p{L})(?:six|sechs)(?!\p{L})/iu],[7,/(?<!\p{L})(?:seven|sieben)(?!\p{L})/iu],[8,/(?<!\p{L})(?:eight|acht)(?!\p{L})/iu],[9,/(?<!\p{L})(?:nine|neun)(?!\p{L})/iu],[10,/(?<!\p{L})(?:ten|zehn)(?!\p{L})/iu]];
+function foodChecks(domains,message,op){
+ const lower=message.toLocaleLowerCase(),action=op.action||'track';
+ const named=text=>String(text??'').toLocaleLowerCase().split(/[^\p{L}\p{N}]+/u).filter(w=>w.length>=3).some(w=>lower.includes(w.slice(0,4)));
+ const number=v=>[String(v),String(v).replace('.',',')].some(x=>new RegExp('(?<![\\d.,])'+x.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'(?!\\d|[.,]\\d)').test(message));
+ const counted=n=>number(n)||COUNT_WORDS.some(([v,re])=>v===Number(n)&&re.test(message));
+ if(['barcode','product'].includes(action))throw Error('The notebook\'s chat looks a barcode up by itself; use the food it found.');
+ if(action==='track'){
+  if(op.preset!==undefined&&!named(String(op.preset).replace(/usual|my/gi,'')||op.preset))throw Error('A saved meal must be one you named');
+  for(const it of [].concat(op.items??[])){
+   if(!it||typeof it!=='object')throw Error('Give each food as an item');
+   const product=String(it.food||'').startsWith('off:')&&lower.includes(String(it.food).slice(4));
+   if(!named(it.item)&&!product)throw Error('A tracked food must be one you named');
+   if(it.grams!==undefined&&it.grams!==null&&it.assumed!==true&&!number(it.grams))throw Error('An amount must be one you said; a typical weight is marked as assumed');
+   if(it.count!==undefined&&it.count!==null&&!counted(it.count))throw Error('A count must be one you said');
+   if(it.unit&&!named(it.unit))throw Error('A pack, bowl or slice must be one you said');
+  }
+  if(op.meal&&op.meal!=='none'&&mealOf(message)!==op.meal)throw Error('A meal must be the one you named');
+ }
+ if(action==='answer'){for(const a of [].concat(op.answers??(op.grams!==undefined?[{grams:op.grams}]:[])))if(!number(a?.grams))throw Error('An amount must be one you said');}
+ if(action==='remember'&&(!/(?<!\p{L})(?:remember|save|keep|merk\p{L}*|speicher\p{L}*)/iu.test(message)||!named(String(op.name||'').replace(/usual|my/gi,'')||op.name)))throw Error('Say what to remember the meal as');
+ if(action==='correct'){
+  if(op.item!==undefined&&!named(op.item))throw Error('A corrected food must be one you named');
+  if(op.grams!==undefined&&!number(op.grams))throw Error('An amount must be one you said');
+  if(op.count!==undefined&&!counted(op.count))throw Error('A count must be one you said');
+  if(op.remove===true&&!/(?<!\p{L})(?:delete|remove|drop|undo|lösch\p{L}*|entfern\p{L}*|streich\p{L}*)/iu.test(message))throw Error('Say that you want it removed');
+ }
+ if(action==='target'){
+  const said={sex:{female:/(?<!\p{L})(?:female|woman|women|frau|weiblich)(?!\p{L})/iu,male:/(?<!\p{L})(?:male|man|men|mann|männlich)(?!\p{L})/iu},
+   activity:{sedentary:/sit|sedentary|desk|inactive|kaum|wenig/iu,light:/light|leicht|a little|bisschen/iu,moderate:/moderat|mäßig|medium|mittel|some sport|regular/iu,very:/very|sehr|daily sport|täglich/iu,extra:/extrem|extreme|athlet|hard training|physical job|körperlich/iu},
+   goal:{lose:/lose|loss|abnehm|leaner|weniger|cut/iu,keep:/keep|maintain|halten|stay|gleich/iu,gain:/gain|zunehm|build|bulk|mehr/iu}};
+  if(op.sex!==undefined&&!said.sex[op.sex]?.test(message))throw Error('Say which the formula should count you as');
+  for(const k of ['age','height_cm','weight_kg'])if(op[k]!==undefined&&!number(op[k]))throw Error('Your '+(k==='age'?'age':k==='height_cm'?'height':'weight')+' must be one you said');
+  if(op.activity!==undefined&&!said.activity[op.activity]?.test(message))throw Error('Say how active you are');
+  if(op.goal!==undefined&&!said.goal[op.goal]?.test(message))throw Error('Say whether you want to lose, keep or gain weight');
+  const facts=['sex','age','height_cm','weight_kg','activity','goal','off','pregnant','breastfeeding','eating_disorder'].some(k=>op[k]!==undefined);
+  if(!facts&&!/(?<!\p{L})(?:target|goal|ziel|calories|kalorien|kcal)/iu.test(message))throw Error('Say that you want a food target');
+ }
+ const flags={pregnant:/pregnan|schwanger/iu,breastfeeding:/breastfeed|nursing|stille|stillen/iu,eating_disorder:/eating disorder|essstörung|anorex|bulimi|binge|magersucht|ess-brech/iu};
+ for(const [k,re] of Object.entries(flags))if(op[k]===true&&!re.test(message))throw Error('Say that yourself first');
+ if(action==='settings'&&op.numbers!==undefined){
+  const off=/(?<!\p{L})(?:stop|don.t|do not|no more|hide|without|nicht mehr|keine|ohne|aus|ausblenden)(?!\p{L})/iu.test(message),about=/calor|kalor|kcal|number|zahl/iu.test(message);
+  if(!about||op.numbers===off)throw Error('Say whether to show the calories or not');
+ }
+ if(action==='talk'&&!/(?<!\p{L})(?:talk|gespräch|coach)/iu.test(message))throw Error('Say which talk may read your food tracker');
+}
 export function validateConversationOperations(domains,input,operations){
  if(!Array.isArray(operations)||operations.length>10)throw Error('Invalid conversation operations');
  const message=String(input.message||input.messages?.filter(m=>m.role==='user').at(-1)?.content||'');
@@ -317,12 +369,16 @@ export function validateConversationOperations(domains,input,operations){
   'work-record-observation':/\b(?:record|log|save|notiere|speichere)\b[\s\S]*(?:check|review|observation|result|prüfung|ergebnis)/i,
   // "track" is the spoken word, never "log" (D-261, D-321).
   'tracker-hold':/\btrack(?:e|en|ing)?\b/i,
-  'tracker-create':/^\s*(?:yes|yeah|yep|yup|sure|ok(?:ay)?|go ahead|do it|start it|ja|jo|klar|mach(?: das)?)\b|\b(?:i want to track|start tracking|new tracker|make a tracker|create a tracker|ich will .* tracken)\b/i,
+  // A yes may follow the answer to the one question asked with it ("250 g, and yes", D-321 step 5).
+  'tracker-create':/^\s*(?:yes|yeah|yep|yup|sure|ok(?:ay)?|go ahead|do it|start it|ja|jo|klar|mach(?: das)?)\b|(?:,|\band\b|\bund\b)\s*(?:yes|yeah|yep|sure|ok(?:ay)?|ja|klar)\b|\b(?:i want to track|start tracking|new tracker|make a tracker|create a tracker|ich will .* tracken)\b/i,
   'track':/\btrack(?:e|ed|en)?\b/i,
   'tracker-correct':/\b(?:that was|it was|not \d|change|correct|fix|delete|remove|lösche|korrigiere|war)\b/i,
   // A headache, a pill or a pain level, with "track" or without (D-321: the tracker hands it on).
   'headache':/(?<!\p{L})(?:track|headache|migraine|kopfschmerz|kopfweh|migräne|pill|tablet|painkiller|schmerzmittel|ibuprofen|aspirin|paracetamol|thomapyrin|took|genommen|pain|schmerz)/iu,
   // The period and the cycle (D-321 step 4); what each action may write is checked below (cycleChecks).
+  // What she eats (D-321 step 5): a meal, an amount, a preset, a correction, the day, the target, the
+  // settings; what each action may write is checked below (foodChecks).
+  'food':/(?<!\p{L})(?:track|food|meal|ate|eat|eaten|had|breakfast|lunch|dinner|supper|snack|essen|gegessen|frühstück|mittag|abend|calor|kalor|kcal|target|ziel|remember|merk|speicher|usual|wie immer|today|heute|what|was|were|war|delete|remove|lösch|entfern|show|zeig|stop|pregnan|schwanger|breastfeed|still|eating disorder|essstörung|talk|gespräch|yes|ja|\d)/iu,
   'cycle':/(?<!\p{L})(?:track|period|periode|regel|menstru|cycle|zyklus|cramp|krampf|krämpf|spotting|schmier|blut|bleed|pms|fertil|fruchtbar|ovulat|eisprung|pregnan|schwanger|still|breastfeed|pill|pille|contracept|verhüt|diagnos|delete|lösch|remove|entfern|heads|tell me|sag mir|bescheid|erinner|remind|warn|vorwarn|leave|weg|count|zähl|yes|ja|no|nein|over|vorbei|when|wann|next|nächste|talk|gespräch|ended|aufgehört)/iu
  };
  // What each operation does, in the words a person uses. A request that says
@@ -337,7 +393,7 @@ export function validateConversationOperations(domains,input,operations){
   'health-add':'record|log|save|track|notiere|speichere','memory-confirm':'remember|save|correct|update|merke|speichere|korrigiere','memory-propose':'remember|save|merke|speichere',
   'routine-change':'pause|resume|schedule|change|stop|start|move|pausiere|ändere|verschiebe','forecast-settle':'settle|record|resolve|log|notiere',
   'work-allow-local':'allow|approve|authori[sz]e|erlaube|genehmige','work-retry-draft':'retry|try|redo|wiederhole','work-record-observation':'record|log|save|notiere|speichere',
-  'tracker-hold':'track|tracke','tracker-create':'track|create|start|make','track':'track|tracke','tracker-correct':'change|correct|fix|delete|remove|lösche|korrigiere','headache':'track|tracke|log|record|save|note|notiere|speichere','cycle':'track|tracke|delete|remove|lösche'};
+  'tracker-hold':'track|tracke','tracker-create':'track|create|start|make','track':'track|tracke','tracker-correct':'change|correct|fix|delete|remove|lösche|korrigiere','headache':'track|tracke|log|record|save|note|notiere|speichere','cycle':'track|tracke|delete|remove|lösche','food':'track|tracke|remember|save|merke|speichere|delete|remove|lösche|set|change'};
  const refuses=type=>{const v=verbs[type];if(!v)return false;
   return new RegExp("(?<!\\p{L})(?:do not|don.t|dont|never|must not|should not|niemals)(?!\\s+forget)\\s+(?:[\\p{L}']+\\s+){0,2}?(?:"+v+")",'iu').test(message)||new RegExp("(?<!\\p{L})(?:"+v+")\\p{L}*\\s+(?:(?:mich|mir|das|es|dies|ihn|sie|uns)\\s+)?nicht(?!\\p{L})",'iu').test(message);};
  for(const operation of operations){
@@ -373,10 +429,14 @@ export function validateConversationOperations(domains,input,operations){
   }
   // A cycle day, its end, an answer about a cycle or a deletion must be what she said (cycleChecks).
   const cycle=cycleTracker(domains.store);
+  const kept=foodTracker(domains.store);
+  if(operation.type==='food')foodChecks(domains,message,operation);
+  else if(operation.type==='track'&&kept&&(operation.tracker===kept.id||findTracker(domains.store,operation.tracker).match?.id===kept.id))foodChecks(domains,message,{...operation,action:'track'});
+  if(operation.type==='tracker-create'&&operation.proposal_id&&domains.store.get('tracker_proposals',String(operation.proposal_id))?.specialist==='food')foodChecks(domains,message,{action:'answer',answers:operation.answers??[],...(operation.eating_disorder!==undefined?{eating_disorder:operation.eating_disorder}:{})});
   if(operation.type==='cycle')cycleChecks(domains,message,{...operation,action:operation.action||'track'});
   else if(operation.type==='tracker-hold'&&(operation.specialist==='cycle'||CYCLE_WORDS.test(String(operation.name||''))))cycleChecks(domains,message,{...operation,...(operation.data||{}),action:'track'});
   else if(operation.type==='track'&&cycle&&(operation.tracker===cycle.id||findTracker(domains.store,operation.tracker).match?.id===cycle.id))cycleChecks(domains,message,{...operation,...(operation.data||{}),action:operation.data?.ended===true||operation.ended===true?'over':'track'});
-  if(['tracker-hold','track','tracker-correct','cycle'].includes(operation.type)){
+  if(['tracker-hold','track','tracker-correct','cycle','food'].includes(operation.type)){
    // The number saved must be a number he said, as a number of its own (a 9 is
    // not in "92"); "92,5" may arrive as 92.5.
    const said=v=>v===undefined||v===null||v===''||[String(v),String(v).replace('.',',')].some(x=>new RegExp('(?<![\\d.,])'+x.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'(?!\\d|[.,]\\d)').test(message));

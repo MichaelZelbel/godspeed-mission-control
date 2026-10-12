@@ -445,6 +445,9 @@ export class Domains {
     if(['note-chat','collection-chat','conversation-chat'].includes(name)&&input.mode==='summarize')return this.summarizeChat(input);
     if (['note-chat','collection-chat','conversation-chat','draft-event','weekly-review','generate_collection_schema'].includes(name)) {
       if (!this.provider) throw new Error('Choose and configure a model provider before asking Godspeed');
+      // A barcode in her message is looked up first (Open Food Facts, cached), so the model is given the
+      // product as a candidate; a failed lookup leaves it out and the model says it found nothing.
+      if(name==='conversation-chat'&&/(?<!\d)\d{8,14}(?!\d)/.test(String(input.message||''))){const {lookupBarcode}=await import('./food-products.mjs');for(const code of new Set(String(input.message).match(/(?<!\d)\d{8,14}(?!\d)/g)))try{await lookupBarcode(this.store.state,code,{fetcher:this.foodFetcher,signal:input.signal});}catch{}}
       const context=await retrievedContext(this.query,input,this.provider,{index:this.index}),notes=context.notes;
       const attached=chatAttachments(this.mediaRoot,input.files||[]);context.documents=attached.documents;
       if(input.attachments){
@@ -510,13 +513,13 @@ export class Domains {
       if(name==='conversation-chat'&&structured.operations?.length){
         // The cycle tracker writes its replies in her language itself (cycle.mjs), told by the model.
         const language=typeof structured.language==='string'?structured.language:undefined;
-        const ran=structured.operations.filter(op=>!(input.retained_coach_reply&&op.type==='coach-reply'&&op.id===input.talk_id)).map(op=>op&&op.type==='cycle'&&!op.language&&language?{...op,language}:op);
+        const ran=structured.operations.filter(op=>!(input.retained_coach_reply&&op.type==='coach-reply'&&op.id===input.talk_id)).map(op=>op&&['cycle','food'].includes(op.type)&&!op.language&&language?{...op,language}:op);
         structured.operation_results=conversationOperations(this,input,ran);
         // A tracker's answer is the server's line ("Tracked: 91 cm, down 1 since
         // Monday."), never the model's guess at the numbers (D-321). The model's
         // own words stay after it only when it also did something else.
         // A habit tracked, a headache and the cycle are answered the same way (their own lines).
-        const computed=op=>TRACKER_OPERATIONS.includes(op.type)||op.type==='headache'||op.type==='cycle';
+        const computed=op=>TRACKER_OPERATIONS.includes(op.type)||['headache','cycle','food'].includes(op.type);
         const lines=ran.map((op,i)=>computed(op)?{text:structured.operation_results[i]?.reply,language:structured.operation_results[i]?.language||'en'}:null).filter(l=>l&&typeof l.text==='string'&&l.text);
         // In the language of the message, as the bot answers (D-321): until 12 October 2026 these
         // lines were English whatever the person wrote.
