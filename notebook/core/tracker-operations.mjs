@@ -138,7 +138,7 @@ export function trackerOperation(domains,raw){
   const items=store.list('collection_items'),list=trackers(store).filter(c=>visible.has(c.id)).map(c=>{
    const all=entries(store,c,items),made=[...all].sort((a,b)=>String(a.updated_at).localeCompare(String(b.updated_at))||String(a.created_at).localeCompare(String(b.created_at))).at(-1),todays=all.filter(i=>String(i.data?.when).slice(0,10)===today).at(-1);
    return {id:c.id,name:c.name,names:c.tracker.names||[c.name],cadence:c.tracker.cadence==='any'?'any':'daily',talk:c.tracker.talk||null,specialist:c.tracker.specialist||null,status:trackerStatus(store,c,now,all),hash:c._hash,
-    fields:own(c).map(({key,label,type,unit,options})=>({key,label,type,...(unit?{unit}:{}),...(options?{options}:{})})),
+    fields:own(c).map(({key,label,type,unit,options,min,max})=>({key,label,type,...(unit?{unit}:{}),...(options?{options}:{}),...(min!==undefined?{min}:{}),...(max!==undefined?{max}:{})})),
     last:made?{id:made.id,when:made.data?.when,data:made.data,hash:made._hash}:null,today:todays?{id:todays.id,hash:todays._hash}:null,
     ...(from?{recent:all.filter(i=>String(i.data?.when).slice(0,10)>=from).map(i=>({id:i.id,when:i.data?.when,data:i.data,hash:i._hash}))}:{}),
     // The food tracker adds its days' totals and the target's last change, the one line its talk hears.

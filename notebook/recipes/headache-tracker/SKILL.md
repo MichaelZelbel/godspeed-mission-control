@@ -83,8 +83,9 @@ order (here `med --taken 08:00`, then `end`).
 
 ## What to say
 
-One line, in their language, built from the command's own `Saved:` output, for example
-`Saved: since 06:30, pain 3, right side, pounding, 2 Thomapyrin at 06:45.` Then stop. A pill the
+One line, in their language, built from the command's own `Saved:` output and starting with
+"Tracked:", never "Saved:" (German: "Erfasst:"), for example
+`Tracked: since 06:30, pain 3, right side, pounding, 2 Thomapyrin at 06:45.` Then stop. A pill the
 output gives no time has none in your line either ("took 1 ibuprofen").
 
 - **When a new headache has no pain number**, you may add one short question: `How strong, 1 to 10?`

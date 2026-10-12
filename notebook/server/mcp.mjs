@@ -1,4 +1,5 @@
 import {visibleRows} from '../core/visibility.mjs';
+import {TRACKER_OPERATIONS} from '../core/tracker-operations.mjs';
 import {retireShares} from '../core/shares.mjs';
 import {toolScope,scopedQuery} from '../core/api-keys.mjs';
 import {topicDefinitions,topicToolNames,topicTool} from './topic-tools.mjs';
@@ -63,6 +64,9 @@ export async function mcp(input,{store,query,index,domains,scopes,delegated=fals
     else if(input.method==='tools/list')result={tools:definitions};
     else if(input.method==='tools/call'){
       const {name,arguments:a={}}=input.params||{};let value;
+      // A tracker operation named as action or operation instead of type (the book's capture run of
+      // 12 October 2026: every new session's first call was {"action":"tracker-list"}) is that type.
+      if(name==='personal_operation'&&a&&(a.type===undefined||a.type===null)){for(const key of ['action','operation'])if(TRACKER_OPERATIONS.includes(a[key])){a.type=a[key];delete a[key];break;}}
       if(memoryToolNames.includes(name)){
         const scoped=Object.assign(Object.create(Object.getPrototypeOf(domains)),domains,{toolScope:type=>toolScope('save_record',{type}),delegated:!!delegated});
         value=await memoryTool(name,a,{store,query,index,domains,seen,scopes},expected=>assistantMutationContext({store,query,domains:scoped,scopes},{...a,expected},name));

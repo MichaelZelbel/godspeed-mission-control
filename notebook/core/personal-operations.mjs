@@ -259,6 +259,8 @@ export function personalOperation(domains,input){
   if(item.kind!=='local-note'||!note||note.is_trashed||!['awaiting_approval','failed'].includes(item.state))throw Error('Choose a pending local-note task and an existing note');
   return store.save('work_items',{id:item.id,state:'pending',allowed_action:'write-local-note',target_id:note.id,target_hash:note._hash,authorised_at:new Date().toISOString()},item._hash);
  }
+ // Named by its type; the capture run of 12 October 2026 saw a model send {"action":"tracker-list"}.
+ if(type===undefined||type===null||type==='')throw Error('Name the operation as type, for example {"type":"tracker-list"}');
  throw Error('Unsupported personal operation: '+type);
 }
 // What a cycle operation writes must be what she said (D-321 step 4), as a headache's must: a flow,

@@ -101,7 +101,8 @@ records the habit itself in this same file; either way the day is tracked once.
   (`--date yesterday` for another day). Say what was taken back: "Taken back: stretching, today."
 - The evening check: `godspeed-coach habit answer <yes|no|skip ...> --source <...> --words "<verbatim>"`, one answer per habit in the order the block lists them, or one for all.
 - Reply with a short sentence that makes sense on its own, in their language, saying in plain
-  words what was tracked and for which day: "Tracked: stretching, done today." Never pass on the
+  words what was tracked and for which day: "Tracked: stretching, done today.", "Tracked:
+  stretching, not done today.", "Tracked: stretching, skipped yesterday." Never pass on the
   command's output as it is: its dates are written for machines. Nothing else. Say "tracked",
   never "logged": people dictate, and speech recognition hears "track" where it turns "log" into
   "look".

@@ -141,3 +141,17 @@ test('the shipped recipes pass an operation\'s reply on as it came, set up colum
   // The texts shipped until today stay known, so an unedited installed copy is replaced.
   for(const [name,old] of [['tracker','0284d7e3c89601983997724ee8d2bd2f88f510f9a4b290ca6338888561abf7d1'],['food-tracker','ceaa7e6c7934218eb618775fd815f03a08dfaa3b0654657074a67aa802b8c716']])assert.ok(revisions[name+'/SKILL.md'].includes(old),name);
 });
+
+// The recapture of 12 October 2026: the headache replies began "Saved:", as the recipe's example did,
+// and a habit's no came back as "Tracked: stretching, no today.".
+test('the headache recipe replies with "Tracked:", and the coach recipe says a no in words',()=>{
+  const headache=read('../recipes/headache-tracker/SKILL.md'),coach=read('../recipes/coach/SKILL.md');
+  assert.match(headache,/starting with\n"Tracked:", never "Saved:"/);
+  assert.match(headache,/`Tracked: since 06:30, pain 3, right side, pounding, 2 Thomapyrin at 06:45\.`/);
+  assert.doesNotMatch(headache,/`Saved: since/);
+  assert.match(coach,/"Tracked:\n  stretching, not done today\."/);
+  assert.equal(headache,read('../../third-party/addons/godspeed-headache/skill/headache-tracker/SKILL.md'));
+  assert.equal(coach,read('../../third-party/addons/godspeed-coach/skill/coach/SKILL.md'));
+  const revisions=JSON.parse(read('../data/recipe-revisions.json'));
+  for(const name of ['coach','headache-tracker'])assert.ok(revisions[name+'/SKILL.md'].includes(digest(read('../recipes/'+name+'/SKILL.md'))),name);
+});

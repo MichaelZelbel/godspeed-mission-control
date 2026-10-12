@@ -194,3 +194,17 @@ test('a new habit on day one reaches the shelf, and "track stretching yesterday"
  const file=fs.readFileSync(path.join(env.root,'coach','health','habits','stretching.md'),'utf8');
  assert.match(file,/- 2026-10-12 done \(notebook\) "track stretching"\n- 2026-10-12 no \(notebook\) "no stretching today"\n$/);
 });
+
+// The recapture of 12 October 2026: every new session's first call named the operation as action,
+// and was refused as "Unsupported personal operation: undefined"; the sleep tracker's quality column
+// was listed without its range.
+test('a tracker operation named as action is that operation, a missing type is said plainly, and a column keeps its range',async t=>{
+ const env=fixture(t);
+ assert.deepEqual(ok(await call(env,{action:'tracker-list',words:'what do I track?'})),{trackers:[],pending:[]});
+ assert.deepEqual(ok(await call(env,{operation:'tracker-list'})),{trackers:[],pending:[]});
+ const none=await call(env,{action:'headache',at:'06:30'});
+ assert.equal(none.error,true);assert.equal(none.text,'Name the operation as type, for example {"type":"tracker-list"}');
+ const held=ok(await call(env,{type:'tracker-hold',name:'Sleep',fields:[{label:'Hours',type:'number',unit:'hours'},{label:'Quality',type:'number',min:1,max:5}],words:'I want to track my sleep: hours, and quality from 1 to 5'}));
+ ok(await call(env,{type:'tracker-create',proposal_id:held.proposal_id,words:'yes'}));
+ assert.deepEqual((await list(env)).trackers[0].fields,[{key:'hours',label:'Hours',type:'number',unit:'hours'},{key:'quality',label:'Quality',type:'number',min:1,max:5}]);
+});
