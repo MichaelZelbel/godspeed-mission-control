@@ -146,7 +146,9 @@ function column(f){
  if(!f||typeof f!=='object')throw Error('Give each column as {label, type}');
  const label=String(f.label??'').trim()||String(f.key??'').replace(/_/g,' ').trim(),key=f.key===undefined||f.key===null||f.key===''?keyOf(label):String(f.key);
  if(!/^[a-z][a-z0-9_]{0,39}$/.test(key)||['when','note'].includes(key))throw Error('A tracker column needs a short name, such as "hours"');
- const out={...f,key,label:label?label.charAt(0).toUpperCase()+label.slice(1):key};
+ // A label is kept as given ("cm" for a one-number tracker in cm, as before); one made from a key
+ // starts with a capital ("hours" is Hours).
+ const out={...f,key,label:String(f.label??'').trim()||(label?label.charAt(0).toUpperCase()+label.slice(1):key)};
  for(const end of ['min','max'])if(out[end]!==undefined&&out[end]!==null){out[end]=toNumber(out[end]);if(out.type!=='number')throw Error('Only a number column has a range');}
  if(out.min!==undefined&&out.max!==undefined&&out.min>out.max)throw Error(out.label+' needs a range from the smaller number to the larger');
  return out;

@@ -221,3 +221,11 @@ test('a dose said as a word is passed to the headache tracker as its number',asy
  const {headacheArgs}=await import('../core/headache-operation.mjs');
  assert.deepEqual(headacheArgs({action:'start',meds:[{med:'ibuprofen',dose:'one'},{med:'Aspirin',dose:'zwei Tabletten'},{med:'Thomapyrin',dose:'400 mg'},{med:'Paracetamol',dose:'an extra one'}]}).filter((x,i,all)=>all[i-1]==='--med'),['ibuprofen: 1','Aspirin: 2 Tabletten','Thomapyrin: 400 mg','Paracetamol: an extra one']);
 });
+
+// The fifth recapture's Belly showed a column labelled "Cm": a label is kept as given, as before
+// 12 October 2026; only one made from a key starts with a capital.
+test('a column label is kept as given, and one made from a key starts with a capital',async()=>{
+ const {schemaFor}=await import('../core/trackers.mjs');
+ assert.deepEqual(schemaFor({unit:'cm',cadence:'daily'}).map(f=>f.label),['Day','cm','Note']);
+ assert.deepEqual(schemaFor({fields:[{key:'hours',type:'number'},{label:'quality',type:'number'}],cadence:'daily'}).map(f=>f.label),['Day','Hours','quality','Note']);
+});
