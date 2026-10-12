@@ -125,10 +125,10 @@ export function setupQuestion(l,kept,today){
  const when=kept?.day&&kept.day!==today?dateWords(l,kept.day):null,sym=(kept?.symptoms||[]).map(s=>symptomSaid(l,s));
  if(l==='de'){
   const k=!kept?'':kept.period?' Ich habe mir '+(when?'den '+when:'heute')+' als Tag 1 notiert.':sym.length?' Ich habe mir '+(when?'vom '+when+' ':'von heute ')+list(l,sym)+' notiert.':'';
-  return 'Einen Zyklus-Tracker starten? Er hält die Tage deiner Periode fest und auf Wunsch ein paar Beschwerden, und er sagt deine nächste Periode voraus, sobald er zwei Zyklen gesehen hat. Er ist nicht zur Verhütung und nicht für den Kinderwunsch gedacht, und er stellt keine Diagnose. Deine Einträge bleiben in deinem eigenen Notizbuch; was du schreibst, läuft wie jede Nachricht über Telegram und deinen KI-Dienst.'+k;
+  return 'Einen Zyklus-Tracker starten? Er hält die Tage deiner Periode fest und auf Wunsch ein paar Beschwerden, und er sagt deine nächste Periode voraus, sobald er zwei Zyklen gesehen hat. Er ist nicht zur Verhütung und nicht für den Kinderwunsch gedacht, und er stellt keine Diagnose. Deine Einträge bleiben in deinem eigenen Notizbuch; was du schreibst und was ich antworte, läuft wie jede Nachricht über Telegram und deinen KI-Dienst.'+k;
  }
  const k=!kept?'':kept.period?" I've kept "+(when||'today')+' as day 1.':sym.length?" I've kept "+(when?'the '+list(l,sym)+' of '+when:"today's "+list(l,sym))+'.':'';
- return "Start a cycle tracker? It keeps the days of your period and a few symptoms if you like, and forecasts your next period once it has seen two cycles. It is not for contraception or for trying to conceive, and it is not a diagnosis. Your entries stay in your own notebook; what you type passes through Telegram and your AI service like every message."+k;
+ return "Start a cycle tracker? It keeps the days of your period and a few symptoms if you like, and forecasts your next period once it has seen two cycles. It is not for contraception or for trying to conceive, and it is not a diagnosis. Your entries stay in your own notebook; what you type and what I answer pass through Telegram and your AI service, like every message."+k;
 }
 export function createdReply(l,said){
  return l==='de'?'Erfasst: '+said+'. Ab jetzt sag einfach "track Periode", "track Periode vorbei" oder ein Symptom, etwa "track Krämpfe".':'Tracked: '+said+'. From now on just say "track period", "track period over", or a symptom, like "track cramps".';

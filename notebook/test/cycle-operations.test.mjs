@@ -31,7 +31,7 @@ const files=root=>{const walk=d=>fs.readdirSync(d,{withFileTypes:true}).flatMap(
 test('"track period" with no tracker asks the design\'s question once and creates nothing; yes creates it with day 1',async()=>{
  const f=fixture();
  const held=await f.op({type:'cycle',action:'track'});
- assert.equal(held.reply,"Start a cycle tracker? It keeps the days of your period and a few symptoms if you like, and forecasts your next period once it has seen two cycles. It is not for contraception or for trying to conceive, and it is not a diagnosis. Your entries stay in your own notebook; what you type passes through Telegram and your AI service like every message. I've kept today as day 1.");
+ assert.equal(held.reply,"Start a cycle tracker? It keeps the days of your period and a few symptoms if you like, and forecasts your next period once it has seen two cycles. It is not for contraception or for trying to conceive, and it is not a diagnosis. Your entries stay in your own notebook; what you type and what I answer pass through Telegram and your AI service, like every message. I've kept today as day 1.");
  assert.equal(cycle(f.store),undefined);
  const list=await f.op({type:'tracker-list'});assert.equal(list.pending[0].question,held.reply,'the open question is listed as the base lists them');
  const made=await f.op({type:'tracker-create',proposal_id:held.proposal_id});

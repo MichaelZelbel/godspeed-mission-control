@@ -46,7 +46,8 @@ from status with them.
 
 Reply with the operation's `reply`, word for word and whole, and nothing else. Never shorten,
 summarise or reword it: the setup question and every forecast carry sentences she must read (what the
-tracker is not for, where her entries go). The rehearsal of 12 October 2026 showed a reply cut down to
+tracker is not for, where her entries go, and that what she types and what you answer pass through
+Telegram and her AI service). The rehearsal of 12 October 2026 showed a reply cut down to
 "Start a cycle tracker? I've kept today as day 1."; that must never happen again.
 
 ## Never

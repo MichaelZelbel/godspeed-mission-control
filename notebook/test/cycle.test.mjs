@@ -113,10 +113,10 @@ test('the heads-up line is in the brief only two days before the window, and onl
 });
 
 test('the setup question is the design\'s words, and the day replies say what was kept',()=>{
- assert.equal(setupQuestion('en',{day:'2026-10-12',period:true},'2026-10-12'),"Start a cycle tracker? It keeps the days of your period and a few symptoms if you like, and forecasts your next period once it has seen two cycles. It is not for contraception or for trying to conceive, and it is not a diagnosis. Your entries stay in your own notebook; what you type passes through Telegram and your AI service like every message. I've kept today as day 1.");
+ assert.equal(setupQuestion('en',{day:'2026-10-12',period:true},'2026-10-12'),"Start a cycle tracker? It keeps the days of your period and a few symptoms if you like, and forecasts your next period once it has seen two cycles. It is not for contraception or for trying to conceive, and it is not a diagnosis. Your entries stay in your own notebook; what you type and what I answer pass through Telegram and your AI service, like every message. I've kept today as day 1.");
  assert.match(setupQuestion('en',{day:'2026-10-12',symptoms:['cramps']},'2026-10-12'),/ I've kept today's cramps\.$/);
  assert.match(setupQuestion('en',{day:'2026-10-10',period:true},'2026-10-12'),/ I've kept 10 October as day 1\.$/);
- assert.match(setupQuestion('de',{day:'2026-10-12',period:true},'2026-10-12'),/^Einen Zyklus-Tracker starten\? .*nicht zur Verhütung und nicht für den Kinderwunsch gedacht.* Ich habe mir heute als Tag 1 notiert\.$/);
+ assert.match(setupQuestion('de',{day:'2026-10-12',period:true},'2026-10-12'),/^Einen Zyklus-Tracker starten\? .*nicht zur Verhütung und nicht für den Kinderwunsch gedacht.* Deine Einträge bleiben in deinem eigenen Notizbuch; was du schreibst und was ich antworte, läuft wie jede Nachricht über Telegram und deinen KI-Dienst\. Ich habe mir heute als Tag 1 notiert\.$/);
  assert.equal(createdReply('en','period day 1'),'Tracked: period day 1. From now on just say "track period", "track period over", or a symptom, like "track cramps".');
  assert.equal(dayReply('en',{day:'2026-10-13',today:'2026-10-13',periodDay:2,data:{flow:'heavy',pain:2,symptoms:['cramps']}}),'Tracked: period day 2, heavy, cramps 2 of 3.');
  assert.equal(dayReply('de',{day:'2026-10-13',today:'2026-10-13',periodDay:2,data:{flow:'heavy',pain:2,symptoms:['cramps']}}),'Erfasst: Periode Tag 2, stark, Krämpfe 2 von 3.');
