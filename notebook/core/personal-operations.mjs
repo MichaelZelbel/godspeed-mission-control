@@ -19,7 +19,7 @@ import {readTable} from '../../third-party/addons/godspeed-coach/lib/auto.mjs';
 import {localPath} from './local-path.mjs';
 import {visibleRows} from './visibility.mjs';
 import {checkOutboundURL} from './outbound-fetch.mjs';
-export const operationContract=`Return JSON {reply,notes_created?:[{title,content}],operations?:[{type,source_quote,...fields}]}. Use an operation only when the user's current message explicitly requests that change. source_quote must be exact user words requesting it, never a note quote. Supported operations:
+export const operationContract=`Return JSON {reply,language,notes_created?:[{title,content}],operations?:[{type,source_quote,...fields}]}. language is the two-letter code of the language the user's current message is written in (en, de, ...); write reply in that language. Use an operation only when the user's current message explicitly requests that change. source_quote must be exact user words requesting it, never a note quote. Supported operations:
 goal-add {title,measure,status?:adopted|provisional,wait_for_report?:boolean}; goal-change {id,title?,measure?,status?:adopted|provisional|paused|achieved|retired,wait_for_report?:boolean,reason}; goal-outcome {id,evidence,value?,outcome};
 When the user explicitly asks to wait for their separate report after an applied change, persist wait_for_report:true in that goal. Do not enable it without that request.
 obligation-add {title,due_at,target_at?,recurrence?:{days}}; obligation-complete {id,evidence}; obligation-snooze {id,until};

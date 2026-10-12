@@ -512,7 +512,10 @@ export class Domains {
         // own words stay after it only when it also did something else.
         // A habit tracked and a headache are answered the same way (their own lines).
         const computed=op=>TRACKER_OPERATIONS.includes(op.type)||op.type==='headache';
-        const said=ran.map((op,i)=>computed(op)?structured.operation_results[i]?.reply:null).filter(r=>typeof r==='string'&&r);
+        const lines=ran.map((op,i)=>computed(op)?{text:structured.operation_results[i]?.reply,language:structured.operation_results[i]?.language||'en'}:null).filter(l=>l&&typeof l.text==='string'&&l.text);
+        // In the language of the message, as the bot answers (D-321): until 12 October 2026 these
+        // lines were English whatever the person wrote.
+        const said=await this.inLanguage(lines,structured.language,signal);
         if(said.length)structured.reply=said.join(' ')+(ran.some(op=>!computed(op))&&structured.reply?' '+structured.reply:'');
       }
       if(name==='note-chat'){
@@ -588,6 +591,23 @@ export class Domains {
       return { ...structured,reply:content,response: content, message: content, content, conversation_id: saved.conversation_id,tool_results,notes_created };
     }
     throw new Error('Processing function has not been ported: ' + name);
+  }
+  // The lines a tracker, a habit or a headache worked out in code, in the language the model says
+  // the message was written in (D-321). One call rewrites the lines not already in it; a rewrite is
+  // used only when it keeps every number of its line and has no long dash, else the line stays as
+  // written, since the numbers are the server's and a rewrite must never change one. A failed call
+  // changes nothing: the operations have already run, and their answer still reaches the person.
+  async inLanguage(lines,language,signal){
+    const target=typeof language==='string'&&/^[a-z]{2}(?:-[a-z]{2})?$/i.test(language.trim())?language.trim().slice(0,2).toLowerCase():'en';
+    const texts=lines.map(l=>l.text),todo=lines.map((l,i)=>String(l.language||'en').slice(0,2).toLowerCase()===target?null:i).filter(i=>i!==null);
+    if(target==='en'&&lines.every(l=>!l.language||l.language==='en')||!todo.length||!this.provider)return texts;
+    const numbers=text=>new Set((String(text).match(/\d+(?:[.,]\d+)?/g)||[]).map(n=>Number(n.replace(',','.'))));
+    try{
+      const raw=json(await this.provider({kind:'reply-language',input:{language:target,lines:todo.map(i=>texts[i])},signal,contract:'Return JSON {lines:[string]}: each given line rewritten in the language with the code "'+target+'", in the same order, one line for each. Plain and short. Keep every number, time, date and name exactly. Add nothing and leave nothing out. Do not use em dashes.'}));
+      const out=Array.isArray(raw?.lines)?raw.lines:[];
+      todo.forEach((i,n)=>{const line=out[n];if(typeof line!=='string'||!line.trim()||/[–—]/.test(line))return;const have=numbers(line);if([...numbers(texts[i])].every(x=>have.has(x)))texts[i]=line.trim();});
+    }catch(error){if(signal?.aborted)throw error;}
+    return texts;
   }
   // The chat screens fold older turns into a rolling summary
   // ({mode:'summarize', messages}). It is a reading of the transcript they
