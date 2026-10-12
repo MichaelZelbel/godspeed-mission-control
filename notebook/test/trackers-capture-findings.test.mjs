@@ -203,7 +203,7 @@ test('a call without a type is told to name it and read the recipe, a name is a 
  const env=fixture(t);
  for(const args of [{action:'tracker-list',words:'what do I track?'},{operation:'tracker-list'},{action:'headache',at:'06:30'}]){
   const r=await call(env,args);
-  assert.equal(r.error,true);assert.equal(r.text,'Name the operation as type, for example {"type":"tracker-list"}, and follow the recipe for it (a message that starts with "track": the tracker recipe)');
+  assert.equal(r.error,true);assert.equal(r.text,'This call names no operation. Read the recipe for this message first (skill_view: the tracker recipe for a message that starts with "track"), then call as it says');
  }
  const sauna=ok(await call(env,{type:'tracker-hold',name:'sauna',words:'track sauna'}));
  assert.equal(sauna.reply,"Start a new tracker called Sauna, counting each time, as often as you like? I've kept this one for today.");

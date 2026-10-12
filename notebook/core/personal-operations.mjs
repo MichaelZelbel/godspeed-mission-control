@@ -259,9 +259,11 @@ export function personalOperation(domains,input){
   if(item.kind!=='local-note'||!note||note.is_trashed||!['awaiting_approval','failed'].includes(item.state))throw Error('Choose a pending local-note task and an existing note');
   return store.save('work_items',{id:item.id,state:'pending',allowed_action:'write-local-note',target_id:note.id,target_hash:note._hash,authorised_at:new Date().toISOString()},item._hash);
  }
- // Named by its type; the capture runs of 12 October 2026 saw a model send {"action":"tracker-list"}. Taking that
- // as the type let the model skip the recipe that says how, so the refusal points to it instead.
- if(type===undefined||type===null||type==='')throw Error('Name the operation as type, for example {"type":"tracker-list"}, and follow the recipe for it (a message that starts with "track": the tracker recipe)');
+ // Named by its type. The capture runs of 12 October 2026 saw a model send {"action":"tracker-list"}: taking that
+ // as the type (3dfd733), or a refusal that showed the fix (e944ca8), let it skip the recipe, and without the
+ // recipe it named trackers in lower case, retyped replies and missed another name. So the refusal sends it
+ // to the recipe, as the first refusal did when every session read it (c043bf7).
+ if(type===undefined||type===null||type==='')throw Error('This call names no operation. Read the recipe for this message first (skill_view: the tracker recipe for a message that starts with "track"), then call as it says');
  throw Error('Unsupported personal operation: '+type);
 }
 // What a cycle operation writes must be what she said (D-321 step 4), as a headache's must: a flow,
