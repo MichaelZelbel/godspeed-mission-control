@@ -177,3 +177,14 @@ test('the coach and tracker recipes say how a talk that exists is told what it m
   const revisions=JSON.parse(read('../data/recipe-revisions.json'));
   for(const name of ['coach','tracker'])assert.ok(revisions[name+'/SKILL.md'].includes(digest(read('../recipes/'+name+'/SKILL.md'))),name+' ships a known revision');
 });
+
+// "skip" is the answer for a day that shouldn't count (the evening check), "Does not count" on the
+// habit page: coach 0.2.7 leaves a skipped day out of the planned days, and the recipe tells the
+// talk the same, so a skipped day is never read out as a missed one.
+test('the coach recipe says a skipped habit day counts neither way',()=>{
+  const coach=read('../recipes/coach/SKILL.md');
+  assert.match(coach.replace(/\s+/g,' '),/A day answered "skip" does not count either way: the brief's habit lines, graduating and "make it smaller" leave it out of the planned days, and so do you; never call it a missed day\./);
+  assert.equal(coach,read('../../third-party/addons/godspeed-coach/skill/coach/SKILL.md'));
+  assert.ok(JSON.parse(read('../data/recipe-revisions.json'))['coach/SKILL.md'].includes(digest(coach)),'coach ships a known revision');
+  assert.doesNotMatch(coach,/[–—]/,'no long dashes');
+});

@@ -21,7 +21,7 @@ test('scheduled health habit review uses fresh selected measurements without tur
  assert.equal(habit.agreement.split('[talk:'+talk.id+']').length-1,1);
  await domains.invoke('personal-operation',{type:'habit-observe',id:habit.id,answer:'no',observation:'Fictional missed attempt after switching tasks'});
  for(const [id,value,at] of [['fresh',18,now],['future',99,now+86400000],['stale',77,now-9*86400000]])store.save('health_observations',{id,metric:'walking_minutes',value,source:'Fictional selected feed',observed_at:new Date(at).toISOString()});
- const execute=jobExecutor(async input=>{assert.equal(input.kind,'habit-review');assert.deepEqual(input.context.health.observations.map(r=>r.value),[18]);assert.equal(input.context.observations[0].answer,'no');assert.ok(input.contract.includes('never proof'));return 'What pulled you into the other task?';},query);
+ const execute=jobExecutor(async input=>{assert.equal(input.kind,'habit-review');assert.deepEqual(input.context.health.observations.map(r=>r.value),[18]);assert.equal(input.context.observations[0].answer,'no');assert.ok(input.contract.includes('never proof'));assert.match(input.contract,/A day answered skip does not count either way: it is neither done nor missed\./);return 'What pulled you into the other task?';},query);
  const result=await execute({id:'fixture-health-check',kind:'habit-check',habit_id:habit.id},{settings:{},store});assert.equal(result.verified,true);assert.ok(store.get('notes',result.record_id).content.includes('What pulled'));
  const retained=query.rows('habits').find(h=>h.id===habit.id);assert.equal(retained.observations[0].answer,'no');assert.equal(retained.agreement,habit.agreement);
 });

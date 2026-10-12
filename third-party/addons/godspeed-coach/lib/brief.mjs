@@ -34,11 +34,14 @@ function goalLines(mcDir, id) {
   return [`- ${id}: ${d.head.TITLE || ""}${d.head.MEASURE ? ` (measure: ${d.head.MEASURE})` : ""}`, ...recent].join("\n");
 }
 
+// The planned days are the ones that count: a skipped day is named apart and left out of them,
+// so the talk never reads it as a missed day (habits.mjs, stats).
 export function habitLine(h, ymd) {
   const s = stats(h, ymd, 7);
   const v = verdict(h, ymd);
   const note = v === "graduate" ? "; six weeks of mostly done: offer to graduate it" : v === "struggling" ? "; under half for two weeks: ask whether to make it smaller or drop it" : "";
-  return `- ${h.title} (${daysWords(h.days)}${h.auto ? `, ticked from data: ${h.auto}` : ""}): last 7 days done ${s.done}, no ${s.no}, skip ${s.skip}, unknown ${s.unknown}${note}`;
+  const skipped = s.skip ? `; ${s.skip} skipped, not counted` : "";
+  return `- ${h.title} (${daysWords(h.days)}${h.auto ? `, ticked from data: ${h.auto}` : ""}): last 7 days, ${s.applicable} planned: done ${s.done}, no ${s.no}, unknown ${s.unknown}${skipped}${note}`;
 }
 
 export function brief(mcDir, s, area, ymd) {

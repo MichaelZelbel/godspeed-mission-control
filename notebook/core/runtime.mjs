@@ -108,7 +108,7 @@ export function jobExecutor(configuredProvider,query) {
       const habit=visibleRows(query,'habits').find(h=>h.id===job.habit_id&&h.status==='active');if(!habit)return {verified:true,silent:true};
       if(!provider)throw Error('Connect an assistant before reviewing a habit');
       const sources={agreement:habit.agreement,observations:habit.observations,previous:visibleRows(query,'coach_talks').filter(t=>t.area===habit.area).slice(-3),...(habit.area==='health'?{health:currentHealth(query)}:{})};
-      const question=await provider({kind:'habit-review',context:sources,contract:'Ask one short question about this agreed habit using its actual observations. Missing observations mean unknown. Dated health measurements are source observations, never proof that this newly agreed habit happened. Do not invent success, change the agreement, or diagnose.'});
+      const question=await provider({kind:'habit-review',context:sources,contract:'Ask one short question about this agreed habit using its actual observations. Missing observations mean unknown. A day answered skip does not count either way: it is neither done nor missed. Dated health measurements are source observations, never proof that this newly agreed habit happened. Do not invent success, change the agreement, or diagnose.'});
       if(typeof question!=='string'||!question.trim())throw Error('Habit review returned no question');
       const note=retainHabitReview(store,habit,question,sources);return {verified:true,record_id:note.id,delivery:'notebook'};
     }
@@ -130,7 +130,7 @@ export function jobExecutor(configuredProvider,query) {
       const today=new Intl.DateTimeFormat('en-CA',{timeZone:settings.timezone||'UTC',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
       if(prior.some(t=>t.id.endsWith(today)&&t.status==='closed'))return {verified:true,silent:true,reason:'Today\'s coaching conversation is already closed'};
       const health=currentHealth(query),sources={preparation:nativeCoachContext(store,area),previous:prior.slice(-3),habits:visibleRows(query,'habits').filter(h=>h.area===area),health:health.observations,health_freshness:health,journal:visibleRows(query,'journal').slice(-7)};
-      const question=await provider({kind:'coaching',context:{area,...sources},contract:'Open one short coaching question using prior words and actual habit observations. Respect the configured area boundaries. Missing health observations are missing; do not diagnose. Never invent agreement.'});
+      const question=await provider({kind:'coaching',context:{area,...sources},contract:'Open one short coaching question using prior words and actual habit observations. A habit day answered skip does not count either way: it is neither done nor missed. Respect the configured area boundaries. Missing health observations are missing; do not diagnose. Never invent agreement.'});
       const talk=personalOperation({store,query},{type:'coach-open',area,question,sources});
       const note=store.save('notes',{title:'Your '+area+' coaching conversation',content:question,talk_id:talk.id,source_app:'coaching'});
       return {verified:true,record_id:note.id,talk_id:talk.id,delivery:'notebook'};

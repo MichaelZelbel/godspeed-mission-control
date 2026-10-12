@@ -24,6 +24,8 @@ test('scheduled coaching opens a lasting talk and uses previous reply and observ
  const oldFile=path.join(store.root,talk.native_file);fs.renameSync(oldFile,path.join(path.dirname(oldFile),previousDay+'.md'));
  store.save('health_observations',{metric:'Fictional energy',value:7,observed_at:new Date().toISOString()});
  await run({kind:'coaching',id:'health-coach',area:'health'},{store,settings:{}});assert.ok(JSON.stringify(calls.at(-1)).includes('It helped me pause.'));assert.ok(JSON.stringify(calls.at(-1)).includes('Fictional energy'));
+ // "skip" is for a day that shouldn't count: the talk never reads it as a missed day.
+ assert.match(calls.at(-1).contract,/A habit day answered skip does not count either way: it is neither done nor missed\./);
 });
 test('failed receipts produce one durable repair item and healthy repeated check stays quiet',async()=>{
  const {store,query}=fixture(),run=jobExecutor(null,query);store.save('job_receipts',{id:'fictional-failure',job_id:'fictional-job',kind:'goal-work',state:'failed',error:'Synthetic failed check'});

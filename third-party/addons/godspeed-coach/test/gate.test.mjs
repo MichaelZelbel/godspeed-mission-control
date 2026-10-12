@@ -76,7 +76,7 @@ test("the brief carries today's queued question, the last talk, habits and goals
   assert.doesNotMatch(b, /next week's/);
   assert.match(b, /coach\/health\/talks\/2026-09-27\.md \(held\)/);
   assert.match(b, /Did you do the head lifts\?/);
-  assert.match(b, /Face-down head lifts \(every day\): last 7 days done 1, no 0, skip 0, unknown 5/);
+  assert.match(b, /Face-down head lifts \(every day\): last 7 days, 6 planned: done 1, no 0, unknown 5$/m);
   assert.match(b, /- age-healthy: Age healthy \(measure: sleep and runs\)/);
   assert.match(b, /PROGRESS head lifts adopted/);
   assert.doesNotMatch(b, /ATTENTION long noise/);

@@ -148,14 +148,20 @@ export function dueOn(habit, ymd) {
   return habit.days === "daily" || habit.days.includes(weekdayOf(ymd));
 }
 
+// The last `days` calendar days up to untilYmd. `applicable` is the planned days that count:
+// done + no + unknown (a planned day with no answer). A skipped day is counted in `skip` only and
+// left out of everything else, because "skip" is the answer for a day that shouldn't count ("for
+// example because you were ill", in the evening check; "Does not count" on the notebook's habit
+// page). So it never makes the graduation's half-answered rule harder and never counts as a no.
 export function stats(habit, untilYmd, days) {
   const r = { applicable: 0, done: 0, no: 0, skip: 0, unknown: 0, answered: 0, rate: null };
   for (let i = days - 1; i >= 0; i--) {
     const d = addDays(untilYmd, -i);
     if (habit.started && d < habit.started) continue;
     if (!(habit.days === "daily" || habit.days.includes(weekdayOf(d)))) continue;
-    r.applicable++;
     const a = answerOn(habit, d);
+    if (a === "skip") { r.skip++; continue; }
+    r.applicable++;
     if (a) r[a]++; else r.unknown++;
   }
   r.answered = r.done + r.no;
@@ -164,7 +170,8 @@ export function stats(habit, untilYmd, days) {
 }
 
 // Offered in the talk, never decided alone: graduate after six weeks of mostly done, or "make it
-// smaller, or drop it?" after two weeks under half.
+// smaller, or drop it?" after two weeks under half. Both read stats(), so a skipped day counts in
+// neither: graduating needs at least half of the planned days that count answered.
 export function verdict(habit, todayYmd) {
   if (habit.status !== "active") return "fine";
   if (habit.started && daysBetween(habit.started, todayYmd) >= GRADUATE_DAYS) {

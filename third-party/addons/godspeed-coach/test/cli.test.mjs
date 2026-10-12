@@ -37,7 +37,7 @@ test("habits: add, track by loose words, answer tonight's check, list", () => {
   assert.match(cli(mc, "2026-09-30T19:05:00Z", "context").out, /Habit check sent tonight/);
   assert.equal(cli(mc, "2026-09-30T19:06:00Z", "habit", "answer", "yes").out, "Tracked: Face-down head lifts done.");
   assert.match(cli(mc, T, "habit", "list").out, /^head-lifts: Face-down head lifts \(health, daily, active\)/);
-  assert.match(cli(mc, "2026-09-30T19:10:00Z", "habits", "week").out, /last 7 days done 2, no 0, skip 0, unknown 0/, "the no before it started does not count");
+  assert.match(cli(mc, "2026-09-30T19:10:00Z", "habits", "week").out, /last 7 days, 2 planned: done 2, no 0, unknown 0$/, "the no before it started does not count");
 });
 
 test("talks: the gate, opening, his words, held", () => {

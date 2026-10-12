@@ -129,7 +129,9 @@ If the command refuses because five are active, say which five and ask which one
 graduate first.
 
 Graduating and "make it smaller, or drop it?" are offered only inside a talk, when the brief says
-so, never in the evening check and never on their own.
+so, never in the evening check and never on their own. A day answered "skip" does not count either
+way: the brief's habit lines, graduating and "make it smaller" leave it out of the planned days, and
+so do you; never call it a missed day.
 
 ## A talk they start themselves
 

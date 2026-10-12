@@ -25,7 +25,8 @@ written down, so next week starts where this one ended.
 Habits are the other half. A talk decides on a small habit; you say "track head lifts" when you
 did it; the evening check asks only about what you have not mentioned, and on a good day you hear
 nothing. After six weeks of mostly done, the talk offers to graduate the habit. Two weeks under
-half, it asks whether to make it smaller or drop it.
+half, it asks whether to make it smaller or drop it. A day you answer "skip" counts neither way: it
+is left out, as if the habit had not been planned that day.
 
 ## What it is
 
