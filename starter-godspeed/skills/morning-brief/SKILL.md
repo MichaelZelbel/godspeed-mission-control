@@ -60,7 +60,7 @@ their own words, so they need no yes each time. This brief is where they see eac
 stop it. Run `mc-work going-out --json`. When it lists nothing, or `mc-work` is not installed,
 leave this section out. Otherwise write it in the person's language, after the first part:
 
-    Going out at 8 pm unless you say stop:
+    Going out at <time> unless you say stop:
     1. <what changes where, in plain words> (<its goal, in plain words>)
     2. ...
     Reply "stop" to keep all of them back, or "stop" and a number for one.

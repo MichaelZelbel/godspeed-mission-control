@@ -189,14 +189,15 @@ for (const b of blocks) {
   // A step under a standing permission names its kind, "PERMISSION: may:<kind>", and the goal's
   // card must hold a MAY line for that kind; such a step goes out at its time unless stopped, so it
   // is never on the ship list and needs no line there.
-  const may = (f.PERMISSION || '').match(/^\s*may:\s*([^\s,;.()]*)/i);
-  if (may && !kindsOf(goal).includes(may[1])) problems.push(`move "${title}": PERMISSION may:${may[1]} is not a standing permission of ${goal}; use a kind its card has a MAY line for (mc-goals may ${goal}), or put the move on the ship list`);
+  const may = (f.PERMISSION || '').match(/^\s*may:\s*([a-z0-9-]+)?/i);
+  const kind = may ? may[1] || '' : '';
+  if (may && !kindsOf(goal).includes(kind)) problems.push(`move "${title}": PERMISSION may:${kind} is not a standing permission of ${goal}; use a kind its card has a MAY line for (mc-goals may ${goal}), or put the move on the ship list`);
   const onList = !may && /ship list/i.test(f.PERMISSION || '');
   const his = /^\s*only the person/i.test(f['HOW IT LANDS'] || '');
   if (his) persons++;
-  // EVERY MOVE AIMS AT THE LIMIT (2026-10-12). From 2026-09-25 to 10-11 fourteen changes touched
-  // only what the mission control may touch, on pages nobody visits, and no goal number moved.
-  // Once the goal's research names what limits it now, the move says how it moves that.
+  // EVERY MOVE AIMS AT THE LIMIT (2026-10-12). Changes that touch only what the mission control may
+  // touch, on pages nobody visits, move no goal's number. Once the goal's research names what
+  // limits it now, the move says how it moves that.
   if (goal) {
     const limit = limitOf(goal);
     const key = limit && limit.slice(0, 40).trimEnd();
@@ -219,9 +220,9 @@ for (const b of blocks) {
 }
 
 // AT MOST ONE THING A DAY FOR THE PERSON (2026-10-12), across all goals: a day that hands them two
-// or three tasks hands them a routine they never asked for (they refused new routines, calendar
-// entries and forms in October 2026), and the moves that wait on them do not happen.
-if (persons > 1) problems.push(`at most one move a day may be the person's to do; ${persons} are (HOW IT LANDS "only the person"); keep the one they already said they want, and find a route the mission control holds for the rest or leave them for another day`);
+// or three tasks hands them a routine they never asked for, and the moves that wait on them do
+// not happen.
+if (persons > 1) problems.push(`at most one move a day may be the person's to do; ${persons} are (HOW IT LANDS "only the person"); keep the one they already said they want, and find a route the mission control holds for the rest, or leave them for another day and write "FEWER <goal>: the person's one step today is move <n>" for a goal that is left short`);
 
 const fewer = {};
 // Two reasons are refused, because the recipe answers both (2026-09-24, test run 4 used them for

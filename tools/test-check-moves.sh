@@ -165,13 +165,20 @@ maymove() { move 4 yt-goal "Simon Willison" "the reply, in full" | grep -v '^APP
 OUT="$(run)"; [ $? -eq 0 ] && ok "a move under a MAY line of its goal passes, with no APPLY line and off the ship list" || bad "MAY move passes: $OUT"
 { full; maymove unknown-kind; } > "$RUN/moves.md"
 OUT="$(run)"; case "$OUT" in *"PERMISSION may:unknown-kind is not a standing permission of yt-goal"*) ok "a kind the goal card has no MAY line for fails, named";; *) bad "unknown MAY kind: $OUT";; esac
+{ full; maymove "yt-replies (notice, at most ten a week)"; } > "$RUN/moves.md"
+OUT="$(run)"; [ $? -eq 0 ] && ok "  the kind may be followed by words of explanation" || bad "  kind with words after it: $OUT"
+{ full; maymove ""; } > "$RUN/moves.md"
+OUT="$(run)"; case "$OUT" in *"PERMISSION may: is not a standing permission of yt-goal"*) ok "  and may: with no kind fails";; *) bad "  may: with no kind: $OUT";; esac
+# health-goal has a standing permission of its own, of another kind: yt-goal's does not cover it.
+printf 'ID: health-goal\nKIND: outcome\nSTATUS: adopted\nMAY: walk-log | note my walks in my own log | 7 per week | alone | "log my walks" 2026-10-12\n\n## Log\n' > "$TMP/goals/health-goal.md"
+{ full; move 4 health-goal "Simon Willison" "x" | grep -v '^APPLY' | sed 's/^PERMISSION: .*/PERMISSION: may:walk-log/'; } > "$RUN/moves.md"
+OUT="$(run)"; [ $? -eq 0 ] && ok "  a goal's own kind passes for that goal" || bad "  health-goal's own kind: $OUT"
 { full; move 4 health-goal "Simon Willison" "x" | grep -v '^APPLY' | sed 's/^PERMISSION: .*/PERMISSION: may:yt-replies/'; } > "$RUN/moves.md"
 OUT="$(run)"; case "$OUT" in *"PERMISSION may:yt-replies is not a standing permission of health-goal"*) ok "  and another goal's MAY line does not cover it";; *) bad "  MAY of another goal: $OUT";; esac
 
 # --- every move aims at its goal's limit (2026-10-12) ------------------------------------------
-# 2026-09-25 to 10-11: fourteen changes on pages nobody visits, no goal number moved. Once a goal's
-# research names the one thing that limits it now (LIMIT: under "## The limit now" in brief.md),
-# each move for it says on an AIMS AT line how it moves that limit. A goal whose research names no
+# Once a goal's research names the one thing that limits it now (LIMIT: under "## The limit now"
+# in brief.md), each move for it says on an AIMS AT line how it moves that limit. A goal whose research names no
 # limit yet (founding, or no research) is not blocked: its moves pass and a NOTE says why.
 mkdir -p "$TMP/goals/research/kits"
 brief() { printf 'GOAL: kits\nUPDATED: %s\nSTATUS: %s\n\n## The limit now\n%s\n\n## What works now\n(nothing yet)\n' "$D" "$1" "$2" > "$TMP/goals/research/kits/brief.md"; }
@@ -219,6 +226,9 @@ rm -r "$TMP/goals/research/kits"
 hisown() { move "$1" "$2" "Simon Willison" "x" | sed 's/^HOW IT LANDS: .*/HOW IT LANDS: only the person can film it; CHECK the video is listed/'; }
 { move 1 money-goal "Simon Willison" "x"; move 2 money-goal "Justin Welsh" "y"; hisown 3 money-goal; hisown 4 health-goal; } > "$RUN/moves.md"
 OUT="$(run)"; case "$OUT" in *"at most one move a day may be the person's to do; 2 are"*) ok "two moves only the person can make, across goals, fail";; *) bad "two for the person: $OUT";; esac
+case "$OUT" in *"FEWER <goal>: the person's one step today is move <n>"*) ok "  and the refusal says how a goal left short says so";; *) bad "  FEWER hint: $OUT";; esac
+{ move 1 money-goal "Simon Willison" "x"; move 2 money-goal "Justin Welsh" "y"; hisown 3 money-goal; echo "FEWER health-goal: the person's one step today is move 3"; } > "$RUN/moves.md"
+OUT="$(run)"; [ $? -eq 0 ] && ok "  and that FEWER line is a reason the check accepts" || bad "  FEWER person's step: $OUT"
 { move 1 money-goal "Simon Willison" "x"; move 2 money-goal "Justin Welsh" "y"; hisown 3 money-goal; echo "FEWER health-goal: the week's scale reading lands on Sunday"; } > "$RUN/moves.md"
 OUT="$(run)"; [ $? -eq 0 ] && ok "  one passes" || bad "  one for the person: $OUT"
 

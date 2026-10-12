@@ -48,16 +48,17 @@ week per goal, when the research brief's "Worth asking for" names a kind of step
 the day's card asking for it, in plain words with one example ("May I answer comments under your
 YouTube videos without asking each time? I would send at most ten a week and you see each one the
 morning before."). The answer, quoted, becomes `mc-goals allow`. Never ask for money, sign-ups or
-LinkedIn automation. A goal with no MAY lines may still carry an older `ALLOWED:` line: a move
-inside it is filed OWNER mission control, NEEDS none, and the runner applies it, checks it live
-and keeps NOW for the undo.
+LinkedIn automation. If `mc-work file` says this week's steps of that kind are used, the move goes
+on the ship list instead (`PERMISSION: ship list`, with the item it filed on its APPLY line). A
+goal with no MAY lines may still carry an older `ALLOWED:` line: a move inside it is filed OWNER
+mission control, NEEDS none, and the runner applies it, checks it live and keeps NOW for the undo.
 
 **The ship list.** Every prepared move no standing permission covers goes on ONE card a day:
 numbered lines, each one sentence saying what changes where, plus one link to a page showing
-every NOW and AFTER side by side. They answer "ship all", some numbers, or nothing. A yes, quoted, unblocks those moves and
-the runner applies them the same day; the person never has to carry out a prepared move by hand
-when the mission control has a way to apply it. An unanswered line expires after seven days and is
-never re-asked. A thing only they can do (record a video, sign a form) is one line on the same
+every NOW and AFTER side by side. They answer "ship all", some numbers, or nothing. A yes,
+quoted, unblocks those moves and the runner applies them the same day; the person never has to
+carry out a prepared move by hand when the mission control has a way to apply it. An unanswered
+line expires after seven days and is never re-asked. A thing only they can do (record a video, sign a form) is one line on the same
 card, not a second card. When one kind of move keeps coming back to the list, add a line asking
 whether it may become a standing permission.
 
@@ -293,12 +294,16 @@ standing-permission line at most once a week per goal.
 
 **Every move aims at the limit.** `AIMS AT:` quotes the goal's `LIMIT:` from its research brief and
 says in one line how this move moves it. A move that touches only what the mission control may
-touch, on a page nobody visits, is not a move (2026-09-25 to 10-11: fourteen such changes, no goal
-number moved). **At most one move a day is the person's to do**, across all goals, and only a thing
-they already said they want; never a new routine, a calendar entry or a form (their refusals,
-2026-10: "I keep Saturdays unstructured", "no calendar entries", "I cannot schedule runs").
+touch, on a page nobody visits, is not a move: changes like that move no goal's number. **At most
+one move a day is the person's to do**, across all goals, and only a thing they already said they
+want; never a new routine, a calendar entry or a form they did not ask for. When that leaves a
+goal short of moves, say so on its line: `FEWER <goal>: the person's one step today is move <n>`.
 While a goal's brief names no limit yet (its first nights), its moves say `AIMS AT: founding`,
 and the moves check notes that instead of refusing the day.
+
+**A strategy or project uses its outcome's research.** A strategy or project with no research
+folder of its own uses the brief of the first outcome on its SERVES line that has one, for WHO DID
+THIS and AIMS AT, and never a `LIMIT:` line on a goal card.
 
 **1. Pick three moves per active goal**, fewer only when a line `FEWER <goal>: <why>` in
 `moves.md` says why. Two things are never the why: a thin ideas register (the next rung comes from
@@ -327,8 +332,9 @@ MAKE item for the runner (Step 4), and joins the ship list the day it is ready.
     ### <n>. <one line a stranger understands: what changes where>
     GOAL: <id>
     BET: <the weekly number now> -> <what you expect it to be seven days after this goes live>
-    AIMS AT: <the goal's LIMIT from its research brief, quoted, then in one line how this move
-             moves it; "founding" while the brief names no limit yet>
+    AIMS AT: <the LIMIT from the goal's research brief (a strategy's or project's without one:
+             the brief of the first outcome on its SERVES line that has one), quoted, then in
+             one line how this move moves it; "founding" while that brief names no limit yet>
     WHERE: <the live address>
     NOW: <quoted, read live today>
     AFTER: <the exact new version, in full>
@@ -412,8 +418,8 @@ nothing was:**
 
 1. **The moves (Step 3):** a MAKE item for each move too big to prepare in the decision run, its
    DONE WHEN the finished thing and a block for it appended to that day's `moves.md`; and an APPLY
-   item for each prepared move, `--outward yes` unless an ALLOWED line covers it (and with
-   `--may <kind>` when a MAY line covers it), its CHECK reading the
+   item for each prepared move, `--outward yes` unless the ALLOWED line of a goal with no MAY
+   lines covers it (and with `--may <kind>` when a MAY line covers it), its CHECK reading the
    live place (the address answers, the page holds the new words). The move's bet is its
    forecast; file an `mc-forecast` only for a material action (Step 3.6).
 2. **Everything else the mission control can do alone** that the playbook's "Godspeed steps" names and the
