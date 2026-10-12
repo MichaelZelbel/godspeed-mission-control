@@ -45,3 +45,24 @@ test('a key without the collections scope cannot make or fill a tracker',async t
   const r=await call(env,'personal_operation',{type:'tracker-create',proposal_id:held.proposal_id},scopes);
   assert.equal(r.error,true);assert.equal(env.store.list('collections').length,0);
 });
+
+// A habit tracked over MCP keeps the person's words in the coach's line, as the chat path does
+// (D-321, a leftover of steps 2 and 3: the bot's "track walk to work" wrote an empty quote).
+test('a habit tracked over MCP keeps the person\'s words, and an assistant must pass them',async t=>{
+  process.env.GODSPEED_NOW='2026-10-12T05:00:00Z';t.after(()=>{delete process.env.GODSPEED_NOW;});
+  const env=fixture(t),scopes=['actions','collections'];
+  const {addArea}=await import('../../third-party/addons/godspeed-coach/lib/areas.mjs');
+  const {addHabit}=await import('../../third-party/addons/godspeed-coach/lib/habits.mjs');
+  addArea(env.store.root,{slug:'health',title:'Health',rhythm:'weekly sunday',starts:'2026-10-04'});
+  const walk=addHabit(env.store.root,{area:'health',slug:'walk-to-work',title:'Walk to work and back',days:'daily'},'2026-10-04');
+  const before=fs.readFileSync(walk.file,'utf8');
+  const refused=await call(env,'personal_operation',{type:'track',tracker:'habit-health-walk-to-work'},scopes);
+  assert.equal(refused.error,true);assert.match(refused.text,/words/);
+  assert.equal(fs.readFileSync(walk.file,'utf8'),before,'nothing was written');
+  const done=ok(await call(env,'personal_operation',{type:'track',tracker:'habit-health-walk-to-work',words:'track walk to work'},scopes));
+  assert.equal(done.reply,'Tracked: walk to work and back, done today.');
+  assert.match(fs.readFileSync(walk.file,'utf8'),/- 2026-10-12 done \(notebook\) "track walk to work"\n$/);
+  // The owner's own shelf (no assistant) changes a day without words, as before.
+  const shelf=await env.domains.invoke('personal-operation',{type:'tracker-correct',tracker:'habit-health-walk-to-work',answer:'skip'});
+  assert.equal(shelf.answer,'skip');
+});

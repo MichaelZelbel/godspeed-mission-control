@@ -56,7 +56,7 @@ export function trackerOperation(domains,input){
   return {collection_id:collection.id,entry_id:entry?.id||null,reply:createdReply(collection,entry)};
  }
  // A habit's day is the coach's: its own track() on its own file (habit-trackers.mjs).
- if(['track','tracker-correct'].includes(type)&&isHabitRef(store,input.tracker))return habitOperation(store,input,{now,zone,today:dayOf(now,zone)});
+ if(['track','tracker-correct'].includes(type)&&isHabitRef(store,input.tracker))return habitOperation(store,input,{now,zone,today:dayOf(now,zone),assistant:domains.assistant===true});
  if(type==='track'){
   let c=resolve(store,input.tracker),under=false;if(c.tracker.specialist==='headache')throw Error(HEADACHES);
   const word=typeof input.new_name==='string'?input.new_name.trim():'';

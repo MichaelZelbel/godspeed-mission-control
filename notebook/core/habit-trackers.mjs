@@ -43,12 +43,16 @@ export function habitTrackerList(store,{today,from}={}){
 }
 const lower=s=>String(s).charAt(0).toLowerCase()+String(s).slice(1);
 const dayWords=(day,today)=>day===today?'today':day===addDays(today,-1)?'yesterday':'on '+longDay(day);
-// track and tracker-correct on a habit. `today` is the installation's day.
-export function habitOperation(store,input,{now,zone,today}){
+// track and tracker-correct on a habit. `today` is the installation's day. The coach keeps the
+// person's words with the day: the chat's message, or `words` over MCP. An assistant that tracks a
+// habit without them is refused (until 12 October 2026 the bot's "track walk to work" wrote an
+// empty quote); the owner's own clicks on the shelf need none.
+export function habitOperation(store,input,{now,zone,today,assistant=false}){
  const found=findHabits(store,input.tracker);
  if(found.length>1)throw Error('Which one: '+found.map(h=>h.title).sort().join(' or ')+'?');
  const h=found[0];if(!h)throw Error('No habit called '+input.tracker);
- const words=String(input.note??input.source_quote??'').trim(),name=lower(h.title);
+ const words=String(input.note??input.words??input.source_quote??'').trim(),name=lower(h.title);
+ if(assistant&&!words&&(input.type==='track'||input.remove!==true))throw Error("Pass the person's own message as words: the habit keeps them with the day.");
  if(input.type==='track'){
   const answer=input.answer??'done';if(!ANSWERS.includes(answer))throw Error('A habit day is done, no or skip');
   const day=whenFor({on:input.on,cadence:'daily'},now,zone);
