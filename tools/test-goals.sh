@@ -400,6 +400,52 @@ check "a challenge in the brief makes the playbook challenged" "$(pbstate rr-mon
 contains "  and the row says why" "$(reasons rr-money)" "the research contradicts its playbook"
 contains "check notes a founding research folder" "$(hg check 2>&1)" "rr-money: research founding"
 
+# --- standing permissions: the person's words, once, per kind of step ------------------------
+hg file --kind outcome --title "Audience" --id mm-aud --area work --status adopted --source x >/dev/null 2>&1
+OUT="$(hg allow mm-aud --kind yt-replies --what "reply to comments on my YouTube videos" --per-week 10 2>&1)"; check "allow without his words is refused" "$?" "1"
+contains "  and says why" "$OUT" "--words is required"
+OUT="$(hg allow mm-aud --kind yt-replies --what "reply to comments on my YouTube videos" --per-week 10 --words "yes, you may answer comments" 2>&1)"
+contains "allow writes a MAY line" "$(grep '^MAY:' "$TMP/goals/mm-aud.md")" 'MAY: yt-replies | reply to comments on my YouTube videos | 10 per week | notice | "yes, you may answer comments" 2026-09-13'
+check "  and logs it" "$(grep -c 'MAY-GIVEN yt-replies' "$TMP/goals/mm-aud.md")" "1"
+OUT="$(hg allow mm-aud --kind spend --what "buy ads" --per-week 1 --words "ok" 2>&1)"; check "a kind that spends money is refused" "$?" "1"
+contains "  and says it always needs a fresh yes" "$OUT" "always needs a fresh yes"
+OUT="$(hg allow mm-aud --kind li-posts --what "post on LinkedIn for me" --per-week 3 --words "ok" 2>&1)"; check "LinkedIn automation is refused" "$?" "1"
+OUT="$(hg allow mm-aud --kind call-slots --what "book a call with whoever asks" --per-week 3 --words "ok" 2>&1)"; check "a booking is refused" "$?" "1"
+OUT="$(hg allow mm-aud --kind book-page --what "fix typos on my book page" --per-week 3 --words "fix those yourself" 2>&1)"; check "  while a page about a book is not a booking" "$?" "0"
+hg allow mm-aud --kind book-page --revoke --words "test cleanup" >/dev/null 2>&1
+OUT="$(hg allow mm-aud --kind dm-replies --what "reply to my direct messages" --per-week 3 --mode alone --words "ok" 2>&1)"; check "alone mode for a step that reaches people is refused" "$?" "1"
+contains "  and says notice is the way" "$OUT" "--mode notice"
+OUT="$(hg allow mm-aud --kind x-many --what "fix my pages" --per-week 99 --words "ok" 2>&1)"; check "a weekly limit past 50 is refused" "$?" "1"
+OUT="$(hg allow mm-aud --kind pages --what "fix wording on my own sites" --per-week 5 --mode alone --words "fix my pages yourself" 2>&1)"; check "alone mode is accepted" "$?" "0"
+J="$(hg may mm-aud --json 2>&1)"
+check "may --json lists both" "$(printf '%s' "$J" | "$NODE" -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const p=JSON.parse(s);console.log(p.map(x=>x.kind+":"+x.mode+":"+x.perWeek).join(","))})')" "yt-replies:notice:10,pages:alone:5"
+# Ruling 2 (2026-10-12): the card store keeps only the first value of a repeated KEY and writes
+# no free text, so every later write of the card must carry all MAY lines through, once each.
+hg progress mm-aud --evidence "x" >/dev/null 2>&1
+hg change mm-aud --set "NOTE=a note" --why "test a later write" >/dev/null 2>&1
+hg attention --record --why "a third write" >/dev/null 2>&1
+check "a later write keeps the first MAY line, once" "$(grep -c '^MAY: yt-replies |' "$TMP/goals/mm-aud.md")" "1"
+check "  and the second, once" "$(grep -c '^MAY: pages |' "$TMP/goals/mm-aud.md")" "1"
+check "  and the log of those writes is there" "$(grep -c -e ' PROGRESS x' -e ' CHANGED NOTE' "$TMP/goals/mm-aud.md")" "2"
+check "  MAY lines sit above the log" "$(awk '/^## Log/{l=NR} /^MAY: /{m=NR} END{print (m<l)?"above":"below"}' "$TMP/goals/mm-aud.md")" "above"
+contains "show prints every MAY line" "$(hg show mm-aud 2>&1)" "MAY: pages | fix wording on my own sites"
+OUT="$(hg change mm-aud --set "MAY=anything" --why "sneak one in" 2>&1)"; check "a MAY line is never set through change" "$?" "1"
+contains "  and says where it comes from" "$OUT" "mc-goals allow"
+OUT="$(hg allow mm-aud --kind yt-replies --what "reply to comments on my YouTube videos" --per-week 4 --words "four a week is enough" 2>&1)"
+check "allowing a kind again replaces its line" "$(grep -c '^MAY: yt-replies | reply to comments on my YouTube videos | 4 per week' "$TMP/goals/mm-aud.md")$(grep -c '^MAY: yt-replies' "$TMP/goals/mm-aud.md")" "11"
+sed -i 's/$/\r/' "$TMP/goals/mm-aud.md"
+check "CRLF card: may still reads both" "$(hg may mm-aud --json 2>&1 | "$NODE" -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{console.log(JSON.parse(s).length)})')" "2"
+OUT="$(hg allow mm-aud --kind nothing-here --revoke --words "stop that" 2>&1)"; check "revoking a kind the goal does not have is refused" "$?" "1"
+contains "  and names its kinds" "$OUT" "yt-replies, pages"
+OUT="$(hg allow mm-aud --kind yt-replies --revoke --words "stop answering comments" 2>&1)"
+check "revoke removes the line" "$(grep -c '^MAY: yt-replies' "$TMP/goals/mm-aud.md")" "0"
+check "  and logs his words" "$(grep -c 'MAY-REVOKED yt-replies "stop answering comments"' "$TMP/goals/mm-aud.md")" "1"
+check "  and keeps the other one" "$(grep -c '^MAY: pages |' "$TMP/goals/mm-aud.md")" "1"
+hg allow mm-aud --kind pages --revoke --words "no more" >/dev/null 2>&1
+contains "with none left, may says every outward step needs a fresh yes" "$(hg may mm-aud 2>&1)" "every outward step needs a fresh yes"
+check "  and the card has no MAY line" "$(grep -c '^MAY:' "$TMP/goals/mm-aud.md")" "0"
+OUT="$(hg check 2>&1)"; missing "a card with MAY lines is no PROBLEM for check" "$OUT" "PROBLEM mm-aud"
+
 echo
 echo "$PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

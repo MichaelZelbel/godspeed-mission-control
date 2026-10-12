@@ -63,6 +63,32 @@ function blocks(text, key) {
   return out;
 }
 
+// A standing permission: the person's own words, once, for one kind of step (2026-10-12). It is
+// what lets a prepared step go out at a set time unless stopped, instead of waiting for a yes
+// that, measured, did not come (no goal move approved between 2026-09-30 and 2026-10-11). It is
+// a line on the goal card, written only by `mc-goals allow`, never inferred by a program:
+//   MAY: <kind> | <what, in plain words> | <n> per week | notice|alone | "<their words>" <date>
+// notice: the step goes out at its set time unless the person stops it. alone: it goes out when
+// ready and is reported after; only for steps that touch the person's own pages, files and
+// accounts and reach nobody else. A card may carry several, one per kind.
+const MAY_RE = /^MAY: ([a-z0-9-]+) \| (.+?) \| (\d+) per week \| (notice|alone) \| "(.*)" (\d{4}-\d{2}-\d{2})$/;
+function parseMay(line) {
+  const m = String(line || '').replace(/\r/g, '').match(MAY_RE);
+  return m ? { kind: m[1], what: m[2], perWeek: parseInt(m[3], 10), mode: m[4], words: m[5], date: m[6] } : null;
+}
+const formatMay = (m) => `MAY: ${m.kind} | ${m.what} | ${m.perWeek} per week | ${m.mode} | "${m.words}" ${m.date}`;
+// Every MAY line in a card's text, in the order written.
+function mayIn(text) { return String(text || '').replace(/\r/g, '').split('\n').map(parseMay).filter(Boolean); }
+// Kinds of step that always need a fresh yes, whatever was said once: money, sign-ups, bookings,
+// cancellations, a first or bulk message, LinkedIn by automation (its User Agreement 8.2).
+// "book" only as booking something, so a page about a book is not refused.
+const NEVER_STANDING = new RegExp('\\b(?:spend\\w*|pay|pays|paid|payments?|buy\\w*|bought|purchas\\w*|bookings?|booked'
+  + '|book(?=\\s+(?:a|an|the|me|us|tickets?|flights?|hotels?|rooms?|tables?|calls?|meetings?|appointments?|slots?|venues?)\\b)'
+  + '|subscri\\w*|sign[- ]?ups?|sign(?:ing)? up|cancel\\w*|ads?|advert\\w*|donat\\w*|linkedin|bulk|mass[- ]?e?-?mails?'
+  + '|cold|first[- ](?:message|contact)s?)\\b', 'i');
+// Words that say a step reaches another person, so it may never go out alone, only with notice.
+const REACHES_PEOPLE = /\b(?:repl\w*|comment\w*|messag\w*|e-?mails?|dms?|send\w*|invit\w*|tweet\w*|outreach)\b/i;
+
 function createGoalCommands({root=L.godspeedRoot(__filename),goalStore,workStore}={}) {
 const GODSPEED = root;
 const DIR = path.join(GODSPEED, 'goals');
@@ -76,7 +102,30 @@ const IMPORTANCE = ['core', 'high', 'normal'];
 const ENERGY = ['low', 'medium', 'high'];
 const ORDER = ['ID', 'KIND', 'STATUS', 'AREA', 'TITLE', 'OWN WORDS', 'MEASURE', 'LEAD', 'DEADLINE', 'SERVES', 'DEPENDS ON',
   'PROTECTED', 'OWNER', 'IMPORTANCE', 'ENERGY', 'RESOURCES', 'CADENCE', 'REVIEW', 'SOURCE', 'FILED', 'NOTE'];
-const S = goalStore || L.store(DIR, ORDER);
+// MAY LINES SURVIVE EVERY WRITE (2026-10-12). The shared card format keeps only the first value
+// of a repeated KEY and writes back fields and log, nothing else, so a plain write of a card
+// with two MAY lines would keep one and lose the other: a permission silently gone. The file
+// store is therefore wrapped. A card read from it carries no MAY field (they are not fields), and
+// every write puts back the MAY lines that were in the file before it, all of them, once each,
+// above ## Log. Only `allow` changes them, by handing the new set as c.may. A store passed in by
+// a caller (the notebook's) keeps no card file and is used as it is.
+function keepingMay(base) {
+  const strip = (c) => { if (c) delete c.f.MAY; return c; };
+  const withMay = (rendered, lines) => lines.length
+    ? rendered.replace(/\n\n## Log\n/, `\n\n${lines.map(formatMay).join('\n')}\n\n## Log\n`) : rendered;
+  const render = (c) => { const f = Object.assign({}, c.f); delete f.MAY; return base.render(Object.assign({}, c, { f })); };
+  return Object.assign({}, base, {
+    read: (id) => strip(base.read(id)),
+    all: () => base.all().map(strip),
+    write(c) {
+      const lines = Array.isArray(c.may) ? c.may : mayIn(L.readText(base.path(c.id)));
+      fs.mkdirSync(DIR, { recursive: true });
+      fs.writeFileSync(base.path(c.id), withMay(render(c), lines), 'utf8');
+    },
+    render: (c) => withMay(render(c), Array.isArray(c.may) ? c.may : mayIn(L.readText(base.path(c.id)))),
+  });
+}
+const S = goalStore || keepingMay(L.store(DIR, ORDER));
 const { die, say, oneLine, flag, today, q } = L;
 const MACHINE = L.machineWords(GODSPEED);
 
@@ -171,6 +220,7 @@ cmds.change = (a) => {
     if (!m) die(`--set "${p}" is not FIELD=value`);
     const k = m[1].trim(), v = oneLine(m[2]);
     if (k === 'ID' || k === 'FILED') die(`${k} never changes`);
+    if (k === 'MAY') die('a MAY line is written only by mc-goals allow, with the person\'s own words quoted; never through change');
     if (k === 'STATUS' && !STATUSES.includes(v)) die(`STATUS must be one of: ${STATUSES.join(', ')}`);
     if (k === 'KIND' && !KINDS.includes(v)) die(`KIND must be one of: ${KINDS.join(', ')}`);
     if (k === 'IMPORTANCE' && !IMPORTANCE.includes(v)) die(`IMPORTANCE must be one of: ${IMPORTANCE.join(', ')}`);
@@ -212,6 +262,49 @@ cmds.progress = (a) => {
   L.logLine(c, d, 'PROGRESS', ev);
   S.write(c);
   say(`${c.id}: progress recorded`);
+};
+
+// ---------------------------------------------------------------------------
+// allow / may: standing permissions, one per kind of step, in the person's own words
+// ---------------------------------------------------------------------------
+function mayLines(c) { return mayIn(L.readText(path.join(DIR, `${c.id}.md`))); }
+cmds.allow = (a) => {
+  const c = S.read(a._[0] || die('usage: mc-goals allow <id> --kind <slug> --what "..." --per-week <n> --words "<their words>" [--mode notice|alone] | --kind <slug> --revoke --words "..."')) || die('no such goal');
+  const d = a.date || today();
+  const words = a.words === 'true' ? '' : oneLine(a.words);
+  if (!words) die('--words is required: the person\'s own words, quoted; a standing permission is never inferred');
+  const kind = oneLine(a.kind);
+  if (!/^[a-z0-9-]+$/.test(kind)) die('--kind is a short slug like yt-replies');
+  const lines = mayLines(c);
+  if (flag(a, 'revoke')) {
+    if (!lines.some(m => m.kind === kind)) die(`${c.id} has no standing permission "${kind}"; its kinds are: ${lines.map(m => m.kind).join(', ') || 'none'}`);
+    c.may = lines.filter(m => m.kind !== kind);
+    L.logLine(c, d, 'MAY-REVOKED', `${kind} ${q(words)}`);
+    S.write(c);
+    say(`${c.id}: ${kind} may no longer go out without a fresh yes`);
+    return;
+  }
+  const what = a.what === 'true' ? '' : oneLine(a.what);
+  if (!what) die('--what is required: the kind of step in plain words');
+  if (NEVER_STANDING.test(`${kind} ${what}`)) die(`${kind}: this kind of step always needs a fresh yes, never a standing one (money, sign-ups, bookings, cancellations, a first or bulk message, anything on LinkedIn by automation)`);
+  const perWeek = /^\d+$/.test(String(a['per-week'] || '')) ? parseInt(a['per-week'], 10) : 0;
+  if (!(perWeek >= 1 && perWeek <= 50)) die('--per-week is a number from 1 to 50: how many of these may go out in seven days');
+  if (a.mode !== undefined && !['notice', 'alone'].includes(a.mode)) die('--mode is notice (goes out at its set time unless stopped, the default) or alone');
+  const mode = a.mode === 'alone' ? 'alone' : 'notice';
+  if (mode === 'alone' && REACHES_PEOPLE.test(`${kind} ${what}`)) die(`${kind} reaches other people, so it never goes out alone; give it --mode notice: it goes out at its set time unless stopped`);
+  const given = { kind, what: what.replace(/\|/g, '/'), perWeek, mode, words: words.replace(/"/g, "'"), date: d };
+  // Given again, a kind keeps its place on the card and takes the new words.
+  c.may = lines.some(m => m.kind === kind) ? lines.map(m => (m.kind === kind ? given : m)) : lines.concat([given]);
+  L.logLine(c, d, 'MAY-GIVEN', `${kind} (${mode}, ${perWeek} per week) ${q(words)}`);
+  S.write(c);
+  say(`${c.id}: ${kind} may go out ${mode === 'alone' ? 'when ready, reported after' : 'at its set time unless stopped'}, up to ${perWeek} a week`);
+};
+cmds.may = (a) => {
+  const c = S.read(a._[0] || die('usage: mc-goals may <id> [--json]')) || die('no such goal');
+  const lines = mayLines(c);
+  if (flag(a, 'json')) { say(JSON.stringify(lines)); return; }
+  if (!lines.length) { say(`${c.id}: no standing permissions; every outward step needs a fresh yes`); return; }
+  for (const m of lines) say(`${m.kind}: ${m.what} (${m.mode}, ${m.perWeek} a week) since ${m.date}: "${m.words}"`);
 };
 
 // ---------------------------------------------------------------------------
@@ -907,6 +1000,15 @@ cmds.help = () => say(`mc-goals: the register of what you want, and the choice o
                                                                  achieve) and flags the forecasts that depend on it
   adopt|retire|pause|achieve <id> --why "..."
   progress <id> --evidence "..."          what exists now that did not before, and where it was read
+  allow <id> --kind <slug> --what "<the kind of step, plain words>" --per-week <n> --words "<their words, quoted>"
+       [--mode notice|alone]              a standing permission, written once as a MAY line on the card. notice (the
+                                          default): such a step goes out at its set time unless stopped. alone: it
+                                          goes out when ready and is reported after, only for steps that touch the
+                                          person's own pages, files and accounts and reach nobody else. Money,
+                                          sign-ups, bookings, cancellations, a first or bulk message and LinkedIn
+                                          automation always need a fresh yes and are refused here
+  allow <id> --kind <slug> --revoke --words "<their words>"   takes it back; logged as MAY-REVOKED
+  may <id> [--json]                       the goal's standing permissions: kind, what, per week, mode, words, date
   question <id> --text "..."              one clarifying question in seven days per goal, never a second while one is open
   answer <id> --text "<your words>"
   diagnose <id>                           writes goals/diagnoses/<id>-<date>.md with the sections a diagnosis needs
@@ -929,7 +1031,7 @@ cmds.help = () => say(`mc-goals: the register of what you want, and the choice o
 
 return {cmds,plan,parseLead,judge};
 }
-module.exports={createGoalCommands,blocks};
+module.exports={createGoalCommands,blocks,parseMay};
 if(require.main===module){
 const {cmds}=createGoalCommands();
 const {die}=L;
