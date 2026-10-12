@@ -183,3 +183,14 @@ mc-goals list | show <id> | tree | check
 Chapter 7 of the book is the idea behind this folder; Chapter 8, on the daily round, is where
 `mc-decide` puts it to work. The two rooms next door are `forecasts/` (what your mission control expects to
 happen) and `work/` (what it is doing about it).
+
+## Research: what is known about winning a goal, kept current
+
+Every adopted outcome gets `goals/research/<id>/` the moment it is adopted: the top people of
+its field (`people.md`), people who reached it from a start like yours (`cases.md`), what is
+established and what was just proven wrong (`claims.md`), chances with a closing date
+(`openings.md`), where the field's knowledge lives (`sources.md`), and a one-page `brief.md`.
+`mc-research` runs the `goal-research` recipe for each of them every night, and
+`mc-check-research` refuses a night without its sources, its exact quotes or its record in
+`days/`. The daily decision reads the brief first, and every move must copy a person or case
+from these files. `mc-goals research <id> --state` says how far along a goal's research is.
