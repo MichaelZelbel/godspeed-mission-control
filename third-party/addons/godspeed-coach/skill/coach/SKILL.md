@@ -1,6 +1,6 @@
 ---
 name: coach
-description: Recurring coaching talks and daily habits. Use when a coaching talk is due (the talk job's brief says COACH TALK DUE), when the [godspeed-coach] block shows an open talk and the person's message continues it, when they answer the evening habit check (yes / no / skip), when they say they did a habit ("did head lifts", "head lifts done", "Kopfheben erledigt"), when a journal entry clearly names an active habit, when they want a new habit or to pause, graduate or drop one, when they want a new coaching talk ("a weekly health talk on Sundays at seven"), when they say "let's do the health talk now" or name any coach area, and when they change a talk's day, time, tone or rhythm.
+description: Recurring coaching talks and daily habits. Use when a coaching talk is due (the talk job's brief says COACH TALK DUE), when the [godspeed-coach] block shows an open talk and the person's message continues it, when they answer the evening habit check (yes / no / skip), when they say they did a habit ("did head lifts", "head lifts done", "Kopfheben erledigt") or take a tracked day back ("delete the last head lifts"), when a journal entry clearly names an active habit, when they want a new habit or to pause, graduate or drop one, when they want a new coaching talk ("a weekly health talk on Sundays at seven"), when they say "let's do the health talk now" or name any coach area, and when they change a talk's day, time, tone or rhythm.
 ---
 
 ## What this is
@@ -90,12 +90,15 @@ way ("What changed: nothing yet, they want to think about it") and mark it held.
 They say "did stretching", "stretching done", answer the evening check with "yes", "no", "skip"
 or "yes no", or write a journal entry that clearly names an active habit.
 
-A message that starts with "track" belongs to the tracker recipe when this mission control has
-one: it records "track stretching" itself, through the notebook, and nothing more is needed here.
-Without a tracker recipe, "track stretching" means "did stretching".
+"Track stretching" means "did stretching": track it with the command below. Where this mission
+control has the tracker recipe, a message that starts with "track" may reach it first, and it then
+records the habit itself in this same file; either way the day is tracked once.
 
 - One habit: `godspeed-coach habit track "<their words>" --source <telegram | telegram-voice | desk | journal> --words "<verbatim>"`.
   Add `--answer no` or `--answer skip` when they say so, `--date yesterday` for yesterday.
+- Taken back ("delete the last stretching", "undo that", "that was a mistake"):
+  `godspeed-coach habit untrack "<their words>"` removes that habit's newest tracked day
+  (`--date yesterday` for another day). Say what was taken back: "Taken back: stretching, today."
 - The evening check: `godspeed-coach habit answer <yes|no|skip ...> --source <...> --words "<verbatim>"`, one answer per habit in the order the block lists them, or one for all.
 - Reply with a short sentence that makes sense on its own, in their language, saying in plain
   words what was tracked and for which day: "Tracked: stretching, done today." Never pass on the
