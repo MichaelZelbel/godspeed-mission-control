@@ -134,4 +134,25 @@ rm -f "$RUN/settle.txt"
 { full | awk '{print} /^GOAL:/{print "BET: 2 -> 4"}'; echo "UNREAD money-goal:"; } > "$RUN/moves.md"
 OUT="$(run)"; case "$OUT" in *"not read in the last seven days"*) ok "  but an UNREAD line with no reason does not count";; *) bad "  empty UNREAD: $OUT";; esac
 
+# --- WHO DID THIS comes from the goal's research once it has any ---------------------------
+mkdir -p "$TMP/goals/research/kits"
+printf 'CASE: Pieter Levels\nSTART: x\nDID: y\nRESULT: z\nSOURCE: https://example.org (read 2026-09-24)\n\n' > "$TMP/goals/research/kits/cases.md"
+printf 'PERSON: Justin Welsh\nLINK: https://example.org/jw\nWHY: x\nOFFER: y\nSTATUS: unverified\n\n' > "$TMP/goals/research/kits/people.md"
+who3() { { move 1 kits "$1" "x"; move 2 kits "Pieter Levels" "y"; move 3 kits "Pieter Levels" "z"; echo "FEWER health-goal: waiting"; } > "$RUN/moves.md"; run; }
+OUT="$(who3 "Someone Unlisted, read at https://example.org")"
+case "$OUT" in *"WHO DID THIS must name a person or case from goals/research/kits/"*) ok "a name the goal's research does not hold is refused";; *) bad "unlisted name: $OUT";; esac
+OUT="$(who3 "Pieter Levels priced Nomad List in week one (cases.md)")"
+case "$OUT" in *"WHO DID THIS must name a person or case"*) bad "a case from cases.md is accepted: $OUT";; *) ok "a case from cases.md is accepted";; esac
+OUT="$(who3 "justin welsh's profile layout")"
+case "$OUT" in *"WHO DID THIS must name a person or case"*) bad "a person from people.md, any case, accepted: $OUT";; *) ok "a person from people.md is accepted, any letter case";; esac
+# a strategy uses the research of the outcome it serves
+printf 'ID: kits-strategy\nKIND: strategy\nSTATUS: adopted\nSERVES: other-goal, kits\n\n## Log\n' > "$TMP/goals/kits-strategy.md"
+{ move 1 kits-strategy "Someone Unlisted" "x"; move 2 kits-strategy "Pieter Levels" "y"; move 3 kits-strategy "Pieter Levels" "z"; echo "FEWER health-goal: waiting"; } > "$RUN/moves.md"
+OUT="$(run)"
+case "$OUT" in *'for kits-strategy": WHO DID THIS must name a person or case from goals/research/kits/'*) ok "a strategy is held to the research of the outcome it serves";; *) bad "strategy via SERVES: $OUT";; esac
+[ "$(printf '%s\n' "$OUT" | grep -c 'WHO DID THIS must name a person or case')" = "1" ] && ok "  and only the move with the unlisted name" || bad "  only the unlisted move: $OUT"
+rm -r "$TMP/goals/research/kits"
+OUT="$(who3 "Someone Unlisted, read at https://example.org")"
+case "$OUT" in *"WHO DID THIS must name a person or case"*) bad "no research: old behaviour expected: $OUT";; *) ok "with no research for the goal the unlisted name passes this rule again";; esac
+
 echo; echo "$PASS passed, $FAIL failed"; [ "$FAIL" -eq 0 ]

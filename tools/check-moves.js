@@ -50,6 +50,35 @@ const RUN = path.join(ROOT, 'routines', 'next-action', DATE);
 
 const problems = [];
 const read = (p) => { try { return fs.readFileSync(p, 'utf8').replace(/\r/g, ''); } catch (e) { return null; } };
+const { blocks: parseBlocks } = require(path.join(__dirname, 'goals.js'));
+// Which goal's research a move is held to: the goal's own folder if it has one, else the folder of
+// the first outcome its card says it SERVES that has one (a strategy uses the research of the
+// outcome it serves). Returns the research goal id, or null when no research exists.
+const SAFE_ID = /^[a-z0-9][a-z0-9-]*$/;
+const hasResearch = (id) => SAFE_ID.test(id) && fs.existsSync(path.join(ROOT, 'goals', 'research', id));
+function researchGoal(goal) {
+  if (!SAFE_ID.test(goal)) return null;
+  if (hasResearch(goal)) return goal;
+  const card = read(path.join(ROOT, 'goals', goal + '.md'));
+  const m = card && card.match(/^SERVES:[ 	]*(.*)$/m);
+  if (!m) return null;
+  return m[1].split(',').map(s => s.trim()).filter(Boolean).find(hasResearch) || null;
+}
+// The names a goal's research knows: its cases and its people. Once a goal has any, a move for it
+// copies one of them, because a move copies what worked for somebody we actually read about
+// (2026-10-11: the moves had been copying names from the model's memory).
+const researchNames = {};
+function namesOf(goal) {
+  const rg = researchGoal(goal);
+  if (!rg) return { from: null, names: [] };
+  if (!(rg in researchNames)) {
+    const dir = path.join(ROOT, 'goals', 'research', rg);
+    researchNames[rg] = [...parseBlocks(read(path.join(dir, 'cases.md')), 'CASE').map(b => b.CASE),
+                         ...parseBlocks(read(path.join(dir, 'people.md')), 'PERSON').map(b => b.PERSON)]
+      .filter(Boolean).map(s => s.toLowerCase());
+  }
+  return { from: rg, names: researchNames[rg] };
+}
 const days = (a, b) => Math.round((new Date(b + 'T00:00:00Z') - new Date(a + 'T00:00:00Z')) / 86400000);
 function leadOf(goal) {
   if (!/^[a-z0-9][a-z0-9-]*$/.test(goal)) return null;
@@ -109,6 +138,10 @@ for (const b of blocks) {
   const who = f['WHO DID THIS'] || '';
   if (/\b(his own|my own|her own|their own|this mission control|mission control's own)\b|W-\d{8}-\d+|ideas\//i.test(who)) {
     problems.push(`move "${title}": WHO DID THIS must name somebody outside who did this, not the person's or the mission control's own work`);
+  }
+  const known = goal ? namesOf(goal) : { from: null, names: [] };
+  if (known.names.length && !known.names.some(n => who.toLowerCase().includes(n))) {
+    problems.push(`move "${title}": WHO DID THIS must name a person or case from goals/research/${known.from}/ (cases.md or people.md); if the one you copied is not there, add them there first with the source you read`);
   }
   // A move on the ship list that the mission control applies needs its work item named, or a
   // "ship 2" answer reaches nothing (ship-list-apply reads this line).
