@@ -5,9 +5,16 @@
 # ones researched longest ago first), it runs the goal-research recipe for that one goal through
 # mc-run, then checks the night with mc-check-research --fetch. A night that falls short is sent
 # back ONCE with the exact gaps. A night that still falls short, or never ran, leaves
-# goals/research/<id>/days/<date>.gap.md, so a missing night can never read as a quiet one.
+# goals/research/<id>/days/<date>.gap.md, so a missing night can never read as a quiet one; a day
+# record that failed its check is renamed <date>.unchecked.md so it does not count as a night.
 #
-# IT NEVER CONTACTS ANYONE AND NEVER SPENDS. The recipe only reads pages and writes files.
+# THE TIME BUDGET (--budget-minutes, default 130) bounds when the run FINISHES: a goal starts only
+# if the time already used, plus its timeout (900 s daily, 2700 s founding) and the 900 s fix
+# round, still fits. Goals that do not fit are named in the summary and the run exits 1.
+#
+# IT NEVER CONTACTS ANYONE AND NEVER SPENDS. The recipe only reads pages and writes files. With
+# claude that is enforced: the shell is limited to the checker and a few readers. Hermes and
+# Codex ignore the tool list, so there the read-only rule rests on the recipe's wording.
 #
 # RUN IT BY HAND:   mc-research            (or --only <id> for one goal, --dry-run to see the list)
 # ONCE A NIGHT, before your daily decision (crontab -e):
@@ -25,7 +32,7 @@ while [ $# -gt 0 ]; do
     --timeout-daily) TD="$2"; shift 2 ;;
     --timeout-founding) TF="$2"; shift 2 ;;
     --dry-run) DRY=1; shift ;;
-    -h|--help) sed -n '2,16p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,24p' "$0"; exit 0 ;;
     *) echo "mc-research: I do not know the argument $1" >&2; exit 2 ;;
   esac
 done
@@ -59,19 +66,24 @@ g() { GODSPEED_ROOT="$GODSPEED" GODSPEED_TODAY="$TODAY" "$NODE" "$GOALS" "$@"; }
 RUNDIR="$GODSPEED/routines/research/$TODAY"; mkdir -p "$RUNDIR"
 SUMMARY="$RUNDIR/summary.txt"
 
-DUE="$(g research --due --date "$TODAY" ${ONLY:+--only "$ONLY"})"
+DUE="$(g research --due --date "$TODAY" ${ONLY:+--only "$ONLY"})" || { echo "mc-research: could not read the due list" >&2; exit 1; }
 if [ "$DRY" -eq 1 ]; then echo "Due tonight ($TODAY):"; printf '%s\n' "${DUE:-nothing}"; exit 0; fi
 [ -n "$DUE" ] || { echo "$TODAY: nothing due" >> "$SUMMARY"; echo "nothing due $TODAY"; exit 0; }
 
 # The assistant gets /dev/null as its input: the list of goals is read from descriptor 3 below,
 # and an assistant that reads its standard input must never swallow the goals still to come.
+# claude gets only these tools, so a research night cannot reach out through the shell: Bash is
+# limited to the checker, the goals tool and three harmless readers. mc-run passes the list to
+# `claude --allowedTools` as separate words, so each Bash(...) pattern (no spaces inside) survives.
+# Hermes and Codex ignore the list; with them the read-only rule rests on the recipe's wording.
+TOOLS="Bash(mc-check-research:*) Bash(mc-goals:*) Bash(ls:*) Bash(wc:*) Bash(date:*) Read Grep Glob Write Edit WebSearch WebFetch"
 recipe() { # prompt timeout out
   if [ -n "$EXTRA" ] && [ -f "$EXTRA" ]; then
     bash "$RUNNER" goal-research --godspeed "$GODSPEED" --cwd "$GODSPEED" --prompt-file "$EXTRA" --prompt "$1" \
-      --timeout "$2" --out "$3" --allowed-tools "Bash Read Grep Glob Write Edit WebSearch WebFetch" < /dev/null || true
+      --timeout "$2" --out "$3" --allowed-tools "$TOOLS" < /dev/null || true
   else
     bash "$RUNNER" goal-research --godspeed "$GODSPEED" --cwd "$GODSPEED" --prompt "$1" \
-      --timeout "$2" --out "$3" --allowed-tools "Bash Read Grep Glob Write Edit WebSearch WebFetch" < /dev/null || true
+      --timeout "$2" --out "$3" --allowed-tools "$TOOLS" < /dev/null || true
   fi
 }
 count_people() { g research "$1" --state --json --date "$TODAY" 2>/dev/null | "$NODE" -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{console.log(JSON.parse(s).people)}catch(e){console.log(0)}})'; }
@@ -79,11 +91,12 @@ count_people() { g research "$1" --state --json --date "$TODAY" 2>/dev/null | "$
 START=$(date +%s); BAD=0; SKIPPED=""
 while read -r ID MODE LAST <&3; do
   [ -n "$ID" ] || continue
-  if [ $(( ($(date +%s) - START) / 60 )) -ge "$BUDGET" ]; then SKIPPED="$SKIPPED $ID"; continue; fi
+  T="$TD"; [ "$MODE" = founding ] && T="$TF"
+  # A goal starts only if its whole night (the timeout, plus the 900 seconds of the fix round) still fits.
+  if [ $(( $(date +%s) - START + T + 900 )) -gt $(( BUDGET * 60 )) ]; then SKIPPED="$SKIPPED $ID"; continue; fi
   g research "$ID" >/dev/null
   BEFORE="$(count_people "$ID")"
-  T="$TD"; [ "$MODE" = founding ] && T="$TF"
-  PROMPT="Today is $TODAY (UTC). Goal: $ID. Mode: $MODE. Its research folder is goals/research/$ID (last completed night: $LAST). Follow the goal-research recipe exactly for this one goal: update the files, rewrite brief.md with UPDATED: $TODAY, write goals/research/$ID/days/$TODAY.md, file the ideas the recipe asks for, and run mc-check-research --goal $ID --date $TODAY --mode $MODE until it prints OK. Your final answer is one plain sentence."
+  PROMPT="Today is $TODAY (UTC). Goal: $ID. Mode: $MODE. Its research folder is goals/research/$ID (last completed night: $LAST). Follow the goal-research recipe exactly for this one goal: update the files, rewrite brief.md with UPDATED: $TODAY, write goals/research/$ID/days/$TODAY.md, file the ideas the recipe asks for, and run mc-check-research --goal $ID --date $TODAY --mode $MODE --fetch until it prints OK. Your final answer is one plain sentence."
   recipe "$PROMPT" "$T" "$RUNDIR/$ID.answer.txt"
   CHK=(--godspeed "$GODSPEED" --goal "$ID" --date "$TODAY" --mode "$MODE" --before-people "$BEFORE" --fetch)
   if ! GAPS="$("$NODE" "$CHECK" "${CHK[@]}" 2>&1)"; then
@@ -92,7 +105,12 @@ $GAPS
 Follow the goal-research recipe for exactly these gaps, in goals/research/$ID, and run the check again until it prints OK. Your final answer is one plain sentence."
     recipe "$FIX" 900 "$RUNDIR/$ID.answer-fix.txt"
     GAPS="$("$NODE" "$CHECK" "${CHK[@]}" 2>&1)" || {
-      { echo "# $ID $TODAY: the research night did not complete"; echo; echo "Written by mc-research so that a missing night is not read as a quiet one. The check said:"; echo; echo "$GAPS"; } \
+      # The day file is set aside, so a night that failed its check never counts as a night done.
+      MOVED=""
+      if [ -f "$GODSPEED/goals/research/$ID/days/$TODAY.md" ]; then
+        mv "$GODSPEED/goals/research/$ID/days/$TODAY.md" "$GODSPEED/goals/research/$ID/days/$TODAY.unchecked.md" && MOVED="yes"
+      fi
+      { echo "# $ID $TODAY: the research night did not complete"; echo; echo "Written by mc-research so that a missing night is not read as a quiet one.${MOVED:+ The day record failed the check and was renamed days/$TODAY.unchecked.md, so it does not count as a night.} The check said:"; echo; echo "$GAPS"; } \
         > "$GODSPEED/goals/research/$ID/days/$TODAY.gap.md"
       echo "$ID: NOT COMPLETED ($MODE); see goals/research/$ID/days/$TODAY.gap.md" >> "$SUMMARY"
       printf '%s\n' "$GAPS" > "$RUNDIR/$ID.check.txt"
