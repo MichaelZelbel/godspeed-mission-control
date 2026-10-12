@@ -1,6 +1,6 @@
 {
   "name": "godspeed-headache",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "A headache diary you talk to, for Godspeed Mission Control: say when it started, how bad, where, what you took and when it ended, and mission control keeps the log and finds the pattern. An add-on for Teach It Once.",
   "license": "MIT",
   "type": "module",

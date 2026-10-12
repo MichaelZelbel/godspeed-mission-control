@@ -8,7 +8,7 @@ import { localParts } from "./clock.mjs";
 
 export const ROOT = path.join("routines", "headache");
 const ARRAYS = new Set(["symptoms", "triggers"]);
-const ORDER = ["at", "kind", "episode", "start", "end", "pain", "side", "quality", "symptoms", "triggers", "med", "dose", "taken", "source"];
+const ORDER = ["at", "kind", "episode", "start", "end", "pain", "side", "quality", "symptoms", "triggers", "med", "dose", "taken", "untimed", "source"];
 
 export function slugify(text) {
   const s = String(text || "").replace(/ß/g, "ss").replace(/ä/g, "ae").replace(/ö/g, "oe").replace(/ü/g, "ue")

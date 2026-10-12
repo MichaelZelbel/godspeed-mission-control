@@ -46,7 +46,8 @@ test('"track walk to work", "track headache since 6:30, right side" and "track b
  assert.match(context.personal.headache.open,/\[godspeed-headache\] Open headache[\s\S]*h-20261012-0630: 2026-10-12: since 06:30/);
  assert.equal(context.personal.trackers.find(t=>t.specialist==='headache').id,headaches.id,'the Headaches tracker is supplied, marked as the headache tracker\'s');
  r=await say(domains,'took one ibuprofen, and the headache is over',[{type:'headache',action:'med',meds:[{med:'Ibuprofen',dose:'1 tablet'}]},{type:'headache',action:'end'}]);
- assert.equal(r.reply,'Tracked: since 06:30, still going (30 min), right, took Ibuprofen 1 tablet at 07:00. Tracked: 06:30-07:00, 30 min, right, took Ibuprofen 1 tablet at 07:00.');
+ // He said no time for the pill, so no time is said for it (the capture run of 12 October 2026).
+ assert.equal(r.reply,'Tracked: since 06:30, still going (30 min), right, took Ibuprofen 1 tablet. Tracked: 06:30-07:00, 30 min, right, took Ibuprofen 1 tablet.');
  // 3. Belly, an ordinary tracker.
  context=chatContext(query,{message:'track belly 95',conversation_id:'c1'});
  const belly=context.personal.trackers.find(t=>t.name==='Belly');

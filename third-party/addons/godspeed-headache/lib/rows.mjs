@@ -11,7 +11,7 @@
 // it is exact to the millisecond).
 import { localParts } from "./clock.mjs";
 import { localToInstant } from "./when.mjs";
-import { normSide, normQuality, parseMed } from "./episodes.mjs";
+import { normSide, normQuality, parseMed, medOf } from "./episodes.mjs";
 
 export const FIELDS = Object.freeze([
   { key: "when", label: "Started", type: "datetime", primary: true },
@@ -54,23 +54,31 @@ export function instantOf(value, tz) {
 const list = (value) => [...new Set(String(value ?? "").split(/\s*[,;]\s*/).map((x) => x.trim().toLowerCase()).filter(Boolean))];
 const num = (value) => { if (value === null || value === undefined || value === "") return null; const n = Number(String(value).replace(",", ".")); return Number.isFinite(n) ? n : null; };
 
-// "Thomapyrin Intensiv: 2 tablets at 08:20; Ibuprofen at 2026-10-13 01:10". A pill with no time is
-// taken at the start of the row.
+// "Thomapyrin Intensiv: 2 tablets at 08:20; Ibuprofen at 2026-10-13 01:10; Ibuprofen: 1 (time not
+// given)". A pill with no time counts on the day of the row's start. One marked "(time not given)"
+// is untimed, so no time is said or reckoned with for it; it counts on the day of the row's start,
+// or on the day it names ("Ibuprofen: 1 on 2026-10-13 (time not given)").
+export const UNTIMED = "(time not given)";
+const UNTIMED_MARK = /\s*\((?:time not given|no time given|zeit nicht angegeben|ohne uhrzeit)\)\s*$/i;
 export function parseMeds(text, start, tz) {
   const startDay = start ? localParts(start, tz).date : null, out = [];
-  for (const part of String(text ?? "").split(/\s*;\s*/).map((x) => x.trim()).filter(Boolean)) {
-    const m = part.match(/^(.*?)\s+at\s+(?:(\d{4}-\d{2}-\d{2})[ T])?(\d{1,2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?)\s*$/i);
+  for (const said of String(text ?? "").split(/\s*;\s*/).map((x) => x.trim()).filter(Boolean)) {
+    const untimed = UNTIMED_MARK.test(said), bare = said.replace(UNTIMED_MARK, "").trim();
+    const onDay = untimed ? bare.match(/^(.*?)\s+on\s+(\d{4}-\d{2}-\d{2})$/) : null, part = onDay ? onDay[1] : bare;
+    const m = untimed ? null : part.match(/^(.*?)\s+at\s+(?:(\d{4}-\d{2}-\d{2})[ T])?(\d{1,2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?)\s*$/i);
     const med = parseMed(m ? m[1] : part);
     if (!med) continue;
     let taken = start;
     if (m && (m[2] || startDay)) taken = instantOf(`${m[2] || startDay} ${m[3]}`, tz) || start;
-    out.push({ med: med.med, dose: med.dose, taken: taken ? taken.toISOString() : null });
+    if (onDay) taken = instantOf(onDay[2], tz) || start;
+    out.push({ med: med.med, dose: med.dose, taken: taken ? taken.toISOString() : null, ...(untimed ? { untimed: true } : {}) });
   }
   return out;
 }
 export function formatMeds(meds, start, tz) {
   const startDay = start ? localParts(new Date(start), tz).date : null;
   return meds.map((m) => {
+    if (m.untimed) { const day = m.taken ? localParts(new Date(m.taken), tz).date : null; return `${m.med}${m.dose ? ": " + m.dose : ""}${day && day !== startDay ? " on " + day : ""} ${UNTIMED}`; }
     const stamp = m.taken ? localStamp(m.taken, tz) : "";
     const time = stamp && stamp.slice(0, 10) === startDay ? stamp.slice(11) : stamp;
     return `${m.med}${m.dose ? ": " + m.dose : ""}${time ? " at " + time : ""}`;
@@ -113,7 +121,8 @@ export function rowData(state, tz, keep = {}) {
   const out = Object.fromEntries(Object.entries(keep || {}).filter(([k]) => !OWN.has(k)));
   const set = (key, value) => { if (value !== null && value !== undefined && value !== "") out[key] = value; };
   if (state.kind === "pill") {
-    set("when", localStamp(state.meds[0].taken, tz));
+    // A pill with no time said is a pill of that day: the row's start is the day, not a time.
+    set("when", state.meds[0].untimed ? localParts(new Date(state.meds[0].taken), tz).date : localStamp(state.meds[0].taken, tz));
     set("medication", formatMeds(state.meds, state.meds[0].taken, tz));
     set("words", state.words.join("\n").trim());
     set("kind", "pill");
@@ -145,7 +154,7 @@ export function applyEntries(log, entries) {
   for (const e of ordered) {
     if (e.kind === "med" && !e.episode) {
       const pill = pills.at(-1);
-      const med = { med: e.med, dose: e.dose || "", taken: e.taken || e.at };
+      const med = medOf(e);
       if (pill) { pill.meds.push(med); if (e.words) pill.words.push(e.words); }
       else pills.push({ kind: "pill", meds: [med], words: e.words ? [e.words] : [] });
       continue;
@@ -166,7 +175,7 @@ export function applyEntries(log, entries) {
     if (e.quality) ep.quality = e.quality;
     for (const x of e.symptoms || []) if (!ep.symptoms.includes(x)) ep.symptoms.push(x);
     for (const x of e.triggers || []) if (!ep.triggers.includes(x)) ep.triggers.push(x);
-    if (e.kind === "med") ep.meds.push({ med: e.med, dose: e.dose || "", taken: e.taken || e.at });
+    if (e.kind === "med") ep.meds.push(medOf(e));
     if (e.words) ep.words.push(e.words);
   }
   const changed = [...touched].filter((id) => !removed.has(id)).map((id) => byId.get(id));

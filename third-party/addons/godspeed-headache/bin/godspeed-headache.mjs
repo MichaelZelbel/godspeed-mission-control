@@ -91,10 +91,13 @@ function details() {
   return d;
 }
 
-// A pill said without a time: see the caller for which moment it defaults to.
+// A pill said without a time is kept without one ("untimed"): it still counts on its day (see the
+// caller for which moment stands for that day), but nothing says or reckons with a time nobody gave.
+// Until 0.3.1 it was stamped with the moment of the message, and "took one ibuprofen" came back as
+// "took ibuprofen 1 at 06:41" (the book's capture run of 12 October 2026). "--taken now" is a time.
 function medEntries(episode, defaultTaken) {
   const taken = (f.taken ? when(f.taken) : defaultTaken || at).toISOString();
-  return f.med.map(parseMed).filter(Boolean).map((m) => ({ kind: "med", episode, med: m.med, dose: m.dose || f.dose || "", taken }));
+  return f.med.map(parseMed).filter(Boolean).map((m) => ({ kind: "med", episode, med: m.med, dose: m.dose || f.dose || "", taken, ...(f.taken ? {} : { untimed: true }) }));
 }
 
 function needEpisode(opts) {
@@ -151,7 +154,7 @@ const commands = {
     const meds = medEntries(ep?.id, null);
     if (f.words && meds.length) meds[0].words = f.words;
     saveAll(meds, `med ${f.med.join(", ")}`);
-    out(ep ? `Saved: ${describe(show(ep.id), tz, at)}` : `Saved: ${f.med.join(", ")} at ${localParts(f.taken ? when(f.taken) : at, tz).hm}, no headache open.`, { ok: true, episode: ep ? show(ep.id) : null });
+    out(ep ? `Saved: ${describe(show(ep.id), tz, at)}` : `Saved: ${f.med.join(", ")}${f.taken ? ` at ${localParts(when(f.taken), tz).hm}` : ""}, no headache open.`, { ok: true, episode: ep ? show(ep.id) : null });
   },
   end() {
     const ep = needEpisode();

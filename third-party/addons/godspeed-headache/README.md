@@ -36,8 +36,8 @@ a sentence to your assistant, and every entry is a small text file in your own m
 - **In the notebook, one row per headache.** In a mission control with the Godspeed notebook
   (a `notebook/` folder and its `.godspeed/` state), the diary is the notebook's **Headaches
   tracker**: a collection with one row per headache (started, ended, minutes, strongest and first
-  pain, where, what it felt like, symptoms, possible trigger, every pill with its time, your own
-  words) and one row per pill taken with no headache going on. You can sort and edit it in the
+  pain, where, what it felt like, symptoms, possible trigger, every pill with its time when you
+  said one, your own words) and one row per pill taken with no headache going on. You can sort and edit it in the
   notebook like any table, and the next command reads your edit. The command writes the rows as
   the notebook writes its records, under the notebook's own writer lock.
 - **Without the notebook, entries, never edits.** Every sentence becomes one file under
@@ -62,7 +62,7 @@ medicine with its dose and time. German words are understood (links, rechts, poc
 
 `godspeed-headache patterns` over any number of days: how many headaches and on how many days,
 typical length, strongest pain, time of day, weekday, side, kind, triggers, which medicines, how
-long from the first pill to the end, and your **painkiller days in any 30**, against the limit
+long from the first pill to the end (for pills whose time you said), and your **painkiller days in any 30**, against the limit
 where frequent painkillers start causing headaches themselves (10 days a month for combination
 painkillers, 15 for plain ones). With a daily health table (`daily_table` in the settings), it
 compares headache days with free days, column by column, once each side has five days.

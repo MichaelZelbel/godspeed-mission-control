@@ -59,8 +59,8 @@ the ids are in the [godspeed-headache] block, and `godspeed-headache list --days
 ### Reading what they said
 
 - **Times.** Pass what they said: `06:30`, `yesterday 22:00`, `2026-09-26 22:00`, or relative
-  as `-30m`, `-2h`. "Since half past six" is `06:30`; "an hour ago" is `-1h`; no time given is now.
-  The command works out the day (a time later than now means yesterday; an end before the start
+  as `-30m`, `-2h`. "Since half past six" is `06:30`; "an hour ago" is `-1h`; a headache with no
+  time given started now. The command works out the day (a time later than now means yesterday; an end before the start
   means the next day). Never do clock sums yourself.
 - **Pain** is 0 to 10 and only ever a number they gave ("a 3", "drei von zehn"). Words like "mild"
   or "brutal" are not numbers: keep them in `--words`, do not invent a figure.
@@ -74,6 +74,9 @@ the ids are in the [godspeed-headache] block, and `godspeed-headache list --days
   short words. Never guess a trigger.
 - **Medicine**: name and dose as said. "Two Thomapyrin" is `--med "Thomapyrin Intensiv: 2 tablets"`
   when the [godspeed-headache] block or their earlier entries show that is the one they use.
+- **When a pill was taken**: only a time they said. `--taken 06:45` for "at quarter to seven",
+  `--taken now` for "just took one" or "taking one now". "Took one ibuprofen" says no time: leave
+  `--taken` out, and the pill is kept without a time. Never give it the time of their message.
 
 One message can hold several moves ("headache is gone, took another pill at 8"): save each, in
 order (here `med --taken 08:00`, then `end`).
@@ -81,7 +84,8 @@ order (here `med --taken 08:00`, then `end`).
 ## What to say
 
 One line, in their language, built from the command's own `Saved:` output, for example
-`Saved: since 06:30, pain 3, right side, pounding, 2 Thomapyrin at 06:45.` Then stop.
+`Saved: since 06:30, pain 3, right side, pounding, 2 Thomapyrin at 06:45.` Then stop. A pill the
+output gives no time has none in your line either ("took 1 ibuprofen").
 
 - **When a new headache has no pain number**, you may add one short question: `How strong, 1 to 10?`
   (German: `Wie stark, 1 bis 10?`). Only that one, only on a start, never twice. Everything else

@@ -219,8 +219,19 @@ function fits(file, title) {
   return base === name || (base.startsWith(name + " ") && /^(?:[2-9]|[1-9]\d+)$/.test(base.slice(name.length + 1)));
 }
 
-// The tracker itself, made the way the notebook makes a collection (its query.mjs defaults).
-export function createTracker(mcDir, { name = "Headaches", fields, names, talk = "health", now = new Date() }) {
+// Whether the coach has a talk of that area: coach/<area>/area.md with a talk rhythm (an area made
+// for a habit alone has RHYTHM none). The notebook's trackers.mjs talkExists reads it the same way.
+export function talkExists(mcDir, area) {
+  let text = "";
+  try { text = fs.readFileSync(path.join(mcDir, "coach", area, "area.md"), "utf8"); } catch { return false; }
+  const rhythm = ((text.replace(/\r/g, "").split("\n\n")[0].match(/^RHYTHM:[ \t]*(.*)$/m) || [])[1] || "").trim().toLowerCase();
+  return Boolean(rhythm) && rhythm !== "none";
+}
+
+// The tracker itself, made the way the notebook makes a collection (its query.mjs defaults). The
+// health talk reads it only when this mission control has a health talk (Mission Control's D-321:
+// a new one has none, and a tracker never names a talk that is not there).
+export function createTracker(mcDir, { name = "Headaches", fields, names, talk = talkExists(mcDir, "health") ? "health" : null, now = new Date() }) {
   const existing = markdownIn(path.join(mcDir, NOTEBOOK, "Collections")).map(readRecord).filter((r) => r && r.type === "collections");
   const plain = readableSlug(name);
   const uid = randomUUID(), stamp = now.toISOString();

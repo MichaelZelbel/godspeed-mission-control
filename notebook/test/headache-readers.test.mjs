@@ -13,9 +13,10 @@ test('the notebook\'s health rows and its health summary read the Headaches trac
   const {store,query,domains}=fixture();
   await say(domains,'/headache start --pain 3 --side right --med "Ibuprofen: 400 mg" --words "Fictional headache"');
   const tracker=headacheTracker(store);assert.ok(tracker,'the first headache starts the tracker');
-  assert.equal(tracker.tracker.specialist,'headache');assert.equal(tracker.tracker.talk,'health');
+  // No health talk here, so no talk reads it; the pill had no time said, so it has none (D-321).
+  assert.equal(tracker.tracker.specialist,'headache');assert.equal(tracker.tracker.talk,null);
   const [row]=store.list('collection_items').filter(i=>i.collection_id===tracker.id);
-  assert.equal(row.data.side,'right');assert.equal(row.data.medication.startsWith('Ibuprofen: 400 mg at '),true);
+  assert.equal(row.data.side,'right');assert.equal(row.data.medication,'Ibuprofen: 400 mg (time not given)');
   assert.equal(fs.existsSync(path.join(store.root,'routines','headache','entries')),false,'no entry file');
   // The add-on wrote these files itself: the notebook reads them as its own, with nothing to fix.
   store.scan(true);assert.deepEqual(store.problems,[]);

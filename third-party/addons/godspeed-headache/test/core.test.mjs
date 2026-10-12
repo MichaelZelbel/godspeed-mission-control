@@ -204,6 +204,30 @@ test("a pill keeps the person's words, once, with a headache open or not, from -
   ]);
 });
 
+// The book's capture run of 12 October 2026: "took one ibuprofen", said with no time, came back as
+// "took ibuprofen 1 at 06:41", the moment of the message stated as when it was taken.
+test("a pill said without a time is kept without one: never said with a time, still counted on its day", () => {
+  const dir = mc();
+  let r = cli(dir, "2026-10-12T04:41:00Z", "start", "--at", "06:30", "--side", "right", "--med", "ibuprofen: 1", "--words", "track headache since 6:30, right side, took one ibuprofen");
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /^Saved: 2026-10-12: since 06:30, still going \(11 min\); right; took ibuprofen 1 \(h-20261012-0630\)\n$/);
+  r = cli(dir, "2026-10-12T04:42:00Z", "set", "--pain", "4", "--json");
+  assert.deepEqual(JSON.parse(r.stdout).episode.meds.map((m) => m.untimed), [true]);
+  r = cli(dir, "2026-10-12T04:43:00Z", "end");
+  assert.match(r.stdout, /06:30-06:43, 13 min; pain 4; right; took ibuprofen 1$/m);
+  assert.doesNotMatch(r.stdout, / at \d/);
+  // Counted on its day, as before; no "pill to end" figure rests on a time nobody gave.
+  assert.match(cli(dir, "2026-10-12T05:00:00Z", "daily", "--csv").stdout, /2026-10-12,13,4,1,1/);
+  const p = JSON.parse(cli(dir, "2026-10-12T05:00:00Z", "patterns", "--json").stdout);
+  assert.equal(p.painkiller_days, 1);
+  assert.equal(p.pill_episodes, 0);
+  // A time said is a time: "--taken now", or a clock time.
+  r = cli(dir, "2026-10-12T05:01:00Z", "med", "Ibuprofen", "--taken", "now");
+  assert.match(r.stdout, /^Saved: Ibuprofen at 07:01, no headache open\.$/m);
+  r = cli(dir, "2026-10-12T05:02:00Z", "med", "Ibuprofen");
+  assert.match(r.stdout, /^Saved: Ibuprofen, no headache open\.$/m);
+});
+
 test("a pill with no headache open is still saved", () => {
   const dir = mc();
   const r = cli(dir, "2026-09-27T07:10:00Z", "med", "Thomapyrin Intensiv", "--dose", "1 tablet");

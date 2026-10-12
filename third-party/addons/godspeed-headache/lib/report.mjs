@@ -18,7 +18,7 @@ export function describe(ep, tz, now) {
   if (ep.quality) bits.push(ep.quality);
   if (ep.symptoms.length) bits.push(ep.symptoms.join(", "));
   if (ep.triggers.length) bits.push(`trigger: ${ep.triggers.join(", ")}`);
-  if (ep.meds.length) bits.push(`took ${ep.meds.map((m) => `${m.med}${m.dose ? ` ${m.dose}` : ""} at ${hm(m.taken, tz)}`).join(", ")}`);
+  if (ep.meds.length) bits.push(`took ${ep.meds.map((m) => `${m.med}${m.dose ? ` ${m.dose}` : ""}${m.untimed ? "" : ` at ${hm(m.taken, tz)}`}`).join(", ")}`);
   return `${d}: ${bits.join("; ")}`;
 }
 
@@ -87,7 +87,8 @@ export function patterns(log, s, now, { days = 90 } = {}) {
   const wd = (iso) => localParts(new Date(iso), tz).weekday;
   const closed = eps.filter((e) => !e.open);
   const reliefs = [];
-  for (const e of closed) if (e.meds.length) reliefs.push(Math.round((Date.parse(e.end) - Date.parse(e.meds[0].taken)) / 60000));
+  // From the first pill with a time said to the end; a pill with no time gives no such figure.
+  for (const e of closed) { const timed = e.meds.filter((m) => !m.untimed); if (timed.length) reliefs.push(Math.round((Date.parse(e.end) - Date.parse(timed[0].taken)) / 60000)); }
   const r = {
     window: { from, to, days },
     episodes: eps.length,

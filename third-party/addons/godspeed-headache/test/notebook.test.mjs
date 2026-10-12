@@ -50,6 +50,36 @@ test("pills are one readable line, with the day when it is not the start's", () 
   assert.deepEqual(parseMeds("Aspirin: 1 tablet at night", new Date(start), TZ), [{ med: "Aspirin", dose: "1 tablet at night", taken: start }]);
 });
 
+test("the health talk reads the new Headaches tracker only when there is a health talk", () => {
+  const dir = mc(), area = path.join(dir, "coach", "health");
+  fs.mkdirSync(area, { recursive: true });
+  // An area made for a habit alone has no talk.
+  fs.writeFileSync(path.join(area, "area.md"), "AREA: health\nTITLE: Health\nRHYTHM: none\nSTATUS: on\n\n## Preparation\n\nx\n");
+  ok(cli(dir, "2026-10-12T04:41:00Z", "start", "--at", "06:30"));
+  assert.equal(findTracker(dir).tracker.talk, null);
+  const other = mc();
+  fs.mkdirSync(path.join(other, "coach", "health"), { recursive: true });
+  fs.writeFileSync(path.join(other, "coach", "health", "area.md"), "AREA: health\nTITLE: Health\nRHYTHM: weekly sunday\nTIME: 19:00\nSTARTS: 2026-10-01\nSTATUS: on\n\n## Preparation\n\nx\n");
+  ok(cli(other, "2026-10-12T04:41:00Z", "start", "--at", "06:30"));
+  assert.equal(findTracker(other).tracker.talk, "health");
+});
+
+test("a pill with no time said reads back without one, on its own day, in the headache's row", () => {
+  const dir = mc();
+  let r = ok(cli(dir, "2026-10-12T04:41:00Z", "start", "--at", "06:30", "--side", "right", "--med", "ibuprofen: 1", "--words", "took one ibuprofen"));
+  assert.match(r.stdout, /right; took ibuprofen 1 \(h-20261012-0630\)$/m);
+  assert.equal(rows(dir)[0].data.medication, "ibuprofen: 1 (time not given)");
+  r = ok(cli(dir, "2026-10-12T04:42:00Z", "set", "--pain", "4"));
+  assert.match(r.stdout, /pain 4; right; took ibuprofen 1$/m);
+  assert.equal(rows(dir)[0].data.medication, "ibuprofen: 1 (time not given)", "it stays so through the next command");
+  // A headache from last night, its pill this morning: the row names the pill's day.
+  ok(cli(dir, "2026-10-12T04:50:00Z", "log", "--from", "yesterday 22:00", "--to", "23:30"));
+  const late = rows(dir).find((i) => i.data.when.startsWith("2026-10-11"));
+  const meds = parseMeds("Aspirin: 1 on 2026-10-12 (time not given)", instantOf(late.data.when, TZ), TZ);
+  assert.deepEqual(meds, [{ med: "Aspirin", dose: "1", taken: instantOf("2026-10-12", TZ).toISOString(), untimed: true }]);
+  assert.equal(formatMeds(meds, instantOf(late.data.when, TZ).toISOString(), TZ), "Aspirin: 1 on 2026-10-12 (time not given)");
+});
+
 test("a row he edited reads as the table says: strongest pain is the strongest", () => {
   const item = (data) => ({ id: "collection-items-x", data });
   const { episodes } = logFromRows([item({ when: "2026-10-01 08:00", end: "2026-10-01T10:00", pain: 3, pain_first: 5, side: "Links", triggers: "neck, Pillow" })], TZ);
@@ -67,7 +97,8 @@ test("with a notebook and no diary, the first headache starts the Headaches trac
   assert.match(r.stdout, /since 06:30.*pain 3; right; pounding; took Thomapyrin Intensiv 2 tablets at 06:45/);
   const tracker = findTracker(dir);
   assert.equal(tracker.name, "Headaches");
-  assert.deepEqual(tracker.tracker, { names: ["Headaches", "Headache", "Kopfschmerzen", "Kopfweh"], cadence: "any", talk: "health", specialist: "headache" });
+  // This mission control has no health talk, so no talk reads the tracker (Mission Control's D-321).
+  assert.deepEqual(tracker.tracker, { names: ["Headaches", "Headache", "Kopfschmerzen", "Kopfweh"], cadence: "any", talk: null, specialist: "headache" });
   assert.deepEqual(tracker.field_schema.map((f) => f.key), ["when", "end", "minutes", "pain", "pain_first", "side", "quality", "symptoms", "triggers", "medication", "words", "episode", "kind"]);
   assert.equal(fs.existsSync(path.join(dir, "routines", "headache", "entries")), false, "no entry file is written");
   assert.deepEqual(rows(dir).map((i) => i.data), [{ when: "2026-09-27 06:30", pain: 3, pain_first: 3, side: "right", quality: "pounding", medication: "Thomapyrin Intensiv: 2 tablets at 06:45", words: "Kopfschmerz rechts", episode: "h-20260927-0630", kind: "headache" }]);
@@ -92,12 +123,15 @@ test("with a notebook and no diary, the first headache starts the Headaches trac
 test("a pill with no headache going on is a row of its own; a cancel leaves a tombstone", () => {
   const dir = mc();
   ok(cli(dir, "2026-09-27T07:10:30Z", "med", "Thomapyrin Intensiv", "--dose", "1 tablet", "--words", "took one"));
-  assert.deepEqual(rows(dir).map((i) => i.data), [{ when: "2026-09-27 09:10", medication: "Thomapyrin Intensiv: 1 tablet at 09:10", words: "took one", kind: "pill" }], "now is kept to the minute");
-  assert.match(ok(cli(dir, "2026-09-27T07:12:00Z", "daily", "--csv")).stdout, /2026-09-27,0,,0,1/);
+  // No time was said, so the row keeps the day and says the time was not given (0.3.1).
+  assert.deepEqual(rows(dir).map((i) => i.data), [{ when: "2026-09-27", medication: "Thomapyrin Intensiv: 1 tablet (time not given)", words: "took one", kind: "pill" }]);
+  ok(cli(dir, "2026-09-27T07:11:30Z", "med", "Ibuprofen", "--taken", "now", "--words", "took an ibuprofen just now"));
+  assert.equal(rows(dir).find((i) => i.data.medication.startsWith("Ibuprofen")).data.medication, "Ibuprofen at 09:11", "a time said is kept to the minute");
+  assert.match(ok(cli(dir, "2026-09-27T07:12:00Z", "daily", "--csv")).stdout, /2026-09-27,0,,0,2/);
   ok(cli(dir, "2026-09-27T07:20:00Z", "start", "--at", "09:00"));
   const id = rows(dir).find((i) => i.data.kind === "headache").id;
   assert.match(ok(cli(dir, "2026-09-27T07:21:00Z", "cancel")).stdout, /^Removed from the log/);
-  assert.deepEqual(rows(dir).map((i) => i.data.kind), ["pill"]);
+  assert.deepEqual(rows(dir).map((i) => i.data.kind), ["pill", "pill"]);
   const tomb = decodeRecord(fs.readFileSync(path.join(dir, "notebook", "_system", "collection_items", id + ".md"), "utf8"));
   assert.ok(tomb.removed_at);
   assert.equal(tomb.revision, 2);

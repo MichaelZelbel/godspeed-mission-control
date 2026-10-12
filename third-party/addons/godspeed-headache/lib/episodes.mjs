@@ -40,6 +40,9 @@ export function parseMed(v) {
   return i > 0 ? { med: s.slice(0, i).trim(), dose: s.slice(i + 1).trim() } : { med: s, dose: "" };
 }
 
+// A pill as the log keeps it; `untimed` when no time was said for it (bin: medEntries).
+export const medOf = (e) => ({ med: e.med, dose: e.dose || "", taken: e.taken || e.at, ...(e.untimed === true || e.untimed === "true" ? { untimed: true } : {}) });
+
 export function episodesFrom(entries) {
   const byId = new Map();
   const loose = [];
@@ -53,7 +56,7 @@ export function episodesFrom(entries) {
   const rank = { start: 0, set: 1, med: 2, end: 3, cancel: 4 };
   const ordered = [...entries].sort((a, b) => a.at.localeCompare(b.at) || (rank[a.kind] ?? 5) - (rank[b.kind] ?? 5));
   for (const e of ordered) {
-    if (e.kind === "med" && !e.episode) { loose.push({ med: e.med, dose: e.dose || "", taken: e.taken || e.at }); continue; }
+    if (e.kind === "med" && !e.episode) { loose.push(medOf(e)); continue; }
     const ep = e.episode && byId.get(e.episode);
     if (!ep) continue;
     if (e.kind === "cancel") { ep.cancelled = true; continue; }
@@ -66,7 +69,7 @@ export function episodesFrom(entries) {
     if (e.quality) ep.quality = e.quality;
     for (const x of e.symptoms || []) if (!ep.symptoms.includes(x)) ep.symptoms.push(x);
     for (const x of e.triggers || []) if (!ep.triggers.includes(x)) ep.triggers.push(x);
-    if (e.kind === "med") ep.meds.push({ med: e.med, dose: e.dose || "", taken: e.taken || e.at });
+    if (e.kind === "med") ep.meds.push(medOf(e));
     if (e.words) ep.words.push(e.words);
   }
   const eps = [...byId.values()].filter((ep) => !ep.cancelled).map((ep) => ({
