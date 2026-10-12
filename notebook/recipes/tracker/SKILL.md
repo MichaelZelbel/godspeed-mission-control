@@ -1,22 +1,35 @@
 ---
 name: tracker
-description: Track anything the person names. Use when a message starts with "track" (any case, typed or dictated, "Track:" too) and what follows is not a habit Mission Control coaches and not a headache; when they answer yes to "Start a new tracker called ...?"; when they ask to set up a tracker ("I want to track my sleep: hours and quality"); when they correct or delete a tracked entry ("that was 91, not 92", "delete the last belly"); and when they ask about something they track ("how has my belly changed this month?").
+description: Track anything the person names. Use for every message that starts with "track" (any case, typed or dictated, "Track:" too, also inside a German sentence), the habits and headaches included, since this recipe hands those on; when they answer yes to "Start a new tracker called ...?"; when they ask to set up a tracker ("I want to track my sleep: hours and quality"); when they correct or delete a tracked entry ("that was 91, not 92", "delete the last belly", "delete the last walk to work"); and when they ask about something they track ("how has my belly changed this month?").
 ---
 
 # Tracker
 
-Every tracker is a collection in the notebook. You never create one without the person's yes.
+Every tracker is a collection in the notebook, and every habit the coach keeps is listed as a
+tracker too. You never create a tracker without the person's yes.
 
 ## Who gets "track"
 
-1. "track" plus the name of an active habit ("track walk to work") belongs to the coach recipe.
-2. "track headache ...", a pill or a pain level belongs to the headache-tracker recipe.
-3. Everything else is yours. The journal no longer takes "track".
+Read the trackers first: `personal_operation {"type":"tracker-list"}`. Then, in this order:
+
+1. **An active habit**, by its name or other name (a tracker with `"specialist":"habit"`: "track
+   walk to work"): `{"type":"track","tracker":"<its id>"}`, with `"answer":"no"` or
+   `"answer":"skip"` when they say so and `"on":"YYYY-MM-DD"` for another day. The coach's own
+   record gets the day. "Delete the last walk to work": `{"type":"tracker-correct","tracker":"<its id>","remove":true}`.
+   Reply with the operation's `reply` and nothing else.
+2. **A headache, a pill or a pain level** ("track headache since 6:30, right side", "track a pill",
+   "track pain 5"): load the headache-tracker recipe and do what it says; its `godspeed-headache`
+   command keeps the Headaches tracker. Never `track` on the Headaches tracker
+   (`"specialist":"headache"`).
+3. **One of the trackers' names or other names**: yours, below.
+4. **Anything else**: a new tracker, asked about once, below.
+
+The journal no longer takes "track".
 
 ## What to do
 
-1. Read the trackers: `personal_operation {"type":"tracker-list"}`. It lists every tracker with
-   its other names, its columns and current hashes, and every open question.
+1. The trackers you read above list every tracker with its other names, its columns and current
+   hashes, and every open question.
 2. The name is a tracker's name or other name: `{"type":"track","tracker":"<id>","value":<number>}`.
    It clearly means one tracker under a word not yet listed ("waist" for Belly): add
    `"new_name":"Waist"` and the tracker's hash, `"expected":{"collections/<id>":"<hash>"}`.

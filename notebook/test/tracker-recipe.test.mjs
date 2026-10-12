@@ -55,3 +55,19 @@ test('the coach and headache recipes no longer claim "track", and their vendored
 test('the headache add-on carries the notebook\'s own YAML module',()=>{
   assert.equal(read('../../third-party/addons/godspeed-headache/lib/yaml.mjs'),read('../core/records/yaml.mjs'));
 });
+
+// The tracker recipe claims every "track" and hands a habit and a headache on, in the order of the
+// design: habit, headache, tracker, new tracker (D-321).
+test('the tracker recipe takes every "track" and hands habits and headaches on',()=>{
+  const tracker=read('../recipes/tracker/SKILL.md'),description=tracker.match(/^description: (.*)$/m)[1];
+  assert.match(description,/every message that starts with "track"/);
+  assert.doesNotMatch(description,/not a habit|not a headache/);
+  const order=['**An active habit**','**A headache, a pill or a pain level**','**One of the trackers\' names','**Anything else**'].map(x=>tracker.indexOf(x));
+  assert.ok(order.every(i=>i>0)&&order.every((i,n)=>!n||i>order[n-1]),'the hand-off order');
+  assert.match(tracker,/\{"type":"track","tracker":"<its id>"\}/);
+  assert.match(tracker,/load the headache-tracker recipe/);
+  assert.match(tracker,/Never `track` on the Headaches tracker/);
+  assert.doesNotMatch(tracker,/[–—]/,'no long dashes');
+  const revisions=JSON.parse(read('../data/recipe-revisions.json'));
+  assert.ok(revisions['tracker/SKILL.md'].includes('3bc20a6ad70ca45c2d7740b7716d2f86bef907f17a00245347f7bcd38993b53e'),'the text shipped until today');
+});
