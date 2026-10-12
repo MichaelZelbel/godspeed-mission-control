@@ -14,14 +14,16 @@
 #   4. dev/kit-publish: release/second-edition-publish is remade on the new commit (the old head is
 #      kept as release/second-edition-publish-<old short>), with the same text changes, the pins and
 #      hashes swapped, and the new binaries: one commit
-#   5. dev/mc-installer-clean-test-second-edition: release.env, the exe and the installer swapped,
-#      committed (push it yourself, after force-pushing the publish branch, to run the test)
+#   5. dev/mc-installer-clean-test: the test branch release-<new short>, made from that repository's
+#      v2 (every v2 check comes along, the goal day of 2026-10-13 included), with release.env, the exe
+#      and the installer swapped, committed (push it yourself, after force-pushing the publish
+#      branch, to run the test; set PREVIOUS_RELEASE and PREVIOUS_PRODUCT in release.env by hand)
 #
 # Run from Git Bash. Never with a current folder inside C:\godspeed's own files (it cds itself).
 set -euo pipefail
 NEW=${1:?new product commit}; NEW_BOOT=${2:-}
 DEV=/c/godspeed/dev
-PUB=$DEV/kit-publish; BUILD=$DEV/kit-publish-build; KB=$DEV/kit-bootstrap-second-edition; TEST=$DEV/mc-installer-clean-test-second-edition
+PUB=$DEV/kit-publish; BUILD=$DEV/kit-publish-build; KB=$DEV/kit-bootstrap-second-edition; TEST=${TEST:-$DEV/mc-installer-clean-test}
 HERE=$(cd "$(dirname "$0")" && pwd)
 NODE_DIR=$HERE/node-v22.19.0-win-x64
 # TEXT_FROM: the publish commit whose README, handoff entry and installers are replayed onto the new
@@ -73,9 +75,12 @@ fi
 echo "== 4. the publish branch"
 W=$PUB; if [ "$DRY" = 1 ]; then W=$DEV/kit-publish-dry; rm -rf "$W"; git -C "$PUB" worktree add -q --detach "$W" "$OLD_PUBLISH_HEAD"; fi
 # VARIANT=1: build beside the prepared release instead of replacing it: branch release/second-edition-publish-<new>
-# in its own worktree dev/kit-publish-<new>, and test branch second-edition-release-<new>.
-VARIANT=${VARIANT:-0}; TARGET=release/second-edition-publish; TEST_BRANCH=second-edition-release
-if [ "$VARIANT" = 1 ]; then TARGET=release/second-edition-publish-$S; TEST_BRANCH=second-edition-release-$S; W=$DEV/kit-publish-$S; fi
+# in its own worktree dev/kit-publish-<new>.
+VARIANT=${VARIANT:-0}; TARGET=release/second-edition-publish
+if [ "$VARIANT" = 1 ]; then TARGET=release/second-edition-publish-$S; W=$DEV/kit-publish-$S; fi
+# The clean-install test branch is named after the product commit it tests and made from the test
+# repository's v2, the one branch that holds every v2 check (the goal day included, 2026-10-13).
+TEST_BRANCH=release-$S
 patch=$HERE/publish-text-$S.patch
 git -C "$PUB" diff "$OLD" "$OLD_PUBLISH_HEAD" -- README.md docs/full-version/trial-handoff.md install-godspeed.sh installers/install-godspeed.sh \
   | sed "s/$OLD/$NEW/g; s/$OLD_BOOT/$NEW_BOOT/g; s/$OLD_SH_SHA/$NEW_SH_SHA/g; s/product $OS\b/product $S/g; s/kit-bootstrap $OSB\b/kit-bootstrap $SB/g" > "$patch"
@@ -107,7 +112,9 @@ EOF
 git -C "$W" log --oneline -2
 
 echo "== 5. the clean-install test branch"
-if git -C "$TEST" rev-parse -q --verify "refs/heads/$TEST_BRANCH" >/dev/null; then git -C "$TEST" checkout -q "$TEST_BRANCH"; else git -C "$TEST" checkout -q -b "$TEST_BRANCH"; fi
+git -C "$TEST" fetch -q origin v2
+if git -C "$TEST" rev-parse -q --verify "refs/heads/$TEST_BRANCH" >/dev/null; then git -C "$TEST" checkout -q "$TEST_BRANCH"
+else git -C "$TEST" checkout -q --no-track -b "$TEST_BRANCH" origin/v2; fi
 sed -i "s#^KIT_BRANCH=.*#KIT_BRANCH=$TARGET#; s/^PRODUCT=.*/PRODUCT=$NEW/; s/^BOOTSTRAP=.*/BOOTSTRAP=$NEW_BOOT/" "$TEST/release.env"
 cp "$A/GodspeedSetup.exe" "$TEST/GodspeedSetup.exe"; cp "$A/install-godspeed.sh" "$TEST/install-godspeed.sh"
 git -C "$TEST" add release.env GodspeedSetup.exe install-godspeed.sh

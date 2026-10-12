@@ -89,7 +89,7 @@ Product commit 43a4e5dfc694c1ddbbf779d1124742a0f1bd3792:
  8. Release asset Godspeed-v2-integrated-source.tar.gz (git archive of the commit) + release notes text
  9. The build checkout C:\godspeed\dev\kit-publish-build (detached at the commit) and its notebook/ui/dist
 10. kit-bootstrap payload folder windows\full-alpha-payload\<12>-<12> (automatic)
-11. Clean-install test branch: release.env PRODUCT, GodspeedSetup.exe, install-godspeed.sh  [mc-installer-clean-test-second-edition]
+11. Clean-install test branch: release.env PRODUCT, GodspeedSetup.exe, install-godspeed.sh  [since 2026-10-13: dev/mc-installer-clean-test, branch release-<short> made from v2 by rebuild.sh]
 12. The publish branch's base: release/second-edition-publish sits on the commit (remade on the new one)
 13. Hostinger: the image tag v2-sha-<commit pushed to codex/godspeed-v2-completeness> and its digest (after publish)
 kit-bootstrap commit c91da3a4aa2a1c71f123548ca1aaef08366dcf90: items 1, 2 (ENGINE + KB_BRANCH), 3 (bootstrapCommit), 4 (KbPin inside the exe), 7, 11 (BOOTSTRAP, kb-tag.txt names the branch).
@@ -152,7 +152,7 @@ Commands (Git Bash, cwd = release-prep; never inside C:\godspeed's own files; un
      Logs: ui-build-<short>.log, exe-build-<short>.log. Takes about 12 minutes.
   3. by hand: handoff "What is new" gets a bullet per new fix of round 4; after the CI, a "Checked before publishing" paragraph with the run number.
   4. git -C C:/godspeed/dev/kit-publish push --force-with-lease origin release/second-edition-publish     (test branch only)
-     git -C C:/godspeed/dev/mc-installer-clean-test-second-edition push origin second-edition-release     (starts clean-install.yml; ~35 min, Windows jobs longest)
+     git -C C:/godspeed/dev/mc-installer-clean-test push origin release-<new short>     (starts clean-install.yml; ~35 min, Windows jobs longest; since 2026-10-13 the branch is made from v2, which carries the goal day)
      optional, tests only: v2-integrated.yml dispatch on the publish branch (POST .../actions/workflows/v2-integrated.yml/dispatches {"ref":"release/second-edition-publish"}) = the image gate
   5. read results: release-prep\watch-runs.sh mc-installer-clean-test:<run id> ; release-prep\job-log.sh <repo> <run> <job name part>
 State left for the re-run: test worktree is on branch second-edition-release with d961176 (tool-test fix, cherry-picked, NOT pushed yet - the step-4 push carries it).
