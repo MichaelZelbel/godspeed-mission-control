@@ -372,11 +372,22 @@ export function validateConversationOperations(domains,input,operations){
   if(table&&!domains.query.rows(table).some(r=>r.id===operation[field]))throw Error('Choose an existing '+(table==='habits'?'habit':'coaching talk'));
  }
 }
+// Which request this is, so a retry of it never runs twice and a new one always runs: its request
+// id; else the user message with these words saved after the conversation's last answer (the one
+// the caller saved for this request); else the words and that last answer. Until 12 October 2026
+// it was the last message with these words, or the words alone, so the same words in one
+// conversation were one request forever: "track walk to work" on Tuesday replayed Monday's result
+// and wrote nothing (D-321). The same words before any answer was saved are still the same request.
+export function requestIdentity(query,input,message){
+ const mine=query.rows('conversation_messages').filter(m=>m.conversation_id===input.conversation_id).sort((a,b)=>String(a.created_at).localeCompare(String(b.created_at))||String(a.id).localeCompare(String(b.id)));
+ const answered=mine.filter(m=>m.role==='assistant').at(-1);
+ const source=mine.filter(m=>m.role==='user'&&m.content===message&&(!answered||String(m.created_at)>=String(answered.created_at))).at(-1);
+ return {source,requestId:input.request_id||source?.id||hash([input.conversation_id,message,answered?.id||null])};
+}
 export function conversationOperations(domains,input,operations){
  if(!Array.isArray(operations)||operations.length>10)throw Error('Invalid conversation operations');
  const message=String(input.message||input.messages?.filter(m=>m.role==='user').at(-1)?.content||'');
- const source=domains.query.rows('conversation_messages').filter(m=>m.role==='user'&&m.conversation_id===input.conversation_id&&m.content===message).at(-1);
- const requestId=input.request_id||source?.id||hash([input.conversation_id,message]);
+ const {source,requestId}=requestIdentity(domains.query,input,message);
  const planId='personal-plan-'+hash([input.conversation_id,requestId]);
  const digest=hash(operations),plan=domains.store.get('command_receipts',planId);
  if(plan&&plan.plan_hash!==digest)throw Error('Request retry conflicts with its saved operation plan; reload the original result');
