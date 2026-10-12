@@ -20,6 +20,8 @@ import {visibleRows,knowledgeContext} from './visibility.mjs';
 import {chatContext,chatAttachments,retrievedContext,collectionWriteSnapshot,noteWriteSnapshot} from './chat-context.mjs';
 import {personalOperation,conversationOperations,validateConversationOperations,operationContract,requestIdentity} from './personal-operations.mjs';
 import {TRACKER_OPERATIONS} from './tracker-operations.mjs';
+import {cycleTracker} from './cycle-operations.mjs';
+import {asksForbidden,declineReply,lang as cycleLanguage} from './cycle.mjs';
 import {explicitNoteCapture} from './chat-intent.mjs';
 import {importGoalFiles} from './legacy-goals.mjs';
 import {commandWords} from './card-commands.mjs';
@@ -504,19 +506,29 @@ export class Domains {
       // left out is said to be left out.
       let collectionUnasked=false;
       if(name==='collection-chat'&&(hypothetical||/\b(?:do not|don.t|never|must not|should not|nicht|niemals)\s+(?:add|create|change|edit|update|remove|delete|rename|mark|set|move|fix|correct|replace)\b/i.test(requested)||! /^(?:(?:please|bitte)\s+|(?:can|could|would)\s+you\s+(?:please\s+)?)?(?:add|create|change|edit|update|remove|delete|rename|mark|set|move|fix|correct|replace|erstell\w*|ändere|bearbeite|ergänze|lösche|benenne|markiere|setze)\b/i.test(requested.trim()))){collectionUnasked=!!(structured.items_created?.length||structured.item_updates?.length);delete structured.items_created;delete structured.item_updates;}
+      let said=[];
       if(name==='conversation-chat'&&structured.operations?.length){
-        const ran=structured.operations.filter(op=>!(input.retained_coach_reply&&op.type==='coach-reply'&&op.id===input.talk_id));
+        // The cycle tracker writes its replies in her language itself (cycle.mjs), told by the model.
+        const language=typeof structured.language==='string'?structured.language:undefined;
+        const ran=structured.operations.filter(op=>!(input.retained_coach_reply&&op.type==='coach-reply'&&op.id===input.talk_id)).map(op=>op&&op.type==='cycle'&&!op.language&&language?{...op,language}:op);
         structured.operation_results=conversationOperations(this,input,ran);
         // A tracker's answer is the server's line ("Tracked: 91 cm, down 1 since
         // Monday."), never the model's guess at the numbers (D-321). The model's
         // own words stay after it only when it also did something else.
-        // A habit tracked and a headache are answered the same way (their own lines).
-        const computed=op=>TRACKER_OPERATIONS.includes(op.type)||op.type==='headache';
+        // A habit tracked, a headache and the cycle are answered the same way (their own lines).
+        const computed=op=>TRACKER_OPERATIONS.includes(op.type)||op.type==='headache'||op.type==='cycle';
         const lines=ran.map((op,i)=>computed(op)?{text:structured.operation_results[i]?.reply,language:structured.operation_results[i]?.language||'en'}:null).filter(l=>l&&typeof l.text==='string'&&l.text);
         // In the language of the message, as the bot answers (D-321): until 12 October 2026 these
         // lines were English whatever the person wrote.
-        const said=await this.inLanguage(lines,structured.language,signal);
+        said=await this.inLanguage(lines,structured.language,signal);
         if(said.length)structured.reply=said.join(' ')+(ran.some(op=>!computed(op))&&structured.reply?' '+structured.reply:'');
+      }
+      // Never a fertile window, an ovulation day, safe days, advice about conceiving or avoiding
+      // pregnancy, or a diagnosis, where a cycle tracker is kept (D-321 step 4): such a question is
+      // answered with the decline line whatever the model wrote, after any line an operation gave.
+      if(name==='conversation-chat'&&asksForbidden(requested)&&cycleTracker(this.store)){
+        const l=structured.language?cycleLanguage(structured.language):/eisprung|fruchtbar|schwanger|kinderwunsch|verhüt|sichere tage|diagnose|endometriose/i.test(requested)?'de':'en',line=declineReply(l);
+        structured.reply=[...said.filter(x=>x!==declineReply('en')&&x!==declineReply('de')),line].join(' ');
       }
       if(name==='note-chat'){
         const request=String(input.message||input.messages?.filter(m=>m.role==='user').at(-1)?.content||'').trim();

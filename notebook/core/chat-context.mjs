@@ -6,6 +6,7 @@ import {fileContext} from './context.mjs';
 import {retrieveNoteWindows} from './retrieval-windows.mjs';
 import {explicitNoteCapture} from './chat-intent.mjs';
 import {trackerOperation} from './tracker-operations.mjs';
+import {cycleOperation} from './cycle-operations.mjs';
 import {headacheLog} from './native-personal.mjs';
 import {contextBlock} from '../../third-party/addons/godspeed-headache/lib/context.mjs';
 import {loadSettings as headacheSettings} from '../../third-party/addons/godspeed-headache/lib/settings.mjs';
@@ -48,6 +49,9 @@ function buildChatContext(query,input){
   const tracked=trackerOperation({store:reader,query},{type:'tracker-list'});context.personal.trackers=tracked.trackers;context.personal.tracker_questions=tracked.pending;
   // The open headaches, as the bot's [godspeed-headache] block shows them before every message, so
   // "headache over" or a pill lands on the right one (D-321).
+  // Her cycle tracker (D-321 step 4): the open period, the cycles and what counts, the open questions
+  // (an unusual cycle, a deletion), with ids and hashes; null when there is none.
+  try{const status=cycleOperation({store:reader,query},{action:'status'});context.personal.cycle=status.tracker?status:null;}catch{context.personal.cycle=null;}
   try{const log=headacheLog(reader),settings=headacheSettings(query.store.root);context.personal.headache={tracker:log.tracker?.id||null,open:contextBlock(log.episodes,settings,clockNow())||'No headache is open.'};}catch{context.personal.headache={tracker:null,open:'The headache tracker could not be read.'};}
   for(const type of ['notes','contacts','entities','world_claims','moments','profile_facts','goals','media_analysis']){
     const selected=pick(type,type==='notes'?8:4);context[type]=selected.rows;context.retrieval.counts[type]=selected.total;

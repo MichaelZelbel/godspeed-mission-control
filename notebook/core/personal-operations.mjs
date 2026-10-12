@@ -13,7 +13,8 @@ import {trackerOperation,TRACKER_OPERATIONS} from './tracker-operations.mjs';
 import {proposalState,card,findTracker} from './trackers.mjs';
 import {isHabitRef} from './habit-trackers.mjs';
 import {headacheOperation,headacheArgs} from './headache-operation.mjs';
-import {cycleOperation} from './cycle-operations.mjs';
+import {cycleOperation,cycleTracker,DELETE_MS} from './cycle-operations.mjs';
+import {CYCLE_WORDS,PERIOD_WORDS,OVER_WORDS,FLOW_WORDS,WHERE_WORDS,SYMPTOMS} from './cycle.mjs';
 import {nextCalendarRun} from './jobs/calendar.mjs';
 import {resumeChanges} from './jobs/routine-control.mjs';
 import {readTable} from '../../third-party/addons/godspeed-coach/lib/auto.mjs';
@@ -38,7 +39,8 @@ tracker-create {proposal_id?,name?,unit?,cadence?,fields?,talk?}: the user says 
 track {tracker,value?,data?,note?,on?,at?,new_name?}: the user tracks something a supplied tracker records. tracker is its id. When he used a new word for an existing tracker, pass it as new_name.
 tracker-correct {tracker,entry_id?,value?,data?,remove?:boolean}: the user corrects or removes an entry ("that was 91, not 92", "delete the last belly"). Without entry_id it is his most recent entry in that tracker.
 Never invent a tracker; never create one without his yes. Relay the operation's reply as the answer.
-A message that starts with "track" goes, in this order: the name of a supplied habit tracker (specialist habit) is track {tracker:<its id>,answer?:done|no|skip}; a headache, a pill or a pain level is headache; a supplied tracker's name or other name is track; only a name nothing supplied has is tracker-hold.
+A message that starts with "track" goes, in this order: the name of a supplied habit tracker (specialist habit) is track {tracker:<its id>,answer?:done|no|skip}; a headache, a pill or a pain level is headache; the period, the cycle or a cycle symptom ("track period", "track Periode", "track cramps") is cycle; a supplied tracker's name or other name is track; only a name nothing supplied has is tracker-hold.
+cycle {action:track|over|forecast|leave-out|count|heads-up|talk|decline|delete,flow?:spotting|light|medium|heavy|unspecified,pain?:0-3,pain_where?:[belly|back|head],symptoms?:[cramps|headache|bloating|breast tenderness|acne|low mood|irritable|low energy|poor sleep|cravings|digestion|discharge],note?,on?:YYYY-MM-DD,start?:YYYY-MM-DD,why?:outlier|pregnancy|breastfeeding|contraception,enabled?:boolean,talk?,confirm?,language}: her period and cycle; personal.cycle is her cycle tracker (null: none yet). track is a day ("track period, heavy, cramps 2"; a headache named as one of the day's symptoms is a symptom here): flow is the amount she said, unspecified when she says she has her period without an amount, left out for a day of symptoms only; with no cycle tracker it asks its setup question, and her yes is tracker-create with that question's id. "period over" is over. "when is my next period?" is forecast. Her answer to "Leave this one out of the forecast?": yes is leave-out, no is count. A cycle affected by pregnancy, breastfeeding or starting or stopping hormonal contraception is leave-out with why and start (the day it began; without start, the cycle she is in now). "tell me two days before my period" is heads-up {enabled:true}, stopping it {enabled:false}. "my health talk may read my cycle" is talk {talk:"health"}. "delete my cycle tracker" is delete; her yes to that question is delete {confirm:<personal.cycle.deletion.request_id>}. A question about a fertile window, ovulation, safe days, conceiving or avoiding pregnancy, contraception or a diagnosis is decline: never answer it yourself. Pass language. Relay the operation's reply as the answer.
 headache {action:start|log|set|med|end|cancel,at?,from?,to?,pain?,side?,quality?,symptoms?:[word],triggers?:[word],meds?:[{med,dose?}],taken?,episode?}: a headache or migraine, with or without "track". start: one going on now (at: when it began, as he said it: HH:MM, "yesterday HH:MM" or -30m); log: one already over (from and to); set: more about one (pain, side, what it feels like, a symptom, a trigger he named, a corrected time); med: a pill or other medicine; end: it is over (at, if he said when); cancel: it was a mistake. The open headaches are in personal.headache with their ids; without episode it is the open one. Pain is only a number he gave; never guess a trigger; never do clock sums.
 Every operation MUST contain source_quote. Copy the entire current user message exactly into that field, including the request verb. Without it, no operation can run. Use supplied IDs; ask to resolve ambiguity. ISO dates must include timezone. No outward actions or credentials. Never claim a change persisted until the operation succeeds.`;
 const required=(value,label)=>{if(typeof value!=='string'||!value.trim())throw Error(label+' is required');return value.trim();};
@@ -254,6 +256,36 @@ export function personalOperation(domains,input){
  }
  throw Error('Unsupported personal operation: '+type);
 }
+// What a cycle operation writes must be what she said (D-321 step 4), as a headache's must: a flow,
+// a pain, a place and a symptom in her own words; "over", the heads-up on or off, a talk, a reason
+// to leave a cycle out, and a deletion said in words; a yes only to a deletion question still open.
+const PAIN_WORDS=[/(?<!\p{L})(?:zero|null|none|kein)(?!\p{L})/iu,/(?<!\p{L})(?:one|eins|ein)(?!\p{L})/iu,/(?<!\p{L})(?:two|zwei)(?!\p{L})/iu,/(?<!\p{L})(?:three|drei)(?!\p{L})/iu];
+function cycleChecks(domains,message,op){
+ const lower=message.toLocaleLowerCase(),has=words=>words.some(w=>lower.includes(w)),given=v=>v!==undefined&&v!==null&&v!==''&&!(Array.isArray(v)&&!v.length),action=op.action;
+ if(action==='track'){
+  const symptoms=[].concat(op.symptoms??[]),where=[].concat(op.pain_where??[]);
+  if(given(op.flow)&&op.flow!=='unspecified'&&!has(FLOW_WORDS[op.flow]||[String(op.flow)]))throw Error('A tracked flow must be the flow you said');
+  if((op.flow==='unspecified'||!given(op.flow)&&!symptoms.length&&!given(op.pain)&&!where.length)&&!PERIOD_WORDS.test(message))throw Error('Say that you have your period, or which symptom');
+  if(given(op.pain)){const n=Number(String(op.pain).replace(',','.')),digits=(message.match(/\d+(?:[.,]\d+)?/g)||[]).some(x=>Number(x.replace(',','.'))===n),word=Number.isInteger(n)&&n>=0&&n<=3&&PAIN_WORDS[n].test(message);if(!digits&&!word)throw Error('A pain level must be a number you said');}
+  for(const w of where)if(!has(WHERE_WORDS[w]||[String(w)]))throw Error('Where it hurts must be a place you said');
+  for(const x of symptoms){const known=SYMPTOMS.find(s=>s.key===x);if(!has(known?known.words:[String(x).toLowerCase()]))throw Error('A symptom must be a symptom you named');}
+ }
+ if(action==='over'&&!OVER_WORDS.test(message))throw Error('Say that your period is over');
+ if(action==='heads-up'){
+  const off=/(?<!\p{L})(?:stop|off|no more|don.t|do not|nicht mehr|keine|aus|aufhören|abschalten|ausschalten|abstellen)(?!\p{L})/iu.test(message);
+  if(!/heads.?up|tell me|let me know|remind|warn|before|vorher|bescheid|sag mir|erinner|vorwarn/iu.test(message)||typeof op.enabled!=='boolean'||op.enabled===off)throw Error('Say whether to switch the heads-up on or off');
+ }
+ if(action==='talk'&&!/(?<!\p{L})(?:talk|gespräch|coach)/iu.test(message))throw Error('Say which talk may read your cycle');
+ if(action==='leave-out'){
+  const said={outlier:/(?<!\p{L})(?:yes|yeah|yep|sure|ok(?:ay)?|ja|jo|klar|leave|out|skip|ignore|weglassen|weg|raus|nicht zählen|don.t count|not count)(?!\p{L})/iu,pregnancy:/pregnan|schwanger/iu,breastfeeding:/breastfeed|nursing|stillen|stille/iu,contraception:/(?<!\p{L})(?:pill|pille|contracept\p{L}*|birth control|verhüt\p{L}*|hormon\p{L}*|spirale|iud|ring|implant\p{L}*|patch|pflaster)(?!\p{L})/iu}[op.why||'outlier'];
+  if(!said||!said.test(message))throw Error('Say why that cycle should be left out');
+ }
+ if(action==='count'&&!/(?<!\p{L})(?:count|include|keep|zähl\p{L}*|behalten|mitzählen|no|nein|nope)(?!\p{L})/iu.test(message))throw Error('Say that the cycle should count');
+ if(action==='delete'){
+  if(op.confirm){const d=domains.store.get('tracker_deletions',String(op.confirm));if(!/^\s*(?:yes|yeah|yep|sure|ok(?:ay)?|ja|jo|klar|do it|go ahead|mach(?: das)?|lösch\p{L}*)(?!\p{L})/iu.test(message)||!d||d.removed_at||!(clockNow()-Date.parse(d.created_at)<=DELETE_MS))throw Error('That question has expired. Say "delete my cycle tracker" again and I will ask once more.');}
+  else if(!/(?<!\p{L})(?:delete|remove|lösch\p{L}*|entfern\p{L}*)/iu.test(message)||!/(?<!\p{L})(?:cycle|period|tracker|zyklus|periode)/iu.test(message))throw Error('Say that you want your cycle tracker deleted');
+ }
+}
 export function validateConversationOperations(domains,input,operations){
  if(!Array.isArray(operations)||operations.length>10)throw Error('Invalid conversation operations');
  const message=String(input.message||input.messages?.filter(m=>m.role==='user').at(-1)?.content||'');
@@ -286,7 +318,9 @@ export function validateConversationOperations(domains,input,operations){
   'track':/\btrack(?:e|ed|en)?\b/i,
   'tracker-correct':/\b(?:that was|it was|not \d|change|correct|fix|delete|remove|lösche|korrigiere|war)\b/i,
   // A headache, a pill or a pain level, with "track" or without (D-321: the tracker hands it on).
-  'headache':/(?<!\p{L})(?:track|headache|migraine|kopfschmerz|kopfweh|migräne|pill|tablet|painkiller|schmerzmittel|ibuprofen|aspirin|paracetamol|thomapyrin|took|genommen|pain|schmerz)/iu
+  'headache':/(?<!\p{L})(?:track|headache|migraine|kopfschmerz|kopfweh|migräne|pill|tablet|painkiller|schmerzmittel|ibuprofen|aspirin|paracetamol|thomapyrin|took|genommen|pain|schmerz)/iu,
+  // The period and the cycle (D-321 step 4); what each action may write is checked below (cycleChecks).
+  'cycle':/(?<!\p{L})(?:track|period|periode|regel|menstru|cycle|zyklus|cramp|krampf|krämpf|spotting|schmier|blut|bleed|pms|fertil|fruchtbar|ovulat|eisprung|pregnan|schwanger|still|breastfeed|pill|pille|contracept|verhüt|diagnos|delete|lösch|remove|entfern|heads|tell me|sag mir|bescheid|erinner|remind|warn|vorwarn|leave|weg|count|zähl|yes|ja|no|nein|over|vorbei|when|wann|next|nächste|talk|gespräch|ended|aufgehört)/iu
  };
  // What each operation does, in the words a person uses. A request that says
  // not to do that ("Don't remind me", "Please don't pause", "Erinnere mich
@@ -300,7 +334,7 @@ export function validateConversationOperations(domains,input,operations){
   'health-add':'record|log|save|track|notiere|speichere','memory-confirm':'remember|save|correct|update|merke|speichere|korrigiere','memory-propose':'remember|save|merke|speichere',
   'routine-change':'pause|resume|schedule|change|stop|start|move|pausiere|ändere|verschiebe','forecast-settle':'settle|record|resolve|log|notiere',
   'work-allow-local':'allow|approve|authori[sz]e|erlaube|genehmige','work-retry-draft':'retry|try|redo|wiederhole','work-record-observation':'record|log|save|notiere|speichere',
-  'tracker-hold':'track|tracke','tracker-create':'track|create|start|make','track':'track|tracke','tracker-correct':'change|correct|fix|delete|remove|lösche|korrigiere','headache':'track|tracke|log|record|save|note|notiere|speichere'};
+  'tracker-hold':'track|tracke','tracker-create':'track|create|start|make','track':'track|tracke','tracker-correct':'change|correct|fix|delete|remove|lösche|korrigiere','headache':'track|tracke|log|record|save|note|notiere|speichere','cycle':'track|tracke|delete|remove|lösche'};
  const refuses=type=>{const v=verbs[type];if(!v)return false;
   return new RegExp("(?<!\\p{L})(?:do not|don.t|dont|never|must not|should not|niemals)(?!\\s+forget)\\s+(?:[\\p{L}']+\\s+){0,2}?(?:"+v+")",'iu').test(message)||new RegExp("(?<!\\p{L})(?:"+v+")\\p{L}*\\s+(?:(?:mich|mir|das|es|dies|ihn|sie|uns)\\s+)?nicht(?!\\p{L})",'iu').test(message);};
  for(const operation of operations){
@@ -334,7 +368,12 @@ export function validateConversationOperations(domains,input,operations){
    if(habitTrack(domains,operation)&&(operation.answer??(operation.type==='track'?'done':undefined))==='done'&&/\b(?:did not|didn.t|haven.t|have not|not done|skipped|nicht|nein)\b/i.test(message))throw Error('Habit completion contradicts the actual user reply');
    if(operation.type==='track'&&typeof operation.new_name==='string'&&operation.new_name.trim()&&!message.toLocaleLowerCase().includes(operation.new_name.trim().toLocaleLowerCase()))throw Error('A new name must be one you used');
   }
-  if(['tracker-hold','track','tracker-correct'].includes(operation.type)){
+  // A cycle day, its end, an answer about a cycle or a deletion must be what she said (cycleChecks).
+  const cycle=cycleTracker(domains.store);
+  if(operation.type==='cycle')cycleChecks(domains,message,{...operation,action:operation.action||'track'});
+  else if(operation.type==='tracker-hold'&&(operation.specialist==='cycle'||CYCLE_WORDS.test(String(operation.name||''))))cycleChecks(domains,message,{...operation,...(operation.data||{}),action:'track'});
+  else if(operation.type==='track'&&cycle&&(operation.tracker===cycle.id||findTracker(domains.store,operation.tracker).match?.id===cycle.id))cycleChecks(domains,message,{...operation,...(operation.data||{}),action:operation.data?.ended===true||operation.ended===true?'over':'track'});
+  if(['tracker-hold','track','tracker-correct','cycle'].includes(operation.type)){
    // The number saved must be a number he said, as a number of its own (a 9 is
    // not in "92"); "92,5" may arrive as 92.5.
    const said=v=>v===undefined||v===null||v===''||[String(v),String(v).replace('.',',')].some(x=>new RegExp('(?<![\\d.,])'+x.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'(?!\\d|[.,]\\d)').test(message));
