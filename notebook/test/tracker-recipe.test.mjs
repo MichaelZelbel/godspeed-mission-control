@@ -62,12 +62,32 @@ test('the tracker recipe takes every "track" and hands habits and headaches on',
   const tracker=read('../recipes/tracker/SKILL.md'),description=tracker.match(/^description: (.*)$/m)[1];
   assert.match(description,/every message that starts with "track"/);
   assert.doesNotMatch(description,/not a habit|not a headache/);
-  const order=['**An active habit**','**A headache, a pill or a pain level**','**One of the trackers\' names','**Anything else**'].map(x=>tracker.indexOf(x));
+  const order=['**An active habit**','**A headache, a pill or a pain level**','**The period or the cycle**','**One of the trackers\' names','**Anything else**'].map(x=>tracker.indexOf(x));
   assert.ok(order.every(i=>i>0)&&order.every((i,n)=>!n||i>order[n-1]),'the hand-off order');
-  assert.match(tracker,/\{"type":"track","tracker":"<its id>"\}/);
+  assert.match(tracker,/\{"type":"track","tracker":"<its id>","words":"<their message>"\}/);
   assert.match(tracker,/load the headache-tracker recipe/);
   assert.match(tracker,/Never `track` on the Headaches tracker/);
   assert.doesNotMatch(tracker,/[–—]/,'no long dashes');
   const revisions=JSON.parse(read('../data/recipe-revisions.json'));
   assert.ok(revisions['tracker/SKILL.md'].includes('3bc20a6ad70ca45c2d7740b7716d2f86bef907f17a00245347f7bcd38993b53e'),'the text shipped until today');
+});
+
+// Step 4 (D-321): the cycle tracker has its own recipe, and the tracker recipe hands the period and
+// the cycle words to it, after a habit and a headache and before its own trackers.
+test('the cycle-tracker recipe claims the period and declines what it never answers',()=>{
+  const cycle=read('../recipes/cycle-tracker/SKILL.md'),description=cycle.match(/^description: (.*)$/m)[1];
+  assert.match(cycle,/^---\nname: cycle-tracker\n/);
+  for(const words of ['"track period"','"track Periode"','"track period over"','"when is my next period?"','"tell me two days before my period"','"delete my cycle tracker"','"track cramps"'])assert.ok(description.includes(words),words);
+  assert.match(description,/fertile window, ovulation, safe days or getting pregnant, which you decline/);
+  assert.match(cycle,/\{"type":"cycle","action":"decline"\}/);assert.match(cycle,/\{"type":"cycle","action":"forecast"\}/);
+  assert.match(cycle,/"confirm":"<request_id>","expected":<that map>/);
+  assert.match(cycle,/never a message/);assert.doesNotMatch(cycle,/[–—]/,'no long dashes');
+  const tracker=read('../recipes/tracker/SKILL.md');
+  assert.match(tracker,/load the cycle-tracker recipe/);assert.match(tracker,/Never `track` on the cycle tracker/);
+  const inventory=JSON.parse(read('../data/recipe-inventory.json'));
+  assert.deepEqual(inventory.find(r=>r.name==='cycle-tracker'),{...inventory.find(r=>r.name==='tracker'),name:'cycle-tracker'});
+  const revisions=JSON.parse(read('../data/recipe-revisions.json'));
+  for(const name of ['tracker','cycle-tracker'])assert.ok(revisions[name+'/SKILL.md'].includes(digest(read('../recipes/'+name+'/SKILL.md'))),name+' ships a known revision');
+  // The tracker text shipped until 12 October 2026 (e8eb43c) stays known, so an unedited copy is replaced.
+  assert.ok(revisions['tracker/SKILL.md'].includes('670b19ada22060f4bf9f6e7e44bfee6ec6fe7507a636e5faa33f13c992583e85'));
 });

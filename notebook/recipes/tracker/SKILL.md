@@ -1,6 +1,6 @@
 ---
 name: tracker
-description: Track anything the person names. Use for every message that starts with "track" (any case, typed or dictated, "Track:" too, also inside a German sentence), the habits and headaches included, since this recipe hands those on; when they answer yes to "Start a new tracker called ...?"; when they ask to set up a tracker ("I want to track my sleep: hours and quality"); when they correct or delete a tracked entry ("that was 91, not 92", "delete the last belly", "delete the last walk to work"); and when they ask about something they track ("how has my belly changed this month?").
+description: Track anything the person names. Use for every message that starts with "track" (any case, typed or dictated, "Track:" too, also inside a German sentence), the habits, headaches and the period included, since this recipe hands those on; when they answer yes to "Start a new tracker called ...?"; when they ask to set up a tracker ("I want to track my sleep: hours and quality"); when they correct or delete a tracked entry ("that was 91, not 92", "delete the last belly", "delete the last walk to work"); and when they ask about something they track ("how has my belly changed this month?").
 ---
 
 # Tracker
@@ -13,16 +13,20 @@ tracker too. You never create a tracker without the person's yes.
 Read the trackers first: `personal_operation {"type":"tracker-list"}`. Then, in this order:
 
 1. **An active habit**, by its name or other name (a tracker with `"specialist":"habit"`: "track
-   walk to work"): `{"type":"track","tracker":"<its id>"}`, with `"answer":"no"` or
+   walk to work"): `{"type":"track","tracker":"<its id>","words":"<their message>"}`, with `"answer":"no"` or
    `"answer":"skip"` when they say so and `"on":"YYYY-MM-DD"` for another day. The coach's own
-   record gets the day. "Delete the last walk to work": `{"type":"tracker-correct","tracker":"<its id>","remove":true}`.
+   record gets the day and their words. "It was a no": `{"type":"tracker-correct","tracker":"<its id>","answer":"no","words":"<their message>"}`.
+   "Delete the last walk to work": `{"type":"tracker-correct","tracker":"<its id>","remove":true}`.
    Reply with the operation's `reply` and nothing else.
 2. **A headache, a pill or a pain level** ("track headache since 6:30, right side", "track a pill",
    "track pain 5"): load the headache-tracker recipe and do what it says; its `godspeed-headache`
    command keeps the Headaches tracker. Never `track` on the Headaches tracker
    (`"specialist":"headache"`).
-3. **One of the trackers' names or other names**: yours, below.
-4. **Anything else**: a new tracker, asked about once, below.
+3. **The period or the cycle** ("track period", "track Periode", "track period over", or a cycle
+   symptom such as "track cramps"): load the cycle-tracker recipe and do what it says; its `cycle`
+   operation keeps her cycle tracker. Never `track` on the cycle tracker (`"specialist":"cycle"`).
+4. **One of the trackers' names or other names**: yours, below.
+5. **Anything else**: a new tracker, asked about once, below.
 
 The journal no longer takes "track".
 
