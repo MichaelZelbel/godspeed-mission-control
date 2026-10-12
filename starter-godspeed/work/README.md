@@ -76,8 +76,10 @@ yes or no. If you cannot write that sentence, you do not yet know what you are a
   `mc-goals allow` wrote on the goal card with your words) carries those words as its APPROVED
   line and a `GOES OUT:` time in UTC, and it is not taken before that time. It must carry a
   CHECK that shows it is live, and `mc-work-run` never calls it done unless it first saved what
-  was there before (`before.txt`, so it can be put back). `mc-work going-out`
-  lists the day's steps, numbered. `mc-work stop <id> --words "..."` keeps one back, and
+  was there before (`before.txt`, so it can be put back). It goes out only after your morning
+  message showed it (`mc-work announce` marks what the message showed), because you can stop
+  only what you saw: one filed after the morning message waits for the next day's 18:00 UTC.
+  `mc-work going-out` lists the day's steps, numbered. `mc-work stop <id> --words "..."` keeps one back, and
   `mc-work stop --today --words "..."` keeps back every one of that day's that has not gone out.
   Past the permission's weekly number a step is filed blocked and asks you again, and a
   permission taken off the goal card stops everything still waiting on it.
@@ -103,7 +105,7 @@ mc-work take <id> --runner <name> [--approved-by "<your words>"]
 mc-work attempt <id> --runner <name> --ok --result "..." | --failed "why"
 mc-work verify <id> [--evidence "what was observed, where"]
 mc-work block <id> --needs ... | unblock <id> --why ... | cancel <id> --why ...
-mc-work going-out [--date D] | stop <id> --words "..." | stop --today --words "..."
+mc-work going-out [--date D] | announce <id>... | stop <id> --words "..." | stop --today --words "..."
 mc-work tick | next | list | show <id> | check
 ```
 

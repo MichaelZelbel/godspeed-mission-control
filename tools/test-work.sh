@@ -204,6 +204,7 @@ ID1="$(printf '%s' "$OUT" | grep -o 'W-[0-9]*-[0-9]*' | head -1)"
 check "  with GOES OUT" "$(grep -c '^GOES OUT: 2026-09-13T18:00' "$TMP/work/$ID1.md")" "1"
 check "  and his words as its approval" "$(grep -c '^APPROVED: standing yt-replies: "yes, answer comments"' "$TMP/work/$ID1.md")" "1"
 missing "next skips it before its time" "$(GODSPEED_NOW=2026-09-13T17:59:00Z hw next 2>&1)" "$ID1"
+hw announce "$ID1" >/dev/null 2>&1   # the morning message showed it
 contains "next offers it after its time" "$(GODSPEED_NOW=2026-09-13T18:01:00Z hw next 2>&1)" "$ID1"
 OUT="$(hw file --what "Reply two" --done-when x --goal aud --outward yes --may yt-replies --check "test -f live.txt" --key r2 --source t 2>&1)"
 OUT="$(hw file --what "Reply three" --done-when x --goal aud --outward yes --may yt-replies --check "test -f live.txt" --key r3 --source t 2>&1)"
@@ -223,6 +224,7 @@ OUT="$(hw take "$ID1" --runner test 2>&1)"; check "a stopped step can never be t
 st() { for i in "$@"; do sed -n 's/^STATUS: //p' "$TMP/work/$i.md"; done | tr '\n' ' '; }
 ID2="$(idof r2)"; ID3="$(idof r3)"
 check "a notice step given no time goes out at 18:00 UTC on the day it was filed" "$(sed -n 's/^GOES OUT: //p' "$TMP/work/$ID2.md")" "2026-09-13T18:00"
+hw stop "$ID2" --words "test cleanup" >/dev/null 2>&1   # never shown: it would roll into later days
 check "an alone step has no GOES OUT" "$(grep -c '^GOES OUT:' "$TMP/work/$IDP.md")" "0"
 check "  and carries his words as its approval too" "$(grep -c '^APPROVED: standing own-pages: "fix my pages yourself"' "$TMP/work/$IDP.md")" "1"
 check "the step past the weekly limit needs authorization" "$(sed -n 's/^NEEDS: //p' "$TMP/work/$ID3.md")" "authorization"
@@ -232,6 +234,7 @@ missing "  next never offers it, even after the hour" "$(GODSPEED_NOW=2026-09-13
 OUT="$(GODSPEED_NOW=2026-09-13T19:00:00Z hw take "$ID3" --runner test 2>&1)"; check "  nor can it be taken without a fresh yes" "$?" "1"
 OUT="$(hw file --what "Reply in a new week" --done-when x --goal aud --outward yes --may yt-replies --check "test -f live.txt" --key r5 --source t --date 2026-09-20 2>&1)"
 contains "seven days on, the limit counts again from zero" "$OUT" "planned"
+hw stop "$(idof r5)" --words "test cleanup" >/dev/null 2>&1   # never shown: it would roll into later days
 sed -i 's/$/\r/' "$TMP/goals/aud.md"
 OUT="$(hw file --what "Fix the footer" --done-when x --goal aud --outward yes --may own-pages --check "test -f live.txt" --key p2 --source t 2>&1)"
 contains "a goal card with Windows line endings is read the same" "$OUT" "planned"
@@ -263,6 +266,7 @@ OUT="$(hw file --what "Answer A" --done-when x --goal news --outward yes --may n
 OUT="$(GODSPEED_NOW=2026-09-13T18:30:00Z nf "Answer late" n1)"
 N1="$(idof n1)"
 check "filed after 18:00 UTC, it goes out at 18:00 UTC the next day" "$(sed -n 's/^GOES OUT: //p' "$TMP/work/$N1.md")" "2026-09-14T18:00"
+hw stop "$N1" --words "test cleanup" >/dev/null 2>&1   # never shown: it would roll into later days
 
 # Review focus 1: a step stopped one minute before its time never goes out.
 nf "Answer B" n2 --goes-out 2026-09-15T18:00 >/dev/null
@@ -279,6 +283,7 @@ nf "Answer C" n3 --goes-out 2026-09-15T19:00 >/dev/null
 N3="$(idof n3)"
 OUT="$(GODSPEED_TODAY=2026-09-15 GODSPEED_NOW=2026-09-15T18:30:00Z hw take "$N3" --runner test 2>&1)"; check "a step is not taken before its time" "$?" "1"
 contains "  and says when it goes" "$OUT" "goes out at 2026-09-15T19:00 UTC unless stopped"
+hw stop "$N3" --words "test cleanup" >/dev/null 2>&1   # never shown: it would roll into later days
 
 # Review focus 2: stop --today stops every step of the day that has not gone out; stop <id> stops one.
 nf "Morning answer" n4 --goes-out 2026-09-16T09:00 >/dev/null
@@ -292,6 +297,7 @@ GO="$(D16 05:00 going-out 2>&1)"
 check "going-out numbers the day's steps in time order" "$(printf '%s\n' "$GO" | cut -d' ' -f1-3 | tr '\n' '|')" "1. Morning answer|2. Answer one|3. Answer two|4. Answer three|"
 missing "  and leaves out the next day's" "$GO" "tomorrow"
 contains "  with the time in UTC" "$GO" "(news, 18:00 UTC)"
+D16 05:20 announce "$N4" "$N5" "$N6" "$N7" >/dev/null 2>&1   # the morning message showed them
 D16 09:05 take "$N4" --runner test >/dev/null 2>&1
 D16 09:06 attempt "$N4" --runner test --ok --result "replied, https://example.org/r" >/dev/null 2>&1
 check "(the morning step went out)" "$(st "$N4")" "attempted "
@@ -317,16 +323,6 @@ contains "  and says so" "$OUT" "already went out"
 OUT="$(D16 12:00 stop --today --words "stop" 2>&1)"; check "stop --today with nothing waiting is no error" "$?" "0"
 contains "  and says nothing is waiting" "$OUT" "nothing is waiting to go out on 2026-09-16"
 OUT="$(hw stop "$N8" 2>&1)"; check "stop without his words is refused" "$?" "1"
-nf "Early answer" n9 --goes-out 2026-09-18T09:00 >/dev/null
-nf "Evening answer" n10 --goes-out 2026-09-18T18:00 >/dev/null
-N9="$(idof n9)"; N10="$(idof n10)"
-D18() { GODSPEED_TODAY=2026-09-18 GODSPEED_NOW="2026-09-18T$1:00Z" hw "${@:2}"; }
-D18 09:05 take "$N9" --runner test >/dev/null 2>&1
-OUT="$(D18 09:10 stop --today --words "stop" 2>&1)"
-contains "stop --today names a step that is going out right now" "$OUT" "$N9 is going out right now"
-check "  and leaves it going" "$(st "$N9")" "dispatched "
-check "  while it stops the rest of the day" "$(st "$N10")" "cancelled "
-D18 09:12 attempt "$N9" --runner test --ok --result "replied, https://example.org/r9" >/dev/null 2>&1
 
 # A permission taken back stops what was queued under it from going out.
 "$NODE" "$TMP/bin/goals.js" allow news --kind nl-replies --revoke --words "stop answering for me" >/dev/null 2>&1
@@ -342,6 +338,20 @@ contains "  and says why" "$OUT" "$N8: the standing permission nl-replies is no 
 missing "  after which check has no problem with it" "$(D17 18:05 check 2>&1)" "PROBLEM $N8"
 OUT="$(D17 18:06 unblock "$N8" --why "he said yes" --approved-by "go on, send it" 2>&1)"
 contains "  a fresh yes lets it go" "$(D17 18:06 next 2>&1)" "$N8"
+
+# stop --today names a step that is going out right now (news's permission is gone, so aud's is used)
+af() { local w="$1" k="$2"; shift 2; hw file --what "$w" --done-when "the reply is visible" --goal aud --outward yes --may yt-replies --check "test -f live.txt" --key "$k" --source t "$@" 2>&1; }
+af "Early answer" n9 --goes-out 2026-09-18T09:00 >/dev/null
+af "Evening answer" n10 --goes-out 2026-09-18T18:00 >/dev/null
+N9="$(idof n9)"; N10="$(idof n10)"
+D18() { GODSPEED_TODAY=2026-09-18 GODSPEED_NOW="2026-09-18T$1:00Z" hw "${@:2}"; }
+D18 05:20 announce "$N9" "$N10" >/dev/null 2>&1
+D18 09:05 take "$N9" --runner test >/dev/null 2>&1
+OUT="$(D18 09:10 stop --today --words "stop" 2>&1)"
+contains "stop --today names a step that is going out right now" "$OUT" "$N9 is going out right now"
+check "  and leaves it going" "$(st "$N9")" "dispatched "
+check "  while it stops the rest of the day" "$(st "$N10")" "cancelled "
+D18 09:12 attempt "$N9" --runner test --ok --result "replied, https://example.org/r9" >/dev/null 2>&1
 
 # A GOES OUT edited by hand out of its form is never due (review of unit C, 2026-10-13).
 cat > "$TMP/goals/re.md" <<'EOF'
@@ -381,10 +391,70 @@ GODSPEED_NOW=2026-09-13T18:05:00Z hw tick >/dev/null 2>&1
 check "  tick sets it to wait for that fresh yes" "$(st "$M2")$(sed -n 's/^NEEDS: //p' "$TMP/work/$M2.md")" "blocked authorization"
 rf "Answer under the new words" m3 --goes-out 2026-09-13T18:00 >/dev/null
 M3="$(idof m3)"
+hw announce "$M3" >/dev/null 2>&1
 contains "  while a step filed under the new words goes" "$(GODSPEED_NOW=2026-09-13T18:05:00Z hw next 2>&1)" "$M3"
 hgr allow re --kind forum-replies --revoke --words "stop" --date 2026-09-14 >/dev/null 2>&1
 hgr allow re --kind forum-replies --what "answer replies on my forum thread" --per-week 5 --words "answer them, but only the kind ones" --date 2026-09-14 >/dev/null 2>&1
 missing "given again in the same words on a later day, a step queued before it does not go out" "$(GODSPEED_TODAY=2026-09-14 GODSPEED_NOW=2026-09-14T18:05:00Z hw next 2>&1)" "$M3"
+
+# --- a step goes out only after the morning message showed it (Rulings 19 and 21, 2026-10-13) ----
+# The person can stop only what they saw: a step filed after the morning message waits a day.
+cat > "$TMP/goals/eve.md" <<'EOF'
+ID: eve
+KIND: outcome
+STATUS: adopted
+TITLE: Evening
+
+MAY: eve-replies | answer replies under my posts | 20 per week | notice | "answer them" 2026-09-20
+
+## Log
+- 2026-09-20 FILED adopted outcome, source: x
+EOF
+D21() { GODSPEED_TODAY=2026-09-21 GODSPEED_NOW="2026-09-21T$1:00Z" hw "${@:2}"; }
+D22() { GODSPEED_TODAY=2026-09-22 GODSPEED_NOW="2026-09-22T$1:00Z" hw "${@:2}"; }
+ef() { local t="$1" w="$2" k="$3"; shift 3; GODSPEED_TODAY=2026-09-21 GODSPEED_NOW="2026-09-21T$t:00Z" hw file --what "$w" --done-when "the reply is visible" --goal eve --outward yes --may eve-replies --check "test -f live.txt" --key "$k" --source t "$@" 2>&1; }
+gf() { "$NODE" -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{console.log(JSON.parse(s).map(r=>r.n+":"+r.announced).join(","))})'; }
+ef 04:10 "Shown reply" e1 >/dev/null
+ef 04:10 "Shown late reply" e2 --goes-out 2026-09-21T19:00 >/dev/null
+E1="$(idof e1)"; E2="$(idof e2)"
+check "going-out --json says a step was not shown yet" "$(D21 05:15 going-out --json | gf)" "1:,2:"
+contains "  and the text marks it" "$(D21 05:15 going-out 2>&1)" "not shown in a morning message yet"
+OUT="$(D21 05:16 announce "$E1" "$E2" 2>&1)"; check "announce marks the steps the morning message showed" "$?" "0"
+check "  ANNOUNCED on each" "$(grep -h '^ANNOUNCED:' "$TMP/work/$E1.md" "$TMP/work/$E2.md" | tr '\n' ' ')" "ANNOUNCED: 2026-09-21 ANNOUNCED: 2026-09-21 "
+check "  with a line in the log" "$(grep -c '^- 2026-09-21 ANNOUNCED in the morning message' "$TMP/work/$E1.md")" "1"
+check "  going-out --json carries the date" "$(D21 05:17 going-out --json | gf)" "1:2026-09-21,2:2026-09-21"
+missing "  and the text no longer marks them" "$(D21 05:17 going-out 2>&1)" "not shown"
+ef 09:00 "Unshown reply" e3 --goes-out 2026-09-21T18:00 >/dev/null
+E3="$(idof e3)"
+GO="$(D21 09:05 going-out 2>&1)"
+check "a step filed after the morning message comes after the shown ones, so their numbers hold" "$(printf '%s\n' "$GO" | cut -d' ' -f1-3 | tr '\n' '|')" "1. Shown reply|2. Shown late|3. Unshown reply|"
+contains "  and is marked as not shown" "$(printf '%s\n' "$GO" | grep 'Unshown')" "not shown in a morning message yet"
+missing "before 18:00 the shown step waits" "$(D21 17:59 next 2>&1)" "$E1"
+OUT="$(D21 18:01 take "$E3" --runner test 2>&1)"; check "at 18:01 the step nobody was shown cannot be taken" "$?" "1"
+contains "  and says why" "$OUT" "has not been shown"
+OUT="$(D21 18:01 take "$E3" --runner test --now 2>&1)"; check "  not even with --now" "$?" "1"
+OUT="$(D21 18:01 next 2>&1)"
+contains "after 18:00 the shown step is due" "$OUT" "$E1"
+missing "  the step nobody was shown is not" "$OUT" "$E3"
+check "  it moved to the next day's 18:00 UTC" "$(sed -n 's/^GOES OUT: //p' "$TMP/work/$E3.md")" "2026-09-22T18:00"
+check "  saying so in its log" "$(grep -c '^- 2026-09-21 NOT SHOWN: goes out 2026-09-22T18:00 instead' "$TMP/work/$E3.md")" "1"
+check "  and it is still not marked shown" "$(grep -c '^ANNOUNCED:' "$TMP/work/$E3.md")" "0"
+missing "  it left the evening's list" "$(D21 18:02 going-out 2>&1)" "Unshown reply"
+contains "the next morning it is in that day's list" "$(D22 05:15 going-out 2>&1)" "1. Unshown reply"
+D22 05:16 announce "$E3" >/dev/null 2>&1
+missing "  shown, it still waits for 18:00" "$(D22 17:59 next 2>&1)" "$E3"
+contains "  and goes after it" "$(D22 18:01 next 2>&1)" "$E3"
+ef 09:30 "Missed by everyone" e4 --goes-out 2026-09-21T20:00 >/dev/null
+E4="$(idof e4)"
+OUT="$(D21 20:05 tick 2>&1)"
+contains "tick moves a step that passed its time unshown" "$OUT" "$E4: not shown in a morning message, so it goes out at 2026-09-22T18:00 instead"
+check "  to the next day's 18:00 UTC" "$(sed -n 's/^GOES OUT: //p' "$TMP/work/$E4.md")" "2026-09-22T18:00"
+OUT="$(D21 18:10 announce "$E1" W-19990101-01 "$N2" "$IDP" 2>&1)"; check "announce with an id it cannot mark exits 1" "$?" "1"
+contains "  names an id that is not on the register" "$OUT" "W-19990101-01: no such work, not marked"
+contains "  names a closed one" "$OUT" "$N2: is cancelled, not marked"
+contains "  names one that goes out alone, with no GOES OUT" "$OUT" "$IDP: has no GOES OUT"
+contains "  and still marks the one it can" "$OUT" "$E1: shown"
+OUT="$(hw announce 2>&1)"; check "announce with no id is refused" "$?" "1"
 
 echo
 echo "$PASS passed, $FAIL failed"

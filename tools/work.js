@@ -35,6 +35,11 @@
 //    its GOES OUT time unless the person stops it first (`stop`); in alone mode when it is ready.
 //    Past the kind's weekly limit it is filed blocked, needing a fresh yes. A permission taken off
 //    the card stops everything still queued under it. GOES OUT is UTC, written YYYY-MM-DDTHH:MM.
+//  - SHOWN BEFORE IT GOES (2026-10-13). The person can stop only a step they saw, and they see
+//    the day's steps in one morning message. So a notice step goes out only once `announce` has
+//    marked it ANNOUNCED (the morning message showed it) on or before its day. One filed after
+//    the morning message, or never shown, moves to the next day's 18:00 UTC instead of going
+//    out unseen. A step that later got a yes for itself was seen by definition.
 //
 // The folder it owns:
 //   work/<ID>.md      one item each
@@ -63,7 +68,7 @@ const KINDS = ['do', 'learn'];
 const namesFile = (s) => String(s || '').split(/\s+/).map(t => t.replace(/[.,;:)"'\]]+$/, ''))
   .some(t => t.includes('/') && /\.(md|csv|json|txt)$/i.test(t));
 const ORDER = ['ID', 'STATUS', 'KIND', 'KEY', 'GOAL', 'CARD', 'WHAT', 'DONE WHEN', 'CHECK', 'OWNER', 'NEEDS', 'OUTWARD', 'ATTEMPTS', 'MAX ATTEMPTS',
-  'LEASE', 'NEXT TRY', 'STALE AFTER', 'FILED', 'SOURCE', 'RESULT', 'LINK', 'APPROVED', 'MAY', 'GOES OUT'];
+  'LEASE', 'NEXT TRY', 'STALE AFTER', 'FILED', 'SOURCE', 'RESULT', 'LINK', 'APPROVED', 'MAY', 'GOES OUT', 'ANNOUNCED'];
 const S = L.store(DIR, ORDER);
 const { die, say, oneLine, flag, today, q } = L;
 const now = () => (process.env.GODSPEED_NOW || new Date().toISOString());
@@ -109,12 +114,44 @@ function defaultGoesOut(d) {
   if (`${day}T18:00` <= n) { day = n.slice(0, 10); if (`${day}T18:00` <= n) day = L.addDays(day, 1); }
   return `${day}T18:00`;
 }
-// Every step that goes out on a day, in time order, numbered once for the whole day: a step that
-// went out or was stopped keeps its number, so "stop 2" in the afternoon means the same step as
-// the 2 in the morning message.
+// SHOWN BEFORE IT GOES (Rulings 19 and 21, 2026-10-13). A notice step on a standing yes goes out
+// only once the morning message showed it: ANNOUNCED on or before the day of its GOES OUT. A step
+// with a yes of its own (unblock --approved-by) was seen by the person who gave it.
+const needsShowing = (c) => !!c.f['GOES OUT'] && isStanding(c);
+const shown = (c) => L.isoDate(c.f.ANNOUNCED) && !goesOutBad(c) && c.f.ANNOUNCED <= c.f['GOES OUT'].slice(0, 10);
+const unshown = (c) => needsShowing(c) && !shown(c);
+// The next day's 18:00 UTC after a GOES OUT that passed unseen, and never one already past.
+function laterSlot(goesOut) {
+  const n = nowMinute();
+  let day = L.addDays(goesOut.slice(0, 10), 1);
+  if (n.slice(0, 10) > day) day = n.slice(0, 10);
+  if (`${day}T18:00` <= n) day = L.addDays(day, 1);
+  return `${day}T18:00`;
+}
+// A planned step whose time passed before anyone was shown it does not sit there overdue: it moves
+// to the next day's 18:00 UTC, so the next morning message shows it. Run by tick, and lazily by
+// going-out, next, announce and stop --today, so it never sits stale. dry: say, write nothing.
+function moveUnshown(d, dry) {
+  const moved = [];
+  for (const c of S.all()) {
+    if (c.f.STATUS !== 'planned' || !unshown(c) || goesOutBad(c) || c.f['GOES OUT'] > nowMinute() || !standingHolds(c)) continue;
+    const at = laterSlot(c.f['GOES OUT']);
+    moved.push({ id: c.id, at });
+    if (dry) continue;
+    c.f['GOES OUT'] = at;
+    L.logLine(c, d, 'NOT', `SHOWN: goes out ${at} instead`);   // reads "NOT SHOWN: goes out ... instead"
+    S.write(c);
+  }
+  return moved;
+}
+// Every step that goes out on a day, numbered once for the whole day: a step that went out or was
+// stopped keeps its number, so "stop 2" in the afternoon means the same step as the 2 in the
+// morning message. The steps the morning message showed come first, in time order, so one filed
+// after it is numbered after them and moves no shown step's number.
 function dayList(d) {
+  const rank = (c) => (needsShowing(c) && !shown(c) ? 1 : 0);
   return S.all().filter(c => !goesOutBad(c) && (c.f['GOES OUT'] || '').slice(0, 10) === d)
-    .sort((x, y) => x.f['GOES OUT'].localeCompare(y.f['GOES OUT']) || x.id.localeCompare(y.id))
+    .sort((x, y) => rank(x) - rank(y) || x.f['GOES OUT'].localeCompare(y.f['GOES OUT']) || x.id.localeCompare(y.id))
     .map((c, i) => ({ n: i + 1, c }));
 }
 
@@ -220,6 +257,7 @@ cmds.take = (a) => {
   if (goesOutBad(c)) die(`${c.id} has GOES OUT "${c.f['GOES OUT']}", which is not YYYY-MM-DDTHH:MM (UTC); it does not go out until that is written right`);
   if (notYetDue(c) && !flag(a, 'now')) die(`${c.id} goes out at ${c.f['GOES OUT']} UTC unless stopped; not before`);
   if (isStanding(c) && !standingHolds(c)) die(`${c.id} was filed on the standing permission ${c.f.MAY || '(none named)'} of ${c.f.GOAL || 'its goal'}, which is no longer on the goal card in the words it was filed under; it waits for a fresh yes (unblock --approved-by)`);
+  if (unshown(c)) die(`${c.id} has not been shown in a morning message, so the person could not stop it; it does not go out until it was (mc-work announce)`);
   if (c.f.OUTWARD === 'yes') {
     // Approved once is approved for this item: a yes already on record (from `unblock
     // --approved-by`) lets the runner take it, so a move the person said yes to actually lands
@@ -357,6 +395,7 @@ cmds.stop = (a) => {
   if (!words) die('--words is required: what the person said, as they said it');
   const d = a.date || today();
   if (flag(a, 'today')) {
+    moveUnshown(today());
     const day = dayList(d).map(r => r.c);
     const targets = day.filter(c => UNSENT.includes(c.f.STATUS));
     const going = day.filter(c => c.f.STATUS === 'dispatched');
@@ -370,17 +409,44 @@ cmds.stop = (a) => {
   if (!UNSENT.includes(c.f.STATUS)) die(`${c.id} is ${c.f.STATUS}: ${c.f.STATUS === 'dispatched' ? 'it is going out right now' : 'it already went out'}, so it cannot be stopped, only undone`);
   stopOne(c, d, words);
 };
-// GOING OUT. The steps that go out on a day unless stopped, numbered in time order. A step that
-// went out or was stopped is not listed, and the others keep the number they had (see dayList).
+// GOING OUT. The steps that go out on a day unless stopped, numbered (see dayList). A step that
+// went out or was stopped is not listed, and the others keep the number they had. A step not yet
+// shown in a morning message carries announced "" and is marked: it goes only once shown.
 cmds['going-out'] = (a) => {
   const d = a.date || today();
+  moveUnshown(today());
   const rows = dayList(d).filter(r => ['planned', 'dispatched'].includes(r.c.f.STATUS));
   if (flag(a, 'json')) {
-    say(JSON.stringify(rows.map(({ n, c }) => ({ n, id: c.id, at: c.f['GOES OUT'], what: c.f.WHAT, goal: c.f.GOAL || '', link: c.f.LINK || '', status: c.f.STATUS }))));
+    say(JSON.stringify(rows.map(({ n, c }) => ({ n, id: c.id, at: c.f['GOES OUT'], what: c.f.WHAT, goal: c.f.GOAL || '', link: c.f.LINK || '', status: c.f.STATUS, announced: c.f.ANNOUNCED || '' }))));
     return;
   }
   if (!rows.length) { say(`nothing goes out on ${d}`); return; }
-  for (const { n, c } of rows) say(`${n}. ${c.f.WHAT} (${c.f.GOAL ? c.f.GOAL + ', ' : ''}${c.f['GOES OUT'].slice(11)} UTC)` + (c.f.STATUS === 'dispatched' ? ' going out now' : ''));
+  for (const { n, c } of rows) {
+    say(`${n}. ${c.f.WHAT} (${c.f.GOAL ? c.f.GOAL + ', ' : ''}${c.f['GOES OUT'].slice(11)} UTC)` + (c.f.STATUS === 'dispatched' ? ' going out now' : '')
+      + (unshown(c) ? '; not shown in a morning message yet, so it waits until one has shown it' : ''));
+  }
+};
+// ANNOUNCE. The morning message marks each step it showed, so it can go out at its time: the
+// person saw it and could stop it. An id it cannot mark is named with the reason (exit 1).
+cmds.announce = (a) => {
+  const ids = a._;
+  if (!ids.length) die('usage: mc-work announce <id> [<id>...] [--date D]: the steps the morning message showed');
+  const d = a.date || today();
+  moveUnshown(today());
+  let missed = 0;
+  for (const id of ids) {
+    const c = /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(id) ? S.read(id) : null;
+    const why = !c ? 'no such work'
+      : !UNSENT.includes(c.f.STATUS) ? `is ${c.f.STATUS}`
+      : !c.f['GOES OUT'] ? 'has no GOES OUT (it goes out alone, or only with a yes of its own)'
+      : goesOutBad(c) ? `has GOES OUT "${c.f['GOES OUT']}", not YYYY-MM-DDTHH:MM (UTC)` : '';
+    if (why) { missed++; say(`${id}: ${why}, not marked`); continue; }
+    c.f.ANNOUNCED = d;
+    L.logLine(c, d, 'ANNOUNCED', 'in the morning message');
+    S.write(c);
+    say(`${c.id}: shown, goes out at ${c.f['GOES OUT']} UTC unless stopped`);
+  }
+  if (missed) process.exit(1);
 };
 
 // SWEEP. Your answer on a card, or a change to a goal, reaches the work underneath it.
@@ -406,7 +472,7 @@ cmds.sweep = (a) => {
 // touches outward work, because outward work waits for a person by design.
 cmds.tick = (a) => {
   const d = a.date || today();
-  const notes = [];
+  const notes = moveUnshown(d).map(m => `${m.id}: not shown in a morning message, so it goes out at ${m.at} instead`);
   for (const c of S.all()) {
     if (!OPEN.includes(c.f.STATUS)) continue;
     const l = leaseOf(c);
@@ -442,11 +508,14 @@ cmds.tick = (a) => {
 
 cmds.next = (a) => {
   const d = a.date || today();
+  // --dry-run (mc-work-run's own dry run) writes nothing: a step that passed its time unseen is
+  // still left out, it is only not moved to the next day here.
+  moveUnshown(today(), flag(a, 'dry-run'));
   const rows = S.all().filter(c => (c.f.STATUS === 'planned' || (c.f.STATUS === 'failed' && c.f['NEXT TRY'] && c.f['NEXT TRY'] <= d && attemptsOf(c) < maxOf(c)))
     && (c.f.OUTWARD !== 'yes' || (c.f.APPROVED && c.f.STATUS === 'planned')) && c.f.NEEDS === 'none' && !leaseLive(c) && (!a.goal || c.f.GOAL === a.goal)
-    // a step that goes out unless stopped waits for its time (UTC), and one whose standing
-    // permission was taken back does not go out on it at all
-    && !notYetDue(c) && !(isStanding(c) && !standingHolds(c)));
+    // a step that goes out unless stopped waits for its time (UTC) and for a morning message to
+    // have shown it, and one whose standing permission was taken back does not go out on it at all
+    && !notYetDue(c) && !unshown(c) && !(isStanding(c) && !standingHolds(c)));
   if (flag(a, 'json')) { say(JSON.stringify(rows.map(c => Object.assign({ id: c.id }, c.f)))); return; }
   if (!rows.length) { say('nothing runnable now'); return; }
   for (const c of rows) say(`${c.id.padEnd(16)} ${c.f.STATUS.padEnd(9)} ${(c.f.KIND || 'do').padEnd(5)} ${c.f.WHAT}` + (c.f.GOAL ? `  [${c.f.GOAL}]` : ''));
@@ -478,6 +547,7 @@ cmds.check = () => {
       else if (!standingHolds(c)) problems.push(`${c.id}: its standing permission ${c.f.MAY} is no longer on ${c.f.GOAL || 'its goal'} in the words it was filed under; it must not go out on it`);
     }
     if (c.f['GOES OUT'] && !GOES_OUT_FORM.test(c.f['GOES OUT'])) problems.push(`${c.id}: GOES OUT ${c.f['GOES OUT']} is not YYYY-MM-DDTHH:MM (UTC)`);
+    if (c.f.ANNOUNCED && !L.isoDate(c.f.ANNOUNCED)) problems.push(`${c.id}: ANNOUNCED ${c.f.ANNOUNCED} is not a date; the step does not go out until a morning message marks it`);
     if (OPEN.includes(c.f.STATUS)) { (keys[c.f.KEY] = keys[c.f.KEY] || []).push(c.id); }
   }
   for (const [k, ids] of Object.entries(keys)) if (ids.length > 1) problems.push(`key ${k} is open twice: ${ids.join(', ')}`);
@@ -504,10 +574,14 @@ cmds.help = () => say(`mc-work: dispatched, attempted and verified are three dif
                                         ready. Past the kind's weekly limit it is filed blocked, needing a fresh yes
   take <id> --runner <name> [--approved-by "<your words>"]         two-hour lease; outward only with your words
                                         (or a standing permission still on its goal card); never before GOES OUT
+  announce <id> [<id>...] [--date D]    the morning message showed these steps: ANNOUNCED. A notice step goes out
+                                        only once shown (on or before its day), because the person can stop only
+                                        what they saw; one never shown moves to the next day's 18:00 UTC (NOT SHOWN)
   stop <id> --words "<their words>"     keeps one step back from going out (cancelled, STOPPED with the words)
   stop --today --words "..." [--date D] every step whose GOES OUT is that day and has not gone out yet
-  going-out [--date D] [--json]         the steps that go out that day unless stopped, numbered in time order (UTC);
-                                        a step keeps its number all day, so "stop 2" always means the same one
+  going-out [--date D] [--json]         the steps that go out that day unless stopped, numbered (UTC times): the
+                                        shown ones first in time order, so "stop 2" always means the same one;
+                                        JSON carries announced (its date, or "" when not shown yet)
   attempt <id> --runner <name> --ok --result "..." | --failed "why"   failed: retry in 1, 2, 4 days, never outward
   verify <id> [--evidence "..."]     runs CHECK; verified only on exit 0, or on evidence a person observed
   block <id> --needs ... | unblock <id> --why ... [--approved-by "..."] | cancel <id> --why ...

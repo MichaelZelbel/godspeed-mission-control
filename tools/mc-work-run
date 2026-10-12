@@ -152,7 +152,10 @@ let s=""; process.stdin.on("data",d=>s+=d).on("end",()=>{
   rows.sort((a,b)=>(rank(a)-rank(b))||String(a.id).localeCompare(String(b.id)));
   for (const r of rows) console.log(r.id+"\t"+(r.KIND||"do")+"\t"+(r.WHAT||""));
 });'
-ORDER_IDS="$(reg work next --json 2>/dev/null | "$NODE" -e "$ORDER_SCRIPT" "$ONLY")"
+# A dry run asks next not to write either: next moves a step whose time passed before any morning
+# message showed it to the next day (2026-10-13), and a dry run must leave the register as it was.
+NEXT_DRY=""; [ "$DRY" -eq 1 ] && NEXT_DRY="--dry-run"
+ORDER_IDS="$(reg work next --json $NEXT_DRY 2>/dev/null | "$NODE" -e "$ORDER_SCRIPT" "$ONLY")"
 RUNDIR_TOUCHED="$(mktemp 2>/dev/null || echo "/tmp/mc-work-touched-$$")"
 : > "$RUNDIR_TOUCHED"
 
