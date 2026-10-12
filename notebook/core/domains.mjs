@@ -510,8 +510,10 @@ export class Domains {
         // A tracker's answer is the server's line ("Tracked: 91 cm, down 1 since
         // Monday."), never the model's guess at the numbers (D-321). The model's
         // own words stay after it only when it also did something else.
-        const said=ran.map((op,i)=>TRACKER_OPERATIONS.includes(op.type)?structured.operation_results[i]?.reply:null).filter(r=>typeof r==='string'&&r);
-        if(said.length)structured.reply=said.join(' ')+(ran.some(op=>!TRACKER_OPERATIONS.includes(op.type))&&structured.reply?' '+structured.reply:'');
+        // A habit tracked and a headache are answered the same way (their own lines).
+        const computed=op=>TRACKER_OPERATIONS.includes(op.type)||op.type==='headache';
+        const said=ran.map((op,i)=>computed(op)?structured.operation_results[i]?.reply:null).filter(r=>typeof r==='string'&&r);
+        if(said.length)structured.reply=said.join(' ')+(ran.some(op=>!computed(op))&&structured.reply?' '+structured.reply:'');
       }
       if(name==='note-chat'){
         const request=String(input.message||input.messages?.filter(m=>m.role==='user').at(-1)?.content||'').trim();

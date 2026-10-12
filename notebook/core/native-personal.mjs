@@ -71,7 +71,7 @@ export function nativeOperation(store,input){
 }
 export function addonCommand(store,{addon,args}){
  if(!['coach','journal','headache'].includes(addon)||!Array.isArray(args)||args.some(a=>typeof a!=='string'||a.length>20000)||args.some(a=>['--godspeed','--evidence-script'].includes(a)))throw Error('Invalid personal command');
- const allowed=addon==='headache'?['help','start','end','set','med','cancel','list','show','patterns','daily','context','config']:addon==='coach'?['help','areas','show','area','brief','talk','habit','habits','context','config']:['help','start','define','note','done','drop','reopen','check','status','context','report','week','words','open','met','config'];
+ const allowed=addon==='headache'?['help','start','log','end','set','med','cancel','open','list','show','patterns','daily','context','config']:addon==='coach'?['help','areas','show','area','brief','talk','habit','habits','context','config']:['help','start','define','note','done','drop','reopen','check','status','context','report','week','words','open','met','config'];
  if(!allowed.includes(args[0]))throw Error('This personal command is not available through the notebook');
  if(args.some(a=>/^(?:evidence[.]script|--hook|--command|--script)$/.test(a)))throw Error('Executable hooks require a separately reviewed installation');
  const autoIndex=args.indexOf('--auto');if(autoIndex!==-1&&!parseAuto(args[autoIndex+1]))throw Error('Automatic habit evidence needs a numeric measurement comparison');

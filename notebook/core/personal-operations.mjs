@@ -12,6 +12,7 @@ import {localParts,addDays,zonedToUtc,now as clockNow} from '../../third-party/a
 import {trackerOperation,TRACKER_OPERATIONS} from './tracker-operations.mjs';
 import {proposalState,card,findTracker} from './trackers.mjs';
 import {isHabitRef} from './habit-trackers.mjs';
+import {headacheOperation,headacheArgs} from './headache-operation.mjs';
 import {nextCalendarRun} from './jobs/calendar.mjs';
 import {resumeChanges} from './jobs/routine-control.mjs';
 import {readTable} from '../../third-party/addons/godspeed-coach/lib/auto.mjs';
@@ -36,6 +37,8 @@ tracker-create {proposal_id?,name?,unit?,cadence?,fields?,talk?}: the user says 
 track {tracker,value?,data?,note?,on?,at?,new_name?}: the user tracks something a supplied tracker records. tracker is its id. When he used a new word for an existing tracker, pass it as new_name.
 tracker-correct {tracker,entry_id?,value?,data?,remove?:boolean}: the user corrects or removes an entry ("that was 91, not 92", "delete the last belly"). Without entry_id it is his most recent entry in that tracker.
 Never invent a tracker; never create one without his yes. Relay the operation's reply as the answer.
+A message that starts with "track" goes, in this order: the name of a supplied habit tracker (specialist habit) is track {tracker:<its id>,answer?:done|no|skip}; a headache, a pill or a pain level is headache; a supplied tracker's name or other name is track; only a name nothing supplied has is tracker-hold.
+headache {action:start|log|set|med|end|cancel,at?,from?,to?,pain?,side?,quality?,symptoms?:[word],triggers?:[word],meds?:[{med,dose?}],taken?,episode?}: a headache or migraine, with or without "track". start: one going on now (at: when it began, as he said it: HH:MM, "yesterday HH:MM" or -30m); log: one already over (from and to); set: more about one (pain, side, what it feels like, a symptom, a trigger he named, a corrected time); med: a pill or other medicine; end: it is over (at, if he said when); cancel: it was a mistake. The open headaches are in personal.headache with their ids; without episode it is the open one. Pain is only a number he gave; never guess a trigger; never do clock sums.
 Every operation MUST contain source_quote. Copy the entire current user message exactly into that field, including the request verb. Without it, no operation can run. Use supplied IDs; ask to resolve ambiguity. ISO dates must include timezone. No outward actions or credentials. Never claim a change persisted until the operation succeeds.`;
 const required=(value,label)=>{if(typeof value!=='string'||!value.trim())throw Error(label+' is required');return value.trim();};
 const date=(value,label)=>{required(value,label);if(!Number.isFinite(Date.parse(value))||!/(Z|[+-]\d\d:\d\d)$/.test(value))throw Error(label+' needs an ISO date with timezone');return new Date(value).toISOString();};
@@ -73,7 +76,8 @@ function nativeArguments(input){
 }
 // A habit's day is written to the coach's own file, as habit-observe writes it (habit-trackers.mjs).
 const habitTrack=(domains,op)=>['track','tracker-correct'].includes(op.type)&&isHabitRef(domains.store,op.tracker);
-const outsideRecords=(domains,op)=>NATIVE.includes(op.type)||habitTrack(domains,op)||op.type==='routine-change'&&!!domains.nativeScheduler||process.env.GODSPEED_ORIGINAL_RUNTIME==='on'&&['goal-add','goal-change','goal-outcome','forecast-settle'].includes(op.type)||['obligation-complete','obligation-snooze'].includes(op.type)&&dueRows(domains.store).some(d=>d.id===op.id);
+// A headache is written by the headache add-on into its tracker's files (headache-operation.mjs).
+const outsideRecords=(domains,op)=>NATIVE.includes(op.type)||op.type==='headache'||habitTrack(domains,op)||op.type==='routine-change'&&!!domains.nativeScheduler||process.env.GODSPEED_ORIGINAL_RUNTIME==='on'&&['goal-add','goal-change','goal-outcome','forecast-settle'].includes(op.type)||['obligation-complete','obligation-snooze'].includes(op.type)&&dueRows(domains.store).some(d=>d.id===op.id);
 // The same domains, reading and writing a staged view of the store.
 const staged=(domains,store)=>{const query=new domains.query.constructor(store);query.nativeHermesHome=domains.query.nativeHermesHome;return Object.assign(Object.create(Object.getPrototypeOf(domains)),domains,{store,query});};
 // A copy of the records to try a change on, without the workspace lock and
@@ -143,6 +147,8 @@ export function personalOperation(domains,input){
  }
  // Trackers (D-321): collections with a tracker card, in tracker-operations.mjs.
  if(TRACKER_OPERATIONS.includes(type))return trackerOperation(domains,input);
+ // Headaches: the headache add-on, the one owner of the Headaches tracker (headache-operation.mjs).
+ if(type==='headache')return headacheOperation(domains,input);
  const old=table=>{const r=store.get(table,required(input.id,'Record ID'));if(!r||r.removed_at)throw Error('Record does not exist');if(input.expected&&input.expected!==r._hash)store.conflict(table,input,r);return r;};
  if(type==='work-record-observation'){
   const item=old('work_items'),evidence=required(input.evidence,'Reported check evidence');
@@ -275,7 +281,9 @@ export function validateConversationOperations(domains,input,operations){
   'tracker-hold':/\btrack(?:e|en|ing)?\b/i,
   'tracker-create':/^\s*(?:yes|yeah|yep|yup|sure|ok(?:ay)?|go ahead|do it|start it|ja|jo|klar|mach(?: das)?)\b|\b(?:i want to track|start tracking|new tracker|make a tracker|create a tracker|ich will .* tracken)\b/i,
   'track':/\btrack(?:e|ed|en)?\b/i,
-  'tracker-correct':/\b(?:that was|it was|not \d|change|correct|fix|delete|remove|lösche|korrigiere|war)\b/i
+  'tracker-correct':/\b(?:that was|it was|not \d|change|correct|fix|delete|remove|lösche|korrigiere|war)\b/i,
+  // A headache, a pill or a pain level, with "track" or without (D-321: the tracker hands it on).
+  'headache':/(?<!\p{L})(?:track|headache|migraine|kopfschmerz|kopfweh|migräne|pill|tablet|painkiller|schmerzmittel|ibuprofen|aspirin|paracetamol|thomapyrin|took|genommen|pain|schmerz)/iu
  };
  // What each operation does, in the words a person uses. A request that says
  // not to do that ("Don't remind me", "Please don't pause", "Erinnere mich
@@ -289,7 +297,7 @@ export function validateConversationOperations(domains,input,operations){
   'health-add':'record|log|save|track|notiere|speichere','memory-confirm':'remember|save|correct|update|merke|speichere|korrigiere','memory-propose':'remember|save|merke|speichere',
   'routine-change':'pause|resume|schedule|change|stop|start|move|pausiere|ändere|verschiebe','forecast-settle':'settle|record|resolve|log|notiere',
   'work-allow-local':'allow|approve|authori[sz]e|erlaube|genehmige','work-retry-draft':'retry|try|redo|wiederhole','work-record-observation':'record|log|save|notiere|speichere',
-  'tracker-hold':'track|tracke','tracker-create':'track|create|start|make','track':'track|tracke','tracker-correct':'change|correct|fix|delete|remove|lösche|korrigiere'};
+  'tracker-hold':'track|tracke','tracker-create':'track|create|start|make','track':'track|tracke','tracker-correct':'change|correct|fix|delete|remove|lösche|korrigiere','headache':'track|tracke|log|record|save|note|notiere|speichere'};
  const refuses=type=>{const v=verbs[type];if(!v)return false;
   return new RegExp("(?<!\\p{L})(?:do not|don.t|dont|never|must not|should not|niemals)(?!\\s+forget)\\s+(?:[\\p{L}']+\\s+){0,2}?(?:"+v+")",'iu').test(message)||new RegExp("(?<!\\p{L})(?:"+v+")\\p{L}*\\s+(?:(?:mich|mir|das|es|dies|ihn|sie|uns)\\s+)?nicht(?!\\p{L})",'iu').test(message);};
  for(const operation of operations){
@@ -330,6 +338,20 @@ export function validateConversationOperations(domains,input,operations){
    if(!said(operation.value)||Object.values(operation.data||{}).some(v=>typeof v==='number'&&!said(v)))throw Error('A tracked value must be one you said');
    // Another day needs his word for it.
    if(operation.on&&!/\b(?:yesterday|gestern|vorgestern|today|heute|tomorrow|morgen|on \w+|am \w+|last \w+|letzten? \w+|\d{1,2}[./]\d{1,2}|\d{4}-\d\d-\d\d|\d{1,2}(?:st|nd|rd|th)?\s+[a-z]+|monday|tuesday|wednesday|thursday|friday|saturday|sunday|montag|dienstag|mittwoch|donnerstag|freitag|samstag|sonntag)\b/i.test(message))throw Error('Say which day if it was not today');
+  }
+  if(operation.type==='headache'){
+   // What the headache tracker saves must be what he said (its recipe's rules, checked here):
+   // a pain he gave as a number, digits or a word ("drei von zehn"); a time only when he named
+   // one; every trigger, symptom and medicine in his own words (a medicine may be his usual one
+   // when he only says "a pill").
+   headacheArgs(operation);
+   const lower=message.toLocaleLowerCase(),NUMBERS=['zero|null|kein','one|eins|einer?','two|zwei','three|drei','four|vier','five|fünf','six|sechs','seven|sieben','eight|acht','nine|neun','ten|zehn'];
+   const pain=operation.pain;
+   if(pain!==undefined&&pain!==null&&pain!==''){const n=Number(String(pain).replace(',','.')),digits=[String(pain),String(n),String(n).replace('.',',')].some(x=>new RegExp('(?<![\\d.,])'+x.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'(?![\\d]|[.,]\\d)').test(message)),word=Number.isInteger(n)&&n>=0&&n<=10&&new RegExp('(?<!\\p{L})(?:'+NUMBERS[n]+')(?!\\p{L})','iu').test(message);if(!digits&&!word)throw Error('A pain level must be a number you said');}
+   for(const key of ['at','from','to','taken'])if(operation[key]!==undefined&&operation[key]!==null&&!/^(?:now|jetzt)$/i.test(String(operation[key]).trim())&&!/\d|(?<!\p{L})(?:now|jetzt|ago|vor|since|seit|until|till|bis|um|at|from|von|morning|morgens?|noon|mittags?|afternoon|nachmittags?|evening|abends?|night|nachts?|yesterday|gestern|halb|viertel|o.clock|uhr|hour|stunde|minute)(?!\p{L})/iu.test(message))throw Error('Say when, if it was not now');
+   const named=text=>String(text??'').toLocaleLowerCase().split(/[^\p{L}\p{N}]+/u).filter(w=>w.length>=4).some(w=>lower.includes(w.slice(0,5)));
+   for(const key of ['triggers','symptoms'])for(const x of [].concat(operation[key]??[]))if(!named(x))throw Error('A '+(key==='triggers'?'trigger':'symptom')+' must be one you named');
+   for(const m of [].concat(operation.meds??[]))if(!named(typeof m==='string'?m:m?.med)&&!/(?<!\p{L})(?:pill|tablet|tablette|painkiller|schmerzmittel|schmerztablette|medicine|medikament)/iu.test(message))throw Error('A medicine must be one you named');
   }
   if(operation.type==='tracker-create'&&operation.proposal_id&&proposalState(domains.store,domains.store.get('tracker_proposals',operation.proposal_id),clockNow())!=='pending')throw Error('That question has expired. Say it again and I will ask once more.');
   if(operation.type==='work-record-observation'){

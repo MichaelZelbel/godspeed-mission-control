@@ -6,6 +6,10 @@ import {fileContext} from './context.mjs';
 import {retrieveNoteWindows} from './retrieval-windows.mjs';
 import {explicitNoteCapture} from './chat-intent.mjs';
 import {trackerOperation} from './tracker-operations.mjs';
+import {headacheLog} from './native-personal.mjs';
+import {contextBlock} from '../../third-party/addons/godspeed-headache/lib/context.mjs';
+import {loadSettings as headacheSettings} from '../../third-party/addons/godspeed-headache/lib/settings.mjs';
+import {now as clockNow} from '../../third-party/addons/godspeed-coach/lib/clock.mjs';
 // Full write baselines stay outside the enumerable prompt object.
 const writeSnapshots=new WeakMap();
 export const collectionWriteSnapshot=context=>writeSnapshots.get(context)||[];
@@ -42,6 +46,9 @@ function buildChatContext(query,input){
   // through query.rows, so from this context's one snapshot of the vault.
   const reader={root:query.store.root,list:type=>query.rows(type).filter(r=>!r.removed_at),get:(type,id)=>query.rows(type).find(r=>r.id===id)||null};
   const tracked=trackerOperation({store:reader,query},{type:'tracker-list'});context.personal.trackers=tracked.trackers;context.personal.tracker_questions=tracked.pending;
+  // The open headaches, as the bot's [godspeed-headache] block shows them before every message, so
+  // "headache over" or a pill lands on the right one (D-321).
+  try{const log=headacheLog(reader),settings=headacheSettings(query.store.root);context.personal.headache={tracker:log.tracker?.id||null,open:contextBlock(log.episodes,settings,clockNow())||'No headache is open.'};}catch{context.personal.headache={tracker:null,open:'The headache tracker could not be read.'};}
   for(const type of ['notes','contacts','entities','world_claims','moments','profile_facts','goals','media_analysis']){
     const selected=pick(type,type==='notes'?8:4);context[type]=selected.rows;context.retrieval.counts[type]=selected.total;
   }
