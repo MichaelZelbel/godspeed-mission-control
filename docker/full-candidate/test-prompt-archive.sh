@@ -30,7 +30,7 @@ for _ in $(seq 1 60); do x "grep -q '^GODSPEED_PROMPT_SINCE=' $hh/.godspeed/devi
 check "the first harvest recorded when the server began saving" "x \"grep -q '^GODSPEED_PROMPT_SINCE=' $hh/.godspeed/device.env\""
 check "and that older chats on this server are not brought in" "x \"grep -qx 'GODSPEED_PROMPT_SOURCES=' $hh/.godspeed/device.env\""
 
-docker exec -u hermes "$name" python3 - "$hh/state.db" <<'PY' || { echo "FAIL  the Telegram fixture could not be written"; exit 1; }
+docker exec -i -u hermes "$name" python3 - "$hh/state.db" <<'PY' || { echo "FAIL  the Telegram fixture could not be written"; exit 1; }
 import sqlite3, sys, time
 con = sqlite3.connect(sys.argv[1])
 con.execute("CREATE TABLE IF NOT EXISTS sessions (id TEXT PRIMARY KEY, source TEXT NOT NULL, started_at REAL NOT NULL)")
