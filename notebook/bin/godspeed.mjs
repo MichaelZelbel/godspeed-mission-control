@@ -73,6 +73,10 @@ else if(command==='restore')result=restore(store,media,path.resolve(verb));
 else if(command==='import')result=importExport(query,JSON.parse(fs.readFileSync(verb,'utf8')));
 else if(command==='export')result={format:1,records:[...store.scan().values()].map(r=>{const copy={...r};delete copy._hash;return copy;})};
 else if(command==='validate')result={problems:store.scan()&&store.problems};
+// The food tracker's table (D-321 step 5): downloaded once at setup, checked against its pinned
+// checksum, offline after that (core/food-table.mjs).
+else if(command==='food-table'&&verb==='install')result=await (await import('../core/food-table.mjs')).installFoodTable(store.state,{force:rest.includes('--force')});
+else if(command==='food-table'&&verb==='status')result=(await import('../core/food-table.mjs')).tableStatus(store.state);
 else if(command==='menerio'&&verb==='chunks')result=(await import('../core/menerio-chunks.mjs')).importOrphanChunks(store,path.resolve(rest[0]));
 // Named paths: folder mode with those paths. None (what the installers run when they
 // join a computer to a mission control already on GitHub): joinRepository decides.
