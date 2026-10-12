@@ -155,4 +155,17 @@ rm -r "$TMP/goals/research/kits"
 OUT="$(who3 "Someone Unlisted, read at https://example.org")"
 case "$OUT" in *"WHO DID THIS must name a person or case"*) bad "no research: old behaviour expected: $OUT";; *) ok "with no research for the goal the unlisted name passes this rule again";; esac
 
+# --- a step under a standing permission (2026-10-12) -----------------------------------------
+# A MAY line on the move's goal card, written by mc-goals allow with the person's own words, lets
+# a kind of step go out without a fresh yes; the move names that kind and needs no ship-list line.
+rm -f "$TMP/goals/money-goal.md"
+printf 'ID: yt-goal\r\nKIND: outcome\r\nSTATUS: adopted\r\nMAY: yt-replies | answer comments under my videos | 10 per week | notice | "yes, answer them" 2026-10-12\r\n\r\n## Log\r\n' > "$TMP/goals/yt-goal.md"
+maymove() { move 4 yt-goal "Simon Willison" "the reply, in full" | grep -v '^APPLY' | sed "s/^PERMISSION: .*/PERMISSION: may:$1/"; }
+{ full; maymove yt-replies; } > "$RUN/moves.md"
+OUT="$(run)"; [ $? -eq 0 ] && ok "a move under a MAY line of its goal passes, with no APPLY line and off the ship list" || bad "MAY move passes: $OUT"
+{ full; maymove unknown-kind; } > "$RUN/moves.md"
+OUT="$(run)"; case "$OUT" in *"PERMISSION may:unknown-kind is not a standing permission of yt-goal"*) ok "a kind the goal card has no MAY line for fails, named";; *) bad "unknown MAY kind: $OUT";; esac
+{ full; move 4 health-goal "Simon Willison" "x" | grep -v '^APPLY' | sed 's/^PERMISSION: .*/PERMISSION: may:yt-replies/'; } > "$RUN/moves.md"
+OUT="$(run)"; case "$OUT" in *"PERMISSION may:yt-replies is not a standing permission of health-goal"*) ok "  and another goal's MAY line does not cover it";; *) bad "  MAY of another goal: $OUT";; esac
+
 echo; echo "$PASS passed, $FAIL failed"; [ "$FAIL" -eq 0 ]

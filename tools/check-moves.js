@@ -21,6 +21,8 @@
 //     work id or an idea file.
 //   - AFTER is the thing itself, or names a file that exists and is not empty.
 //   - a ship-list move the mission control applies names its work item on an APPLY line.
+//   - a move under a standing permission, "PERMISSION: may:<kind>", names a kind its goal card has
+//     a MAY line for (2026-10-12); it is not on the ship list, so it needs no line there.
 //   - a goal whose card names a weekly number (LEAD) is judged by it (2026-09-30): each of its
 //     moves carries "BET: <now> -> <expected seven days after it goes live>" and an APPLY line,
 //     the number was read in the last seven days, and a goal settle.txt names under "read today"
@@ -50,7 +52,7 @@ const RUN = path.join(ROOT, 'routines', 'next-action', DATE);
 
 const problems = [];
 const read = (p) => { try { return fs.readFileSync(p, 'utf8').replace(/\r/g, ''); } catch (e) { return null; } };
-const { blocks: parseBlocks } = require(path.join(__dirname, 'goals.js'));
+const { blocks: parseBlocks, parseMay } = require(path.join(__dirname, 'goals.js'));
 // Which goal's research a move is held to: the goal's own folder if it has one, else the folder of
 // the first outcome its card says it SERVES that has one (a strategy uses the research of the
 // outcome it serves). Returns the research goal id, or null when no research exists.
@@ -78,6 +80,14 @@ function namesOf(goal) {
       .filter(Boolean).map(s => s.toLowerCase());
   }
   return { from: rg, names: researchNames[rg] };
+}
+// The kinds of step a goal's card lets go out without a fresh yes: its MAY lines, each written by
+// `mc-goals allow` with the person's own words (2026-10-12). Read from the move's own goal card.
+const mayKinds = {};
+function kindsOf(goal) {
+  if (!SAFE_ID.test(goal)) return [];
+  if (!(goal in mayKinds)) mayKinds[goal] = (read(path.join(ROOT, 'goals', goal + '.md')) || '').split('\n').map(parseMay).filter(Boolean).map(m => m.kind);
+  return mayKinds[goal];
 }
 const days = (a, b) => Math.round((new Date(b + 'T00:00:00Z') - new Date(a + 'T00:00:00Z')) / 86400000);
 function leadOf(goal) {
@@ -152,7 +162,12 @@ for (const b of blocks) {
   // thank-you "betting on a reply", a call's topics "that add no contact", run days "held"). Name
   // the change it should make, or file it as work beside the moves.
   else if (lead && parseFloat(bet[1]) === parseFloat(bet[2])) problems.push(`move "${title}": its BET (${bet[1]} -> ${bet[2]}) bets on no change, so it is not a move for ${goal}'s weekly number; name the change you expect within seven days of going live, or file it as work beside the moves`);
-  const onList = /ship list/i.test(f.PERMISSION || '');
+  // A step under a standing permission names its kind, "PERMISSION: may:<kind>", and the goal's
+  // card must hold a MAY line for that kind; such a step goes out at its time unless stopped, so it
+  // is never on the ship list and needs no line there.
+  const may = (f.PERMISSION || '').match(/^\s*may:\s*([^\s,;.()]*)/i);
+  if (may && !kindsOf(goal).includes(may[1])) problems.push(`move "${title}": PERMISSION may:${may[1]} is not a standing permission of ${goal}; use a kind its card has a MAY line for (mc-goals may ${goal}), or put the move on the ship list`);
+  const onList = !may && /ship list/i.test(f.PERMISSION || '');
   const his = /^\s*only the person/i.test(f['HOW IT LANDS'] || '');
   const applyTo = (b.match(/^APPLY:[ \t]*(\S+)/m) || [])[1];
   if (lead && !applyTo) problems.push(`move "${title}": a move with a bet needs "APPLY: <work id>", the item whose verification starts its seven days (a move only the person can make gets an item they own, whose CHECK shows it happened)`);
