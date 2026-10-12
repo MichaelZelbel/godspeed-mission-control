@@ -26,3 +26,21 @@ export function lastEntryDays(items: { collection_id: string; data?: unknown }[]
   }
   return last;
 }
+
+// Habits are trackers too (D-321, step 3), made from the coach's own habit files: tracker-list
+// gives them with specialist "habit". An active habit is on the shelf; a paused, graduated or
+// dropped one rests in the folded part, with every day it ever had.
+type Listed = { id: string; specialist?: string | null; status?: string };
+export function habitShelf<T extends Listed>(listed: T[]) {
+  const habits = listed.filter((t) => t.specialist === "habit");
+  return { active: habits.filter((t) => t.status === "active"), resting: habits.filter((t) => t.status !== "active") };
+}
+
+// A habit's tracked days, newest first, as the habit page lists them.
+type Day = { when?: string; data?: { answer?: string; note?: string } | null };
+export function habitDays(habit: { recent?: Day[] | null }) {
+  return [...(habit.recent ?? [])]
+    .filter((d) => typeof d.when === "string" && d.data?.answer)
+    .sort((a, b) => String(b.when).localeCompare(String(a.when)))
+    .map((d) => ({ day: String(d.when), answer: String(d.data?.answer), note: String(d.data?.note ?? "") }));
+}

@@ -13,6 +13,8 @@ import {DashboardLayout} from '@/components/layout/DashboardLayout';
 const Notes=lazy(()=>import('./pages/Notes')),People=lazy(()=>import('./pages/People')),World=lazy(()=>import('./pages/World'));
 const Profile=lazy(()=>import('./pages/Profile')),Collections=lazy(()=>import('./pages/Collections')),CollectionDetail=lazy(()=>import('./pages/CollectionDetail'));
 const CollectionSchema=lazy(()=>import('./pages/CollectionSchema')),CollectionTemplates=lazy(()=>import('./pages/CollectionTemplates'));
+// A habit on the Trackers shelf (D-321, step 3).
+const HabitTracker=lazy(()=>import('./pages/HabitTracker'));
 const Timeline=lazy(()=>import('./pages/TimelinePage')),Media=lazy(()=>import('./pages/MediaLibrary')),Review=lazy(()=>import('./pages/ReviewQueue'));
 const Groups=lazy(()=>import('./pages/Groups')),GroupDetail=lazy(()=>import('./pages/GroupDetail')),Actions=lazy(()=>import('./pages/Actions'));
 const Activity=lazy(()=>import('./pages/ActivityPage')),WeeklyReview=lazy(()=>import('./pages/WeeklyReview'));
@@ -42,7 +44,7 @@ export default function App(){return <ThemeProvider attribute="class" defaultThe
   <Route path="/dashboard/groups" element={<Groups/>}/><Route path="/dashboard/groups/:slug" element={<GroupDetail/>}/>
   <Route path="/dashboard/actions" element={<Actions/>}/><Route path="/dashboard/activity" element={<Activity/>}/><Route path="/dashboard/review" element={<WeeklyReview/>}/>
   <Route path="/collections" element={<Collections/>}/><Route path="/collections/templates" element={<CollectionTemplates/>}/>
-  <Route path="/collections/:slug/schema" element={<CollectionSchema/>}/><Route path="/collections/:slug/:itemId" element={<CollectionDetail/>}/><Route path="/collections/:slug" element={<CollectionDetail/>}/>
+  <Route path="/collections/:slug/schema" element={<CollectionSchema/>}/><Route path="/collections/:slug/:itemId" element={<CollectionDetail/>}/><Route path="/collections/:slug" element={<CollectionDetail/>}/><Route path="/trackers/habits/:id" element={<HabitTracker/>}/>
   <Route path="/dashboard/graph" element={<KnowledgeGraph/>}/>
   <Route path="*" element={<p>This page is unavailable in this test installation.</p>}/>
 </Route></Routes></AuthProvider></BrowserRouter></TooltipProvider></ThemeProvider>;}

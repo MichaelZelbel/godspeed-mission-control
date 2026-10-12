@@ -22,7 +22,7 @@ import { AICollectionDialog } from "@/components/collections/AICollectionDialog"
 import { BRAND } from "@/lib/brand";
 import { dbErrorMessage } from "@/lib/function-error";
 import { LoadErrorState } from "@/components/collections/LoadErrorState";
-import { lastEntryDays, shelve } from "@/lib/tracker-shelf";
+import { habitShelf, lastEntryDays, shelve } from "@/lib/tracker-shelf";
 
 type Collection = Database["public"]["Tables"]["collections"]["Row"];
 // itemCount is null when the count could not be read: "0 items" would be a
@@ -127,6 +127,37 @@ function CollectionCard({ collection }: { collection: CollectionWithCount }) {
               ? "Item count not available"
               : `${collection.itemCount} item${collection.itemCount === 1 ? "" : "s"}`}
           </p>
+        </CardContent>
+      </Card>
+    </Link>
+  );
+}
+
+// A habit on the Trackers shelf (D-321, step 3): the coach's own record, shown as a tracker. Its
+// page lists its days and changes them through the coach.
+type HabitCardData = { id: string; name: string; specialist?: string | null; status?: string; habit_status?: string; talk?: string | null; last?: { when?: string; data?: { answer?: string } } | null };
+const ANSWER_WORDS: Record<string, string> = { done: "done", no: "not done", skip: "skipped" };
+function HabitCard({ habit }: { habit: HabitCardData }) {
+  const last = habit.last?.when && habit.last.data?.answer ? `${ANSWER_WORDS[habit.last.data.answer] ?? habit.last.data.answer} on ${habit.last.when}` : "No day tracked yet";
+  return (
+    <Link
+      to={`/trackers/habits/${encodeURIComponent(habit.id)}`}
+      className="block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+    >
+      <Card className="cursor-pointer transition-colors hover:bg-accent/50">
+        <CardHeader className="pb-3">
+          <div className="flex items-start gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary" aria-hidden="true">✓</div>
+            <div className="min-w-0 flex-1">
+              <CardTitle className="truncate text-base">{habit.name}</CardTitle>
+              <p className="mt-1 line-clamp-2 min-h-10 text-sm text-muted-foreground">
+                Habit{habit.talk ? `, ${habit.talk} talk` : ""}{habit.habit_status && habit.habit_status !== "active" ? `, ${habit.habit_status}` : ""}
+              </p>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <p className="text-xs text-muted-foreground">{last}</p>
         </CardContent>
       </Card>
     </Link>
@@ -267,6 +298,8 @@ export default function Collections() {
   // read, and then no tracker is folded away as resting on a guess.
   const [lastWhen, setLastWhen] = useState<Record<string, string> | null>({});
   const [restingOpen, setRestingOpen] = useState(false);
+  // Habits, from tracker-list; none when it could not be read, and the rest of the page still loads.
+  const [habits, setHabits] = useState<{ active: HabitCardData[]; resting: HabitCardData[] }>({ active: [], resting: [] });
   const userId = user?.id;
 
   useEffect(() => {
@@ -327,9 +360,13 @@ export default function Collections() {
           .eq("user_id", userId);
         days = entriesError ? null : lastEntryDays(entries ?? []);
       }
+      // Habits are trackers made from the coach's own files (D-321): tracker-list gives them.
+      const { data: listed, error: listError } = await supabase.functions.invoke("personal-operation", { body: { type: "tracker-list" } });
+      const habitList = listError ? { active: [], resting: [] } : habitShelf(((listed as { trackers?: HabitCardData[] } | null)?.trackers ?? []));
       if (!cancelled) {
         setCollections(rows.map((collection) => ({ ...collection, itemCount: countById.get(collection.id) ?? null })));
         setLastWhen(days);
+        setHabits(habitList);
         setIsLoading(false);
       }
     };
@@ -343,7 +380,8 @@ export default function Collections() {
     const sorted = shelve(collections, lastWhen ?? {}, new Date());
     return lastWhen ? sorted : { ...sorted, trackers: [...sorted.trackers, ...sorted.resting], resting: [] };
   }, [collections, lastWhen]);
-  const hasTrackers = shelf.trackers.length + shelf.resting.length > 0;
+  const hasTrackers = shelf.trackers.length + shelf.resting.length + habits.active.length + habits.resting.length > 0;
+  const resting = shelf.resting.length + habits.resting.length;
 
   return (
     <div className="w-full max-w-6xl">
@@ -374,29 +412,31 @@ export default function Collections() {
           title="Your collections could not be loaded."
           onRetry={() => setRefreshKey((key) => key + 1)}
         />
-      ) : collections.length === 0 ? (
+      ) : collections.length === 0 && !hasTrackers ? (
         <EmptyCollectionsState onNewBlank={() => setDialogOpen(true)} onCreateWithAI={() => setAiDialogOpen(true)} onBrowseTemplates={() => navigate("/collections/templates")} />
       ) : (
         <div className="space-y-8">
           {hasTrackers && (
             <section className="space-y-3" aria-labelledby="trackers-heading">
               <h2 id="trackers-heading" className="text-lg font-bold font-display">Trackers</h2>
-              {shelf.trackers.length > 0 && (
+              {shelf.trackers.length + habits.active.length > 0 && (
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
                   {shelf.trackers.map((collection) => <CollectionCard key={collection.id} collection={collection} />)}
+                  {habits.active.map((habit) => <HabitCard key={habit.id} habit={habit} />)}
                 </div>
               )}
-              {shelf.resting.length > 0 && (
+              {resting > 0 && (
                 <Collapsible open={restingOpen} onOpenChange={setRestingOpen} className="space-y-3">
                   <CollapsibleTrigger asChild>
                     <button type="button" className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground">
-                      Resting ({shelf.resting.length})
+                      Resting ({resting})
                       <ChevronDown className={cn("h-4 w-4 transition-transform", restingOpen && "rotate-180")} />
                     </button>
                   </CollapsibleTrigger>
                   <CollapsibleContent>
                     <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
                       {shelf.resting.map((collection) => <CollectionCard key={collection.id} collection={collection} />)}
+                      {habits.resting.map((habit) => <HabitCard key={habit.id} habit={habit} />)}
                     </div>
                   </CollapsibleContent>
                 </Collapsible>
