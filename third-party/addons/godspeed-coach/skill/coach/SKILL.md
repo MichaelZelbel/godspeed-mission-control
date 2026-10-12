@@ -1,6 +1,6 @@
 ---
 name: coach
-description: Recurring coaching talks and daily habits. Use when a coaching talk is due (the talk job's brief says COACH TALK DUE), when the [godspeed-coach] block shows an open talk and the person's message continues it, when they answer the evening habit check (yes / no / skip), when they say they did a habit ("did head lifts", "head lifts done", "Kopfheben erledigt") or take a tracked day back ("delete the last head lifts"), when a journal entry clearly names an active habit, when they want a new habit or to pause, graduate or drop one, when they want a new coaching talk ("a weekly health talk on Sundays at seven"), when they say "let's do the health talk now" or name any coach area, and when they change a talk's day, time, tone or rhythm.
+description: Recurring coaching talks and daily habits. Use when a coaching talk is due (the talk job's brief says COACH TALK DUE), when the [godspeed-coach] block shows an open talk and the person's message continues it, when they answer the evening habit check (yes / no / skip), when they say they did a habit ("did head lifts", "head lifts done", "Kopfheben erledigt") or take a tracked day back ("delete the last head lifts"), when a journal entry clearly names an active habit, when they want a new habit or to pause, graduate or drop one, when they want a new coaching talk ("a weekly health talk on Sundays at seven"), when they say "let's do the health talk now" or name any coach area, when they change a talk's day, time, tone or rhythm, and when they say what a talk may look at or must never do, or take that back ("The health talk may also look at my sleep tracker", "The health talk must never suggest buying anything", "The health talk no longer needs my sleep tracker").
 ---
 
 ## What this is
@@ -156,10 +156,9 @@ its output as it is:
 
 Rhythms: `daily`, `weekly <day>`, `every 2 weeks <day>`, `monthly <1 to 28>`. The first talk is
 tomorrow or later (`--starts <date>` for a specific day). An area a habit made has no talk
-(`godspeed-coach areas` says "no talk"); the same `area add` gives it one, and its habits stay. If they name what the talk should look
-at ("my running app", "my calendar") or something it must never do, add them to
-`coach/<area>/area.md` as `MAY READ:` and `LIMIT:` lines under the header, and say so in the same
-confirmation.
+(`godspeed-coach areas` says "no talk"); the same `area add` gives it one, and its habits stay. If they
+name what the talk should look at ("my running app", "my sleep tracker") or something it must never
+do, add each once the area exists, as "Changing an area" says, and say so in the same confirmation.
 
 ## Changing an area
 
@@ -173,6 +172,29 @@ confirmation.
 Confirm in plain words what changed and when the next talk is (the command's output names it),
 never the output as it is: "The work talk is now every Thursday at 19:00, the next one this
 Thursday."
+
+What a talk may look at, and what it must never do, can be added or taken back at any time, for a
+talk that already exists or an area with no talk yet:
+
+- **One of their trackers** ("The health talk may also look at my sleep tracker", "The health talk
+  no longer needs my sleep tracker"). Where the notebook is connected, a talk reads the trackers
+  whose own card names it, so change the card, never a line in `area.md`: read the trackers
+  (`personal_operation {"type":"tracker-list"}`), then
+  `personal_operation {"type":"tracker-talk","tracker":"<its id>","talk":"<area>","words":"<their message>","expected":{"collections/<its id>":"<its hash>"}}`;
+  taking it back adds `"remove":true`. Its `reply` is your answer, character for character.
+- **Anything else it may look at** ("The health talk may also look at my running app"):
+  `godspeed-coach area read <area> "<what, in their words>"`; taking it back:
+  `godspeed-coach area read <area> "<what>" --remove`.
+- **Something it must never do** ("The health talk must never suggest buying anything"):
+  `godspeed-coach area limit <area> "<the rule as they said it>"`, such as
+  `"never suggest buying anything"`; taking it back: the same with `--remove`. A limit binds every
+  reply of that talk.
+
+`godspeed-coach area read <area>` and `area limit <area>` list what is there now. Confirm in one
+short sentence that makes sense on its own, in their words, never the command's output as it is:
+"The health talk may now look at your running app.", "The health talk will never suggest buying
+anything.", "The health talk no longer looks at your running app." For an area with no talk yet,
+add that its talk will keep this once there is one.
 
 ## Never
 

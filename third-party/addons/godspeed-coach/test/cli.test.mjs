@@ -153,3 +153,48 @@ test("a refused habit leaves no area behind, and the cap of five is unchanged", 
   assert.match(cli(mc, T, "habit", "add", "health", "f", "--title", "F").out, /^Started: F \(f\), daily, from 2026-10-12\.$/);
   assert.equal(fs.readFileSync(path.join(mc, "coach", "health", "area.md"), "utf8"), before);
 });
+
+// "The health talk may also look at my sleep tracker", "The health talk must never suggest buying
+// anything", and taking one back, for a talk that already exists (until 12 October 2026 only area
+// add took them, and later the assistant had to edit area.md by hand).
+test("areas: what a talk may look at and must never do, added and taken back after it exists", () => {
+  const mc = mission(), T = "2026-10-12T10:00:00Z";
+  const file = path.join(mc, "coach", "health", "area.md");
+  const before = fs.readFileSync(file, "utf8");
+  const read = cli(mc, T, "area", "read", "health", "my sleep tracker");
+  assert.equal(read.code, 0, read.err);
+  assert.equal(read.out, "Added: the Health and fitness talk may look at my sleep tracker.");
+  assert.equal(cli(mc, T, "area", "limit", "health", "never suggest buying anything").out, "Added a limit to the Health and fitness talk: never suggest buying anything.");
+  assert.equal(fs.readFileSync(file, "utf8"), before.replace("LIMIT: never diagnose\n", "MAY READ: my sleep tracker\nLIMIT: never diagnose\nLIMIT: never suggest buying anything\n"), "only the two lines changed");
+  assert.equal(cli(mc, T, "area", "read", "health", "My sleep tracker").out, "Already there: the Health and fitness talk may look at my sleep tracker. Nothing changed.");
+  assert.equal(cli(mc, T, "area", "read", "health").out, "The Health and fitness talk may look at: my sleep tracker.");
+  assert.equal(cli(mc, T, "area", "limit", "health").out, "The Health and fitness talk's limits: never diagnose; never suggest buying anything.");
+  assert.deepEqual(JSON.parse(cli(mc, T, "area", "read", "health", "--json").out), { ok: true, area: "health", may_read: ["my sleep tracker"], limits: ["never diagnose", "never suggest buying anything"] });
+  // The talk's brief carries both, so the next talk reads the one and keeps the other.
+  const b = cli(mc, "2026-10-18T17:00:00Z", "brief", "health", "--date", "2026-10-18").out;
+  assert.match(b, /Limits, binding:\n- never diagnose\n- never suggest buying anything\nMay read:\n- my sleep tracker\n/);
+  // "The health talk no longer needs my sleep tracker."
+  assert.equal(cli(mc, T, "area", "read", "health", "sleep tracker", "--remove").out, "Taken away: the Health and fitness talk no longer looks at my sleep tracker.");
+  assert.equal(cli(mc, T, "area", "read", "health").out, "Nothing is named for the Health and fitness talk to look at.");
+  const none = cli(mc, T, "area", "read", "health", "my calendar", "--remove");
+  assert.equal(none.code, 1); assert.match(none.err, /^Nothing the Health and fitness talk may look at matches "my calendar"\. Nothing is named for it to look at\.$/);
+  assert.equal(cli(mc, T, "area", "limit", "health", "never suggest buying anything", "--remove").out, 'Taken away: the Health and fitness talk\'s limit "never suggest buying anything".');
+  assert.equal(fs.readFileSync(file, "utf8"), before, "back to the file it was");
+  // An area that does not exist is refused plainly, and nothing is made for it.
+  const unknown = cli(mc, T, "area", "read", "garden", "my calendar");
+  assert.equal(unknown.code, 1);
+  assert.equal(unknown.err, 'There is no coach area called "garden". Areas: health.');
+  assert.equal(fs.existsSync(path.join(mc, "coach", "garden")), false);
+  assert.equal(cli(mc, T, "area", "limit", "health", "").code, 1);
+});
+
+test("areas: an area with no talk takes what it may read and its limits, and keeps them when it gets a talk", () => {
+  const mc = tmpMission({ "coach/settings.json": JSON.stringify({ timezone: "Europe/Berlin", git_sync: "off" }) }), T = "2026-10-12T10:00:00Z";
+  assert.equal(cli(mc, T, "habit", "add", "sleep", "lights-out", "--title", "Lights out").code, 0);
+  assert.equal(cli(mc, T, "area", "read", "sleep", "my sleep tracker").out, "Added: the Sleep talk may look at my sleep tracker. It has no talk yet; the talk it gets later keeps this.");
+  assert.equal(cli(mc, T, "area", "limit", "sleep", "never suggest sleeping pills").out, "Added a limit to the Sleep talk: never suggest sleeping pills. It has no talk yet; the talk it gets later keeps this.");
+  assert.equal(cli(mc, T, "area", "add", "sleep", "--rhythm", "weekly sunday", "--time", "19:00").code, 0);
+  const text = fs.readFileSync(path.join(mc, "coach", "sleep", "area.md"), "utf8");
+  assert.match(text, /\nMAY READ: my sleep tracker\nLIMIT: never suggest sleeping pills\n/);
+  assert.match(text, /^RHYTHM: weekly sunday$/m);
+});

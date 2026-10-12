@@ -155,3 +155,25 @@ test('the headache recipe replies with "Tracked:", and the coach recipe says a n
   const revisions=JSON.parse(read('../data/recipe-revisions.json'));
   for(const name of ['coach','headache-tracker'])assert.ok(revisions[name+'/SKILL.md'].includes(digest(read('../recipes/'+name+'/SKILL.md'))),name);
 });
+
+// Mission Control's idea card of 12 October 2026: a talk that exists can be told in one sentence
+// what it may look at and what it must never do, and the recipes say how, with the reader's words.
+test('the coach and tracker recipes say how a talk that exists is told what it may look at and must never do',()=>{
+  const coach=read('../recipes/coach/SKILL.md'),tracker=read('../recipes/tracker/SKILL.md');
+  const description=coach.match(/^description: (.*)$/m)[1];
+  for(const words of ['"The health talk may also look at my sleep tracker"','"The health talk must never suggest buying anything"','"The health talk no longer needs my sleep tracker"'])assert.ok(description.includes(words),words);
+  const changing=coach.split('## Changing an area')[1].split('## Never')[0];
+  assert.match(changing,/`godspeed-coach area read <area> "<what, in their words>"`/);
+  assert.match(changing,/`godspeed-coach area read <area> "<what>" --remove`/);
+  assert.match(changing,/`godspeed-coach area limit <area> "<the rule as they said it>"`/);
+  assert.match(changing,/\{"type":"tracker-talk","tracker":"<its id>","talk":"<area>","words":"<their message>","expected":\{"collections\/<its id>":"<its hash>"\}\}/);
+  assert.match(changing,/"The health talk may now look at your running app\.", "The health talk will never suggest buying\nanything\.", "The health talk no longer looks at your running app\."/);
+  // Nothing tells the assistant to edit area.md by hand any more.
+  assert.doesNotMatch(coach,/add them to\n`coach\/<area>\/area\.md` as `MAY READ:`/);
+  assert.match(tracker,/^description: .*"The health talk may also look at my sleep tracker"/m);
+  assert.match(tracker,/\{"type":"tracker-talk","tracker":"<id>","talk":"health","words":"<their message>","expected":\{"collections\/<id>":"<hash>"\}\}/);
+  assert.doesNotMatch(coach+tracker,/[–—]/,'no long dashes');
+  assert.equal(coach,read('../../third-party/addons/godspeed-coach/skill/coach/SKILL.md'));
+  const revisions=JSON.parse(read('../data/recipe-revisions.json'));
+  for(const name of ['coach','tracker'])assert.ok(revisions[name+'/SKILL.md'].includes(digest(read('../recipes/'+name+'/SKILL.md'))),name+' ships a known revision');
+});

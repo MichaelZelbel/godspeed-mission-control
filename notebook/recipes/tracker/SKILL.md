@@ -1,6 +1,6 @@
 ---
 name: tracker
-description: Track anything the person names. Use for every message that starts with "track" (any case, typed or dictated, "Track:" too, also inside a German sentence), the habits, headaches, the period and food included, since this recipe hands those on; when they answer yes to "Start a new tracker called ...?"; when they ask to set up a tracker ("I want to track my sleep: hours, and quality from 1 to 5"); when they correct or delete a tracked entry ("that was 91, not 92", "delete the last belly", "delete the last walk to work"); and when they ask about something they track ("how has my belly changed this month?").
+description: Track anything the person names. Use for every message that starts with "track" (any case, typed or dictated, "Track:" too, also inside a German sentence), the habits, headaches, the period and food included, since this recipe hands those on; when they answer yes to "Start a new tracker called ...?"; when they ask to set up a tracker ("I want to track my sleep: hours, and quality from 1 to 5"); when they correct or delete a tracked entry ("that was 91, not 92", "delete the last belly", "delete the last walk to work"); when they ask about something they track ("how has my belly changed this month?"); and when they say which coaching talk may look at a tracker or no longer needs it ("The health talk may also look at my sleep tracker", "The health talk no longer needs my sleep tracker").
 ---
 
 # Tracker
@@ -77,6 +77,12 @@ The journal no longer takes "track".
    say it in theirs, and keep every number, name and day.
 9. **A question about what they track**: `{"type":"tracker-list","days":<days asked about>}` gives
    each tracker's entries of those days under `recent`. Answer from those entries only.
+10. **Which talk looks at a tracker** ("The health talk may also look at my sleep tracker", "The
+   health talk no longer needs my sleep tracker"): a talk reads the trackers whose card names it.
+   `{"type":"tracker-talk","tracker":"<id>","talk":"health","words":"<their message>","expected":{"collections/<id>":"<hash>"}}`;
+   taking it away adds `"remove":true`. A tracker has one talk: when another talk has it, the reply
+   asks first, and only their yes adds `"instead":true`. The reply is your answer, as in 8. Anything
+   else a talk may look at, or must never do, is the coach recipe's ("Changing an area").
 
 ## Never
 

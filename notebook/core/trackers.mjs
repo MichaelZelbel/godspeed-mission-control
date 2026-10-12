@@ -13,7 +13,7 @@ export const HOLD_MS=86400000,REST_DAYS=30;
 const MONTHS=['January','February','March','April','May','June','July','August','September','October','November','December'];
 const WEEKDAYS=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 // A talk is a coaching area by its own name (coach/<area>/), as the person named it.
-const talkWords=talk=>talk==='work-money'?'work and money':String(talk).replaceAll('-',' ');
+export const talkWords=talk=>talk==='work-money'?'work and money':String(talk).replaceAll('-',' ');
 // Whether that talk exists: an area folder with an area.md that has a talk rhythm. A new mission
 // control has no health talk, and an area made for a habit alone has RHYTHM none (the coach's
 // areas.mjs), so a tracker is given to a talk, and the reply names it, only when the talk is

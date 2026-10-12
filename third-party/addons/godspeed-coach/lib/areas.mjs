@@ -161,6 +161,75 @@ export function habitArea(mcDir, name) {
   return { area: readArea(dir), created: true };
 }
 
+// What a talk may look at (MAY READ) and what it must never do (LIMIT), said after the talk
+// exists: "The health talk may also look at my sleep tracker", "The health talk must never suggest
+// buying anything", "The health talk no longer needs my sleep tracker". Until 12 October 2026 they
+// could only be given when the area was made, and later the assistant had to edit the file by
+// hand. One header line is added or taken away; every other line, and the file's own line endings,
+// stay exactly as they were. An area with no talk takes them too, for the talk it gets later.
+export const AREA_LINES = ["MAY READ", "LIMIT"];
+const lineText = (v) => String(v ?? "").replace(/\s+/g, " ").trim();
+const sameLine = (v) => lineText(v).toLowerCase().replace(/[.!]+$/, "");
+const FILLER = new Set(["my", "the", "a", "an", "your", "his", "her", "our", "their", "its", "mein", "meine", "meinen", "der", "die", "das", "den"]);
+const lineWords = (v) => sameLine(v).split(/[^\p{L}\p{N}]+/u).filter((w) => w && !FILLER.has(w));
+// Their words fit a line when one holds every word of the other: "the Sleep tracker" and "sleep"
+// fit "my sleep tracker"; "my calendar" does not.
+const fits = (words, line) => {
+  const a = lineWords(words), b = lineWords(line);
+  return a.length > 0 && b.length > 0 && (a.every((w) => b.includes(w)) || b.every((w) => a.includes(w)));
+};
+function areaLineKey(key) {
+  const k = String(key || "").toUpperCase();
+  if (!AREA_LINES.includes(k)) throw new Error(`An area's lines here are MAY READ or LIMIT, not "${key}".`);
+  return k;
+}
+function areaLines(area) {
+  const raw = fs.readFileSync(area.file, "utf8");
+  const eol = raw.includes("\r\n") ? "\r\n" : "\n";
+  const lines = raw.split(eol);
+  const end = lines.findIndex((l) => !l.trim() || l.startsWith("## "));
+  return { eol, lines, end: end === -1 ? lines.length : end };
+}
+const lineOf = (k, l) => (l.startsWith(k + ":") ? l.slice(k.length + 1).trim() : null);
+const talkName = (area) => `the ${area.title} talk`;
+
+export function addAreaLine(area, key, value) {
+  const k = areaLineKey(key);
+  const v = lineText(value);
+  if (!v) throw new Error(k === "LIMIT" ? 'Say what the talk must never do, for example "never suggest buying anything".' : 'Say what the talk may look at, for example "my sleep tracker".');
+  const had = (area.lists[k] || []).find((x) => sameLine(x) === sameLine(v));
+  if (had !== undefined) return { area: readArea(area.dir), changed: false, line: had };
+  const { eol, lines, end } = areaLines(area);
+  const same = lines.slice(0, end).map((l, i) => (lineOf(k, l) !== null ? i : -1)).filter((i) => i !== -1);
+  // After the last line of its kind; a first MAY READ goes before the limits, as area add writes them.
+  const firstLimit = lines.slice(0, end).findIndex((l) => lineOf("LIMIT", l) !== null);
+  const at = same.length ? same.at(-1) + 1 : k === "MAY READ" && firstLimit !== -1 ? firstLimit : end;
+  lines.splice(at, 0, `${k}: ${v}`);
+  fs.writeFileSync(area.file, lines.join(eol));
+  return { area: readArea(area.dir), changed: true, line: v };
+}
+
+export function removeAreaLine(area, key, words) {
+  const k = areaLineKey(key);
+  if (!lineText(words)) throw new Error(k === "LIMIT" ? "Say which limit to take away." : "Say what the talk no longer needs to look at.");
+  const { eol, lines, end } = areaLines(area);
+  const found = lines.slice(0, end).map((l, i) => ({ i, value: lineOf(k, l) })).filter((x) => x.value !== null);
+  const exact = found.filter((x) => sameLine(x.value) === sameLine(words));
+  const hit = exact.length ? exact : found.filter((x) => fits(words, x.value));
+  const names = found.map((x) => x.value).join("; ");
+  if (!hit.length) {
+    throw new Error(k === "LIMIT"
+      ? `None of ${talkName(area)}'s limits matches "${lineText(words)}". ${found.length ? `Its limits: ${names}.` : "It has no limits of its own."}`
+      : `Nothing ${talkName(area)} may look at matches "${lineText(words)}". ${found.length ? `It may look at: ${names}.` : "Nothing is named for it to look at."}`);
+  }
+  if (!exact.length && hit.length > 1) {
+    throw new Error(`Several ${k === "LIMIT" ? `of ${talkName(area)}'s limits match` : `things ${talkName(area)} may look at match`} "${lineText(words)}": ${hit.map((x) => x.value).join(" / ")}. Say which one.`);
+  }
+  const gone = new Set(hit.map((x) => x.i));
+  fs.writeFileSync(area.file, lines.filter((_, i) => !gone.has(i)).join(eol));
+  return { area: readArea(area.dir), removed: hit.map((x) => x.value) };
+}
+
 export function setAreaField(area, key, value) {
   const k = String(key || "").toUpperCase();
   if (!FIELD_CHECKS[k]) throw new Error(`An area's settings are ${AREA_FIELDS.join(", ")}; "${key}" is not one of them.`);

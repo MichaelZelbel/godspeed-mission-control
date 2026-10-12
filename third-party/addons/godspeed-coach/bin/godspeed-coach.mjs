@@ -6,7 +6,7 @@ import path from "node:path";
 import { findMissionControl, appHome } from "../lib/paths.mjs";
 import { now, localParts, addDays } from "../lib/clock.mjs";
 import { loadSettings, setSetting, DEFAULTS } from "../lib/settings.mjs";
-import { listAreas, findArea, isTalkDay, addArea, setAreaField, nextTalkDay, habitArea, AREA_FIELDS } from "../lib/areas.mjs";
+import { listAreas, findArea, isTalkDay, addArea, setAreaField, nextTalkDay, habitArea, AREA_FIELDS, addAreaLine, removeAreaLine } from "../lib/areas.mjs";
 import { openTalk, readTalk, setTalkState, setFollowUp, addSaid, setShown, talkDates, talkFile } from "../lib/talks.mjs";
 import { addHabit, listHabits, findHabit, track, untrack, lastAnsweredDay, setStatus, stats, askedOn, answerOn } from "../lib/habits.mjs";
 import { readTable } from "../lib/auto.mjs";
@@ -16,7 +16,7 @@ import { dueTick } from "../lib/tick.mjs";
 import { contextBlock, waitingTalks } from "../lib/context.mjs";
 import { commitCoach, syncInBackground, pullQuietly } from "../lib/sync.mjs";
 
-const FLAGS = new Set(["json", "yes", "no-hermes", "no-claude", "all", "scheduled"]);
+const FLAGS = new Set(["json", "yes", "no-hermes", "no-claude", "all", "scheduled", "remove"]);
 function parseArgs(argv) {
   const pos = []; const f = {};
   for (let i = 0; i < argv.length; i++) {
@@ -118,7 +118,36 @@ const commands = {
         return out(`Changed: ${b.title} ${key.toUpperCase()} = ${v.join(" ")}. ${b.noTalk ? "It has no talk." : b.on ? `Next talk: ${first || "none"}.` : "Paused: no talks until it is on again."}`, { ok: true, next: b.noTalk ? null : first });
       } catch (e) { die(e.message); }
     }
-    die("godspeed-coach area add <name> --title ... --rhythm ... | area set <area> <SETTING> <value>");
+    if (sub === "read" || sub === "limit") {
+      // "The health talk may also look at my sleep tracker" (read), "must never suggest buying
+      // anything" (limit), and --remove to take one back. Only that header line changes
+      // (lib/areas.mjs addAreaLine, removeAreaLine).
+      const a = needArea(name);
+      const K = sub === "read" ? "MAY READ" : "LIMIT";
+      const talk = `the ${a.title} talk`;
+      const state = (b) => ({ ok: true, area: b.slug, may_read: b.lists["MAY READ"] || [], limits: b.lists.LIMIT || [] });
+      const later = a.noTalk ? " It has no talk yet; the talk it gets later keeps this." : "";
+      if (pos.length < 3) {
+        const have = a.lists[K] || [];
+        const T = talk.charAt(0).toUpperCase() + talk.slice(1);
+        return out(sub === "read"
+          ? (have.length ? `${T} may look at: ${have.join("; ")}.` : `Nothing is named for ${talk} to look at.`)
+          : (have.length ? `${T}'s limits: ${have.join("; ")}.` : `${T} has no limits of its own.`), state(a));
+      }
+      const what = [key, ...v].join(" ");
+      try {
+        if (f.remove) {
+          const r = removeAreaLine(a, K, what);
+          saved(`area ${a.slug} ${K} taken away`);
+          return out(sub === "read" ? `Taken away: ${talk} no longer looks at ${r.removed.join(" and ")}.` : `Taken away: ${talk}'s limit ${r.removed.map((x) => `"${x}"`).join(" and ")}.`, { ...state(r.area), removed: r.removed });
+        }
+        const r = addAreaLine(a, K, what);
+        if (r.changed) saved(`area ${a.slug} ${K} added`);
+        const said = sub === "read" ? `${talk} may look at ${r.line}.` : r.changed ? `Added a limit to ${talk}: ${r.line}.` : `${talk}'s limit "${r.line}".`;
+        return out(r.changed ? (sub === "read" ? `Added: ${said}` : said) + later : `Already there: ${said} Nothing changed.`, { ...state(r.area), changed: r.changed });
+      } catch (e) { die(e.message); }
+    }
+    die("godspeed-coach area add <name> --title ... --rhythm ... | area set <area> <SETTING> <value> | area read <area> \"<what it may look at>\" [--remove] | area limit <area> \"<what it must never do>\" [--remove]");
   },
   brief() { const a = needArea(pos[0]); console.log(brief(mcDir, s, a, dateArg(f.date))); },
   gate() {
