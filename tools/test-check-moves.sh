@@ -168,4 +168,58 @@ OUT="$(run)"; case "$OUT" in *"PERMISSION may:unknown-kind is not a standing per
 { full; move 4 health-goal "Simon Willison" "x" | grep -v '^APPLY' | sed 's/^PERMISSION: .*/PERMISSION: may:yt-replies/'; } > "$RUN/moves.md"
 OUT="$(run)"; case "$OUT" in *"PERMISSION may:yt-replies is not a standing permission of health-goal"*) ok "  and another goal's MAY line does not cover it";; *) bad "  MAY of another goal: $OUT";; esac
 
+# --- every move aims at its goal's limit (2026-10-12) ------------------------------------------
+# 2026-09-25 to 10-11: fourteen changes on pages nobody visits, no goal number moved. Once a goal's
+# research names the one thing that limits it now (LIMIT: under "## The limit now" in brief.md),
+# each move for it says on an AIMS AT line how it moves that limit. A goal whose research names no
+# limit yet (founding, or no research) is not blocked: its moves pass and a NOTE says why.
+mkdir -p "$TMP/goals/research/kits"
+brief() { printf 'GOAL: kits\nUPDATED: %s\nSTATUS: %s\n\n## The limit now\n%s\n\n## What works now\n(nothing yet)\n' "$D" "$1" "$2" > "$TMP/goals/research/kits/brief.md"; }
+aimed() { move "$1" "$2" "Simon Willison" "x" | awk -v a="$3" '{print} /^GOAL:/ && a != "-" {print "AIMS AT: " a}'; }
+aims() { { full; aimed 4 kits "$1"; } > "$RUN/moves.md"; run; }
+brief current "LIMIT: almost nobody sees the kits"
+OUT="$(aims "almost nobody sees the kits: the one page with traffic gets the install line")"; RC=$?
+[ $RC -eq 0 ] && ok "a move whose AIMS AT names its goal's limit passes" || bad "AIMS AT names the limit: $OUT"
+OUT="$(aims "Almost Nobody Sees The Kits, so this puts one on the page people read")"
+[ $? -eq 0 ] && ok "  in any letter case" || bad "  letter case: $OUT"
+OUT="$(aims "the README")"
+case "$OUT" in *"AIMS AT must name this goal's limit (\"almost nobody sees the kits...\")"*) ok "an AIMS AT that does not name the limit fails, quoting it";; *) bad "AIMS AT off the limit: $OUT";; esac
+OUT="$(aims -)"
+case "$OUT" in *"AIMS AT must name this goal's limit"*) ok "  and so does a move with no AIMS AT for a goal that has a limit";; *) bad "  missing AIMS AT: $OUT";; esac
+OUT="$(aims "founding")"
+case "$OUT" in *"AIMS AT must name this goal's limit"*) ok "  and founding is no aim once a limit is named";; *) bad "  founding with a limit: $OUT";; esac
+brief current "LIMIT: almost nobody sees the kits: 178 visitors a fortnight on the one page with traffic"
+OUT="$(aims "almost nobody sees the kits: 178 visitors, and this page is where they land")"
+[ $? -eq 0 ] && ok "a long limit needs only its first 40 characters" || bad "first 40 characters: $OUT"
+OUT="$(aims "the README")"
+case "$OUT" in *"(\"almost nobody sees the kits: 178 visitor...\")"*) ok "  and the refusal quotes those 40";; *) bad "  quotes 40: $OUT";; esac
+{ full; aimed 4 kits-strategy "the README"; } > "$RUN/moves.md"; OUT="$(run)"
+case "$OUT" in *'for kits-strategy": AIMS AT must name this goal'*) ok "a strategy aims at the limit of the outcome it serves";; *) bad "strategy via SERVES: $OUT";; esac
+printf 'GOAL: kits\r\nUPDATED: %s\r\nSTATUS: current\r\n\r\n## The limit now\r\nLIMIT: almost nobody sees the kits\r\n' "$D" > "$TMP/goals/research/kits/brief.md"
+OUT="$(aims "the README")"
+case "$OUT" in *"(\"almost nobody sees the kits...\")"*) ok "a brief written with Windows line endings is read the same";; *) bad "CRLF brief: $OUT";; esac
+OUT="$(aims "almost nobody sees the kits: the install line")"
+[ $? -eq 0 ] && ok "  and passes the same" || bad "  CRLF passes: $OUT"
+# Founding night (review focus 4): no limit named yet must not block the whole day.
+brief founding "nothing named"
+OUT="$(aims "founding")"; RC=$?
+[ $RC -eq 0 ] && ok "a goal whose research names no limit yet accepts AIMS AT: founding" || bad "founding: $OUT"
+case "$OUT" in *"NOTE kits: no LIMIT named yet in its research; AIMS AT not required"*) ok "  and says why in a NOTE";; *) bad "  NOTE: $OUT";; esac
+OUT="$(aims -)"
+[ $? -eq 0 ] && ok "  and a move with no AIMS AT passes too" || bad "  no AIMS AT, no limit: $OUT"
+[ "$(printf '%s\n' "$OUT" | grep -c '^NOTE money-goal: no LIMIT named yet')" = "1" ] && ok "  one NOTE per goal, also for a goal with no research at all" || bad "  one NOTE per goal: $OUT"
+brief current "nothing named"; printf '\n## Who to reach and what we offer\nLIMIT: not this one\n' >> "$TMP/goals/research/kits/brief.md"
+OUT="$(aims "the README")"
+case "$OUT" in *"NOTE kits: no LIMIT"*) ok "a LIMIT line outside ## The limit now is not the limit";; *) bad "LIMIT outside its section: $OUT";; esac
+{ full; aimed 4 kits "founding" | grep -v '^UNDO'; } > "$RUN/moves.md"; OUT="$(run)"
+case "$OUT" in *"UNDO is missing"*"NOTE kits"*) ok "a NOTE stands beside the gaps, after them, and never fails a day itself";; *) bad "NOTE with gaps: $OUT";; esac
+rm -r "$TMP/goals/research/kits"
+
+# --- at most one move a day is the person's to do (2026-10-12) -------------------------------
+hisown() { move "$1" "$2" "Simon Willison" "x" | sed 's/^HOW IT LANDS: .*/HOW IT LANDS: only the person can film it; CHECK the video is listed/'; }
+{ move 1 money-goal "Simon Willison" "x"; move 2 money-goal "Justin Welsh" "y"; hisown 3 money-goal; hisown 4 health-goal; } > "$RUN/moves.md"
+OUT="$(run)"; case "$OUT" in *"at most one move a day may be the person's to do; 2 are"*) ok "two moves only the person can make, across goals, fail";; *) bad "two for the person: $OUT";; esac
+{ move 1 money-goal "Simon Willison" "x"; move 2 money-goal "Justin Welsh" "y"; hisown 3 money-goal; echo "FEWER health-goal: the week's scale reading lands on Sunday"; } > "$RUN/moves.md"
+OUT="$(run)"; [ $? -eq 0 ] && ok "  one passes" || bad "  one for the person: $OUT"
+
 echo; echo "$PASS passed, $FAIL failed"; [ "$FAIL" -eq 0 ]

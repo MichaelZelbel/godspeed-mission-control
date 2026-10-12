@@ -291,13 +291,22 @@ something under "What we could do without asking" gets at least one move from th
 the runner to apply today. The one step under "Worth asking for" goes on the ship list as a
 standing-permission line at most once a week per goal.
 
+**Every move aims at the limit.** `AIMS AT:` quotes the goal's `LIMIT:` from its research brief and
+says in one line how this move moves it. A move that touches only what the mission control may
+touch, on a page nobody visits, is not a move (2026-09-25 to 10-11: fourteen such changes, no goal
+number moved). **At most one move a day is the person's to do**, across all goals, and only a thing
+they already said they want; never a new routine, a calendar entry or a form (their refusals,
+2026-10: "I keep Saturdays unstructured", "no calendar entries", "I cannot schedule runs").
+While a goal's brief names no limit yet (its first nights), its moves say `AIMS AT: founding`,
+and the moves check notes that instead of refusing the day.
+
 **1. Pick three moves per active goal**, fewer only when a line `FEWER <goal>: <why>` in
 `moves.md` says why. Two things are never the why: a thin ideas register (the next rung comes from
 what people who reached this goal did, read today, not from the register) and a platform nobody
 is signed in to (prepare the move anyway; its ship-list line asks for the one sign-in, after which
 every later move there lands without them). A goal about their own life (health, friends) moves
 in their life, not on a public page: a booking held, a list written for the shop, a message
-drafted to the right person, an entry in their calendar. This run has time; spend it here. Pick
+drafted to the right person. This run has time; spend it here. Pick
 them in this order: a RHYTHM line of the goal that is
 due; then the next rung, which is the answer to "what did people who reached this goal do at the
 stage this person is at now, that this person has not done yet?" (the playbook's "In what order";
@@ -318,6 +327,8 @@ MAKE item for the runner (Step 4), and joins the ship list the day it is ready.
     ### <n>. <one line a stranger understands: what changes where>
     GOAL: <id>
     BET: <the weekly number now> -> <what you expect it to be seven days after this goes live>
+    AIMS AT: <the goal's LIMIT from its research brief, quoted, then in one line how this move
+             moves it; "founding" while the brief names no limit yet>
     WHERE: <the live address>
     NOW: <quoted, read live today>
     AFTER: <the exact new version, in full>
@@ -359,8 +370,10 @@ the NEXT line promises "I apply the rest the same day" only for moves the missio
 
 **5. Check before you finish.** Run `mc-check-moves --date <today>`. It counts the moves per
 active goal and reads every block for the fields above, checks every move of a goal with a
-weekly number for its BET and APPLY line, and checks that each active goal's number was read this
-week; keep working until it prints OK. If it is
+weekly number for its BET and APPLY line, checks that each active goal's number was read this
+week, that every move of a goal whose brief names a limit aims at it, that a `may:` move names a
+kind its goal card allows, and that at most one move is the person's to do; keep working until it
+prints OK (a NOTE line beside it explains and never fails the day). If it is
 not installed, check the same things by eye and say so in the record.
 
 **6. Compare only what is expensive.** Keep this in proportion. A routine move gets one sentence and no forecast. Something that will

@@ -23,6 +23,10 @@
 //   - a ship-list move the mission control applies names its work item on an APPLY line.
 //   - a move under a standing permission, "PERMISSION: may:<kind>", names a kind its goal card has
 //     a MAY line for (2026-10-12); it is not on the ship list, so it needs no line there.
+//   - once a goal's research brief names its limit ("LIMIT:" under "## The limit now"), each of
+//     its moves carries "AIMS AT:" naming that limit; while it names none, a NOTE says so and the
+//     moves pass (2026-10-12).
+//   - at most one move of the whole day is the person's to do (HOW IT LANDS "only the person").
 //   - a goal whose card names a weekly number (LEAD) is judged by it (2026-09-30): each of its
 //     moves carries "BET: <now> -> <expected seven days after it goes live>" and an APPLY line,
 //     the number was read in the last seven days, and a goal settle.txt names under "read today"
@@ -81,6 +85,21 @@ function namesOf(goal) {
   }
   return { from: rg, names: researchNames[rg] };
 }
+// The one thing that limits a goal now, as its research brief names it: the LIMIT: line under
+// "## The limit now" in goals/research/<id>/brief.md (2026-10-12). null while the research names
+// none (founding night, or no research at all), and then a move for the goal needs no aim.
+const limits = {};
+function limitOf(goal) {
+  const rg = researchGoal(goal);
+  if (!rg) return null;
+  if (!(rg in limits)) {
+    const brief = read(path.join(ROOT, 'goals', 'research', rg, 'brief.md')) || '';
+    const sec = brief.match(/^## The limit now[ \t]*\n([\s\S]*?)(?=^## |(?![\s\S]))/m);
+    const m = sec && sec[1].match(/^LIMIT:[ \t]*(\S.*)$/m);
+    limits[rg] = m ? m[1].replace(/\s+/g, ' ').trim() : null;
+  }
+  return limits[rg];
+}
 // The kinds of step a goal's card lets go out without a fresh yes: its MAY lines, each written by
 // `mc-goals allow` with the person's own words (2026-10-12). Read from the move's own goal card.
 const mayKinds = {};
@@ -123,6 +142,11 @@ if (text === null) {
 }
 
 const FIELDS = ['GOAL', 'WHERE', 'NOW', 'AFTER', 'WHO DID THIS', 'HOW IT LANDS', 'UNDO', 'PERMISSION'];
+// Read like the fields above, but required only for a goal whose research names its limit.
+const PARSED = [...FIELDS, 'AIMS AT'];
+const notes = [];
+const noted = new Set();
+let persons = 0;
 const blocks = text.split(/^(?=###? \d+\.)/m).filter(b => /^###? \d+\./.test(b));
 // A MOVE THE CHECK CANNOT SEE IS NOT CHECKED (2026-09-30). A run on Hermes headed its moves
 // "### Move 1: ...": no block matched, FEWER lines covered the count, and not one field was read
@@ -139,7 +163,7 @@ for (const b of blocks) {
   let cur = null;
   for (const line of b.split('\n').slice(1)) {
     const m = line.match(/^([A-Z][A-Z ]+):\s?(.*)$/);
-    if (m && FIELDS.includes(m[1].trim())) { cur = m[1].trim(); f[cur] = m[2]; continue; }
+    if (m && PARSED.includes(m[1].trim())) { cur = m[1].trim(); f[cur] = m[2]; continue; }
     if (cur && /^\s+\S/.test(line)) f[cur] += ' ' + line.trim();
   }
   for (const k of FIELDS) if (!f[k] || !f[k].trim()) problems.push(`move "${title}": ${k} is missing or empty`);
@@ -169,6 +193,17 @@ for (const b of blocks) {
   if (may && !kindsOf(goal).includes(may[1])) problems.push(`move "${title}": PERMISSION may:${may[1]} is not a standing permission of ${goal}; use a kind its card has a MAY line for (mc-goals may ${goal}), or put the move on the ship list`);
   const onList = !may && /ship list/i.test(f.PERMISSION || '');
   const his = /^\s*only the person/i.test(f['HOW IT LANDS'] || '');
+  if (his) persons++;
+  // EVERY MOVE AIMS AT THE LIMIT (2026-10-12). From 2026-09-25 to 10-11 fourteen changes touched
+  // only what the mission control may touch, on pages nobody visits, and no goal number moved.
+  // Once the goal's research names what limits it now, the move says how it moves that.
+  if (goal) {
+    const limit = limitOf(goal);
+    const key = limit && limit.slice(0, 40).trimEnd();
+    const aims = (f['AIMS AT'] || '').replace(/\s+/g, ' ').toLowerCase();
+    if (key && !aims.includes(key.toLowerCase())) problems.push(`move "${title}": AIMS AT must name this goal's limit ("${key}...") from goals/research/${researchGoal(goal)}/brief.md, and say in one line how this move moves it`);
+    else if (!limit && !noted.has(goal)) { noted.add(goal); notes.push(`NOTE ${goal}: no LIMIT named yet in its research; AIMS AT not required`); }
+  }
   const applyTo = (b.match(/^APPLY:[ \t]*(\S+)/m) || [])[1];
   if (lead && !applyTo) problems.push(`move "${title}": a move with a bet needs "APPLY: <work id>", the item whose verification starts its seven days (a move only the person can make gets an item they own, whose CHECK shows it happened)`);
   // The item exists by the time this runs, so a bet names it or it is lost (final review of D-266:
@@ -182,6 +217,11 @@ for (const b of blocks) {
     if (!fs.existsSync(p) || fs.statSync(p).size < 50) problems.push(`move "${title}": AFTER points to ${file[1]}, which is not there or empty`);
   }
 }
+
+// AT MOST ONE THING A DAY FOR THE PERSON (2026-10-12), across all goals: a day that hands them two
+// or three tasks hands them a routine they never asked for (they refused new routines, calendar
+// entries and forms in October 2026), and the moves that wait on them do not happen.
+if (persons > 1) problems.push(`at most one move a day may be the person's to do; ${persons} are (HOW IT LANDS "only the person"); keep the one they already said they want, and find a route the mission control holds for the rest or leave them for another day`);
 
 const fewer = {};
 // Two reasons are refused, because the recipe answers both (2026-09-24, test run 4 used them for
@@ -220,8 +260,11 @@ for (const g of (dueLine ? dueLine[1].split(/\s+/) : []).filter(x => x && x !== 
   if (lead && !unread[g] && lead.lastRead !== DATE) problems.push(`${g}: a verdict is due today and its weekly number has no reading dated ${DATE}; read it and record it: mc-goals read ${g} <number> --where "...", or, when only the person can tell it and has not, write a line "UNREAD ${g}: <where and when you asked>"`);
 }
 
+// A NOTE explains and never fails a day; it is printed after the gaps or after OK.
 if (problems.length) {
   for (const p of problems) console.log(p);
+  for (const n of notes) console.log(n);
   process.exit(1);
 }
 console.log('OK ' + (active.length ? active.map(g => `${g} ${counts[g] || 0}${fewer[g] ? ' (fewer: said why)' : ''}`).join(', ') : `${blocks.length} move(s)`));
+for (const n of notes) console.log(n);
