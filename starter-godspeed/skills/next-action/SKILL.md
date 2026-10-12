@@ -136,6 +136,16 @@ count knows what was looked at today.
 
 ## Step 2. How this goal is won, then what limits it here
 
+**First the research**, `goals/research/<id>/brief.md`, rewritten every night by the
+goal-research recipe: what works now, what changed this week, what was just proven wrong, who to
+reach with what offer, the open chances with their closing dates, what you may do without asking,
+and any challenge to the playbook. Read it before the playbook and cite it. `attention.txt` says
+when a goal's research is still being founded or has not completed a night for two days; say so
+under "Not done and why", and work from what is there. A bullet under "Challenges to the playbook"
+means the lever it names is in doubt: do not make a move that rests on that lever today, and if
+two or more of its levers are challenged, refute the playbook (`mc-goals playbook <id> --refute
+--evidence "<the challenges>"`).
+
 For each active outcome, and the strategies and projects under it (`mc-goals tree`):
 
 **First the playbook**, `goals/playbooks/<id>.md`: who has reached this outcome, what they do,
@@ -218,6 +228,9 @@ three sources, in this order:
 - **Their own words.** Anything they toss out ("why don't we...", "one idea I just had") is an
   idea the moment it is said. It goes into the register the same day, in their words, and they are
   never asked to repeat it. An idea of theirs that the mission control lost is the worst miss this step has.
+- **What the research filed overnight.** Every new opening and every person who turned HOT has an
+  idea file already (SOURCE `goal research <date>`). Rank them with the rest; an opening whose
+  closing date falls within 14 days ranks above any idea without one.
 - **What you just read outside.** Each surprise from point 1 is an idea or kills one.
 - **What the people in the playbook actually ship.** Not their advice: their things. Look at what
   they made in their first year and ask which of those this person could make this week.
@@ -258,6 +271,15 @@ made from an idea changes the ranking of the ideas like it: say so in the record
 ## Step 3. Today's moves, prepared in this run
 
 This step is the day's output. Everything before it exists to choose these well.
+
+**Every move copies somebody in the research.** WHO DID THIS names a case from
+`goals/research/<goal>/cases.md` or a person from its `people.md`; the moves check refuses any
+other name once the goal's research holds one. If the person you want to copy is not there, add
+them there first, with the source you opened. Each active goal with an open opening closing within
+14 days, or a HOT person, gets at least one move from it today. Each active goal whose brief lists
+something under "What we could do without asking" gets at least one move from that list, filed for
+the runner to apply today. The one step under "Worth asking for" goes on the ship list as a
+standing-permission line at most once a week per goal.
 
 **1. Pick three moves per active goal**, fewer only when a line `FEWER <goal>: <why>` in
 `moves.md` says why. Two things are never the why: a thin ideas register (the next rung comes from
