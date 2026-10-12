@@ -231,7 +231,15 @@ while IFS=$'\t' read -r ID KIND WHAT; do
     if [ -n "$APPROVED" ]; then
       echo
       echo "## This item is an approved move: apply it"
-      echo "The person said yes to exactly this, in these words: $APPROVED"
+      # A STANDING YES (2026-10-12): `mc-work file --may` writes APPROVED as `standing <kind>: "<words>"`,
+      # the person's yes given once on the goal card for every step of one kind. The register lets it
+      # through only while that permission is still on the card and its GOES OUT time has passed.
+      case "$APPROVED" in
+        "standing "*)
+          SKIND="${APPROVED#standing }"; SKIND="${SKIND%%:*}"
+          echo "The person gave a standing yes to every step of this kind ($SKIND), in these words: ${APPROVED#*: }. It covers this one step, exactly as prepared, and nothing beyond it." ;;
+        *) echo "The person said yes to exactly this, in these words: $APPROVED" ;;
+      esac
       echo "Carry out WHAT at the place it names, exactly as prepared (the AFTER text or file the item or its preview names), and nothing beyond it. First read and save what is there now (NOW) under routines/work/$TODAY/$ID/before.txt so it can be put back. Then apply it with the tools you have: an API or command line first, the signed-in browser if that is the only way. Then read the live place again and quote what it now shows. If the live place differs from what the move expected, or applying it would do anything the yes did not cover, stop and end with RESULT: FAILED naming what differs."
     fi
     echo

@@ -150,6 +150,30 @@ and the moves still out. It is the answer to "what did my mission control do for
 what came of it?" A goal without a LEAD keeps working exactly as before; its moves just cannot be
 judged.
 
+## Standing permissions: your yes, once, for one kind of step
+
+Anything that reaches another person waits for your yes. For a step you would say yes to every
+time (answering comments under your own videos, fixing a typo on your own site) you can say it
+once instead:
+
+    mc-goals allow <id> --kind yt-replies --what "reply to comments on my YouTube videos" --per-week 10 --words "yes, you may answer comments"
+
+That writes one line on the card, with your words and the date:
+
+    MAY: yt-replies | reply to comments on my YouTube videos | 10 per week | notice | "yes, you may answer comments" 2026-10-12
+
+**notice** (the default): such a step goes out at a set time, 18:00 UTC unless the plan says
+otherwise, unless you say stop before then. **alone**: it goes out when it is ready and you are
+told after; only for steps that touch your own pages, files and accounts and reach nobody else.
+Past the weekly number, the next one asks you again. Your words are required: a program never
+writes this line for you. Money, sign-ups, bookings, cancellations, a first or bulk message and
+anything on LinkedIn by automation always ask you first, and are refused here.
+
+    mc-goals may <id>                                    what this goal may do without asking
+    mc-goals allow <id> --kind yt-replies --revoke --words "stop answering comments"
+
+Taking one back stops whatever was still waiting to go out on it.
+
 ## What limits a goal: the diagnosis
 
     mc-goals diagnose <id>
@@ -177,6 +201,8 @@ mc-goals attention                            who gets attention today, and why
 mc-goals read <id> <number> --where "..."     this week's reading of the weekly number
 mc-goals bets --moves <moves.md>              copies each move's bet onto its goal (mc-decide runs it)
 mc-goals settle [--dry-run]                   the verdicts, seven days after each move went live
+mc-goals allow <id> --kind <k> --what "..." --per-week <n> --words "<your words>"   a standing permission
+mc-goals may <id>                             the standing permissions it carries
 mc-goals list | show <id> | tree | check
 ```
 

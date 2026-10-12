@@ -174,7 +174,11 @@ one of the others is not installed.
   on the number (BET, copied onto the card by `mc-goals bets`), and seven days
   after a move went live `mc-goals settle` writes the verdict from the readings
   (RESULT: worked, moved, flat, unread or never-live). The run that made the
-  move never grades it.
+  move never grades it. A goal can also carry **standing permissions**
+  (`mc-goals allow`, `mc-goals may`): your own words, given once, for one kind of
+  step and a number per week, so those steps stop waiting for a yes each time.
+  Money, sign-ups, bookings, cancellations, a first or bulk message and anything
+  on LinkedIn by automation are never among them: those always ask you first.
 - **`forecast.js`** (`mc-forecast`) holds what your mission control expects to happen, with a
   date and a number, so its judgment can be scored rather than trusted. It refuses
   invented precision, a forecast with no reference class, and a revision that
@@ -185,13 +189,17 @@ one of the others is not installed.
   apart that a to-do list treats as one: dispatched, attempted, and verified. Only
   verified closes an item, and "the runner said it did it" is not verified. A
   duplicate trigger files nothing twice; anything that reaches somebody else waits
-  for your own words. Chapters 3 and 8.
+  for your own words. Those words are either a yes for that one step, or a
+  standing yes you gave its goal for that kind of step: then the step goes out at
+  a set time (UTC, 18:00 unless the plan says otherwise) unless you say stop
+  first, and `mc-work stop` keeps one step or the whole day back. Chapters 3 and 8.
 
 ```
 mc-goals attention          who gets attention today, and why
 mc-goals settle             each goal's weekly number, and the verdicts on its moves
 mc-forecast score           how good your mission control's predictions have been
 mc-work tick                dead leases, due retries, stale plans
+mc-work going-out           what goes out today unless you say stop
 ```
 
 - **`mc-run`** carries out one recipe from your mission control with nobody sitting at the

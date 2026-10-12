@@ -30,6 +30,11 @@
 //  - An item has a KIND: `do` (the default) or `learn`. A learn item is a question, and it is
 //    done when the answer is WRITTEN somewhere a reader can open, so its DONE WHEN must name a
 //    file. "We found out X" in a runner's report closes nothing; the file does.
+//  - A STANDING PERMISSION (2026-10-12). Outward work filed with `--may <kind>` rides on a MAY line
+//    the person's own words put on its goal card (`mc-goals allow`). In notice mode it goes out at
+//    its GOES OUT time unless the person stops it first (`stop`); in alone mode when it is ready.
+//    Past the kind's weekly limit it is filed blocked, needing a fresh yes. A permission taken off
+//    the card stops everything still queued under it. GOES OUT is UTC, written YYYY-MM-DDTHH:MM.
 //
 // The folder it owns:
 //   work/<ID>.md      one item each
@@ -58,11 +63,53 @@ const KINDS = ['do', 'learn'];
 const namesFile = (s) => String(s || '').split(/\s+/).map(t => t.replace(/[.,;:)"'\]]+$/, ''))
   .some(t => t.includes('/') && /\.(md|csv|json|txt)$/i.test(t));
 const ORDER = ['ID', 'STATUS', 'KIND', 'KEY', 'GOAL', 'CARD', 'WHAT', 'DONE WHEN', 'CHECK', 'OWNER', 'NEEDS', 'OUTWARD', 'ATTEMPTS', 'MAX ATTEMPTS',
-  'LEASE', 'NEXT TRY', 'STALE AFTER', 'FILED', 'SOURCE', 'RESULT', 'LINK', 'APPROVED'];
+  'LEASE', 'NEXT TRY', 'STALE AFTER', 'FILED', 'SOURCE', 'RESULT', 'LINK', 'APPROVED', 'MAY', 'GOES OUT'];
 const S = L.store(DIR, ORDER);
 const { die, say, oneLine, flag, today, q } = L;
 const now = () => (process.env.GODSPEED_NOW || new Date().toISOString());
 const cmds = {};
+
+// ---------------------------------------------------------------------------
+// standing permissions: read from the goal card through goals.js, so the MAY line has one parser
+// ---------------------------------------------------------------------------
+// goals.js is loaded only when a permission is needed, so everything else here keeps working on a
+// computer where it is not installed; there, a step on a standing permission does not go out.
+let parseMay;
+function goalMay(goal) {
+  if (parseMay === undefined) { try { parseMay = require(path.join(__dirname, 'goals.js')).parseMay || null; } catch (e) { parseMay = null; } }
+  if (!parseMay || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(String(goal || ''))) return null;
+  const p = path.join(GODSPEED, 'goals', `${goal}.md`);
+  if (!fs.existsSync(p)) return null;
+  return L.readText(p).split('\n').map(parseMay).filter(Boolean);
+}
+const isStanding = (c) => /^standing /.test(c.f.APPROVED || '');
+// The permission this item was filed under is still on its goal card.
+function standingHolds(c) {
+  const lines = c.f.MAY ? goalMay(c.f.GOAL) : null;
+  return !!lines && lines.some(m => m.kind === c.f.MAY);
+}
+// Statuses in which a standing item could still go out on its permission.
+const MAY_SEND = ['planned', 'dispatched', 'stale', 'failed'];
+// Statuses in which a step has not gone out yet, so `stop` can still keep it back.
+const UNSENT = ['planned', 'blocked', 'stale', 'failed'];
+const nowMinute = () => now().slice(0, 16);
+const GOES_OUT_FORM = /^\d{4}-\d{2}-\d{2}T(?:[01]\d|2[0-3]):[0-5]\d$/;
+// The default time a notice step goes out: 18:00 UTC on the day it was filed, or the next 18:00
+// UTC when that has already passed, so the person always has the day to stop it.
+function defaultGoesOut(d) {
+  const n = nowMinute();
+  let day = d;
+  if (`${day}T18:00` <= n) { day = n.slice(0, 10); if (`${day}T18:00` <= n) day = L.addDays(day, 1); }
+  return `${day}T18:00`;
+}
+// Every step that goes out on a day, in time order, numbered once for the whole day: a step that
+// went out or was stopped keeps its number, so "stop 2" in the afternoon means the same step as
+// the 2 in the morning message.
+function dayList(d) {
+  return S.all().filter(c => (c.f['GOES OUT'] || '').slice(0, 10) === d)
+    .sort((x, y) => x.f['GOES OUT'].localeCompare(y.f['GOES OUT']) || x.id.localeCompare(y.id))
+    .map((c, i) => ({ n: i + 1, c }));
+}
 
 function nextId(d) {
   const n = S.all().filter(c => c.id.startsWith('W-' + d.replace(/-/g, ''))).length + 1;
@@ -99,18 +146,54 @@ cmds.file = (a) => {
   if (outward === 'yes' && needs === 'none') needs = 'authorization';
   if (owner === 'person' && needs === 'none') needs = 'person';
   const d = a.date || today();
+  // UNDER A STANDING PERMISSION (2026-10-12): the goal card's MAY line for this kind is the yes,
+  // up to its weekly limit. Counted are the steps filed on that permission in the seven days to
+  // this one, not the ones stopped; past the limit the step waits for a fresh yes like any other.
+  let may = null, goesOut = '', standing = '', overLimit = false;
+  if (a.may !== undefined) {
+    const kindWanted = a.may === 'true' ? '' : oneLine(a.may);
+    if (!kindWanted) die('--may needs the kind of step, as the goal card names it (mc-goals may <goal>)');
+    if (outward !== 'yes') die('--may is for outward steps; inward work needs no permission');
+    const goal = oneLine(a.goal);
+    if (!goal) die('--may needs --goal: a standing permission belongs to a goal');
+    const all = goalMay(goal);
+    if (!all) die(`no goal card goals/${goal}.md to read a standing permission from` + (parseMay ? '' : ' (goals.js is not installed beside this program)'));
+    may = all.find(m => m.kind === kindWanted);
+    if (!may) die(`${goal} has no standing permission "${kindWanted}"; its kinds are: ${all.map(m => m.kind).join(', ') || 'none'}`);
+    const weekAgo = L.addDays(d, -6);
+    const used = S.all().filter(w => w.f.MAY === may.kind && w.f.GOAL === goal && w.f.STATUS !== 'cancelled' && isStanding(w)
+      && (w.f.FILED || '') >= weekAgo && (w.f.FILED || '') <= d).length;
+    if (used >= may.perWeek) overLimit = true;
+    else {
+      if (needs === 'authorization') needs = 'none';
+      standing = `standing ${may.kind}: "${may.words}"`;
+      if (may.mode === 'notice') {
+        const at = a['goes-out'] === undefined ? '' : oneLine(a['goes-out']);
+        if (a['goes-out'] !== undefined && !GOES_OUT_FORM.test(at)) die('--goes-out is YYYY-MM-DDTHH:MM in UTC, like 2026-10-13T18:00');
+        if (at && at <= nowMinute()) die(`--goes-out ${at} UTC has already passed; a step that goes out unless stopped must leave time to stop it`);
+        goesOut = at || defaultGoesOut(d);
+      }
+    }
+  }
   const id = a.id ? L.safeId(a.id) : nextId(d);
   if (S.exists(id)) die(`${id} already exists`);
   const f = {
     ID: id, STATUS: needs === 'none' ? 'planned' : 'blocked', KIND: kind, KEY: key, GOAL: oneLine(a.goal), CARD: oneLine(a.card), WHAT: what, 'DONE WHEN': done,
     CHECK: oneLine(a.check), OWNER: owner, NEEDS: needs, OUTWARD: outward, ATTEMPTS: '0', 'MAX ATTEMPTS': String(parseInt(a['max-attempts'] || '3', 10) || 3),
     'STALE AFTER': String(parseInt(a['stale-after'] || '7', 10) || 7), FILED: d, SOURCE: oneLine(a.source || 'unknown'),
+    APPROVED: standing, MAY: may ? may.kind : '', 'GOES OUT': goesOut,
   };
   const c = { id, f, log: [] };
   L.logLine(c, d, 'FILED', `by ${f.SOURCE}` + (f.GOAL ? ` for ${f.GOAL}` : '') + (f.CARD ? ` under card ${f.CARD}` : ''));
-  if (f.STATUS === 'blocked') L.logLine(c, d, 'BLOCKED', `needs ${needs}`);
+  if (f.STATUS === 'blocked') L.logLine(c, d, 'BLOCKED', overLimit
+    ? `this week's ${may.perWeek} ${may.kind} steps are used; this one needs a fresh yes`
+    : `needs ${needs}`);
   S.write(c);
-  say(`${id}: ${f.STATUS}` + (f.STATUS === 'blocked' ? ` (needs ${needs})` : '') + (outward === 'yes' ? ' outward: never on its own' : ''));
+  const how = overLimit ? ` outward: this week's ${may.perWeek} ${may.kind} steps are used, so this one needs a fresh yes`
+    : standing && goesOut ? ` outward: goes out at ${goesOut} UTC unless stopped (standing ${may.kind})`
+    : standing ? ` outward: goes out when ready and is reported after (standing ${may.kind})`
+    : outward === 'yes' ? ' outward: never on its own' : '';
+  say(`${id}: ${f.STATUS}` + (f.STATUS === 'blocked' ? ` (needs ${needs})` : '') + how);
 };
 
 cmds.take = (a) => {
@@ -123,6 +206,8 @@ cmds.take = (a) => {
   if (attemptsOf(c) >= maxOf(c) && !flag(a, 'now')) die(`${c.id} has used its ${maxOf(c)} attempts; a person decides what happens next`);
   const live = leaseLive(c);
   if (live && live.runner !== runner) die(`${c.id} is held by ${live.runner} until ${live.until}`);
+  if (c.f['GOES OUT'] && c.f['GOES OUT'] > nowMinute() && !flag(a, 'now')) die(`${c.id} goes out at ${c.f['GOES OUT']} UTC unless stopped; not before`);
+  if (isStanding(c) && !standingHolds(c)) die(`${c.id} was filed on the standing permission ${c.f.MAY || '(none named)'} of ${c.f.GOAL || 'its goal'}, which is no longer on the goal card; it waits for a fresh yes (unblock --approved-by)`);
   if (c.f.OUTWARD === 'yes') {
     // Approved once is approved for this item: a yes already on record (from `unblock
     // --approved-by`) lets the runner take it, so a move the person said yes to actually lands
@@ -246,6 +331,43 @@ cmds.cancel = (a) => {
   say(`${c.id}: cancelled (${why.slice(0, 80)})`);
 };
 
+// STOP. The person's word against a step that would go out unless stopped: one step by its id, or
+// every step of the day that has not gone out yet. Their words are kept on each. A step that
+// already went out cannot be stopped here, only undone.
+function stopOne(c, d, words) {
+  c.f.STATUS = 'cancelled'; c.f.LEASE = '';
+  L.logLine(c, d, 'STOPPED', q(words));
+  S.write(c);
+  say(`${c.id}: stopped`);
+}
+cmds.stop = (a) => {
+  const words = a.words === 'true' ? '' : oneLine(a.words);
+  if (!words) die('--words is required: what the person said, as they said it');
+  const d = a.date || today();
+  if (flag(a, 'today')) {
+    const targets = dayList(d).map(r => r.c).filter(c => UNSENT.includes(c.f.STATUS));
+    if (!targets.length) { say(`nothing is waiting to go out on ${d}`); return; }
+    for (const c of targets) stopOne(c, d, words);
+    return;
+  }
+  const c = S.read(a._[0] || die('usage: mc-work stop <id> --words "..." | stop --today --words "..."')) || die('no such work');
+  if (c.f.STATUS === 'cancelled') { say(`${c.id}: already stopped`); return; }
+  if (!UNSENT.includes(c.f.STATUS)) die(`${c.id} is ${c.f.STATUS}: ${c.f.STATUS === 'dispatched' ? 'it is going out right now' : 'it already went out'}, so it cannot be stopped, only undone`);
+  stopOne(c, d, words);
+};
+// GOING OUT. The steps that go out on a day unless stopped, numbered in time order. A step that
+// went out or was stopped is not listed, and the others keep the number they had (see dayList).
+cmds['going-out'] = (a) => {
+  const d = a.date || today();
+  const rows = dayList(d).filter(r => ['planned', 'dispatched'].includes(r.c.f.STATUS));
+  if (flag(a, 'json')) {
+    say(JSON.stringify(rows.map(({ n, c }) => ({ n, id: c.id, at: c.f['GOES OUT'], what: c.f.WHAT, goal: c.f.GOAL || '', link: c.f.LINK || '', status: c.f.STATUS }))));
+    return;
+  }
+  if (!rows.length) { say(`nothing goes out on ${d}`); return; }
+  for (const { n, c } of rows) say(`${n}. ${c.f.WHAT} (${c.f.GOAL ? c.f.GOAL + ', ' : ''}${c.f['GOES OUT'].slice(11)} UTC)` + (c.f.STATUS === 'dispatched' ? ' going out now' : ''));
+};
+
 // SWEEP. Your answer on a card, or a change to a goal, reaches the work underneath it.
 cmds.sweep = (a) => {
   const d = a.date || today();
@@ -278,6 +400,13 @@ cmds.tick = (a) => {
       L.logLine(c, d, 'RELEASED', `lease of ${l.runner} expired with no attempt reported`);
       notes.push(`${c.id}: lease of ${l.runner} expired, planned again`); S.write(c); continue;
     }
+    // A permission taken back: what was queued on it waits for a fresh yes instead of going out.
+    if (['planned', 'stale', 'failed'].includes(c.f.STATUS) && isStanding(c) && !standingHolds(c)) {
+      const why = `the standing permission ${c.f.MAY || '(none named)'} is no longer on ${c.f.GOAL || 'its goal'}; it needs a fresh yes`;
+      c.f.STATUS = 'blocked'; c.f.NEEDS = 'authorization'; c.f.LEASE = '';
+      L.logLine(c, d, 'BLOCKED', why);
+      notes.push(`${c.id}: ${why}`); S.write(c); continue;
+    }
     if (c.f.STATUS === 'failed' && c.f['NEXT TRY'] && c.f['NEXT TRY'] <= d && c.f.OUTWARD !== 'yes' && attemptsOf(c) < maxOf(c)) {
       notes.push(`${c.id}: retry due (attempt ${attemptsOf(c) + 1} of ${maxOf(c)})`);
     }
@@ -299,7 +428,10 @@ cmds.tick = (a) => {
 cmds.next = (a) => {
   const d = a.date || today();
   const rows = S.all().filter(c => (c.f.STATUS === 'planned' || (c.f.STATUS === 'failed' && c.f['NEXT TRY'] && c.f['NEXT TRY'] <= d && attemptsOf(c) < maxOf(c)))
-    && (c.f.OUTWARD !== 'yes' || (c.f.APPROVED && c.f.STATUS === 'planned')) && c.f.NEEDS === 'none' && !leaseLive(c) && (!a.goal || c.f.GOAL === a.goal));
+    && (c.f.OUTWARD !== 'yes' || (c.f.APPROVED && c.f.STATUS === 'planned')) && c.f.NEEDS === 'none' && !leaseLive(c) && (!a.goal || c.f.GOAL === a.goal)
+    // a step that goes out unless stopped waits for its time (UTC), and one whose standing
+    // permission was taken back does not go out on it at all
+    && !(c.f['GOES OUT'] && c.f['GOES OUT'] > nowMinute()) && !(isStanding(c) && !standingHolds(c)));
   if (flag(a, 'json')) { say(JSON.stringify(rows.map(c => Object.assign({ id: c.id }, c.f)))); return; }
   if (!rows.length) { say('nothing runnable now'); return; }
   for (const c of rows) say(`${c.id.padEnd(16)} ${c.f.STATUS.padEnd(9)} ${(c.f.KIND || 'do').padEnd(5)} ${c.f.WHAT}` + (c.f.GOAL ? `  [${c.f.GOAL}]` : ''));
@@ -324,6 +456,13 @@ cmds.check = () => {
     if (!c.f['DONE WHEN']) problems.push(`${c.id}: no DONE WHEN`);
     if (c.f.STATUS === 'verified' && !c.log.some(l => l.event === 'VERIFIED')) problems.push(`${c.id}: verified without a VERIFIED line`);
     if (c.f.OUTWARD === 'yes' && ['dispatched', 'attempted', 'verified'].includes(c.f.STATUS) && !c.f.APPROVED) problems.push(`${c.id}: outward work moved without your approval on record`);
+    // A standing approval holds only while its MAY line is on the goal card: a permission taken
+    // back must not keep sending.
+    if (isStanding(c) && MAY_SEND.includes(c.f.STATUS)) {
+      if (!c.f.MAY) problems.push(`${c.id}: a standing approval with no MAY kind; it cannot be traced to a permission on a goal card`);
+      else if (!standingHolds(c)) problems.push(`${c.id}: its standing permission ${c.f.MAY} is no longer on ${c.f.GOAL || 'its goal'}; it must not go out on it`);
+    }
+    if (c.f['GOES OUT'] && !GOES_OUT_FORM.test(c.f['GOES OUT'])) problems.push(`${c.id}: GOES OUT ${c.f['GOES OUT']} is not YYYY-MM-DDTHH:MM (UTC)`);
     if (OPEN.includes(c.f.STATUS)) { (keys[c.f.KEY] = keys[c.f.KEY] || []).push(c.id); }
   }
   for (const [k, ids] of Object.entries(keys)) if (ids.length > 1) problems.push(`key ${k} is open twice: ${ids.join(', ')}`);
@@ -338,7 +477,18 @@ cmds.help = () => say(`mc-work: dispatched, attempted and verified are three dif
        [--max-attempts 3] [--stale-after 7] [--source "..."]       a second file with the same open KEY files nothing
        [--kind do|learn]                a learn item is a question; its DONE WHEN must name a file the answer is written in
        [--learn "<question>" --path <file>]   sugar: KIND learn, WHAT the question, DONE WHEN "the answer ... is written in <file>"
+       [--outward yes --goal G --may <kind> [--goes-out YYYY-MM-DDTHH:MM]]
+                                        outward work on a standing permission of goal G (mc-goals allow): its APPROVED
+                                        quotes the person's words. notice kind: goes out at GOES OUT unless stopped;
+                                        GOES OUT is UTC, default 18:00 UTC on the day it is filed (the next day once
+                                        that has passed), and never a time already past. alone kind: goes out when
+                                        ready. Past the kind's weekly limit it is filed blocked, needing a fresh yes
   take <id> --runner <name> [--approved-by "<your words>"]         two-hour lease; outward only with your words
+                                        (or a standing permission still on its goal card); never before GOES OUT
+  stop <id> --words "<their words>"     keeps one step back from going out (cancelled, STOPPED with the words)
+  stop --today --words "..." [--date D] every step whose GOES OUT is that day and has not gone out yet
+  going-out [--date D] [--json]         the steps that go out that day unless stopped, numbered in time order (UTC);
+                                        a step keeps its number all day, so "stop 2" always means the same one
   attempt <id> --runner <name> --ok --result "..." | --failed "why"   failed: retry in 1, 2, 4 days, never outward
   verify <id> [--evidence "..."]     runs CHECK; verified only on exit 0, or on evidence a person observed
   block <id> --needs ... | unblock <id> --why ... [--approved-by "..."] | cancel <id> --why ...

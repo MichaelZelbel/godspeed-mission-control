@@ -19,6 +19,7 @@ trap 'rm -rf "$TMP" "$TEST_GUARD_HOME"' EXIT
 mkdir -p "$TMP/rules" "$TMP/bin"
 : > "$TMP/AGENTS.md"
 cp "$HERE/work.js" "$TMP/bin/"
+cp "$HERE/goals.js" "$TMP/bin/"
 cp "$HERE/mc-cards.js" "$TMP/bin/"
 cp "$HERE/check-written.js" "$TMP/bin/"
 export GODSPEED_ROOT="$TMP"
@@ -181,6 +182,151 @@ OUT="$(hw link W-20260913-01 --url "https://example.org/p/x.html" 2>&1)"
 contains "an https link is recorded" "$OUT" "link recorded"
 check "  LINK on the item" "$(grep -c '^LINK: https://example.org/p/x.html' "$TMP/work/W-20260913-01.md")" "1"
 check "  and a PUBLISHED line" "$(grep -c 'PUBLISHED https://example.org/p/x.html' "$TMP/work/W-20260913-01.md")" "1"
+
+# --- steps that go out unless stopped ----------------------------------------------------------
+# GOES OUT is UTC and is compared with GODSPEED_NOW; this file's clock stands at 2026-09-13T10:00Z.
+mkdir -p "$TMP/goals"
+cat > "$TMP/goals/aud.md" <<'EOF'
+ID: aud
+KIND: outcome
+STATUS: adopted
+TITLE: Audience
+
+MAY: yt-replies | reply to comments on my YouTube videos | 2 per week | notice | "yes, answer comments" 2026-09-10
+MAY: own-pages | fix wording on my own sites | 5 per week | alone | "fix my pages yourself" 2026-09-10
+
+## Log
+- 2026-09-10 FILED adopted outcome, source: x
+EOF
+OUT="$(hw file --what "Reply to the question under video 12" --done-when "reply visible" --goal aud --outward yes --may yt-replies --goes-out 2026-09-13T18:00 --key r1 --source t 2>&1)"
+contains "a step under a notice permission files planned" "$OUT" "planned"
+ID1="$(printf '%s' "$OUT" | grep -o 'W-[0-9]*-[0-9]*' | head -1)"
+check "  with GOES OUT" "$(grep -c '^GOES OUT: 2026-09-13T18:00' "$TMP/work/$ID1.md")" "1"
+check "  and his words as its approval" "$(grep -c '^APPROVED: standing yt-replies: "yes, answer comments"' "$TMP/work/$ID1.md")" "1"
+missing "next skips it before its time" "$(GODSPEED_NOW=2026-09-13T17:59:00Z hw next 2>&1)" "$ID1"
+contains "next offers it after its time" "$(GODSPEED_NOW=2026-09-13T18:01:00Z hw next 2>&1)" "$ID1"
+OUT="$(hw file --what "Reply two" --done-when x --goal aud --outward yes --may yt-replies --key r2 --source t 2>&1)"
+OUT="$(hw file --what "Reply three" --done-when x --goal aud --outward yes --may yt-replies --key r3 --source t 2>&1)"
+contains "past the weekly limit it needs a fresh yes" "$OUT" "blocked"
+OUT="$(hw file --what "Post" --done-when x --goal aud --outward yes --may linkedin-posts --key r4 --source t 2>&1)"; check "a kind the goal does not have is refused" "$?" "1"
+contains "  and names the goal's kinds" "$OUT" "yt-replies, own-pages"
+OUT="$(hw file --what "Fix my homepage typo" --done-when x --goal aud --outward yes --may own-pages --key p1 --source t 2>&1)"
+IDP="$(printf '%s' "$OUT" | grep -o 'W-[0-9]*-[0-9]*' | head -1)"
+contains "an alone-mode step is runnable at once" "$(hw next 2>&1)" "$IDP"
+GO="$(hw going-out --date 2026-09-13 2>&1)"
+contains "going-out lists today's notice steps" "$GO" "1. Reply to the question under video 12"
+OUT="$(hw stop "$ID1" --words "not that one" 2>&1)"
+check "stop cancels it" "$(grep -c '^STATUS: cancelled' "$TMP/work/$ID1.md")" "1"
+check "  with his words" "$(grep -c 'STOPPED "not that one"' "$TMP/work/$ID1.md")" "1"
+OUT="$(hw take "$ID1" --runner test 2>&1)"; check "a stopped step can never be taken" "$?" "1"
+
+st() { for i in "$@"; do sed -n 's/^STATUS: //p' "$TMP/work/$i.md"; done | tr '\n' ' '; }
+ID2="$(idof r2)"; ID3="$(idof r3)"
+check "a notice step given no time goes out at 18:00 UTC on the day it was filed" "$(sed -n 's/^GOES OUT: //p' "$TMP/work/$ID2.md")" "2026-09-13T18:00"
+check "an alone step has no GOES OUT" "$(grep -c '^GOES OUT:' "$TMP/work/$IDP.md")" "0"
+check "  and carries his words as its approval too" "$(grep -c '^APPROVED: standing own-pages: "fix my pages yourself"' "$TMP/work/$IDP.md")" "1"
+check "the step past the weekly limit needs authorization" "$(sed -n 's/^NEEDS: //p' "$TMP/work/$ID3.md")" "authorization"
+check "  with no standing approval and no time on it" "$(grep -c -e '^APPROVED:' -e '^GOES OUT:' "$TMP/work/$ID3.md")" "0"
+check "  and its log says the week's limit is used" "$(grep -c "BLOCKED this week's 2 yt-replies steps are used; this one needs a fresh yes" "$TMP/work/$ID3.md")" "1"
+missing "  next never offers it, even after the hour" "$(GODSPEED_NOW=2026-09-13T19:00:00Z hw next 2>&1)" "$ID3"
+OUT="$(GODSPEED_NOW=2026-09-13T19:00:00Z hw take "$ID3" --runner test 2>&1)"; check "  nor can it be taken without a fresh yes" "$?" "1"
+OUT="$(hw file --what "Reply in a new week" --done-when x --goal aud --outward yes --may yt-replies --key r5 --source t --date 2026-09-20 2>&1)"
+contains "seven days on, the limit counts again from zero" "$OUT" "planned"
+sed -i 's/$/\r/' "$TMP/goals/aud.md"
+OUT="$(hw file --what "Fix the footer" --done-when x --goal aud --outward yes --may own-pages --key p2 --source t 2>&1)"
+contains "a goal card with Windows line endings is read the same" "$OUT" "planned"
+
+cat > "$TMP/goals/news.md" <<'EOF'
+ID: news
+KIND: outcome
+STATUS: adopted
+TITLE: Newsletter readers
+
+MAY: nl-replies | answer replies to my newsletter | 10 per week | notice | "answer them for me" 2026-09-10
+
+## Log
+- 2026-09-10 FILED adopted outcome, source: x
+EOF
+nf() { local w="$1" k="$2"; shift 2; hw file --what "$w" --done-when "the reply is visible" --goal news --outward yes --may nl-replies --key "$k" --source t "$@" 2>&1; }
+OUT="$(nf "Answer A" n0 --goes-out "2026-09-14 18:00")"; check "a GOES OUT not written YYYY-MM-DDTHH:MM is refused" "$?" "1"
+contains "  and says it is UTC" "$OUT" "UTC"
+OUT="$(nf "Answer A" n0 --goes-out 2026-09-13T09:59)"; check "a GOES OUT already past is refused" "$?" "1"
+contains "  it must leave time to stop it" "$OUT" "time to stop it"
+OUT="$(hw file --what "Answer A" --done-when x --goal news --may nl-replies --key n0 --source t 2>&1)"; check "--may on inward work is refused" "$?" "1"
+OUT="$(hw file --what "Answer A" --done-when x --outward yes --may nl-replies --key n0 --source t 2>&1)"; check "--may without a goal is refused" "$?" "1"
+OUT="$(hw file --what "Answer A" --done-when x --goal nowhere --outward yes --may nl-replies --key n0 --source t 2>&1)"; check "--may for a goal that is not there is refused" "$?" "1"
+OUT="$(GODSPEED_NOW=2026-09-13T18:30:00Z nf "Answer late" n1)"
+N1="$(idof n1)"
+check "filed after 18:00 UTC, it goes out at 18:00 UTC the next day" "$(sed -n 's/^GOES OUT: //p' "$TMP/work/$N1.md")" "2026-09-14T18:00"
+
+# Review focus 1: a step stopped one minute before its time never goes out.
+nf "Answer B" n2 --goes-out 2026-09-15T18:00 >/dev/null
+N2="$(idof n2)"
+OUT="$(GODSPEED_TODAY=2026-09-15 GODSPEED_NOW=2026-09-15T17:59:00Z hw stop "$N2" --words "hold that one back" 2>&1)"
+contains "a step stopped a minute before its time is stopped" "$OUT" "$N2: stopped"
+check "  it is cancelled" "$(st "$N2")" "cancelled "
+check "  with his words on it" "$(grep -c '^- 2026-09-15 STOPPED "hold that one back"' "$TMP/work/$N2.md")" "1"
+missing "  after its time next never offers it" "$(GODSPEED_TODAY=2026-09-15 GODSPEED_NOW=2026-09-15T18:01:00Z hw next 2>&1)" "$N2"
+OUT="$(GODSPEED_TODAY=2026-09-15 GODSPEED_NOW=2026-09-15T18:01:00Z hw take "$N2" --runner test 2>&1)"; check "  nor can it be taken" "$?" "1"
+OUT="$(GODSPEED_TODAY=2026-09-15 GODSPEED_NOW=2026-09-15T18:01:00Z hw stop "$N2" --words "again" 2>&1)"; check "stopping it twice is no error" "$?" "0"
+contains "  and says so" "$OUT" "already stopped"
+nf "Answer C" n3 --goes-out 2026-09-15T19:00 >/dev/null
+N3="$(idof n3)"
+OUT="$(GODSPEED_TODAY=2026-09-15 GODSPEED_NOW=2026-09-15T18:30:00Z hw take "$N3" --runner test 2>&1)"; check "a step is not taken before its time" "$?" "1"
+contains "  and says when it goes" "$OUT" "goes out at 2026-09-15T19:00 UTC unless stopped"
+
+# Review focus 2: stop --today stops every step of the day that has not gone out; stop <id> stops one.
+nf "Morning answer" n4 --goes-out 2026-09-16T09:00 >/dev/null
+nf "Answer one" n5 --goes-out 2026-09-16T18:00 >/dev/null
+nf "Answer two" n6 --goes-out 2026-09-16T19:00 >/dev/null
+nf "Answer three" n7 --goes-out 2026-09-16T20:00 >/dev/null
+nf "Answer for tomorrow" n8 --goes-out 2026-09-17T18:00 >/dev/null
+N4="$(idof n4)"; N5="$(idof n5)"; N6="$(idof n6)"; N7="$(idof n7)"; N8="$(idof n8)"
+D16() { GODSPEED_TODAY=2026-09-16 GODSPEED_NOW="2026-09-16T$1:00Z" hw "${@:2}"; }
+GO="$(D16 05:00 going-out 2>&1)"
+check "going-out numbers the day's steps in time order" "$(printf '%s\n' "$GO" | cut -d' ' -f1-3 | tr '\n' '|')" "1. Morning answer|2. Answer one|3. Answer two|4. Answer three|"
+missing "  and leaves out the next day's" "$GO" "tomorrow"
+contains "  with the time in UTC" "$GO" "(news, 18:00 UTC)"
+D16 09:05 take "$N4" --runner test >/dev/null 2>&1
+D16 09:06 attempt "$N4" --runner test --ok --result "replied, https://example.org/r" >/dev/null 2>&1
+check "(the morning step went out)" "$(st "$N4")" "attempted "
+GO="$(D16 12:00 going-out 2>&1)"
+missing "a step that went out leaves the list" "$GO" "Morning answer"
+contains "  and the others keep their numbers, so stop 2 still means the second" "$GO" "2. Answer one"
+OUT="$(D16 12:00 stop "$N6" --words "stop 3" 2>&1)"
+check "stop <id> stops that step" "$(st "$N6")" "cancelled "
+check "  and only that one" "$(st "$N5" "$N7" "$N8")" "planned planned planned "
+GO="$(D16 12:00 going-out 2>&1)"
+contains "  the list keeps its numbers" "$GO" "4. Answer three"
+missing "  without the stopped step" "$GO" "Answer two"
+J="$(D16 12:00 going-out --json 2>&1)"
+check "going-out --json carries number, id and UTC time" "$(printf '%s' "$J" | "$NODE" -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{console.log(JSON.parse(s).map(r=>r.n+":"+r.id+":"+r.at).join(","))})')" "2:$N5:2026-09-16T18:00,4:$N7:2026-09-16T20:00"
+OUT="$(D16 12:00 stop --today --words "stop" 2>&1)"
+check "stop --today stops every step of the day not yet gone out" "$(st "$N5" "$N7")" "cancelled cancelled "
+check "  with his words on each" "$(cat "$TMP/work/$N5.md" "$TMP/work/$N7.md" | grep -c '^- 2026-09-16 STOPPED "stop"')" "2"
+check "  leaves the one that already went out" "$(st "$N4")" "attempted "
+check "  and the next day's" "$(st "$N8")" "planned "
+check "  going-out is then empty" "$(D16 12:00 going-out --json 2>&1)" "[]"
+OUT="$(D16 12:00 stop "$N4" --words "too late" 2>&1)"; check "a step that went out cannot be stopped" "$?" "1"
+contains "  and says so" "$OUT" "already went out"
+OUT="$(D16 12:00 stop --today --words "stop" 2>&1)"; check "stop --today with nothing waiting is no error" "$?" "0"
+contains "  and says nothing is waiting" "$OUT" "nothing is waiting to go out on 2026-09-16"
+OUT="$(hw stop "$N8" 2>&1)"; check "stop without his words is refused" "$?" "1"
+
+# A permission taken back stops what was queued under it from going out.
+"$NODE" "$TMP/bin/goals.js" allow news --kind nl-replies --revoke --words "stop answering for me" >/dev/null 2>&1
+check "(the permission is off the goal card)" "$(grep -c '^MAY: nl-replies' "$TMP/goals/news.md")" "0"
+D17() { GODSPEED_TODAY=2026-09-17 GODSPEED_NOW="2026-09-17T$1:00Z" hw "${@:2}"; }
+missing "a step whose permission was taken back is never offered" "$(D17 18:05 next 2>&1)" "$N8"
+OUT="$(D17 18:05 take "$N8" --runner test 2>&1)"; check "  nor taken" "$?" "1"
+contains "  and says it needs a fresh yes" "$OUT" "fresh yes"
+contains "check names it as a problem" "$(D17 18:05 check 2>&1)" "PROBLEM $N8: its standing permission nl-replies is no longer on news"
+OUT="$(D17 18:05 tick 2>&1)"
+check "tick sets it to wait for a fresh yes" "$(st "$N8")$(sed -n 's/^NEEDS: //p' "$TMP/work/$N8.md")" "blocked authorization"
+contains "  and says why" "$OUT" "$N8: the standing permission nl-replies is no longer on news"
+missing "  after which check has no problem with it" "$(D17 18:05 check 2>&1)" "PROBLEM $N8"
+OUT="$(D17 18:06 unblock "$N8" --why "he said yes" --approved-by "go on, send it" 2>&1)"
+contains "  a fresh yes lets it go" "$(D17 18:06 next 2>&1)" "$N8"
 
 echo
 echo "$PASS passed, $FAIL failed"

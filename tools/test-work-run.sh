@@ -201,6 +201,26 @@ check "an answer with no RESULT line fails the run with exit 4" "$?" "4"
 check "  and the item is failed" "$(status_of "$NID")" "failed"
 contains "  the run still ends with its count" "$OUT" "1 taken, 0 attempted, 0 verified"
 
+# --- a step on a standing permission goes out at its time, not before, and never once stopped ---------------------
+# GOES OUT is UTC; this file's clock stands at 2026-09-15T08:00Z.
+hg allow five-friends --kind circle-replies --what "answer replies in my reading circle thread" --per-week 3 --words "yes, answer them for me" >/dev/null 2>&1
+hw file --what "Answer the reply in the circle thread" --done-when "research/circle-reply.md exists" --goal five-friends --outward yes --may circle-replies --goes-out 2026-09-15T18:00 --key circle --source test >/dev/null
+CID="$(grep -l 'KEY: circle$' "$TMP/work"/W-*.md | head -1 | xargs basename | sed 's/.md$//')"
+OUT="$(run --only "$CID" 2>&1)"
+contains "a notice step is not run before its time" "$OUT" "not runnable now"
+check "  and stays planned" "$(status_of "$CID")" "planned"
+OUT="$(GODSPEED_NOW=2026-09-15T18:01:00.000Z run --only "$CID" 2>&1)"
+contains "after its time it is taken without anybody quoting a yes again" "$OUT" "$CID taken"
+contains "  as a move to apply" "$(cat "$TMP/routines/work/2026-09-15/$CID/prompt-seen.txt")" "This item is an approved move: apply it"
+contains "  told the yes is a standing one, for this kind of step, in the person's words" "$(cat "$TMP/routines/work/2026-09-15/$CID/prompt-seen.txt")" 'a standing yes to every step of this kind (circle-replies), in these words: "yes, answer them for me"'
+hw file --what "Answer the second reply" --done-when "research/circle-two.md exists" --goal five-friends --outward yes --may circle-replies --goes-out 2026-09-15T19:00 --key circle2 --source test >/dev/null
+C2="$(grep -l 'KEY: circle2$' "$TMP/work"/W-*.md | head -1 | xargs basename | sed 's/.md$//')"
+GODSPEED_NOW=2026-09-15T18:59:00.000Z hw stop "$C2" --words "not that one" >/dev/null 2>&1
+OUT="$(GODSPEED_NOW=2026-09-15T19:01:00.000Z run --only "$C2" 2>&1)"
+contains "a step stopped a minute before its time is never run" "$OUT" "not runnable now"
+check "  and stays stopped" "$(status_of "$C2")" "cancelled"
+check "  no assistant ever saw it" "$([ -d "$TMP/routines/work/2026-09-15/$C2" ] && echo ran || echo never)" "never"
+
 echo
 echo "$PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]
