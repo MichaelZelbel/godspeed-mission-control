@@ -208,6 +208,9 @@ while IFS=$'\t' read -r ID KIND WHAT; do
   # own words are on it (APPROVED), and only then does this one item get the tools that change
   # things outside: the rest of the run stays read-only, as before.
   APPROVED=""; ITEM_TOOLS="$EXTRA_TOOLS"
+  # A STEP ON A STANDING PERMISSION (filed with --may) went out without a yes for this one step, so
+  # it is never recorded done unless its UNDO copy, before.txt, was saved first (2026-10-13).
+  MAY_KIND="$(field "$SHOW" MAY)"
   if [ "$(field "$SHOW" OUTWARD)" = "yes" ]; then
     APPROVED="$(field "$SHOW" APPROVED)"
     [ -n "$APPROVED" ] && [ -n "$APPLY_TOOLS" ] && ITEM_TOOLS="${ITEM_TOOLS:+$ITEM_TOOLS }$APPLY_TOOLS"
@@ -237,7 +240,7 @@ while IFS=$'\t' read -r ID KIND WHAT; do
       case "$APPROVED" in
         "standing "*)
           SKIND="${APPROVED#standing }"; SKIND="${SKIND%%:*}"
-          echo "The person gave a standing yes to every step of this kind ($SKIND), in these words: ${APPROVED#*: }. It covers this one step, exactly as prepared, and nothing beyond it." ;;
+          echo "The person gave a standing yes to every step of this kind ($SKIND), in these words: ${APPROVED#*: }. It covers this one step, exactly as prepared, and nothing beyond it. Without before.txt (below) this step is recorded as failed, whatever it did, because it could not be put back." ;;
         *) echo "The person said yes to exactly this, in these words: $APPROVED" ;;
       esac
       echo "Carry out WHAT at the place it names, exactly as prepared (the AFTER text or file the item or its preview names), and nothing beyond it. First read and save what is there now (NOW) under routines/work/$TODAY/$ID/before.txt so it can be put back. Then apply it with the tools you have: an API or command line first, the signed-in browser if that is the only way. Then read the live place again and quote what it now shows. If the live place differs from what the move expected, or applying it would do anything the yes did not cover, stop and end with RESULT: FAILED naming what differs."
@@ -286,6 +289,15 @@ while IFS=$'\t' read -r ID KIND WHAT; do
       log "$ID failed: $WHY"
       continue ;;
   esac
+  # NO UNDO, NOT DONE (2026-10-13). Every step that goes out keeps what was there before it, so it
+  # can be put back. For a step on a standing permission that copy is routines/work/<day>/<id>/before.txt,
+  # the place the approved-move prompt names; without it the step is recorded failed, never attempted.
+  if [ -n "$MAY_KIND" ] && [ ! -f "$ITEMDIR/before.txt" ]; then
+    WHY="no UNDO: routines/work/$TODAY/$ID/before.txt was not written before the step went out, so it cannot be put back; check the live place by hand"
+    reg work attempt "$ID" --runner "$RUNNER_NAME" --failed "$WHY" 2>&1 | sed 's/^/  /'
+    log "$ID failed: $WHY"
+    continue
+  fi
   RESULT="$(printf '%s' "$RESULT_LINE" | sed 's/^RESULT: *//' | cut -c1-300)"
   SAY="$(grep -a '^SAY:' "$ITEMDIR/answer.txt" 2>/dev/null | tail -1 | tr -d '\r' | sed 's/^SAY: *//' | cut -c1-300)"
   reg work attempt "$ID" --runner "$RUNNER_NAME" --ok --result "$RESULT" 2>&1 | sed 's/^/  /'

@@ -198,19 +198,19 @@ MAY: own-pages | fix wording on my own sites | 5 per week | alone | "fix my page
 ## Log
 - 2026-09-10 FILED adopted outcome, source: x
 EOF
-OUT="$(hw file --what "Reply to the question under video 12" --done-when "reply visible" --goal aud --outward yes --may yt-replies --goes-out 2026-09-13T18:00 --key r1 --source t 2>&1)"
+OUT="$(hw file --what "Reply to the question under video 12" --done-when "reply visible" --goal aud --outward yes --may yt-replies --check "test -f live.txt" --goes-out 2026-09-13T18:00 --key r1 --source t 2>&1)"
 contains "a step under a notice permission files planned" "$OUT" "planned"
 ID1="$(printf '%s' "$OUT" | grep -o 'W-[0-9]*-[0-9]*' | head -1)"
 check "  with GOES OUT" "$(grep -c '^GOES OUT: 2026-09-13T18:00' "$TMP/work/$ID1.md")" "1"
 check "  and his words as its approval" "$(grep -c '^APPROVED: standing yt-replies: "yes, answer comments"' "$TMP/work/$ID1.md")" "1"
 missing "next skips it before its time" "$(GODSPEED_NOW=2026-09-13T17:59:00Z hw next 2>&1)" "$ID1"
 contains "next offers it after its time" "$(GODSPEED_NOW=2026-09-13T18:01:00Z hw next 2>&1)" "$ID1"
-OUT="$(hw file --what "Reply two" --done-when x --goal aud --outward yes --may yt-replies --key r2 --source t 2>&1)"
-OUT="$(hw file --what "Reply three" --done-when x --goal aud --outward yes --may yt-replies --key r3 --source t 2>&1)"
+OUT="$(hw file --what "Reply two" --done-when x --goal aud --outward yes --may yt-replies --check "test -f live.txt" --key r2 --source t 2>&1)"
+OUT="$(hw file --what "Reply three" --done-when x --goal aud --outward yes --may yt-replies --check "test -f live.txt" --key r3 --source t 2>&1)"
 contains "past the weekly limit it needs a fresh yes" "$OUT" "blocked"
-OUT="$(hw file --what "Post" --done-when x --goal aud --outward yes --may linkedin-posts --key r4 --source t 2>&1)"; check "a kind the goal does not have is refused" "$?" "1"
+OUT="$(hw file --what "Post" --done-when x --goal aud --outward yes --may linkedin-posts --check "test -f live.txt" --key r4 --source t 2>&1)"; check "a kind the goal does not have is refused" "$?" "1"
 contains "  and names the goal's kinds" "$OUT" "yt-replies, own-pages"
-OUT="$(hw file --what "Fix my homepage typo" --done-when x --goal aud --outward yes --may own-pages --key p1 --source t 2>&1)"
+OUT="$(hw file --what "Fix my homepage typo" --done-when x --goal aud --outward yes --may own-pages --check "test -f live.txt" --key p1 --source t 2>&1)"
 IDP="$(printf '%s' "$OUT" | grep -o 'W-[0-9]*-[0-9]*' | head -1)"
 contains "an alone-mode step is runnable at once" "$(hw next 2>&1)" "$IDP"
 GO="$(hw going-out --date 2026-09-13 2>&1)"
@@ -230,10 +230,10 @@ check "  with no standing approval and no time on it" "$(grep -c -e '^APPROVED:'
 check "  and its log says the week's limit is used" "$(grep -c "BLOCKED this week's 2 yt-replies steps are used; this one needs a fresh yes" "$TMP/work/$ID3.md")" "1"
 missing "  next never offers it, even after the hour" "$(GODSPEED_NOW=2026-09-13T19:00:00Z hw next 2>&1)" "$ID3"
 OUT="$(GODSPEED_NOW=2026-09-13T19:00:00Z hw take "$ID3" --runner test 2>&1)"; check "  nor can it be taken without a fresh yes" "$?" "1"
-OUT="$(hw file --what "Reply in a new week" --done-when x --goal aud --outward yes --may yt-replies --key r5 --source t --date 2026-09-20 2>&1)"
+OUT="$(hw file --what "Reply in a new week" --done-when x --goal aud --outward yes --may yt-replies --check "test -f live.txt" --key r5 --source t --date 2026-09-20 2>&1)"
 contains "seven days on, the limit counts again from zero" "$OUT" "planned"
 sed -i 's/$/\r/' "$TMP/goals/aud.md"
-OUT="$(hw file --what "Fix the footer" --done-when x --goal aud --outward yes --may own-pages --key p2 --source t 2>&1)"
+OUT="$(hw file --what "Fix the footer" --done-when x --goal aud --outward yes --may own-pages --check "test -f live.txt" --key p2 --source t 2>&1)"
 contains "a goal card with Windows line endings is read the same" "$OUT" "planned"
 
 cat > "$TMP/goals/news.md" <<'EOF'
@@ -247,14 +247,19 @@ MAY: nl-replies | answer replies to my newsletter | 10 per week | notice | "answ
 ## Log
 - 2026-09-10 FILED adopted outcome, source: x
 EOF
-nf() { local w="$1" k="$2"; shift 2; hw file --what "$w" --done-when "the reply is visible" --goal news --outward yes --may nl-replies --key "$k" --source t "$@" 2>&1; }
+nf() { local w="$1" k="$2"; shift 2; hw file --what "$w" --done-when "the reply is visible" --goal news --outward yes --may nl-replies --check "test -f live.txt" --key "$k" --source t "$@" 2>&1; }
 OUT="$(nf "Answer A" n0 --goes-out "2026-09-14 18:00")"; check "a GOES OUT not written YYYY-MM-DDTHH:MM is refused" "$?" "1"
 contains "  and says it is UTC" "$OUT" "UTC"
 OUT="$(nf "Answer A" n0 --goes-out 2026-09-13T09:59)"; check "a GOES OUT already past is refused" "$?" "1"
 contains "  it must leave time to stop it" "$OUT" "time to stop it"
-OUT="$(hw file --what "Answer A" --done-when x --goal news --may nl-replies --key n0 --source t 2>&1)"; check "--may on inward work is refused" "$?" "1"
-OUT="$(hw file --what "Answer A" --done-when x --outward yes --may nl-replies --key n0 --source t 2>&1)"; check "--may without a goal is refused" "$?" "1"
-OUT="$(hw file --what "Answer A" --done-when x --goal nowhere --outward yes --may nl-replies --key n0 --source t 2>&1)"; check "--may for a goal that is not there is refused" "$?" "1"
+OUT="$(hw file --what "Answer A" --done-when x --goal news --may nl-replies --check "test -f live.txt" --key n0 --source t 2>&1)"; check "--may on inward work is refused" "$?" "1"
+OUT="$(hw file --what "Answer A" --done-when x --outward yes --may nl-replies --check "test -f live.txt" --key n0 --source t 2>&1)"; check "--may without a goal is refused" "$?" "1"
+OUT="$(hw file --what "Answer A" --done-when x --goal nowhere --outward yes --may nl-replies --check "test -f live.txt" --key n0 --source t 2>&1)"; check "--may for a goal that is not there is refused" "$?" "1"
+# Every step that goes out without a yes each time is checked live after it lands (2026-10-13).
+OUT="$(hw file --what "Answer A" --done-when x --goal news --outward yes --may nl-replies --key n0 --source t 2>&1)"; check "--may without a live check is refused" "$?" "1"
+contains "  and says why" "$OUT" "checked live"
+check "  and files nothing" "$(grep -l '^KEY: n0$' "$TMP/work"/*.md 2>/dev/null | wc -l | tr -d ' ')" "0"
+OUT="$(hw file --what "Answer A" --done-when x --goal news --outward yes --may nl-replies --check --key n0 --source t 2>&1)"; check "  a bare --check, which checks nothing, is refused too" "$?" "1"
 OUT="$(GODSPEED_NOW=2026-09-13T18:30:00Z nf "Answer late" n1)"
 N1="$(idof n1)"
 check "filed after 18:00 UTC, it goes out at 18:00 UTC the next day" "$(sed -n 's/^GOES OUT: //p' "$TMP/work/$N1.md")" "2026-09-14T18:00"
@@ -312,6 +317,16 @@ contains "  and says so" "$OUT" "already went out"
 OUT="$(D16 12:00 stop --today --words "stop" 2>&1)"; check "stop --today with nothing waiting is no error" "$?" "0"
 contains "  and says nothing is waiting" "$OUT" "nothing is waiting to go out on 2026-09-16"
 OUT="$(hw stop "$N8" 2>&1)"; check "stop without his words is refused" "$?" "1"
+nf "Early answer" n9 --goes-out 2026-09-18T09:00 >/dev/null
+nf "Evening answer" n10 --goes-out 2026-09-18T18:00 >/dev/null
+N9="$(idof n9)"; N10="$(idof n10)"
+D18() { GODSPEED_TODAY=2026-09-18 GODSPEED_NOW="2026-09-18T$1:00Z" hw "${@:2}"; }
+D18 09:05 take "$N9" --runner test >/dev/null 2>&1
+OUT="$(D18 09:10 stop --today --words "stop" 2>&1)"
+contains "stop --today names a step that is going out right now" "$OUT" "$N9 is going out right now"
+check "  and leaves it going" "$(st "$N9")" "dispatched "
+check "  while it stops the rest of the day" "$(st "$N10")" "cancelled "
+D18 09:12 attempt "$N9" --runner test --ok --result "replied, https://example.org/r9" >/dev/null 2>&1
 
 # A permission taken back stops what was queued under it from going out.
 "$NODE" "$TMP/bin/goals.js" allow news --kind nl-replies --revoke --words "stop answering for me" >/dev/null 2>&1
@@ -327,6 +342,49 @@ contains "  and says why" "$OUT" "$N8: the standing permission nl-replies is no 
 missing "  after which check has no problem with it" "$(D17 18:05 check 2>&1)" "PROBLEM $N8"
 OUT="$(D17 18:06 unblock "$N8" --why "he said yes" --approved-by "go on, send it" 2>&1)"
 contains "  a fresh yes lets it go" "$(D17 18:06 next 2>&1)" "$N8"
+
+# A GOES OUT edited by hand out of its form is never due (review of unit C, 2026-10-13).
+cat > "$TMP/goals/re.md" <<'EOF'
+ID: re
+KIND: outcome
+STATUS: adopted
+TITLE: Forum
+
+## Log
+- 2026-09-10 FILED adopted outcome, source: x
+EOF
+hgr() { "$NODE" "$TMP/bin/goals.js" "$@"; }
+hgr allow re --kind forum-replies --what "answer replies on my forum thread" --per-week 5 --words "answer them" >/dev/null 2>&1
+rf() { local w="$1" k="$2"; shift 2; hw file --what "$w" --done-when "the reply is visible" --goal re --outward yes --may forum-replies --check "test -f live.txt" --key "$k" --source t "$@" 2>&1; }
+rf "Hand-edited time" m1 --goes-out 2026-09-13T18:00 >/dev/null
+M1="$(idof m1)"
+sed -i 's/^GOES OUT: .*/GOES OUT: 2026-09-13 18:00/' "$TMP/work/$M1.md"
+missing "a GOES OUT out of its form is never due for next" "$(GODSPEED_NOW=2026-09-14T09:00:00Z hw next 2>&1)" "$M1"
+OUT="$(GODSPEED_NOW=2026-09-14T09:00:00Z hw take "$M1" --runner test 2>&1)"; check "  nor for take" "$?" "1"
+contains "  which says what is wrong" "$OUT" "not YYYY-MM-DDTHH:MM"
+OUT="$(GODSPEED_NOW=2026-09-14T09:00:00Z hw take "$M1" --runner test --now 2>&1)"; check "  not even with --now" "$?" "1"
+contains "  and check names it" "$(hw check 2>&1)" "PROBLEM $M1: GOES OUT 2026-09-13 18:00 is not YYYY-MM-DDTHH:MM (UTC)"
+missing "  and it is not listed as going out" "$(hw going-out --date 2026-09-13 2>&1)" "Hand-edited time"
+hw stop "$M1" --words "test cleanup" >/dev/null 2>&1
+
+# A permission taken back and given again in new words: what was queued under the old words
+# does not go out under the new ones (review of unit C, 2026-10-13).
+rf "Answer under the old words" m2 --goes-out 2026-09-13T18:00 >/dev/null
+M2="$(idof m2)"
+hgr allow re --kind forum-replies --revoke --words "stop that" >/dev/null 2>&1
+hgr allow re --kind forum-replies --what "answer replies on my forum thread" --per-week 5 --words "answer them, but only the kind ones" >/dev/null 2>&1
+check "(the permission is back, in new words)" "$(grep -c '^MAY: forum-replies .*"answer them, but only the kind ones"' "$TMP/goals/re.md")" "1"
+missing "a step queued under the old words does not go out under the new ones" "$(GODSPEED_NOW=2026-09-13T18:05:00Z hw next 2>&1)" "$M2"
+OUT="$(GODSPEED_NOW=2026-09-13T18:05:00Z hw take "$M2" --runner test 2>&1)"; check "  nor can it be taken" "$?" "1"
+contains "  it needs a fresh yes" "$OUT" "fresh yes"
+GODSPEED_NOW=2026-09-13T18:05:00Z hw tick >/dev/null 2>&1
+check "  tick sets it to wait for that fresh yes" "$(st "$M2")$(sed -n 's/^NEEDS: //p' "$TMP/work/$M2.md")" "blocked authorization"
+rf "Answer under the new words" m3 --goes-out 2026-09-13T18:00 >/dev/null
+M3="$(idof m3)"
+contains "  while a step filed under the new words goes" "$(GODSPEED_NOW=2026-09-13T18:05:00Z hw next 2>&1)" "$M3"
+hgr allow re --kind forum-replies --revoke --words "stop" --date 2026-09-14 >/dev/null 2>&1
+hgr allow re --kind forum-replies --what "answer replies on my forum thread" --per-week 5 --words "answer them, but only the kind ones" --date 2026-09-14 >/dev/null 2>&1
+missing "given again in the same words on a later day, a step queued before it does not go out" "$(GODSPEED_TODAY=2026-09-14 GODSPEED_NOW=2026-09-14T18:05:00Z hw next 2>&1)" "$M3"
 
 echo
 echo "$PASS passed, $FAIL failed"

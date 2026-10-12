@@ -40,6 +40,7 @@ case "${FAKE_MODE:-ok}" in
   failed)   echo "RESULT: FAILED: the shop needs a login this machine does not have" > "$OUT"; exit 0 ;;
   short)    [ -n "$P" ] && { mkdir -p "$(dirname "$P")"; echo "too short" > "$P"; }; echo "RESULT: wrote $P" > "$OUT"; exit 0 ;;
   *)        [ -n "${FAKE_TOUCH:-}" ] && printf 'repaired\n' > "$FAKE_TOUCH"
+            [ -n "${FAKE_BEFORE:-}" ] && printf '%s\n' "$FAKE_BEFORE" > "$(dirname "$OUT")/before.txt"
             [ -n "$P" ] && { mkdir -p "$(dirname "$P")"; { echo "# Answer"; for i in $(seq 1 80); do printf 'word%s ' "$i"; done; echo; echo; echo "## Sources"; echo "- https://example.org/a"; } > "$P"; }
             echo "scratch line"; [ -n "${FAKE_SAY:-}" ] && echo "SAY: $FAKE_SAY"; echo "RESULT: wrote $P with 80 words" ;;
 esac > "${OUT:-/dev/stdout}"
@@ -204,7 +205,7 @@ contains "  the run still ends with its count" "$OUT" "1 taken, 0 attempted, 0 v
 # --- a step on a standing permission goes out at its time, not before, and never once stopped ---------------------
 # GOES OUT is UTC; this file's clock stands at 2026-09-15T08:00Z.
 hg allow five-friends --kind circle-replies --what "answer replies in my reading circle thread" --per-week 3 --words "yes, answer them for me" >/dev/null 2>&1
-hw file --what "Answer the reply in the circle thread" --done-when "research/circle-reply.md exists" --goal five-friends --outward yes --may circle-replies --goes-out 2026-09-15T18:00 --key circle --source test >/dev/null
+hw file --what "Answer the reply in the circle thread" --done-when "research/circle-reply.md exists" --goal five-friends --outward yes --may circle-replies --check "test -f research/circle-reply.md" --goes-out 2026-09-15T18:00 --key circle --source test >/dev/null
 CID="$(grep -l 'KEY: circle$' "$TMP/work"/W-*.md | head -1 | xargs basename | sed 's/.md$//')"
 OUT="$(run --only "$CID" 2>&1)"
 contains "a notice step is not run before its time" "$OUT" "not runnable now"
@@ -213,7 +214,18 @@ OUT="$(GODSPEED_NOW=2026-09-15T18:01:00.000Z run --only "$CID" 2>&1)"
 contains "after its time it is taken without anybody quoting a yes again" "$OUT" "$CID taken"
 contains "  as a move to apply" "$(cat "$TMP/routines/work/2026-09-15/$CID/prompt-seen.txt")" "This item is an approved move: apply it"
 contains "  told the yes is a standing one, for this kind of step, in the person's words" "$(cat "$TMP/routines/work/2026-09-15/$CID/prompt-seen.txt")" 'a standing yes to every step of this kind (circle-replies), in these words: "yes, answer them for me"'
-hw file --what "Answer the second reply" --done-when "research/circle-two.md exists" --goal five-friends --outward yes --may circle-replies --goes-out 2026-09-15T19:00 --key circle2 --source test >/dev/null
+contains "  and told that without its UNDO copy it is not done" "$(cat "$TMP/routines/work/2026-09-15/$CID/prompt-seen.txt")" "Without before.txt"
+# Every step that goes out keeps its UNDO (2026-10-13): this assistant wrote no before.txt.
+check "a standing step with no UNDO copy is recorded failed, not done" "$(status_of "$CID")" "failed"
+contains "  with the reason" "$(cat "$TMP/work/$CID.md")" "no UNDO: routines/work/2026-09-15/$CID/before.txt was not written"
+missing "  and no ATTEMPTED line" "$(cat "$TMP/work/$CID.md")" " ATTEMPTED "
+contains "  the run says so" "$OUT" "$CID failed: no UNDO"
+hw file --what "Answer the third reply" --done-when "research/circle-three.md exists" --goal five-friends --outward yes --may circle-replies --check "test -f research/circle-three.md" --goes-out 2026-09-15T18:00 --key circle3 --source test >/dev/null
+C3="$(grep -l 'KEY: circle3$' "$TMP/work"/W-*.md | head -1 | xargs basename | sed 's/.md$//')"
+OUT="$(GODSPEED_NOW=2026-09-15T18:02:00.000Z FAKE_BEFORE="the thread before my reply" run --only "$C3" 2>&1)"
+check "a standing step that kept its UNDO copy is verified by its live check" "$(status_of "$C3")" "verified"
+contains "  by the check, not the runner" "$(cat "$TMP/work/$C3.md")" "VERIFIED check passed (test -f research/circle-three.md)"
+hw file --what "Answer the second reply" --done-when "research/circle-two.md exists" --goal five-friends --outward yes --may circle-replies --check "test -f research/circle-two.md" --goes-out 2026-09-15T19:00 --key circle2 --source test >/dev/null
 C2="$(grep -l 'KEY: circle2$' "$TMP/work"/W-*.md | head -1 | xargs basename | sed 's/.md$//')"
 GODSPEED_NOW=2026-09-15T18:59:00.000Z hw stop "$C2" --words "not that one" >/dev/null 2>&1
 OUT="$(GODSPEED_NOW=2026-09-15T19:01:00.000Z run --only "$C2" 2>&1)"

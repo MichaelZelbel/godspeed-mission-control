@@ -80,14 +80,16 @@ const formatMay = (m) => `MAY: ${m.kind} | ${m.what} | ${m.perWeek} per week | $
 // Every MAY line in a card's text, in the order written.
 function mayIn(text) { return String(text || '').replace(/\r/g, '').split('\n').map(parseMay).filter(Boolean); }
 // Kinds of step that always need a fresh yes, whatever was said once: money, sign-ups, bookings,
-// cancellations, a first or bulk message, LinkedIn by automation (its User Agreement 8.2).
+// cancellations, a first message to someone never contacted (strangers, prospects, leads, an
+// introduction, reaching out), a bulk message, LinkedIn by automation (its User Agreement 8.2).
 // "book" only as booking something, so a page about a book is not refused.
 const NEVER_STANDING = new RegExp('\\b(?:spend\\w*|pay|pays|paid|payments?|buy\\w*|bought|purchas\\w*|bookings?|booked'
   + '|book(?=\\s+(?:a|an|the|me|us|tickets?|flights?|hotels?|rooms?|tables?|calls?|meetings?|appointments?|slots?|venues?)\\b)'
   + '|subscri\\w*|sign[- ]?ups?|sign(?:ing)? up|cancel\\w*|ads?|advert\\w*|donat\\w*|linkedin|bulk|mass[- ]?e?-?mails?'
-  + '|cold|first[- ](?:message|contact)s?)\\b', 'i');
-// Words that say a step reaches another person, so it may never go out alone, only with notice.
-const REACHES_PEOPLE = /\b(?:repl\w*|comment\w*|messag\w*|e-?mails?|dms?|send\w*|invit\w*|tweet\w*|outreach)\b/i;
+  + '|cold|first[- ](?:message|contact)s?|strangers?|prospects?|leads?|reach(?:ing)? out|introduc\\w*|new (?:people|contacts))\\b', 'i');
+// Words that say a step reaches another person or the public, so it may never go out alone, only
+// with notice. "reply" in its own forms only, so "replace a broken link" is not caught.
+const REACHES_PEOPLE = /\b(?:repl(?:y|ies|ied|ying)|comment\w*|messag\w*|e-?mails?|dms?|send\w*|invit\w*|tweet\w*|outreach|write to|contact\w*|people|post\w*|publish\w*)\b/i;
 
 function createGoalCommands({root=L.godspeedRoot(__filename),goalStore,workStore}={}) {
 const GODSPEED = root;
@@ -286,7 +288,7 @@ cmds.allow = (a) => {
   }
   const what = a.what === 'true' ? '' : oneLine(a.what);
   if (!what) die('--what is required: the kind of step in plain words');
-  if (NEVER_STANDING.test(`${kind} ${what}`)) die(`${kind}: this kind of step always needs a fresh yes, never a standing one (money, sign-ups, bookings, cancellations, a first or bulk message, anything on LinkedIn by automation)`);
+  if (NEVER_STANDING.test(`${kind} ${what}`)) die(`${kind}: this kind of step always needs a fresh yes, never a standing one (money, sign-ups, bookings, cancellations, a first message to someone never contacted, a bulk message, anything on LinkedIn by automation)`);
   const perWeek = /^\d+$/.test(String(a['per-week'] || '')) ? parseInt(a['per-week'], 10) : 0;
   if (!(perWeek >= 1 && perWeek <= 50)) die('--per-week is a number from 1 to 50: how many of these may go out in seven days');
   if (a.mode !== undefined && !['notice', 'alone'].includes(a.mode)) die('--mode is notice (goes out at its set time unless stopped, the default) or alone');

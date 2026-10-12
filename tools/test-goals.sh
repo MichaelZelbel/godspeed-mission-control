@@ -444,6 +444,13 @@ check "  and keeps the other one" "$(grep -c '^MAY: pages |' "$TMP/goals/mm-aud.
 hg allow mm-aud --kind pages --revoke --words "no more" >/dev/null 2>&1
 contains "with none left, may says every outward step needs a fresh yes" "$(hg may mm-aud 2>&1)" "every outward step needs a fresh yes"
 check "  and the card has no MAY line" "$(grep -c '^MAY:' "$TMP/goals/mm-aud.md")" "0"
+# A first message to a stranger always needs a fresh yes (review of unit C, 2026-10-13).
+OUT="$(hg allow mm-aud --kind intro-notes --what "write to strangers who might like my kit" --per-week 3 --words "ok" 2>&1)"; check "writing to strangers is refused" "$?" "1"
+contains "  and says it always needs a fresh yes" "$OUT" "always needs a fresh yes"
+OUT="$(hg allow mm-aud --kind outreach --what "reach out to new contacts" --per-week 3 --words "ok" 2>&1)"; check "reaching out to new contacts is refused" "$?" "1"
+OUT="$(hg allow mm-aud --kind posts --what "post my drafts on my blog" --per-week 3 --mode alone --words "ok" 2>&1)"; check "alone for a step that posts is refused" "$?" "1"
+OUT="$(hg allow mm-aud --kind pages --what "replace a broken link on my own site" --per-week 3 --mode alone --words "fix the links yourself" 2>&1)"; check "alone for replacing a link on my own site is accepted (replace is not reply)" "$?" "0"
+hg allow mm-aud --kind pages --revoke --words "test cleanup" >/dev/null 2>&1
 OUT="$(hg check 2>&1)"; missing "a card with MAY lines is no PROBLEM for check" "$OUT" "PROBLEM mm-aud"
 
 echo
