@@ -42,31 +42,49 @@ test('a weekday is the most recent one, worked out in code, whatever date a mode
  assert.deepEqual(dayMentions('track belly 94',today),[]);
  assert.equal(resolveOn('Friday',today),'2026-10-09');assert.equal(resolveOn('2026-10-02',today),'2026-10-02');
  assert.throws(()=>resolveOn('soon',today),/today, yesterday or a weekday/);
- // Their words win over a date worked out elsewhere; a date they said themselves stands.
- assert.equal(entryOn({on:'2026-10-16',words:'track belly 94 on Friday'},today),'2026-10-09');
+ // Their own day words are worked out here, and that is the day.
+ assert.equal(entryOn({on:'Friday',words:'track belly 94 on Friday'},today),'2026-10-09');
+ assert.equal(entryOn({on:'today',words:'track belly 92, same as yesterday'},today),'2026-10-12');
+ assert.equal(entryOn({on:'Friday'},today,{assistant:true}),'2026-10-09');
+ // A date that differs from the one day their words name is refused, naming the day and how to pass it.
+ assert.throws(()=>entryOn({on:'2026-10-16',words:'track belly 94 on Friday'},today),/^Error: Their message names Friday \(9 October\), not 2026-10-16\. Pass "on":"Friday" when the entry is for that day, or "on":"today" when it is for today, and send the call again$/);
+ assert.equal(entryOn({on:'2026-10-09',words:'track belly 94 on Friday'},today),'2026-10-09');
+ // So is a missing day when their words name another one (the second run on 12 October 2026: the bot
+ // left "on Friday" out and the 94 was kept for today).
+ assert.throws(()=>entryOn({words:'track belly 94 on Friday'},today),/^Error: Their message names Friday \(9 October\)\. Pass "on":"Friday"/);
+ assert.throws(()=>entryOn({words:'track stretching yesterday'},today),/Pass "on":"yesterday"/);
+ assert.throws(()=>entryOn({words:'track belly 94 on Friday or Saturday'},today),/Pass it as "on"/);
+ // A message with a date of its own may name it for something else: the caller's choice stands.
+ assert.equal(entryOn({words:'track belly 91 and remind me to call the doctor on 2099-01-01'},today),undefined);
+ assert.equal(entryOn({words:'track belly 92'},today),undefined);
+ assert.equal(entryOn({words:'track belly 92 this morning'},today),undefined);
+ assert.equal(entryOn({words:'what did I eat yesterday?'},today,{entry:false}),undefined,'a question writes nothing');
+ // A date they said themselves stands.
  assert.equal(entryOn({on:'2026-10-02',words:'track belly 94 for Friday the 2nd'},today),'2026-10-02');
  assert.equal(entryOn({on:'2026-10-02',words:'track belly 94, two weeks ago on Friday'},today),'2026-10-02');
  // An assistant that sends a date of its own sends their words with it.
  assert.throws(()=>entryOn({on:'2026-10-09'},today,{assistant:true}),/words/);
- assert.equal(entryOn({on:'Friday'},today,{assistant:true}),'2026-10-09');
 });
 
 test('"track belly 94 on Friday" holds the 94 for last Friday, and the next entry is compared with it',async t=>{
  const env=fixture(t);
- // What the bot sent on 12 October: the coming Friday as a date. Its words put it on the Friday just past.
- const held=ok(await call(env,{type:'tracker-hold',name:'Belly',unit:'cm',value:94,on:'2026-10-16',talk:'health',words:'track belly 94 on Friday'}));
- assert.equal(held.reply,"Start a new tracker called Belly, one number in cm, once a day? I've kept the 94 for 9 October.");
- // Or the person's own word for the day, worked out by the operation.
- const again=ok(await call(env,{type:'tracker-hold',name:'Belly',unit:'cm',value:94,on:'Friday',words:'track belly 94 on Friday'}));
- assert.equal(again.reply,held.reply);
+ // What the bot sent on 12 October: the coming Friday as a date, and in the second run no day at
+ // all. Both are refused with the day their words name; their own word for it is worked out here.
+ const future=await call(env,{type:'tracker-hold',name:'Belly',unit:'cm',value:94,on:'2026-10-16',talk:'health',words:'track belly 94 on Friday'});
+ assert.equal(future.error,true);assert.match(future.text,/^Their message names Friday \(9 October\), not 2026-10-16\. Pass "on":"Friday"/);
+ const left=await call(env,{type:'tracker-hold',name:'Belly',unit:'cm',value:94,words:'track belly 94 on Friday'});
+ assert.equal(left.error,true);assert.match(left.text,/^Their message names Friday \(9 October\)\. Pass "on":"Friday"/);
+ assert.equal(env.store.list('tracker_proposals').length,0,'nothing was held for the wrong day');
+ const again=ok(await call(env,{type:'tracker-hold',name:'Belly',unit:'cm',value:94,on:'Friday',talk:'health',words:'track belly 94 on Friday'}));
+ assert.equal(again.reply,"Start a new tracker called Belly, one number in cm, once a day? I've kept the 94 for 9 October.");
  const made=ok(await call(env,{type:'tracker-create',proposal_id:again.proposal_id,words:'yes'}));
  assert.equal(made.reply,'Tracked: Belly 94 cm on Friday. From now on just say "track belly" and the number.','no health talk here, so none is named');
  const [belly]=trackers(env.store);assert.deepEqual(entries(env.store,belly).map(e=>[e.data.when,e.data.value]),[['2026-10-09',94]]);
  const today=ok(await call(env,{type:'track',tracker:belly.id,value:92,words:'track belly 92'}));
  assert.equal(today.reply,'Tracked: 92 cm, down 2 since Friday.');
  // A future day is refused, and the refusal says how to pass their words.
- const future=await call(env,{type:'track',tracker:belly.id,value:91,on:'2026-10-16',words:'track belly 91 on the 16th'});
- assert.equal(future.error,true);assert.match(future.text,/in the future\. A weekday they named is the most recent one: pass their own words as on/);
+ const ahead=await call(env,{type:'track',tracker:belly.id,value:91,on:'2026-10-16',words:'track belly 91 on the 16th'});
+ assert.equal(ahead.error,true);assert.match(ahead.text,/in the future\. A weekday they named is the most recent one: pass their own words as on/);
  const bare=await call(env,{type:'track',tracker:belly.id,value:91,on:'2026-10-09'});
  assert.equal(bare.error,true);assert.match(bare.text,/as words/);
  // German: "gestern" is yesterday.

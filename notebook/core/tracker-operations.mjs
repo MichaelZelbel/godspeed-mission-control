@@ -27,7 +27,7 @@ export function trackerOperation(domains,raw){
  const {store,query}=domains,type=raw.type,now=clockNow(),zone=tz(store),assistant=domains.assistant===true;
  // Another day is worked out here from their own words ("on Friday", "gestern"), never by a model
  // (trackers.mjs entryOn). Every path below, habits, the cycle and food included, gets the day.
- const input=['tracker-hold','track'].includes(type)&&raw.on!==undefined?{...raw,on:entryOn(raw,dayOf(now,zone),{assistant})}:raw;
+ const input=['tracker-hold','track'].includes(type)?{...raw,on:entryOn(raw,dayOf(now,zone),{assistant})}:raw;
  if(type==='tracker-hold'){
   const name=String(input.name||'').trim();if(!name)throw Error('Say what to track');
   // "track period" (and "track Periode", "track cramps") belongs to the cycle tracker (D-321 step 4).

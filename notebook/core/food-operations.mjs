@@ -61,7 +61,7 @@ const presetSaid=(l,key)=>MEAL_SAID[l][key]||key;
 export function foodOperation(domains,raw){
  const {store,query}=domains,now=clockNow(),zone=tz(store),today=dayOf(now,zone);
  // Their day words ("yesterday", "on Friday") are worked out in code (trackers.mjs entryOn).
- const input=raw.on!==undefined&&raw.on!==null&&raw.on!==''?{...raw,on:entryOn(raw,today)}:raw,action=input.action||'track';
+ const action=raw.action||'track',input={...raw,on:entryOn(raw,today,{entry:action==='track'})};
  if(!FOOD_ACTIONS.includes(action))throw Error('A food action is one of: '+FOOD_ACTIONS.join(', '));
  const c=foodTracker(store),card=foodCard(c?.tracker),l=lang(input.language||c?.tracker.language),lookup=foodLookup(store);
  const rows=()=>c?entries(store,c):[];

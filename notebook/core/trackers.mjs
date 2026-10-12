@@ -61,15 +61,39 @@ export function resolveOn(on,today){
  if(days.length>1)throw Error('Say one day');
  throw Error('Give the day as YYYY-MM-DD, or in their own words: today, yesterday or a weekday such as Friday');
 }
-// The day an entry is for. `words` is the person's message: when its day words name one day and
-// they said no date of their own, that day is the one kept, whatever date the caller worked out.
-// An assistant that names another day by a date passes their words with it, so it can be checked.
-export function entryOn({on,words,source_quote},today,{assistant=false}={}){
- if(on===undefined||on===null||on==='')return undefined;
- let day=resolveOn(on,today);const text=String(words??source_quote??'').trim();
- if(!text&&assistant&&/^\d{4}-\d\d-\d\d$/.test(String(on).trim())&&day!==today)throw Error('Pass their message as words with another day, or their own day words as on (such as "on":"Friday"), so the day is worked out from what they said');
- if(text&&!EXPLICIT_DAY.test(text)){const days=dayMentions(text,today);if(days.length===1)day=days[0];}
- return day;
+// A date they said, or a count back ("two weeks ago", "vor drei Tagen", "last week"): another day
+// than today, which only the caller can turn into a date.
+const ANOTHER_DAY=new RegExp('\\d{4}-\\d\\d-\\d\\d|(?<!\\d)\\d{1,2}\\.\\d{1,2}\\.|(?<!\\d)\\d{1,2}(?:st|nd|rd|th|\\.)?\\s+(?:of\\s+)?'+MONTH+'|(?<!\\p{L})'+MONTH+'\\s+\\d{1,2}(?!\\d)|(?<!\\p{L})the\\s+\\d{1,2}(?:st|nd|rd|th)(?!\\p{L})|(?<!\\p{L})(?:ago|last\\s+week|letzte\\s+woche|vor\\s+\\S+\\s+(?:tagen|wochen))(?!\\p{L})','iu');
+// A day as their own words name it, for a refusal the assistant acts on: "yesterday", "Friday".
+const dayWord=(day,today)=>daysBetween(day,today)===1?'yesterday':daysBetween(day,today)===2?'the day before yesterday':WEEKDAYS[new Date(dayMs(day)).getUTCDay()];
+const askOn=(day,today,given)=>'Their message names '+dayWord(day,today)+' ('+longDay(day)+')'+(given?', not '+given:'')+'. Pass "on":"'+dayWord(day,today)+'" when the entry is for that day, or "on":"today" when it is for today, and send the call again';
+// The day an entry is for, YYYY-MM-DD, or undefined for today. `on` in their own words is worked out
+// here and kept. Every other answer is checked against their message (`words`, or the chat's quote of
+// it): a date that differs from the one day their words name is refused, and so is a missing `on`
+// when their words name another day (the capture runs of 12 October 2026: the bot sent the coming
+// Friday as a date, and then left the day out). The refusal names the day and how to pass it, so no
+// model's calendar sums decide it. A date they said themselves ("Friday the 2nd") stands.
+// `entry`: the call writes an entry, so a missing day is checked too.
+export function entryOn({on,words,source_quote},today,{assistant=false,entry=true}={}){
+ const text=String(words??source_quote??'').trim(),own=EXPLICIT_DAY.test(text),said=text?dayMentions(text,today):[];
+ if(on===undefined||on===null||on===''){
+  if(!entry)return undefined;
+  // A message that also holds a date of its own ("remind me on 2099-01-01") may name that day for
+  // something else; then the caller's choice stands.
+  const other=said.filter(d=>d!==today);
+  if(!other.length||ANOTHER_DAY.test(text))return undefined;
+  if(other.length===1)throw Error(askOn(other[0],today));
+  throw Error('Their message names another day than today. Pass it as "on", in their own words ("on":"Friday", "on":"yesterday"), or "on":"today" when the entry is for today, and send the call again');
+ }
+ const given=String(on).trim();
+ // Their own day words: worked out here, and that is the day.
+ if(!/^\d{4}-\d\d-\d\d$/.test(given))return resolveOn(given,today);
+ if(!text){
+  if(assistant&&given!==today)throw Error('Pass their message as words with another day, or their own day words as on (such as "on":"Friday"), so the day is worked out from what they said');
+  return given;
+ }
+ if(!own&&said.length===1&&said[0]!==given)throw Error(askOn(said[0],today,given));
+ return given;
 }
 // "I want to track my sleep: hours, and quality from 1 to 5": a tracker set up on purpose holds
 // no entry, since nothing has happened yet. "track sauna" holds the one it names.

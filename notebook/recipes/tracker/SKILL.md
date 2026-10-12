@@ -62,10 +62,11 @@ The journal no longer takes "track".
    with any change they asked for ("call it Waist": `"name":"Waist"`). Nothing else: the question
    already holds the columns. Never create a tracker in the turn that asked; only their answer to
    the question creates it, and the operation refuses the message that asked.
-6. **Another day** ("yesterday", "on Friday", "gestern", "am Freitag"): pass their own day words as
-   `"on"`, such as `"on":"Friday"` or `"on":"yesterday"`, or `"on":"YYYY-MM-DD"` for a date they
-   said. Never work out a weekday's date yourself: the operation does, and a weekday is always the
-   most recent one before today.
+6. **Another day** ("yesterday", "on Friday", "gestern", "am Freitag"): always pass their own day
+   words as `"on"`, such as `"on":"Friday"` or `"on":"yesterday"`, or `"on":"YYYY-MM-DD"` for a
+   date they said. Never work out a weekday's date yourself: the operation does, and a weekday is
+   always the most recent one before today. When their message names a day and `"on"` is missing
+   or says another day, the operation refuses and names the day: send the call again as it says.
 7. **Changing an existing entry** (same day on a once-a-day tracker, a correction, a delete) needs
    its hash: pass `"expected":{"collection_items/<id>":"<hash>"}` from `tracker-list` (`today` or
    `last`). A correction: `{"type":"tracker-correct","tracker":"<id>","value":<number>,"words":"<their message>"}`;

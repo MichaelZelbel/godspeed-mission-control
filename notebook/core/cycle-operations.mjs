@@ -52,7 +52,7 @@ export function cycleCreate(domains,p,input={}){
 export function cycleOperation(domains,raw){
  const {store,query}=domains,now=clockNow(),zone=tz(store),today=dayOf(now,zone);
  // Her day words ("yesterday", "on Friday") are worked out in code (trackers.mjs entryOn).
- const input=raw.on!==undefined&&raw.on!==null&&raw.on!==''?{...raw,on:entryOn(raw,today)}:raw,action=input.action||'track';
+ const action=raw.action||'track',input={...raw,on:entryOn(raw,today,{entry:['track','over'].includes(action)})};
  if(!CYCLE_ACTIONS.includes(action))throw Error('A cycle action is one of: '+CYCLE_ACTIONS.join(', '));
  const c=cycleTracker(store),l=lang(input.language||c?.tracker.language),rows=()=>c?entries(store,c):[];
  const none=l==='de'?'Du hast noch keinen Zyklus-Tracker. Sag am ersten Tag deiner Periode "track Periode", dann frage ich, ob ich einen anlegen soll.':'You have no cycle tracker yet. Say "track period" on the first day of your period and I will ask whether to start one.';
