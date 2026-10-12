@@ -84,6 +84,16 @@ async function quotes() {
       if (res.ok && /text|html|json/.test(res.headers.get('content-type') || '')) body = await res.text(); else why = `HTTP ${res.status}`;
     } catch (e) { why = String(e.name || e.message || e); }
     if (body === null) { notes.push(`${file}: "${name}" page could not be read (${why}); the quote stays as the run wrote it`); continue; }
+    if (!norm(body).includes(want)) {
+      // A page that is a script shell or a login wall serves 200 and no readable text: that is a
+      // page we cannot read, not a quote that is wrong.
+      const visible = body.replace(/<(script|style|noscript)\b[\s\S]*?<\/\1\s*>/gi, ' ').replace(/<[^>]+>/g, ' ');
+      const words = visible.split(/\s+/).filter(Boolean).length;
+      if (words < 100 || /enable javascript|javascript is (required|disabled)/i.test(visible)) {
+        notes.push(`${file}: "${name}" page served no readable text (${words} visible words); the quote stays as the run wrote it`);
+        continue;
+      }
+    }
     if (!norm(body).includes(want)) problems.push(`${file}: "${name}" quote not found on its page (${url}); open the page again, copy the sentence exactly, or remove the block`);
   }
 }

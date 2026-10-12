@@ -65,7 +65,8 @@ PORT_FILE="$TMP/port"
 const http=require("http");
 const s=http.createServer((q,r)=>{
   if(q.url==="/has"){r.writeHead(200,{"content-type":"text/html"});r.end("<p>We say: charge   from day one, always.</p>");return;}
-  if(q.url==="/lacks"){r.writeHead(200,{"content-type":"text/html"});r.end("<p>Give it away.</p>");return;}
+  if(q.url==="/lacks"){r.writeHead(200,{"content-type":"text/html"});r.end("<p>Give it away. "+"word ".repeat(150)+"</p>");return;}
+  if(q.url==="/js"){r.writeHead(200,{"content-type":"text/html"});r.end("<html><head><script>var a=1;"+"x();".repeat(300)+"</script></head><body><noscript>Please enable JavaScript to view this page.</noscript></body></html>");return;}
   r.writeHead(403);r.end("no");
 });
 s.listen(0,"127.0.0.1",()=>require("fs").writeFileSync(process.argv[1],String(s.address().port)));' "$PORT_FILE" & SRV=$!
@@ -81,6 +82,12 @@ OUT="$(run --fetch)"; check "a page that refuses us is not a failed quote" "$?" 
 contains "  but it is noted" "$OUT" "NOTE claims.md: \"Paywalled\" page could not be read"
 printf 'CLAIM: Old one\nSTATUS: supported 2026-01-01\nSOURCE: http://127.0.0.1:%s/lacks (read 2026-01-01)\nQUOTE: "never there"\nMEANS: x\n\n' "$P" >> "$R/claims.md"
 OUT="$(run --fetch)"; check "only quotes read tonight are fetched" "$?" "0"
+
+# a script shell or login wall that answers 200 with no readable text is a note, not a failed quote
+printf 'CLAIM: Early pricing beats free\nSTATUS: supported %s\nSOURCE: http://127.0.0.1:%s/has (read %s)\nQUOTE: "charge from day one"\nMEANS: price\n\n' "$D" "$P" "$D" > "$R/claims.md"
+printf 'CLAIM: Script only\nSTATUS: supported %s\nSOURCE: http://127.0.0.1:%s/js (read %s)\nQUOTE: "a sentence the shell never shows"\nMEANS: x\n\n' "$D" "$P" "$D" >> "$R/claims.md"
+OUT="$(run --fetch)"; check "a page with only a script shell is not a failed quote" "$?" "0"
+contains "  but it is noted" "$OUT" "NOTE claims.md: \"Script only\" page served no readable text"
 
 echo "$PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]
