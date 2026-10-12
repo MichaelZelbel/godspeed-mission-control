@@ -61,6 +61,14 @@ when it says nothing needs saying and there was no error. This is the only place
 speaks about anything in `due/`: never read `due/` yourself, never call something overdue or
 urgent on your own. This section does not count toward the 200 words.
 
+## Cycle heads-up
+
+Call `personal_operation {"type":"cycle","action":"brief"}`. When it gives a `line`, put that line
+in the brief word for word, as one line, after the first part: it is the person's own heads-up about
+their next period, which they switched on themselves. Say nothing else about their cycle, and never
+send the line anywhere else. Leave it out when `line` is null or the notebook is not reached. This
+line does not count toward the 200 words.
+
 ## Checks
 
 Run `mc-check-brief` on the finished file and fix what it refuses, without dropping anything
