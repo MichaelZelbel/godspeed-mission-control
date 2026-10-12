@@ -84,7 +84,7 @@ function EmptyCollectionsState({ onNewBlank, onCreateWithAI, onBrowseTemplates }
         </div>
         <h1 className="text-2xl font-bold font-display">No collections yet</h1>
         <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-muted-foreground">
-          Collections are structured trackers for anything you want to remember - household items, reading lists, contacts, job applications. Create one from a template or describe what you want to track.
+          A collection is a table of things you want to keep in order: household items, reading lists, contacts, job applications. Create one from a template or describe what it should hold. Anything you track by saying "track" goes on its own Trackers shelf here.
         </p>
         <div className="mt-6 flex flex-col items-center justify-center gap-3 sm:flex-row">
           <Button variant="secondary" onClick={onBrowseTemplates}>Browse Templates</Button>
