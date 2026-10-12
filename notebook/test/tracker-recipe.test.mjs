@@ -112,3 +112,32 @@ test('the food-tracker recipe claims food, keeps every number with the operation
   assert.ok(revisions['tracker/SKILL.md'].includes('b876984f2d8ad2f25ffda69c45ac2978cea74a9a86e840d863704e2d79f5b1a1'),'the tracker text shipped until today');
   for(const name of ['tracker','food-tracker'])assert.ok(revisions[name+'/SKILL.md'].includes(digest(read('../recipes/'+name+'/SKILL.md'))),name+' ships a known revision');
 });
+
+// The book's capture run of 12 October 2026 (D-321): the bot retyped an operation's reply, set up a
+// two-column tracker as two trackers, asked and created in one turn, worked out a weekday's date as
+// the coming one, gave a pill the time of the message, and asked for a talk to start a habit. The
+// recipes the product ships say what to do instead, and Michael's own copies are the same text.
+test('the shipped recipes pass an operation\'s reply on as it came, set up columns in one tracker, and leave days to the operation',()=>{
+  const tracker=read('../recipes/tracker/SKILL.md');
+  assert.match(tracker.replace(/\s+/g,' '),/Your reply is the operation's `reply`, exactly as it came\*\*: the same words, the same quotes and the same punctuation, character for character, with nothing added and nothing left out\. Never retype it in your own style\. Only when they wrote in another language than the reply's, say it in theirs, and keep every number, name and day\./);
+  assert.match(tracker,/"fields":\[\{"label":"Hours","type":"number","unit":"hours"\},\{"label":"Quality","type":"number","min":1,"max":5\}\]/);
+  assert.match(tracker,/Never split their columns into\s+trackers of their own/);
+  assert.match(tracker,/\{"type":"tracker-create","proposal_id":"<id>","words":"<their answer>"\}/);
+  assert.match(tracker,/Never create a tracker in the turn that asked/);
+  assert.match(tracker,/`"on":"Friday"`/);assert.match(tracker,/Never work out a weekday's date yourself/);
+  assert.match(tracker,/"data":\{"hours":7,"quality":4\}/);
+  for(const name of ['food-tracker','cycle-tracker'])assert.match(read('../recipes/'+name+'/SKILL.md'),/Reply with the operation's `reply`, word for word and whole, and nothing else[.:]/,name);
+  assert.match(read('../recipes/food-tracker/SKILL.md'),/the same words, quotes and\npunctuation, character for character, never retyped in your own style/);
+  assert.match(read('../recipes/cycle-tracker/SKILL.md'),/or retype its quotes and punctuation in your own style/);
+  for(const name of ['food-tracker','cycle-tracker'])assert.match(read('../recipes/'+name+'/SKILL.md'),/`"on":"yesterday"` or `"on":"Friday"`/,name);
+  const headache=read('../recipes/headache-tracker/SKILL.md');
+  assert.match(headache,/\*\*When a pill was taken\*\*: only a time they said\./);assert.match(headache,/Never give it the time of their message\./);
+  const coach=read('../recipes/coach/SKILL.md');
+  assert.match(coach,/It does not have to exist: when it does not, the command makes it, with no talk\./);
+  assert.match(coach,/never ask for a day or time, set up a talk, or offer one to start a habit/);
+  for(const text of [tracker,headache,coach])assert.doesNotMatch(text,/[–—]/,'no long dashes');
+  const revisions=JSON.parse(read('../data/recipe-revisions.json'));
+  for(const name of ['tracker','coach','headache-tracker','food-tracker','cycle-tracker'])assert.ok(revisions[name+'/SKILL.md'].includes(digest(read('../recipes/'+name+'/SKILL.md'))),name+' ships a known revision');
+  // The texts shipped until today stay known, so an unedited installed copy is replaced.
+  for(const [name,old] of [['tracker','0284d7e3c89601983997724ee8d2bd2f88f510f9a4b290ca6338888561abf7d1'],['food-tracker','ceaa7e6c7934218eb618775fd815f03a08dfaa3b0654657074a67aa802b8c716']])assert.ok(revisions[name+'/SKILL.md'].includes(old),name);
+});

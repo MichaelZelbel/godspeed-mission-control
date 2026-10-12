@@ -17,9 +17,9 @@ const ok=r=>{assert.equal(r.error,false,r.text);return JSON.parse(r.text);};
 // an existing entry needs its current hash, as every assistant edit does.
 test('the bot holds, creates, tracks and replaces through personal_operation',async t=>{
   const env=fixture(t),scopes=['actions','collections'];
-  const held=ok(await call(env,'personal_operation',{type:'tracker-hold',name:'Belly',unit:'cm',value:92},scopes));
+  const held=ok(await call(env,'personal_operation',{type:'tracker-hold',name:'Belly',unit:'cm',value:92,words:'track belly 92'},scopes));
   assert.match(held.reply,/^Start a new tracker called Belly/);
-  const created=ok(await call(env,'personal_operation',{type:'tracker-create',proposal_id:held.proposal_id},scopes));
+  const created=ok(await call(env,'personal_operation',{type:'tracker-create',proposal_id:held.proposal_id,words:'yes'},scopes));
   assert.match(created.reply,/^Tracked: Belly 92 cm\./);
   const list=ok(await call(env,'personal_operation',{type:'tracker-list'},scopes));
   const belly=list.trackers[0];assert.equal(belly.name,'Belly');assert.deepEqual(list.pending,[]);
@@ -41,8 +41,8 @@ test('the bot holds, creates, tracks and replaces through personal_operation',as
 
 test('a key without the collections scope cannot make or fill a tracker',async t=>{
   const env=fixture(t),scopes=['actions'];
-  const held=ok(await call(env,'personal_operation',{type:'tracker-hold',name:'Belly',unit:'cm',value:92},scopes));
-  const r=await call(env,'personal_operation',{type:'tracker-create',proposal_id:held.proposal_id},scopes);
+  const held=ok(await call(env,'personal_operation',{type:'tracker-hold',name:'Belly',unit:'cm',value:92,words:'track belly 92'},scopes));
+  const r=await call(env,'personal_operation',{type:'tracker-create',proposal_id:held.proposal_id,words:'yes'},scopes);
   assert.equal(r.error,true);assert.equal(env.store.list('collections').length,0);
 });
 

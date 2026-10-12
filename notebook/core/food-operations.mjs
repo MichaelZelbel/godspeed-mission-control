@@ -3,7 +3,7 @@
 // table in food-table.mjs, packaged food in food-products.mjs; this file reads and writes. Nothing
 // here sends anything to anyone, and no job runs: the weekly adaptation is worked out when read.
 import path from 'node:path';
-import {trackers,entries,proposalState,dayOf,whenFor,norm,HOLD_MS} from './trackers.mjs';
+import {trackers,entries,proposalState,dayOf,whenFor,norm,HOLD_MS,entryOn,talkExists,existingTalk} from './trackers.mjs';
 import {now as clockNow,localParts} from '../../third-party/addons/godspeed-coach/lib/clock.mjs';
 import {readTable} from '../../third-party/addons/godspeed-coach/lib/auto.mjs';
 import {loadSettings as coachSettings} from '../../third-party/addons/godspeed-coach/lib/settings.mjs';
@@ -58,8 +58,10 @@ function lastMeal(rows){
 const presetKey=name=>{const n=norm(name).replace(/(?<!\p{L})(?:my|usual|the|übliche[snrm]?|mein[e]?|wie immer|as always)(?!\p{L})/giu,' ').replace(/\s+/g,' ').trim();for(const m of ['breakfast','lunch','dinner','snack'])if(n===m||norm(MEAL_SAID.de[m])===n)return m;return n;};
 const presetSaid=(l,key)=>MEAL_SAID[l][key]||key;
 
-export function foodOperation(domains,input){
- const {store,query}=domains,now=clockNow(),zone=tz(store),today=dayOf(now,zone),action=input.action||'track';
+export function foodOperation(domains,raw){
+ const {store,query}=domains,now=clockNow(),zone=tz(store),today=dayOf(now,zone);
+ // Their day words ("yesterday", "on Friday") are worked out in code (trackers.mjs entryOn).
+ const input=raw.on!==undefined&&raw.on!==null&&raw.on!==''?{...raw,on:entryOn(raw,today)}:raw,action=input.action||'track';
  if(!FOOD_ACTIONS.includes(action))throw Error('A food action is one of: '+FOOD_ACTIONS.join(', '));
  const c=foodTracker(store),card=foodCard(c?.tracker),l=lang(input.language||c?.tracker.language),lookup=foodLookup(store);
  const rows=()=>c?entries(store,c):[];
@@ -119,7 +121,7 @@ export function foodOperation(domains,input){
    // unclear amount (the base's hold). Nothing is created.
    const {unclear}=items.length?resolveItems(items,{lookup,portionOf:()=>null}):{unclear:[]};
    const replaces=store.list('tracker_proposals').filter(o=>o.specialist==='food'&&proposalState(store,o,now)==='pending').map(o=>o.id);
-   const p=store.save('tracker_proposals',{name:l==='de'?'Essen':'Food',cadence:'any',field_schema:foodSchema(),talk:'health',specialist:'food',language:l,meal:items.length?{when,meal:mealFor,items}:null,unclear,replaces,created_at:now.toISOString()});
+   const p=store.save('tracker_proposals',{name:l==='de'?'Essen':'Food',cadence:'any',field_schema:foodSchema(),talk:existingTalk(store.root,'health'),specialist:'food',language:l,meal:items.length?{when,meal:mealFor,items}:null,unclear,replaces,created_at:now.toISOString()});
    return {proposal_id:p.id,language:l,reply:setupQuestion(l,{questions:questionText(l,unclear),kept:items.length>0})};
   }
   if(!items.length)throw Error(l==='de'?'Sag, was du gegessen hast.':'Say what you ate.');
@@ -215,7 +217,10 @@ export function foodOperation(domains,input){
   return {language:l,tracker_hash:updated._hash,reply};
  }
  if(action==='talk'){
-  const talk=talkOf(input.talk),updated=setCard({},{talk});
+  const talk=talkOf(input.talk);
+  // Only a talk that exists can read it; nothing is changed for one that does not (trackers.mjs talkExists).
+  if(talk&&!talkExists(store.root,talk))return {language:l,talk:null,changed:false,reply:l==='de'?'Es gibt noch kein Gespräch "'+talk+'". Sag, wann es stattfinden soll, dann kann es ab da deinen Ernährungs-Tracker lesen.':'There is no '+talk.replaceAll('-',' ')+' talk yet. Say when it should happen, and from then on it can read your food tracker.'};
+  const updated=setCard({},{talk});
   return {language:l,talk,tracker_hash:updated._hash,reply:talk?(l==='de'?'Erledigt: Dein Gespräch "'+talk+'" darf jetzt deinen Ernährungs-Tracker lesen.':'Done: your '+talk.replaceAll('-',' ')+' talk may now read your food tracker.'):(l==='de'?'Erledigt: Kein Gespräch liest deinen Ernährungs-Tracker.':'Done: no talk reads your food tracker.')};
  }
  throw Error('Unsupported food action: '+action);
@@ -227,7 +232,7 @@ export function foodCreate(domains,p,input={}){
  const {store,query}=domains,now=clockNow(),zone=tz(store),today=dayOf(now,zone),l=lang(input.language||p.language);
  if(foodTracker(store))throw Error(l==='de'?'Du hast schon einen Ernährungs-Tracker.':'You already have a food tracker.');
  const ed=input.eating_disorder===true,name=p.name||(l==='de'?'Essen':'Food');
- const collection=query.execute({table:'collections',operation:'insert',values:{name,icon:'🍽️',description:l==='de'?'Ernährungs-Tracker':'Food tracker',visibility:'personal',field_schema:foodSchema(),tracker:{names:[...new Set([name,...NAMES])],cadence:'any',talk:ed?null:p.talk??'health',specialist:'food',language:l,proposal_id:p.id,food:{numbers:!ed,eating_disorder:ed}}}}).data[0];
+ const collection=query.execute({table:'collections',operation:'insert',values:{name,icon:'🍽️',description:l==='de'?'Ernährungs-Tracker':'Food tracker',visibility:'personal',field_schema:foodSchema(),tracker:{names:[...new Set([name,...NAMES])],cadence:'any',talk:ed?null:existingTalk(store.root,p.talk===undefined?'health':p.talk),specialist:'food',language:l,proposal_id:p.id,food:{numbers:!ed,eating_disorder:ed}}}}).data[0];
  const tail=ed?' '+edReply(l):targetHint(l);
  if(!p.meal?.items?.length)return {collection_id:collection.id,language:l,reply:ed?edReply(l):readyReply(l)};
  const unclear=p.unclear||[],answers=[].concat(input.answers??(input.grams!==undefined?[{grams:input.grams}]:[]));

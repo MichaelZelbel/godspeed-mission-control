@@ -6,10 +6,12 @@ import {withTable} from './food-fixture.mjs';
 
 // The food tracker's operations (D-321 step 5), on the shared tracker base: one path for the notebook's
 // chat, MCP and the bot. A frozen clock (GODSPEED_NOW), the table cut from the real BLS file, no model.
-async function fixture(now='2026-10-12T10:00:00Z'){
+// talks: the coaching areas that have a talk; a new mission control has none (D-321).
+async function fixture(now='2026-10-12T10:00:00Z',{talks=[]}={}){
  process.env.GODSPEED_NOW=now;
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-food-ops-')),store=new Store(root),query=new QueryService(store),domains=new Domains(query);
  store.save('settings',{id:'installation',timezone:'Europe/Berlin'});await withTable(root);
+ for(const area of talks){fs.mkdirSync(path.join(root,'coach',area),{recursive:true});fs.writeFileSync(path.join(root,'coach',area,'area.md'),'AREA: '+area+'\nTITLE: '+area+'\nRHYTHM: weekly sunday\nTIME: 19:00\nSTARTS: 2026-09-01\nSTATUS: on\n\n## Preparation\n\nx\n');}
  return {root,store,query,domains,op:input=>domains.invoke('personal-operation',input)};
 }
 test.after(()=>{delete process.env.GODSPEED_NOW;});
@@ -29,7 +31,8 @@ test('"track food, tofu with half a pack of rice": the setup question asks about
  // Tofu 200 g: 115 x 2 = 230 kcal, 15.51 x 2 = 31.02 g protein. Rice 125 g: 351 x 1.25 = 438.75 kcal, 7.931 x 1.25 = 9.91 g.
  assert.equal(made.reply,'Tracked: tofu 200 g (assumed), rice 125 g: 669 kcal, 41 g protein. Say "set my food target" when you want a daily target.');
  const c=food(f.store);
- assert.deepEqual({name:c.name,cadence:c.tracker.cadence,talk:c.tracker.talk,specialist:c.tracker.specialist},{name:'Food',cadence:'any',talk:'health',specialist:'food'});
+ // This mission control has no health talk, so no talk reads it (D-321).
+ assert.deepEqual({name:c.name,cadence:c.tracker.cadence,talk:c.tracker.talk,specialist:c.tracker.specialist},{name:'Food',cadence:'any',talk:null,specialist:'food'});
  assert.deepEqual(entries(f.store,c).map(r=>r.data),[
   {when:'2026-10-12 12:00',meal:'none',item:'tofu',food:'Tofu',grams:200,kcal:230,protein_g:31.02,carbs_g:0,fat_g:11.26,assumed:true,source:'BLS 4.0 H861000'},
   {when:'2026-10-12 12:00',meal:'none',item:'rice',food:'White rice raw',grams:125,count:0.5,unit:'pack',kcal:438.75,protein_g:9.91,carbs_g:96.38,fat_g:0.78,assumed:false,source:'BLS 4.0 C352000'}]);
@@ -150,8 +153,9 @@ test('a barcode through a stand-in network, then the product is tracked like a f
 });
 
 test('a tracker-list for the weekly talk carries the days and the target\'s change in one line',async()=>{
- const f=await fixture('2026-10-01T10:00:00Z');
+ const f=await fixture('2026-10-01T10:00:00Z',{talks:['health']});
  const held=await f.op({type:'food',action:'track',items:[TOFU]});await f.op({type:'tracker-create',proposal_id:held.proposal_id});
+ assert.equal(food(f.store).tracker.talk,'health','with a health talk, the food tracker is its own by default');
  await f.op({type:'food',action:'target',sex:'female',age:34,height_cm:168,weight_kg:70,activity:'light',goal:'lose'});
  for(const d of ['2026-10-02','2026-10-03','2026-10-05','2026-10-06']){at(d+'T10:00:00Z');await f.op({type:'food',action:'track',items:[{food:'C352000',item:'rice',grams:300}]});}
  f.store.save('health_observations',{metric:'weight_kg',value:70,observed_on:'2026-09-24',observed_at:'2026-09-24T06:00:00Z'});

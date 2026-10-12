@@ -1,7 +1,7 @@
 // The tracker operations (D-321), one path for the notebook's chat, MCP and the
 // Telegram bot: personalOperation hands these types here. The rules they share
 // are in trackers.mjs; this file reads and writes.
-import {norm,card,trackers,findTracker,entries,trackerStatus,proposalState,dayOf,whenFor,schemaFor,entryData,holdQuestion,createdReply,instantReply,fmt,unitOf,longDay} from './trackers.mjs';
+import {norm,card,trackers,findTracker,entries,trackerStatus,proposalState,dayOf,whenFor,schemaFor,entryData,holdQuestion,createdReply,instantReply,fmt,unitOf,longDay,entryOn,existingTalk,setUpOnPurpose,entryWords} from './trackers.mjs';
 import {now as clockNow,addDays} from '../../third-party/addons/godspeed-coach/lib/clock.mjs';
 import {visibleRows} from './visibility.mjs';
 import {habitTrackerList,habitOperation,isHabitRef,findHabits} from './habit-trackers.mjs';
@@ -20,9 +20,14 @@ const HEADACHES='The Headaches tracker is kept by the headache tracker: say it a
 // The food tracker's rows are worked out by its own operation from the food table (D-321 step 5).
 const FOOD='The food tracker is kept by the food operation: food {action:"track",items:[{food:<id from food search>,item,grams?,count?,unit?,assumed?}]}, as the food-tracker recipe says; never track.';
 const has=input=>input.value!==undefined&&input.value!==null&&input.value!==''||Object.keys(input.data||{}).length>0;
-export function trackerOperation(domains,input){
+// The person's message, as an assistant passes it (`words`) or the chat quotes it (`source_quote`).
+const wordsOf=input=>String(input.words??input.source_quote??'').trim();
+export function trackerOperation(domains,raw){
  // The coach's clock: the real time, or GODSPEED_NOW for a rehearsal with a frozen clock.
- const {store,query}=domains,type=input.type,now=clockNow(),zone=tz(store);
+ const {store,query}=domains,type=raw.type,now=clockNow(),zone=tz(store),assistant=domains.assistant===true;
+ // Another day is worked out here from their own words ("on Friday", "gestern"), never by a model
+ // (trackers.mjs entryOn). Every path below, habits, the cycle and food included, gets the day.
+ const input=['tracker-hold','track'].includes(type)&&raw.on!==undefined?{...raw,on:entryOn(raw,dayOf(now,zone),{assistant})}:raw;
  if(type==='tracker-hold'){
   const name=String(input.name||'').trim();if(!name)throw Error('Say what to track');
   // "track period" (and "track Periode", "track cramps") belongs to the cycle tracker (D-321 step 4).
@@ -34,6 +39,8 @@ export function trackerOperation(domains,input){
   if(existing.length)throw Error('There is already a tracker called '+name+'; track it instead');
   // "track food", "track lunch, ..." belongs to the food tracker (D-321 step 5): its own question, its items.
   if(input.specialist==='food'||FOOD_WORDS.test(name))return foodOperation(domains,{...input,action:'track'});
+  // The message that asks is kept with the question, so a yes is a later message (tracker-create).
+  if(assistant&&!wordsOf(input))throw Error("Pass the person's own message as words: a new tracker needs their yes in a later message.");
   // "track sauna" names no number, unit or column: something that happened, counted each time
   // and as often as it happens (the design's "a tracker with no number"). Until the bot's
   // rehearsal on 12 October 2026 it became "one number, once a day".
@@ -42,11 +49,15 @@ export function trackerOperation(domains,input){
   // A tracker with no columns of its own counts each time: "track sauna" is itself the
   // entry, held like a number would be, so the yes counts it (design: nothing he said is lost).
   const counting=!field_schema.some(f=>!['when','note'].includes(f.key));
-  const entry=has(input)||counting?{when:whenFor({on:input.on,at:input.at,cadence},now,zone),data:entryData(shape,input)}:null;
+  // Set up on purpose ("I want to track my sleep: hours, and quality from 1 to 5"), nothing has
+  // happened yet: no entry is held, unless they gave one.
+  const entry=has(input)||counting&&!setUpOnPurpose(input)?{when:whenFor({on:input.on,at:input.at,cadence},now,zone),data:entryData(shape,input)}:null;
   // An earlier open question for the same name is replaced by this one; it is
   // named here rather than changed (proposalState in trackers.mjs).
   const replaces=store.list('tracker_proposals').filter(o=>norm(o.name)===norm(name)&&proposalState(store,o,now)==='pending').map(o=>o.id);
-  const p=store.save('tracker_proposals',{name,cadence,field_schema,talk:talkOf(input.talk),entry,replaces,created_at:now.toISOString()});
+  // A talk only when it exists (trackers.mjs talkExists): a new mission control has none.
+  const words=wordsOf(input);
+  const p=store.save('tracker_proposals',{name,cadence,field_schema,talk:existingTalk(store.root,talkOf(input.talk)),entry,replaces,...(words?{words}:{}),created_at:now.toISOString()});
   return {proposal_id:p.id,reply:holdQuestion(p,dayOf(now,zone))};
  }
  if(type==='tracker-create'){
@@ -54,6 +65,9 @@ export function trackerOperation(domains,input){
   else if(!input.fields&&!input.unit)throw Error('Say which columns the tracker should have');
   if(p?.specialist==='cycle')return cycleCreate(domains,p,input);
   if(p?.specialist==='food')return foodCreate(domains,p,input);
+  // Their yes is a message of its own, after the question (the capture run of 12 October 2026: the
+  // bot asked and created in one turn, and a first entry was made that nobody said yes to).
+  if(p){const said=wordsOf(input);if(assistant&&!said)throw Error("Pass the person's answer as words: only their yes to the question creates the tracker.");if(said&&p.words&&norm(said)===norm(p.words))throw Error('That is the message that asked for the tracker. Ask the question, and create it only when they answer yes.');}
   const name=String(input.name||p?.name||'').trim();if(!name)throw Error('Say what the tracker is called');
   if(findTracker(store,name).candidates.length)throw Error('There is already a tracker called '+name);
   const cadence=input.cadence?(input.cadence==='any'?'any':'daily'):p?.cadence||'daily';
@@ -61,12 +75,15 @@ export function trackerOperation(domains,input){
   // question's own; the held number stays the number, checked again.
   const asked=p?(p.field_schema||[]).filter(f=>!['when','note'].includes(f.key)).map(({indexable,...f})=>f):undefined;
   const field_schema=schemaFor(input.fields||input.unit||!p?{unit:input.unit,fields:input.fields,cadence}:{fields:asked,cadence});
-  const talk=input.talk!==undefined?talkOf(input.talk):p?.talk??null;
+  const talk=existingTalk(store.root,input.talk!==undefined?talkOf(input.talk):p?.talk??null);
   let held=null;
-  if(p?.entry){const {note,...data}=p.entry.data;held={when:cadence===p.cadence?p.entry.when:whenFor({on:p.entry.when.slice(0,10),cadence},new Date(p.created_at),zone),data:entryData({name,field_schema},{data,note})};}
+  // A count held for "track sleep" does not fit columns that take numbers ("yes, with hours and
+  // quality"): the tracker starts empty, as one set up on purpose does.
+  const fits=p?.entry&&!(!Object.keys(p.entry.data||{}).some(k=>k!=='note')&&field_schema.some(f=>f.type==='number'));
+  if(fits){const {note,...data}=p.entry.data;held={when:cadence===p.cadence?p.entry.when:whenFor({on:p.entry.when.slice(0,10),cadence},new Date(p.created_at),zone),data:entryData({name,field_schema},{data,note})};}
   const collection=query.execute({table:'collections',operation:'insert',values:{name,icon:'📈',description:'Tracker',visibility:'personal',field_schema,tracker:{names:[name],cadence,talk,specialist:null,...(p?{proposal_id:p.id}:{})}}}).data[0];
   const entry=held?query.execute({table:'collection_items',operation:'insert',values:{collection_id:collection.id,data:{when:held.when,...held.data}}}).data[0]:null;
-  return {collection_id:collection.id,entry_id:entry?.id||null,reply:createdReply(collection,entry)};
+  return {collection_id:collection.id,entry_id:entry?.id||null,reply:createdReply(collection,entry,dayOf(now,zone))};
  }
  // A habit's day is the coach's: its own track() on its own file (habit-trackers.mjs).
  if(['track','tracker-correct'].includes(type)&&isHabitRef(store,input.tracker))return habitOperation(store,input,{now,zone,today:dayOf(now,zone),assistant:domains.assistant===true});
@@ -87,7 +104,9 @@ export function trackerOperation(domains,input){
   const same=cadence==='daily'?all.filter(i=>String(i.data?.when).slice(0,10)===when).at(-1):null;
   if(same){
    const entry=query.execute({table:'collection_items',operation:'update',values:{data:{...same.data,...data,when}},filters:[['eq','id',same.id]],expected:expectedOf(input,'collection_items',same.id)}).data[0];
-   return {collection_id:c.id,entry_id:entry.id,replaced:true,reply:(when===dayOf(now,zone)?"Today's ":longDay(when)+"'s ")+(oneNumber(c)?describe(c,same):c.name+' entry')+' is now '+describe(c,entry)+'.'};
+   const said=(when===dayOf(now,zone)?"Today's ":longDay(when)+"'s ")+(oneNumber(c)?describe(c,same):c.name+' entry')+' is now '+describe(c,entry)+'.';
+   // Under another name the reply names the tracker it used, so a wrong match shows at once.
+   return {collection_id:c.id,entry_id:entry.id,replaced:true,reply:under?'Tracked under '+c.name+': '+said.charAt(0).toLowerCase()+said.slice(1):said};
   }
   const entry=query.execute({table:'collection_items',operation:'insert',values:{collection_id:c.id,data:{when,...data}}}).data[0];
   // Waking a resting tracker needs no write: this entry makes it active.
@@ -143,10 +162,10 @@ function resolve(store,ref){
 const expectedOf=(input,table,id)=>{const v=input.expected?.[table+'/'+id]??input.expected?.[id];return typeof v==='string'?{[id]:v}:{};};
 const own=c=>(c.field_schema||[]).filter(f=>!['when','note'].includes(f.key));
 const oneNumber=c=>{const f=own(c);return f.length===1&&f[0].type==='number'?f[0]:null;};
-// An entry in a few words: "92 cm", or "Hours 7, Quality 4", or nothing.
+// An entry in a few words: "92 cm", or "7 hours, quality 4 of 5", or nothing.
 function describe(c,entry){
  const one=oneNumber(c);if(one)return fmt(entry.data?.[one.key])+unitOf(one);
- return own(c).filter(f=>entry.data?.[f.key]!==undefined&&entry.data?.[f.key]!=='').map(f=>f.label+' '+(f.type==='number'?fmt(entry.data[f.key]):entry.data[f.key])).join(', ');
+ return entryWords(c,entry.data);
 }
 // "Tracked: Belly 90 cm." under "Tracked under Belly: " reads "90 cm."
 const withoutName=(c,reply)=>{const rest=reply.replace(/^Tracked: /,'');return rest.startsWith(c.name+', ')?rest.slice(c.name.length+2):rest.startsWith(c.name+' ')?rest.slice(c.name.length+1):rest;};

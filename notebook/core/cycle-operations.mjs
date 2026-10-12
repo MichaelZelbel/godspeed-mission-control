@@ -2,7 +2,7 @@
 // MCP and the Telegram bot, on the shared tracker base. The rules and every reply are in cycle.mjs;
 // this file reads and writes. Nothing here sends anything to anyone: the heads-up is a line the
 // person's own morning brief asks for (`brief`), and only when she switched it on.
-import {trackers,entries,proposalState,dayOf,whenFor,toNumber} from './trackers.mjs';
+import {trackers,entries,proposalState,dayOf,whenFor,toNumber,entryOn,talkExists} from './trackers.mjs';
 import {now as clockNow,daysBetween} from '../../third-party/addons/godspeed-coach/lib/clock.mjs';
 import {FLOWS,PERIOD_FLOWS,PAIN_WHERE,SYMPTOMS,cycleSchema,cycleCard,cycleState,periods,forecast,lang,setupQuestion,createdReply,dayWords,dayReply,overReply,forecastReply,headsUpLine,declineReply,whyWords,dateWords,days,FIXED_LINE} from './cycle.mjs';
 
@@ -49,8 +49,10 @@ export function cycleCreate(domains,p,input={}){
  return {collection_id:collection.id,entry_id:entry?.id||null,language:l,reply:createdReply(l,said)};
 }
 
-export function cycleOperation(domains,input){
- const {store,query}=domains,now=clockNow(),zone=tz(store),today=dayOf(now,zone),action=input.action||'track';
+export function cycleOperation(domains,raw){
+ const {store,query}=domains,now=clockNow(),zone=tz(store),today=dayOf(now,zone);
+ // Her day words ("yesterday", "on Friday") are worked out in code (trackers.mjs entryOn).
+ const input=raw.on!==undefined&&raw.on!==null&&raw.on!==''?{...raw,on:entryOn(raw,today)}:raw,action=input.action||'track';
  if(!CYCLE_ACTIONS.includes(action))throw Error('A cycle action is one of: '+CYCLE_ACTIONS.join(', '));
  const c=cycleTracker(store),l=lang(input.language||c?.tracker.language),rows=()=>c?entries(store,c):[];
  const none=l==='de'?'Du hast noch keinen Zyklus-Tracker. Sag am ersten Tag deiner Periode "track Periode", dann frage ich, ob ich einen anlegen soll.':'You have no cycle tracker yet. Say "track period" on the first day of your period and I will ask whether to start one.';
@@ -116,7 +118,10 @@ export function cycleOperation(domains,input){
   return {language:l,heads_up:true,reply};
  }
  if(action==='talk'){
-  const talk=talkOf(input.talk);setCard({},{talk});
+  const talk=talkOf(input.talk);
+  // Only a talk that exists can read it; nothing is changed for one that does not (trackers.mjs talkExists).
+  if(talk&&!talkExists(store.root,talk))return {language:l,talk:null,changed:false,reply:l==='de'?'Es gibt noch kein Gespräch "'+talk+'". Sag, wann es stattfinden soll, dann kann es ab da deinen Zyklus-Tracker lesen.':'There is no '+talk.replaceAll('-',' ')+' talk yet. Say when it should happen, and from then on it can read your cycle tracker.'};
+  setCard({},{talk});
   return {language:l,talk,reply:talk?(l==='de'?'Erledigt: Dein Gespräch "'+talk+'" darf jetzt deinen Zyklus-Tracker lesen.':'Done: your '+talk.replaceAll('-',' ')+' talk may now read your cycle tracker.'):(l==='de'?'Erledigt: Kein Gespräch liest deinen Zyklus-Tracker.':'Done: no talk reads your cycle tracker.')};
  }
  if(['leave-out','count'].includes(action)){

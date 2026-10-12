@@ -21,8 +21,9 @@ she writes German, `"language":"en"` when she writes English.
    `medium`, `heavy`; `unspecified` when she has her period and did not say how much; left out for a
    day of symptoms only), `"pain"` (0 to 3, only a number she gave), `"pain_where"` (`belly`, `back`,
    `head`), `"symptoms"` (`cramps`, `headache`, `bloating`, `breast tenderness`, `acne`, `low mood`,
-   `irritable`, `low energy`, `poor sleep`, `cravings`, `digestion`, `discharge`), `"note"`, and
-   `"on":"YYYY-MM-DD"` for another day. A second entry on a day she already tracked needs that entry's
+   `irritable`, `low energy`, `poor sleep`, `cravings`, `digestion`, `discharge`), `"note"`, and for
+   another day her own day words, `"on":"yesterday"` or `"on":"Friday"` (the operation works out the
+   date; a weekday is the most recent one), or `"on":"YYYY-MM-DD"` for a date she said. A second entry on a day she already tracked needs that entry's
    hash: `"expected":{"collection_items/<today.id>":"<today.hash>"}`.
    With no cycle tracker yet, the same call asks her the setup question and creates nothing. Her yes
    to it: `{"type":"tracker-create","proposal_id":"<the question's id from status.proposals>"}`.
@@ -45,7 +46,7 @@ Steps 4, 5 and 6 change her tracker: pass `"expected":{"collections/<tracker.id>
 from status with them.
 
 Reply with the operation's `reply`, word for word and whole, and nothing else. Never shorten,
-summarise or reword it: the setup question and every forecast carry sentences she must read (what the
+summarise or reword it, or retype its quotes and punctuation in your own style: the setup question and every forecast carry sentences she must read (what the
 tracker is not for, where her entries go, and that what she types and what you answer pass through
 Telegram and her AI service). The rehearsal of 12 October 2026 showed a reply cut down to
 "Start a cycle tracker? I've kept today as day 1."; that must never happen again.

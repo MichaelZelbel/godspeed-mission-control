@@ -29,7 +29,9 @@ call when they write German, `"language":"en"` when they write English.
      says it was assumed.
    - A pack, bowl, plate, glass or can: `count` and `unit` ("half a pack": `"count":0.5,"unit":"pack"`)
      and no grams. Never guess its size: the operation asks them once and remembers the answer.
-   - Another day: `"on":"YYYY-MM-DD"`; another time: `"at":"HH:MM"`.
+   - Another day: their own day words, `"on":"yesterday"` or `"on":"Friday"` (the operation works out
+     the date; a weekday is the most recent one), or `"on":"YYYY-MM-DD"` for a date they said; another
+     time: `"at":"HH:MM"`.
    With no food tracker yet, the same call asks them the setup question and creates nothing.
 2. **Their yes to "Start a food tracker?"**: `{"type":"tracker-create","proposal_id":"<the question's id from status.proposals>"}`,
    with `"answers":[{"grams":250}]` when they gave the asked amount in the same message ("250 g, and
@@ -60,9 +62,10 @@ Steps 4 (remember), 7, 8 and 10 change their tracker: pass
 `"expected":{"collections/<tracker.id>":"<tracker.hash>"}` from status. A reply that changed the tracker
 gives its new hash as `tracker_hash` for the next change.
 
-Reply with the operation's `reply`, word for word and whole, and nothing else. Every number in it comes
-from the food table, and the setup question carries sentences they must read (the numbers are
-estimates; an eating disorder means no target).
+Reply with the operation's `reply`, word for word and whole, and nothing else: the same words, quotes and
+punctuation, character for character, never retyped in your own style. Every number in it comes from the
+food table, and the setup question carries sentences they must read (the numbers are estimates; an eating
+disorder means no target).
 
 ## Never
 

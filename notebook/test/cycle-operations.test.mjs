@@ -116,8 +116,14 @@ test('the heads-up only when she switches it on: one line for her brief, two day
  at('2026-11-06');assert.equal((await f.op({type:'cycle',action:'brief'})).line,'Heads-up: your period may start in two days, likely between 8 and 10 November.');
  await f.op({type:'cycle',action:'heads-up',enabled:false});
  assert.equal((await f.op({type:'cycle',action:'brief'})).line,null);
- // Her talk reads it only when she says so.
+ // Her talk reads it only when she says so, and only a talk that exists (D-321: a new mission
+ // control has no health talk, and nothing may say a talk will read it when there is none).
  assert.equal((await f.op({type:'tracker-list',talk:'health'})).trackers.length,0);
+ const none=await f.op({type:'cycle',action:'talk',talk:'health'});
+ assert.equal(none.reply,'There is no health talk yet. Say when it should happen, and from then on it can read your cycle tracker.');
+ assert.equal(cycle(f.store).tracker.talk,null);
+ fs.mkdirSync(path.join(f.root,'coach','health'),{recursive:true});
+ fs.writeFileSync(path.join(f.root,'coach','health','area.md'),'AREA: health\nTITLE: Health\nRHYTHM: weekly sunday\nTIME: 19:00\nSTARTS: 2026-10-01\nSTATUS: on\n\n## Preparation\n\nx\n');
  await f.op({type:'cycle',action:'talk',talk:'health'});
  assert.equal((await f.op({type:'tracker-list',talk:'health'})).trackers[0].name,'Cycle');
 });

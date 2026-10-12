@@ -57,7 +57,11 @@ test('a tracker with no number counts this month, and several columns are read b
   assert.equal(instantReply(sauna,entries(s,sauna).filter(i=>i.id!==e.id),e,now,'Europe/Berlin'),'Tracked: Sauna, 3rd time this month.');
   const sleep=s.save('collections',{name:'Sleep',field_schema:schemaFor({fields:[{key:'hours',label:'Hours',type:'number'},{key:'quality',label:'Quality',type:'number'}],cadence:'daily'}),tracker:{names:['Sleep'],cadence:'daily',talk:'health',specialist:null}});
   const n=s.save('collection_items',{collection_id:sleep.id,title:'2026-10-11',data:{when:'2026-10-11',hours:7,quality:4}});
-  assert.equal(instantReply(sleep,[],n,now,'Europe/Berlin'),'Tracked: Sleep, Hours 7, Quality 4.');
+  // The columns read back in the words of a sentence: a unit after its number, a range as "of 5".
+  assert.equal(instantReply(sleep,[],n,now,'Europe/Berlin'),'Tracked: Sleep, hours 7, quality 4.');
+  const rated=s.save('collections',{name:'Rest',field_schema:schemaFor({fields:[{label:'Hours',type:'number',unit:'hours'},{label:'Quality',type:'number',min:1,max:5}],cadence:'daily'}),tracker:{names:['Rest'],cadence:'daily',talk:null,specialist:null}});
+  const r=s.save('collection_items',{collection_id:rated.id,title:'2026-10-10',data:{when:'2026-10-10',hours:7,quality:4}});
+  assert.equal(instantReply(rated,[],r,now,'Europe/Berlin'),'Tracked: Rest yesterday, 7 hours, quality 4 of 5.');
 });
 
 test('a tracker rests after thirty days without an entry',()=>{

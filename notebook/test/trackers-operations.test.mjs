@@ -6,7 +6,9 @@ import {trackers,entries,proposalState} from '../core/trackers.mjs';
 
 // Trackers, held then created (D-321): "track belly 92" asks once and creates
 // nothing; "yes" creates the collection with the 92 in it.
-const fixture=()=>{const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-track-ops-'))),query=new QueryService(store);store.save('settings',{id:'installation',timezone:'Europe/Berlin'});return {store,query,domains:new Domains(query)};};
+// talks: the coaching areas that have a talk (coach/<area>/area.md). A new mission control has none.
+const fixture=({talks=[]}={})=>{const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-track-ops-'))),query=new QueryService(store);store.save('settings',{id:'installation',timezone:'Europe/Berlin'});for(const area of talks)talkArea(store,area);return {store,query,domains:new Domains(query)};};
+const talkArea=(store,area,rhythm='weekly sunday')=>{fs.mkdirSync(path.join(store.root,'coach',area),{recursive:true});fs.writeFileSync(path.join(store.root,'coach',area,'area.md'),'AREA: '+area+'\nTITLE: '+area+'\nRHYTHM: '+rhythm+'\nTIME: 19:00\nSTARTS: 2026-10-01\nSTATUS: on\n\n## Preparation\n\nx\n');};
 const say=async(domains,message,operations,reply='ok')=>{domains.provider=async()=>({reply,operations:operations.map(o=>({source_quote:message,...o}))});return domains.invoke('conversation-chat',{message,conversation_id:'c1'});};
 // A proposal's state is worked out when read, never written back: over MCP an
 // assistant may change an existing record only with its current hash, and a
@@ -22,7 +24,7 @@ test('an unknown name is held and asked about, and nothing is created',async()=>
 });
 
 test('yes creates the tracker with the held entry, and says how to use it',async()=>{
-  const {store,domains}=fixture();
+  const {store,domains}=fixture({talks:['health']});
   await say(domains,'track belly 92',[{type:'tracker-hold',name:'Belly',unit:'cm',value:92,talk:'health'}]);
   const [p]=store.list('tracker_proposals');
   const r=await say(domains,'yes',[{type:'tracker-create',proposal_id:p.id}]);
@@ -110,7 +112,7 @@ test('"track sauna" with no number, unit or columns is a tracker that counts eac
 });
 
 test('a tracker names its coaching talk by the area\'s own name, and nothing else',async()=>{
-  const {store,domains}=fixture();
+  const {store,domains}=fixture({talks:['work']});
   const r=await say(domains,'I want to track invoices sent',[{type:'tracker-create',name:'Invoices',unit:'invoices',talk:'work'}]);
   assert.match(r.operation_results[0].reply,/Your work talk will read it\.$/);assert.equal(trackers(store)[0].tracker.talk,'work');
   await assert.rejects(say(domains,'I want to track naps',[{type:'tracker-create',name:'Naps',unit:'min',talk:'../health'}]),/coaching talk/);
@@ -122,7 +124,7 @@ test('a German decimal comma is the number he said',async()=>{
   const [p]=store.list('tracker_proposals');assert.equal(p.entry.data.value,92.5);
 });
 
-const withBelly=async()=>{const f=fixture();await say(f.domains,'track belly 92',[{type:'tracker-hold',name:'Belly',unit:'cm',value:92,talk:'health'}]);const [p]=f.store.list('tracker_proposals');await say(f.domains,'yes',[{type:'tracker-create',proposal_id:p.id}]);return {...f,belly:trackers(f.store)[0]};};
+const withBelly=async()=>{const f=fixture({talks:['health']});await say(f.domains,'track belly 92',[{type:'tracker-hold',name:'Belly',unit:'cm',value:92,talk:'health'}]);const [p]=f.store.list('tracker_proposals');await say(f.domains,'yes',[{type:'tracker-create',proposal_id:p.id}]);return {...f,belly:trackers(f.store)[0]};};
 
 test('the next entry asks nothing and answers with the change',async()=>{
   const {store,domains,belly}=await withBelly();
@@ -142,7 +144,8 @@ test('a second entry on the same day replaces the first',async()=>{
 test('another word for a tracker lands in it, says so, and is remembered',async()=>{
   const {store,domains,belly}=await withBelly();
   const r=await say(domains,'track waist 90 yesterday',[{type:'track',tracker:belly.id,value:90,new_name:'Waist',on:new Date(Date.now()-86400000).toISOString().slice(0,10)}]);
-  assert.match(r.operation_results[0].reply,/^Tracked under Belly: 90 cm\.$/);assert.deepEqual(store.get('collections',belly.id).tracker.names,['Belly','Waist']);
+  // An entry for another day names that day (the capture run of 12 October 2026).
+  assert.match(r.operation_results[0].reply,/^Tracked under Belly: 90 cm yesterday\.$/);assert.deepEqual(store.get('collections',belly.id).tracker.names,['Belly','Waist']);
   await assert.rejects(say(domains,'track belly 89',[{type:'track',tracker:belly.id,value:89,new_name:'Bauch'}]),/one you used/);
 });
 
