@@ -172,15 +172,18 @@ limits_shell() {
 #                  the hooks. With dontAsk whatever the list does not allow is refused, so a run
 #                  writes only where its Write(<path>) and Edit(<path>) rules say, relative to the
 #                  working folder, e.g. Edit(goals/research/**). An Edit in the list makes the Write
-#                  tool exist as well (Claude Code holds Write to the Edit rules).
+#                  tool exist as well: Claude Code 2.1.296 holds Write to the Edit rules and skips a
+#                  Write(<path>) rule with a warning in $OUT.stderr; the list names both, so a later
+#                  Claude Code that reads Write rules is held to the same folders.
 #   --tools        the tools the list names, and ToolSearch, which loads the notebook's tools.
 #                  Nothing else exists in the run, so a tool the list forgot cannot be used.
 #   --strict-mcp-config, and --mcp-config with a file holding only the servers the list names
 #                  (mcp__<server>__...), taken from the mission control's .mcp.json: --restricted
 #                  would not start them, and nothing else starts (no browser, no video service).
 # Tested on Claude Code 2.1.296 on 2026-10-13 (the server, as root, whose settings allow Bash(*)):
-# curl and git push refused; a write outside the folder, in dev/, skills/ and .claude/ refused;
-# writes in goals/research/ and ideas/ ran; mc-check-research --fetch, WebFetch and the notebook ran.
+# curl refused, no MCP server but the notebook present; writes in dev/, skills/ and .claude/
+# refused, writes in goals/research/ and ideas/ ran; mc-check-research --fetch, WebFetch and the
+# notebook ran. (git push and a write outside the folder were refused the same day before dontAsk.)
 # A Claude Code too old for --restricted gets --setting-sources "" (the settings are not read); one
 # without dontAsk gets its default mode, which in a run with nobody there refuses whatever the list
 # does not allow. One that knows neither switch runs unbound, and says so in $OUT.stderr, where
