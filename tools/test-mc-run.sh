@@ -39,20 +39,25 @@ size="$(wc -c < "$G/skills/big/SKILL.md" | tr -d ' ')"
 
 # THE STAND-IN. It writes down every argument, the longest one, and what came on standard input,
 # then answers. As hermes it also prints Hermes' waiting line, which must not reach the answer.
-# Asked for its help, it answers like a Claude Code that knows --restricted, or (STAND_HELP=sources)
-# one that knows only --setting-sources, or (STAND_HELP=none) one that knows neither.
+# Asked for its help, it answers like a Claude Code that knows --restricted and dontAsk, or
+# (STAND_HELP=nodontask) one without dontAsk, or (STAND_HELP=sources) one that knows only
+# --setting-sources, or (STAND_HELP=none) one that knows neither. The MCP file it is handed is
+# copied, since mc-run removes it when the run ends. STAND_SLEEP makes it hang that long.
 for name in hermes claude codex; do
   cat > "$B/$name" <<STAND
 #!/bin/sh
 if [ "\$1" = --help ]; then
   echo asked >> "$L/$name.help"
   case "\${STAND_HELP:-restricted}" in
-    restricted) printf '  --restricted  Restricted mode\n  --setting-sources <sources>  Comma-separated list\n' ;;
+    restricted) printf '  --restricted  Restricted mode\n  --setting-sources <sources>  Comma-separated list\n  --strict-mcp-config  Only use MCP servers from --mcp-config\n  --permission-mode <mode>  ("acceptEdits", "dontAsk", "plan")\n' ;;
+    nodontask) printf '  --restricted  Restricted mode\n  --setting-sources <sources>  Comma-separated list\n  --strict-mcp-config  Only use MCP servers\n' ;;
     sources) printf '  --setting-sources <sources>  Comma-separated list\n' ;;
   esac
   exit 0
 fi
 for a in "\$@"; do printf '[%s]\n' "\$a"; done > "$L/$name.args"
+prev=""; for a in "\$@"; do [ "\$prev" = --mcp-config ] && cp "\$a" "$L/$name.mcp"; prev="\$a"; done
+[ -n "\${STAND_SLEEP:-}" ] && sleep "\$STAND_SLEEP"
 longest=0; for a in "\$@"; do [ \${#a} -gt \$longest ] && longest=\${#a}; done; echo \$longest > "$L/$name.longest"
 cat > "$L/$name.stdin"
 printf 'Here is the answer.\n\nFor you today: nothing.\nRESULT: done\n'
@@ -103,11 +108,11 @@ check "the answer's last line is the assistant's, not Hermes' waiting line" "$(t
 # research ran its own shell. A list that names Bash(...) commands now starts claude with
 # --restricted (no settings files read, file tools kept in the folder), --tools (only what the list
 # names) and the mission control's .mcp.json; a list that grants the whole shell, and no list, do not.
-printf '{ "mcpServers": {} }\n' > "$G/.mcp.json"
+printf '{ "mcpServers": { "notebook": { "command": "nb", "env": { "KEY": "${NB_KEY}" } }, "planino": { "command": "pl" } } }\n' > "$G/.mcp.json"
 GW="$G"; command -v cygpath >/dev/null 2>&1 && GW="$(cygpath -m "$G")"
-LIMITED="Bash(mc-goals:*) Bash(ls:*) Read Write WebFetch mcp__notebook__search_brain"
+LIMITED="Bash(mc-goals:*) Bash(ls:*) Read Write(goals/research/**) Edit(goals/research/**) WebFetch mcp__notebook__search_brain"
 runl() { # runner help-kind list
-  rm -f "$L/$1.args" "$L/$1.help"
+  rm -f "$L/$1.args" "$L/$1.help" "$L/$1.mcp"
   HOME="$TMP/home" PATH="$B:$PATH" GODSPEED_RUNNER="$1" STAND_HELP="$2" bash "$HERE/mc-run" big --godspeed "$G" \
     --out "$G/out/l-$1.txt" --timeout 60 ${3:+--allowed-tools "$3"} 2> "$L/$1.err"
 }
@@ -116,16 +121,34 @@ runl claude restricted "$LIMITED"; check "  it finished" "$?" "0"
 args="$(cat "$L/claude.args" 2>/dev/null)"
 contains "  claude runs restricted, so the computer's settings cannot add to the list" "$args" "[--restricted]"
 contains "  with only the tools the list names, and ToolSearch" "$args" "[--tools]
-[Bash,Read,Write,WebFetch,ToolSearch]"
-contains "  the mission control's own MCP servers are handed over" "$args" "[--mcp-config]
-[$GW/.mcp.json]"
+[Bash,Read,Write,Edit,WebFetch,ToolSearch]"
+contains "  in dontAsk mode, so it writes only where the list says" "$args" "[--permission-mode]
+[dontAsk]"
+missing "  never acceptEdits, which approves every edit in the mission control" "$args" "acceptEdits"
+contains "  only the MCP servers it is handed start" "$args" "[--strict-mcp-config]"
+contains "  and it is handed some" "$args" "[--mcp-config]"
+mcp="$(cat "$L/claude.mcp" 2>/dev/null)"
+contains "  the server the list names is in that file" "$mcp" '"notebook"'
+contains "  with its key still named, never filled in" "$mcp" '${NB_KEY}'
+missing "  a server the list does not name is not" "$mcp" "planino"
+check "  and the file is gone when the run ends" "$(ls "${TMPDIR:-/tmp}"/mc-run-mcp.* 2>/dev/null | wc -l | tr -d ' ')" "0"
 contains "  and the list follows, one word per pattern" "$args" "[--allowedTools]
 [Bash(mc-goals:*)]
 [Bash(ls:*)]
 [Read]
-[Write]
+[Write(goals/research/**)]
+[Edit(goals/research/**)]
 [WebFetch]
 [mcp__notebook__search_brain]"
+runl claude restricted "Bash(ls:*) Read WebFetch"
+args="$(cat "$L/claude.args" 2>/dev/null)"
+contains "a list that names no MCP server: still only the servers handed over, which are none" "$args" "[--strict-mcp-config]"
+missing "  and no MCP file at all" "$args" "[--mcp-config]"
+runl claude nodontask "$LIMITED"; check "a Claude Code without dontAsk still runs" "$?" "0"
+args="$(cat "$L/claude.args" 2>/dev/null)"
+contains "  restricted" "$args" "[--restricted]"
+missing "  in its default mode, never acceptEdits" "$args" "[--permission-mode]"
+contains "  and says so" "$(cat "$L/claude.err" 2>/dev/null)" "no dontAsk mode"
 contains "  the answer was kept" "$(cat "$G/out/l-claude.txt" 2>/dev/null)" "RESULT: done"
 runl claude sources "$LIMITED"
 args="$(cat "$L/claude.args" 2>/dev/null)"
@@ -133,11 +156,13 @@ contains "a Claude Code without --restricted reads no settings files instead" "$
 []"
 missing "  and is not given --restricted" "$args" "[--restricted]"
 contains "  its MCP servers are handed over too" "$args" "[--mcp-config]"
+missing "  and it is not given --strict-mcp-config, which it does not know" "$args" "[--strict-mcp-config]"
 runl claude none "$LIMITED"; check "a Claude Code that knows neither still runs" "$?" "0"
 args="$(cat "$L/claude.args" 2>/dev/null)"
 missing "  without --restricted" "$args" "[--restricted]"
 missing "  without --setting-sources" "$args" "[--setting-sources]"
-contains "  and says the list is not binding" "$(cat "$L/claude.err" 2>/dev/null)" "cannot hold a run to its list of tools"
+contains "  and says the list is not binding" "$(cat "$L/claude.err" 2>/dev/null)" "not held to its list of tools"
+contains "  where mc-research reads it, beside the answer" "$(cat "$G/out/l-claude.txt.stderr" 2>/dev/null)" "not held to its list of tools"
 for list in "Bash Read" "Bash(*) Read WebFetch" ""; do
   runl claude restricted "$list"
   args="$(cat "$L/claude.args" 2>/dev/null)"
@@ -146,6 +171,7 @@ for list in "Bash Read" "Bash(*) Read WebFetch" ""; do
   missing "  no --tools" "$args" "[--tools]"
   missing "  no --setting-sources" "$args" "[--setting-sources]"
   missing "  no --mcp-config" "$args" "[--mcp-config]"
+  missing "  no dontAsk" "$args" "dontAsk"
   check "  and claude is not even asked what it knows" "$(test -f "$L/claude.help" && echo asked || echo not)" "not"
 done
 missing "no list: no --allowedTools either" "$(cat "$L/claude.args")" "[--allowedTools]"
@@ -155,7 +181,38 @@ for name in hermes codex; do
 done
 runl hermes restricted "Bash Read"
 check "hermes with a whole-shell list says nothing about it" "$(cat "$L/hermes.err" 2>/dev/null)" ""
+contains "a whole-shell list keeps acceptEdits" "$(runl claude restricted "Bash Read"; cat "$L/claude.args")" "[acceptEdits]"
 rm -f "$G/.mcp.json"
+
+# ALREADY IN A CAGE (2026-10-13). On the server a cron job runs in agent-cage as a whole, and
+# agent-cage called again inside a cage keeps the first clock and puts no limit of its own on the
+# command. So mc-run, inside a cage, keeps its --timeout with timeout. The stand-in cage below does
+# what the real one does: inside a cage it just runs the command.
+echo "-- inside a cage"
+CG="$TMP/cage"; mkdir -p "$CG"
+cat > "$CG/agent-cage" <<CAGE
+#!/bin/sh
+echo used >> "$L/cage.used"
+while [ \$# -gt 0 ]; do case "\$1" in --max) shift 2 ;; --) shift; break ;; *) break ;; esac; done
+case "\$(cat "\${MC_RUN_CGROUP_FILE:-/proc/self/cgroup}" 2>/dev/null)" in *"/agent.slice/"*) exec "\$@" ;; esac
+exec timeout 3 "\$@"
+CAGE
+chmod +x "$CG/agent-cage"
+printf '0::/agent.slice/agent-1-2-3.scope\n' > "$TMP/cgroup-caged"
+printf '0::/user.slice/user-0.slice/session-1.scope\n' > "$TMP/cgroup-free"
+rm -f "$L/cage.used"
+t0=$(date +%s)
+HOME="$TMP/home" PATH="$CG:$B:$PATH" GODSPEED_RUNNER=claude STAND_SLEEP=40 MC_RUN_CGROUP_FILE="$TMP/cgroup-caged" \
+  bash "$HERE/mc-run" big --godspeed "$G" --out "$G/out/caged.txt" --timeout 2 --allowed-tools "Bash Read"; rc=$?
+took=$(( $(date +%s) - t0 ))
+[ "$took" -lt 20 ] && ok "a hung run inside a cage still ends at its own --timeout (${took}s)" || bad "a hung run inside a cage ran ${took}s past its 2 s limit"
+check "  and the exit says it was ended for time" "$rc" "124"
+check "  the cage was not asked again" "$(test -f "$L/cage.used" && echo used || echo not)" "not"
+rm -f "$L/cage.used"
+HOME="$TMP/home" PATH="$CG:$B:$PATH" GODSPEED_RUNNER=claude MC_RUN_CGROUP_FILE="$TMP/cgroup-free" \
+  bash "$HERE/mc-run" big --godspeed "$G" --out "$G/out/free.txt" --timeout 60 --allowed-tools "Bash Read"; rc=$?
+check "outside a cage the run goes through the cage" "$(test -f "$L/cage.used" && echo used || echo not)" "used"
+check "  and finishes" "$rc" "0"
 
 # WINDOWS: a real Windows program as hermes, with the two settings Hermes gives its commands.
 if command -v cygpath >/dev/null 2>&1; then

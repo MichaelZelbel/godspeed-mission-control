@@ -31,9 +31,9 @@
 #
 # A TOOL LIST (--allowed-tools) is for claude; Hermes and Codex take none, so with them a
 # recipe's limits rest on the recipe's own words. A list that limits the shell (it names Bash(...)
-# commands, or no shell at all) is binding: claude runs with --restricted, so the settings files
-# on the computer cannot add to it, and the file tools stay inside the working folder. A list that
-# grants the whole shell (a bare Bash) changes nothing else. See claude_binding below.
+# commands, or no shell at all) is binding: claude runs with --restricted and dontAsk, so the
+# settings files on the computer cannot add to it, and it writes only where its Edit(<path>) rules
+# say. A list that grants the whole shell (a bare Bash) changes nothing. See claude_binding below.
 #
 # The exit code is the assistant's own. Nothing in here reads or edits the answer, except that
 # Hermes' waiting lines are taken out of it (see run_hermes).
@@ -130,8 +130,14 @@ cd "$CWD" || exit 2
 # it instead: the same time limit, but it also ends everything the assistant started, holds it
 # to one processor core, and keeps it behind the machine's own services. A command that runs
 # away can then not hold the server for days after the run is over.
-if command -v agent-cage >/dev/null 2>&1; then TO() { agent-cage --max "${TIMEOUT}s" -- "$@"; }
-elif command -v timeout >/dev/null 2>&1; then TO() { timeout "$TIMEOUT" "$@"; }
+# A run that is ALREADY inside a cage (a cron job that the server caged as a whole, two hours) gets
+# no new cage: agent-cage then keeps the first clock and runs the command with no limit of its own,
+# so a hung goal or decision would run until the job's cage ends everything (2026-10-13). There the
+# run's own limit is kept with timeout, which ends the run and what it started; still in the cage.
+in_cage() { case "$(cat "${MC_RUN_CGROUP_FILE:-/proc/self/cgroup}" 2>/dev/null)" in *"/agent.slice/"*) return 0 ;; esac; return 1; }
+if command -v agent-cage >/dev/null 2>&1 && ! { in_cage && command -v timeout >/dev/null 2>&1; }; then
+  TO() { agent-cage --max "${TIMEOUT}s" -- "$@"; }
+elif command -v timeout >/dev/null 2>&1; then TO() { timeout --kill-after=30 "$TIMEOUT" "$@"; }
 elif command -v gtimeout >/dev/null 2>&1; then TO() { gtimeout "$TIMEOUT" "$@"; }
 else TO() { "$@"; }
 fi
@@ -157,40 +163,86 @@ limits_shell() {
 # commands, wrote its own page fetchers in the shell, committed and pushed. So such a list now
 # starts claude with:
 #   --restricted   the settings files of the user, the project and the folder are not read, so
-#                  nothing can add to the list; the file tools stay inside the working folder (a
-#                  run cannot plant a script where a later command runs it), and writes to .git,
-#                  settings and tool configuration are refused, since nobody is there to allow them.
+#                  nothing can add to the list (nor the settings' env, model or apiKeyHelper: the
+#                  login comes from the environment, CLAUDE_CODE_OAUTH_TOKEN, or from claude login).
+#                  The file tools cannot leave the working folder.
+#   --permission-mode dontAsk   instead of acceptEdits, which approves EVERY edit in the working
+#                  folder. The working folder is the mission control, and it holds what later runs
+#                  with the whole shell execute: routines, scripts, recipes, the decision's prompt,
+#                  the hooks. With dontAsk whatever the list does not allow is refused, so a run
+#                  writes only where its Write(<path>) and Edit(<path>) rules say, relative to the
+#                  working folder, e.g. Edit(goals/research/**). An Edit in the list makes the Write
+#                  tool exist as well (Claude Code holds Write to the Edit rules).
 #   --tools        the tools the list names, and ToolSearch, which loads the notebook's tools.
 #                  Nothing else exists in the run, so a tool the list forgot cannot be used.
-#   --mcp-config   the mission control's .mcp.json, given directly: --restricted does not read
-#                  the approval that would start it, and without it the notebook is missing.
-# Tested on Claude Code 2.1.296 on 2026-10-13: curl refused, the listed commands, WebFetch and the
-# notebook's search ran, a file outside the folder and one in .git/hooks refused.
-# A Claude Code too old for --restricted gets --setting-sources "" (the settings are not read, the
-# file tools are not confined), and one too old for that runs with a warning.
+#   --strict-mcp-config, and --mcp-config with a file holding only the servers the list names
+#                  (mcp__<server>__...), taken from the mission control's .mcp.json: --restricted
+#                  would not start them, and nothing else starts (no browser, no video service).
+# Tested on Claude Code 2.1.296 on 2026-10-13 (the server, as root, whose settings allow Bash(*)):
+# curl and git push refused; a write outside the folder, in dev/, skills/ and .claude/ refused;
+# writes in goals/research/ and ideas/ ran; mc-check-research --fetch, WebFetch and the notebook ran.
+# A Claude Code too old for --restricted gets --setting-sources "" (the settings are not read); one
+# without dontAsk gets its default mode, which in a run with nobody there refuses whatever the list
+# does not allow. One that knows neither switch runs unbound, and says so in $OUT.stderr, where
+# mc-research reads it for the night's summary.
 # A list that grants the whole shell (mc-decide, mc-work-run) cannot be held to anything this way,
 # so it is left alone: its hooks, its deny rules and the notebook's approval keep applying.
+CLAUDE_MODE=(--permission-mode acceptEdits)
 CLAUDE_BIND=()
+NOT_BOUND=""
+MCP_TMP=""
+help_probe() { # what this claude knows; a claude that hangs here must not hold the run
+  if command -v timeout >/dev/null 2>&1; then timeout 30 claude --help 2>&1
+  elif command -v gtimeout >/dev/null 2>&1; then gtimeout 30 claude --help 2>&1
+  else claude --help 2>&1
+  fi
+}
 claude_binding() {
   limits_shell || return 0
-  local names="" w n help m
+  local names="" servers=() w n s help m src="" node=""
   for w in "${TOOLS_LIST[@]}"; do
     n="${w%%(*}"
-    case "$n" in ''|mcp__*) continue ;; esac
+    case "$n" in
+      '') continue ;;
+      mcp__*) s="${n#mcp__}"; s="${s%%__*}"
+              case " ${servers[*]-} " in *" $s "*) ;; *) servers+=("$s") ;; esac
+              continue ;;
+    esac
     case ",$names," in *",$n,"*) ;; *) names="${names:+$names,}$n" ;; esac
+    if [ "$n" = Edit ]; then case ",$names," in *",Write,"*) ;; *) names="$names,Write" ;; esac; fi
   done
   case ",$names," in *",ToolSearch,"*) ;; *) names="${names:+$names,}ToolSearch" ;; esac
-  help="$(claude --help 2>&1)"
+  help="$(help_probe)"
   case "$help" in
     *--restricted*) CLAUDE_BIND=(--restricted --tools "$names") ;;
     *--setting-sources*) CLAUDE_BIND=(--setting-sources "") ;;
-    *) echo "mc-run: this Claude Code cannot hold a run to its list of tools (it knows neither --restricted nor --setting-sources), so the settings on this computer may allow more; update it with: claude update" >&2
+    *) NOT_BOUND="mc-run: this run was not held to its list of tools: this Claude Code knows neither --restricted nor --setting-sources, so the settings on this computer may allow more; update it with: claude update"
+       echo "$NOT_BOUND" >&2
        return 0 ;;
   esac
-  for m in "$CWD/.mcp.json" "$GODSPEED/.mcp.json"; do
-    [ -f "$m" ] && { CLAUDE_BIND+=(--mcp-config "$m"); break; }
-  done
+  case "$help" in
+    *dontAsk*) CLAUDE_MODE=(--permission-mode dontAsk) ;;
+    *) CLAUDE_MODE=()
+       echo "mc-run: this Claude Code has no dontAsk mode, so the run uses its default mode, which with nobody there refuses whatever the list does not allow" >&2 ;;
+  esac
+  case "$help" in *--strict-mcp-config*) CLAUDE_BIND+=(--strict-mcp-config) ;; esac
+  [ "${#servers[@]}" -gt 0 ] || return 0
+  for m in "$CWD/.mcp.json" "$GODSPEED/.mcp.json"; do [ -f "$m" ] && { src="$m"; break; }; done
+  [ -n "$src" ] || return 0
+  for c in node nodejs; do command -v "$c" >/dev/null 2>&1 && { node="$c"; break; }; done
+  if [ -z "$node" ]; then CLAUDE_BIND+=(--mcp-config "$src"); return 0; fi
+  # The file names the servers' keys only by ${NAME}, as .mcp.json does; it is the person's own
+  # and is removed when the run ends.
+  MCP_TMP="$(mktemp "${TMPDIR:-/tmp}/mc-run-mcp.XXXXXX")" || return 0
+  chmod 600 "$MCP_TMP" 2>/dev/null
+  if "$node" -e 'const fs=require("fs");const [src,dst,...names]=process.argv.slice(1);
+const all=(JSON.parse(fs.readFileSync(src,"utf8")).mcpServers)||{};const out={};
+for(const n of names) if(all[n]) out[n]=all[n];
+fs.writeFileSync(dst,JSON.stringify({mcpServers:out},null,2)+"\n");' "$(winpath "$src")" "$(winpath "$MCP_TMP")" "${servers[@]}" 2>/dev/null; then
+    CLAUDE_BIND+=(--mcp-config "$(winpath "$MCP_TMP")")
+  fi
 }
+trap '[ -n "$MCP_TMP" ] && rm -f "$MCP_TMP"' EXIT
 if [ "$RUNNER" = claude ]; then
   claude_binding
 elif limits_shell; then
@@ -201,7 +253,7 @@ fi
 # long it can be that way, and nothing inside it can be mistaken for an option.
 run_claude() {
   if [ "${#TOOLS_LIST[@]}" -gt 0 ]; then
-    printf '%s' "$PROMPT" | TO claude -p --permission-mode acceptEdits --output-format text \
+    printf '%s' "$PROMPT" | TO claude -p ${CLAUDE_MODE[@]+"${CLAUDE_MODE[@]}"} --output-format text \
       ${CLAUDE_BIND[@]+"${CLAUDE_BIND[@]}"} --allowedTools "${TOOLS_LIST[@]}"
   else
     printf '%s' "$PROMPT" | TO claude -p --permission-mode acceptEdits --output-format text
@@ -238,6 +290,8 @@ if [ -n "$OUT" ]; then
   mkdir -p "$(dirname "$OUT")"
   "run_$RUNNER" > "$OUT.tmp" 2> "$OUT.stderr"; RC=$?
   mv -f "$OUT.tmp" "$OUT"
+  # Kept beside the answer, so whoever reads the answer can tell a run that was not held to its list.
+  [ -n "$NOT_BOUND" ] && printf '%s\n' "$NOT_BOUND" >> "$OUT.stderr"
 else
   "run_$RUNNER"; RC=$?
 fi

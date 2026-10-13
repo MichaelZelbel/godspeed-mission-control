@@ -83,6 +83,14 @@ contains "  but it is noted" "$OUT" "NOTE claims.md: \"Paywalled\" page could no
 printf 'CLAIM: Old one\nSTATUS: supported 2026-01-01\nSOURCE: http://127.0.0.1:%s/lacks (read 2026-01-01)\nQUOTE: "never there at all"\nMEANS: x\n\n' "$P" >> "$R/claims.md"
 OUT="$(run --fetch)"; check "only quotes read tonight are fetched" "$?" "0"
 
+# --fetch-max N reads at most N pages, so the night's budget can reserve the check's time; the
+# pages past N are named as not read again, never passed or failed silently.
+printf 'CLAIM: Early pricing beats free\nSTATUS: supported %s\nSOURCE: http://127.0.0.1:%s/has (read %s)\nQUOTE: "charge from day one"\nMEANS: price\n\n' "$D" "$P" "$D" > "$R/claims.md"
+printf 'CLAIM: Free wins\nSTATUS: supported %s\nSOURCE: http://127.0.0.1:%s/lacks (read %s)\nQUOTE: "free always wins"\nMEANS: x\n\n' "$D" "$P" "$D" >> "$R/claims.md"
+OUT="$(run --fetch --fetch-max 1)"; check "with --fetch-max 1 only the first page is read" "$?" "0"
+contains "  and the second is named as not read again" "$OUT" 'NOTE claims.md: "Free wins" page not read again tonight (the check reads at most 1 pages)'
+contains "without the cap the second page is read" "$(run --fetch)" "quote not found on its page"
+
 # a script shell or login wall that answers 200 with no readable text is a note, not a failed quote
 printf 'CLAIM: Early pricing beats free\nSTATUS: supported %s\nSOURCE: http://127.0.0.1:%s/has (read %s)\nQUOTE: "charge from day one"\nMEANS: price\n\n' "$D" "$P" "$D" > "$R/claims.md"
 printf 'CLAIM: Script only\nSTATUS: supported %s\nSOURCE: http://127.0.0.1:%s/js (read %s)\nQUOTE: "a sentence the shell never shows"\nMEANS: x\n\n' "$D" "$P" "$D" >> "$R/claims.md"

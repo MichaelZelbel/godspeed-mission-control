@@ -23,7 +23,7 @@ const GOAL = opt('goal', '');
 const DATE = opt('date', process.env.GODSPEED_TODAY || new Date().toISOString().slice(0, 10));
 const MODE = opt('mode', 'daily');
 const BEFORE = parseInt(opt('before-people', '-1'), 10);
-if (!GOAL) { console.error('usage: mc-check-research --goal <id> [--date D] [--mode daily|founding] [--before-people N] [--fetch]'); process.exit(2); }
+if (!GOAL) { console.error('usage: mc-check-research --goal <id> [--date D] [--mode daily|founding] [--before-people N] [--fetch [--fetch-max N]]'); process.exit(2); }
 const DIR = path.join(ROOT, 'goals', 'research', GOAL);
 const read = (p) => { try { return fs.readFileSync(p, 'utf8').replace(/\r/g, ''); } catch (e) { return null; } };
 const problems = [];
@@ -84,7 +84,14 @@ if (MODE === 'founding' && BEFORE >= 0 && people < 30 && people <= BEFORE) probl
 async function quotes() {
   // A quote too short to check is a problem already (above) and is never looked for on a page.
   const tonight = [...parsed['claims.md'], ...parsed['openings.md']].filter(r => r.SOURCE && r.SOURCE.includes(`(read ${DATE})`) && r.QUOTE && quoteKey(r.QUOTE).length >= MIN_QUOTE);
-  for (const r of tonight) {
+  // --fetch-max N: at most N pages are read, so the check's time is bounded (15 s a page) and the
+  // nightly budget can reserve it; the rest are named, never silently passed.
+  const maxArg = process.argv.indexOf('--fetch-max');
+  const max = maxArg > 0 ? Number(process.argv[maxArg + 1]) : Infinity;
+  if (Number.isFinite(max) && max >= 0 && tonight.length > max) {
+    for (const r of tonight.slice(max)) notes.push(`${r.CLAIM ? 'claims.md' : 'openings.md'}: "${r.CLAIM || r.OPENING}" page not read again tonight (the check reads at most ${max} pages)`);
+  }
+  for (const r of tonight.slice(0, Number.isFinite(max) && max >= 0 ? max : undefined)) {
     const url = (r.SOURCE.match(URL_RE) || [''])[0];
     const name = r.CLAIM || r.OPENING;
     const file = r.CLAIM ? 'claims.md' : 'openings.md';

@@ -208,9 +208,26 @@ mc-work going-out           what goes out today unless you say stop
   configuration, so changing assistant does not turn every scheduled job into
   rubble. A list of tools (`--allowed-tools`) that names only some shell
   commands, as the nightly research's does, binds Claude Code: it runs with
-  `--restricted`, so the settings on the computer cannot allow more, and its file
-  tools stay inside the mission control. Hermes and Codex take no such list; with
-  them a recipe's limits rest on its own words.
+  `--restricted` and `--permission-mode dontAsk`, so the settings on the computer
+  cannot allow more, whatever the list does not allow is refused, and it writes
+  only in the folders its `Write(...)`/`Edit(...)` rules name (the research:
+  `goals/research/` and `ideas/`), never in the routines, scripts, recipes or hooks
+  that later runs execute with the whole shell. Only the MCP servers the list names
+  start. Such a run reads none of your Claude Code settings files, so its login
+  must come from `claude login` or the environment (`CLAUDE_CODE_OAUTH_TOKEN`,
+  `ANTHROPIC_API_KEY`), not from a key or helper set in `settings.json`. A
+  Claude Code too old to be held says so beside the answer (`<out>.stderr`), and
+  the research summary repeats it.
+  Hermes and Codex take no such list; with them a recipe's limits rest on its own
+  words. That is an accepted risk, not an oversight: Hermes has a per-chat switch
+  (`hermes chat -t <toolsets>`) that could leave the terminal out, but the research
+  recipe runs its own checker and goals tool in the shell, and Hermes' file tools
+  write anywhere on the computer, so leaving the terminal out would break the
+  night's self-check without closing the door. On a reader's computer the nightly
+  research is guided by the recipe, not locked; Claude Code is the runner that
+  locks it.
+  Inside a server's agent cage (a cron job caged as a whole), mc-run still ends a
+  run at its own `--timeout`, since the cage only keeps the job's outer clock.
 - **`mc-decide`** is the one that ties them together, once a day. It moves time
   on the work tracker, works out the attention plan, lists the forecasts that have
   come due, then runs your `next-action` recipe with all of it in front of it. The

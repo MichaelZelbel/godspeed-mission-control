@@ -9,14 +9,18 @@
 # record that failed its check is renamed <date>.unchecked.md so it does not count as a night.
 #
 # THE TIME BUDGET (--budget-minutes, default 130) bounds when the run FINISHES: a goal starts only
-# if the time already used, plus its timeout (900 s daily, 2700 s founding) and the 900 s fix
-# round, still fits. Goals that do not fit are named in the summary and the run exits 1.
+# if the time already used, plus its timeout (900 s daily, 2700 s founding), the 900 s fix round
+# and the two checks that read tonight's quotes again (15 s a page, each check reading at most
+# --fetch-quotes pages, default 20) still fits. Goals that do not fit are named in the summary and
+# the run exits 1.
 #
-# IT NEVER CONTACTS ANYONE AND NEVER SPENDS. The recipe only reads pages and writes files. With
-# claude that is enforced: the shell is limited to the checker, the goals tool and two readers,
-# and mc-run makes that list binding (claude --restricted), so settings on the computer that allow
-# every command do not count for this run. Hermes and Codex take no tool list, so on a computer
-# that runs them the read-only rule rests on the recipe's wording alone.
+# IT NEVER CONTACTS ANYONE AND NEVER SPENDS, AND WRITES ONLY ITS OWN FOLDERS. The recipe only reads
+# pages and writes files. With claude that is enforced: the shell is limited to the checker, the
+# goals tool and two readers, the file tools may write only in goals/research/ and ideas/, and
+# mc-run makes that list binding (claude --restricted, --permission-mode dontAsk), so settings on
+# the computer that allow every command do not count, and nothing the night writes is a file a
+# later run executes. Hermes and Codex take no tool list, so on a computer that runs them these
+# limits rest on the recipe's wording alone (tools/README.md says why that risk is accepted).
 #
 # IT COMMITS ONLY ITS OWN FILES: the research folders, tonight's run folder (without the .tmp
 # answer of a run still going), and the goal cards and ideas that changed while it ran. Other jobs
@@ -27,7 +31,7 @@
 #        15 0 * * *  $HOME/.local/bin/mc-research >> $HOME/.godspeed/research.log 2>&1
 set -uo pipefail
 
-GODSPEED=""; TODAY=""; BUDGET=130; ONLY=""; EXTRA=""; TD=900; TF=2700; DRY=0
+GODSPEED=""; TODAY=""; BUDGET=130; ONLY=""; EXTRA=""; TD=900; TF=2700; DRY=0; FQ=20
 while [ $# -gt 0 ]; do
   case "$1" in
     --godspeed) GODSPEED="$2"; shift 2 ;;
@@ -37,8 +41,9 @@ while [ $# -gt 0 ]; do
     --extra-prompt-file) EXTRA="$2"; shift 2 ;;
     --timeout-daily) TD="$2"; shift 2 ;;
     --timeout-founding) TF="$2"; shift 2 ;;
+    --fetch-quotes) FQ="$2"; shift 2 ;;
     --dry-run) DRY=1; shift ;;
-    -h|--help) sed -n '2,28p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,32p' "$0"; exit 0 ;;
     *) echo "mc-research: I do not know the argument $1" >&2; exit 2 ;;
   esac
 done
@@ -81,15 +86,20 @@ if [ "$DRY" -eq 1 ]; then echo "Due tonight ($TODAY):"; printf '%s\n' "${DUE:-no
 # claude gets only these tools, so a research night cannot reach out through the shell: Bash is
 # limited to the checker, the goals tool and two harmless readers (no `date`: as root, `date -s`
 # sets the clock, and the prompt already says what day it is); the notebook may be searched and
-# read, never written. Because the list limits the shell, mc-run makes it binding (claude
-# --restricted): the computer's own settings cannot add to it, and the file tools stay inside the
-# mission control. mc-run passes the list as separate words, so each Bash(...) pattern survives.
+# read, never written; files are written only in goals/research/ and ideas/. The mission control
+# also holds what later runs execute with the whole shell (routines, scripts, recipes, hooks), so
+# a bare Write or Edit would let a night plant a command there. Because the list limits the shell,
+# mc-run makes it binding (claude --restricted, dontAsk): the computer's own settings cannot add
+# to it, and whatever it does not allow is refused. mc-run passes the list as separate words, so
+# each Bash(...) and Write(...) pattern survives.
 # Hermes and Codex take no list; with them the read-only rule rests on the recipe's wording.
-TOOLS="Bash(mc-check-research:*) Bash(mc-goals:*) Bash(ls:*) Bash(wc:*) Read Grep Glob Write Edit WebSearch WebFetch mcp__notebook__search_brain mcp__notebook__get_note"
-# An mc-run from before 2026-10-13 passes the list without binding it. Said in the summary, so a
-# night that was not held to its list never reads as one that was.
-grep -q -- '--restricted' "$RUNNER" 2>/dev/null || \
-  echo "note: tonight's research was not held to its list of tools, because $RUNNER is older than mc-research; update both together" >> "$SUMMARY"
+TOOLS="Bash(mc-check-research:*) Bash(mc-goals:*) Bash(ls:*) Bash(wc:*) Read Grep Glob Write(goals/research/**) Edit(goals/research/**) Write(ideas/**) Edit(ideas/**) WebSearch WebFetch mcp__notebook__search_brain mcp__notebook__get_note"
+# An mc-run from before 2026-10-13 passes the list without binding it, or binds it but approves
+# every edit in the mission control. Said in the summary, so a night that was not held to its list
+# never reads as one that was. A run whose claude could not be held says so in its .stderr.
+NOTED=0
+not_held() { [ "$NOTED" -eq 1 ] && return 0; NOTED=1; echo "note: tonight's research was not held to its list of tools, because $1" >> "$SUMMARY"; }
+grep -q -- 'dontAsk' "$RUNNER" 2>/dev/null || not_held "$RUNNER is older than mc-research; update both together"
 # What a night may commit: the research folders and tonight's run folder, and the goal cards and
 # ideas that changed while it ran. Other jobs write into goals/, ideas/ and routines/ as well, and
 # what they leave half-written is theirs to commit. So the cards and ideas are fingerprinted now
@@ -117,6 +127,10 @@ recipe() { # prompt timeout out
     bash "$RUNNER" goal-research --godspeed "$GODSPEED" --cwd "$GODSPEED" --prompt "$1" \
       --timeout "$2" --out "$3" --allowed-tools "$TOOLS" < /dev/null || true
   fi
+  # mc-run writes there when this computer's claude could not be held to the list.
+  if grep -q "not held to its list of tools" "$3.stderr" 2>/dev/null; then
+    not_held "$(grep -m1 "not held to its list of tools" "$3.stderr" | sed -E 's/^.*not held to its list of tools:? *//')"
+  fi
 }
 count_people() { g research "$1" --state --json --date "$TODAY" 2>/dev/null | "$NODE" -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{console.log(JSON.parse(s).people)}catch(e){console.log(0)}})'; }
 
@@ -124,8 +138,9 @@ START=$(date +%s); BAD=0; SKIPPED=""
 while read -r ID MODE LAST <&3; do
   [ -n "$ID" ] || continue
   T="$TD"; [ "$MODE" = founding ] && T="$TF"
-  # A goal starts only if its whole night (the timeout, plus the 900 seconds of the fix round) still fits.
-  if [ $(( $(date +%s) - START + T + 900 )) -gt $(( BUDGET * 60 )) ]; then
+  # A goal starts only if its whole night still fits: the timeout, the 900 seconds of the fix round,
+  # and the two checks with --fetch, each reading at most FQ pages at 15 seconds a page.
+  if [ $(( $(date +%s) - START + T + 900 + 2 * FQ * 15 )) -gt $(( BUDGET * 60 )) ]; then
     SKIPPED="$SKIPPED $ID"
     # Said in the goal's own folder too, so a short night is never read as a quiet one.
     if [ -d "$GODSPEED/goals/research/$ID/days" ]; then
@@ -147,12 +162,16 @@ Written by mc-research before the run so that a killed night is never read as do
   BEFORE="$(count_people "$ID")"
   PROMPT="Today is $TODAY (UTC). Goal: $ID. Mode: $MODE. Its research folder is goals/research/$ID (last completed night: $LAST). Follow the goal-research recipe exactly for this one goal: update the files, rewrite brief.md with UPDATED: $TODAY, write goals/research/$ID/days/$TODAY.md, file the ideas the recipe asks for, and run mc-check-research --goal $ID --date $TODAY --mode $MODE --fetch until it prints OK. Your final answer is one plain sentence."
   recipe "$PROMPT" "$T" "$RUNDIR/$ID.answer.txt"
-  CHK=(--godspeed "$GODSPEED" --goal "$ID" --date "$TODAY" --mode "$MODE" --before-people "$BEFORE" --fetch)
+  CHK=(--godspeed "$GODSPEED" --goal "$ID" --date "$TODAY" --mode "$MODE" --before-people "$BEFORE" --fetch --fetch-max "$FQ")
+  ANSWER="$RUNDIR/$ID.answer.txt"
   if ! GAPS="$("$NODE" "$CHECK" "${CHK[@]}" 2>&1)"; then
     FIX="Today is $TODAY (UTC). Goal: $ID. Mode: $MODE. Tonight's research for this goal is not finished; mc-check-research says:
 $GAPS
 Follow the goal-research recipe for exactly these gaps, in goals/research/$ID, and run the check again until it prints OK. Your final answer is one plain sentence."
+    rm -f "$RUNDIR/$ID.answer-fix.txt"
     recipe "$FIX" 900 "$RUNDIR/$ID.answer-fix.txt"
+    # The fix round's answer is the night's last word, so the summary takes it when there is one.
+    [ -s "$RUNDIR/$ID.answer-fix.txt" ] && ANSWER="$RUNDIR/$ID.answer-fix.txt"
     GAPS="$("$NODE" "$CHECK" "${CHK[@]}" 2>&1)" || {
       # The day file is set aside, so a night that failed its check never counts as a night done.
       MOVED=""
@@ -168,7 +187,7 @@ Follow the goal-research recipe for exactly these gaps, in goals/research/$ID, a
   fi
   printf '%s\n' "$GAPS" > "$RUNDIR/$ID.check.txt"
   rm -f "$GAPFILE"
-  echo "$ID: done ($MODE): $(last_paragraph "$RUNDIR/$ID.answer.txt")" >> "$SUMMARY"
+  echo "$ID: done ($MODE): $(last_paragraph "$ANSWER")" >> "$SUMMARY"
 done 3<<< "$DUE"
 [ -n "$SKIPPED" ] && echo "skipped for time:$SKIPPED (they go first tomorrow)" >> "$SUMMARY"
 
@@ -181,7 +200,11 @@ if [ -d "$GODSPEED/.git" ] && command -v git >/dev/null 2>&1; then
   own() { case "$1" in ''|*.tmp) ;; *) OWN+=("$1") ;; esac; }
   for d in goals/research "routines/research/$TODAY"; do
     [ -e "$GODSPEED/$d" ] || continue
-    while IFS= read -r -d '' f; do own "$f"; done < <(gl ls-files -z -m -o -d --exclude-standard -- "$d" 2>/dev/null)
+    # Changed, new and deleted since the last commit, staged or not, and the files git has not
+    # seen yet. (ls-files -m misses a change that is already staged.)
+    while IFS= read -r -d '' f; do own "$f"; done < <(
+      { gl diff -z --name-only HEAD -- "$d" 2>/dev/null || gl ls-files -z -m -d -- "$d" 2>/dev/null
+        gl ls-files -z -o --exclude-standard -- "$d" 2>/dev/null; })
   done
   while IFS= read -r p; do own "$p"; done < <(
     LC_ALL=C comm -13 <(printf '%s\n' "$FP_BEFORE") <(fingerprints) | sed -E 's/^[0-9]+ [0-9]+ //')

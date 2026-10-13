@@ -25,7 +25,7 @@ hg file --kind outcome --title "Health" --id health --area health --status adopt
 cat > "$B/claude" <<STAND
 #!/bin/sh
 # Asked what it knows (mc-run does, to bind the tool list), it answers like a current Claude Code.
-[ "\$1" = --help ] && { echo "  --restricted  Restricted mode"; exit 0; }
+[ "\$1" = --help ] && { printf '  --restricted  Restricted mode\n  --permission-mode <mode>  ("dontAsk")\n  --strict-mcp-config\n'; exit 0; }
 # The prompt may come as an argument or on standard input, depending on mc-run's claude branch.
 P="\$*"; [ -t 0 ] || P="\$P \$(cat)"
 GOAL="\$(printf '%s' "\$P" | sed -n 's/.*Goal: \([a-z0-9-]*\)\. Mode.*/\1/p' | head -1)"
@@ -168,17 +168,23 @@ printf '\nanother job was here\n' >> "$G2/goals/travel.md"
 mkdir -p "$G2/routines/research/2026-10-18"; : > "$G2/routines/research/2026-10-18/other.answer.txt.tmp"
 cat > "$B2/claude" <<STAND
 #!/bin/sh
-[ "\$1" = --help ] && { echo "  --restricted  Restricted mode"; exit 0; }
+# STAND_OLD=1: a Claude Code that knows neither --restricted nor --setting-sources.
+[ "\$1" = --help ] && { [ -n "\${STAND_OLD:-}" ] || printf '  --restricted  Restricted mode\n  --permission-mode <mode>  ("dontAsk")\n  --strict-mcp-config\n'; exit 0; }
+printf '[%s]\n' "\$@" > "$TMP/b2.args"
 P="\$(cat)"
 GOAL="\$(printf '%s' "\$P" | sed -n 's/.*Goal: \([a-z0-9-]*\)\. Mode.*/\1/p' | head -1)"
 DAY="\$(printf '%s' "\$P" | sed -n 's/.*Today is \([0-9-]*\) (UTC).*/\1/p' | head -1)"
+# A goal named in fail-once-<goal> writes nothing the first time, so the fix round runs.
+if [ -f "$TMP/fail-once-\$GOAL" ]; then rm -f "$TMP/fail-once-\$GOAL"; echo "First try, nothing written."; exit 0; fi
 R="$G2/goals/research/\$GOAL"
 printf '# %s\n\n## Searched\n%s\n\n## Found\nx\n\n## Changed in the files\nx\n' "\$GOAL" "\$(printf 'word %.0s' \$(seq 1 160))" > "\$R/days/\$DAY.md"
 sed -i "s/^UPDATED: .*/UPDATED: \$DAY/" "\$R/brief.md"
 i=0; while [ \$i -lt 30 ]; do i=\$((i+1)); printf 'PERSON: P%s %s\nLINK: https://e.org/%s\nWHY: w\nLAST: never read\nOFFER: o\nSTATUS: verified %s\nHOT: no\n\n' "\$i" "\$DAY" "\$i" "\$DAY" >> "\$R/people.md"; done
 printf 'TITLE: an opening for %s\n' "\$GOAL" > "$G2/ideas/\$GOAL-opening.md"
 printf '\nNOTE: changed by tonight\n' >> "$G2/goals/\$GOAL.md"
-if [ "\$GOAL" = money ]; then
+if printf '%s' "\$P" | grep -q "is not finished"; then
+  printf 'Fixed the gaps for %s.\n' "\$GOAL"
+elif [ "\$GOAL" = money ]; then
   printf 'The three helpers are still working; I will assemble the files as soon as they report.\n\nThirty people are verified; still waiting on the cases helper.\n\n\nProtein is what limits this goal now.\n\n'
 else
   printf 'Waiting on one helper.\n\n%s\n' "\$(printf 'long %.0s' \$(seq 1 150))"
@@ -206,14 +212,56 @@ case "$LINE" in *"Waiting on one helper"*) bad "  a long last paragraph is used 
 N="$(printf '%s' "${LINE#sleep: done (founding): }" | wc -c | tr -d ' ')"
 [ "$N" -le 400 ] && ok "  and cut at 400 characters ($N)" || bad "  and cut at 400 characters (it has $N)"
 
+# THE NIGHT WRITES ONLY ITS OWN FOLDERS (2026-10-13). A bare Write or Edit let a night write
+# anywhere in the mission control, which holds what later runs execute with the whole shell. The
+# list names goal research and ideas only, and mc-run runs claude in dontAsk, not acceptEdits.
+A2="$(cat "$TMP/b2.args" 2>/dev/null)"
+contains "the night's list writes only in goals/research and ideas" "$A2" "[Write(goals/research/**)]
+[Edit(goals/research/**)]
+[Write(ideas/**)]
+[Edit(ideas/**)]"
+case "$A2" in *"[Write]"*|*"[Edit]"*) bad "  and has no bare Write or Edit";; *) ok "  and has no bare Write or Edit";; esac
+contains "  claude runs in dontAsk" "$A2" "[--permission-mode]
+[dontAsk]"
+missing "  never acceptEdits" "$A2" "acceptEdits"
+
+# A CHANGE ANOTHER STEP ALREADY STAGED in a research folder goes into the night's commit too
+# (ls-files -m misses a change whose working copy matches what is staged).
+export GODSPEED_TODAY=2026-10-19
+printf 'staged before the night\n' >> "$G2/goals/research/sleep/brief.md"; git -C "$G2" add goals/research/sleep/brief.md
+# THE SUMMARY TAKES THE FIX ROUND'S ANSWER when the fix round ran.
+: > "$TMP/fail-once-money"
+OUT="$(HOME="$TMP/home" PATH="$B2:$PATH" GODSPEED_RUNNER=claude bash "$HERE/mc-research" --godspeed "$G2" --date 2026-10-19 --only money 2>&1)"
+check "a night fixed in its fix round exits 0" "$?" "0"
+contains "  its summary line is the fix round's answer" "$(cat "$G2/routines/research/2026-10-19/summary.txt")" "money: done (founding): Fixed the gaps for money."
+contains "  a staged change in a research folder is in the night's commit" "$(git -C "$G2" show --name-only --format= HEAD)" "goals/research/sleep/brief.md"
+
+# A CLAUDE THAT CANNOT BE HELD to the list: mc-run says so beside the answer, and the summary says it.
+export GODSPEED_TODAY=2026-10-20
+OUT="$(HOME="$TMP/home" PATH="$B2:$PATH" GODSPEED_RUNNER=claude STAND_OLD=1 bash "$HERE/mc-research" --godspeed "$G2" --date 2026-10-20 --only money 2>&1)"
+contains "a claude that knows neither switch is named in the summary" "$(cat "$G2/routines/research/2026-10-20/summary.txt")" "was not held to its list of tools, because"
+contains "  with mc-run's reason" "$(cat "$G2/routines/research/2026-10-20/summary.txt")" "knows neither --restricted nor --setting-sources"
+check "  said once" "$(grep -c 'not held' "$G2/routines/research/2026-10-20/summary.txt")" "1"
+
 # AN mc-run OLDER THAN mc-research cannot hold the night to its list; the summary says so instead of
-# staying silent. A copy of the tools whose mc-run knows nothing of --restricted.
+# staying silent. A copy of the tools whose mc-run binds the list but approves every edit (no dontAsk).
 OLD="$TMP/old"; mkdir -p "$OLD"
 cp "$HERE/mc-research" "$HERE/goals.js" "$HERE/mc-cards.js" "$HERE/check-research.js" "$OLD/"
-sed 's/--restricted/--old-mode/g' "$HERE/mc-run" > "$OLD/mc-run"
-export GODSPEED_TODAY=2026-10-19
-OUT="$(HOME="$TMP/home" PATH="$B2:$PATH" GODSPEED_RUNNER=claude bash "$OLD/mc-research" --godspeed "$G2" --date 2026-10-19 --only money 2>&1)"
-contains "an older mc-run is named in the summary" "$(cat "$G2/routines/research/2026-10-19/summary.txt")" "was not held to its list of tools"
+sed 's/dontAsk/oldMode/g' "$HERE/mc-run" > "$OLD/mc-run"
+export GODSPEED_TODAY=2026-10-21
+OUT="$(HOME="$TMP/home" PATH="$B2:$PATH" GODSPEED_RUNNER=claude bash "$OLD/mc-research" --godspeed "$G2" --date 2026-10-21 --only money 2>&1)"
+contains "an older mc-run is named in the summary" "$(cat "$G2/routines/research/2026-10-21/summary.txt")" "older than mc-research"
+
+# THE BUDGET KEEPS ROOM FOR THE TWO CHECKS that read tonight's quotes again (15 s a page, at most
+# --fetch-quotes pages each): a budget that fits the night and its fix round but not the checks
+# skips the goal; with no pages to read, the same budget fits.
+export GODSPEED_TODAY=2026-10-22
+rm -f "$TMP/ran"
+OUT="$(HOME="$TMP/home" PATH="$B2:$PATH" GODSPEED_RUNNER=claude bash "$HERE/mc-research" --godspeed "$G2" --date 2026-10-22 --only sleep --budget-minutes 16 --timeout-daily 30 --timeout-founding 30 2>&1)"
+check "a budget with no room for the two checks exits 1" "$?" "1"
+contains "  and skips the goal by name" "$(cat "$G2/routines/research/2026-10-22/summary.txt")" "skipped for time: sleep"
+OUT="$(HOME="$TMP/home" PATH="$B2:$PATH" GODSPEED_RUNNER=claude bash "$HERE/mc-research" --godspeed "$G2" --date 2026-10-22 --only sleep --budget-minutes 16 --timeout-daily 30 --timeout-founding 30 --fetch-quotes 0 2>&1)"
+check "  the same budget fits when the checks read no pages" "$?" "0"
 
 echo "$PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]
