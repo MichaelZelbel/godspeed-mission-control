@@ -8,7 +8,8 @@ import { now, localParts, addDays } from "../lib/clock.mjs";
 import { loadSettings, setSetting, DEFAULTS } from "../lib/settings.mjs";
 import { listAreas, findArea, isTalkDay, addArea, setAreaField, nextTalkDay, habitArea, AREA_FIELDS, addAreaLine, removeAreaLine } from "../lib/areas.mjs";
 import { openTalk, readTalk, setTalkState, setFollowUp, addSaid, setShown, talkDates, talkFile } from "../lib/talks.mjs";
-import { addHabit, listHabits, findHabit, track, untrack, lastAnsweredDay, setStatus, stats, askedOn, answerOn } from "../lib/habits.mjs";
+import { addHabit, listHabits, findHabit, track, untrack, lastAnsweredDay, setStatus, stats, askedOn, answerOn,setHabitSchedule,setHabitDisplay,exemptHabitDays } from "../lib/habits.mjs";
+import {habitProgress,assertDay} from '../lib/progress.mjs';
 import { readTable } from "../lib/auto.mjs";
 import { brief, habitLine } from "../lib/brief.mjs";
 import { gate, NO_WAKE } from "../lib/gate.mjs";
@@ -53,6 +54,8 @@ const at = now();
 const today = localParts(at, s.timezone).date;
 const out = (human, json) => console.log(f.json ? JSON.stringify(json) : human);
 const saved = (label) => syncInBackground(mcDir, `coach: ${label}`, syncMode);
+const progressResult=h=>({habit:h.slug,progressCard:{id:'habit-'+h.area+'-'+h.slug,name:h.title,doneMeans:h.doneMeans,days:h.days,daysText:h.daysText,started:h.started,progress:habitProgress(h,{now:at,timezone:s.timezone})}});
+const progressReply=h=>{const p=habitProgress(h,{now:at,timezone:s.timezone});return `${h.title}: ${p.lifetimeCompletedDays} completed days altogether${p.display==='calm'?'':`, ${p.currentRun} completions in this run`}.`;};
 
 function dateArg(v) {
   if (!v || v === "today") return today;
@@ -77,6 +80,12 @@ function needHabit(words, opts) {
   if (!h) die(`No habit matches "${words}". Active habits: ${names}.`);
   if (h.ambiguous) die(`Several habits match "${words}": ${h.ambiguous.join(" / ")}. Say which one.`);
   return h;
+}
+function habitEffectiveDate(habit,value=f.date) {
+ const localToday=localParts(at,habit.timezone||s.timezone).date;
+ const date=!value||value==='today'?localToday:value==='yesterday'?addDays(localToday,-1):assertDay(value);
+ if(date>localToday)throw Error('An effective date cannot be in the future. Use a dated exemption for a future holiday.');
+ return date;
 }
 const ANSWER_WORDS = { yes: "done", y: "done", ja: "done", done: "done", did: "done", erledigt: "done", no: "no", n: "no", nein: "no", not: "no", skip: "skip", skipped: "skip" };
 function answerWord(v) {
@@ -209,11 +218,14 @@ const commands = {
       const words = args.join(" ").trim() || f.words;
       if (!words) die('Say which habit: godspeed-coach habit track "head lifts"');
       const h = needHabit(words);
-      const d = dateArg(f.date);
+      h.progressTimezone=s.timezone;
+      const habitToday=localParts(at,h.timezone||s.timezone).date;
+      const d=!f.date||f.date==='today'?habitToday:f.date==='yesterday'?addDays(habitToday,-1):dateArg(f.date);
       const ans = answerWord(f.answer);
-      track(h, d, ans, f.source || "cli", f.words || words);
+      if(d>localParts(at,h.timezone||s.timezone).date)die('A completion cannot be recorded in the future.');
+      const updated=track(h, d, ans, f.source || "cli", f.words || words);
       saved(`habit ${h.slug} ${d} ${ans}`);
-      return out(`Tracked: ${h.title}, ${d}, ${ans}.`, { ok: true, habit: h.slug, date: d, answer: ans });
+      return out(`Tracked: ${h.title}, ${d}, ${ans}.`, { ok: true, slug:h.slug, date: d, answer: ans,reply:progressReply(updated),...progressResult(updated) });
     }
     if (sub === "untrack") {
       // "Delete the last head lifts", "undo that": the newest tracked day, or the day --date names,
@@ -223,9 +235,9 @@ const commands = {
       const h = needHabit(words, { includeInactive: true });
       const d = f.date ? dateArg(f.date) : lastAnsweredDay(h);
       if (!d) die(`Nothing is tracked for ${h.title} yet.`);
-      try { untrack(h, d); } catch (e) { die(e.message); }
+      let updated;try { updated=untrack(h, d); } catch (e) { die(e.message); }
       saved(`habit ${h.slug} ${d} taken back`);
-      return out(`Taken back: ${h.title}, ${d}.`, { ok: true, habit: h.slug, date: d });
+      return out(`Taken back: ${h.title}, ${d}.`, { ok: true, slug: h.slug, date: d,reply:progressReply(updated),...progressResult(updated) });
     }
     if (sub === "answer") {
       // "yes no" to tonight's check, in the order it asked.
@@ -234,18 +246,33 @@ const commands = {
       if (!asked.length) die("No habit check is waiting for an answer today.");
       const words = args.join(" ").split(/[\s,]+/).filter(Boolean);
       if (words.length !== asked.length && words.length !== 1) die(`The check asked about ${asked.length}: ${asked.map((h) => h.title).join(", ")}. Give one answer each, or one for all.`);
-      const done = asked.map((h, i) => { const ans = answerWord(words[words.length === 1 ? 0 : i]); track(h, d, ans, f.source || "cli", f.words || words.join(" ")); return `${h.title} ${ans}`; });
+      const updated=[];
+      const done = asked.map((h, i) => { const ans = answerWord(words[words.length === 1 ? 0 : i]);h.progressTimezone=s.timezone;updated.push(track(h, d, ans, f.source || "cli", f.words || words.join(" "))); return `${h.title} ${ans}`; });
       saved(`habits ${d}`);
-      return out(`Tracked: ${done.join(", ")}.`, { ok: true, date: d, tracked: done });
+      return out(`Tracked: ${done.join(", ")}.`, { ok: true, date: d, tracked: done,reply:updated.map(progressReply).join('\n'),habits:updated.map(h=>progressResult(h).progressCard) });
     }
     if (sub === "list") {
       const hs = listHabits(mcDir).filter((h) => f.all || h.status === "active");
-      return out(hs.map((h) => `${h.slug}: ${h.title} (${h.area}, ${h.daysText}, ${h.status}${h.auto ? `, from data: ${h.auto}` : ""})`).join("\n") || "No habits.", hs.map(({ log, ...h }) => h));
+      return out(hs.map((h) => `${h.slug}: ${h.title} (${h.area}, ${h.daysText}, ${h.status}${h.auto ? `, from data: ${h.auto}` : ""})`).join("\n") || "No habits.", hs.map(({ log, ...h }) => ({...h,progress:habitProgress(h,{now:at,timezone:s.timezone})})));
+    }
+    if (sub==='progress') {
+      const h=needHabit(args.join(' '),{includeInactive:true}),p=habitProgress(h,{now:at,timezone:s.timezone});
+      return out(progressReply(h),{ok:true,reply:progressReply(h),...progressResult(h)});
+    }
+    if (['schedule','display','exempt','pause','resume'].includes(sub)) {
+      const h=needHabit(args.join(' '),{includeInactive:true});let updated;
+      h.progressTimezone=s.timezone;
+      const date=habitEffectiveDate(h);
+      if(sub==='schedule')updated=setHabitSchedule(h,f.days,date,s.timezone);
+      else if(sub==='display')updated=setHabitDisplay(h,f.display);
+      else if(sub==='exempt')updated=exemptHabitDays(h,assertDay(f.from||date),assertDay(f.to||f.from||date),f.words||'');
+      else updated=setStatus(h,sub==='pause'?'paused':'active',date);
+      saved(`habit ${h.slug} ${sub}`);return out(`Changed: ${h.title}.`,{ok:true,reply:progressReply(updated),...progressResult(updated)});
     }
     if (sub === "status") {
       const [ref, st] = args;
       const h = needHabit(ref, { includeInactive: true });
-      try { setStatus(h, st); } catch (e) { die(e.message); }
+      try { h.progressTimezone=s.timezone;setStatus(h, st,habitEffectiveDate(h)); } catch (e) { die(e.message); }
       saved(`habit ${h.slug} ${st}`);
       return out(`${h.title} is now ${st}.`, { ok: true });
     }

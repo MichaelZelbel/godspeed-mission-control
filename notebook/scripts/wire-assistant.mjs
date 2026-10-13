@@ -100,6 +100,7 @@ for(const [addon,skill] of [['coach','coach'],['journal','interstitial-journal']
  const source=path.join(kit,'third-party/addons/godspeed-'+addon);
  fs.cpSync(path.join(source,'hermes/plugin/godspeed-'+addon),path.join(home,'plugins/godspeed-'+addon),{recursive:true});
  atomic(path.join(home,'plugins/godspeed-'+addon,'mission-control.txt'),root+'\n');
+  if(addon==='coach')atomic(path.join(home,'plugins/godspeed-coach','progress-renderer.txt'),path.join(kit,'notebook/scripts/habit-progress-image.mjs')+'\n');
  // Packaged skills use the maintained complete workflow. User-customised
  // workspace skills are preserved by the installer's normal conflict policy.
  installSkillTree(store,path.join(source,'skill',skill),path.join(home,'skills',skill));

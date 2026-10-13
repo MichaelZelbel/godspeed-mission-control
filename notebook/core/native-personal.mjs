@@ -7,7 +7,8 @@ import {dueMessages} from '../../third-party/addons/godspeed-journal/lib/tick.mj
 import {checkRecord} from '../../third-party/addons/godspeed-journal/lib/evidence.mjs';
 import {listHabits,addHabit,track} from '../../third-party/addons/godspeed-coach/lib/habits.mjs';
 import {loadSettings as coachSettings,saveSettings as saveCoach} from '../../third-party/addons/godspeed-coach/lib/settings.mjs';
-import {localParts} from '../../third-party/addons/godspeed-coach/lib/clock.mjs';
+import {localParts,now as clockNow} from '../../third-party/addons/godspeed-coach/lib/clock.mjs';
+import {habitProgress} from '../../third-party/addons/godspeed-coach/lib/progress.mjs';
 import {brief} from '../../third-party/addons/godspeed-coach/lib/brief.mjs';
 import {setHead,parseDoc,appendToSection} from '../../third-party/addons/godspeed-coach/lib/header.mjs';
 import {parseAuto} from '../../third-party/addons/godspeed-coach/lib/auto.mjs';
@@ -32,13 +33,13 @@ export function headacheLog(store,items){
 export function nativeRows(store,type){
  if(['health_episodes','medications'].includes(type)){const data=headacheLog(store),file=data.tracker?'notebook/Collections':'routines/headache';if(type==='health_episodes')return data.episodes.map(({item,...e})=>({...e,id:'headache-'+e.id,uid:hash(e.id),native_file:file,onset_at:e.start,created_at:e.start,type,_hash:hash(e)}));return [...data.loose.map(({item,...m})=>m),...data.episodes.flatMap(e=>e.meds)].map(m=>({...m,id:'medication-'+hash(m),uid:hash(m),taken_at:m.taken,created_at:m.taken,type,_hash:hash(m)}));}
  if(type==='coach_talks')return listAreas(store.root).flatMap(area=>talkDates(area).map(day=>{const talk=readTalk(area,day),content=fs.readFileSync(talk.file,'utf8');return {id:'talk-'+area.slug+'-'+day,uid:hash(talk.file).slice(0,32),area:area.slug,native_file:path.relative(store.root,talk.file).replaceAll('\\','/'),question:talk.sections['The opening']||'',replies:(talk.sections['What you said']||'').split('\n').filter(Boolean).map(content=>({content})),sources:talk.sections['What was read']||'',status:talk.state==='opened'?'open':'closed',created_at:talk.opened||day+'T00:00:00Z',_hash:hash(content),type};}));
- if(type==='habits')return listHabits(store.root).map(h=>({id:'habit-'+h.area+'-'+h.slug,uid:hash(h.file).slice(0,32),native_file:path.relative(store.root,h.file).replaceAll('\\','/'),title:h.title,area:h.area,status:h.status,agreement:h.agreed,talk_id:h.agreed.match(/\[talk:(.+?)\]/)?.[1]||null,check_at:parseDoc(fs.readFileSync(h.file,'utf8')).head['CHECK-AT']||null,observations:Object.entries(h.log).map(([at,o])=>({at,content:o.words,answer:o.answer})),_hash:hash(fs.readFileSync(h.file)),created_at:h.started+'T00:00:00Z',type}));
+ if(type==='habits')return listHabits(store.root).map(h=>({id:'habit-'+h.area+'-'+h.slug,uid:hash(h.file).slice(0,32),native_file:path.relative(store.root,h.file).replaceAll('\\','/'),title:h.title,name:h.title,doneMeans:h.doneMeans,days:h.days,daysText:h.daysText,started:h.started,progress:habitProgress(h,{timezone:store.get('settings','installation')?.timezone||'UTC'}),area:h.area,status:h.status,agreement:h.agreed,talk_id:h.agreed.match(/\[talk:(.+?)\]/)?.[1]||null,check_at:parseDoc(fs.readFileSync(h.file,'utf8')).head['CHECK-AT']||null,observations:Object.entries(h.log).map(([at,o])=>({at,content:o.words,answer:o.answer})),_hash:hash(fs.readFileSync(h.file)),created_at:h.started+'T00:00:00Z',type}));
  if(type==='journal')return readEntries(store.root,journalSettings(store.root),{days:3650}).map(e=>({id:'journal-'+hash(e),uid:hash(e).slice(0,32),...e,content:e.words,created_at:e.at,type}));
  return [];
 }
 export function rememberFile(store,file){if(fs.existsSync(file)){const content=fs.readFileSync(file);atomic(path.join(store.root,'coach','history',hash(file)+'-'+hash(content)+'.txt'),content);}}
 export function nativeOperation(store,input){
- const timezone=store.get('settings','installation')?.timezone||'UTC',day=localParts(new Date(),timezone).date;
+ const timezone=store.get('settings','installation')?.timezone||'UTC',day=localParts(clockNow(),timezone).date;
  if(input.type==='coach-open'){
   let area=findArea(store.root,input.area);if(!area)area=addArea(store.root,{slug:input.area,title:input.area,rhythm:'weekly sunday',time:'19:00',starts:day,limits:input.limits||[],preparation:input.preparation||''});
   const previous=nativeRows(store,'coach_talks').find(t=>t.area===input.area&&t.status==='open');if(previous)return previous;
@@ -55,13 +56,13 @@ export function nativeOperation(store,input){
   if(input.auto&&!parseAuto(input.auto))throw Error('Automatic habit evidence needs a numeric measurement comparison');
   const talk=nativeRows(store,'coach_talks').find(t=>t.id===input.talk_id);if(!talk)throw Error('Coaching talk missing');
   const reference='[talk:'+talk.id+']',agreement=input.agreement.includes(reference)?input.agreement:input.agreement+' '+reference;
-  const habit=addHabit(store.root,{area:talk.area,title:input.title,doneMeans:input.done_means||input.title,days:input.days||'daily',auto:input.auto||'',agreed:agreement},day,coachSettings(store.root).max_habits);
+  const habit=addHabit(store.root,{area:talk.area,title:input.title,doneMeans:input.done_means||input.title,days:input.days||'daily',auto:input.auto||'',agreed:agreement,timezone},day,coachSettings(store.root).max_habits);
   atomic(habit.file,setHead(fs.readFileSync(habit.file,'utf8'),'CHECK-AT',input.check_at));
   return nativeRows(store,'habits').find(h=>h.id==='habit-'+habit.area+'-'+habit.slug);
  }
  if(input.type==='habit-observe'){
   if(!['done','no','skip'].includes(input.answer))throw Error('Habit observation needs an explicit done, no or skip answer');
-  const row=nativeRows(store,'habits').find(h=>h.id===input.id);if(!row)throw Error('Habit missing');const habit=listHabits(store.root).find(h=>h.file===path.join(store.root,row.native_file)),observed=input.observation_day||day;if(!/^\d{4}-\d{2}-\d{2}$/.test(observed)||observed>day)throw Error('Habit observation needs a real current or previous day');rememberFile(store,habit.file);track(habit,observed,input.answer,'conversation',input.observation);return nativeRows(store,'habits').find(h=>h.id===row.id);
+  const row=nativeRows(store,'habits').find(h=>h.id===input.id);if(!row)throw Error('Habit missing');const habit=listHabits(store.root).find(h=>h.file===path.join(store.root,row.native_file)),habitDay=localParts(clockNow(),habit.timezone||timezone).date,observed=input.observation_day||habitDay;if(!/^\d{4}-\d{2}-\d{2}$/.test(observed)||observed>habitDay)throw Error('Habit observation needs a real current or previous day');habit.progressTimezone=timezone;rememberFile(store,habit.file);track(habit,observed,input.answer,'conversation',input.observation);const updated=nativeRows(store,'habits').find(h=>h.id===row.id);return {...updated,habit:{id:updated.id,name:updated.title,doneMeans:updated.doneMeans,progress:updated.progress}};
  }
  if(input.type==='journal-add'){
   const settings=journalSettings(store.root);if(settings.capture_enabled===false)throw Error('Journaling is switched off');const updated={...settings,timezone,git_sync:'off'};saveJournal(store.root,updated);writeEntry(store.root,updated,{kind:'note',words:input.content,source:input.source_id||'notebook'});return nativeRows(store,'journal').at(-1);

@@ -16,6 +16,14 @@ against it, and refuses a call that needs it and lacks it.
 
 Read the trackers first: `personal_operation {"type":"tracker-list"}`. Then, in this order:
 
+Habit cards include full-history `progress`, `doneMeans`, `days`, `daysText` and `started`.
+Recent entry windows do not limit lifetime totals. Pass a habit's hash as
+`expected:{"habits/<habit id>":"<hash>"}` when changing it. Its operation result supplies the
+verified data for the same Telegram reply's calendar image. Do not invent numbers or send another
+message to advertise progress. On request use `habit-progress` with action show, display (calm or
+standard), pause, resume, exempt (inclusive from/to dates) or schedule (days and effective on date).
+Holidays, illness and outages are exemptions, never scarce protection. Preserve unknown answers.
+
 1. **An active habit**, by its name or other name (a tracker with `"specialist":"habit"`: "track
    walk to work"): `{"type":"track","tracker":"<its id>","words":"<their message>"}`, with `"answer":"no"` or
    `"answer":"skip"` when they say so and `"on"` for another day (below). The coach's own

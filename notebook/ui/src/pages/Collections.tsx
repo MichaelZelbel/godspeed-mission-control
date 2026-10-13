@@ -23,6 +23,7 @@ import { BRAND } from "@/lib/brand";
 import { dbErrorMessage } from "@/lib/function-error";
 import { LoadErrorState } from "@/components/collections/LoadErrorState";
 import { habitShelf, lastEntryDays, shelve } from "@/lib/tracker-shelf";
+import type { HabitProgress } from "@/lib/habit-progress";
 
 type Collection = Database["public"]["Tables"]["collections"]["Row"];
 // itemCount is null when the count could not be read: "0 items" would be a
@@ -135,7 +136,7 @@ function CollectionCard({ collection }: { collection: CollectionWithCount }) {
 
 // A habit on the Trackers shelf (D-321, step 3): the coach's own record, shown as a tracker. Its
 // page lists its days and changes them through the coach.
-type HabitCardData = { id: string; name: string; specialist?: string | null; status?: string; habit_status?: string; talk?: string | null; last?: { when?: string; data?: { answer?: string } } | null };
+type HabitCardData = { id: string; name: string; specialist?: string | null; status?: string; habit_status?: string; talk?: string | null; progress?: HabitProgress; last?: { when?: string; data?: { answer?: string } } | null };
 const ANSWER_WORDS: Record<string, string> = { done: "done", no: "not done", skip: "skipped" };
 function HabitCard({ habit }: { habit: HabitCardData }) {
   const last = habit.last?.when && habit.last.data?.answer ? `${ANSWER_WORDS[habit.last.data.answer] ?? habit.last.data.answer} on ${habit.last.when}` : "No day tracked yet";
@@ -157,6 +158,10 @@ function HabitCard({ habit }: { habit: HabitCardData }) {
           </div>
         </CardHeader>
         <CardContent>
+          {habit.progress && <div className="mb-2 space-y-1 text-sm">
+            <p className="font-medium">{habit.progress.lifetimeCompletedDays} days completed, all time</p>
+            {habit.progress.display !== "calm" && habit.progress.currentRun > 0 && <p>Current streak: {habit.progress.currentRun} completed planned days</p>}
+          </div>}
           <p className="text-xs text-muted-foreground">{last}</p>
         </CardContent>
       </Card>

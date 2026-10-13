@@ -9,7 +9,7 @@ import {cycleOperation,cycleCreate} from './cycle-operations.mjs';
 import {CYCLE_WORDS} from './cycle.mjs';
 import {foodOperation,foodCreate,foodSummary} from './food-operations.mjs';
 import {FOOD_WORDS} from './food.mjs';
-export const TRACKER_OPERATIONS=['tracker-hold','tracker-create','track','tracker-correct','tracker-list','tracker-talk'];
+export const TRACKER_OPERATIONS=['tracker-hold','tracker-create','track','tracker-correct','tracker-list','tracker-talk','habit-progress'];
 const tz=store=>store.get('settings','installation')?.timezone||'UTC';
 // The coaching talk that reads a tracker, by its area's name (coach/<area>/: health, work,
 // relationships, or one the person added), or none.
@@ -115,7 +115,7 @@ export function trackerOperation(domains,raw){
   return {collection_id:c.id,talk:remove?null:talk,changed:true,tracker_hash:updated._hash,reply:remove?the+' no longer looks at '+yours+'.':the+' may now look at '+yours+(current?', instead of the '+talkWords(current)+' talk':'')+'.'};
  }
  // A habit's day is the coach's: its own track() on its own file (habit-trackers.mjs).
- if(['track','tracker-correct'].includes(type)&&isHabitRef(store,input.tracker))return habitOperation(store,input,{now,zone,today:dayOf(now,zone),assistant:domains.assistant===true});
+ if(type==='habit-progress'||['track','tracker-correct'].includes(type)&&isHabitRef(store,input.tracker))return habitOperation(store,input,{now,zone,today:dayOf(now,zone),assistant:domains.assistant===true});
  if(type==='track'){
   let c=resolve(store,input.tracker),under=false;if(c.tracker.specialist==='headache')throw Error(HEADACHES);
   if(c.tracker.specialist==='cycle')return cycleOperation(domains,{...input,action:input.data?.ended===true||input.ended===true?'over':'track'});
@@ -172,7 +172,7 @@ export function trackerOperation(domains,raw){
     ...(from?{recent:all.filter(i=>String(i.data?.when).slice(0,10)>=from).map(i=>({id:i.id,when:i.data?.when,data:i.data,hash:i._hash}))}:{}),
     // The food tracker adds its days' totals and the target's last change, the one line its talk hears.
     ...(c.tracker.specialist==='food'?{food:foodSummary(domains,c,{from,today})}:{})};
-  }).concat(habitTrackerList(store,{today,from})).filter(t=>!talk||t.talk===talk&&t.status==='active');
+  }).concat(habitTrackerList(store,{today,from,now,zone,calendarDays:input.calendarDays===undefined?14:Number(input.calendarDays)})).filter(t=>!talk||t.talk===talk&&t.status==='active');
   const pending=store.list('tracker_proposals').filter(p=>proposalState(store,p,now)==='pending').map(p=>({id:p.id,name:p.name,created_at:p.created_at,question:holdQuestion(p,today)}));
   return {trackers:list,pending};
  }

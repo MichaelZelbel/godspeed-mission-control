@@ -1,0 +1,35 @@
+.habit-progress { border: 1px solid hsl(var(--border) / .3); border-radius: var(--radius); padding: 1.25rem; background: hsl(var(--card)); color: hsl(var(--foreground)); }
+.habit-progress-totals { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 1.5rem; }
+.habit-progress-number { font-size: 2.75rem; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.2; }
+.habit-progress-run { max-width: 15rem; }
+.habit-progress h2, .habit-progress h3 { font-size: 1rem; line-height: 1.5; }
+.habit-progress p.text-sm, .habit-tracker section > p.text-sm { font-size: 1rem; line-height: 1.5; }
+.habit-milestone { display: block; width: 100%; height: .5rem; border: 0; border-radius: var(--radius); overflow: hidden; background: hsl(var(--muted)); accent-color: hsl(var(--primary)); }
+.habit-milestone::-webkit-progress-bar { background: hsl(var(--muted)); }
+.habit-milestone::-webkit-progress-value { background: hsl(var(--primary)); }
+.habit-milestone::-moz-progress-bar { background: hsl(var(--primary)); }
+.habit-week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: .25rem; padding: 0; list-style: none; }
+.habit-calendar-day { display: flex; flex-direction: column; align-items: center; gap: .25rem; min-width: 0; }
+.habit-weekday { font-size: .8125rem; font-weight: 600; }
+.habit-date { font-size: .875rem; font-variant-numeric: tabular-nums; }
+.habit-day-symbol { display: flex; align-items: center; justify-content: center; width: 2rem; height: 2rem; border: 1px solid hsl(var(--foreground) / .35); border-radius: 50%; }
+.habit-day-icon { width: 1rem; height: 1rem; flex-shrink: 0; }
+.habit-day-completed .habit-day-symbol { background: hsl(var(--primary)); color: hsl(var(--primary-foreground)); border-color: hsl(var(--primary)); }
+.habit-day-protected .habit-day-symbol { border-radius: var(--radius); border-width: 2px; border-color: hsl(var(--primary)); }
+.habit-day-paused .habit-day-symbol { border-radius: var(--radius); border-style: dashed; }
+.habit-day-notplanned .habit-day-symbol { border-color: transparent; }
+.habit-day-unknown .habit-day-symbol { border-style: dashed; }
+.habit-today { min-height: 1rem; font-size: .6875rem; font-weight: 700; }
+.habit-legend { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .75rem 1rem; margin-top: .75rem; padding: 1rem 0 0; border-top: 1px solid hsl(var(--border) / .2); list-style: none; }
+.habit-legend li { display: flex; align-items: center; gap: .375rem; font-size: .8125rem; }
+.habit-summary { display: flex; align-items: center; min-height: 44px; cursor: pointer; text-decoration: underline; text-underline-offset: 4px; font-size: .875rem; }
+.habit-summary::before { content: '+'; margin-right: .5rem; font-size: 1rem; }
+details[open] > .habit-summary::before { content: '−'; }
+.habit-summary:focus-visible { outline: 2px solid hsl(var(--ring)); outline-offset: 3px; }
+.habit-tracker input, .habit-tracker select, .habit-tracker button { min-height: 44px; }
+.habit-tracker select { color: hsl(var(--foreground)); color-scheme: light dark; background: hsl(var(--background)); }
+.habit-tracker button { transition-property: color, background-color, border-color, opacity, transform; }
+.habit-tracker { overflow-wrap: anywhere; }
+.habit-tracker details:not([open]) > :not(summary) { display: none; }
+@media (max-width: 390px) { .habit-progress { padding: 1rem .75rem; } .habit-legend { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem .5rem; } .habit-week { gap: 0; } }
+@media (prefers-reduced-motion: reduce) { .habit-tracker button { transition: none; transform: none !important; } }

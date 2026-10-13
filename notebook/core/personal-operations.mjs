@@ -11,7 +11,7 @@ import {radarCommand} from './radar-lifecycle.mjs';
 import {localParts,addDays,zonedToUtc,now as clockNow} from '../../third-party/addons/godspeed-coach/lib/clock.mjs';
 import {trackerOperation,TRACKER_OPERATIONS} from './tracker-operations.mjs';
 import {proposalState,card,findTracker} from './trackers.mjs';
-import {isHabitRef} from './habit-trackers.mjs';
+import {isHabitRef,assertHabitProgressRequest} from './habit-trackers.mjs';
 import {headacheOperation,headacheArgs} from './headache-operation.mjs';
 import {cycleOperation,cycleTracker,DELETE_MS} from './cycle-operations.mjs';
 import {foodOperation,foodTracker} from './food-operations.mjs';
@@ -41,6 +41,7 @@ tracker-create {proposal_id?,name?,unit?,cadence?,fields?,talk?}: the user says 
 track {tracker,value?,data?,note?,on?,at?,new_name?}: the user tracks something a supplied tracker records. tracker is its id; a tracker with several columns takes data by their keys. When he used a new word for an existing tracker, pass it as new_name. Another day: on is his own day words ("Friday", "yesterday") or YYYY-MM-DD; a weekday is the most recent one, worked out by the operation.
 tracker-correct {tracker,entry_id?,value?,data?,remove?:boolean}: the user corrects or removes an entry ("that was 91, not 92", "delete the last belly"). Without entry_id it is his most recent entry in that tracker.
 tracker-talk {tracker,talk,remove?:boolean,instead?:boolean}: the user says a coaching talk may look at a supplied tracker ("The health talk may also look at my sleep tracker"), or no longer needs it (remove:true, "The health talk no longer needs my sleep tracker"). talk is the coaching area, such as health. A tracker has one talk: instead:true only when he says it should move from another talk.
+habit-progress {tracker,action:display|pause|resume|exempt|schedule,display?:standard|calm,on?:YYYY-MM-DD,from?:YYYY-MM-DD,to?:YYYY-MM-DD,days?:daily or mon,wed,fri,words?}: only for supplied habit trackers. Calm hides streak pressure. Pause/resume records dated status. Exempt excuses an inclusive date range for holiday, illness or outages without spending protection. Schedule records the effective date. Never infer that an unanswered day means not done.
 Never invent a tracker; never create one without his yes. Relay the operation's reply as the answer.
 A message that starts with "track" goes, in this order: the name of a supplied habit tracker (specialist habit) is track {tracker:<its id>,answer?:done|no|skip}; a headache, a pill or a pain level is headache; the period, the cycle or a cycle symptom ("track period", "track Periode", "track cramps") is cycle; food, a meal or something she ate or drank ("track food, ...", "track lunch, ...", "track usual breakfast") is food; a supplied tracker's name or other name is track; only a name nothing supplied has is tracker-hold.
 cycle {action:track|over|forecast|leave-out|count|heads-up|talk|decline|delete,flow?:spotting|light|medium|heavy|unspecified,pain?:0-3,pain_where?:[belly|back|head],symptoms?:[cramps|headache|bloating|breast tenderness|acne|low mood|irritable|low energy|poor sleep|cravings|digestion|discharge],note?,on?:YYYY-MM-DD,start?:YYYY-MM-DD,why?:outlier|pregnancy|breastfeeding|contraception,enabled?:boolean,talk?,confirm?,language}: her period and cycle; personal.cycle is her cycle tracker (null: none yet). track is a day ("track period, heavy, cramps 2"; a headache named as one of the day's symptoms is a symptom here): flow is the amount she said, unspecified when she says she has her period without an amount, left out for a day of symptoms only; with no cycle tracker it asks its setup question, and her yes is tracker-create with that question's id. "period over" is over. "when is my next period?" is forecast. Her answer to "Leave this one out of the forecast?": yes is leave-out, no is count. A cycle affected by pregnancy, breastfeeding or starting or stopping hormonal contraception is leave-out with why and start (the day it began; without start, the cycle she is in now). "tell me two days before my period" is heads-up {enabled:true}, stopping it {enabled:false}. "my health talk may read my cycle" is talk {talk:"health"}. "delete my cycle tracker" is delete; her yes to that question is delete {confirm:<personal.cycle.deletion.request_id>}. A question about a fertile window, ovulation, safe days, conceiving or avoiding pregnancy, contraception or a diagnosis is decline: never answer it yourself. Pass language. Relay the operation's reply as the answer.
@@ -82,7 +83,7 @@ function nativeArguments(input){
  if(type==='obligation-snooze')date(input.until,'New target');
 }
 // A habit's day is written to the coach's own file, as habit-observe writes it (habit-trackers.mjs).
-const habitTrack=(domains,op)=>['track','tracker-correct'].includes(op.type)&&isHabitRef(domains.store,op.tracker);
+const habitTrack=(domains,op)=>['track','tracker-correct','habit-progress'].includes(op.type)&&isHabitRef(domains.store,op.tracker);
 // A headache is written by the headache add-on into its tracker's files (headache-operation.mjs).
 const outsideRecords=(domains,op)=>NATIVE.includes(op.type)||op.type==='headache'||habitTrack(domains,op)||op.type==='routine-change'&&!!domains.nativeScheduler||process.env.GODSPEED_ORIGINAL_RUNTIME==='on'&&['goal-add','goal-change','goal-outcome','forecast-settle'].includes(op.type)||['obligation-complete','obligation-snooze'].includes(op.type)&&dueRows(domains.store).some(d=>d.id===op.id);
 // The same domains, reading and writing a staged view of the store.
@@ -363,6 +364,7 @@ export function validateConversationOperations(domains,input,operations){
   'coach-close':/\b(?:close|finish|end|beende)\b[\s\S]*(?:talk|coach|conversation|gespräch)/i,
   'habit-agree':/\b(?:i agree|i will|let.s try|agree to|ich stimme|ich werde)\b/i,
   'habit-observe':/\b(?:record|log|track|did|didn.t|did not|skipped|notiere|erledigt|nicht)\b/i,
+  'habit-progress':/\b(?:show|progress|streak|pause|resume|restart|continue|exempt|excuse|holiday|vacation|ill|sick|schedule|change|set|switch|calm|display|hide|zeig|fortschritt|pausiere|urlaub|krank|ruhig|anzeige)\b/i,
   'journal-add':/\b(?:journal|diary|notiere|tagebuch)\b/i,
   'journal-switch':/\b(?:enable|disable|turn on|turn off|start|stop|switch|aktiviere|deaktiviere)\b[\s\S]*(?:journal|diary|tagebuch)/i,
   'health-add':/\b(?:record|log|save|notiere|speichere)\b/i,
@@ -397,7 +399,7 @@ export function validateConversationOperations(domains,input,operations){
  const verbs={'goal-add':'set|add|adopt|create|remember|lege|speichere','goal-change':'change|pause|resume|retire|close|complete|update|ändere|pausiere|beende','goal-outcome':'record|save|log|update|speichere|notiere',
   'obligation-add':'remind|add|create|set|erinnere','obligation-complete':'complete|close|finish|mark|erledige|schließe','obligation-snooze':'snooze|postpone|move|delay|verschiebe',
   'coach-open':'start|open|begin|starte|beginne|öffne','coach-reply':'reply|answer|tell|record|antworte|notiere','coach-close':'close|finish|end|beende|schließe',
-  'habit-agree':'agree|try|commit|stimme','habit-observe':'record|log|track|notiere','journal-add':'journal|write|record|log|notiere|schreibe','journal-switch':'enable|disable|turn|start|stop|switch|aktiviere|deaktiviere',
+  'habit-agree':'agree|try|commit|stimme','habit-observe':'record|log|track|notiere','habit-progress':'pause|resume|restart|continue|exempt|excuse|change|hide|show|pausiere|ändere','journal-add':'journal|write|record|log|notiere|schreibe','journal-switch':'enable|disable|turn|start|stop|switch|aktiviere|deaktiviere',
   'health-add':'record|log|save|track|notiere|speichere','memory-confirm':'remember|save|correct|update|merke|speichere|korrigiere','memory-propose':'remember|save|merke|speichere',
   'routine-change':'pause|resume|schedule|change|stop|start|move|pausiere|ändere|verschiebe','forecast-settle':'settle|record|resolve|log|notiere',
   'work-allow-local':'allow|approve|authori[sz]e|erlaube|genehmige','work-retry-draft':'retry|try|redo|wiederhole','work-record-observation':'record|log|save|notiere|speichere',
@@ -413,6 +415,9 @@ export function validateConversationOperations(domains,input,operations){
    if(!note||!item||![note.id,note.title].filter(Boolean).some(name=>message.includes(name))||![item.id,item.title].filter(Boolean).some(name=>message.includes(name)))throw Error('Approval must identify the exact task and target note');
   }
   if(operation.type==='habit-observe'&&operation.answer==='done'&&/\b(?:did not|didn.t|haven.t|have not|not done|skipped|nicht|nein)\b/i.test(message))throw Error('Habit completion contradicts the actual user reply');
+  if(operation.type==='habit-progress'){
+   assertHabitProgressRequest(domains.store,operation,{message});
+  }
   if(['goal-add','goal-change'].includes(operation.type)&&operation.wait_for_report===true&&(!/\b(?:wait|warten|warte)\b[\s\S]*\b(?:report|review|rating|observation|bericht|bewertung|rückmeldung)\b/i.test(message)||/\b(?:do not|don.t|never|stop|nicht)\s+(?:wait|waiting|warten)\b/i.test(message)))throw Error('Waiting for an outcome report needs your explicit request');
   if(['memory-confirm','memory-propose'].includes(operation.type)){
    if(!operation.subject_type)throw Error('Memory must explicitly identify whose fact this is');

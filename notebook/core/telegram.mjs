@@ -1,8 +1,27 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {atomic,hash} from './records/store.mjs';
+import {habitProgressPng,habitProgressText} from './habit-progress-image.mjs';
 export class Telegram {
-  constructor({store,domains,token,owner,origin='https://api.telegram.org',transport=fetch,loginLink}){this.store=store;this.domains=domains;this.token=token;this.owner=String(owner);this.origin=origin;this.transport=transport;this.loginLink=loginLink;this.file=path.join(store.state,'telegram-offset.json');this.running=false;}
+  constructor({store,domains,token,owner,origin='https://api.telegram.org',transport=fetch,loginLink,renderProgress=habitProgressPng}){this.store=store;this.domains=domains;this.token=token;this.owner=String(owner);this.origin=origin;this.transport=transport;this.loginLink=loginLink;this.renderProgress=renderProgress;this.file=path.join(store.state,'telegram-offset.json');this.running=false;}
+  async replyWithProgress(reply,result,locale='en'){
+    const habits=[result?.habit,...(result?.operation_results||[]).map(value=>value?.habit)].filter(h=>h?.progress?.version===1);
+    const habit=habits.at(-1);let bytes;
+    if(habit)try{bytes=await this.renderProgress(habit,{locale});}catch{}
+    const text=String(reply).slice(0,4000);
+    if(!bytes)return this.call('sendMessage',{chat_id:this.owner,text});
+    // One picture is the reply, with its text as the caption. Long answers keep their text reply.
+    let message;if(text.length>1024)message=await this.call('sendMessage',{chat_id:this.owner,text});
+    const form=new FormData();form.set('chat_id',this.owner);form.set('caption',text.length<=1024?text:habitProgressText(habit,{locale}).split('\n').slice(0,4).join('\n'));
+    form.set('photo',new Blob([bytes],{type:'image/png'}),'habit-progress.png');
+    // An ambiguous network failure is not followed by a second send. A definite API rejection
+    // means no photo was delivered, so the already-saved answer can safely fall back to text.
+    const response=await this.transport(this.origin+'/bot'+this.token+'/sendPhoto',{method:'POST',body:form,signal:AbortSignal.timeout(35000)});
+    const data=await response.json();
+    if(response.ok&&data.ok)return data.result;
+    if(data.ok===false&&Number(data.error_code)>=400&&Number(data.error_code)<500)return message||this.call('sendMessage',{chat_id:this.owner,text});
+    throw Error('Telegram picture delivery is uncertain');
+  }
   // A message carrying a link goes without a preview: Telegram's servers fetch
   // a previewed link first, and a one-time sign-in link was used up by them
   // before the owner could tap it (until 6 October 2026).
@@ -36,15 +55,15 @@ export class Telegram {
         const id='telegram-'+update.update_id,prior=this.store.get('command_receipts',id);
         if(prior){if(prior.state==='attempted'){await this.store.saveAsync('command_receipts',{id,state:'needs_review',error:'Interrupted Telegram request; actions were not repeated.'});await this.failureNotice(id,'Your previous message did not finish. I have not repeated any actions. Please send it again.');}atomic(this.file,JSON.stringify({offset:update.update_id+1}));continue;}
         await this.store.saveAsync('command_receipts',{id,source:'telegram',state:'attempted',request:text});
-        let reply,answered=false,sendAttempted=false;
+        let reply,answerResult,answered=false,sendAttempted=false;
         try{
           if(['/notebook','/chat'].includes(text)&&this.loginLink)reply='Open your '+(text==='/chat'?'chat':'notebook')+': '+this.loginLink(text==='/chat'?'/chat':'/');
           else if(text.startsWith('/capture ')){const note=await this.store.saveAsync('notes',{id:'telegram-note-'+update.update_id,title:'Telegram capture',content:text.slice(9),source_app:'telegram'});reply='Saved your note: '+note.title;}
           else if(text==='/status'){const jobs=this.store.list('jobs');reply='Your candidate has '+this.store.records.size+' records and '+jobs.filter(j=>!j.paused).length+' enabled routines.';}
           else if(text.startsWith('/approve ')){const approval=this.store.get('approvals',text.slice(9).trim());if(!approval||approval.status!=='pending')throw new Error('Pending approval missing');await this.store.saveAsync('approvals',{id:approval.id,status:'approved',user_words:text,approved_at:new Date().toISOString()});reply='Recorded your approval for '+approval.title+'.';}
-          else {await this.store.saveAsync('conversation_messages',{role:'user',content:text,source_app:'telegram',conversation_id:'telegram-owner'});const result=await this.domains.invoke('conversation-chat',{message:text,conversation_id:'telegram-owner',request_id:id});reply=result.reply;answered=true;}
+          else {await this.store.saveAsync('conversation_messages',{role:'user',content:text,source_app:'telegram',conversation_id:'telegram-owner'});const result=await this.domains.invoke('conversation-chat',{message:text,conversation_id:'telegram-owner',request_id:id});answerResult=result;reply=result.reply;answered=true;}
           sendAttempted=true;
-          const delivered=await this.call('sendMessage',{chat_id:this.owner,text:String(reply).slice(0,4000)});
+          const delivered=await this.replyWithProgress(reply,answerResult,message.from?.language_code||'en');
           await this.store.saveAsync('command_receipts',{id,state:'verified',message_id:delivered.message_id,result:reply});
           if(!answered)await this.store.saveAsync('conversation_messages',{role:'assistant',content:reply,source_app:'telegram',message_id:delivered.message_id,conversation_id:'telegram-owner'});
         }catch{await this.store.saveAsync('command_receipts',{id,state:'needs_review',error:'Telegram request did not finish. It will not be replayed automatically.'});if(!sendAttempted)await this.failureNotice(id,'I could not finish your message. I have not repeated any actions. Please try again.');}

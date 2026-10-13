@@ -22,6 +22,19 @@ const mission = () => tmpMission({
   "coach/health/area.md": area(),
 });
 
+test('habit effective dates reject future writes and follow the fixed habit timezone',()=>{
+ const mc=mission(),at='2026-10-13T00:30:00Z';
+ cli(mc,at,'habit','add','health','reading','--title','Reading','--days','daily');
+ const file=path.join(mc,'coach','health','habits','reading.md');
+ fs.writeFileSync(file,fs.readFileSync(file,'utf8').replace('TIMEZONE: Europe/Berlin','TIMEZONE: America/Los_Angeles'));
+ const before=fs.readFileSync(file,'utf8');
+ for(const command of [
+  ['pause','reading','--date','2026-10-13'],['resume','reading','--date','tomorrow'],['schedule','reading','--days','mon,wed,fri','--date','2026-10-20'],['status','reading','paused','--date','2026-10-14'],
+ ]){const r=cli(mc,at,'habit',...command);assert.equal(r.code,1);assert.equal(fs.readFileSync(file,'utf8'),before);}
+ const paused=cli(mc,at,'habit','pause','reading','--json');assert.equal(paused.code,0);assert.equal(JSON.parse(paused.out).habit,'reading');assert.match(fs.readFileSync(file,'utf8'),/"kind":"status","on":"2026-10-12","status":"paused"/);
+ const resumed=cli(mc,at,'habit','resume','reading','--date','yesterday');assert.equal(resumed.code,0);assert.match(fs.readFileSync(file,'utf8'),/"kind":"status","on":"2026-10-11","status":"active"/);
+});
+
 test("habits: add, track by loose words, answer tonight's check, list", () => {
   const mc = mission();
   const T = "2026-09-29T10:00:00Z";

@@ -15,6 +15,9 @@ import {installSkillTree} from '../core/packaged-skills.mjs';
 import {planWorkspaceMove,moveWorkspace,undoWorkspaceMove} from '../core/workspace-move.mjs';
 import {installStarter,adoptedMissionControl,addArchiveLine} from '../core/starter-workspace.mjs';
 import {machineDevice} from '../core/device-id.mjs';
+import {listHabits,initializeHabitProgress} from '../../third-party/addons/godspeed-coach/lib/habits.mjs';
+import {localParts,now as clockNow} from '../../third-party/addons/godspeed-coach/lib/clock.mjs';
+import {rememberFile} from '../core/native-personal.mjs';
 const args=process.argv.slice(2),root=process.env.GODSPEED_WORKSPACE;if(!root)throw new Error('Set GODSPEED_WORKSPACE to your candidate workspace');
 if(args[0]==='workspace-move'){
  const [_,action,value,installationFile]=args;
@@ -46,7 +49,9 @@ if(command==='init'){
   if(!fs.existsSync(contract)||earlier.includes(fs.readFileSync(contract,'utf8')))atomic(contract,contractText);
   const spec=fs.readFileSync(fileURLToPath(new URL('../../docs/full-version/file-format.md',import.meta.url)),'utf8');
   if(!fs.existsSync(path.join(root,'README.md')))atomic(path.join(root,'README.md'),'# Godspeed Mission Control\n\n'+spec);
-  result={initialized:true,preservedExisting:true};
+  const progressZone=store.get('settings','installation')?.timezone||'UTC',progressDay=localParts(clockNow(),progressZone).date;let progressUpgrades=0;
+  for(const habit of listHabits(root))if(!habit.timezone||!habit.progressHistory.some(e=>e.kind==='schedule')) {rememberFile(store,habit.file);if(initializeHabitProgress(habit,progressDay,progressZone).changed)progressUpgrades++;}
+  result={initialized:true,preservedExisting:true,habitProgressUpgrades:progressUpgrades};
 }else if(['coach','journal'].includes(command)){
   const addon=command==='coach'?'godspeed-coach':'godspeed-journal';
   const executable=fileURLToPath(new URL('../../third-party/addons/'+addon+'/bin/'+addon+'.mjs',import.meta.url));

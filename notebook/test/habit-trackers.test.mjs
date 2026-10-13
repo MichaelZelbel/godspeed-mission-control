@@ -69,3 +69,48 @@ test('track never writes the Headaches tracker, and a habit or a headache is nev
  await assert.rejects(op(domains,{type:'tracker-hold',name:'Walk to work'}),/is a habit/);
  assert.equal(store.list('tracker_proposals').length,0);
 });
+
+test('progress is full-history regardless of entry window; owner can choose calm and excuse dates with stale edits refused',async()=>{
+ const {domains,store,walk}=fixture();
+ let card=(await op(domains,{type:'tracker-list',days:1})).trackers.find(t=>t.id==='habit-health-walk-to-work');
+ assert.equal(card.progress.lifetimeCompletedDays,1);assert.equal(card.recent.length,0);assert.equal(card.doneMeans,'walked both ways');assert.equal(card.progress.calendar.length,14);
+ const r=await op(domains,{type:'habit-progress',tracker:card.id,action:'display',display:'calm',expected:{[card.id]:card.hash}});assert.equal(r.habit.progress.display,'calm');
+ await assert.rejects(op(domains,{type:'habit-progress',tracker:card.id,action:'pause',expected:{[card.id]:card.hash}}),/changed/);
+ await op(domains,{type:'habit-progress',tracker:card.id,action:'exempt',from:'2026-10-04',to:'2026-10-12',note:'hospital'});
+ card=(await op(domains,{type:'tracker-list',days:14,calendarDays:7})).trackers.find(t=>t.id==='habit-health-walk-to-work');
+ assert.equal(card.progress.calendar.length,7);assert.equal(card.progress.lifetimeCompletedDays,1);assert.equal(card.progress.protections.used,0);assert.equal(card.progress.calendar.find(d=>d.date==='2026-10-06').status,'completed');
+ await op(domains,{type:'tracker-correct',tracker:card.id,entry_id:'2026-10-06',answer:'no'});
+ const row=fs.readFileSync(walk.file,'utf8');assert.match(row,/- 2026-10-06 no \(notebook\) "steps 9513"/,'an owner correction preserves existing words unless explicitly erased');
+ assert.equal(store.list('collections').length,0);
+});
+
+test('explicit conversation requests reach habit-progress; an unrelated message cannot pause it',async()=>{
+ const {domains}=fixture();const id='habit-health-walk-to-work';
+ const r=await say(domains,'Pause walk to work',[{type:'habit-progress',tracker:id,action:'pause'}]);assert.equal(r.operation_results[0].habit.progress.calendar.at(-1).status,'paused');
+ await assert.rejects(say(domains,'Show my progress',[{type:'habit-progress',tracker:id,action:'resume'}]),/request/);
+});
+
+test('assistant progress reads cannot mutate settings or invent exemption ranges, through either route',async()=>{
+ const {domains,walk}=fixture(),id='habit-health-walk-to-work',before=fs.readFileSync(walk.file,'utf8');
+ const assistant=Object.assign(Object.create(Object.getPrototypeOf(domains)),domains,{assistant:true});
+ for(const [words,change] of [
+  ['Show my streak',{action:'display',display:'calm'}],
+  ['Show my walk to work streak',{action:'display',display:'calm'}],
+  ['Switch walk to work to calm display',{action:'display',display:'standard'}],
+  ['Switch walk to work to standard display',{action:'display',display:'calm'}],
+  ['Show my streak on Monday',{action:'schedule',days:'daily'}],
+  ['Show my walk to work streak on Monday',{action:'schedule',days:'daily'}],
+  ['I am ill',{action:'exempt',from:'2026-10-01',to:'2026-10-12'}],
+  ['Excuse walk to work today',{action:'exempt',from:'2026-10-01',to:'2026-10-12'}],
+  ['Change walk to work schedule to Monday',{action:'schedule',days:'daily'}],
+  ["Don't pause walk to work",{action:'pause'}],
+ ]) {
+  await assert.rejects(op(assistant,{type:'habit-progress',tracker:id,words,...change}));
+  await assert.rejects(say(domains,words,[{type:'habit-progress',tracker:id,...change}]));
+  assert.equal(fs.readFileSync(walk.file,'utf8'),before);
+ }
+ const read=await op(assistant,{type:'habit-progress',tracker:id,action:'show',words:'Show my streak'});assert.equal(read.action,'show');assert.equal(fs.readFileSync(walk.file,'utf8'),before);
+ await op(assistant,{type:'habit-progress',tracker:id,action:'display',display:'calm',words:'Switch walk to work to calm display'});
+ await op(assistant,{type:'habit-progress',tracker:id,action:'exempt',from:'2026-10-10',to:'2026-10-12',words:'Excuse walk to work from 2026-10-10 to 2026-10-12'});
+ await op(assistant,{type:'habit-progress',tracker:id,action:'schedule',days:'mon,wed,fri',words:'Change walk to work schedule to Monday Wednesday Friday'});
+});
