@@ -1,12 +1,13 @@
 FROM node:22.19.0-bookworm-slim@sha256:4a4884e8a44826194dff92ba316264f392056cbe243dcc9fd3551e71cea02b90 AS frontend
 ARG REVISION=unknown
 ARG USE_VERIFIED_FRONTEND=0
-WORKDIR /build
+WORKDIR /build/notebook/ui
 COPY notebook/ui/package*.json ./
 RUN npm ci --no-audit --no-fund
 COPY notebook/ui/ ./
+COPY notebook/core/progress-assets/ ../core/progress-assets/
 COPY notebook/scripts/verify-prebuilt-frontend.mjs /verify-prebuilt-frontend.mjs
-RUN if [ "$USE_VERIFIED_FRONTEND" = 1 ]; then node /verify-prebuilt-frontend.mjs /build "$REVISION"; else npm run build; fi
+RUN if [ "$USE_VERIFIED_FRONTEND" = 1 ]; then node /verify-prebuilt-frontend.mjs /build/notebook/ui "$REVISION"; else npm run build; fi
 
 # Includes the approved computer-use layer. The digest is immutable.
 FROM ghcr.io/michaelzelbel/godspeed-mission-control@sha256:358bf1b87b22898c0bd1a173226004558e41a3d16fc39214ecedab7fb550de20
@@ -14,7 +15,7 @@ USER root
 RUN uv pip install --python /opt/hermes/.venv/bin/python3 --no-cache faster-whisper==1.2.1
 COPY --from=frontend /usr/local/bin/node /usr/local/bin/node
 COPY . /opt/godspeed/kit/
-COPY --from=frontend /build/dist /opt/godspeed/kit/notebook/ui/dist
+COPY --from=frontend /build/notebook/ui/dist /opt/godspeed/kit/notebook/ui/dist
 RUN chmod 755 /opt/godspeed/kit/docker/full-candidate/entrypoint.sh && chown -R hermes:hermes /opt/godspeed/kit
 ENV GODSPEED_WORKSPACE=/opt/data/full-candidate/workspace \
     GODSPEED_MEDIA_ROOT=/opt/data/full-candidate/media \
