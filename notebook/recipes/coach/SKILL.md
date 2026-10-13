@@ -155,8 +155,10 @@ missed day.
 ## A talk they start themselves
 
 "Let's do the health talk now", "Können wir über Arbeit reden?": run `godspeed-coach brief <area>`
-and follow "Opening a talk" in this conversation (skip the `[SILENT]` rule). If a talk of that area
-is already open, continue it instead.
+and follow "Opening a talk" in this conversation (skip the `[SILENT]` rule). The open command that
+brief prints ends with `--shown`, because they read the opening right here: run it exactly as
+printed, so a later conversation does not bring the talk up again. If a talk of that area is
+already open, continue it instead.
 
 ## A new area
 

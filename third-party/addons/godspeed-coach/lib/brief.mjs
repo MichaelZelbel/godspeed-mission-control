@@ -69,12 +69,15 @@ export function raisedElsewhere(mcDir, area, ymd) {
   return out;
 }
 
-export function brief(mcDir, s, area, ymd) {
+// `inChat`: they asked for this talk in the conversation (`godspeed-coach brief <area>`), so the opening
+// is the reply they read, and the record is made as seen (`--shown`). The scheduled talk's brief, which
+// the gate prints, never is: a talk that waits for the chat must stay waiting.
+export function brief(mcDir, s, area, ymd, { inChat = false } = {}) {
   const rel = (p) => path.relative(mcDir, p).replace(/\\/g, "/");
   const L = [];
   L.push(`COACH TALK DUE: ${area.title} (id for commands: ${area.slug}), ${ymd}, ${area.time} ${s.timezone}`);
   const home = mcDir.replace(/\\/g, "/");
-  L.push(`Record: ${rel(talkFile(area, ymd))}, created by (run it exactly like this): godspeed-coach talk open ${area.slug} --godspeed "${home}" --opening "<the opening>" --read "<what you read>"`);
+  L.push(`Record: ${rel(talkFile(area, ymd))}, created by (run it exactly like this): godspeed-coach talk open ${area.slug} --godspeed "${home}" --opening "<the opening>" --read "<what you read>"${inChat ? " --shown" : ""}`);
   L.push(`Mission control folder: ${home} (every godspeed-coach command in this talk takes --godspeed "${home}")`);
   L.push(`Style: ${area.style}. Tone: ${area.tone}. Rhythm: ${rhythmWords(area)}.`);
   if (area.serves.length) L.push(`Serves: ${area.serves.join(", ")}.`);

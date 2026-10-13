@@ -34,13 +34,15 @@ export function lastTalk(area, beforeYmd) {
   return ds.length ? readTalk(area, ds.at(-1)) : null;
 }
 
-export function openTalk(area, ymd, { opening = "", read = "" } = {}, now = new Date()) {
+// `shown`: when they already saw the opening (a talk they started themselves in the chat): SHOWN is
+// written with the record, as setShown would, so the [godspeed-coach] block never brings it up again.
+export function openTalk(area, ymd, { opening = "", read = "", shown = "" } = {}, now = new Date()) {
   const f = talkFile(area, ymd);
   // Opened twice (a retry after the first message did go out): keep the first record.
   if (fs.existsSync(f)) return { file: f, created: false };
   fs.mkdirSync(path.dirname(f), { recursive: true });
   const text = formatDoc(
-    { TALK: area.slug, DATE: ymd, STATE: "opened", OPENED: now.toISOString().replace(/\.\d+Z$/, "Z"), "FOLLOW-UP": "" },
+    { TALK: area.slug, DATE: ymd, STATE: "opened", OPENED: now.toISOString().replace(/\.\d+Z$/, "Z"), "FOLLOW-UP": "", ...(shown ? { SHOWN: shown } : {}) },
     { "What was read": read, "The opening": opening, "What you said": "", "What changed": "" },
   );
   fs.writeFileSync(f, text);

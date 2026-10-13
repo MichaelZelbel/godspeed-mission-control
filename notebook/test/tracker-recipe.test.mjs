@@ -248,3 +248,17 @@ test('the coach and tracker recipes send a habit to another talk through tracker
   // The texts shipped until today stay known, so an unedited installed copy is replaced.
   for(const [name,old] of [['coach','3f5ee7b357f84c86a8cec168e7dd7934533875f300437189075e64250babf784'],['tracker','ccae4c80ee9c41de012c6ed236f0a15161037164860e8c875d00103d4b2a44b3']])assert.ok(revisions[name+'/SKILL.md'].includes(old),name);
 });
+
+// A talk they start themselves in the chat is seen already (14 October 2026): the open command its brief
+// prints ends with --shown, and the recipe says to keep it, so the next conversation does not bring the
+// same talk up again under another talk's opening.
+test('the coach recipe keeps --shown on the open command of a talk they start themselves',()=>{
+  const coach=read('../recipes/coach/SKILL.md');
+  assert.equal(coach,read('../../third-party/addons/godspeed-coach/skill/coach/SKILL.md'));
+  const started=coach.split('## A talk they start themselves')[1].split('## A new area')[0].replace(/\s+/g,' ');
+  assert.match(started,/The open command that brief prints ends with `--shown`, because they read the opening right here: run it exactly as printed, so a later conversation does not bring the talk up again\./);
+  assert.doesNotMatch(coach,/[–—]/,'no long dashes');
+  const revisions=JSON.parse(read('../data/recipe-revisions.json'));
+  assert.ok(revisions['coach/SKILL.md'].includes(digest(coach)),'coach ships a known revision');
+  assert.ok(revisions['coach/SKILL.md'].includes('11de14f3425b1bb724910164a968f3f211524312a95689593e32d5f077c9e0ff'),'the text shipped until today stays known');
+});

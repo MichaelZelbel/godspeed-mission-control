@@ -17,7 +17,7 @@ import { dueTick } from "../lib/tick.mjs";
 import { contextBlock, waitingTalks } from "../lib/context.mjs";
 import { commitCoach, syncInBackground, pullQuietly } from "../lib/sync.mjs";
 
-const FLAGS = new Set(["json", "yes", "no-hermes", "no-claude", "all", "scheduled", "remove"]);
+const FLAGS = new Set(["json", "yes", "no-hermes", "no-claude", "all", "scheduled", "remove", "shown"]);
 function parseArgs(argv) {
   const pos = []; const f = {};
   for (let i = 0; i < argv.length; i++) {
@@ -158,7 +158,9 @@ const commands = {
     }
     die("godspeed-coach area add <name> --title ... --rhythm ... | area set <area> <SETTING> <value> | area read <area> \"<what it may look at>\" [--remove] | area limit <area> \"<what it must never do>\" [--remove]");
   },
-  brief() { const a = needArea(pos[0]); console.log(brief(mcDir, s, a, dateArg(f.date))); },
+  // Asked for in the conversation ("Can we do the health talk now?"): the open command it prints
+  // carries --shown. The scheduled talk gets its brief from the gate, without it.
+  brief() { const a = needArea(pos[0]); console.log(brief(mcDir, s, a, dateArg(f.date), { inChat: true })); },
   gate() {
     pullQuietly(mcDir, syncMode);
     const g = gate(mcDir, s, at, path.join(appHome(), "state.json"));
@@ -170,7 +172,11 @@ const commands = {
     if (sub === "open") {
       const d = dateArg(f.date);
       if (!f.opening) die('Give the opening: --opening "<what you are sending them>"');
-      const r = openTalk(a, d, { opening: f.opening, read: f.read || "" }, at);
+      // --shown: the opening is the reply they are reading in the chat, so the talk never waits for it.
+      // A scheduled run never marks a talk seen (GODSPEED_SCHEDULED_RUN or --scheduled): for someone
+      // without a messenger that would hide a talk that really waits.
+      const shown = f.shown && !(f.scheduled || process.env.GODSPEED_SCHEDULED_RUN) ? at.toISOString().replace(/\.\d+Z$/, "Z") : "";
+      const r = openTalk(a, d, { opening: f.opening, read: f.read || "", shown }, at);
       if (r.created) saved(`${a.slug} talk opened ${d}`);
       return out(r.created ? `Opened: ${path.relative(mcDir, r.file).replace(/\\/g, "/")}` : `Already open: ${path.relative(mcDir, r.file).replace(/\\/g, "/")} (kept the first opening)`, { ok: true, created: r.created, file: r.file });
     }
