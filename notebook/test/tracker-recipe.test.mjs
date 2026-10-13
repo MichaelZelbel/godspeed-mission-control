@@ -210,3 +210,19 @@ test('the coach recipe says a skipped habit day counts neither way',()=>{
   assert.ok(JSON.parse(read('../data/recipe-revisions.json'))['coach/SKILL.md'].includes(digest(coach)),'coach ships a known revision');
   assert.doesNotMatch(coach,/[–—]/,'no long dashes');
 });
+
+// Michael's decision of 13 October 2026: any number of talks may read a tracker. The recipes no longer
+// say a tracker has one talk or that adding one asks first; only their own "instead" moves it.
+test('the tracker recipes say any number of talks may read a tracker, adding never asks, and only instead moves it',()=>{
+  const tracker=read('../recipes/tracker/SKILL.md'),food=read('../recipes/food-tracker/SKILL.md'),cycle=read('../recipes/cycle-tracker/SKILL.md'),coach=read('../recipes/coach/SKILL.md');
+  for(const text of [tracker,food,cycle,coach]){assert.doesNotMatch(text,/has one talk|one talk:/);assert.doesNotMatch(text,/[–—]/,'no long dashes');}
+  const flat=tracker.replace(/\s+/g,' ');
+  assert.match(flat,/any number of talks may read one tracker/);
+  assert.match(flat,/adds that talk and never asks: the talks that read it already keep reading it\. Taking one away adds `"remove":true`, and the others keep it\. Only when their own words say instead/);
+  assert.doesNotMatch(flat,/the reply asks first/);
+  for(const text of [food,cycle])assert.match(text.replace(/\s+/g,' '),/adds that talk, and the talks that read it already keep reading it\. Taking one away adds `"remove":true`; `"instead":true` only when (?:they say|she says) instead/);
+  const revisions=JSON.parse(read('../data/recipe-revisions.json'));
+  for(const name of ['tracker','food-tracker','cycle-tracker'])assert.ok(revisions[name+'/SKILL.md'].includes(digest(read('../recipes/'+name+'/SKILL.md'))),name+' ships a known revision');
+  // The texts shipped until today stay known, so an unedited installed copy is replaced.
+  for(const [name,old] of [['tracker','faef7089df4754d29f994f247f88e33e8a05f97dc4bbb38eae11b2dd194ce6f1'],['food-tracker','0ef71e62224e4902619b87c047bada18f181f555a2298b105122c7315699565a'],['cycle-tracker','f78d68d429576a134f5738b9eaaa7f0931a2a25ef2402ff6b987c7afc21ed6be']])assert.ok(revisions[name+'/SKILL.md'].includes(old),name);
+});

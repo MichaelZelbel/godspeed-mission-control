@@ -37,7 +37,9 @@ she writes German, `"language":"en"` when she writes English.
    `status.cycles`) when it is not the cycle she is in now.
 5. **The heads-up** ("tell me two days before my period"): `{"type":"cycle","action":"heads-up","enabled":true}`;
    stopping it: `"enabled":false`. It is one line in her own morning brief, never a message.
-6. **Her talk** ("my health talk may read my cycle"): `{"type":"cycle","action":"talk","talk":"health"}`.
+6. **Her talks** ("my health talk may read my cycle"): `{"type":"cycle","action":"talk","talk":"health"}`
+   adds that talk, and the talks that read it already keep reading it. Taking one away adds
+   `"remove":true`; `"instead":true` only when she says instead, and then that talk is the only one.
 7. **Delete** ("delete my cycle tracker"): `{"type":"cycle","action":"delete"}` asks her once and
    gives a `request_id` and an `expected` map. Only her yes to that question deletes:
    `{"type":"cycle","action":"delete","confirm":"<request_id>","expected":<that map>}`.

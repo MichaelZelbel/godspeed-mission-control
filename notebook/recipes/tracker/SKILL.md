@@ -85,12 +85,15 @@ The journal no longer takes "track".
    say it in theirs, and keep every number, name and day.
 9. **A question about what they track**: `{"type":"tracker-list","days":<days asked about>}` gives
    each tracker's entries of those days under `recent`. Answer from those entries only.
-10. **Which talk looks at a tracker** ("The health talk may also look at my sleep tracker", "The
-   health talk no longer needs my sleep tracker"): a talk reads the trackers whose card names it.
-   `{"type":"tracker-talk","tracker":"<id>","talk":"health","words":"<their message>","expected":{"collections/<id>":"<hash>"}}`;
-   taking it away adds `"remove":true`. A tracker has one talk: when another talk has it, the reply
-   asks first, and only their yes adds `"instead":true`. The reply is your answer, as in 8. Anything
-   else a talk may look at, or must never do, is the coach recipe's ("Changing an area").
+10. **Which talks look at a tracker** ("The health talk may also look at my sleep tracker", "The
+   health talk no longer needs my sleep tracker"): a talk reads the trackers whose card names it,
+   and any number of talks may read one tracker.
+   `{"type":"tracker-talk","tracker":"<id>","talk":"health","words":"<their message>","expected":{"collections/<id>":"<hash>"}}`
+   adds that talk and never asks: the talks that read it already keep reading it. Taking one away
+   adds `"remove":true`, and the others keep it. Only when their own words say instead ("the
+   psychology talk instead of the health talk") add `"instead":true`: then that talk is the only one.
+   The reply is your answer, as in 8. Anything else a talk may look at, or must never do, is the
+   coach recipe's ("Changing an area").
 
 ## Never
 

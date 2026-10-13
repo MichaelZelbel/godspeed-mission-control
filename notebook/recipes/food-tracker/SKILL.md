@@ -56,7 +56,9 @@ call when they write German, `"language":"en"` when they write English.
 9. **A barcode** ("track 20 g of 4008400401621"): `{"type":"food","action":"barcode","code":"4008400401621"}`,
    then track it with `"food":"off:4008400401621"`. **A branded product** by name:
    `{"type":"food","action":"product","query":"Haribo Goldbären"}`, then track the one they mean.
-10. **Their talk** ("my health talk may read my food"): `{"type":"food","action":"talk","talk":"health"}`.
+10. **Their talks** ("my health talk may read my food"): `{"type":"food","action":"talk","talk":"health"}`
+   adds that talk, and the talks that read it already keep reading it. Taking one away adds
+   `"remove":true`; `"instead":true` only when they say instead, and then that talk is the only one.
 
 Steps 4 (remember), 7, 8 and 10 change their tracker: pass
 `"expected":{"collections/<tracker.id>":"<tracker.hash>"}` from status. A reply that changed the tracker
