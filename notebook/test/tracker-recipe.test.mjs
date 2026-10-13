@@ -1,9 +1,31 @@
-import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import {createHash} from 'node:crypto';
+import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import {createHash} from 'node:crypto';import os from 'node:os';import path from 'node:path';
+import {installSkillTree} from '../core/packaged-skills.mjs';
 
 // One recipe owns "track" (D-321): the tracker recipe takes it, the journal
 // gives it up, and the coach's talks read the trackers for their area.
 const read=p=>fs.readFileSync(new URL(p,import.meta.url),'utf8').replaceAll('\r','');
 const digest=text=>createHash('sha256').update(text).digest('hex');
+
+test('shipped progress recipes remain eligible for later upgrades, while owner edits require review',t=>{
+ for(const name of ['coach','tracker']){
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-progress-recipe-upgrade-'));
+  t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+  const store={root,state:path.join(root,'.godspeed')},source=path.join(root,'incoming',name),target=path.join(root,'skills',name);
+  fs.mkdirSync(source,{recursive:true});fs.mkdirSync(target,{recursive:true});
+  const shipped=read('../recipes/'+name+'/SKILL.md'),next=shipped+'\nA fictional next packaged version.\n';
+  fs.writeFileSync(path.join(source,'SKILL.md'),next);
+  fs.writeFileSync(path.join(target,'SKILL.md'),shipped.replaceAll('\n','\r\n'));
+  const upgraded=installSkillTree(store,source,target);
+  assert.deepEqual(upgraded,{updated:1,conflicts:0},'a known stock recipe upgrades without a pre-existing ledger');
+  assert.equal(fs.readFileSync(path.join(target,'SKILL.md'),'utf8'),next);
+  assert.equal(fs.readFileSync(path.join(store.state,'skill-history',name,digest(shipped),'SKILL.md'),'utf8').replaceAll('\r',''),shipped,'the prior shipped text is retained');
+  const custom=next+'\nThe owner added a private preference.\n';fs.writeFileSync(path.join(target,'SKILL.md'),custom);
+  fs.writeFileSync(path.join(source,'SKILL.md'),next+'\nAnother fictional package change.\n');
+  const reviewed=installSkillTree(store,source,target);
+  assert.equal(reviewed.conflicts,1);assert.equal(reviewed.updated,0);
+  assert.equal(fs.readFileSync(path.join(target,'SKILL.md'),'utf8'),custom,'an owner edit is never overwritten');
+ }
+});
 
 test('the tracker recipe owns "track" and the journal no longer takes it',()=>{
   const tracker=read('../recipes/tracker/SKILL.md'),journal=read('../recipes/interstitial-journal/SKILL.md'),coach=read('../recipes/coach/SKILL.md');

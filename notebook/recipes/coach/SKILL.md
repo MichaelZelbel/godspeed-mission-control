@@ -94,12 +94,26 @@ or "yes no", or write a journal entry that clearly names an active habit.
 control has the tracker recipe, a message that starts with "track" may reach it first, and it then
 records the habit itself in this same file; either way the day is tracked once.
 
-- One habit: `godspeed-coach habit track "<their words>" --source <telegram | telegram-voice | desk | journal> --words "<verbatim>"`.
+When the notebook is connected, prefer its `personal_operation` for habit answers and corrections:
+read `{"type":"tracker-list"}`, then `{"type":"track","tracker":"<habit id>","answer":"done","words":"<their exact message>","expected":{"habits/<habit id>":"<hash>"}}`.
+Use no or skip only when they said so. This path returns verified progress for the same chat's
+readable calendar image on Telegram. Never make up totals or send a separate unsolicited report.
+For a requested progress picture use `{"type":"habit-progress","action":"show","tracker":"<habit id>"}`.
+For a requested calm display use action display with display calm; pause/resume take on YYYY-MM-DD;
+exempt takes inclusive from/to dates for holidays, illness or outages; schedule takes days and on.
+These changes use the habit hash and their exact words. Exemptions preserve continuity without
+adding completions or spending the two protections. Unknown answers are never factual no entries.
+Without notebook tools, `godspeed-coach habit progress "<habit>" --json` returns the same progress;
+`habit display "<habit>" --display calm`, `habit pause|resume "<habit>" --date YYYY-MM-DD`,
+`habit exempt "<habit>" --from YYYY-MM-DD --to YYYY-MM-DD --words "<reason>"`, and
+`habit schedule "<habit>" --days mon,wed,fri --date YYYY-MM-DD` keep dated history.
+
+- One habit: `godspeed-coach habit track "<their words>" --source <telegram | telegram-voice | desk | journal> --words "<verbatim>" --json`. Relay JSON.reply, whose progress numbers come from the habit file. Telegram attaches its readable calendar to this same reply.
   Add `--answer no` or `--answer skip` when they say so, `--date yesterday` for yesterday.
 - Taken back ("delete the last stretching", "undo that", "that was a mistake"):
-  `godspeed-coach habit untrack "<their words>"` removes that habit's newest tracked day
+  `godspeed-coach habit untrack "<their words>" --json` removes that habit's newest tracked day
   (`--date yesterday` for another day). Say what was taken back: "Taken back: stretching, today."
-- The evening check: `godspeed-coach habit answer <yes|no|skip ...> --source <...> --words "<verbatim>"`, one answer per habit in the order the block lists them, or one for all.
+- The evening check: `godspeed-coach habit answer <yes|no|skip ...> --source <...> --words "<verbatim>" --json`, one answer per habit in the order the block lists them, or one for all. Relay JSON.reply and let Telegram attach its calendars to this same reply.
 - Reply with a short sentence that makes sense on its own, in their language, saying in plain
   words what was tracked and for which day: "Tracked: stretching, done today.", "Tracked:
   stretching, not done today.", "Tracked: stretching, skipped yesterday." Never pass on the
