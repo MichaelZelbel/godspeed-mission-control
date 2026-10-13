@@ -17,7 +17,7 @@ import { PageLoader } from "@/components/LoadingStates";
 
 export function DashboardLayout() {
   const pathname=useLocation().pathname;
-  const isChat=pathname==="/dashboard/chat",isNotes=pathname.startsWith("/dashboard/notes"),isImport=pathname==="/dashboard/settings/import";
+  const isChat=pathname==="/dashboard/chat",isNotes=pathname.startsWith("/dashboard/notes"),isImport=pathname==="/dashboard/settings/import",isHabit=pathname.startsWith("/trackers/habits/");
 
   return (
     <SidebarProvider>
@@ -47,7 +47,7 @@ export function DashboardLayout() {
             </RouteErrorBoundary>
           </main>
         </div>
-        {!isChat&&!isNotes&&!isImport&&<GlobalAIChatFAB />}
+        {!isChat&&!isNotes&&!isImport&&!isHabit&&<GlobalAIChatFAB />}
         <CommandPalette />
       </div>
     </SidebarProvider>
