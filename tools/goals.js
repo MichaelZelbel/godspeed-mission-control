@@ -350,7 +350,25 @@ cmds.allow = (a) => {
   L.logLine(c, d, 'MAY-GIVEN', `${kind} (${mode}, ${perWeek} per week) ${q(words)}`);
   S.write(c);
   say(`${c.id}: ${kind} may go out ${mode === 'alone' ? 'when ready, reported after' : 'at its set time unless stopped'}, up to ${perWeek} a week`);
+  // A notice step goes out only after a morning message showed it (mc-work announce), so without a
+  // morning brief it never goes out, silently (final review I8, 2026-10-13).
+  if (mode === 'notice') {
+    const brief = morningBriefRoutine();
+    if (brief === false) say('note: no morning brief runs in this mission control, and a step like this goes out only after a morning message has shown it; switch the morning brief on, or these steps never go out');
+    else if (brief === null) say('note: a step like this goes out only after a morning message has shown it; if no morning brief runs here, switch it on, or these steps never go out');
+  }
 };
+// Is there a morning brief routine to show notice steps? The routines live in the assistant's
+// schedule (Hermes: <HERMES_HOME or ~/.hermes>/cron/jobs.json, where the notebook and the
+// morning-brief recipe put it). true or false when that file can be read, null when it cannot.
+function morningBriefRoutine() {
+  const home = process.env.HERMES_HOME || path.join(require('os').homedir(), '.hermes');
+  let data;
+  try { data = JSON.parse(fs.readFileSync(path.join(home, 'cron', 'jobs.json'), 'utf8')); } catch (e) { return null; }
+  const jobs = Array.isArray(data) ? data : (data && Array.isArray(data.jobs) ? data.jobs : []);
+  return jobs.some(j => j && typeof j === 'object' && j.enabled !== false
+    && (j.skill === 'morning-brief' || (Array.isArray(j.skills) && j.skills.includes('morning-brief')) || /morning[ -]brief/i.test(String(j.name || ''))));
+}
 cmds.may = (a) => {
   const c = S.read(a._[0] || die('usage: mc-goals may <id> [--json]')) || die('no such goal');
   // A strategy or project with none of its own moves under its outcome's (standingOf, above);

@@ -321,7 +321,9 @@ check "  going-out is then empty" "$(D16 12:00 going-out --json 2>&1)" "[]"
 OUT="$(D16 12:00 stop "$N4" --words "too late" 2>&1)"; check "a step that went out cannot be stopped" "$?" "1"
 contains "  and says so" "$OUT" "already went out"
 OUT="$(D16 12:00 stop --today --words "stop" 2>&1)"; check "stop --today with nothing waiting is no error" "$?" "0"
-contains "  and says nothing is waiting" "$OUT" "nothing is waiting to go out on 2026-09-16"
+contains "  and says nothing is waiting in the next 24 hours" "$OUT" "nothing is waiting to go out in the next 24 hours"
+OUT="$(D16 12:00 stop --today --date 2026-09-16 --words "stop" 2>&1)"
+contains "  with --date it names that day" "$OUT" "nothing is waiting to go out on 2026-09-16"
 OUT="$(hw stop "$N8" 2>&1)"; check "stop without his words is refused" "$?" "1"
 
 # A permission taken back stops what was queued under it from going out.
@@ -439,7 +441,8 @@ missing "  the step nobody was shown is not" "$OUT" "$E3"
 check "  it moved to the next day's 18:00 UTC" "$(sed -n 's/^GOES OUT: //p' "$TMP/work/$E3.md")" "2026-09-22T18:00"
 check "  saying so in its log" "$(grep -c '^- 2026-09-21 NOT SHOWN: goes out 2026-09-22T18:00 instead' "$TMP/work/$E3.md")" "1"
 check "  and it is still not marked shown" "$(grep -c '^ANNOUNCED:' "$TMP/work/$E3.md")" "0"
-missing "  it left the evening's list" "$(D21 18:02 going-out 2>&1)" "Unshown reply"
+missing "  it left that day's list" "$(D21 18:02 going-out --date 2026-09-21 2>&1)" "Unshown reply"
+contains "  in the evening the coming list shows it at its new time, with the date, still not shown" "$(D21 18:02 going-out 2>&1)" "Unshown reply (eve, 2026-09-22 18:00 UTC); not shown in a morning message yet"
 contains "the next morning it is in that day's list" "$(D22 05:15 going-out 2>&1)" "1. Unshown reply"
 D22 05:16 announce "$E3" >/dev/null 2>&1
 missing "  shown, it still waits for 18:00" "$(D22 17:59 next 2>&1)" "$E3"
@@ -455,6 +458,67 @@ contains "  names a closed one" "$OUT" "$N2: is cancelled, not marked"
 contains "  names one that goes out alone, with no GOES OUT" "$OUT" "$IDP: has no GOES OUT"
 contains "  and still marks the one it can" "$OUT" "$E1: shown"
 OUT="$(hw announce 2>&1)"; check "announce with no id is refused" "$?" "1"
+
+# --- notice steps outside Europe's clock (final review I8, 2026-10-13) ----------------------------
+# A morning message after 18:00 UTC (7 am from about UTC+8 eastward) listed the passed UTC day, so
+# the day's steps, filed for the next UTC day, were never shown and never went out. Without --date,
+# going-out lists the next 18:00 UTC slot's steps due within 24 hours, numbered the same all the
+# person's day; announce marks the UTC date; stop --today reaches 24 hours back and forward.
+cat > "$TMP/goals/far.md" <<'EOF'
+ID: far
+KIND: outcome
+STATUS: adopted
+TITLE: Far east
+
+MAY: far-replies | answer replies under my posts | 20 per week | notice | "answer them" 2026-09-20
+
+## Log
+- 2026-09-20 FILED adopted outcome, source: x
+EOF
+hw stop "$E4" --words "test cleanup" >/dev/null 2>&1   # never shown: it would roll into these days
+at() { local now="$1" day="$2"; shift 2; GODSPEED_TODAY="$day" GODSPEED_NOW="$now" hw "$@" 2>&1; }
+ff() { local now="$1" day="$2" w="$3" k="$4"; shift 4; at "$now" "$day" file --what "$w" --done-when "the reply is visible" --goal far --outward yes --may far-replies --check "test -f live.txt" --key "$k" --source t "$@"; }
+gn() { "$NODE" -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{console.log(JSON.parse(s).map(r=>r.n+":"+r.id).join(","))})'; }
+# UTC+8: the decision at 04:10 local is 20:10 UTC the day before; the morning message at 07:00
+# local is 23:00 UTC, still the day before by the UTC date.
+ff 2026-09-24T20:10Z 2026-09-24 "East reply" f1 >/dev/null
+F1="$(idof f1)"
+check "filed after 18:00 UTC, the step goes out at the next day's 18:00 UTC" "$(sed -n 's/^GOES OUT: //p' "$TMP/work/$F1.md")" "2026-09-25T18:00"
+OUT="$(at 2026-09-24T23:00Z 2026-09-24 going-out)"
+contains "at 23:00 UTC the morning message's list holds it" "$OUT" "1. East reply (far, 2026-09-25 18:00 UTC); not shown"
+check "  --json numbers it 1" "$(at 2026-09-24T23:00Z 2026-09-24 going-out --json | gn)" "1:$F1"
+# The routines set GODSPEED_TODAY to the person's own date, here already the 25th.
+OUT="$(at 2026-09-24T23:00Z 2026-09-25 announce "$F1")"; check "  it can be announced" "$?" "0"
+check "  ANNOUNCED is the UTC date the message ran on, not the person's date" "$(sed -n 's/^ANNOUNCED: //p' "$TMP/work/$F1.md")" "2026-09-24"
+ff 2026-09-25T01:00Z 2026-09-25 "East reply filed later" f2 >/dev/null
+F2="$(idof f2)"
+check "at noon local (04:00 UTC) the list numbers it the same, the later one after it" "$(at 2026-09-25T04:00Z 2026-09-25 going-out --json | gn)" "1:$F1,2:$F2"
+missing "  before its time it waits" "$(at 2026-09-25T17:59Z 2026-09-26 next)" "$F1"
+contains "  and at its time it goes out, because it was shown" "$(at 2026-09-25T18:01Z 2026-09-26 next)" "$F1"
+missing "  while the one nobody was shown does not" "$(at 2026-09-25T18:01Z 2026-09-26 next)" "$F2"
+hw stop "$F2" --words "test cleanup" >/dev/null 2>&1   # never shown: it would roll into later days
+# UTC+14: the morning message at 07:00 local is 17:00 UTC, and the person's date is a day ahead of
+# the UTC date of GOES OUT.
+ff 2026-09-26T09:00Z 2026-09-26 "Farthest reply" f3 >/dev/null
+F3="$(idof f3)"
+at 2026-09-26T17:00Z 2026-09-27 announce "$F3" >/dev/null
+contains "a step announced where the person's date is a day ahead still goes out at its time" "$(at 2026-09-26T18:01Z 2026-09-27 next)" "$F3"
+hw stop "$F3" --words "test cleanup" >/dev/null 2>&1
+# Europe, 06:00 UTC: a step due at 18:00 UTC yesterday that the runner has not taken yet is still
+# stopped by a bare stop, while the list shows only what is coming.
+ff 2026-09-27T05:00Z 2026-09-27 "Evening reply" f4 >/dev/null
+ff 2026-09-27T19:00Z 2026-09-27 "Reply for tomorrow" f5 >/dev/null
+F4="$(idof f4)"; F5="$(idof f5)"
+at 2026-09-27T05:10Z 2026-09-27 announce "$F4" >/dev/null
+check "(the step filed after 18:00 UTC goes out the next day)" "$(sed -n 's/^GOES OUT: //p' "$TMP/work/$F5.md")" "2026-09-28T18:00"
+OUT="$(at 2026-09-28T06:00Z 2026-09-28 going-out)"
+contains "at 06:00 UTC the morning list holds the step filed after 18:00 UTC" "$OUT" "1. Reply for tomorrow (far, 18:00 UTC)"
+missing "  and not yesterday's, which is past its time" "$OUT" "Evening reply"
+OUT="$(at 2026-09-28T06:00Z 2026-09-28 announce "$F5")"; check "  it can be announced" "$?" "0"
+OUT="$(at 2026-09-28T06:00Z 2026-09-28 stop --today --words "stop")"
+contains "a bare stop the next morning still stops yesterday's step the runner has not taken" "$OUT" "$F4: stopped"
+contains "  and today's" "$OUT" "$F5: stopped"
+check "  (both cancelled)" "$(st "$F4" "$F5")" "cancelled cancelled "
 
 # --- a strategy's steps go out under its outcome's MAY lines (final review I6, 2026-10-13) --------
 # A strategy or project with no MAY lines of its own uses those of the first outcome on its SERVES

@@ -167,6 +167,28 @@ function dayList(d) {
     .sort((x, y) => rank(x) - rank(y) || x.f['GOES OUT'].localeCompare(y.f['GOES OUT']) || x.id.localeCompare(y.id))
     .map((c, i) => ({ n: i + 1, c }));
 }
+// THE COMING STEPS, WHEREVER THE PERSON LIVES (2026-10-13, final review I8). going-out, announce
+// and stop --today used today's UTC date. Where the morning message comes after 18:00 UTC (7 am
+// from about UTC+8 eastward), the day's steps were already filed for the next UTC day, so the
+// message listed the passed day and the steps were never shown and never went out. And in Europe a
+// step due at 18:00 UTC that the runner takes the next morning could no longer be stopped then.
+// So, without --date:
+//   - the steps are those of the next 18:00 UTC slot: the day of the next 18:00 UTC still ahead,
+//     numbered as dayList numbers it, then the day after it, numbered on from there. That day
+//     changes only at 18:00 UTC, when its steps go out, so "stop 2" means the same step all the
+//     person's day, wherever they live;
+//   - going-out lists those not gone out whose GOES OUT is within the next 24 hours;
+//   - stop --today stops every step not gone out whose GOES OUT is within 24 hours of now, before
+//     or after, so a step past its time that the runner has not taken yet is still stopped;
+//   - announce marks the UTC date it ran on, the date GOES OUT is compared with (the routines set
+//     GODSPEED_TODAY to the person's own date, which in the far east is a day ahead).
+const DAY_MS = 24 * 3600 * 1000;
+const minuteFrom = (ms) => new Date(Date.parse(now()) + ms).toISOString().slice(0, 16);
+function slotDay() { const n = nowMinute(), d = n.slice(0, 10); return `${d}T18:00` > n ? d : L.addDays(d, 1); }
+function comingList() {
+  const slot = slotDay(), first = dayList(slot);
+  return first.concat(dayList(L.addDays(slot, 1)).map(r => ({ n: r.n + first.length, c: r.c })));
+}
 
 function nextId(d) {
   const n = S.all().filter(c => c.id.startsWith('W-' + d.replace(/-/g, ''))).length + 1;
@@ -416,12 +438,15 @@ cmds.stop = (a) => {
   const d = a.date || today();
   if (flag(a, 'today')) {
     moveUnshown(today());
-    const day = dayList(d).map(r => r.c);
+    // --date D: the steps of that UTC day. Without it: every step within 24 hours of now (above).
+    const from = minuteFrom(-DAY_MS), to = minuteFrom(DAY_MS);
+    const day = a.date ? dayList(a.date).map(r => r.c)
+      : S.all().filter(c => !goesOutBad(c) && c.f['GOES OUT'] && c.f['GOES OUT'] >= from && c.f['GOES OUT'] <= to);
     const targets = day.filter(c => UNSENT.includes(c.f.STATUS));
     const going = day.filter(c => c.f.STATUS === 'dispatched');
     for (const c of targets) stopOne(c, d, words);
     for (const c of going) say(`${c.id} is going out right now; it cannot be stopped, only undone`);
-    if (!targets.length && !going.length) say(`nothing is waiting to go out on ${d}`);
+    if (!targets.length && !going.length) say(a.date ? `nothing is waiting to go out on ${d}` : 'nothing is waiting to go out in the next 24 hours');
     return;
   }
   const c = S.read(a._[0] || die('usage: mc-work stop <id> --words "..." | stop --today --words "..."')) || die('no such work');
@@ -433,16 +458,21 @@ cmds.stop = (a) => {
 // went out or was stopped is not listed, and the others keep the number they had. A step not yet
 // shown in a morning message carries announced "" and is marked: it goes only once shown.
 cmds['going-out'] = (a) => {
-  const d = a.date || today();
   moveUnshown(today());
-  const rows = dayList(d).filter(r => ['planned', 'dispatched'].includes(r.c.f.STATUS));
+  // --date D: the steps of that UTC day. Without it: the coming steps (comingList, above) that go
+  // out within the next 24 hours.
+  const to = minuteFrom(DAY_MS);
+  const rows = (a.date ? dayList(a.date) : comingList().filter(r => r.c.f['GOES OUT'] <= to))
+    .filter(r => ['planned', 'dispatched'].includes(r.c.f.STATUS));
   if (flag(a, 'json')) {
     say(JSON.stringify(rows.map(({ n, c }) => ({ n, id: c.id, at: c.f['GOES OUT'], what: c.f.WHAT, goal: c.f.GOAL || '', link: c.f.LINK || '', status: c.f.STATUS, announced: c.f.ANNOUNCED || '' }))));
     return;
   }
-  if (!rows.length) { say(`nothing goes out on ${d}`); return; }
+  if (!rows.length) { say(a.date ? `nothing goes out on ${a.date}` : 'nothing goes out in the next 24 hours'); return; }
+  const utcToday = nowMinute().slice(0, 10);
   for (const { n, c } of rows) {
-    say(`${n}. ${c.f.WHAT} (${c.f.GOAL ? c.f.GOAL + ', ' : ''}${c.f['GOES OUT'].slice(11)} UTC)` + (c.f.STATUS === 'dispatched' ? ' going out now' : '')
+    const at = c.f['GOES OUT'], when = a.date || at.slice(0, 10) === utcToday ? at.slice(11) : `${at.slice(0, 10)} ${at.slice(11)}`;
+    say(`${n}. ${c.f.WHAT} (${c.f.GOAL ? c.f.GOAL + ', ' : ''}${when} UTC)` + (c.f.STATUS === 'dispatched' ? ' going out now' : '')
       + (unshown(c) ? '; not shown in a morning message yet, so it waits until one has shown it' : ''));
   }
 };
@@ -451,7 +481,8 @@ cmds['going-out'] = (a) => {
 cmds.announce = (a) => {
   const ids = a._;
   if (!ids.length) die('usage: mc-work announce <id> [<id>...] [--date D]: the steps the morning message showed');
-  const d = a.date || today();
+  // ANNOUNCED is compared with the UTC date of GOES OUT, so it is the UTC date it ran on (above).
+  const d = a.date || nowMinute().slice(0, 10);
   moveUnshown(today());
   let missed = 0;
   for (const id of ids) {
@@ -598,12 +629,16 @@ cmds.help = () => say(`mc-work: dispatched, attempted and verified are three dif
                                         (or a standing permission still on its goal card); never before GOES OUT
   announce <id> [<id>...] [--date D]    the morning message showed these steps: ANNOUNCED. A notice step goes out
                                         only once shown (on or before its day), because the person can stop only
-                                        what they saw; one never shown moves to the next day's 18:00 UTC (NOT SHOWN)
+                                        what they saw; one never shown moves to the next day's 18:00 UTC (NOT SHOWN).
+                                        ANNOUNCED is the UTC date it ran on, unless --date names one
   stop <id> --words "<their words>"     keeps one step back from going out (cancelled, STOPPED with the words)
-  stop --today --words "..." [--date D] every step whose GOES OUT is that day and has not gone out yet
-  going-out [--date D] [--json]         the steps that go out that day unless stopped, numbered (UTC times): the
-                                        shown ones first in time order, so "stop 2" always means the same one;
-                                        JSON carries announced (its date, or "" when not shown yet)
+  stop --today --words "..." [--date D] every step not gone out yet whose GOES OUT is within 24 hours of now,
+                                        before or after (with --date: every one of that UTC day)
+  going-out [--date D] [--json]         the steps that go out unless stopped, numbered (UTC times): those of the
+                                        next 18:00 UTC slot's day, then the day after, that go out within the next
+                                        24 hours (with --date: that UTC day). The shown ones first in time order,
+                                        so "stop 2" means the same one until that slot's 18:00 UTC, wherever the
+                                        person lives; JSON carries announced (its date, or "" when not shown yet)
   attempt <id> --runner <name> --ok --result "..." | --failed "why"   failed: retry in 1, 2, 4 days, never outward
   verify <id> [--evidence "..."]     runs CHECK; verified only on exit 0, or on evidence a person observed
   block <id> --needs ... | unblock <id> --why ... [--approved-by "..."] | cancel <id> --why ...

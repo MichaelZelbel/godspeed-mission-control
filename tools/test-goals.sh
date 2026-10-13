@@ -458,6 +458,24 @@ OUT="$(hg allow mm-aud --kind pages --what "replace a broken link on my own site
 hg allow mm-aud --kind pages --revoke --words "test cleanup" >/dev/null 2>&1
 OUT="$(hg check 2>&1)"; missing "a card with MAY lines is no PROBLEM for check" "$OUT" "PROBLEM mm-aud"
 
+# --- a notice step needs a morning message to show it (final review I8, 2026-10-13) -------------
+hg file --kind outcome --title "Warned" --id mm-warn --area work --status adopted --source x >/dev/null 2>&1
+mkdir -p "$TMP/h-none" "$TMP/h-round/cron" "$TMP/h-brief/cron" "$TMP/h-off/cron"
+printf '{"jobs":[{"id":"a1","name":"Daily round","skill":"next-action"}]}' > "$TMP/h-round/cron/jobs.json"
+printf '{"jobs":[{"id":"a2","name":"Morning brief","skills":["morning-brief"],"enabled":true}]}' > "$TMP/h-brief/cron/jobs.json"
+printf '[{"id":"a3","name":"Morning brief","skill":"morning-brief","enabled":false}]' > "$TMP/h-off/cron/jobs.json"
+warnallow() { HERMES_HOME="$TMP/$1" hg allow mm-warn --kind "$2" --what "answer comments under my videos" --per-week 3 --words "answer them" "${@:3}" 2>&1; }
+OUT="$(warnallow h-round w1)"
+contains "allow --mode notice with no morning brief routine warns, in one line" "$OUT" "note: no morning brief runs in this mission control"
+check "  (one line)" "$(printf '%s\n' "$OUT" | grep -c '^note:')" "1"
+contains "  a morning brief routine that is switched off counts as none" "$(warnallow h-off w2)" "note: no morning brief runs"
+missing "  with a morning brief routine there is no warning" "$(warnallow h-brief w3)" "note:"
+contains "  where the routines cannot be read, it says what a notice step needs" "$(warnallow h-none w4)" "note: a step like this goes out only after a morning message has shown it"
+OUT="$(HERMES_HOME="$TMP/h-round" hg allow mm-warn --kind w5 --what "fix typos on my own pages" --per-week 3 --mode alone --words "fix them" 2>&1)"
+contains "  an alone step needs no morning message" "$OUT" "may go out when ready"
+missing "  so no warning" "$OUT" "note:"
+check "  the permissions are written all the same" "$(grep -c '^MAY: w[1-5] ' "$TMP/goals/mm-warn.md")" "5"
+
 # --- goals the person pinned for a trial (final review I3, 2026-10-13) --------------------------
 # Three seats over six outcomes left three of four trial goals quiet on the trial's first day.
 # GODSPEED_ATTENTION_PIN names goals that are always active and ranked first; the seats grow to
