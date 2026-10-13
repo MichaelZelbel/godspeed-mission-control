@@ -71,21 +71,17 @@ export default function HabitTracker() {
       <div>
         <Link to="/collections" className="inline-flex min-h-11 items-center text-sm underline underline-offset-4">Back to your trackers</Link>
         <h1 className="mt-1 text-2xl font-bold font-display">{habit.name}</h1>
-        {habit.doneMeans && <p className="mt-2 text-base leading-6">Your small step: {habit.doneMeans}</p>}
-        {habit.daysText && <p className="mt-1 text-sm">Planned: {habit.daysText}</p>}
-        {!active && <p className="mt-2 text-sm">This habit is {habit.habit_status}. Your completed days stay with you.</p>}
       </div>
       {progress ? <>
-        <div className="flex flex-wrap items-center gap-3">
-          {active && today?.scheduled && today.status !== "completed" && <Button disabled={busy} onClick={() => run({ type: "track", on: progress.today, answer: "done" })}>Mark today done</Button>}
-          {today?.status === "completed" && <p className="font-medium">Today is done. A small step, kept.</p>}
-          {active && today && !today.scheduled && today.status !== "completed" && <p className="text-sm">Nothing planned for today. You can still record a completed day below.</p>}
+        <HabitProgress progress={progress} habitStatus={habit.habit_status}>
+          {active && today?.scheduled && today.status !== "completed" && today.status !== "paused" && <><p className="habit-tiny-action">{habit.doneMeans || habit.name}</p><Button disabled={busy} onClick={() => run({ type: "track", on: progress.today, answer: "done" })}>I did it</Button></>}
+          {today?.status === "completed" && <p>A small step, kept. {habit.doneMeans}</p>}
+          {active && today && (!today.scheduled || today.status === "paused") && today.status !== "completed" && <p>Nothing to complete today. You can still add a completed day below.</p>}
           {paused && <Button disabled={busy} onClick={() => run({ type: "habit-progress", action: "resume", on: progress.today })}>Resume this habit</Button>}
-        </div>
-        <HabitProgress progress={progress} />
+        </HabitProgress>
       </> : <p role="status">Progress could not be calculated. Your recorded days are below.</p>}
-      <section aria-labelledby="record-day-heading">
-        <h2 id="record-day-heading" className="font-semibold text-lg">Add or correct a day</h2>
+      <details className="border-t pt-2">
+        <summary className="habit-summary">Add or correct a day</summary>
         <p className="mt-1 text-sm leading-6">Already did it? Record it here. A late entry counts on the day you did it.</p>
         <form className="mt-3 grid gap-3 sm:grid-cols-2" onSubmit={(e) => { e.preventDefault(); run({ type: "track", on: day, answer, ...(note.trim() ? { note: note.trim() } : {}) }); }}>
           <label className="space-y-1 text-sm font-medium">Day<Input className="text-base" type="date" value={day} max={progress?.today} onChange={(e) => setDay(e.target.value)} required disabled={busy || !progress} /></label>
@@ -93,10 +89,12 @@ export default function HabitTracker() {
           <label className="space-y-1 text-sm font-medium sm:col-span-2">Note (optional)<Input className="text-base" value={note} onChange={e => setNote(e.target.value)} maxLength={1000} disabled={busy} /></label>
           <Button type="submit" className="sm:justify-self-start" disabled={busy || !progress}>Save this day</Button>
         </form>
-      </section>
+      </details>
       {progress && <details className="border-t pt-2">
         <summary className="habit-summary font-medium">Pauses and display</summary>
         <div className="space-y-6 pb-4 pt-3">
+          {habit.doneMeans && <p className="text-sm leading-6">Your small step: {habit.doneMeans}</p>}
+          {habit.daysText && <p className="text-sm">Planned: {habit.daysText}</p>}
           <div>
             <label className="space-y-2 text-sm font-medium">Progress display<select className={selectClass} value={progress.display} disabled={busy} onChange={e => run({ type: "habit-progress", action: "display", display: e.target.value })}><option value="standard">Streaks and milestones</option><option value="calm">Calm view: completed days only</option></select></label>
             <p className="mt-2 text-sm">Calm view hides streaks and milestones. Your record stays the same.</p>
@@ -104,7 +102,7 @@ export default function HabitTracker() {
           {(active || paused) && <div className="space-y-2">
             <h3 className="font-medium">Taking a break?</h3>
             <p className="text-sm leading-6">Pause for as long as you need. Illness, holidays and caring duties do not have to use freezes.</p>
-            <Button variant="outline" disabled={busy} onClick={() => run({ type: "habit-progress", action: paused ? "resume" : "pause", on: progress.today })}>{paused ? "Resume this habit" : "Pause from today"}</Button>
+            {active && <Button variant="outline" disabled={busy} onClick={() => run({ type: "habit-progress", action: "pause", on: progress.today })}>Pause from today</Button>}
           </div>}
           <form className="space-y-3" onSubmit={e => { e.preventDefault(); run({ type: "habit-progress", action: "exempt", from, to, note: reason.trim() }); }}>
             <div><h3 className="font-medium">Excuse a break, including a past one</h3><p className="mt-1 text-sm leading-6">These dates preserve your streak without adding completed days or using freezes.</p></div>

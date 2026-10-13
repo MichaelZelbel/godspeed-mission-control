@@ -24,7 +24,7 @@ export function DashboardLayout() {
       <div className="min-h-screen flex w-full">
         <DashboardSidebar />
         <div className="flex-1 min-w-0 flex flex-col">
-          <header className="h-14 flex items-center gap-4 border-b bg-background px-4">
+          <header className="h-14 flex items-center gap-2 sm:gap-4 border-b bg-background px-4">
             <SidebarTrigger />
             <DashboardSearch />
             <GlobalCreateButton />
