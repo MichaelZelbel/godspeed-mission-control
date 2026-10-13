@@ -51,8 +51,10 @@ jobs:
           node-version: '22.19.0'
       - name: Forgiving habit progress and Telegram calendars
         run: |
-          node --test notebook/test/habit-trackers.test.mjs notebook/test/habit-progress-image.test.mjs notebook/test/telegram-progress.test.mjs notebook/test/tracker-recipe.test.mjs third-party/addons/godspeed-coach/test/progress.test.mjs third-party/addons/godspeed-coach/test/cli.test.mjs
+          node --test notebook/test/habit-buttons.test.mjs notebook/test/habit-trackers.test.mjs notebook/test/habit-progress-image.test.mjs notebook/test/telegram-progress.test.mjs notebook/test/tracker-recipe.test.mjs third-party/addons/godspeed-coach/test/progress.test.mjs third-party/addons/godspeed-coach/test/cli.test.mjs
           python3 notebook/test/habit-progress-plugin.test.py
+          python3 notebook/test/habit-progress-telegram.test.py
+          python3 notebook/test/habit-progress-telegram-native.test.py
       - name: Original folder and integrated core checks
         run: node --test notebook/test/starter-workspace.test.mjs notebook/test/assistant-starter-wiring.test.mjs notebook/test/computer-wiring-on-existing-server.test.mjs notebook/test/windows-command-files.test.mjs notebook/test/final-core-contracts.test.mjs notebook/test/telegram-replies.test.mjs notebook/test/native-runtime.test.mjs
       - name: Installers and setup, without Docker

@@ -26,7 +26,12 @@ class ProgressHooks(unittest.TestCase):
         (self.root / "progress-renderer.txt").write_text("renderer.mjs", encoding="utf-8")
         self.habit = {"id": "habit-example", "name": "Reading", "progress": {"version": 1}}
         self.identity = {"session_id": "example-session", "turn_id": "example-turn"}
+        self.route_patch = patch.object(plugin._progress_telegram, "route", return_value={
+            "ownerId": "31415", "userId": "31415", "chatId": "31415", "chatType": "private"})
+        self.route_patch.start()
+        self.addCleanup(self.route_patch.stop)
         plugin._progress_pending.clear()
+        plugin._progress_telegram.clients.clear()
         plugin._output_bus.append = plugin.on_progress_reply
         if hasattr(plugin._output_bus, "voice_transform"):
             del plugin._output_bus.voice_transform
@@ -106,6 +111,30 @@ class ProgressHooks(unittest.TestCase):
         cleanup.pop()()
         self.assertFalse(hasattr(plugin._output_bus, "append"))
         self.assertIsNone(self.reply())
+
+    def test_native_delivery_composes_voice_once_without_media_reupload(self):
+        route = {"chatId": "31415", "userId": "31415", "ownerId": "31415", "chatType": "private"}
+        plugin._progress_telegram.clients["synthetic"] = object()
+        plugin._output_bus.voice_transform = lambda **kwargs: plugin.on_progress_reply(**dict(kwargs, response_text="Repaired text."))
+        with patch.object(plugin._progress_telegram, "route", return_value=route), \
+             patch.object(plugin._progress_telegram, "deliver", return_value=True) as deliver:
+            self.observe()
+            self.assertEqual(self.reply(), "Repaired text.")
+            self.assertIsNone(self.reply())
+            deliver.assert_called_once_with("habit-example", route, "example-session:example-turn", "en")
+
+    def test_native_invalid_route_suppresses_private_photo(self):
+        plugin._progress_telegram.clients["synthetic"] = object()
+        with patch.object(plugin._progress_telegram, "route", return_value=None), \
+             patch.object(plugin._progress_telegram, "deliver") as deliver:
+            self.observe()
+            self.assertEqual(self.reply(), "Recorded. 120 days altogether.")
+            deliver.assert_not_called()
+
+    def test_no_native_client_invalid_route_never_falls_back_to_private_media(self):
+        with patch.object(plugin._progress_telegram, "route", return_value=None):
+            self.observe()
+            self.assertEqual(self.reply(), "Recorded. 120 days altogether.")
 
 
 if __name__ == "__main__":

@@ -12,11 +12,23 @@ import time
 import sys
 import types
 import re
+import importlib.util
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 _progress_lock = threading.Lock()
 _progress_pending = {}
 _output_bus = sys.modules.setdefault("godspeed_progress_output_v1", types.ModuleType("godspeed_progress_output_v1"))
+
+
+def _renderer():
+    with open(os.path.join(HERE, "progress-renderer.txt"), encoding="utf-8") as f:
+        return f.read().strip()
+
+
+_telegram_spec = importlib.util.spec_from_file_location("godspeed_coach_telegram_progress", os.path.join(HERE, "telegram_progress.py"))
+_telegram_module = importlib.util.module_from_spec(_telegram_spec)
+_telegram_spec.loader.exec_module(_telegram_module)
+_progress_telegram = _telegram_module.ProgressTelegram(lambda: _mission_control(), _renderer)
 
 
 def _progress_values(result):
@@ -84,8 +96,11 @@ def on_progress_tool(**kwargs):
                         _progress_pending.pop(old, None)
                 while len(_progress_pending) > 200:
                     _progress_pending.pop(next(iter(_progress_pending)))
-                entry = _progress_pending.setdefault(key, {"at": now, "paths": {}})
+                entry = _progress_pending.setdefault(key, {"at": now, "paths": {}, "habits": {},
+                                                           "route": _progress_telegram.route(key[0]),
+                                                           "locale": args.get("language") or os.environ.get("GODSPEED_PROGRESS_LOCALE") or "en"})
                 entry["paths"][habit.get("id") or habit.get("name")] = file
+                entry["habits"][habit.get("id") or habit.get("name")] = habit
         return None
     except Exception:
         # The operation already succeeded. A picture failure must keep the ordinary text reply.
@@ -101,6 +116,13 @@ def on_progress_reply(**kwargs):
     response = str(kwargs.get("response_text") or "")
     if response.strip() in ("[SILENT]", "[NO_REPLY]", "NO_REPLY"):
         return None
+    if not entry.get("route"):
+        return response
+    if _progress_telegram.clients:
+        # A registered native client makes routing mandatory. Never show private habit data in a group.
+        for habit in entry.get("habits", {}).values():
+            _progress_telegram.deliver(habit["id"], entry["route"], ":".join(key), entry.get("locale", "en"))
+        return response
     paths = list(entry["paths"].values())
     # A repeated finalizer call cannot append twice, and the gateway deduplicates existing tags.
     tags = ["MEDIA:" + file for file in paths if file not in response]
@@ -163,10 +185,13 @@ def register(ctx):
     ctx.register_hook("post_tool_call", on_progress_tool)
     _output_bus.append = on_progress_reply
     ctx.register_hook("transform_llm_output", on_progress_transform)
+    if callable(getattr(ctx, "register_telegram_handler", None)):
+        ctx.register_telegram_handler(_progress_telegram.factory)
     if callable(getattr(ctx, "on_unload", None)):
         def detach_progress():
             if getattr(_output_bus, "append", None) is on_progress_reply:
                 del _output_bus.append
             with _progress_lock:
                 _progress_pending.clear()
+            _progress_telegram.close()
         ctx.on_unload(detach_progress)

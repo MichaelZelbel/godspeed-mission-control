@@ -74,7 +74,7 @@ export function assertHabitProgressRequest(store,input,{now=clockNow(),zone=stor
 // person's words with the day: the chat's message, or `words` over MCP. An assistant that tracks a
 // habit without them is refused (until 12 October 2026 the bot's "track walk to work" wrote an
 // empty quote); the owner's own clicks on the shelf need none.
-export function habitOperation(store,input,{now,zone,today,assistant=false}){
+export function habitOperation(store,input,{now,zone,today,assistant=false,evidence=null}){
  const found=findHabits(store,input.tracker);
  if(found.length>1)throw Error('Which one: '+found.map(h=>h.title).sort().join(' or ')+'?');
  const h=found[0];if(!h)throw Error('No habit called '+input.tracker);
@@ -90,7 +90,10 @@ export function habitOperation(store,input,{now,zone,today,assistant=false}){
   if(assistant&&!words)throw Error("Pass the person's own message as words");
   const action=input.action;let updated;
   if(action==='display') {if(!['standard','calm'].includes(input.display))throw Error('Choose standard or calm display');rememberFile(store,h.file);updated=setHabitDisplay(h,input.display);}
-  else if(action==='pause'||action==='resume') {const on=assertDay(input.on||today);if(on>today)throw Error('Use a dated exemption for a future holiday');rememberFile(store,h.file);updated=setStatus(h,action==='pause'?'paused':'active',on);}
+  else if(action==='pause'||action==='resume') {const on=assertDay(input.on||today);if(on>today)throw Error('Use a dated exemption for a future holiday');rememberFile(store,h.file);updated=setStatus(h,action==='pause'?'paused':'active',on);
+   // The native button service supplies this trusted context directly, never as model input.
+   if(evidence&&/^telegram-button:[a-f0-9]{32}$/.test(evidence.source))fs.appendFileSync(h.file,'\n<!-- '+JSON.stringify({source:evidence.source,action,on,evidence:'Telegram button tap'})+' -->\n');
+  }
   else if(action==='schedule') {const on=assertDay(input.on||today);if(on>today)throw Error('A schedule change starts today or on a past date');rememberFile(store,h.file);updated=setHabitSchedule(h,input.days,on,zone);}
   else if(action==='exempt') {const from=assertDay(input.from),to=assertDay(input.to||from);if(to<from)throw Error('The last day must come after the first day');rememberFile(store,h.file);updated=exemptHabitDays(h,from,to,words);}
   else throw Error('Choose display, pause, resume, schedule or exempt');
