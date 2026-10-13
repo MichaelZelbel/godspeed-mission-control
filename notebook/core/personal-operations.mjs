@@ -40,7 +40,7 @@ tracker-hold {name,unit?,cadence?:daily|any,fields?:[{label,type:number|text|boo
 tracker-create {proposal_id?,name?,unit?,cadence?,fields?,talk?}: the user says yes to a supplied pending tracker question (pass its proposal_id; carry any change he asked for, such as another name or unit), or explicitly asks to set up a tracker with its columns.
 track {tracker,value?,data?,note?,on?,at?,new_name?}: the user tracks something a supplied tracker records. tracker is its id; a tracker with several columns takes data by their keys. When he used a new word for an existing tracker, pass it as new_name. Another day: on is his own day words ("Friday", "yesterday") or YYYY-MM-DD; a weekday is the most recent one, worked out by the operation.
 tracker-correct {tracker,entry_id?,value?,data?,remove?:boolean}: the user corrects or removes an entry ("that was 91, not 92", "delete the last belly"). Without entry_id it is his most recent entry in that tracker.
-tracker-talk {tracker,talk,remove?:boolean,instead?:boolean}: the user says a coaching talk may look at a supplied tracker ("The health talk may also look at my sleep tracker"), or no longer needs it (remove:true, "The health talk no longer needs my sleep tracker"). talk is the coaching area, such as health. A tracker has one talk: instead:true only when he says it should move from another talk.
+tracker-talk {tracker,talk,remove?:boolean,instead?:boolean}: the user says a coaching talk may look at a supplied tracker ("The health talk may also look at my sleep tracker"), or no longer needs it (remove:true, "The health talk no longer needs my sleep tracker"). talk is the coaching area, such as health. Any number of talks may look at a tracker: adding one never asks and the others keep looking at it; instead:true only when his own words say this talk should look at it instead of the others.
 habit-progress {tracker,action:display|pause|resume|exempt|schedule,display?:standard|calm,on?:YYYY-MM-DD,from?:YYYY-MM-DD,to?:YYYY-MM-DD,days?:daily or mon,wed,fri,words?}: only for supplied habit trackers. Calm hides streak pressure. Pause/resume records dated status. Exempt excuses an inclusive date range for holiday, illness or outages without spending protection. Schedule records the effective date. Never infer that an unanswered day means not done.
 Never invent a tracker; never create one without his yes. Relay the operation's reply as the answer.
 A message that starts with "track" goes, in this order: the name of a supplied habit tracker (specialist habit) is track {tracker:<its id>,answer?:done|no|skip}; a headache, a pill or a pain level is headache; the period, the cycle or a cycle symptom ("track period", "track Periode", "track cramps") is cycle; food, a meal or something she ate or drank ("track food, ...", "track lunch, ...", "track usual breakfast") is food; a supplied tracker's name or other name is track; only a name nothing supplied has is tracker-hold.
@@ -271,6 +271,8 @@ export function personalOperation(domains,input){
 // What a cycle operation writes must be what she said (D-321 step 4), as a headache's must: a flow,
 // a pain, a place and a symptom in her own words; "over", the heads-up on or off, a talk, a reason
 // to leave a cycle out, and a deletion said in words; a yes only to a deletion question still open.
+// A talk that no longer needs a tracker, in their words ("The health talk no longer needs my sleep tracker").
+const TALK_AWAY=/(?<!\p{L})(?:no longer|not any ?more|stop|stops|don.t|do not|doesn.t|does not|never|remove|take away|nicht mehr|keine?n?|nie|aufhören|entfern\p{L}*)(?!\p{L})/iu;
 const PAIN_WORDS=[/(?<!\p{L})(?:zero|null|none|kein)(?!\p{L})/iu,/(?<!\p{L})(?:one|eins|ein)(?!\p{L})/iu,/(?<!\p{L})(?:two|zwei)(?!\p{L})/iu,/(?<!\p{L})(?:three|drei)(?!\p{L})/iu];
 function cycleChecks(domains,message,op){
  const lower=message.toLocaleLowerCase(),has=words=>words.some(w=>lower.includes(w)),given=v=>v!==undefined&&v!==null&&v!==''&&!(Array.isArray(v)&&!v.length),action=op.action;
@@ -288,6 +290,7 @@ function cycleChecks(domains,message,op){
   if(!/heads.?up|tell me|let me know|remind|warn|before|vorher|bescheid|sag mir|erinner|vorwarn/iu.test(message)||typeof op.enabled!=='boolean'||op.enabled===off)throw Error('Say whether to switch the heads-up on or off');
  }
  if(action==='talk'&&!/(?<!\p{L})(?:talk|gespräch|coach)/iu.test(message))throw Error('Say which talk may read your cycle');
+ if(action==='talk'&&op.remove===true&&!TALK_AWAY.test(message))throw Error('Say that the talk no longer needs your cycle tracker');
  if(action==='leave-out'){
   const said={outlier:/(?<!\p{L})(?:yes|yeah|yep|sure|ok(?:ay)?|ja|jo|klar|leave|out|skip|ignore|weglassen|weg|raus|nicht zählen|don.t count|not count)(?!\p{L})/iu,pregnancy:/pregnan|schwanger/iu,breastfeeding:/breastfeed|nursing|stillen|stille/iu,contraception:/(?<!\p{L})(?:pill|pille|contracept\p{L}*|birth control|verhüt\p{L}*|hormon\p{L}*|spirale|iud|ring|implant\p{L}*|patch|pflaster)(?!\p{L})/iu}[op.why||'outlier'];
   if(!said||!said.test(message))throw Error('Say why that cycle should be left out');
@@ -347,6 +350,7 @@ function foodChecks(domains,message,op){
   if(!about||op.numbers===off)throw Error('Say whether to show the calories or not');
  }
  if(action==='talk'&&!/(?<!\p{L})(?:talk|gespräch|coach)/iu.test(message))throw Error('Say which talk may read your food tracker');
+ if(action==='talk'&&op.remove===true&&!TALK_AWAY.test(message))throw Error('Say that the talk no longer needs your food tracker');
 }
 export function validateConversationOperations(domains,input,operations){
  if(!Array.isArray(operations)||operations.length>10)throw Error('Invalid conversation operations');
@@ -474,7 +478,7 @@ export function validateConversationOperations(domains,input,operations){
   // Which talk looks at a tracker, the way round they said it: "may also look at" gives it to the
   // talk, "no longer needs" takes it away.
   if(operation.type==='tracker-talk'){
-   const away=/(?<!\p{L})(?:no longer|not any ?more|stop|stops|don.t|do not|doesn.t|does not|never|remove|take away|nicht mehr|keine?n?|nie|aufhören|entfern\p{L}*)(?!\p{L})/iu.test(message);
+   const away=TALK_AWAY.test(message);
    if((operation.remove===true)!==away)throw Error(operation.remove===true?'Say that the talk no longer needs that tracker':'Say that the talk may look at that tracker');
   }
   if(operation.type==='tracker-create'&&operation.proposal_id&&proposalState(domains.store,domains.store.get('tracker_proposals',operation.proposal_id),clockNow())!=='pending')throw Error('That question has expired. Say it again and I will ask once more.');

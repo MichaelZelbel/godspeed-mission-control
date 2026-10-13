@@ -3,7 +3,7 @@
 // table in food-table.mjs, packaged food in food-products.mjs; this file reads and writes. Nothing
 // here sends anything to anyone, and no job runs: the weekly adaptation is worked out when read.
 import path from 'node:path';
-import {trackers,entries,proposalState,dayOf,whenFor,norm,HOLD_MS,entryOn,talkExists,existingTalk} from './trackers.mjs';
+import {trackers,entries,proposalState,dayOf,whenFor,norm,HOLD_MS,entryOn,talkExists,existingTalk,talksOf,cardWithTalks,assertInstead,talkChange} from './trackers.mjs';
 import {now as clockNow,localParts} from '../../third-party/addons/godspeed-coach/lib/clock.mjs';
 import {readTable} from '../../third-party/addons/godspeed-coach/lib/auto.mjs';
 import {loadSettings as coachSettings} from '../../third-party/addons/godspeed-coach/lib/settings.mjs';
@@ -66,8 +66,9 @@ export function foodOperation(domains,raw){
  const c=foodTracker(store),card=foodCard(c?.tracker),l=lang(input.language||c?.tracker.language),lookup=foodLookup(store);
  const rows=()=>c?entries(store,c):[];
  const none=l==='de'?'Du hast noch keinen Ernährungs-Tracker. Sag "track" und was du gegessen hast, dann frage ich, ob ich einen anlegen soll.':'You have no food tracker yet. Say "track" and what you ate, and I will ask whether to start one.';
- // Returns the tracker as saved, with its new hash, so a caller can make its next change with it.
- const setCard=(food={},extra={})=>{query.execute({table:'collections',operation:'update',values:{tracker:{...c.tracker,...extra,food:{...(c.tracker.food||{}),...food}}},filters:[['eq','id',c.id]],expected:expectedOf(input,'collections',c.id)});return store.get('collections',c.id);};
+ // Returns the tracker as saved, with its new hash, so a caller can make its next change with it. Every
+ // write stores the card's talks as a list (trackers.mjs cardWithTalks), an older card's one talk included.
+ const setCard=(food={},extra={})=>{query.execute({table:'collections',operation:'update',values:{tracker:cardWithTalks({...c.tracker,...extra,food:{...(c.tracker.food||{}),...food}})},filters:[['eq','id',c.id]],expected:expectedOf(input,'collections',c.id)});return store.get('collections',c.id);};
  const weights=()=>weightsOf(store,zone);
  const target=all=>card.target?currentTarget(card,all,weights(),today):null;
  const leftFor=(all,day)=>{if(day!==today||!card.numbers)return null;const t=target(all);if(!t)return null;const done=totalsOf(all.filter(r=>String(r.data?.when).slice(0,10)===today));return {kcal:t.kcal-done.kcal,protein_g:t.protein_g-done.protein_g};};
@@ -96,7 +97,7 @@ export function foodOperation(domains,raw){
   const table=!!foodTable(stateOf(store)),weight=latestWeight(weights(),today);
   if(!c)return {tracker:null,proposals,table,weight};
   const all=rows(),t=target(all),todays=all.filter(r=>String(r.data?.when).slice(0,10)===today),brief=r=>({id:r.id,hash:r._hash,when:r.data?.when,meal:r.data?.meal,item:r.data?.item,food:r.data?.food,grams:r.data?.grams,count:r.data?.count,unit:r.data?.unit,assumed:r.data?.assumed===true});
-  return {tracker:{id:c.id,hash:c._hash,name:c.name,language:c.tracker.language||'en',talk:c.tracker.talk||null,numbers:card.numbers,eating_disorder:card.eating_disorder,pregnant:card.pregnant,breastfeeding:card.breastfeeding},
+  return {tracker:{id:c.id,hash:c._hash,name:c.name,language:c.tracker.language||'en',talks:talksOf(c.tracker),numbers:card.numbers,eating_disorder:card.eating_disorder,pregnant:card.pregnant,breastfeeding:card.breastfeeding},
    target:t?{kcal:t.kcal,protein_g:t.protein_g,fat_g:t.fat_g,carbs_g:t.carbs_g,set_on:card.target.set_on,change:t.changes.at(-1)?adaptLine(l,t.changes.at(-1)):null}:null,profile:card.profile,
    today:{rows:todays.map(brief),totals:totalsOf(todays)},last_meal:lastMeal(all).map(brief),
    presets:Object.entries(card.presets).map(([name,p])=>({name,items:p.items.map(i=>({item:i.item,grams:i.grams}))})),
@@ -121,7 +122,7 @@ export function foodOperation(domains,raw){
    // unclear amount (the base's hold). Nothing is created.
    const {unclear}=items.length?resolveItems(items,{lookup,portionOf:()=>null}):{unclear:[]};
    const replaces=store.list('tracker_proposals').filter(o=>o.specialist==='food'&&proposalState(store,o,now)==='pending').map(o=>o.id);
-   const p=store.save('tracker_proposals',{name:l==='de'?'Essen':'Food',cadence:'any',field_schema:foodSchema(),talk:existingTalk(store.root,'health'),specialist:'food',language:l,meal:items.length?{when,meal:mealFor,items}:null,unclear,replaces,created_at:now.toISOString()});
+   const p=store.save('tracker_proposals',{name:l==='de'?'Essen':'Food',cadence:'any',field_schema:foodSchema(),talks:[existingTalk(store.root,'health')].filter(Boolean),specialist:'food',language:l,meal:items.length?{when,meal:mealFor,items}:null,unclear,replaces,created_at:now.toISOString()});
    return {proposal_id:p.id,language:l,reply:setupQuestion(l,{questions:questionText(l,unclear),kept:items.length>0})};
   }
   if(!items.length)throw Error(l==='de'?'Sag, was du gegessen hast.':'Say what you ate.');
@@ -200,7 +201,7 @@ export function foodOperation(domains,raw){
   // Her weight from her health data when she did not say one (the design: "taken from her health data when present").
   if(health&&profile.weight_from!=='said'){profile.weight_kg=health.kg;profile.weight_from='health';}
   const state={...card,...flags},t=targetFor({...profile,pregnant:state.pregnant,breastfeeding:state.breastfeeding,eating_disorder:state.eating_disorder},today);
-  if(t.none){const updated=setCard({profile,...flags,target:null,...(t.none==='eating_disorder'?{numbers:false}:{})},t.none==='eating_disorder'?{talk:null}:{});return {language:l,target:null,why:t.none,tracker_hash:updated._hash,reply:noTargetReply(l,t.none)};}
+  if(t.none){const updated=setCard({profile,...flags,target:null,...(t.none==='eating_disorder'?{numbers:false}:{})},t.none==='eating_disorder'?{talks:[]}:{});return {language:l,target:null,why:t.none,tracker_hash:updated._hash,reply:noTargetReply(l,t.none)};}
   if(t.missing){const updated=setCard({profile,...flags});return {language:l,target:null,missing:t.missing,tracker_hash:updated._hash,reply:targetQuestion(l,{missing:t.missing,weight:t.missing.includes('weight_kg')?null:profile.weight_from==='health'?{kg:profile.weight_kg}:null})};}
   const updated=setCard({profile,...flags,target:{set_on:today,kcal:t.kcal,protein_g:t.protein_g,fat_g:t.fat_g,carbs_g:t.carbs_g,formula_kcal:t.formula_kcal,floor:t.floor}});
   return {language:l,target:{kcal:t.kcal,protein_g:t.protein_g,fat_g:t.fat_g,carbs_g:t.carbs_g},tracker_hash:updated._hash,reply:targetReply(l,t,{...profile,age:Math.round(profile.age)})};
@@ -208,7 +209,7 @@ export function foodOperation(domains,raw){
  if(action==='settings'){
   const change={};for(const k of ['numbers','eating_disorder','pregnant','breastfeeding'])if(typeof input[k]==='boolean')change[k]=input[k];
   if(!Object.keys(change).length)throw Error('Say what to change: the numbers in replies, or whether you are pregnant, breastfeeding or have or had an eating disorder');
-  if(change.eating_disorder===true){const updated=setCard({...change,numbers:false,target:null},{talk:null});return {language:l,tracker_hash:updated._hash,reply:edReply(l)};}
+  if(change.eating_disorder===true){const updated=setCard({...change,numbers:false,target:null},{talks:[]});return {language:l,tracker_hash:updated._hash,reply:edReply(l)};}
   if((change.pregnant||change.breastfeeding)){const updated=setCard({...change,target:null});return {language:l,tracker_hash:updated._hash,reply:noTargetReply(l,'pregnant')};}
   const updated=setCard(change);
   const reply=change.numbers===false?(l==='de'?'Erledigt: keine Kalorien und andere Zahlen mehr in meinen Antworten zum Essen. Frag "wie viele Kalorien heute?", wenn du die Summen willst.':'Done: no more calories or other numbers in my food replies. Ask "how many calories today?" when you want the totals.')
@@ -217,11 +218,13 @@ export function foodOperation(domains,raw){
   return {language:l,tracker_hash:updated._hash,reply};
  }
  if(action==='talk'){
-  const talk=talkOf(input.talk);
-  // Only a talk that exists can read it; nothing is changed for one that does not (trackers.mjs talkExists).
-  if(talk&&!talkExists(store.root,talk))return {language:l,talk:null,changed:false,reply:l==='de'?'Es gibt noch kein Gespräch "'+talk+'". Sag, wann es stattfinden soll, dann kann es ab da deinen Ernährungs-Tracker lesen.':'There is no '+talk.replaceAll('-',' ')+' talk yet. Say when it should happen, and from then on it can read your food tracker.'};
-  const updated=setCard({},{talk});
-  return {language:l,talk,tracker_hash:updated._hash,reply:talk?(l==='de'?'Erledigt: Dein Gespräch "'+talk+'" darf jetzt deinen Ernährungs-Tracker lesen.':'Done: your '+talk.replaceAll('-',' ')+' talk may now read your food tracker.'):(l==='de'?'Erledigt: Kein Gespräch liest deinen Ernährungs-Tracker.':'Done: no talk reads your food tracker.')};
+  // Any number of talks may read it, as any tracker (trackers.mjs talksOf): a talk is added, `remove`
+  // takes away that one, and only their own "instead" makes it the one talk. No talk at all: none reads
+  // it. Only a talk that exists is added; nothing is changed for one that does not (talkExists).
+  assertInstead(input,{assistant:domains.assistant===true});
+  const r=talkChange(l,{en:'food tracker',de:'Ernährungs-Tracker'},talksOf(c.tracker),talkOf(input.talk),{remove:input.remove===true,instead:input.instead===true,exists:t=>talkExists(store.root,t)});
+  const updated=r.changed?setCard({},{talks:r.talks}):c;
+  return {language:l,talks:r.talks,changed:r.changed,tracker_hash:updated._hash,reply:r.reply};
  }
  throw Error('Unsupported food action: '+action);
 }
@@ -232,7 +235,10 @@ export function foodCreate(domains,p,input={}){
  const {store,query}=domains,now=clockNow(),zone=tz(store),today=dayOf(now,zone),l=lang(input.language||p.language);
  if(foodTracker(store))throw Error(l==='de'?'Du hast schon einen Ernährungs-Tracker.':'You already have a food tracker.');
  const ed=input.eating_disorder===true,name=p.name||(l==='de'?'Essen':'Food');
- const collection=query.execute({table:'collections',operation:'insert',values:{name,icon:'🍽️',description:l==='de'?'Ernährungs-Tracker':'Food tracker',visibility:'personal',field_schema:foodSchema(),tracker:{names:[...new Set([name,...NAMES])],cadence:'any',talk:ed?null:existingTalk(store.root,p.talk===undefined?'health':p.talk),specialist:'food',language:l,proposal_id:p.id,food:{numbers:!ed,eating_disorder:ed}}}}).data[0];
+ // The talk its question named (talksOf reads an older question's `talk`); a question kept before the
+ // talk was saved with it goes to the health talk, as then.
+ const asked=p.talks!==undefined||p.talk!==undefined?talksOf(p):['health'];
+ const collection=query.execute({table:'collections',operation:'insert',values:{name,icon:'🍽️',description:l==='de'?'Ernährungs-Tracker':'Food tracker',visibility:'personal',field_schema:foodSchema(),tracker:{names:[...new Set([name,...NAMES])],cadence:'any',talks:ed?[]:asked.filter(t=>talkExists(store.root,t)),specialist:'food',language:l,proposal_id:p.id,food:{numbers:!ed,eating_disorder:ed}}}}).data[0];
  const tail=ed?' '+edReply(l):targetHint(l);
  if(!p.meal?.items?.length)return {collection_id:collection.id,language:l,reply:ed?edReply(l):readyReply(l)};
  const unclear=p.unclear||[],answers=[].concat(input.answers??(input.grams!==undefined?[{grams:input.grams}]:[]));

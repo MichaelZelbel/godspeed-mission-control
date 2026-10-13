@@ -2,7 +2,7 @@
 // MCP and the Telegram bot, on the shared tracker base. The rules and every reply are in cycle.mjs;
 // this file reads and writes. Nothing here sends anything to anyone: the heads-up is a line the
 // person's own morning brief asks for (`brief`), and only when she switched it on.
-import {trackers,entries,proposalState,dayOf,whenFor,toNumber,entryOn,talkExists} from './trackers.mjs';
+import {trackers,entries,proposalState,dayOf,whenFor,toNumber,entryOn,talkExists,talksOf,cardWithTalks,assertInstead,talkChange} from './trackers.mjs';
 import {now as clockNow,daysBetween} from '../../third-party/addons/godspeed-coach/lib/clock.mjs';
 import {FLOWS,PERIOD_FLOWS,PAIN_WHERE,SYMPTOMS,cycleSchema,cycleCard,cycleState,periods,forecast,lang,setupQuestion,createdReply,dayWords,dayReply,overReply,forecastReply,headsUpLine,declineReply,whyWords,dateWords,days,FIXED_LINE} from './cycle.mjs';
 
@@ -43,7 +43,7 @@ export function cycleCreate(domains,p,input={}){
  const {store,query}=domains,l=lang(input.language||p.language);
  if(cycleTracker(store))throw Error(l==='de'?'Du hast schon einen Zyklus-Tracker.':'You already have a cycle tracker.');
  const name=p.name||(l==='de'?'Zyklus':'Cycle');
- const collection=query.execute({table:'collections',operation:'insert',values:{name,icon:'🌙',description:l==='de'?'Zyklus-Tracker':'Cycle tracker',visibility:'personal',field_schema:cycleSchema(),tracker:{names:[...new Set([name,...NAMES])],cadence:'daily',talk:null,specialist:'cycle',language:l,proposal_id:p.id,cycle:{heads_up:false,left_out:[],counted:[]}}}}).data[0];
+ const collection=query.execute({table:'collections',operation:'insert',values:{name,icon:'🌙',description:l==='de'?'Zyklus-Tracker':'Cycle tracker',visibility:'personal',field_schema:cycleSchema(),tracker:{names:[...new Set([name,...NAMES])],cadence:'daily',talks:[],specialist:'cycle',language:l,proposal_id:p.id,cycle:{heads_up:false,left_out:[],counted:[]}}}}).data[0];
  const entry=p.entry?query.execute({table:'collection_items',operation:'insert',values:{collection_id:collection.id,data:{when:p.entry.when,...p.entry.data}}}).data[0]:null;
  const said=entry?dayWords(l,{periodDay:PERIOD_FLOWS.has(entry.data.flow)?1:null,data:entry.data}):(l==='de'?'dein Zyklus-Tracker ist bereit':'your cycle tracker is ready');
  return {collection_id:collection.id,entry_id:entry?.id||null,language:l,reply:createdReply(l,said)};
@@ -56,13 +56,14 @@ export function cycleOperation(domains,raw){
  if(!CYCLE_ACTIONS.includes(action))throw Error('A cycle action is one of: '+CYCLE_ACTIONS.join(', '));
  const c=cycleTracker(store),l=lang(input.language||c?.tracker.language),rows=()=>c?entries(store,c):[];
  const none=l==='de'?'Du hast noch keinen Zyklus-Tracker. Sag am ersten Tag deiner Periode "track Periode", dann frage ich, ob ich einen anlegen soll.':'You have no cycle tracker yet. Say "track period" on the first day of your period and I will ask whether to start one.';
- const setCard=(cycle={},extra={})=>query.execute({table:'collections',operation:'update',values:{tracker:{...c.tracker,...extra,cycle:{...cycleCard(c.tracker),...cycle}}},filters:[['eq','id',c.id]],expected:expectedOf(input,'collections',c.id)}).data[0];
+ // Every write stores the card's talks as a list (trackers.mjs cardWithTalks), an older card's one talk included.
+ const setCard=(cycle={},extra={})=>query.execute({table:'collections',operation:'update',values:{tracker:cardWithTalks({...c.tracker,...extra,cycle:{...cycleCard(c.tracker),...cycle}})},filters:[['eq','id',c.id]],expected:expectedOf(input,'collections',c.id)}).data[0];
 
  if(action==='track'&&!c){
   // No tracker yet: the held first day and the setup question, once (the base's hold).
   const entry={when:whenFor({on:input.on,cadence:'daily'},now,zone),data:dayData(input)};
   const replaces=store.list('tracker_proposals').filter(o=>o.specialist==='cycle'&&proposalState(store,o,now)==='pending').map(o=>o.id);
-  const p=store.save('tracker_proposals',{name:l==='de'?'Zyklus':'Cycle',cadence:'daily',field_schema:cycleSchema(),talk:null,specialist:'cycle',language:l,entry,replaces,created_at:now.toISOString()});
+  const p=store.save('tracker_proposals',{name:l==='de'?'Zyklus':'Cycle',cadence:'daily',field_schema:cycleSchema(),talks:[],specialist:'cycle',language:l,entry,replaces,created_at:now.toISOString()});
   return {proposal_id:p.id,language:l,reply:setupQuestion(l,keptOf(entry),today)};
  }
  if(['track','over'].includes(action)){
@@ -100,7 +101,7 @@ export function cycleOperation(domains,raw){
   const todays=all.filter(i=>String(i.data?.when).slice(0,10)===today).at(-1),made=[...all].sort((a,b)=>String(a.updated_at).localeCompare(String(b.updated_at))).at(-1);
   const open=last&&(!last.over||last.last>last.over)&&daysBetween(last.last,today)<=3?{start:last.start,day:daysBetween(last.start,today)+1}:null;
   const deletion=liveDeletion(store,c,now);
-  return {tracker:{id:c.id,hash:c._hash,name:c.name,language:state.card.language,talk:c.tracker.talk||null,heads_up:state.card.heads_up},
+  return {tracker:{id:c.id,hash:c._hash,name:c.name,language:state.card.language,talks:talksOf(c.tracker),heads_up:state.card.heads_up},
    today:todays?{id:todays.id,hash:todays._hash,data:todays.data}:null,last:made?{id:made.id,hash:made._hash,when:made.data?.when,data:made.data}:null,
    period:open,cycles:state.cycles.slice(-7).map(({start,length,status,why})=>({start,length,status,why})),
    forecast:f.kind==='window'?{kind:'window',from:f.from,to:f.to,likely:f.likely}:{kind:f.kind},
@@ -118,11 +119,14 @@ export function cycleOperation(domains,raw){
   return {language:l,heads_up:true,reply};
  }
  if(action==='talk'){
-  const talk=talkOf(input.talk);
-  // Only a talk that exists can read it; nothing is changed for one that does not (trackers.mjs talkExists).
-  if(talk&&!talkExists(store.root,talk))return {language:l,talk:null,changed:false,reply:l==='de'?'Es gibt noch kein Gespräch "'+talk+'". Sag, wann es stattfinden soll, dann kann es ab da deinen Zyklus-Tracker lesen.':'There is no '+talk.replaceAll('-',' ')+' talk yet. Say when it should happen, and from then on it can read your cycle tracker.'};
-  setCard({},{talk});
-  return {language:l,talk,reply:talk?(l==='de'?'Erledigt: Dein Gespräch "'+talk+'" darf jetzt deinen Zyklus-Tracker lesen.':'Done: your '+talk.replaceAll('-',' ')+' talk may now read your cycle tracker.'):(l==='de'?'Erledigt: Kein Gespräch liest deinen Zyklus-Tracker.':'Done: no talk reads your cycle tracker.')};
+  // Any number of talks may read it, as any tracker (trackers.mjs talksOf): a talk is added, `remove`
+  // takes away that one, and only her own "instead" makes it the one talk. No talk at all: none reads it.
+  assertInstead(input,{assistant:domains.assistant===true});
+  const r=talkChange(l,{en:'cycle tracker',de:'Zyklus-Tracker'},talksOf(c.tracker),talkOf(input.talk),{remove:input.remove===true,instead:input.instead===true,exists:t=>talkExists(store.root,t)});
+  // The hash the next change needs is the saved card's, read back (as tracker-talk does).
+  if(r.changed)setCard({},{talks:r.talks});
+  const updated=r.changed?store.get('collections',c.id):c;
+  return {language:l,talks:r.talks,changed:r.changed,tracker_hash:updated._hash,reply:r.reply};
  }
  if(['leave-out','count'].includes(action)){
   const state=cycleState(rows(),c.tracker,today),marks=cycleCard(c.tracker),why=action==='leave-out'?(input.why||'outlier'):null;

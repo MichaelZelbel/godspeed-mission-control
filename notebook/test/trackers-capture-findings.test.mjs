@@ -109,12 +109,12 @@ test('a tracker is given to a talk, and the reply says so, only when that talk e
  const none=fixture(t);
  const a=ok(await call(none,{type:'tracker-hold',name:'Belly',unit:'cm',value:92,talk:'health',words:'track belly 92'}));
  const ma=ok(await call(none,{type:'tracker-create',proposal_id:a.proposal_id,words:'yes'}));
- assert.doesNotMatch(ma.reply,/talk/);assert.equal(trackers(none.store)[0].tracker.talk,null);
+ assert.doesNotMatch(ma.reply,/talk/);assert.deepEqual(trackers(none.store)[0].tracker.talks,[]);
  assert.equal(talkExists(none.root,'health'),false);
  const env=fixture(t,{talks:['health']});
  const b=ok(await call(env,{type:'tracker-hold',name:'Belly',unit:'cm',value:92,talk:'health',words:'track belly 92'}));
  const mb=ok(await call(env,{type:'tracker-create',proposal_id:b.proposal_id,words:'yes'}));
- assert.match(mb.reply,/ Your health talk will read it\.$/);assert.equal(trackers(env.store)[0].tracker.talk,'health');
+ assert.match(mb.reply,/ Your health talk will read it\.$/);assert.deepEqual(trackers(env.store)[0].tracker.talks,['health']);
  // An area a habit made with no talk is not a talk.
  fs.mkdirSync(path.join(env.root,'coach','work'),{recursive:true});fs.writeFileSync(path.join(env.root,'coach','work','area.md'),'AREA: work\nTITLE: Work\nRHYTHM: none\nSTATUS: on\n\n## Preparation\n\nx\n');
  assert.equal(talkExists(env.root,'work'),false);assert.equal(talkExists(env.root,'health'),true);

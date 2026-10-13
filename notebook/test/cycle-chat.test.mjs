@@ -91,3 +91,20 @@ test('the checks refuse what she did not say, a quoted or refused track, and a l
  assert.match(r.reply,/^Deleted: your cycle tracker and its \d+ days are gone from your notebook\. What remains: /);
  assert.equal(cycle(f.store),undefined);
 });
+
+// Any number of talks may read her cycle tracker (13 October 2026): in the chat, taking a talk away is
+// what she said, and "instead" only when she said it.
+test('her talks in the chat: one talk taken away only when she says so, instead only when she says it',async()=>{
+ const f=fixture();await sixCycles(f);
+ for(const area of ['health','psychology']){fs.mkdirSync(path.join(f.store.root,'coach',area),{recursive:true});fs.writeFileSync(path.join(f.store.root,'coach',area,'area.md'),'AREA: '+area+'\nTITLE: '+area+'\nRHYTHM: weekly sunday\nTIME: 19:00\nSTARTS: 2026-10-01\nSTATUS: on\n\n## Preparation\n\nx\n');}
+ let r=await say(f.domains,'My health talk may read my cycle.',[{type:'cycle',action:'talk',talk:'health'}]);
+ assert.equal(r.reply,'Done: your health talk may now read your cycle tracker.');
+ r=await say(f.domains,'My psychology talk may read my cycle too.',[{type:'cycle',action:'talk',talk:'psychology'}]);
+ assert.equal(r.reply,'Done: your psychology talk may now read your cycle tracker, along with your health talk.');
+ await assert.rejects(say(f.domains,'My health talk may read my cycle.',[{type:'cycle',action:'talk',talk:'health',remove:true}]),/Say that the talk no longer needs your cycle tracker/);
+ await assert.rejects(say(f.domains,'My health talk may read my cycle.',[{type:'cycle',action:'talk',talk:'health',instead:true}]),/Pass instead only when their own words say/);
+ assert.deepEqual(cycle(f.store).tracker.talks,['health','psychology']);
+ r=await say(f.domains,'My health talk no longer needs my cycle.',[{type:'cycle',action:'talk',talk:'health',remove:true}]);
+ assert.equal(r.reply,'Done: your health talk no longer reads your cycle tracker.');
+ assert.deepEqual(cycle(f.store).tracker.talks,['psychology']);
+});

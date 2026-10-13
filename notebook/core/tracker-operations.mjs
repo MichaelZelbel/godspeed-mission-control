@@ -1,7 +1,7 @@
 // The tracker operations (D-321), one path for the notebook's chat, MCP and the
 // Telegram bot: personalOperation hands these types here. The rules they share
 // are in trackers.mjs; this file reads and writes.
-import {norm,card,trackers,findTracker,entries,trackerStatus,proposalState,dayOf,whenFor,schemaFor,entryData,holdQuestion,createdReply,instantReply,fmt,unitOf,longDay,entryOn,existingTalk,setUpOnPurpose,entryWords,talkExists,talkWords} from './trackers.mjs';
+import {norm,card,trackers,findTracker,entries,trackerStatus,proposalState,dayOf,whenFor,schemaFor,entryData,holdQuestion,createdReply,instantReply,fmt,unitOf,longDay,entryOn,existingTalk,setUpOnPurpose,entryWords,talkExists,talkWords,talksOf,cardWithTalks,talksWords,assertInstead} from './trackers.mjs';
 import {now as clockNow,addDays} from '../../third-party/addons/godspeed-coach/lib/clock.mjs';
 import {visibleRows} from './visibility.mjs';
 import {habitTrackerList,habitOperation,isHabitRef,findHabits} from './habit-trackers.mjs';
@@ -60,7 +60,8 @@ export function trackerOperation(domains,raw){
   const replaces=store.list('tracker_proposals').filter(o=>norm(o.name)===norm(name)&&proposalState(store,o,now)==='pending').map(o=>o.id);
   // A talk only when it exists (trackers.mjs talkExists): a new mission control has none.
   const words=wordsOf(input);
-  const p=store.save('tracker_proposals',{name,cadence,field_schema,talk:existingTalk(store.root,talkOf(input.talk)),entry,replaces,...(words?{words}:{}),created_at:now.toISOString()});
+  const talk=existingTalk(store.root,talkOf(input.talk));
+  const p=store.save('tracker_proposals',{name,cadence,field_schema,talks:talk?[talk]:[],entry,replaces,...(words?{words}:{}),created_at:now.toISOString()});
   return {proposal_id:p.id,reply:holdQuestion(p,dayOf(now,zone))};
  }
  if(type==='tracker-create'){
@@ -78,41 +79,48 @@ export function trackerOperation(domains,raw){
   // question's own; the held number stays the number, checked again.
   const asked=p?(p.field_schema||[]).filter(f=>!['when','note'].includes(f.key)).map(({indexable,...f})=>f):undefined;
   const field_schema=schemaFor(input.fields||input.unit||!p?{unit:input.unit,fields:input.fields,cadence}:{fields:asked,cadence});
-  const talk=existingTalk(store.root,input.talk!==undefined?talkOf(input.talk):p?.talk??null);
+  // A new tracker goes to the one talk named, only when it exists; a question kept before 13 October
+  // 2026 names it as `talk` (talksOf reads both).
+  const talk=existingTalk(store.root,input.talk!==undefined?talkOf(input.talk):talksOf(p)[0]??null);
   let held=null;
   // A count held for "track sleep" does not fit columns that take numbers ("yes, with hours and
   // quality"): the tracker starts empty, as one set up on purpose does.
   const fits=p?.entry&&!(!Object.keys(p.entry.data||{}).some(k=>k!=='note')&&field_schema.some(f=>f.type==='number'));
   if(fits){const {note,...data}=p.entry.data;held={when:cadence===p.cadence?p.entry.when:whenFor({on:p.entry.when.slice(0,10),cadence},new Date(p.created_at),zone),data:entryData({name,field_schema},{data,note})};}
-  const collection=query.execute({table:'collections',operation:'insert',values:{name,icon:'📈',description:'Tracker',visibility:'personal',field_schema,tracker:{names:[name],cadence,talk,specialist:null,...(p?{proposal_id:p.id}:{})}}}).data[0];
+  const collection=query.execute({table:'collections',operation:'insert',values:{name,icon:'📈',description:'Tracker',visibility:'personal',field_schema,tracker:{names:[name],cadence,talks:talk?[talk]:[],specialist:null,...(p?{proposal_id:p.id}:{})}}}).data[0];
   const entry=held?query.execute({table:'collection_items',operation:'insert',values:{collection_id:collection.id,data:{when:held.when,...held.data}}}).data[0]:null;
   return {collection_id:collection.id,entry_id:entry?.id||null,reply:createdReply(collection,entry,dayOf(now,zone))};
  }
- // Which talk looks at a tracker, after both exist: "The health talk may also look at my sleep
+ // Which talks look at a tracker, after both exist: "The health talk may also look at my sleep
  // tracker", "The health talk no longer needs my sleep tracker" (Mission Control's idea card of 12
  // October 2026). A talk reads the trackers whose card names it (tracker-list with talk), so this
- // changes the card's talk and nothing else; a tracker has one talk, and moves to another only
- // when they say instead. Until then only tracker-hold and tracker-create named a talk.
+ // changes the card's talks and nothing else. Any number of talks may read a tracker (Michael's
+ // decision of 13 October 2026): adding one never asks, removing takes away only that one, and only
+ // their own "instead" makes it the one talk. Until that day a tracker had one talk, and a second
+ // was answered with "a tracker has one talk. Should the X talk look at it instead?".
  if(type==='tracker-talk'){
   const talk=talkOf(input.talk);if(!talk)throw Error('Say which talk, by its area, such as health');
   const habit=findHabits(store,input.tracker)[0];
   if(habit)throw Error(habit.title+' is a habit: the '+talkWords(habit.area)+' talk looks at it with its area, and no other talk can');
-  const c=resolve(store,input.tracker),remove=input.remove===true,current=c.tracker.talk||null,yours='your '+trackerWords(c),the='The '+talkWords(talk)+' talk';
-  const same=reply=>({collection_id:c.id,talk:current,changed:false,tracker_hash:c._hash,reply});
-  if(remove&&current!==talk)return same(the+' was not looking at '+yours+'.');
+  const c=resolve(store,input.tracker),remove=input.remove===true,instead=!remove&&input.instead===true;
+  assertInstead(input,{assistant});
   // The cycle and food trackers keep their own talk action, with their own words and language.
-  if(c.tracker.specialist==='cycle')return cycleOperation(domains,{...input,action:'talk',talk:remove?null:talk});
-  if(c.tracker.specialist==='food')return foodOperation(domains,{...input,action:'talk',talk:remove?null:talk});
+  if(c.tracker.specialist==='cycle')return cycleOperation(domains,{...input,action:'talk',talk,remove,instead});
+  if(c.tracker.specialist==='food')return foodOperation(domains,{...input,action:'talk',talk,remove,instead});
+  const current=talksOf(c.tracker),others=current.filter(t=>t!==talk),yours='your '+trackerWords(c),the='The '+talkWords(talk)+' talk';
+  const same=reply=>({collection_id:c.id,talks:current,changed:false,tracker_hash:c._hash,reply});
+  if(remove&&!current.includes(talk))return same(the+' was not looking at '+yours+'.');
   if(!remove){
    if(!talkExists(store.root,talk))return same('There is no '+talkWords(talk)+' talk yet. Say when it should happen, and from then on it can look at '+yours+'.');
-   if(current===talk)return same(the+' already looks at '+yours+'.');
-   if(current&&input.instead!==true)return same('Your '+trackerWords(c)+' is looked at by the '+talkWords(current)+' talk, and a tracker has one talk. Should the '+talkWords(talk)+' talk look at it instead?');
+   if(current.includes(talk)&&!(instead&&others.length))return same(the+' already looks at '+yours+'.');
   }
-  query.execute({table:'collections',operation:'update',values:{tracker:{...c.tracker,talk:remove?null:talk}},filters:[['eq','id',c.id]],expected:expectedOf(input,'collections',c.id)});
+  const talks=remove?others:instead?[talk]:[...current,talk];
+  query.execute({table:'collections',operation:'update',values:{tracker:cardWithTalks(c.tracker,talks)},filters:[['eq','id',c.id]],expected:expectedOf(input,'collections',c.id)});
   // The hash the next change needs is the saved card's: over MCP the update's own row still carried
   // the old one (the capture of 12 October 2026), so it is read back, as the food tracker does.
   const updated=store.get('collections',c.id);
-  return {collection_id:c.id,talk:remove?null:talk,changed:true,tracker_hash:updated._hash,reply:remove?the+' no longer looks at '+yours+'.':the+' may now look at '+yours+(current?', instead of the '+talkWords(current)+' talk':'')+'.'};
+  const reply=remove?the+' no longer looks at '+yours+'.':the+' may now look at '+yours+(!others.length?'':instead?', instead of the '+talksWords(others):', along with the '+talksWords(others))+'.';
+  return {collection_id:c.id,talks,changed:true,tracker_hash:updated._hash,reply};
  }
  // A habit's day is the coach's: its own track() on its own file (habit-trackers.mjs).
  if(type==='habit-progress'||['track','tracker-correct'].includes(type)&&isHabitRef(store,input.tracker))return habitOperation(store,input,{now,zone,today:dayOf(now,zone),assistant:domains.assistant===true});
@@ -124,7 +132,7 @@ export function trackerOperation(domains,raw){
   if(word){
    if(findTracker(store,word).candidates.some(o=>o.id!==c.id))throw Error('Another tracker is already called '+word);
    // "track waist 91" landed in Belly: Waist is now another name for it.
-   if(![c.name,...(c.tracker.names||[])].some(x=>norm(x)===norm(word)))c=query.execute({table:'collections',operation:'update',values:{tracker:{...c.tracker,names:[...(c.tracker.names||[c.name]),word]}},filters:[['eq','id',c.id]],expected:expectedOf(input,'collections',c.id)}).data[0];
+   if(![c.name,...(c.tracker.names||[])].some(x=>norm(x)===norm(word)))c=query.execute({table:'collections',operation:'update',values:{tracker:cardWithTalks({...c.tracker,names:[...(c.tracker.names||[c.name]),word]})},filters:[['eq','id',c.id]],expected:expectedOf(input,'collections',c.id)}).data[0];
    under=norm(word)!==norm(c.name);
   }
   const cadence=c.tracker.cadence==='any'?'any':'daily',when=whenFor({on:input.on,at:input.at,cadence},now,zone),data=entryData(c,input),all=entries(store,c);
@@ -160,19 +168,20 @@ export function trackerOperation(domains,raw){
  }
  if(type==='tracker-list'){
   // Read only. What the chat and the bot need to name a tracker and to change an
-  // entry: ids, other names, columns, and the current hashes the MCP guard asks for.
+  // entry: ids, other names, columns, and the current hashes the MCP guard asks for. `talks` names
+  // every talk that reads it; with `talk`, the trackers whose talks include that one, active only.
   const days=input.days===undefined?0:Number(input.days);if(!Number.isInteger(days)||days<0||days>366)throw Error('Choose a number of days from 0 to 366');
   const talk=input.talk===undefined?null:talkOf(input.talk),today=dayOf(now,zone),from=days?addDays(today,-(days-1)):null;
   const visible=new Set(visibleRows(query,'collections').map(r=>r.id));
   const items=store.list('collection_items'),list=trackers(store).filter(c=>visible.has(c.id)).map(c=>{
    const all=entries(store,c,items),made=[...all].sort((a,b)=>String(a.updated_at).localeCompare(String(b.updated_at))||String(a.created_at).localeCompare(String(b.created_at))).at(-1),todays=all.filter(i=>String(i.data?.when).slice(0,10)===today).at(-1);
-   return {id:c.id,name:c.name,names:c.tracker.names||[c.name],cadence:c.tracker.cadence==='any'?'any':'daily',talk:c.tracker.talk||null,specialist:c.tracker.specialist||null,status:trackerStatus(store,c,now,all),hash:c._hash,
+   return {id:c.id,name:c.name,names:c.tracker.names||[c.name],cadence:c.tracker.cadence==='any'?'any':'daily',talks:talksOf(c.tracker),specialist:c.tracker.specialist||null,status:trackerStatus(store,c,now,all),hash:c._hash,
     fields:own(c).map(({key,label,type,unit,options,min,max})=>({key,label,type,...(unit?{unit}:{}),...(options?{options}:{}),...(min!==undefined?{min}:{}),...(max!==undefined?{max}:{})})),
     last:made?{id:made.id,when:made.data?.when,data:made.data,hash:made._hash}:null,today:todays?{id:todays.id,hash:todays._hash}:null,
     ...(from?{recent:all.filter(i=>String(i.data?.when).slice(0,10)>=from).map(i=>({id:i.id,when:i.data?.when,data:i.data,hash:i._hash}))}:{}),
     // The food tracker adds its days' totals and the target's last change, the one line its talk hears.
     ...(c.tracker.specialist==='food'?{food:foodSummary(domains,c,{from,today})}:{})};
-  }).concat(habitTrackerList(store,{today,from,now,zone,calendarDays:input.calendarDays===undefined?14:Number(input.calendarDays)})).filter(t=>!talk||t.talk===talk&&t.status==='active');
+  }).concat(habitTrackerList(store,{today,from,now,zone,calendarDays:input.calendarDays===undefined?14:Number(input.calendarDays)})).filter(t=>!talk||t.talks.includes(talk)&&t.status==='active');
   const pending=store.list('tracker_proposals').filter(p=>proposalState(store,p,now)==='pending').map(p=>({id:p.id,name:p.name,created_at:p.created_at,question:holdQuestion(p,today)}));
   return {trackers:list,pending};
  }
@@ -191,7 +200,8 @@ function resolve(store,ref){
 const expectedOf=(input,table,id)=>{const v=input.expected?.[table+'/'+id]??input.expected?.[id];return typeof v==='string'?{[id]:v}:{};};
 const own=c=>(c.field_schema||[]).filter(f=>!['when','note'].includes(f.key));
 // A tracker as a reply names it: "sleep tracker" for Sleep; a name with capitals inside ("BP") stays.
-const trackerWords=c=>{const n=String(c.name||'').trim(),low=n.length>1&&n.slice(1)===n.slice(1).toLocaleLowerCase()?n.charAt(0).toLocaleLowerCase()+n.slice(1):n;return /tracker$/i.test(low)?low:low+' tracker';};
+// The headache add-on's tracker, Headaches, is "headache tracker", as Michael says it.
+const trackerWords=c=>{if(c.tracker?.specialist==='headache')return 'headache tracker';const n=String(c.name||'').trim(),low=n.length>1&&n.slice(1)===n.slice(1).toLocaleLowerCase()?n.charAt(0).toLocaleLowerCase()+n.slice(1):n;return /tracker$/i.test(low)?low:low+' tracker';};
 const oneNumber=c=>{const f=own(c);return f.length===1&&f[0].type==='number'?f[0]:null;};
 // An entry in a few words: "92 cm", or "7 hours, quality 4 of 5", or nothing.
 function describe(c,entry){

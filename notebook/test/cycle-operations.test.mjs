@@ -37,7 +37,7 @@ test('"track period" with no tracker asks the design\'s question once and create
  const made=await f.op({type:'tracker-create',proposal_id:held.proposal_id});
  assert.equal(made.reply,'Tracked: period day 1. From now on just say "track period", "track period over", or a symptom, like "track cramps".');
  const c=cycle(f.store);
- assert.deepEqual({name:c.name,cadence:c.tracker.cadence,talk:c.tracker.talk,specialist:c.tracker.specialist,heads_up:c.tracker.cycle.heads_up},{name:'Cycle',cadence:'daily',talk:null,specialist:'cycle',heads_up:false});
+ assert.deepEqual({name:c.name,cadence:c.tracker.cadence,talks:c.tracker.talks,specialist:c.tracker.specialist,heads_up:c.tracker.cycle.heads_up},{name:'Cycle',cadence:'daily',talks:[],specialist:'cycle',heads_up:false});
  assert.deepEqual(entries(f.store,c).map(i=>i.data),[{when:'2026-10-12',flow:'unspecified'}]);
  // The base's own way in reaches the same: "track period" said to tracker-hold now tracks.
  at('2026-10-13');
@@ -121,7 +121,7 @@ test('the heads-up only when she switches it on: one line for her brief, two day
  assert.equal((await f.op({type:'tracker-list',talk:'health'})).trackers.length,0);
  const none=await f.op({type:'cycle',action:'talk',talk:'health'});
  assert.equal(none.reply,'There is no health talk yet. Say when it should happen, and from then on it can read your cycle tracker.');
- assert.equal(cycle(f.store).tracker.talk,null);
+ assert.deepEqual(cycle(f.store).tracker.talks,[]);
  fs.mkdirSync(path.join(f.root,'coach','health'),{recursive:true});
  fs.writeFileSync(path.join(f.root,'coach','health','area.md'),'AREA: health\nTITLE: Health\nRHYTHM: weekly sunday\nTIME: 19:00\nSTARTS: 2026-10-01\nSTATUS: on\n\n## Preparation\n\nx\n');
  await f.op({type:'cycle',action:'talk',talk:'health'});
@@ -161,4 +161,32 @@ test('the generic track and correct reach the cycle tracker and keep its columns
  assert.match(fixed.reply,/^Changed: Cycle on 12 October/);
  const listed=(await f.op({type:'tracker-list'})).trackers.find(t=>t.id===c.id);
  assert.deepEqual(listed.fields.find(x=>x.key==='flow').options,['spotting','light','medium','heavy','none','unspecified']);
+});
+
+// Any number of talks may read the cycle tracker, as any tracker (13 October 2026), and it still reaches a
+// talk only when she says so; its own words, English or German.
+test('the cycle tracker\'s talks: only when she says so, then add, remove one and instead, in English and German',async()=>{
+ const f=fixture();
+ for(const area of ['health','psychology']){fs.mkdirSync(path.join(f.root,'coach',area),{recursive:true});fs.writeFileSync(path.join(f.root,'coach',area,'area.md'),'AREA: '+area+'\nTITLE: '+area+'\nRHYTHM: weekly sunday\nTIME: 19:00\nSTARTS: 2026-10-01\nSTATUS: on\n\n## Preparation\n\nx\n');}
+ const held=await f.op({type:'cycle',action:'track',language:'de'});await f.op({type:'tracker-create',proposal_id:held.proposal_id});
+ assert.deepEqual(cycle(f.store).tracker.talks,[],'a health talk exists, and still no talk reads it until she says so');
+ let r=await f.op({type:'cycle',action:'talk',talk:'health'});
+ assert.equal(r.reply,'Erledigt: Dein Gespräch "health" darf jetzt deinen Zyklus-Tracker lesen.');
+ r=await f.op({type:'cycle',action:'talk',talk:'psychology'});
+ assert.equal(r.reply,'Erledigt: Dein Gespräch "psychology" darf jetzt deinen Zyklus-Tracker lesen, neben deinem Gespräch "health".');
+ assert.deepEqual(cycle(f.store).tracker.talks,['health','psychology']);
+ r=await f.op({type:'cycle',action:'talk',talk:'health',remove:true});
+ assert.equal(r.reply,'Erledigt: Dein Gespräch "health" liest deinen Zyklus-Tracker nicht mehr.');assert.deepEqual(cycle(f.store).tracker.talks,['psychology']);
+ r=await f.op({type:'cycle',action:'talk',talk:'health',language:'en'});
+ assert.equal(r.reply,'Done: your health talk may now read your cycle tracker, along with your psychology talk.');
+ r=await f.op({type:'cycle',action:'talk',talk:'psychology',instead:true,language:'en'});
+ assert.equal(r.reply,'Done: your psychology talk may now read your cycle tracker, instead of your health talk.');assert.deepEqual(cycle(f.store).tracker.talks,['psychology']);
+ // No talk named: none reads it any more, as before.
+ r=await f.op({type:'cycle',action:'talk',talk:null,language:'en'});
+ assert.equal(r.reply,'Done: no talk reads your cycle tracker.');assert.deepEqual(cycle(f.store).tracker.talks,[]);
+ // An older card with one talk is read as a list, and the next write stores the list.
+ const c=cycle(f.store),{talks:_,...old}=c.tracker;f.store.save('collections',{id:c.id,tracker:{...old,talk:'health'}},c._hash);
+ assert.deepEqual((await f.op({type:'cycle',action:'status'})).tracker.talks,['health']);
+ await f.op({type:'cycle',action:'heads-up',enabled:true});
+ assert.deepEqual(cycle(f.store).tracker.talks,['health']);assert.equal('talk' in cycle(f.store).tracker,false);
 });

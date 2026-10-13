@@ -25,7 +25,7 @@ test('each habit is a tracker with its answered days; an active one is on the sh
  const {domains}=fixture();
  const {trackers}=await op(domains,{type:'tracker-list',days:14});
  const walk=trackers.find(t=>t.id==='habit-health-walk-to-work'),lifts=trackers.find(t=>t.id==='habit-health-head-lifts');
- assert.deepEqual({name:walk.name,names:walk.names,specialist:walk.specialist,talk:walk.talk,status:walk.status,cadence:walk.cadence},{name:'Walk to work and back',names:['Walk to work and back','walk to work'],specialist:'habit',talk:'health',status:'active',cadence:'daily'});
+ assert.deepEqual({name:walk.name,names:walk.names,specialist:walk.specialist,talks:walk.talks,status:walk.status,cadence:walk.cadence},{name:'Walk to work and back',names:['Walk to work and back','walk to work'],specialist:'habit',talks:['health'],status:'active',cadence:'daily'});
  assert.deepEqual(walk.recent.map(d=>[d.when,d.data]),[['2026-10-06',{answer:'done',note:'steps 9513',source:'data'}]],'an asked day is not a tracked day');
  assert.deepEqual(walk.fields.map(f=>f.key),['answer','note']);
  assert.equal(lifts.status,'resting');assert.equal(lifts.habit_status,'paused');
@@ -114,4 +114,13 @@ test('assistant progress reads cannot mutate settings or invent exemption ranges
  await op(assistant,{type:'habit-progress',tracker:id,action:'display',display:'calm',words:'Switch walk to work to calm display'});
  await op(assistant,{type:'habit-progress',tracker:id,action:'exempt',from:'2026-10-10',to:'2026-10-12',words:'Excuse walk to work from 2026-10-10 to 2026-10-12'});
  await op(assistant,{type:'habit-progress',tracker:id,action:'schedule',days:'mon,wed,fri',words:'Change walk to work schedule to Monday Wednesday Friday'});
+});
+
+// Any number of talks may read a tracker (13 October 2026). A habit's talks are its own area's, first,
+// and the other talks its coach file names, once the coach keeps them (readBy).
+test('a habit\'s talks: its area first, then any other talk its file names, each once',async()=>{
+ const {habitTalks}=await import('../core/habit-trackers.mjs');
+ assert.deepEqual(habitTalks({area:'health'}),['health']);
+ assert.deepEqual(habitTalks({area:'health',readBy:['psychology','health','work']}),['health','psychology','work']);
+ assert.deepEqual(habitTalks({area:'health',readBy:'psychology'}),['health'],'only a list counts');
 });

@@ -32,7 +32,7 @@ test('"track food, tofu with half a pack of rice": the setup question asks about
  assert.equal(made.reply,'Tracked: tofu 200 g (assumed), rice 125 g: 669 kcal, 41 g protein. Say "set my food target" when you want a daily target.');
  const c=food(f.store);
  // This mission control has no health talk, so no talk reads it (D-321).
- assert.deepEqual({name:c.name,cadence:c.tracker.cadence,talk:c.tracker.talk,specialist:c.tracker.specialist},{name:'Food',cadence:'any',talk:null,specialist:'food'});
+ assert.deepEqual({name:c.name,cadence:c.tracker.cadence,talks:c.tracker.talks,specialist:c.tracker.specialist},{name:'Food',cadence:'any',talks:[],specialist:'food'});
  assert.deepEqual(entries(f.store,c).map(r=>r.data),[
   {when:'2026-10-12 12:00',meal:'none',item:'tofu',food:'Tofu',grams:200,kcal:230,protein_g:31.02,carbs_g:0,fat_g:11.26,assumed:true,source:'BLS 4.0 H861000'},
   {when:'2026-10-12 12:00',meal:'none',item:'rice',food:'White rice raw',grams:125,count:0.5,unit:'pack',kcal:438.75,protein_g:9.91,carbs_g:96.38,fat_g:0.78,assumed:false,source:'BLS 4.0 C352000'}]);
@@ -112,7 +112,7 @@ test('stop showing calories; an eating disorder means totals only on request and
  assert.match(r.reply,/^Your daily target: 1,500 kcal.* The formula gave 886 kcal, and I never set less than 1,500 kcal for men\./);
  r=await f.op({type:'food',action:'settings',eating_disorder:true});
  assert.equal(r.reply,'Understood. I will not set a target, and I will show totals only when you ask for them.');
- const c=food(f.store);assert.equal(c.tracker.food.target,null);assert.equal(c.tracker.talk,null);
+ const c=food(f.store);assert.equal(c.tracker.food.target,null);assert.deepEqual(c.tracker.talks,[]);
  r=await f.op({type:'food',action:'target',sex:'female',age:30,height_cm:165,weight_kg:60,activity:'light',goal:'lose'});
  assert.equal(r.reply,'Understood. I will not set a target, and I will show totals only when you ask for them.');
 });
@@ -155,7 +155,7 @@ test('a barcode through a stand-in network, then the product is tracked like a f
 test('a tracker-list for the weekly talk carries the days and the target\'s change in one line',async()=>{
  const f=await fixture('2026-10-01T10:00:00Z',{talks:['health']});
  const held=await f.op({type:'food',action:'track',items:[TOFU]});await f.op({type:'tracker-create',proposal_id:held.proposal_id});
- assert.equal(food(f.store).tracker.talk,'health','with a health talk, the food tracker is its own by default');
+ assert.deepEqual(food(f.store).tracker.talks,['health'],'with a health talk, the food tracker is its own by default');
  await f.op({type:'food',action:'target',sex:'female',age:34,height_cm:168,weight_kg:70,activity:'light',goal:'lose'});
  for(const d of ['2026-10-02','2026-10-03','2026-10-05','2026-10-06']){at(d+'T10:00:00Z');await f.op({type:'food',action:'track',items:[{food:'C352000',item:'rice',grams:300}]});}
  f.store.save('health_observations',{metric:'weight_kg',value:70,observed_on:'2026-09-24',observed_at:'2026-09-24T06:00:00Z'});
@@ -165,4 +165,69 @@ test('a tracker-list for the weekly talk carries the days and the target\'s chan
  const t=list.trackers.find(x=>x.specialist==='food');
  assert.ok(t.food.change.startsWith('Your food target moved from 1,451 to '),t.food.change);
  assert.equal(t.food.days.length,4);
+});
+
+// Any number of talks may read the food tracker, as any tracker (Michael's decision of 13 October 2026):
+// its own talk action adds a talk without asking, takes one away, or with "instead" leaves only one, in
+// its own words, English or German. An eating disorder still takes it away from every talk.
+test('the food tracker\'s talks: add, remove one, instead, in English and German; an eating disorder clears them all',async()=>{
+ const f=await fixture('2026-10-12T10:00:00Z',{talks:['health','psychology','work']});
+ const held=await f.op({type:'food',action:'track',items:[TOFU]});await f.op({type:'tracker-create',proposal_id:held.proposal_id});
+ const talks=()=>food(f.store).tracker.talks;
+ assert.deepEqual(talks(),['health']);
+ let r=await f.op({type:'food',action:'talk',talk:'psychology'});
+ assert.equal(r.reply,'Done: your psychology talk may now read your food tracker, along with your health talk.');assert.deepEqual(talks(),['health','psychology']);
+ assert.equal(r.tracker_hash,food(f.store)._hash,'the hash the next change needs');
+ r=await f.op({type:'food',action:'talk',talk:'work'});
+ assert.equal(r.reply,'Done: your work talk may now read your food tracker, along with your health and psychology talks.');
+ assert.equal((await f.op({type:'food',action:'talk',talk:'work'})).reply,'Your work talk already reads your food tracker.');
+ r=await f.op({type:'food',action:'talk',talk:'health',remove:true});
+ assert.equal(r.reply,'Done: your health talk no longer reads your food tracker.');assert.deepEqual(talks(),['psychology','work']);
+ assert.equal((await f.op({type:'tracker-list',talk:'health'})).trackers.length,0);
+ assert.equal((await f.op({type:'tracker-list',talk:'work'})).trackers[0].specialist,'food');
+ r=await f.op({type:'food',action:'talk',talk:'health',instead:true});
+ assert.equal(r.reply,'Done: your health talk may now read your food tracker, instead of your psychology and work talks.');assert.deepEqual(talks(),['health']);
+ r=await f.op({type:'food',action:'talk',talk:'garden'});
+ assert.equal(r.reply,'There is no garden talk yet. Say when it should happen, and from then on it can read your food tracker.');assert.equal(r.changed,false);
+ // German, in its own words.
+ r=await f.op({type:'food',action:'talk',talk:'psychology',language:'de'});
+ assert.equal(r.reply,'Erledigt: Dein Gespräch "psychology" darf jetzt deinen Ernährungs-Tracker lesen, neben deinem Gespräch "health".');
+ r=await f.op({type:'food',action:'talk',talk:'work',language:'de'});
+ assert.equal(r.reply,'Erledigt: Dein Gespräch "work" darf jetzt deinen Ernährungs-Tracker lesen, neben deinen Gesprächen "health" und "psychology".');
+ assert.equal((await f.op({type:'food',action:'talk',talk:'work',language:'de'})).reply,'Dein Gespräch "work" liest deinen Ernährungs-Tracker schon.');
+ r=await f.op({type:'food',action:'talk',talk:'work',remove:true,language:'de'});
+ assert.equal(r.reply,'Erledigt: Dein Gespräch "work" liest deinen Ernährungs-Tracker nicht mehr.');
+ assert.equal((await f.op({type:'food',action:'talk',talk:'work',remove:true,language:'de'})).reply,'Dein Gespräch "work" liest deinen Ernährungs-Tracker gar nicht.');
+ r=await f.op({type:'food',action:'talk',talk:'work',instead:true,language:'de'});
+ assert.equal(r.reply,'Erledigt: Dein Gespräch "work" darf jetzt deinen Ernährungs-Tracker lesen, statt deiner Gespräche "health" und "psychology".');
+ r=await f.op({type:'food',action:'talk',talk:'health',instead:true,language:'de'});
+ assert.equal(r.reply,'Erledigt: Dein Gespräch "health" darf jetzt deinen Ernährungs-Tracker lesen, statt deines Gesprächs "work".');
+ r=await f.op({type:'food',action:'talk',talk:'health',remove:true,language:'de'});
+ assert.equal(r.reply,'Erledigt: Kein Gespräch liest deinen Ernährungs-Tracker.');assert.deepEqual(talks(),[]);
+ // An eating disorder: no talk reads it any more, however many did.
+ for(const talk of ['health','psychology'])await f.op({type:'food',action:'talk',talk});
+ assert.deepEqual(talks(),['health','psychology']);
+ await f.op({type:'food',action:'settings',eating_disorder:true});
+ assert.deepEqual(talks(),[]);assert.equal('talk' in food(f.store).tracker,false);
+});
+
+// A food tracker made before 13 October 2026 has one `talk`: read as a list, and any write of the card stores the list.
+test('an older food card with one talk is read as a list, and the next write of the card stores the list',async()=>{
+ const f=await fixture('2026-10-12T10:00:00Z',{talks:['health','work']});
+ const held=await f.op({type:'food',action:'track',items:[TOFU]});await f.op({type:'tracker-create',proposal_id:held.proposal_id});
+ const c=food(f.store),{talks:_,...old}=c.tracker;f.store.save('collections',{id:c.id,tracker:{...old,talk:'health'}},c._hash);
+ assert.deepEqual((await f.op({type:'food',action:'status'})).tracker.talks,['health']);
+ assert.equal((await f.op({type:'tracker-list',talk:'health'})).trackers[0].specialist,'food');
+ await f.op({type:'food',action:'settings',numbers:false});
+ assert.deepEqual(food(f.store).tracker.talks,['health']);assert.equal('talk' in food(f.store).tracker,false);
+});
+
+// A food question asked before 13 October 2026 names its talk as `talk`; the yes still gives the tracker that talk.
+test('a food question kept before the change still gives the new tracker its talk',async()=>{
+ const f=await fixture('2026-10-12T10:00:00Z',{talks:['health','work']});
+ const held=await f.op({type:'food',action:'track',items:[TOFU]});
+ const p=f.store.get('tracker_proposals',held.proposal_id),{talks:_,...old}=p;
+ const asked=f.store.save('tracker_proposals',{...old,id:undefined,talk:'work',replaces:[p.id],created_at:p.created_at});
+ await f.op({type:'tracker-create',proposal_id:asked.id});
+ assert.deepEqual(food(f.store).tracker.talks,['work']);
 });

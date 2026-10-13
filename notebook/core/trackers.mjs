@@ -1,6 +1,6 @@
 // Trackers (Mission Control's work/plans/2026-10-11-trackers-design.md, D-321).
 // A tracker is an ordinary collection with a `tracker` card: {names, cadence:
-// daily|any, talk, specialist}. Its entries are collection items whose primary
+// daily|any, talks, specialist} (an older card has one `talk`: talksOf below). Its entries are collection items whose primary
 // field `when` holds the day ("2026-10-11") or, for any-number trackers, the day
 // and minute ("2026-10-11 06:30"). Resting and the 24-hour hold are worked out
 // when read, never by a job: nothing here may message anyone.
@@ -27,6 +27,50 @@ export function talkExists(root,talk){
 }
 // The talk a new tracker is given: the one named, when it exists; otherwise none.
 export const existingTalk=(root,talk)=>talk&&talkExists(root,talk)?talk:null;
+// The talks that read a tracker. Any number of talks may (Michael's decision of 13 October 2026: "The
+// psychology talk may ALSO look at my headache tracker"), so a card holds a list, `talks`. A card
+// written before that day names one `talk`, or null, and the headache add-on still makes its card that
+// way: it is read here as a list of that one, so no card needs a migration run. Every reader asks
+// this; a tracker question (tracker_proposals) is read the same way.
+const AREA=/^[a-z][a-z0-9-]{0,39}$/;
+export function talksOf(card){
+ if(!card||typeof card!=='object')return [];
+ const list=Array.isArray(card.talks)?card.talks:card.talk===undefined||card.talk===null||card.talk===''?[]:[card.talk];
+ return [...new Set(list.filter(t=>typeof t==='string'&&AREA.test(t)))];
+}
+// The card as every write stores it: `talks`, and the old `talk` gone.
+export function cardWithTalks(card,talks=talksOf(card)){const {talk,...rest}=card||{};return {...rest,talks:[...new Set(talks)]};}
+// Several talks in a reply: "health talk", "health and work talks", "health, work and money talks".
+export const talksWords=talks=>listWords(talks.map(talkWords))+(talks.length>1?' talks':' talk');
+// The talk action of the cycle and food trackers, which answer in their own words and language
+// (cycle-operations.mjs, food-operations.mjs), on the same list as every tracker: a talk is added and
+// the others keep reading it, `remove` takes away only that one, `instead` makes it the one talk. No
+// talk named: none reads it any more. `what` names the tracker, {en, de}; `exists` says whether a
+// talk is there (talkExists). Returns the new list, whether it changed, and the reply.
+export function talkChange(l,what,current,talk,{remove=false,instead=false,exists=()=>false}={}){
+ const de=l==='de',yours=de?'deinen '+what.de:'your '+what.en,done=de?'Erledigt: ':'Done: ',others=current.filter(t=>t!==talk);
+ const one=t=>talkWords(t)+' talk',quoted=ts=>listWords(ts.map(t=>'"'+t+'"'),'und');
+ const nobody={talks:[],changed:current.length>0,reply:done+(de?'Kein Gespräch liest '+yours+'.':'no talk reads '+yours+'.')};
+ if(!talk)return nobody;
+ if(remove){
+  if(!current.includes(talk))return {talks:current,changed:false,reply:de?'Dein Gespräch "'+talk+'" liest '+yours+' gar nicht.':'Your '+one(talk)+' was not reading '+yours+'.'};
+  if(!others.length)return nobody;
+  return {talks:others,changed:true,reply:done+(de?'Dein Gespräch "'+talk+'" liest '+yours+' nicht mehr.':'your '+one(talk)+' no longer reads '+yours+'.')};
+ }
+ if(!exists(talk))return {talks:current,changed:false,reply:de?'Es gibt noch kein Gespräch "'+talk+'". Sag, wann es stattfinden soll, dann kann es ab da '+yours+' lesen.':'There is no '+one(talk)+' yet. Say when it should happen, and from then on it can read '+yours+'.'};
+ if(current.includes(talk)&&!(instead&&others.length))return {talks:current,changed:false,reply:de?'Dein Gespräch "'+talk+'" liest '+yours+' schon.':'Your '+one(talk)+' already reads '+yours+'.'};
+ const tail=!others.length?'':instead?(de?', statt '+(others.length>1?'deiner Gespräche ':'deines Gesprächs ')+quoted(others):', instead of your '+talksWords(others))
+  :(de?', neben '+(others.length>1?'deinen Gesprächen ':'deinem Gespräch ')+quoted(others):', along with your '+talksWords(others));
+ return {talks:instead?[talk]:[...current,talk],changed:true,reply:done+(de?'Dein Gespräch "'+talk+'" darf jetzt '+yours+' lesen':'your '+one(talk)+' may now read '+yours)+tail+'.'};
+}
+// "instead" moves a tracker away from every other talk, so only their own words do it, never a guess:
+// "The psychology talk should look at my headache tracker instead", "statt dem Gesundheitsgespräch".
+const INSTEAD=/(?<!\p{L})(?:instead|rather than|in place of|move|moves|moved|stattdessen|statt|anstatt|anstelle|verschieb\p{L}*)(?!\p{L})/iu;
+export function assertInstead(input,{assistant=false}={}){
+ if(input.instead!==true||input.remove===true)return;
+ const said=String(input.words??input.source_quote??'').trim();
+ if((assistant||said)&&!INSTEAD.test(said))throw Error('Pass instead only when their own words say the talk should look at it instead of the others, with their message as words. Without instead the talk is added, and the talks that read it already keep reading it.');
+}
 // Day words, worked out in code (the capture run of 12 October 2026: "track belly 94 on Friday"
 // became the coming Friday and was refused as a future day). A weekday means the most recent one
 // before today, in English or German; today's own weekday name means today only when they say
@@ -163,7 +207,7 @@ export function columnWords(f){
  const name=String(f.label||f.key).toLowerCase(),unit=f.unit&&String(f.unit).toLowerCase()!==name?' in '+f.unit:'';
  return name+unit+(f.min!==undefined&&f.max!==undefined?' from '+fmt(f.min)+' to '+fmt(f.max):'');
 }
-const listWords=items=>items.length<2?items.join(''):items.slice(0,-1).join(', ')+' and '+items.at(-1);
+const listWords=(items,and='and')=>items.length<2?items.join(''):items.slice(0,-1).join(', ')+' '+and+' '+items.at(-1);
 // One value of a column for a reply: "7 hours", "quality 4 of 5", "mood calm".
 export function valueWords(f,v){
  if(f.type==='number'){const n=fmt(toNumber(v));if(f.unit)return n+' '+f.unit;return String(f.label||f.key).toLowerCase()+' '+n+(f.max!==undefined&&(f.min===undefined||f.min<=1)?' of '+fmt(f.max):'');}
@@ -206,7 +250,7 @@ export function holdQuestion(p,today){
 const pastWords=(day,today)=>{const gap=daysBetween(day,today);return gap===1?'yesterday':gap>1&&gap<7?'on '+WEEKDAYS[new Date(dayMs(day)).getUTCDay()]:'on '+longDay(day);};
 const onDay=(entry,today)=>{const day=String(entry?.data?.when??'').slice(0,10);return day&&day!==today?' '+pastWords(day,today):'';};
 export function createdReply(c,entry,today){
- const fields=own(c),one=fields.length===1&&fields[0].type==='number'?fields[0]:null,talk=c.tracker?.talk?' Your '+talkWords(c.tracker.talk)+' talk will read it.':'';
+ const fields=own(c),one=fields.length===1&&fields[0].type==='number'?fields[0]:null,talks=talksOf(c.tracker),talk=talks.length?' Your '+talksWords(talks)+' will read it.':'';
  const say='"track '+norm(c.name)+'"'+(one?' and the number':fields.length>1?' with its '+listWords(fields.map(f=>String(f.label||f.key).toLowerCase())):'');
  if(!entry)return c.name+' is ready. Say '+say+'.'+talk;
  const day=today?onDay(entry,today):'',what=one?' '+fmt(entry.data[one.key])+unitOf(one):fields.length>1?', '+entryWords(c,entry.data):'';

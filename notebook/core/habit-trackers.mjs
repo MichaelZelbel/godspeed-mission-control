@@ -17,6 +17,10 @@ export const habitId=h=>'habit-'+h.area+'-'+h.slug;
 const ANSWERS=['done','no','skip'],SAID={done:'done',no:'not done',skip:'skipped'};
 const habitNames=h=>[...new Set([h.title,h.slug.replaceAll('-',' ')].filter(Boolean))];
 const habitsOf=store=>store?.root?listHabits(store.root):[];
+// The talks that read a habit: its own area's, first. Michael's decision of 13 October 2026 lets any
+// number of talks read a tracker; for a habit the others will come from the coach's own file (a READ BY
+// line, the coach release after 0.2.7), read here as `readBy` once that coach is vendored.
+export const habitTalks=h=>[...new Set([h.area,...(Array.isArray(h.readBy)?h.readBy:[])].filter(t=>typeof t==='string'&&t))];
 // A habit by its tracker id, or by its title or slug said in full. Two that fit are named, never guessed.
 export function findHabits(store,ref){
  const named=norm(ref);if(!named)return [];
@@ -37,7 +41,7 @@ export function habitTrackerList(store,{today,from,now=clockNow(),zone=store.get
  return habitsOf(store).map(h=>{
   const progress=habitProgress(h,{now,timezone:zone,calendarDays});
   const days=answered(h),last=days.at(-1),todays=days.find(d=>d.when===progress.today);
-  return {id:habitId(h),name:h.title,names:habitNames(h),cadence:h.days==='daily'?'daily':'scheduled',days:h.days,daysText:h.daysText,started:h.started,doneMeans:h.doneMeans,progress,talk:h.area,specialist:'habit',status:h.status==='active'?'active':'resting',habit_status:h.status,hash:hash(fs.readFileSync(h.file)),
+  return {id:habitId(h),name:h.title,names:habitNames(h),cadence:h.days==='daily'?'daily':'scheduled',days:h.days,daysText:h.daysText,started:h.started,doneMeans:h.doneMeans,progress,talks:habitTalks(h),specialist:'habit',status:h.status==='active'?'active':'resting',habit_status:h.status,hash:hash(fs.readFileSync(h.file)),
    fields:[{key:'answer',label:'Done?',type:'select',options:[...ANSWERS]},{key:'note',label:'Note',type:'text'}],
    last:last?{id:last.id,when:last.when,data:last.data,hash:null}:null,today:todays?{id:todays.id,hash:null}:null,
    ...(from?{recent:days.filter(d=>d.when>=from).map(d=>({...d,hash:null}))}:{})};

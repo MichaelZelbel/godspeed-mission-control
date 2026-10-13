@@ -114,7 +114,7 @@ test('"track sauna" with no number, unit or columns is a tracker that counts eac
 test('a tracker names its coaching talk by the area\'s own name, and nothing else',async()=>{
   const {store,domains}=fixture({talks:['work']});
   const r=await say(domains,'I want to track invoices sent',[{type:'tracker-create',name:'Invoices',unit:'invoices',talk:'work'}]);
-  assert.match(r.operation_results[0].reply,/Your work talk will read it\.$/);assert.equal(trackers(store)[0].tracker.talk,'work');
+  assert.match(r.operation_results[0].reply,/Your work talk will read it\.$/);assert.deepEqual(trackers(store)[0].tracker.talks,['work']);assert.equal('talk' in trackers(store)[0].tracker,false);
   await assert.rejects(say(domains,'I want to track naps',[{type:'tracker-create',name:'Naps',unit:'min',talk:'../health'}]),/coaching talk/);
 });
 

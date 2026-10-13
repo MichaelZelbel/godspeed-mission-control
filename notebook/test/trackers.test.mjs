@@ -1,6 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';
 import {Store} from '../core/records/store.mjs';
-import {norm,card,trackers,findTracker,entries,trackerStatus,toNumber,dayOf,whenFor,schemaFor,entryData,holdQuestion,createdReply,instantReply} from '../core/trackers.mjs';
+import {norm,card,trackers,findTracker,entries,trackerStatus,toNumber,dayOf,whenFor,schemaFor,entryData,holdQuestion,createdReply,instantReply,talksOf,cardWithTalks,talksWords} from '../core/trackers.mjs';
 
 // Trackers (work/plans/2026-10-11-trackers-design.md, D-321): the rules every
 // way in shares, tested without a model.
@@ -79,6 +79,24 @@ test('the question and the first reply say exactly what will happen',()=>{
   assert.equal(createdReply({...c,tracker:{...c.tracker,talk:null}},null),'Belly is ready. Say "track belly" and the number.');
   // A talk is a coaching area by the name the person gave it.
   assert.equal(createdReply({...c,tracker:{...c.tracker,talk:'work'}},null),'Belly is ready. Say "track belly" and the number. Your work talk will read it.');
+  // Since 13 October 2026 a card holds a list of talks; the cards above are the older kind, with one.
+  assert.equal(createdReply({...c,tracker:{names:['Belly'],cadence:'daily',talks:['health']}},null),'Belly is ready. Say "track belly" and the number. Your health talk will read it.');
+  assert.equal(createdReply({...c,tracker:{names:['Belly'],cadence:'daily',talks:['health','psychology']}},null),'Belly is ready. Say "track belly" and the number. Your health and psychology talks will read it.');
   assert.deepEqual(entryData(c,{value:'92,5',note:'after dinner'}),{value:92.5,note:'after dinner'});
   assert.throws(()=>entryData(c,{}),/value/);
+});
+
+// Any number of talks may read a tracker (Michael's decision of 13 October 2026). A card written before
+// that day names one `talk`, or null: every reader asks talksOf, and every write stores `talks`.
+test('a card\'s talks: a list, an older single talk read as one, and the old field dropped on write',()=>{
+  assert.deepEqual(talksOf({talks:['health','psychology']}),['health','psychology']);
+  assert.deepEqual(talksOf({talk:'health'}),['health']);
+  assert.deepEqual(talksOf({talk:null}),[]);assert.deepEqual(talksOf({}),[]);assert.deepEqual(talksOf(null),[]);
+  assert.deepEqual(talksOf({talks:['health'],talk:'work'}),['health'],'the list wins over an older field');
+  assert.deepEqual(talksOf({talks:['health','health','../x','',null,'work-money']}),['health','work-money'],'each talk once, and only an area name');
+  assert.deepEqual(cardWithTalks({names:['Belly'],talk:'health',specialist:null}),{names:['Belly'],specialist:null,talks:['health']});
+  assert.deepEqual(cardWithTalks({names:['Belly'],talk:'health'},['health','work']),{names:['Belly'],talks:['health','work']});
+  assert.equal(talksWords(['health']),'health talk');
+  assert.equal(talksWords(['health','work-money']),'health and work and money talks');
+  assert.equal(talksWords(['health','psychology','sleep']),'health, psychology and sleep talks');
 });
