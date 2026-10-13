@@ -1,6 +1,6 @@
 ---
 name: morning-brief
-description: Write today's morning brief into brief/YYYY-MM-DD.md, the short message that reaches the person each morning when they switched it on in setup. The starter version every mission control ships with; Chapter 25 of the book shows how to replace it with your own. Use when the morning brief job runs, when the person asks for "today's brief", "my brief" or "the brief again", when they answer the brief's list of steps going out with "stop" or "stop" and a number, and when they ask to switch the morning brief on.
+description: Write today's morning brief into brief/YYYY-MM-DD.md, the short message that reaches the person each morning when they switched it on in setup. The starter version every mission control ships with; Chapter 25 of the book shows how to replace it with your own. Use when the morning brief job runs, when the person asks for "today's brief", "my brief" or "the brief again", when they answer the brief's list of steps going out with "stop" or "stop" and a number, when they ask to put back a step the brief reported as done without asking, and when they ask to switch the morning brief on.
 ---
 
 # Morning brief (starter)
@@ -83,6 +83,22 @@ line 2: find the `id` whose `n` is 2 in `mc-work going-out --json` and run
 `mc-work stop <id> --words "<their words>"` (for several numbers, once for each). Confirm in one
 plain sentence what is kept back. When nothing was going out, say "Nothing was going out today."
 and run nothing.
+
+## Done yesterday without asking
+
+Some kinds of step the person allowed to go out alone, on their own pages, files and accounts,
+without being shown first: this brief is where they hear about them, after. Run
+`mc-work went-out --json`: the steps that went out alone and were checked live yesterday. When it
+lists nothing, or `mc-work` is not installed, leave this section out. Otherwise write, in the
+person's language:
+
+    Done yesterday without asking:
+    - <what changed where, in plain words> (<its goal, in plain words>) <its link, if it has one>
+
+Write `what` as one plain sentence without file paths. This section does not count toward the
+200 words. When they ask to put one back, what was there before is kept in
+`routines/work/<day>/<its id>/before.txt`: put it back at the same place, check the place live, and
+say in one sentence that it is back.
 
 ## Deadlines and targets
 

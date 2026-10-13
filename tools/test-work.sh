@@ -574,6 +574,39 @@ OUT="$(hw tick 2>&1)"
 contains "  and tick sets it to wait for a fresh yes" "$OUT" "$S3: the standing permission page-fixes is no longer on str6"
 check "  (blocked, needing authorization)" "$(st "$S3")$(sed -n 's/^NEEDS: //p' "$TMP/work/$S3.md")" "blocked authorization"
 
+# --- what went out alone is reported after (final review M1, 2026-10-13) -------------------------
+cat > "$TMP/goals/al.md" <<'EOF'
+ID: al
+KIND: outcome
+STATUS: adopted
+TITLE: Own pages
+
+MAY: al-pages | fix wording on my own pages | 5 per week | alone | "fix them yourself" 2026-09-20
+MAY: al-replies | answer replies under my posts | 5 per week | notice | "answer them" 2026-09-20
+
+## Log
+- 2026-09-20 FILED adopted outcome, source: x
+EOF
+A30() { GODSPEED_TODAY=2026-09-30 GODSPEED_NOW="2026-09-30T$1:00Z" hw "${@:2}" 2>&1; }
+touch "$TMP/live.txt"
+A30 09:00 file --what "Fix the typo on my about page" --done-when "the page reads right" --goal al --outward yes --may al-pages --check "test -f live.txt" --key al1 --source t >/dev/null
+AL1="$(idof al1)"
+A30 09:05 take "$AL1" --runner test >/dev/null; A30 09:06 attempt "$AL1" --runner test --ok --result "fixed" >/dev/null; A30 09:07 verify "$AL1" >/dev/null
+check "(the alone step went out and was verified on the 30th)" "$(st "$AL1")" "verified "
+A30 06:00 file --what "Answer the question under my post" --done-when "the reply is visible" --goal al --outward yes --may al-replies --check "test -f live.txt" --key al2 --source t >/dev/null
+AL2="$(idof al2)"; A30 06:05 announce "$AL2" >/dev/null
+A30 18:05 take "$AL2" --runner test >/dev/null; A30 18:06 attempt "$AL2" --runner test --ok --result "replied" >/dev/null; A30 18:07 verify "$AL2" >/dev/null
+check "(the notice step went out and was verified on the 30th too)" "$(st "$AL2")" "verified "
+A30 10:00 file --what "Write the plan" --done-when "the plan is written" --goal al --check "test -f live.txt" --key al3 --source t >/dev/null
+AL3="$(idof al3)"; A30 10:01 take "$AL3" --runner test >/dev/null; A30 10:02 attempt "$AL3" --runner test --ok --result "written" >/dev/null; A30 10:03 verify "$AL3" >/dev/null
+OUT="$(GODSPEED_TODAY=2026-10-01 GODSPEED_NOW=2026-10-01T05:00:00Z hw went-out 2>&1)"
+contains "the next morning went-out lists the step that went out alone yesterday" "$OUT" "$AL1: Fix the typo on my about page (al, standing al-pages)"
+missing "  not the notice step, which the morning message showed before it went" "$OUT" "$AL2"
+missing "  nor work that needed no permission" "$OUT" "$AL3"
+check "  --json carries id, kind and the day" "$(GODSPEED_TODAY=2026-10-01 hw went-out --json 2>&1 | "$NODE" -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{console.log(JSON.parse(s).map(r=>r.id+":"+r.kind+":"+r.verified).join(","))})')" "$AL1:al-pages:2026-09-30"
+contains "  a day later it is not listed again" "$(GODSPEED_TODAY=2026-10-02 hw went-out 2>&1)" "nothing went out without asking on 2026-10-01"
+contains "  --date names the day" "$(hw went-out --date 2026-09-30 2>&1)" "$AL1"
+
 echo
 echo "$PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

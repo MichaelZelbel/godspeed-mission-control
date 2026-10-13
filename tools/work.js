@@ -520,6 +520,21 @@ cmds.announce = (a) => {
   if (missed) process.exit(1);
 };
 
+// WENT OUT. A step of a kind the person allowed to go out alone is not shown before it goes; it is
+// reported after (final review M1, 2026-10-13): the morning message lists the ones verified the day
+// before. Notice steps are not listed: the morning message showed them before they went.
+cmds['went-out'] = (a) => {
+  const d = a.date || L.addDays(today(), -1);
+  const rows = S.all().filter(c => isStanding(c) && c.f.MAY && !c.f['GOES OUT'] && c.f.STATUS === 'verified'
+    && c.log.some(l => l.event === 'VERIFIED' && l.date === d));
+  if (flag(a, 'json')) {
+    say(JSON.stringify(rows.map(c => ({ id: c.id, what: c.f.WHAT, goal: c.f.GOAL || '', kind: c.f.MAY, link: c.f.LINK || '', verified: d }))));
+    return;
+  }
+  if (!rows.length) { say(`nothing went out without asking on ${d}`); return; }
+  for (const c of rows) say(`${c.id}: ${c.f.WHAT} (${c.f.GOAL ? c.f.GOAL + ', ' : ''}standing ${c.f.MAY})` + (c.f.LINK ? ` ${c.f.LINK}` : ''));
+};
+
 // SWEEP. Your answer on a card, or a change to a goal, reaches the work underneath it.
 cmds.sweep = (a) => {
   const d = a.date || today();
@@ -660,6 +675,8 @@ cmds.help = () => say(`mc-work: dispatched, attempted and verified are three dif
                                         24 hours (with --date: that UTC day). The shown ones first in time order,
                                         so "stop 2" means the same one until that slot's 18:00 UTC, wherever the
                                         person lives; JSON carries announced (its date, or "" when not shown yet)
+  went-out [--date D] [--json]          the steps that went out alone on a standing permission and were verified
+                                        on day D (default yesterday): what the morning message reports after
   attempt <id> --runner <name> --ok --result "..." | --failed "why"   failed: retry in 1, 2, 4 days, never outward
   verify <id> [--evidence "..."]     runs CHECK; verified only on exit 0, or on evidence a person observed
   block <id> --needs ... | unblock <id> --why ... [--approved-by "..."] | cancel <id> --why ...
