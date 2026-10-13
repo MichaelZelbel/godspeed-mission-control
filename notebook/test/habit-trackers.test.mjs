@@ -74,6 +74,7 @@ test('progress is full-history regardless of entry window; owner can choose calm
  const {domains,store,walk}=fixture();
  let card=(await op(domains,{type:'tracker-list',days:1})).trackers.find(t=>t.id==='habit-health-walk-to-work');
  assert.equal(card.progress.lifetimeCompletedDays,1);assert.equal(card.recent.length,0);assert.equal(card.doneMeans,'walked both ways');assert.equal(card.progress.calendar.length,14);
+ const shown=await op(domains,{type:'habit-progress',tracker:card.id,action:'show'});assert.equal(shown.reply,'Walk to work and back: 1 completed day altogether.');assert.equal(shown.habit.status,'active');
  const r=await op(domains,{type:'habit-progress',tracker:card.id,action:'display',display:'calm',expected:{[card.id]:card.hash}});assert.equal(r.habit.progress.display,'calm');
  await assert.rejects(op(domains,{type:'habit-progress',tracker:card.id,action:'pause',expected:{[card.id]:card.hash}}),/changed/);
  await op(domains,{type:'habit-progress',tracker:card.id,action:'exempt',from:'2026-10-04',to:'2026-10-12',note:'hospital'});

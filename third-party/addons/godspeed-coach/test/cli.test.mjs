@@ -35,6 +35,15 @@ test('habit effective dates reject future writes and follow the fixed habit time
  const resumed=cli(mc,at,'habit','resume','reading','--date','yesterday');assert.equal(resumed.code,0);assert.match(fs.readFileSync(file,'utf8'),/"kind":"status","on":"2026-10-11","status":"active"/);
 });
 
+test('progress replies use singular days and completions, and include the actual habit status',()=>{
+ const mc=mission(),at='2026-10-13T12:00:00Z';
+ cli(mc,at,'habit','add','health','reading','--title','Reading','--days','daily');
+ const done=JSON.parse(cli(mc,at,'habit','track','reading','--json').out);
+ assert.equal(done.reply,'Reading: 1 completed day altogether, 1 completion in this run.');assert.equal(done.progressCard.status,'active');
+ const paused=JSON.parse(cli(mc,at,'habit','pause','reading','--json').out);assert.equal(paused.progressCard.status,'paused');
+ const shown=JSON.parse(cli(mc,at,'habit','progress','reading','--json').out);assert.match(shown.reply,/1 completed day altogether/);assert.equal(shown.progressCard.status,'paused');
+});
+
 test("habits: add, track by loose words, answer tonight's check, list", () => {
   const mc = mission();
   const T = "2026-09-29T10:00:00Z";

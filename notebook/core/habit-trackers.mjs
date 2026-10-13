@@ -82,10 +82,10 @@ export function habitOperation(store,input,{now,zone,today,assistant=false}){
  if(expected!==undefined&&expected!==hash(fs.readFileSync(h.file)))throw Error('This habit changed; reload its progress before saving');
  zone=h.timezone||zone;today=localParts(now,zone).date;
  h.progressTimezone=zone;
- const result=(updated,data)=>({...data,progress:habitProgress(updated,{now,timezone:zone}),habit:{id:habitId(updated),name:updated.title,doneMeans:updated.doneMeans,days:updated.days,daysText:updated.daysText,started:updated.started,progress:habitProgress(updated,{now,timezone:zone})}});
+ const result=(updated,data)=>({...data,progress:habitProgress(updated,{now,timezone:zone}),habit:{id:habitId(updated),name:updated.title,status:updated.status,doneMeans:updated.doneMeans,days:updated.days,daysText:updated.daysText,started:updated.started,progress:habitProgress(updated,{now,timezone:zone})}});
  const words=String(input.note??input.words??input.source_quote??'').trim(),name=lower(h.title);
  if(input.type==='habit-progress'){
-  if(input.action==='show')return result(h,{habit_id:habitId(h),action:'show',reply:h.title+': '+habitProgress(h,{now,timezone:zone}).lifetimeCompletedDays+' completed days altogether.'});
+  if(input.action==='show'){const total=habitProgress(h,{now,timezone:zone}).lifetimeCompletedDays;return result(h,{habit_id:habitId(h),action:'show',reply:h.title+': '+total+' completed '+(total===1?'day':'days')+' altogether.'});}
   if(assistant)assertHabitProgressRequest(store,input,{now,zone});
   if(assistant&&!words)throw Error("Pass the person's own message as words");
   const action=input.action;let updated;

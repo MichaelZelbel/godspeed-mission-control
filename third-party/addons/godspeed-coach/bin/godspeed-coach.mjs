@@ -54,8 +54,8 @@ const at = now();
 const today = localParts(at, s.timezone).date;
 const out = (human, json) => console.log(f.json ? JSON.stringify(json) : human);
 const saved = (label) => syncInBackground(mcDir, `coach: ${label}`, syncMode);
-const progressResult=h=>({habit:h.slug,progressCard:{id:'habit-'+h.area+'-'+h.slug,name:h.title,doneMeans:h.doneMeans,days:h.days,daysText:h.daysText,started:h.started,progress:habitProgress(h,{now:at,timezone:s.timezone})}});
-const progressReply=h=>{const p=habitProgress(h,{now:at,timezone:s.timezone});return `${h.title}: ${p.lifetimeCompletedDays} completed days altogether${p.display==='calm'?'':`, ${p.currentRun} completions in this run`}.`;};
+const progressResult=h=>({habit:h.slug,progressCard:{id:'habit-'+h.area+'-'+h.slug,name:h.title,status:h.status,doneMeans:h.doneMeans,days:h.days,daysText:h.daysText,started:h.started,progress:habitProgress(h,{now:at,timezone:s.timezone})}});
+const progressReply=h=>{const p=habitProgress(h,{now:at,timezone:s.timezone});return `${h.title}: ${p.lifetimeCompletedDays} completed ${p.lifetimeCompletedDays===1?'day':'days'} altogether${p.display==='calm'?'':`, ${p.currentRun} ${p.currentRun===1?'completion':'completions'} in this run`}.`;};
 
 function dateArg(v) {
   if (!v || v === "today") return today;
