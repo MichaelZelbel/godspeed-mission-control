@@ -458,6 +458,35 @@ OUT="$(hg allow mm-aud --kind pages --what "replace a broken link on my own site
 hg allow mm-aud --kind pages --revoke --words "test cleanup" >/dev/null 2>&1
 OUT="$(hg check 2>&1)"; missing "a card with MAY lines is no PROBLEM for check" "$OUT" "PROBLEM mm-aud"
 
+# --- goals the person pinned for a trial (final review I3, 2026-10-13) --------------------------
+# Three seats over six outcomes left three of four trial goals quiet on the trial's first day.
+# GODSPEED_ATTENTION_PIN names goals that are always active and ranked first; the seats grow to
+# hold every one of them.
+band() { "$NODE" -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const p=JSON.parse(s);console.log(process.argv[1]==="active"?p.active.map(r=>r.id).join(","):process.argv[1]==="quiet"?p.quiet.map(r=>r.id).join(","):p[process.argv[1]])})' "$1"; }
+QUIET="$(hg attention --json 2>&1 | band quiet)"
+Q1="$(printf '%s' "$QUIET" | cut -d, -f1)"; Q2="$(printf '%s' "$QUIET" | cut -d, -f2)"
+Q3="$(printf '%s' "$QUIET" | cut -d, -f3)"; Q4="$(printf '%s' "$QUIET" | cut -d, -f4)"
+[ -n "$Q4" ] && ok "(four outcomes are quiet without a pin: $QUIET)" || bad "(four quiet outcomes needed for this test, got: $QUIET)"
+J="$(GODSPEED_ATTENTION_PIN="$Q3" hg attention --json 2>&1)"
+check "a pinned goal that would be quiet is active, and ranked first" "$(printf '%s' "$J" | band active | cut -d, -f1)" "$Q3"
+check "  the seats stay three when one is pinned" "$(printf '%s' "$J" | band seats)" "3"
+contains "  and its row says why" "$(GODSPEED_ATTENTION_PIN="$Q3" hg attention 2>&1 | grep "^  $Q3 ")" "pinned for a trial"
+# The text output is what mc-decide keeps (attention.txt) and what the trial check reads: a pinned
+# goal's row sits under "active:", never under "quiet today:".
+TXT="$(GODSPEED_ATTENTION_PIN="$Q3" hg attention 2>&1)"
+check "  in the text, its row is the first under active:" "$(printf '%s\n' "$TXT" | sed -n '/^active:/{n;p;}' | awk '{print $1}')" "$Q3"
+missing "  and it is not under quiet today:" "$(printf '%s\n' "$TXT" | sed -n '/^quiet today:/,/^[^ ]/p')" "  $Q3 "
+J="$(GODSPEED_ATTENTION_PIN="$Q1,$Q2, $Q3,$Q4" hg attention --json 2>&1)"
+check "four pinned: all four are active, first" "$(printf '%s' "$J" | band active)" "$Q1,$Q2,$Q3,$Q4"
+check "  the seats grow to four" "$(printf '%s' "$J" | band seats)" "4"
+contains "  and the header says so" "$(GODSPEED_ATTENTION_PIN="$Q1,$Q2,$Q3,$Q4" hg attention 2>&1)" "at most 4 outcomes active"
+check "--active 5 with four pinned keeps five seats" "$(GODSPEED_ATTENTION_PIN="$Q1,$Q2,$Q3,$Q4" hg attention --active 5 --json 2>&1 | band seats)" "5"
+OUT="$(GODSPEED_ATTENTION_PIN="no-such-goal,friends" hg attention 2>&1)"
+contains "a pinned id that is not on the register holds no seat, and a note says so" "$OUT" "note: no-such-goal is pinned for a trial, but it is not an adopted outcome"
+missing "  a pinned provisional idea is never active" "$(printf '%s' "$OUT" | sed -n '/^active:/,/^quiet/p')" "  friends "
+GODSPEED_ATTENTION_PIN="$Q4" hg attention --record --why "pinned trial day" >/dev/null 2>&1
+check "--record writes ATTENTION on a pinned goal" "$(grep -c 'ATTENTION pinned trial day' "$TMP/goals/$Q4.md")" "1"
+
 echo
 echo "$PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

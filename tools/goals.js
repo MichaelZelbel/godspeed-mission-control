@@ -848,7 +848,9 @@ cmds.research = (a) => {
 // attention: which goals deserve attention today, and why. Weightless. Reads, never writes,
 // unless --record.
 // ---------------------------------------------------------------------------
-function plan(d, seats) {
+// GODSPEED_ATTENTION_PIN=a,b,c: goals the person pinned for a trial (see plan, below).
+const pinsFromEnv = () => String(process.env.GODSPEED_ATTENTION_PIN || '').split(',').map(s => s.trim()).filter(Boolean);
+function plan(d, seats, pins = pinsFromEnv()) {
   const all = S.all();
   const rows = [];
   const openQ = (c) => { const l = last(c, ['QUESTION', 'ANSWER']); return l && l.event === 'QUESTION' ? l : null; };
@@ -930,7 +932,15 @@ function plan(d, seats) {
   const top = rows.filter(r => r.rank && (r.kind === 'outcome' || r.kind === 'commitment' || r.standsAlone));
   top.sort((x, y) => { for (let i = 0; i < x.rank.length; i++) if (x.rank[i] !== y.rank[i]) return x.rank[i] - y.rank[i]; return x.id < y.id ? -1 : 1; });
   const protectedRows = top.filter(r => r.kind === 'commitment');
-  const outcomes = top.filter(r => r.kind !== 'commitment');
+  // GOALS THE PERSON PINNED FOR A TRIAL (2026-10-13, final review I3). A trial that judges a goal
+  // by a decision and steps every day cannot let the seats rotate it out: three seats over six
+  // outcomes left three of four trial goals quiet on its first day. A pinned goal is always active
+  // and ranked first, and the seats grow to hold every pinned goal.
+  const pinSet = new Set(pins);
+  const pinnedRows = top.filter(r => r.kind !== 'commitment' && pinSet.has(r.id));
+  const outcomes = pinnedRows.concat(top.filter(r => r.kind !== 'commitment' && !pinSet.has(r.id)));
+  seats = Math.max(seats, pinnedRows.length);
+  for (const r of pinnedRows) r.reasons.unshift('pinned for a trial: active every day while it stays pinned');
   const active = outcomes.slice(0, seats);
   for (const r of protectedRows) r.band = 'protected';
   for (const r of active) r.band = 'active';
@@ -946,6 +956,7 @@ function plan(d, seats) {
   }
   const energy = active.map(r => (S.read(r.id) || { f: {} }).f.ENERGY).filter(e => e === 'high');
   const notes = [];
+  for (const id of pins) if (!pinnedRows.some(r => r.id === id)) notes.push(`${id} is pinned for a trial, but it is not an adopted outcome (or a goal that stands on its own) on the register, so it holds no seat`);
   if (energy.length >= 2) notes.push(`${energy.length} active outcomes both ask for high energy today; expect one to move and say which`);
   const asks = rows.filter(r => r.band === 'provisional' && r.mayAsk).sort((x, y) => x.id < y.id ? -1 : 1);
   const ask = asks.length ? asks[0] : null;
@@ -964,7 +975,7 @@ cmds.attention = (a) => {
     }
   }
   if (flag(a, 'json')) { say(JSON.stringify(p, null, 2)); return; }
-  say(`Attention for ${d} (at most ${seats} outcomes active; every row carries its reason)`);
+  say(`Attention for ${d} (at most ${p.seats} outcomes active; every row carries its reason)`);
   const line = (r) => `  ${r.id.padEnd(34)} ${r.kind.padEnd(11)} ${r.reasons.join('; ') || 'nothing pressing'}`;
   if (p.protected.length) { say('protected:'); p.protected.forEach(r => say(line(r))); }
   say('active:');
@@ -1091,7 +1102,9 @@ cmds.help = () => say(`mc-goals: the register of what you want, and the choice o
   bets --moves <moves.md>                 copies each move's BET onto its goal (mc-decide runs it)
   settle [--date D] [--dry-run] [--json]  seven days after a move went live: worked, moved, flat, unread
                                           or never-live, written by this program from the readings
-  attention [--date D] [--active 3] [--json] [--record]   which goals get attention today and why (weightless bands)
+  attention [--date D] [--active 3] [--json] [--record]   which goals get attention today and why (weightless bands);
+                                          GODSPEED_ATTENTION_PIN=a,b,c names goals the person pinned for a trial:
+                                          always active and ranked first, with as many seats as there are pinned
   list [--all] [--kind K] [--json] | show <id> | tree | check`);
 
 return {cmds,plan,parseLead,judge};

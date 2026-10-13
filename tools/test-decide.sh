@@ -126,6 +126,17 @@ check "  an assistant that crashed on the way back fails the run" "$RC" "1"
 contains "  and the line names that answer" "$OUT" "answer-moves.txt.stderr"
 contains "  and says the day is decided but not finished" "$OUT" "decided $D, but the assistant did not finish"
 
+echo "-- goals the person pinned for a trial reach the day's attention plan (final review I3)"
+for g in a1 a2 a3 a4; do GODSPEED_ROOT="$G" GODSPEED_TODAY="$D" "$NODE" "$HERE/goals.js" file --kind outcome --title "Goal $g" --id "$g" --status adopted --source "test" >/dev/null 2>&1; done
+fresh; decide >/dev/null
+ACTIVE="$(sed -n '/^active:/,/^[^ ]/p' "$RUN/attention.txt")"
+missing "  without a pin, a4 waits behind three seats" "$ACTIVE" "  a4 "
+fresh; GODSPEED_ATTENTION_PIN=a4 decide >/dev/null
+ACTIVE="$(sed -n '/^active:/,/^[^ ]/p' "$RUN/attention.txt")"
+contains "  mc-decide hands GODSPEED_ATTENTION_PIN on: the pinned goal is active" "$ACTIVE" "  a4 "
+check "  and first" "$(printf '%s\n' "$ACTIVE" | sed -n '2p' | awk '{print $1}')" "a4"
+rm -f "$G/goals/a1.md" "$G/goals/a2.md" "$G/goals/a3.md" "$G/goals/a4.md"; rm -rf "$G/goals/research"
+
 echo
 echo "$PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]
