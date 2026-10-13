@@ -263,6 +263,18 @@ OUT="$(hw file --what "Answer A" --done-when x --goal news --outward yes --may n
 contains "  and says why" "$OUT" "checked live"
 check "  and files nothing" "$(grep -l '^KEY: n0$' "$TMP/work"/*.md 2>/dev/null | wc -l | tr -d ' ')" "0"
 OUT="$(hw file --what "Answer A" --done-when x --goal news --outward yes --may nl-replies --check --key n0 --source t 2>&1)"; check "  a bare --check, which checks nothing, is refused too" "$?" "1"
+# A check that looks at nothing passes whatever happened (final review, 2026-10-13).
+for noop in 'exit 0' 'true;' ':;' ':' 'echo ok' 'true && exit 0' '[ 1 = 1 ]' 'test -n "x"' "sh -c 'exit 0'"; do
+  OUT="$(hw file --what "Answer A" --done-when x --goal news --outward yes --may nl-replies --check "$noop" --key n0 --source t 2>&1)"
+  check "  a check that looks at nothing ($noop) is refused" "$?" "1"
+done
+contains "  and says why" "$OUT" "passes whatever happened, so it checks nothing"
+check "  and files nothing" "$(grep -l '^KEY: n0$' "$TMP/work"/*.md 2>/dev/null | wc -l | tr -d ' ')" "0"
+for real in 'curl -sf https://example.org/r | grep -q "the reply"' '[ -s reply.txt ]' 'cd site && test -f index.html'; do
+  OUT="$(hw file --what "Answer real" --done-when x --goal news --outward yes --may nl-replies --check "$real" --key n-real --source t 2>&1)"
+  check "  a check that looks at something ($real) is accepted" "$?" "0"
+  hw stop "$(printf '%s' "$OUT" | grep -o 'W-[0-9]*-[0-9]*' | head -1)" --words "test cleanup" >/dev/null 2>&1   # never shown: it would roll into later days
+done
 OUT="$(GODSPEED_NOW=2026-09-13T18:30:00Z nf "Answer late" n1)"
 N1="$(idof n1)"
 check "filed after 18:00 UTC, it goes out at 18:00 UTC the next day" "$(sed -n 's/^GOES OUT: //p' "$TMP/work/$N1.md")" "2026-09-14T18:00"

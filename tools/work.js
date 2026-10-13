@@ -100,6 +100,24 @@ function standing(goal) {
   return standings[goal];
 }
 function goalMay(goal) { const st = standing(goal); return st ? st.lines : null; }
+// A CHECK THAT LOOKS AT NOTHING CHECKS NOTHING (final review, 2026-10-13). A step that goes out
+// without a yes each time is verified by its CHECK, and `true`, `:`, `exit 0`, `true;` or `echo ok`
+// pass whatever happened. So the check must hold at least one command that looks at something:
+// any command but the ones below, and test or [ ] only when it tests a file or a value that comes
+// from a command or a variable. sh -c '...' and bash -c '...' are read inside.
+const NO_LOOK = new Set(['true', 'false', ':', 'exit', 'return', 'echo', 'printf', 'sleep', 'cd', 'pwd', 'export', 'set', 'unset', 'wait', '/bin/true', '/usr/bin/true', '/bin/false']);
+function looksAtSomething(check) {
+  return String(check || '').split(/;|&&|\|\||\||&|\n/).some(segment => {
+    const seg = segment.trim().replace(/^[({!\s'"]+|[)}\s'"]+$/g, '');
+    const words = seg.split(/\s+/).filter(Boolean);
+    while (words.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(words[0])) words.shift();
+    const cmd = words[0] || '';
+    if (!cmd || NO_LOOK.has(cmd)) return false;
+    if (/^(?:ba)?sh$/.test(path.basename(cmd)) && words[1] === '-c') return looksAtSomething(words.slice(2).join(' '));
+    if (/^(?:test|\[|\[\[)$/.test(cmd)) return /\$|\s-(?:[efsdrwxLhpSbcgukOGN]|nt|ot|ef)\s/.test(` ${seg} `);
+    return true;
+  });
+}
 const isStanding = (c) => /^standing /.test(c.f.APPROVED || '');
 const standingText = (m) => `standing ${m.kind}: "${m.words}"`;
 // The permission this item was filed under is still on its goal card: the same kind, in the same
@@ -244,8 +262,10 @@ cmds.file = (a) => {
     holder = st.holder;
     // A step that goes out without a yes each time is checked live after it lands (and keeps
     // its UNDO, which mc-work-run enforces): the check is what verify runs.
-    // A bare --check reads as the word true, which checks nothing, so it is refused too.
-    if (!oneLine(a.check) || ['true', ':'].includes(oneLine(a.check))) die('--may needs --check "<shell that exits 0 when the step is live>": a step that goes out without a yes each time is checked live after it lands');
+    // A bare --check reads as the word true, which checks nothing, so it is refused too, and so is
+    // any check that looks at nothing (true;, :;, exit 0, echo ok: see looksAtSomething).
+    if (!oneLine(a.check) || oneLine(a.check) === 'true') die('--may needs --check "<shell that exits 0 when the step is live>": a step that goes out without a yes each time is checked live after it lands');
+    if (!looksAtSomething(oneLine(a.check))) die(`--may needs a --check that looks at the live place (a page, a file, an API): "${oneLine(a.check)}" passes whatever happened, so it checks nothing`);
     // The limit belongs to the MAY line, so it is counted on the goal that holds it: a strategy's
     // steps and its outcome's own share the outcome's weekly limit (2026-10-13).
     const weekAgo = L.addDays(d, -6);
@@ -618,7 +638,8 @@ cmds.help = () => say(`mc-work: dispatched, attempted and verified are three dif
                                         or project with none of its own uses its outcome's, and shares that
                                         outcome's weekly limit, mc-goals may G): its APPROVED
                                         quotes the person's words, and it must carry a CHECK that exits 0 once the
-                                        step is live (mc-work-run also needs its UNDO copy, before.txt, to call it
+                                        step is live and looks at the live place (true, :, exit 0, echo ... are
+                                        refused) (mc-work-run also needs its UNDO copy, before.txt, to call it
                                         done). It goes out only while that permission is on the card in the same
                                         words, given on or before the day it was filed. notice kind: goes out at
                                         GOES OUT unless stopped (a GOES OUT not in its form is never due);
