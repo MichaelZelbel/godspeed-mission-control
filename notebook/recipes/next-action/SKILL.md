@@ -41,7 +41,11 @@ person said, once and in their own words, may go out without asking each time. A
 kind is filed `--outward yes --may <kind> --check "<how to see it live>"` with
 `PERMISSION: may:<kind>`, and keeps its UNDO (what was there before), so it can be put back. In
 notice mode it goes out at 18:00 UTC unless the person says stop in the morning message; in alone
-mode the runner applies it when ready and the morning message reports it. Only moves of a kind no
+mode the runner applies it when ready and the morning message reports it. A strategy or project
+with no MAY lines of its own moves under those of the first outcome on its SERVES line that has
+some (`mc-goals may <strategy>` shows them and names that outcome): file the move with the
+strategy's own id, `--goal <strategy> --may <kind>`, and write `PERMISSION: may:<kind>`; it counts
+toward that outcome's weekly limit. Only moves of a kind no
 MAY line covers go on the ship list. Prefer a move under a MAY line over an equal one that needs a
 fresh yes: a step that waits for a yes that does not come is a step that never happened. Once a
 week per goal, when the research brief's "Worth asking for" names a kind of step, put ONE line on
@@ -338,14 +342,17 @@ MAKE item for the runner (Step 4), and joins the ship list the day it is ready.
     WHERE: <the live address>
     NOW: <quoted, read live today>
     AFTER: <the exact new version, in full>
-    WHO DID THIS: <a named person or company outside this mission control, what they did, where
-                  you read it today; this mission control's own past work is never the example>
+    WHO DID THIS: <a named person or company outside this mission control, from the goal's
+                  cases.md or people.md (a strategy's or project's without research of its own:
+                  those of the first outcome on its SERVES line that has some), what they did,
+                  where you read it today; this mission control's own past work is never the example>
     HOW IT LANDS: <API | signed-in browser | company | only the person> and the live CHECK;
                   "only the person" is the last resort: look for a route the mission control
                   holds first (another field, another page, an API) and say which you tried
     UNDO: <how NOW comes back>
-    PERMISSION: <may:<kind> when one of the goal's MAY lines covers it; for a goal with no MAY
-                lines, the ALLOWED line that covers it; otherwise "ship list">
+    PERMISSION: <may:<kind> when one of the goal's MAY lines covers it (a strategy's or project's
+                with none of its own: its outcome's, as `mc-goals may <id>` shows); for a goal
+                with no MAY lines, the ALLOWED line that covers it; otherwise "ship list">
 
 Every move of a goal with a LEAD carries a BET and an APPLY item, including a move only the person
 can make: file it OWNER person, its CHECK a line a machine can run that shows it happened (the mail

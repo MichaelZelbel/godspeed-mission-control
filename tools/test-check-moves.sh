@@ -175,6 +175,21 @@ printf 'ID: health-goal\nKIND: outcome\nSTATUS: adopted\nMAY: walk-log | note my
 OUT="$(run)"; [ $? -eq 0 ] && ok "  a goal's own kind passes for that goal" || bad "  health-goal's own kind: $OUT"
 { full; move 4 health-goal "Simon Willison" "x" | grep -v '^APPLY' | sed 's/^PERMISSION: .*/PERMISSION: may:yt-replies/'; } > "$RUN/moves.md"
 OUT="$(run)"; case "$OUT" in *"PERMISSION may:yt-replies is not a standing permission of health-goal"*) ok "  and another goal's MAY line does not cover it";; *) bad "  MAY of another goal: $OUT";; esac
+# A strategy with no MAY lines of its own moves under those of the outcome it serves (final review
+# I6, 2026-10-13): the first outcome on its SERVES line that has some, one level up.
+printf 'ID: yt-strat\nKIND: strategy\nSTATUS: adopted\nSERVES: no-card-goal, money-plain, yt-goal\n\n## Log\n' > "$TMP/goals/yt-strat.md"
+printf 'ID: money-plain\nKIND: outcome\nSTATUS: adopted\n\n## Log\n' > "$TMP/goals/money-plain.md"
+stratmove() { move 4 "$1" "Simon Willison" "the reply, in full" | grep -v '^APPLY' | sed "s/^PERMISSION: .*/PERMISSION: may:$2/"; }
+{ full; stratmove yt-strat yt-replies; } > "$RUN/moves.md"
+OUT="$(run)"; [ $? -eq 0 ] && ok "a strategy's move under its outcome's MAY line passes" || bad "strategy under its outcome's MAY: $OUT"
+{ full; stratmove yt-strat walk-log; } > "$RUN/moves.md"
+OUT="$(run)"; case "$OUT" in *"PERMISSION may:walk-log is not a standing permission of yt-strat (it has none of its own and uses those of yt-goal, the outcome it serves)"*) ok "  a kind its outcome has no line for fails, and says whose lines it uses";; *) bad "  strategy, unknown kind: $OUT";; esac
+printf 'ID: yt-own\nKIND: strategy\nSTATUS: adopted\nSERVES: yt-goal\nMAY: shorts | cut shorts from my videos | 3 per week | alone | "cut them yourself" 2026-10-12\n\n## Log\n' > "$TMP/goals/yt-own.md"
+{ full; stratmove yt-own yt-replies; } > "$RUN/moves.md"
+OUT="$(run)"; case "$OUT" in *"PERMISSION may:yt-replies is not a standing permission of yt-own;"*) ok "  a strategy with MAY lines of its own uses only those";; *) bad "  own lines first: $OUT";; esac
+printf 'ID: yt-project\nKIND: project\nSTATUS: adopted\nSERVES: yt-own\n\n## Log\n' > "$TMP/goals/yt-project.md"
+{ full; stratmove yt-project shorts; } > "$RUN/moves.md"
+OUT="$(run)"; case "$OUT" in *"PERMISSION may:shorts is not a standing permission of yt-project"*) ok "  and only an outcome's lines are used, one level up";; *) bad "  only an outcome's: $OUT";; esac
 
 # --- every move aims at its goal's limit (2026-10-12) ------------------------------------------
 # Once a goal's research names the one thing that limits it now (LIMIT: under "## The limit now"

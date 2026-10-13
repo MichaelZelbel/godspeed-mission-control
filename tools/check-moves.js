@@ -22,7 +22,9 @@
 //   - AFTER is the thing itself, or names a file that exists and is not empty.
 //   - a ship-list move the mission control applies names its work item on an APPLY line.
 //   - a move under a standing permission, "PERMISSION: may:<kind>", names a kind its goal card has
-//     a MAY line for (2026-10-12); it is not on the ship list, so it needs no line there.
+//     a MAY line for (2026-10-12), or, for a strategy or project with none of its own, the card of
+//     the first outcome on its SERVES line that has some (2026-10-13); it is not on the ship list,
+//     so it needs no line there.
 //   - once a goal's research brief names its limit ("LIMIT:" under "## The limit now"), each of
 //     its moves carries "AIMS AT:" naming that limit; while it names none, a NOTE says so and the
 //     moves pass (2026-10-12).
@@ -56,7 +58,7 @@ const RUN = path.join(ROOT, 'routines', 'next-action', DATE);
 
 const problems = [];
 const read = (p) => { try { return fs.readFileSync(p, 'utf8').replace(/\r/g, ''); } catch (e) { return null; } };
-const { blocks: parseBlocks, parseMay, limitOf: limitIn } = require(path.join(__dirname, 'goals.js'));
+const { blocks: parseBlocks, limitOf: limitIn, standingOf } = require(path.join(__dirname, 'goals.js'));
 // Which goal's research a move is held to: the goal's own folder if it has one, else the folder of
 // the first outcome its card says it SERVES that has one (a strategy uses the research of the
 // outcome it serves). Returns the research goal id, or null when no research exists.
@@ -99,12 +101,17 @@ function limitOf(goal) {
   }
   return limits[rg];
 }
-// The kinds of step a goal's card lets go out without a fresh yes: its MAY lines, each written by
-// `mc-goals allow` with the person's own words (2026-10-12). Read from the move's own goal card.
+// The kinds of step a goal lets go out without a fresh yes: its MAY lines, each written by
+// `mc-goals allow` with the person's own words (2026-10-12); for a strategy or project with none
+// of its own, those of the first outcome on its SERVES line that has some (goals.js standingOf,
+// the reading work.js files the step under, 2026-10-13). { holder, kinds }.
 const mayKinds = {};
 function kindsOf(goal) {
-  if (!SAFE_ID.test(goal)) return [];
-  if (!(goal in mayKinds)) mayKinds[goal] = (read(path.join(ROOT, 'goals', goal + '.md')) || '').split('\n').map(parseMay).filter(Boolean).map(m => m.kind);
+  if (!SAFE_ID.test(goal)) return { holder: null, kinds: [] };
+  if (!(goal in mayKinds)) {
+    const st = standingOf(ROOT, goal);
+    mayKinds[goal] = { holder: st && st.holder, kinds: st ? st.lines.map(m => m.kind) : [] };
+  }
   return mayKinds[goal];
 }
 const days = (a, b) => Math.round((new Date(b + 'T00:00:00Z') - new Date(a + 'T00:00:00Z')) / 86400000);
@@ -186,11 +193,15 @@ for (const b of blocks) {
   // the change it should make, or file it as work beside the moves.
   else if (lead && parseFloat(bet[1]) === parseFloat(bet[2])) problems.push(`move "${title}": its BET (${bet[1]} -> ${bet[2]}) bets on no change, so it is not a move for ${goal}'s weekly number; name the change you expect within seven days of going live, or file it as work beside the moves`);
   // A step under a standing permission names its kind, "PERMISSION: may:<kind>", and the goal's
-  // card must hold a MAY line for that kind; such a step goes out at its time unless stopped, so it
-  // is never on the ship list and needs no line there.
+  // card must hold a MAY line for that kind (a strategy's or project's with none of its own: its
+  // outcome's); such a step goes out at its time unless stopped, so it is never on the ship list
+  // and needs no line there.
   const may = (f.PERMISSION || '').match(/^\s*may:\s*([a-z0-9-]+)?/i);
   const kind = may ? may[1] || '' : '';
-  if (may && !kindsOf(goal).includes(kind)) problems.push(`move "${title}": PERMISSION may:${kind} is not a standing permission of ${goal}; use a kind its card has a MAY line for (mc-goals may ${goal}), or put the move on the ship list`);
+  const allowed = may ? kindsOf(goal) : null;
+  if (may && !allowed.kinds.includes(kind)) problems.push(`move "${title}": PERMISSION may:${kind} is not a standing permission of ${goal}`
+    + (allowed.holder && allowed.holder !== goal ? ` (it has none of its own and uses those of ${allowed.holder}, the outcome it serves)` : '')
+    + `; use a kind it has a MAY line for (mc-goals may ${goal}), or put the move on the ship list`);
   const onList = !may && /ship list/i.test(f.PERMISSION || '');
   const his = /^\s*only the person/i.test(f['HOW IT LANDS'] || '');
   if (his) persons++;

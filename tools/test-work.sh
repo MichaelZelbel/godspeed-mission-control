@@ -456,6 +456,48 @@ contains "  names one that goes out alone, with no GOES OUT" "$OUT" "$IDP: has n
 contains "  and still marks the one it can" "$OUT" "$E1: shown"
 OUT="$(hw announce 2>&1)"; check "announce with no id is refused" "$?" "1"
 
+# --- a strategy's steps go out under its outcome's MAY lines (final review I6, 2026-10-13) --------
+# A strategy or project with no MAY lines of its own uses those of the first outcome on its SERVES
+# line that has some, one level up; the weekly limit is the outcome's, shared with its own steps.
+cat > "$TMP/goals/out6.md" <<'EOF'
+ID: out6
+KIND: outcome
+STATUS: adopted
+TITLE: Kit sales
+
+MAY: page-fixes | fix wording on my own kit pages | 3 per week | alone | "fix them yourself" 2026-09-10
+
+## Log
+- 2026-09-10 FILED adopted outcome, source: x
+EOF
+printf 'ID: str6\nKIND: strategy\nSTATUS: adopted\nTITLE: Kit pages\nSERVES: out6\n\n## Log\n' > "$TMP/goals/str6.md"
+printf 'ID: own6\nKIND: strategy\nSTATUS: adopted\nTITLE: Videos\nSERVES: out6\n\nMAY: shorts | cut shorts from my videos | 3 per week | alone | "cut them" 2026-09-10\n\n## Log\n' > "$TMP/goals/own6.md"
+printf 'ID: prj6\nKIND: project\nSTATUS: adopted\nTITLE: One page\nSERVES: str6\n\n## Log\n' > "$TMP/goals/prj6.md"
+sf() { local g="$1" k="$2"; shift 2; hw file --what "Fix a line for $g ($k)" --done-when "the page reads right" --goal "$g" --outward yes --may page-fixes --check "test -f live.txt" --key "$k" --source t "$@" 2>&1; }
+OUT="$(sf str6 s1)"
+contains "a strategy's step under its outcome's MAY line files planned" "$OUT" "planned"
+contains "  and says whose permission it uses" "$OUT" "standing page-fixes of out6"
+S1="$(idof s1)"
+check "  its APPROVED quotes the outcome's words" "$(grep -c '^APPROVED: standing page-fixes: "fix them yourself"' "$TMP/work/$S1.md")" "1"
+contains "  next offers it (alone: when ready)" "$(hw next 2>&1)" "$S1"
+OUT="$(hw take "$S1" --runner test 2>&1)"; check "  and take takes it on the outcome's permission" "$?" "0"
+contains "mc-goals may names the outcome a strategy's permissions come from" "$("$NODE" "$TMP/bin/goals.js" may str6 2>&1)" "its steps go out under those of out6"
+check "  and --json says from: out6" "$("$NODE" "$TMP/bin/goals.js" may str6 --json 2>&1 | "$NODE" -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{console.log(JSON.parse(s).map(m=>m.kind+":"+m.from).join(","))})')" "page-fixes:out6"
+OUT="$(sf out6 s2)"; contains "the outcome's own step counts toward the same three" "$OUT" "planned"
+OUT="$(sf str6 s3)"; contains "  and so does the strategy's next one" "$OUT" "planned"
+OUT="$(sf str6 s4)"
+contains "the weekly limit is the outcome's, shared with the strategy's steps" "$OUT" "this week's 3 page-fixes steps of out6 are used"
+check "  so the fourth waits for a fresh yes" "$(st "$(idof s4)")" "blocked "
+OUT="$(sf own6 s5)"; check "a strategy with MAY lines of its own uses only those" "$?" "1"
+contains "  and names its own kinds" "$OUT" "its kinds are: shorts"
+OUT="$(sf prj6 s6)"; check "a project serving a strategy does not reach the outcome above it (one level)" "$?" "1"
+"$NODE" "$TMP/bin/goals.js" allow out6 --kind page-fixes --revoke --words "stop fixing my pages" >/dev/null 2>&1
+S3="$(idof s3)"
+missing "with the outcome's line taken back, a strategy's queued step is not offered" "$(hw next 2>&1)" "$S3"
+OUT="$(hw tick 2>&1)"
+contains "  and tick sets it to wait for a fresh yes" "$OUT" "$S3: the standing permission page-fixes is no longer on str6"
+check "  (blocked, needing authorization)" "$(st "$S3")$(sed -n 's/^NEEDS: //p' "$TMP/work/$S3.md")" "blocked authorization"
+
 echo
 echo "$PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

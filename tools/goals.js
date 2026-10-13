@@ -103,6 +103,32 @@ function parseMay(line) {
 const formatMay = (m) => `MAY: ${m.kind} | ${m.what} | ${m.perWeek} per week | ${m.mode} | "${m.words}" ${m.date}`;
 // Every MAY line in a card's text, in the order written.
 function mayIn(text) { return String(text || '').replace(/\r/g, '').split('\n').map(parseMay).filter(Boolean); }
+// THE STANDING PERMISSIONS A GOAL'S STEPS GO OUT UNDER (2026-10-13, final review I6). A goal's own
+// MAY lines; a goal with none (a strategy or a project) uses those of the first outcome on its
+// SERVES line that has any, one level up, the way it uses that outcome's research. Without this a
+// strategy's step of a kind its outcome allows was refused by the moves check and sent to the
+// ship list, to wait for a yes that does not come. One reading for check-moves and work.js.
+// Returns null when the goal has no card; otherwise { holder, lines }: holder is the goal whose
+// card carries the lines (its weekly limits are counted there), null when no card does.
+const SAFE_GOAL = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+function standingOf(root, goal) {
+  const card = (id) => {
+    if (!SAFE_GOAL.test(String(id || ''))) return null;
+    try { return fs.readFileSync(path.join(root, 'goals', `${id}.md`), 'utf8').replace(/\r/g, ''); } catch (e) { return null; }
+  };
+  const own = card(goal);
+  if (own === null) return null;
+  const lines = mayIn(own);
+  if (lines.length) return { holder: goal, lines };
+  const serves = (own.match(/^SERVES:[ \t]*(.*)$/m) || ['', ''])[1].split(',').map(s => s.trim()).filter(Boolean);
+  for (const up of serves) {
+    const text = card(up);
+    if (text === null || !/^KIND:[ \t]*outcome[ \t]*$/m.test(text)) continue;
+    const upLines = mayIn(text);
+    if (upLines.length) return { holder: up, lines: upLines };
+  }
+  return { holder: null, lines: [] };
+}
 // Kinds of step that always need a fresh yes, whatever was said once: money, sign-ups, bookings,
 // cancellations, a first message to someone never contacted (strangers, prospects, leads, an
 // introduction, reaching out), a bulk message, LinkedIn by automation (its User Agreement 8.2).
@@ -327,9 +353,14 @@ cmds.allow = (a) => {
 };
 cmds.may = (a) => {
   const c = S.read(a._[0] || die('usage: mc-goals may <id> [--json]')) || die('no such goal');
-  const lines = mayLines(c);
+  // A strategy or project with none of its own moves under its outcome's (standingOf, above);
+  // such lines carry from: <that outcome> in --json.
+  const st = standingOf(GODSPEED, c.id) || { holder: c.id, lines: mayLines(c) };
+  const inherited = st.holder && st.holder !== c.id;
+  const lines = inherited ? st.lines.map(m => Object.assign({}, m, { from: st.holder })) : st.lines;
   if (flag(a, 'json')) { say(JSON.stringify(lines)); return; }
   if (!lines.length) { say(`${c.id}: no standing permissions; every outward step needs a fresh yes`); return; }
+  if (inherited) say(`${c.id} has none of its own; its steps go out under those of ${st.holder}, the outcome it serves, and count toward ${st.holder}'s weekly limits:`);
   for (const m of lines) say(`${m.kind}: ${m.what} (${m.mode}, ${m.perWeek} a week) since ${m.date}: "${m.words}"`);
 };
 
@@ -1040,7 +1071,9 @@ cmds.help = () => say(`mc-goals: the register of what you want, and the choice o
                                           sign-ups, bookings, cancellations, a first or bulk message and LinkedIn
                                           automation always need a fresh yes and are refused here
   allow <id> --kind <slug> --revoke --words "<their words>"   takes it back; logged as MAY-REVOKED
-  may <id> [--json]                       the goal's standing permissions: kind, what, per week, mode, words, date
+  may <id> [--json]                       the goal's standing permissions: kind, what, per week, mode, words, date;
+                                          a strategy or project with none of its own uses those of the first
+                                          outcome on its SERVES line that has some (--json adds from: <outcome>)
   question <id> --text "..."              one clarifying question in seven days per goal, never a second while one is open
   answer <id> --text "<your words>"
   diagnose <id>                           writes goals/diagnoses/<id>-<date>.md with the sections a diagnosis needs
@@ -1063,7 +1096,7 @@ cmds.help = () => say(`mc-goals: the register of what you want, and the choice o
 
 return {cmds,plan,parseLead,judge};
 }
-module.exports={createGoalCommands,blocks,parseMay,limitOf};
+module.exports={createGoalCommands,blocks,parseMay,limitOf,standingOf};
 if(require.main===module){
 const {cmds}=createGoalCommands();
 const {die}=L;

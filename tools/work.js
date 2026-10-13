@@ -79,14 +79,27 @@ const cmds = {};
 // ---------------------------------------------------------------------------
 // goals.js is loaded only when a permission is needed, so everything else here keeps working on a
 // computer where it is not installed; there, a step on a standing permission does not go out.
-let parseMay;
-function goalMay(goal) {
-  if (parseMay === undefined) { try { parseMay = require(path.join(__dirname, 'goals.js')).parseMay || null; } catch (e) { parseMay = null; } }
-  if (!parseMay || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(String(goal || ''))) return null;
-  const p = path.join(GODSPEED, 'goals', `${goal}.md`);
-  if (!fs.existsSync(p)) return null;
-  return L.readText(p).split('\n').map(parseMay).filter(Boolean);
+let goalsJs;
+function goalsLib() {
+  if (goalsJs === undefined) { try { goalsJs = require(path.join(__dirname, 'goals.js')); } catch (e) { goalsJs = null; } }
+  return goalsJs;
 }
+// The standing permissions a goal's steps go out under, { holder, lines } (goals.js standingOf):
+// the goal's own MAY lines, or, for a strategy or project with none, those of the first outcome on
+// its SERVES line that has some; holder is the goal whose card carries them, where the weekly limit
+// is counted (2026-10-13). null when the goal has no card, or goals.js is not here.
+const standings = {};
+function standing(goal) {
+  const g = goalsLib();
+  if (!g || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(String(goal || ''))) return null;
+  if (!(goal in standings)) {
+    const p = path.join(GODSPEED, 'goals', `${goal}.md`);
+    standings[goal] = g.standingOf ? g.standingOf(GODSPEED, goal)
+      : fs.existsSync(p) ? { holder: goal, lines: L.readText(p).split('\n').map(g.parseMay).filter(Boolean) } : null;
+  }
+  return standings[goal];
+}
+function goalMay(goal) { const st = standing(goal); return st ? st.lines : null; }
 const isStanding = (c) => /^standing /.test(c.f.APPROVED || '');
 const standingText = (m) => `standing ${m.kind}: "${m.words}"`;
 // The permission this item was filed under is still on its goal card: the same kind, in the same
@@ -193,28 +206,34 @@ cmds.file = (a) => {
   // UNDER A STANDING PERMISSION (2026-10-12): the goal card's MAY line for this kind is the yes,
   // up to its weekly limit. Counted are the steps filed on that permission in the seven days to
   // this one, not the ones stopped; past the limit the step waits for a fresh yes like any other.
-  let may = null, goesOut = '', standing = '', overLimit = false;
+  let may = null, goesOut = '', standingWords = '', overLimit = false, holder = null;
   if (a.may !== undefined) {
     const kindWanted = a.may === 'true' ? '' : oneLine(a.may);
     if (!kindWanted) die('--may needs the kind of step, as the goal card names it (mc-goals may <goal>)');
     if (outward !== 'yes') die('--may is for outward steps; inward work needs no permission');
     const goal = oneLine(a.goal);
     if (!goal) die('--may needs --goal: a standing permission belongs to a goal');
-    const all = goalMay(goal);
-    if (!all) die(`no goal card goals/${goal}.md to read a standing permission from` + (parseMay ? '' : ' (goals.js is not installed beside this program)'));
+    const st = standing(goal);
+    if (!st) die(`no goal card goals/${goal}.md to read a standing permission from` + (goalsLib() ? '' : ' (goals.js is not installed beside this program)'));
+    const all = st.lines;
+    const via = st.holder && st.holder !== goal ? ` (it has none of its own and uses those of ${st.holder}, the outcome it serves)` : '';
     may = all.find(m => m.kind === kindWanted);
-    if (!may) die(`${goal} has no standing permission "${kindWanted}"; its kinds are: ${all.map(m => m.kind).join(', ') || 'none'}`);
+    if (!may) die(`${goal} has no standing permission "${kindWanted}"${via}; its kinds are: ${all.map(m => m.kind).join(', ') || 'none'}`);
+    holder = st.holder;
     // A step that goes out without a yes each time is checked live after it lands (and keeps
     // its UNDO, which mc-work-run enforces): the check is what verify runs.
     // A bare --check reads as the word true, which checks nothing, so it is refused too.
     if (!oneLine(a.check) || ['true', ':'].includes(oneLine(a.check))) die('--may needs --check "<shell that exits 0 when the step is live>": a step that goes out without a yes each time is checked live after it lands');
+    // The limit belongs to the MAY line, so it is counted on the goal that holds it: a strategy's
+    // steps and its outcome's own share the outcome's weekly limit (2026-10-13).
     const weekAgo = L.addDays(d, -6);
-    const used = S.all().filter(w => w.f.MAY === may.kind && w.f.GOAL === goal && w.f.STATUS !== 'cancelled' && isStanding(w)
+    const used = S.all().filter(w => w.f.MAY === may.kind && w.f.STATUS !== 'cancelled' && isStanding(w)
+      && (w.f.GOAL === goal || (standing(w.f.GOAL) || {}).holder === holder)
       && (w.f.FILED || '') >= weekAgo && (w.f.FILED || '') <= d).length;
     if (used >= may.perWeek) overLimit = true;
     else {
       if (needs === 'authorization') needs = 'none';
-      standing = `standing ${may.kind}: "${may.words}"`;
+      standingWords = standingText(may);
       if (may.mode === 'notice') {
         const at = a['goes-out'] === undefined ? '' : oneLine(a['goes-out']);
         if (a['goes-out'] !== undefined && !GOES_OUT_FORM.test(at)) die('--goes-out is YYYY-MM-DDTHH:MM in UTC, like 2026-10-13T18:00');
@@ -229,17 +248,18 @@ cmds.file = (a) => {
     ID: id, STATUS: needs === 'none' ? 'planned' : 'blocked', KIND: kind, KEY: key, GOAL: oneLine(a.goal), CARD: oneLine(a.card), WHAT: what, 'DONE WHEN': done,
     CHECK: oneLine(a.check), OWNER: owner, NEEDS: needs, OUTWARD: outward, ATTEMPTS: '0', 'MAX ATTEMPTS': String(parseInt(a['max-attempts'] || '3', 10) || 3),
     'STALE AFTER': String(parseInt(a['stale-after'] || '7', 10) || 7), FILED: d, SOURCE: oneLine(a.source || 'unknown'),
-    APPROVED: standing, MAY: may ? may.kind : '', 'GOES OUT': goesOut,
+    APPROVED: standingWords, MAY: may ? may.kind : '', 'GOES OUT': goesOut,
   };
   const c = { id, f, log: [] };
   L.logLine(c, d, 'FILED', `by ${f.SOURCE}` + (f.GOAL ? ` for ${f.GOAL}` : '') + (f.CARD ? ` under card ${f.CARD}` : ''));
+  const of = holder && holder !== f.GOAL ? ` of ${holder}` : '';
   if (f.STATUS === 'blocked') L.logLine(c, d, 'BLOCKED', overLimit
-    ? `this week's ${may.perWeek} ${may.kind} steps are used; this one needs a fresh yes`
+    ? `this week's ${may.perWeek} ${may.kind} steps${of} are used; this one needs a fresh yes`
     : `needs ${needs}`);
   S.write(c);
-  const how = overLimit ? ` outward: this week's ${may.perWeek} ${may.kind} steps are used, so this one needs a fresh yes`
-    : standing && goesOut ? ` outward: goes out at ${goesOut} UTC unless stopped (standing ${may.kind})`
-    : standing ? ` outward: goes out when ready and is reported after (standing ${may.kind})`
+  const how = overLimit ? ` outward: this week's ${may.perWeek} ${may.kind} steps${of} are used, so this one needs a fresh yes`
+    : standingWords && goesOut ? ` outward: goes out at ${goesOut} UTC unless stopped (standing ${may.kind}${of})`
+    : standingWords ? ` outward: goes out when ready and is reported after (standing ${may.kind}${of})`
     : outward === 'yes' ? ' outward: never on its own' : '';
   say(`${id}: ${f.STATUS}` + (f.STATUS === 'blocked' ? ` (needs ${needs})` : '') + how);
 };
@@ -563,7 +583,9 @@ cmds.help = () => say(`mc-work: dispatched, attempted and verified are three dif
        [--kind do|learn]                a learn item is a question; its DONE WHEN must name a file the answer is written in
        [--learn "<question>" --path <file>]   sugar: KIND learn, WHAT the question, DONE WHEN "the answer ... is written in <file>"
        [--outward yes --goal G --may <kind> --check "<live check>" [--goes-out YYYY-MM-DDTHH:MM]]
-                                        outward work on a standing permission of goal G (mc-goals allow): its APPROVED
+                                        outward work on a standing permission of goal G (mc-goals allow; a strategy
+                                        or project with none of its own uses its outcome's, and shares that
+                                        outcome's weekly limit, mc-goals may G): its APPROVED
                                         quotes the person's words, and it must carry a CHECK that exits 0 once the
                                         step is live (mc-work-run also needs its UNDO copy, before.txt, to call it
                                         done). It goes out only while that permission is on the card in the same
