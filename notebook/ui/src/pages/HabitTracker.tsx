@@ -13,7 +13,7 @@ import { habitDays } from "@/lib/tracker-shelf";
 // One habit on the Trackers shelf (D-321, step 3). Its days are the coach's own record, the habit
 // file the evening check and the talks read; every change here goes back through the coach
 // (personal operations track and tracker-correct), so a day is never kept twice.
-type Habit = { id: string; name: string; hash?: string; talk?: string | null; habit_status?: string; doneMeans?: string; daysText?: string; progress?: Progress; recent?: { when?: string; data?: { answer?: string; note?: string } | null }[] | null };
+type Habit = { id: string; name: string; hash?: string; talks?: string[] | null; habit_status?: string; doneMeans?: string; daysText?: string; progress?: Progress; recent?: { when?: string; data?: { answer?: string; note?: string } | null }[] | null };
 const ANSWERS = [["done", "Done"], ["no", "Not done"], ["skip", "Excused day"]] as const;
 const selectClass = "block w-full min-h-11 rounded-md border bg-background px-3 text-base";
 

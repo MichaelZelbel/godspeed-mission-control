@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { habitDays, habitShelf, lastEntryDays, shelve } from "./tracker-shelf";
+import { habitDays, habitShelf, lastEntryDays, shelve, talksLabel } from "./tracker-shelf";
 
 describe("shelve", () => {
   const now = new Date("2026-10-11T12:00:00Z");
@@ -47,5 +47,18 @@ describe("habitShelf", () => {
       { day: "2026-10-06", answer: "done", note: "steps 9513" },
     ]);
     expect(habitDays({})).toEqual([]);
+  });
+});
+
+// Any number of talks may read a tracker (13 October 2026): the shelf names them all, in plain words.
+describe("talksLabel", () => {
+  it("names one talk, two talks and three talks naturally, and an older single talk too", () => {
+    expect(talksLabel({ talks: ["health"] })).toBe("health talk");
+    expect(talksLabel({ talks: ["health", "psychology"] })).toBe("health and psychology talks");
+    expect(talksLabel({ talks: ["health", "psychology", "deep-sleep"] })).toBe("health, psychology and deep sleep talks");
+    expect(talksLabel({ talks: ["work-money"] })).toBe("work and money talk");
+    expect(talksLabel({ talk: "health" })).toBe("health talk");
+    expect(talksLabel({ talks: [] })).toBe("");
+    expect(talksLabel({})).toBe("");
   });
 });

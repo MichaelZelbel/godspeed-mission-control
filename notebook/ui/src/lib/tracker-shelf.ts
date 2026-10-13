@@ -44,3 +44,14 @@ export function habitDays(habit: { recent?: Day[] | null }) {
     .sort((a, b) => String(b.when).localeCompare(String(a.when)))
     .map((d) => ({ day: String(d.when), answer: String(d.data?.answer), note: String(d.data?.note ?? "") }));
 }
+
+// The talks that read a tracker, as the shelf names them: "health talk", "health and psychology talks",
+// "health, work and money talks". Any number of talks may read a tracker (Michael's decision of 13
+// October 2026), so tracker-list gives `talks`; a notebook from before that day gave one `talk`.
+const talkName = (talk: string) => (talk === "work-money" ? "work and money" : talk.replace(/-/g, " "));
+export function talksLabel(tracker: { talks?: string[] | null; talk?: string | null }) {
+  const names = (Array.isArray(tracker.talks) ? tracker.talks : tracker.talk ? [tracker.talk] : []).filter(Boolean).map(talkName);
+  if (!names.length) return "";
+  const list = names.length < 2 ? names[0] : names.slice(0, -1).join(", ") + " and " + names[names.length - 1];
+  return list + (names.length > 1 ? " talks" : " talk");
+}

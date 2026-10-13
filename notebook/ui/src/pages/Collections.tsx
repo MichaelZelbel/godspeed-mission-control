@@ -22,7 +22,7 @@ import { AICollectionDialog } from "@/components/collections/AICollectionDialog"
 import { BRAND } from "@/lib/brand";
 import { dbErrorMessage } from "@/lib/function-error";
 import { LoadErrorState } from "@/components/collections/LoadErrorState";
-import { habitShelf, lastEntryDays, shelve } from "@/lib/tracker-shelf";
+import { habitShelf, lastEntryDays, shelve, talksLabel } from "@/lib/tracker-shelf";
 import type { HabitProgress } from "@/lib/habit-progress";
 
 type Collection = Database["public"]["Tables"]["collections"]["Row"];
@@ -136,7 +136,7 @@ function CollectionCard({ collection }: { collection: CollectionWithCount }) {
 
 // A habit on the Trackers shelf (D-321, step 3): the coach's own record, shown as a tracker. Its
 // page lists its days and changes them through the coach.
-type HabitCardData = { id: string; name: string; specialist?: string | null; status?: string; habit_status?: string; talk?: string | null; progress?: HabitProgress; last?: { when?: string; data?: { answer?: string } } | null };
+type HabitCardData = { id: string; name: string; specialist?: string | null; status?: string; habit_status?: string; talks?: string[] | null; talk?: string | null; progress?: HabitProgress; last?: { when?: string; data?: { answer?: string } } | null };
 const ANSWER_WORDS: Record<string, string> = { done: "done", no: "not done", skip: "skipped" };
 function HabitCard({ habit }: { habit: HabitCardData }) {
   const last = habit.last?.when && habit.last.data?.answer ? `${ANSWER_WORDS[habit.last.data.answer] ?? habit.last.data.answer} on ${habit.last.when}` : "No day tracked yet";
@@ -152,7 +152,7 @@ function HabitCard({ habit }: { habit: HabitCardData }) {
             <div className="min-w-0 flex-1">
               <CardTitle className="truncate text-base">{habit.name}</CardTitle>
               <p className="mt-1 line-clamp-2 min-h-10 text-sm text-muted-foreground">
-                Habit{habit.talk ? `, ${habit.talk} talk` : ""}{habit.habit_status && habit.habit_status !== "active" ? `, ${habit.habit_status}` : ""}
+                Habit{talksLabel(habit) ? `, ${talksLabel(habit)}` : ""}{habit.habit_status && habit.habit_status !== "active" ? `, ${habit.habit_status}` : ""}
               </p>
             </div>
           </div>
