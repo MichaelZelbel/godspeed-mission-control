@@ -4,7 +4,15 @@ Godspeed with the integrated notebook, for readers of [Teach It Once: Make AI yo
 
 Version 2 is the current edition, here on `main`. Its installers set up a new, separate folder. They do not move an existing version 1 Godspeed folder or your Menerio account.
 
-## New in this release (12 October 2026, second update)
+## New in this release (13 October 2026)
+
+- Every goal now has research of its own, kept current every night. A new routine runs at 00:15 on your clock and looks for who leads the field, who reached the goal from a start like yours, what was just proven wrong, and chances with a closing date. It writes what it finds into the goal's research folder, `goals/research/<goal>/`, and checks every quote it keeps against the page it came from. Its instructions are to read pages and write files only, and never to contact anyone or spend anything; Hermes, which runs your routines, takes no list of tools, so those instructions are what holds it. A mission control that already has its routines gets this one too, once, unless you removed routines on purpose.
+- A research night that was cut off part way is never counted as done. Its goal goes first the next night, and a goal that had no time left says so in its own research folder.
+- The daily round reads each goal's research before it picks the day's work. Every step it plans copies a person or a case from that research, names what holds the goal back right now, and says how the step changes that. At most one step a day is yours to do.
+- You can allow one kind of step for a goal once, in your own words, with a number per week (`mc-goals allow`). Such a step then goes out at its set time unless you say stop: your morning brief lists it that morning, and `mc-work stop` keeps it back. A step that reaches nobody else can also be allowed to go ahead by itself, and the next morning brief says what it did. Money, sign-ups, bookings, cancellations, a first message to someone new and anything on LinkedIn by automation always ask you first.
+- A new installation no longer starts with a review of the next-action recipe, a recipe it never changed. Until that review was settled, the notebook did not sync.
+
+## New on 12 October 2026, second update
 
 - Trackers you talk to. Say "track belly 92 cm" and your mission control asks once whether to start a tracker called Belly, then keeps the number; after that, "track belly 91" is enough. Your trackers are in Collections, under Trackers. One you have not used for 30 days rests there, with everything kept, until your next "track".
 - A cycle tracker for the period: "track period", "track period over", or a symptom such as "track cramps". After two complete cycles it says when the next period is likely to start, and if you ask, it gives a heads-up in your morning brief. It is not for contraception, for trying to conceive or for a diagnosis, and it says so.
@@ -24,11 +32,6 @@ Version 2 is the current edition, here on `main`. Its installers set up a new, s
 - Programming goes to a coding helper. When you ask your mission control to write or change code in one of your projects, it hands the work to a helper that works only in that project's folder, tests and saves it there, and reports back, so your conversation keeps its context. Claude Code does this by itself; the manual tells Codex and Hermes to do the same.
 - On Linux, a routine that ran in the same instant the notebook first looked at it is no longer overlooked.
 
-## New on 13 October 2026
-
-- A fourth routine joins the ones your first goal starts: a nightly research run on your goals, at 00:15 on your clock, before the daily round picks the day's work. It writes research files and ideas, and contacts nobody. A mission control that already has its routines gets this one too, once, unless you removed routines on purpose.
-- A research night that was cut off part way is no longer counted as done; its goal is researched again the next night. A goal that had no time left says so in its own research folder.
-
 ## New on 9 October 2026, for the book's second edition
 
 - Your first goal starts three routines by itself: a daily round that picks the day's work and does it, deadline reminders, and a weekly check-in about the goal on Sundays.
@@ -43,11 +46,11 @@ Version 2 is the current edition, here on `main`. Its installers set up a new, s
 
 ## Windows
 
-[Download GodspeedSetup.exe](https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-12-2/GodspeedSetup.exe), then run it.
+[Download GodspeedSetup.exe](https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-13-1/GodspeedSetup.exe), then run it.
 
 This uses Godspeed's original setup wizard and shared installer, then connects the integrated notebook. On a PC that already has Godspeed, the wizard selects a separate installation by default. The notebook opens at [http://127.0.0.1:47831/dashboard](http://127.0.0.1:47831/dashboard). Connect your own model account in Settings to use the assistant. The installer is unsigned.
 
-The executable is also [committed in this repository](installers/GodspeedSetup.exe). The [download page](https://github.com/MichaelZelbel/godspeed-mission-control/releases/tag/godspeed-v2-integrated-2026-10-12-2) lists the same file and its checksums.
+The executable is also [committed in this repository](installers/GodspeedSetup.exe). The [download page](https://github.com/MichaelZelbel/godspeed-mission-control/releases/tag/godspeed-v2-integrated-2026-10-13-1) lists the same file and its checksums.
 
 ## Linux or Mac
 
@@ -56,8 +59,8 @@ This uses Godspeed's shared native installer for Git, Node.js, Hermes and the Go
 Download this release's installer, check that it is the published file, and run it:
 
 ```bash
-curl -fsSLO https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-12-2/install-godspeed.sh
-echo "6641bdd6c47cbbdaeff34b9666fd1a5a8c860dbc3c0ac90320180e8185c9b517  install-godspeed.sh" | sha256sum -c - && bash install-godspeed.sh
+curl -fsSLO https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-13-1/install-godspeed.sh
+echo "3078a9b059b5d1a1a7be805612a72a5cb455b0490c09bae7b4a36b782da454d6  install-godspeed.sh" | sha256sum -c - && bash install-godspeed.sh
 ```
 
 On a Mac, write `shasum -a 256 -c -` where it says `sha256sum -c -`. The check refuses any other file, and the installer names one exact version of the notebook, so every reader of this release gets the same notebook.

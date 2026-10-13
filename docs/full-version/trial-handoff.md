@@ -7,11 +7,25 @@
 - Open this folder in VS Code or Codex: `C:/godspeed/work/trials/godspeed-v2`.
 - Windows notebook: http://127.0.0.1:49175/dashboard
 - Development VPS notebook: https://srv1069233.hstgr.cloud:48443/dashboard
-- Windows download: https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-12-2/GodspeedSetup.exe
-- Linux download: https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-12-2/install-godspeed.sh
-- Source, manifests and checksums: https://github.com/MichaelZelbel/godspeed-mission-control/releases/tag/godspeed-v2-integrated-2026-10-12-2
+- Windows download: https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-13-1/GodspeedSetup.exe
+- Linux download: https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-13-1/install-godspeed.sh
+- Source, manifests and checksums: https://github.com/MichaelZelbel/godspeed-mission-control/releases/tag/godspeed-v2-integrated-2026-10-13-1
 - One-click Hostinger installation: https://srv1069233.hstgr.cloud/godspeed-install
 - Development branch: https://github.com/MichaelZelbel/godspeed-mission-control/tree/main
+
+## 13 October 2026 release: every goal researched every night, and steps that go out unless stopped
+
+`godspeed-v2-integrated-2026-10-13-1` installs product 9ab230680e2972eb424eeb54cbb83d1a8cc5ee9b (main after the 12 October second release: the goal research of Mission Control D-323 and the standing permissions of D-324, with the fixes of the final review of 13 October). The Windows installer is built from the same kit-bootstrap 0eafb061d28a077b2d7c0cc83d0bd002fcb44444 (branch `codex/godspeed-v2-native-integration`), and the Linux and Mac installer takes its shared installer from that commit too.
+
+What is new for a reader, since `godspeed-v2-integrated-2026-10-12-2`:
+
+- The nightly goal research: the routine "Nightly goal research" (`notebook/core/starting-routines.mjs`, 00:15 on the reader's clock, a two-hour budget; Hermes' `script_timeout_seconds` 9000) runs `tools/mc-research` with the `goal-research` recipe on every adopted outcome, and `mc-check-research --fetch` reads every kept quote on its page. A mission control whose routines were made before gets it once (`addNewStartingRoutines`). With Claude Code the run is held to its list of tools (`--restricted`, dontAsk, writes only in `goals/research/` and `ideas/`); the routines run Hermes, which takes no list, so there the read-only rule rests on the recipe's words (final review I2, stated in the README).
+- The routines run the programs of the installed notebook version (`<state>/versions/<product>/tools`), so this release is the first in which a reader's routines have `mc-research`, `mc-goals may` and the moves check that wants AIMS AT.
+- The decision (`next-action`, `check-moves`): every move copies a person or case from its goal's research, names the goal's LIMIT (one reading, `limitOf`, shared by both checks), and at most one move a day is the person's to do; a strategy aims at its outcome's limit and uses its outcome's standing permissions.
+- Standing permissions (`mc-goals allow`, MAY lines on the card): notice steps go out at the next 18:00 UTC slot unless stopped, only after a morning message showed them, wherever the reader lives; alone steps (never anything that reaches people) go out when ready and the next morning brief reports them; a standing step carries its undo and a live check that must look at something.
+- No "Review edited next-action skill" on a fresh install: the packaged next-action recipe is the starter's, and every shipped hash is a known revision.
+
+Checked before publishing: PENDING.
 
 ## 12 October 2026, second release: the cycle and food trackers
 
