@@ -14,7 +14,7 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
-const { blocks } = require(path.join(__dirname, 'goals.js'));
+const { blocks, limitOf } = require(path.join(__dirname, 'goals.js'));
 
 function opt(name, dflt) { const i = process.argv.indexOf('--' + name); return i > 0 && process.argv[i + 1] && !process.argv[i + 1].startsWith('--') ? process.argv[i + 1] : dflt; }
 const has = (name) => process.argv.includes('--' + name);
@@ -39,11 +39,18 @@ else {
 const brief = read(path.join(DIR, 'brief.md'));
 if (brief === null) problems.push('brief.md is missing');
 else if (!new RegExp(`^UPDATED: ${DATE}$`, 'm').test(brief)) problems.push(`brief.md does not say UPDATED: ${DATE}; rewrite it from tonight's files`);
-if (brief !== null && /^STATUS: current$/m.test(brief) && !/^## The limit now\n(?:.*\n)*?LIMIT: \S/m.test(brief)) {
+// The one reading of the limit that check-moves and the trial check share (goals.js limitOf).
+if (brief !== null && /^STATUS: current$/m.test(brief) && !limitOf(brief)) {
   problems.push('brief.md has no LIMIT: line under ## The limit now; name the one thing that limits this goal now, from the claims and cases');
 }
 
 const URL_RE = /https?:\/\/\S+/;
+// A quote is checked by its letters and digits only, so markup, punctuation and spacing on the
+// page never decide it. A quote with fewer than 12 of them left (or none: QUOTE: "") would be
+// found on any page at all, so it is a problem, never a pass (final review, 2026-10-13).
+const norm = (s) => s.toLowerCase().replace(/<[^>]+>/g, ' ').replace(/&[a-z#0-9]+;/g, ' ').replace(/[^a-z0-9]+/g, ' ').trim();
+const quoteKey = (q) => norm(String(q).replace(/^"|"$/g, ''));
+const MIN_QUOTE = 12;
 const SPEC = {
   'people.md': ['PERSON', ['LINK', 'WHY', 'OFFER', 'STATUS'], { LINK: URL_RE, STATUS: /^(unverified|verified \d{4}-\d{2}-\d{2})$/ }],
   'cases.md': ['CASE', ['START', 'DID', 'RESULT', 'SOURCE'], { SOURCE: URL_RE }],
@@ -64,6 +71,10 @@ for (const [file, [key, required, shapes]] of Object.entries(SPEC)) {
     seen.add(low);
     for (const k of required) if (!r[k]) problems.push(`${file}: "${name}" has no ${k}`);
     for (const [k, re] of Object.entries(shapes)) if (r[k] && !re.test(r[k])) problems.push(`${file}: "${name}" ${k} is "${r[k]}", which is not the form the file header names`);
+    // A claim with no QUOTE at all is named above; any quote written is held to its length.
+    if (r.QUOTE && quoteKey(r.QUOTE).length < MIN_QUOTE) {
+      problems.push(`${file}: "${name}" quote too short to check: fewer than ${MIN_QUOTE} letters and digits (a to z, 0 to 9) are left of it, and that is found on any page; copy the whole sentence from the source, or remove the block`);
+    }
   }
 }
 const people = parsed['people.md'].length;
@@ -71,13 +82,13 @@ if (MODE === 'daily' && BEFORE >= 0 && BEFORE < 100 && people - BEFORE < 5) prob
 if (MODE === 'founding' && BEFORE >= 0 && people < 30 && people <= BEFORE) problems.push(`people.md: a founding night must add people until the list holds 30; it holds ${people}`);
 
 async function quotes() {
-  const tonight = [...parsed['claims.md'], ...parsed['openings.md']].filter(r => r.SOURCE && r.SOURCE.includes(`(read ${DATE})`) && r.QUOTE);
-  const norm = (s) => s.toLowerCase().replace(/<[^>]+>/g, ' ').replace(/&[a-z#0-9]+;/g, ' ').replace(/[^a-z0-9]+/g, ' ').trim();
+  // A quote too short to check is a problem already (above) and is never looked for on a page.
+  const tonight = [...parsed['claims.md'], ...parsed['openings.md']].filter(r => r.SOURCE && r.SOURCE.includes(`(read ${DATE})`) && r.QUOTE && quoteKey(r.QUOTE).length >= MIN_QUOTE);
   for (const r of tonight) {
     const url = (r.SOURCE.match(URL_RE) || [''])[0];
     const name = r.CLAIM || r.OPENING;
     const file = r.CLAIM ? 'claims.md' : 'openings.md';
-    const want = norm(r.QUOTE.replace(/^"|"$/g, '')).slice(0, 80);
+    const want = quoteKey(r.QUOTE).slice(0, 80);
     let body = null, why = '';
     try {
       const res = await fetch(url, { signal: AbortSignal.timeout(15000), headers: { 'user-agent': 'Mozilla/5.0 (research check)' } });

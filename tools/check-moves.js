@@ -56,7 +56,7 @@ const RUN = path.join(ROOT, 'routines', 'next-action', DATE);
 
 const problems = [];
 const read = (p) => { try { return fs.readFileSync(p, 'utf8').replace(/\r/g, ''); } catch (e) { return null; } };
-const { blocks: parseBlocks, parseMay } = require(path.join(__dirname, 'goals.js'));
+const { blocks: parseBlocks, parseMay, limitOf: limitIn } = require(path.join(__dirname, 'goals.js'));
 // Which goal's research a move is held to: the goal's own folder if it has one, else the folder of
 // the first outcome its card says it SERVES that has one (a strategy uses the research of the
 // outcome it serves). Returns the research goal id, or null when no research exists.
@@ -86,17 +86,16 @@ function namesOf(goal) {
   return { from: rg, names: researchNames[rg] };
 }
 // The one thing that limits a goal now, as its research brief names it: the LIMIT: line under
-// "## The limit now" in goals/research/<id>/brief.md (2026-10-12). null while the research names
-// none (founding night, or no research at all), and then a move for the goal needs no aim.
+// "## The limit now" in goals/research/<id>/brief.md (2026-10-12), read by goals.js limitOf, the
+// one reading check-research and the trial check share (2026-10-13). null while the research
+// names none (founding night, or no research at all), and then a move for the goal needs no aim.
 const limits = {};
 function limitOf(goal) {
   const rg = researchGoal(goal);
   if (!rg) return null;
   if (!(rg in limits)) {
-    const brief = read(path.join(ROOT, 'goals', 'research', rg, 'brief.md')) || '';
-    const sec = brief.match(/^## The limit now[ \t]*\n([\s\S]*?)(?=^## |(?![\s\S]))/m);
-    const m = sec && sec[1].match(/^LIMIT:[ \t]*(\S.*)$/m);
-    limits[rg] = m ? m[1].replace(/\s+/g, ' ').trim() : null;
+    const limit = limitIn(read(path.join(ROOT, 'goals', 'research', rg, 'brief.md')) || '');
+    limits[rg] = limit ? limit.replace(/\s+/g, ' ') : null;
   }
   return limits[rg];
 }
@@ -203,7 +202,11 @@ for (const b of blocks) {
     const key = limit && limit.slice(0, 40).trimEnd();
     const aims = (f['AIMS AT'] || '').replace(/\s+/g, ' ').toLowerCase();
     if (key && !aims.includes(key.toLowerCase())) problems.push(`move "${title}": AIMS AT must name this goal's limit ("${key}...") from goals/research/${researchGoal(goal)}/brief.md, and say in one line how this move moves it`);
-    else if (!limit && !noted.has(goal)) { noted.add(goal); notes.push(`NOTE ${goal}: no LIMIT named yet in its research; AIMS AT not required`); }
+    else if (!limit && !noted.has(goal)) {
+      noted.add(goal);
+      notes.push(researchGoal(goal) ? `NOTE ${goal}: no LIMIT named yet in its research; AIMS AT not required`
+        : `NOTE ${goal}: has no research yet; AIMS AT not required`);
+    }
   }
   const applyTo = (b.match(/^APPLY:[ \t]*(\S+)/m) || [])[1];
   if (lead && !applyTo) problems.push(`move "${title}": a move with a bet needs "APPLY: <work id>", the item whose verification starts its seven days (a move only the person can make gets an item they own, whose CHECK shows it happened)`);

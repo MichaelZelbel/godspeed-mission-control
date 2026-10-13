@@ -63,6 +63,30 @@ function blocks(text, key) {
   return out;
 }
 
+// THE ONE THING THAT LIMITS A GOAL NOW, as its research brief names it (2026-10-13). One reading
+// for every program that asks: check-research (a current brief must name it), check-moves (each
+// move aims at it) and Mission Control's trial check (a copy of this rule, tested on the same
+// cases in limit-cases.json). Three readings that disagreed meant a LIMIT under a later section
+// passed the research check and quietly switched the aim check off.
+//   - Windows line endings are taken out first.
+//   - The section starts at the first line that, with trailing spaces removed, is exactly
+//     "## The limit now", and ends at the next line starting with "## ". Only that first section counts.
+//   - The limit is the first line inside it that starts with "LIMIT:" (at the very start of the line),
+//     its text after "LIMIT:" with spaces trimmed at both ends.
+//   - No such section, no such line, or an empty value: there is no limit (null).
+function limitOf(briefText) {
+  let inside = false;
+  for (const line of String(briefText || '').replace(/\r/g, '').split('\n')) {
+    if (line.startsWith('## ')) {
+      if (inside) return null;
+      inside = line.trimEnd() === '## The limit now';
+      continue;
+    }
+    if (inside && line.startsWith('LIMIT:')) return line.slice('LIMIT:'.length).trim() || null;
+  }
+  return null;
+}
+
 // A standing permission: the person's own words, once, for one kind of step (2026-10-12). It is
 // what lets a prepared step go out at a set time unless stopped, instead of waiting for a yes
 // that, measured, did not come (no goal move approved between 2026-09-30 and 2026-10-11). It is
@@ -1039,7 +1063,7 @@ cmds.help = () => say(`mc-goals: the register of what you want, and the choice o
 
 return {cmds,plan,parseLead,judge};
 }
-module.exports={createGoalCommands,blocks,parseMay};
+module.exports={createGoalCommands,blocks,parseMay,limitOf};
 if(require.main===module){
 const {cmds}=createGoalCommands();
 const {die}=L;

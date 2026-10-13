@@ -77,10 +77,10 @@ OUT="$(run --fetch)"; check "a quote that is on its page passes" "$?" "0"
 printf 'CLAIM: Free wins\nSTATUS: supported %s\nSOURCE: http://127.0.0.1:%s/lacks (read %s)\nQUOTE: "free always wins"\nMEANS: x\n\n' "$D" "$P" "$D" >> "$R/claims.md"
 contains "a quote missing from a page that served text fails" "$(run --fetch)" "quote not found on its page"
 printf 'CLAIM: Early pricing beats free\nSTATUS: supported %s\nSOURCE: http://127.0.0.1:%s/has (read %s)\nQUOTE: "charge from day one"\nMEANS: price\n\n' "$D" "$P" "$D" > "$R/claims.md"
-printf 'CLAIM: Paywalled\nSTATUS: supported %s\nSOURCE: http://127.0.0.1:%s/blocked (read %s)\nQUOTE: "anything"\nMEANS: x\n\n' "$D" "$P" "$D" >> "$R/claims.md"
+printf 'CLAIM: Paywalled\nSTATUS: supported %s\nSOURCE: http://127.0.0.1:%s/blocked (read %s)\nQUOTE: "anything behind the wall"\nMEANS: x\n\n' "$D" "$P" "$D" >> "$R/claims.md"
 OUT="$(run --fetch)"; check "a page that refuses us is not a failed quote" "$?" "0"
 contains "  but it is noted" "$OUT" "NOTE claims.md: \"Paywalled\" page could not be read"
-printf 'CLAIM: Old one\nSTATUS: supported 2026-01-01\nSOURCE: http://127.0.0.1:%s/lacks (read 2026-01-01)\nQUOTE: "never there"\nMEANS: x\n\n' "$P" >> "$R/claims.md"
+printf 'CLAIM: Old one\nSTATUS: supported 2026-01-01\nSOURCE: http://127.0.0.1:%s/lacks (read 2026-01-01)\nQUOTE: "never there at all"\nMEANS: x\n\n' "$P" >> "$R/claims.md"
 OUT="$(run --fetch)"; check "only quotes read tonight are fetched" "$?" "0"
 
 # a script shell or login wall that answers 200 with no readable text is a note, not a failed quote
@@ -88,6 +88,21 @@ printf 'CLAIM: Early pricing beats free\nSTATUS: supported %s\nSOURCE: http://12
 printf 'CLAIM: Script only\nSTATUS: supported %s\nSOURCE: http://127.0.0.1:%s/js (read %s)\nQUOTE: "a sentence the shell never shows"\nMEANS: x\n\n' "$D" "$P" "$D" >> "$R/claims.md"
 OUT="$(run --fetch)"; check "a page with only a script shell is not a failed quote" "$?" "0"
 contains "  but it is noted" "$OUT" "NOTE claims.md: \"Script only\" page served no readable text"
+
+# A quote too short to check is a problem, never a pass (final review, 2026-10-13): QUOTE: "" was
+# found on every page, so --fetch passed a claim whose sentence nobody had copied.
+printf 'CLAIM: Early pricing beats free\nSTATUS: supported %s\nSOURCE: http://127.0.0.1:%s/has (read %s)\nQUOTE: ""\nMEANS: price\n\n' "$D" "$P" "$D" > "$R/claims.md"
+OUT="$(run --fetch)"; check "an empty quote fails, even on a page that serves text" "$?" "1"
+contains "  and says it is too short to check" "$OUT" 'claims.md: "Early pricing beats free" quote too short to check'
+missing "  and is never looked for on the page" "$OUT" "quote not found"
+OUT="$(run)"; check "  without --fetch too" "$?" "1"
+printf 'CLAIM: Early pricing beats free\nSTATUS: supported %s\nSOURCE: http://127.0.0.1:%s/has (read %s)\nQUOTE: "Yes, a day!"\nMEANS: price\n\n' "$D" "$P" "$D" > "$R/claims.md"
+contains "a quote with fewer than 12 letters and digits fails" "$(run --fetch)" "quote too short to check"
+printf 'CLAIM: Early pricing beats free\nSTATUS: supported %s\nSOURCE: http://127.0.0.1:%s/has (read %s)\nQUOTE: "from day one"\nMEANS: price\n\n' "$D" "$P" "$D" > "$R/claims.md"
+OUT="$(run --fetch)"; check "  while one of exactly 12 is looked for on its page, and passes" "$?" "0"
+printf 'CLAIM: Early pricing beats free\nSTATUS: supported %s\nSOURCE: http://127.0.0.1:%s/has (read %s)\nQUOTE: "charge from day one"\nMEANS: price\n\n' "$D" "$P" "$D" > "$R/claims.md"
+printf 'OPENING: A short one\nUNTIL: 2026-10-30\nSOURCE: http://127.0.0.1:%s/has (read %s)\nQUOTE: "Apply!"\nMOVE: apply\n\n' "$P" "$D" >> "$R/openings.md"
+contains "an opening's quote is held to the same length" "$(run)" 'openings.md: "A short one" quote too short to check'
 
 echo "$PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

@@ -214,7 +214,9 @@ OUT="$(aims "founding")"; RC=$?
 case "$OUT" in *"NOTE kits: no LIMIT named yet in its research; AIMS AT not required"*) ok "  and says why in a NOTE";; *) bad "  NOTE: $OUT";; esac
 OUT="$(aims -)"
 [ $? -eq 0 ] && ok "  and a move with no AIMS AT passes too" || bad "  no AIMS AT, no limit: $OUT"
-[ "$(printf '%s\n' "$OUT" | grep -c '^NOTE money-goal: no LIMIT named yet')" = "1" ] && ok "  one NOTE per goal, also for a goal with no research at all" || bad "  one NOTE per goal: $OUT"
+[ "$(printf '%s\n' "$OUT" | grep -c '^NOTE money-goal: ')" = "1" ] && ok "  one NOTE per goal, also for a goal with no research at all" || bad "  one NOTE per goal: $OUT"
+# A goal with no research folder at all says so, not that its research names no limit (final review M4).
+case "$OUT" in *"NOTE money-goal: has no research yet; AIMS AT not required"*) ok "  and that goal's NOTE says it has no research yet";; *) bad "  no research yet: $OUT";; esac
 brief current "nothing named"; printf '\n## Who to reach and what we offer\nLIMIT: not this one\n' >> "$TMP/goals/research/kits/brief.md"
 OUT="$(aims "the README")"
 case "$OUT" in *"NOTE kits: no LIMIT"*) ok "a LIMIT line outside ## The limit now is not the limit";; *) bad "LIMIT outside its section: $OUT";; esac
