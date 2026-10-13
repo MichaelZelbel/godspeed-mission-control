@@ -52,7 +52,13 @@ for skill in inventory['skills']:
  text='---\nname: '+name+'\ndescription: '+purpose.split('.')[0]+'.\n---\n\n# '+name.replace('-',' ').capitalize()+'\n\n'+purpose+'\n\n## Shared contract\n\nRead AGENTS.md and profile/voice.md. Search existing knowledge before asking for a life fact. Use the notebook MCP or documented file CLI. Files hold durable state; never write SQLite directly. Resolve people and references by stable ID, not name alone. Keep model inference in the review queue until the user accepts it. Verify saved work. Keep credentials outside synced files. Buying, booking, sending, publishing and deleting external data require explicit approval. Do not use employer or client names in examples.\n'
  native={'coach':('godspeed-coach','coach'),'interstitial-journal':('godspeed-journal','interstitial-journal'),'headache-tracker':('godspeed-headache','headache-tracker'),'phone-errands':('mc-phone','phone-errands'),'video-finishing':('mc-video','video-finishing')}
  reusable=root/'notebook/reusable-recipes'/name
- if (reusable/'SKILL.md').exists():
+ starter=root/'starter-godspeed/skills'/name
+ # A recipe the starter ships too is the starter's, byte for byte (2026-10-13): the notebook installs
+ # it over the starter's copy, and any other text there filed a review that stopped the folder's
+ # sync on every new install. tools/recipe-shipped-hashes.sh keeps both copies equal to it.
+ if (starter/'SKILL.md').exists():
+  for target in (reusable,folder):shutil.copytree(starter,target,dirs_exist_ok=True)
+ elif (reusable/'SKILL.md').exists():
   shutil.copytree(reusable,folder,dirs_exist_ok=True)
   with (folder/'SKILL.md').open('a',encoding='utf-8',newline='\n') as f:f.write('\n\n## Installed personal workspace\n\nUse the current user workspace and its configured providers. Keep original workflow, command contracts, scripts and verification criteria. Read the workspace authorization rules before sends, sign-ins, payments or publishing. Search existing device-private credentials before asking for configuration. Saved output and a passing screen are not evidence that the full requested result happened.\n')
  elif name in native:

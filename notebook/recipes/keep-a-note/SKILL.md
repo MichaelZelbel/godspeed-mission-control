@@ -69,8 +69,3 @@ the notebook is not connected on this computer.
 - Never save under `godspeed/`, and never edit a note whose source is a mission control file.
 - Never delete a note, and never replace a note's text, unless the person asked for exactly
   that, about that note.
-
-
-## Installed personal workspace
-
-Use the current user workspace and its configured providers. Keep original workflow, command contracts, scripts and verification criteria. Read the workspace authorization rules before sends, sign-ins, payments or publishing. Search existing device-private credentials before asking for configuration. Saved output and a passing screen are not evidence that the full requested result happened.

@@ -36,18 +36,29 @@ in the world, prepared to the last click. A move has, in the record and in its w
   person because only they can), and the live CHECK that shows it landed.
 - **UNDO**: how to put NOW back.
 
-**Standing permissions.** A goal's `ALLOWED:` line lists what the mission control may change on
-its own for that goal ("update my profile texts every week", "fix wording on my own project
-pages"). A move inside it is filed OWNER mission control, NEEDS none, and the runner applies it,
-checks it live and keeps NOW for the undo. Only the person writes an ALLOWED line; you may ask for
-one (see the ship list), never assume one.
+**Standing permissions.** A goal's `MAY:` lines (`mc-goals may <id>`) are the kinds of step the
+person said, once and in their own words, may go out without asking each time. A move of such a
+kind is filed `--outward yes --may <kind> --check "<how to see it live>"` with
+`PERMISSION: may:<kind>`, and keeps its UNDO (what was there before), so it can be put back. In
+notice mode it goes out at 18:00 UTC unless the person says stop in the morning message; in alone
+mode the runner applies it when ready and the morning message reports it. Only moves of a kind no
+MAY line covers go on the ship list. Prefer a move under a MAY line over an equal one that needs a
+fresh yes: a step that waits for a yes that does not come is a step that never happened. Once a
+week per goal, when the research brief's "Worth asking for" names a kind of step, put ONE line on
+the day's card asking for it, in plain words with one example ("May I answer comments under your
+YouTube videos without asking each time? I would send at most ten a week and you see each one the
+morning before."). The answer, quoted, becomes `mc-goals allow`. Never ask for money, sign-ups or
+LinkedIn automation. If `mc-work file` says this week's steps of that kind are used, the move goes
+on the ship list instead (`PERMISSION: ship list`, with the item it filed on its APPLY line). A
+goal with no MAY lines may still carry an older `ALLOWED:` line: a move inside it is filed OWNER
+mission control, NEEDS none, and the runner applies it, checks it live and keeps NOW for the undo.
 
-**The ship list.** Every prepared move outside ALLOWED goes on ONE card a day: numbered lines, each
-one sentence saying what changes where, plus one link to a page showing every NOW and AFTER side
-by side. They answer "ship all", some numbers, or nothing. A yes, quoted, unblocks those moves and
-the runner applies them the same day; the person never has to carry out a prepared move by hand
-when the mission control has a way to apply it. An unanswered line expires after seven days and is
-never re-asked. A thing only they can do (record a video, sign a form) is one line on the same
+**The ship list.** Every prepared move no standing permission covers goes on ONE card a day:
+numbered lines, each one sentence saying what changes where, plus one link to a page showing
+every NOW and AFTER side by side. They answer "ship all", some numbers, or nothing. A yes,
+quoted, unblocks those moves and the runner applies them the same day; the person never has to
+carry out a prepared move by hand when the mission control has a way to apply it. An unanswered
+line expires after seven days and is never re-asked. A thing only they can do (record a video, sign a form) is one line on the same
 card, not a second card. When one kind of move keeps coming back to the list, add a line asking
 whether it may become a standing permission.
 
@@ -136,9 +147,19 @@ count knows what was looked at today.
 
 ## Step 2. How this goal is won, then what limits it here
 
+**First the research**, `goals/research/<id>/brief.md`, rewritten every night by the
+goal-research recipe: what works now, what changed this week, what was just proven wrong, who to
+reach with what offer, the open chances with their closing dates, what you may do without asking,
+and any challenge to the playbook. Read it before the playbook and cite it. `attention.txt` says
+when a goal's research is still being founded or has not completed a night for two days; say so
+under "Not done and why", and work from what is there. A bullet under "Challenges to the playbook"
+means the lever it names is in doubt: do not make a move that rests on that lever today, and if
+two or more of its levers are challenged, refute the playbook (`mc-goals playbook <id> --refute
+--evidence "<the challenges>"`).
+
 For each active outcome, and the strategies and projects under it (`mc-goals tree`):
 
-**First the playbook**, `goals/playbooks/<id>.md`: who has reached this outcome, what they do,
+**Then the playbook**, `goals/playbooks/<id>.md`: who has reached this outcome, what they do,
 in what order, what they track, where it fails, and which of those steps a mission control can do on its
 own. Read it before anything else about the goal.
 
@@ -218,6 +239,9 @@ three sources, in this order:
 - **Their own words.** Anything they toss out ("why don't we...", "one idea I just had") is an
   idea the moment it is said. It goes into the register the same day, in their words, and they are
   never asked to repeat it. An idea of theirs that the mission control lost is the worst miss this step has.
+- **What the research filed overnight.** Every new opening and every person who turned HOT has an
+  idea file already (SOURCE `goal research <date>`). Rank them with the rest; an opening whose
+  closing date falls within 14 days ranks above any idea without one.
 - **What you just read outside.** Each surprise from point 1 is an idea or kills one.
 - **What the people in the playbook actually ship.** Not their advice: their things. Look at what
   they made in their first year and ask which of those this person could make this week.
@@ -259,13 +283,35 @@ made from an idea changes the ranking of the ideas like it: say so in the record
 
 This step is the day's output. Everything before it exists to choose these well.
 
+**Every move copies somebody in the research.** WHO DID THIS names a case from
+`goals/research/<goal>/cases.md` or a person from its `people.md`; the moves check refuses any
+other name once the goal's research holds one. If the person you want to copy is not there, add
+them there first, with the source you opened. Each active goal with an open opening closing within
+14 days, or a HOT person, gets at least one move from it today. Each active goal whose brief lists
+something under "What we could do without asking" gets at least one move from that list, filed for
+the runner to apply today. The one step under "Worth asking for" goes on the ship list as a
+standing-permission line at most once a week per goal.
+
+**Every move aims at the limit.** `AIMS AT:` quotes the goal's `LIMIT:` from its research brief and
+says in one line how this move moves it. A move that touches only what the mission control may
+touch, on a page nobody visits, is not a move: changes like that move no goal's number. **At most
+one move a day is the person's to do**, across all goals, and only a thing they already said they
+want; never a new routine, a calendar entry or a form they did not ask for. When that leaves a
+goal short of moves, say so on its line: `FEWER <goal>: the person's one step today is move <n>`.
+While a goal's brief names no limit yet (its first nights), its moves say `AIMS AT: founding`,
+and the moves check notes that instead of refusing the day.
+
+**A strategy or project uses its outcome's research.** A strategy or project with no research
+folder of its own uses the brief of the first outcome on its SERVES line that has one, for WHO DID
+THIS and AIMS AT, and never a `LIMIT:` line on a goal card.
+
 **1. Pick three moves per active goal**, fewer only when a line `FEWER <goal>: <why>` in
 `moves.md` says why. Two things are never the why: a thin ideas register (the next rung comes from
 what people who reached this goal did, read today, not from the register) and a platform nobody
 is signed in to (prepare the move anyway; its ship-list line asks for the one sign-in, after which
 every later move there lands without them). A goal about their own life (health, friends) moves
 in their life, not on a public page: a booking held, a list written for the shop, a message
-drafted to the right person, an entry in their calendar. This run has time; spend it here. Pick
+drafted to the right person. This run has time; spend it here. Pick
 them in this order: a RHYTHM line of the goal that is
 due; then the next rung, which is the answer to "what did people who reached this goal do at the
 stage this person is at now, that this person has not done yet?" (the playbook's "In what order";
@@ -286,6 +332,9 @@ MAKE item for the runner (Step 4), and joins the ship list the day it is ready.
     ### <n>. <one line a stranger understands: what changes where>
     GOAL: <id>
     BET: <the weekly number now> -> <what you expect it to be seven days after this goes live>
+    AIMS AT: <the LIMIT from the goal's research brief (a strategy's or project's without one:
+             the brief of the first outcome on its SERVES line that has one), quoted, then in
+             one line how this move moves it; "founding" while that brief names no limit yet>
     WHERE: <the live address>
     NOW: <quoted, read live today>
     AFTER: <the exact new version, in full>
@@ -295,7 +344,8 @@ MAKE item for the runner (Step 4), and joins the ship list the day it is ready.
                   "only the person" is the last resort: look for a route the mission control
                   holds first (another field, another page, an API) and say which you tried
     UNDO: <how NOW comes back>
-    PERMISSION: <the ALLOWED line that covers it, or "ship list">
+    PERMISSION: <may:<kind> when one of the goal's MAY lines covers it; for a goal with no MAY
+                lines, the ALLOWED line that covers it; otherwise "ship list">
 
 Every move of a goal with a LEAD carries a BET and an APPLY item, including a move only the person
 can make: file it OWNER person, its CHECK a line a machine can run that shows it happened (the mail
@@ -304,7 +354,9 @@ is in Sent, the event is in the calendar); its seven days start the day that ite
 step whose honest bet is no change (a thank-you, a call's agenda, a habit held) is not a move for
 that number; file it as work beside the moves, and the check refuses it as a move.
 
-**4. Apply or ask.** A move covered by the goal's ALLOWED line gets an APPLY item (Step 4) and the
+**4. Apply or ask.** A move under one of the goal's MAY lines is filed as "Standing permissions"
+above says, and goes out on its own (notice: at its time unless stopped; alone: when ready). A
+move inside the ALLOWED line of a goal with no MAY lines gets an APPLY item (Step 4) and the
 runner applies it today. Every other prepared move, together with prepared moves from earlier days
 that are still unanswered and under seven days old, goes on today's ship list: publish `moves.md`
 as a page (the mission control's own publish command, if it has one) and file ONE card:
@@ -324,8 +376,10 @@ the NEXT line promises "I apply the rest the same day" only for moves the missio
 
 **5. Check before you finish.** Run `mc-check-moves --date <today>`. It counts the moves per
 active goal and reads every block for the fields above, checks every move of a goal with a
-weekly number for its BET and APPLY line, and checks that each active goal's number was read this
-week; keep working until it prints OK. If it is
+weekly number for its BET and APPLY line, checks that each active goal's number was read this
+week, that every move of a goal whose brief names a limit aims at it, that a `may:` move names a
+kind its goal card allows, and that at most one move is the person's to do; keep working until it
+prints OK (a NOTE line beside it explains and never fails the day). If it is
 not installed, check the same things by eye and say so in the record.
 
 **6. Compare only what is expensive.** Keep this in proportion. A routine move gets one sentence and no forecast. Something that will
@@ -364,7 +418,8 @@ nothing was:**
 
 1. **The moves (Step 3):** a MAKE item for each move too big to prepare in the decision run, its
    DONE WHEN the finished thing and a block for it appended to that day's `moves.md`; and an APPLY
-   item for each prepared move, `--outward yes` unless ALLOWED covers it, its CHECK reading the
+   item for each prepared move, `--outward yes` unless the ALLOWED line of a goal with no MAY
+   lines covers it (and with `--may <kind>` when a MAY line covers it), its CHECK reading the
    live place (the address answers, the page holds the new words). The move's bet is its
    forecast; file an `mc-forecast` only for a material action (Step 3.6).
 2. **Everything else the mission control can do alone** that the playbook's "Godspeed steps" names and the
@@ -405,7 +460,8 @@ Write `decision.md` in today's run folder (the prompt that called you names it):
     ## <goal id>          short: the outside numbers read today and the surprise in them; the
                           next rung and who did it; the constraint if it changed; the work ids
     ## Moves              every move from moves.md in one line each: goal, what changes where,
-                          and whether it is applied today (ALLOWED), on the ship list, or waiting
+                          and whether it goes out under a standing permission (MAY, and when;
+                          or ALLOWED, applied today), is on the ship list, or is waiting
                           on a MAKE item
     ## For you today      the ship list card (its id and its numbered lines), or "nothing today, because ...";
                           and for each active goal whose weekly number only the person can tell and
@@ -440,8 +496,3 @@ active goal go a second day with nothing made for it. Count a number a machine i
 active goal. Take work it will not finish in this run. Mark work verified on the runner's word.
 Grade its own move. Repeat something they answered, or ignored twice. Put more than one card in front of them. Let an active goal end a day with only paper. Turn
 their silence into a yes.
-
-
-## Installed personal workspace
-
-Use the current user workspace and its configured providers. Keep original workflow, command contracts, scripts and verification criteria. Read the workspace authorization rules before sends, sign-ins, payments or publishing. Search existing device-private credentials before asking for configuration. Saved output and a passing screen are not evidence that the full requested result happened.

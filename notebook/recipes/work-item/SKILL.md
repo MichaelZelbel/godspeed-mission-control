@@ -81,8 +81,3 @@ That sentence becomes the card they see, and it is the only thing they read befo
 open the piece. Write it the way you would say it across a table. No file names, no folders, no
 ids, no tool names: the ledger refuses a card that carries one, and a refused card means the
 finished piece reaches nobody. Housekeeping they will never open gets no SAY line.
-
-
-## Installed personal workspace
-
-Use the current user workspace and its configured providers. Keep original workflow, command contracts, scripts and verification criteria. Read the workspace authorization rules before sends, sign-ins, payments or publishing. Search existing device-private credentials before asking for configuration. Saved output and a passing screen are not evidence that the full requested result happened.

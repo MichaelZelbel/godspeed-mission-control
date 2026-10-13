@@ -89,8 +89,3 @@ where it was typed. Two ways, and you recommend one:
 
 Moving an existing laptop connection to the server: connect Gmail on the server first and check
 it, then pair the laptop, then `mc-mail disconnect gmail` on the laptop. Never the other order.
-
-
-## Installed personal workspace
-
-Use the current user workspace and its configured providers. Keep original workflow, command contracts, scripts and verification criteria. Read the workspace authorization rules before sends, sign-ins, payments or publishing. Search existing device-private credentials before asking for configuration. Saved output and a passing screen are not evidence that the full requested result happened.
