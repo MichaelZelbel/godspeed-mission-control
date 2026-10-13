@@ -143,7 +143,10 @@ test('a second entry on the same day replaces the first',async()=>{
 
 test('another word for a tracker lands in it, says so, and is remembered',async()=>{
   const {store,domains,belly}=await withBelly();
-  const r=await say(domains,'track waist 90 yesterday',[{type:'track',tracker:belly.id,value:90,new_name:'Waist',on:new Date(Date.now()-86400000).toISOString().slice(0,10)}]);
+  // Yesterday on the installation's clock (Europe/Berlin in the fixture), not in UTC: from 22:00 UTC
+  // in summer Berlin is a day ahead, and UTC's yesterday was the day before yesterday there.
+  const berlin=new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Berlin'}).format(new Date()),yesterday=new Date(Date.parse(berlin+'T00:00:00Z')-86400000).toISOString().slice(0,10);
+  const r=await say(domains,'track waist 90 yesterday',[{type:'track',tracker:belly.id,value:90,new_name:'Waist',on:yesterday}]);
   // An entry for another day names that day (the capture run of 12 October 2026).
   assert.match(r.operation_results[0].reply,/^Tracked under Belly: 90 cm yesterday\.$/);assert.deepEqual(store.get('collections',belly.id).tracker.names,['Belly','Waist']);
   await assert.rejects(say(domains,'track belly 89',[{type:'track',tracker:belly.id,value:89,new_name:'Bauch'}]),/one you used/);

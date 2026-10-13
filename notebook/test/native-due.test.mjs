@@ -1,17 +1,22 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import {Store} from '../core/records/store.mjs';import {QueryService} from '../core/query.mjs';import {Domains} from '../core/domains.mjs';import {remind} from '../core/goal-loop.mjs';
 const fixture=()=>{const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-due-'))),query=new QueryService(store);return {store,query,domains:new Domains(query)};};
+// The days are counted from today (UTC, as mc-due counts them). Until 13 October 2026 they were
+// written out, and on that day the marker's day (2026-10-13) was no longer after today, so the stale
+// list was rightly empty and the test failed: a day that has gone by stays in the calendar.
+const dayFrom=n=>new Date(Date.parse(new Date().toISOString().slice(0,10)+'T00:00:00Z')+n*86400000).toISOString().slice(0,10);
 test('installed obligation help and calendar bookkeeping share the canonical plan without calendar access',async()=>{
  const {store,domains}=fixture(),run=args=>domains.invoke('personal-operation',{type:'due-command',args});
+ const from=dayFrom(-10),target=dayFrom(20),to=dayFrom(23),moved=dayFrom(21);
  assert.match((await run(['help'])).result,/mc-due/);
- await run(['add','fictional-marker','--title','Fictional inspection','--from','2026-10-03','--target','2026-10-12','--to','2026-10-15','--done-when','Inspection recorded','--cost','Fictional missed inspection']);
- assert.match((await run(['marker','--needed'])).result,/fictional-marker\t2026-10-12\t2026-10-15/);
+ await run(['add','fictional-marker','--title','Fictional inspection','--from',from,'--target',target,'--to',to,'--done-when','Inspection recorded','--cost','Fictional missed inspection']);
+ assert.match((await run(['marker','--needed'])).result,new RegExp('fictional-marker\t'+target+'\t'+to));
  await run(['marker','fictional-marker','--set','fictional-event-id']);
  assert.equal((await run(['marker','--needed'])).result,'');
- await run(['target','fictional-marker','2026-10-13']);
- assert.match((await run(['marker','--needed'])).result,/2026-10-13/);
+ await run(['target','fictional-marker',moved]);
+ assert.match((await run(['marker','--needed'])).result,new RegExp('\t'+moved+'\t'));
  await run(['marker','fictional-marker','--set','fictional-new-event']);
  await run(['done','fictional-marker','--evidence','Fictional inspection recorded']);
- assert.match((await run(['marker','--stale'])).result,/fictional-new-event\t2026-10-13/);
+ assert.match((await run(['marker','--stale'])).result,new RegExp('fictional-new-event\t'+moved));
  await run(['marker','fictional-marker','--clear']);
  assert.equal((await run(['marker','--stale'])).result,'');
  assert.equal(store.list('deadlines').length,0);
