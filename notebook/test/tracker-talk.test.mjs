@@ -126,7 +126,6 @@ test('a habit belongs to its own area\'s talk, and the cycle tracker answers as 
  const f=fixture(t,{talks:['health','work']});
  const {addHabit}=await import('../../third-party/addons/godspeed-coach/lib/habits.mjs');
  addHabit(f.root,{area:'health',slug:'stretching',title:'Stretching',days:'daily'},'2026-10-12');
- await assert.rejects(f.op({type:'tracker-talk',tracker:'stretching',talk:'health'}),/Stretching is a habit: the health talk looks at it with its area, and no other talk can/);
  // A habit's talks are its area's, and tracker-list filters habits by the same list.
  assert.deepEqual((await f.op({type:'tracker-list'})).trackers.find(x=>x.specialist==='habit').talks,['health']);
  assert.deepEqual(await read(f,'health'),['Stretching']);assert.deepEqual(await read(f,'work'),[]);
@@ -214,4 +213,77 @@ test('the chat and the bot add a second talk without asking, and move it only wh
  assert.equal(said.error,false,said.text);
  assert.equal(JSON.parse(said.text).reply,'The psychology talk may now look at your sleep tracker, instead of the work and health talks.');
  assert.deepEqual(card(f,'Sleep').talks,['psychology']);
+});
+
+// A habit may be read by other talks too (coach 0.2.8, READ BY): "The work talk may also look at my
+// stretching habit" goes through tracker-talk, the same as a tracker, and the notebook answers in the
+// trackers' words. Its own area's talk always looks at it and cannot be taken away.
+test('other talks may look at a habit through tracker-talk; its own talk always does',async t=>{
+ process.env.GODSPEED_NOW='2026-10-12T08:00:00Z';t.after(()=>{delete process.env.GODSPEED_NOW;});
+ const f=fixture(t,{talks:['health','work','psychology']});talkArea(f.root,'garden','none');
+ const {addHabit}=await import('../../third-party/addons/godspeed-coach/lib/habits.mjs');
+ addHabit(f.root,{area:'health',slug:'stretching',title:'Stretching',days:'daily'},'2026-10-12');
+ const file=path.join(f.root,'coach','health','habits','stretching.md'),before=fs.readFileSync(file,'utf8');
+ const habit=async()=>(await f.op({type:'tracker-list'})).trackers.find(x=>x.specialist==='habit'&&x.name==='Stretching');
+ assert.deepEqual((await habit()).talks,['health']);assert.deepEqual(await read(f,'work'),[]);
+ const added=await f.op({type:'tracker-talk',tracker:'stretching',talk:'work'});
+ assert.equal(added.reply,'The work talk may now look at your stretching habit, along with the health talk.');
+ assert.equal(added.changed,true);assert.deepEqual(added.talks,['health','work']);
+ assert.equal(fs.readFileSync(file,'utf8'),before.replace('AREA: health\n','AREA: health\nREAD BY: work\n'),'only the READ BY line');
+ assert.deepEqual((await habit()).talks,['health','work']);assert.equal(added.tracker_hash,(await habit()).hash,'the hash the next change needs');
+ // tracker-list with the talk returns the habit for a talk that reads it, as for a tracker.
+ assert.deepEqual(await read(f,'work'),['Stretching']);assert.deepEqual(await read(f,'health'),['Stretching']);
+ assert.ok(fs.readdirSync(path.join(f.root,'coach','history')).length>0,'the earlier version is kept, as every notebook coach write does');
+ assert.equal((await f.op({type:'tracker-talk',tracker:'Stretching',talk:'work'})).reply,'The work talk already looks at your stretching habit.');
+ const second=await f.op({type:'tracker-talk',tracker:'stretching',talk:'psychology'});
+ assert.equal(second.reply,'The psychology talk may now look at your stretching habit, along with the health and work talks.');
+ const off=await f.op({type:'tracker-talk',tracker:'stretching',talk:'work',remove:true});
+ assert.equal(off.reply,'The work talk no longer looks at your stretching habit.');assert.deepEqual(off.talks,['health','psychology']);
+ assert.deepEqual(await read(f,'work'),[]);assert.deepEqual(await read(f,'psychology'),['Stretching']);
+ const notThere=await f.op({type:'tracker-talk',tracker:'stretching',talk:'work',remove:true});
+ assert.equal(notThere.reply,'The work talk was not looking at your stretching habit.');assert.equal(notThere.changed,false);
+ // Its own area's talk cannot be taken away, and already looks at it.
+ const own=await f.op({type:'tracker-talk',tracker:'stretching',talk:'health',remove:true});
+ assert.equal(own.reply,'Stretching is a health habit, so the health talk always looks at it.');assert.equal(own.changed,false);
+ assert.equal((await f.op({type:'tracker-talk',tracker:'stretching',talk:'health'})).reply,'The health talk already looks at your stretching habit.');
+ // A talk that does not exist: the trackers' reply, and nothing written.
+ const kept=fs.readFileSync(file,'utf8');
+ assert.equal((await f.op({type:'tracker-talk',tracker:'stretching',talk:'travel'})).reply,'There is no travel talk yet. Say when it should happen, and from then on it can look at your stretching habit.');
+ assert.match((await f.op({type:'tracker-talk',tracker:'stretching',talk:'garden'})).reply,/^There is no garden talk yet\./);
+ assert.equal(fs.readFileSync(file,'utf8'),kept);
+ // instead: the new talk replaces the other talks that look at it, and the reply says its own talk keeps it.
+ await assert.rejects(f.op({type:'tracker-talk',tracker:'stretching',talk:'work',instead:true,words:'The work talk may also look at my stretching habit.'}),/Pass instead only when their own words say/);
+ const moved=await f.op({type:'tracker-talk',tracker:'stretching',talk:'work',instead:true,words:'The work talk should look at my stretching habit instead.'});
+ assert.equal(moved.reply,'The work talk may now look at your stretching habit, instead of the psychology talk. Stretching is a health habit, so the health talk keeps looking at it too.');
+ assert.deepEqual(moved.talks,['health','work']);assert.deepEqual(await read(f,'psychology'),[]);
+});
+
+test('a habit whose own area has no talk is looked at by the talk it is given, and nothing else is named',async t=>{
+ process.env.GODSPEED_NOW='2026-10-12T08:00:00Z';t.after(()=>{delete process.env.GODSPEED_NOW;});
+ const f=fixture(t,{talks:['work']});
+ const {addHabit}=await import('../../third-party/addons/godspeed-coach/lib/habits.mjs');
+ // The coach makes an area with no talk for a habit started on its own (coach 0.2.5).
+ talkArea(f.root,'health','none');addHabit(f.root,{area:'health',slug:'stretching',title:'Stretching',days:'daily'},'2026-10-12');
+ const r=await f.op({type:'tracker-talk',tracker:'stretching',talk:'work'});
+ assert.equal(r.reply,'The work talk may now look at your stretching habit.');
+ assert.deepEqual(await read(f,'work'),['Stretching']);
+ const moved=await f.op({type:'tracker-talk',tracker:'stretching',talk:'work',instead:true,words:'Only the work talk instead.'});
+ assert.equal(moved.reply,'The work talk already looks at your stretching habit.');
+});
+
+// Over MCP the bot passes the habit's hash from tracker-list, as for a habit day.
+test('the bot gives a habit to another talk over MCP with the habit\'s hash',async t=>{
+ process.env.GODSPEED_NOW='2026-10-12T08:00:00Z';t.after(()=>{delete process.env.GODSPEED_NOW;});
+ const f=fixture(t,{talks:['health','work']}),scopes=['actions','collections'];
+ const {addHabit}=await import('../../third-party/addons/godspeed-coach/lib/habits.mjs');
+ addHabit(f.root,{area:'health',slug:'stretching',title:'Stretching',days:'daily'},'2026-10-12');
+ const call=async args=>{const r=await mcp({id:1,method:'tools/call',params:{name:'personal_operation',arguments:args}},{store:f.store,query:f.query,domains:f.domains,scopes});return {error:!!r.result.isError,text:r.result.content[0].text};};
+ const listed=JSON.parse((await call({type:'tracker-list'})).text).trackers.find(x=>x.specialist==='habit');
+ const words='The work talk may also look at my stretching habit.';
+ const stale=await call({type:'tracker-talk',tracker:listed.id,talk:'work',words,expected:{['habits/'+listed.id]:'0'.repeat(64)}});
+ assert.equal(stale.error,true);assert.match(stale.text,/This habit changed/);
+ const done=await call({type:'tracker-talk',tracker:listed.id,talk:'work',words,expected:{['habits/'+listed.id]:listed.hash}});
+ assert.equal(done.error,false,done.text);assert.equal(JSON.parse(done.text).reply,'The work talk may now look at your stretching habit, along with the health talk.');
+ const now=JSON.parse((await call({type:'tracker-list',talk:'work'})).text).trackers.find(x=>x.specialist==='habit');
+ assert.deepEqual(now.talks,['health','work']);assert.equal(JSON.parse(done.text).tracker_hash,now.hash);
 });

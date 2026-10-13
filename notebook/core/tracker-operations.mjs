@@ -4,7 +4,7 @@
 import {norm,card,trackers,findTracker,entries,trackerStatus,proposalState,dayOf,whenFor,schemaFor,entryData,holdQuestion,createdReply,instantReply,fmt,unitOf,longDay,entryOn,existingTalk,setUpOnPurpose,entryWords,talkExists,talkWords,talksOf,cardWithTalks,talksWords,assertInstead} from './trackers.mjs';
 import {now as clockNow,addDays} from '../../third-party/addons/godspeed-coach/lib/clock.mjs';
 import {visibleRows} from './visibility.mjs';
-import {habitTrackerList,habitOperation,isHabitRef,findHabits} from './habit-trackers.mjs';
+import {habitTrackerList,habitOperation,isHabitRef,findHabits,habitTalkOperation} from './habit-trackers.mjs';
 import {cycleOperation,cycleCreate} from './cycle-operations.mjs';
 import {CYCLE_WORDS} from './cycle.mjs';
 import {foodOperation,foodCreate,foodSummary} from './food-operations.mjs';
@@ -100,8 +100,11 @@ export function trackerOperation(domains,raw){
  // was answered with "a tracker has one talk. Should the X talk look at it instead?".
  if(type==='tracker-talk'){
   const talk=talkOf(input.talk);if(!talk)throw Error('Say which talk, by its area, such as health');
-  const habit=findHabits(store,input.tracker)[0];
-  if(habit)throw Error(habit.title+' is a habit: the '+talkWords(habit.area)+' talk looks at it with its area, and no other talk can');
+  // A habit is a tracker too (habit-trackers.mjs): its own area's talk always looks at it, and other
+  // talks are named in its coach file's READ BY line (coach 0.2.8).
+  const habits=findHabits(store,input.tracker);
+  if(habits.length>1)throw Error('Which one: '+habits.map(h=>h.title).sort().join(' or ')+'?');
+  if(habits[0])return habitTalkOperation(store,habits[0],input,{talk,assistant});
   const c=resolve(store,input.tracker),remove=input.remove===true,instead=!remove&&input.instead===true;
   assertInstead(input,{assistant});
   // The cycle and food trackers keep their own talk action, with their own words and language.

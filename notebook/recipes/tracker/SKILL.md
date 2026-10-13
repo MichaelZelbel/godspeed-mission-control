@@ -1,6 +1,6 @@
 ---
 name: tracker
-description: Track anything the person names. Use for every message that starts with "track" (any case, typed or dictated, "Track:" too, also inside a German sentence), the habits, headaches, the period and food included, since this recipe hands those on; when they answer yes to "Start a new tracker called ...?"; when they ask to set up a tracker ("I want to track my sleep: hours, and quality from 1 to 5"); when they correct or delete a tracked entry ("that was 91, not 92", "delete the last belly", "delete the last walk to work"); when they ask about something they track ("how has my belly changed this month?"); and when they say which coaching talk may look at a tracker or no longer needs it ("The health talk may also look at my sleep tracker", "The health talk no longer needs my sleep tracker").
+description: Track anything the person names. Use for every message that starts with "track" (any case, typed or dictated, "Track:" too, also inside a German sentence), the habits, headaches, the period and food included, since this recipe hands those on; when they answer yes to "Start a new tracker called ...?"; when they ask to set up a tracker ("I want to track my sleep: hours, and quality from 1 to 5"); when they correct or delete a tracked entry ("that was 91, not 92", "delete the last belly", "delete the last walk to work"); when they ask about something they track ("how has my belly changed this month?"); and when they say which coaching talk may look at a tracker or a habit, or no longer needs it ("The health talk may also look at my sleep tracker", "The health talk no longer needs my sleep tracker", "The work talk may also look at my stretching habit").
 ---
 
 # Tracker
@@ -92,6 +92,9 @@ The journal no longer takes "track".
    adds that talk and never asks: the talks that read it already keep reading it. Taking one away
    adds `"remove":true`, and the others keep it. Only when their own words say instead ("the
    psychology talk instead of the health talk") add `"instead":true`: then that talk is the only one.
+   A habit is one of the trackers too ("The work talk may also look at my stretching habit"): the
+   same call with the habit's id from `tracker-list`, with `"expected":{"habits/<id>":"<hash>"}`. Its
+   own area's talk always looks at it and is never taken away; the others only look.
    The reply is your answer, as in 8. Anything else a talk may look at, or must never do, is the
    coach recipe's ("Changing an area").
 

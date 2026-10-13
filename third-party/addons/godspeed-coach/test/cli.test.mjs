@@ -220,3 +220,46 @@ test("areas: an area with no talk takes what it may read and its limits, and kee
   assert.match(text, /\nMAY READ: my sleep tracker\nLIMIT: never suggest sleeping pills\n/);
   assert.match(text, /^RHYTHM: weekly sunday$/m);
 });
+// "The psychology talk may also look at my walk to work habit" (13 October 2026): one READ BY line
+// in the habit file; its own talk keeps the evening check, graduation and the struggling check.
+test("habits: another talk may look at a habit, added, listed and taken back by habit read-by", () => {
+  const mc = tmpMission({
+    "coach/settings.json": JSON.stringify({ timezone: "Europe/Berlin", git_sync: "off" }),
+    "coach/health/area.md": area(),
+    "coach/psychology/area.md": area({ AREA: "psychology", TITLE: "Psychology", STYLE: "compass" }),
+  });
+  const T = "2026-10-12T10:00:00Z";
+  assert.equal(cli(mc, T, "habit", "add", "health", "walk-to-work", "--title", "Walk to work and back", "--days", "daily").code, 0);
+  const file = path.join(mc, "coach", "health", "habits", "walk-to-work.md");
+  const before = fs.readFileSync(file, "utf8");
+  assert.equal(cli(mc, T, "habit", "read-by", "walk to work").out, "Your habit Walk to work and back belongs to the Health and fitness talk; no other talk looks at it.");
+  const added = cli(mc, T, "habit", "read-by", "walk to work", "psychology");
+  assert.equal(added.code, 0, added.err);
+  assert.equal(added.out, "The Psychology talk may now look at your habit Walk to work and back.");
+  assert.equal(fs.readFileSync(file, "utf8"), before.replace("AREA: health\n", "AREA: health\nREAD BY: psychology\n"), "only that line");
+  assert.equal(cli(mc, T, "habit", "read-by", "walk-to-work", "Psychology").out, "The Psychology talk may already look at your habit Walk to work and back. Nothing changed.");
+  assert.equal(cli(mc, T, "habit", "read-by", "walk to work").out, "Your habit Walk to work and back belongs to the Health and fitness talk; the Psychology talk may also look at it.");
+  assert.deepEqual(JSON.parse(cli(mc, T, "habit", "read-by", "walk to work", "psychology", "--json").out),
+    { ok: true, habit: "walk-to-work", area: "health", read_by: ["psychology"], changed: false, reply: "The Psychology talk may already look at your habit Walk to work and back. Nothing changed." });
+  assert.match(cli(mc, T, "habit", "list").out, /^walk-to-work: Walk to work and back \(health, also read by psychology, daily, active\)$/m);
+  assert.deepEqual(JSON.parse(cli(mc, T, "habit", "list", "--json").out)[0].readBy, ["psychology"]);
+  // The psychology talk's brief carries it, marked as a health habit.
+  assert.match(cli(mc, T, "brief", "psychology", "--date", "2026-10-18").out, /^- Walk to work and back \(a Health and fitness habit, every day\): last 7 days/m);
+  // Refused plainly, and nothing changes.
+  const own = cli(mc, T, "habit", "read-by", "walk to work", "health");
+  assert.equal(own.code, 1); assert.equal(own.err, "Walk to work and back is a Health and fitness habit; the Health and fitness talk always looks at it.");
+  const unknown = cli(mc, T, "habit", "read-by", "walk to work", "garden");
+  assert.equal(unknown.code, 1); assert.equal(unknown.err, 'There is no coach area called "garden". Areas: health, psychology.');
+  assert.equal(fs.existsSync(path.join(mc, "coach", "garden")), false);
+  const noHabit = cli(mc, T, "habit", "read-by", "reading", "psychology");
+  assert.equal(noHabit.code, 1); assert.match(noHabit.err, /^No habit matches "reading"\. Active habits: Walk to work and back\.$/);
+  const unquoted = cli(mc, T, "habit", "read-by", "walk", "to", "work", "psychology");
+  assert.equal(unquoted.code, 1); assert.match(unquoted.err, /habit read-by "walk to work" psychology/);
+  assert.equal(fs.readFileSync(file, "utf8"), before.replace("AREA: health\n", "AREA: health\nREAD BY: psychology\n"));
+  // "The psychology talk no longer needs my walk to work habit."
+  assert.equal(cli(mc, T, "habit", "read-by", "walk to work", "psychology", "--remove").out, "The Psychology talk no longer looks at your habit Walk to work and back.");
+  const again = cli(mc, T, "habit", "read-by", "walk to work", "psychology", "--remove");
+  assert.equal(again.code, 0); assert.equal(again.out, "The Psychology talk was not looking at your habit Walk to work and back. Nothing changed.");
+  assert.equal(fs.readFileSync(file, "utf8"), before, "back to the file it was");
+});
+

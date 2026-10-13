@@ -5,7 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { parseDoc, setHead, appendToSection, formatDoc } from "./header.mjs";
 import { addDays, weekdayOf, daysBetween, WEEKDAY_WORDS, listWords, now, localParts } from "./clock.mjs";
-import { coachDir } from "./areas.mjs";
+import { coachDir, findArea, listAreas } from "./areas.mjs";
 import {loadSettings} from './settings.mjs';
 import {assertDay,stateOn} from './progress.mjs';
 
@@ -56,8 +56,9 @@ export function readHabit(file) {
     if (answer === "asked") e.asked = true;
     else Object.assign(e, { answer, source, words });
   }
+  const area = h.AREA || path.basename(path.dirname(path.dirname(file)));
   return {
-    slug: h.HABIT || path.basename(file, ".md"), file, area: h.AREA || path.basename(path.dirname(path.dirname(file))),
+    slug: h.HABIT || path.basename(file, ".md"), file, area, readBy: readersOf(h["READ BY"], area),
     title: h.TITLE || h.HABIT, doneMeans: h["DONE MEANS"] || "", days: parseDays(h.DAYS) || "daily", daysText: h.DAYS || "daily",
     started: h.STARTED || "", status: (h.STATUS || "active").toLowerCase(), auto: (h.AUTO || "").trim(), agreed: h.AGREED || "", log,
     timezone:h.TIMEZONE||null,progressDisplay:h['PROGRESS DISPLAY']==='calm'?'calm':'standard',progressHistory,
@@ -75,6 +76,80 @@ export function listHabits(mcDir, { status } = {}) {
     for (const n of fs.readdirSync(dir).filter((x) => x.endsWith(".md")).sort()) out.push(readHabit(path.join(dir, n)));
   }
   return status ? out.filter((h) => h.status === status) : out;
+}
+
+// Which other talks may look at a habit (Michael's decision of 13 October 2026: his headache
+// tracker matters to a health talk and a psychology talk alike). One header line names the OTHER
+// areas, "READ BY: psychology, sleep"; the habit's own area always looks at it and is never in the
+// line. Only looking: the evening check, graduation and "make it smaller" stay with its own talk.
+function readersOf(raw, own) {
+  return [...new Set(String(raw || "").split(",").map((x) => x.trim().toLowerCase()).filter((x) => x && x !== own))];
+}
+const talkOf = (a) => `the ${a.title} talk`;
+const capital = (t) => t.charAt(0).toUpperCase() + t.slice(1);
+const withArticle = (t) => `${/^[aeiou]/i.test(t) ? "an" : "a"} ${t}`;
+const areaSlugOf = (name) => String(name || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+const ownerOf = (mcDir, habit) => findArea(mcDir, habit.area) || { slug: habit.area, title: habit.area };
+
+// A habit by its slug, or the habit itself (from listHabits or readHabit), read fresh from its file.
+function habitFrom(mcDir, ref) {
+  if (ref && typeof ref === "object" && ref.file) return readHabit(ref.file);
+  const s = slugify(ref);
+  const all = listHabits(mcDir).filter((h) => h.slug === s);
+  const active = all.filter((h) => h.status === "active");
+  const pool = active.length ? active : all;
+  if (!s || !pool.length) throw new Error(`There is no habit called "${String(ref ?? "").trim()}".`);
+  if (pool.length > 1) throw new Error(`Several habits are called ${s}: ${pool.map((h) => `${h.title} (${h.area})`).join(" / ")}. Say which one.`);
+  return pool[0];
+}
+
+// "Your habit Walk to work and back belongs to the Health talk; the Psychology talk may also look
+// at it." For listing who reads it.
+export function habitReadersWords(mcDir, ref) {
+  const habit = habitFrom(mcDir, ref);
+  const others = habit.readBy.map((slug) => talkOf(findArea(mcDir, slug) || { title: slug }));
+  return `Your habit ${habit.title} belongs to ${talkOf(ownerOf(mcDir, habit))}; ${others.length ? `${listWords(others)} may also look at it.` : "no other talk looks at it."}`;
+}
+
+// Adds an area to the habit's READ BY line, or takes it away with { remove: true }. Only that one
+// header line is written (made under AREA, dropped with its last area); every other line and the
+// file's own line endings stay exactly as they were. Refuses, writing nothing, an area that does
+// not exist and the habit's own area. Returns the habit read fresh, the area, whether anything
+// changed, the readers now, and `reply`: one plain sentence to say back to the person as it is.
+export function setHabitReader(mcDir, ref, areaName, { remove = false } = {}) {
+  const habit = habitFrom(mcDir, ref);
+  const owner = ownerOf(mcDir, habit);
+  const area = findArea(mcDir, areaName);
+  if ((area ? area.slug : areaSlugOf(areaName)) === habit.area) {
+    throw new Error(`${habit.title} is ${withArticle(owner.title)} habit; ${talkOf(owner)} always looks at it.`);
+  }
+  if (!area) throw new Error(`There is no coach area called "${String(areaName ?? "").trim()}". Areas: ${listAreas(mcDir).map((a) => a.slug).join(", ") || "none yet"}.`);
+  const had = habit.readBy.includes(area.slug);
+  const T = capital(talkOf(area));
+  const result = (changed, reply) => {
+    const h = readHabit(habit.file);
+    return { habit: h, area: { slug: area.slug, title: area.title, noTalk: area.noTalk }, changed, readBy: h.readBy, reply };
+  };
+  if (remove ? !had : had) {
+    return result(false, remove ? `${T} was not looking at your habit ${habit.title}. Nothing changed.` : `${T} may already look at your habit ${habit.title}. Nothing changed.`);
+  }
+  const readers = remove ? habit.readBy.filter((x) => x !== area.slug) : [...habit.readBy, area.slug];
+  const raw = fs.readFileSync(habit.file, "utf8");
+  const eol = raw.includes("\r\n") ? "\r\n" : "\n";
+  const lines = raw.split(eol);
+  let end = lines.findIndex((l) => !l.trim() || l.startsWith("## "));
+  if (end === -1) end = lines.length;
+  const at = lines.slice(0, end).findIndex((l) => l.startsWith("READ BY:"));
+  const line = `READ BY: ${readers.join(", ")}`;
+  if (at !== -1) {
+    if (readers.length) lines[at] = line; else lines.splice(at, 1);
+  } else if (readers.length) {
+    const areaLine = lines.slice(0, end).findIndex((l) => l.startsWith("AREA:"));
+    lines.splice(areaLine === -1 ? end : areaLine + 1, 0, line);
+  }
+  fs.writeFileSync(habit.file, lines.join(eol));
+  const later = area.noTalk ? " It has no talk yet; the talk it gets later keeps this." : "";
+  return result(true, remove ? `${T} no longer looks at your habit ${habit.title}.` : `${T} may now look at your habit ${habit.title}.${later}`);
 }
 
 export function addHabit(mcDir, { area, slug, title, doneMeans, days, agreed = "", auto = "", timezone }, today, max = 5) {

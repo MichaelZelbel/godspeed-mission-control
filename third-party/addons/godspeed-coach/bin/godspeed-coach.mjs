@@ -8,7 +8,7 @@ import { now, localParts, addDays } from "../lib/clock.mjs";
 import { loadSettings, setSetting, DEFAULTS } from "../lib/settings.mjs";
 import { listAreas, findArea, isTalkDay, addArea, setAreaField, nextTalkDay, habitArea, AREA_FIELDS, addAreaLine, removeAreaLine } from "../lib/areas.mjs";
 import { openTalk, readTalk, setTalkState, setFollowUp, addSaid, setShown, talkDates, talkFile } from "../lib/talks.mjs";
-import { addHabit, listHabits, findHabit, track, untrack, lastAnsweredDay, setStatus, stats, askedOn, answerOn,setHabitSchedule,setHabitDisplay,exemptHabitDays } from "../lib/habits.mjs";
+import { addHabit, listHabits, findHabit, track, untrack, lastAnsweredDay, setStatus, stats, askedOn, answerOn,setHabitSchedule,setHabitDisplay,exemptHabitDays, setHabitReader, habitReadersWords } from "../lib/habits.mjs";
 import {habitProgress,assertDay} from '../lib/progress.mjs';
 import { readTable } from "../lib/auto.mjs";
 import { brief, habitLine } from "../lib/brief.mjs";
@@ -253,7 +253,22 @@ const commands = {
     }
     if (sub === "list") {
       const hs = listHabits(mcDir).filter((h) => f.all || h.status === "active");
-      return out(hs.map((h) => `${h.slug}: ${h.title} (${h.area}, ${h.daysText}, ${h.status}${h.auto ? `, from data: ${h.auto}` : ""})`).join("\n") || "No habits.", hs.map(({ log, ...h }) => ({...h,progress:habitProgress(h,{now:at,timezone:s.timezone})})));
+      return out(hs.map((h) => `${h.slug}: ${h.title} (${h.area}${h.readBy.length ? `, also read by ${h.readBy.join(", ")}` : ""}, ${h.daysText}, ${h.status}${h.auto ? `, from data: ${h.auto}` : ""})`).join("\n") || "No habits.", hs.map(({ log, ...h }) => ({...h,progress:habitProgress(h,{now:at,timezone:s.timezone})})));
+    }
+    if (sub === "read-by") {
+      // "The psychology talk may also look at my walk to work habit", "... no longer needs it"
+      // (--remove), and with no area, who looks at it now. Only the habit's READ BY line changes
+      // (lib/habits.mjs setHabitReader); its own talk keeps the evening check and graduation.
+      const [ref, areaName, ...extra] = args;
+      if (!ref || extra.length) die('godspeed-coach habit read-by "<habit>" <area> [--remove], with the habit\'s name in quotes, for example: godspeed-coach habit read-by "walk to work" psychology');
+      const h = needHabit(ref, { includeInactive: true });
+      const state = (x) => ({ ok: true, habit: x.slug, area: x.area, read_by: x.readBy });
+      if (!areaName) { const reply = habitReadersWords(mcDir, h); return out(reply, { ...state(h), reply }); }
+      try {
+        const r = setHabitReader(mcDir, h, areaName, { remove: Boolean(f.remove) });
+        if (r.changed) saved(`habit ${h.slug} ${f.remove ? "no longer" : "also"} read by ${r.area.slug}`);
+        return out(r.reply, { ...state(r.habit), changed: r.changed, reply: r.reply });
+      } catch (e) { die(e.message); }
     }
     if (sub==='progress') {
       const h=needHabit(args.join(' '),{includeInactive:true}),p=habitProgress(h,{now:at,timezone:s.timezone});
@@ -276,7 +291,7 @@ const commands = {
       saved(`habit ${h.slug} ${st}`);
       return out(`${h.title} is now ${st}.`, { ok: true });
     }
-    die("godspeed-coach habit add|track|untrack|answer|list|status");
+    die("godspeed-coach habit add|track|untrack|answer|list|status|read-by");
   },
   habits() {
     if (pos[0] !== "week") die("godspeed-coach habits week [<area>]");

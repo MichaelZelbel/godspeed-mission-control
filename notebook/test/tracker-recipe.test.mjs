@@ -226,3 +226,25 @@ test('the tracker recipes say any number of talks may read a tracker, adding nev
   // The texts shipped until today stay known, so an unedited installed copy is replaced.
   for(const [name,old] of [['tracker','faef7089df4754d29f994f247f88e33e8a05f97dc4bbb38eae11b2dd194ce6f1'],['food-tracker','0ef71e62224e4902619b87c047bada18f181f555a2298b105122c7315699565a'],['cycle-tracker','f78d68d429576a134f5738b9eaaa7f0931a2a25ef2402ff6b987c7afc21ed6be']])assert.ok(revisions[name+'/SKILL.md'].includes(old),name);
 });
+
+// Coach 0.2.8 (13 October 2026): several talks may look at one habit, and a talk never opens with what
+// another talk raised this week. One path: where the notebook is connected a habit goes through
+// tracker-talk, the same as a tracker; the coach's own command is for a mission control without it.
+test('the coach and tracker recipes send a habit to another talk through tracker-talk, and the coach command only without the notebook',()=>{
+  const coach=read('../recipes/coach/SKILL.md'),tracker=read('../recipes/tracker/SKILL.md');
+  assert.equal(coach,read('../../third-party/addons/godspeed-coach/skill/coach/SKILL.md'),'the vendored fork is what ships');
+  const changing=coach.split('## Changing an area')[1].split('## Never')[0],flat=changing.replace(/\s+/g,' ');
+  assert.match(flat,/Where the notebook is connected, a habit is one of its trackers, so it goes the same way as a tracker/);
+  assert.match(changing,/\{"type":"tracker-talk","tracker":"<the habit's id>","talk":"<area>","words":"<their message>","expected":\{"habits\/<the habit's id>":"<its hash>"\}\}/);
+  assert.match(flat,/Without the notebook: `godspeed-coach habit read-by "<the habit>" <area>`/);
+  assert.match(coach.replace(/\s+/g,' '),/The one thing is never something the brief lists under "Raised in other talks this week"/);
+  assert.match(coach,/- An opening about something another talk raised in the last seven days\./);
+  const flatTracker=tracker.replace(/\s+/g,' ');
+  assert.match(flatTracker,/A habit is one of the trackers too \("The work talk may also look at my stretching habit"\): the same call with the habit's id from `tracker-list`, with `"expected":\{"habits\/<id>":"<hash>"\}`/);
+  assert.match(tracker.match(/^description: (.*)$/m)[1],/"The work talk may also look at my stretching habit"/);
+  for(const text of [coach,tracker])assert.doesNotMatch(text,/[–—]/,'no long dashes');
+  const revisions=JSON.parse(read('../data/recipe-revisions.json'));
+  for(const name of ['coach','tracker'])assert.ok(revisions[name+'/SKILL.md'].includes(digest(read('../recipes/'+name+'/SKILL.md'))),name+' ships a known revision');
+  // The texts shipped until today stay known, so an unedited installed copy is replaced.
+  for(const [name,old] of [['coach','3f5ee7b357f84c86a8cec168e7dd7934533875f300437189075e64250babf784'],['tracker','ccae4c80ee9c41de012c6ed236f0a15161037164860e8c875d00103d4b2a44b3']])assert.ok(revisions[name+'/SKILL.md'].includes(old),name);
+});

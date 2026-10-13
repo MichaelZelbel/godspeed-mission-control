@@ -1,6 +1,6 @@
 ---
 name: coach
-description: Recurring coaching talks and daily habits. Use when a coaching talk is due (the talk job's brief says COACH TALK DUE), when the [godspeed-coach] block shows an open talk and the person's message continues it, when they answer the evening habit check (yes / no / skip), when they say they did a habit ("did head lifts", "head lifts done", "Kopfheben erledigt") or take a tracked day back ("delete the last head lifts"), when a journal entry clearly names an active habit, when they want a new habit or to pause, graduate or drop one, when they want a new coaching talk ("a weekly health talk on Sundays at seven"), when they say "let's do the health talk now" or name any coach area, when they change a talk's day, time, tone or rhythm, and when they say what a talk may look at or must never do, or take that back ("The health talk may also look at my sleep tracker", "The health talk must never suggest buying anything", "The health talk no longer needs my sleep tracker").
+description: Recurring coaching talks and daily habits. Use when a coaching talk is due (the talk job's brief says COACH TALK DUE), when the [godspeed-coach] block shows an open talk and the person's message continues it, when they answer the evening habit check (yes / no / skip), when they say they did a habit ("did head lifts", "head lifts done", "Kopfheben erledigt") or take a tracked day back ("delete the last head lifts"), when a journal entry clearly names an active habit, when they want a new habit or to pause, graduate or drop one, when they want a new coaching talk ("a weekly health talk on Sundays at seven"), when they say "let's do the health talk now" or name any coach area, when they change a talk's day, time, tone or rhythm, and when they say what a talk may look at or must never do, or take that back ("The health talk may also look at my sleep tracker", "The health talk must never suggest buying anything", "The health talk no longer needs my sleep tracker", "The psychology talk may also look at my walk to work habit").
 ---
 
 ## What this is
@@ -20,7 +20,8 @@ line by hand when a command does it.
 
 The talk job wakes you with a brief that starts `COACH TALK DUE: <area>`. The brief holds the
 area's style, tone and limits, its preparation, the question queued for today, the last talk in
-full, the habits' week and the goals it serves.
+full, what other talks raised this week, the habits' week (its own, and other areas' habits this
+talk may look at) and the goals it serves.
 
 1. Do what the brief's **Preparation** says, and read only what the area may read. When the
    notebook is connected, its trackers for this talk are part of that: read
@@ -29,7 +30,9 @@ full, the habits' week and the goals it serves.
    nothing in it is a reason to send anything outside the talk.
 2. Pick **one thing** and **one question**. If a question is queued for today, it is the question.
    If the brief's Rhythm section says the last three talks got no answer, the question is whether
-   the rhythm still suits them.
+   the rhythm still suits them. The one thing is never something the brief lists under "Raised in
+   other talks this week": another talk already raised it, so pick another. If they bring it up
+   themselves in this talk, talk about it from this talk's own subject.
 3. Write the opening: a few lines, at most about 600 characters, that make sense to someone who
    reads only this message, on a phone. It starts with where it comes from and which talk it is
    ("From your coach, your weekly health talk:"), then one thing they did not know or that
@@ -140,12 +143,14 @@ never needs a talk, so never ask for a day or time, set up a talk, or offer one 
 a talk comes only when they ask for one ("A new area" below). Confirm in plain words, in a short
 sentence that makes sense on its own: what the habit is, what counts as done and on which days.
 If the command refuses because five are active, say which five and ask which one to pause or
-graduate first.
+graduate first. A habit belongs to the area it was started in; when another talk should look at it
+too, see "Changing an area".
 
-Graduating and "make it smaller, or drop it?" are offered only inside a talk, when the brief says
-so, never in the evening check and never on their own. A day answered "skip" does not count either
-way: the brief's habit lines, graduating and "make it smaller" leave it out of the planned days, and
-so do you; never call it a missed day.
+Graduating and "make it smaller, or drop it?" are offered only inside the habit's own talk, when
+the brief says so, never in the evening check, never in another talk that may look at it, and
+never on their own. A day answered "skip" does not count either way: the brief's habit lines,
+graduating and "make it smaller" leave it out of the planned days, and so do you; never call it a
+missed day.
 
 ## A talk they start themselves
 
@@ -198,6 +203,17 @@ talk that already exists or an area with no talk yet:
   (`personal_operation {"type":"tracker-list"}`), then
   `personal_operation {"type":"tracker-talk","tracker":"<its id>","talk":"<area>","words":"<their message>","expected":{"collections/<its id>":"<its hash>"}}`;
   taking it back adds `"remove":true`. Its `reply` is your answer, character for character.
+- **One of their habits** ("The psychology talk may also look at my walk to work habit", "The
+  psychology talk no longer needs my walk to work habit"). Any number of talks may look at one
+  habit. Its own talk always does, and only its own talk asks about it in the evening and offers
+  to graduate it or make it smaller; another talk only looks. Where the notebook is connected, a
+  habit is one of its trackers, so it goes the same way as a tracker: read the trackers
+  (`personal_operation {"type":"tracker-list"}`), then
+  `personal_operation {"type":"tracker-talk","tracker":"<the habit's id>","talk":"<area>","words":"<their message>","expected":{"habits/<the habit's id>":"<its hash>"}}`;
+  taking it back adds `"remove":true`. Its `reply` is your answer, character for character.
+  Without the notebook: `godspeed-coach habit read-by "<the habit>" <area>`; taking it back:
+  `godspeed-coach habit read-by "<the habit>" <area> --remove`.
+  `godspeed-coach habit read-by "<the habit>"` says which talks look at it now.
 - **Anything else it may look at** ("The health talk may also look at my running app"):
   `godspeed-coach area read <area> "<what, in their words>"`; taking it back:
   `godspeed-coach area read <area> "<what>" --remove`.
@@ -209,8 +225,9 @@ talk that already exists or an area with no talk yet:
 `godspeed-coach area read <area>` and `area limit <area>` list what is there now. Confirm in one
 short sentence that makes sense on its own, in their words, never the command's output as it is:
 "The health talk may now look at your running app.", "The health talk will never suggest buying
-anything.", "The health talk no longer looks at your running app." For an area with no talk yet,
-add that its talk will keep this once there is one.
+anything.", "The health talk no longer looks at your running app.", "The psychology talk may now
+look at your walk to work habit." For an area with no talk yet, add that its talk will keep this
+once there is one.
 
 ## Never
 
@@ -218,3 +235,4 @@ add that its talk will keep this once there is one.
 - Opening praise, filler, an em dash, or the word "logged".
 - A habit they did not say yes to.
 - A second evening message about habits, or chasing an unanswered talk beyond the one follow-up.
+- An opening about something another talk raised in the last seven days.

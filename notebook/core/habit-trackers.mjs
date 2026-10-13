@@ -6,20 +6,20 @@
 // from "track walk to work" or from the shelf, runs the coach's own track() or untrack() on the
 // same file, keeping the earlier version in coach/history as every notebook coach write does.
 import fs from 'node:fs';
-import {listHabits,track,untrack,setStatus,setHabitSchedule,setHabitDisplay,exemptHabitDays} from '../../third-party/addons/godspeed-coach/lib/habits.mjs';
+import {listHabits,track,untrack,setStatus,setHabitSchedule,setHabitDisplay,exemptHabitDays,setHabitReader} from '../../third-party/addons/godspeed-coach/lib/habits.mjs';
 import {addDays,localParts,now as clockNow} from '../../third-party/addons/godspeed-coach/lib/clock.mjs';
 import {habitProgress,assertDay} from '../../third-party/addons/godspeed-coach/lib/progress.mjs';
 import {hash} from './records/store.mjs';
 import {rememberFile} from './native-personal.mjs';
-import {norm,longDay,whenFor} from './trackers.mjs';
+import {norm,longDay,whenFor,talkExists,talkWords,talksWords,assertInstead} from './trackers.mjs';
 
 export const habitId=h=>'habit-'+h.area+'-'+h.slug;
 const ANSWERS=['done','no','skip'],SAID={done:'done',no:'not done',skip:'skipped'};
 const habitNames=h=>[...new Set([h.title,h.slug.replaceAll('-',' ')].filter(Boolean))];
 const habitsOf=store=>store?.root?listHabits(store.root):[];
-// The talks that read a habit: its own area's, first. Michael's decision of 13 October 2026 lets any
-// number of talks read a tracker; for a habit the others will come from the coach's own file (a READ BY
-// line, the coach release after 0.2.7), read here as `readBy` once that coach is vendored.
+// The talks that read a habit: its own area's, first, then the other areas its coach file names in its
+// READ BY line (coach 0.2.8, `readBy`). Michael's decision of 13 October 2026: any number of talks may
+// read a tracker, and a habit is one.
 export const habitTalks=h=>[...new Set([h.area,...(Array.isArray(h.readBy)?h.readBy:[])].filter(t=>typeof t==='string'&&t))];
 // A habit by its tracker id, or by its title or slug said in full. Two that fit are named, never guessed.
 export function findHabits(store,ref){
@@ -118,4 +118,43 @@ export function habitOperation(store,input,{now,zone,today,assistant=false,evide
  const correctedWords=input.note===undefined&&input.words===undefined&&input.source_quote===undefined?h.log[day]?.words||'':words;
  rememberFile(store,h.file);const updated=track(h,day,answer,input.source||'notebook',correctedWords);
  return result(updated,{habit_id:habitId(h),day,answer,removed:false,reply:'Changed: '+name+' is '+SAID[answer]+' '+dayWords(day,today)+'.'});
+}
+// "The work talk may also look at my stretching habit" (coach 0.2.8): tracker-talk on a habit, in the
+// trackers' words. The coach's own setHabitReader writes the habit's READ BY line, and nothing else in
+// the file; its own area's talk always looks at it and cannot be taken away, and only that talk asks
+// about it in the evening and offers to graduate it. Only a talk that exists is added. "instead"
+// replaces the other talks that look at it, and the reply says its own talk keeps it. Over MCP the
+// habit's hash from tracker-list is checked when given, as for a habit day.
+const habitWords=h=>{const n=String(h.title||h.slug).trim(),low=n.length>1&&n.slice(1)===n.slice(1).toLocaleLowerCase()?n.charAt(0).toLocaleLowerCase()+n.slice(1):n;return /habit$/i.test(low)?low:low+' habit';};
+const withArticle=w=>(/^[aeiou]/i.test(w)?'an ':'a ')+w;
+export function habitTalkOperation(store,h,input,{talk,assistant=false}){
+ const id=habitId(h),file=()=>hash(fs.readFileSync(h.file));
+ const expected=typeof input.expected==='string'?input.expected:input.expected?.['habits/'+id]??input.expected?.[id];
+ if(expected!==undefined&&expected!==file())throw Error('This habit changed; read it again with tracker-list before changing which talks look at it');
+ assertInstead(input,{assistant});
+ const remove=input.remove===true,instead=!remove&&input.instead===true,root=store.root,own=h.area,readers=habitTalks(h).filter(t=>t!==own);
+ const yours='your '+habitWords(h),the='The '+talkWords(talk)+' talk',owns=h.title+' is '+withArticle(talkWords(own))+' habit, so the '+talkWords(own)+' talk';
+ const same=reply=>({habit_id:id,talks:habitTalks(h),changed:false,tracker_hash:file(),reply});
+ if(talk===own){
+  if(remove)return same(owns+' always looks at it.');
+  if(talkExists(root,own))return same(the+' already looks at '+yours+'.');
+ }
+ if(remove&&!readers.includes(talk))return same(the+' was not looking at '+yours+'.');
+ if(!remove){
+  if(!talkExists(root,talk))return same('There is no '+talkWords(talk)+' talk yet. Say when it should happen, and from then on it can look at '+yours+'.');
+  if(readers.includes(talk)&&!(instead&&readers.length>1))return same(the+' already looks at '+yours+'.');
+ }
+ rememberFile(store,h.file);
+ const others=readers.filter(t=>t!==talk);
+ if(remove)setHabitReader(root,h,talk,{remove:true});
+ else{
+  if(instead)for(const t of others)setHabitReader(root,h,t,{remove:true});
+  if(!readers.includes(talk))setHabitReader(root,h,talk);
+ }
+ const updated=findHabits(store,id)[0]||h,ownTalk=talkExists(root,own);
+ const along=[...(ownTalk?[own]:[]),...others.filter(t=>talkExists(root,t))];
+ const reply=remove?the+' no longer looks at '+yours+'.'
+  :instead?the+' may now look at '+yours+(others.length?', instead of the '+talksWords(others):'')+'.'+(ownTalk?' '+owns+' keeps looking at it too.':'')
+  :the+' may now look at '+yours+(along.length?', along with the '+talksWords(along):'')+'.';
+ return {habit_id:id,talks:habitTalks(updated),changed:true,tracker_hash:hash(fs.readFileSync(updated.file)),reply};
 }
