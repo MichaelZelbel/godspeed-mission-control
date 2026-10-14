@@ -1,6 +1,6 @@
 # Notebook production wording correction: preparation receipt
 
-Prepared on 14 October 2026. This is preparation evidence, not publication approval or a complete release certification.
+Prepared on 14 October 2026. Michael subsequently approved publication: "Yes, thank you. Please publish it." The preparation evidence below records the original build checks; publication validation is recorded separately at the end.
 
 ## Exact source
 
@@ -18,7 +18,7 @@ The product difference contains only these three files:
 - `notebook/ui/src/App.tsx`: unavailable-page fallback becomes "This page is unavailable."
 - `notebook/adapters/src/App.tsx`: the same unavailable-page fallback.
 
-No newer feature changes were included. The source archive preserves all other files exactly at the original public product, including its historical installer copies. The separately staged installer asset below has the new product pin.
+No newer feature changes were included. The notebook runtime preserves every other runtime file from the original public product. The source publication snapshot is `579f5a1ccb507d3f354f4cf1cdbe3f2106fd3ba3`, based on the corrected runtime and adding only corrected installer artifacts, release links, packaging notes and the archive export attribute. Its archive includes the corrected root installer, Windows setup, shell installer and manifest. Embedded checksums cover those three installer files; the release checksum file additionally covers the source archive, avoiding a checksum cycle.
 
 ## Download assets
 
@@ -29,7 +29,7 @@ Local directory: `C:/godspeed-worktrees/notebook-production-label-artifacts`.
 | `GodspeedSetup.exe` | `60997cc4840a68e6499fd935799ff4755de87812cda663c2ba19486d3fabe0b3` |
 | `install-godspeed.sh` | `66e4350edd0c6b98bdd408a24fc5afd16604fb536354757b39559fe6a591aa7a` |
 | `windows-manifest.json` | `5dce390d94e7b93d54806e0d0a7a1a3f181aecfe4c6a9ef3f89bb7e37479eec7` |
-| `Godspeed-v2-integrated-source.tar.gz` | `9357dc0077fc5e3fa9f4afbe8ef4970a7d6102ced6af753d57356f1d87e535ca` |
+| `Godspeed-v2-integrated-source.tar.gz` | `79a5acb64c8c97677b0a7ff8b244e01bbdf83a5034ef4778e2cccd6c7e9e956e` |
 
 `SHA256SUMS` is also staged. The shell installer was downloaded from the exact original release, verified against release asset SHA256 `3078a9b059b5d1a1a7be805612a72a5cb455b0490c09bae7b4a36b782da454d6`, then changed only by replacing the original product hash with the corrected product hash. Its bootstrap pin stays unchanged.
 
@@ -69,4 +69,4 @@ No image has been pushed to a registry. The complete Docker test/browser suite a
 
 No public release, live installer pin, website short link, hosted installer image pin, or running installation was changed by this preparation. GitHub's latest release was read back as `godspeed-v2-integrated-2026-10-13-1` after asset preparation.
 
-Publication still requires Michael's approval under `rules/ask-before-irreversible-or-outward.md`. After approval, complete the appropriate install/update validations, publish the replacement download assets, update installer pins and checksums together, publish and verify the image, update the hosted installer image digest, and download/read back each public entry point. The preparation branch itself must not be merged to main as a substitute for those coordinated release steps.
+Michael approved the release under `rules/ask-before-irreversible-or-outward.md`. Publication includes install/update validations, replacement download assets, installer pins and checksums, the exact corrected image, the hosted installer image digest, and public read-back checks. The immutable runtime commit stays separate from main's newer features.
