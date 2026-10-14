@@ -39,6 +39,8 @@
 //     (that idea's path or its name without .md), reported once per idea; an IDEA of "none ..." is
 //     exempt. Why: the decision twice kept a chance closing within the week away from the person,
 //     writing that it "changes no weekly number", though its recipe says such a chance gets a move.
+//     An opening whose idea file says "STATUS: dropped" (the person said no) or "STATUS: made" is
+//     skipped, though it stays in openings.md until its UNTIL; a missing idea file is still required.
 //
 //   mc-check-moves --date 2026-09-24 [--per-goal 3] [--godspeed DIR]
 //
@@ -253,6 +255,17 @@ if (persons > 1) problems.push(`at most one move a day may be the person's to do
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
 const validDay = (s) => ISO_DAY.test(s) && !isNaN(Date.parse(s + 'T00:00:00Z')) && new Date(s + 'T00:00:00Z').toISOString().slice(0, 10) === s;
 const IDEA_FILE = /ideas\/[A-Za-z0-9._-]+\.md/;
+// An idea already settled needs no move: the person said no (dropped) or it is done (made). Its
+// opening stays in openings.md until its UNTIL, so without this the day would be refused for it
+// every morning. Read from the idea file's own first STATUS line; a missing file is not settled.
+const settled = new Map();
+function ideaSettled(rel) {
+  if (!settled.has(rel)) {
+    const st = (read(path.join(ROOT, rel)) || '').match(/^STATUS:[ \t]*(.*)$/m);
+    settled.set(rel, !!st && /^(?:dropped|made)\b/i.test(st[1].trim()));
+  }
+  return settled.get(rel);
+}
 const chances = new Map();
 const openingsRead = new Set();
 for (const g of active) {
@@ -267,7 +280,7 @@ for (const g of active) {
     const idea = (o.IDEA || '').trim();
     if (/^none\b/i.test(idea)) continue;
     const file = idea.match(IDEA_FILE);
-    if (!file) continue;
+    if (!file || ideaSettled(file[0])) continue;
     const had = chances.get(file[0]);
     if (!had || until < had.until) chances.set(file[0], { goal: g, opening: (o.OPENING || '').replace(/\s+/g, ' ').trim(), until });
   }

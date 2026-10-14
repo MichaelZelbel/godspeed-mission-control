@@ -270,7 +270,19 @@ case "$OUT" in *'health-goal: the chance "A 5 km fun run in the town park on a S
 OUT="$(run)"; [ $? -eq 0 ] && ok "  a move citing the idea's path passes" || bad "  cited by path: $OUT"
 { base; carry "the enter-the-fun-run idea"; } > "$RUN/moves.md"
 OUT="$(run)"; [ $? -eq 0 ] && ok "  and so does one citing the idea's name" || bad "  cited by name: $OUT"
+# Once the person said no, the idea is dropped (or made once done), but its opening stays in
+# openings.md until its UNTIL; the day must not be refused for it every morning (2026-10-14).
 base > "$RUN/moves.md"
+mkdir -p "$TMP/ideas"
+idea() { printf 'GOAL: health-goal\r\nSTATUS: %s\r\nSOURCE: goal research %s\r\n\r\n- %s note\r\n' "$1" "$D" "$D" > "$TMP/ideas/enter-the-fun-run.md"; }
+idea dropped
+OUT="$(run)"; [ $? -eq 0 ] && ok "a chance whose idea file says STATUS dropped needs no move" || bad "dropped idea: $OUT"
+idea "made, 2026-09-23, entered and paid"
+OUT="$(run)"; [ $? -eq 0 ] && ok "  nor one whose idea is made" || bad "made idea: $OUT"
+idea open
+OUT="$(run)"; case "$OUT" in *"no move today carries it"*) ok "  but an open idea is still refused";; *) bad "  open idea: $OUT";; esac
+rm -r "$TMP/ideas"
+OUT="$(run)"; case "$OUT" in *"no move today carries it"*) ok "  and a missing idea file is still required";; *) bad "  missing idea file: $OUT";; esac
 opening 2026-09-24 ideas/enter-the-fun-run.md | openings
 OUT="$(run)"; case "$OUT" in *"no move today carries it"*) ok "  a chance closing today counts too";; *) bad "  closes today: $OUT";; esac
 { opening 2026-09-30 ideas/enter-the-fun-run.md; opening 2026-09-28 ideas/enter-the-fun-run.md "A second race in the same idea"; } | openings
