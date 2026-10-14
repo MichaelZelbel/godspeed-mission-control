@@ -9,7 +9,7 @@
 name: godspeed-mission-control
 services:
   godspeed:
-    image: ghcr.io/michaelzelbel/godspeed-mission-control@sha256:5a154b6dde1fea14cf039c15cb311f10a3bc5cb192d3178362a60591b6163fdd
+    image: ghcr.io/michaelzelbel/godspeed-mission-control@sha256:60df0c65e25d3b0f445112e9bb5fdf9982ef2f13afa31cfa9ae5b90439f8ba00
     restart: unless-stopped
     # A small init as process 1 collects the programs the assistant leaves behind. The image's
     # own entrypoint replaces the one that did, and until 7 October 2026 they piled up as zombies.
