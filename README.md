@@ -6,7 +6,7 @@ Version 2 is the current edition, here on `main`. Its installers set up a new, s
 
 ## New in this release (14 October 2026)
 
-The notebook no longer calls every installation a test installation. Its unavailable-page message says 'This page is unavailable.' This release otherwise keeps the notebook from 13 October.
+The notebook no longer calls every installation a test installation. Its unavailable-page message says 'This page is unavailable.' This release otherwise keeps the notebook from 13 October. The installer keeps its starter files matched to that notebook version.
 
 ## New on 12 October 2026, second update
 
@@ -61,7 +61,7 @@ Download this release's installer, check that it is the published file, and run 
 
 ```bash
 curl -fsSLO https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-14-1/install-godspeed.sh
-echo "66e4350edd0c6b98bdd408a24fc5afd16604fb536354757b39559fe6a591aa7a  install-godspeed.sh" | sha256sum -c - && bash install-godspeed.sh
+echo "5843a37502758b9cfd504d55a2b87413c916cee4773375ae2044fc0dd61866b6  install-godspeed.sh" | sha256sum -c - && bash install-godspeed.sh
 ```
 
 On a Mac, write `shasum -a 256 -c -` where it says `sha256sum -c -`. The check refuses any other file, and the installer names one exact version of the notebook, so every reader of this release gets the same notebook.
