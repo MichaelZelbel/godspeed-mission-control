@@ -25,6 +25,7 @@ import {
   Image as ImageIcon,
   ClipboardList,
   User,
+  Fingerprint,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useNotes, useCreateNote } from "@/hooks/useNotes";
@@ -84,6 +85,7 @@ const NAV_ITEMS: { title: string; url: string; icon: typeof FileText }[] = [
   { title: "Review Queue", url: "/dashboard/review-queue", icon: ClipboardList },
   { title: "Weekly Review", url: "/dashboard/review", icon: Calendar },
   { title: "My Profile", url: "/dashboard/profile", icon: User },
+  { title: "Identity", url: "/dashboard/identity", icon: Fingerprint },
   { title: "Settings", url: "/dashboard/settings", icon: Settings },
 ];
 

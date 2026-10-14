@@ -7,7 +7,7 @@ import { SEOHead } from "@/components/SEOHead";
 import { useProfile } from "@/hooks/useProfile";
 import { useFacts } from "@/hooks/useFacts";
 import { ProfileSections } from "@/components/profile/ProfileSections";
-import { AgentInstructionsTab } from "@/components/profile/AgentInstructionsTab";
+import { InstructionsMoved } from "@/components/profile/InstructionsMoved";
 import { ExportTab } from "@/components/profile/ExportTab";
 import { ProfileSuggestions } from "@/components/profile/ProfileSuggestions";
 import { ProfileCompleteness } from "@/components/profile/ProfileCompleteness";
@@ -29,8 +29,6 @@ export default function Profile() {
     seedDefaults,
     upsertCategory,
     deleteCategory,
-    upsertInstruction,
-    deleteInstruction,
     upsertView,
     deleteView,
   } = useProfile();
@@ -152,11 +150,7 @@ export default function Profile() {
           </TabsContent>
 
           <TabsContent value="instructions" className="mt-4">
-            <AgentInstructionsTab
-              instructions={instructions}
-              onSave={(data) => upsertInstruction.mutate(data)}
-              onDelete={(id) => deleteInstruction.mutate(id)}
-            />
+            <InstructionsMoved count={instructions.length} />
           </TabsContent>
 
           <TabsContent value="export" className="mt-4">

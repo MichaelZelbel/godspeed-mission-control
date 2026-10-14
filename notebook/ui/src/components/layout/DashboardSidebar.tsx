@@ -13,6 +13,7 @@ import {
   Plug,
   UserCircle,
   User,
+  Fingerprint,
   
   Network,
   Image,
@@ -118,6 +119,7 @@ export function DashboardSidebar() {
 
   const systemItems = [
     { title: "My Profile", url: "/dashboard/profile", icon: User },
+    { title: "Identity", url: "/dashboard/identity", icon: Fingerprint },
     { title: "Settings", url: "/dashboard/settings", icon: Settings },
     { title: "Godspeed chat", url: "/chat", icon: Plug },
     { title: "Connect AI", url: "/dashboard/settings?tab=mcp", icon: Plug },
