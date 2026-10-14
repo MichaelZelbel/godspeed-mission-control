@@ -42,5 +42,5 @@ export default function App(){return <ThemeProvider attribute="class" defaultThe
   <Route path="/collections" element={<Collections/>}/><Route path="/collections/templates" element={<CollectionTemplates/>}/>
   <Route path="/collections/:slug/schema" element={<CollectionSchema/>}/><Route path="/collections/:slug/:itemId" element={<CollectionDetail/>}/><Route path="/collections/:slug" element={<CollectionDetail/>}/>
   <Route path="/dashboard/graph" element={<KnowledgeGraph/>}/>
-  <Route path="*" element={<p>This page is unavailable in this test installation.</p>}/>
+  <Route path="*" element={<p>This page is unavailable.</p>}/>
 </Route></Routes></AuthProvider></BrowserRouter></TooltipProvider></ThemeProvider>;}
