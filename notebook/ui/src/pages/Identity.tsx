@@ -58,7 +58,7 @@ function ItemCard({ title, text, note, onOpen, waiting }: { title: string; text?
   return (
     <button type="button" onClick={onOpen} className="block w-full rounded-lg text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
       <Card className="h-full cursor-pointer transition-colors hover:bg-accent/50">
-        <CardHeader className="pb-2"><CardTitle className="text-base leading-snug">{title}</CardTitle></CardHeader>
+        <CardHeader className="pb-2"><CardTitle className="line-clamp-3 text-base leading-snug" title={title}>{title}</CardTitle></CardHeader>
         <CardContent className="space-y-2">
           {text && <p className="line-clamp-3 text-sm text-muted-foreground">{text}</p>}
           {note && <p className="text-xs text-muted-foreground">{note}</p>}
