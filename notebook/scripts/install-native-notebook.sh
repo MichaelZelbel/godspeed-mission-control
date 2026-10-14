@@ -585,17 +585,22 @@ fi
 if [ "$service_user" = root ]; then
   echo 'The notebook and its assistant run as root here, so the assistant can change anything on this computer. Installing from an ordinary account avoids that.' >&2
 fi
-echo "Godspeed Mission Control folder: $root"
+# The last words a person reads after installing: where it is, how to start, where to hear more.
+# The Windows setup's finish page says the same three things (kit-bootstrap, godspeed-setup.iss).
+echo
+echo "Your mission control is in $root."
 if [ -n "$web_address" ] && [ -z "$web_problem" ]; then
   setup=$(setup_path || true)
   if [ -n "$setup" ]; then
-    echo "Notebook: open this private link to make your account. It works once, for 24 hours, and running the installer again makes a new one:"
+    echo "To talk to it, open this private link to make your account, then connect your own AI account in Settings. The link works once, for 24 hours, and running the installer again makes a new one:"
     echo "$web_address$setup"
   else
-    echo "Notebook: $web_address/dashboard"
+    echo "To talk to it, open your notebook at $web_address/dashboard. The first time, connect your own AI account in Settings."
   fi
 else
-  echo "Notebook: http://127.0.0.1:$GODSPEED_PORT/dashboard"
   # A server without its web address is not finished.
-  if [ -n "$web_problem" ]; then echo "$web_problem" >&2; exit 1; fi
+  if [ -n "$web_problem" ]; then echo "Notebook: http://127.0.0.1:$GODSPEED_PORT/dashboard"; echo "$web_problem" >&2; exit 1; fi
+  echo "To talk to it, open your notebook at http://127.0.0.1:$GODSPEED_PORT/dashboard. The first time, connect your own AI account in Settings."
 fi
+echo
+echo "I write about what it does and what broke, free: https://michaelzelbel.substack.com/subscribe"
