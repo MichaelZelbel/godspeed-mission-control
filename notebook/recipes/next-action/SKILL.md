@@ -300,8 +300,11 @@ standing-permission line at most once a week per goal.
 says in one line how this move moves it. A move that touches only what the mission control may
 touch, on a page nobody visits, is not a move: changes like that move no goal's number. **At most
 one move a day is the person's to do**, across all goals, and only a thing they already said they
-want; never a new routine, a calendar entry or a form they did not ask for. When that leaves a
-goal short of moves, say so on its line: `FEWER <goal>: the person's one step today is move <n>`.
+want; never a new routine, a calendar entry or a form they did not ask for. A line carried from an
+earlier day that only the person can do counts toward that one, so when carried lines already hold
+it, today adds no step of theirs; every carried line past the one gets `HOLD <work id>: <why>` in
+`moves.md` and stays off today's card (it still expires seven days after it was filed). When that
+leaves a goal short of moves, say so on its line: `FEWER <goal>: the person's one step today is move <n>`.
 While a goal's brief names no limit yet (its first nights), its moves say `AIMS AT: founding`,
 and the moves check notes that instead of refusing the day.
 
@@ -365,7 +368,9 @@ that number; file it as work beside the moves, and the check refuses it as a mov
 above says, and goes out on its own (notice: at its time unless stopped; alone: when ready). A
 move inside the ALLOWED line of a goal with no MAY lines gets an APPLY item (Step 4) and the
 runner applies it today. Every other prepared move, together with prepared moves from earlier days
-that are still unanswered and under seven days old, goes on today's ship list: publish `moves.md`
+that are still unanswered and under seven days old, goes on today's ship list, except a carried
+line that has a `HOLD` line, which waits off the card (a carried line only the person can do is
+their one step for the day; see "At most one move a day" above). Publish `moves.md`
 as a page (the mission control's own publish command, if it has one) and file ONE card:
 
     godspeed attention file --kind approval --owner godspeed --topic ship-list-<date>
