@@ -45,6 +45,7 @@ import {NoteProcessing} from '../core/processing.mjs';
 import {mediaObjectName,mediaFileName} from '../core/media-names.mjs';
 import {retireShares} from '../core/shares.mjs';
 import {installFoodTable,foodTableWanted} from '../core/food-table.mjs';
+import {IdentityShelf} from '../core/identity-shelf.mjs';
 
 // What the browser is told each built file is. A module script sent as
 // octet-stream is refused outright: the PDF reader's worker (.mjs) was, so
@@ -119,6 +120,12 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   const menerioImport=new MenerioImport(store,mediaRoot,()=>{index.rebuild();factClosing.request();},{beat});
   const telegramConnection=new TelegramConnection();
   const chatRequests=new Map(),recoveryRunner=new RecoveryRunner(store),backupRunner=new BackupRunner(store,mediaRoot);let dictationBusy=false;
+  // The Identity page (core/identity-shelf.mjs): who it is, its rules, what it knows about its
+  // owner and its recipes, with every earlier version. Its assistant's own identity file follows
+  // "who it is"; only the assistant this installation connected is meant (assistant.json).
+  const assistantHome=()=>{try{const d=JSON.parse(fs.readFileSync(assistantPath,'utf8').replace(/^﻿/,''));return d?.verified&&typeof d.home==='string'?d.home:null;}catch{return null;}};
+  const shelf=domains.identity=new IdentityShelf(store,{assistantHome});
+  try{shelf.followPersona();}catch{}
   const loginLinks=new Map();
   const apiKeys=new ApiKeys(store);
   // A pairing key lets the other device copy media, nothing else: until 6 October 2026
@@ -284,6 +291,29 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       if(route==='/api/conflicts/resolve'&&req.method==='POST'){
         const input=JSON.parse(await body(req));resolveSavedConflict(store,input,{assistantPath});
         return send(res,200,{ok:true});
+      }
+      // The Identity page. Only the files it names, by the patterns in identity-shelf.mjs; every
+      // change through the workspace's writer and lock, kept as a version of its own.
+      if(route==='/api/identity'||route.startsWith('/api/identity/')){
+        if(route==='/api/identity'&&req.method==='GET')return send(res,200,shelf.overview());
+        if(route==='/api/identity/item'&&req.method==='GET')return send(res,200,shelf.read(url.searchParams.get('target')));
+        if(route==='/api/identity/history'&&req.method==='GET')return send(res,200,{data:await shelf.versions(url.searchParams.get('target'))});
+        // The instructions connected AI apps receive (get_user_profile): records, kept as records.
+        if(route==='/api/identity/instructions'&&req.method==='GET')return send(res,200,{data:shelf.instructionList()});
+        if(route==='/api/identity/instruction-history'&&req.method==='GET')return send(res,200,{data:shelf.instructionVersions(url.searchParams.get('id'))});
+        if(req.method!=='POST')return send(res,405,{error:'Use GET or POST'});
+        const input=JSON.parse(await body(req,256*1024)),options={expected_hash:typeof input.expected_hash==='string'?input.expected_hash:undefined,by:'notebook'};
+        if(route==='/api/identity/save')return send(res,200,await shelf.save(input.target,{text:input.text,fields:input.fields},options));
+        if(route==='/api/identity/undo')return send(res,200,await shelf.undo(input.target,options));
+        if(route==='/api/identity/restore')return send(res,200,await shelf.restore(input.target,String(input.version||''),options));
+        if(route==='/api/identity/rule')return send(res,200,await shelf.addRule(input.fields||{},{by:'notebook'}));
+        if(route==='/api/identity/remove')return send(res,200,await shelf.removeRule(input.target,options));
+        if(route==='/api/identity/mark-who')return send(res,200,await shelf.markWho({by:'notebook'}));
+        if(route==='/api/identity/gather-rules')return send(res,200,await shelf.gatherRules({by:'notebook'}));
+        if(route==='/api/identity/assistant-identity')return send(res,200,shelf.followPersona({take:true}));
+        if(route==='/api/identity/instruction')return send(res,200,await shelf.saveInstruction(input.instruction||{},options));
+        if(route==='/api/identity/instruction-restore')return send(res,200,await shelf.restoreInstruction(String(input.id||''),String(input.version||''),options));
+        return send(res,404,{error:'Unknown operation'});
       }
       if(route==='/api/setup'&&req.method==='POST'){const input=JSON.parse(await body(req));return send(res,200,{...await scheduler.configure({...input,owner:mediaSync.server()||device}),results:await scheduler.tick()});}
       if(route==='/api/jobs/run'&&req.method==='POST'){const input=JSON.parse(await body(req));if(originalRuntime)return send(res,202,scheduler.startRun(input.id));return send(res,200,{results:await scheduler.tick()});}
@@ -455,8 +485,11 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   // Private backups and Git merge workspaces are outside the watched knowledge.
   const watchRoot=name=>{const folder=path.join(store.root,name);if(!watchers.has(name)&&fs.existsSync(folder))watchers.set(name,fs.watch(folder,{recursive:true},changed(name)));};
   for(const name of durableRoots)watchRoot(name);
-  const rootWatcher=fs.watch(store.root,(event,name)=>{if(durableRoots.includes(name)){watchRoot(name);changed(name)(event,null);}else if(durableFiles.includes(name))changed('')(event,name);});
-  return { server, store, index, query, domains, scheduler, sync, mediaSync,address: server.address(), webAddress: webServer?.address() || null, close: async () => { if (webServer) await new Promise(resolve => webServer.close(resolve)); clearInterval(meaningTimer);clearInterval(processingTimer);clearInterval(backupTimer);clearInterval(factTimer);stopIndexing();store.unwatch();githubSignIn.close();await syncRunner.close();await menerioImport.close();rootWatcher.close();for(const watcher of watchers.values())watcher.close();clearTimeout(debounce);clearTimeout(indexDebounce);clearInterval(telegramTimer);clearInterval(interval);clearInterval(jobs);clearInterval(syncTimer);clearInterval(mediaTimer); await new Promise(resolve => server.close(resolve)); index.close(); } };
+  // A manual changed by anything (a sync from another machine, a session, an editor) brings the
+  // assistant's own identity file in step with its "who it is" (assistant-soul.mjs).
+  let soulDebounce;const followPersona=()=>{clearTimeout(soulDebounce);soulDebounce=setTimeout(()=>{try{shelf.followPersona();}catch{}},2000);soulDebounce.unref?.();};
+  const rootWatcher=fs.watch(store.root,(event,name)=>{if(durableRoots.includes(name)){watchRoot(name);changed(name)(event,null);}else if(durableFiles.includes(name)){changed('')(event,name);if(name==='AGENTS.md')followPersona();}});
+  return { server, store, index, query, domains, scheduler, sync, mediaSync,address: server.address(), webAddress: webServer?.address() || null, close: async () => { if (webServer) await new Promise(resolve => webServer.close(resolve)); clearInterval(meaningTimer);clearInterval(processingTimer);clearInterval(backupTimer);clearInterval(factTimer);stopIndexing();store.unwatch();githubSignIn.close();clearTimeout(soulDebounce);await syncRunner.close();await menerioImport.close();rootWatcher.close();for(const watcher of watchers.values())watcher.close();clearTimeout(debounce);clearTimeout(indexDebounce);clearInterval(telegramTimer);clearInterval(interval);clearInterval(jobs);clearInterval(syncTimer);clearInterval(mediaTimer); await new Promise(resolve => server.close(resolve)); index.close(); } };
 }
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const root = process.env.GODSPEED_WORKSPACE;

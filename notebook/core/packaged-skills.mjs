@@ -1,5 +1,5 @@
 import fs from 'node:fs';import {durable} from './file-policy.mjs';import path from 'node:path';import {fileURLToPath} from 'node:url';import {hash,atomic} from './records/store.mjs';
-const normalized=bytes=>{const text=bytes.toString('utf8');return hash(!text.includes('\0')&&Buffer.from(text,'utf8').equals(bytes)?text.replaceAll('\r',''):bytes);};
+export const normalized=bytes=>{const text=bytes.toString('utf8');return hash(!text.includes('\0')&&Buffer.from(text,'utf8').equals(bytes)?text.replaceAll('\r',''):bytes);};
 // In an adopted mission control the owner's skills are the originals the
 // packaged recipes were made from, so the owner's copy wins: a skill folder the
 // package never installed is left alone, and an edit the owner made is kept

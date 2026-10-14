@@ -36,7 +36,12 @@ const definitions=[
   {name:'record_event',description:'Append a timeline event. Earlier events are never replaced.',inputSchema:schema},
   {name:'structural_change',description:'Rename, change a name, merge or remove a user-requested record. Read every affected record first. Supply expected_hash for the source and expected keyed by type/id for every other changed record, including incoming links and a merge target.',inputSchema:{type:'object',properties:{type:{type:'string'},id:{type:'string'},action:{enum:['display-name','rename','merge','remove']},expected_hash:{type:'string'},expected:{type:'object'},options:{type:'object'}},required:['type','id','action','expected_hash']}},
   {name:'review_suggestions',description:'Apply, reject, snooze or roll back user-reviewed suggestions. Never accept inferred personal facts without user approval.',inputSchema:schema},
-  {name:'validate_knowledge',description:'Validate file identity and typed references without changing invalid files.',inputSchema:schema}
+  {name:'validate_knowledge',description:'Validate file identity and typed references without changing invalid files.',inputSchema:schema},
+  // The Identity page's path for the assistant (core/identity-shelf.mjs). Hermes' own file tools
+  // ask a person before writing AGENTS.md or SOUL.md and refuse where nobody can answer (the
+  // notebook's chat, Telegram), so "rename yourself" had no way through; this is the one, with an
+  // earlier version kept for every change and the owner's own words required.
+  {name:'identity_files',description:'Read or change what makes this mission control behave as it does, exactly as the notebook\'s Identity page does: who you are (target "who", the persona paragraph of AGENTS.md, nothing else of it), your rules (target "rule:<name>", rules/<name>.md; the one-line list in AGENTS.md follows by itself), what you know about the owner (target "profile:<name>", profile/<name>.md) and your recipes (target "skill:<name>", skills/<name>/SKILL.md). Use this, not file tools, when the owner asks you to rename yourself, change your character, add, change or remove a rule, or change a profile page or a recipe. action: overview, read (gives the fields and the hash), history (earlier versions), save (who: text = the whole new paragraph; rule: fields {title, line, group must|never|how, always, story}; skill: fields {description, steps}; profile: text), add_rule (fields), remove_rule, undo (the last change), restore (version = an id from history). Every change needs words: the owner\'s request copied exactly from their message, and expected_hash from read. Every change is kept, and the owner can undo it on the Identity page. The answer\'s now is what the file holds after the change, read back from disk: report that, never what you meant to write.',inputSchema:{type:'object',properties:{action:{enum:['overview','read','history','save','add_rule','remove_rule','undo','restore']},target:{type:'string'},text:{type:'string'},fields:{type:'object'},version:{type:'string'},expected_hash:{type:'string'},words:{type:'string',description:'The owner\'s request, copied exactly from their message.'}},required:['action']}}
 ];
 // The version of each note this server last handed an assistant (get_note, a
 // search, a list), so an update_note without a hash is checked against what
@@ -81,7 +86,18 @@ export async function mcp(input,{store,query,index,domains,scopes,delegated=fals
         domains=Object.assign(Object.create(Object.getPrototypeOf(domains)),domains,{toolScope:type=>toolScope('save_record',{type}),delegated:!!delegated});
         ({store,query,domains}=assistantMutationContext({store,query,domains,scopes},a,name));
       }
-      if(topicToolNames.includes(name))value=topicTool(name,a,{store,query});
+      if(name==='identity_files'){
+        // Another program's key reads and changes none of it: these files steer every later job.
+        if(delegated)throw Error('Only this mission control\'s own assistant reads and changes these files.');
+        const shelf=domains.identity;if(!shelf)throw Error('The Identity page is not available in this notebook.');
+        const action=String(a.action||''),write=['save','add_rule','remove_rule','undo','restore'].includes(action);
+        if(write&&!shelf.ownerAsked(a.words))throw Error('Change these only when the owner asked for it. Pass their request as words, copied exactly from their latest message; or they can change it themselves on the Identity page of the notebook.');
+        const options={expected_hash:typeof a.expected_hash==='string'?a.expected_hash:undefined,by:'assistant',words:a.words};
+        if(['save','remove_rule'].includes(action)&&options.expected_hash===undefined)throw Error('Read it first (action read) and pass its hash as expected_hash.');
+        value=action==='overview'?shelf.overview():action==='read'?shelf.read(a.target):action==='history'?await shelf.versions(a.target):action==='save'?await shelf.save(a.target,{text:a.text,fields:a.fields},options)
+          :action==='add_rule'?await shelf.addRule(a.fields||{},options):action==='remove_rule'?await shelf.removeRule(a.target,options):action==='undo'?await shelf.undo(a.target,options):action==='restore'?await shelf.restore(a.target,String(a.version||''),options):(()=>{throw Error('Choose an action: overview, read, history, save, add_rule, remove_rule, undo or restore.');})();
+      }
+      else if(topicToolNames.includes(name))value=topicTool(name,a,{store,query});
       // Each machine's notebook knows its own address (core/notebook-address.mjs); the server passes the port it listens on.
       else if(name==='get_notebook_link')value=(domains.notebookAddress||notebookAddress)();
       else if(name==='list_note_folders')value=query.withSnapshot(()=>{
