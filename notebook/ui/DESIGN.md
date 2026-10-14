@@ -69,3 +69,11 @@ Desktop: [document count | filter sort folder tags search new] [chat | formattin
 Phone390: [document count | filter sort folder tags search new], or selected note [chat | formatting | note actions]
 
 Verification: local production build passes. A real browser rendered the application against intercepted fictional note data at 1440px, 800px, 390px and 360px, plus reduced motion. Both header rows remain single-line, with no page overflow or runtime errors. A forced 150px toolbar and scroll-to-end leave the 32px chat control visible. Phone navigation retains 44px actions. Opening and closing chat updates its pressed state; source mode retains the pinned chat. Personal notes were not accessed. An independent review found no blockers. Its optional overflow-edge fade is deferred because the existing formatting overflow and keyboard/touch scrolling remain available. Type checking reports existing errors in unrelated files and missing PowerSync modules; no changed component is reported. A real phone, Safari and the deployed application still need separate verification.
+
+## App icon
+
+Brief (14 October 2026): the installed app's icon was the G on a near-black square (#0e121b), which Windows shows in the taskbar and Start menu as a cut-out tile. The G now stands on a transparent background.
+
+The set, all in `public/`: `icon-192.png` and `icon-512.png` (manifest "any") and the tab icons `favicon.ico` (16, 32, 48) and `favicon-96.png` are the G with a thin violet outline on transparency; the tab icons' outline is a little stronger so the G holds at 16px. `icon-maskable-512.png` keeps the G on #0e121b inside Android's 80% safe circle, because Android crops a maskable icon to its own shape. `apple-touch-icon.png` keeps its dark background, because iPhones paint a transparent home-screen icon black. The in-app logo (`src/assets/godspeed-logo.png`) is unchanged.
+
+To cut the set again, start from `icon-source/godspeed-g-transparent-master.png` (712px, transparent). `notebook/test/app-icons.test.mjs` checks that the "any" and tab icons stay transparent and the maskable and iPhone icons stay opaque.
