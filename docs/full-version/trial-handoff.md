@@ -7,12 +7,19 @@
 - Open this folder in VS Code or Codex: `C:/godspeed/work/trials/godspeed-v2`.
 - Windows notebook: http://127.0.0.1:49175/dashboard
 - Development VPS notebook: https://srv1069233.hstgr.cloud:48443/dashboard
-- Windows download: https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-13-1/GodspeedSetup.exe
-- Linux download: https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-13-1/install-godspeed.sh
-- Source, manifests and checksums: https://github.com/MichaelZelbel/godspeed-mission-control/releases/tag/godspeed-v2-integrated-2026-10-13-1
+- Windows download: https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-14-1/GodspeedSetup.exe
+- Linux download: https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-14-1/install-godspeed.sh
+- Source, manifests and checksums: https://github.com/MichaelZelbel/godspeed-mission-control/releases/tag/godspeed-v2-integrated-2026-10-14-1
 - One-click Hostinger installation: https://srv1069233.hstgr.cloud/godspeed-install
 - Development branch: https://github.com/MichaelZelbel/godspeed-mission-control/tree/main
 
+## 14 October 2026 release: corrected notebook label
+
+`godspeed-v2-integrated-2026-10-14-1` installs product `02f4ecbdd89276783004e102d032178f952f1c6e`, the exact public product from 13 October plus three notebook copy corrections. The unconditional "Test installation" footer is removed, its separator remains, and both unavailable-page fallbacks say "This page is unavailable." The bootstrap remains `0eafb061d28a077b2d7c0cc83d0bd002fcb44444`.
+
+The Windows setup, Linux/Mac installer, source archive, manifest and checksums are the staged assets recorded in `notebook-production-label-2026-10-14.md`. The shell installer SHA256 is `66e4350edd0c6b98bdd408a24fc5afd16604fb536354757b39559fe6a591aa7a`; the Windows setup SHA256 is `60997cc4840a68e6499fd935799ff4755de87812cda663c2ba19486d3fabe0b3`. Newer main changes remain on main; the pinned notebook runtime adds no newer features.
+
+Validation and publication evidence will be appended after their checks finish. Docker/Hostinger publication is recorded separately with its final image digest.
 ## 13 October 2026 release: every goal researched every night, and steps that go out unless stopped
 
 `godspeed-v2-integrated-2026-10-13-1` installs product 9ab230680e2972eb424eeb54cbb83d1a8cc5ee9b (main after the 12 October second release: the goal research of Mission Control D-323 and the standing permissions of D-324, with the fixes of the final review of 13 October). The Windows installer is built from the same kit-bootstrap 0eafb061d28a077b2d7c0cc83d0bd002fcb44444 (branch `codex/godspeed-v2-native-integration`), and the Linux and Mac installer takes its shared installer from that commit too.
