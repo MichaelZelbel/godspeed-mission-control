@@ -29,6 +29,15 @@
 //     its moves carries "AIMS AT:" naming that limit; while it names none, a NOTE says so and the
 //     moves pass (2026-10-12).
 //   - at most one move of the whole day is the person's to do (HOW IT LANDS "only the person").
+//     Since 2026-10-14 a carried step counts too: a work item OWNER person, SOURCE next-action, KEY
+//     apply-..., still waiting (planned, dispatched, attempted or blocked) and unanswered (no
+//     APPROVED line), filed on an earlier day
+//     and younger than its STALE AFTER (seven days by default, the day the ship list drops it), and
+//     not the APPLY of one of today's moves. Why: on 2026-10-14 the card carried two messages only
+//     he could send, filed 12 October, beside one new step of his; this check counted one and
+//     passed, and he was handed three. A line "HOLD <work id>: <why>" keeps a carried step off
+//     today's card and out of the count. Every run prints "PERSON <n>: <what they are>", which never
+//     fails a day, so other programs read this count instead of making their own.
 //   - a goal whose card names a weekly number (LEAD) is judged by it (2026-09-30): each of its
 //     moves carries "BET: <now> -> <expected seven days after it goes live>" and an APPLY line,
 //     the number was read in the last seven days, and a goal settle.txt names under "read today"
@@ -122,6 +131,7 @@ function kindsOf(goal) {
   }
   return mayKinds[goal];
 }
+const ISO_DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
 const days = (a, b) => Math.round((new Date(b + 'T00:00:00Z') - new Date(a + 'T00:00:00Z')) / 86400000);
 function leadOf(goal) {
   if (!/^[a-z0-9][a-z0-9-]*$/.test(goal)) return null;
@@ -160,7 +170,11 @@ const FIELDS = ['GOAL', 'WHERE', 'NOW', 'AFTER', 'WHO DID THIS', 'HOW IT LANDS',
 const PARSED = [...FIELDS, 'AIMS AT'];
 const notes = [];
 const noted = new Set();
-let persons = 0;
+// What the person is handed today: "move <n> (<title>)" for each of today's moves only they can
+// make, then the carried steps (below, after the moves are read).
+const persons = [];
+const todayApplies = new Set();
+const shorten = (s, n) => { s = String(s || '').replace(/\s+/g, ' ').trim(); return s.length > n ? s.slice(0, n).trimEnd() + '...' : s; };
 const blocks = text.split(/^(?=###? \d+\.)/m).filter(b => /^###? \d+\./.test(b));
 // A MOVE THE CHECK CANNOT SEE IS NOT CHECKED (2026-09-30). A run on Hermes headed its moves
 // "### Move 1: ...": no block matched, FEWER lines covered the count, and not one field was read
@@ -212,7 +226,7 @@ for (const b of blocks) {
     + `; use a kind it has a MAY line for (mc-goals may ${goal}), or put the move on the ship list`);
   const onList = !may && /ship list/i.test(f.PERMISSION || '');
   const his = /^\s*only the person/i.test(f['HOW IT LANDS'] || '');
-  if (his) persons++;
+  if (his) persons.push(`move ${(title.match(/^(\d+)\./) || [])[1] || '?'} (${shorten(title.replace(/^\d+\.\s*/, ''), 70)})`);
   // EVERY MOVE AIMS AT THE LIMIT (2026-10-12). Changes that touch only what the mission control may
   // touch, on pages nobody visits, move no goal's number. Once the goal's research names what
   // limits it now, the move says how it moves that.
@@ -228,6 +242,7 @@ for (const b of blocks) {
     }
   }
   const applyTo = (b.match(/^APPLY:[ \t]*(\S+)/m) || [])[1];
+  if (applyTo) todayApplies.add(applyTo);
   if (lead && !applyTo) problems.push(`move "${title}": a move with a bet needs "APPLY: <work id>", the item whose verification starts its seven days (a move only the person can make gets an item they own, whose CHECK shows it happened)`);
   // The item exists by the time this runs, so a bet names it or it is lost (final review of D-266:
   // "APPLY: (filed below)" passed, and mc-goals bets could record nothing for it).
@@ -244,7 +259,45 @@ for (const b of blocks) {
 // AT MOST ONE THING A DAY FOR THE PERSON (2026-10-12), across all goals: a day that hands them two
 // or three tasks hands them a routine they never asked for, and the moves that wait on them do
 // not happen.
-if (persons > 1) problems.push(`at most one move a day may be the person's to do; ${persons} are (HOW IT LANDS "only the person"); keep the one they already said they want, and find a route the mission control holds for the rest, or leave them for another day and write "FEWER <goal>: the person's one step today is move <n>" for a goal that is left short`);
+// A CARRIED STEP IS ONE OF THEM (2026-10-14). The ship list carries earlier days' prepared moves
+// that are unanswered and under seven days old, so a step only the person can do, filed on an
+// earlier day and still waiting, is on today's card as surely as today's own. It is read from the
+// work register: OWNER person, SOURCE next-action, KEY apply-..., a status still waiting for them
+// (verified and cancelled are closed; failed and stale are off the card until planned again), no
+// APPROVED line (the card carries only unanswered lines),
+// FILED before today and fewer than its STALE AFTER days ago (the register's expiry, seven by
+// default: an item filed 12 October is carried to 18 October and gone on the 19th). An item that
+// is also the APPLY of one of today's moves is that move, counted once. "HOLD <work id>: <why>"
+// keeps one off today's card and out of the count; it still expires on its own day.
+const held = new Map();
+for (const m of text.matchAll(/^HOLD[ \t]+([A-Za-z0-9][A-Za-z0-9._-]*)[ \t]*:?[ \t]*(.*)$/gm)) {
+  if (m[2].trim()) held.set(m[1], m[2].trim());
+  else problems.push(`HOLD ${m[1]} says no why; write "HOLD ${m[1]}: <why it stays off today's card>"`);
+}
+const WAITING = ['planned', 'dispatched', 'attempted', 'blocked'];
+let register = [];
+try { register = require(path.join(__dirname, 'mc-cards.js')).store(path.join(ROOT, 'work'), []).all(); } catch (e) { register = []; }
+const carried = [];
+for (const c of register) {
+  const f = c.f;
+  if (!/^(person|me|you|him|her|them|i)$/i.test((f.OWNER || '').trim())) continue;
+  if ((f.SOURCE || '').trim() !== 'next-action' || !/^apply-/.test((f.KEY || '').trim())) continue;
+  if (!WAITING.includes((f.STATUS || '').trim())) continue;
+  // Answered already (an APPROVED line): it is no longer a question on the card. A yes to a step
+  // only the person can do is theirs to do on the day they chose, and that day's note says so.
+  if ((f.APPROVED || '').trim()) continue;
+  const filed = (f.FILED || '').trim();
+  if (!ISO_DAY_RE.test(filed)) continue;
+  const age = days(filed, DATE);
+  const life = parseInt(f['STALE AFTER'] || '7', 10) || 7;
+  if (age < 1 || age >= life) continue;
+  if (todayApplies.has(c.id) || held.has(c.id)) continue;
+  carried.push(c);
+  persons.push(`${c.id} (${shorten((f.WHAT || '').replace(/^Per [^:]*:\s*/, ''), 70)})`);
+}
+if (persons.length > 1) problems.push(`at most one move a day may be the person's to do; ${persons.length} are: ${persons.join('; ')}. Keep the one they already said they want; for every other carried step write a line "HOLD <work id>: <why>" in moves.md (it stays off today's card and still expires seven days after it was filed), and for today's moves find a route the mission control holds, or leave them for another day and write "FEWER <goal>: the person's one step today is move <n>" for a goal that is left short`);
+// The count itself, for other programs to read (goal-trial-check reads it); never fails a day.
+notes.unshift(`PERSON ${persons.length}: ${persons.length ? persons.join('; ') : 'none'}`);
 
 // A DATED CHANCE CLOSING SOON GETS A MOVE (2026-10-14). Twice the decision read a chance in a goal's
 // research that closed within the week and left it out, writing that it "changes no weekly number";

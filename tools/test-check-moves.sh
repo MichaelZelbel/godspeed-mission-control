@@ -248,6 +248,43 @@ case "$OUT" in *"FEWER <goal>: the person's one step today is move <n>"*) ok "  
 OUT="$(run)"; [ $? -eq 0 ] && ok "  and that FEWER line is a reason the check accepts" || bad "  FEWER person's step: $OUT"
 { move 1 money-goal "Simon Willison" "x"; move 2 money-goal "Justin Welsh" "y"; hisown 3 money-goal; echo "FEWER health-goal: the week's scale reading lands on Sunday"; } > "$RUN/moves.md"
 OUT="$(run)"; [ $? -eq 0 ] && ok "  one passes" || bad "  one for the person: $OUT"
+case "$OUT" in *"PERSON 1: move 3 (Change something for money-goal)"*) ok "  and the count is printed as a PERSON line";; *) bad "  PERSON line: $OUT";; esac
+
+# --- a carried step only the person can do counts toward the one (2026-10-14) ------------------
+# On 2026-10-14 the card carried two messages only he could send, filed 12 October, beside one new
+# step of his; the check counted one and passed. Carried items are read from the work register.
+carry() { # id filed status [extra line]
+  printf 'ID: %s\nSTATUS: %s\nKIND: do\nKEY: apply-%s\nGOAL: friends\nWHAT: Per routines/next-action/%s/moves.md move 2: he sends Sam the prepared message\nOWNER: person\nNEEDS: authorization\nOUTWARD: yes\nSTALE AFTER: 7\nFILED: %s\nSOURCE: next-action\n%s\n\n## Log\n- %s FILED by next-action for friends\n' \
+    "$1" "$3" "$1" "$2" "$2" "${4:-}" "$2" > "$TMP/work/$1.md"
+}
+nocarry() { rm -f "$TMP/work"/W-2026092[0-3]-*.md "$TMP/work"/W-2026091*.md; }
+mine() { move 1 money-goal "Simon Willison" "x"; move 2 money-goal "Justin Welsh" "y"; move 3 money-goal "swyx" "z"; echo "FEWER health-goal: the week's scale reading lands on Sunday"; }
+carry W-20260922-01 2026-09-22 blocked; carry W-20260922-02 2026-09-22 blocked
+mine > "$RUN/moves.md"
+OUT="$(run)"; case "$OUT" in *"person's to do; 2 are: W-20260922-01 (he sends Sam the prepared message); W-20260922-02"*) ok "two carried steps and none today fail, and are named by id and what";; *) bad "two carried: $OUT";; esac
+case "$OUT" in *'HOLD <work id>: <why>'*) ok "  and the refusal says how to hold one back";; *) bad "  HOLD hint: $OUT";; esac
+case "$OUT" in *"PERSON 2: W-20260922-01"*) ok "  and the PERSON line says 2 on a failing day too";; *) bad "  PERSON 2: $OUT";; esac
+{ mine; echo "HOLD W-20260922-02: Sam is away until the 30th"; } > "$RUN/moves.md"
+OUT="$(run)"; [ $? -eq 0 ] && ok "one carried step plus a HOLD for the other passes" || bad "HOLD passes: $OUT"
+case "$OUT" in *"PERSON 1: W-20260922-01"*) ok "  and the held one is not counted";; *) bad "  held not counted: $OUT";; esac
+{ mine; echo "HOLD W-20260922-02"; } > "$RUN/moves.md"
+OUT="$(run)"; case "$OUT" in *"HOLD W-20260922-02 says no why"*) ok "  a HOLD with no why is refused";; *) bad "  HOLD without why: $OUT";; esac
+rm -f "$TMP/work/W-20260922-02.md"
+{ move 1 money-goal "Simon Willison" "x"; move 2 money-goal "Justin Welsh" "y"; hisown 3 money-goal; echo "FEWER health-goal: the person's one step today is move 3"; } > "$RUN/moves.md"
+OUT="$(run)"; case "$OUT" in *"person's to do; 2 are: move 3 (Change something for money-goal); W-20260922-01"*) ok "one carried step plus one of today's fails";; *) bad "carried plus today: $OUT";; esac
+nocarry
+carry W-20260917-01 2026-09-17 blocked
+carry W-20260922-03 2026-09-22 cancelled; carry W-20260922-04 2026-09-22 verified
+carry W-20260922-05 2026-09-22 blocked 'APPROVED: 2026-09-22 "yes, I do that one"'
+carry W-20260924-09 2026-09-24 blocked
+OUT="$(run)"; [ $? -eq 0 ] && ok "a carried step seven days old or more, cancelled, verified, answered or filed today is not counted" || bad "not counted: $OUT"
+case "$OUT" in *"PERSON 1: move 3"*) ok "  and the count is today's one";; *) bad "  only today's: $OUT";; esac
+nocarry; rm -f "$TMP/work/W-20260924-09.md"
+carry W-20260923-07 2026-09-23 blocked
+{ move 1 money-goal "Simon Willison" "x"; move 2 money-goal "Justin Welsh" "y"; hisown 3 money-goal | sed 's/^APPLY: .*/APPLY: W-20260923-07/'; echo "FEWER health-goal: the person's one step today is move 3"; } > "$RUN/moves.md"
+OUT="$(run)"; [ $? -eq 0 ] && ok "a carried step that is also today's APPLY counts once" || bad "counted once: $OUT"
+case "$OUT" in *"PERSON 1: move 3"*) ok "  as today's move";; *) bad "  as today's move: $OUT";; esac
+nocarry
 
 # --- a dated chance closing within two weeks gets a move (2026-10-14) ------------------------
 # Twice the decision left a chance closing within the week out of the day, writing that it "changes
