@@ -178,3 +178,15 @@ test("the recipe: the opening never starts with what another talk raised, and ha
   assert.match(read("README.md"), /godspeed-coach habit read-by "walk to work" psychology/);
   assert.doesNotMatch(read("README.md"), /—/);
 });
+
+// The capture of 14 October 2026: "Can we do the psychology talk now?" while the health talk was
+// open was saved as an answer to the health talk. Asking for another talk starts it.
+test("the recipe: asking for another talk while one is open starts that talk and never answers the open one", () => {
+  const text = read("skill/coach/SKILL.md");
+  const continuing = text.split("## Continuing a talk")[1].split("## Closing a talk")[0];
+  assert.match(continuing, /A message that asks for a talk of another area \("can we do the psychology talk now\?"\) is not about the open talk: follow "A talk they start themselves"\./);
+  const start = text.split("## A talk they start themselves")[1].split("## A new area")[0];
+  assert.match(start, /This holds while a talk of another area is open: that talk stays open as it is, and the request is never saved with `talk said` as an answer to it\./);
+  assert.doesNotMatch(text, /Their answer continues it|Their reply continues it/);
+  assert.doesNotMatch(text, /—/);
+});

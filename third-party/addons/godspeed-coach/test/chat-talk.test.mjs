@@ -127,3 +127,34 @@ test("talk open --shown records the talk as seen, so it never waits for the chat
   assert.equal(readTalk(plain.a, "2026-10-11").shown, "");
   assert.match(context(plain.mc).stdout, /Waiting talk: Health/);
 });
+
+// The capture of 14 October 2026 (99e85dc): the health talk was open, the person asked "Can we do the
+// psychology talk now?", and the block's "Their reply continues it" made the model save that as an
+// answer to the health talk, twice, and open no psychology talk. The block now names the other-talk
+// case, for an open talk and a waiting one alike, and the other talk opens while this one stays open.
+const OTHER = 'A message that asks for another talk ("can we do the work talk now?") starts that talk instead and leaves this one open: "A talk they start themselves".';
+test("while one talk is open or waiting, the block says asking for another talk starts that one, and the open one is left as it is", () => {
+  const mc = tmpMission({
+    "coach/health/area.md": area({ AREA: "health", TITLE: "Health", TIME: "19:00" }),
+    "coach/psychology/area.md": area({ AREA: "psychology", TITLE: "Psychology", RHYTHM: "weekly wednesday", TIME: "20:00", STYLE: "compass" }),
+  });
+  saveSettings(mc, { ...S, talk_delivery: "chat" });
+  const [health] = listAreas(mc).filter((a) => a.slug === "health");
+  openTalk(health, "2026-10-11", { opening: "From your coach, your weekly health talk: what did those three headache days have in common?" }, new Date("2026-10-11T16:00:00Z"));
+  // Waiting for the chat, the first time.
+  const waiting = context(mc).stdout.split("\n").find((l) => l.startsWith("- Waiting talk:"));
+  assert.equal(waiting, `- Waiting talk: Health (id for commands: health), opened today at 18:00, record coach/health/talks/2026-10-11.md. There is no messenger, so they have not seen it yet: it waited for this chat. First answer their message; then bring the talk up in a short sentence or two that make sense on their own and end with its question. It opened with: "From your coach, your weekly health talk: what did those three headache days have in common?". Bring it up once, in this reply only. An answer to it continues it: follow the coach recipe, "Continuing a talk". ${OTHER}`);
+  // From then on, an open talk.
+  const open = context(mc).stdout.split("\n").find((l) => l.startsWith("- Open talk:"));
+  assert.equal(open, `- Open talk: Health (id for commands: health), opened today at 18:00, record coach/health/talks/2026-10-11.md. A reply to it continues it: follow the coach recipe, "Continuing a talk". ${OTHER}`);
+  // "Can we do the psychology talk now?": its brief, then its own record; the health talk is left as it was.
+  const record = path.join(mc, "coach", "health", "talks", "2026-10-11.md"), before = fs.readFileSync(record, "utf8");
+  const run = (...args) => spawnSync(process.execPath, [BIN, ...args, "--godspeed", mc], { encoding: "utf8", env: { ...process.env, GODSPEED_NOW: AT.toISOString(), GODSPEED_COACH_GIT_SYNC: "off", GODSPEED_SCHEDULED_RUN: "" } });
+  assert.match(run("brief", "psychology").stdout, /^COACH TALK DUE: Psychology \(id for commands: psychology\), 2026-10-11/);
+  assert.equal(run("talk", "open", "psychology", "--opening", "From your coach, your psychology talk: what is on your mind this week?", "--shown").stdout.trim(), "Opened: coach/psychology/talks/2026-10-11.md");
+  assert.equal(fs.readFileSync(record, "utf8"), before, "nothing saved as an answer to the health talk");
+  const both = context(mc).stdout;
+  assert.match(both, /^- Open talk: Health \(id for commands: health\),/m);
+  assert.match(both, /^- Open talk: Psychology \(id for commands: psychology\),/m);
+  assert.doesNotMatch(both, /Waiting talk/);
+});

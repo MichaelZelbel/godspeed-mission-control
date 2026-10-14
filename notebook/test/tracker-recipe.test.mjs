@@ -262,3 +262,18 @@ test('the coach recipe keeps --shown on the open command of a talk they start th
   assert.ok(revisions['coach/SKILL.md'].includes(digest(coach)),'coach ships a known revision');
   assert.ok(revisions['coach/SKILL.md'].includes('11de14f3425b1bb724910164a968f3f211524312a95689593e32d5f077c9e0ff'),'the text shipped until today stays known');
 });
+
+// The capture of 14 October 2026 (99e85dc): with the health talk open, "Can we do the psychology talk
+// now?" was saved as an answer to it. The recipe says a request for another talk starts that talk.
+test('the coach recipe: asking for another talk while one is open starts that talk and never answers the open one',()=>{
+  const coach=read('../recipes/coach/SKILL.md');
+  assert.equal(coach,read('../../third-party/addons/godspeed-coach/skill/coach/SKILL.md'));
+  const flat=s=>s.replace(/\s+/g,' ');
+  assert.match(flat(coach.split('## Continuing a talk')[1].split('## Closing a talk')[0]),/A message that asks for a talk of another area \("can we do the psychology talk now\?"\) is not about the open talk: follow "A talk they start themselves"\./);
+  assert.match(flat(coach.split('## A talk they start themselves')[1].split('## A new area')[0]),/This holds while a talk of another area is open: that talk stays open as it is, and the request is never saved with `talk said` as an answer to it\./);
+  assert.doesNotMatch(coach,/Their answer continues it|Their reply continues it/);
+  assert.doesNotMatch(coach,/[–—]/,'no long dashes');
+  const revisions=JSON.parse(read('../data/recipe-revisions.json'));
+  assert.ok(revisions['coach/SKILL.md'].includes(digest(coach)),'coach ships a known revision');
+  for(const old of ['e36b83a48a486083b883cf83c96844cf515c815bd207a0a708ecad9df614d3e5','11de14f3425b1bb724910164a968f3f211524312a95689593e32d5f077c9e0ff'])assert.ok(revisions['coach/SKILL.md'].includes(old),'the texts shipped until today stay known');
+});

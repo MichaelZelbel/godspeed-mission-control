@@ -18,6 +18,11 @@ import { listHabits, askedOn, answerOn } from "./habits.mjs";
 const clean = (t) => String(t || "").replace(/\s+/g, " ").trim();
 
 // The open talks that wait for this conversation: no messenger, no reply yet, not shown before.
+// The capture of 14 October 2026: with the health talk open, "Can we do the psychology talk now?" was
+// saved as an answer to it, because the block said every reply continues it. A request for another
+// talk starts that talk and leaves this one as it is.
+const OTHER_TALK = 'A message that asks for another talk ("can we do the work talk now?") starts that talk instead and leaves this one open: "A talk they start themselves".';
+
 export function waitingTalks(mcDir, s, now, { scheduled = false } = {}) {
   if (s.talk_delivery !== "chat" || scheduled) return [];
   return openTalks(mcDir, now).filter(({ talk }) => !talk.answered && !talk.shown);
@@ -34,10 +39,10 @@ export function contextBlock(mcDir, s, now, { scheduled = false } = {}) {
   for (const { area, ymd, talk } of talks) {
     const when = talk.opened ? whenSaid(talk.opened, now, tz) : ymd;
     if (waiting.has(talk.file)) {
-      L.push(`- Waiting talk: ${area.title} (id for commands: ${area.slug}), opened ${when}, record coach/${area.slug}/talks/${ymd}.md. There is no messenger, so they have not seen it yet: it waited for this chat. First answer their message; then bring the talk up in a short sentence or two that make sense on their own and end with its question. It opened with: "${clean(talk.sections["The opening"])}". Bring it up once, in this reply only. Their answer continues it: follow the coach recipe, "Continuing a talk".`);
+      L.push(`- Waiting talk: ${area.title} (id for commands: ${area.slug}), opened ${when}, record coach/${area.slug}/talks/${ymd}.md. There is no messenger, so they have not seen it yet: it waited for this chat. First answer their message; then bring the talk up in a short sentence or two that make sense on their own and end with its question. It opened with: "${clean(talk.sections["The opening"])}". Bring it up once, in this reply only. An answer to it continues it: follow the coach recipe, "Continuing a talk". ${OTHER_TALK}`);
       continue;
     }
-    L.push(`- Open talk: ${area.title} (id for commands: ${area.slug}), opened ${when}, record coach/${area.slug}/talks/${ymd}.md${talk.followUp ? ", follow-up sent" : ""}. Their reply continues it: follow the coach recipe, "Continuing a talk".`);
+    L.push(`- Open talk: ${area.title} (id for commands: ${area.slug}), opened ${when}, record coach/${area.slug}/talks/${ymd}.md${talk.followUp ? ", follow-up sent" : ""}. A reply to it continues it: follow the coach recipe, "Continuing a talk". ${OTHER_TALK}`);
   }
   const asked = active.filter((h) => askedOn(h, today) && !answerOn(h, today));
   if (asked.length) L.push(`- Habit check sent tonight, still unanswered, asking in this order: ${asked.map((h) => h.title).join(", ")}. A short yes / no / skip answers it: follow the coach recipe, "Tracking a habit".`);

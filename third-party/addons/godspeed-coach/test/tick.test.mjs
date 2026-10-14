@@ -123,7 +123,7 @@ test("context: an open talk and tonight's unanswered habit check both appear, ea
   addHabit(mc, { area: "health", slug: "head-lifts", title: "Face-down head lifts", days: "daily" }, "2026-09-29");
   apply(mc, dueTick(mc, S, at("2026-10-04T19:00:00Z")).writes);
   const head = "[godspeed-coach] For you, not to pass on (times in Europe/Berlin). The coach sends its own habit check and talk follow-up, so never raise a habit or a talk in a reply about something else.";
-  const talk = `- Open talk: Health and fitness (id for commands: health), opened today at 19:01, record coach/health/talks/2026-10-04.md. Their reply continues it: follow the coach recipe, "Continuing a talk".`;
+  const talk = `- Open talk: Health and fitness (id for commands: health), opened today at 19:01, record coach/health/talks/2026-10-04.md. A reply to it continues it: follow the coach recipe, "Continuing a talk". A message that asks for another talk ("can we do the work talk now?") starts that talk instead and leaves this one open: "A talk they start themselves".`;
   assert.equal(contextBlock(mc, S, at("2026-10-04T19:10:00Z")), [
     head, talk,
     `- Habit check sent tonight, still unanswered, asking in this order: Face-down head lifts. A short yes / no / skip answers it: follow the coach recipe, "Tracking a habit".`,
