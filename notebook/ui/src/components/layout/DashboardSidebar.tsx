@@ -203,12 +203,7 @@ export function DashboardSidebar() {
       </SidebarContent>
 
       <SidebarFooter>
-        {!collapsed && (
-          <>
-            <SidebarSeparator />
-            <span className="px-2 text-xs text-muted-foreground">Test installation</span>
-          </>
-        )}
+        {!collapsed && <SidebarSeparator />}
         <Button
           variant="ghost"
           size={collapsed ? "icon" : "sm"}
