@@ -33,6 +33,12 @@
 //     moves carries "BET: <now> -> <expected seven days after it goes live>" and an APPLY line,
 //     the number was read in the last seven days, and a goal settle.txt names under "read today"
 //     has a reading dated today. A goal with no LEAD is checked exactly as before.
+//   - a dated chance that closes within fourteen days gets a move (2026-10-14): for each active
+//     goal, every OPENING in goals/research/<its research goal>/openings.md whose UNTIL lies from
+//     today to fourteen days on and whose IDEA names an idea file is cited by at least one move
+//     (that idea's path or its name without .md), reported once per idea; an IDEA of "none ..." is
+//     exempt. Why: the decision twice kept a chance closing within the week away from the person,
+//     writing that it "changes no weekly number", though its recipe says such a chance gets a move.
 //
 //   mc-check-moves --date 2026-09-24 [--per-goal 3] [--godspeed DIR]
 //
@@ -237,6 +243,42 @@ for (const b of blocks) {
 // or three tasks hands them a routine they never asked for, and the moves that wait on them do
 // not happen.
 if (persons > 1) problems.push(`at most one move a day may be the person's to do; ${persons} are (HOW IT LANDS "only the person"); keep the one they already said they want, and find a route the mission control holds for the rest, or leave them for another day and write "FEWER <goal>: the person's one step today is move <n>" for a goal that is left short`);
+
+// A DATED CHANCE CLOSING SOON GETS A MOVE (2026-10-14). Twice the decision read a chance in a goal's
+// research that closed within the week and left it out, writing that it "changes no weekly number";
+// the person never heard of it and the date passed. A chance with an idea file that closes within
+// fourteen days is carried by a move that cites the idea (its path, or its name without .md): on the
+// ship list as a question for the person, or as the person's one step today. A FEWER line does not
+// excuse it. Several openings may share one idea; it is reported once, with its earliest date.
+const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
+const validDay = (s) => ISO_DAY.test(s) && !isNaN(Date.parse(s + 'T00:00:00Z')) && new Date(s + 'T00:00:00Z').toISOString().slice(0, 10) === s;
+const IDEA_FILE = /ideas\/[A-Za-z0-9._-]+\.md/;
+const chances = new Map();
+const openingsRead = new Set();
+for (const g of active) {
+  const rg = researchGoal(g);
+  if (!rg || openingsRead.has(rg)) continue;
+  openingsRead.add(rg);
+  for (const o of parseBlocks(read(path.join(ROOT, 'goals', 'research', rg, 'openings.md')), 'OPENING')) {
+    const until = (o.UNTIL || '').trim();
+    if (!validDay(until)) continue;
+    const left = days(DATE, until);
+    if (left < 0 || left > 14) continue;
+    const idea = (o.IDEA || '').trim();
+    if (/^none\b/i.test(idea)) continue;
+    const file = idea.match(IDEA_FILE);
+    if (!file) continue;
+    const had = chances.get(file[0]);
+    if (!had || until < had.until) chances.set(file[0], { goal: g, opening: (o.OPENING || '').replace(/\s+/g, ' ').trim(), until });
+  }
+}
+const moveTexts = blocks.map(b => b.toLowerCase());
+for (const [idea, c] of chances) {
+  const slug = path.basename(idea, '.md').toLowerCase();
+  if (moveTexts.some(t => t.includes(idea.toLowerCase()) || t.includes(slug))) continue;
+  const short = c.opening.length > 80 ? c.opening.slice(0, 80).trimEnd() + '...' : c.opening;
+  problems.push(`${c.goal}: the chance "${short}" closes on ${c.until} and no move today carries it; make it a move (on the ship list as a question for the person, or as the person's one step today) and cite ${idea} in that move`);
+}
 
 const fewer = {};
 // Two reasons are refused, because the recipe answers both (2026-09-24, test run 4 used them for

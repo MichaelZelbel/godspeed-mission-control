@@ -249,4 +249,42 @@ OUT="$(run)"; [ $? -eq 0 ] && ok "  and that FEWER line is a reason the check ac
 { move 1 money-goal "Simon Willison" "x"; move 2 money-goal "Justin Welsh" "y"; hisown 3 money-goal; echo "FEWER health-goal: the week's scale reading lands on Sunday"; } > "$RUN/moves.md"
 OUT="$(run)"; [ $? -eq 0 ] && ok "  one passes" || bad "  one for the person: $OUT"
 
+# --- a dated chance closing within two weeks gets a move (2026-10-14) ------------------------
+# Twice the decision left a chance closing within the week out of the day, writing that it "changes
+# no weekly number". A chance in the goal's research with an idea file, closing from today to
+# fourteen days on, is carried by a move that cites the idea; "IDEA: none ..." is exempt.
+mkdir -p "$TMP/goals/research/health-goal"
+opening() { # until idea [opening text]
+  printf 'OPENING: %s\nUNTIL: %s\nSOURCE: https://example.org/run (read %s)\nMOVE: the mission control asks whether to enter\nIDEA: %s\n\n' \
+    "${3:-A 5 km fun run in the town park on a Sunday morning, 10 euros entry, at most 200 starters, entry closes early}" "$1" "$D" "$2"
+}
+openings() { { printf '# Openings\n\n'; cat; } > "$TMP/goals/research/health-goal/openings.md"; }
+base() { move 1 money-goal "Simon Willison" "x"; move 2 money-goal "Justin Welsh" "y"; move 3 money-goal "swyx" "z"; echo "FEWER health-goal: the week's scale reading lands on Sunday"; }
+carry() { move 4 health-goal "Simon Willison" "x" | awk -v c="$1" '{print} /^GOAL:/{print "CARRIES: " c}'; }
+base > "$RUN/moves.md"
+opening 2026-09-30 ideas/enter-the-fun-run.md | openings
+OUT="$(run)"; RC=$?
+[ $RC -eq 1 ] && ok "a chance closing in six days that no move carries fails" || bad "chance in six days, no move: $OUT"
+case "$OUT" in *'health-goal: the chance "A 5 km fun run in the town park on a Sunday morning, 10 euros entry, at most 200...'*'closes on 2026-09-30 and no move today carries it'*'cite ideas/enter-the-fun-run.md in that move'*) ok "  and names the chance, its date and the idea to cite";; *) bad "  names it: $OUT";; esac
+{ base; carry "ideas/enter-the-fun-run.md, asked on the ship list"; } > "$RUN/moves.md"
+OUT="$(run)"; [ $? -eq 0 ] && ok "  a move citing the idea's path passes" || bad "  cited by path: $OUT"
+{ base; carry "the enter-the-fun-run idea"; } > "$RUN/moves.md"
+OUT="$(run)"; [ $? -eq 0 ] && ok "  and so does one citing the idea's name" || bad "  cited by name: $OUT"
+base > "$RUN/moves.md"
+opening 2026-09-24 ideas/enter-the-fun-run.md | openings
+OUT="$(run)"; case "$OUT" in *"no move today carries it"*) ok "  a chance closing today counts too";; *) bad "  closes today: $OUT";; esac
+{ opening 2026-09-30 ideas/enter-the-fun-run.md; opening 2026-09-28 ideas/enter-the-fun-run.md "A second race in the same idea"; } | openings
+OUT="$(run)"
+[ "$(printf '%s\n' "$OUT" | grep -c 'no move today carries it')" = "1" ] && ok "two openings sharing one idea are reported once" || bad "once per idea: $OUT"
+case "$OUT" in *'"A second race in the same idea" closes on 2026-09-28'*) ok "  with the earliest closing date";; *) bad "  earliest date: $OUT";; esac
+opening 2026-10-14 ideas/enter-the-fun-run.md | openings
+OUT="$(run)"; [ $? -eq 0 ] && ok "a chance closing in twenty days needs no move today" || bad "twenty days: $OUT"
+opening 2026-09-20 ideas/enter-the-fun-run.md | openings
+OUT="$(run)"; [ $? -eq 0 ] && ok "a chance that already closed needs no move" || bad "past UNTIL: $OUT"
+opening 2026-09-30 "none (folded into ideas/enter-the-fun-run.md as its earlier step)" | openings
+OUT="$(run)"; [ $? -eq 0 ] && ok "an opening with IDEA none (...) is exempt, even when it mentions an idea file" || bad "IDEA none: $OUT"
+opening "early October" ideas/enter-the-fun-run.md | openings
+OUT="$(run)"; [ $? -eq 0 ] && ok "an UNTIL that is not a date is left to the research check" || bad "UNTIL not a date: $OUT"
+rm -r "$TMP/goals/research/health-goal"
+
 echo; echo "$PASS passed, $FAIL failed"; [ "$FAIL" -eq 0 ]
