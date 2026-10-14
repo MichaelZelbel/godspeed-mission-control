@@ -95,6 +95,103 @@ function allDigits (s) {
   return /^[0-9]+$/.test(s)
 }
 
+// The rules a set of rule files holds, as [group, order, slug, line], and the files that cannot
+// be compiled. `files` is [{name, text}], one per file in rules/.
+function collect (files, { defaultOrder = 99 } = {}) {
+  const rules = []
+  const problems = []
+  for (const { name, text } of files.slice().sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))) {
+    if (!name.endsWith('.md') || name === 'README.md' || name === 'MEMORY.md') continue
+    const h = header(text)
+    const slug = name.slice(0, -3)
+    if ((h.where === undefined ? 'always' : h.where) !== 'always') {
+      continue // a rule kept for reference, or one that belongs to a single job
+    }
+    if (!h.line) {
+      problems.push(slug + ' has no `line:` in its header, so there is nothing to put in the ' +
+                    'block. Add one: a single sentence saying what the rule is.')
+      continue
+    }
+    rules.push([
+      h.group === undefined ? 'how' : h.group,
+      allDigits(h.order === undefined ? '' : h.order) ? parseInt(h.order, 10) : defaultOrder,
+      slug,
+      h.line
+    ])
+  }
+  return { rules, problems }
+}
+
+// The opening line and the closing paragraph the block in `agentsText` already has. A mission
+// control that keeps its rules with a program of its own (an owner's, which names itself in that
+// line) keeps both when the notebook's Identity page brings the list up to date.
+function existingFrame (agentsText) {
+  const i = agentsText.indexOf(BEGIN)
+  const j = agentsText.indexOf(END, i)
+  if (i === -1 || j === -1) return null
+  const block = agentsText.slice(i, j)
+  const close = block.indexOf('-->')
+  if (close === -1) return null
+  const begin = block.slice(0, close + 3)
+  const paragraphs = block.slice(close + 3).replace(/\r\n/g, '\n').split(/\n\s*\n/).map(p => p.trim()).filter(Boolean)
+  const last = paragraphs[paragraphs.length - 1]
+  const footer = last && !/^(\d+\.|\*\*)/.test(last) ? last : null
+  return { begin, footer }
+}
+
+function buildBlock (rules, frame) {
+  const parts = [
+    (frame && frame.begin) || (BEGIN + ' - written by mc-compile-rules from the files in rules/. Edit those, not this. -->'),
+    ''
+  ]
+  let n = 0
+  for (const group of GROUPS) {
+    const rows = rules
+      .filter(r => r[0] === group[0])
+      .sort((a, b) => (a[1] - b[1]) || (a[2] < b[2] ? -1 : a[2] > b[2] ? 1 : 0))
+    if (rows.length === 0) continue
+    parts.push(group[1], '')
+    for (const row of rows) {
+      n += 1
+      parts.push(n + '. ' + row[3] + ' `[' + row[2] + ']`')
+    }
+    parts.push('')
+  }
+  parts.push((frame && frame.footer) || FOOTER, '', END)
+  return { block: parts.join('\n') + '\n', count: n }
+}
+
+// Keep one blank line after the closing marker, or the paragraph below it collides with the
+// block and reads as part of it. Null when AGENTS.md has no place for the block.
+function splice (agentsText, block) {
+  const i = agentsText.indexOf(BEGIN)
+  const j = agentsText.indexOf(END)
+  if (i === -1 || j === -1) return null
+  const rest = agentsText.slice(j + END.length).replace(/^\n+/, '')
+  return agentsText.slice(0, i) + block + (rest ? '\n' + rest : '')
+}
+
+// The whole compilation without touching a file: what AGENTS.md becomes with the rule files in
+// `files`. The notebook's Identity page (notebook/core/identity-shelf.mjs) calls this with a rule
+// it is about to save, so the file and the list change in one step. keepFrame keeps the opening
+// line and closing paragraph the block already has; ceiling lets a block that is already longer
+// than the limit (an owner's own, kept by their own program) stay as long as it is, never longer.
+function compileText ({ files, agentsText, keepFrame = false, ceiling = 0 }) {
+  // A rule with no order of its own goes after every numbered one when the list is kept for an
+  // owner's program (theirs counts it as last); this program's own list puts it at 99.
+  const { rules, problems } = collect(files, { defaultOrder: keepFrame ? Infinity : 99 })
+  if (problems.length) return { problems }
+  if (rules.length === 0) return { empty: true, problems: [] }
+  const { block, count } = buildBlock(rules, keepFrame ? existingFrame(agentsText) : null)
+  if (block.length > Math.max(MAX_CHARS, ceiling)) {
+    const longest = rules.slice().sort((a, b) => b[3].length - a[3].length).slice(0, 3)
+    return { problems: [], tooLong: { size: block.length, limit: MAX_CHARS, longest: longest.map(r => ({ slug: r[2], chars: r[3].length })) } }
+  }
+  const next = splice(agentsText, block)
+  if (next === null) return { problems: [], noMarkers: true, block, count }
+  return { problems: [], next, block, count }
+}
+
 function main (argv) {
   let godspeed = process.cwd()
   const at = argv.indexOf('--godspeed')
@@ -112,84 +209,39 @@ function main (argv) {
     return 2
   }
 
-  const rules = []
-  const problems = []
-  for (const name of fs.readdirSync(rulesDir).sort()) {
-    if (!name.endsWith('.md') || name === 'README.md' || name === 'MEMORY.md') continue
-    const h = header(read(path.join(rulesDir, name)))
-    const slug = name.slice(0, -3)
-    if ((h.where === undefined ? 'always' : h.where) !== 'always') {
-      continue // a rule kept for reference, or one that belongs to a single job
-    }
-    if (!h.line) {
-      problems.push(slug + ' has no `line:` in its header, so there is nothing to put in the ' +
-                    'block. Add one: a single sentence saying what the rule is.')
-      continue
-    }
-    rules.push([
-      h.group === undefined ? 'how' : h.group,
-      allDigits(h.order === undefined ? '' : h.order) ? parseInt(h.order, 10) : 99,
-      slug,
-      h.line
-    ])
-  }
-  if (problems.length) {
-    for (const p of problems) process.stderr.write('  ' + p + '\n')
+  const files = fs.readdirSync(rulesDir).filter(name => name.endsWith('.md')).map(name => ({ name, text: read(path.join(rulesDir, name)) }))
+  const cur = read(agents)
+  const result = compileText({ files, agentsText: cur })
+  if (result.problems.length) {
+    for (const p of result.problems) process.stderr.write('  ' + p + '\n')
     return 2
   }
-  if (rules.length === 0) {
+  if (result.empty) {
     process.stderr.write('No rules found in ' + rulesDir + '. Nothing written.\n')
     return 2
   }
 
-  const parts = [
-    BEGIN + ' - written by mc-compile-rules from the files in rules/. Edit those, not this. -->',
-    ''
-  ]
-  let n = 0
-  for (const group of GROUPS) {
-    const rows = rules
-      .filter(r => r[0] === group[0])
-      .sort((a, b) => (a[1] - b[1]) || (a[2] < b[2] ? -1 : a[2] > b[2] ? 1 : 0))
-    if (rows.length === 0) continue
-    parts.push(group[1], '')
-    for (const row of rows) {
-      n += 1
-      parts.push(n + '. ' + row[3] + ' `[' + row[2] + ']`')
-    }
-    parts.push('')
-  }
-  parts.push(FOOTER, '', END)
-  const block = parts.join('\n') + '\n'
-
-  if (block.length > MAX_CHARS) {
-    const longest = rules.slice().sort((a, b) => b[3].length - a[3].length).slice(0, 3)
+  if (result.tooLong) {
     process.stderr.write(
-      'Not written. The block would be ' + block.length + ' characters and the limit is ' +
+      'Not written. The block would be ' + result.tooLong.size + ' characters and the limit is ' +
       MAX_CHARS + '.\n\n' +
       'That limit is here on purpose. Rules pile up, and past a certain number they start\n' +
       'contradicting each other at the edges, which makes your assistant worse rather than\n' +
       'better. Merge one into a rule that already covers the same ground, shorten one, or\n' +
       'drop one. Your three longest lines:\n\n')
-    for (const row of longest) {
-      process.stderr.write('  ' + String(row[3].length).padStart(4) + ' characters  ' + row[2] + '\n')
+    for (const row of result.tooLong.longest) {
+      process.stderr.write('  ' + String(row.chars).padStart(4) + ' characters  ' + row.slug + '\n')
     }
     return 1
   }
 
-  const cur = read(agents)
-  const i = cur.indexOf(BEGIN)
-  const j = cur.indexOf(END)
-  if (i === -1 || j === -1) {
+  if (result.noMarkers) {
     process.stderr.write(
       'AGENTS.md has no place to put the rules. Add these two lines where they belong,\n' +
       'then run this again:\n\n    ' + BEGIN + ' -->\n    ' + END + '\n')
     return 2
   }
-  // Keep one blank line after the closing marker, or the paragraph below it collides with the
-  // block and reads as part of it.
-  const rest = cur.slice(j + END.length).replace(/^\n+/, '')
-  const next = cur.slice(0, i) + block + (rest ? '\n' + rest : '')
+  const { next, block, count: n } = result
 
   if (check) {
     if (next !== cur) {
@@ -210,4 +262,6 @@ function main (argv) {
   return 0
 }
 
-process.exit(main(process.argv.slice(2)))
+module.exports = { BEGIN, END, MAX_CHARS, GROUPS, header, collect, existingFrame, buildBlock, splice, compileText }
+
+if (require.main === module) process.exit(main(process.argv.slice(2)))
