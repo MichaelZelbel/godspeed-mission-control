@@ -174,7 +174,7 @@ test('a model without tools changes a part of the page only with the owner\'s wo
     const r=await chat(post,{message:'Please change rule 3 to: ask before every purchase.',page:'identity'});
     assert.equal(r.status,200,JSON.stringify(r.body));assert.equal(r.body.data.identity_changed,true);
     assert.match(told.contract,/identity_changes/);assert.match(told.context.identity_page,/Now: "/,'it is given each rule\'s sentence');
-    assert.match(r.body.data.reply,/^Here you go\.\n\nSaved: changed the rule "[a-z-]+"\. The earlier version is kept on that page\.$/);
+    assert.match(r.body.data.reply,/^Here you go\.\n\nSaved: changed rule 3, "Never spend my money"\. The earlier version is kept on that page\.$/);
     assert.match(read(root,'AGENTS.md'),/^3\. Ask before every purchase\. `\[/m);
     // Words the owner did not write change nothing, and the reply says so.
     const manual=read(root,'AGENTS.md'),refused=await chat(post,{message:'What does rule 3 say?',page:'identity'});

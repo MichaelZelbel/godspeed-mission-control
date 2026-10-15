@@ -115,6 +115,20 @@ export function ruleName(slug,h){
   const words=inWords(slug);if(chars(words)<=40)return words;
   return firstWords(h.line||words,40);
 }
+// The start of a page's first paragraph of prose, for its tile: past headings, comments, tables,
+// code and rules, a hard-wrapped paragraph joined into one line (the page strips inline marks).
+export function proseStart(body,max=220){
+  for(const block of lf(body).replace(/<!--[\s\S]*?-->/g,'').replace(/^(```|~~~)[^\n]*\n[\s\S]*?^\1[^\n]*$/gm,'').split(/\n\s*\n/)){
+    if(/^(?: {4}|\t)/.test(block.replace(/^\n+/,'')))continue;
+    const lines=block.split('\n').filter(l=>l.trim()&&!/^\s*(#{1,6}\s|\||```|~~~|<|[-*_=]{3,}\s*$)/.test(l));
+    if(!lines.length)continue;
+    const text=lines.map(l=>l.trim().replace(/^(?:[-*+]|\d+[.)])\s+/,'')).join(' ');
+    return [...text].length>max?[...text].slice(0,max).join('').replace(/\s+\S*$/,'')+'…':text;
+  }
+  return '';
+}
+// A rule's kind in words, as the page tags it and as the chat is told it.
+export const KIND_WORDS={must:'Must',never:'Never',how:'How it works'};
 // Where a rule that is not read before every job is read, in the page's words, and the order of
 // those groups on the page: the companies, each skill, when its subject comes up, then the rest.
 export function placeOf(where){
@@ -253,7 +267,7 @@ export class IdentityShelf{
     // only for one job have none): its description, the one place its file says what it is.
     // stated: the file names its kind; a rule read before every job is always listed under one.
     const rules=read.map(({rule,text})=>{const h=readFront(splitFront(text).front);return {...rule,n:numbers.get(rule.slug),stated:rule.always||h.group!==undefined,...(rule.line?{}:{about:oneLine(h.description)}),...(rule.always?{}:{place:(({key,label})=>({key,label}))(placeOf(rule.where))})};}).sort((a,b)=>a.n-b.n);
-    const profile=this.profileNames().map(name=>{try{const text=this.readText('profile/'+name+'.md'),body=lf(splitFront(text).body),title=(body.match(/^#\s+(.+)$/m)||[])[1]||inWords(name);return {target:'profile:'+name,name,title:oneLine(title),preview:body.replace(/^#.*$/gm,'').replace(/<!--[\s\S]*?-->/g,'').trim().split('\n').find(Boolean)?.slice(0,160)||'',review_waiting:waiting.has('profile/'+name+'.md')};}catch{return null;}}).filter(Boolean).map((p,i)=>({n:i+1,...p}));
+    const profile=this.profileNames().map(name=>{try{const text=this.readText('profile/'+name+'.md'),body=lf(splitFront(text).body),title=(body.match(/^#\s+(.+)$/m)||[])[1]||inWords(name);return {target:'profile:'+name,name,title:oneLine(title),preview:proseStart(body),review_waiting:waiting.has('profile/'+name+'.md')};}catch{return null;}}).filter(Boolean).map((p,i)=>({n:i+1,...p}));
     const skills=this.skillNames().map(name=>{try{const bytes=this.readBytes('skills/'+name+'/SKILL.md'),h=readFront(splitFront(bytes.toString('utf8')).front);return {target:'skill:'+name,name,title:inWords(h.name||name),description:h.description||'',origin:this.skillOrigin(name,bytes),review_waiting:waiting.has('skills/'+name+'/SKILL.md')};}catch{return null;}}).filter(Boolean).map((k,i)=>({n:i+1,...k}));
     let extra;try{const e=this.read('extra');extra={state:e.state,text:e.text,hash:e.hash,review_waiting:e.review_waiting};}catch(error){extra={state:'unavailable',text:'',reason:error.message};}
     return {manual:{...this.manualInfo(manual),review_waiting:waiting.has(MANUAL),rules_list:this.rulesState(manual),rules_program:this.rulesKeeper(manual)?.program??null},who,extra,soul:this.soulInfo(),rules,profile,skills};
@@ -273,16 +287,39 @@ export class IdentityShelf{
     for(const {slug} of placed)out.set(slug,++last);
     return out;
   }
+  // A part named the way the page names it: 'rule 29, "Tickets arrive readable"', 'profile page 2,
+  // "About me"', 'skill 4, "Keep a note"'; without a number when it has none (a rule removed).
+  // Every version's message says this, never a file name (16 October 2026: 'Changed the rule
+  // "tickets-reach-michael-as-formatted-markdown"'). Messages written before stay as they were.
+  pageName(t){
+    try{
+      if(t.kind==='rule'){
+        const read=this.ruleNames().map(slug=>{const text=this.readText('rules/'+slug+'.md');return {text,rule:this.ruleFields(slug,text)};});
+        const n=this.ruleNumbers(this.readText(MANUAL),read).get(t.name),title=read.find(r=>r.rule.slug===t.name)?.rule.title||inWords(t.name);
+        return n?'rule '+n+', "'+title+'"':'the rule "'+title+'"';
+      }
+      if(t.kind==='profile'||t.kind==='skill'){
+        const names=t.kind==='profile'?this.profileNames():this.skillNames(),i=names.indexOf(t.name),text=this.readText(t.file);
+        const title=t.kind==='profile'?oneLine((lf(splitFront(text||'').body).match(/^#\s+(.+)$/m)||[])[1]||inWords(t.name)):inWords(readFront(splitFront(text||'').front).name||t.name);
+        const what=t.kind==='profile'?'profile page':'skill';
+        return i>=0?what+' '+(i+1)+', "'+title+'"':'the '+what+' "'+title+'"';
+      }
+    }catch{}
+    return t.label;
+  }
   // What the chat on the page is told with every message: that the owner has the page open, and
-  // the numbers it shows, so "change rule 13" reaches the rule shown as 13. detail adds each
-  // rule's sentence and "who it is", for an assistant without tools to read them (domains.mjs).
+  // the numbers it shows, so "change rule 13" reaches the rule shown as 13. Each rule's sentence
+  // comes after its kind in words ("Never: use your real employer or client names ..."): the
+  // sentence only says what it means after its heading in AGENTS.md, and quoted without it, it
+  // says the opposite (16 October 2026, "which rule is number 13?"). detail adds "who it is" and
+  // the extra instructions, for an assistant without tools to read them (domains.mjs).
   chatContext({label,detail=false}={}){
     const o=this.overview(),name=oneLine(label).slice(0,40),always=o.rules.filter(r=>r.always),rest=o.rules.filter(r=>!r.always);
-    const said=r=>detail&&r.line?' Now: "'+r.line+'"':'';
+    const said=r=>r.line?'. '+(r.always||r.stated?KIND_WORDS[r.group]+': ':'')+r.line:'';
     const lines=['The owner has the notebook page '+(name?'"'+name+'" ':'')+'open that shows who you are, your rules, what you know about them and your skills, numbered as below. When they name one by its number ("rule 13", "profile page 2", "skill 4"), they mean the one with that number here. Change these only with the identity_files tool, as that page does: read the part first, then change it with its expected_hash and their words. Never change these files with file tools.',
       'Who you are: target "who".'+(detail&&o.who.text?' Now: "'+oneLine(o.who.text)+'"':''),
       'Extra instructions, read right after who you are: target "extra".'+(detail?o.extra.text?' Now: "'+oneLine(o.extra.text)+'"':' None yet.':'')];
-    if(always.length)lines.push('Rules read before every job, numbered as in AGENTS.md:',...always.map(r=>r.n+'. '+r.title+' ('+r.target+')'+said(r)));
+    if(always.length)lines.push('Rules read before every job, numbered as in AGENTS.md. Each sentence follows its kind: "Must:" is something you always do, "Never:" something you must never do (AGENTS.md lists it under "I must never"), "How it works:" how things work here. Quote a rule with its kind, never its sentence alone: a "Never" sentence alone says the opposite.',...always.map(r=>r.n+'. '+r.title+' ('+r.target+')'+said(r)));
     if(rest.length)lines.push('Rules read only when their subject comes up:',...rest.map(r=>r.n+'. '+r.title+' ('+r.target+'; '+r.place.label.toLowerCase()+')'+said(r)));
     if(o.profile.length)lines.push('Profile pages:',...o.profile.map(p=>p.n+'. '+p.title+' ('+p.target+')'));
     if(o.skills.length)lines.push('Skills:',...o.skills.map(k=>k.n+'. '+k.title+' ('+k.target+')'));
@@ -420,18 +457,18 @@ export class IdentityShelf{
         return {writes:[{file:EXTRA,text:text?(text+'\n').replace(/\n/g,eol):null}],message:!text?'removed the extra instructions':current.state==='missing'?'added the extra instructions':'changed the extra instructions'};},options);
     }
     const fields=input.fields||{};
-    if(t.kind==='rule')return this.change(t,current=>this.rulePlan(t,current,fields,'changed the rule "'+t.name+'"'),options);
+    if(t.kind==='rule')return this.change(t,current=>this.rulePlan(t,current,fields,'changed '+this.pageName(t)),options);
     if(t.kind==='skill')return this.change(t,()=>{
       const old=this.readText(t.file),old_description=readFront(splitFront(old).front).description,description=fields.description===undefined?oneLine(old_description):oneLine(fields.description);
       // A description changed here is held to what the assistants read; one left as it was always saves.
       if(description!==oneLine(old_description)){if(!description)refuse('Say in one sentence what this skill is for: your assistant picks a skill by it.','BLANK');if(description.length>1024)refuse('Keep what the skill is for under 1,024 characters.','TOO_LONG');}
       const steps=lf(fields.steps??splitFront(old).body);if(!steps.trim())refuse('A skill needs its steps.','BLANK');
       const headed=description===oneLine(old_description)?old:setFront(old,{description},{quote:yamlQuoted});
-      return {writes:[{file:t.file,text:splitFront(headed).head+this.fitBody(old,steps)}],message:'changed the skill "'+t.name+'"'};
+      return {writes:[{file:t.file,text:splitFront(headed).head+this.fitBody(old,steps)}],message:'changed '+this.pageName(t)};
     },options);
     return this.change(t,()=>{
       const old=this.readText(t.file),body=lf(input.text??fields.text??'');if(!body.trim())refuse('This page cannot be empty.','BLANK');
-      return {writes:[{file:t.file,text:splitFront(old).head+this.fitBody(old,body)}],message:'changed '+t.file};
+      return {writes:[{file:t.file,text:splitFront(old).head+this.fitBody(old,body)}],message:'changed '+this.pageName(t)};
     },options);
   }
   // New text for the part below a file's header, with the blank lines and line endings it had.
@@ -478,14 +515,14 @@ export class IdentityShelf{
     const base=title.normalize('NFKD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,60).replace(/-+$/,'')||'rule';
     const taken=new Set(this.ruleNames());let slug=base;for(let n=2;taken.has(slug)||fs.existsSync(path.join(this.root,'rules',slug+'.md'));n++)slug=base+'-'+n;
     const t={...this.target('rule:'+slug),missingOk:true};
-    return this.change(t,current=>this.rulePlan(t,current,{...fields,title},'added the rule "'+slug+'"',{create:true}),{...options,expected_hash:undefined}).then(result=>({...result,target:t.target}));
+    return this.change(t,current=>this.rulePlan(t,current,{...fields,title},'added the rule "'+title+'"',{create:true}),{...options,expected_hash:undefined}).then(result=>({...result,target:t.target}));
   }
   async removeRule(target,options={}){
     const t=this.target(target);if(t.kind!=='rule')refuse('Only a rule can be removed here.','REFUSED');
     return this.change(t,()=>{
       const manual=this.readText(MANUAL);const writes=[{file:t.file,text:null}];
       if(manual!==null){const gathered=this.gather(manual,new Map([[t.name,null]]));if(gathered.problem)refuse(gathered.problem,gathered.code||'RULES_PROBLEM');if(gathered.next!==manual)writes.push({file:MANUAL,text:gathered.next});}
-      return {writes,message:'removed the rule "'+t.name+'"'};
+      return {writes,message:'removed '+this.pageName(t)};
     },options);
   }
   async markWho(options={}){
@@ -519,13 +556,13 @@ export class IdentityShelf{
   async undo(target,options={}){
     const t=this.target(target),list=await this.versions(target,{limit:3});
     const previous=list.find((v,i)=>i>0);if(!previous||!list[0].current)refuse('There is no earlier version to go back to.','NO_EARLIER');
-    return this.bringBack(t,previous,'undid the last change to '+t.label,options);
+    return this.bringBack(t,previous,'undid the last change to '+this.pageName(t),options);
   }
   async restore(target,id,options={}){
     const t=this.target(target),list=await this.versions(target,{limit:200}),version=list.find(v=>v.id===id);
     if(!version)refuse('That earlier version is not there any more. Open the list again.','NO_VERSION',{status:404});
     if(version.current)return {saved:true,unchanged:true};
-    return this.bringBack(t,version,'brought back '+t.label+' as it was on '+version.at.slice(0,16).replace('T',' '),options);
+    return this.bringBack(t,version,'brought back '+this.pageName(t)+' as it was on '+version.at.slice(0,16).replace('T',' '),options);
   }
   async bringBack(t,version,message,options){
     // The exact text of that version, read again from history (the list carries what the page shows).

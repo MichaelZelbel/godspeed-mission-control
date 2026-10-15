@@ -7,7 +7,7 @@ import "@testing-library/jest-dom/vitest";
 import Identity from "./Identity";
 import { InstructionsMoved } from "@/components/profile/InstructionsMoved";
 import { BRAIN_PAGE } from "@/lib/brain-page";
-import { paragraphs, places, reflow, sizeLine, sizeState, versionLine, versionWords, type RuleTile } from "@/lib/identity";
+import { places, plainInline, reflow, sizeLine, sizeState, versionLine, versionWords, type RuleTile } from "@/lib/identity";
 
 vi.mock("@/components/SEOHead", () => ({ SEOHead: () => null }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn() } }));
@@ -36,6 +36,9 @@ const overview = (over: Record<string, unknown> = {}) => ({
   skills: [{ n: 1, target: "skill:keep-a-note", name: "keep-a-note", title: "Keep a note", description: "File a note.", origin: "shipped" }],
   ...over,
 });
+// Extra instructions as the owner's bot text is written: Markdown with headings, a numbered list
+// whose items wrap, inline code, bold, a code block and a table, long enough to fold.
+const extraMd = "# When Michael reaches you through Telegram\n\nYou are the Mission Control of \"Who it is\" above,\nreached through Telegram.\n\n## First action of every session\n\n1. Run `godspeed sync --pull` (pulls Mission Control;\n   say so if it fails).\n2. If `AGENTS.md` is not in your context, read it.\n\n**HARD GATE.** Before you explain any sentence:\n\n    godspeed brief find \"<his words>\"\n\n| He asks about | Run first |\n|---|---|\n| what happened | `godspeed week <days>` |\n\n" + "More plain words for the assistant. ".repeat(40);
 const versions = [
   { id: "c2", at: "2026-10-15T08:00:00Z", current: true, removed: false, by: "you, on this page", message: "changed who it is", text: who },
   { id: "c1", at: "2026-10-14T08:00:00Z", current: false, removed: false, by: "kept by your notebook", message: "kept the version from before the next change", text: "You are Godspeed." },
@@ -55,10 +58,10 @@ function serve() {
     if (route.startsWith("/api/identity/item")) {
       const target = decodeURIComponent(route.split("target=")[1]);
       if (target.startsWith("rule:")) return json(ruleItem);
-      if (target === "extra") return json({ target: "extra", kind: "extra", file: "assistant/extra-instructions.md", label: "the extra instructions", state: "missing", text: "", hash: "h-extra", soul: state.soul });
+      if (target === "extra") return json({ target: "extra", kind: "extra", file: "assistant/extra-instructions.md", label: "the extra instructions", state: state.extra.text ? "ok" : "missing", text: state.extra.text, hash: "h-extra", soul: state.soul });
       return json({ target: "who", kind: "who", file: "AGENTS.md", label: "who it is", state: "ok", text: who, hash: "h-who", manual: state.manual, soul: state.soul });
     }
-    if (route.startsWith("/api/identity/history")) return json({ data: versions });
+    if (route.startsWith("/api/identity/history")) return json({ data: route.includes("target=extra") ? [{ ...versions[0], text: extraMd, message: "changed the extra instructions" }, { ...versions[1], text: "## Before\n\n1. One step\n2. Another step" }] : versions });
     if (route === "/api/identity/instructions") return json({ data: [{ id: "i1", instruction: "Always address me as Sam.", applies_to: "all", is_active: true, removed: false, hash: "h-i1", updated_at: null }] });
     if (route === "/api/identity/notebook") return json({ notes: 4210, people: 312, facts: 1534, events: 88, things: 41, collections: 6 });
     if (route.startsWith("/api/identity/")) return json({ saved: true, now: { text: "x", hash: "h2" } });
@@ -161,6 +164,46 @@ describe("Godspeed's brain", () => {
     await waitFor(() => expect(calls.find((c) => c.route === "/api/identity/restore")?.body).toEqual({ target: "who", version: "c1", expected_hash: "h-who" }));
   });
 
+  it("shows the extra instructions as the Markdown they are, the first part until \"Show all\", and edits them exactly as written", async () => {
+    state = overview({ extra: { state: "ok", text: extraMd, hash: "h-extra" } });
+    open();
+    await screen.findByRole("heading", { level: 2, name: "Extra instructions" });
+    const extra = document.getElementById("extra")!;
+    expect(within(extra).getByRole("heading", { level: 3, name: "When Michael reaches you through Telegram" })).toBeVisible();
+    expect(within(extra).getByRole("heading", { level: 4, name: "First action of every session" })).toBeVisible();
+    const steps = within(extra).getAllByRole("listitem");
+    expect(steps.map((li) => li.textContent?.replace(/\s+/g, " ").trim())).toEqual(["Run godspeed sync --pull (pulls Mission Control; say so if it fails).", "If AGENTS.md is not in your context, read it."]);
+    expect(within(extra).getByText("godspeed sync --pull").tagName).toBe("CODE");
+    expect(within(extra).getByText("HARD GATE.").tagName).toBe("STRONG");
+    expect(extra.querySelector("pre")).toHaveTextContent('godspeed brief find "<his words>"');
+    // A table scrolls sideways in its own box rather than widening the page.
+    const table = within(extra).getByRole("region", { name: "Table" });
+    expect(table).toHaveClass("overflow-x-auto");
+    expect(within(table).getByRole("columnheader", { name: "Run first" })).toBeVisible();
+    expect(extra.textContent).not.toMatch(/# When|\*\*HARD|\| He asks/);
+    // Long: its first part, faded, until "Show all".
+    const more = within(extra).getByRole("button", { name: "Show all" });
+    expect(more).toHaveAttribute("aria-expanded", "false");
+    expect(extra.querySelector("[data-collapsed]")).not.toBeNull();
+    fireEvent.click(more);
+    expect(within(extra).getByRole("button", { name: "Show less" })).toHaveAttribute("aria-expanded", "true");
+    expect(extra.querySelector("[data-collapsed]")).toBeNull();
+    // The editor holds the text exactly as written: its lists, code and table come back as they went in.
+    fireEvent.click(within(extra).getByRole("button", { name: "Edit" }));
+    const box = await screen.findByRole("textbox", { name: "Extra instructions" });
+    expect(box).toHaveValue(extraMd);
+    // An earlier version reads as Markdown too.
+    fireEvent.click(screen.getByRole("tab", { name: "Earlier versions" }));
+    const older = (await screen.findAllByRole("listitem")).find((li) => within(li).queryByRole("button", { name: "Restore this version" }))!;
+    fireEvent.click(within(older).getByRole("button", { name: "Show" }));
+    expect(within(older).getByRole("heading", { name: "Before" })).toBeVisible();
+    expect(within(older).getAllByRole("listitem").map((li) => li.textContent)).toEqual(["One step", "Another step"]);
+    fireEvent.click(screen.getByRole("tab", { name: "Edit" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Save" }));
+    await waitFor(() => expect(screen.queryByRole("textbox", { name: "Extra instructions" })).toBeNull());
+    expect(calls.some((c) => c.route === "/api/identity/save")).toBe(false);
+  });
+
   it("adds extra instructions, which the assistant reads right after \"who it is\"", async () => {
     open();
     await screen.findByRole("heading", { level: 2, name: "Extra instructions" });
@@ -223,7 +266,8 @@ describe("Godspeed's brain", () => {
     fireEvent.change(message, { target: { value: "Please change rule 2 so that it also covers bookings." } });
     fireEvent.keyDown(message, { key: "Enter" });
     await waitFor(() => expect(calls.find((c) => c.route === "/api/functions/conversation-chat")?.body).toMatchObject({ message: "Please change rule 2 so that it also covers bookings.", page: "identity", page_label: "Godspeed's brain", conversation_id: "notebook:page:identity" }));
-    expect(await screen.findByText("Done.")).toBeVisible();
+    // The reply is shown plain, then as Markdown once that loads: look again until it settles.
+    await waitFor(() => expect(screen.getByText("Done.")).toBeVisible());
     await waitFor(() => expect(calls.filter((c) => c.route === "/api/identity").length).toBeGreaterThan(before));
     // The switch at the top left closes it again.
     fireEvent.click(screen.getByRole("button", { name: "Close the chat" }));
@@ -254,9 +298,14 @@ describe("identity helpers", () => {
     expect(sizeLine(19100, { ...size, kept_under: 19000 })).toMatch(/your own rules program keeps that file under 19,000/);
     expect(sizeLine(20500, { chars: 19000, limit: 20000, warn: 19000 }, "soul")).toMatch(/^Too long to save: "Who it is" and your extra instructions would be 20,500 characters together/);
   });
-  it("reflows a paragraph the file wraps, keeping blank lines, and splits paragraphs at them", () => {
+  it("reflows only plain prose a file wraps, never a list, a heading, a table or code", () => {
     expect(reflow("One\ntwo\n\nThree")).toBe("One two\n\nThree");
-    expect(paragraphs("One\ntwo\r\n\r\nThree\n")).toEqual(["One two", "Three"]);
+    const structured = "# Steps\n\n1. Run this\n   and that.\n2. Then this.\n\n    code line\n\n| a | b |\n|---|---|\n| 1 | 2 |";
+    expect(reflow(structured)).toBe(structured);
+  });
+  it("shows a Markdown preview on a tile as plain words", () => {
+    expect(plainInline("**Telefon:** use `godspeed phone` and [the map](https://x.test), _created 2026-07-14_.")).toBe("Telefon: use godspeed phone and the map, created 2026-07-14.");
+    expect(plainInline("_Created 2026-08-25 (D-152). Read by `mc-subs`, which checks it…")).toBe("Created 2026-08-25 (D-152). Read by mc-subs, which checks it…");
   });
   it("groups the rules read only when their subject comes up by where they are read, in the server's order", () => {
     const r = (n: number, place?: { key: string; label: string }) => ({ n, target: "rule:r" + n, slug: "r" + n, title: "R" + n, line: "", group: "how", always: !place, where: place?.key ?? "always", place }) as RuleTile;

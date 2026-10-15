@@ -20,8 +20,9 @@ import { GlobalAIChatFAB } from "@/components/chat/GlobalAIChatFAB";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 import { BRAIN_PAGE } from "@/lib/brain-page";
+import { PageMarkdown, ShowMore } from "@/components/brain/PageMarkdown";
 import {
-  GROUPS, NAME_LIMIT, ORIGIN_NOTE, ORIGIN_WORDS, PAGE_CHAT, PAGE_CHAT_CHANGED, TOGGLE_PAGE_CHAT, chars, identity, kindTag, manualAfter, paragraphs, places, reflow, ruleListLine, sizeLine, sizeState, versionWords, whenLabel,
+  GROUPS, NAME_LIMIT, ORIGIN_NOTE, ORIGIN_WORDS, PAGE_CHAT, PAGE_CHAT_CHANGED, TOGGLE_PAGE_CHAT, chars, identity, kindTag, manualAfter, places, plainInline, reflow, ruleListLine, sizeLine, sizeState, versionWords, whenLabel,
   type Instruction, type InstructionVersion, type Item, type ManualSize, type NotebookTotals, type Overview, type PageFields, type RuleFields, type RuleGroup, type SkillFields, type SoulSize, type Version,
 } from "@/lib/identity";
 
@@ -83,9 +84,10 @@ function Tile({ n, name, text, tag, note, waiting, onOpen }: { n: number; name: 
 // As many columns as the page's own width holds, so the tiles stay readable beside the open chat.
 const grid = "grid grid-cols-[repeat(auto-fill,minmax(min(100%,17rem),1fr))] gap-3";
 
-// A text the owner wrote, in a column that reads well: one paragraph per blank line.
-function Paragraphs({ text, className }: { text?: string | null; className?: string }) {
-  return <div className={cn("max-w-[65ch] space-y-4 text-base leading-7", className)}>{paragraphs(text).map((p, i) => <p key={i}>{p}</p>)}</div>;
+// A text the owner wrote, as the document it is, in a column that reads well; a long one shows
+// its first part until "Show all".
+function Written({ text }: { text?: string | null }) {
+  return <ShowMore text={text}><PageMarkdown text={text} /></ShowMore>;
 }
 
 // Shown only when a change gets near or over what the file may hold.
@@ -140,7 +142,7 @@ function Versions({ target, kind, hash, onChanged }: { target: string; kind: Ite
 function VersionText({ kind, version }: { kind: Item["kind"]; version: Version }) {
   const box = "mt-2 max-h-72 overflow-auto whitespace-pre-wrap rounded bg-muted/50 p-3 text-sm";
   if (version.removed) return <p className="mt-2 text-sm text-muted-foreground">{kind === "who" ? "There was no marked \"who it is\" paragraph then." : kind === "extra" ? "There were no extra instructions then." : "It did not exist then."}</p>;
-  if (kind === "who" || kind === "extra") return <p className={box}>{reflow(version.text)}</p>;
+  if (kind === "who" || kind === "extra") return <div className="mt-2 max-h-96 overflow-auto rounded bg-muted/50 p-3"><PageMarkdown text={version.text} compact /></div>;
   const f = version.fields as any;
   if (kind === "rule") return <div className={box}><p className="font-medium">{f.title}</p><p>{f.line}</p><p className="mt-2 text-muted-foreground">{f.story}</p></div>;
   if (kind === "skill") return <div className={box}><p className="font-medium">{f.description}</p><p className="mt-2">{f.steps}</p></div>;
@@ -156,15 +158,17 @@ function Editor({ target, overview, onClose }: { target: string; overview?: Over
   useEffect(() => {
     if (!item.data) return;
     const d = item.data;
-    // The paragraph as one flowing text: the file's fixed line width means nothing on a phone.
-    setDraft(d.kind === "who" || d.kind === "extra" ? { text: reflow(d.text) } : { ...(d.fields as object) });
+    // "Who it is" as flowing paragraphs: the file's fixed line width means nothing on a phone. The
+    // extra instructions exactly as written: they are Markdown, and their lists, code and tables
+    // must come back as they went in.
+    setDraft(d.kind === "who" ? { text: reflow(d.text) } : d.kind === "extra" ? { text: d.text ?? "" } : { ...(d.fields as object) });
   }, [item.data]);
   const changed = () => { invalidate(target); item.refetch(); };
   const d = item.data;
   const save = async () => {
     if (!d || !draft) return;
     // Unchanged words are no change, however the file wraps them.
-    if ((d.kind === "who" || d.kind === "extra") && draft.text.trim() === reflow(d.text).trim()) { toast.success("Nothing changed."); onClose(); return; }
+    if ((d.kind === "who" || d.kind === "extra") && draft.text.trim() === (d.kind === "who" ? reflow(d.text) : d.text ?? "").trim()) { toast.success("Nothing changed."); onClose(); return; }
     setBusy(true); setError("");
     try {
       const result = d.kind === "who" || d.kind === "extra" ? await identity.save(target, { text: draft.text }, d.hash) : await identity.save(target, d.kind === "profile" ? { text: draft.text } : { fields: draft }, d.hash);
@@ -444,7 +448,7 @@ function OwnSoul({ soul, busy, onBring }: { soul: Overview["soul"]; busy: boolea
       {show && <Dialog open onOpenChange={(open) => { if (!open) setShow(false); }}>
         <DialogContent className="max-h-[92dvh] max-w-2xl overflow-y-auto p-4 sm:p-6">
           <DialogHeader><DialogTitle>The text Hermes also reads</DialogTitle><DialogDescription>"Bring it here" moves it into your extra instructions, where you can change it and go back to any earlier version. The file it comes from is kept as a copy.</DialogDescription></DialogHeader>
-          <div className="max-w-[65ch] whitespace-pre-wrap rounded bg-muted/50 p-4 text-base leading-7">{soul.text}</div>
+          <div className="rounded bg-muted/50 p-4"><PageMarkdown text={soul.text} /></div>
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
             <Button type="button" variant="ghost" className="min-h-11 sm:min-h-9" onClick={() => setShow(false)}>Close</Button>
             <Button type="button" className="min-h-11 sm:min-h-9" disabled={busy} onClick={() => { setShow(false); onBring(); }}>Bring it here</Button>
@@ -512,7 +516,7 @@ export default function Identity() {
             {o && <>
               <Section id="who" icon={<UserRound className="h-5 w-5" />} title="Who it is" explain="Its name and character. Your assistant reads this first, every time."
                 action={o.who.state === "ok" ? <Button size="sm" className="min-h-11 sm:min-h-9" onClick={() => setOpen("who")}><Pencil className="mr-1.5 h-4 w-4" aria-hidden="true" />Edit</Button> : undefined}>
-                {o.who.state === "ok" && <Card><CardContent className="p-5 sm:p-6"><Paragraphs text={o.who.text} /></CardContent></Card>}
+                {o.who.state === "ok" && <Card><CardContent className="p-4 sm:p-6"><Written text={o.who.text} /></CardContent></Card>}
                 {o.who.state === "no-markers" && <Card><CardContent className="space-y-3 p-5">
                   <p className="text-sm">Your assistant's main instructions (AGENTS.md) do not mark which paragraph says who your assistant is, so it cannot be changed here yet. This paragraph would become it:</p>
                   <p className="whitespace-pre-wrap rounded bg-muted/50 p-3 text-sm">{o.who.proposal}</p>
@@ -523,8 +527,8 @@ export default function Identity() {
 
               <Section id="extra" icon={<NotebookPen className="h-5 w-5" />} title="Extra instructions" explain={<>Your assistant reads these right after "Who it is": in Telegram, in this notebook's chat and in its routines.</>}
                 action={o.extra.state !== "unavailable" ? <Button size="sm" variant={o.extra.text ? "default" : "outline"} className="min-h-11 sm:min-h-9" onClick={() => setOpen("extra")}>{o.extra.text ? <><Pencil className="mr-1.5 h-4 w-4" aria-hidden="true" />Edit</> : <><Plus className="mr-1.5 h-4 w-4" aria-hidden="true" />Add</>}</Button> : undefined}>
-                <Card><CardContent className="space-y-4 p-5 sm:p-6">
-                  {o.extra.text ? <Paragraphs text={o.extra.text} /> : <p className="text-sm text-muted-foreground">None yet. For example: "Answer in German when I write German."</p>}
+                <Card><CardContent className="space-y-4 p-4 sm:p-6">
+                  {o.extra.text ? <Written text={o.extra.text} /> : <p className="text-sm text-muted-foreground">None yet. For example: "Answer in German when I write German."</p>}
                   {o.extra.state === "unavailable" && <p className="text-sm text-muted-foreground">{o.extra.reason}</p>}
                   {o.soul.kind === "own" && <OwnSoul soul={o.soul} busy={busy} onBring={() => act(identity.bringSoulHere, "Brought here: it is part of your extra instructions now, and the file it came from is kept as a copy.")} />}
                   {o.soul.kind === "no-assistant" && <p className="text-xs text-muted-foreground">Your assistant's program is not connected on this computer, so these take effect where it runs.</p>}
@@ -540,7 +544,7 @@ export default function Identity() {
                 {o.manual.rules_list === "kept-elsewhere" && <p role="alert" className="rounded-md border border-warning/40 p-3 text-sm">The list in your assistant's main instructions (AGENTS.md) is kept by {o.manual.rules_program ? <code className="break-all">{o.manual.rules_program}</code> : "a program of your own"}, and it is not the list this page would write from your rules. So rules are not changed here: change the rule file in rules/ and run that program.</p>}
                 {o.manual.rules_list === "no-place" && <p className="rounded-md border border-warning/40 p-3 text-sm">Your assistant's main instructions (AGENTS.md) have no place for the list of rules, so your assistant reads them only when it opens the files.</p>}
                 {always.length > 0 && <div className={grid}>
-                  {always.map((r) => <Tile key={r.target} n={r.n} name={r.title} text={r.line || r.about} tag={kindTag(r.group)} waiting={r.review_waiting} onOpen={() => setOpen(r.target)} />)}
+                  {always.map((r) => <Tile key={r.target} n={r.n} name={r.title} text={plainInline(r.line || r.about)} tag={kindTag(r.group)} waiting={r.review_waiting} onOpen={() => setOpen(r.target)} />)}
                 </div>}
                 {restCount > 0 && <Collapsible open={restOpen} onOpenChange={setRestOpen} className="rounded-lg border border-border">
                   <CollapsibleTrigger asChild>
@@ -552,7 +556,7 @@ export default function Identity() {
                   <CollapsibleContent className="space-y-5 px-4 pb-4 pt-1">
                     {rest.map((g) => <div key={g.key} className="space-y-2">
                       <h3 className="text-sm font-semibold text-muted-foreground">{g.label} ({g.rules.length})</h3>
-                      <div className={grid}>{g.rules.map((r) => <Tile key={r.target} n={r.n} name={r.title} text={r.line || r.about} tag={r.stated ? kindTag(r.group) : undefined} waiting={r.review_waiting} onOpen={() => setOpen(r.target)} />)}</div>
+                      <div className={grid}>{g.rules.map((r) => <Tile key={r.target} n={r.n} name={r.title} text={plainInline(r.line || r.about)} tag={r.stated ? kindTag(r.group) : undefined} waiting={r.review_waiting} onOpen={() => setOpen(r.target)} />)}</div>
                     </div>)}
                   </CollapsibleContent>
                 </Collapsible>}
@@ -562,7 +566,7 @@ export default function Identity() {
 
               <Section id="profile" icon={<BookUser className="h-5 w-5" />} title="What it knows about you" explain="Pages about you, your work and your voice. Your assistant opens them when its main instructions point to them or when their subject comes up.">
                 {o.profile.length > 0 && <div className={grid}>
-                  {o.profile.map((p) => <Tile key={p.target} n={p.n} name={p.title} text={p.preview} waiting={p.review_waiting} onOpen={() => setOpen(p.target)} />)}
+                  {o.profile.map((p) => <Tile key={p.target} n={p.n} name={p.title} text={plainInline(p.preview)} waiting={p.review_waiting} onOpen={() => setOpen(p.target)} />)}
                 </div>}
                 {!o.profile.length && <p className="text-sm text-muted-foreground">No pages yet.</p>}
                 <InYourNotebook />
@@ -570,7 +574,7 @@ export default function Identity() {
 
               <Section id="skills" icon={<Wrench className="h-5 w-5" />} title="Skills" explain="Step-by-step instructions for one job each. Your assistant picks a skill by what it is for.">
                 {o.skills.length > 0 && <div className={grid}>
-                  {o.skills.map((k) => <Tile key={k.target} n={k.n} name={k.title} text={k.description} note={ORIGIN_NOTE[k.origin]} waiting={k.review_waiting} onOpen={() => setOpen(k.target)} />)}
+                  {o.skills.map((k) => <Tile key={k.target} n={k.n} name={k.title} text={plainInline(k.description)} note={ORIGIN_NOTE[k.origin]} waiting={k.review_waiting} onOpen={() => setOpen(k.target)} />)}
                 </div>}
                 {!o.skills.length && <p className="text-sm text-muted-foreground">No skills yet.</p>}
               </Section>

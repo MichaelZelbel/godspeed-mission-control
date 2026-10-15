@@ -142,10 +142,19 @@ export function places(rules: RuleTile[]): { key: string; label: string; rules: 
   }
   return out;
 }
-// A paragraph the file wraps at a fixed width reads as one paragraph on the page; blank lines stay.
-export const reflow = (text?: string | null) => String(text ?? "").split(/\n{2,}/).map((p) => p.replace(/\s*\n\s*/g, " ")).join("\n\n");
-// The paragraphs of a text: a blank line starts a new one, a single line break is a wrap.
-export const paragraphs = (text?: string | null) => reflow(String(text ?? "").replace(/\r\n?/g, "\n").trim()).split(/\n{2,}/).map((p) => p.trim()).filter(Boolean);
+// A paragraph of plain prose the file wraps at a fixed width reads as one paragraph in an editor
+// on a phone; blank lines stay. A block with any structure (a heading, a list, a quote, a table,
+// code) is left exactly as written: joining its lines would change what it says (16 October
+// 2026: the extra instructions' numbered steps ran together).
+const STRUCTURE = /^(?:\s*(?:[-*+]\s|\d+[.)]\s|#{1,6}\s|>|\||```|~~~|<)|\s{4}|\t)/;
+export const reflow = (text?: string | null) => String(text ?? "").replace(/\r\n?/g, "\n").split(/\n{2,}/)
+  .map((block) => block.split("\n").some((line) => STRUCTURE.test(line)) ? block : block.replace(/\s*\n\s*/g, " ")).join("\n\n");
+// A short preview of Markdown as plain words: no **, `, _ or link syntax on a tile.
+export const plainInline = (text?: string | null) => String(text ?? "")
+  .replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1").replace(/`+([^`]*)`+/g, "$1").replace(/(\*\*|__)(.+?)\1/g, "$2")
+  .replace(/(^|[\s(])[*_]([^*_\n]+)[*_](?=[\s).,;:!?]|$)/g, "$1$2").replace(/\s+/g, " ").trim()
+  // An emphasis the preview cut before it closed.
+  .replace(/^[*_]+(?=\S)/, "").replace(/(?<=\S)[*_]+(…?)$/, "$1");
 // When a version was made, in the reader's own words and clock.
 export function whenLabel(at: string, now = new Date()): string {
   const date = new Date(at);

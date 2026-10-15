@@ -104,6 +104,9 @@ test('rules: adding, changing and removing one keeps the list in AGENTS.md in st
   assert.match(compileCheck(root),/up to date: 9 rules/,'the program that keeps the list agrees');
   const rule=shelf.read('rule:no-calls-after-nine');
   await shelf.save('rule:no-calls-after-nine',{fields:{...rule.fields,line:'Phone anyone for me after 10 pm.'}},{expected_hash:rule.hash});
+  // Its earlier versions name it as the page does: its number and short name, never its file name.
+  const named=await shelf.versions('rule:no-calls-after-nine');
+  assert.equal(named[0].message,'changed rule 9, "No calls after nine"');assert.equal(named[1].message,'added the rule "No calls after nine"');
   assert.match(read(root,'AGENTS.md'),/Phone anyone for me after 10 pm\./);assert.doesNotMatch(read(root,'AGENTS.md'),/after 9 pm/);
   assert.match(compileCheck(root),/up to date/);
   // A rule taken off the every-job list stays a rule, and leaves the list.
@@ -429,6 +432,9 @@ test('rules are numbered as AGENTS.md numbers them, and the rest follow by where
   const founder=shelf.overview().rules.find(r=>r.slug==='founder-only');assert.equal(founder.about,'Only the founder posts in company channels.');assert.equal(founder.stated,false);
   // A folder's README is not a page about the owner.
   atomic(path.join(root,'profile','README.md'),'# profile/ - what I know because you told me\n');assert.ok(!shelf.overview().profile.some(p=>p.name==='README'));
+  // A profile page's preview is its first paragraph of prose, past comments, tables and code, joined into one line.
+  atomic(path.join(root,'profile','connections.md'),'---\nalways_read: true\n---\n# Connections\n\n<!-- kept by a script -->\n| a | b |\n|---|---|\n\n```\ncode\n```\n\n**Telefon:** use `godspeed phone`\nfor calls.\n');
+  assert.equal(shelf.overview().profile.find(p=>p.name==='connections').preview,'**Telefon:** use `godspeed phone` for calls.');
   // A list written before a rule was added keeps its numbers: the new rule follows them.
   atomic(path.join(root,'rules','a-new-one.md'),'---\nwhere: always\ngroup: must\norder: 1\nline: "A rule the list does not carry yet."\n---\n');
   const behind=shelf.overview();assert.equal(behind.manual.rules_list,'kept-elsewhere');
@@ -439,5 +445,9 @@ test('rules are numbered as AGENTS.md numbers them, and the rest follow by where
   assert.match(told,/notebook page "Godspeed's brain" open/);
   for(const r of behind.rules)assert.ok(told.includes('\n'+r.n+'. '+r.title+' ('+r.target),r.slug);
   assert.match(told,/Profile pages:\n1\. /);assert.match(told,/Skills:\n1\. Keep a note \(skill:keep-a-note\)/);
-  assert.match(shelf.chatContext({detail:true}),/Now: "Verify any claim you could act on live in this same turn or label it UNVERIFIED\."/);
+  // Each sentence after its kind in words, so it is quoted the right way round.
+  assert.match(told,/\n\d+\. Verify before asserting \(rule:verify-before-asserting\)\. Must: Verify any claim you could act on live in this same turn or label it UNVERIFIED\.\n/);
+  assert.match(told,/\n\d+\. Never spend my money \(rule:never-spend-my-money\)\. Never: Buy, book, subscribe/);
+  assert.match(told,/a "Never" sentence alone says the opposite/);
+  assert.match(told,/\n\d+\. Founder only \(rule:founder-only; for the companies\)\n/,'a rule without a sentence or a stated kind is named only');
 });
