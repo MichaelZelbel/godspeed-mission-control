@@ -129,7 +129,9 @@ test('a rule list that would pass its limit, or a rule without its sentence, is 
   await assert.rejects(shelf.addRule({title:'Silent',line:'',group:'must'}),error=>error.code==='BLANK');
   const long='Do this thing that is described at great length so that the whole list grows past what fits '.repeat(4).trim();
   let refused=null;for(let i=0;i<20&&!refused;i++){try{await shelf.addRule({title:'Long rule '+i,line:long.slice(0,390),group:'must'});}catch(error){refused=error;}}
-  assert.equal(refused?.code,'RULES_TOO_LONG');assert.match(refused.message,/at most 4000/);
+  assert.equal(refused?.code,'RULES_TOO_LONG');assert.match(refused.message,/at most 4,000/);
+  // It names the longest rules as the page shows them, by number and name, never by file name.
+  assert.match(refused.message,/The longest now: rule \d+, "Long rule \d+" \(\d+ characters\)/);assert.doesNotMatch(refused.message,/long-rule-/);
   assert.match(compileCheck(root),/up to date/,'every saved rule is in the list, the refused one is not');
   assert.notEqual(read(root,'AGENTS.md'),before);
 });
@@ -422,6 +424,11 @@ test('rules are numbered as AGENTS.md numbers them, and the rest follow by where
   assert.deepEqual(rest.map(r=>[r.n,r.slug,r.place.label]),[[listed.length+1,'founder-only','For the companies'],[listed.length+2,'brief-numbers','For the skill daily brief'],[listed.length+3,'search-the-chat','When its subject comes up'],[listed.length+4,'a-chapter-rule','Book'],[listed.length+5,'merged-away','Merged: verify before asserting']]);
   assert.deepEqual(o.rules.map(r=>r.n),o.rules.map((r,i)=>i+1),'one number each, no gaps');
   assert.deepEqual(o.profile.map(p=>p.n),o.profile.map((p,i)=>i+1));assert.deepEqual(o.skills.map(k=>[k.n,k.title]),[[1,'Keep a note']]);
+  // A rule for one job often has no sentence: its tile says its description instead, and names no kind it does not state.
+  atomic(path.join(root,'rules','founder-only.md'),'---\ntitle: "Founder only"\ndescription: "Only the founder posts in company channels."\nwhere: company\n---\nStory.\n');
+  const founder=shelf.overview().rules.find(r=>r.slug==='founder-only');assert.equal(founder.about,'Only the founder posts in company channels.');assert.equal(founder.stated,false);
+  // A folder's README is not a page about the owner.
+  atomic(path.join(root,'profile','README.md'),'# profile/ - what I know because you told me\n');assert.ok(!shelf.overview().profile.some(p=>p.name==='README'));
   // A list written before a rule was added keeps its numbers: the new rule follows them.
   atomic(path.join(root,'rules','a-new-one.md'),'---\nwhere: always\ngroup: must\norder: 1\nline: "A rule the list does not carry yet."\n---\n');
   const behind=shelf.overview();assert.equal(behind.manual.rules_list,'kept-elsewhere');

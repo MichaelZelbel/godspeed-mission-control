@@ -163,7 +163,8 @@ export class IdentityShelf{
   realFolder(relative){const dir=path.join(this.root,relative);let stat=null;try{stat=fs.lstatSync(dir);}catch{}return !!stat&&stat.isDirectory()&&!stat.isSymbolicLink();}
   // ---- What the page lists --------------------------------------------------------------------
   ruleNames(){return this.realFolder('rules')?fs.readdirSync(path.join(this.root,'rules'),{withFileTypes:true}).filter(e=>e.isFile()&&e.name.endsWith('.md')&&!['README.md','MEMORY.md'].includes(e.name)&&SLUG.test(e.name.slice(0,-3))).map(e=>e.name.slice(0,-3)).sort():[];}
-  profileNames(){return this.realFolder('profile')?fs.readdirSync(path.join(this.root,'profile'),{withFileTypes:true}).filter(e=>e.isFile()&&e.name.endsWith('.md')&&NAME.test(e.name.slice(0,-3))&&!windowsInvalid(e.name)).map(e=>e.name.slice(0,-3)).sort():[];}
+  // A folder's README (what the folder is for) is not a page about the owner, as it is no rule.
+  profileNames(){return this.realFolder('profile')?fs.readdirSync(path.join(this.root,'profile'),{withFileTypes:true}).filter(e=>e.isFile()&&e.name.endsWith('.md')&&!['readme.md','memory.md'].includes(e.name.toLowerCase())&&NAME.test(e.name.slice(0,-3))&&!windowsInvalid(e.name)).map(e=>e.name.slice(0,-3)).sort():[];}
   skillNames(){
     if(!this.realFolder('skills'))return [];
     return fs.readdirSync(path.join(this.root,'skills'),{withFileTypes:true}).filter(e=>e.isDirectory()&&!e.name.startsWith('.')&&NAME.test(e.name)&&!windowsInvalid(e.name)).map(e=>e.name)
@@ -248,7 +249,10 @@ export class IdentityShelf{
     const who=manual===null?{state:'no-manual'}:persona===null?{state:'no-markers',proposal:markedManual(manual).persona}:{state:'ok',text:persona,hash:hash(persona)};
     const read=this.ruleNames().map(slug=>{try{const text=this.readText('rules/'+slug+'.md');return {text,rule:{target:'rule:'+slug,...this.ruleFields(slug,text),story:undefined,review_waiting:waiting.has('rules/'+slug+'.md')}};}catch{return null;}}).filter(Boolean);
     const numbers=this.ruleNumbers(manual,read);
-    const rules=read.map(({rule})=>({...rule,n:numbers.get(rule.slug),...(rule.always?{}:{place:(({key,label})=>({key,label}))(placeOf(rule.where))})})).sort((a,b)=>a.n-b.n);
+    // about: what the tile says under the name of a rule without its one sentence (most rules read
+    // only for one job have none): its description, the one place its file says what it is.
+    // stated: the file names its kind; a rule read before every job is always listed under one.
+    const rules=read.map(({rule,text})=>{const h=readFront(splitFront(text).front);return {...rule,n:numbers.get(rule.slug),stated:rule.always||h.group!==undefined,...(rule.line?{}:{about:oneLine(h.description)}),...(rule.always?{}:{place:(({key,label})=>({key,label}))(placeOf(rule.where))})};}).sort((a,b)=>a.n-b.n);
     const profile=this.profileNames().map(name=>{try{const text=this.readText('profile/'+name+'.md'),body=lf(splitFront(text).body),title=(body.match(/^#\s+(.+)$/m)||[])[1]||inWords(name);return {target:'profile:'+name,name,title:oneLine(title),preview:body.replace(/^#.*$/gm,'').replace(/<!--[\s\S]*?-->/g,'').trim().split('\n').find(Boolean)?.slice(0,160)||'',review_waiting:waiting.has('profile/'+name+'.md')};}catch{return null;}}).filter(Boolean).map((p,i)=>({n:i+1,...p}));
     const skills=this.skillNames().map(name=>{try{const bytes=this.readBytes('skills/'+name+'/SKILL.md'),h=readFront(splitFront(bytes.toString('utf8')).front);return {target:'skill:'+name,name,title:inWords(h.name||name),description:h.description||'',origin:this.skillOrigin(name,bytes),review_waiting:waiting.has('skills/'+name+'/SKILL.md')};}catch{return null;}}).filter(Boolean).map((k,i)=>({n:i+1,...k}));
     let extra;try{const e=this.read('extra');extra={state:e.state,text:e.text,hash:e.hash,review_waiting:e.review_waiting};}catch(error){extra={state:'unavailable',text:'',reason:error.message};}
@@ -316,7 +320,9 @@ export class IdentityShelf{
     const i=manual.indexOf(compiler.BEGIN),j=manual.indexOf(compiler.END),ceiling=i>=0&&j>i?j+compiler.END.length-i+1:0;
     const result=compiler.compileText({files:[...files].map(([slug,text])=>({name:slug+'.md',text})),agentsText:manual,keepFrame:true,ceiling});
     if(result.problems?.length)return {problem:result.problems[0].replace(/`/g,'')};
-    if(result.tooLong)return {problem:'The list of rules your assistant reads before every job would be '+result.tooLong.size+' characters, and it may be at most '+Math.max(result.tooLong.limit,ceiling)+'. Shorten a rule\'s sentence, or merge two rules that say the same thing. The longest now: '+result.tooLong.longest.map(r=>r.slug+' ('+r.chars+')').join(', ')+'.',code:'RULES_TOO_LONG'};
+    // The longest rules by the number and the name the page shows them with, never by file name.
+    if(result.tooLong){const numbers=compiler.listed(manual),named=slug=>{let title=inWords(slug);try{const text=files.get(slug);if(text)title=ruleName(slug,readFront(splitFront(text).front));}catch{}return (numbers.has(slug)?'rule '+numbers.get(slug)+', ':'')+'"'+title+'"';};
+      return {problem:'The list of rules your assistant reads before every job would be '+result.tooLong.size.toLocaleString('en')+' characters, and it may be at most '+Math.max(result.tooLong.limit,ceiling).toLocaleString('en')+'. Shorten a rule\'s sentence, or merge two rules that say the same thing. The longest now: '+result.tooLong.longest.map(r=>named(r.slug)+' ('+r.chars+' characters)').join('; ')+'.',code:'RULES_TOO_LONG'};}
     if(result.empty)return {next:manual,empty:true};
     if(result.noMarkers)return {next:manual,noPlace:true};
     return {next:result.next};
