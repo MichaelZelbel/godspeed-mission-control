@@ -125,12 +125,14 @@ test("the block carries an open talk's opening and what was prepared, and says t
   const block = contextBlock(mc, S, new Date("2026-10-15T19:00:00Z")).split("\n");
   const at = block.findIndex((l) => l.startsWith("- Open talk: Work and money (id for commands: work), opened today at 19:02, record coach/work/talks/2026-10-15.md."));
   assert.ok(at > 0);
-  assert.deepEqual(block.slice(at + 1, at + 6), [
+  assert.deepEqual(block.slice(at + 1, at + 8), [
     `  It opened with: "From your coach, your weekly work and money talk: a talk call closes on 31 October. Will you send one?"`,
     "  Prepared, for when they ask what else there is:",
     "  - 29 October: rates decided (https://example.org/b)",
     "  - 3 November: a hackathon, $9,000 (https://example.org/c)",
-    "  Everything needed to continue this talk is here, so answer from it without running commands or looking things up unless they ask for something it lacks.",
+    "  Everything needed to continue this talk is here: answer from it without running commands or looking things up, unless they ask for something it lacks.",
+    `  While this talk is open, a question like "what else do you have?", "what do you suggest?" or "what should I do?" is about this talk: answer from what was prepared.`,
+    "  Every answer is one or two sentences, and a suggestion is one sentence.",
   ]);
   assert.match(block[0], /^\[godspeed-coach\] For you, not to pass on/);
 });
@@ -187,10 +189,12 @@ test("a waiting talk carries what was prepared, and its opening once", () => {
   const block = contextBlock(mc, { ...S, talk_delivery: "chat" }, new Date("2026-10-15T19:00:00Z")).split("\n");
   const at = block.findIndex((l) => l.startsWith("- Waiting talk: Work and money"));
   assert.ok(at > 0);
-  assert.deepEqual(block.slice(at + 1, at + 4), [
+  assert.deepEqual(block.slice(at + 1, at + 6), [
     "  Prepared, for when they ask what else there is:",
     "  - 3 November: a hackathon (https://example.org/c)",
-    "  Everything needed to continue this talk is here, so answer from it without running commands or looking things up unless they ask for something it lacks.",
+    "  Everything needed to continue this talk is here: answer from it without running commands or looking things up, unless they ask for something it lacks.",
+    `  While this talk is open, a question like "what else do you have?", "what do you suggest?" or "what should I do?" is about this talk: answer from what was prepared.`,
+    "  Every answer is one or two sentences, and a suggestion is one sentence.",
   ]);
   assert.equal(block.join("\n").split("Will you send one?").length, 2);
 });

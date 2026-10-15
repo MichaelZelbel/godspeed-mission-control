@@ -127,6 +127,7 @@ test("context: an open talk and tonight's unanswered habit check both appear, ea
     `- Open talk: Health and fitness (id for commands: health), opened today at 19:01, record coach/health/talks/2026-10-04.md. A reply to it continues it: follow the coach recipe, "Continuing a talk". A message that asks for another talk ("can we do the work talk now?") starts that talk instead and leaves this one open: "A talk they start themselves".`,
     `  It opened with: "Hi."`,
     `  Nothing else was prepared. If they ask what else there is, run \`godspeed-coach brief health\` once and answer from its sections "What the research found for ..."; this talk stays the open one, so open no other.`,
+    "  Every answer is one or two sentences, and a suggestion is one sentence.",
   ].join("\n");
   assert.equal(contextBlock(mc, S, at("2026-10-04T19:10:00Z")), [
     head, talk,

@@ -224,19 +224,24 @@ test("an open talk from a preparation carries its whole talk card and names the 
   const block = cli(mc, "2026-10-21T17:30:00Z", "context", "--hook", "claude").out.split("\n");
   const at = block.findIndex((l) => l.startsWith("- Open talk: Work and money (id for commands: work), opened today at 19:00, record coach/work/talks/2026-10-21.md."));
   assert.ok(at > 0, block.join("\n"));
-  assert.deepEqual(block.slice(at + 1, at + 9), [
+  assert.deepEqual(block.slice(at + 1, at + 11), [
     `  It opened with: "${OPENING}"`,
     "  Talk card, prepared ahead (the short version; coach/work/prep/2026-10-21.md holds the depth):",
     ...CARD.split("\n").map((l) => `  ${l}`),
-    "  Answer from this card without running commands. When it does not answer them, read coach/work/prep/2026-10-21.md once rather than searching anywhere else.",
+    // The Telegram test of 15 October 2026: two paragraphs for "Why should I move the date?", and
+    // another add-on's offers for "What else do you have for me?". The block says how to go on.
+    "  Everything needed to continue this talk is here: answer from it without running commands or looking things up, unless they ask for something it lacks (then read coach/work/prep/2026-10-21.md once).",
+    `  While this talk is open, a question like "what else do you have?", "what do you suggest?" or "what should I do?" is about this talk: answer from the card's moves.`,
+    "  Every answer is one or two sentences, and a suggestion is one sentence.",
   ]);
+  assert.equal(block.length, at + 11, "nothing after it but the end of the block");
   // A card longer than about 1600 characters is cut by whole lines.
   const long = Array.from({ length: 40 }, (_, i) => `- line ${i}: ${"a number with its date and source, ".repeat(2)}`).join("\n");
   const mc2 = mission({ "coach/work/prep/2026-10-21.md": prep({ card: long }) });
   cli(mc2, "2026-10-21T17:00:00Z", "talk", "open", "work", "--from-prep", "coach/work/prep/2026-10-21.md");
   const lines = cli(mc2, "2026-10-21T17:30:00Z", "context").out.split("\n");
   const start = lines.findIndex((l) => l.startsWith("  Talk card, prepared ahead"));
-  const end = lines.findIndex((l) => l.startsWith("  Answer from this card"));
+  const end = lines.findIndex((l) => l.startsWith("  Everything needed"));
   const card = lines.slice(start + 1, end);
   assert.equal(card.at(-1), "  ...");
   assert.ok(card.slice(0, -1).join("\n").length <= 1600 && card.length >= 15, `${card.length} lines`);
