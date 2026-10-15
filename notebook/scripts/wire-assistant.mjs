@@ -8,7 +8,7 @@ import {commandFile} from './windows-command-file.mjs';
 import {starterBorn} from '../core/starter-workspace.mjs';
 import {withTimezone,godspeedHermesSettings,CRON_PROVIDER} from '../core/hermes-config.mjs';
 import {personaOf} from '../core/persona.mjs';
-import {syncSoul} from '../core/assistant-soul.mjs';
+import {syncSoul,readExtra} from '../core/assistant-soul.mjs';
 const root=process.env.GODSPEED_WORKSPACE,home=process.argv[2];if(!root||!home)throw new Error('Choose the candidate workspace and isolated assistant home');
 const store=new Store(root),port=Number(process.env.GODSPEED_PORT||47831),file=path.join(home,'config.yaml');fs.mkdirSync(home,{recursive:true});
 const kit=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..');
@@ -168,6 +168,8 @@ atomic(file,text);fs.chmodSync(file,0o600);
 // Hermes reads its own SOUL.md before AGENTS.md, as the assistant's identity, and seeds it with
 // "You are Hermes Agent, built by Nous Research ..." (core/assistant-soul.mjs says why and how).
 // It is written from the persona paragraph of AGENTS.md, the one place the name and character are
-// stated, unless its owner wrote their own SOUL.md, which the notebook's Identity page then names.
-try{const persona=personaOf(fs.readFileSync(path.join(root,'AGENTS.md'),'utf8'));if(persona)syncSoul({home,persona});}catch(error){console.error('The assistant\'s identity file was not brought in step with AGENTS.md: '+error.message);}
+// stated, and the owner's extra instructions after it (assistant/extra-instructions.md), unless
+// its owner wrote their own SOUL.md, which the notebook's page for these then shows and offers to
+// bring in among the extra instructions.
+try{const persona=personaOf(fs.readFileSync(path.join(root,'AGENTS.md'),'utf8'));if(persona)syncSoul({home,persona,extra:readExtra(root)});}catch(error){console.error('The assistant\'s identity file was not brought in step with AGENTS.md and the extra instructions: '+error.message);}
 console.log(JSON.stringify({wired:true,isolated:true,port}));

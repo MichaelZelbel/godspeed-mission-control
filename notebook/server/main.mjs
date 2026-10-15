@@ -28,6 +28,7 @@ import { importExport } from '../core/import.mjs';
 import { kinds } from '../core/jobs/scheduler.mjs';
 import { MediaSync } from '../core/sync/media.mjs';
 import { mcp } from './mcp.mjs';
+import {notebookTotals} from './memory-tools.mjs';
 import { spawn } from 'node:child_process';
 import {ApiKeys,toolScope} from '../core/api-keys.mjs';
 import {Telegram} from '../core/telegram.mjs';
@@ -120,8 +121,8 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   const menerioImport=new MenerioImport(store,mediaRoot,()=>{index.rebuild();factClosing.request();},{beat});
   const telegramConnection=new TelegramConnection();
   const chatRequests=new Map(),recoveryRunner=new RecoveryRunner(store),backupRunner=new BackupRunner(store,mediaRoot);let dictationBusy=false;
-  // The Identity page (core/identity-shelf.mjs): who it is, its rules, what it knows about its
-  // owner and its recipes, with every earlier version. Its assistant's own identity file follows
+  // The page that shows who the assistant is (core/identity-shelf.mjs): who it is, its rules, what
+  // it knows about its owner and its skills, with every earlier version. Its assistant's own identity file follows
   // "who it is"; only the assistant this installation connected is meant (assistant.json).
   const assistantHome=()=>{try{const d=JSON.parse(fs.readFileSync(assistantPath,'utf8').replace(/^﻿/,''));return d?.verified&&typeof d.home==='string'?d.home:null;}catch{return null;}};
   const shelf=domains.identity=new IdentityShelf(store,{assistantHome});
@@ -292,12 +293,14 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         const input=JSON.parse(await body(req));resolveSavedConflict(store,input,{assistantPath});
         return send(res,200,{ok:true});
       }
-      // The Identity page. Only the files it names, by the patterns in identity-shelf.mjs; every
+      // That page's routes. Only the files it names, by the patterns in identity-shelf.mjs; every
       // change through the workspace's writer and lock, kept as a version of its own.
       if(route==='/api/identity'||route.startsWith('/api/identity/')){
         if(route==='/api/identity'&&req.method==='GET')return send(res,200,shelf.overview());
         if(route==='/api/identity/item'&&req.method==='GET')return send(res,200,shelf.read(url.searchParams.get('target')));
         if(route==='/api/identity/history'&&req.method==='GET')return send(res,200,{data:await shelf.versions(url.searchParams.get('target'))});
+        // Beside the profile pages: what else the assistant can look up, as its own tools count it.
+        if(route==='/api/identity/notebook'&&req.method==='GET')return send(res,200,notebookTotals({store,query}));
         // The instructions connected AI apps receive (get_user_profile): records, kept as records.
         if(route==='/api/identity/instructions'&&req.method==='GET')return send(res,200,{data:shelf.instructionList()});
         if(route==='/api/identity/instruction-history'&&req.method==='GET')return send(res,200,{data:shelf.instructionVersions(url.searchParams.get('id'))});
@@ -310,7 +313,9 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         if(route==='/api/identity/remove')return send(res,200,await shelf.removeRule(input.target,options));
         if(route==='/api/identity/mark-who')return send(res,200,await shelf.markWho({by:'notebook'}));
         if(route==='/api/identity/gather-rules')return send(res,200,await shelf.gatherRules({by:'notebook'}));
-        if(route==='/api/identity/assistant-identity')return send(res,200,shelf.followPersona({take:true}));
+        // "Bring it here": the text the assistant's program read first, its owner's own, moves into
+        // the extra instructions, and from then on that file follows this page.
+        if(route==='/api/identity/bring-soul-here')return send(res,200,await shelf.bringSoulHere({by:'notebook'}));
         if(route==='/api/identity/instruction')return send(res,200,await shelf.saveInstruction(input.instruction||{},options));
         if(route==='/api/identity/instruction-restore')return send(res,200,await shelf.restoreInstruction(String(input.id||''),String(input.version||''),options));
         return send(res,404,{error:'Unknown operation'});
@@ -474,6 +479,8 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
     const relative=name==null?null:(root?root+'/':'')+String(name).replaceAll('\\','/');
     if(relative!==null&&(relative.split('/').some(part=>part.startsWith('.'))||relative.endsWith('.tmp')))return;
     changedFiles.add(relative===null?'*':relative);
+    // The extra instructions changed by anything: the assistant's own identity file follows them.
+    if(root==='assistant')followPersona();
     clearTimeout(indexDebounce);indexDebounce=setTimeout(()=>{
       if(menerioImport.mutating)return;
       const names=[...changedFiles];changedFiles.clear();
@@ -485,8 +492,8 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   // Private backups and Git merge workspaces are outside the watched knowledge.
   const watchRoot=name=>{const folder=path.join(store.root,name);if(!watchers.has(name)&&fs.existsSync(folder))watchers.set(name,fs.watch(folder,{recursive:true},changed(name)));};
   for(const name of durableRoots)watchRoot(name);
-  // A manual changed by anything (a sync from another machine, a session, an editor) brings the
-  // assistant's own identity file in step with its "who it is" (assistant-soul.mjs).
+  // A manual or extra instructions changed by anything (a sync from another machine, a session, an
+  // editor) bring the assistant's own identity file in step with them (assistant-soul.mjs).
   let soulDebounce;const followPersona=()=>{clearTimeout(soulDebounce);soulDebounce=setTimeout(()=>{try{shelf.followPersona();}catch{}},2000);soulDebounce.unref?.();};
   const rootWatcher=fs.watch(store.root,(event,name)=>{if(durableRoots.includes(name)){watchRoot(name);changed(name)(event,null);}else if(durableFiles.includes(name)){changed('')(event,name);if(name==='AGENTS.md')followPersona();}});
   return { server, store, index, query, domains, scheduler, sync, mediaSync,address: server.address(), webAddress: webServer?.address() || null, close: async () => { if (webServer) await new Promise(resolve => webServer.close(resolve)); clearInterval(meaningTimer);clearInterval(processingTimer);clearInterval(backupTimer);clearInterval(factTimer);stopIndexing();store.unwatch();githubSignIn.close();clearTimeout(soulDebounce);await syncRunner.close();await menerioImport.close();rootWatcher.close();for(const watcher of watchers.values())watcher.close();clearTimeout(debounce);clearTimeout(indexDebounce);clearInterval(telegramTimer);clearInterval(interval);clearInterval(jobs);clearInterval(syncTimer);clearInterval(mediaTimer); await new Promise(resolve => server.close(resolve)); index.close(); } };

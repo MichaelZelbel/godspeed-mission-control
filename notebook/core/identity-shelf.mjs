@@ -7,7 +7,7 @@ import {hash} from './records/store.mjs';
 import {durable,windowsInvalid} from './file-policy.mjs';
 import {newFindings} from './context-scan.mjs';
 import {ShelfHistory,COMMIT_PREFIX} from './identity-history.mjs';
-import {readSoul,syncSoul} from './assistant-soul.mjs';
+import {readSoul,syncSoul,soulChars,EXTRA,SOUL_LIMIT} from './assistant-soul.mjs';
 import {normalized} from './packaged-skills.mjs';
 
 // THE IDENTITY PAGE: THE FILES THAT MAKE THIS MISSION CONTROL BEHAVE AS IT DOES.
@@ -17,6 +17,8 @@ import {normalized} from './packaged-skills.mjs';
 //
 //   who      the persona paragraph of AGENTS.md, between its persona markers, and nothing else
 //            of that file; Hermes' own identity file (SOUL.md) follows it (assistant-soul.mjs)
+//   extra    assistant/extra-instructions.md: the owner's extra instructions, which Hermes reads
+//            right after "who it is" (SOUL.md is the two together, assistant-soul.mjs)
 //   rule:x   rules/x.md; the one-line list of rules in AGENTS.md (mc-compile-rules,
 //            tools/compile-rules.js) is brought up to date in the same change. A rule's short
 //            name is its own `title:` (ruleName), never its `description:`
@@ -131,7 +133,8 @@ export class IdentityShelf{
   target(target){
     const t=String(target??'');
     if(t==='who')return {kind:'who',target:t,file:MANUAL,label:'who it is'};
-    const m=/^(rule|profile|skill):(.+)$/.exec(t);if(!m)refuse('Choose a part of this page: who it is, a rule, a profile page or a skill.','UNKNOWN_TARGET');
+    if(t==='extra')return {kind:'extra',target:t,file:EXTRA,label:'the extra instructions',missingOk:true};
+    const m=/^(rule|profile|skill):(.+)$/.exec(t);if(!m)refuse('Choose a part of this page: who it is, the extra instructions, a rule, a profile page or a skill.','UNKNOWN_TARGET');
     const [,kind,name]=m;
     if(name.includes('..')||windowsInvalid(name)||!(kind==='rule'?SLUG:NAME).test(name)||kind==='rule'&&['readme','memory'].includes(name.toLowerCase()))refuse('That is not one of the files this page shows.','UNKNOWN_TARGET');
     const file=kind==='rule'?'rules/'+name+'.md':kind==='profile'?'profile/'+name+'.md':'skills/'+name+'/SKILL.md';
@@ -175,6 +178,7 @@ export class IdentityShelf{
   view(t,text){
     if(text===null)return null;
     if(t.kind==='who')return personaOf(text);
+    if(t.kind==='extra')return lf(text).trim()||null;
     if(t.kind==='rule')return this.ruleFields(t.name,text);
     if(t.kind==='skill'){const {front,body}=splitFront(text),h=readFront(front);return {name:h.name||t.name,description:h.description||'',steps:lf(body).replace(/^\n+/,'')};}
     const {front,body}=splitFront(text);return {text:lf(body).replace(/^\n+/,''),kept_details:front!==null};
@@ -202,12 +206,21 @@ export class IdentityShelf{
       if(persona===null)return {...t,state:'no-markers',proposal:markedManual(text).persona,manual:this.manualInfo(text),review_waiting:waiting.has(MANUAL)};
       return {...t,state:'ok',text:persona,hash:hash(persona),manual:this.manualInfo(text),soul:this.soulInfo(),review_waiting:waiting.has(MANUAL)};
     }
+    // None yet is a part like any other: it is written by its first save.
+    if(t.kind==='extra'){const now=lf(text??'').trim();return {...t,state:text===null?'missing':'ok',text:now,hash:hash(now),soul:this.soulSize(),review_waiting:waiting.has(EXTRA)};}
     if(text===null)refuse('This file is missing.','MISSING',{status:404});
     this.safePath(t.file);
     return {...t,state:'ok',fields:this.view(t,text),hash:hash(Buffer.from(text,'utf8')),review_waiting:waiting.has(t.file)||t.kind==='rule'&&waiting.has(MANUAL),
       ...(t.kind==='rule'?{manual:this.manualInfo(this.readText(MANUAL))}:{}),...(t.kind==='skill'?{origin:this.skillOrigin(t.name,Buffer.from(text,'utf8'))}:{})};
   }
-  soulInfo(){const home=this.assistantHome(),soul=readSoul(home);return {kind:soul.kind,...(soul.kind==='own'&&soul.text!==null?{text:soul.text}:{})};}
+  // What the assistant's program reads first (SOUL.md): ours (written from "who it is" and the
+  // extra instructions), its owner's own text (shown on the page, with "Bring it here"), or none.
+  soulInfo(){const home=this.assistantHome(),soul=readSoul(home);return {kind:soul.kind,...(soul.kind==='own'?{text:soul.text,...(soul.linked?{linked:true}:{})}:{}),...this.soulSize()};}
+  // How long SOUL.md is when written from the two parts: Hermes reads at most SOUL_LIMIT of it.
+  soulSize(persona,extra){
+    try{persona??=personaOf(this.readText(MANUAL)||'');extra??=this.readText(EXTRA);}catch{}
+    return {chars:soulChars(persona||'',extra||''),limit:SOUL_LIMIT,warn:SOUL_LIMIT-1000};
+  }
   rulesState(manual){
     if(!compiler)return 'unavailable';if(manual===null)return 'no-manual';
     if(manual.indexOf(compiler.BEGIN)===-1||manual.indexOf(compiler.END)===-1)return 'no-place';
@@ -238,7 +251,8 @@ export class IdentityShelf{
     const rules=read.map(({rule})=>({...rule,n:numbers.get(rule.slug),...(rule.always?{}:{place:(({key,label})=>({key,label}))(placeOf(rule.where))})})).sort((a,b)=>a.n-b.n);
     const profile=this.profileNames().map(name=>{try{const text=this.readText('profile/'+name+'.md'),body=lf(splitFront(text).body),title=(body.match(/^#\s+(.+)$/m)||[])[1]||inWords(name);return {target:'profile:'+name,name,title:oneLine(title),preview:body.replace(/^#.*$/gm,'').replace(/<!--[\s\S]*?-->/g,'').trim().split('\n').find(Boolean)?.slice(0,160)||'',review_waiting:waiting.has('profile/'+name+'.md')};}catch{return null;}}).filter(Boolean).map((p,i)=>({n:i+1,...p}));
     const skills=this.skillNames().map(name=>{try{const bytes=this.readBytes('skills/'+name+'/SKILL.md'),h=readFront(splitFront(bytes.toString('utf8')).front);return {target:'skill:'+name,name,title:inWords(h.name||name),description:h.description||'',origin:this.skillOrigin(name,bytes),review_waiting:waiting.has('skills/'+name+'/SKILL.md')};}catch{return null;}}).filter(Boolean).map((k,i)=>({n:i+1,...k}));
-    return {manual:{...this.manualInfo(manual),review_waiting:waiting.has(MANUAL),rules_list:this.rulesState(manual),rules_program:this.rulesKeeper(manual)?.program??null},who,soul:this.soulInfo(),rules,profile,skills};
+    let extra;try{const e=this.read('extra');extra={state:e.state,text:e.text,hash:e.hash,review_waiting:e.review_waiting};}catch(error){extra={state:'unavailable',text:'',reason:error.message};}
+    return {manual:{...this.manualInfo(manual),review_waiting:waiting.has(MANUAL),rules_list:this.rulesState(manual),rules_program:this.rulesKeeper(manual)?.program??null},who,extra,soul:this.soulInfo(),rules,profile,skills};
   }
   // slug -> number. The rules read before every job keep the number the list in AGENTS.md gives
   // them (the compiler reads it back, compile-rules.js listed): that list is what the assistant
@@ -262,7 +276,8 @@ export class IdentityShelf{
     const o=this.overview(),name=oneLine(label).slice(0,40),always=o.rules.filter(r=>r.always),rest=o.rules.filter(r=>!r.always);
     const said=r=>detail&&r.line?' Now: "'+r.line+'"':'';
     const lines=['The owner has the notebook page '+(name?'"'+name+'" ':'')+'open that shows who you are, your rules, what you know about them and your skills, numbered as below. When they name one by its number ("rule 13", "profile page 2", "skill 4"), they mean the one with that number here. Change these only with the identity_files tool, as that page does: read the part first, then change it with its expected_hash and their words. Never change these files with file tools.',
-      'Who you are: target "who".'+(detail&&o.who.text?' Now: "'+oneLine(o.who.text)+'"':'')];
+      'Who you are: target "who".'+(detail&&o.who.text?' Now: "'+oneLine(o.who.text)+'"':''),
+      'Extra instructions, read right after who you are: target "extra".'+(detail?o.extra.text?' Now: "'+oneLine(o.extra.text)+'"':' None yet.':'')];
     if(always.length)lines.push('Rules read before every job, numbered as in AGENTS.md:',...always.map(r=>r.n+'. '+r.title+' ('+r.target+')'+said(r)));
     if(rest.length)lines.push('Rules read only when their subject comes up:',...rest.map(r=>r.n+'. '+r.title+' ('+r.target+'; '+r.place.label.toLowerCase()+')'+said(r)));
     if(o.profile.length)lines.push('Profile pages:',...o.profile.map(p=>p.n+'. '+p.title+' ('+p.target+')'));
@@ -272,7 +287,7 @@ export class IdentityShelf{
   // A cheap sign of whether any file the page shows changed: the chat compares it before and after
   // a reply, so the page shows what the assistant changed (domains.mjs).
   fingerprint(){
-    const files=[MANUAL,...this.ruleNames().map(s=>'rules/'+s+'.md'),...this.profileNames().map(n=>'profile/'+n+'.md'),...this.skillNames().map(n=>'skills/'+n+'/SKILL.md')];
+    const files=[MANUAL,EXTRA,...this.ruleNames().map(s=>'rules/'+s+'.md'),...this.profileNames().map(n=>'profile/'+n+'.md'),...this.skillNames().map(n=>'skills/'+n+'/SKILL.md')];
     return hash(files.map(f=>{try{const s=fs.statSync(path.join(this.root,f));return f+':'+s.size+':'+s.mtimeMs;}catch{return f+':-';}}).join('\n'));
   }
   // ---- The list of rules in AGENTS.md ---------------------------------------------------------
@@ -332,6 +347,7 @@ export class IdentityShelf{
       const before=new Map(writes.map(w=>[w.file,this.readBytes(w.file)]));
       for(const w of writes)this.safePath(w.file,{missing:true});
       const manualWrite=writes.find(w=>w.file===MANUAL),manual=manualWrite?this.checkManual(before.get(MANUAL)?.toString('utf8')??'',manualWrite.text??''):null;
+      if(writes.some(w=>w.file===MANUAL||w.file===EXTRA))this.checkSoul(before,writes);
       const changed=writes.filter(w=>{const old=before.get(w.file);return w.text===null?old!==null:old===null||!old.equals(Buffer.from(w.text,'utf8'));});
       if(!changed.length){outcome={unchanged:true};return {saved:true,unchanged:true,...extra};}
       this.store.publishFiles(changed.map(w=>w.text===null?{file:w.file,delete:true}:{file:w.file,text:w.text}));
@@ -341,20 +357,45 @@ export class IdentityShelf{
       const fullMessage=COMMIT_PREFIX+message+(by==='assistant'?' (asked in chat)':'');
       let recorded;try{recorded=this.history.record(changed.map(w=>({file:w.file,before:before.get(w.file),after:after.get(w.file)})),fullMessage,{body:words?'Asked in chat: '+oneLine(words).slice(0,500):undefined});}
       catch(error){recorded={commit:null,note:String(error.message).split('\n')[0]};}
-      outcome={manualChanged:changed.some(w=>w.file===MANUAL)};
+      outcome={soulChanged:changed.some(w=>w.file===MANUAL||w.file===EXTRA)};
       return {saved:true,message:fullMessage,files:changed.map(w=>w.file),recorded:{where:recorded.kind||null,commit:recorded.commit||null,...(recorded.note?{note:recorded.note}:{})},...(manual?{manual}:{}),...extra};
     },{timeoutMs:30000});
-    if(outcome?.manualChanged)result.soul=this.followPersona();
+    if(outcome?.soulChanged)result.soul=this.followPersona();
     // What the part holds now, read back from disk.
-    try{const now=this.read(t.target);result.now=now.kind==='who'?{text:now.text,hash:now.hash,state:now.state}:{fields:now.fields,hash:now.hash};}catch(error){if(error.code==='MISSING')result.now={removed:true};else throw error;}
+    try{const now=this.read(t.target);result.now=now.kind==='who'||now.kind==='extra'?{text:now.text,hash:now.hash,state:now.state}:{fields:now.fields,hash:now.hash};}catch(error){if(error.code==='MISSING')result.now={removed:true};else throw error;}
     return result;
   }
-  // Hermes' identity file follows "who it is", unless its owner wrote their own (assistant-soul.mjs).
+  // What the assistant's program reads first (SOUL.md) is "who it is" and the extra instructions
+  // together: a change that would make that longer than its program reads, or put words in the
+  // extra instructions that it refuses to read at all, is refused before anything is written.
+  checkSoul(before,writes){
+    const was=file=>before.has(file)?before.get(file)?.toString('utf8')??'':this.readText(file)??'';
+    const now=file=>{const w=writes.find(x=>x.file===file);return w?w.text??'':was(file);};
+    const size=soulChars(personaOf(now(MANUAL))||'',now(EXTRA)),earlier=soulChars(personaOf(was(MANUAL))||'',was(EXTRA));
+    if(size>SOUL_LIMIT&&size>earlier)refuse('This would make what your assistant reads first, "who it is" and the extra instructions together, '+size.toLocaleString('en')+' characters long. Its program reads only '+SOUL_LIMIT.toLocaleString('en')+' and drops the middle of a longer text. Make something shorter first.','SOUL_TOO_LONG',{soul:{chars:size,limit:SOUL_LIMIT}});
+    const found=newFindings(lf(was(EXTRA)),lf(now(EXTRA)));
+    if(found.length)refuse('Your assistant\'s program would refuse to read your extra instructions with "'+found[0].words+'" in them, because those words look like an attempt to take over an assistant. Please say it another way.','LOOKS_LIKE_TAKEOVER',{findings:found});
+  }
+  // Hermes' identity file follows "who it is" and the extra instructions, unless its owner wrote
+  // their own (assistant-soul.mjs).
   followPersona({take=false}={}){
     const home=this.assistantHome();if(!home)return {kind:'no-assistant',written:false};
     try{const persona=personaOf(this.readText(MANUAL)||'');if(persona===null)return {kind:readSoul(home).kind,written:false,reason:'no-persona'};
-      const outcome=syncSoul({home,persona,take,now:this.now()});return {kind:outcome.kind,written:outcome.written,...(outcome.reason?{reason:outcome.reason}:{}),...(outcome.kept?{kept_copy:true}:{})};}
+      const outcome=syncSoul({home,persona,extra:this.readText(EXTRA)??'',take,now:this.now()});return {kind:outcome.kind,written:outcome.written,...(outcome.reason?{reason:outcome.reason}:{}),...(outcome.kept?{kept_copy:true}:{})};}
     catch(error){return {kind:'unknown',written:false,reason:String(error.message).split('\n')[0]};}
+  }
+  // "Bring it here": a SOUL.md its owner wrote moves into the extra instructions, as a change of
+  // its own with an earlier version, after any extra instructions already there; then SOUL.md is
+  // written from this page, and the owner's file is kept beside it as a copy (syncSoul).
+  async bringSoulHere(options={}){
+    const home=this.assistantHome(),soul=readSoul(home);
+    if(soul.kind==='no-assistant')refuse('Your assistant\'s program is not connected on this computer.','NO_ASSISTANT',{status:404});
+    if(soul.kind!=='own')return {saved:true,unchanged:true,soul:this.followPersona()};
+    if(soul.linked||soul.text===null)refuse('That text is a link to a file somewhere else, so it is not brought here. Copy what you want to keep into the extra instructions yourself.','LINKED');
+    const t=this.target('extra'),own=lf(soul.text).trim();
+    const result=await this.change(t,current=>({writes:[{file:EXTRA,text:[current.text,own].filter(Boolean).join('\n\n')+'\n'}],message:'brought in the text the assistant\'s program read first'}),{...options,expected_hash:undefined});
+    result.soul=this.followPersona({take:true});
+    return result;
   }
   async save(target,input={},options={}){
     const t=this.target(target);
@@ -365,6 +406,12 @@ export class IdentityShelf{
         // Only a change is held to the length: the paragraph as it stands always saves.
         if(text!==current.text&&chars(text)>4000)refuse('Keep "who it is" to a few paragraphs, at most 4,000 characters.','TOO_LONG');
         const manual=this.readText(MANUAL);return {writes:[{file:MANUAL,text:withPersona(manual,text)}],message:'changed who it is'};},options);
+    }
+    // The extra instructions: the whole text; none at all removes the file, an earlier version keeps it.
+    if(t.kind==='extra'){
+      const text=lf(input.text??input.fields?.text??'').trim();
+      return this.change(t,current=>{const eol=(this.readText(EXTRA)||'').includes('\r\n')?'\r\n':'\n';
+        return {writes:[{file:EXTRA,text:text?(text+'\n').replace(/\n/g,eol):null}],message:!text?'removed the extra instructions':current.state==='missing'?'added the extra instructions':'changed the extra instructions'};},options);
     }
     const fields=input.fields||{};
     if(t.kind==='rule')return this.change(t,current=>this.rulePlan(t,current,fields,'changed the rule "'+t.name+'"'),options);
@@ -454,7 +501,7 @@ export class IdentityShelf{
     for(const v of raw){const view=this.viewText(t,this.view(t,v.text));if(out.length&&view===last)continue;last=view;out.push({...v,view});}
     if(!out.length||last!==currentView){let at=null;try{at=fs.statSync(path.join(this.root,t.file)).mtime.toISOString();}catch{}out.push({commit:null,at:at||this.now().toISOString(),author:null,message:null,body:'',text:current,view:currentView,unrecorded:true});}
     return out.reverse().slice(0,limit).map((v,i)=>({id:v.commit||'now',at:v.at,current:i===0&&v.view===currentView,removed:v.view===null,by:this.byWhom(v),message:v.message&&v.message.startsWith(COMMIT_PREFIX)?v.message.slice(COMMIT_PREFIX.length):v.message,
-      ...(t.kind==='who'?{text:v.view}:{fields:v.view===null?null:JSON.parse(v.view)}),...(v.unrecorded?{unrecorded:true}:{})}));
+      ...(t.kind==='who'||t.kind==='extra'?{text:v.view}:{fields:v.view===null?null:JSON.parse(v.view)}),...(v.unrecorded?{unrecorded:true}:{})}));
   }
   byWhom(v){
     if(v.unrecorded)return 'not kept as a version yet';
@@ -486,7 +533,7 @@ export class IdentityShelf{
       },options);
     }
     const text=raw?raw.text:null;
-    if(t.kind!=='rule'&&text===null)refuse('This file did not exist then, so there is nothing to bring back.','NO_VERSION');
+    if(!['rule','extra'].includes(t.kind)&&text===null)refuse('This file did not exist then, so there is nothing to bring back.','NO_VERSION');
     return this.change({...t,missingOk:true},()=>{
       const writes=[{file:t.file,text}];
       if(t.kind==='rule'){const manual=this.readText(MANUAL);if(manual!==null){const g=this.gather(manual,new Map([[t.name,text]]));if(g.problem)refuse(g.problem,g.code||'RULES_PROBLEM');if(g.next!==manual)writes.push({file:MANUAL,text:g.next});}}

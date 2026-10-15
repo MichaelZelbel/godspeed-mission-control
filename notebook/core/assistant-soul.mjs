@@ -14,11 +14,19 @@ import {atomic,hash} from './records/store.mjs';
 // Control", and a routine's message was written by Hermes Agent alone. On the test server the
 // Telegram chat's stored prompt began with Hermes' text (state.db, session of 4 October 2026).
 //
-// The persona paragraph of AGENTS.md (its "who it is", between the persona markers) is the one
-// source. This file is written from it: when it is missing, when it is Hermes' own untouched
-// default, and when it is one this module wrote. One its owner wrote themselves is never
-// replaced silently: the Identity page says so and offers to replace it, keeping a copy.
-export const SOUL_MARK='<!-- godspeed:who-it-is - written by Godspeed Mission Control from the who-it-is paragraph of AGENTS.md. Change that paragraph, not this file: this file follows it. -->';
+// Two sources, both shown and changed on the notebook page that shows who the assistant is: the
+// persona paragraph of AGENTS.md (its "who it is", between the persona markers), and the owner's
+// extra instructions (assistant/extra-instructions.md, EXTRA), which follow it with a blank line
+// between. This file is written from them: when it is missing, when it is Hermes' own untouched
+// default, and when it is one this module wrote. One its owner wrote themselves is never replaced
+// silently: the page says Hermes also reads a text it does not hold yet, shows it, and "Bring it
+// here" moves that text into the extra instructions, keeping the old file as a copy beside it
+// (16 October 2026: what the assistant's program reads is never a file nobody can see).
+export const SOUL_MARK='<!-- godspeed:who-it-is - written by Godspeed Mission Control from the who-it-is paragraph of AGENTS.md and from assistant/extra-instructions.md. Change those, not this file: this file follows them. -->';
+export const EXTRA='assistant/extra-instructions.md';
+// Hermes reads at most this much of a context file and drops the middle of a longer one
+// (prompt_builder.py CONTEXT_FILE_MAX_CHARS), SOUL.md included.
+export const SOUL_LIMIT=20000;
 const normal=text=>String(text??'').replace(/\r\n?/g,'\n').replace(/^﻿/,'').trim();
 // Hermes' own seeded texts (hermes_cli/default_soul.py: DEFAULT_SOUL_MD, its ASCII variant, the
 // previous generation and the two comment-only scaffolds older installers wrote). A file equal to
@@ -34,7 +42,8 @@ export const HERMES_DEFAULTS=[
   SCAFFOLD_HEAD+SCAFFOLD_TAIL,
 ].map(normal);
 
-export function soulText(persona){return SOUL_MARK+'\n\n'+normal(persona)+'\n';}
+export function soulText(persona,extra=''){return SOUL_MARK+'\n\n'+normal(persona)+(normal(extra)?'\n\n'+normal(extra):'')+'\n';}
+export const soulChars=(persona,extra)=>[...soulText(persona,extra)].length;
 const recordFile=home=>path.join(home,'.godspeed-soul.json');
 const lastWritten=home=>{try{return JSON.parse(fs.readFileSync(recordFile(home),'utf8')).hash||null;}catch{return null;}};
 
@@ -53,16 +62,20 @@ export function readSoul(home){
   return {kind:'own',file,text};
 }
 
-// Brings SOUL.md in step with `persona`. take: also replace the owner's own file (the Identity
-// page's "use who it is there too"). Whatever is replaced that was not written from "who it is"
-// unchanged is kept beside it first.
-export function syncSoul({home,persona,take=false,now=new Date()}){
+// The extra instructions in a workspace, or '' (a missing file is none).
+export function readExtra(root){try{return fs.readFileSync(path.join(root,EXTRA),'utf8');}catch{return '';}}
+// Brings SOUL.md in step with `persona` and `extra`. take: also replace the owner's own file (the
+// page's "Bring it here", after its text was moved into the extra instructions). Whatever is
+// replaced that was not written from them unchanged is kept beside it first. A text past what
+// Hermes reads is not written (the page refuses such a change before it is saved).
+export function syncSoul({home,persona,extra='',take=false,now=new Date()}){
   const soul=readSoul(home);
   if(soul.kind==='no-assistant')return {...soul,written:false};
   if(!normal(persona))return {kind:soul.kind,file:soul.file,written:false,reason:'no-persona'};
   if(soul.linked)return {kind:soul.kind,file:soul.file,written:false,reason:'linked'};
   if(soul.kind==='own'&&!take)return {kind:'own',file:soul.file,written:false,reason:'own'};
-  const want=soulText(persona);
+  const want=soulText(persona,extra);
+  if([...want].length>SOUL_LIMIT)return {kind:soul.kind,file:soul.file,written:false,reason:'too-long'};
   if(soul.text===want)return {kind:soul.kind,file:soul.file,written:false,inStep:true};
   let kept=null;
   if(soul.kind==='own'||soul.kind==='hermes'||soul.edited){
