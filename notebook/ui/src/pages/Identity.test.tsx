@@ -6,7 +6,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import "@testing-library/jest-dom/vitest";
 import Identity from "./Identity";
 import { InstructionsMoved } from "@/components/profile/InstructionsMoved";
-import { reflow, sizeLine, sizeState, versionLine } from "@/lib/identity";
+import { reflow, sizeLine, sizeState, versionLine, versionWords } from "@/lib/identity";
 
 vi.mock("@/components/SEOHead", () => ({ SEOHead: () => null }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn() } }));
@@ -142,5 +142,8 @@ describe("identity helpers", () => {
   });
   it("words a version without its machinery", () => {
     expect(versionLine({ id: "x", at: "", current: false, removed: false, by: "", message: "changed who it is (asked in chat)" })).toBe("Changed who it is");
+    expect(versionWords({ id: "c1", at: "", current: false, removed: false, by: "you, on this page", message: "changed who it is" })).toBe("Changed who it is, you, on this page");
+    // A version not kept yet says so once, not twice (a fresh installation showed it on every part).
+    expect(versionWords({ id: "now", at: "", current: true, removed: false, by: "not kept as a version yet", message: null, unrecorded: true })).toBe("Changed outside this page, not kept as a version yet");
   });
 });

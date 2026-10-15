@@ -110,3 +110,9 @@ export function versionLine(v: Version): string {
   const what = v.message ? v.message.replace(/ \(asked in chat\)$/, "") : "Saved";
   return what.charAt(0).toUpperCase() + what.slice(1);
 }
+// The line under a version: what changed, and by whom. A version not kept yet already says so,
+// and the server's "by" for it says the same again (15 October 2026: "..., not kept as a version
+// yet, not kept as a version yet" on every part of a fresh installation).
+export function versionWords(v: Version): string {
+  return v.unrecorded || !v.by ? versionLine(v) : versionLine(v) + ", " + v.by;
+}

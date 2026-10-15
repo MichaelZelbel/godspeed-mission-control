@@ -18,7 +18,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { ScopeBadge, SCOPE_OPTIONS } from "@/components/profile/ScopeBadge";
 import { cn } from "@/lib/utils";
 import {
-  GROUPS, ORIGIN_WORDS, identity, manualAfter, reflow, sizeLine, sizeState, versionLine, whenLabel, ruleListLine,
+  GROUPS, ORIGIN_WORDS, identity, manualAfter, reflow, sizeLine, sizeState, versionWords, whenLabel, ruleListLine,
   type Instruction, type InstructionVersion, type Item, type ManualSize, type Overview, type RuleFields, type RuleGroup, type SkillFields, type PageFields, type Version,
 } from "@/lib/identity";
 
@@ -103,7 +103,7 @@ function Versions({ target, kind, hash, onChanged }: { target: string; kind: Ite
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div className="min-w-0">
                 <p className="text-sm font-medium">{whenLabel(v.at)}{v.current && <Badge variant="secondary" className="ml-2 align-middle">Now</Badge>}</p>
-                <p className="text-xs text-muted-foreground">{versionLine(v)}, {v.by}</p>
+                <p className="text-xs text-muted-foreground">{versionWords(v)}</p>
               </div>
               <div className="flex gap-2">
                 <Button size="sm" variant="ghost" className="min-h-11 sm:min-h-9" aria-expanded={open === v.id} onClick={() => setOpen(open === v.id ? null : v.id)}>{open === v.id ? "Hide" : "Show"}</Button>
