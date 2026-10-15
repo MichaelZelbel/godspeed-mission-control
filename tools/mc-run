@@ -170,11 +170,12 @@ limits_shell() {
 #                  folder. The working folder is the mission control, and it holds what later runs
 #                  with the whole shell execute: routines, scripts, recipes, the decision's prompt,
 #                  the hooks. With dontAsk whatever the list does not allow is refused, so a run
-#                  writes only where its Write(<path>) and Edit(<path>) rules say, relative to the
-#                  working folder, e.g. Edit(goals/research/**). An Edit in the list makes the Write
-#                  tool exist as well: Claude Code 2.1.296 holds Write to the Edit rules and skips a
-#                  Write(<path>) rule with a warning in $OUT.stderr; the list names both, so a later
-#                  Claude Code that reads Write rules is held to the same folders.
+#                  writes only where its Edit(<path>) rules say, e.g. Edit(/goals/research/**), a
+#                  path in the working folder (anchor_rules below says why that is written for it).
+#                  An Edit in the list makes the Write tool exist as well, and Claude Code checks
+#                  every file tool against the Edit rules only: a Write(<path>) rule is never read
+#                  ("Use Edit(...) instead (Edit rules cover all file-editing tools)" in
+#                  $OUT.stderr), so a list names Edit alone.
 #   --tools        the tools the list names, and ToolSearch, which loads the notebook's tools.
 #                  Nothing else exists in the run, so a tool the list forgot cannot be used.
 #   --strict-mcp-config, and --mcp-config with a file holding only the servers the list names
@@ -200,8 +201,53 @@ help_probe() { # what this claude knows; a claude that hangs here must not hold 
   else claude --help 2>&1
   fi
 }
+# A FILE RULE MEANS THE RUN'S FOLDER, WHEREVER THE ASSISTANT HAS cd'd TO (2026-10-15). Claude Code
+# reads a plain path in a Read(...) or Edit(...) rule against its CURRENT folder, and its Bash tool
+# keeps a cd from one command to the next. A research night began with
+# `cd goals/research/financial-security && ls` (read-only, so allowed) and never went back, so
+# Edit(goals/research/**) then meant goals/research/financial-security/goals/research/**: every
+# save was refused, twice, and the goal had no night. So a plain path, and a /path (which Claude
+# Code anchors at the folder it started in), is written here as the absolute path Claude Code reads
+# as one, //<the run's folder>/<path>:
+#   - on Windows Claude Code matches C:\x as /c/x, so C:/x becomes /c/x (cygpath -u is not that:
+#     it writes the Temp folder as /tmp);
+#   - [ ] * ? \ in the folder's name are escaped, or the rule reads them as a pattern;
+#   - a folder reached through a symlink is named twice, as given and where it really is, because
+#     an allow rule holds only when the path asked for AND the file it leads to both match;
+#   - a path with no / in it (*.md) keeps matching at any depth: //<folder>/**/*.md.
+# A rule that is already absolute (//x, ~/x), a carve-out (!x) or one above the folder (../x) is
+# passed as written. Tested with real headless runs (dontAsk, --restricted) that cd into the goal's
+# folder first: Claude Code 2.1.300 on Linux (a folder with a space, one with [ ], one through a
+# symlink) and 2.1.270 on Windows; the plain rule refused every save, the anchored one let the
+# saves in goals/research/ and ideas/ through and refused skills/ and goals/.
+claude_path() { # a folder written as Claude Code matches it
+  local p="$1"
+  case "$p" in [A-Za-z]:/*) p="/$(printf '%s' "${p%%:*}" | tr 'A-Z' 'a-z')/${p#?:/}" ;; esac
+  printf '%s' "$p" | sed 's/[][*?\\]/\\&/g'
+}
+anchor_rules() {
+  local roots=() r phys w tool p out=()
+  r="$(cd "$CWD" 2>/dev/null && pwd)" || return 0
+  r="$(winpath "$r")"; r="${r%/}"; [ -n "$r" ] || return 0
+  roots+=("$(claude_path "$r")")
+  phys="$(cd "$CWD" 2>/dev/null && pwd -P)"; phys="$(winpath "$phys")"; phys="${phys%/}"
+  if [ -n "$phys" ]; then phys="$(claude_path "$phys")"; [ "$phys" = "${roots[0]}" ] || roots+=("$phys"); fi
+  for w in "${TOOLS_LIST[@]}"; do
+    case "$w" in
+      'Read('*')'|'Edit('*')')
+        tool="${w%%(*}"; p="${w#*(}"; p="${p%)}"
+        case "$p" in ./*) p="${p#./}" ;; //*|'~'*) out+=("$w"); continue ;; /*) p="${p#/}" ;; esac
+        case "$p" in ''|.|..|../*|'!'*) out+=("$w"); continue ;; esac
+        case "$p" in */*) ;; *) p="**/$p" ;; esac
+        for r in "${roots[@]}"; do out+=("$tool(/$r/$p)"); done ;;
+      *) out+=("$w") ;;
+    esac
+  done
+  TOOLS_LIST=("${out[@]}")
+}
 claude_binding() {
   limits_shell || return 0
+  anchor_rules
   local names="" servers=() w n s help m src="" node=""
   for w in "${TOOLS_LIST[@]}"; do
     n="${w%%(*}"

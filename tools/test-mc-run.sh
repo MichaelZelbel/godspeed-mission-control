@@ -110,7 +110,9 @@ check "the answer's last line is the assistant's, not Hermes' waiting line" "$(t
 # names) and the mission control's .mcp.json; a list that grants the whole shell, and no list, do not.
 printf '{ "mcpServers": { "notebook": { "command": "nb", "env": { "KEY": "${NB_KEY}" } }, "planino": { "command": "pl" } } }\n' > "$G/.mcp.json"
 GW="$G"; command -v cygpath >/dev/null 2>&1 && GW="$(cygpath -m "$G")"
-LIMITED="Bash(mc-goals:*) Bash(ls:*) Read Write(goals/research/**) Edit(goals/research/**) WebFetch mcp__notebook__search_brain"
+LIMITED="Bash(mc-goals:*) Bash(ls:*) Read Edit(/goals/research/**) WebFetch mcp__notebook__search_brain"
+# The mission control's folder as Claude Code matches a path (C:/x is /c/x on Windows).
+GC="$(cd "$G" && pwd)"; command -v cygpath >/dev/null 2>&1 && GC="$(cygpath -m "$GC" | sed -E 's#^([A-Za-z]):#/\L\1#')"
 runl() { # runner help-kind list
   rm -f "$L/$1.args" "$L/$1.help" "$L/$1.mcp"
   HOME="$TMP/home" PATH="$B:$PATH" GODSPEED_RUNNER="$1" STAND_HELP="$2" bash "$HERE/mc-run" big --godspeed "$G" \
@@ -121,7 +123,7 @@ runl claude restricted "$LIMITED"; check "  it finished" "$?" "0"
 args="$(cat "$L/claude.args" 2>/dev/null)"
 contains "  claude runs restricted, so the computer's settings cannot add to the list" "$args" "[--restricted]"
 contains "  with only the tools the list names, and ToolSearch" "$args" "[--tools]
-[Bash,Read,Write,Edit,WebFetch,ToolSearch]"
+[Bash,Read,Edit,Write,WebFetch,ToolSearch]"
 contains "  in dontAsk mode, so it writes only where the list says" "$args" "[--permission-mode]
 [dontAsk]"
 missing "  never acceptEdits, which approves every edit in the mission control" "$args" "acceptEdits"
@@ -132,13 +134,12 @@ contains "  the server the list names is in that file" "$mcp" '"notebook"'
 contains "  with its key still named, never filled in" "$mcp" '${NB_KEY}'
 missing "  a server the list does not name is not" "$mcp" "planino"
 check "  and the file is gone when the run ends" "$(ls "${TMPDIR:-/tmp}"/mc-run-mcp.* 2>/dev/null | wc -l | tr -d ' ')" "0"
-contains "  and the list follows, one word per pattern" "$args" "[--allowedTools]
+contains "  and the list follows, one word per pattern, its file rule anchored at the mission control" "$args" "[--allowedTools]
 [Bash(mc-goals:*)]
 [Bash(ls:*)]
 [Read]
-[Write(goals/research/**)]
-[Edit(goals/research/**)]
-[WebFetch]
+[Edit(/$GC/goals/research/**)]"
+contains "  the rest of the list as given" "$args" "[WebFetch]
 [mcp__notebook__search_brain]"
 runl claude restricted "Bash(ls:*) Read WebFetch"
 args="$(cat "$L/claude.args" 2>/dev/null)"
@@ -183,6 +184,52 @@ runl hermes restricted "Bash Read"
 check "hermes with a whole-shell list says nothing about it" "$(cat "$L/hermes.err" 2>/dev/null)" ""
 contains "a whole-shell list keeps acceptEdits" "$(runl claude restricted "Bash Read"; cat "$L/claude.args")" "[acceptEdits]"
 rm -f "$G/.mcp.json"
+
+# A FILE RULE MEANS THE RUN'S FOLDER, WHEREVER THE ASSISTANT HAS cd'd TO (2026-10-15). Claude Code
+# reads a plain path in an Edit rule against its current folder, and its shell keeps a cd: a night
+# that began with `cd goals/research/<goal>` had every save refused. So mc-run writes a plain path
+# and a /path as the run's folder's absolute path (//...), escapes what gitignore reads as a
+# pattern, writes C:/x as /c/x on Windows, and names a folder reached through a symlink twice. The
+# expected rules are spelled out by hand here, never worked out the way mc-run does it.
+echo "-- a file rule is anchored at the run's folder"
+TP="$(cd "$TMP" && pwd -P)"
+G4="$TMP/mission [control] one"; mkdir -p "$G4/rules" "$G4/skills"; cp -r "$G/skills/big" "$G4/skills/"
+ANCHOR_LIST="Bash(ls:*) Read Edit(goals/research/**) Edit(./ideas/**) Edit(/notes/**) Edit(*.tmp) Read(docs/**) Edit(//etc/keep/**) Edit(~/keep/**) Edit(!x) Edit(../up/**) WebFetch"
+runa() { # folder
+  rm -f "$L/claude.args"
+  HOME="$TMP/home" PATH="$B:$PATH" GODSPEED_RUNNER=claude STAND_HELP=restricted bash "$HERE/mc-run" big --godspeed "$1" \
+    --out "$TMP/anchor.txt" --timeout 60 --allowed-tools "$ANCHOR_LIST" 2> "$L/claude.err"
+  cat "$L/claude.args" 2>/dev/null
+}
+if command -v cygpath >/dev/null 2>&1; then
+  # Windows: C:/Users/me/... is matched as /c/Users/me/...; cygpath -u is not that (it writes the
+  # Temp folder as /tmp), so the drive is spelled out from the C:/ form.
+  W4="$(cygpath -m "$G4" | sed -E 's#^([A-Za-z]):#/\L\1#; s#\[#\\[#g; s#\]#\\]#g')"
+  args="$(runa "$G4")"
+  contains "a plain path is the folder's, as Windows paths are matched (/c/...)" "$args" "[Edit(/$W4/goals/research/**)]"
+  missing "  never the /tmp of cygpath -u" "$args" "[Edit(//tmp/"
+else
+  # The run starts in the mission control through a symlink: both spellings are named.
+  ln -s "$G4" "$TMP/mc-link"
+  W4="$TMP/mc-link"; P4="$TP/mission \\[control\\] one"
+  args="$(runa "$TMP/mc-link")"
+  contains "a plain path is anchored at the folder the run starts in, as given" "$args" "[Edit(/$W4/goals/research/**)]"
+  contains "  and where that folder really is, its [ ] escaped" "$args" "[Edit(/$P4/goals/research/**)]"
+  contains "  a /path the same" "$args" "[Edit(/$W4/notes/**)]
+[Edit(/$P4/notes/**)]"
+  W4="$P4"
+fi
+contains "  ./path the same" "$args" "[Edit(/$W4/ideas/**)]"
+contains "  a name with no / still matches at any depth" "$args" "[Edit(/$W4/**/*.tmp)]"
+contains "  Read rules too" "$args" "[Read(/$W4/docs/**)]"
+contains "  an absolute rule stays as written" "$args" "[Edit(//etc/keep/**)]"
+contains "  a home rule stays as written" "$args" "[Edit(~/keep/**)]"
+contains "  a carve-out stays as written" "$args" "[Edit(!x)]"
+contains "  a rule above the folder stays as written" "$args" "[Edit(../up/**)]"
+missing "  no plain path is left" "$args" "[Edit(goals/research/**)]"
+check "  the run still finishes" "$(cat "$TMP/anchor.txt" | tail -n 1)" "RESULT: done"
+args="$(rm -f "$L/claude.args"; HOME="$TMP/home" PATH="$B:$PATH" GODSPEED_RUNNER=claude bash "$HERE/mc-run" big --godspeed "$G4" --out "$TMP/anchor.txt" --timeout 60 --allowed-tools "Bash Read Edit(goals/research/**)" 2>/dev/null; cat "$L/claude.args")"
+contains "a whole-shell list is passed as given" "$args" "[Edit(goals/research/**)]"
 
 # ALREADY IN A CAGE (2026-10-13). On the server a cron job runs in agent-cage as a whole, and
 # agent-cage called again inside a cage keeps the first clock and puts no limit of its own on the

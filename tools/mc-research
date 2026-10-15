@@ -91,9 +91,14 @@ if [ "$DRY" -eq 1 ]; then echo "Due tonight ($TODAY):"; printf '%s\n' "${DUE:-no
 # a bare Write or Edit would let a night plant a command there. Because the list limits the shell,
 # mc-run makes it binding (claude --restricted, dontAsk): the computer's own settings cannot add
 # to it, and whatever it does not allow is refused. mc-run passes the list as separate words, so
-# each Bash(...) and Write(...) pattern survives.
+# each Bash(...) and Edit(...) pattern survives.
+# The two Edit rules hold every file tool (Claude Code checks Write against the Edit rules and never
+# reads a Write(...) rule). Their paths start with / (the folder the run starts in, the mission
+# control), and mc-run writes them out as that folder's absolute path: a plain goals/research/**
+# follows the assistant's cd, and on 2026-10-15 a night that began with `cd goals/research/<goal>`
+# had every save refused.
 # Hermes and Codex take no list; with them the read-only rule rests on the recipe's wording.
-TOOLS="Bash(mc-check-research:*) Bash(mc-goals:*) Bash(ls:*) Bash(wc:*) Read Grep Glob Write(goals/research/**) Edit(goals/research/**) Write(ideas/**) Edit(ideas/**) WebSearch WebFetch mcp__notebook__search_brain mcp__notebook__get_note"
+TOOLS="Bash(mc-check-research:*) Bash(mc-goals:*) Bash(ls:*) Bash(wc:*) Read Grep Glob Edit(/goals/research/**) Edit(/ideas/**) WebSearch WebFetch mcp__notebook__search_brain mcp__notebook__get_note"
 # An mc-run from before 2026-10-13 passes the list without binding it, or binds it but approves
 # every edit in the mission control. Said in the summary, so a night that was not held to its list
 # never reads as one that was. A run whose claude could not be held says so in its .stderr.

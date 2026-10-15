@@ -210,9 +210,11 @@ mc-work going-out           what goes out today unless you say stop
   commands, as the nightly research's does, binds Claude Code: it runs with
   `--restricted` and `--permission-mode dontAsk`, so the settings on the computer
   cannot allow more, whatever the list does not allow is refused, and it writes
-  only in the folders its `Write(...)`/`Edit(...)` rules name (the research:
+  only in the folders its `Edit(...)` rules name (the research:
   `goals/research/` and `ideas/`), never in the routines, scripts, recipes or hooks
-  that later runs execute with the whole shell. Only the MCP servers the list names
+  that later runs execute with the whole shell. Those folders are counted from the
+  folder the run starts in, also after the assistant has moved into one of them
+  with `cd`. Only the MCP servers the list names
   start. Such a run reads none of your Claude Code settings files, so its login
   must come from `claude login` or the environment (`CLAUDE_CODE_OAUTH_TOKEN`,
   `ANTHROPIC_API_KEY`), not from a key or helper set in `settings.json`. A

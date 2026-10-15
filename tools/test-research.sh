@@ -1,7 +1,14 @@
 #!/usr/bin/env bash
 # The gate for mc-research: every due goal gets its night, a failed night leaves a gap file and a
 # loud exit, and the time budget skips the most recently researched goals, by name.
+#
+# `bash tools/test-research.sh --live` also runs one small real night through this computer's
+# claude (its own login), in a throwaway mission control: it moves into the goal's folder, then
+# saves inside and tries to save outside. It costs a few cents and needs a logged-in Claude Code.
 set -uo pipefail
+LIVE=0; [ "${1:-}" = --live ] && LIVE=1
+# The guard below empties these; the live run needs the real ones for its login.
+REAL_HOME="$HOME"; REAL_USERPROFILE="${USERPROFILE:-}"; REAL_APPDATA="${APPDATA:-}"; REAL_LOCALAPPDATA="${LOCALAPPDATA:-}"; REAL_CCD="${CLAUDE_CONFIG_DIR:-}"
 . "$(dirname "$0")/test-guard.bash"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 NODE=""; for c in node nodejs /usr/local/bin/node /usr/bin/node; do "$c" -e '' >/dev/null 2>&1 && { NODE="$c"; break; }; done
@@ -16,6 +23,7 @@ ok()  { PASS=$((PASS+1)); printf '  ok   %s\n' "$1"; }
 bad() { FAIL=$((FAIL+1)); printf '  FAIL %s\n' "$1"; }
 check()    { if [ "$2" = "$3" ]; then ok "$1"; else bad "$1 (wanted [$3], got [$2])"; fi; }
 contains() { case "$2" in *"$3"*) ok "$1";; *) bad "$1 (missing [$3] in: $(printf '%s' "$2" | head -5))";; esac; }
+missing()  { case "$2" in *"$3"*) bad "$1 (should not contain [$3])";; *) ok "$1";; esac; }
 hg() { GODSPEED_ROOT="$G" "$NODE" "$HERE/goals.js" "$@"; }
 hg file --kind outcome --title "Money" --id money --area money --status adopted --source x >/dev/null
 hg file --kind outcome --title "Health" --id health --area health --status adopted --source x >/dev/null
@@ -216,11 +224,13 @@ N="$(printf '%s' "${LINE#sleep: done (founding): }" | wc -c | tr -d ' ')"
 # anywhere in the mission control, which holds what later runs execute with the whole shell. The
 # list names goal research and ideas only, and mc-run runs claude in dontAsk, not acceptEdits.
 A2="$(cat "$TMP/b2.args" 2>/dev/null)"
-contains "the night's list writes only in goals/research and ideas" "$A2" "[Write(goals/research/**)]
-[Edit(goals/research/**)]
-[Write(ideas/**)]
-[Edit(ideas/**)]"
+# The mission control's folder as Claude Code matches a path (C:/x is /c/x on Windows).
+G2C="$(cd "$G2" && pwd)"; command -v cygpath >/dev/null 2>&1 && G2C="$(cygpath -m "$G2C" | sed -E 's#^([A-Za-z]):#/\L\1#')"
+contains "the night's list writes only in goals/research and ideas, of this mission control" "$A2" "[Edit(/$G2C/goals/research/**)]
+[Edit(/$G2C/ideas/**)]"
 case "$A2" in *"[Write]"*|*"[Edit]"*) bad "  and has no bare Write or Edit";; *) ok "  and has no bare Write or Edit";; esac
+# Claude Code never reads a Write(<path>) rule (Edit rules hold every file tool) and warns about one.
+missing "  and no Write(...) rule, which Claude Code never reads" "$A2" "[Write("
 contains "  claude runs in dontAsk" "$A2" "[--permission-mode]
 [dontAsk]"
 missing "  never acceptEdits" "$A2" "acceptEdits"
@@ -262,6 +272,136 @@ check "a budget with no room for the two checks exits 1" "$?" "1"
 contains "  and skips the goal by name" "$(cat "$G2/routines/research/2026-10-22/summary.txt")" "skipped for time: sleep"
 OUT="$(HOME="$TMP/home" PATH="$B2:$PATH" GODSPEED_RUNNER=claude bash "$HERE/mc-research" --godspeed "$G2" --date 2026-10-22 --only sleep --budget-minutes 16 --timeout-daily 30 --timeout-founding 30 --fetch-quotes 0 2>&1)"
 check "  the same budget fits when the checks read no pages" "$?" "0"
+
+# A NIGHT THAT MOVES INTO ITS GOAL'S FOLDER STILL SAVES THERE, AND ONLY THERE (2026-10-15). Claude
+# Code reads a plain path in an Edit rule against its CURRENT folder, and its shell keeps a cd. The
+# financial-security night began with `cd goals/research/financial-security && ls` and never went
+# back, so Edit(goals/research/**) pointed into goals/research/financial-security/goals/research/
+# and every save was refused, twice. This stand-in holds its file tools to its Edit rules the way
+# Claude Code does (checked with real runs, see mc-run's anchor_rules): //x is the absolute x, ~/x
+# the home's, /x the folder it started in, x the folder it is in now. Its first act is that cd.
+# Then it saves a whole night and tries files outside goals/research/ and ideas/.
+echo "-- a night that moves into its goal's folder first"
+export GODSPEED_TODAY=2026-10-23
+G3="$TMP/mission control three"; B3="$TMP/bin3"; mkdir -p "$G3/rules" "$G3/skills/goal-research" "$G3/ideas" "$G3/routines" "$B3"
+cp "$HERE/../starter-godspeed/skills/goal-research/SKILL.md" "$G3/skills/goal-research/SKILL.md"
+: > "$G3/AGENTS.md"
+GODSPEED_ROOT="$G3" "$NODE" "$HERE/goals.js" file --kind outcome --title "Money" --id money --area money --status adopted --source x >/dev/null
+cat > "$TMP/cd-claude.js" <<'JS'
+const fs = require("fs"), path = require("path");
+const log = process.argv[2], args = process.argv.slice(3);
+const at = args.indexOf("--allowedTools"), rules = at >= 0 ? args.slice(at + 1) : [];
+let prompt = ""; try { prompt = fs.readFileSync(0, "utf8"); } catch (e) {}
+const goal = (prompt.match(/Goal: ([a-z0-9-]+)\. Mode/) || [])[1], day = (prompt.match(/Today is ([0-9-]+) \(UTC\)/) || [])[1];
+// As Claude Code matches a path: forward slashes, and C:\x is /c/x.
+const posix = (p) => { p = p.replace(/\\/g, "/"); const m = p.match(/^([A-Za-z]):\/?(.*)$/); return m ? "/" + m[1].toLowerCase() + "/" + m[2] : p; };
+const start = process.cwd(), home = process.env.HOME || "";
+const cwd = path.join(start, "goals", "research", goal); // the night's first command: cd goals/research/<goal>
+const anchor = (p) => p.startsWith("//") ? p.slice(1) : p.startsWith("~/") ? posix(home) + p.slice(1)
+  : p.startsWith("/") ? posix(start) + p : posix(cwd) + "/" + p.replace(/^\.\//, "");
+const regex = (pat) => { let re = "";
+  for (let i = 0; i < pat.length; i++) {
+    const c = pat[i];
+    if (c === "\\" && i + 1 < pat.length) re += pat[++i].replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    else if (pat.startsWith("/**", i) && i + 3 === pat.length) { re += "/.*"; i += 2; }
+    else if (pat.startsWith("**/", i)) { re += "(?:.*/)?"; i += 2; }
+    else if (c === "*") re += "[^/]*";
+    else if (c === "?") re += "[^/]";
+    else re += c.replace(/[.+^${}()|[\]\\]/g, "\\$&");
+  }
+  return new RegExp("^" + re + "$"); };
+const allowed = (f) => rules.some((r) => { const m = r.match(/^Edit\((.*)\)$/); return !!m && regex(anchor(m[1])).test(posix(f)); });
+const save = (rel, change) => { // rel is written from the goal's folder, where the night now is
+  const f = path.resolve(cwd, rel), ok = allowed(f);
+  fs.appendFileSync(log, (ok ? "allowed " : "refused ") + path.relative(start, f).replace(/\\/g, "/") + "\n");
+  if (!ok) return; fs.mkdirSync(path.dirname(f), { recursive: true });
+  fs.writeFileSync(f, change(fs.existsSync(f) ? fs.readFileSync(f, "utf8") : ""));
+};
+save(`days/${day}.md`, () => `# ${goal}\n\n## Searched\n${"word ".repeat(160)}\n\n## Found\nx\n\n## Changed in the files\nx\n`);
+save("brief.md", (t) => t.replace(/^UPDATED: .*/m, `UPDATED: ${day}`));
+save("people.md", (t) => t + Array.from({ length: 30 }, (_, i) => `PERSON: P${i} ${day}\nLINK: https://e.org/${i}\nWHY: w\nLAST: never read\nOFFER: o\nSTATUS: verified ${day}\nHOT: no\n\n`).join(""));
+save(`../../../ideas/${goal}-opening.md`, () => `TITLE: an opening for ${goal}\n`);
+save("../../../skills/planted/SKILL.md", () => "planted\n");
+save(`../../${goal}.md`, (t) => t + "\nplanted\n");
+save(path.join(start, "routines", "planted.sh"), () => "planted\n");
+console.log(`Saved tonight's research for ${goal}.`);
+JS
+cat > "$B3/claude" <<STAND
+#!/bin/sh
+[ "\$1" = --help ] && { printf '  --restricted  Restricted mode\n  --permission-mode <mode>  ("dontAsk")\n  --strict-mcp-config\n'; exit 0; }
+exec "$NODE" "$TMP/cd-claude.js" "$TMP/cd.log" "\$@"
+STAND
+chmod +x "$B3/claude"
+night3() { # tools-folder date
+  rm -f "$TMP/cd.log"
+  HOME="$TMP/home" PATH="$B3:$PATH" GODSPEED_RUNNER=claude bash "$1/mc-research" --godspeed "$G3" --date "$2" --only money >/dev/null 2>&1
+}
+# Before the fix: mc-research's plain paths, and an mc-run that passed them on as written.
+OLD3="$TMP/old3"; NEWRES="$TMP/newres"; NEWRUN="$TMP/newrun"; mkdir -p "$OLD3" "$NEWRES" "$NEWRUN"
+for d in "$OLD3" "$NEWRES" "$NEWRUN"; do cp "$HERE/goals.js" "$HERE/mc-cards.js" "$HERE/check-research.js" "$d/"; done
+sed 's#Edit(/goals/research/\*\*) Edit(/ideas/\*\*)#Edit(goals/research/**) Edit(ideas/**)#' "$HERE/mc-research" > "$OLD3/mc-research"
+sed '/^  anchor_rules$/d' "$HERE/mc-run" > "$OLD3/mc-run"
+grep -q 'Edit(goals/research/\*\*) Edit(ideas/\*\*)' "$OLD3/mc-research" && ! grep -q '^  anchor_rules$' "$OLD3/mc-run" \
+  && ok "the copy from before the fix is what ran on 2026-10-15" || bad "the copy from before the fix could not be made"
+night3 "$OLD3" 2026-10-23; rc=$?
+check "before the fix, a night that moved into its folder fails (as on 2026-10-15)" "$rc" "1"
+contains "  its saves in its own folder were refused" "$(cat "$TMP/cd.log" 2>/dev/null)" "refused goals/research/money/days/2026-10-23.md"
+check "  and it left a gap file" "$(test -f "$G3/goals/research/money/days/2026-10-23.gap.md" && echo yes)" "yes"
+# Today's mc-research with yesterday's mc-run: its /paths already mean the mission control.
+cp "$HERE/mc-research" "$NEWRES/"; cp "$OLD3/mc-run" "$NEWRES/"
+export GODSPEED_TODAY=2026-10-24
+night3 "$NEWRES" 2026-10-24; check "today's mc-research holds even with an older mc-run" "$?" "0"
+# Yesterday's mc-research with today's mc-run: the plain paths are anchored at the mission control.
+cp "$OLD3/mc-research" "$NEWRUN/"; cp "$HERE/mc-run" "$NEWRUN/"
+export GODSPEED_TODAY=2026-10-25
+night3 "$NEWRUN" 2026-10-25; check "today's mc-run holds even an older mc-research's plain paths" "$?" "0"
+export GODSPEED_TODAY=2026-10-26
+night3 "$HERE" 2026-10-26; check "after the fix, a night that moved into its folder completes" "$?" "0"
+LOG3="$(cat "$TMP/cd.log" 2>/dev/null)"
+check "  its day record is there" "$(test -f "$G3/goals/research/money/days/2026-10-26.md" && echo yes)" "yes"
+check "  with no gap file beside it" "$(test -f "$G3/goals/research/money/days/2026-10-26.gap.md" && echo still-there || echo gone)" "gone"
+contains "  its edit of a file it already had went through" "$LOG3" "allowed goals/research/money/people.md"
+check "  the idea it filed is there" "$(test -f "$G3/ideas/money-opening.md" && echo yes)" "yes"
+for f in skills/planted/SKILL.md goals/money.md routines/planted.sh; do
+  contains "  a save to $f was refused" "$LOG3" "refused $f"
+done
+check "  no recipe was planted" "$(test -e "$G3/skills/planted" && echo planted || echo none)" "none"
+missing "  the goal card was not changed" "$(cat "$G3/goals/money.md")" "planted"
+check "  no routine was planted" "$(test -e "$G3/routines/planted.sh" && echo planted || echo none)" "none"
+
+# THE SAME WITH A REAL CLAUDE (--live only). Through the real mc-run, with mc-research's own list,
+# in a throwaway mission control whose name has a space and [ ] in it.
+if [ "$LIVE" -eq 1 ]; then
+  echo "-- live: a real claude moves into the goal's folder, then saves"
+  LV="$TMP/mission control [live]"; mkdir -p "$LV/rules" "$LV/skills/cd-then-save" "$LV/goals/research/money/days" "$LV/ideas" "$LV/routines"
+  echo "old" > "$LV/goals/research/money/people.md"
+  LW="$LV"; command -v cygpath >/dev/null 2>&1 && LW="$(cygpath -m "$LV")"
+  cat > "$LV/skills/cd-then-save/SKILL.md" <<SKILL
+Do exactly these steps with your tools, one at a time. When a step fails, go on with the next. Do nothing else.
+1. Bash: cd goals/research/money && ls
+2. Edit tool: in $LW/goals/research/money/people.md replace old with new.
+3. Write tool: create $LW/goals/research/money/days/2026-10-15.md with the text: day
+4. Write tool: create $LW/ideas/money-opening.md with the text: idea
+5. Write tool: create $LW/routines/notes.md with the text: note
+6. Write tool: create $LW/goals/notes.md with the text: note
+Then answer with one line per step: STEP <n>: and the first 80 characters of what the tool answered.
+SKILL
+  TOOLS_LIVE="$(sed -n 's/^TOOLS="\(.*\)"$/\1/p' "$HERE/mc-research")"
+  contains "  the list is mc-research's own" "$TOOLS_LIVE" "Edit(/goals/research/**)"
+  REAL=(HOME="$REAL_HOME")
+  for v in USERPROFILE="$REAL_USERPROFILE" APPDATA="$REAL_APPDATA" LOCALAPPDATA="$REAL_LOCALAPPDATA" CLAUDE_CONFIG_DIR="$REAL_CCD"; do
+    [ -n "${v#*=}" ] && REAL+=("$v")
+  done
+  env "${REAL[@]}" GODSPEED_RUNNER=claude bash "$HERE/mc-run" cd-then-save --godspeed "$LV" \
+    --timeout 600 --out "$TMP/live.txt" --allowed-tools "$TOOLS_LIVE"
+  echo "  the assistant answered:"; sed 's/^/    /' "$TMP/live.txt"
+  check "  after its cd, its edit in the goal's folder went through" "$(cat "$LV/goals/research/money/people.md")" "new"
+  check "  its day record was saved" "$(cat "$LV/goals/research/money/days/2026-10-15.md" 2>/dev/null | tr -d '\r\n')" "day"
+  check "  its idea was saved" "$(cat "$LV/ideas/money-opening.md" 2>/dev/null | tr -d '\r\n')" "idea"
+  check "  a save in routines/ was refused" "$(test -e "$LV/routines/notes.md" && echo saved || echo refused)" "refused"
+  check "  a save to a goal card's folder was refused" "$(test -e "$LV/goals/notes.md" && echo saved || echo refused)" "refused"
+  contains "  and the refusals were Claude Code's own" "$(grep -iE '^STEP [56]:' "$TMP/live.txt" | tr 'A-Z' 'a-z')" "denied"
+fi
 
 echo "$PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]
