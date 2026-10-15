@@ -334,6 +334,14 @@ function stats(ctx) {
     changed_last_7_days: within(7), changed_last_30_days: within(30), people: people(query).length, current_facts: facts(query).filter(f => holds(f, day)).length,
     timeline_entries: live(visibleRows(query, 'moments')).length, collections: live(visibleRows(query, 'collections')).length};
 }
+// What the assistant can look up in the notebook, counted as its own tools see it (visibility.mjs):
+// the page that shows what it knows about its owner names these beside the profile pages.
+export function notebookTotals(ctx) {
+  const {query} = ctx, day = today(ctx);
+  return query.withSnapshot(() => ({notes: live(visibleRows(query, 'notes')).filter(n => !n.is_trashed).length, people: people(query).length,
+    facts: facts(query).filter(f => holds(f, day)).length, events: live(visibleRows(query, 'moments')).length, things: entities(query).length,
+    collections: live(visibleRows(query, 'collections')).length}));
+}
 async function searchMoments(a, ctx) {
   const {query, index} = ctx, byId = new Map(live(visibleRows(query, 'moments')).map(m => [m.id, m])), found = await index.searchHybrid(required(a.query, 'words to search for'), {limit: 60, types: ['moments']});
   const named = subjectNames(query), parts = new Map();

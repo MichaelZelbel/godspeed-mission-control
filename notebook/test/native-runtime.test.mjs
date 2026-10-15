@@ -12,6 +12,11 @@ test('notebook transport preserves the real Hermes agent loop, tools and named c
  assert.equal(captured.exe,'hermes');assert.ok(captured.args.includes('--continue'));assert.ok(captured.args.includes('--create-if-missing'));assert.equal(captured.args.includes('--max-turns'),false);assert.equal(captured.args.includes('--toolsets'),false);
  assert.equal(captured.options.env.GODSPEED_FILE_HERMES,'0');
 });
+test('a message from the page that shows who the assistant is reaches Hermes with that page\'s numbered parts',async()=>{
+ let sent='';const agent=nativeAgent({executable:'hermes',home:'fixture-home',cwd:'fixture-workspace',spawnProcess:()=>{const child=new EventEmitter();child.stdin=new PassThrough();child.stdout=new PassThrough();child.stderr=new PassThrough();child.stdin.on('data',data=>{sent+=String(data);queueMicrotask(()=>{child.stdout.write('Fictional reply');child.emit('close',0);});});return child;}});
+ await agent({message:'Change rule 3 so that it says hello.',conversation_id:'notebook:page:identity',page_context:'The owner has the notebook page open.\n3. Never spend my money (rule:never-spend-my-money)'});
+ assert.equal(sent,'Change rule 3 so that it says hello.\n\nThe owner has the notebook page open.\n3. Never spend my money (rule:never-spend-my-money)');
+});
 test('Godspeed chat uses native Hermes rather than the notebook action planner while memory stays connected',async t=>{
  const store=new Store(fixture(t)),domains=new Domains(new QueryService(store),{provider:()=>assert.fail('Replacement planner ran')});domains.nativeAgent=async input=>({reply:'Original agent '+input.message});
  assert.equal((await domains.invoke('conversation-chat',{message:'Fictional question',conversation_id:'fixture'})).reply,'Original agent Fictional question');

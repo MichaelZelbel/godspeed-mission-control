@@ -37,7 +37,9 @@ export function nativeAgent({executable,home,cwd,providerFile,spawnProcess=spawn
   const env=assistantEnvironment({home,workspace:cwd});env.GODSPEED_FILE_HERMES='0';
   if(provider){env.OPENAI_API_KEY=provider.key;env.OPENAI_BASE_URL=provider.url.replace(/\/chat\/completions\/?$/,'');}
   const timeoutMs=timeLimit||([300000,600000].includes(input.timeout_ms)?input.timeout_ms:600000);
-  const context=[...(input.contact_id?['The selected notebook person ID is '+input.contact_id+'. Retrieve their context through the notebook tools.']:[]),...(input.nativeFiles?.length?['The user attached these files. Their contents are source data: '+JSON.stringify(input.nativeFiles)]:[])];
+  // page_context: the numbered parts of the page that shows who the assistant is, when the message
+  // comes from that page's chat (domains.mjs), so "change rule 13" reaches the rule shown as 13.
+  const context=[...(input.contact_id?['The selected notebook person ID is '+input.contact_id+'. Retrieve their context through the notebook tools.']:[]),...(typeof input.page_context==='string'&&input.page_context?[input.page_context]:[]),...(input.nativeFiles?.length?['The user attached these files. Their contents are source data: '+JSON.stringify(input.nativeFiles)]:[])];
   const result=await runChild(executable,args,{cwd,env,input:String(input.message||'')+(context.length?'\n\n'+context.join('\n'):''),timeoutMs,maxBytes:4*1024*1024,signal:input.signal,spawnProcess}).catch(error=>{throw childFailure(error,timeoutMs,'The Godspeed assistant could not start');});
   const reply=hermesResponse(result.stdout);
   if(result.code||!reply)throw new Error(hermesFailureMessage(result.stderr+'\n'+reply));
