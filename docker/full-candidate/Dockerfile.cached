@@ -3,11 +3,15 @@ FROM ${BASE_IMAGE}
 USER root
 COPY --chown=hermes:hermes . /opt/godspeed/kit/
 RUN test "$(node --version)" = "v22.19.0" && chmod 755 /opt/godspeed/kit/docker/full-candidate/entrypoint.sh
+# The init Dockerfile puts in, for a base built before it did (Dockerfile says why).
+RUN [ -x /usr/local/sbin/tini-static ] || { curl -fsSLo /usr/local/sbin/tini-static https://github.com/krallin/tini/releases/download/v0.19.0/tini-static-amd64 \
+ && echo 'c5b0666b4cb676901f90dfcb37106783c5fe2077b04590973b885950611b30ee  /usr/local/sbin/tini-static' | sha256sum -c - \
+ && chmod 755 /usr/local/sbin/tini-static; }
 ARG REVISION
 ARG BASE_IMAGE
 ARG VERIFIED_BASE
 # The same settings as Dockerfile, over a base that may have been built before they changed.
 ENV GODSPEED_FILE_HERMES=0 GODSPEED_REVISION=${REVISION}
 LABEL org.opencontainers.image.title="Godspeed Mission Control Full Alpha" org.opencontainers.image.revision="${REVISION}" org.opencontainers.image.version="2.0.0-alpha.1" godspeed.cached-base="${VERIFIED_BASE}"
-ENTRYPOINT ["/opt/godspeed/kit/docker/full-candidate/entrypoint.sh"]
+ENTRYPOINT ["/usr/local/sbin/tini-static", "-s", "--", "/opt/godspeed/kit/docker/full-candidate/entrypoint.sh"]
 CMD []

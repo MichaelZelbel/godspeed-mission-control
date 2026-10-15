@@ -17,7 +17,7 @@ export GODSPEED_VERIFY_SETUP_CODE
 GODSPEED_VERIFY_SETUP_CODE=$(openssl rand -hex 32)
 docker network create "$network" >/dev/null
 docker volume create "$volume" >/dev/null
-docker run -d --init --name "$name" --network "$network" --memory=2g --cpus=2 \
+docker run -d --name "$name" --network "$network" --memory=2g --cpus=2 \
   --mount "type=volume,src=$volume,dst=/opt/data/full-candidate" \
   -e "GODSPEED_ACCESS_TOKEN=$GODSPEED_VERIFY_SETUP_CODE" -e GODSPEED_TELEGRAM_API=http://127.0.0.1:8081 \
   -e GODSPEED_PROMPT_HARVEST_FIRST=3 -e GODSPEED_PROMPT_HARVEST_EVERY=5 "$image" >/dev/null
@@ -27,6 +27,14 @@ for attempt in $(seq 1 90); do
 done
 docker exec "$name" node -e "fetch('http://127.0.0.1:47831/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 docker exec "$name" /opt/hermes/.venv/bin/python3 -c 'import faster_whisper; print("Packaged local dictation dependency verified.")'
+# The image's own init collects every finished program, with no --init from the host (this
+# container runs without one): a program whose parent has gone, as git's background maintenance
+# after every fetch is, must not stay behind (Dockerfile says why).
+docker exec "$name" ps -o args= -p 1 | grep -q "^/usr/local/sbin/tini-static " || { echo "Process 1 is not the image's init."; exit 1; }
+docker exec "$name" sh -c 'for i in 1 2 3 4 5; do sh -c "sleep 0.2 &"; done; sleep 2'
+left=$(docker exec "$name" sh -c 'ps -eo stat= | grep -c "^Z" || true')
+[ "$left" = 0 ] || { echo "$left finished programs were never collected."; exit 1; }
+echo "Finished programs are collected by the image's own init."
 # Run the actual modules shipped in this image, with small synthetic fixtures.
 # A failure names its tests in the build log; the whole log stays in the evidence.
 docker exec -e GODSPEED_ORIGINAL_RUNTIME=off -w /opt/godspeed/kit/notebook "$name" sh -c 'node --test test/*.test.mjs' > "$evidence/server-tests.log" 2>&1 || { grep -E '^not ok|^# (tests|pass|fail)' "$evidence/server-tests.log"; grep -E -A12 '^not ok' "$evidence/server-tests.log" | grep -E 'error|expected|actual|Error|FAIL|assert' | head -60; exit 1; }

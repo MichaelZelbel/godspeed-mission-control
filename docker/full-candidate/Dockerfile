@@ -13,6 +13,17 @@ RUN if [ "$USE_VERIFIED_FRONTEND" = 1 ]; then node /verify-prebuilt-frontend.mjs
 FROM ghcr.io/michaelzelbel/godspeed-mission-control@sha256:358bf1b87b22898c0bd1a173226004558e41a3d16fc39214ecedab7fb550de20
 USER root
 RUN uv pip install --python /opt/hermes/.venv/bin/python3 --no-cache faster-whisper==1.2.1
+# A real init as process 1, so every finished program is collected. This image replaces the base's
+# own entrypoint (s6-overlay's /init, which collected them), and the base's /usr/bin/tini is a shim
+# that only hands on to that /init. With the notebook's supervisor as process 1 nothing collected
+# a program whose parent had gone: git 2.47 finishes every fetch by starting its maintenance in the
+# background (it detaches), so each sync left one, and on the test server srv1069233 about 6,500 of
+# them had piled up by 15 October 2026. Compose's `init: true` did the same, but only where a
+# Compose file asked for it, and that server's did not. tini 0.19.0, static, checked by its
+# published SHA-256. -s: still collects them when a host init runs in front of it.
+RUN curl -fsSLo /usr/local/sbin/tini-static https://github.com/krallin/tini/releases/download/v0.19.0/tini-static-amd64 \
+ && echo 'c5b0666b4cb676901f90dfcb37106783c5fe2077b04590973b885950611b30ee  /usr/local/sbin/tini-static' | sha256sum -c - \
+ && chmod 755 /usr/local/sbin/tini-static
 COPY --from=frontend /usr/local/bin/node /usr/local/bin/node
 COPY . /opt/godspeed/kit/
 COPY --from=frontend /build/notebook/ui/dist /opt/godspeed/kit/notebook/ui/dist
@@ -33,5 +44,5 @@ ARG REVISION=unknown
 ENV GODSPEED_REVISION=${REVISION}
 LABEL org.opencontainers.image.title="Godspeed Mission Control Full Alpha" \
       org.opencontainers.image.revision="${REVISION}" org.opencontainers.image.licenses="MIT AND AGPL-3.0-only"
-ENTRYPOINT ["/opt/godspeed/kit/docker/full-candidate/entrypoint.sh"]
+ENTRYPOINT ["/usr/local/sbin/tini-static", "-s", "--", "/opt/godspeed/kit/docker/full-candidate/entrypoint.sh"]
 CMD []
