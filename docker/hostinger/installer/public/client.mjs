@@ -1,5 +1,5 @@
 const storage = 'godspeed-hostinger-installation';
-const endpoint = 'https://srv1069233.hstgr.cloud/godspeed-install';
+const endpoint = 'https://godspeedmissioncontrol.com/godspeed-install';
 let poll;
 export function installationClient({ onState, onError, onReady, base = endpoint }) {
   let job;

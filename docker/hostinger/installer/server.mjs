@@ -236,7 +236,7 @@ export function createInstaller({ directory, origin, fetcher = fetch, now = Date
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const installer = createInstaller({ directory: process.env.GODSPEED_INSTALL_STATE || '/var/lib/godspeed-installer', origin: process.env.GODSPEED_INSTALL_ORIGIN || 'https://srv1069233.hstgr.cloud/godspeed-install', coordinatorProxy: process.env.GODSPEED_INSTALL_PROXY, verifyCallbackHost: process.env.GODSPEED_INSTALL_VERIFY_HOST !== '0' });
+  const installer = createInstaller({ directory: process.env.GODSPEED_INSTALL_STATE || '/var/lib/godspeed-installer', origin: process.env.GODSPEED_INSTALL_ORIGIN || 'https://godspeedmissioncontrol.com/godspeed-install', coordinatorProxy: process.env.GODSPEED_INSTALL_PROXY, verifyCallbackHost: process.env.GODSPEED_INSTALL_VERIFY_HOST !== '0' });
   const bind = process.env.GODSPEED_INSTALL_BIND || '127.0.0.1';
   if (!bind) throw new Error('Docker network address could not be detected');
   installer.server.listen(Number(process.env.GODSPEED_INSTALL_PORT || 8794), bind);

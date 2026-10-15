@@ -4,7 +4,7 @@ import fs from 'node:fs';
 const address = process.env.GODSPEED_INSTALL_BIND || '10.0.0.1';
 if (!address) throw Error('Docker network address could not be detected');
 const base = `http://${address}:8794/godspeed-install`;
-const request = await fetch(base + '/api/start', { method: 'POST', headers: { origin: 'https://srv1069233.hstgr.cloud', 'content-type': 'application/json' }, body: '{}' });
+const request = await fetch(base + '/api/start', { method: 'POST', headers: { origin: new URL(process.env.GODSPEED_INSTALL_ORIGIN || 'https://godspeedmissioncontrol.com/godspeed-install').origin, 'content-type': 'application/json' }, body: '{}' });
 if (request.status !== 201) throw Error('Could not prepare the VPS test installation');
 const ticket = await request.json();
 const publicConfig = new URL(new URL(ticket.checkout).searchParams.get('compose_url'));

@@ -101,7 +101,7 @@ On a server, the installer also gives the notebook a web address with HTTPS. A s
 
 ## One-click Hostinger installation
 
-[Install Godspeed Mission Control v2 on Hostinger](https://srv1069233.hstgr.cloud/godspeed-install). This prepares a private deployment configuration for Hostinger's Deploy button, then gives you your new server's setup link. Hostinger charges for the server; complete its checkout yourself. The image it installs is pinned to one exact build.
+[Install Godspeed Mission Control v2 on Hostinger](https://godspeedmissioncontrol.com/hostinger). This prepares a private deployment configuration for Hostinger's Deploy button, then gives you your new server's setup link. Hostinger charges for the server; complete its checkout yourself. The image it installs is pinned to one exact build.
 
 ## Status
 

@@ -10,7 +10,7 @@
 - Windows download: https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-15-1/GodspeedSetup.exe
 - Linux download: https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-15-1/install-godspeed.sh
 - Source, manifests and checksums: https://github.com/MichaelZelbel/godspeed-mission-control/releases/tag/godspeed-v2-integrated-2026-10-15-1
-- One-click Hostinger installation: https://srv1069233.hstgr.cloud/godspeed-install
+- One-click Hostinger installation: https://godspeedmissioncontrol.com/hostinger (its coordinator, https://godspeedmissioncontrol.com/godspeed-install, runs on the website since 15 October 2026)
 - Development branch: https://github.com/MichaelZelbel/godspeed-mission-control/tree/main
 
 ## 15 October 2026 release: the Identity page

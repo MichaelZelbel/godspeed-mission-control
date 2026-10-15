@@ -1,6 +1,6 @@
 # Godspeed Mission Control prepared Hostinger installer
 
-Live test endpoint: https://srv1069233.hstgr.cloud/godspeed-install
+Live coordinator: https://godspeedmissioncontrol.com/godspeed-install, run by the website godspeedmissioncontrol.com since 15 October 2026 (its page is https://godspeedmissioncontrol.com/hostinger). The website copies its configuration from compose.mjs here, so this folder still decides what a buyer's server is given. The Node coordinator in this folder is the reference implementation: GitHub CI runs it, and it is what you deploy to run a coordinator of your own.
 
 The coordinator creates private per-installation Compose URLs for Hostinger's documented Deploy button. The generated configuration requires zero input fields and uses the complete pinned image. After the buyer completes checkout and clicks Deploy, the hostname callback and private polling hand the buyer a single-use owner invitation.
 
@@ -10,7 +10,7 @@ The paid checkout has not been completed. Actual generated deployment, HTTPS iss
 
 ## Coordinator deployment
 
-Copy this folder to /opt/godspeed-hostinger-installer. Install godspeed-installer.service. Its GODSPEED_INSTALL_BIND must be the actual Docker host-gateway address (inspect Docker's bridge network). The test machine uses 10.0.0.1. The coordinator is not exposed publicly on that HTTP port; the generated Caddy configuration proxies /godspeed-install over HTTPS when deployed on the coordinator's own server. Other buyer servers use HTTPS directly and do not proxy the coordinator.
+To run a coordinator of your own: copy this folder to /opt/godspeed-hostinger-installer and install godspeed-installer.service, with GODSPEED_INSTALL_ORIGIN set to your coordinator's public HTTPS address. Its GODSPEED_INSTALL_BIND must be the actual Docker host-gateway address (inspect Docker's bridge network). The former test machine used 10.0.0.1. The coordinator is not exposed publicly on that HTTP port; the generated Caddy configuration proxies /godspeed-install over HTTPS when deployed on the coordinator's own server. Other buyer servers use HTTPS directly and do not proxy the coordinator.
 
 The generated configuration says nothing about Telegram. The buyer connects a bot on their own server's web page after the account is made (../README.md, "Telegram, connected after the account"), so a bot's key never reaches this coordinator, the website or its logs.
 
