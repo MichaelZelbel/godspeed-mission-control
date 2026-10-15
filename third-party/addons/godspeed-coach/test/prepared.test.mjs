@@ -132,7 +132,7 @@ test("the block carries an open talk's opening and what was prepared, and says t
     "  - 3 November: a hackathon, $9,000 (https://example.org/c)",
     "  Everything needed to continue this talk is here: answer from it without running commands or looking things up, unless they ask for something it lacks.",
     `  While this talk is open, a question like "what else do you have?", "what do you suggest?" or "what should I do?" is about this talk: answer from what was prepared.`,
-    "  Every answer is one or two sentences, and a suggestion is one sentence.",
+    "  Every answer is two sentences at most, about 300 characters, a closing question included: one that answers, and if needed one that asks or suggests.",
   ]);
   assert.match(block[0], /^\[godspeed-coach\] For you, not to pass on/);
 });
@@ -194,7 +194,7 @@ test("a waiting talk carries what was prepared, and its opening once", () => {
     "  - 3 November: a hackathon (https://example.org/c)",
     "  Everything needed to continue this talk is here: answer from it without running commands or looking things up, unless they ask for something it lacks.",
     `  While this talk is open, a question like "what else do you have?", "what do you suggest?" or "what should I do?" is about this talk: answer from what was prepared.`,
-    "  Every answer is one or two sentences, and a suggestion is one sentence.",
+    "  Every answer is two sentences at most, about 300 characters, a closing question included: one that answers, and if needed one that asks or suggests.",
   ]);
   assert.equal(block.join("\n").split("Will you send one?").length, 2);
 });

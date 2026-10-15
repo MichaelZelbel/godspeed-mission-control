@@ -72,6 +72,20 @@ export function prepUsedOn(area, p, exceptYmd) {
 
 const usable = (area, p, ymd) => !prepProblem(p, area) && !prepUsedOn(area, p, ymd);
 
+// Fresh means PREPARED at most PREP_FRESH_HOURS before the talk starts: the world and his week move,
+// and a preparation written three days ahead is out of date by the evening it opens. A file with no
+// readable PREPARED time cannot show it is fresh, so it counts as stale.
+export const PREP_FRESH_HOURS = 48;
+export function preparedAt(p) {
+  const raw = String(p?.head?.PREPARED || "").trim();
+  const t = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(raw) ? Date.parse(raw) : NaN;
+  return Number.isNaN(t) ? null : new Date(t);
+}
+export function prepStale(p, talkAt) {
+  const t = preparedAt(p);
+  return !t || talkAt.getTime() - t.getTime() > PREP_FRESH_HOURS * 3600000;
+}
+
 // Which prepared talk the brief for <ymd> carries, or null for the brief as before. On a scheduled
 // talk day, that day's. Asked for on any other day (a talk they start themselves), the next
 // scheduled talk's when it is at most PREP_AHEAD_DAYS away, else today's or yesterday's.
@@ -92,6 +106,9 @@ export function prepForBrief(area, ymd) {
 
 // Every area that is on and has a talk rhythm, whose next scheduled talk starts within <hours> from
 // now and has no ready preparation yet, soonest first. A talk already opened for that day needs none.
+// A ready preparation that is stale (below) is listed too, with stale: true and when it was
+// prepared, so the job prepares it again; until a fresh one replaces it, the brief and
+// `talk open --from-prep` keep using it. Every entry says stale: true or false.
 export function prepDue(mcDir, s, now, hours) {
   const tz = s.timezone;
   const today = localParts(now, tz).date;
@@ -107,8 +124,11 @@ export function prepDue(mcDir, s, now, hours) {
     }
     if (!next || next.at.getTime() > until) continue;
     if (fs.existsSync(talkFile(a, next.d))) continue;
-    if (usable(a, readPrep(prepFile(a, next.d)), next.d)) continue;
-    out.push({ at: next.at.getTime(), area: a.slug, title: a.title, date: next.d, time: a.time, timezone: tz, file: rel(mcDir, prepFile(a, next.d)) });
+    const p = readPrep(prepFile(a, next.d));
+    const ready = usable(a, p, next.d);
+    const stale = ready && prepStale(p, next.at);
+    if (ready && !stale) continue;
+    out.push({ at: next.at.getTime(), area: a.slug, title: a.title, date: next.d, time: a.time, timezone: tz, file: rel(mcDir, prepFile(a, next.d)), stale, ...(stale ? { prepared: preparedAt(p)?.toISOString().replace(/\.\d+Z$/, "Z") || "" } : {}) });
   }
   return out.sort((x, y) => x.at - y.at).map(({ at, ...r }) => r);
 }

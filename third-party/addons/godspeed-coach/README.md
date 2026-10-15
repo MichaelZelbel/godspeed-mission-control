@@ -56,7 +56,8 @@ something another talk raised in the last seven days.
   time to prepare it well. If something writes `coach/<area>/prep/<talk date>.md` ahead of time
   (`STATE: ready`, a section "The opening" and a section "Talk card"), the talk opens with that
   opening as written, and every interface carries its talk card while the talk is open, with the
-  file behind it for depth. `godspeed-coach prep-due` tells that job which coming talks still need it.
+  file behind it for depth. `godspeed-coach prep-due` tells that job which coming talks still need it,
+  and which were prepared more than 48 hours before they start and need it again.
 
 ## Install
 

@@ -171,7 +171,9 @@ const commands = {
     const hours = Number(raw);
     if (raw === undefined || !Number.isFinite(hours) || hours <= 0) die("godspeed-coach prep-due --within-hours <hours> [--json]: the talks that start within that many hours and are not prepared yet.");
     const due = prepDue(mcDir, s, at, hours);
-    out(due.map((x) => `${x.area}: ${x.title}, ${WEEKDAY_WORDS.en[weekdayOf(x.date)]} ${x.date} at ${x.time} (${x.timezone}), prepare ${x.file}`).join("\n") || "Nothing to prepare.", due);
+    // A stale one says when it was prepared, in the talk's own time zone.
+    const when = (x) => { if (!x.prepared) return "no PREPARED time"; const p = localParts(new Date(x.prepared), x.timezone); return `prepared ${p.date} ${p.hm}`; };
+    out(due.map((x) => `${x.area}: ${x.title}, ${WEEKDAY_WORDS.en[weekdayOf(x.date)]} ${x.date} at ${x.time} (${x.timezone}), prepare ${x.file}${x.stale ? ` (stale, ${when(x)})` : ""}`).join("\n") || "Nothing to prepare.", due);
   },
   gate() {
     pullQuietly(mcDir, syncMode);

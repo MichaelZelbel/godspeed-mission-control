@@ -37,7 +37,7 @@ const cut = (t, n) => (t.length > n ? t.slice(0, n - 3).replace(/\s+\S*$/, "") +
 // else do you have for me?" got dating matches from another add-on's block. This block comes with
 // every message, so it says it here, in three short sentences. `prep`: the prepared talk file, read
 // once when they ask for something the card lacks; `from`: what the talk's suggestions come from.
-export const ANSWER_LENGTH = "  Every answer is one or two sentences, and a suggestion is one sentence.";
+export const ANSWER_LENGTH = "  Every answer is two sentences at most, about 300 characters, a closing question included: one that answers, and if needed one that asks or suggests.";
 export function goOn({ prep = "", from = "what was prepared" } = {}) {
   return [
     `  Everything needed to continue this talk is here: answer from it without running commands or looking things up, unless they ask for something it lacks${prep ? ` (then read ${prep} once)` : ""}.`,

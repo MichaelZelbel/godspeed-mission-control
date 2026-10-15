@@ -33,8 +33,8 @@ const CARD = [
   "- Costs: about 3,000 euro a month (2026-10-01, the budget sheet)",
   "The question I most want his view on: is six months still the number?",
 ].join("\n");
-const prep = ({ area: a = "work", talk = "2026-10-21 19:00", state = "ready", opening = OPENING, card = CARD } = {}) => [
-  `AREA: ${a}`, `TALK: ${talk}`, "PREPARED: 2026-10-20T08:12:00Z", `STATE: ${state}`, "",
+const prep = ({ area: a = "work", talk = "2026-10-21 19:00", state = "ready", opening = OPENING, card = CARD, prepared = "2026-10-20T08:12:00Z" } = {}) => [
+  `AREA: ${a}`, `TALK: ${talk}`, ...(prepared === null ? [] : [`PREPARED: ${prepared}`]), `STATE: ${state}`, "",
   "## The opening", opening, "",
   "## Talk card", card, "",
   "## Where he stands", "- Savings about 18,000 euro (2026-10-12, last talk)", "",
@@ -189,9 +189,9 @@ test("prep-due lists each area whose next talk starts within the hours given and
   const j = cli(mc, at, "prep-due", "--within-hours", "200", "--json");
   assert.equal(j.code, 0, j.err);
   assert.deepEqual(JSON.parse(j.out), [
-    { area: "health", title: "Health and fitness", date: "2026-10-18", time: "19:00", timezone: "Europe/Berlin", file: "coach/health/prep/2026-10-18.md" },
-    { area: "work", title: "Work and money", date: "2026-10-21", time: "19:00", timezone: "Europe/Berlin", file: "coach/work/prep/2026-10-21.md" },
-    { area: "relationships", title: "Love and relationships", date: "2026-10-23", time: "19:00", timezone: "Europe/Berlin", file: "coach/relationships/prep/2026-10-23.md" },
+    { area: "health", title: "Health and fitness", date: "2026-10-18", time: "19:00", timezone: "Europe/Berlin", file: "coach/health/prep/2026-10-18.md", stale: false },
+    { area: "work", title: "Work and money", date: "2026-10-21", time: "19:00", timezone: "Europe/Berlin", file: "coach/work/prep/2026-10-21.md", stale: false },
+    { area: "relationships", title: "Love and relationships", date: "2026-10-23", time: "19:00", timezone: "Europe/Berlin", file: "coach/relationships/prep/2026-10-23.md", stale: false },
   ]);
   assert.equal(cli(mc, at, "prep-due", "--within-hours", "72").out, "health: Health and fitness, Sunday 2026-10-18 at 19:00 (Europe/Berlin), prepare coach/health/prep/2026-10-18.md");
   assert.equal(cli(mc, at, "prep-due", "--within-hours", "24").out, "Nothing to prepare.");
@@ -208,7 +208,7 @@ test("prep-due lists each area whose next talk starts within the hours given and
 
 test("prep-due leaves out a talk that is prepared or already open, and lists one whose preparation is a draft", () => {
   const mc = threeAreas({
-    "coach/health/prep/2026-10-18.md": prep({ area: "health", talk: "2026-10-18 19:00" }),
+    "coach/health/prep/2026-10-18.md": prep({ area: "health", talk: "2026-10-18 19:00", prepared: "2026-10-17T10:00:00Z" }),
     "coach/work/prep/2026-10-21.md": prep({ state: "draft" }),
     "coach/relationships/talks/2026-10-23.md": "TALK: relationships\nDATE: 2026-10-23\nSTATE: opened\n\n## The opening\nHi.\n",
   });
@@ -216,6 +216,49 @@ test("prep-due leaves out a talk that is prepared or already open, and lists one
   // Today's talk has started: the next one is a week on.
   const sunday = threeAreas();
   assert.deepEqual(prepDue(sunday, S, new Date("2026-10-18T17:30:00Z"), 24 * 8).map((x) => `${x.area} ${x.date}`), ["work 2026-10-21", "relationships 2026-10-23", "health 2026-10-25"]);
+});
+
+// A preparation written days ahead is out of date by the evening the talk opens. Fresh means
+// PREPARED at most 48 hours before the talk starts; a stale one is listed again, so the hourly job
+// prepares it anew, and until then the brief and the open command keep using it.
+test("prep-due lists a stale preparation again, and the brief and talk open keep using it until a fresh one replaces it", () => {
+  // Wednesday 2026-10-21 19:00 in Berlin is 17:00 UTC.
+  const at = "2026-10-20T08:00:00Z";
+  const listed = (text) => JSON.parse(cli(mission({ "coach/work/prep/2026-10-21.md": text }), at, "prep-due", "--within-hours", "40", "--json").out);
+  // Three days before: stale. Thirty hours before: fresh. Exactly 48 hours before: still fresh.
+  assert.deepEqual(listed(prep({ prepared: "2026-10-18T17:00:00Z" })), [{ area: "work", title: "Work and money", date: "2026-10-21", time: "19:00", timezone: "Europe/Berlin", file: "coach/work/prep/2026-10-21.md", stale: true, prepared: "2026-10-18T17:00:00Z" }]);
+  assert.deepEqual(listed(prep({ prepared: "2026-10-20T11:00:00Z" })), []);
+  assert.deepEqual(listed(prep({ prepared: "2026-10-19T17:00:00Z" })), []);
+  assert.equal(listed(prep({ prepared: "2026-10-19T16:59:00Z" }))[0].stale, true);
+  // No readable PREPARED time cannot show it is fresh.
+  assert.deepEqual(listed(prep({ prepared: null })).map((x) => [x.stale, x.prepared]), [[true, ""]]);
+  assert.deepEqual(listed(prep({ prepared: "last week" })).map((x) => [x.stale, x.prepared]), [[true, ""]]);
+  // A missing or draft one is listed as before, not stale.
+  assert.deepEqual(listed(prep({ state: "draft", prepared: "2026-10-18T17:00:00Z" })).map((x) => x.stale), [false]);
+  // In words, with the time in the talk's own zone.
+  const mc = mission({ "coach/work/prep/2026-10-21.md": prep({ prepared: "2026-10-18T17:00:00Z" }) });
+  assert.equal(cli(mc, at, "prep-due", "--within-hours", "40").out, "work: Work and money, Wednesday 2026-10-21 at 19:00 (Europe/Berlin), prepare coach/work/prep/2026-10-21.md (stale, prepared 2026-10-18 19:00)");
+  assert.match(cli(mission({ "coach/work/prep/2026-10-21.md": prep({ prepared: null }) }), at, "prep-due", "--within-hours", "40").out, /\(stale, no PREPARED time\)$/);
+  // Until a fresh one replaces it, the stale file is still the talk's preparation.
+  assert.match(cli(mc, "2026-10-21T17:00:00Z", "brief", "work").out, /--from-prep "coach\/work\/prep\/2026-10-21\.md"/);
+  const open = cli(mc, "2026-10-21T17:00:00Z", "talk", "open", "work", "--from-prep", "coach/work/prep/2026-10-21.md");
+  assert.equal(open.code, 0, open.err);
+  // Opened, it needs nothing more.
+  assert.equal(cli(mc, "2026-10-21T17:05:00Z", "prep-due", "--within-hours", "40").out, "Nothing to prepare.");
+});
+
+test("the health talk of 18 October: prepared on the 15th, it is listed as stale once the talk is 40 hours away", () => {
+  const mc = tmpMission({
+    "coach/settings.json": JSON.stringify({ timezone: "Europe/Berlin", git_sync: "off" }),
+    "coach/health/area.md": area({ STARTS: "2026-10-04" }),
+    "coach/health/prep/2026-10-18.md": prep({ area: "health", talk: "2026-10-18 19:00", prepared: "2026-10-15T22:10:29Z" }),
+  });
+  // The talk starts at 17:00 UTC on Sunday; 40 hours before is Saturday 01:00 UTC, 03:00 in Berlin.
+  assert.equal(cli(mc, "2026-10-17T00:59:00Z", "prep-due", "--within-hours", "40").out, "Nothing to prepare.");
+  assert.equal(cli(mc, "2026-10-17T01:00:00Z", "prep-due", "--within-hours", "40").out, "health: Health and fitness, Sunday 2026-10-18 at 19:00 (Europe/Berlin), prepare coach/health/prep/2026-10-18.md (stale, prepared 2026-10-16 00:10)");
+  // Prepared again on Saturday morning: fresh, and nothing to prepare.
+  fs.writeFileSync(path.join(mc, "coach", "health", "prep", "2026-10-18.md"), prep({ area: "health", talk: "2026-10-18 19:00", prepared: "2026-10-17T06:00:00Z" }));
+  assert.equal(cli(mc, "2026-10-17T07:00:00Z", "prep-due", "--within-hours", "40").out, "Nothing to prepare.");
 });
 
 test("an open talk from a preparation carries its whole talk card and names the file that holds the depth", () => {
@@ -232,7 +275,7 @@ test("an open talk from a preparation carries its whole talk card and names the 
     // another add-on's offers for "What else do you have for me?". The block says how to go on.
     "  Everything needed to continue this talk is here: answer from it without running commands or looking things up, unless they ask for something it lacks (then read coach/work/prep/2026-10-21.md once).",
     `  While this talk is open, a question like "what else do you have?", "what do you suggest?" or "what should I do?" is about this talk: answer from the card's moves.`,
-    "  Every answer is one or two sentences, and a suggestion is one sentence.",
+    "  Every answer is two sentences at most, about 300 characters, a closing question included: one that answers, and if needed one that asks or suggests.",
   ]);
   assert.equal(block.length, at + 11, "nothing after it but the end of the block");
   // A card longer than about 1600 characters is cut by whole lines.
@@ -258,7 +301,7 @@ test("the recipe: a prepared talk opens as written, and the talk goes on like tw
   assert.match(opening, / 5\. Create the record BEFORE you answer, with the command line exactly as the brief prints it/);
   assert.match(opening, / 7\. Your final answer is the opening and nothing else\./);
   const continuing = text.split("## Continuing a talk")[1].split("## Closing a talk")[0];
-  assert.match(continuing, /3\. Talk like two people deciding something together, in the area's tone\. A question gets one or two sentences; a suggestion is one sentence\. When they ask what you think, say it and why in two sentences, then ask how they see it; disagree when the evidence does\. The talk card in the block is the short version; the prepared talk file \(`coach\/<area>\/prep\/<date>\.md`\) holds the depth, so when the card does not answer them, read that file once rather than searching anywhere else\./);
+  assert.match(continuing, /3\. Talk like two people deciding something together, in the area's tone\. An answer is two sentences at most, the closing question included; a suggestion is one sentence\. When they ask what you think, say it and why in one sentence, then ask how they see it; disagree when the evidence does\. The talk card in the block is the short version; the prepared talk file \(`coach\/<area>\/prep\/<date>\.md`\) holds the depth, so when the card does not answer them, read that file once rather than searching anywhere else\./);
   assert.doesNotMatch(continuing, /Answer like a person across the table/);
   assert.doesNotMatch(text, /[–—]/, "no long dash in the recipe");
 });

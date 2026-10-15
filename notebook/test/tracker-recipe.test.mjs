@@ -333,3 +333,18 @@ test('the coach recipe: a prepared talk opens as written, and the talk goes on l
   assert.ok(revisions['coach/SKILL.md'].includes(digest(coach)),'coach ships a known revision');
   assert.ok(revisions['coach/SKILL.md'].includes('3d17c43123ffe72d96f9c213bf67baf0ad15855bf4017caa1b394463c8473783'),'the text shipped until today stays known');
 });
+
+// With coach 0.4.1 Claude Code still answered a talk in three to four sentences: two that answer, a
+// closing question, sometimes a third explaining. He wants a fast answer in one sentence, maybe two.
+// Coach 0.4.2: an answer is two sentences at most, the closing question included.
+test('the coach recipe: an answer in a talk is two sentences at most, the closing question included',()=>{
+  const coach=read('../recipes/coach/SKILL.md');
+  assert.equal(coach,read('../../third-party/addons/godspeed-coach/skill/coach/SKILL.md'));
+  const continuing=coach.split('## Continuing a talk')[1].split('## Closing a talk')[0].replace(/\s+/g,' ');
+  assert.match(continuing,/An answer is two sentences at most, the closing question included; a suggestion is one sentence\. When they ask what you think, say it and why in one sentence, then ask how they see it; disagree when the evidence does\./);
+  assert.doesNotMatch(continuing,/one or two sentences|say it and why in two sentences/);
+  assert.ok(coach.match(/^description: (.*)$/m)[1].length<1000);
+  const revisions=JSON.parse(read('../data/recipe-revisions.json'));
+  assert.ok(revisions['coach/SKILL.md'].includes(digest(coach)),'coach ships a known revision');
+  assert.ok(revisions['coach/SKILL.md'].includes('50bbd27be5b5ac3d1cc753c08dbc07a708d2ac1393e0a1cbbc184fa606af10ab'),'the text shipped until today stays known');
+});
