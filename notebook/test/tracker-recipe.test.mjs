@@ -298,3 +298,16 @@ test('the coach recipe: the research is the talk\'s material, and a talk on a sc
   assert.ok(revisions['coach/SKILL.md'].includes(digest(coach)),'coach ships a known revision');
   for(const old of ['a7ab480751bff1576ef2eb77382e795455db4c4d9d064248b6061e8c09f540d0','e36b83a48a486083b883cf83c96844cf515c815bd207a0a708ecad9df614d3e5'])assert.ok(revisions['coach/SKILL.md'].includes(old),'the texts shipped until today stay known');
 });
+
+// Hermes refuses a recipe whose description is longer than 1024 characters. The coach's was 1036, so
+// on 15 October 2026 the assistant's own review could not patch it and wrote a short description
+// that named none of its triggers. Coach 0.3.2: 978 characters, every trigger kept.
+test('the coach recipe\'s description fits Hermes\'s 1024-character limit',()=>{
+  const coach=read('../recipes/coach/SKILL.md');
+  assert.equal(coach,read('../../third-party/addons/godspeed-coach/skill/coach/SKILL.md'));
+  const description=coach.match(/^description: (.*)$/m)[1];
+  assert.ok(description.length<1000,`the description is ${description.length} characters`);
+  const revisions=JSON.parse(read('../data/recipe-revisions.json'));
+  assert.ok(revisions['coach/SKILL.md'].includes(digest(coach)),'coach ships a known revision');
+  assert.ok(revisions['coach/SKILL.md'].includes('fe19d3c02796f5cc024f42b397893e35ac760e1b7ca0f3a99def77ce03e176d7'),'the text shipped until today stays known');
+});
