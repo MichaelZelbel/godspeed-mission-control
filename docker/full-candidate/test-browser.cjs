@@ -29,7 +29,7 @@ const origin=process.env.GODSPEED_VERIFY_ORIGIN||'https://localhost:48443';
   }
   if(process.env.GODSPEED_VERIFY_INVITATION_URL){
    const invitation=new URL(process.env.GODSPEED_VERIFY_INVITATION_URL);invitation.searchParams.set('next','/dashboard/settings/import');
-   await page.goto(invitation.href);await page.getByRole('heading',{name:'Make it yours'}).waitFor();
+   await page.goto(invitation.href);await page.getByRole('heading',{name:'Make it yours'}).waitFor();await page.screenshot({path:path.join(evidence,'make-it-yours.png'),fullPage:true});
    assert.equal(await page.getByLabel('Setup code',{exact:true}).count(),0);
   }else{
    await page.goto(origin+'/dashboard/settings/import');
