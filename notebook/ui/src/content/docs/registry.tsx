@@ -1,5 +1,6 @@
 import { Callout, CodeBlock } from "@/components/docs/DocComponents";
 import type { DocPage, DocCategory } from "./types";
+import { BRAIN_PAGE } from "@/lib/brain-page";
 
 // ── Getting Started ──
 
@@ -488,6 +489,28 @@ const githubSync: DocPage = {
   ),
 };
 
+// ── Godspeed's brain (lib/brain-page.ts) ──
+
+const brainPage: DocPage = {
+  slug: "brain",
+  title: BRAIN_PAGE.label,
+  description: BRAIN_PAGE.description,
+  category: "Your Profile",
+  headings: [
+    { id: "what-is-brain", title: "What It Is" },
+    { id: "brain-changes", title: "Changing It" },
+  ],
+  searchText: "brain identity who it is extra instructions rules skills profile pages assistant persona soul",
+  content: () => (
+    <>
+      <h2 id="what-is-brain">What It Is</h2>
+      <p>{BRAIN_PAGE.label} shows what makes your assistant behave the way it does: who it is, its extra instructions, its rules (numbered as it reads them), what it knows about you and its skills, which are step-by-step instructions for one job each.</p>
+      <h2 id="brain-changes">Changing It</h2>
+      <p>Change any part on the page, or open the chat on the page and ask, for example "Change rule 3 so that it also covers bookings". Every change keeps the earlier version, so you can undo it or bring back any version.</p>
+    </>
+  ),
+};
+
 // ── Your Profile ──
 
 const profilePage: DocPage = {
@@ -523,8 +546,7 @@ const profilePage: DocPage = {
       <p>A progress indicator shows how complete your profile is. A richer profile means better AI suggestions, more relevant connections, and smarter processing.</p>
 
       <h2 id="agent-instructions">Agent Instructions</h2>
-      <p>In the <strong>Agent Instructions</strong> tab, write custom instructions for the AI. For example: "Always address me informally" or "Focus on action items related to my startup". They reach the note, conversation and collection chats, and every AI assistant you connect over MCP, which receives them with your profile. Automatic note processing does not use them.</p>
-      <Callout type="tip">Agent Instructions are a powerful way to make Godspeed Mission Control truly yours - experiment with different instructions to shape how the AI works for you.</Callout>
+      <p>Instructions for the AI apps you connect are in <strong>{BRAIN_PAGE.label}</strong>, next to your rules. For example: "Always address me informally". Every AI app you connect over MCP receives them with your profile. Automatic note processing does not use them.</p>
     </>
   ),
 };
@@ -754,6 +776,7 @@ export const allDocs: DocPage[] = [
   githubSync,
   collections,
   profilePage,
+  brainPage,
   dailyWorkflow,
   weeklyReview,
   settingsAccount,
@@ -810,6 +833,7 @@ export const docCategories: DocCategory[] = [
     slug: "profile",
     pages: [
       { slug: "profile", title: "Your Profile" },
+      { slug: "brain", title: BRAIN_PAGE.label },
     ],
   },
   {

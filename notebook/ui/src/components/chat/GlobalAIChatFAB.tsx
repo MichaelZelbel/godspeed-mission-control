@@ -49,6 +49,7 @@ import {
 const ChatMarkdown = lazy(() => import("./ChatMarkdown"));
 
 import ChatComposer, {type ChatFile} from "./ChatComposer";
+import { BRAIN_PAGE } from "@/lib/brain-page";
 type ChatMessage = PersistedChatMessage;
 type SizeMode = "docked" | "expanded" | "fullscreen";
 
@@ -60,16 +61,24 @@ function loadSizeMode(): SizeMode {
   return v === "expanded" || v === "fullscreen" ? v : "docked";
 }
 
-export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChange}:{page?:boolean;embedded?:boolean;noteTitle?:string;onOpenChange?:(open:boolean)=>void}) {
+// pageContext: a page with a conversation of its own, docked beside it (Godspeed's brain,
+// lib/brain-page.ts). Each message carries the page's name, the server tells the assistant what
+// the page shows (core/domains.mjs), and an answer that changed it tells the page to show it.
+type PageContext={page:string;label:string;toggleEvent?:string;changedEvent?:string};
+// The same conversation opened in its own window (/dashboard/chat?page=identity).
+const PAGE_CHATS:Record<string,PageContext>={identity:{page:'identity',label:BRAIN_PAGE.label}};
+export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChange,pageContext}:{page?:boolean;embedded?:boolean;noteTitle?:string;onOpenChange?:(open:boolean)=>void;pageContext?:PageContext}) {
   const { user, session } = useAuth();
   const location = useLocation();
   const talkId=page?new URLSearchParams(location.search).get('talk'):null;
+  const pageChat=pageContext??(page?PAGE_CHATS[new URLSearchParams(location.search).get('page')||'']:undefined);
   const queryClient = useQueryClient();
   const isMobile = useIsMobile();
   const [open, setOpen] = useState(page);
   const openChangeRef=useRef(onOpenChange);openChangeRef.current=onOpenChange;
   useEffect(()=>{openChangeRef.current?.(open);},[open]);
-  useEffect(()=>{if(!embedded)return;const toggle=()=>setOpen(v=>!v);window.addEventListener("godspeed:toggle-note-chat",toggle);return()=>window.removeEventListener("godspeed:toggle-note-chat",toggle);},[embedded]);
+  const toggleEvent=pageContext?.toggleEvent??"godspeed:toggle-note-chat";
+  useEffect(()=>{if(!embedded)return;const toggle=()=>setOpen(v=>!v);window.addEventListener(toggleEvent,toggle);return()=>window.removeEventListener(toggleEvent,toggle);},[embedded,toggleEvent]);
   const [confirm, confirmDialog] = useConfirmDialog();
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -102,7 +111,7 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
   }, [location.pathname,location.search,page]);
 
   // Returning to the note list on a phone must reveal the tree again.
-  useEffect(()=>{if(embedded&&isMobile&&!noteId)setOpen(false);},[embedded,isMobile,noteId]);
+  useEffect(()=>{if(embedded&&isMobile&&!noteId&&!pageContext)setOpen(false);},[embedded,isMobile,noteId,pageContext]);
 
   // Detect person context (People profile page) so the assistant knows whose
   // profile the user is looking at
@@ -148,7 +157,7 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
     };
   }, [collectionSlug, user?.id]);
 
-  const contextKey = talkId?'coach:'+talkId:collectionId
+  const contextKey = talkId?'coach:'+talkId:pageChat?'page:'+pageChat.page:collectionId
     ? `collection:${collectionId}`
     : noteId
       ? `note:${noteId}`
@@ -188,7 +197,8 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
         setOpen((prev) => !prev);
         return;
       }
-      if (e.key === "Escape" && open) {
+      // An open dialog takes its own Escape; the docked chat beside it stays open.
+      if (e.key === "Escape" && open && !(embedded && document.querySelector('[role="dialog"],[role="alertdialog"]'))) {
         if (effectiveMode === "fullscreen") {
           setSizeMode(isMobile ? "docked" : "expanded");
         } else if (effectiveMode === "expanded") {
@@ -200,7 +210,7 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [page, open, effectiveMode, isMobile, setSizeMode]);
+  }, [page, embedded, open, effectiveMode, isMobile, setSizeMode]);
 
   useEffect(()=>{if(open)setState(loadChatState(user?.id,contextKey));},[open]);
   useEffect(()=>{const changed=(event:Event)=>{if((event as CustomEvent).detail?.key===contextKey)setState(loadChatState(user?.id,contextKey));};window.addEventListener('godspeed:chat-history-updated',changed);return()=>window.removeEventListener('godspeed:chat-history-updated',changed);},[contextKey,user?.id,setState]);
@@ -314,7 +324,7 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
 
 
       const { data, error: fnErr } = await supabase.functions.invoke(chatFn, {
-        body: {...invokeBody,message:userMsg.content,conversation_id:'notebook:'+contextKey,talk_id:talkId||undefined,files:files.length?files:state.messages.slice().reverse().find(m=>m.attachments?.length)?.attachments||[],model:model||undefined,effort:effort||undefined,request_id:requestRef.current},
+        body: {...invokeBody,message:userMsg.content,conversation_id:'notebook:'+contextKey,talk_id:talkId||undefined,page:pageChat?.page,page_label:pageChat?.label,files:files.length?files:state.messages.slice().reverse().find(m=>m.attachments?.length)?.attachments||[],model:model||undefined,effort:effort||undefined,request_id:requestRef.current},
       });
 
       // A non-2xx answer (out of credits is a 402) arrives as fnErr with
@@ -398,6 +408,11 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
         );
       }
 
+      // The page this conversation belongs to shows what the assistant changed on it.
+      if (pageChat && data.identity_changed) {
+        window.dispatchEvent(new CustomEvent(pageChat.changedEvent ?? "godspeed:page-chat-changed", { detail: { page: pageChat.page } }));
+      }
+
       setFiles([]);
       deliver(sentKey, sentUserId, sentContext, updated);
       summarizeLater(chatFn, sentKey, sentUserId, sentContext, updated);
@@ -409,7 +424,7 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
     } finally {
       setIsLoading(false);requestRef.current=null;
     }
-  }, [input, files, model, effort, isLoading, session, state, noteId, personId,talkId, collectionId, collectionItemId, queryClient, chatKey, contextKey, user?.id, deliver, summarizeLater]);
+  }, [input, files, model, effort, isLoading, session, state, noteId, personId,talkId, pageChat, collectionId, collectionItemId, queryClient, chatKey, contextKey, user?.id, deliver, summarizeLater]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     // Enter sends; Shift+Enter inserts a newline. This matches the in-note and
@@ -430,7 +445,9 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
 
   if (!user) return null;
 
-  const emptyText = collectionId
+  const emptyText = pageChat
+    ? "Ask me to change any part of this page by its number, for example \"Change rule 3 so that it also covers bookings\"."
+    : collectionId
     ? "Ask me to add, update, or search items in this collection."
     : noteId
     ? "Ask me about this note or your knowledge base."
@@ -502,8 +519,8 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
             <div className="flex items-center justify-between px-4 py-2.5 border-b border-border shrink-0">
               <div className="flex items-center gap-2 min-w-0">
                 <Bot className="h-4 w-4 text-primary shrink-0" />
-                <span className="text-sm font-semibold truncate" title={noteTitle||contextTitle||"Godspeed"}>
-                  {noteId ? "Godspeed / "+(noteTitle||contextTitle||"Current note") : "Godspeed"}
+                <span className="text-sm font-semibold truncate" title={pageChat?.label||noteTitle||contextTitle||"Godspeed"}>
+                  {pageChat ? "Godspeed / "+pageChat.label : noteId ? "Godspeed / "+(noteTitle||contextTitle||"Current note") : "Godspeed"}
                 </span>
                 {!embedded && state.messages.length > 0 && (
                   <span className="text-[10px] text-muted-foreground shrink-0">
@@ -513,7 +530,7 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
               </div>
               {page&&<Button variant="ghost" className="h-11" onClick={handleClear} disabled={isLoading}>Clear conversation</Button>}
               {!page&&<div className="flex items-center gap-1">
-                <a className="inline-flex h-11 w-11 sm:h-10 sm:w-10 items-center justify-center rounded hover:bg-muted" href={'/dashboard/chat'+(noteId?'?note='+encodeURIComponent(noteId):personId?'?person='+encodeURIComponent(personId):'')} target="_blank" rel="noreferrer" aria-label="Open chat in a new window" title="Open chat in a new window"><ExternalLink className="h-4 w-4"/></a>
+                <a className="inline-flex h-11 w-11 sm:h-10 sm:w-10 items-center justify-center rounded hover:bg-muted" href={'/dashboard/chat'+(pageChat?'?page='+encodeURIComponent(pageChat.page):noteId?'?note='+encodeURIComponent(noteId):personId?'?person='+encodeURIComponent(personId):'')} target="_blank" rel="noreferrer" aria-label="Open chat in a new window" title="Open chat in a new window"><ExternalLink className="h-4 w-4"/></a>
                 {!embedded&&<span className="text-[10px] text-muted-foreground hidden xl:inline mr-1">Ctrl+Shift+K</span>}
                 {state.messages.length > 0 && (
                   <Button
@@ -578,7 +595,7 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
               {state.messages.length === 0 && (
                 <div className={cn("text-center text-muted-foreground text-sm",embedded&&isMobile?"py-2 space-y-2":"py-12 space-y-3")}>
                   {!(embedded&&isMobile)&&<Bot className="h-8 w-8 mx-auto opacity-40" />}
-                  <h2 className={cn("font-semibold text-foreground",embedded&&isMobile?"text-base":"text-xl")}>{embedded&&isMobile?'Ask about this note':'What would you like to work on?'}</h2><p>{emptyText}</p>
+                  <h2 className={cn("font-semibold text-foreground",embedded&&isMobile?"text-base":"text-xl")}>{embedded&&isMobile?(pageChat?'Ask about this page':'Ask about this note'):'What would you like to work on?'}</h2><p>{emptyText}</p>
                   {!(embedded&&isMobile)&&<p className="text-[10px]">
                     Attach a document or image, or ask about a note. Your conversations are saved here.
                   </p>}
@@ -669,7 +686,7 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
             </div>
 
             <div className="shrink-0 pt-3 pb-1 px-1">
-              <ChatComposer compact={embedded} value={input} onChange={setInput} onSend={sendMessage} onStop={stopReply} busy={isLoading} files={files} onFiles={setFiles} model={model} effort={effort} onModel={setModel} onEffort={setEffort} reply={state.messages.filter(m=>m.role==='assistant').at(-1)?.content||''} context={noteId?undefined:personId?'Current person: '+(contextTitle||'Loading...'):collectionId?'Current collection':'Your notebook / Relevant notes and people'} onError={setError}/>
+              <ChatComposer compact={embedded} value={input} onChange={setInput} onSend={sendMessage} onStop={stopReply} busy={isLoading} files={files} onFiles={setFiles} model={model} effort={effort} onModel={setModel} onEffort={setEffort} reply={state.messages.filter(m=>m.role==='assistant').at(-1)?.content||''} context={pageChat?'This page: '+pageChat.label:noteId?undefined:personId?'Current person: '+(contextTitle||'Loading...'):collectionId?'Current collection':'Your notebook / Relevant notes and people'} onError={setError}/>
               <p className="text-[11px] text-muted-foreground text-center pt-2">Enter to send · Shift+Enter for a new line</p>
             </div>
           </div>

@@ -12,12 +12,15 @@ import { LowBalanceBanner } from "./LowBalanceBanner";
 import { useProcessingSweep } from "@/hooks/useProcessingSweep";
 import { RouteErrorBoundary } from "@/components/ErrorBoundary";
 import { PageLoader } from "@/components/LoadingStates";
+import { BRAIN_PAGE } from "@/lib/brain-page";
 
 
 
 export function DashboardLayout() {
   const pathname=useLocation().pathname;
-  const isChat=pathname==="/dashboard/chat",isNotes=pathname.startsWith("/dashboard/notes"),isImport=pathname==="/dashboard/settings/import",isHabit=pathname.startsWith("/trackers/habits/");
+  // Godspeed's brain docks its own chat beside its content, as Notes does: no floating button
+  // over the rule being changed.
+  const isChat=pathname==="/dashboard/chat",isNotes=pathname.startsWith("/dashboard/notes"),isImport=pathname==="/dashboard/settings/import",isHabit=pathname.startsWith("/trackers/habits/"),isBrain=pathname===BRAIN_PAGE.path;
 
   return (
     <SidebarProvider>
@@ -47,7 +50,7 @@ export function DashboardLayout() {
             </RouteErrorBoundary>
           </main>
         </div>
-        {!isChat&&!isNotes&&!isImport&&!isHabit&&<GlobalAIChatFAB />}
+        {!isChat&&!isNotes&&!isImport&&!isHabit&&!isBrain&&<GlobalAIChatFAB />}
         <CommandPalette />
       </div>
     </SidebarProvider>

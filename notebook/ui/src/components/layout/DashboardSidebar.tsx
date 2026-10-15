@@ -13,7 +13,6 @@ import {
   Plug,
   UserCircle,
   User,
-  Fingerprint,
   
   Network,
   Image,
@@ -26,6 +25,7 @@ import {
   Globe,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
+import { BRAIN_PAGE } from "@/lib/brain-page";
 import { BRAND } from "@/lib/brand";
 import { brandLogo } from "@/lib/brand-assets";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -119,7 +119,7 @@ export function DashboardSidebar() {
 
   const systemItems = [
     { title: "My Profile", url: "/dashboard/profile", icon: User },
-    { title: "Identity", url: "/dashboard/identity", icon: Fingerprint },
+    { title: BRAIN_PAGE.label, url: BRAIN_PAGE.path, icon: BRAIN_PAGE.icon },
     { title: "Settings", url: "/dashboard/settings", icon: Settings },
     { title: "Godspeed chat", url: "/chat", icon: Plug },
     { title: "Connect AI", url: "/dashboard/settings?tab=mcp", icon: Plug },

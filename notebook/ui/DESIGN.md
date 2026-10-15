@@ -78,7 +78,24 @@ The set, all in `public/`: `icon-192.png` and `icon-512.png` (manifest "any") an
 
 To cut the set again, start from `icon-source/godspeed-g-transparent-master.png` (712px, transparent). `notebook/test/app-icons.test.mjs` checks that the "any" and tab icons stay transparent and the maskable and iPhone icons stay opaque.
 
-## Identity page
+## Godspeed's brain (the Identity page until 16 October 2026)
+
+Brief (16 October 2026, Michael on the production notebook): the page was confusing and partly broken. A rule could not be saved with only "Read before every job" switched ("Keep the rule's name short", because its long description stood in for its name); "It must / It must never / How things work here" read as three names for one thing; about sixty rules sat under one heading with no numbers; "Your manual: 18,805 of 20,000 characters" under "Who it is" described another file in a word he does not use; nine profile pages looked like everything it knows; "recipes" and "Identity" with a fingerprint (his own identity) were the wrong words; the round chat button covered the rule being edited and opened the general chat; and the yellow box about the assistant program's own identity file was a mystery file.
+
+Plan v2:
+- Name: "Godspeed's brain" with lucide `Brain`, at `/dashboard/brain` (the old address redirects, keeping the part after #). Menu label, command palette, heading, browser title, icon and links all read `src/lib/brain-page.ts`; the server never names the page.
+- Order: Who it is, Extra instructions, Rules, What it knows about you, Skills. A sticky row at the top of the page's own scroll area holds the chat switch at the far left (as on Notes) and a way to each part.
+- Who it is: the paragraphs in a readable column (65 characters, text-base, leading-7), one paragraph per blank line. No size line under it.
+- Extra instructions (`assistant/extra-instructions.md`): what the assistant's program reads right after "Who it is", in Telegram, the notebook's chat and routines; SOUL.md is the two together (core/assistant-soul.mjs). When SOUL.md is its owner's own text, the card says plainly that Hermes also reads a text the page does not hold yet, with "Show it" (the whole text) and "Bring it here".
+- Rules: one section. Numbered tiles: a big bold number, the short name as the headline (never cut off), a small outline tag for the kind ("Must", "Never", "How it works"), the sentence below in smaller muted text clamped to three lines (a rule without a sentence shows its description). The rules read before every job come first, numbered as AGENTS.md numbers them (the server's numbers, from the compiler); the rest sit in one section closed by default, "Read only when their subject comes up (N)", grouped by where they are read, numbered on. The tile grid fills the page's own width, so it stays readable beside the open chat.
+- What it knows about you: numbered profile pages, then "And everything in your notebook" with real counts and links (notes, people, facts, timeline events, places and things, collections), and one sentence on what is read every time and what is searched.
+- Skills: numbered, "Step-by-step instructions for one job each".
+- Sizes: a note under an editor only when a change gets near or over a limit, saying what it counts and why (AGENTS.md read in full before every job; "Who it is" and the extra instructions read first).
+- Chat: the notebook's chat docked beside the page as on Notes (left, beside the content; above it on a phone), its own conversation, told the page's numbers with each message; a change it makes refreshes the page.
+
+Checked on 16 October 2026 in a real browser at 1440px and 390px against a throwaway copy of the owner's rules, profile, skills, notebook and AGENTS.md (never his folder itself), with a stand-in assistant that changed rule 12 through the real path from the chat.
+
+The 15 October design, kept for its reasons:
 
 Reading this as: a book reader looking at, and changing, what makes their mission control behave the way it does, in Operate mode, on desktop and phone. Vibe: familiar, calm, trustworthy.
 

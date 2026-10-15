@@ -1,5 +1,6 @@
 import { lazy, Suspense, useState } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, Link, Outlet } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, Link, Outlet, useLocation } from 'react-router-dom';
+import { BRAIN_PAGE } from '@/lib/brain-page';
 import { ThemeProvider } from 'next-themes';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { TooltipProvider } from '@/components/ui/tooltip';
@@ -19,8 +20,10 @@ const Timeline=lazy(()=>import('./pages/TimelinePage')),Media=lazy(()=>import('.
 const Groups=lazy(()=>import('./pages/Groups')),GroupDetail=lazy(()=>import('./pages/GroupDetail')),Actions=lazy(()=>import('./pages/Actions'));
 const Activity=lazy(()=>import('./pages/ActivityPage')),WeeklyReview=lazy(()=>import('./pages/WeeklyReview'));
 const KnowledgeGraph=lazy(()=>import('./pages/KnowledgeGraph'));
-// The Identity page: who it is, its rules, what it knows about you, how it does its jobs.
+// Godspeed's brain (lib/brain-page.ts): who it is, its rules, what it knows about you, its skills.
 const Identity=lazy(()=>import('./pages/Identity'));
+// Its address until 16 October 2026 ("Identity"), with a section after # kept.
+function ToBrainPage(){const {search,hash}=useLocation();return <Navigate to={BRAIN_PAGE.path+search+hash} replace/>;}
 const Control=lazy(()=>import('./local/Control'));
 const ImportMenerio=lazy(()=>import('./local/ImportMenerio'));
 const ConnectTelegram=lazy(()=>import('./local/ConnectTelegram'));
@@ -41,7 +44,7 @@ export default function App(){return <ThemeProvider attribute="class" defaultThe
   <Route path="/dashboard/telegram" element={<ConnectTelegram/>}/>
   <Route path="/dashboard/people" element={<People/>}/><Route path="/dashboard/people/:id" element={<People/>}/>
   <Route path="/dashboard/world" element={<World/>}/><Route path="/dashboard/world/:id" element={<World/>}/>
-  <Route path="/dashboard/profile" element={<Profile/>}/><Route path="/dashboard/identity" element={<Identity/>}/><Route path="/dashboard/timeline" element={<Timeline/>}/>
+  <Route path="/dashboard/profile" element={<Profile/>}/><Route path={BRAIN_PAGE.path} element={<Identity/>}/><Route path={BRAIN_PAGE.oldPath} element={<ToBrainPage/>}/><Route path="/dashboard/timeline" element={<Timeline/>}/>
   <Route path="/dashboard/media" element={<Media/>}/><Route path="/dashboard/review-queue" element={<Review/>}/>
   <Route path="/dashboard/groups" element={<Groups/>}/><Route path="/dashboard/groups/:slug" element={<GroupDetail/>}/>
   <Route path="/dashboard/actions" element={<Actions/>}/><Route path="/dashboard/activity" element={<Activity/>}/><Route path="/dashboard/review" element={<WeeklyReview/>}/>
