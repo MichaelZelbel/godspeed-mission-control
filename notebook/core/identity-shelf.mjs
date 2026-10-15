@@ -18,10 +18,18 @@ import {normalized} from './packaged-skills.mjs';
 //   who      the persona paragraph of AGENTS.md, between its persona markers, and nothing else
 //            of that file; Hermes' own identity file (SOUL.md) follows it (assistant-soul.mjs)
 //   rule:x   rules/x.md; the one-line list of rules in AGENTS.md (mc-compile-rules,
-//            tools/compile-rules.js) is brought up to date in the same change
+//            tools/compile-rules.js) is brought up to date in the same change. A rule's short
+//            name is its own `title:` (ruleName), never its `description:`
 //   profile:x  profile/x.md
-//   skill:x  skills/x/SKILL.md; a recipe the package keeps up to date stays the person's once they
-//            change it (packaged-skills.mjs keeps an edited recipe and offers the update for review)
+//   skill:x  skills/x/SKILL.md; a skill the package keeps up to date stays the person's once they
+//            change it (packaged-skills.mjs keeps an edited skill and offers the update for review)
+//
+// The page numbers rules, profile pages and skills (overview), and the chat on the page is given
+// the same numbers (chatContext), so "change rule 13" means the rule the page shows as 13, and the
+// rules read before every job carry the numbers AGENTS.md gives them.
+//
+// What the page shows must save: a field the person did not change is never refused for its
+// length or form, and never written (rulePlan).
 //
 // Only those paths: a target names one by a narrow pattern, every folder on the way must be a
 // real folder (not a link) inside the workspace, the file a regular file. Every change is written
@@ -33,9 +41,13 @@ const require=createRequire(import.meta.url);
 let compiler=null;try{compiler=require(fileURLToPath(new URL('../../tools/compile-rules.js',import.meta.url)));}catch{}
 
 export const MANUAL='AGENTS.md';
+// What the page calls AGENTS.md: "manual" meant nothing to the owner (16 October 2026).
+const MAIN='your assistant\'s main instructions (AGENTS.md)';
 // Hermes cuts a context file past 20,000 characters (it keeps the start and the end and drops the
 // middle: prompt_builder.py CONTEXT_FILE_MAX_CHARS); the starter's manual asks to stay under 19,000.
 export const MANUAL_LIMIT=20000,MANUAL_WARN=19000;
+// A rule's short name: a few words, so the owner can find it among fifty.
+export const NAME_LIMIT=60;
 import {PERSONA_BEGIN_LINE,PERSONA_END_LINE,personaParts,personaOf,withPersona,markedManual,unmarkedManual} from './persona.mjs';
 export {PERSONA_BEGIN_LINE,PERSONA_END_LINE,personaParts,personaOf,withPersona,markedManual,unmarkedManual};
 const SLUG=/^[a-z0-9][a-z0-9._-]{0,99}$/,NAME=/^[A-Za-z0-9][A-Za-z0-9 ._-]{0,99}$/;
@@ -74,8 +86,42 @@ export function setFront(text,updates,{quote=quoted}={}){
   return '---'+eol+lines.join(eol)+eol+'---'+eol+(front===null?body.replace(/^\r?\n?/,''):body);
 }
 const oneLine=value=>String(value??'').replace(/\s*\r?\n\s*/g,' ').trim();
-// A recipe's description is read as YAML by the assistants: written as YAML's double-quoted text.
+// A skill's description is read as YAML by the assistants: written as YAML's double-quoted text.
 const yamlQuoted=value=>'"'+String(value).replace(/\\/g,'\\\\').replace(/"/g,'\\"')+'"';
+
+// ---- Names in words --------------------------------------------------------------------------
+// "never-spend-my-money" -> "Never spend my money"; "merged:finish-the-whole-task" -> "Merged: finish
+// the whole task". A hyphen between digits stays, so a date reads as a date.
+export function inWords(value){
+  const w=String(value??'').replace(/:\s*/g,': ').replace(/(?<=[\p{L}\d])[-_.]+(?=\p{L})|(?<=\p{L})[-_.]+(?=\d)/gu,' ').replace(/\s+/g,' ').trim();
+  return w.charAt(0).toUpperCase()+w.slice(1);
+}
+// The first words of a sentence, at most `max` characters, marked as cut when they are.
+export function firstWords(text,max=40){
+  const plain=oneLine(text).replace(/[`*]/g,'');let out='';
+  for(const word of plain.split(' ').filter(Boolean)){const next=out?out+' '+word:word;if(chars(next)>max)break;out=next;}
+  if(!out)return [...plain].slice(0,max).join('');
+  return out===plain?out:out.replace(/[,;:.!?]+$/,'')+'…';
+}
+// A rule's short name: its own `title:`; else its file name in words, when that is short; else the
+// first words of its sentence. Never its `description:`: in an owner's own files that is often a
+// long summary written for another program, and until 16 October 2026 the page showed it as the
+// name and refused to save a rule whose untouched description was long ("Keep the rule's name
+// short", on a rule where only "Read before every job" had been switched).
+export function ruleName(slug,h){
+  const own=oneLine(h.title);if(own)return own;
+  const words=inWords(slug);if(chars(words)<=40)return words;
+  return firstWords(h.line||words,40);
+}
+// Where a rule that is not read before every job is read, in the page's words, and the order of
+// those groups on the page: the companies, each skill, when its subject comes up, then the rest.
+export function placeOf(where){
+  const w=String(where??'').trim();
+  if(w==='company'||w==='companies')return {key:'company',label:'For the companies',rank:0};
+  const skill=/^skill:\s*(.+)$/.exec(w);if(skill)return {key:'skill:'+skill[1],label:'For the skill '+inWords(skill[1]).toLowerCase(),rank:1};
+  if(['','search','when-it-matters','when-needed'].includes(w))return {key:'when-it-matters',label:'When its subject comes up',rank:2};
+  return {key:w,label:inWords(w),rank:3};
+}
 
 export class IdentityShelf{
   constructor(store,{assistantHome=()=>null,now=()=>new Date(),recentWindowMs=20*60*1000}={}){
@@ -85,11 +131,11 @@ export class IdentityShelf{
   target(target){
     const t=String(target??'');
     if(t==='who')return {kind:'who',target:t,file:MANUAL,label:'who it is'};
-    const m=/^(rule|profile|skill):(.+)$/.exec(t);if(!m)refuse('Choose a part of the Identity page.','UNKNOWN_TARGET');
+    const m=/^(rule|profile|skill):(.+)$/.exec(t);if(!m)refuse('Choose a part of this page: who it is, a rule, a profile page or a skill.','UNKNOWN_TARGET');
     const [,kind,name]=m;
     if(name.includes('..')||windowsInvalid(name)||!(kind==='rule'?SLUG:NAME).test(name)||kind==='rule'&&['readme','memory'].includes(name.toLowerCase()))refuse('That is not one of the files this page shows.','UNKNOWN_TARGET');
     const file=kind==='rule'?'rules/'+name+'.md':kind==='profile'?'profile/'+name+'.md':'skills/'+name+'/SKILL.md';
-    return {kind,target:t,name,file,label:kind==='rule'?'the rule "'+name+'"':kind==='profile'?file:'the recipe "'+name+'"'};
+    return {kind,target:t,name,file,label:kind==='rule'?'the rule "'+name+'"':kind==='profile'?file:'the skill "'+name+'"'};
   }
   // The absolute path of a workspace file, refusing links and anything outside the workspace.
   // missing: whether the file itself may be absent (a new rule, a removed one brought back).
@@ -134,11 +180,12 @@ export class IdentityShelf{
     const {front,body}=splitFront(text);return {text:lf(body).replace(/^\n+/,''),kept_details:front!==null};
   }
   ruleFields(slug,text){
-    const {front,body}=splitFront(text),h=readFront(front),heading=(lf(body).match(/^#\s+(.+)$/m)||[])[1];
-    return {slug,title:h.description||heading||slug,line:h.line||'',group:['must','never','how'].includes(h.group)?h.group:'how',always:h.where===undefined||h.where==='always',story:lf(body).replace(/^\n+/,'')};
+    const {front,body}=splitFront(text),h=readFront(front);
+    return {slug,title:ruleName(slug,h),line:oneLine(h.line),group:['must','never','how'].includes(h.group)?h.group:'how',always:h.where===undefined||h.where==='always',where:h.where===undefined?'always':String(h.where),story:lf(body).replace(/^\n+/,'')};
   }
   viewText(t,view){return view===null?null:typeof view==='string'?view:JSON.stringify(view);}
-  manualInfo(text){return {exists:text!==null,chars:chars(text||''),limit:MANUAL_LIMIT,warn:MANUAL_WARN};}
+  // kept_under: a list of rules kept by the owner's own program keeps the file under 19,000 (checkManual).
+  manualInfo(text){return {exists:text!==null,chars:chars(text||''),limit:MANUAL_LIMIT,warn:MANUAL_WARN,kept_under:this.rulesKeeper(text)?MANUAL_WARN:null};}
   skillOrigin(name,bytes){
     let ledger={},known={};
     try{ledger=JSON.parse(fs.readFileSync(path.join(this.store.state,'packaged-skills.json'),'utf8'));}catch{}
@@ -178,14 +225,55 @@ export class IdentityShelf{
     const named=/\bby\s+(\S+?)[.,;:]?(?=\s|$)/.exec(line);
     return named?{program:named[1]}:null;
   }
+  // Everything the page shows, numbered. Rules come in the order the page lists them: first the
+  // ones read before every job, with the numbers AGENTS.md gives them (ruleNumbers), then the rest
+  // grouped by where they are read (placeOf), numbered on. Profile pages and skills are numbered
+  // 1, 2, 3 in their own lists.
   overview(){
     const manual=this.readText(MANUAL),waiting=this.waitingReviews();
     const persona=manual===null?null:personaOf(manual);
     const who=manual===null?{state:'no-manual'}:persona===null?{state:'no-markers',proposal:markedManual(manual).persona}:{state:'ok',text:persona,hash:hash(persona)};
-    const rules=this.ruleNames().map(slug=>{try{const f=this.ruleFields(slug,this.readText('rules/'+slug+'.md'));return {target:'rule:'+slug,...f,story:undefined,review_waiting:waiting.has('rules/'+slug+'.md')};}catch{return null;}}).filter(Boolean);
-    const profile=this.profileNames().map(name=>{try{const text=this.readText('profile/'+name+'.md'),body=lf(splitFront(text).body),title=(body.match(/^#\s+(.+)$/m)||[])[1]||name;return {target:'profile:'+name,name,title,preview:body.replace(/^#.*$/gm,'').replace(/<!--[\s\S]*?-->/g,'').trim().split('\n').find(Boolean)?.slice(0,160)||'',review_waiting:waiting.has('profile/'+name+'.md')};}catch{return null;}}).filter(Boolean);
-    const skills=this.skillNames().map(name=>{try{const bytes=this.readBytes('skills/'+name+'/SKILL.md'),h=readFront(splitFront(bytes.toString('utf8')).front);return {target:'skill:'+name,name,description:h.description||'',origin:this.skillOrigin(name,bytes),review_waiting:waiting.has('skills/'+name+'/SKILL.md')};}catch{return null;}}).filter(Boolean);
+    const read=this.ruleNames().map(slug=>{try{const text=this.readText('rules/'+slug+'.md');return {text,rule:{target:'rule:'+slug,...this.ruleFields(slug,text),story:undefined,review_waiting:waiting.has('rules/'+slug+'.md')}};}catch{return null;}}).filter(Boolean);
+    const numbers=this.ruleNumbers(manual,read);
+    const rules=read.map(({rule})=>({...rule,n:numbers.get(rule.slug),...(rule.always?{}:{place:(({key,label})=>({key,label}))(placeOf(rule.where))})})).sort((a,b)=>a.n-b.n);
+    const profile=this.profileNames().map(name=>{try{const text=this.readText('profile/'+name+'.md'),body=lf(splitFront(text).body),title=(body.match(/^#\s+(.+)$/m)||[])[1]||inWords(name);return {target:'profile:'+name,name,title:oneLine(title),preview:body.replace(/^#.*$/gm,'').replace(/<!--[\s\S]*?-->/g,'').trim().split('\n').find(Boolean)?.slice(0,160)||'',review_waiting:waiting.has('profile/'+name+'.md')};}catch{return null;}}).filter(Boolean).map((p,i)=>({n:i+1,...p}));
+    const skills=this.skillNames().map(name=>{try{const bytes=this.readBytes('skills/'+name+'/SKILL.md'),h=readFront(splitFront(bytes.toString('utf8')).front);return {target:'skill:'+name,name,title:inWords(h.name||name),description:h.description||'',origin:this.skillOrigin(name,bytes),review_waiting:waiting.has('skills/'+name+'/SKILL.md')};}catch{return null;}}).filter(Boolean).map((k,i)=>({n:i+1,...k}));
     return {manual:{...this.manualInfo(manual),review_waiting:waiting.has(MANUAL),rules_list:this.rulesState(manual),rules_program:this.rulesKeeper(manual)?.program??null},who,soul:this.soulInfo(),rules,profile,skills};
+  }
+  // slug -> number. The rules read before every job keep the number the list in AGENTS.md gives
+  // them (the compiler reads it back, compile-rules.js listed): that list is what the assistant
+  // reads, and where it is up to date it is exactly the compiler's own order (numbered). A rule
+  // the list does not carry yet follows in the compiler's order. The rules read only when their
+  // subject comes up are numbered on, group by group in the page's order, by file name inside one.
+  ruleNumbers(manual,read){
+    const out=new Map(),always=read.filter(r=>r.rule.always),rest=read.filter(r=>!r.rule.always);
+    const listed=compiler&&manual!==null?compiler.listed(manual):new Map();let last=0;
+    for(const {rule} of always)if(listed.has(rule.slug)){out.set(rule.slug,listed.get(rule.slug));last=Math.max(last,listed.get(rule.slug));}
+    const order=compiler?compiler.numbered(always.map(r=>({name:r.rule.slug+'.md',text:r.text})),{keepFrame:true}).rules.map(r=>r.slug):[];
+    for(const slug of [...order,...always.map(r=>r.rule.slug)])if(!out.has(slug))out.set(slug,++last);
+    const placed=rest.map(r=>({slug:r.rule.slug,place:placeOf(r.rule.where)})).sort((a,b)=>a.place.rank-b.place.rank||a.place.label.localeCompare(b.place.label)||a.slug.localeCompare(b.slug));
+    for(const {slug} of placed)out.set(slug,++last);
+    return out;
+  }
+  // What the chat on the page is told with every message: that the owner has the page open, and
+  // the numbers it shows, so "change rule 13" reaches the rule shown as 13. detail adds each
+  // rule's sentence and "who it is", for an assistant without tools to read them (domains.mjs).
+  chatContext({label,detail=false}={}){
+    const o=this.overview(),name=oneLine(label).slice(0,40),always=o.rules.filter(r=>r.always),rest=o.rules.filter(r=>!r.always);
+    const said=r=>detail&&r.line?' Now: "'+r.line+'"':'';
+    const lines=['The owner has the notebook page '+(name?'"'+name+'" ':'')+'open that shows who you are, your rules, what you know about them and your skills, numbered as below. When they name one by its number ("rule 13", "profile page 2", "skill 4"), they mean the one with that number here. Change these only with the identity_files tool, as that page does: read the part first, then change it with its expected_hash and their words. Never change these files with file tools.',
+      'Who you are: target "who".'+(detail&&o.who.text?' Now: "'+oneLine(o.who.text)+'"':'')];
+    if(always.length)lines.push('Rules read before every job, numbered as in AGENTS.md:',...always.map(r=>r.n+'. '+r.title+' ('+r.target+')'+said(r)));
+    if(rest.length)lines.push('Rules read only when their subject comes up:',...rest.map(r=>r.n+'. '+r.title+' ('+r.target+'; '+r.place.label.toLowerCase()+')'+said(r)));
+    if(o.profile.length)lines.push('Profile pages:',...o.profile.map(p=>p.n+'. '+p.title+' ('+p.target+')'));
+    if(o.skills.length)lines.push('Skills:',...o.skills.map(k=>k.n+'. '+k.title+' ('+k.target+')'));
+    return lines.join('\n');
+  }
+  // A cheap sign of whether any file the page shows changed: the chat compares it before and after
+  // a reply, so the page shows what the assistant changed (domains.mjs).
+  fingerprint(){
+    const files=[MANUAL,...this.ruleNames().map(s=>'rules/'+s+'.md'),...this.profileNames().map(n=>'profile/'+n+'.md'),...this.skillNames().map(n=>'skills/'+n+'/SKILL.md')];
+    return hash(files.map(f=>{try{const s=fs.statSync(path.join(this.root,f));return f+':'+s.size+':'+s.mtimeMs;}catch{return f+':-';}}).join('\n'));
   }
   // ---- The list of rules in AGENTS.md ---------------------------------------------------------
   // What AGENTS.md becomes with the rule files as they would be after `changes` (slug -> text or
@@ -203,7 +291,7 @@ export class IdentityShelf{
   gather(manual,changes){
     const keeper=this.rulesKeeper(manual);
     if(keeper){const now=this.compiled(manual,new Map());if(!now.problem&&!now.empty&&!now.noPlace&&now.next!==manual){const program=keeper.program||'a program of your own';
-      return {problem:'The list of rules in your manual is kept by '+program+', and it is not the list this page would write from your rules, so rules are not changed here. Change the rule file in rules/ and run '+program+'.',code:'RULES_KEPT_ELSEWHERE'};}}
+      return {problem:'The list of rules in '+MAIN+' is kept by '+program+', and it is not the list this page would write from your rules, so rules are not changed here. Change the rule file in rules/ and run '+program+'.',code:'RULES_KEPT_ELSEWHERE'};}}
     return this.compiled(manual,changes);
   }
   compiled(manual,changes){
@@ -224,11 +312,11 @@ export class IdentityShelf{
     // A manual whose list of rules a program of the owner's keeps stays under the line such a
     // program keeps it under: Michael's compile-rules.py refuses a manual past 19,000 characters,
     // and his push with it (runtime-limits.json, "warn").
-    if(keeper&&now>MANUAL_WARN&&now>was)refuse('This would make your manual '+now.toLocaleString('en')+' characters long. Your list of rules is kept by '+(keeper.program||'a program of your own')+', and this page keeps a manual like that under '+MANUAL_WARN.toLocaleString('en')+'. Make it shorter first.','MANUAL_TOO_LONG',{manual:{chars:now,limit:MANUAL_WARN}});
-    if(now>=MANUAL_LIMIT&&now>was)refuse('This would make your manual '+now.toLocaleString('en')+' characters long. Your assistant\'s program reads only '+MANUAL_LIMIT.toLocaleString('en')+' and drops the middle of a longer one. Make it shorter first.','MANUAL_TOO_LONG',{manual:{chars:now,limit:MANUAL_LIMIT}});
+    if(keeper&&now>MANUAL_WARN&&now>was)refuse('This would make '+MAIN+' '+now.toLocaleString('en')+' characters long. Your list of rules is kept by '+(keeper.program||'a program of your own')+', and this page keeps a file like that under '+MANUAL_WARN.toLocaleString('en')+'. Make something shorter first.','MANUAL_TOO_LONG',{manual:{chars:now,limit:MANUAL_WARN}});
+    if(now>=MANUAL_LIMIT&&now>was)refuse('This would make '+MAIN+' '+now.toLocaleString('en')+' characters long. Your assistant\'s program reads only '+MANUAL_LIMIT.toLocaleString('en')+' and drops the middle of a longer one. Make something shorter first.','MANUAL_TOO_LONG',{manual:{chars:now,limit:MANUAL_LIMIT}});
     const found=newFindings(before||'',after);
-    if(found.length)refuse('Your assistant\'s program would refuse to read your whole manual with "'+found[0].words+'" in it, because those words look like an attempt to take over an assistant. Please say it another way.','LOOKS_LIKE_TAKEOVER',{findings:found});
-    return {chars:now,limit:MANUAL_LIMIT,warn:MANUAL_WARN,...(now>=MANUAL_WARN?{warning:'Your manual is '+now.toLocaleString('en')+' characters long. Short enough for you to read all of it? Your assistant\'s program stops at '+MANUAL_LIMIT.toLocaleString('en')+'.'}:{})};
+    if(found.length)refuse('Your assistant\'s program would refuse to read all of '+MAIN+' with "'+found[0].words+'" in it, because those words look like an attempt to take over an assistant. Please say it another way.','LOOKS_LIKE_TAKEOVER',{findings:found});
+    return {chars:now,limit:MANUAL_LIMIT,warn:MANUAL_WARN,...(now>=MANUAL_WARN?{warning:'Your assistant reads its main instructions (AGENTS.md) in full before every job, and they are now '+now.toLocaleString('en')+' characters long. Short enough for you to read all of it? Its program stops at '+MANUAL_LIMIT.toLocaleString('en')+'.'}:{})};
   }
   // ---- Writing ----------------------------------------------------------------------------------
   // One change: plan(current) returns {writes: [{file, text|null}], message}; everything it writes
@@ -240,7 +328,7 @@ export class IdentityShelf{
       if(expected_hash!==undefined&&expected_hash!==current.hash)refuse('This changed since you opened it. Open it again to see the newest version.','CHANGED',{status:409});
       const waiting=this.waitingReviews();
       const {writes,message,extra={}}=plan(current);
-      for(const w of writes)if(waiting.has(w.file))refuse('Two versions of '+(w.file===MANUAL?'your manual':w.file)+' are waiting for you in Settings, under Review conflicting edits. Settle that first, then change it here.','REVIEW_WAITING',{status:409});
+      for(const w of writes)if(waiting.has(w.file))refuse('Two versions of '+(w.file===MANUAL?MAIN:w.file)+' are waiting for you in Settings, under Review conflicting edits. Settle that first, then change it here.','REVIEW_WAITING',{status:409});
       const before=new Map(writes.map(w=>[w.file,this.readBytes(w.file)]));
       for(const w of writes)this.safePath(w.file,{missing:true});
       const manualWrite=writes.find(w=>w.file===MANUAL),manual=manualWrite?this.checkManual(before.get(MANUAL)?.toString('utf8')??'',manualWrite.text??''):null;
@@ -272,18 +360,21 @@ export class IdentityShelf{
     const t=this.target(target);
     if(t.kind==='who'){
       const text=lf(input.text??input.fields?.text).trim();
-      if(!text)refuse('"Who it is" cannot be empty.','BLANK');if(chars(text)>4000)refuse('Keep "who it is" to a paragraph, at most 4,000 characters.','TOO_LONG');
-      return this.change(t,current=>{if(current.state!=='ok')refuse('Your manual has no marked "who it is" paragraph yet. Add the marks first.','NO_MARKERS');const manual=this.readText(MANUAL);return {writes:[{file:MANUAL,text:withPersona(manual,text)}],message:'changed who it is'};},options);
+      if(!text)refuse('"Who it is" cannot be empty.','BLANK');
+      return this.change(t,current=>{if(current.state!=='ok')refuse('Your assistant\'s main instructions (AGENTS.md) have no marked "who it is" paragraph yet. Add the marks first.','NO_MARKERS');
+        // Only a change is held to the length: the paragraph as it stands always saves.
+        if(text!==current.text&&chars(text)>4000)refuse('Keep "who it is" to a few paragraphs, at most 4,000 characters.','TOO_LONG');
+        const manual=this.readText(MANUAL);return {writes:[{file:MANUAL,text:withPersona(manual,text)}],message:'changed who it is'};},options);
     }
     const fields=input.fields||{};
     if(t.kind==='rule')return this.change(t,current=>this.rulePlan(t,current,fields,'changed the rule "'+t.name+'"'),options);
     if(t.kind==='skill')return this.change(t,()=>{
-      const old=this.readText(t.file),description=oneLine(fields.description);
-      if(!description)refuse('Say in one sentence what this recipe is for: your assistant picks recipes by it.','BLANK');if(description.length>1024)refuse('Keep what the recipe is for under 1,024 characters.','TOO_LONG');
-      const steps=lf(fields.steps??'');if(!steps.trim())refuse('A recipe needs its steps.','BLANK');
-      const old_description=readFront(splitFront(old).front).description;
-      const headed=old_description===description?old:setFront(old,{description},{quote:yamlQuoted});
-      return {writes:[{file:t.file,text:splitFront(headed).head+this.fitBody(old,steps)}],message:'changed the recipe "'+t.name+'"'};
+      const old=this.readText(t.file),old_description=readFront(splitFront(old).front).description,description=fields.description===undefined?oneLine(old_description):oneLine(fields.description);
+      // A description changed here is held to what the assistants read; one left as it was always saves.
+      if(description!==oneLine(old_description)){if(!description)refuse('Say in one sentence what this skill is for: your assistant picks a skill by it.','BLANK');if(description.length>1024)refuse('Keep what the skill is for under 1,024 characters.','TOO_LONG');}
+      const steps=lf(fields.steps??splitFront(old).body);if(!steps.trim())refuse('A skill needs its steps.','BLANK');
+      const headed=description===oneLine(old_description)?old:setFront(old,{description},{quote:yamlQuoted});
+      return {writes:[{file:t.file,text:splitFront(headed).head+this.fitBody(old,steps)}],message:'changed the skill "'+t.name+'"'};
     },options);
     return this.change(t,()=>{
       const old=this.readText(t.file),body=lf(input.text??fields.text??'');if(!body.trim())refuse('This page cannot be empty.','BLANK');
@@ -297,19 +388,30 @@ export class IdentityShelf{
     return lead+lf(text).replace(/^\n+/,'').replace(/\n+$/,'').replace(/\n/g,eol)+trail;
   }
   // A rule's file as the page's fields describe it, and the list in AGENTS.md brought up to date with it.
+  // What the page shows must save (16 October 2026). Each field is checked and written only when
+  // the person changed it: a name, a sentence or a kind left as the page showed it is never refused
+  // for its length or form and never rewritten, and `description:` is never written from the name
+  // (a new rule gets its sentence there). The short name lives in `title:`.
   rulePlan(t,current,fields,message,{create=false}={}){
-    const old=create?null:this.readText(t.file),oldFields=old===null?null:this.ruleFields(t.name,old);
-    const line=oneLine(fields.line??oldFields?.line),title=oneLine(fields.title??oldFields?.title)||line.slice(0,80);
-    const group=fields.group??oldFields?.group??'how',always=fields.always??oldFields?.always??true;
-    if(!['must','never','how'].includes(group))refuse('Choose what kind of rule this is.','BAD_GROUP');
-    if(always&&!line)refuse('Write the rule in one sentence: that sentence is what your assistant reads before every job.','BLANK');
-    if(line.length>400)refuse('Keep the one sentence under 400 characters; the whole story goes below it.','TOO_LONG');
-    if(title.length>160)refuse('Keep the rule\'s name short.','TOO_LONG');
-    let story=lf(fields.story??oldFields?.story??'');
+    const old=create?null:this.readText(t.file),was=old===null?null:this.ruleFields(t.name,old);
+    const given=key=>fields[key]!==undefined&&fields[key]!==null;
+    const line=given('line')?oneLine(fields.line):was?.line??'';
+    const always=given('always')?fields.always!==false:was?.always??true;
+    const group=given('group')?String(fields.group):was?.group??'how';
+    let title=given('title')?oneLine(fields.title):was?.title??'';
+    if(create&&!title)title=firstWords(line,NAME_LIMIT);
+    const changed={line:create||line!==was.line,always:create||always!==was.always,group:create||group!==was.group,title:create||title!==was.title};
+    if(changed.group&&!['must','never','how'].includes(group))refuse('Choose what kind of rule this is.','BAD_GROUP');
+    if(changed.title&&!title)refuse('Give the rule a name: a few words, so you can find it.','BLANK');
+    if(changed.title&&chars(title)>NAME_LIMIT)refuse('Keep the rule\'s name to a few words, at most '+NAME_LIMIT+' characters, so you can find it. The whole rule goes in its sentence and its story.','TOO_LONG');
+    if(always&&!line&&(changed.line||changed.always))refuse('Write the rule in one sentence: that sentence is what your assistant reads before every job.','BLANK');
+    if(changed.line&&chars(line)>400)refuse('Keep the one sentence under 400 characters; the whole story goes below it.','TOO_LONG');
+    let story=lf(given('story')?fields.story:was?.story??'');
     if(create&&!/^#\s/.test(story.trimStart()))story='# '+title+'\n\n'+story;
     const oldWhere=old===null?undefined:readFront(splitFront(old).front).where;
-    const updates={...(create?{name:t.name}:{}),description:title,where:always?'always':oldWhere&&oldWhere!=='always'?oldWhere:'when-it-matters',group,line};
-    if(create)updates.order=String(fields.order??this.nextOrder(group));
+    const where=always?'always':oldWhere&&oldWhere!=='always'?oldWhere:'when-it-matters';
+    const updates=create?{name:t.name,title,description:line||title,where,group,line,order:String(fields.order??this.nextOrder(group))}
+      :{...(changed.title?{title}:{}),...(changed.always?{where}:{}),...(changed.group?{group}:{}),...(changed.line?{line}:{})};
     const base=old??'';const text=setFront(base,updates);const {head}=splitFront(text);
     const next=head+this.fitBody(old,story);
     const manual=this.readText(MANUAL);let writes=[{file:t.file,text:next}];
@@ -318,7 +420,8 @@ export class IdentityShelf{
   }
   nextOrder(group){let max=0;for(const slug of this.ruleNames()){const h=readFront(splitFront(this.readText('rules/'+slug+'.md')).front);if((h.group||'how')===group&&/^\d+$/.test(h.order||''))max=Math.max(max,Number(h.order));}return max+1;}
   async addRule(fields={},options={}){
-    const title=oneLine(fields.title)||oneLine(fields.line).slice(0,80);if(!title)refuse('Give the rule a name or its one sentence.','BLANK');
+    const title=oneLine(fields.title)||firstWords(fields.line,NAME_LIMIT);if(!title)refuse('Give the rule a name or its one sentence.','BLANK');
+    if(chars(title)>NAME_LIMIT)refuse('Keep the rule\'s name to a few words, at most '+NAME_LIMIT+' characters, so you can find it. The whole rule goes in its sentence and its story.','TOO_LONG');
     const base=title.normalize('NFKD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,60).replace(/-+$/,'')||'rule';
     const taken=new Set(this.ruleNames());let slug=base;for(let n=2;taken.has(slug)||fs.existsSync(path.join(this.root,'rules',slug+'.md'));n++)slug=base+'-'+n;
     const t={...this.target('rule:'+slug),missingOk:true};
@@ -334,13 +437,13 @@ export class IdentityShelf{
   }
   async markWho(options={}){
     const t=this.target('who');
-    return this.change(t,current=>{if(current.state==='no-manual')refuse('There is no manual (AGENTS.md) in your mission control.','MISSING',{status:404});if(current.state==='ok')return {writes:[],message:''};return {writes:[{file:MANUAL,text:markedManual(this.readText(MANUAL)).text}],message:'marked who it is in AGENTS.md'};},{...options,expected_hash:undefined});
+    return this.change(t,current=>{if(current.state==='no-manual')refuse('Your mission control has no main instructions for your assistant (AGENTS.md).','MISSING',{status:404});if(current.state==='ok')return {writes:[],message:''};return {writes:[{file:MANUAL,text:markedManual(this.readText(MANUAL)).text}],message:'marked who it is in AGENTS.md'};},{...options,expected_hash:undefined});
   }
   // Brings the list of rules in AGENTS.md up to date with the files in rules/ (for a list a
   // program elsewhere left behind).
   async gatherRules(options={}){
     const t=this.target('who');
-    return this.change({...t,label:'the list of rules'},()=>{const manual=this.readText(MANUAL);if(manual===null)refuse('There is no manual (AGENTS.md) in your mission control.','MISSING',{status:404});const g=this.gather(manual,new Map());if(g.problem)refuse(g.problem,g.code||'RULES_PROBLEM');if(g.noPlace)refuse('Your manual has no place for the list of rules.','NO_PLACE');return {writes:[{file:MANUAL,text:g.next}],message:'brought the list of rules up to date'};},{...options,expected_hash:undefined});
+    return this.change({...t,label:'the list of rules'},()=>{const manual=this.readText(MANUAL);if(manual===null)refuse('Your mission control has no main instructions for your assistant (AGENTS.md).','MISSING',{status:404});const g=this.gather(manual,new Map());if(g.problem)refuse(g.problem,g.code||'RULES_PROBLEM');if(g.noPlace)refuse('Your assistant\'s main instructions (AGENTS.md) have no place for the list of rules.','NO_PLACE');return {writes:[{file:MANUAL,text:g.next}],message:'brought the list of rules up to date'};},{...options,expected_hash:undefined});
   }
   // ---- Earlier versions ---------------------------------------------------------------------------
   // Newest first, one entry per change of what the page shows for this part.
@@ -378,7 +481,7 @@ export class IdentityShelf{
       return this.change(t,current=>{
         const manual=this.readText(MANUAL);
         if(version.removed||version.text===null)return {writes:[{file:MANUAL,text:unmarkedManual(manual)}],message};
-        if(current.state!=='ok')refuse('Your manual has no marked "who it is" paragraph now.','NO_MARKERS');
+        if(current.state!=='ok')refuse('Your assistant\'s main instructions (AGENTS.md) have no marked "who it is" paragraph now.','NO_MARKERS');
         return {writes:[{file:MANUAL,text:withPersona(manual,version.text)}],message};
       },options);
     }

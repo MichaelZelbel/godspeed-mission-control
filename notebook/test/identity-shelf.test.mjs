@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
+import {createRequire} from 'node:module';
 import {Store,atomic,hash} from '../core/records/store.mjs';
 import {FileSync} from '../core/sync/git.mjs';
 import {IdentityShelf,personaOf,MANUAL_LIMIT} from '../core/identity-shelf.mjs';
@@ -97,7 +98,8 @@ test('rules: adding, changing and removing one keeps the list in AGENTS.md in st
   const added=await shelf.addRule({title:'No calls after nine',line:'Phone anyone for me after 9 pm.',group:'never',story:'Evenings are mine.\n\n**Why:** I sleep early.'});
   assert.equal(added.target,'rule:no-calls-after-nine');assert.deepEqual(added.files.sort(),['AGENTS.md','rules/no-calls-after-nine.md']);
   const file=read(root,'rules','no-calls-after-nine.md');
-  assert.match(file,/^---\nname: "no-calls-after-nine"\ndescription: "No calls after nine"\nwhere: "always"\ngroup: "never"\nline: "Phone anyone for me after 9 pm."\norder: "9"\n---\n# No calls after nine\n\nEvenings are mine\./);
+  // Its short name in title:, its sentence in description: (never the name).
+  assert.match(file,/^---\nname: "no-calls-after-nine"\ntitle: "No calls after nine"\ndescription: "Phone anyone for me after 9 pm."\nwhere: "always"\ngroup: "never"\nline: "Phone anyone for me after 9 pm."\norder: "9"\n---\n# No calls after nine\n\nEvenings are mine\./);
   assert.match(read(root,'AGENTS.md'),/9\. Phone anyone for me after 9 pm\. `\[no-calls-after-nine\]`/);
   assert.match(compileCheck(root),/up to date: 9 rules/,'the program that keeps the list agrees');
   const rule=shelf.read('rule:no-calls-after-nine');
@@ -295,4 +297,75 @@ test('the assistant\'s own identity file follows "who it is" unless its owner wr
   assert.equal(shelf.overview().soul.kind,'own');assert.equal(shelf.overview().soul.text,'You are my butler Jeeves.\n');
   assert.equal(shelf.followPersona({take:true}).written,true);assert.equal(read(home,'SOUL.md'),SOUL_MARK+'\n\nYou are Captain Speedy.\n');
   assert.ok(fs.readdirSync(home).filter(n=>n.startsWith('SOUL.before-godspeed-')).some(n=>read(home,n)==='You are my butler Jeeves.\n'),'the owner\'s text is kept');
+});
+
+// An owner's rule file as Michael's mission control writes them: no title, a long summary in
+// description: written for another program, a nested metadata block, the sentence in line:.
+const summary='FEEDBACK '+'never state actionable facts (URLs, buttons, prices, signup flows, feature claims) from memory or old docs as current; verify live this turn or label it UNVERIFIED, and say what was seen. '.repeat(2).trim();
+const ownersRule=({where='always',group='must',order='2'}={})=>'---\nname: verify-before-asserting\ndescription: "'+summary+'"\nwhere: '+where+'\ngroup: '+group+'\norder: '+order+'\nline: "Verify any claim you could act on live in this same turn or label it UNVERIFIED."\nmetadata: \n  rule_id: R-001\n  type: feedback\n---\n\nThe owner\'s repeated complaint: confident-sounding nonsense.\n';
+test('a rule whose description is a long summary and has no title saves as the page shows it, and with only "read before every job" switched',async()=>{
+  assert.ok(summary.length>300);
+  const {shelf,root}=workspace(),file=path.join(root,'rules','verify-before-asserting.md');atomic(file,ownersRule());
+  await shelf.gatherRules();
+  const shown=shelf.read('rule:verify-before-asserting');
+  // Its name is its file name in words, never the summary.
+  assert.equal(shown.fields.title,'Verify before asserting');
+  const untouched=await shelf.save('rule:verify-before-asserting',{fields:shown.fields},{expected_hash:shown.hash});
+  assert.equal(untouched.unchanged,true);assert.equal(read(file),ownersRule(),'saved as shown: not a byte changed');
+  // Only the switch: only where: changes, the summary and every other line stay as written.
+  const off=await shelf.save('rule:verify-before-asserting',{fields:{...shown.fields,always:false}},{expected_hash:shown.hash});
+  assert.equal(off.saved,true);assert.equal(read(file),ownersRule({where:'"when-it-matters"'}));
+  assert.doesNotMatch(read(file),/^title:/m,'no name is written that the person did not change');
+  const again=shelf.read('rule:verify-before-asserting');
+  await shelf.save('rule:verify-before-asserting',{fields:{...again.fields,always:true}},{expected_hash:again.hash});
+  assert.equal(read(file),ownersRule({where:'"always"'}));
+  // A name changed here goes into title:, never into description:, and is held to a few words.
+  const named=shelf.read('rule:verify-before-asserting');
+  await assert.rejects(shelf.save('rule:verify-before-asserting',{fields:{...named.fields,title:'Verify every claim live in this turn before you state it, or say plainly it is unverified'}},{expected_hash:named.hash}),error=>error.code==='TOO_LONG'&&/a few words/.test(error.message));
+  await shelf.save('rule:verify-before-asserting',{fields:{...named.fields,title:'Check before claiming'}},{expected_hash:named.hash});
+  assert.match(read(file),/^title: "Check before claiming"$/m);assert.ok(read(file).includes('description: "'+summary+'"'),'the summary stays as it was');
+  assert.equal(shelf.overview().rules.find(r=>r.slug==='verify-before-asserting').title,'Check before claiming');
+  // The assistant may send only what it changes; the rest stays.
+  const now=shelf.read('rule:verify-before-asserting');
+  await shelf.save('rule:verify-before-asserting',{fields:{line:'Verify any claim you could act on live in this same turn.'}},{expected_hash:now.hash});
+  const after=shelf.read('rule:verify-before-asserting').fields;assert.equal(after.title,'Check before claiming');assert.equal(after.group,'must');assert.equal(after.always,true);
+  // A long file name falls back to the first words of the sentence.
+  atomic(path.join(root,'rules','work-toward-making-me-an-opinion-leader-in-personal-ai-all-t.md'),'---\nwhere: company\nline: "Work toward making me an opinion leader in personal AI, always."\n---\nStory.\n');
+  assert.equal(shelf.read('rule:work-toward-making-me-an-opinion-leader-in-personal-ai-all-t').fields.title,'Work toward making me an opinion leader…');
+});
+
+test('rules are numbered as AGENTS.md numbers them, and the rest follow by where they are read',async()=>{
+  // A list kept by the owner's own program, rules with and without an order, and rules for one job.
+  const {shelf,root}=workspace({manual:ownersManual()});
+  atomic(path.join(root,'rules','verify-before-asserting.md'),ownersRule({order:'2'}));
+  atomic(path.join(root,'rules','no-order-of-its-own.md'),'---\nwhere: always\ngroup: never\nline: "Leave a rule without an order last in its group."\n---\nStory.\n');
+  atomic(path.join(root,'rules','founder-only.md'),'---\ntitle: "Founder only"\nwhere: company\nline: "Only the founder posts in company channels."\n---\nStory.\n');
+  atomic(path.join(root,'rules','brief-numbers.md'),'---\nwhere: skill:daily-brief\nline: "Number every brief line."\n---\nStory.\n');
+  atomic(path.join(root,'rules','a-chapter-rule.md'),'---\nwhere: book\nline: "Chapters let the reader do it."\n---\nStory.\n');
+  atomic(path.join(root,'rules','search-the-chat.md'),'---\nwhere: search\nline: "Search the chat first."\n---\nStory.\n');
+  atomic(path.join(root,'rules','merged-away.md'),'---\nwhere: merged:verify-before-asserting\nline: "Old wording."\n---\nStory.\n');
+  // The list as the owner's program writes it (the kit's compiler writes it the same way).
+  const compiler=createRequire(import.meta.url)(path.join(kit,'tools','compile-rules.js')),before=read(root,'AGENTS.md');
+  atomic(path.join(root,'AGENTS.md'),compiler.compileText({files:fs.readdirSync(path.join(root,'rules')).map(name=>({name,text:read(root,'rules',name)})),agentsText:before,keepFrame:true}).next);
+  const manual=read(root,'AGENTS.md'),listed=[...manual.matchAll(/^(\d+)\. .* `\[([a-z0-9-]+)\]`$/gm)].map(m=>[Number(m[1]),m[2]]);
+  assert.equal(shelf.overview().manual.rules_list,'ok');
+  const o=shelf.overview(),always=o.rules.filter(r=>r.always);
+  assert.deepEqual(always.map(r=>[r.n,r.slug]),listed,'the page numbers the list exactly as AGENTS.md does');
+  assert.equal(always.at(-1).slug,'no-order-of-its-own');
+  // Then the rest, numbered on: the companies, each skill, when its subject comes up, the others.
+  const rest=o.rules.filter(r=>!r.always);
+  assert.deepEqual(rest.map(r=>[r.n,r.slug,r.place.label]),[[listed.length+1,'founder-only','For the companies'],[listed.length+2,'brief-numbers','For the skill daily brief'],[listed.length+3,'search-the-chat','When its subject comes up'],[listed.length+4,'a-chapter-rule','Book'],[listed.length+5,'merged-away','Merged: verify before asserting']]);
+  assert.deepEqual(o.rules.map(r=>r.n),o.rules.map((r,i)=>i+1),'one number each, no gaps');
+  assert.deepEqual(o.profile.map(p=>p.n),o.profile.map((p,i)=>i+1));assert.deepEqual(o.skills.map(k=>[k.n,k.title]),[[1,'Keep a note']]);
+  // A list written before a rule was added keeps its numbers: the new rule follows them.
+  atomic(path.join(root,'rules','a-new-one.md'),'---\nwhere: always\ngroup: must\norder: 1\nline: "A rule the list does not carry yet."\n---\n');
+  const behind=shelf.overview();assert.equal(behind.manual.rules_list,'kept-elsewhere');
+  for(const [n,slug] of listed)assert.equal(behind.rules.find(r=>r.slug===slug).n,n,'what the assistant reads keeps its number');
+  assert.equal(behind.rules.find(r=>r.slug==='a-new-one').n,listed.length+1);
+  // The chat on the page is told the same numbers.
+  const told=shelf.chatContext({label:'Godspeed\'s brain'});
+  assert.match(told,/notebook page "Godspeed's brain" open/);
+  for(const r of behind.rules)assert.ok(told.includes('\n'+r.n+'. '+r.title+' ('+r.target),r.slug);
+  assert.match(told,/Profile pages:\n1\. /);assert.match(told,/Skills:\n1\. Keep a note \(skill:keep-a-note\)/);
+  assert.match(shelf.chatContext({detail:true}),/Now: "Verify any claim you could act on live in this same turn or label it UNVERIFIED\."/);
 });

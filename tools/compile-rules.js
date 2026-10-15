@@ -139,26 +139,56 @@ function existingFrame (agentsText) {
   return { begin, footer }
 }
 
+// The rules in the order the block lists them, each with its number: the groups in GROUPS order,
+// inside a group by `order:` and then by name. buildBlock writes exactly this, and the notebook's
+// page for these files shows the same numbers, so "rule 13" means one rule everywhere.
+function ordered (rules) {
+  const out = []
+  for (const group of GROUPS) {
+    const rows = rules
+      .filter(r => r[0] === group[0])
+      .sort((a, b) => (a[1] - b[1]) || (a[2] < b[2] ? -1 : a[2] > b[2] ? 1 : 0))
+    for (const row of rows) out.push({ n: out.length + 1, group: row[0], slug: row[2], line: row[3] })
+  }
+  return out
+}
+
+// The same numbering from rule files alone ({name, text} per file), without writing anything.
+function numbered (files, { keepFrame = false } = {}) {
+  const { rules, problems } = collect(files, { defaultOrder: keepFrame ? Infinity : 99 })
+  return { rules: ordered(rules), problems }
+}
+
+// The numbers the block in `agentsText` gives its rules as it is written now ("12. ... `[slug]`"),
+// slug -> number. Empty when there is no block. What the assistant reads is this, so where the
+// block is behind its files these are the numbers that hold until it is written again.
+function listed (agentsText) {
+  const out = new Map()
+  const i = agentsText.indexOf(BEGIN)
+  const j = i === -1 ? -1 : agentsText.indexOf(END, i)
+  if (i === -1 || j === -1) return out
+  for (const line of agentsText.slice(i, j).replace(/\r\n/g, '\n').split('\n')) {
+    const m = /^(\d+)\.\s.*`\[([^\]`]+)\]`\s*$/.exec(line)
+    if (m && !out.has(m[2])) out.set(m[2], parseInt(m[1], 10))
+  }
+  return out
+}
+
 function buildBlock (rules, frame) {
   const parts = [
     (frame && frame.begin) || (BEGIN + ' - written by mc-compile-rules from the files in rules/. Edit those, not this. -->'),
     ''
   ]
-  let n = 0
+  const rows = ordered(rules)
   for (const group of GROUPS) {
-    const rows = rules
-      .filter(r => r[0] === group[0])
-      .sort((a, b) => (a[1] - b[1]) || (a[2] < b[2] ? -1 : a[2] > b[2] ? 1 : 0))
-    if (rows.length === 0) continue
+    const inGroup = rows.filter(r => r.group === group[0])
+    if (inGroup.length === 0) continue
     parts.push(group[1], '')
-    for (const row of rows) {
-      n += 1
-      parts.push(n + '. ' + row[3] + ' `[' + row[2] + ']`')
-    }
+    for (const row of inGroup) parts.push(row.n + '. ' + row.line + ' `[' + row.slug + ']`')
     parts.push('')
   }
   parts.push((frame && frame.footer) || FOOTER, '', END)
-  return { block: parts.join('\n') + '\n', count: n }
+  return { block: parts.join('\n') + '\n', count: rows.length }
 }
 
 // Keep one blank line after the closing marker, or the paragraph below it collides with the
@@ -262,6 +292,6 @@ function main (argv) {
   return 0
 }
 
-module.exports = { BEGIN, END, MAX_CHARS, GROUPS, header, collect, existingFrame, buildBlock, splice, compileText }
+module.exports = { BEGIN, END, MAX_CHARS, GROUPS, header, collect, existingFrame, buildBlock, splice, compileText, numbered, listed }
 
 if (require.main === module) process.exit(main(process.argv.slice(2)))

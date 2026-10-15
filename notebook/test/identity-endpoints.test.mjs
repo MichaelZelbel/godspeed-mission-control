@@ -32,7 +32,9 @@ test('the page lists the four parts and changes one through the server, with its
   try{
     const overview=(await get('/api/identity')).body;
     assert.equal(overview.who.state,'ok');assert.equal(overview.manual.rules_list,'ok');
-    assert.deepEqual(overview.rules.map(r=>r.slug).slice(0,2),['never-delete-without-asking','never-invent-a-fact']);
+    // Numbered as the list in AGENTS.md numbers them, in that order.
+    const listed=[...read(root,'AGENTS.md').matchAll(/^(\d+)\. .* `\[([a-z0-9-]+)\]`$/gm)].map(m=>[Number(m[1]),m[2]]);
+    assert.ok(listed.length>=8);assert.deepEqual(overview.rules.map(r=>[r.n,r.slug]),listed);
     assert.ok(overview.profile.some(p=>p.name==='about-me'));assert.deepEqual(overview.skills.map(k=>k.name),['keep-a-note']);
     assert.equal(overview.manual.limit,20000);assert.ok(overview.manual.chars>18000);
     const who=(await get('/api/identity/item?target=who')).body;
