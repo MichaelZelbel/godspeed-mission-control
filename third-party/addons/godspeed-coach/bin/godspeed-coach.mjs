@@ -4,7 +4,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { findMissionControl, appHome } from "../lib/paths.mjs";
-import { now, localParts, addDays } from "../lib/clock.mjs";
+import { now, localParts, addDays, weekdayOf, WEEKDAY_WORDS } from "../lib/clock.mjs";
 import { loadSettings, setSetting, DEFAULTS } from "../lib/settings.mjs";
 import { listAreas, findArea, isTalkDay, addArea, setAreaField, nextTalkDay, habitArea, AREA_FIELDS, addAreaLine, removeAreaLine } from "../lib/areas.mjs";
 import { openTalk, readTalk, setTalkState, setFollowUp, addSaid, setShown, talkDates, talkFile } from "../lib/talks.mjs";
@@ -15,6 +15,7 @@ import { brief, habitLine } from "../lib/brief.mjs";
 import { gate, NO_WAKE } from "../lib/gate.mjs";
 import { dueTick } from "../lib/tick.mjs";
 import { contextBlock, waitingTalks } from "../lib/context.mjs";
+import { readPrep, prepProblem, prepDue, prepPath } from "../lib/prep.mjs";
 import { commitCoach, syncInBackground, pullQuietly } from "../lib/sync.mjs";
 
 const FLAGS = new Set(["json", "yes", "no-hermes", "no-claude", "all", "scheduled", "remove", "shown"]);
@@ -163,6 +164,15 @@ const commands = {
   // Asked for in the conversation ("Can we do the health talk now?"): the open command it prints
   // carries --shown. The scheduled talk gets its brief from the gate, without it.
   brief() { const a = needArea(pos[0]); console.log(brief(mcDir, s, a, dateArg(f.date), { inChat: true })); },
+  // For the job that prepares talks ahead (lib/prep.mjs): which coming talks still need preparing.
+  // It only reads: nothing is pulled, written or sent.
+  "prep-due"() {
+    const raw = f["within-hours"];
+    const hours = Number(raw);
+    if (raw === undefined || !Number.isFinite(hours) || hours <= 0) die("godspeed-coach prep-due --within-hours <hours> [--json]: the talks that start within that many hours and are not prepared yet.");
+    const due = prepDue(mcDir, s, at, hours);
+    out(due.map((x) => `${x.area}: ${x.title}, ${WEEKDAY_WORDS.en[weekdayOf(x.date)]} ${x.date} at ${x.time} (${x.timezone}), prepare ${x.file}`).join("\n") || "Nothing to prepare.", due);
+  },
   gate() {
     pullQuietly(mcDir, syncMode);
     const g = gate(mcDir, s, at, path.join(appHome(), "state.json"));
@@ -173,14 +183,27 @@ const commands = {
     const a = needArea(name);
     if (sub === "open") {
       const d = dateArg(f.date);
-      if (!f.opening) die('Give the opening: --opening "<what you are sending them>"');
       // --shown: the opening is the reply they are reading in the chat, so the talk never waits for it.
       // A scheduled run never marks a talk seen (GODSPEED_SCHEDULED_RUN or --scheduled): for someone
       // without a messenger that would hide a talk that really waits.
       const shown = f.shown && !(f.scheduled || process.env.GODSPEED_SCHEDULED_RUN) ? at.toISOString().replace(/\.\d+Z$/, "Z") : "";
-      const r = openTalk(a, d, { opening: f.opening, read: f.read || "", shown, prepared: f.prepared || "" }, at);
+      const t = { opening: f.opening, read: f.read || "", shown, prepared: f.prepared || "", prep: "" };
+      if (f["from-prep"] !== undefined) {
+        // The talk was prepared ahead (lib/prep.mjs): the opening and the talk card come from the
+        // file, and the opening is printed, so the talk job's final answer is exactly that.
+        if (f.opening !== undefined || f.prepared !== undefined) die("Give the opening either from the prepared talk (--from-prep) or with --opening and --prepared, not both.");
+        const file = path.resolve(mcDir, f["from-prep"]);
+        const p = readPrep(file);
+        const why = prepProblem(p, a);
+        if (why) die(`The prepared talk ${prepPath(mcDir, file)} cannot open a talk: ${why}. Nothing was opened.`);
+        Object.assign(t, { opening: p.opening, prepared: p.card, read: f.read || `the prepared talk ${prepPath(mcDir, file)}`, prep: prepPath(mcDir, file) });
+      }
+      if (!t.opening) die('Give the opening: --opening "<what you are sending them>", or --from-prep <file> for a talk prepared ahead');
+      const r = openTalk(a, d, t, at);
       if (r.created) saved(`${a.slug} talk opened ${d}`);
-      return out(r.created ? `Opened: ${path.relative(mcDir, r.file).replace(/\\/g, "/")}` : `Already open: ${path.relative(mcDir, r.file).replace(/\\/g, "/")} (kept the first opening)`, { ok: true, created: r.created, file: r.file });
+      const where = path.relative(mcDir, r.file).replace(/\\/g, "/");
+      if (r.created && t.prep) return out(`Opened: ${where}. The opening, to send exactly as it is:\n\n${t.opening}`, { ok: true, created: true, file: r.file, opening: t.opening });
+      return out(r.created ? `Opened: ${where}` : `Already open: ${where} (kept the first opening)`, { ok: true, created: r.created, file: r.file });
     }
     if (sub === "said") {
       // One --words per message: where commands show on their screen, the whole talk is saved in

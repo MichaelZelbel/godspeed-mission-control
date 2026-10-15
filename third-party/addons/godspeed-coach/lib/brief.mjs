@@ -1,8 +1,9 @@
 // Everything one talk needs, gathered before the model runs: the area's rules, what to prepare, the
 // last talk in full (the memory), the question queued for today, what other talks raised this week,
 // the week of each habit (its own, and other areas' habits that name it), the goals the area serves
-// and what the nightly research found for them. The talk itself reads more only when the
-// conversation gets there.
+// and what the nightly research found for them. A talk prepared ahead (lib/prep.mjs) brings that
+// file whole instead of the research, and its opening is already written. The talk itself reads
+// more only when the conversation gets there.
 import fs from "node:fs";
 import path from "node:path";
 import { parseDoc } from "./header.mjs";
@@ -10,6 +11,7 @@ import { localParts, addDays, dayWords } from "./clock.mjs";
 import { lastTalk, missedInARow, talkFile, talkDates, readTalk } from "./talks.mjs";
 import { listHabits, stats, verdict, daysWords } from "./habits.mjs";
 import { rhythmWords, listAreas, findArea } from "./areas.mjs";
+import { prepForBrief } from "./prep.mjs";
 
 export function queuedQuestions(area, ymd) {
   const f = path.join(area.dir, "questions.md");
@@ -131,6 +133,11 @@ export function raisedElsewhere(mcDir, area, ymd) {
 // from the record and the [godspeed-coach] block alone (lib/context.mjs).
 export const preparedHint = (from) => `<two to four more things from ${from}, one line each, in plain words with their date and source link, ready for 'what else do you have?'>`;
 
+// The open command when the talk was prepared ahead (lib/prep.mjs): the opening is written, so the
+// talk job's model only saves it and returns it as it is.
+export const fromPrepCommand = (area, home, file) => `godspeed-coach talk open ${area.slug} --godspeed "${home}" --from-prep "${file}"`;
+const FROM_PREP_SAYS = "The opening is written: this command saves it with the talk card and prints it, and your final answer is that opening, exactly as printed.";
+
 // `inChat`: they asked for this talk in the conversation (`godspeed-coach brief <area>`), so the opening
 // is the reply they read, and the record is made as seen (`--shown`). The scheduled talk's brief, which
 // the gate prints, never is: a talk that waits for the chat must stay waiting.
@@ -138,10 +145,15 @@ export function brief(mcDir, s, area, ymd, { inChat = false } = {}) {
   const rel = (p) => path.relative(mcDir, p).replace(/\\/g, "/");
   const L = [];
   const research = area.serves.map((g) => ({ g, found: goalResearch(mcDir, g, ymd) }));
+  // A talk prepared ahead brings its own depth: the goal research is in it, checked and cut, so the
+  // brief leaves the research sections out and stays focused.
+  const prep = prepForBrief(area, ymd);
   L.push(`COACH TALK DUE: ${area.title} (id for commands: ${area.slug}), ${ymd}, ${area.time} ${s.timezone}`);
   const home = mcDir.replace(/\\/g, "/");
   const hint = preparedHint(research.some((r) => r.found) ? "the research" : "what you read");
-  L.push(`Record: ${rel(talkFile(area, ymd))}, created by (run it exactly like this): godspeed-coach talk open ${area.slug} --godspeed "${home}" --opening "<the opening>" --prepared "${hint}" --read "<what you read>"${inChat ? " --shown" : ""}`);
+  L.push(prep
+    ? `Record: ${rel(talkFile(area, ymd))}, created by (run it exactly like this): ${fromPrepCommand(area, home, rel(prep.file))}${inChat ? " --shown" : ""}. ${FROM_PREP_SAYS}`
+    : `Record: ${rel(talkFile(area, ymd))}, created by (run it exactly like this): godspeed-coach talk open ${area.slug} --godspeed "${home}" --opening "<the opening>" --prepared "${hint}" --read "<what you read>"${inChat ? " --shown" : ""}`);
   L.push(`Mission control folder: ${home} (every godspeed-coach command in this talk takes --godspeed "${home}")`);
   L.push(`Style: ${area.style}. Tone: ${area.tone}. Rhythm: ${rhythmWords(area)}.`);
   if (area.serves.length) L.push(`Serves: ${area.serves.join(", ")}.`);
@@ -150,6 +162,8 @@ export function brief(mcDir, s, area, ymd, { inChat = false } = {}) {
   const reads = area.lists["MAY READ"] || [];
   if (reads.length) L.push("May read:", ...reads.map((l) => `- ${l}`));
   if (area.sections.Preparation) L.push("", "## Preparation", area.sections.Preparation);
+  // The whole file, its headings one level down so they stay inside this section.
+  if (prep) L.push("", `## The prepared talk (${rel(prep.file)})`, prep.text.replace(/^(#{2,5}) /gm, "#$1 "));
 
   const qs = queuedQuestions(area, ymd);
   L.push("", "## Question queued for this talk");
@@ -180,7 +194,7 @@ export function brief(mcDir, s, area, ymd, { inChat = false } = {}) {
 
   if (area.serves.length) {
     L.push("", "## Goals it serves", ...research.map(({ g, found }) => goalLines(mcDir, g, { log: !found })));
-    for (const { found } of research) if (found) L.push("", found);
+    if (!prep) for (const { found } of research) if (found) L.push("", found);
   }
   return L.join("\n");
 }

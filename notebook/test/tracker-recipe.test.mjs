@@ -311,3 +311,25 @@ test('the coach recipe\'s description fits Hermes\'s 1024-character limit',()=>{
   assert.ok(revisions['coach/SKILL.md'].includes(digest(coach)),'coach ships a known revision');
   assert.ok(revisions['coach/SKILL.md'].includes('fe19d3c02796f5cc024f42b397893e35ac760e1b7ca0f3a99def77ce03e176d7'),'the text shipped until today stays known');
 });
+
+// The talks of 14 and 15 October 2026 opened unprepared: the talk job's model wrote the opening in
+// about a minute. Coach 0.4.0: a job of its own prepares each talk ahead (coach/<area>/prep/<date>.md),
+// the talk opens with that opening as written, and the talk goes on like two people deciding
+// something, reading the prepared file once when the talk card does not answer.
+test('the coach recipe: a prepared talk opens as written, and the talk goes on like two people deciding something',()=>{
+  const coach=read('../recipes/coach/SKILL.md');
+  assert.equal(coach,read('../../third-party/addons/godspeed-coach/skill/coach/SKILL.md'));
+  const flat=s=>s.replace(/\s+/g,' ');
+  const opening=flat(coach.split('## Opening a talk')[1].split('## Continuing a talk')[0]);
+  assert.match(opening,/1\. If the brief carries a prepared talk \(its section "The prepared talk"\), that is the preparation and the opening is written: skip steps 2 to 4, run the open command the brief prints \(with `--from-prep`\) as step 5 says, and your final answer is the opening it prints, exactly\./);
+  assert.match(opening,/ 7\. Your final answer is the opening and nothing else\./);
+  const continuing=flat(coach.split('## Continuing a talk')[1].split('## Closing a talk')[0]);
+  assert.match(continuing,/3\. Talk like two people deciding something together, in the area's tone\./);
+  assert.match(continuing,/The talk card in the block is the short version; the prepared talk file \(`coach\/<area>\/prep\/<date>\.md`\) holds the depth, so when the card does not answer them, read that file once rather than searching anywhere else\./);
+  assert.doesNotMatch(continuing,/Answer like a person across the table/);
+  assert.doesNotMatch(coach,/[\u2013\u2014]/,'no long dashes');
+  assert.ok(coach.match(/^description: (.*)$/m)[1].length<1000);
+  const revisions=JSON.parse(read('../data/recipe-revisions.json'));
+  assert.ok(revisions['coach/SKILL.md'].includes(digest(coach)),'coach ships a known revision');
+  assert.ok(revisions['coach/SKILL.md'].includes('3d17c43123ffe72d96f9c213bf67baf0ad15855bf4017caa1b394463c8473783'),'the text shipped until today stays known');
+});

@@ -18,7 +18,7 @@ export function readTalk(area, ymd) {
   const d = parseDoc(fs.readFileSync(f, "utf8"));
   return {
     ymd, file: f, state: (d.head.STATE || "opened").toLowerCase(), opened: d.head.OPENED || "",
-    followUp: d.head["FOLLOW-UP"] || "", shown: d.head.SHOWN || "", sections: d.sections,
+    followUp: d.head["FOLLOW-UP"] || "", shown: d.head.SHOWN || "", prep: d.head.PREP || "", sections: d.sections,
     answered: Boolean((d.sections["What you said"] || d.sections["What he said"] || "").trim()),
   };
 }
@@ -39,15 +39,16 @@ export function lastTalk(area, beforeYmd) {
 // `prepared`: what the talk has ready beyond the opening, for "what else do you have?" (the open
 // command's --prepared). It sits right after the opening, and the [godspeed-coach] block carries
 // both, so the talk goes on without looking anything up (lib/context.mjs). A record without it is
-// as before.
-export function openTalk(area, ymd, { opening = "", read = "", shown = "", prepared = "" } = {}, now = new Date()) {
+// as before. `prep`: the prepared talk it opened from (coach/<area>/prep/<date>.md, lib/prep.mjs), so
+// every interface can read its depth when the talk card does not answer them.
+export function openTalk(area, ymd, { opening = "", read = "", shown = "", prepared = "", prep = "" } = {}, now = new Date()) {
   const f = talkFile(area, ymd);
   // Opened twice (a retry after the first message did go out): keep the first record.
   if (fs.existsSync(f)) return { file: f, created: false };
   fs.mkdirSync(path.dirname(f), { recursive: true });
   const ready = String(prepared || "").replace(/\r\n?/g, "\n").trim();
   const text = formatDoc(
-    { TALK: area.slug, DATE: ymd, STATE: "opened", OPENED: now.toISOString().replace(/\.\d+Z$/, "Z"), "FOLLOW-UP": "", ...(shown ? { SHOWN: shown } : {}) },
+    { TALK: area.slug, DATE: ymd, STATE: "opened", OPENED: now.toISOString().replace(/\.\d+Z$/, "Z"), "FOLLOW-UP": "", ...(shown ? { SHOWN: shown } : {}), ...(prep ? { PREP: prep } : {}) },
     { "What was read": read, "The opening": opening, ...(ready ? { Prepared: ready } : {}), "What you said": "", "What changed": "" },
   );
   fs.writeFileSync(f, text);

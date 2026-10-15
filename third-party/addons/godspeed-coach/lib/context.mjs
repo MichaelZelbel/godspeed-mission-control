@@ -32,10 +32,28 @@ const OTHER_TALK = 'A message that asks for another talk ("can we do the work ta
 export const TALK_CHARS = 1500;
 const cut = (t, n) => (t.length > n ? t.slice(0, n - 3).replace(/\s+\S*$/, "") + "..." : t);
 
+// A talk opened from a prepared talk (0.4.0, lib/prep.mjs) keeps that file's talk card as its
+// Prepared section: the card is carried whole, line by line as it was written, up to CARD_CHARS,
+// with the file that holds the depth behind it.
+export const CARD_CHARS = 1600;
+export function talkCard(talk, max = CARD_CHARS) {
+  const lines = String(talk.sections.Prepared || "").split("\n").map((l) => l.trimEnd()).filter((l) => l.trim());
+  const L = [`  Talk card, prepared ahead (the short version; ${talk.prep} holds the depth):`];
+  let room = max;
+  for (const l of lines) {
+    const line = `  ${l}`;
+    if (line.length + 1 > room) { L.push(L.length === 1 ? cut(line, room) : "  ..."); break; }
+    L.push(line); room -= line.length + 1;
+  }
+  L.push(`  Answer from this card without running commands. When it does not answer them, read ${talk.prep} once rather than searching anywhere else.`);
+  return L;
+}
+
 // A talk opened before 0.3.0 has no Prepared section: one brief, when they ask, has the research.
 export function talkMaterial(talk, slug, { max = TALK_CHARS, opening = true } = {}) {
   const first = cut(clean(talk.sections["The opening"]), Math.min(max, 700));
   const said = !opening ? [] : [first ? `  It opened with: "${first}"` : "  No opening is recorded."];
+  if (talk.prep) return [...said, ...talkCard(talk)];
   const items = String(talk.sections.Prepared || "").split("\n").map((l) => clean(l.replace(/^\s*[-*]\s+/, ""))).filter(Boolean);
   if (!items.length) return [...said, `  Nothing else was prepared. If they ask what else there is, run \`godspeed-coach brief ${slug}\` once and answer from its sections "What the research found for ..."; this talk stays the open one, so open no other.`];
   const L = [...said, "  Prepared, for when they ask what else there is:"];

@@ -1,6 +1,6 @@
 {
   "name": "godspeed-coach",
-  "version": "0.3.2",
+  "version": "0.4.0",
   "description": "Recurring coaching talks and daily habits for Godspeed Mission Control: it opens the talk on your messenger at the time you chose, and you track habits in one spoken line. An add-on for Teach It Once.",
   "license": "MIT",
   "type": "module",
