@@ -316,6 +316,19 @@ address_answers() {
 setup_path() {
   "$node" -e 'const base="http://127.0.0.1:"+process.argv[1];fetch(base+"/api/auth/status").then(r=>r.json()).then(s=>s.configured?"":fetch(base+"/api/login-link",{method:"POST",headers:{"content-type":"application/json"},body:"{}"}).then(r=>r.json()).then(d=>d.path||Promise.reject())).then(p=>process.stdout.write(p),()=>process.exit(1))' "$GODSPEED_PORT"
 }
+
+# --- The copies made before updates -------------------------------------------------
+# After an update that worked, the newest three of the copies made before updating stay and
+# older ones go, by the new version's own rule (notebook/core/upgrade-copies.mjs). Until 15
+# October 2026 every update added one, about 250 MB on a grown notebook, and none was removed:
+# Michael's server had 35, 7.2 GB, after eight days of updates, and its disk was 97% full. It is
+# called only once every step of the update worked, never during one or after one that failed,
+# and a copy it cannot remove never fails the update that worked.
+prune_update_copies() {
+  [ -n "${backup_dir:-}" ] && [ -d "$backup_dir" ] || return 0
+  "$node" "$version/notebook/bin/godspeed.mjs" prune-backups "$state/backups" --made "$backup_dir" >/dev/null 2>&1 \
+    || echo "Older backups made before updates could not all be removed. They are in: $state/backups" >&2
+}
 # Lets a test load the functions above without installing anything.
 if [ "${GODSPEED_INSTALLER_FUNCTIONS_ONLY:-}" = 1 ]; then return 0 2>/dev/null || exit 0; fi
 
@@ -529,6 +542,9 @@ case "$manager" in
     ;;
   *)
     echo "Start the notebook with: '$node' '$state/start.mjs'"
+    # Nothing here starts the notebook (a Mac, a computer without systemd), so this update has
+    # done every step it can: the older copies made before updates go (prune_update_copies).
+    prune_update_copies
     ;;
 esac
 
@@ -560,6 +576,9 @@ if [ -n "$started" ]; then
     [ "$old" = "$(basename "$version")" ] || [ "$old" = "$previous" ] || rm -rf "${state:?}/versions/$old"
   done
   rm -rf "${state:?}/source" "$state"/versions/.incoming.* "$state"/runtime/.download.*
+  # The new notebook answers, so the update worked: the newest three copies made before
+  # updates stay, older ones go. A notebook that did not answer ended the installation above.
+  prune_update_copies
 
   # The web address, now that the notebook's web door answers.
   if [ -n "$web_site" ]; then

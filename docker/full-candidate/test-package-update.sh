@@ -8,7 +8,8 @@
 # settings stay, the settings before are kept beside them, the data is backed up before
 # the switch, a package that does not match its checksums changes nothing, and the setup
 # code never appears on a command line. Until 6 October 2026 a second run loaded the new
-# image and went on running the old one.
+# image and went on running the old one. Once the new image answers, the backups made before
+# updates are thinned to the newest three, and not when it does not answer (15 October 2026).
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 work=$(mktemp -d)
@@ -23,6 +24,7 @@ cat > "$work/bin/docker" <<'SH'
 printf '%s\n' "$*" >> "$FAKE_LOG"
 case "$*" in
   *" ps -q notebook"*) echo 0123456789ab ;;
+  */health*) [ -z "${FAKE_UNHEALTHY:-}" ] || exit 1 ;;
   *bootstrap*) cat > "$FAKE_STDIN"; echo '/setup#invite=fixture' ;;
 esac
 exit 0
@@ -66,6 +68,11 @@ backup=$(grep -n 'godspeed.mjs backup /opt/data/full-candidate/backups/before-up
 load=$(grep -n '^load -i image.tar.gz' "$FAKE_LOG" | cut -d: -f1 | head -1)
 check 'the data is backed up before the new image is loaded' '[ -n "$backup" ] && [ -n "$load" ] && [ "$backup" -lt "$load" ]'
 check 'and the new image is started' 'grep -q " up -d$" "$FAKE_LOG"'
+prune=$(grep -n 'godspeed.mjs prune-backups /opt/data/full-candidate/backups --made /opt/data/full-candidate/backups/before-update-' "$FAKE_LOG" | cut -d: -f1 | head -1)
+up=$(grep -n ' up -d$' "$FAKE_LOG" | cut -d: -f1 | head -1)
+made=$(grep -o 'godspeed.mjs backup /opt/data/full-candidate/backups/before-update-[0-9-]*' "$FAKE_LOG" | head -1 | sed 's/.* //')
+check 'once the new image answers, older backups made before updates go' '[ -n "$prune" ] && [ "$prune" -gt "$up" ]'
+check 'keeping the one just made' 'grep -q -- "prune-backups /opt/data/full-candidate/backups --made $made$" "$FAKE_LOG"'
 check 'the package files are the new ones' 'grep -q godspeed:two "$work/server/manifest.json"'
 
 echo '== the same package again'
@@ -73,6 +80,7 @@ echo '== the same package again'
 before=$(ls "$work/server"/candidate.env.before-* | wc -l)
 bash "$work/server/install.sh" > /dev/null 2>&1
 check 'no backup and no second copy of the settings' '! grep -q "godspeed.mjs backup" "$FAKE_LOG" && [ "$(ls "$work/server"/candidate.env.before-* | wc -l)" = "$before" ]'
+check 'and no backup is removed' '! grep -q "prune-backups" "$FAKE_LOG"'
 
 echo '== a package that does not match its own checksums'
 package godspeed:three "$work/three.tar.gz"
@@ -83,6 +91,15 @@ tar -czf "$work/bad.tar.gz" -C "$work/bad" "${files[@]}"
 if bash "$work/server/manage.sh" upgrade "$work/bad.tar.gz" > "$work/bad.out" 2>&1; then refused=no; else refused=yes; fi
 check 'it is refused' '[ "$refused" = yes ] && grep -q "nothing was changed" "$work/bad.out"'
 check 'and nothing changed' '[ "$(value GODSPEED_CANDIDATE_IMAGE)" = godspeed:two ] && ! grep -q godspeed:three "$work/server/manifest.json" && [ ! -s "$FAKE_LOG" ]'
+
+echo '== a new package whose server does not answer'
+printf '#!/bin/sh\nexit 0\n' > "$work/bin/sleep"; chmod +x "$work/bin/sleep"   # no minute of waiting here
+package godspeed:four "$work/four.tar.gz"
+: > "$FAKE_LOG"
+FAKE_UNHEALTHY=1 bash "$work/server/manage.sh" upgrade "$work/four.tar.gz" > "$work/four.out" 2>&1 || true
+rm -f "$work/bin/sleep"
+check 'the data is backed up first' 'grep -q "godspeed.mjs backup /opt/data/full-candidate/backups/before-update-" "$FAKE_LOG"'
+check 'and no backup is removed' '! grep -q "prune-backups" "$FAKE_LOG"'
 
 echo
 if [ "$fails" -eq 0 ]; then echo 'ALL PASS'; else echo "$fails FAILED"; exit 1; fi

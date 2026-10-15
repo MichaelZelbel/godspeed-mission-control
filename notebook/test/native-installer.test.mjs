@@ -126,3 +126,39 @@ test('a re-run keeps the machine name and settings the last installation ran wit
   assert.equal(read.out,`GODSPEED_DEVICE=[production]\nGODSPEED_PORT=[47900]\nGODSPEED_MEDIA_ROOT=[/srv/media "x"]\nHERMES_HOME=[${state}/hermes]\nGODSPEED_MISSING=[]\n`);
   assert.equal(sh('previous_setting GODSPEED_DEVICE',{state:scratch('fresh'),node}).out,'','a first installation has nothing to keep');
 });
+
+// The copies made before updates (core/upgrade-copies.mjs): until 15 October 2026 every update
+// added one and none was removed. The installer's own step, with this checkout as the new version.
+const product=slash(fileURLToPath(new URL('../..',import.meta.url))).replace(/\/$/,'');
+function updateCopies(){
+  const state=scratch('copies'),backups=state+'/backups';
+  const copy=name=>{fs.mkdirSync(backups+'/'+name,{recursive:true});fs.writeFileSync(backups+'/'+name+'/backup.json','{"format":1,"files":[]}');return name;};
+  const older=[1,2,3,4,5].map(day=>copy(`2026100${day}-120000-${String(day).repeat(40)}`));
+  fs.mkdirSync(backups+'/my own folder');
+  const made=copy('20261015-120000-'+'a'.repeat(40));
+  return {state,backups,older,made};
+}
+
+test('after an update that worked, the newest three copies made before updates stay and older ones go',options,()=>{
+  const {state,backups,older,made}=updateCopies();
+  const result=sh('prune_update_copies',{state,version:product,node:slash(process.execPath),backup_dir:backups+'/'+made});
+  assert.equal(result.status,0,result.err);
+  assert.equal(result.err,'','nothing to report when it worked');
+  assert.deepEqual(fs.readdirSync(backups).sort(),[older[3],older[4],made,'my own folder'].sort());
+});
+
+test('an installation that made no copy before it (a first one) removes none',options,()=>{
+  const {state,backups}=updateCopies(),before=fs.readdirSync(backups).sort();
+  const result=sh('prune_update_copies',{state,version:product,node:slash(process.execPath),backup_dir:''});
+  assert.equal(result.status,0,result.err);
+  assert.deepEqual(fs.readdirSync(backups).sort(),before);
+});
+
+test('a copy that cannot be removed is said once and never fails the update that worked',options,()=>{
+  const {state,backups,made}=updateCopies(),before=fs.readdirSync(backups).sort();
+  // A new version without the step (an older one named by mistake): the command fails.
+  const result=sh('prune_update_copies',{state,version:scratch('no-product'),node:slash(process.execPath),backup_dir:backups+'/'+made});
+  assert.equal(result.status,0,result.err);
+  assert.match(result.err,/could not all be removed/);
+  assert.deepEqual(fs.readdirSync(backups).sort(),before,'and nothing went');
+});

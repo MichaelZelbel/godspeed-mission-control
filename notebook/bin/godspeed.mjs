@@ -18,7 +18,19 @@ import {machineDevice} from '../core/device-id.mjs';
 import {listHabits,initializeHabitProgress} from '../../third-party/addons/godspeed-coach/lib/habits.mjs';
 import {localParts,now as clockNow} from '../../third-party/addons/godspeed-coach/lib/clock.mjs';
 import {rememberFile} from '../core/native-personal.mjs';
-const args=process.argv.slice(2),root=process.env.GODSPEED_WORKSPACE;if(!root)throw new Error('Set GODSPEED_WORKSPACE to your candidate workspace');
+const args=process.argv.slice(2),root=process.env.GODSPEED_WORKSPACE;
+// After an update that worked, the installers keep the newest three of the copies they made
+// before updating and remove older ones (core/upgrade-copies.mjs). It reads only that folder, so
+// it needs no workspace and never opens the notebook the new version is running.
+if(args[0]==='prune-backups'){
+ const option=name=>{const at=args.indexOf(name);return at>1?args[at+1]:undefined;};
+ const folder=args[1],made=option('--made'),keep=option('--keep');
+ if(!folder||folder.startsWith('--')||!made)throw Error('prune-backups FOLDER --made COPY [--keep 3]');
+ const {pruneUpgradeCopies}=await import('../core/upgrade-copies.mjs');
+ const outcome=pruneUpgradeCopies(folder,{made,...(keep===undefined?{}:{keep:Number(keep)})});
+ console.log(JSON.stringify(outcome,null,2));process.exit(outcome.failed.length?1:0);
+}
+if(!root)throw new Error('Set GODSPEED_WORKSPACE to your candidate workspace');
 if(args[0]==='workspace-move'){
  const [_,action,value,installationFile]=args;
  let outcome;
@@ -94,5 +106,5 @@ else if(command==='convert-notebook'){
   const {renamed=[],rewritten=[],problems,...summary}=outcome;
   result={...summary,renamed:renamed.length,rewritten:rewritten.length,...(problems?{problems}:{}),first_renames:renamed.slice(0,10).map(r=>r.from+' -> '+r.to),full_list:list};
 }
-else throw new Error('Commands: init, record list/get/save/merge/remove/display-name, memory search/lookup, world claim/event/close [--dry-run], backup, restore, import, export, validate, sync folder [PATH...], menerio chunks ARCHIVE_SOURCE_DIR, convert-notebook [--dry-run]');
+else throw new Error('Commands: init, record list/get/save/merge/remove/display-name, memory search/lookup, world claim/event/close [--dry-run], backup, prune-backups FOLDER --made COPY [--keep 3], restore, import, export, validate, sync folder [PATH...], menerio chunks ARCHIVE_SOURCE_DIR, convert-notebook [--dry-run]');
 console.log(JSON.stringify(result,null,2));

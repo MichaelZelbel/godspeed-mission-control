@@ -13,6 +13,8 @@ compose=(docker compose --env-file candidate.env -f compose.yaml)
 # loaded and the old image kept running. The setup code and every other setting stay,
 # the two image lines follow the manifest, and the settings before are kept beside it
 # (candidate.env.before-<time>), with the old image still loaded, to go back to.
+backups=/opt/data/full-candidate/backups
+update_copy=""
 if [ -f candidate.env ]; then
   if [ "$(sed -n 's/^GODSPEED_CANDIDATE_IMAGE=//p' candidate.env)" != "$image" ]; then
     stamp=$(date -u +%Y%m%d-%H%M%S)
@@ -20,8 +22,9 @@ if [ -f candidate.env ]; then
     # The data first: a checked backup in the data volume, made by the version that wrote it.
     if [ -n "$("${compose[@]}" ps -q notebook 2>/dev/null)" ]; then
       echo 'Saving a backup before the update...' >&2
-      "${compose[@]}" exec -T notebook node /opt/godspeed/kit/notebook/bin/godspeed.mjs backup "/opt/data/full-candidate/backups/before-update-$stamp" >/dev/null \
+      "${compose[@]}" exec -T notebook node /opt/godspeed/kit/notebook/bin/godspeed.mjs backup "$backups/before-update-$stamp" >/dev/null \
         || { echo 'The backup before the update did not finish, so nothing was changed. Run this again when the server answers.' >&2; exit 1; }
+      update_copy="$backups/before-update-$stamp"
     else
       echo 'The server was not running, so no backup was made before this update. Your data stays where it was.' >&2
     fi
@@ -35,10 +38,19 @@ printf 'GODSPEED_CANDIDATE_IMAGE=%s\nGODSPEED_CADDY_IMAGE=%s\n' "$image" "$caddy
 mv candidate.env.new candidate.env
 docker load -i image.tar.gz
 "${compose[@]}" up -d
+healthy=""
 for attempt in $(seq 1 30); do
-  if "${compose[@]}" exec -T notebook node --input-type=module -e 'const r=await fetch("http://127.0.0.1:47831/health");process.exit(r.ok?0:1)' >/dev/null 2>&1; then break; fi
+  if "${compose[@]}" exec -T notebook node --input-type=module -e 'const r=await fetch("http://127.0.0.1:47831/health");process.exit(r.ok?0:1)' >/dev/null 2>&1; then healthy=1; break; fi
   sleep 2
 done
+# The new image answers, so the update worked: the newest three backups made before updates stay
+# and older ones go, by the new version's own rule (notebook/core/upgrade-copies.mjs). Until 15
+# October 2026 every update added one and none was removed. Nothing goes after an update whose
+# server did not answer, and a backup made with manage.sh backup is never touched.
+if [ -n "$update_copy" ] && [ -n "$healthy" ]; then
+  "${compose[@]}" exec -T notebook node /opt/godspeed/kit/notebook/bin/godspeed.mjs prune-backups "$backups" --made "$update_copy" >/dev/null 2>&1 \
+    || echo "Older backups made before updates could not all be removed. They are in $backups in the data volume." >&2
+fi
 if path=$(bash ./manage.sh setup-link); then
   public_host=${GODSPEED_CANDIDATE_HOST:-$(sed -n 's/^GODSPEED_CANDIDATE_HOST=//p' candidate.env)}
   public_port=${GODSPEED_CANDIDATE_HTTPS_PORT:-$(sed -n 's/^GODSPEED_CANDIDATE_HTTPS_PORT=//p' candidate.env)}
