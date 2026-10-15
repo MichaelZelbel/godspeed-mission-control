@@ -414,6 +414,7 @@ export default function Identity() {
             {o.manual.rules_list === "out-of-step" && <div role="alert" className="flex flex-col gap-2 rounded-md border border-warning/40 p-3 text-sm sm:flex-row sm:items-center sm:justify-between">
               <p>The list in your manual is behind your rules: something changed a rule without updating it.</p>
               <Button size="sm" variant="outline" className="min-h-11 sm:min-h-9" disabled={busy} onClick={() => act(identity.gatherRules, "The list is up to date.")}>Bring the list up to date</Button></div>}
+            {o.manual.rules_list === "kept-elsewhere" && <p role="alert" className="rounded-md border border-warning/40 p-3 text-sm">The list in your manual is kept by {o.manual.rules_program ? <code className="break-all">{o.manual.rules_program}</code> : "a program of your own"}, and it is not the list this page would write from your rules. So rules are not changed here: change the rule file in rules/ and run that program.</p>}
             {o.manual.rules_list === "no-place" && <p className="rounded-md border border-warning/40 p-3 text-sm">Your manual has no place for the list of rules, so your assistant reads them only when it opens the files.</p>}
             {grouped.map((g) => <div key={g.value} className="space-y-2">
               <h3 className="text-sm font-semibold text-muted-foreground">{g.title}</h3>

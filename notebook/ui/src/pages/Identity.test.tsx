@@ -109,6 +109,15 @@ describe("Identity page", () => {
     fireEvent.click(screen.getByRole("button", { name: "Use \"who it is\" there too" }));
     await waitFor(() => expect(calls.some((c) => c.route === "/api/identity/assistant-identity")).toBe(true));
   });
+
+  it("leaves a list of rules kept by the owner's own program to that program, with no button that would rewrite it", async () => {
+    state = overview({ manual: { exists: true, chars: 18900, limit: 20000, warn: 19000, rules_list: "kept-elsewhere", rules_program: "dev/godspeed-engine/scripts/compile-rules.py" } });
+    open();
+    const notice = await screen.findByText(/is not the list this page would write from your rules/);
+    expect(notice).toBeVisible();
+    expect(within(notice).getByText("dev/godspeed-engine/scripts/compile-rules.py")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Bring the list up to date" })).toBeNull();
+  });
 });
 
 describe("My Profile's instructions tab", () => {

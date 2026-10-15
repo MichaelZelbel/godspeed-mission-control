@@ -143,6 +143,60 @@ test('a change that would push the manual past what the assistant reads is refus
   assert.equal(personaOf(read(root,'AGENTS.md')),grown.text);
 });
 
+// An owner whose list of rules is kept by a program of their own (Michael's mission control: its
+// opening line names dev/godspeed-engine/scripts/compile-rules.py, and his push is refused when the
+// list is not what that program writes). The page changes such a list only while it writes the
+// list exactly as it stands; otherwise it leaves the rules to that program.
+const ownersManual=({heading='**I must:**'}={})=>{
+  const kitManual=read(starter,'AGENTS.md'),begin=kitManual.slice(kitManual.indexOf('<!-- rules:begin'),kitManual.indexOf('-->',kitManual.indexOf('<!-- rules:begin'))+3);
+  return kitManual.replace(begin,'<!-- rules:begin - compiled from rules/ by tools/own-rules.py. Never edit inside this block. -->')
+    .replace('Each name in brackets is a file in `rules/` with the whole story behind that rule. Open it before deciding a rule does not apply.','Each name in brackets is a file of mine in `rules/`: open it before you decide.')
+    .replace('**I must:**',heading);
+};
+test('a list of rules kept by the owner\'s own program keeps its wording, and is left to that program when the page would write it otherwise',async()=>{
+  const {shelf,root}=workspace({manual:ownersManual()});
+  let o=shelf.overview();assert.equal(o.manual.rules_list,'ok');assert.equal(o.manual.rules_program,'tools/own-rules.py');
+  await shelf.addRule({title:'No calls after nine',line:'Phone anyone for me after 9 pm.',group:'never'});
+  let manual=read(root,'AGENTS.md');
+  assert.match(manual,/<!-- rules:begin - compiled from rules\/ by tools\/own-rules\.py\. Never edit inside this block\. -->/,'its opening line stays');
+  assert.match(manual,/Each name in brackets is a file of mine in `rules\/`: open it before you decide\.\n\n<!-- rules:end -->/,'its closing paragraph stays');
+  assert.match(manual,/Phone anyone for me after 9 pm\. `\[no-calls-after-nine\]`/);
+  assert.equal(shelf.overview().manual.rules_list,'ok');
+  // A rule changed outside the page and its program not run since: the list is behind.
+  const spendFile=path.join(root,'rules','never-spend-my-money.md'),spend=read(spendFile);
+  atomic(spendFile,spend.replace(/^line: .*$/m,'line: "Spend no money of mine, not even a coffee."'));
+  o=shelf.overview();assert.equal(o.manual.rules_list,'kept-elsewhere');
+  manual=read(root,'AGENTS.md');const rules=fs.readdirSync(path.join(root,'rules')).map(n=>[n,read(root,'rules',n)]);
+  const rule=shelf.read('rule:no-calls-after-nine');
+  await assert.rejects(shelf.save('rule:no-calls-after-nine',{fields:{...rule.fields,line:'Phone anyone for me after 10 pm.'}},{expected_hash:rule.hash}),
+    error=>error.code==='RULES_KEPT_ELSEWHERE'&&/kept by tools\/own-rules\.py/.test(error.message)&&/run tools\/own-rules\.py/.test(error.message));
+  await assert.rejects(shelf.addRule({title:'Another',line:'Another rule.',group:'must'}),error=>error.code==='RULES_KEPT_ELSEWHERE');
+  await assert.rejects(shelf.removeRule('rule:no-calls-after-nine'),error=>error.code==='RULES_KEPT_ELSEWHERE');
+  await assert.rejects(shelf.gatherRules(),error=>error.code==='RULES_KEPT_ELSEWHERE','"bring the list up to date" is that program\'s job');
+  assert.equal(read(root,'AGENTS.md'),manual,'the manual is untouched');
+  assert.deepEqual(fs.readdirSync(path.join(root,'rules')).map(n=>[n,read(root,'rules',n)]),rules,'every rule file is untouched');
+  // Who it is stays changeable: it is not part of the list.
+  const who=shelf.read('who');await shelf.save('who',{text:who.text+' Short.'},{expected_hash:who.hash});
+});
+test('a list the owner\'s program writes in its own words is never rewritten in the page\'s',async()=>{
+  const {shelf,root}=workspace({manual:ownersManual({heading:'**What I always do:**'})}),manual=read(root,'AGENTS.md');
+  assert.equal(shelf.overview().manual.rules_list,'kept-elsewhere');
+  await assert.rejects(shelf.addRule({title:'No calls after nine',line:'Phone anyone for me after 9 pm.',group:'never'}),error=>error.code==='RULES_KEPT_ELSEWHERE');
+  assert.equal(read(root,'AGENTS.md'),manual);assert.equal(fs.existsSync(path.join(root,'rules','no-calls-after-nine.md')),false);
+  // The kit's own list, behind its rules, is still brought up to date here.
+  const kit=workspace(),spendFile=path.join(kit.root,'rules','never-spend-my-money.md');
+  atomic(spendFile,read(spendFile).replace(/^line: .*$/m,'line: "Spend no money of mine, not even a coffee."'));
+  assert.equal(kit.shelf.overview().manual.rules_list,'out-of-step');
+  await kit.shelf.gatherRules();assert.match(read(kit.root,'AGENTS.md'),/not even a coffee/);
+});
+test('a manual whose rules the owner\'s program keeps stays under 19,000 characters',async()=>{
+  const base=ownersManual(),pad=('\n\n'+'Reference material that belongs in its own file. '.repeat(400)).slice(0,18990-[...base].length),{shelf,root}=workspace({manual:base+pad});
+  const size=[...read(root,'AGENTS.md')].length;assert.ok(size>18900&&size<=19000,String(size));
+  const who=shelf.read('who');
+  await assert.rejects(shelf.save('who',{text:who.text+' '+'More words. '.repeat(20)},{expected_hash:who.hash}),error=>error.code==='MANUAL_TOO_LONG'&&/kept by tools\/own-rules\.py/.test(error.message)&&/under 19,000/.test(error.message));
+  assert.equal(personaOf(read(root,'AGENTS.md')),who.text);
+});
+
 test('a file with two versions waiting for review is not changed until the review is settled',async()=>{
   const {shelf,root}=workspace();
   atomic(path.join(root,'conflicts','c1.json'),JSON.stringify({id:'c1',kind:'git',path:'AGENTS.md',local:'a',remote:'b'}));

@@ -164,7 +164,19 @@ export class IdentityShelf{
   rulesState(manual){
     if(!compiler)return 'unavailable';if(manual===null)return 'no-manual';
     if(manual.indexOf(compiler.BEGIN)===-1||manual.indexOf(compiler.END)===-1)return 'no-place';
-    const result=this.gather(manual,new Map());return result.problem?'problem':result.next===manual?'ok':'out-of-step';
+    const result=this.compiled(manual,new Map());if(result.problem)return 'problem';if(result.next===manual)return 'ok';
+    return this.rulesKeeper(manual)?'kept-elsewhere':'out-of-step';
+  }
+  // The program that keeps the list of rules, when it is not this kit's own: the opening line of the
+  // list names it ("compiled from rules/ by dev/godspeed-engine/scripts/compile-rules.py"). Null for
+  // the kit's own list (mc-compile-rules), for a list whose opening line names no program, and for a
+  // manual without a list.
+  rulesKeeper(manual){
+    if(!compiler||manual===null||manual===undefined)return null;
+    const i=manual.indexOf(compiler.BEGIN),close=i===-1?-1:manual.indexOf('-->',i);if(close===-1)return null;
+    const line=manual.slice(i+compiler.BEGIN.length,close);if(/\bmc-compile-rules\b/.test(line))return null;
+    const named=/\bby\s+(\S+?)[.,;:]?(?=\s|$)/.exec(line);
+    return named?{program:named[1]}:null;
   }
   overview(){
     const manual=this.readText(MANUAL),waiting=this.waitingReviews();
@@ -173,13 +185,28 @@ export class IdentityShelf{
     const rules=this.ruleNames().map(slug=>{try{const f=this.ruleFields(slug,this.readText('rules/'+slug+'.md'));return {target:'rule:'+slug,...f,story:undefined,review_waiting:waiting.has('rules/'+slug+'.md')};}catch{return null;}}).filter(Boolean);
     const profile=this.profileNames().map(name=>{try{const text=this.readText('profile/'+name+'.md'),body=lf(splitFront(text).body),title=(body.match(/^#\s+(.+)$/m)||[])[1]||name;return {target:'profile:'+name,name,title,preview:body.replace(/^#.*$/gm,'').replace(/<!--[\s\S]*?-->/g,'').trim().split('\n').find(Boolean)?.slice(0,160)||'',review_waiting:waiting.has('profile/'+name+'.md')};}catch{return null;}}).filter(Boolean);
     const skills=this.skillNames().map(name=>{try{const bytes=this.readBytes('skills/'+name+'/SKILL.md'),h=readFront(splitFront(bytes.toString('utf8')).front);return {target:'skill:'+name,name,description:h.description||'',origin:this.skillOrigin(name,bytes),review_waiting:waiting.has('skills/'+name+'/SKILL.md')};}catch{return null;}}).filter(Boolean);
-    return {manual:{...this.manualInfo(manual),review_waiting:waiting.has(MANUAL),rules_list:this.rulesState(manual)},who,soul:this.soulInfo(),rules,profile,skills};
+    return {manual:{...this.manualInfo(manual),review_waiting:waiting.has(MANUAL),rules_list:this.rulesState(manual),rules_program:this.rulesKeeper(manual)?.program??null},who,soul:this.soulInfo(),rules,profile,skills};
   }
   // ---- The list of rules in AGENTS.md ---------------------------------------------------------
   // What AGENTS.md becomes with the rule files as they would be after `changes` (slug -> text or
   // null). The block keeps the opening line and closing paragraph it has, and a block already
   // longer than the compiler's limit may stay as long as it is, never longer.
+  //
+  // A list kept by a program of the owner's (rulesKeeper) is changed here only while this page
+  // writes it exactly as it stands: the list compiled from the rule files as they are now must be
+  // the manual's list to the byte. Then a changed rule changes one line of it the way that
+  // program would. A list that program writes otherwise (its own headings, numbering or order, a
+  // field it reads another way) or one that is behind its rule files is left to that program, and
+  // the change is refused before anything is written (15 October 2026: Michael's own mission
+  // control keeps its list with dev/godspeed-engine/scripts/compile-rules.py, and his push is
+  // refused when the list is not what that program writes).
   gather(manual,changes){
+    const keeper=this.rulesKeeper(manual);
+    if(keeper){const now=this.compiled(manual,new Map());if(!now.problem&&!now.empty&&!now.noPlace&&now.next!==manual){const program=keeper.program||'a program of your own';
+      return {problem:'The list of rules in your manual is kept by '+program+', and it is not the list this page would write from your rules, so rules are not changed here. Change the rule file in rules/ and run '+program+'.',code:'RULES_KEPT_ELSEWHERE'};}}
+    return this.compiled(manual,changes);
+  }
+  compiled(manual,changes){
     if(!compiler)return {problem:'The program that keeps the list of rules is missing from this installation.'};
     const files=new Map(this.ruleNames().map(slug=>[slug,this.readText('rules/'+slug+'.md')]));
     for(const [slug,text] of changes){if(text===null)files.delete(slug);else files.set(slug,text);}
@@ -193,7 +220,11 @@ export class IdentityShelf{
   }
   // ---- Checks every change to AGENTS.md passes ----------------------------------------------------
   checkManual(before,after){
-    const now=chars(after),was=chars(before||'');
+    const now=chars(after),was=chars(before||''),keeper=this.rulesKeeper(before);
+    // A manual whose list of rules a program of the owner's keeps stays under the line such a
+    // program keeps it under: Michael's compile-rules.py refuses a manual past 19,000 characters,
+    // and his push with it (runtime-limits.json, "warn").
+    if(keeper&&now>MANUAL_WARN&&now>was)refuse('This would make your manual '+now.toLocaleString('en')+' characters long. Your list of rules is kept by '+(keeper.program||'a program of your own')+', and this page keeps a manual like that under '+MANUAL_WARN.toLocaleString('en')+'. Make it shorter first.','MANUAL_TOO_LONG',{manual:{chars:now,limit:MANUAL_WARN}});
     if(now>=MANUAL_LIMIT&&now>was)refuse('This would make your manual '+now.toLocaleString('en')+' characters long. Your assistant\'s program reads only '+MANUAL_LIMIT.toLocaleString('en')+' and drops the middle of a longer one. Make it shorter first.','MANUAL_TOO_LONG',{manual:{chars:now,limit:MANUAL_LIMIT}});
     const found=newFindings(before||'',after);
     if(found.length)refuse('Your assistant\'s program would refuse to read your whole manual with "'+found[0].words+'" in it, because those words look like an attempt to take over an assistant. Please say it another way.','LOOKS_LIKE_TAKEOVER',{findings:found});

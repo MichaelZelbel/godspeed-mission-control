@@ -9,7 +9,9 @@ export type PageFields = { text: string; kept_details?: boolean };
 export type ManualSize = { exists?: boolean; chars: number; limit: number; warn: number; warning?: string };
 export type SoulInfo = { kind: "no-assistant" | "missing" | "empty" | "hermes" | "ours" | "own" | "unknown"; text?: string };
 export type Overview = {
-  manual: ManualSize & { review_waiting?: boolean; rules_list: "ok" | "out-of-step" | "no-place" | "no-manual" | "problem" | "unavailable" };
+  // kept-elsewhere: the list is kept by a program of the owner's (rules_program), and this page
+  // would not write it as it stands, so rules are not changed here (identity-shelf.mjs, gather).
+  manual: ManualSize & { review_waiting?: boolean; rules_list: "ok" | "out-of-step" | "kept-elsewhere" | "no-place" | "no-manual" | "problem" | "unavailable"; rules_program?: string | null };
   who: { state: "ok" | "no-markers" | "no-manual"; text?: string; hash?: string; proposal?: string };
   soul: SoulInfo;
   rules: (Omit<RuleFields, "story"> & { target: string; slug: string; review_waiting?: boolean })[];
