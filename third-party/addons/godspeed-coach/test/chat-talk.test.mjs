@@ -90,14 +90,14 @@ test("the brief they ask for in the chat prints the open command with --shown; t
   const asked = cli(mc, {}, "brief", "health");
   assert.equal(asked.status, 0, asked.stderr);
   const home = mc.replace(/\\/g, "/");
-  assert.ok(asked.stdout.includes(`created by (run it exactly like this): godspeed-coach talk open health --godspeed "${home}" --opening "<the opening>" --read "<what you read>" --shown\n`), asked.stdout.split("\n")[1]);
+  assert.ok(asked.stdout.includes(`created by (run it exactly like this): godspeed-coach talk open health --godspeed "${home}" --opening "<the opening>" --prepared "<two to four more things from what you read, one line each, in plain words with their date and source link, ready for 'what else do you have?'>" --read "<what you read>" --shown\n`), asked.stdout.split("\n")[1]);
   // The library's brief, which the gate prints for a talk due at its time, has no --shown.
   assert.doesNotMatch(brief(mc, { ...S, talk_delivery: "chat" }, a, "2026-10-11"), /--shown/);
   assert.match(brief(mc, { ...S, talk_delivery: "chat" }, a, "2026-10-11", { inChat: true }), /--read "<what you read>" --shown$/m);
   const statePath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "coach-state-")), "state.json");
   const due = gate(mc, { ...S, talk_delivery: "chat" }, new Date("2026-10-11T17:00:00Z"), statePath);
   assert.equal(due.wake, true);
-  assert.match(due.output, /godspeed-coach talk open health --godspeed "[^"]+" --opening "<the opening>" --read "<what you read>"\n/);
+  assert.match(due.output, /godspeed-coach talk open health --godspeed "[^"]+" --opening "<the opening>" --prepared "<[^"]+>" --read "<what you read>"\n/);
   assert.doesNotMatch(due.output, /--shown/);
 });
 
@@ -108,11 +108,13 @@ test("talk open --shown records the talk as seen, so it never waits for the chat
   assert.equal(r.status, 0, r.stderr);
   assert.equal(readTalk(a, "2026-10-11").shown, "2026-10-11T16:05:00Z", "SHOWN as setShown writes it");
   assert.equal(waitingTalks(mc, { ...S, talk_delivery: "chat" }, AT).length, 0);
-  // The next conversation sees an open talk, not a waiting one: its opening is not brought up again.
+  // The next conversation sees an open talk, not a waiting one: its opening is not brought up again,
+  // only carried as what it opened with, so the talk goes on from it (coach 0.3.0).
   const next = context(mc);
-  assert.doesNotMatch(next.stdout, /Waiting talk/);
+  assert.doesNotMatch(next.stdout, /Waiting talk|Bring it up/);
   assert.match(next.stdout, /Open talk: Health/);
-  assert.doesNotMatch(next.stdout, /headaches came after short nights/);
+  assert.equal(next.stdout.split("headaches came after short nights").length, 2, "the opening appears once");
+  assert.match(next.stdout, /^ {2}It opened with: "From your coach, your weekly health talk: on Monday you said the headaches came after short nights\./m);
   // A scheduled run never marks a talk seen, with GODSPEED_SCHEDULED_RUN or --scheduled.
   for (const [env, extra] of [[{ GODSPEED_SCHEDULED_RUN: "1" }, []], [{}, ["--scheduled"]]]) {
     const other = chatMission();

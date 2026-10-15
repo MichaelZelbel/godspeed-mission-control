@@ -23,12 +23,16 @@ area's style, tone and limits, its preparation, the question queued for today, t
 full, what other talks raised this week, the habits' week (its own, and other areas' habits this
 talk may look at) and the goals it serves.
 
-1. Do what the brief's **Preparation** says, and read only what the area may read. When the
+1. Do what the brief's **Preparation** says, and read only what the area may read. The brief's
+   research sections ("What the research found for ...") are the talk's main material. When the
    notebook is connected, its trackers for this talk are part of that: read
    `personal_operation {"type":"tracker-list","talk":"<area>","days":7}` (the trackers that name
    this area, active ones only, with their last seven days). A tracker never asks them to track;
    nothing in it is a reason to send anything outside the talk.
-2. Pick **one thing** and **one question**. If a question is queued for today, it is the question.
+2. Pick **one thing** and **one question**. The one thing comes from that research or from their
+   own words. Say each thing as what it is, in words they would recognise, never by a title from
+   the obligations list, a work-item code or a goal id; if you cannot say in one sentence what it
+   is and why it matters to them, leave it out. If a question is queued for today, it is the question.
    If the brief's Rhythm section says the last three talks got no answer, the question is whether
    the rhythm still suits them. The one thing is never something the brief lists under "Raised in
    other talks this week": another talk already raised it, so pick another. If they bring it up
@@ -42,7 +46,7 @@ talk may look at) and the goals it serves.
    next step smaller; **direct** names what happened plainly and asks what is really going on.
 4. Create the record BEFORE you answer, with the command line exactly as the brief prints it
    (it carries `--godspeed <folder>`; keep that flag on every `godspeed-coach` command in this talk):
-   `godspeed-coach talk open <area> --godspeed <folder> --opening "<the opening, exactly>" --read "<what you read, short>"`
+   `godspeed-coach talk open <area> --godspeed <folder> --opening "<the opening, exactly>" --prepared "<two to four more things from the research, one line each, in plain words with their date and source link, ready for 'what else do you have?'>" --read "<what you read, short>"`
    If it says `Already open`, the opening went out on an earlier run: answer exactly `[SILENT]`.
 5. If you used the queued question, add a line `ASKED: <today>` directly under its heading in
    the area's `questions.md`.
@@ -55,11 +59,19 @@ that starts "From your coach: yesterday at ... I opened your ... talk"). A messa
 talk of another area ("can we do the psychology talk now?") is not about the open talk: follow "A
 talk they start themselves".
 
-1. Save their words first: `godspeed-coach talk said <area> --words "<their words, close to verbatim>"`.
-2. Answer like a person across the table: short, one question at a time, the area's tone. Listen
+1. Save their words. On a chat app (Telegram, WhatsApp), save each message with `talk said` as it
+   comes. Where your commands show on their screen (Claude Code, Codex, a terminal), run nothing
+   while the talk goes on, and save all their messages at the close in one `talk said` with one
+   `--words` per message: `godspeed-coach talk said <area> --words "<their words, close to verbatim>"`
+   (at the close: `--words "<first message>" --words "<second message>"` and so on).
+2. The [godspeed-coach] block carries the opening and what was prepared: answer from it. During a
+   talk run no lookup the block already answers, no investigation and no helper; something you
+   notice is broken waits until the talk is over. When they ask what you have, give the best
+   prepared thing with its date, its source and what you recommend.
+3. Answer like a person across the table: short, one question at a time, the area's tone. Listen
    more than you explain. Bring in research or their data only when the conversation reaches it,
    and then one fact with its source. Never several paragraphs.
-3. The area's LIMIT lines are binding in every reply. Where an area has none, these hold anyway:
+4. The area's LIMIT lines are binding in every reply. Where an area has none, these hold anyway:
    a health talk never diagnoses, never makes "see a doctor" the answer and never tells them to buy
    or book anything; a money talk never moves money, buys or signs up for anything; a relationships
    talk never contacts anyone for them and raises romance only when they do.

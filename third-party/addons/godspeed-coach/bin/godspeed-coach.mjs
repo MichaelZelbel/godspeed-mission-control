@@ -18,22 +18,24 @@ import { contextBlock, waitingTalks } from "../lib/context.mjs";
 import { commitCoach, syncInBackground, pullQuietly } from "../lib/sync.mjs";
 
 const FLAGS = new Set(["json", "yes", "no-hermes", "no-claude", "all", "scheduled", "remove", "shown"]);
+// A flag given more than once keeps its last value in f, as always, and every value in all: "talk
+// said" saves each --words as a message of its own.
 function parseArgs(argv) {
-  const pos = []; const f = {};
+  const pos = []; const f = {}; const all = {};
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (!a.startsWith("--")) { pos.push(a); continue; }
     const k = a.slice(2);
     if (FLAGS.has(k)) { f[k] = true; continue; }
     const next = argv[i + 1];
-    if (next === undefined || next.startsWith("--")) return { pos, f, error: `--${k} needs a value.` };
-    f[k] = next; i++;
+    if (next === undefined || next.startsWith("--")) return { pos, f, all, error: `--${k} needs a value.` };
+    f[k] = next; (all[k] ||= []).push(next); i++;
   }
-  return { pos, f };
+  return { pos, f, all };
 }
 
 const [cmd = "help", ...rest] = process.argv.slice(2);
-const { pos, f, error: argError } = parseArgs(rest);
+const { pos, f, all, error: argError } = parseArgs(rest);
 // These three run inside other programs (before every turn, and on the schedule). A broken coach
 // never breaks the assistant and never sends an error into his chat.
 const QUIET = ["context", "tick", "gate"].includes(cmd);
@@ -176,16 +178,20 @@ const commands = {
       // A scheduled run never marks a talk seen (GODSPEED_SCHEDULED_RUN or --scheduled): for someone
       // without a messenger that would hide a talk that really waits.
       const shown = f.shown && !(f.scheduled || process.env.GODSPEED_SCHEDULED_RUN) ? at.toISOString().replace(/\.\d+Z$/, "Z") : "";
-      const r = openTalk(a, d, { opening: f.opening, read: f.read || "", shown }, at);
+      const r = openTalk(a, d, { opening: f.opening, read: f.read || "", shown, prepared: f.prepared || "" }, at);
       if (r.created) saved(`${a.slug} talk opened ${d}`);
       return out(r.created ? `Opened: ${path.relative(mcDir, r.file).replace(/\\/g, "/")}` : `Already open: ${path.relative(mcDir, r.file).replace(/\\/g, "/")} (kept the first opening)`, { ok: true, created: r.created, file: r.file });
     }
     if (sub === "said") {
-      if (!f.words) die('Give their words: --words "<what they said>"');
+      // One --words per message: where commands show on their screen, the whole talk is saved in
+      // one command at its close, each message on a line of its own.
+      const said = (all.words || []).map((w) => String(w).replace(/\s+/g, " ").trim()).filter(Boolean);
+      if (!said.length) die('Give their words: --words "<what they said>", one --words per message');
       const d = openTalkDate(a);
-      addSaid(a, d, `- ${localParts(at, s.timezone).hm} ${String(f.words).replace(/\s+/g, " ").trim()}`);
+      const hm = localParts(at, s.timezone).hm;
+      addSaid(a, d, said.map((w) => `- ${hm} ${w}`));
       saved(`${a.slug} talk ${d}`);
-      return out("Saved.", { ok: true, date: d });
+      return out(said.length === 1 ? "Saved." : `Saved ${said.length} messages.`, { ok: true, date: d, saved: said.length });
     }
     if (sub === "held" || sub === "not-held") {
       const d = f.date ? dateArg(f.date) : (talkDates(a).at(-1) || die(`No ${a.title} talk exists yet.`));

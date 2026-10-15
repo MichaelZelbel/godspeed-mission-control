@@ -1,7 +1,8 @@
 // Everything one talk needs, gathered before the model runs: the area's rules, what to prepare, the
 // last talk in full (the memory), the question queued for today, what other talks raised this week,
-// the week of each habit (its own, and other areas' habits that name it), and the goals the area
-// serves. The talk itself reads more only when the conversation gets there.
+// the week of each habit (its own, and other areas' habits that name it), the goals the area serves
+// and what the nightly research found for them. The talk itself reads more only when the
+// conversation gets there.
 import fs from "node:fs";
 import path from "node:path";
 import { parseDoc } from "./header.mjs";
@@ -26,13 +27,69 @@ export function queuedQuestions(area, ymd) {
   return out;
 }
 
-function goalLines(mcDir, id) {
+function goalDoc(mcDir, id) {
   const f = path.join(mcDir, "goals", `${id}.md`);
-  if (!fs.existsSync(f)) return `- ${id}: no goal file found`;
-  const d = parseDoc(fs.readFileSync(f, "utf8"));
-  const log = (d.sections.Log || "").split("\n").filter((l) => /^- \d{4}-\d{2}-\d{2} /.test(l) && !/^- \S+ ATTENTION /.test(l));
-  const recent = log.slice(-3).map((l) => `    ${l.length > 300 ? l.slice(0, 297) + "..." : l}`);
+  return fs.existsSync(f) ? parseDoc(fs.readFileSync(f, "utf8")) : null;
+}
+
+// A goal with research gets no log lines: they are bookkeeping ("BET W-20261014-10 150 -> 240",
+// "READ 0 (outside.txt line ...)") that a talk cannot say in words the person would recognise, and
+// the research section below says what they meant.
+function goalLines(mcDir, id, { log = true } = {}) {
+  const d = goalDoc(mcDir, id);
+  if (!d) return `- ${id}: no goal file found`;
+  const lines = (d.sections.Log || "").split("\n").filter((l) => /^- \d{4}-\d{2}-\d{2} /.test(l) && !/^- \S+ ATTENTION /.test(l));
+  const recent = log ? lines.slice(-3).map((l) => `    ${l.length > 300 ? l.slice(0, 297) + "..." : l}`) : [];
   return [`- ${id}: ${d.head.TITLE || ""}${d.head.MEASURE ? ` (measure: ${d.head.MEASURE})` : ""}`, ...recent].join("\n");
+}
+
+// What the nightly goal research found (goals/research/<goal>/brief.md, when the mission control has
+// one): the money picture, what changed, openings with their closing dates, people worth reaching.
+// It is the talk's main material, so the talk never opens on a stale to-do title instead (the work
+// talk of 14 October 2026). "Experiments" is left out: it is bookkeeping full of work-item codes.
+// Longer than RESEARCH_CAP, whole sections are left out, never half of one: the RESEARCH_FIRST ones
+// are kept first, then the others in the file's order while they fit, and the section names what
+// was left out and where all of it is. The sections keep the file's order.
+export const RESEARCH_CAP = 6000;
+export const RESEARCH_STALE_DAYS = 2;
+const RESEARCH_SKIP = new Set(["Experiments"]);
+const RESEARCH_FIRST = ["The limit now", "What changed this week", "Openings", "Who to reach and what we offer"];
+
+export function researchFile(mcDir, id) { return path.join(mcDir, "goals", "research", id, "brief.md"); }
+
+export function goalResearch(mcDir, id, ymd, cap = RESEARCH_CAP) {
+  const f = researchFile(mcDir, id);
+  if (!fs.existsSync(f)) return null;
+  const text = fs.readFileSync(f, "utf8").replace(/\r\n/g, "\n");
+  const updated = (parseDoc(text).head.UPDATED || "").match(/^\d{4}-\d{2}-\d{2}$/)?.[0] || "";
+  const sections = [];
+  for (const part of text.split(/^## /m).slice(1)) {
+    const nl = part.indexOf("\n");
+    const title = (nl === -1 ? part : part.slice(0, nl)).trim();
+    const body = (nl === -1 ? "" : part.slice(nl + 1)).trim().replace(/^(#{3,5}) /gm, "#$1 ");
+    if (!title || !body || RESEARCH_SKIP.has(title)) continue;
+    const first = RESEARCH_FIRST.indexOf(title);
+    sections.push({ i: sections.length, title, block: `### ${title}\n${body}`, rank: first === -1 ? RESEARCH_FIRST.length + sections.length : first });
+  }
+  if (!sections.length) return null;
+  const byRank = [...sections].sort((a, b) => a.rank - b.rank);
+  const kept = new Map(); const left = [];
+  let size = 0;
+  for (const s of byRank) {
+    if (size + s.block.length + 2 <= cap) { kept.set(s.i, s.block); size += s.block.length + 2; } else left.push(s.title);
+  }
+  // One section longer than the whole cap: its first lines, so the talk still has something.
+  if (!kept.size) {
+    const s = byRank[0];
+    kept.set(s.i, s.block.slice(0, cap).replace(/\n[^\n]*$/, ""));
+    left[0] = `the rest of "${s.title}"`;
+  }
+  const body = sections.filter((s) => kept.has(s.i)).map((s) => kept.get(s.i));
+  if (left.length) body.push(`Left out for length: ${left.join("; ")}. All of it: ${path.relative(mcDir, f).replace(/\\/g, "/")}.`);
+  const stale = !updated || updated < addDays(ymd, -RESEARCH_STALE_DAYS);
+  const when = updated ? `updated ${updated}${stale ? ", older than two days: say so if you use it" : ""}` : "no update date: say so if you use it";
+  const title = goalDoc(mcDir, id)?.head.TITLE || id;
+  return `## What the research found for ${title} (${when})\n${body.join("\n\n")}`;
 }
 
 // The planned days are the ones that count: a skipped day is named apart and left out of them,
@@ -69,15 +126,22 @@ export function raisedElsewhere(mcDir, area, ymd) {
   return out;
 }
 
+// What the open command's --prepared asks for, in the brief's command line so the talk job's model
+// sees it: the things it would bring up next, ready for "what else do you have?", so the talk goes on
+// from the record and the [godspeed-coach] block alone (lib/context.mjs).
+export const preparedHint = (from) => `<two to four more things from ${from}, one line each, in plain words with their date and source link, ready for 'what else do you have?'>`;
+
 // `inChat`: they asked for this talk in the conversation (`godspeed-coach brief <area>`), so the opening
 // is the reply they read, and the record is made as seen (`--shown`). The scheduled talk's brief, which
 // the gate prints, never is: a talk that waits for the chat must stay waiting.
 export function brief(mcDir, s, area, ymd, { inChat = false } = {}) {
   const rel = (p) => path.relative(mcDir, p).replace(/\\/g, "/");
   const L = [];
+  const research = area.serves.map((g) => ({ g, found: goalResearch(mcDir, g, ymd) }));
   L.push(`COACH TALK DUE: ${area.title} (id for commands: ${area.slug}), ${ymd}, ${area.time} ${s.timezone}`);
   const home = mcDir.replace(/\\/g, "/");
-  L.push(`Record: ${rel(talkFile(area, ymd))}, created by (run it exactly like this): godspeed-coach talk open ${area.slug} --godspeed "${home}" --opening "<the opening>" --read "<what you read>"${inChat ? " --shown" : ""}`);
+  const hint = preparedHint(research.some((r) => r.found) ? "the research" : "what you read");
+  L.push(`Record: ${rel(talkFile(area, ymd))}, created by (run it exactly like this): godspeed-coach talk open ${area.slug} --godspeed "${home}" --opening "<the opening>" --prepared "${hint}" --read "<what you read>"${inChat ? " --shown" : ""}`);
   L.push(`Mission control folder: ${home} (every godspeed-coach command in this talk takes --godspeed "${home}")`);
   L.push(`Style: ${area.style}. Tone: ${area.tone}. Rhythm: ${rhythmWords(area)}.`);
   if (area.serves.length) L.push(`Serves: ${area.serves.join(", ")}.`);
@@ -114,7 +178,10 @@ export function brief(mcDir, s, area, ymd, { inChat = false } = {}) {
   if (borrowed.length) lines.push("A habit marked as another area's belongs to that area's talk: look at it here, but only its own talk offers to graduate it, make it smaller or drop it.");
   L.push(lines.length ? lines.join("\n") : "None active.");
 
-  if (area.serves.length) L.push("", "## Goals it serves", ...area.serves.map((g) => goalLines(mcDir, g)));
+  if (area.serves.length) {
+    L.push("", "## Goals it serves", ...research.map(({ g, found }) => goalLines(mcDir, g, { log: !found })));
+    for (const { found } of research) if (found) L.push("", found);
+  }
   return L.join("\n");
 }
 

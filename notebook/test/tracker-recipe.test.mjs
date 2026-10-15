@@ -277,3 +277,24 @@ test('the coach recipe: asking for another talk while one is open starts that ta
   assert.ok(revisions['coach/SKILL.md'].includes(digest(coach)),'coach ships a known revision');
   for(const old of ['e36b83a48a486083b883cf83c96844cf515c815bd207a0a708ecad9df614d3e5','11de14f3425b1bb724910164a968f3f211524312a95689593e32d5f077c9e0ff'])assert.ok(revisions['coach/SKILL.md'].includes(old),'the texts shipped until today stay known');
 });
+
+// The work talk of 14 October 2026 opened on a to-do title he no longer knew, while the goal research
+// lay unread, and continued in Claude Code it ran four commands on his screen before a word to him.
+// Coach 0.3.0: the research is the talk's material, a thing is said as what it is, and where commands
+// show on screen nothing runs during the talk.
+test('the coach recipe: the research is the talk\'s material, and a talk on a screen runs nothing',()=>{
+  const coach=read('../recipes/coach/SKILL.md');
+  assert.equal(coach,read('../../third-party/addons/godspeed-coach/skill/coach/SKILL.md'));
+  const flat=s=>s.replace(/\s+/g,' ');
+  const opening=flat(coach.split('## Opening a talk')[1].split('## Continuing a talk')[0]);
+  assert.match(opening,/The brief's research sections \("What the research found for \.\.\."\) are the talk's main material\./);
+  assert.match(opening,/never by a title from the obligations list, a work-item code or a goal id/);
+  assert.match(opening,/--prepared "<two to four more things from the research, one line each, in plain words with their date and source link, ready for 'what else do you have\?'>"/);
+  const continuing=flat(coach.split('## Continuing a talk')[1].split('## Closing a talk')[0]);
+  assert.match(continuing,/run nothing while the talk goes on, and save all their messages at the close in one `talk said` with one `--words` per message/);
+  assert.match(continuing,/The \[godspeed-coach\] block carries the opening and what was prepared: answer from it\./);
+  assert.doesNotMatch(coach,/[–—]/,'no long dashes');
+  const revisions=JSON.parse(read('../data/recipe-revisions.json'));
+  assert.ok(revisions['coach/SKILL.md'].includes(digest(coach)),'coach ships a known revision');
+  for(const old of ['a7ab480751bff1576ef2eb77382e795455db4c4d9d064248b6061e8c09f540d0','e36b83a48a486083b883cf83c96844cf515c815bd207a0a708ecad9df614d3e5'])assert.ok(revisions['coach/SKILL.md'].includes(old),'the texts shipped until today stay known');
+});

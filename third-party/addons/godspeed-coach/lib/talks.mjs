@@ -36,14 +36,19 @@ export function lastTalk(area, beforeYmd) {
 
 // `shown`: when they already saw the opening (a talk they started themselves in the chat): SHOWN is
 // written with the record, as setShown would, so the [godspeed-coach] block never brings it up again.
-export function openTalk(area, ymd, { opening = "", read = "", shown = "" } = {}, now = new Date()) {
+// `prepared`: what the talk has ready beyond the opening, for "what else do you have?" (the open
+// command's --prepared). It sits right after the opening, and the [godspeed-coach] block carries
+// both, so the talk goes on without looking anything up (lib/context.mjs). A record without it is
+// as before.
+export function openTalk(area, ymd, { opening = "", read = "", shown = "", prepared = "" } = {}, now = new Date()) {
   const f = talkFile(area, ymd);
   // Opened twice (a retry after the first message did go out): keep the first record.
   if (fs.existsSync(f)) return { file: f, created: false };
   fs.mkdirSync(path.dirname(f), { recursive: true });
+  const ready = String(prepared || "").replace(/\r\n?/g, "\n").trim();
   const text = formatDoc(
     { TALK: area.slug, DATE: ymd, STATE: "opened", OPENED: now.toISOString().replace(/\.\d+Z$/, "Z"), "FOLLOW-UP": "", ...(shown ? { SHOWN: shown } : {}) },
-    { "What was read": read, "The opening": opening, "What you said": "", "What changed": "" },
+    { "What was read": read, "The opening": opening, ...(ready ? { Prepared: ready } : {}), "What you said": "", "What changed": "" },
   );
   fs.writeFileSync(f, text);
   return { file: f, created: true };
@@ -58,7 +63,8 @@ function rewrite(area, ymd, fn) {
 
 export const setTalkState = (area, ymd, state) => rewrite(area, ymd, (t) => setHead(t, "STATE", state));
 export const setFollowUp = (area, ymd, iso) => rewrite(area, ymd, (t) => setHead(t, "FOLLOW-UP", iso));
-export const addSaid = (area, ymd, line) => rewrite(area, ymd, (t) => appendToSection(t, "What you said", line));
+// One line, or several (a talk held where commands show on screen is saved in one go at its close).
+export const addSaid = (area, ymd, lines) => rewrite(area, ymd, (t) => [].concat(lines).reduce((acc, l) => appendToSection(acc, "What you said", l), t));
 // Without a messenger the opening reached nobody's phone. SHOWN is when the [godspeed-coach] block
 // first put it in front of the assistant in a conversation with them, so it is brought up once.
 export const setShown = (area, ymd, iso) => rewrite(area, ymd, (t) => setHead(t, "SHOWN", iso));

@@ -23,6 +23,33 @@ const clean = (t) => String(t || "").replace(/\s+/g, " ").trim();
 // talk starts that talk and leaves this one as it is.
 const OTHER_TALK = 'A message that asks for another talk ("can we do the work talk now?") starts that talk instead and leaves this one open: "A talk they start themselves".';
 
+// An open talk also carries its opening as sent and what was prepared for it, so a talk continued
+// anywhere (the capture of 14 October 2026: in Claude Code, the work talk re-read its record, its
+// area, the due list and the journal, four commands on his screen before a word to him) is answered
+// from here. At most about TALK_CHARS of it, since the block comes with every message for the three
+// days a talk stays open; whole prepared lines are cut, never half of one. A waiting talk's line
+// already quotes its opening, so it gets only what was prepared.
+export const TALK_CHARS = 1500;
+const cut = (t, n) => (t.length > n ? t.slice(0, n - 3).replace(/\s+\S*$/, "") + "..." : t);
+
+// A talk opened before 0.3.0 has no Prepared section: one brief, when they ask, has the research.
+export function talkMaterial(talk, slug, { max = TALK_CHARS, opening = true } = {}) {
+  const first = cut(clean(talk.sections["The opening"]), Math.min(max, 700));
+  const said = !opening ? [] : [first ? `  It opened with: "${first}"` : "  No opening is recorded."];
+  const items = String(talk.sections.Prepared || "").split("\n").map((l) => clean(l.replace(/^\s*[-*]\s+/, ""))).filter(Boolean);
+  if (!items.length) return [...said, `  Nothing else was prepared. If they ask what else there is, run \`godspeed-coach brief ${slug}\` once and answer from its sections "What the research found for ..."; this talk stays the open one, so open no other.`];
+  const L = [...said, "  Prepared, for when they ask what else there is:"];
+  const head = L.length;
+  let room = max - L.join("\n").length - 1;
+  for (const item of items) {
+    const line = `  - ${item}`;
+    if (line.length > room) { if (L.length === head) L.push(cut(line, room)); break; }
+    L.push(line); room -= line.length + 1;
+  }
+  L.push("  Everything needed to continue this talk is here, so answer from it without running commands or looking things up unless they ask for something it lacks.");
+  return L;
+}
+
 export function waitingTalks(mcDir, s, now, { scheduled = false } = {}) {
   if (s.talk_delivery !== "chat" || scheduled) return [];
   return openTalks(mcDir, now).filter(({ talk }) => !talk.answered && !talk.shown);
@@ -39,10 +66,10 @@ export function contextBlock(mcDir, s, now, { scheduled = false } = {}) {
   for (const { area, ymd, talk } of talks) {
     const when = talk.opened ? whenSaid(talk.opened, now, tz) : ymd;
     if (waiting.has(talk.file)) {
-      L.push(`- Waiting talk: ${area.title} (id for commands: ${area.slug}), opened ${when}, record coach/${area.slug}/talks/${ymd}.md. There is no messenger, so they have not seen it yet: it waited for this chat. First answer their message; then bring the talk up in a short sentence or two that make sense on their own and end with its question. It opened with: "${clean(talk.sections["The opening"])}". Bring it up once, in this reply only. An answer to it continues it: follow the coach recipe, "Continuing a talk". ${OTHER_TALK}`);
+      L.push(`- Waiting talk: ${area.title} (id for commands: ${area.slug}), opened ${when}, record coach/${area.slug}/talks/${ymd}.md. There is no messenger, so they have not seen it yet: it waited for this chat. First answer their message; then bring the talk up in a short sentence or two that make sense on their own and end with its question. It opened with: "${clean(talk.sections["The opening"])}". Bring it up once, in this reply only. An answer to it continues it: follow the coach recipe, "Continuing a talk". ${OTHER_TALK}`, ...talkMaterial(talk, area.slug, { opening: false }));
       continue;
     }
-    L.push(`- Open talk: ${area.title} (id for commands: ${area.slug}), opened ${when}, record coach/${area.slug}/talks/${ymd}.md${talk.followUp ? ", follow-up sent" : ""}. A reply to it continues it: follow the coach recipe, "Continuing a talk". ${OTHER_TALK}`);
+    L.push(`- Open talk: ${area.title} (id for commands: ${area.slug}), opened ${when}, record coach/${area.slug}/talks/${ymd}.md${talk.followUp ? ", follow-up sent" : ""}. A reply to it continues it: follow the coach recipe, "Continuing a talk". ${OTHER_TALK}`, ...talkMaterial(talk, area.slug));
   }
   const asked = active.filter((h) => askedOn(h, today) && !answerOn(h, today));
   if (asked.length) L.push(`- Habit check sent tonight, still unanswered, asking in this order: ${asked.map((h) => h.title).join(", ")}. A short yes / no / skip answers it: follow the coach recipe, "Tracking a habit".`);
