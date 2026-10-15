@@ -401,6 +401,7 @@ SKILL
   check "  a save in routines/ was refused" "$(test -e "$LV/routines/notes.md" && echo saved || echo refused)" "refused"
   check "  a save to a goal card's folder was refused" "$(test -e "$LV/goals/notes.md" && echo saved || echo refused)" "refused"
   contains "  and the refusals were Claude Code's own" "$(grep -iE '^STEP [56]:' "$TMP/live.txt" | tr 'A-Z' 'a-z')" "denied"
+  missing "  and Claude Code warned about no rule it does not read" "$(cat "$TMP/live.txt.stderr" 2>/dev/null)" "is not matched by file permission checks"
 fi
 
 echo "$PASS passed, $FAIL failed"
