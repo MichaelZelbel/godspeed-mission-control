@@ -80,4 +80,8 @@ Verification runs on a disposable GitHub runner using this exact Compose file an
 the published image. Local test certificates verify the HTTPS wiring; issuance of a
 public certificate and the paid Hostinger handoff require a real fresh VPS test.
 
+The same installation on any other Linux server, from any host, is one line:
+`curl -fsSL https://teachitonce.com/server | bash` (`docker/server/install.sh`, described in
+`../README.md`, "Any Linux server, one line"); it uses this `compose.yaml`.
+
 Official Hostinger flow: https://www.hostinger.com/support/deploy-on-hostinger-button/

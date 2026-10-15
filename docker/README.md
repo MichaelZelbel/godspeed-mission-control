@@ -8,7 +8,46 @@ more, and it cannot see or touch anything else on the machine.
 Pick `server/install.sh` instead when you want the opposite: an assistant that runs
 the whole server, installs software and looks after it.
 
-## Install
+## Any Linux server, one line (the current version, with the account page)
+
+On a server you already have, from any hosting company, logged in as root (or a user who
+may use sudo):
+
+```
+curl -fsSL https://teachitonce.com/server | bash
+```
+
+(The same file is `docker/server/install.sh` on main.) It installs Docker if the server has
+none, puts the very `compose.yaml` that Hostinger's one-click deploys
+(`docker/hostinger/compose.yaml`, image pinned by digest) in `/opt/godspeed-mission-control`
+with its two settings in `.env` (readable by root only), starts it, waits until the page
+answers over HTTPS, and prints one private link. The link opens the account page with the
+setup code already filled in: choose a username and password, save the recovery code, then
+Connect Telegram, the same steps as on Hostinger (`hostinger/README.md`).
+
+- **The address.** Without a domain it uses the server's public IPv4 address as
+  `<a-b-c-d>.sslip.io` (for 203.0.113.7: `203-0-113-7.sslip.io`), a free name that points back
+  at that address, so the certificate is a real Let's Encrypt one. With your own domain pointed
+  at the server: `curl -fsSL https://teachitonce.com/server | GODSPEED_HOST=mission.example.com bash`.
+- **It stops with one plain sentence** when another program already uses port 80 or 443 (it
+  never touches that program), when the processor is not x86-64, when Docker is missing on a
+  system other than Debian or Ubuntu, or when another Godspeed Mission Control already runs
+  here (the older container below, or a hosting company's one-click). When the certificate does
+  not come within five minutes, it says to open ports 80 and 443 in the hosting company's
+  firewall (or forward them on a home router) and run the line again.
+- **Run it again at any time.** It keeps the setup code, the address and all data, updates to
+  the image `compose.yaml` pins today, and never makes a second owner: before the account
+  exists it prints a fresh link (the old one stops working), after that it says to sign in.
+- **What it noted** is in `/opt/godspeed-mission-control/install.log`. By hand afterwards:
+  `cd /opt/godspeed-mission-control && docker compose ps` (or `logs`).
+- **The install count** is sent only with `GODSPEED_INSTALL_COUNT=yes` in front of `bash`: the
+  word "installed", the kind `docker-server` and a random number, once. Without it, nothing.
+
+Tested by `docker/server/test.sh` (the address, the busy-port and certificate messages, anywhere)
+and `sudo bash docker/server/test.sh e2e` (the whole path, Docker included, on a machine you can
+throw away, with `GODSPEED_HOST=localhost` and Caddy's own certificate).
+
+## Install (the older image, set up in the terminal)
 
 On the server, as root:
 
