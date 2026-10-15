@@ -10,7 +10,7 @@ Hostinger's supported purchase link is:
 
 Current purchase and install link, including Michael's saved Hostinger referral:
 
-[Install Godspeed Mission Control on Hostinger](https://www.hostinger.com/docker-hosting?compose_url=https%3A%2F%2Fraw.githubusercontent.com%2FMichaelZelbel%2Fgodspeed-mission-control%2F330d74790beec5a7d3750269c202a367196abb4a%2Fdocker%2Fhostinger%2Fcompose.yaml&REFERRALCODE=GHNMICHAEJC8#pricing)
+[Install Godspeed Mission Control on Hostinger](https://www.hostinger.com/docker-hosting?compose_url=https%3A%2F%2Fraw.githubusercontent.com%2FMichaelZelbel%2Fgodspeed-mission-control%2Ff8e285dbbe1f9c42139a2839eacc0966bd045167%2Fdocker%2Fhostinger%2Fcompose.yaml&REFERRALCODE=GHNMICHAEJC8#pricing)
 
 The link names the commit whose `compose.yaml` pins the current image
 (`v2-sha-c2ce006`, digest `bafaadb2…`, since the Identity page release of 15 October 2026; before that `v2-sha-02f4ecb`, digest `60df0c65…`, from the notebook label correction of 14 October 2026, then `v2-sha-377124c`, digest `5a154b6d…`, from 13 October 2026, then `v2-sha-d023277`, digest `8682ddd5…`, from the second release of 12 October, then `v2-sha-d457ded`, digest `4dc94340…`, from the first release of 12 October, then `v2-sha-da2098e`, digest `a67da492…`, from 10 October, then `v2-sha-c83b399`, digest `13232a90…`,
