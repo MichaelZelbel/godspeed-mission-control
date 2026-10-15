@@ -53,6 +53,14 @@ const layouts = {
   weekly_reviews: { word: 'weekly review', folder: () => 'Reviews', name: r => 'Week of ' + text(r.week_start), first: ['week_start', 'week_end'] },
 };
 export const readableTypes = Object.freeze(Object.keys(layouts));
+// Readable records of a kind the notebook no longer has. The Lexicon left the notebook on
+// 8 October 2026 (query.mjs, retiredTables), but a notebook that imported Menerio before then
+// still holds its pages in notebook/Lexicon/, written as "lexicon page" records with their text
+// below the frontmatter. With no layout to put that text in, every one of them failed as a
+// broken record, and a sync that meets a broken record stops: on the test server srv1069233
+// 296 such pages stopped every sync from 8 to 15 October 2026. They are read as the owner's
+// own pages now, kept as they are, found by search, and never taken for a record again.
+const retiredWords = new Set(['lexicon page']);
 const typeOfWord = new Map(Object.entries(layouts).map(([type, l]) => [l.word, type]));
 // Child types and the parent field that places them, by parent type.
 export const childrenOf = Object.entries(layouts).filter(([, l]) => l.parent).reduce((map, [type, l]) => map.set(l.parent.type, [...(map.get(l.parent.type) || []), { type, field: l.parent.field }]), new Map());
@@ -187,6 +195,7 @@ export function decode(source, file) {
   try { data = parse(front); }
   catch (error) { if (/^\s*"?uid"?\s*:/m.test(front)) throw error; throw new NotARecord('Frontmatter without a record'); }
   if (!Object.hasOwn(data, 'uid')) throw new NotARecord('Frontmatter without a record');
+  if (retiredWords.has(data.type)) throw new NotARecord('A page of the retired Lexicon');
   const type = typeOfWord.get(data.type) || data.type, record = {};
   const shown = new Map(RENAMES.filter(([field, name]) => Object.hasOwn(data, name) && !Object.hasOwn(data, field)).map(([field, name]) => [name, field]));
   for (const [field, value] of Object.entries(data)) own(record, field === 'type' ? 'type' : shown.get(field) || field, field === 'type' ? type : value);

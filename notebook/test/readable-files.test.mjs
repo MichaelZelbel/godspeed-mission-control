@@ -125,3 +125,17 @@ test('decode reads the old layout and refuses text a record has no place for',()
   assert.throws(()=>decode(fact+'Some text','x.md'),/no place/);
   assert.throws(()=>decode('# Just a page','x.md'),error=>error.code==='NOT_RECORD','A page without a record is not an error');
 });
+
+// A notebook that imported Menerio before 8 October 2026 holds the retired Lexicon's pages; until
+// 15 October each one was a broken record and stopped every sync of the notebook.
+test('a page of the retired Lexicon is the owner\'s own page, never a broken record',()=>{
+  const page=['---','id: e17d04b5-7259-41b9-afdf-cedbc516b485','type: lexicon page','title: Fictional Project','slug: fictional-project',
+    'uid: e17d04b5-7259-41b9-afdf-cedbc516b485','format: 1','revision: 1','---','Fictional Project was an imagined wiki page.',''].join('\n');
+  assert.throws(()=>decode(page,'notebook/Lexicon/Fictional Project.md'),error=>error.code==='NOT_RECORD');
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-lexicon-'));fs.mkdirSync(path.join(root,'notebook','Lexicon'),{recursive:true});
+  fs.writeFileSync(path.join(root,'notebook','Lexicon','Fictional Project.md'),page);
+  const store=new Store(root);
+  assert.deepEqual(store.problems,[],'no broken record');
+  assert.ok([...store.documents].some(file=>file.endsWith('Fictional Project.md')),'kept as the owner\'s page');
+  assert.equal(fs.readFileSync(path.join(root,'notebook','Lexicon','Fictional Project.md'),'utf8'),page,'left exactly as it was');
+});
