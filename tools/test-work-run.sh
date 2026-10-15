@@ -42,7 +42,8 @@ case "${FAKE_MODE:-ok}" in
   *)        [ -n "${FAKE_TOUCH:-}" ] && printf 'repaired\n' > "$FAKE_TOUCH"
             [ -n "${FAKE_BEFORE:-}" ] && printf '%s\n' "$FAKE_BEFORE" > "$(dirname "$OUT")/before.txt"
             [ -n "$P" ] && { mkdir -p "$(dirname "$P")"; { echo "# Answer"; for i in $(seq 1 80); do printf 'word%s ' "$i"; done; echo; echo; echo "## Sources"; echo "- https://example.org/a"; } > "$P"; }
-            echo "scratch line"; [ -n "${FAKE_SAY:-}" ] && echo "SAY: $FAKE_SAY"; echo "RESULT: wrote $P with 80 words" ;;
+            echo "scratch line"; [ -n "${FAKE_SAY:-}" ] && echo "SAY: $FAKE_SAY"
+            [ -n "${FAKE_IF_IGNORED:-}" ] && echo "IF IGNORED: $FAKE_IF_IGNORED"; echo "RESULT: wrote $P with 80 words" ;;
 esac > "${OUT:-/dev/stdout}"
 exit 0
 FAKE
@@ -110,6 +111,12 @@ contains "  with the link on it" "$(cat "$TMP/card-argv.txt")" "https://example.
 contains "  saying what the assistant wrote for the reader" "$(cat "$TMP/card-argv.txt")" "is written up for you."
 missing "  and not the item's own description" "$(cat "$TMP/card-argv.txt")" "It is written and ready to read"
 contains "  the prompt asked for that sentence" "$(cat "$TMP/routines/work/2026-09-15/W-20260915-02/prompt-seen.txt")" "starts with SAY:"
+# 2026-10-15: no stock sentence about ignoring it. The assistant wrote no IF IGNORED line, so the
+# card says nothing about ignoring it (it used to say "It waits unread, and the next piece is
+# written without your verdict on this one." on every card).
+missing "  a piece with no IF IGNORED line carries no --if-ignored" "$(cat "$TMP/card-argv.txt")" "--if-ignored"
+missing "  and never the old stock sentence" "$(cat "$TMP/card-argv.txt")" "without your verdict"
+contains "  the prompt asks for the real cost of ignoring it, or nothing" "$(cat "$TMP/routines/work/2026-09-15/W-20260915-02/prompt-seen.txt")" "starts with IF IGNORED:"
 contains "  the run ends with its count" "$OUT" "1 taken, 1 attempted, 1 verified"
 
 # --- the runner said done, the check says not: stays attempted, run goes on --------------------------------
@@ -155,6 +162,15 @@ QID="$(grep -l 'KEY: quiet' "$TMP/work"/W-*.md | head -1 | xargs basename | sed 
 OUT="$(run --only "$QID" --publish-cmd "$TMP/bin/publish" 2>&1)"
 check "a piece with no SAY line files no card" "$([ -f "$TMP/card-argv.txt" ] && echo card || echo none)" "none"
 contains "  and the run says why" "$OUT" "no sentence for the person"
+
+# --- what ignoring a piece costs is the assistant's own sentence, passed only when it wrote one -----
+rm -f "$TMP/card-argv.txt"
+hw file --learn "What happens if the new ending is never read?" --path research/ending.md --check "$NODE $TMP/bin/check-written.js research/ending.md --min-words 50" --key ending --source test >/dev/null
+EID="$(grep -l 'KEY: ending' "$TMP/work"/W-*.md | head -1 | xargs basename | sed 's/.md$//')"
+OUT="$(FAKE_SAY="The new ending for the install page is ready for you to read." FAKE_IF_IGNORED="New installs keep showing the old ending, with no link to your Substack." run --only "$EID" --publish-cmd "$TMP/bin/publish" 2>&1)"
+contains "a piece whose assistant named the cost of ignoring it carries that sentence" "$(cat "$TMP/card-argv.txt" 2>/dev/null)" "--if-ignored
+New installs keep showing the old ending, with no link to your Substack."
+missing "  and not the old stock sentence" "$(cat "$TMP/card-argv.txt" 2>/dev/null)" "without your verdict"
 
 # --- the mission control's own machinery runs last, however early it was filed ------------------------------------------------
 hw file --what "Tidy the mission control's own plumbing" --done-when "research/plumbing.md exists" --key plumbing --source test >/dev/null

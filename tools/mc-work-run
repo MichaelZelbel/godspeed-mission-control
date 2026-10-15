@@ -252,6 +252,7 @@ while IFS=$'\t' read -r ID KIND WHAT; do
     echo "## Where things go"
     echo "Anything you write for this item goes at the path DONE WHEN names, or under routines/work/$TODAY/$ID/ if it names none. Your final line is the RESULT line the recipe describes; the register is updated by the program that called you, never by you."
     echo "If you made something the person will open (a draft, an answer, a page), put one line directly above RESULT that starts with SAY: and tells them in one plain sentence what is ready and for what, the way you would say it to them across a table. No file names, no folders, no ids, no tool names: that sentence is the only thing they read before they decide to open it. Housekeeping they will never open gets no SAY line."
+    echo "Beside SAY, if leaving this piece unopened really costs them something, add one line that starts with IF IGNORED: and says that cost in one plain sentence, in the same words you would use with them (for example: IF IGNORED: new installs keep showing the old ending, with no link to your Substack). If nothing changes when they never open it, write no IF IGNORED line at all; never a sentence that would fit any piece."
   } > "$ITEMDIR/prompt.txt"
 
   # WHAT THE ITEM CHANGES IS SAVED WITH THE ITEM. Until 2026-09-21 only the registers and the one
@@ -303,6 +304,7 @@ while IFS=$'\t' read -r ID KIND WHAT; do
   fi
   RESULT="$(printf '%s' "$RESULT_LINE" | sed 's/^RESULT: *//' | cut -c1-300)"
   SAY="$(grep -a '^SAY:' "$ITEMDIR/answer.txt" 2>/dev/null | tail -1 | tr -d '\r' | sed 's/^SAY: *//' | cut -c1-300)"
+  IF_IGNORED="$(grep -a '^IF IGNORED:' "$ITEMDIR/answer.txt" 2>/dev/null | tail -1 | tr -d '\r' | sed 's/^IF IGNORED: *//' | cut -c1-300)"
   reg work attempt "$ID" --runner "$RUNNER_NAME" --ok --result "$RESULT" 2>&1 | sed 's/^/  /'
   DONE=$((DONE + 1))
 
@@ -338,10 +340,16 @@ while IFS=$'\t' read -r ID KIND WHAT; do
   # 2026-09-21 the runner then offered the item's own description as a card, which the ledger
   # refused for its machine words every time. Housekeeping is recorded, not announced.
   if [ -n "$URL" ] && [ -z "$SAY" ]; then log "$ID has no sentence for the person, so no card: it is on the record and on its page"; fi
+  # WHAT IGNORING IT COSTS IS THE ASSISTANT'S OWN SENTENCE, OR NONE (2026-10-15). Every card used to
+  # carry one stock line ("It waits unread, and the next piece is written without your verdict on
+  # this one."), the same for every piece, which told the person nothing. The assistant now writes
+  # an IF IGNORED: line only when ignoring this piece costs something real, and a card without one
+  # says nothing about it.
   if [ -n "$URL" ] && [ -n "$SAY" ] && command -v mc-attention >/dev/null 2>&1; then
+    IGN=(); [ -n "$IF_IGNORED" ] && IGN=(--if-ignored "$IF_IGNORED")
     CARD="$(GODSPEED_ROOT="$GODSPEED" mc-attention file --kind deliverable \
       --what "$SAY" \
-      --if-ignored "It waits unread, and the next piece is written without your verdict on this one." \
+      ${IGN[@]+"${IGN[@]}"} \
       --next "Open the link, read it, and reply with one word: keep, change or drop." \
       --link "$URL" --source "the work runner, $ID" --topic "${GOAL:-work}" --date "$TODAY" 2>&1)"
     log "card: $(printf '%s' "$CARD" | tail -1)"
