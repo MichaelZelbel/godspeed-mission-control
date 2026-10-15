@@ -8,7 +8,19 @@ A new release comes out most weeks. I write about what my AI does for me and wha
 
 Version 2 is the current edition, here on `main`. Its installers set up a new, separate folder. They do not move an existing version 1 Godspeed folder or your Menerio account.
 
-## New in this release (14 October 2026)
+## New in this release (15 October 2026)
+
+- The notebook has an Identity page, under System: who your assistant is, what it may and may not do (your rules, and the instructions for connected AI apps that My Profile held), what it knows about you (your profile pages) and how it does its jobs (your recipes). You see and change them there. Every part keeps its earlier versions, with "Undo last change" and "Restore this version", and your assistant can make the same changes when you ask it in the chat.
+- Hermes, the program behind your assistant, now takes its identity from "who it is". Until now it told itself "You are Hermes Agent" before it read your manual. Its identity file (`SOUL.md` in the assistant's own folder) is written from the "who it is" paragraph of your `AGENTS.md`. On an installation you update, this happens during the update and each time the notebook starts, and the text it replaces is kept beside it. A `SOUL.md` you wrote yourself is left as it is; the Identity page names it and offers to replace it.
+- If a program of your own keeps the list of rules in your `AGENTS.md`, the Identity page changes a rule only when it would write that list exactly as your program does. Otherwise it leaves your rules to that program.
+- Habits are forgiving. Every day you did a habit stays in its lifetime total, even after a break. Two missed days a month are covered automatically, holidays and illness can be excused afterwards, and each habit shows a calendar of its last seven days. On Telegram, a habit reminder has buttons to mark it done.
+- More than one coaching talk may look at the same tracker or habit. Asking for another talk while one is open starts that talk, and a talk you started in the chat is not brought up again as waiting.
+- The daily round gives every dated chance from a goal's research that closes within two weeks a step, unless you dropped the idea. A step only you can take that is still waiting counts toward your one step a day.
+- The installed app's icon is the G on a transparent background.
+- The server image collects the programs it has finished with by itself. Before, a server whose setup did not ask for that kept one finished program from every sync.
+- A notebook that brought in Menerio before 8 October syncs again. The retired Lexicon's pages stopped it; they now stay in `notebook/Lexicon/` as ordinary pages.
+
+## New on 14 October 2026
 
 The notebook no longer calls every installation a test installation. Its unavailable-page message also uses ordinary wording. This release otherwise keeps the notebook from 13 October. The installer keeps its starter files matched to that notebook version.
 
@@ -54,11 +66,11 @@ The notebook no longer calls every installation a test installation. Its unavail
 
 ## Windows
 
-[Download GodspeedSetup.exe](https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-14-1/GodspeedSetup.exe), then run it.
+[Download GodspeedSetup.exe](https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-15-1/GodspeedSetup.exe), then run it.
 
 This uses Godspeed's original setup wizard and shared installer, then connects the integrated notebook. On a PC that already has Godspeed, the wizard selects a separate installation by default. The notebook opens at [http://127.0.0.1:47831/dashboard](http://127.0.0.1:47831/dashboard). Connect your own model account in Settings to use the assistant. The installer is unsigned.
 
-The executable is also [committed in this repository](installers/GodspeedSetup.exe). The [download page](https://github.com/MichaelZelbel/godspeed-mission-control/releases/tag/godspeed-v2-integrated-2026-10-14-1) lists the same file and its checksums.
+The executable is also [committed in this repository](installers/GodspeedSetup.exe). The [download page](https://github.com/MichaelZelbel/godspeed-mission-control/releases/tag/godspeed-v2-integrated-2026-10-15-1) lists the same file and its checksums.
 
 ## Linux or Mac
 
@@ -67,8 +79,8 @@ This uses Godspeed's shared native installer for Git, Node.js, Hermes and the Go
 Download this release's installer, check that it is the published file, and run it:
 
 ```bash
-curl -fsSLO https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-14-1/install-godspeed.sh
-echo "5843a37502758b9cfd504d55a2b87413c916cee4773375ae2044fc0dd61866b6  install-godspeed.sh" | sha256sum -c - && bash install-godspeed.sh
+curl -fsSLO https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-15-1/install-godspeed.sh
+echo "fbda414e67231621f60e1940197f59f6e6786e02438773be39d0f4a5ed0210c9  install-godspeed.sh" | sha256sum -c - && bash install-godspeed.sh
 ```
 
 On a Mac, write `shasum -a 256 -c -` where it says `sha256sum -c -`. The check refuses any other file, and the installer names one exact version of the notebook, so every reader of this release gets the same notebook.

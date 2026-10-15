@@ -7,15 +7,28 @@
 - Open this folder in VS Code or Codex: `C:/godspeed/work/trials/godspeed-v2`.
 - Windows notebook: http://127.0.0.1:49175/dashboard
 - Development VPS notebook: https://srv1069233.hstgr.cloud:48443/dashboard
-- Windows download: https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-14-1/GodspeedSetup.exe
-- Linux download: https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-14-1/install-godspeed.sh
-- Source, manifests and checksums: https://github.com/MichaelZelbel/godspeed-mission-control/releases/tag/godspeed-v2-integrated-2026-10-14-1
+- Windows download: https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-15-1/GodspeedSetup.exe
+- Linux download: https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-15-1/install-godspeed.sh
+- Source, manifests and checksums: https://github.com/MichaelZelbel/godspeed-mission-control/releases/tag/godspeed-v2-integrated-2026-10-15-1
 - One-click Hostinger installation: https://srv1069233.hstgr.cloud/godspeed-install
 - Development branch: https://github.com/MichaelZelbel/godspeed-mission-control/tree/main
 
-## 15 October 2026, on main and the test server only: the Identity page
+## 15 October 2026 release: the Identity page
 
-Not released. The notebook has a page under System, Identity (`/dashboard/identity`, also in the command palette), where the reader sees and changes what makes their mission control behave as it does, like Meta Muse's Identity screen, with what Muse lacks: every part has its earlier versions, "Undo last change" and "Restore this version". Approved by Michael on 15 October 2026.
+`godspeed-v2-integrated-2026-10-15-1` installs product c2ce006ed366281c1aa1a7650dd23ee746710946 (main: the Identity page below, approved by Michael on 15 October 2026, and every change on main since the 13 October release that the narrow 14 October release left out: forgiving habit streaks and progress calendars, Telegram habit buttons, any number of talks per tracker, the coach's talk fixes, the moves check's dated chances and carried person steps, the transparent app icon). The Windows installer is built from kit-bootstrap 68f6103809e5b61b0c163b7797e7f4f65664aef3 (branch `codex/godspeed-v2-native-integration`, the 14 October starter pin), and the Linux and Mac installer takes its shared installer from that commit and pins the starter to the product commit.
+
+Fixed for this release:
+
+- Finished programs piled up in the one-click image (about 6,500 dead `git` on the test server's container): the image replaces s6-overlay's `/init`, so the notebook's supervisor was process 1 and collected nothing, and git 2.47 ends every fetch with a detached maintenance run. tini 0.19.0 (static, SHA-256 checked) is now the image's process 1, with `-s` so it also works behind Compose's `init: true`; the image test runs the container without `--init` and fails on a leftover (`docker/full-candidate/Dockerfile`, `test.sh`).
+- The Identity page and an owner's own rules program (Michael's `compile-rules.py`): a list whose opening line names another program is changed only while the page writes it exactly as it stands from the rule files; otherwise rule changes and "Bring the list up to date" are refused before anything is written, the page names the program, and such a manual stays under 19,000 characters (`gather`, `rulesKeeper`, `checkManual` in `core/identity-shelf.mjs`).
+- A Lexicon page from a Menerio import before 8 October 2026 ("lexicon page" records in `notebook/Lexicon/`) is the owner's own page, no longer a broken record that stops the sync (`core/records/layout.mjs`).
+- The test "the daily limit counts every processing run" runs at a fixed late-morning time in Berlin (it failed in the ten minutes before midnight there).
+
+Checked before publishing: PENDING.
+
+### Before the release, on main and the test server only
+
+The notebook has a page under System, Identity (`/dashboard/identity`, also in the command palette), where the reader sees and changes what makes their mission control behave as it does, like Meta Muse's Identity screen, with what Muse lacks: every part has its earlier versions, "Undo last change" and "Restore this version". Approved by Michael on 15 October 2026.
 
 - Four parts: who it is (only the persona paragraph of AGENTS.md; a manual without the persona marks is offered the marks), what it may and may not do (`rules/*.md`, with the instructions for connected AI apps that My Profile held), what it knows about you (`profile/*.md`), how it does its jobs (`skills/*/SKILL.md`). Server: `notebook/core/identity-shelf.mjs`, `/api/identity/*` in `server/main.mjs`; page: `ui/src/pages/Identity.tsx`, notes in `ui/DESIGN.md`.
 - Every change is its own commit with a plain message ("Identity: changed who it is"): in the repository the notebook syncs through when it carries the file, built in a private index on HEAD so the owner's staged work is untouched, pushed by the next sync round; otherwise in `.godspeed/identity-history.git` on that machine (`core/identity-history.mjs`). Undo and restore are new commits; nothing is rewritten.
