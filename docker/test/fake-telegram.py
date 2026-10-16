@@ -13,8 +13,10 @@
 #            "rules": [{"when": "morning brief", "do": [{"from": 111, "press": "brief:yes"}]}]}
 # A rule fires once unless it says "times". A reader can also send a file:
 # {"from": 111, "document": {"file_name": "notes.md", "content": "..."}}, fetched back
-# through getFile and /file/bot<token>/<path> like Telegram's. Only standard library,
-# so it runs anywhere.
+# through getFile and /file/bot<token>/<path> like Telegram's. An action with "after": 9
+# happens nine seconds later, as a reader who takes their time. Every sendChatAction
+# ("typing...") is kept with its time, and every button with its label. Only standard
+# library, so it runs anywhere.
 import argparse
 import json
 import re
@@ -28,6 +30,7 @@ class Fake:
         self.token = token
         self.cv = threading.Condition()
         self.updates, self.sent, self.edits, self.calls, self.deleted = [], [], [], {}, []
+        self.actions = []   # sendChatAction: {"t": time, "chat_id": ..., "action": "typing"}
         self.files = {}
         self.next_update, self.next_msg = 1, 100
         self.users = scenario.get("users", {})
@@ -37,7 +40,16 @@ class Fake:
             for a in scenario.get("start", []):
                 self.act(a)
 
+    def later(self, a):
+        with self.cv:
+            self.act(a)
+
     def act(self, a):
+        if a.get("after"):
+            t = threading.Timer(a["after"], self.later, [dict(a, after=0)])
+            t.daemon = True
+            t.start()
+            return
         uid = a["from"]
         user = dict({"id": uid, "is_bot": False}, **self.users.get(str(uid), {"first_name": "User%s" % uid}))
         chat = {"id": uid, "type": "private"}
@@ -81,7 +93,8 @@ class Fake:
             if method == "sendMessage":
                 kb = (p.get("reply_markup") or {}).get("inline_keyboard") or []
                 m = {"chat_id": p.get("chat_id"), "text": p.get("text", ""), "message_id": self.next_msg,
-                     "buttons": [b.get("callback_data") for row in kb for b in row]}
+                     "buttons": [b.get("callback_data") for row in kb for b in row],
+                     "labels": [b.get("text") for row in kb for b in row], "t": time.time()}
                 self.next_msg += 1
                 self.sent.append(m)
                 for r in self.rules:
@@ -95,6 +108,8 @@ class Fake:
                             self.act(a)
                 self.save()
                 return {"message_id": m["message_id"], "chat": {"id": m["chat_id"]}, "text": m["text"]}
+            if method == "sendChatAction":
+                self.actions.append({"t": time.time(), "chat_id": p.get("chat_id"), "action": p.get("action")})
             if method == "deleteMessage":
                 self.deleted.append(p.get("message_id"))
             if method == "editMessageText":
@@ -105,7 +120,8 @@ class Fake:
     def save(self):
         if self.record:
             with open(self.record, "w", encoding="utf-8") as f:
-                json.dump({"sent": self.sent, "edits": self.edits, "calls": self.calls, "deleted": self.deleted}, f, indent=1)
+                json.dump({"sent": self.sent, "edits": self.edits, "calls": self.calls, "deleted": self.deleted,
+                           "actions": self.actions}, f, indent=1)
 
 
 def serve(fake, port=0):

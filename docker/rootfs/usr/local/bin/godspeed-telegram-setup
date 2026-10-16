@@ -31,12 +31,21 @@
 #
 # Two flows. The default is the plain Docker image's: collect answers, run the
 # installer, restart the s6 gateway. GODSPEED_TG_FLOW=notebook is the one-click
-# Hostinger server, where the notebook is already installed: it asks the brain,
-# GitHub (a sign-in only), whether a Mission Control is already on GitHub (a yes
-# connects it through GODSPEED_TG_FINISH connect and skips the briefing and the
-# goal), the reader's city, their briefing as a file and their goal, hands the
-# answers to GODSPEED_TG_FINISH, and leaves starting the gateway to the
-# container's supervisor (docker/full-candidate/telegram-runner.mjs).
+# server, where the notebook is already installed. Two steps: the AI, then a few
+# questions: whether this is their first Mission Control (only "No, bring in the
+# one I have on GitHub" signs in to GitHub and connects it through
+# GODSPEED_TG_FINISH connect, skipping the questions about them), their city,
+# a few sentences about themselves (or the book's file) and what they want help
+# with first, both skippable. It hands the answers to GODSPEED_TG_FINISH, and
+# leaves starting the gateway to the container's supervisor
+# (docker/full-candidate/telegram-runner.mjs).
+#
+# Until 16 October 2026 the notebook flow signed everybody in to GitHub "where your
+# backup will be kept later", with no way past it. The host already backs the server
+# up and GitHub is not where a backup goes, so a newcomer without a GitHub account
+# stopped there (Michael, on his first install from the one-line server installer).
+# GitHub can still be connected any time later, in the notebook's Settings ("Connect
+# record sync", notebook/core/sync/github-sign-in.mjs, which signs in itself).
 #
 # Run by the s6 service godspeed-telegram-setup, as the assistant's account. Exits
 # 0 when setup is done or there is nothing for it to do, so the service sleeps.
@@ -77,10 +86,20 @@ GH = shlex.split(os.environ.get("GODSPEED_TG_GH", "gh"))
 SETUP = shlex.split(os.environ.get("GODSPEED_TG_SETUP", "/usr/local/bin/godspeed-setup"))
 HERMES_DIR = os.environ.get("HERMES_HOME") or os.path.join(HOME, ".hermes")
 GODSPEED = os.environ.get("GODSPEED") or os.path.join(HOME, "godspeed")
-TZ = os.environ.get("TZ", "Europe/Berlin")
 SIGNIN_MINUTES = 16          # the device codes last fifteen
 SETUP_MINUTES = 45
 BRIEFING_MAX = 1024 * 1024   # a briefing is a page or two of text
+STEPS = 2 if FLOW == "notebook" else 3
+TYPING_EVERY = 4             # Telegram shows "typing..." for five seconds
+STILL_WORKING = "Still working on it. This can take a few minutes; I write to you when I am done."
+# What the setup page in the owner's browser knew (docker/full-candidate/telegram-runner.mjs
+# passes them on from the page's connect call): the browser's own time zone, which is offered as
+# the city button (until 16 October 2026 the button was the image's TZ, Berlin, for everybody),
+# and the address of this server's notebook, which the last message names.
+BROWSER_TZ = os.environ.get("GODSPEED_TG_BROWSER_TZ", "").strip()
+NOTEBOOK_URL = os.environ.get("GODSPEED_TG_NOTEBOOK_URL", "").strip()
+if not re.fullmatch(r"https?://[A-Za-z0-9.:\[\]-]+(?:/[A-Za-z0-9._~/-]*)?", NOTEBOOK_URL):
+    NOTEBOOK_URL = ""
 
 WINDOWS_EXE = "https://github.com/MichaelZelbel/godspeed-mission-control/releases/latest/download/GodspeedSetup.exe"
 ONE_LINER = "https://raw.githubusercontent.com/MichaelZelbel/godspeed-mission-control/main/install-godspeed.sh"
@@ -233,6 +252,38 @@ def keyboard(buttons):
     return {"inline_keyboard": [[{"text": label, "callback_data": data}] for data, label in buttons]}
 
 
+class Typing:
+    """Telegram's "typing..." under the bot's name while a long step runs. After his last answer
+    Michael saw nothing for about a minute and thought setup had crashed (16 October 2026).
+    Telegram shows it for five seconds, so a thread of its own sends it again every four, until
+    the step ends or fails (the with-block's end stops it either way)."""
+
+    def __init__(self, chat_id, every=TYPING_EVERY):
+        self.chat_id, self.every = chat_id, every
+        self.stopped = threading.Event()
+        self.thread = None
+
+    def _beat(self):
+        while not self.stopped.is_set():
+            try:
+                tg("sendChatAction", http_timeout=10, chat_id=self.chat_id, action="typing")
+            except TelegramError:
+                pass
+            self.stopped.wait(self.every)
+
+    def __enter__(self):
+        if self.chat_id:
+            self.thread = threading.Thread(target=self._beat, daemon=True)
+            self.thread.start()
+        return self
+
+    def __exit__(self, *exc):
+        self.stopped.set()
+        if self.thread:
+            self.thread.join(15)
+        return False
+
+
 class Chat:
     """The conversation with the owner, and the door for everybody else."""
 
@@ -241,6 +292,7 @@ class Chat:
         self.refused = {}
         self.hinted = {}
         self.question = None        # (text, buttons) to show again on /start
+        self.reassured = 0          # when "Still working on it" was last said
 
     # sending
     def send(self, text, buttons=None):
@@ -261,6 +313,38 @@ class Chat:
                text=text, parse_mode="HTML", disable_web_page_preview=True)
         except TelegramError:
             pass
+
+    def reassure(self):
+        """Said once to a message written while a long step runs, not again within two minutes."""
+        if time.time() - self.reassured > 120:
+            self.reassured = time.time()
+            self.send(STILL_WORKING)
+
+    def working(self, fn, *args, **kwargs):
+        """Runs one long step, fn, while "typing..." stays on and the chat is still read: a test
+        question to the AI (up to three minutes a model), a key check, connecting a Mission Control
+        from GitHub (up to fifteen), filing the answers, the hand-over. Until 16 October 2026 these
+        ran with the chat unread and silent. fn must not read the chat itself. Returns what fn
+        returned; what it raised is raised here, after the typing has stopped."""
+        box = {}
+
+        def work():
+            try:
+                box["value"] = fn(*args, **kwargs)
+            except BaseException as e:      # handed to the caller below
+                box["error"] = e
+        worker = threading.Thread(target=work, daemon=True)
+        with Typing(self.st.get("chat_id")):
+            worker.start()
+            worker.join(1)                  # a quick step never waits for Telegram
+            while worker.is_alive():
+                for kind, _ in self.poll(2):
+                    if kind in ("text", "claimed", "document"):
+                        self.reassure()
+                worker.join(0.2)
+        if "error" in box:
+            raise box["error"]
+        return box.get("value")
 
     # receiving
     def poll(self, timeout):
@@ -358,10 +442,13 @@ class Chat:
         if not chat_id or time.time() - self.hinted.get(chat_id, 0) < 60:
             return
         self.hinted[chat_id] = time.time()
+        # A bot its owner has chatted with before shows no Start button, and "hi" or a bare
+        # "/start" cannot take it, so the hint names the message the setup page shows to copy
+        # (until 16 October 2026 it only named the page's button).
         try:
             tg("sendMessage", chat_id=chat_id,
-               text="To set me up, open me with the button on your Godspeed page. Its link carries a "
-                    "one-time code that makes you my owner.")
+               text="To set me up, send me the message shown on your Godspeed setup page. It starts "
+                    "with /start and carries a one-time code that makes you my owner.")
         except TelegramError:
             pass
 
@@ -598,21 +685,43 @@ def find_zone(text):
     return None
 
 
-def ask_zone(chat, first=None):
-    """Whose 06:00: the reader's city, as the zone Hermes' clock and schedules run on."""
-    here = TZ if find_zone(TZ) else "Europe/Berlin"
-    city = here.split("/")[-1].replace("_", " ")
-    prompt = (first or "Whose 06:00? Send me the city you live in, like London or New York, or tap %s.") % esc(city)
+def browser_zone(value=None):
+    """The time zone the owner's browser reported on the setup page, when it is a city's zone
+    (Europe/Vienna, America/Argentina/Buenos_Aires), else None: "UTC" names no city to offer."""
+    z = (BROWSER_TZ if value is None else value).strip()
+    if not re.fullmatch(r"[A-Z][A-Za-z]+(?:/[A-Za-z0-9_+-]+){1,2}", z) or z.split("/")[0] not in ZONE_REGIONS:
+        return None
+    try:
+        from zoneinfo import available_timezones
+        zones = available_timezones()
+    except Exception:
+        zones = None
+    return z if not zones or z in zones else None
+
+
+def city_of(zone):
+    return zone.split("/")[-1].replace("_", " ")
+
+
+def ask_zone(chat, first):
+    """The reader's city, as the zone Hermes' clock and schedules run on. The one button is the
+    zone of the owner's own browser, when the setup page knew it. Until 16 October 2026 it was the
+    image's TZ, Berlin for everybody, and the question said "seven in the morning" means your
+    seven, which read as if something would wake you at seven."""
+    here = browser_zone()
+    button = [("tz:browser", "%s (your computer's time zone)" % city_of(here))] if here else []
+    prompt = first
     while True:
-        a = chat.ask(prompt, [("tz:keep", city)], free_text=True)
-        if a == "tz:keep":
+        a = chat.ask(prompt, button, free_text=True)
+        if a == "tz:browser":
+            chat.send("Got it: %s time." % esc(city_of(here)))
             return here
         zone = find_zone(a)
         if zone:
-            chat.send("Got it: %s time." % esc(zone.split("/")[-1].replace("_", " ")))
+            chat.send("Got it: %s time." % esc(city_of(zone)))
             return zone
-        prompt = ("I do not know the clock of %s. Send the nearest big city, or tap %s."
-                  % (esc(a[:60]), esc(city)))
+        prompt = ("I do not know the time zone of %s. Type the nearest big city, like London or Vienna."
+                  % esc(a[:60]))
 
 
 # --- The steps -------------------------------------------------------------------------------
@@ -701,14 +810,16 @@ def step_brain(chat):
         log("brain: skipped, as asked (KB_SIGNIN_SKIP=1)")
         return
     if st.get("brain_ok"):
-        chat.send("Step 1 of 3: my brain is already set up (%s)." % esc(brain_label(st.get("brain", ""))))
+        chat.send("Step 1 of %d: my AI is already connected (%s)." % (STEPS, esc(brain_label(st.get("brain", "")))))
         return
     while True:
         slug = st.get("brain")
         if not slug:
+            # "My brain" said nothing to a newcomer (Michael, 16 October 2026); this says what it is for.
             slug = chat.ask(
-                "<b>Step 1 of 3: my brain.</b> Which AI should I think with? You pay that company "
-                "directly, with a plan or key you already have or make now. You can switch later.",
+                "<b>Step 1 of %d: connect an AI.</b> I need an AI service to do my thinking, such as "
+                "ChatGPT or Claude. Which one do you have or want to use? You pay that company directly, "
+                "with a plan or key you already have or make now. You can switch later." % STEPS,
                 [(s, label) for s, label in TOP_BRAINS] + [("more", "Another provider")])
             if slug == "more":
                 slug = chat.ask("Which one?", more_brains())
@@ -737,16 +848,34 @@ def brain_chatgpt(chat):
                 "for daily use. The code lasts 15 minutes, and I write back as soon as it went through." % (url, code)),
             chatgpt_done)
         chat.send("You are signed in to ChatGPT. One moment, I am finding a model your plan may use.")
-    why = ""
-    for model in codex_models():       # which ones a plan may use differs; the first that answers wins
-        use_model("openai-codex", model)
-        ok, why = proof()
-        log("brain: ChatGPT with %s: %s" % (model, "answers" if ok else why[:200]))
-        if ok:
-            return True
+
+    def find_model():
+        why = ""
+        for model in codex_models():   # which ones a plan may use differs; the first that answers wins
+            use_model("openai-codex", model)
+            ok, why = proof()
+            log("brain: ChatGPT with %s: %s" % (model, "answers" if ok else why[:200]))
+            if ok:
+                return True, ""
+        return False, why
+    ok, why = chat.working(find_model)
+    if ok:
+        return True
     a = chat.ask("You are signed in to ChatGPT, but none of its models answered me. ChatGPT said: %s"
                  % esc(why[:400]), [("brain:retry", "Try again"), ("brain:other", "Pick another AI")])
     return a == "brain:retry" and brain_chatgpt(chat)
+
+
+def check_key(slug, key):
+    """(True, "") once Hermes keeps the key and answers a test question with it, else (False, why)."""
+    run(HERMES + ["auth", "remove", slug, "godspeed-setup"], timeout=60)   # a key tried before
+    # The key goes in on standard input. As --api-key it was on the command line, where
+    # every account on the server can read it in the process list (until 6 October 2026).
+    # Without --api-key Hermes asks for it, and with no terminal it reads the answer there.
+    rc, _ = run(HERMES + ["auth", "add", slug, "--type", "api-key", "--label", "godspeed-setup"],
+                timeout=60, stdin_text=key + "\n", new_session=True)
+    use_model(slug, default_model(slug))
+    return proof() if rc == 0 else (False, "the key could not be stored")
 
 
 def brain_key(chat, slug):
@@ -764,14 +893,7 @@ def brain_key(chat, slug):
             continue
         SECRETS.append(key)
         chat.send("Thanks, I deleted your message. Checking the key with %s..." % esc(name))
-        run(HERMES + ["auth", "remove", slug, "godspeed-setup"], timeout=60)   # a key tried before
-        # The key goes in on standard input. As --api-key it was on the command line, where
-        # every account on the server can read it in the process list (until 6 October 2026).
-        # Without --api-key Hermes asks for it, and with no terminal it reads the answer there.
-        rc, _ = run(HERMES + ["auth", "add", slug, "--type", "api-key", "--label", "godspeed-setup"],
-                    timeout=60, stdin_text=key + "\n", new_session=True)
-        use_model(slug, default_model(slug))
-        ok, why = proof() if rc == 0 else (False, "the key could not be stored")
+        ok, why = chat.working(check_key, slug, key)
         log("brain: %s: %s" % (slug, "answers" if ok else why[:200]))
         if ok:
             return True
@@ -780,22 +902,29 @@ def brain_key(chat, slug):
 
 
 def step_github(chat):
+    """The plain image's step 2; on the one-click server only for bringing in a Mission Control
+    the reader already keeps on GitHub."""
+    joining = FLOW == "notebook"
     if github_done():
         login = github_login()
-        chat.send("Step 2 of 3: GitHub is already connected%s." % (" as " + esc(login) if login else ""))
+        chat.send("%sGitHub is already connected%s." % ("" if joining else "Step 2 of 3: ",
+                                                       " as " + esc(login) if login else ""))
     else:
-        chat.send("<b>Step 2 of 3: GitHub.</b> %s One moment, I am asking GitHub for a sign-in code."
-                  % ("Your backup will be kept there later, private to you. Nothing is copied there yet."
-                     if FLOW == "notebook" else "That is where your folder is kept, private to you."))
+        chat.send("To bring in your Mission Control, I sign in to GitHub with you. One moment, I am asking "
+                  "GitHub for a sign-in code." if joining else
+                  "<b>Step 2 of 3: GitHub.</b> That is where your folder is kept, private to you. One moment, "
+                  "I am asking GitHub for a sign-in code.")
         device_signin(
             chat, "GitHub",
             # No --skip-ssh-key: the image's gh (Debian's 2.46) does not know it and stops with its
             # usage text, found on the first real run, 2026-10-01. With https it asks nothing anyway.
             GH + ["auth", "login", "--hostname", "github.com", "--git-protocol", "https", "--web"],
             False,
-            lambda url, code: (
+            (lambda url, code: "Open this page:\n%s\n\nType this code there:\n<code>%s</code>\n\nSign in with "
+                               "the GitHub account that holds your Mission Control." % (url, code)) if joining else
+            (lambda url, code: (
                 "No GitHub account yet? Make a free one first: https://github.com/signup\n\n"
-                "Then open this page:\n%s\n\nType this code there:\n<code>%s</code>" % (url, code)),
+                "Then open this page:\n%s\n\nType this code there:\n<code>%s</code>" % (url, code))),
             github_done)
         login = github_login()
         chat.send("GitHub is connected%s." % (" as " + esc(login) if login else ""))
@@ -821,7 +950,8 @@ def step_questions(chat):
             [("brief:yes", "Yes please"), ("brief:no", "Not now")]) == "brief:yes"
         save_state(st)
     if st.get("brief") and "tz" not in st:
-        st["tz"] = ask_zone(chat)
+        st["tz"] = ask_zone(chat, "Your morning brief comes at 06:00, so I need your time zone. Which city "
+                                  "do you live in? Type its name, like London or Vienna.")
         save_state(st)
     # Observed State's line (2026-10-02): offered only with a brief, off unless chosen, credited
     # and linked every time; its author's one condition is that it is never weighed into a score.
@@ -871,11 +1001,17 @@ def fresh_repo_name(login):
 
 
 # --- The one-click server: the notebook is installed already --------------------------------
-# What Teach It Once's server route asks after the two sign-ins: the reader's city, their
-# briefing from Chapter 1 as a file, and their goal. Nothing is installed; the answers go to
-# GODSPEED_TG_FINISH, which files the goal and the clock the way the notebook's own setup does.
+# Step 2, a few questions: whether this is their first Mission Control, their city, a few
+# sentences about themselves and what they want help with first. Nothing is installed; the
+# answers go to GODSPEED_TG_FINISH, which files them the way the notebook's own setup does.
+#
+# Until 16 October 2026 the questions were "your city, your briefing and your goal", with the
+# briefing a file from Teach It Once's Chapter 1 and pasted text under 200 characters refused:
+# a newcomer who had not read the book did not know what was meant (Michael, on his own install).
 
 ROOT_FILES = {"agents.md", "claude.md", "readme.md", "decisions.md", "procedures.md"}
+ABOUT_FILE = "what-my-ai-knew.md"   # the book's name for it, kept for typed text too (FINISH reads it)
+KEPT = "Thanks, I keep that and use it whenever I help you."
 
 
 def briefing_name(sent):
@@ -895,7 +1031,7 @@ def keep_briefing(name, text):
     with open(tmp, "w", encoding="utf-8", newline="\n") as f:
         f.write(text if text.endswith("\n") else text + "\n")
     os.replace(tmp, path)
-    log("briefing: kept as %s (%d characters)" % (name, len(text)))
+    log("about you: kept as %s (%d characters)" % (name, len(text)))
     return name
 
 
@@ -903,47 +1039,61 @@ def briefing_from_file(doc):
     """(saved name, None) or (None, what to tell the reader)."""
     name = briefing_name(doc.get("file_name") or "")
     if not name.endswith((".md", ".txt", ".markdown")):
-        return None, "I can keep a text file, one ending in .md or .txt. Send that one, or tap Later."
+        return None, "I can keep a text file, one ending in .md or .txt. Send that one, or tap Skip."
     if (doc.get("file_size") or 0) > BRIEFING_MAX:
-        return None, "That file is over 1 MB, much longer than a briefing. Send a shorter one, or tap Later."
+        return None, "That file is over 1 MB, much longer than I need. Send a shorter one, or tap Skip."
     try:
         data = download(doc["file_id"], BRIEFING_MAX)
     except TelegramError as e:
-        log("briefing: could not fetch the file (%s)" % e)
+        log("about you: could not fetch the file (%s)" % e)
         return None, "Telegram did not give me the file. Send it once more, please."
     if data is None:
-        return None, "That file is over 1 MB, much longer than a briefing. Send a shorter one, or tap Later."
+        return None, "That file is over 1 MB, much longer than I need. Send a shorter one, or tap Skip."
     try:
         text = data.decode("utf-8-sig")
     except UnicodeDecodeError:
-        return None, "That file is not plain text. Send the .md file itself, or tap Later."
+        return None, "That file is not plain text. Send the .md file itself, or tap Skip."
     return keep_briefing(name, text), None
 
 
-def ask_briefing(chat):
-    later = [("brief:later", "Later")]
-    prompt = ("Now your briefing: the file that tells me who you are. If you follow Teach It Once, it is "
-              "<code>what-my-ai-knew.md</code>. Tap the paperclip and send it to me as a file, or paste its text.")
-    chat.question = (prompt, later)
-    chat.send(prompt, later)
+def ask_about(chat):
+    """A few sentences about the reader, typed (any length; a long paste Telegram cut into several
+    messages is put back together), or the book's what-my-ai-knew.md sent as a file. Skippable."""
+    skip = [("about:skip", "Skip")]
+    prompt = ("Tell me a little about yourself: what you do, what you are working on, and anything I should "
+              "keep in mind when I help you. A few sentences are plenty.\n\n"
+              "If you have read the book Teach It Once, you may already have written this down in a file called "
+              "<code>what-my-ai-knew.md</code>. Then send me that file instead: tap the paperclip.\n\n"
+              "Nothing to tell me right now? Tap Skip. Setup goes on, and you can tell me about yourself later "
+              "in any chat.")
+    skipped = "All right. Tell me about yourself whenever you like, in any chat."
+    chat.question = (prompt, skip)
+    chat.send(prompt, skip)
     while True:
         events = chat.poll(50)
         for i, (kind, value) in enumerate(events):
-            if kind == "button" and value == "brief:later":
+            if kind == "button" and value == "about:skip":
                 chat.question = None
-                chat.send("All right. Send it to me whenever you like and ask me to keep it.")
+                chat.send(skipped)
                 return ""
             if kind == "document":
                 saved, why = briefing_from_file(value)
                 if saved:
                     chat.question = None
-                    chat.send("Thanks. I keep it as <code>%s</code>, at the top of my folder." % esc(saved))
+                    chat.send(KEPT)
                     return saved
                 chat.send(why)
             elif kind in ("text", "claimed"):
-                if value.lower().startswith("/start"):
-                    chat.send(prompt, later)
-                elif len(value) >= 200:
+                low = value.lower()
+                if low.startswith("/start"):
+                    chat.send(prompt, skip)
+                elif low == "skip":
+                    chat.question = None
+                    chat.send(skipped)
+                    return ""
+                elif not value or value.startswith("/"):
+                    chat.send("Send me a few sentences about yourself, or tap Skip.")
+                else:
                     # Telegram cuts a long paste into several messages, sent one right after the other,
                     # so they can come in this same batch or in the next seconds.
                     parts = [value] + [v for k, v in events[i + 1:] if k == "text"]
@@ -953,26 +1103,28 @@ def ask_briefing(chat):
                             break
                         parts += more
                     chat.question = None
-                    saved = keep_briefing("what-my-ai-knew.md", "\n".join(parts))
-                    chat.send("Thanks. I keep your text as <code>%s</code>, at the top of my folder." % saved)
+                    saved = keep_briefing(ABOUT_FILE, "\n".join(parts))
+                    chat.send(KEPT)
                     return saved
-                else:
-                    chat.send("Send the file with the paperclip, paste its whole text, or tap Later.")
 
 
 def ask_goal(chat):
-    prompt = "Last one: your goal. What do you want my help with first? One or two sentences will do."
+    """What they want help with first, or "" for Skip (GODSPEED_TG_FINISH files no goal then, and
+    the first goal told later starts the routines)."""
+    prompt = ("Last question: what would you like my help with first? One or two sentences, for example "
+              "\"plan my week\" or \"keep track of my appointments\".")
     while True:
-        goal = " ".join(chat.ask(prompt, [], free_text=True).split())
+        a = chat.ask(prompt, [("goal:skip", "Skip")], free_text=True)
+        goal = "" if a == "goal:skip" else " ".join(a.split())
         if len(goal) <= 600:
             return goal
-        prompt = "That is a lot for one goal. Send me the heart of it, in one or two sentences."
+        prompt = "That is a lot for a start. Send me the heart of it, in one or two sentences."
 
 
 def connect_existing(spec):
     """(sync state, None) once the mission control on GitHub is connected, or (None, why). The
     notebook's own code connects it, the way Settings' "Connect record sync" does, with the GitHub
-    sign-in of step 2; its first round brings the pages here."""
+    sign-in just made; its first round brings the pages here."""
     payload = json.dumps({"repository": "https://github.com/%s.git" % spec})
     env = {k: v for k, v in os.environ.items() if not k.startswith("GODSPEED_TELEGRAM_")}
     rc, out = run(FINISH + ["connect"], timeout=900, stdin_text=payload, env=env)
@@ -986,15 +1138,21 @@ def connect_existing(spec):
 
 
 def step_existing(chat):
-    """The plain Docker setup asks whether a Mission Control already exists; so does this one. A yes
-    connects it and skips the briefing and the goal, which it already holds."""
+    """Step 2 begins with whether this is their first Mission Control. Only "No, bring in the one I
+    have on GitHub" signs in to GitHub: it connects that one and skips the questions about them,
+    which it already holds. State as before 16 October 2026: "existing" is "" for a fresh start,
+    None while the address is still to come, else owner/name; "joined" once it is connected."""
     st = chat.st
-    login = st.get("login") or github_login()
     if "existing" not in st:
-        a = chat.ask("Do you already have a Mission Control on another computer, kept on GitHub?",
-                     [("have:no", "No, start fresh"), ("have:yes", "Yes, I have one")])
+        chat.send("<b>Step 2 of 2: a few questions about you.</b>")
+        a = chat.ask("Is this your first Godspeed Mission Control?",
+                     [("have:no", "Yes, it is my first"), ("have:yes", "No, bring in the one I have on GitHub")])
         st["existing"] = "" if a == "have:no" else None
         save_state(st)
+    if st.get("existing") == "" or st.get("joined"):
+        return
+    step_github(chat)
+    login = st.get("login") or github_login()
     prompt = "Send me its address. It looks like %s" % esc("https://github.com/%s/godspeed" % (login or "you"))
     while st.get("existing") != "" and not st.get("joined"):
         if not st.get("existing"):
@@ -1010,14 +1168,14 @@ def step_existing(chat):
             st["existing"] = spec
             save_state(st)
         chat.send("One moment, I am bringing in your Mission Control from GitHub.")
-        state, why = connect_existing(st["existing"])
+        state, why = chat.working(connect_existing, st["existing"])
         log("existing: %s: %s" % (st["existing"], state or why[:200]))
         if state:
             st["joined"] = True
             save_state(st)
-            chat.send("Your Mission Control from GitHub is connected%s, so I skip the questions about "
-                      "your briefing and your goal." % (" and its pages are here" if state == "synced"
-                                                        else ", and its pages arrive within a few minutes"))
+            chat.send("Your Mission Control from GitHub is connected%s. It knows you already, so I only need "
+                      "your city." % (" and its pages are here" if state == "synced"
+                                      else ", and its pages arrive within a few minutes"))
             break
         a = chat.ask("I could not connect <b>%s</b>. What it said: %s\n\nNothing is lost. Tap Try again, "
                      "send another address, or start fresh." % (esc(st["existing"]), esc(why[:400])),
@@ -1037,17 +1195,15 @@ def step_existing(chat):
 
 def step_about_you(chat):
     st = chat.st
-    joined = bool(st.get("joined"))
     if "tz" not in st:
-        chat.send("<b>Step 3 of 3: your city.</b>" if joined else
-                  "<b>Step 3 of 3: your city, your briefing and your goal.</b>")
-        st["tz"] = ask_zone(chat, "Which city do you live in? Then \"seven in the morning\" means your seven. "
-                                  "Send me its name, like London or New York, or tap %s.")
+        st["tz"] = ask_zone(chat, "Which city do you live in? I only use it for your time zone, so a reminder "
+                                  "you ask for at 9:00 comes at 9:00 your time. Type the name of your city, "
+                                  "like London or Vienna.")
         save_state(st)
-    if joined:
+    if st.get("joined"):
         return
     if "briefing" not in st:
-        st["briefing"] = ask_briefing(chat)
+        st["briefing"] = ask_about(chat)
         save_state(st)
     if "goal" not in st:
         st["goal"] = ask_goal(chat)
@@ -1055,18 +1211,29 @@ def step_about_you(chat):
 
 
 def step_finish(chat):
-    """The answers, filed by the notebook's own code: the goal, the clock, Telegram for routines."""
+    """The answers, filed by the notebook's own code: the goal, the clock, Telegram for routines,
+    and what they said about themselves, where the assistant reads it."""
     st = chat.st
+    # Said at once after the last answer: until 16 October 2026 nothing came for about a minute,
+    # and Michael thought setup had crashed. What takes the minute: GODSPEED_TG_FINISH starts the
+    # first routines, one `hermes cron create` each (six on a fresh install), then the hand-over's
+    # `hermes send`; each Hermes command starts its whole program. The log names each part's time.
+    chat.send(("I am" if st.get("finishing") else "Thanks! I am") + " setting everything up now. This "
+              "takes a minute or two, and I write to you as soon as I am ready.")
+    st["finishing"] = True
+    save_state(st)
     env = {k: v for k, v in os.environ.items() if not k.startswith("GODSPEED_TELEGRAM_")}
-    payload = json.dumps({"timezone": st.get("tz"), "goal": st.get("goal"), "joined": bool(st.get("joined"))})
+    payload = json.dumps({"timezone": st.get("tz"), "goal": st.get("goal"), "joined": bool(st.get("joined")),
+                          "about": st.get("briefing") or ""})
     while True:
-        rc, out = run(FINISH, timeout=300, stdin_text=payload, env=env)
+        started = time.time()
+        rc, out = chat.working(run, FINISH, timeout=300, stdin_text=payload, env=env)
         if rc == 0:
-            log("finish: goal and clock filed")
+            log("finish: the answers filed (%.0f seconds)" % (time.time() - started))
             return
         reason = next((l.strip() for l in reversed(ANSI.sub("", out).splitlines()) if l.strip()), "no reason given")
         log("finish: stopped (exit %s): %s" % (rc, reason))
-        chat.ask("I could not file your goal and your city. What it said: %s\n\nNothing is lost. Tap Try "
+        chat.ask("I could not file your answers. What it said: %s\n\nNothing is lost. Tap Try "
                  "again." % esc(reason[:400]), [("finish:retry", "Try again")])
 
 
@@ -1117,17 +1284,18 @@ def step_install(chat):
         reader = threading.Thread(target=pump, daemon=True)
         reader.start()
         shown, started = None, time.time()
-        while p.poll() is None:
-            if box["section"] != shown:
-                shown = box["section"]
-                chat.edit(status, "Setting everything up now. This takes about five minutes.\n\nWorking on: %s" % esc(shown))
-            if time.time() - started > SETUP_MINUTES * 60:
-                p.kill()
-                box["reason"] = "it took longer than %d minutes" % SETUP_MINUTES
-                break
-            for kind, value in chat.poll(5):
-                if kind in ("text", "claimed"):
-                    chat.send("Still working on: %s. I message you when it is done." % esc(box["section"]))
+        with Typing(st.get("chat_id")):
+            while p.poll() is None:
+                if box["section"] != shown:
+                    shown = box["section"]
+                    chat.edit(status, "Setting everything up now. This takes about five minutes.\n\nWorking on: %s" % esc(shown))
+                if time.time() - started > SETUP_MINUTES * 60:
+                    p.kill()
+                    box["reason"] = "it took longer than %d minutes" % SETUP_MINUTES
+                    break
+                for kind, value in chat.poll(5):
+                    if kind in ("text", "claimed"):
+                        chat.send("Still working on: %s. I message you when it is done." % esc(box["section"]))
         p.wait()
         reader.join(5)
         if logf is not subprocess.DEVNULL:
@@ -1143,30 +1311,72 @@ def step_install(chat):
                  [("setup:retry", "Try again")])
 
 
-def step_hand_over(chat):
-    """The bot goes to the assistant: the three lines, a gateway restart, the first message."""
-    st = chat.st
-    write_telegram_env(st["owner_id"], st["chat_id"])
+def hermes_zone():
+    """The zone on the top-level `timezone:` line of Hermes' config.yaml, or ""."""
+    try:
+        with open(os.path.join(HERMES_DIR, "config.yaml"), encoding="utf-8-sig") as f:
+            for line in f:
+                m = re.match(r"^timezone:[ \t]*([\"']?)([^\"'#\s]*)\1[ \t]*(?:#.*)?$", line.rstrip("\r\n"))
+                if m:
+                    return m.group(2)
+    except OSError:
+        pass
+    return ""
+
+
+def ready_words():
+    """The last message. On the one-click server it names the notebook, the web page the person
+    made their account on: until 16 October 2026 it said "try what is in my folder?", a folder
+    nobody can see there, and never mentioned the notebook at all."""
+    if FLOW != "notebook":
+        return ("Your Godspeed Mission Control is set up, and this is its chat. Write to me here from "
+                "anywhere: try \"what can you do for me?\"")
+    where = ("In your notebook, in your web browser:\n%s\n" % NOTEBOOK_URL if NOTEBOOK_URL else
+             "In your notebook, in your web browser, at the same address where you set up this server. ")
+    return ("Your Godspeed Mission Control is ready. You can reach me in two places:\n\n"
+            "1. Here in Telegram, from anywhere.\n"
+            "2. %sSign in with the username and password you chose when you set up this server. There you "
+            "can write notes and chat with me: press \"Chat with Godspeed\".\n\n"
+            "Try it now: open your notebook and ask me something." % where)
+
+
+def hand_over_work(st):
+    """The slow part of the hand-over, timed in the log: Hermes' clock, the gateway (plain image
+    only) and the first message. Runs inside chat.working, so it must not read the chat."""
+    t = time.time()
     # The reader's clock, which Hermes' own clock and every schedule run on (hermes_time.py:
     # HERMES_TIMEZONE, then `timezone` in config.yaml, then the server's). Read at start, so
-    # it goes in before the restart below.
-    if st.get("tz"):
+    # it goes in before the restart below. On the one-click server GODSPEED_TG_FINISH has
+    # usually written it already, and asking Hermes again cost a start of its whole program.
+    if st.get("tz") and hermes_zone() != st["tz"]:
         rc, _ = run(HERMES + ["config", "set", "timezone", st["tz"]], timeout=60)
-        log("hand-over: Hermes' clock set to %s (exit %s)" % (st["tz"], rc))
+        log("hand-over: Hermes' clock set to %s (exit %s, %.0f seconds)" % (st["tz"], rc, time.time() - t))
+    elif st.get("tz"):
+        log("hand-over: Hermes' clock is %s already" % st["tz"])
     if FLOW == "notebook":
         # The container's supervisor starts the gateway once this program has finished,
         # so the two never read the bot at the same time.
         log("hand-over: Telegram written to Hermes' settings; the supervisor starts the gateway")
     else:
+        t = time.time()
         rc, _ = run(HERMES + ["gateway", "restart"], timeout=180)
         if rc != 0:
             rc, _ = run(HERMES + ["gateway", "start"], timeout=180)
-        log("hand-over: Telegram written to Hermes' settings; gateway restart exit %s" % rc)
-    first = ("Your Godspeed Mission Control is set up, and this is its chat. Write to me here from "
-             "anywhere: try \"what is in my folder?\"")
+        log("hand-over: Telegram written to Hermes' settings; gateway restart exit %s (%.0f seconds)" % (rc, time.time() - t))
+    first = ready_words()
     # Sent the way the morning brief and the alerts will be sent, which proves that road.
+    t = time.time()
     rc, _ = run(HERMES + ["send", "-t", "telegram", "-s", "Godspeed Mission Control", "-q"],
                 timeout=120, stdin_text=first + "\n")
+    log("hand-over: hermes send exit %s (%.0f seconds)" % (rc, time.time() - t))
+    return rc, first
+
+
+def step_hand_over(chat):
+    """The bot goes to the assistant: the three lines, a gateway restart, the first message."""
+    st = chat.st
+    write_telegram_env(st["owner_id"], st["chat_id"])
+    rc, first = chat.working(hand_over_work, st)
     if rc != 0:
         log("hand-over: hermes send did not deliver (exit %s); sending directly" % rc)
         chat.send(esc(first))
@@ -1177,7 +1387,7 @@ def step_hand_over(chat):
     # A reader who brought in the Mission Control they have already has it on that computer.
     if url.startswith("https://github.com/") and not st.get("joined"):
         chat.send(
-            "Want me on your computer too? Same folder, same memory.\n\n"
+            "Want me on your computer too? Same notes, same memory.\n\n"
             "<b>Windows:</b> download and run %s\nWhere it asks for \"Address of a mission control you "
             "already have\", paste:\n<code>%s</code>\nIf it asks you to sign in to GitHub, use the same "
             "account.\n\n<b>Mac or Linux:</b> paste this into a terminal:\n<code>curl -fsSL %s | bash -s -- --repo %s</code>\n\n"
@@ -1224,24 +1434,28 @@ def main():
     if not st.get("owner_id"):
         while not st.get("owner_id"):
             chat.poll(50)
-        steps = ("2. Sign in to GitHub, where your backup will be kept later.\n"
-                 "3. Your city, your briefing and your goal.\n\n") if FLOW == "notebook" else (
+        # Until 16 October 2026: "Choose my brain", a GitHub sign-in "where your backup will be kept
+        # later" that nobody could skip, and "your city, your briefing and your goal" out of nowhere.
+        ai = ("1. Connect me to an AI, such as ChatGPT or Claude. That is what I think with. You use your "
+              "own account or key and pay that company directly.\n")
+        steps = ("Two short steps and I am ready, about five minutes:\n" + ai +
+                 "2. A few short questions about you, so I can be useful from day one. Some of them you "
+                 "can skip.\n\n") if FLOW == "notebook" else (
+                 "Three short steps and I am ready, about ten minutes:\n" + ai +
                  "2. Connect GitHub. That is where your folder is kept, private to you.\n"
                  "3. A few quick questions.\n\n")
         chat.send(
             "Hi %s. I am your Godspeed Mission Control, running on your own server.\n\n"
-            "Three short steps and I am ready, about ten minutes:\n"
-            "1. Choose my brain: the AI company I think with. You pay it directly.\n"
             "%sFrom now on I answer only you." % (esc(st.get("owner_name", "there")), steps))
     else:
         chat.send("I restarted, and I am picking up where we were.")
     step_brain(chat)
-    step_github(chat)
     if FLOW == "notebook":
-        step_existing(chat)
+        step_existing(chat)     # signs in to GitHub only to bring in a Mission Control from there
         step_about_you(chat)
         step_finish(chat)
     else:
+        step_github(chat)
         step_questions(chat)
         step_install(chat)
     step_hand_over(chat)

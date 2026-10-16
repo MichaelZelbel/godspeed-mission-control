@@ -83,16 +83,18 @@ Telegram bot.
    `compose.yaml` holding the line `GODSPEED_TELEGRAM_TOKEN=123456789:ABCdef...`, then
    `docker compose up -d`.
 3. Open your bot in Telegram and press Start. A bot you have written to before shows no Start
-   button; then send it any message.
+   button; then send it any message. (On a server where you connected the bot from its web
+   page instead, as below, any message is not enough: send the message that page shows, which
+   starts with `/start` and carries a one-time code.)
 
-The bot then walks you through it. First your assistant's brain, the AI company it thinks
-with, paid by you directly: ChatGPT (a code to type on ChatGPT's sign-in page), OpenRouter,
-Claude, OpenAI, Google Gemini, or any other provider Hermes supports, by pasting its key (the
-bot deletes that message at once). It only goes on once the assistant has answered a test
-question with it. Then a code to type on GitHub's page, and a few questions as buttons (a new
-folder or the one you already have, the morning brief with which city's clock it
-follows, and whether it ends with one line about the world). Then it runs
-the same setup as `godspeed-setup`, hands itself over to your assistant, and ends with the
+The bot then walks you through it. First it connects an AI, the service it thinks with, paid
+by you directly: ChatGPT (a code to type on ChatGPT's sign-in page), OpenRouter, Claude,
+OpenAI, Google Gemini, or any other provider Hermes supports, by pasting its key (the bot
+deletes that message at once). While it checks, Telegram shows it typing. It only goes on once
+the assistant has answered a test question with it. Then a code to type on GitHub's page, and a
+few questions as buttons (a new folder or the one you already have, the morning brief and the
+city whose time zone it follows, and whether it ends with one line about the world). Then it
+runs the same setup as `godspeed-setup`, hands itself over to your assistant, and ends with the
 line that puts the same mission control on your Windows PC or Mac.
 
 **Write to your bot first.** The first person to write to it owns it, the same rule the

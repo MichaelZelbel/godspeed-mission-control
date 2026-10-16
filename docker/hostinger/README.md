@@ -47,12 +47,23 @@ key BotFather gives you, and press **Check and connect**. The server checks the 
 Telegram itself; a wrong key is said at once. Then the page shows **Open @yourbot in
 Telegram**, and a QR code for a phone. That link carries a one-time code: only the person who
 opens the bot from it becomes its owner, so a stranger who finds the bot in Telegram's search
-gets nothing. Press **Start**, and setup carries on as a chat: which AI (ChatGPT by a sign-in
-code, or another provider by its key), a GitHub sign-in code, whether you already have a
-Mission Control on GitHub, your city, your briefing as a file, and your goal. If you already
-have one, you send its address instead: the server connects it the way Settings' **Connect
-record sync** does, brings its pages in, and skips the briefing and the goal. Then the bot
-belongs to your assistant, and its first message arrives.
+gets nothing. A bot you have chatted with before shows no Start button; the page also shows
+the message to send it instead (`/start` and the same code), with a Copy button. Press
+**Start**, and setup goes on as a chat in two steps. First an AI to think with (ChatGPT by a
+sign-in code, or another provider by its key). Then a few questions: whether this is your
+first Godspeed Mission Control, your city (only for your time zone; the button offers the time
+zone of the browser you connected the bot from, and you can type any city), a few sentences
+about yourself or the book's `what-my-ai-knew.md` as a file, and what you want help with
+first. The last two have a Skip button. What you tell it about yourself is added to
+`profile/about-me.md`, which your assistant reads before it helps, and shows on the Identity
+page with Undo. Only "No, bring in the one I have on GitHub" signs in to GitHub: you send its
+address, the server connects it the way Settings' **Connect record sync** does, brings its
+pages in, and asks only for your city. A first Mission Control never needs GitHub; you can
+connect it later in Settings with **Connect record sync**. Right after your last answer the
+bot says it is setting everything up and shows it is typing until it is done (about a minute,
+mostly the assistant making its first routines). Then the bot belongs to your assistant, and
+its last message says where to reach it: here in Telegram, and in your notebook at this
+server's address, where you sign in with the username and password you chose.
 
 - **The key stays on this server.** It goes from your browser to your server only, is kept in
   the data volume at `/opt/data/full-candidate/telegram` (readable only by the assistant's
