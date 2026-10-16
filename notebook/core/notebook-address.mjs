@@ -30,11 +30,20 @@ function webAddress(value) {
   } catch { return null; }
 }
 
+// How the owner gets in at a web address, said beside it. Until 16 October 2026 this said "signs
+// in with their notebook account", so an assistant asked how to open the notebook told its owner
+// to use a "notebook account" nobody ever made: they chose a username and password on the setup
+// page (web-auth.mjs; no email address, so no reset by email: the recovery code saved at that
+// setup is the way back in, and the sign-in page asks for it).
+export const SIGN_IN = 'The owner signs in there with the username and password they chose when they first set up this server. ' +
+  'Forgotten? "Forgot your username or password?" on the sign-in page takes the recovery code they saved during that setup. ' +
+  'There is no reset by email; without that code, getting back in needs access to the server itself.';
+
 export function notebookAddress({env = process.env, port = Number(env.GODSPEED_PORT) || 47831, hostnameFile = HOSTINGER_HOSTNAME_FILE,
   read = file => fs.readFileSync(file, 'utf8'), inContainer = () => fs.existsSync('/.dockerenv')} = {}) {
   let web = webAddress(env.GODSPEED_WEB_ADDRESS);
   if (!web) { try { web = hostingerAddress(read(hostnameFile)); } catch {} }
-  if (web) return {link: web + '/dashboard', opens: 'on any computer or phone; the owner signs in with their notebook account'};
-  if (inContainer()) return {link: null, opens: 'This notebook runs in a container that does not know its own web address. It is the address the owner opens the notebook at in a browser.'};
+  if (web) return {link: web + '/dashboard', opens: 'on any computer or phone. ' + SIGN_IN, sign_in: SIGN_IN};
+  if (inContainer()) return {link: null, opens: 'This notebook runs in a container that does not know its own web address. It is the address the owner opens the notebook at in a browser, the same address where they set up this server. ' + SIGN_IN, sign_in: SIGN_IN};
   return {link: 'http://127.0.0.1:' + port + '/dashboard', opens: 'only on the computer this notebook runs on'};
 }

@@ -228,7 +228,7 @@ short sentence that names the page. Follow my privacy rules for all of it.
   `skills/research-watch/SKILL.md`; watching one page for changes is
   `skills/watch/SKILL.md`.
 - **"Send me the link to my notebook".** Call `get_notebook_link` and send me
-  the address it gives, with where it opens.
+  the address it gives, with where it opens and how I sign in.
 - **Beside the notebook, in this folder:** my goal is a card in `goals/`
   (above), which the notebook shows under Settings; the one-page summary of me
   is `profile/about-me.md`, kept short and in step with My Profile; open

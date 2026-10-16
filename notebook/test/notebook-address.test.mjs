@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
-import {notebookAddress,hostingerAddress} from '../core/notebook-address.mjs';
+import {notebookAddress,hostingerAddress,SIGN_IN} from '../core/notebook-address.mjs';
 import {createService} from '../server/main.mjs';
 
 for(const key of Object.keys(process.env))if(/^(GODSPEED_|HERMES_)/.test(key))delete process.env[key];
@@ -24,6 +24,11 @@ test('a server installed with the Linux installer gets the https address it prin
   assert.equal(at({env:{GODSPEED_WEB_ADDRESS:'https://srv1328602.hstgr.cloud:48443'}}).link,'https://srv1328602.hstgr.cloud:48443/dashboard');
   assert.equal(at({env:{GODSPEED_WEB_ADDRESS:'https://notebook.example/'}}).link,'https://notebook.example/dashboard');
   assert.match(at({env:{GODSPEED_WEB_ADDRESS:'https://notebook.example'}}).opens,/any computer or phone/);
+  // "How do I open my notebook?" is answered with how to sign in there: the username and password
+  // chosen at setup, never a "notebook account" nobody made (16 October 2026).
+  const answer=at({env:{GODSPEED_WEB_ADDRESS:'https://notebook.example'}});
+  assert.match(answer.opens,/signs in there with the username and password they chose when they first set up this server/);
+  assert.match(answer.opens,/recovery code/);assert.doesNotMatch(answer.opens,/notebook account/);assert.equal(answer.sign_in,SIGN_IN);
   assert.equal(at({env:{GODSPEED_WEB_ADDRESS:'javascript:alert(1)'},port:47831}).link,'http://127.0.0.1:47831/dashboard','anything but a web address is ignored');
 });
 
@@ -40,6 +45,7 @@ test('in a container that does not know its address there is no link to give, an
   const answer=at({inContainer:()=>true});
   assert.equal(answer.link,null);
   assert.match(answer.opens,/does not know its own web address/);
+  assert.match(answer.opens,/same address where they set up this server/);assert.match(answer.opens,/username and password/);
 });
 
 test('the Linux installer keeps the address for the notebook it starts',()=>{
