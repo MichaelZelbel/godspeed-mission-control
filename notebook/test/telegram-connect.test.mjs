@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import {TelegramConnection} from '../server/telegram-connect.mjs';
+import {TelegramConnection,browserZone,browserAddress} from '../server/telegram-connect.mjs';
 import {createService} from '../server/main.mjs';
 
 // Telegram connected from the web page on the one-click server: the key is checked with
@@ -36,6 +36,27 @@ test('a key Telegram knows is kept on this server only, and the page gets a one-
  assert.equal(JSON.stringify(result).includes(KEY),false,'the key never goes back to a browser');
  if(process.platform!=='win32')assert.equal(fs.statSync(path.join(f.dir,'connection.json')).mode&0o777,0o600);
  assert.deepEqual(f.telegram.calls.map(url=>url.split('/').pop()),['getMe','getWebhookInfo']);
+});
+
+test('a bot used before shows no Start button, so the page also gets the message to send, with the same code',async()=>{
+ const f=fixture(),result=await f.connection.connect(KEY);
+ const saved=JSON.parse(fs.readFileSync(path.join(f.dir,'connection.json'),'utf8'));
+ assert.equal(result.start_message,'/start '+saved.start_code);assert.ok(result.link.endsWith('?start='+saved.start_code),'nothing the link did not show already');
+ f.setup({bot_id:4242,owner_id:111,chat_id:111,owner_name:'Anna'});
+ assert.equal(f.connection.status().start_message,undefined,'gone once the bot has its owner');
+});
+
+test('the browser\'s time zone and address go along with the key for the setup chat, and nothing else',async()=>{
+ const f=fixture();
+ await f.connection.connect(KEY,{timezone:'Europe/Vienna',address:'https://203-0-113-7.sslip.io'});
+ let saved=JSON.parse(fs.readFileSync(path.join(f.dir,'connection.json'),'utf8'));
+ assert.equal(saved.timezone,'Europe/Vienna');assert.equal(saved.web_address,'https://203-0-113-7.sslip.io');
+ assert.equal(JSON.stringify(f.connection.status()).includes('Vienna'),false,'the page is not told back');
+ await f.connection.connect(KEY,{timezone:'not a zone',address:'javascript:alert(1)'});
+ saved=JSON.parse(fs.readFileSync(path.join(f.dir,'connection.json'),'utf8'));
+ assert.equal(saved.timezone,'Europe/Vienna','the same bot keeps what was known');assert.equal(saved.web_address,'https://203-0-113-7.sslip.io');
+ assert.deepEqual(['Europe/Vienna','America/Argentina/Buenos_Aires','UTC','Mars/Olympus','Europe/Vienna; rm -rf /',''].map(browserZone),['Europe/Vienna','America/Argentina/Buenos_Aires',null,null,null,null]);
+ assert.deepEqual(['https://x.example/setup#invite=1','http://127.0.0.1:47832','file:///etc/passwd','nonsense'].map(browserAddress),['https://x.example','http://127.0.0.1:47832',null,null]);
 });
 
 test('a wrong key, a key-shaped typo and an unreachable Telegram each say what to do, and keep nothing',async()=>{

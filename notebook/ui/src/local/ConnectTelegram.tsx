@@ -5,14 +5,28 @@ import {renderSVG} from 'uqr';
 import {Button} from '@/components/ui/button';
 import {Input} from '@/components/ui/input';
 import {Card, CardContent, CardHeader, CardTitle} from '@/components/ui/card';
-import {CheckCircle2, ExternalLink, MessageCircle} from 'lucide-react';
+import {Check, CheckCircle2, Copy, ExternalLink, MessageCircle} from 'lucide-react';
 
 // Telegram on the one-click server: right after the account is made (/dashboard/telegram?welcome=1)
 // and in Settings. The key goes to this server only (notebook/server/telegram-connect.mjs); the
 // bot's link carries a one-time code, so whoever opens it from this page becomes its owner.
-type Status={available:boolean;managed:'web'|'environment'|null;connected:boolean;phase:'none'|'waiting'|'setting-up'|'ready'|'refused';bot?:{username:string;name:string};link?:string;owner?:string|null};
+type Status={available:boolean;managed:'web'|'environment'|null;connected:boolean;phase:'none'|'waiting'|'setting-up'|'ready'|'refused';bot?:{username:string;name:string};link?:string;start_message?:string;owner?:string|null};
 async function call(route:string,body?:unknown){const r=await fetch('/api/'+route,{method:body?'POST':'GET',headers:{'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});const data=await r.json();if(!r.ok)throw new Error(data.error);return data;}
 export const telegramStatus=()=>call('telegram') as Promise<Status>;
+// What the browser knows that the setup chat cannot (16 October 2026): its own time zone, which the
+// chat offers as the city button, and the address this page was opened at, which the chat's last
+// message names when the server does not know its own.
+export function browserFacts(){let timezone='';try{timezone=Intl.DateTimeFormat().resolvedOptions().timeZone||'';}catch{}return {timezone,address:window.location.origin};}
+// "/start <code>" to send by hand: a bot its owner has chatted with before shows no Start button.
+function StartMessage({text}:{text:string}){
+  const [copied,setCopied]=useState(false);
+  const copy=async()=>{try{await navigator.clipboard.writeText(text);setCopied(true);setTimeout(()=>setCopied(false),2000);}catch{const range=document.createRange(),box=document.getElementById('telegram-start-message');if(box){range.selectNodeContents(box);const sel=window.getSelection();sel?.removeAllRanges();sel?.addRange(range);}}};
+  return <div className="flex flex-wrap items-center gap-2">
+    <code id="telegram-start-message" className="min-w-0 max-w-full break-all rounded border bg-muted px-3 py-2 text-sm select-all">{text}</code>
+    <Button type="button" variant="outline" className="min-h-11 gap-2" onClick={copy}>{copied?<Check className="h-4 w-4" aria-hidden="true"/>:<Copy className="h-4 w-4" aria-hidden="true"/>}{copied?'Copied':'Copy'}</Button>
+    <span className="sr-only" role="status">{copied?'Copied':''}</span>
+  </div>;
+}
 function safeNext(value:string|null){
   if(!value||!value.startsWith('/')||value.startsWith('//')||/[\\\r\n]/.test(value)||/^\/(setup|login|api)(\/|$)/.test(value))return '/dashboard';
   return value;
@@ -25,7 +39,7 @@ export function TelegramConnect({welcome=false,onContinue}:{welcome?:boolean;onC
   const data=status.data,username=data?.bot?.username;
   const qr=useMemo(()=>data?.link?renderSVG(data.link,{border:2,pixelSize:6}):'',[data?.link]);
   const update=(next:Status)=>{qc.setQueryData(['telegram-status'],next);setReplacing(false);setLeaving(false);};
-  const connect=async(e:React.FormEvent)=>{e.preventDefault();setBusy(true);setError('');try{update(await call('telegram/connect',{token:key}));setKey('');}catch(err:any){setError(err.message);}finally{setBusy(false);}};
+  const connect=async(e:React.FormEvent)=>{e.preventDefault();setBusy(true);setError('');try{update(await call('telegram/connect',{token:key,...browserFacts()}));setKey('');}catch(err:any){setError(err.message);}finally{setBusy(false);}};
   const disconnect=async()=>{setBusy(true);setError('');try{update(await call('telegram/disconnect',{}));}catch(err:any){setError(err.message);}finally{setBusy(false);}};
   if(status.isLoading)return <p role="status">Checking Telegram…</p>;
   if(status.isError)return <p role="alert">Telegram's status could not be read. <button className="underline" onClick={()=>status.refetch()}>Try again</button></p>;
@@ -46,10 +60,11 @@ export function TelegramConnect({welcome=false,onContinue}:{welcome?:boolean;onC
   if(data.phase==='none'||replacing)body=form;
   else if(data.phase==='refused')body=<><p role="alert">Telegram no longer accepts the key of @{username}. In BotFather, send <code>/token</code> to see its current key, and paste that here.</p>{form}</>;
   else if(data.phase==='waiting')body=<div className="space-y-4">
-    <p>Your bot is <strong>@{username}</strong>. Now open it and press <strong>Start</strong>.</p>
-    <Button asChild className="min-h-11 gap-2"><a href={data.link} target="_blank" rel="noopener noreferrer"><MessageCircle className="h-4 w-4" aria-hidden="true"/>Open @{username} in Telegram<ExternalLink className="h-4 w-4" aria-hidden="true"/></a></Button>
+    <p>Your bot is <strong>@{username}</strong>. Open it in Telegram with the button below and press <strong>Start</strong> at the bottom of the chat.</p>
+    <Button asChild className="min-h-11 h-auto max-w-full whitespace-normal py-2 gap-2"><a href={data.link} target="_blank" rel="noopener noreferrer"><MessageCircle className="h-4 w-4" aria-hidden="true"/>Open @{username} in Telegram<ExternalLink className="h-4 w-4" aria-hidden="true"/></a></Button>
     <div className="flex flex-wrap items-center gap-4"><div className="w-40 h-40 bg-white rounded p-1 [&>svg]:w-full [&>svg]:h-full" role="img" aria-label={'QR code that opens @'+username+' in Telegram'} dangerouslySetInnerHTML={{__html:qr}}/><p className="max-w-xs text-sm">Telegram is on your phone? Point its camera at this code.</p></div>
-    <p className="text-sm">This link works once, and makes you the bot's owner. Then setup carries on in the chat: it asks which AI to use, connects GitHub, and asks for your city, your briefing and your goal.</p>
+    {data.start_message&&<div className="space-y-2"><p className="text-sm">Used this bot before and see no Start button? Then send it this message:</p><StartMessage text={data.start_message}/></div>}
+    <p className="text-sm">The code works once and makes you the bot's owner. Then setup goes on in the chat: you connect an AI and answer a few questions about yourself.</p>
     <div className="flex flex-wrap gap-3"><Button variant="ghost" className="min-h-11" onClick={()=>setReplacing(true)}>Use a different bot</Button>{continueButton}</div>
   </div>;
   else if(data.phase==='setting-up')body=<div className="space-y-4" role="status">

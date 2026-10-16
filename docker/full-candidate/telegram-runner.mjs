@@ -4,6 +4,7 @@ import {spawn} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 import {passedEnvironment} from '../../notebook/core/assistant-files.mjs';
+import {notebookAddress} from '../../notebook/core/notebook-address.mjs';
 
 // Telegram on the one-click server, switched on from the web page instead of a redeploy.
 // The page (notebook/server/telegram-connect.mjs) writes the bot's key to
@@ -15,12 +16,24 @@ import {passedEnvironment} from '../../notebook/core/assistant-files.mjs';
 // and a Telegram problem never takes the notebook down with it.
 const kit=fileURLToPath(new URL('../../',import.meta.url));
 const digest=(...parts)=>createHash('sha256').update(parts.map(String).join('\n')).digest('hex').slice(0,16);
+// Where the owner opens the notebook, for the chat's last message (since 16 October 2026): the
+// address the server knows for itself (GODSPEED_WEB_ADDRESS, which docker/server/install.sh and
+// Hostinger's compose.yaml set, or the Hostinger hostname), else the one the setup page was opened
+// at. An address that opens only on this machine is no use on a phone, so none is given then.
+const loopback=link=>{try{return ['127.0.0.1','localhost','[::1]','::1','0.0.0.0'].includes(new URL(link).hostname);}catch{return true;}};
+export function notebookLink(env,connection,address=notebookAddress){
+  let own=null;try{own=address({env}).link;}catch{}
+  if(own&&!loopback(own))return own;
+  const seen=connection?.web_address?connection.web_address.replace(/\/+$/,'')+'/dashboard':null;
+  return seen&&!loopback(seen)?seen:'';
+}
 
 export class TelegramRunner{
   constructor({dir,env=process.env,spawnProcess=spawn,interval=2000,now=Date.now,kill=(pid,signal)=>process.kill(-pid,signal),
     python=env.GODSPEED_TG_PYTHON||'/opt/hermes/.venv/bin/python3',hermes=env.GODSPEED_TG_HERMES_BIN||'/opt/hermes/bin/hermes',
-    setup=path.join(kit,'docker/rootfs/usr/local/bin/godspeed-telegram-setup'),finish=path.join(kit,'notebook/scripts/telegram-setup-finish.mjs')}={}){
-    Object.assign(this,{dir,env,spawnProcess,interval,now,kill,python,hermes,setup,finish});
+    setup=path.join(kit,'docker/rootfs/usr/local/bin/godspeed-telegram-setup'),finish=path.join(kit,'notebook/scripts/telegram-setup-finish.mjs'),
+    address=notebookAddress}={}){
+    Object.assign(this,{dir,env,spawnProcess,interval,now,kill,python,hermes,setup,finish,address});
     this.child=null;this.failures=0;this.notBefore=0;this.lastKey=null;this.lastExit=null;
   }
   read(name){try{return JSON.parse(fs.readFileSync(path.join(this.dir,name),'utf8'));}catch{return null;}}
@@ -35,6 +48,7 @@ export class TelegramRunner{
     return {kind:'setup',key:'setup:'+digest(connection.token,connection.start_code),command:this.python,args:[this.setup],
       env:{...this.env,PATH:path.dirname(this.python)+path.delimiter+(this.env.PATH||''),GODSPEED_TELEGRAM_TOKEN:connection.token,
         GODSPEED_TELEGRAM_START_CODE:connection.start_code,GODSPEED_TG_FLOW:'notebook',GODSPEED_TG_HERMES:this.hermes,
+        GODSPEED_TG_BROWSER_TZ:connection.timezone||'',GODSPEED_TG_NOTEBOOK_URL:notebookLink(this.env,connection,this.address),
         GODSPEED_TG_STATE:path.join(this.dir,'setup.json'),GODSPEED_TG_LOG:path.join(this.dir,'setup.log'),
         GODSPEED_TG_FINISH:`${JSON.stringify(process.execPath)} ${JSON.stringify(this.finish)}`}};
   }

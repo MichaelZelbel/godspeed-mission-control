@@ -4,14 +4,15 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {EventEmitter} from 'node:events';
-import {TelegramRunner} from '../../docker/full-candidate/telegram-runner.mjs';
+import {TelegramRunner,notebookLink} from '../../docker/full-candidate/telegram-runner.mjs';
 
 // The one-click container's Telegram: the setup chat while the owner answers it, then Hermes'
 // gateway, never both, started again after a pause when one stops, all without a redeploy.
-function fixture(){
+function fixture({webAddress}={}){
  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-telegram-runner-'));let clock=1_000_000,pid=0;
  const started=[],signals=[];
- const runner=new TelegramRunner({dir,env:{PATH:'/usr/bin',HOME:'/fictional',GODSPEED_ACCESS_TOKEN:'fictional-sign-in-code',GODSPEED_CANDIDATE_BOT_TOKEN:'fictional-other-bot'},now:()=>clock,python:'/fictional/python3',hermes:'/fictional/hermes',
+ const runner=new TelegramRunner({dir,env:{PATH:'/usr/bin',HOME:'/fictional',GODSPEED_ACCESS_TOKEN:'fictional-sign-in-code',GODSPEED_CANDIDATE_BOT_TOKEN:'fictional-other-bot',...(webAddress?{GODSPEED_WEB_ADDRESS:webAddress}:{})},now:()=>clock,python:'/fictional/python3',hermes:'/fictional/hermes',
+  address:({env})=>env.GODSPEED_WEB_ADDRESS?{link:env.GODSPEED_WEB_ADDRESS+'/dashboard'}:{link:null},
   setup:'/kit/godspeed-telegram-setup',finish:'/kit/telegram-setup-finish.mjs',
   spawnProcess:(command,args,options)=>{const child=new EventEmitter();child.pid=++pid;child.kill=()=>{};Object.assign(child,{command,args,options});started.push(child);return child;},
   kill:(id,signal)=>{signals.push([id,signal]);const child=started.find(c=>c.pid===id);setImmediate(()=>child.emit('exit',null));}});
@@ -33,6 +34,18 @@ test('nothing runs until a key is saved; then the setup chat runs with the key a
  assert.match(env.GODSPEED_TG_FINISH,/telegram-setup-finish\.mjs"$/);assert.equal(env.TELEGRAM_BOT_TOKEN,undefined,'Hermes does not get the bot during setup');
  assert.ok(env.PATH.startsWith('/fictional'+path.delimiter),'hermes_cli is importable for the provider list');
  await tick(f.runner);assert.equal(f.started.length,1,'one chat at a time');
+});
+
+test('the chat is told the browser\'s time zone and where the notebook opens, the server\'s own address first',async()=>{
+ const f=fixture({webAddress:'https://203-0-113-7.sslip.io'});f.write('connection.json',{...connection,timezone:'Europe/Vienna',web_address:'https://seen-in-the-browser.example'});await tick(f.runner);
+ assert.equal(f.started[0].options.env.GODSPEED_TG_BROWSER_TZ,'Europe/Vienna');
+ assert.equal(f.started[0].options.env.GODSPEED_TG_NOTEBOOK_URL,'https://203-0-113-7.sslip.io/dashboard');
+ const g=fixture();g.write('connection.json',{...connection,web_address:'https://seen-in-the-browser.example'});await tick(g.runner);
+ assert.equal(g.started[0].options.env.GODSPEED_TG_NOTEBOOK_URL,'https://seen-in-the-browser.example/dashboard','the page\'s address when the server knows none');
+ assert.equal(g.started[0].options.env.GODSPEED_TG_BROWSER_TZ,'','no zone known, none made up');
+ // An address that opens only on the server itself is no use on a phone.
+ assert.equal(notebookLink({},{web_address:'http://127.0.0.1:47832'},()=>({link:'http://127.0.0.1:47831/dashboard'})),'');
+ assert.equal(notebookLink({},null,()=>{throw Error('unreadable');}),'');
 });
 
 test('a chat that stops is started again after a pause; once done, the gateway takes the bot at once',async()=>{

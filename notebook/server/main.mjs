@@ -196,7 +196,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       if(route==='/api/telegram'||route.startsWith('/api/telegram/')){
         if(!auth.authorized(req))return send(res,403,{error:'Sign in as the server owner to connect Telegram.'});
         if(route==='/api/telegram'&&req.method==='GET')return send(res,200,telegramConnection.status());
-        if(route==='/api/telegram/connect'&&req.method==='POST')return send(res,200,await telegramConnection.connect(JSON.parse(await body(req,4096)).token));
+        if(route==='/api/telegram/connect'&&req.method==='POST'){const input=JSON.parse(await body(req,4096));return send(res,200,await telegramConnection.connect(input.token,{timezone:input.timezone,address:input.address}));}
         if(route==='/api/telegram/disconnect'&&req.method==='POST')return send(res,200,telegramConnection.disconnect());
         return send(res,404,{error:'Unknown operation'});
       }

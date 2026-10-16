@@ -14,6 +14,18 @@ import {randomBytes} from 'node:crypto';
 // enough for a server anybody can reach (decision D-291).
 const KEY=/^[0-9]{5,15}:[A-Za-z0-9_-]{30,60}$/;
 const fail=(message,status=400)=>Object.assign(new Error(message),{status});
+// What the owner's browser says along with the key (since 16 October 2026), for the setup chat:
+// its time zone, offered as the city button (it was the image's TZ, Berlin, for everybody), and
+// the address the page was opened at, named in the chat's last message when the server does not
+// know its own. Anything else is dropped, never refused: the key is what matters here.
+export function browserZone(value){
+  const zone=String(value||'').trim();
+  if(zone.length>64||!/^[A-Za-z]+(\/[A-Za-z0-9_+-]+){1,2}$/.test(zone))return null;
+  try{new Intl.DateTimeFormat('en',{timeZone:zone});return zone;}catch{return null;}
+}
+export function browserAddress(value){
+  try{const url=new URL(String(value||'').trim());return ['https:','http:'].includes(url.protocol)&&url.hostname&&url.origin.length<=200?url.origin:null;}catch{return null;}
+}
 
 export class TelegramConnection{
   constructor({dir=process.env.GODSPEED_TELEGRAM_DIR,mode=process.env.GODSPEED_TELEGRAM,environmentBot=!!process.env.GODSPEED_CANDIDATE_BOT_TOKEN,originalRuntime=process.env.GODSPEED_ORIGINAL_RUNTIME==='on',hermesHome=process.env.HERMES_HOME,api=process.env.GODSPEED_TELEGRAM_API||'https://api.telegram.org',fetcher=fetch}={}){
@@ -31,8 +43,11 @@ export class TelegramConnection{
     if(!connection?.token)return {available:true,managed:'web',connected:false,phase:'none'};
     const setup=this.read('setup.json')||{},mine=String(setup.bot_id||'')===String(connection.bot_id);
     const phase=mine&&setup.problem==='refused'?'refused':mine&&setup.done?'ready':mine&&setup.owner_id?'setting-up':'waiting';
+    // The message itself too, to copy: a bot its owner has chatted with before shows no Start
+    // button, and only "/start <code>" makes its sender the owner (godspeed-telegram-setup). The
+    // link already carries the code, so this shows the signed-in owner nothing new.
     return {available:true,managed:'web',connected:true,phase,bot:{username:connection.username,name:connection.name},
-      ...(phase==='waiting'?{link:`https://t.me/${connection.username}?start=${connection.start_code}`}:{}),
+      ...(phase==='waiting'?{link:`https://t.me/${connection.username}?start=${connection.start_code}`,start_message:'/start '+connection.start_code}:{}),
       ...(['setting-up','ready'].includes(phase)?{owner:setup.owner_name||null}:{}),
       connected_at:connection.connected_at};
   }
@@ -45,7 +60,7 @@ export class TelegramConnection{
     if(!response.ok||!data.ok)throw fail('Telegram did not answer as expected. Try again in a minute.',502);
     return data.result;
   }
-  async connect(token){
+  async connect(token,{timezone,address}={}){
     if(!this.available)throw fail('Telegram is not connected from this page on this server.',409);
     token=String(token||'').trim();
     if(!KEY.test(token))throw fail('That is not a bot key. BotFather\'s key is a number, a colon and about 35 letters, like 123456789:AAH4kq...');
@@ -57,7 +72,9 @@ export class TelegramConnection{
     fs.mkdirSync(this.dir,{recursive:true,mode:0o700});
     if(!same){fs.rmSync(this.file('setup.json'),{force:true});this.hermesTelegram(null);}
     else if(old.token!==token)this.hermesTelegram(token);   // BotFather's /revoke: same bot, new key
-    this.write({token,bot_id:me.id,username:me.username,name:me.first_name||me.username,start_code:same&&old.start_code?old.start_code:randomBytes(24).toString('base64url'),connected_at:same?old.connected_at:new Date().toISOString()});
+    const zone=browserZone(timezone)||(same?old.timezone:null),web=browserAddress(address)||(same?old.web_address:null);
+    this.write({token,bot_id:me.id,username:me.username,name:me.first_name||me.username,start_code:same&&old.start_code?old.start_code:randomBytes(24).toString('base64url'),connected_at:same?old.connected_at:new Date().toISOString(),
+      ...(zone?{timezone:zone}:{}),...(web?{web_address:web}:{})});
     return this.status();
   }
   disconnect(){
