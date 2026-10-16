@@ -3,7 +3,10 @@
 #
 #   bash docker/server/test.sh          the parts that need no Docker: the sslip.io address, the
 #                                       busy-port and certificate-timeout messages, the systems it
-#                                       installs Docker on. Runs anywhere with bash and python3.
+#                                       installs Docker on, waiting while the server installs its
+#                                       own updates, Docker's installer tried three times with a
+#                                       stand-in for get.docker.com. Runs anywhere with bash and
+#                                       python3; the waiting part needs Linux and perl.
 #   sudo bash docker/server/test.sh e2e also the whole reader's path on THIS machine, as root:
 #                                       install (Docker too, if missing) with GODSPEED_HOST=localhost,
 #                                       the printed link, a browser making the account and reaching
@@ -62,6 +65,78 @@ printf 'ID=linuxmint\nID_LIKE="ubuntu debian"\n' > "$WORK/mint"
 printf 'ID=fedora\nPRETTY_NAME="Fedora Linux 42"\n' > "$WORK/fedora"
 check "Ubuntu, Debian and their family get Docker installed" lib "os_supported $WORK/ubuntu && os_supported $WORK/mint"
 check "another system is said by name" lib "! os_supported $WORK/fedora && [ \"\$(os_name $WORK/fedora)\" = 'Fedora Linux 42' ]"
+
+# A new server busy installing its own updates (16 October 2026). Apt's lock files, held the way
+# apt holds them (an fcntl lock, which flock cannot see), make the installer wait; a wait that
+# runs out says so in one plain sentence. Needs Linux and perl, which every Debian and Ubuntu has.
+hold_lock() {   # hold_lock FILE SECONDS, in the background; $locker is the program holding it
+  rm -f "$1.ready"
+  perl -MFcntl -e 'open(my $f, ">>", $ARGV[0]) or die "open: $!"; my $l = pack("ssx4qqix4", F_WRLCK, 0, 0, 0, 0);
+    fcntl($f, F_SETLKW, $l) or die "lock: $!"; open(my $r, ">", "$ARGV[0].ready") and close $r; sleep $ARGV[1];' "$1" "$2" &
+  locker=$!
+  for _ in $(seq 1 50); do [ -e "$1.ready" ] && return 0; sleep 0.1; done
+  return 1
+}
+if [ "$(uname -s)" = Linux ] && command -v perl >/dev/null 2>&1; then
+  lock="$WORK/lists-lock"; : > "$lock"
+  check "apt counts as free when nobody holds its locks" lib "APT_LOCKS='$WORK/missing $lock'; ! apt_busy"
+  check "and a free apt is not waited for, nothing said" test -z "$(lib "APT_LOCKS='$lock'; wait_for_apt" 2>&1)"
+  hold_lock "$lock" 30
+  check "apt counts as busy while another program holds one of its locks" lib "APT_LOCKS='$WORK/missing $lock'; apt_busy"
+  kill "$locker" 2>/dev/null; wait "$locker" 2>/dev/null
+  check "and as free again once that program lets go" lib "APT_LOCKS='$lock'; ! apt_busy"
+
+  hold_lock "$lock" 3
+  t0=$SECONDS
+  out="$(lib "APT_LOCKS='$lock'; APT_WAIT=20; wait_for_apt; echo free now" 2>&1)"
+  waited=$((SECONDS - t0))
+  wait "$locker" 2>/dev/null
+  check "a busy apt is waited for, said in one line" test "$(grep -cx -- '- This server is still installing its own updates\. Waiting for them to finish (up to 1 minute)\.' <<<"$out")" = 1
+  check "and the wait ends when the updates finish (after $waited s)" bash -c '[ "$(tail -1 <<<"$1")" = "free now" ] && [ "$2" -ge 2 ] && [ "$2" -lt 15 ]' _ "$out" "$waited"
+
+  hold_lock "$lock" 30
+  expect_out "a wait that runs out stops with one plain sentence" \
+    '^This server is still busy installing its own updates\. Run this line again in a few minutes; nothing was changed\.$' \
+    lib "APT_LOCKS='$lock'; APT_WAIT=2; wait_for_apt"
+  check "and exits 1, without a stack trace" bash -c 'out="$(GODSPEED_INSTALL_LIB=1 GODSPEED_DIR="$1" bash -c "source \"$2\"; APT_LOCKS=\"$3\"; APT_WAIT=1; wait_for_apt" 2>&1)"; [ $? -eq 1 ] && ! grep -qiE "trace|line [0-9]+:" <<<"$out"' _ "$WORK/dir" "$ROOT/docker/server/install.sh" "$lock"
+  kill "$locker" 2>/dev/null; wait "$locker" 2>/dev/null
+else
+  echo "SKIP  waiting for a busy apt (needs Linux and perl)"
+fi
+
+# Docker's installer meeting a busy apt: apt told to wait for a lock (the setting APT_CONFIG adds),
+# three tries, and when none works the reader sees apt's own words without opening the log.
+# A stand-in for get.docker.com, so no Docker is installed here.
+mkdir -p "$WORK/dir"
+cat > "$WORK/get-docker-busy.sh" <<'EOF'
+echo "+ sh -c 'apt-get -qq update >/dev/null'"
+echo "APT_CONFIG adds: $(cat "$APT_CONFIG")"
+echo "E: Could not get lock /var/lib/apt/lists/lock. It is held by process 10 (perl)"
+echo "E: Unable to lock directory /var/lib/apt/lists/"
+exit 100
+EOF
+cat > "$WORK/get-docker-once.sh" <<EOF
+[ -e "$WORK/tried-once" ] && { echo "Docker installed"; exit 0; }
+: > "$WORK/tried-once"
+echo "E: Could not get lock /var/lib/apt/lists/lock. It is held by process 10 (perl)"
+exit 100
+EOF
+docker_from() { lib "APT_LOCKS='$WORK/missing'; DOCKER_URL='file://$WORK/$1'; DOCKER_PAUSE=0; install_docker"; }
+printf '%s\n' '2026-10-15T08:00:00Z install started' 'E: an error from an earlier run' > "$WORK/dir/install.log"
+out="$(docker_from get-docker-busy.sh 2>&1)"; rc=$?
+check "a Docker install that never works stops" test "$rc" -ne 0
+check "with the sentence the reader knows" grep -qx 'Docker could not be installed. This is what went wrong:' <<<"$out"
+check "and apt's own error lines under it, indented, each once" bash -c 'grep -qx "    E: Could not get lock /var/lib/apt/lists/lock. It is held by process 10 (perl)" <<<"$1" && grep -qx "    E: Unable to lock directory /var/lib/apt/lists/" <<<"$1" && [ "$(grep -c "Could not get lock" <<<"$1")" = 1 ]' _ "$out"
+check "but nothing from an earlier run" bash -c '! grep -q "earlier run" <<<"$1"' _ "$out"
+check "then where the whole story is" grep -qx "The whole story is in $WORK/dir/install.log." <<<"$out"
+check "it was tried three times" test "$(grep -c 'installing Docker, try [0-9] of 3' "$WORK/dir/install.log")" = 3
+check "each time with apt told to wait up to five minutes for a lock" test "$(grep -c 'APT_CONFIG adds: DPkg::Lock::Timeout "300";' "$WORK/dir/install.log")" = 3
+check "and the downloaded installer and that setting are gone afterwards" bash -c "[ ! -e '$WORK/dir/get-docker.sh' ] && [ ! -e '$WORK/dir/apt-wait.conf' ]"
+check "a try that meets a held lock is tried again, and the next one installs Docker" docker_from get-docker-once.sh
+check "and the log says on which try" grep -q 'Docker installed on try 2$' "$WORK/dir/install.log"
+printf '%s\n' one two three four five six seven > "$WORK/dir/install.log"
+expect_out "without apt error lines, the last five lines are shown" '^    three$' lib 'stop_showing_log "Docker is installed but does not start." 0'
+check "and no more" bash -c "! GODSPEED_INSTALL_LIB=1 GODSPEED_DIR='$WORK/dir' bash -c \"source '$ROOT/docker/server/install.sh'; stop_showing_log x 0\" 2>&1 | grep -qx '    two'"
 
 # A port something else holds: one plain sentence, and the other program is left alone.
 port="$(python3 -c 'import socket;s=socket.socket();s.bind(("127.0.0.1",0));print(s.getsockname()[1])')"

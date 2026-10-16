@@ -36,6 +36,12 @@ part in the chat, then, whenever you like, a short chat in which your assistant 
   here (the older container below, or a hosting company's one-click). When the certificate does
   not come within five minutes, it says to open ports 80 and 443 in the hosting company's
   firewall (or forward them on a home router) and run the line again.
+- **A server that was just made or reinstalled** installs its own updates for its first minutes,
+  and apt lets one program at a time install. The installer waits for those updates to finish
+  (up to 15 minutes; `GODSPEED_APT_WAIT=<seconds>` in front of `bash` changes that), tells apt to
+  wait for its lock instead of stopping, and tries Docker's installer up to three times. When
+  Docker still cannot be installed, the reason (apt's own error lines) is shown under the
+  sentence, so nobody has to open the log to see it.
 - **Run it again at any time.** It keeps the setup code, the address and all data, updates to
   the image `compose.yaml` pins today, and never makes a second owner: before the account
   exists it prints a fresh link (the old one stops working), after that it says to sign in.
@@ -50,7 +56,8 @@ part in the chat, then, whenever you like, a short chat in which your assistant 
   tag (the full 40-character commit). The choice is kept, so running the line again stays on it;
   `GODSPEED_IMAGE=release` goes back to the released one.
 
-Tested by `docker/server/test.sh` (the address, the busy-port and certificate messages, anywhere)
+Tested by `docker/server/test.sh` (the address, the busy-port and certificate messages, waiting
+for a busy apt and the three tries at Docker's installer, anywhere; the apt part needs Linux)
 and `sudo bash docker/server/test.sh e2e` (the whole path, Docker included, on a machine you can
 throw away, with `GODSPEED_HOST=localhost` and Caddy's own certificate).
 

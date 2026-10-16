@@ -29,6 +29,8 @@
 #   GODSPEED_IMAGE=ghcr.io/michaelzelbel/godspeed-mission-control:v2-sha-<commit>
 #                                      try one version before it is released to everybody (kept for
 #                                      later runs; GODSPEED_IMAGE=release goes back to the released one)
+#   GODSPEED_APT_WAIT=900              seconds to wait for a new server to finish installing its own
+#                                      updates before Docker is installed (default 15 minutes)
 # docker/README.md, "Any Linux server, one line", has the rest; docker/server/test.sh tests it.
 # =============================================================================
 
@@ -41,6 +43,7 @@ DIR="${GODSPEED_DIR:-/opt/godspeed-mission-control}"
 PROJECT=godspeed-mission-control
 CERT_WAIT="${GODSPEED_CERT_WAIT:-300}"   # seconds to wait for the HTTPS certificate
 START_WAIT="${GODSPEED_START_WAIT:-600}" # seconds to wait for the app to answer
+APT_WAIT="${GODSPEED_APT_WAIT:-900}"     # seconds to wait for the server's own updates to finish
 NEED_GB=8                                # free disk space the first download needs
 HTTPS_PORT=443                           # the tests point this elsewhere; the server uses 443
 SELF_FILE="${BASH_SOURCE[0]:-}"
@@ -51,6 +54,31 @@ step() { printf -- '- %s\n' "$*"; }
 stop() { printf '\n%s\n\n' "$*" >&2; exit 1; }
 minutes() { local m=$(( ($1 + 59) / 60 )); [ "$m" -eq 1 ] && echo "1 minute" || echo "$m minutes"; }
 log()  { [ -d "$DIR" ] && printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" >> "$LOG" 2>/dev/null; return 0; }
+log_lines() { local n; n="$(wc -l 2>/dev/null < "$LOG")"; echo "$((${n:-0}))"; }
+
+# What a program wrote to the log after line $1 that says what went wrong: apt's own error lines
+# ("E: Could not get lock ...") when there are any, otherwise its last five lines. Our own dated
+# lines are left out, a line repeated by a second try is shown once.
+log_reason() {
+  local new errors
+  new="$(tail -n +"$((${1:-0} + 1))" "$LOG" 2>/dev/null | grep -vE '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:]{8}Z ' \
+         | sed 's/[[:space:]]*$//' | grep -v '^$' | cut -c1-200)"
+  errors="$(printf '%s\n' "$new" | grep -E '^(E: |ERROR)')"
+  [ -n "$errors" ] || errors="$(printf '%s\n' "$new" | tail -n 5)"
+  printf '%s\n' "$errors" | awk 'NF && !seen[$0]++' | tail -n 5
+}
+
+# Stops with sentence $1 and, under it, what went wrong since log line $2, so the reader sees the
+# reason without opening a file.
+stop_showing_log() {
+  local reason; reason="$(log_reason "${2:-0}")"
+  [ -n "$reason" ] || stop "$1 What went wrong is written in $LOG."
+  stop "$1 This is what went wrong:
+
+$(printf '%s\n' "$reason" | sed 's/^/    /')
+
+The whole story is in $LOG."
+}
 
 # --- The address -------------------------------------------------------------
 
@@ -152,6 +180,113 @@ check_ports() {
     who="$(port_owner "$p")"
     stop "Another program on this server already uses port $p${who:+ ($who)}. Godspeed Mission Control needs ports 80 and 443 for its secure web page, and this installer leaves other programs alone, so nothing was changed. Stop that program, or use a server that runs nothing else, then run this line again."
   done
+}
+
+# --- Docker, and apt that installs it -------------------------------------------------
+# (16 October 2026.) Docker comes from Docker's own installer (get.docker.com), which installs it
+# with apt, the program that installs software on Debian and Ubuntu. Apt lets one program at a
+# time do that, and each one holds these files locked while it works. A server that was just made
+# or reinstalled spends its first minutes installing its own updates, so Docker's installer met
+# those locks and stopped at once ("Could not get lock /var/lib/apt/lists/lock"). Now we wait
+# until apt is free, tell apt to wait for a lock instead of stopping, and try three times.
+APT_LOCKS="/var/lib/dpkg/lock-frontend /var/lib/dpkg/lock /var/lib/apt/lists/lock /var/cache/apt/archives/lock"
+DOCKER_URL=https://get.docker.com
+DOCKER_TRIES=3
+DOCKER_PAUSE=10      # seconds between two tries
+APT_WAITED=no        # the waiting line is said once per run
+
+# 0 when another program holds one of APT_LOCKS. They are fcntl locks, which flock cannot see, so
+# perl (always there on Debian and Ubuntu, apt and dpkg need it) asks the system who holds each.
+# Without perl, fuser says whether any program has one of them open. Not knowing counts as free:
+# apt's own wait and the three tries are still there.
+apt_busy() {
+  local f
+  if command -v perl >/dev/null 2>&1; then
+    # shellcheck disable=SC2086  # APT_LOCKS is a list of paths without spaces
+    perl -MFcntl -e '
+      for my $file (@ARGV) {
+        open(my $fh, "<", $file) or next;
+        my $lock = pack("ssx4qqix4", F_WRLCK, 0, 0, 0, 0);
+        fcntl($fh, F_GETLK, $lock) or next;
+        my ($type) = unpack("s", $lock);
+        exit 0 if $type == F_WRLCK || $type == F_RDLCK;
+      }
+      exit 1;' $APT_LOCKS
+    return
+  fi
+  command -v fuser >/dev/null 2>&1 || return 1
+  for f in $APT_LOCKS; do [ -e "$f" ] && fuser "$f" >/dev/null 2>&1 && return 0; done
+  return 1
+}
+
+# Until apt is free, up to APT_WAIT seconds. Says so once, and only when it has to wait. $1 is how
+# the sentence ends when it gives up.
+wait_for_apt() {
+  local ending="${1:-nothing was changed.}" deadline=$((SECONDS + APT_WAIT))
+  apt_busy || return 0
+  if [ "$APT_WAITED" = no ]; then
+    step "This server is still installing its own updates. Waiting for them to finish (up to $(minutes "$APT_WAIT"))."
+    APT_WAITED=yes
+  fi
+  log "apt is busy with another program; waiting"
+  while apt_busy; do
+    if [ "$SECONDS" -ge "$deadline" ]; then
+      log "apt was still busy after $APT_WAIT seconds"
+      stop "This server is still busy installing its own updates. Run this line again in a few minutes; $ending"
+    fi
+    sleep 2
+  done
+  log "apt is free"
+}
+
+# Runs a command with apt told to wait up to five minutes for a lock instead of stopping at once.
+# APT_CONFIG adds this one setting to apt's own settings; it replaces none of them.
+patient_apt() {
+  local conf="$DIR/apt-wait.conf" rc
+  printf 'DPkg::Lock::Timeout "300";\n' > "$conf"
+  APT_CONFIG="$conf" "$@"; rc=$?
+  rm -f "$conf"
+  return "$rc"
+}
+
+# Docker from Docker's own installer, up to three tries, each after apt is free again: the
+# server's updates can take apt back between our look and Docker's first apt command.
+install_docker() {
+  local try from
+  wait_for_apt
+  step "Installing Docker, the program Godspeed runs in. This takes a few minutes."
+  from="$(log_lines)"
+  curl -fsSL "$DOCKER_URL" -o "$DIR/get-docker.sh" 2>>"$LOG" \
+    || { rm -f "$DIR/get-docker.sh"; stop "Docker's installer could not be downloaded from $DOCKER_URL. Check that this server can reach the internet, then run this line again; nothing was changed."; }
+  for try in $(seq 1 "$DOCKER_TRIES"); do
+    [ "$try" -eq 1 ] || { sleep "$DOCKER_PAUSE"; wait_for_apt "it picks up where it stopped."; }
+    log "installing Docker, try $try of $DOCKER_TRIES"
+    if patient_apt sh "$DIR/get-docker.sh" </dev/null >>"$LOG" 2>&1; then
+      log "Docker installed on try $try"
+      rm -f "$DIR/get-docker.sh"
+      return 0
+    fi
+    log "Docker's installer did not finish (try $try of $DOCKER_TRIES)"
+  done
+  rm -f "$DIR/get-docker.sh"
+  stop_showing_log "Docker could not be installed." "$from"
+}
+
+# Starts Docker when it is installed but not running. When it will not start, the reason is in
+# Docker's own journal, so its last lines go into the log and on the screen.
+start_docker() {
+  local from; from="$(log_lines)"
+  systemctl enable --now docker >>"$LOG" 2>&1 || service docker start >>"$LOG" 2>&1 || true
+  for _ in $(seq 1 20); do docker info >/dev/null 2>&1 && return 0; sleep 1; done
+  command -v journalctl >/dev/null 2>&1 && journalctl -u docker.service --no-pager -n 30 >>"$LOG" 2>&1
+  stop_showing_log "Docker is installed but does not start." "$from"
+}
+
+# The compose plugin, when a Docker that was here already came without it.
+add_compose_plugin() {
+  wait_for_apt
+  { patient_apt apt-get update && patient_apt apt-get install -y docker-compose-plugin; } </dev/null >>"$LOG" 2>&1 || true
+  docker compose version >/dev/null 2>&1 || stop "Docker is here but its compose plugin is not, and it could not be added. Install docker-compose-plugin, then run this line again."
 }
 
 # --- Waiting -----------------------------------------------------------------
@@ -257,7 +392,7 @@ as_root() {
   command -v sudo >/dev/null 2>&1 || stop "This needs the server's administrator account. Log in as root and run this line again."
   say "This needs the server's administrator rights, so it asks sudo (it may ask for your password)."
   local pass=() v
-  for v in GODSPEED_HOST GODSPEED_IMAGE GODSPEED_RAW GODSPEED_SELF_URL GODSPEED_DIR GODSPEED_INSTALL_COUNT DO_NOT_TRACK GODSPEED_CERT_WAIT GODSPEED_START_WAIT; do
+  for v in GODSPEED_HOST GODSPEED_IMAGE GODSPEED_RAW GODSPEED_SELF_URL GODSPEED_DIR GODSPEED_INSTALL_COUNT DO_NOT_TRACK GODSPEED_CERT_WAIT GODSPEED_START_WAIT GODSPEED_APT_WAIT; do
     [ -n "${!v:-}" ] && pass+=("$v=${!v}")
   done
   if [ -n "$SELF_FILE" ] && [ -f "$SELF_FILE" ]; then
@@ -281,20 +416,10 @@ main() {
   # Docker, the program Godspeed runs in.
   if ! command -v docker >/dev/null 2>&1; then
     os_supported || stop "This installer can set up Docker on Debian and Ubuntu, and this server runs $(os_name || echo 'another system'). Install Docker with its compose plugin (docs.docker.com/engine/install), then run this line again."
-    step "Installing Docker, the program Godspeed runs in. This takes a few minutes."
-    { curl -fsSL https://get.docker.com -o "$DIR/get-docker.sh" && sh "$DIR/get-docker.sh"; } </dev/null >>"$LOG" 2>&1 \
-      || stop "Docker could not be installed. What went wrong is written in $LOG."
-    rm -f "$DIR/get-docker.sh"
+    install_docker
   fi
-  if ! docker info >/dev/null 2>&1; then
-    systemctl enable --now docker >>"$LOG" 2>&1 || service docker start >>"$LOG" 2>&1 || true
-    for _ in $(seq 1 20); do docker info >/dev/null 2>&1 && break; sleep 1; done
-    docker info >/dev/null 2>&1 || stop "Docker is installed but does not start. What went wrong is written in $LOG."
-  fi
-  if ! docker compose version >/dev/null 2>&1; then
-    { apt-get update && apt-get install -y docker-compose-plugin; } </dev/null >>"$LOG" 2>&1 || true
-    docker compose version >/dev/null 2>&1 || stop "Docker is here but its compose plugin is not, and it could not be added. Install docker-compose-plugin, then run this line again."
-  fi
+  docker info >/dev/null 2>&1 || start_docker
+  docker compose version >/dev/null 2>&1 || add_compose_plugin
   log "$(docker --version)"
 
   # Another Godspeed on this machine: the older container (docker/install.sh), or this
