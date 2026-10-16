@@ -9,11 +9,39 @@
 // review: one person typing in one note produced a conflict record and the
 // screen said "Could not save N note changes". A queued save waits for the one
 // in flight and is then stamped with the version that save returned.
+//
+// Reads are not queued behind writes, so a read can describe a record as it
+// was before a save the screen has already seen answered. On 16 October 2026
+// the notes list (1,374 notes, slow after a reboot) was answered between two
+// saves of the open note and arrived after the second one; the screen took
+// its older version, and every later save of that note was refused. A read
+// therefore never replaces what a write to the same record told the screen
+// after the read was sent (`since`), and a refused write takes the record's
+// current version, so the next save is stamped right instead of failing again.
 export function createRecordWrites({send}) {
   const versions=new Map(),snapshots=new Map(),chains=new Map();
-  const remember=(table,data)=>{
+  // Per record: writes in flight, and the tick at which the latest one was
+  // answered. `clock` advances with every answered write.
+  const writing=new Map(),answered=new Map();let clock=0;
+  const rowsOf=data=>Array.isArray(data)?data:data?[data]:[];
+  const remember=(table,data,since)=>{
     if(!table)return;
-    for(const row of Array.isArray(data)?data:data?[data]:[])if(row&&row.id&&row._hash){const key=table+'/'+row.id;versions.set(key,row._hash);snapshots.set(key,row);}
+    for(const row of rowsOf(data))if(row&&row.id&&row._hash){
+      const key=table+'/'+row.id;
+      if(since!==undefined&&((writing.get(key)||0)>0||(answered.get(key)??-1)>since))continue;
+      // The notes list carries a preview, not the text: a narrower row of the
+      // version already held adds to the copy instead of replacing it.
+      const held=snapshots.get(key);
+      versions.set(key,row._hash);snapshots.set(key,held&&held._hash===row._hash?{...held,...row}:row);
+    }
+  };
+  const isRead=state=>!state.rpc&&(!state.operation||state.operation==='select');
+  // The records a write may change, as far as the request says.
+  const keysOf=state=>{
+    if(!state.table||isRead(state)||state.rpc)return [];
+    const ids=targetIds(state)||new Set();
+    for(const value of rowsOf(state.values))if(typeof value?.id==='string')ids.add(value.id);
+    return [...ids].map(id=>state.table+'/'+id);
   };
   // Only the records a write can touch. The server reads the version of the
   // records it changes and nothing else, so stamping every row the screen had
@@ -33,9 +61,37 @@ export function createRecordWrites({send}) {
     }
     return {...state,expected,baselines};
   };
+  // A write whose records the request does not name (a bulk update by folder,
+  // an insert without an id) counts for every record of its table.
+  const wideWriting=new Map(),wideAnswered=new Map();
+  const stale=(table,since)=>(wideWriting.get(table)||0)>0||(wideAnswered.get(table)??-1)>since;
+  const read=async state=>{
+    const since=clock,result=await send(stamp(state));
+    if(!stale(state.table,since))remember(state.table,result?.data,since);
+    return result;
+  };
+  const count=(map,key,step)=>{const n=(map.get(key)||0)+step;if(n>0)map.set(key,n);else map.delete(key);};
   const run=async state=>{
-    const result=await send(stamp(state));
+    if(!state.table||state.rpc)return send(stamp(state));
+    if(isRead(state))return read(state);
+    const keys=keysOf(state),wide=!keys.length;
+    for(const key of keys)count(writing,key,1);
+    if(wide)count(wideWriting,state.table,1);
+    let result;
+    try{result=await send(stamp(state));}
+    finally{
+      clock++;
+      for(const key of keys){count(writing,key,-1);answered.set(key,clock);}
+      if(wide){count(wideWriting,state.table,-1);wideAnswered.set(state.table,clock);}
+    }
     remember(state.table,result?.data);
+    // Refused because the record changed since the screen last saw it: the
+    // other version is kept for review, and the screen now holds the current
+    // one, so its next save of the same record is not refused again.
+    if(result?.error?.code==='CONFLICT'&&keys.length===1){
+      const id=keys[0].slice(state.table.length+1);
+      try{await read({table:state.table,operation:'select',selection:'*',filters:[['eq','id',id]],orders:[]});}catch{}
+    }
     return result;
   };
   // Serialising is per record, so an edit in one note never waits on another
