@@ -42,7 +42,10 @@ Holidays, illness and outages are exemptions, never scarce protection. Preserve 
 5. **One of the trackers' names or other names**: yours, below.
 6. **Anything else**: a new tracker, asked about once, below.
 
-The journal no longer takes "track".
+The journal no longer takes "track", with one exception: "track journal" or "track Tagebuch" names
+the journal itself, the way "track headache" names the Headaches tracker. That message is a journal
+entry: load the interstitial-journal recipe and do what it says with the words after it, and never
+hold or start a tracker called Journal.
 
 ## What to do
 

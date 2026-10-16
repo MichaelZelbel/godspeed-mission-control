@@ -348,3 +348,15 @@ test('the coach recipe: an answer in a talk is two sentences at most, the closin
   assert.ok(revisions['coach/SKILL.md'].includes(digest(coach)),'coach ships a known revision');
   assert.ok(revisions['coach/SKILL.md'].includes('50bbd27be5b5ac3d1cc753c08dbc07a708d2ac1393e0a1cbbc184fa606af10ab'),'the text shipped until today stays known');
 });
+
+// "Track journal" (16 October 2026): the person opens dictated journal entries with "Track journal.",
+// so the tracker recipe hands that message to the journal instead of offering a tracker called Journal.
+// Every other "track X" is unchanged.
+test('the tracker recipe hands "track journal" and "track Tagebuch" to the journal and never starts a Journal tracker',()=>{
+  const tracker=read('../recipes/tracker/SKILL.md'),flat=tracker.replace(/\s+/g,' ');
+  assert.match(flat,/The journal no longer takes "track", with one exception: "track journal" or "track Tagebuch" names the journal itself, the way "track headache" names the Headaches tracker\. That message is a journal entry: load the interstitial-journal recipe and do what it says with the words after it, and never hold or start a tracker called Journal\./);
+  assert.doesNotMatch(tracker,/[–—]/,'no long dashes');
+  const revisions=JSON.parse(read('../data/recipe-revisions.json'));
+  assert.ok(revisions['tracker/SKILL.md'].includes(digest(tracker)),'tracker ships a known revision');
+  assert.ok(revisions['tracker/SKILL.md'].includes('83689d381977006527816e369ae4549d95205ec97c02eda80714e8311d5064fc'),'the text shipped until today stays known');
+});
