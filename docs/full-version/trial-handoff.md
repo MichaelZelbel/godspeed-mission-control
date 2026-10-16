@@ -7,9 +7,9 @@
 - Open this folder in VS Code or Codex: `C:/godspeed/work/trials/godspeed-v2`.
 - Windows notebook: http://127.0.0.1:49175/dashboard
 - Development VPS notebook: https://srv1069233.hstgr.cloud:48443/dashboard
-- Windows download: https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-15-1/GodspeedSetup.exe
-- Linux download: https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-15-1/install-godspeed.sh
-- Source, manifests and checksums: https://github.com/MichaelZelbel/godspeed-mission-control/releases/tag/godspeed-v2-integrated-2026-10-15-1
+- Windows download: https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-16-1/GodspeedSetup.exe
+- Linux download: https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-16-1/install-godspeed.sh
+- Source, manifests and checksums: https://github.com/MichaelZelbel/godspeed-mission-control/releases/tag/godspeed-v2-integrated-2026-10-16-1
 - One-click Hostinger installation: https://godspeedmissioncontrol.com/hostinger (its coordinator, https://godspeedmissioncontrol.com/godspeed-install, runs on the website since 15 October 2026)
 - Development branch: https://github.com/MichaelZelbel/godspeed-mission-control/tree/main
 

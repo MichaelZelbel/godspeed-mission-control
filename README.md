@@ -8,7 +8,11 @@ A new release comes out most weeks. I write about what my AI does for me and wha
 
 Version 2 is the current edition, here on `main`. Its installers set up a new, separate folder. They do not move an existing version 1 Godspeed folder or your Menerio account.
 
-## New in this release (15 October 2026)
+## New in this release (16 October 2026)
+
+The installers' last words say what comes next. The Windows setup's last page, and the last lines of the Linux and Mac installer and of the one-line server installer, now say where your mission control is, how to start talking to it, and where I write about it. On Windows that page used to keep the stock "Setup has finished" text. This release otherwise keeps the notebook of 15 October.
+
+## New on 15 October 2026
 
 - The notebook has an Identity page, under System: who your assistant is, what it may and may not do (your rules, and the instructions for connected AI apps that My Profile held), what it knows about you (your profile pages) and how it does its jobs (your recipes). You see and change them there. Every part keeps its earlier versions, with "Undo last change" and "Restore this version", and your assistant can make the same changes when you ask it in the chat.
 - Hermes, the program behind your assistant, now takes its identity from "who it is". Until now it told itself "You are Hermes Agent" before it read your manual. Its identity file (`SOUL.md` in the assistant's own folder) is written from the "who it is" paragraph of your `AGENTS.md`. On an installation you update, this happens during the update and each time the notebook starts, and the text it replaces is kept beside it. A `SOUL.md` you wrote yourself is left as it is; the Identity page names it and offers to replace it.
@@ -66,11 +70,11 @@ The notebook no longer calls every installation a test installation. Its unavail
 
 ## Windows
 
-[Download GodspeedSetup.exe](https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-15-1/GodspeedSetup.exe), then run it.
+[Download GodspeedSetup.exe](https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-16-1/GodspeedSetup.exe), then run it.
 
 This uses Godspeed's original setup wizard and shared installer, then connects the integrated notebook. On a PC that already has Godspeed, the wizard selects a separate installation by default. The notebook opens at [http://127.0.0.1:47831/dashboard](http://127.0.0.1:47831/dashboard). Connect your own model account in Settings to use the assistant. The installer is unsigned.
 
-The executable is also [committed in this repository](installers/GodspeedSetup.exe). The [download page](https://github.com/MichaelZelbel/godspeed-mission-control/releases/tag/godspeed-v2-integrated-2026-10-15-1) lists the same file and its checksums.
+The executable is also [committed in this repository](installers/GodspeedSetup.exe). The [download page](https://github.com/MichaelZelbel/godspeed-mission-control/releases/tag/godspeed-v2-integrated-2026-10-16-1) lists the same file and its checksums.
 
 ## Linux or Mac
 
@@ -79,8 +83,8 @@ This uses Godspeed's shared native installer for Git, Node.js, Hermes and the Go
 Download this release's installer, check that it is the published file, and run it:
 
 ```bash
-curl -fsSLO https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-15-1/install-godspeed.sh
-echo "fbda414e67231621f60e1940197f59f6e6786e02438773be39d0f4a5ed0210c9  install-godspeed.sh" | sha256sum -c - && bash install-godspeed.sh
+curl -fsSLO https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-16-1/install-godspeed.sh
+echo "54fa4a1650bc7f6c7806b75b7e5c36cabb776e934bf13976d7dd48dd0b49921c  install-godspeed.sh" | sha256sum -c - && bash install-godspeed.sh
 ```
 
 On a Mac, write `shasum -a 256 -c -` where it says `sha256sum -c -`. The check refuses any other file, and the installer names one exact version of the notebook, so every reader of this release gets the same notebook.
