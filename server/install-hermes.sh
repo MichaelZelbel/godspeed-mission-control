@@ -300,7 +300,7 @@ cat <<NEXT
       stopped gateway shows as "failed" to systemd, so systemctl cannot tell
       an operator's stop from a crash.
 
-   Then message your bot "what is in my folder?" from your phone. If it
+   Then message your bot "what can you do for me?" from your phone. If it
    answers, your assistant has a phone number, and from the next morning the
    brief arrives on it by itself.
 

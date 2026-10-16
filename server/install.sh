@@ -799,7 +799,9 @@ if grep -q '^TELEGRAM_HOME_CHANNEL=[-0-9]' "$HERMES_DIR/.env" 2>/dev/null; then
   BOT_TOKEN="$(sed -n 's/^TELEGRAM_BOT_TOKEN=//p' "$HERMES_DIR/.env" | head -1)"
   BOT_NAME="$(curl -fsS -m 15 "https://api.telegram.org/bot$BOT_TOKEN/getMe" 2>/dev/null | jq -r '.result.username // "your bot"')"
   unset BOT_TOKEN
-  if printf '%s\n' "Your server is set up, and this is your assistant's chat. Write to me here from anywhere: try \"what is in my folder?\"" \
+  # A question anybody can try and understand the answer to; "what is in my folder?" (until
+  # 16 October 2026) asked about a folder the reader had not seen yet.
+  if printf '%s\n' "Your server is set up, and this is your assistant's chat. Write to me here from anywhere: try \"what can you do for me?\"" \
      | "$(kb_hermes_bin)" send -t telegram -s "Teach It Once" -q >/dev/null 2>&1; then
     ok "sent to @$BOT_NAME: look at your phone. That message went the way the morning brief and the watchdog's alerts will go"
   else
