@@ -79,7 +79,7 @@ const origin=process.env.GODSPEED_VERIFY_ORIGIN||'https://localhost:48443';
    const to=id=>record.sent.filter(m=>m.chat_id===id).map(m=>m.text);
    assert.ok(to(999).some(t=>t.includes('send me the message shown on your Godspeed setup page')),'a Start without the code is told to send the message from the page');
    assert.ok(to(111).some(t=>t.includes('Hi Anna')),'the code makes its sender the owner');
-   assert.ok(to(111).some(t=>t.includes('Step 1 of 2: connect an AI')),'and the setup chat begins');
+   assert.ok(to(111).some(t=>t.includes('Connect an AI.')),'and the setup chat begins');
    // The page told the chat the browser's time zone along with the key (the city button).
    const saved=JSON.parse(execFileSync('docker',['exec',name,'cat','/opt/data/full-candidate/telegram/connection.json'],{encoding:'utf8'}));
    assert.equal(saved.timezone,'Europe/Vienna');assert.equal(saved.web_address,origin);
