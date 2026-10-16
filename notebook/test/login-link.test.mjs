@@ -29,6 +29,37 @@ test('a one-time sign-in link survives a link preview and is used only by the pe
  const away=await fetch(base+other+'?next='+encodeURIComponent('/.//evil.example/phish'),{method:'POST',headers:{Origin:base},redirect:'manual'});assert.equal(away.headers.get('location'),'/dashboard');
 });
 
+// 16 October 2026: the page a sign-in link opens said Referrer-Policy:
+// no-referrer, and a browser then sends "Origin: null" with the page's own
+// form, which the cross-site check of 6 October refused. Every link the bot
+// handed out answered "Cross-site requests are refused" on Continue.
+test('pressing Continue on a sign-in link signs in as a real browser sends it, and Origin null is still refused elsewhere',async t=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-login-origin-'));process.env.GODSPEED_ASSISTANT_CONFIG=path.join(root,'no-assistant.json');
+ const token='private-installation-proof-not-a-password',service=await createService({root,host:'0.0.0.0',port:0,token}),base='http://127.0.0.1:'+service.address.port;
+ t.after(async()=>{await service.close();fs.rmSync(root,{recursive:true,force:true});});
+ const json=async(route,input,cookie)=>{const r=await fetch(base+route,{method:'POST',headers:{'Content-Type':'application/json',...(cookie?{Cookie:cookie}:{})},body:JSON.stringify(input)});return {status:r.status,data:await r.json(),cookie:r.headers.get('set-cookie')};};
+ const invite=new URLSearchParams((await json('/api/auth/bootstrap',{token})).data.path.split('#')[1]).get('invite');
+ const cookie=(await json('/api/auth/setup',{username:'owner-test',password:'correct horse battery staple',invite})).cookie.split(';')[0];
+ const link=(await json('/api/login-link',{},cookie)).data.path;
+ const page=await fetch(base+link);await page.text();
+ // The page's own form must carry its origin: no-referrer makes it "null".
+ assert.notEqual(page.headers.get('referrer-policy'),'no-referrer');
+ assert.match(page.headers.get('referrer-policy'),/^(same-origin|strict-origin|strict-origin-when-cross-origin|origin|origin-when-cross-origin)$/);
+ // A browser that still sends "null" (an open older page, a privacy setting).
+ const used=await fetch(base+link,{method:'POST',headers:{Origin:'null','Content-Type':'application/x-www-form-urlencoded'},body:'',redirect:'manual'});
+ assert.equal(used.status,303,'the single-use code is the credential, so Continue works: '+used.status);
+ assert.equal((await fetch(base+'/api/session',{headers:{Cookie:used.headers.get('set-cookie').split(';')[0]}})).status,200);
+ // Everything else keeps refusing a page that is not an address.
+ for(const route of ['/api/query','/api/login-link','/api/logout']){
+  const refused=await fetch(base+route,{method:'POST',headers:{Origin:'null','Content-Type':'application/json',Cookie:cookie},body:'{}'});
+  assert.equal(refused.status,403,route+' must still refuse Origin null');assert.match((await refused.json()).error,/Cross-site/);
+ }
+ // And a sign-in link pressed from another site is refused like any other.
+ const other=(await json('/api/login-link',{},cookie)).data.path;
+ const foreign=await fetch(base+other,{method:'POST',headers:{Origin:'https://evil.example'},redirect:'manual'});
+ assert.equal(foreign.status,403);await foreign.text();
+});
+
 test('the bot sends sign-in links without a link preview',async t=>{
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-telegram-preview-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
  const store=new Store(root),sent=[];
