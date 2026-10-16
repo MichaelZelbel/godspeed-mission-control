@@ -49,21 +49,32 @@ Telegram**, and a QR code for a phone. That link carries a one-time code: only t
 opens the bot from it becomes its owner, so a stranger who finds the bot in Telegram's search
 gets nothing. A bot you have chatted with before shows no Start button; the page also shows
 the message to send it instead (`/start` and the same code), with a Copy button. Press
-**Start**, and setup goes on as a chat in two steps. First an AI to think with (ChatGPT by a
-sign-in code, or another provider by its key). Then a few questions: whether this is your
-first Godspeed Mission Control, your city (only for your time zone; the button offers the time
-zone of the browser you connected the bot from, and you can type any city), a few sentences
-about yourself or the book's `what-my-ai-knew.md` as a file, and what you want help with
-first. The last two have a Skip button. What you tell it about yourself is added to
-`profile/about-me.md`, which your assistant reads before it helps, and shows on the Identity
-page with Undo. Only "No, bring in the one I have on GitHub" signs in to GitHub: you send its
-address, the server connects it the way Settings' **Connect record sync** does, brings its
-pages in, and asks only for your city. A first Mission Control never needs GitHub; you can
-connect it later in Settings with **Connect record sync**. Right after your last answer the
-bot says it is setting everything up and shows it is typing until it is done (about a minute,
-mostly the assistant making its first routines). Then the bot belongs to your assistant, and
-its last message says where to reach it: here in Telegram, and in your notebook at this
-server's address, where you sign in with the username and password you chose.
+**Start**, and setup goes on as a chat. It has two parts.
+
+**1. The technical part, about five minutes.** An AI to think with (ChatGPT by a sign-in code,
+or another provider by its key), and one question: whether this is your first Godspeed Mission
+Control. The clock is set from the time zone of the browser you connected the bot from. Only
+"No, bring in the one I have on GitHub" signs in to GitHub: you send its address, and the server
+connects it the way Settings' **Connect record sync** does and brings its pages in. A first
+Mission Control never needs GitHub; you can connect it later in Settings with **Connect record
+sync**. Right after your last answer the bot says it is setting everything up and shows it is
+typing until it is done (about a minute, mostly the assistant making its first routines). Then
+the bot belongs to your assistant, and its last message says where to reach it (here in
+Telegram, and in your notebook at this server's address, where you sign in with the username
+and password you chose), and that it writes to you again in about ten minutes.
+
+**2. Getting to know you, whenever you like.** About ten minutes later your assistant sends one
+invitation, with no reminders after it. Reply when you like, or send the word `context` at any
+time, in Telegram or in the notebook's chat; the dashboard shows a **Tell Godspeed about you**
+card with the same start until it is done (or you press **Hide**). Your assistant leads a short
+chat, one question at a time, every part skippable: your city (only when your browser's time
+zone was not known; otherwise it says which clock it set), a little about you (the book's
+`what-my-ai-knew.md`, a message to copy into ChatGPT or Claude that writes it for you, or five
+short questions), and what you want help with first, with examples. What you tell it is added to
+`profile/about-me.md`, which your assistant reads before it helps, and shows on the page
+**Godspeed's brain** with Undo; your goal is in Settings. Its recipe is
+`notebook/recipes/context-setup/SKILL.md`; a Mission Control brought in from GitHub knows you
+already and gets no such chat.
 
 - **The key stays on this server.** It goes from your browser to your server only, is kept in
   the data volume at `/opt/data/full-candidate/telegram` (readable only by the assistant's

@@ -12,6 +12,15 @@ This integration uses Hostinger's ordinary environment-variable form, not a cata
 
 The test installation already has its installation proof. Its owner receives a private setup link directly, so no server terminal or setup-code retrieval is needed.
 
+## After the account
+
+The page then offers Telegram. Its setup chat is the technical part only: an AI, and whether this
+is a first Mission Control. Getting to know the owner comes afterwards, in a short chat the
+assistant leads: one invitation in Telegram about ten minutes later, the word `context` at any
+time, or the dashboard's **Tell Godspeed about you** card (`docker/hostinger/README.md` says more).
+The setup chat's last message names the notebook's address and the sign-in with the username and
+password chosen here.
+
 ## Sessions
 
 Normal sign-in lasts eight hours; optional remember-me lasts 30 days. Sessions survive application and Docker restarts, expire on the server, and are removed on logout. Cookies are HttpOnly, Secure for VPS use, SameSite=Lax so saved external links work, and scoped to this server. Authentication failures return to the sign-in form at the original URL. Recovery revokes all existing browser sessions.

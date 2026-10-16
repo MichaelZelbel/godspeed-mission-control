@@ -23,7 +23,8 @@ none, puts the very `compose.yaml` that Hostinger's one-click deploys
 with its two settings in `.env` (readable by root only), starts it, waits until the page
 answers over HTTPS, and prints one private link. The link opens the account page with the
 setup code already filled in: choose a username and password, save the recovery code, then
-Connect Telegram, the same steps as on Hostinger (`hostinger/README.md`).
+Connect Telegram, the same steps as on Hostinger (`hostinger/README.md`): first the technical
+part in the chat, then, whenever you like, a short chat in which your assistant gets to know you.
 
 - **The address.** Without a domain it uses the server's public IPv4 address as
   `<a-b-c-d>.sslip.io` (for 203.0.113.7: `203-0-113-7.sslip.io`), a free name that points back
@@ -42,6 +43,12 @@ Connect Telegram, the same steps as on Hostinger (`hostinger/README.md`).
   `cd /opt/godspeed-mission-control && docker compose ps` (or `logs`).
 - **The install count** is sent only with `GODSPEED_INSTALL_COUNT=yes` in front of `bash`: the
   word "installed", the kind `docker-server` and a random number, once. Without it, nothing.
+- **Trying a version before it is released.** `compose.yaml` on main pins the released image. To
+  run another one on a test server, name it:
+  `curl -fsSL https://teachitonce.com/server | GODSPEED_IMAGE=ghcr.io/michaelzelbel/godspeed-mission-control:v2-sha-<commit> bash`.
+  Every commit on main that passes the "Integrated Godspeed v2" check is published under that
+  tag (the full 40-character commit). The choice is kept, so running the line again stays on it;
+  `GODSPEED_IMAGE=release` goes back to the released one.
 
 Tested by `docker/server/test.sh` (the address, the busy-port and certificate messages, anywhere)
 and `sudo bash docker/server/test.sh e2e` (the whole path, Docker included, on a machine you can
