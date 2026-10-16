@@ -26,6 +26,9 @@
 # Settings, all optional:
 #   GODSPEED_HOST=name.example.com     use your own domain instead of <ip>.sslip.io
 #   GODSPEED_INSTALL_COUNT=yes         tell Michael once that an install worked (default: nothing is sent)
+#   GODSPEED_IMAGE=ghcr.io/michaelzelbel/godspeed-mission-control:v2-sha-<commit>
+#                                      try one version before it is released to everybody (kept for
+#                                      later runs; GODSPEED_IMAGE=release goes back to the released one)
 # docker/README.md, "Any Linux server, one line", has the rest; docker/server/test.sh tests it.
 # =============================================================================
 
@@ -101,6 +104,21 @@ clean_host() {
 local_host() {
   case "$1" in localhost|*.localhost|*.local|*.internal|*.home.arpa) return 0 ;; esac
   is_ipv4 "$1"
+}
+
+# --- A version to try before it is released ---------------------------------------------
+# (16 October 2026.) The compose.yaml on main pins the released image by digest, the same one
+# Hostinger's one-click installs. GODSPEED_IMAGE names another image of this product, one the
+# "Integrated Godspeed v2" check built and published for a commit (:v2-sha-<commit>, or @sha256:...),
+# and this server runs that one instead. It is kept in .env, so running the line again stays on it
+# (going back to the older released image could meet data the newer one already changed);
+# GODSPEED_IMAGE=release goes back to what compose.yaml pins.
+IMAGE_REPO=ghcr.io/michaelzelbel/godspeed-mission-control
+test_image() { [[ "$1" =~ ^ghcr\.io/michaelzelbel/godspeed-mission-control(:v2-sha-[0-9a-f]{40}|@sha256:[0-9a-f]{64})$ ]]; }
+# Puts image $2 on the godspeed service's image line of compose file $1; the HTTPS service's stays.
+pin_image() {
+  sed -i -E "s#^(    image: )ghcr\.io/michaelzelbel/godspeed-mission-control[@:][^[:space:]]*\$#\1$2#" "$1" \
+    && grep -qx "    image: $2" "$1"
 }
 
 # --- The machine ---------------------------------------------------------------
@@ -239,7 +257,7 @@ as_root() {
   command -v sudo >/dev/null 2>&1 || stop "This needs the server's administrator account. Log in as root and run this line again."
   say "This needs the server's administrator rights, so it asks sudo (it may ask for your password)."
   local pass=() v
-  for v in GODSPEED_HOST GODSPEED_RAW GODSPEED_SELF_URL GODSPEED_DIR GODSPEED_INSTALL_COUNT DO_NOT_TRACK GODSPEED_CERT_WAIT GODSPEED_START_WAIT; do
+  for v in GODSPEED_HOST GODSPEED_IMAGE GODSPEED_RAW GODSPEED_SELF_URL GODSPEED_DIR GODSPEED_INSTALL_COUNT DO_NOT_TRACK GODSPEED_CERT_WAIT GODSPEED_START_WAIT; do
     [ -n "${!v:-}" ] && pass+=("$v=${!v}")
   done
   if [ -n "$SELF_FILE" ] && [ -f "$SELF_FILE" ]; then
@@ -290,12 +308,20 @@ main() {
   [ -z "$elsewhere" ] || stop "Godspeed Mission Control already runs on this server, started from $elsewhere (for example by your hosting company's one-click install). Manage it there; nothing was changed."
 
   # The settings: kept from an earlier run, otherwise made now.
-  local host="" code="" ip="" first=yes
+  local host="" code="" ip="" first=yes image=""
   if [ -f "$DIR/.env" ]; then
     first=no
     host="$(sed -n 's/^GODSPEED_HOST=//p' "$DIR/.env" | tail -1)"
     code="$(sed -n 's/^GODSPEED_SETUP_CODE=//p' "$DIR/.env" | tail -1)"
+    image="$(sed -n 's/^GODSPEED_IMAGE=//p' "$DIR/.env" | tail -1)"
   fi
+  case "${GODSPEED_IMAGE:-}" in
+    "") ;;
+    release) image="" ;;
+    *) test_image "$GODSPEED_IMAGE" || stop "GODSPEED_IMAGE should name one version of Godspeed Mission Control, like $IMAGE_REPO:v2-sha-<commit>, or be release. Nothing was changed."
+       image="$GODSPEED_IMAGE" ;;
+  esac
+  test_image "$image" || image=""
   if [ -n "${GODSPEED_HOST:-}" ]; then
     host="$(clean_host "$GODSPEED_HOST")" || stop "GODSPEED_HOST should be a name like mission.example.com, without https:// and without a path."
   elif [ -z "$host" ]; then
@@ -323,10 +349,15 @@ main() {
   curl -fsSL "$GODSPEED_RAW/docker/hostinger/compose.yaml" -o "$DIR/compose.yaml.new" 2>>"$LOG" \
     && grep -q "^name: $PROJECT" "$DIR/compose.yaml.new" \
     || { rm -f "$DIR/compose.yaml.new"; stop "Could not download Godspeed Mission Control's settings file. Check that this server can reach github.com, then run this line again."; }
+  if [ -n "$image" ]; then
+    pin_image "$DIR/compose.yaml.new" "$image" || { rm -f "$DIR/compose.yaml.new"; stop "Could not set the version to try ($image) in the settings file, so nothing was changed."; }
+    step "Using the version to try instead of the released one: $image"
+  fi
   mv -f "$DIR/compose.yaml.new" "$DIR/compose.yaml"
-  ( umask 077; printf 'GODSPEED_HOST=%s\nGODSPEED_SETUP_CODE=%s\n' "$host" "$code" > "$DIR/.env.new" ) && mv -f "$DIR/.env.new" "$DIR/.env"
+  ( umask 077; printf 'GODSPEED_HOST=%s\nGODSPEED_SETUP_CODE=%s\n' "$host" "$code" > "$DIR/.env.new"
+    [ -z "$image" ] || printf 'GODSPEED_IMAGE=%s\n' "$image" >> "$DIR/.env.new" ) && mv -f "$DIR/.env.new" "$DIR/.env"
   chmod 600 "$DIR/.env"
-  log "address $host, first run: $first"
+  log "address $host, first run: $first${image:+, image $image}"
 
   if [ "$first" = yes ]; then step "Downloading Godspeed Mission Control (a few minutes)."; else step "Updating Godspeed Mission Control if there is a newer version."; fi
   compose pull -q >>"$LOG" 2>&1 || stop "The download did not finish. Check that the server has internet and at least $NEED_GB GB of free disk space, then run this line again. What went wrong is written in $LOG."

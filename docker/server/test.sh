@@ -48,6 +48,15 @@ check "and ends with the newsletter" test "$(sed '/^$/d' <<<"$first_words" | tai
 check "a run with the account made says so and how to sign in" bash -c 'grep -q "up to date at https://203-0-113-7.sslip.io, and your account already exists\." <<<"$1" && grep -qx "To talk to it, sign in there with your username and password." <<<"$1"' _ "$again_words"
 check "and hands out no link, the newsletter last" bash -c '! grep -q "invite=" <<<"$1" && [ "$(sed "/^\$/d" <<<"$1" | tail -1)" = "$2" ]' _ "$again_words" "$newsletter"
 
+# A version to try before it is released (GODSPEED_IMAGE): only an image of this product, by a
+# commit's tag or a digest, and it goes on the godspeed service's line only, never Caddy's.
+sha=0123456789abcdef0123456789abcdef01234567
+check "a commit's image or a digest of this product can be tried" lib "test_image ghcr.io/michaelzelbel/godspeed-mission-control:v2-sha-$sha && test_image ghcr.io/michaelzelbel/godspeed-mission-control@sha256:$sha${sha:0:24}"
+check "anything else is refused" lib "! test_image docker.io/evil/image:latest && ! test_image ghcr.io/michaelzelbel/godspeed-mission-control:latest && ! test_image 'ghcr.io/michaelzelbel/godspeed-mission-control:v2-sha-$sha; rm -rf /'"
+cp docker/hostinger/compose.yaml "$WORK/compose.yaml"
+check "the version to try replaces the pinned image" lib "pin_image $WORK/compose.yaml ghcr.io/michaelzelbel/godspeed-mission-control:v2-sha-$sha"
+check "and nothing else: Caddy stays as pinned" bash -c "grep -qx '    image: ghcr.io/michaelzelbel/godspeed-mission-control:v2-sha-$sha' '$WORK/compose.yaml' && grep -q 'image: caddy:2.10.2-alpine@sha256:' '$WORK/compose.yaml' && [ \"\$(diff docker/hostinger/compose.yaml '$WORK/compose.yaml' | grep -c '^[<>]')\" = 2 ]"
+
 printf 'ID=ubuntu\nPRETTY_NAME="Ubuntu 24.04.5 LTS"\n' > "$WORK/ubuntu"
 printf 'ID=linuxmint\nID_LIKE="ubuntu debian"\n' > "$WORK/mint"
 printf 'ID=fedora\nPRETTY_NAME="Fedora Linux 42"\n' > "$WORK/fedora"
