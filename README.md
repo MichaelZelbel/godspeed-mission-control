@@ -8,7 +8,16 @@ A new release comes out most weeks. I write about what my AI does for me and wha
 
 Version 2 is the current edition, here on `main`. Its installers set up a new, separate folder. They do not move an existing version 1 Godspeed folder or your Menerio account.
 
-## New in this release (16 October 2026)
+## New in this release (16 October 2026, second update)
+
+- Setting up a server now comes in two parts. The first is technical and takes about five minutes: in Telegram you connect an AI, such as ChatGPT or Claude, and say whether this is your first Godspeed Mission Control. Your clock is set from your computer's time zone. GitHub comes up only if you want to bring in a Mission Control you already keep there.
+- Getting to know you comes afterwards, whenever you like. About ten minutes after the setup your mission control writes to you once, with no reminders after it. Reply when you are ready, or send the word `context` at any time, in Telegram or in the notebook's chat. It asks where you live (only for the time zone, and only when your computer did not tell it), a little about you, and what you want help with first, one question at a time. Every question can be skipped. If you have never written down who you are, it shows you three easy ways: send the file from the book, let ChatGPT or Claude write it for you with a message it gives you to copy, or answer five short questions. What you tell it is shown on the page Godspeed's brain, with Undo.
+- The dashboard has a big "Chat with Godspeed" button at the top, and a "Tell Godspeed about you" card until that chat is done or you hide it.
+- Connecting Telegram on the setup page: a bot you have used before shows no Start button, so the page also shows the message to send it, with a Copy button.
+- Asked how to open your notebook, your mission control says to sign in with the username and password you chose at setup, and what to do if you forgot them.
+- Also new since 15 October: the Identity page is now "Godspeed's brain", with numbered rules that save as shown, extra instructions and its own chat beside it; coaching talks are prepared ahead from your goal's research and answer in two sentences at most; and an update keeps the newest three copies it made of your notebook, so old copies no longer fill the disk.
+
+## New earlier on 16 October 2026
 
 The installers' last words say what comes next. The Windows setup's last page, and the last lines of the Linux and Mac installer and of the one-line server installer, now say where your mission control is, how to start talking to it, and where I write about it. On Windows that page used to keep the stock "Setup has finished" text. This release otherwise keeps the notebook of 15 October.
 
@@ -70,11 +79,11 @@ The notebook no longer calls every installation a test installation. Its unavail
 
 ## Windows
 
-[Download GodspeedSetup.exe](https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-16-1/GodspeedSetup.exe), then run it.
+[Download GodspeedSetup.exe](https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-16-2/GodspeedSetup.exe), then run it.
 
 This uses Godspeed's original setup wizard and shared installer, then connects the integrated notebook. On a PC that already has Godspeed, the wizard selects a separate installation by default. The notebook opens at [http://127.0.0.1:47831/dashboard](http://127.0.0.1:47831/dashboard). Connect your own model account in Settings to use the assistant. The installer is unsigned.
 
-The executable is also [committed in this repository](installers/GodspeedSetup.exe). The [download page](https://github.com/MichaelZelbel/godspeed-mission-control/releases/tag/godspeed-v2-integrated-2026-10-16-1) lists the same file and its checksums.
+The executable is also [committed in this repository](installers/GodspeedSetup.exe). The [download page](https://github.com/MichaelZelbel/godspeed-mission-control/releases/tag/godspeed-v2-integrated-2026-10-16-2) lists the same file and its checksums.
 
 ## Linux or Mac
 
@@ -83,8 +92,8 @@ This uses Godspeed's shared native installer for Git, Node.js, Hermes and the Go
 Download this release's installer, check that it is the published file, and run it:
 
 ```bash
-curl -fsSLO https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-16-1/install-godspeed.sh
-echo "54fa4a1650bc7f6c7806b75b7e5c36cabb776e934bf13976d7dd48dd0b49921c  install-godspeed.sh" | sha256sum -c - && bash install-godspeed.sh
+curl -fsSLO https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-16-2/install-godspeed.sh
+echo "8e4f2e3745ddafbccd4149fa2f3ebbcf7e1202d224cff57dcb519de31b88eedf  install-godspeed.sh" | sha256sum -c - && bash install-godspeed.sh
 ```
 
 On a Mac, write `shasum -a 256 -c -` where it says `sha256sum -c -`. The check refuses any other file, and the installer names one exact version of the notebook, so every reader of this release gets the same notebook.
