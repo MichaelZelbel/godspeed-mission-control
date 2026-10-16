@@ -12,7 +12,7 @@ Regression checks:
 
 ```sh
 cd notebook
-node --test test/moment-draft.test.mjs test/provider-budget.test.mjs test/memory-tools.test.mjs
+node scripts/run-tests.mjs test/moment-draft.test.mjs test/provider-budget.test.mjs test/memory-tools.test.mjs
 ```
 
 The tests cover request isolation, no saves, malformed and incomplete answers, field normalization, English and German extraction contracts, an HTTP request while another writer holds the notebook lock, and deadline cancellation. Actual model quality and latency require a smoke test against the installation's configured provider. A suggestion itself does not save a moment.

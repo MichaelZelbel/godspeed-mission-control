@@ -37,7 +37,7 @@ left=$(docker exec "$name" sh -c 'ps -eo stat= | grep -c "^Z" || true')
 echo "Finished programs are collected by the image's own init."
 # Run the actual modules shipped in this image, with small synthetic fixtures.
 # A failure names its tests in the build log; the whole log stays in the evidence.
-docker exec -e GODSPEED_ORIGINAL_RUNTIME=off -w /opt/godspeed/kit/notebook "$name" sh -c 'node --test test/*.test.mjs' > "$evidence/server-tests.log" 2>&1 || { grep -E '^not ok|^# (tests|pass|fail)' "$evidence/server-tests.log"; grep -E -A12 '^not ok' "$evidence/server-tests.log" | grep -E 'error|expected|actual|Error|FAIL|assert' | head -60; exit 1; }
+docker exec -e GODSPEED_ORIGINAL_RUNTIME=off -w /opt/godspeed/kit/notebook "$name" sh -c 'node scripts/run-tests.mjs test/*.test.mjs' > "$evidence/server-tests.log" 2>&1 || { grep -E '^not ok|^# (tests|pass|fail)' "$evidence/server-tests.log"; grep -E -A12 '^not ok' "$evidence/server-tests.log" | grep -E 'error|expected|actual|Error|FAIL|assert' | head -60; exit 1; }
 # The hourly conversation archive, run every few seconds here: a Telegram exchange reaches the
 # archive with its answer, the backup and a second machine (test-prompt-archive.sh).
 bash docker/full-candidate/test-prompt-archive.sh "$name" | tee "$evidence/prompt-archive.log"; [ "${PIPESTATUS[0]}" -eq 0 ] || exit 1

@@ -51,15 +51,15 @@ jobs:
           node-version: '22.19.0'
       - name: Forgiving habit progress and Telegram calendars
         run: |
-          node --test notebook/test/habit-buttons.test.mjs notebook/test/habit-trackers.test.mjs notebook/test/habit-progress-image.test.mjs notebook/test/telegram-progress.test.mjs notebook/test/tracker-recipe.test.mjs third-party/addons/godspeed-coach/test/progress.test.mjs third-party/addons/godspeed-coach/test/cli.test.mjs
+          node notebook/scripts/run-tests.mjs notebook/test/habit-buttons.test.mjs notebook/test/habit-trackers.test.mjs notebook/test/habit-progress-image.test.mjs notebook/test/telegram-progress.test.mjs notebook/test/tracker-recipe.test.mjs third-party/addons/godspeed-coach/test/progress.test.mjs third-party/addons/godspeed-coach/test/cli.test.mjs
           python3 notebook/test/habit-progress-plugin.test.py
           python3 notebook/test/habit-progress-telegram.test.py
           python3 notebook/test/habit-progress-telegram-native.test.py
       - name: Original folder and integrated core checks
-        run: node --test notebook/test/starter-workspace.test.mjs notebook/test/assistant-starter-wiring.test.mjs notebook/test/computer-wiring-on-existing-server.test.mjs notebook/test/windows-command-files.test.mjs notebook/test/final-core-contracts.test.mjs notebook/test/telegram-replies.test.mjs notebook/test/native-runtime.test.mjs
+        run: node notebook/scripts/run-tests.mjs notebook/test/starter-workspace.test.mjs notebook/test/assistant-starter-wiring.test.mjs notebook/test/computer-wiring-on-existing-server.test.mjs notebook/test/windows-command-files.test.mjs notebook/test/final-core-contracts.test.mjs notebook/test/telegram-replies.test.mjs notebook/test/native-runtime.test.mjs
       - name: Installers and setup, without Docker
         run: |
-          node --test notebook/test/native-installer.test.mjs notebook/test/native-start-script.test.mjs notebook/test/setup-code.test.mjs notebook/test/native-web-address.test.mjs notebook/test/server-address.test.mjs notebook/test/web-door.test.mjs
+          node notebook/scripts/run-tests.mjs notebook/test/native-installer.test.mjs notebook/test/native-start-script.test.mjs notebook/test/setup-code.test.mjs notebook/test/native-web-address.test.mjs notebook/test/server-address.test.mjs notebook/test/web-door.test.mjs
           bash docker/full-candidate/test-package-update.sh
           python3 docker/test/test-telegram-setup.py
       - name: Docker Hub images through Google's mirror (Docker Hub limits GitHub's shared runners; images stay pinned by digest)
