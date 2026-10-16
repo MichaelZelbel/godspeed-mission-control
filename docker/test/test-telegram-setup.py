@@ -445,20 +445,18 @@ def test_key_provider():
 CODE = "fictionalStartCode0123456789abcd"
 ONE_CLICK = {"GODSPEED_TG_FLOW": "notebook", "GODSPEED_TELEGRAM_START_CODE": CODE}
 NOTEBOOK = "https://203-0-113-7.sslip.io/dashboard"
-ABOUT_ASK = "Tell me a little about yourself"
-GOAL_ASK = "Last question: what would you like my help with first"
+AI_ASK = "<b>Connect an AI.</b> I need an AI service to do my thinking"
+FIRST_ASK = "One more question: is this your first Godspeed Mission Control?"
 SETTING_UP = "Thanks! I am setting everything up now. This takes a minute or two, and I write to you as soon as I am ready."
-KEPT = "Thanks, I keep that and use it whenever I help you."
+INVITE = ("In about ten minutes I will write to you here so you can tell me a little about yourself and what you "
+          "want help with. No rush, answer whenever you like. Or start right now: send me the word context.")
+NO_CONTEXT_QUESTIONS = ("Which city", "Tell me a little about yourself", "Last question", "your briefing", "your goal")
 
 
 def test_one_click_names():
-    print("== the name a sent briefing is kept under, and the browser's time zone")
+    print("== the browser's time zone")
     m = load("tg_setup_names", PROGRAM)
-    check("a second download's (1) is dropped, the name kept",
-          [m.briefing_name(x) for x in ("what-my-ai-knew (1).md", "what-my-ai-knew.md", "C:\\Users\\a\\notes.TXT",
-                                        "AGENTS.md", "../../etc/passwd.md", "")] ==
-          ["what-my-ai-knew.md", "what-my-ai-knew.md", "notes.txt", "what-my-ai-knew.md", "passwd.md", "what-my-ai-knew.md"])
-    check("only a city's zone from the browser is offered, never UTC or something made up",
+    check("only a city's zone from the browser is used, never UTC or something made up",
           [m.browser_zone(x) for x in ("Europe/Vienna", "America/Argentina/Buenos_Aires", "UTC", "Etc/GMT+1", "",
                                        "Europe/Nowhere" if have_zones() else "Moon/Base", "../../etc")] ==
           ["Europe/Vienna", "America/Argentina/Buenos_Aires", None, None, None, None, None])
@@ -473,19 +471,14 @@ def typing_between(r, start, end):
 
 
 def test_one_click_happy():
-    briefing = "# What my AI knew\n\nAnna is a fictional nurse in London who runs before work.\n"
-    r = scenario_run("the one-click server: the link's code, the AI, then a few questions, and no GitHub", {
+    r = scenario_run("the one-click server: the link's code, an AI, first or not, and that is all", {
         "users": USERS,
         "start": [{"from": 999, "text": "/start"}, {"from": 999, "text": "/start guessed"},
                   {"from": 111, "text": "/start " + CODE}],
         "rules": [
             {"when": "Hi Anna", "do": [{"from": 999, "text": "/start " + CODE}]},
-            {"when": "Step 1 of 2: connect an AI", "do": [{"from": 111, "press": "openai-codex"}]},
-            {"when": "Is this your first Godspeed Mission Control", "do": [{"from": 111, "press": "have:no"}]},
-            {"when": "Which city do you live in", "do": [{"from": 111, "press": "tz:browser"}]},
-            {"when": ABOUT_ASK, "do": [{"from": 111, "document": {"file_name": "what-my-ai-knew (1).md",
-                                                                 "content": briefing}}]},
-            {"when": GOAL_ASK, "do": [{"from": 111, "text": "Run a  half marathon\nin May."}]},
+            {"when": AI_ASK, "do": [{"from": 111, "press": "openai-codex"}]},
+            {"when": FIRST_ASK, "do": [{"from": 111, "press": "have:no"}]},
             # Writing while it sets up: answered once, however often.
             {"when": "setting everything up now", "do": [{"from": 111, "text": "are you there?", "after": 1},
                                                          {"from": 111, "text": "hello??", "after": 2}]},
@@ -500,55 +493,40 @@ def test_one_click_happy():
     check("the code works once: after the owner, the same link is refused",
           to_eve[-1:] == ["This assistant belongs to someone else."])
     welcome = next((t for t in to_anna if "Hi Anna" in t), "")
-    check("the welcome names two steps: an AI, and a few questions, with no GitHub and no brain",
-          "Two short steps and I am ready, about five minutes" in welcome
-          and "1. Connect me to an AI, such as ChatGPT or Claude. That is what I think with." in welcome
-          and "2. A few short questions about you" in welcome and "GitHub" not in welcome and "brain" not in welcome)
-    check("step 1 says what the AI is for, step 2 is the last",
-          any_has(to_anna, "<b>Step 1 of 2: connect an AI.</b> I need an AI service to do my thinking")
-          and any_has(to_anna, "<b>Step 2 of 2: a few questions about you.</b>") and not any_has(to_anna, "of 3"))
+    check("the welcome says: the technical part now, about five minutes, getting to know you afterwards",
+          "First the technical part, about five minutes: you connect me to an AI, such as ChatGPT or Claude." in welcome
+          and "Getting to know you comes afterwards, in a short chat of its own, whenever you like." in welcome
+          and "From now on I answer only you." in welcome and "Step" not in welcome and "GitHub" not in welcome)
+    check("the AI question has no step number left over", any_has(to_anna, AI_ASK) and not any_has(to_anna, " of 2", " of 3"))
+    check("no city, nothing about them and no goal is asked here",
+          not any(any_has(to_anna, q) for q in NO_CONTEXT_QUESTIONS))
     check("a first Mission Control never signs in to GitHub, and nothing asks it", gh_untouched(r) and r["connect"] == [])
-    first_q = next((m for m in r["fake"].sent if "Is this your first Godspeed Mission Control" in m["text"]), {})
-    check("the first question of step 2 is one tap: first, or bring in the one on GitHub",
+    first_q = next((m for m in r["fake"].sent if FIRST_ASK in m["text"]), {})
+    check("the one question after the AI is one tap: first, or bring in the one on GitHub",
           first_q.get("labels") == ["Yes, it is my first", "No, bring in the one I have on GitHub"])
-    city_q = next((m for m in r["fake"].sent if "Which city do you live in" in m["text"]), {})
-    check("the city is asked for the time zone only, with the browser's city as its one button",
-          "I only use it for your time zone, so a reminder you ask for at 9:00 comes at 9:00 your time" in city_q.get("text", "")
-          and city_q.get("labels") == ["Vienna (your computer's time zone)"] and "seven" not in city_q.get("text", "")
-          and "Got it: Vienna time." in to_anna)
-    about_q = next((m for m in r["fake"].sent if ABOUT_ASK in m["text"]), {})
-    check("the question about them asks for a few sentences, names the book's file, and can be skipped",
-          "A few sentences are plenty" in about_q.get("text", "") and "Teach It Once" in about_q.get("text", "")
-          and about_q.get("labels") == ["Skip"])
-    kept = os.path.join(r["workspace"], "what-my-ai-knew.md")
-    check("the book's file is kept under its own name, and the thanks names no file and no folder",
-          os.path.exists(kept) and open(kept, encoding="utf-8").read() == briefing and KEPT in to_anna
-          and not any_has(to_anna, "at the top of my folder"))
-    goal_q = next((m for m in r["fake"].sent if GOAL_ASK in m["text"]), {})
-    check("the goal question gives examples and a Skip",
-          "\"plan my week\"" in goal_q.get("text", "") and goal_q.get("labels") == ["Skip"])
-    at = next((i for i, t in enumerate(to_anna) if GOAL_ASK in t), -2)
+    at = next((i for i, t in enumerate(to_anna) if FIRST_ASK in t), -2)
     check("right after the last answer it says it is setting everything up", to_anna[at + 1:at + 2] == [SETTING_UP])
     fin = r["finish"]
-    check("the answers go to the notebook once, the bot's key does not",
-          len(fin) == 1 and fin[0]["input"] == {"timezone": "Europe/Vienna", "goal": "Run a half marathon in May.",
-                                                "joined": False, "about": "what-my-ai-knew.md"}
+    check("the browser's time zone is filed silently, with their name for the later chat, and no key",
+          len(fin) == 1 and fin[0]["input"] == {"timezone": "Europe/Vienna", "timezone_from": "browser", "joined": False,
+                                                "owner_name": "Anna"}
           and fin[0]["token"] is None and fin[0]["code"] is None)
     run = fin[0] if fin else {"started": 0, "ended": 0}
     check("Telegram shows it typing all through the minute that takes",
           len(typing_between(r, run["started"], run["ended"])) >= 2)
     check("a message written meanwhile is answered once",
           sum(t == "Still working on it. This can take a few minutes; I write to you when I am done." for t in to_anna) == 1)
-    check("the bot goes to Hermes, and Hermes' clock is the city's",
+    check("the bot goes to Hermes, and Hermes' clock is the browser's",
           "TELEGRAM_BOT_TOKEN=%s" % TOKEN in r["env"] and "TELEGRAM_ALLOWED_USERS=111" in r["env"]
           and "config set timezone Europe/Vienna" in r["hermes"])
     check("the gateway is left to the container's supervisor", "gateway" not in r["hermes"])
     last = r["hermes_sent"]
-    check("the last message names both places, the notebook's address and how to sign in there, and no folder",
+    check("the last message names both places, the notebook's address and how to sign in there",
           "Your Godspeed Mission Control is ready. You can reach me in two places" in last
           and "1. Here in Telegram, from anywhere." in last and NOTEBOOK in last
-          and "Sign in with the username and password you chose when you set up this server" in last
-          and "press \"Chat with Godspeed\"" in last and "folder" not in last.lower())
+          and "Sign in with the username and password you chose when you set up this server" in last)
+    check("and that it writes in about ten minutes to get to know them, or now with the word context, and no folder",
+          INVITE in last and "folder" not in last.lower())
     check("setup is marked done", r["state"].get("done") is True)
     check("neither the key nor the start code is in any log",
           all(x not in r["log"] and x not in r["out"] for x in (TOKEN, CODE)))
@@ -572,93 +550,37 @@ def backed_up(workspace):
 
 
 def test_one_click_snags():
-    long_text = "I am a fictional teacher in Leeds. " * 8
-    r = scenario_run("the one-click server: Start without the link, a PDF, a pasted text, a long goal, a stop", {
+    r = scenario_run("the one-click server: Start without the link, a key, no time zone from the browser, a stop", {
         "users": USERS,
         "start": [{"from": 111, "text": "/start"}],
         "rules": [
             {"when": "send me the message shown on your Godspeed setup page", "do": [{"from": 111, "text": "/start " + CODE}]},
-            {"when": "Step 1 of 2: connect an AI", "do": [{"from": 111, "press": "openrouter"}]},
+            {"when": AI_ASK, "do": [{"from": 111, "press": "openrouter"}]},
             {"when": "Send me your OpenRouter API key", "do": [{"from": 111, "text": "sk-or-good-0123456789abcdef"}]},
-            {"when": "Is this your first Godspeed Mission Control", "do": [{"from": 111, "text": "Yes, it is my first"}]},
-            {"when": "Which city do you live in", "do": [{"from": 111, "text": "London"}]},
-            {"when": ABOUT_ASK, "do": [{"from": 111, "document": {"file_name": "briefing.pdf", "hex": "25504446"}}]},
-            {"when": "I can keep a text file", "do": [{"from": 111, "text": long_text},
-                                                      {"from": 111, "text": "Second part of the same paste."}]},
-            {"when": GOAL_ASK, "do": [{"from": 111, "text": "x" * 700}]},
-            {"when": "That is a lot for a start", "do": [{"from": 111, "text": "Teach one evening class."}]},
+            {"when": FIRST_ASK, "do": [{"from": 111, "text": "Yes, it is my first"}]},
             # The person takes ten seconds to tap Try again; nothing is "typing" while it waits for them.
-            {"when": "I could not file your answers", "do": [{"from": 111, "press": "finish:retry", "after": 10}]},
+            {"when": "I could not finish the setup", "do": [{"from": 111, "press": "finish:retry", "after": 10}]},
         ]}, extra_env=dict(ONE_CLICK, FAKE_FINISH_FAIL_FIRST="1"), timeout=180)
     to_anna = r["to"](111)
-    kept = os.path.join(r["workspace"], "what-my-ai-knew.md")
     check("it finishes, exit 0", r["rc"] == 0)
     check("Start without the link gets the hint, and the message from the page then works", r["state"].get("owner_id") == 111)
-    city_q = next((m for m in r["fake"].sent if "Which city do you live in" in m["text"]), {})
-    check("with no time zone from the browser there is no city button at all", city_q and city_q["buttons"] == [])
-    check("a file that is not text is said, and nothing is kept from it",
-          any_has(to_anna, "I can keep a text file", "tap Skip") and not os.path.exists(os.path.join(r["workspace"], "briefing.pdf")))
-    check("a pasted text in two messages is kept whole",
-          os.path.exists(kept) and open(kept, encoding="utf-8").read() ==
-          long_text.strip() + "\nSecond part of the same paste.\n" and KEPT in to_anna)
-    check("an overlong goal is asked again", any_has(to_anna, "That is a lot for a start"))
     fin = r["finish"]
+    check("with no time zone from the browser none is filed or asked; the later chat asks the city",
+          len(fin) == 2 and fin[1]["input"]["timezone"] is None and fin[1]["input"]["timezone_from"] is None
+          and not any_has(to_anna, "Which city") and "timezone" not in r["hermes"])
     check("a stop is said with its reason, and Try again files the answers",
-          any_has(to_anna, "I could not file your answers", "The notebook folder is busy right now")
-          and len(fin) == 2 and fin[1]["input"]["goal"] == "Teach one evening class."
-          and fin[1]["input"]["timezone"] == "Europe/London")
-    stop = next((m["t"] for m in r["fake"].sent if "I could not file your answers" in m["text"]), None)
+          any_has(to_anna, "I could not finish the setup", "The notebook folder is busy right now")
+          and len(fin) == 2 and fin[0]["input"] == fin[1]["input"])
+    stop = next((m["t"] for m in r["fake"].sent if "I could not finish the setup" in m["text"]), None)
     check("no typing while it waits for the person to tap Try again, and typing again once it works",
           stop is not None and len(fin) == 2 and typing_between(r, stop + 1, fin[1]["started"] - 0.5) == []
           and typing_between(r, fin[1]["started"] - 1.5, r["ended"]) != [])
     check("a restart of the filing does not thank them twice",
           sum(t.startswith("Thanks! I am setting everything up now") for t in to_anna) == 1)
-    check("without the server's address, the last message says where it is in words",
+    check("without the server's address, the last message says where it is in words, and still invites them",
           "In your notebook, in your web browser, at the same address where you set up this server" in r["hermes_sent"]
-          and "folder" not in r["hermes_sent"].lower())
+          and INVITE in r["hermes_sent"] and "folder" not in r["hermes_sent"].lower())
     check("setup is marked done", r["state"].get("done") is True)
-
-
-def test_one_click_short_and_skips():
-    r = scenario_run("the one-click server: a short sentence about them is enough", {
-        "users": USERS,
-        "start": [{"from": 111, "text": "/start " + CODE}],
-        "rules": [
-            {"when": "Step 1 of 2: connect an AI", "do": [{"from": 111, "press": "openai-codex"}]},
-            {"when": "Is this your first Godspeed Mission Control", "do": [{"from": 111, "press": "have:no"}]},
-            {"when": "Which city do you live in", "do": [{"from": 111, "text": "Vienna"}]},
-            {"when": ABOUT_ASK, "do": [{"from": 111, "text": "I am a nurse."}]},
-            {"when": GOAL_ASK, "do": [{"from": 111, "press": "goal:skip"}]},
-        ]}, extra_env=dict(ONE_CLICK, GODSPEED_TG_NOTEBOOK_URL=NOTEBOOK),
-        hermes_config="model:\n  provider: openai-codex\ntimezone: \"Europe/Vienna\"\n")
-    kept = os.path.join(r["workspace"], "what-my-ai-knew.md")
-    check("a short typed sentence is accepted and kept, with a thanks that names no file",
-          r["rc"] == 0 and os.path.exists(kept) and open(kept, encoding="utf-8").read() == "I am a nurse.\n"
-          and KEPT in r["to"](111) and not any_has(r["to"](111), "Send the file"))
-    check("Skip on the goal files no goal, and setup still finishes",
-          r["state"].get("done") is True and r["state"].get("goal") == "" and len(r["finish"]) == 1
-          and r["finish"][0]["input"]["goal"] == "" and SETTING_UP in r["to"](111))
-    check("Hermes' clock already the city's (the notebook wrote it) is not set a second time",
-          "config set timezone" not in r["hermes"] and "clock is Europe/Vienna already" in r["log"])
-    r = scenario_run("the one-click server: Skip, and Skip", {
-        "users": USERS,
-        "start": [{"from": 111, "text": "/start " + CODE}],
-        "rules": [
-            {"when": "Step 1 of 2: connect an AI", "do": [{"from": 111, "press": "openai-codex"}]},
-            {"when": "Is this your first Godspeed Mission Control", "do": [{"from": 111, "press": "have:no"}]},
-            {"when": "Which city do you live in", "do": [{"from": 111, "press": "tz:browser"}]},
-            {"when": ABOUT_ASK, "do": [{"from": 111, "press": "about:skip"}]},
-            {"when": GOAL_ASK, "do": [{"from": 111, "text": "skip"}]},
-        ]}, extra_env=dict(ONE_CLICK, GODSPEED_TG_BROWSER_TZ="America/Argentina/Buenos_Aires"))
-    to_anna = r["to"](111)
-    check("Skip on the question about them goes on, and says they can tell it later",
-          r["rc"] == 0 and r["state"].get("briefing") == ""
-          and "All right. Tell me about yourself whenever you like, in any chat." in to_anna
-          and not os.path.exists(os.path.join(r["workspace"], "what-my-ai-knew.md")))
-    check("typing skip for the goal skips it too, and the browser's city with a long zone name works",
-          r["state"].get("done") is True and len(r["finish"]) == 1
-          and r["finish"][0]["input"] == {"timezone": "America/Argentina/Buenos_Aires", "goal": "", "joined": False, "about": ""}
-          and "Got it: Buenos Aires time." in to_anna)
 
 
 def test_one_click_existing():
@@ -666,15 +588,15 @@ def test_one_click_existing():
         "users": USERS,
         "start": [{"from": 111, "text": "/start " + CODE}],
         "rules": [
-            {"when": "Step 1 of 2: connect an AI", "do": [{"from": 111, "press": "openai-codex"}]},
-            {"when": "Is this your first Godspeed Mission Control", "do": [{"from": 111, "press": "have:yes"}]},
+            {"when": AI_ASK, "do": [{"from": 111, "press": "openai-codex"}]},
+            {"when": FIRST_ASK, "do": [{"from": 111, "press": "have:yes"}]},
             {"when": "Send me its address", "do": [{"from": 111, "text": "github.com/anna/nope"}]},
             {"when": "I cannot open", "do": [{"from": 111, "text": "https://github.com/anna/mission"}]},
             {"when": "I could not connect", "do": [{"from": 111, "press": "join:retry"}]},
-            {"when": "Which city do you live in", "do": [{"from": 111, "text": "London"}]},
-        ]}, extra_env=dict(ONE_CLICK, FAKE_GH_REPOS="anna/mission", FAKE_CONNECT_FAIL_FIRST="1"), prepare=backed_up)
+        ]}, extra_env=dict(ONE_CLICK, FAKE_GH_REPOS="anna/mission", FAKE_CONNECT_FAIL_FIRST="1",
+                           GODSPEED_TG_BROWSER_TZ="Europe/London", GODSPEED_TG_NOTEBOOK_URL=NOTEBOOK), prepare=backed_up)
     to_anna = r["to"](111)
-    first = next((i for i, t in enumerate(to_anna) if "Is this your first" in t), -1)
+    first = next((i for i, t in enumerate(to_anna) if FIRST_ASK in t), -1)
     check("it finishes, exit 0", r["rc"] == 0)
     check("only bringing one in signs in to GitHub, after that answer, and git is set up",
           0 < first < next((i for i, t in enumerate(to_anna) if "github.com/login/device" in t), -1)
@@ -686,46 +608,47 @@ def test_one_click_existing():
           any_has(to_anna, "I could not connect <b>anna/mission</b>", "publicly readable")
           and [c["input"] for c in r["connect"]] == [{"repository": "https://github.com/anna/mission.git"}] * 2
           and all(c["token"] is None for c in r["connect"]))
-    check("one plain sentence says it is connected and only the city is still needed",
-          any_has(to_anna, "Your Mission Control from GitHub is connected and its pages are here. It knows you "
-                           "already, so I only need your city."))
-    check("only the city is asked, nothing about them and no goal",
-          any_has(to_anna, "Which city do you live in") and not any_has(to_anna, ABOUT_ASK) and not any_has(to_anna, GOAL_ASK))
+    check("one plain sentence says it is connected and knows them already",
+          any_has(to_anna, "Your Mission Control from GitHub is connected and its pages are here. It knows you already."))
+    check("nothing about them is asked", not any(any_has(to_anna, q) for q in NO_CONTEXT_QUESTIONS))
     fin = r["finish"]
-    check("the clock goes to the notebook, marked as brought in, with no goal",
-          len(fin) == 1 and fin[0]["input"] == {"timezone": "Europe/London", "goal": None, "joined": True, "about": ""})
+    check("the browser's clock goes to the notebook, marked as brought in",
+          len(fin) == 1 and fin[0]["input"] == {"timezone": "Europe/London", "timezone_from": "browser", "joined": True,
+                                                "owner_name": "Anna"})
+    check("its last message has no invitation to tell it about themselves, since it knows them",
+          NOTEBOOK in r["hermes_sent"] and "Try it now: open your notebook and ask me something." in r["hermes_sent"]
+          and "ten minutes" not in r["hermes_sent"] and "context" not in r["hermes_sent"])
     check("it does not offer to install itself on the computer that already has it",
           not any_has(to_anna, "Want me on your computer too"))
     check("setup is marked done", r["state"].get("done") is True and r["state"].get("existing") == "anna/mission")
 
 
 def test_one_click_old_state():
-    # What the version before 16 October 2026 had kept when it stopped: its GitHub sign-in done,
-    # "No, start fresh" answered and the city given, the briefing not yet.
-    old = {"bot_id": 42, "owner_id": 111, "chat_id": 111, "owner_name": "Anna", "offset": 1,
-           "brain": "openai-codex", "brain_ok": True, "login": "anna", "existing": "", "tz": "Europe/London"}
-    r = scenario_run("the one-click server: restarted with what the earlier version kept", {
-        "users": USERS, "start": [],
-        "rules": [{"when": ABOUT_ASK, "do": [{"from": 111, "text": "I am a fictional baker."}]},
-                  {"when": GOAL_ASK, "do": [{"from": 111, "text": "Bake on Sundays."}]}]},
-        extra_env=ONE_CLICK, state=old)
+    # What the version before the split had kept when it stopped: the city given in the chat, what
+    # they said about themselves and their goal, the filing not done yet.
+    old = {"bot_id": 42, "owner_id": 111, "chat_id": 111, "owner_name": "Anna", "offset": 1, "brain": "openai-codex",
+           "brain_ok": True, "login": "anna", "existing": "", "tz": "Europe/London", "briefing": "what-my-ai-knew.md",
+           "goal": "Bake on Sundays."}
+    r = scenario_run("the one-click server: restarted with the answers an earlier version had asked", {
+        "users": USERS, "start": [], "rules": []}, extra_env=dict(ONE_CLICK, GODSPEED_TG_BROWSER_TZ="Europe/Vienna"), state=old)
     to_anna = r["to"](111)
-    check("it picks up where it was, asks the new questions, and finishes",
+    check("it picks up where it was, asks nothing more, and finishes",
           r["rc"] == 0 and r["state"].get("done") is True and to_anna[:1] == ["I restarted, and I am picking up where we were."]
-          and not any_has(to_anna, "Which city") and not any_has(to_anna, "Is this your first")
-          and r["finish"] and r["finish"][0]["input"] == {"timezone": "Europe/London", "goal": "Bake on Sundays.",
-                                                          "joined": False, "about": "what-my-ai-knew.md"})
+          and not any(any_has(to_anna, q) for q in NO_CONTEXT_QUESTIONS) and not any_has(to_anna, FIRST_ASK))
+    check("what they had answered is all filed, their own city over the browser's",
+          r["finish"] and r["finish"][0]["input"] == {"timezone": "Europe/London", "timezone_from": "answer", "joined": False,
+                                                      "owner_name": "Anna", "goal": "Bake on Sundays.",
+                                                      "about": "what-my-ai-knew.md"}
+          and "config set timezone Europe/London" in r["hermes"])
     old = {"bot_id": 42, "owner_id": 111, "chat_id": 111, "owner_name": "Anna", "offset": 1,
            "brain": "openrouter", "brain_ok": True, "login": "anna"}
-    r = scenario_run("the one-click server: restarted right after the earlier version's GitHub sign-in", {
+    r = scenario_run("the one-click server: restarted right after an earlier version's GitHub sign-in", {
         "users": USERS, "start": [],
-        "rules": [{"when": "Is this your first Godspeed Mission Control", "do": [{"from": 111, "press": "have:no"}]},
-                  {"when": "Which city do you live in", "do": [{"from": 111, "text": "London"}]},
-                  {"when": ABOUT_ASK, "do": [{"from": 111, "press": "about:skip"}]},
-                  {"when": GOAL_ASK, "do": [{"from": 111, "press": "goal:skip"}]}]},
+        "rules": [{"when": FIRST_ASK, "do": [{"from": 111, "press": "have:no"}]}]},
         extra_env=ONE_CLICK, state=old)
-    check("it asks the new first question, never signs in again, and finishes",
-          r["rc"] == 0 and r["state"].get("done") is True and gh_untouched(r) and len(r["finish"]) == 1)
+    check("it asks the one question, never signs in again, and finishes",
+          r["rc"] == 0 and r["state"].get("done") is True and gh_untouched(r) and len(r["finish"]) == 1
+          and INVITE in r["hermes_sent"])
 
 
 def links_for(env):
@@ -790,7 +713,6 @@ if __name__ == "__main__":
     test_one_click_names()
     test_one_click_happy()
     test_one_click_snags()
-    test_one_click_short_and_skips()
     test_one_click_existing()
     test_one_click_old_state()
     test_one_click_links()

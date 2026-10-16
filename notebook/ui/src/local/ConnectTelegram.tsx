@@ -64,7 +64,7 @@ export function TelegramConnect({welcome=false,onContinue}:{welcome?:boolean;onC
     <Button asChild className="min-h-11 h-auto max-w-full whitespace-normal py-2 gap-2"><a href={data.link} target="_blank" rel="noopener noreferrer"><MessageCircle className="h-4 w-4" aria-hidden="true"/>Open @{username} in Telegram<ExternalLink className="h-4 w-4" aria-hidden="true"/></a></Button>
     <div className="flex flex-wrap items-center gap-4"><div className="w-40 h-40 bg-white rounded p-1 [&>svg]:w-full [&>svg]:h-full" role="img" aria-label={'QR code that opens @'+username+' in Telegram'} dangerouslySetInnerHTML={{__html:qr}}/><p className="max-w-xs text-sm">Telegram is on your phone? Point its camera at this code.</p></div>
     {data.start_message&&<div className="space-y-2"><p className="text-sm">Used this bot before and see no Start button? Then send it this message:</p><StartMessage text={data.start_message}/></div>}
-    <p className="text-sm">The code works once and makes you the bot's owner. Then setup goes on in the chat: you connect an AI and answer a few questions about yourself.</p>
+    <p className="text-sm">The code works once and makes you the bot's owner. Then setup goes on in the chat: you connect an AI, about five minutes. Getting to know you comes afterwards, whenever you like.</p>
     <div className="flex flex-wrap gap-3"><Button variant="ghost" className="min-h-11" onClick={()=>setReplacing(true)}>Use a different bot</Button>{continueButton}</div>
   </div>;
   else if(data.phase==='setting-up')body=<div className="space-y-4" role="status">

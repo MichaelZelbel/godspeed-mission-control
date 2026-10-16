@@ -35,7 +35,7 @@ describe("TelegramConnect", () => {
     fireEvent.click(screen.getByRole("button", { name: "Copy" }));
     await waitFor(() => expect(writeText).toHaveBeenCalledWith("/start fictionalCode0123456789abcdefgh"));
     expect(await screen.findByRole("button", { name: "Copied" })).toBeInTheDocument();
-    expect(screen.getByText(/The code works once and makes you the bot's owner\. Then setup goes on in the chat: you connect an AI and answer a few questions about yourself\./)).toBeInTheDocument();
+    expect(screen.getByText(/The code works once and makes you the bot's owner\. Then setup goes on in the chat: you connect an AI, about five minutes\. Getting to know you comes afterwards, whenever you like\./)).toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(/GitHub|briefing/);
   });
   it("sends the browser's time zone and address with the key", async () => {

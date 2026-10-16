@@ -24,14 +24,19 @@ function fresh(t){
 }
 
 test('a goal skipped in the chat files the clock and Telegram, and leaves the routines waiting for the first goal',t=>{
-  const f=fresh(t),result=f.run({timezone:'Europe/Vienna',goal:'',joined:false,about:''});
-  assert.equal(result.status,0,result.stderr);assert.match(result.stdout,/the first goal starts them/);
+  const f=fresh(t),result=f.run({timezone:'Europe/Vienna',timezone_from:'browser',owner_name:'Anna',joined:false});
+  assert.equal(result.status,0,result.stderr);assert.match(result.stdout,/^Filed the clock; routines deliver to Telegram\./);
   const store=new Store(f.root),settings=store.get('settings','installation');
   assert.deepEqual([settings.owner,settings.timezone,settings.delivery],['vps','Europe/Vienna','telegram'],'this server runs the routines');
   assert.equal(store.get('settings',FLAG)?.state,'pending','a goal told later, in the chat or in Settings, starts the routines');
   assert.equal(store.list('goals').length,0,'no goal is made up');
   assert.match(fs.readFileSync(path.join(f.home,'config.yaml'),'utf8'),/^timezone: "Europe\/Vienna"$/m,'Hermes\' clock is the reader\'s');
-  const again=f.run({timezone:'Europe/Vienna',goal:'',joined:false,about:''});
+  // The second part, getting to know them, waits for them (core/context-setup.mjs), with the zone
+  // from their browser, so it does not ask the city.
+  const ctx=JSON.parse(fs.readFileSync(path.join(f.root,'.godspeed','context-setup.json'),'utf8'));
+  assert.deepEqual([ctx.state,ctx.owner_name,ctx.timezone,ctx.timezone_from],['waiting','Anna','Europe/Vienna','browser']);
+  assert.match(result.stderr,/the word context still starts it/,'no Hermes here, so the invitation is not planned, and that is said');
+  const again=f.run({timezone:'Europe/Vienna',timezone_from:'browser',owner_name:'Anna',joined:false});
   assert.equal(again.status,0,again.stderr);assert.equal(new Store(f.root).get('settings',FLAG)?.state,'pending','Try again changes nothing');
 });
 
