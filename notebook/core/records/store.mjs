@@ -596,6 +596,21 @@ export class Store {
       if (type === 'moments' && old) throw new Error('Events are append-only; add a correction event');
       const record = this.prepare(type, value, old); this.commit([record]); return record;
   }
+  // The version of a record that carried `version` (its hash), from the
+  // record's own history, or null when the history does not hold it. This is
+  // what a save that started from an older version is compared against field
+  // by field: the copy a screen sends along may be a list row without the text.
+  versionOf(record,version){
+    if(!record||typeof version!=='string'||!/^[0-9a-f]{64}$/.test(version))return null;
+    if(record._hash===version){const current={...record};delete current._hash;return current;}
+    if(!this.records)this.scan();
+    const tail='-'+version.slice(0,12);
+    for(let revision=Number(record.revision)||0;revision>0;revision--){
+      const kept=this.records.get('record_history/'+record.uid+'-'+revision+tail);
+      if(kept?.snapshot&&kept.source_uid===record.uid&&hash(encode(kept.snapshot))===version)return copy(kept.snapshot);
+    }
+    return null;
+  }
   conflict(type,value,old,base=null){
     const conflict = { id: randomUUID(), type, record_id: old?.id||value.id, kind:'stale-write',base,local:{...old,...value}, remote: old, at: new Date().toISOString() };
     atomic(path.join(this.root, 'conflicts', conflict.id + '.json'), JSON.stringify(conflict, null, 2));

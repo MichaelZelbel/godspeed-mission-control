@@ -344,7 +344,12 @@ export class QueryService {
             assertAssistantLinks(this,table,{...old,...(operation==='update'?values:value)});
           }
           if (old && expected[old.id] && expected[old.id] !== old._hash) {
-            const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b),base=baselines[old.id];
+            // The version the writer started from, from the record's own
+            // history; the copy the screen sent is used only when the history
+            // does not hold it. A list row has no text, so until 16 October
+            // 2026 the notebook's processing changing a note's tags got the
+            // next save of its text refused under an open editor.
+            const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b),base=this.store.versionOf(old,expected[old.id])||baselines[old.id];
             const patch=operation==='update'?values:value;
             // Concurrent autosaves of different conversation fields can both
             // advance this display timestamp. It is not authored content.
