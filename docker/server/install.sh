@@ -207,6 +207,31 @@ count_install() {
   return 0
 }
 
+# The last words a person reads after installing: where the mission control is, how to start
+# talking to it, and where to hear more. The Linux and Mac installer and the Windows setup's
+# finish page end with the same three things. With a private link (the account is not made yet)
+# it is a first install; without one the account exists. A run that failed never gets here.
+finished_words() {
+  local host="$1" link="${2:-}"
+  say ""
+  if [ -n "$link" ]; then
+    say "Your mission control is installed at https://$host."
+    say ""
+    say "To talk to it, open this private link in your browser to make your account:"
+    say ""
+    say "  https://$host$link"
+    say ""
+    say "Choose a username and password there, and save the recovery code it shows you."
+    say "The link works once, within 24 hours. Run this line again for a new one."
+  else
+    say "Your mission control is up to date at https://$host, and your account already exists."
+    say "To talk to it, sign in there with your username and password."
+  fi
+  say ""
+  say "I write about what it does and what broke, free: https://michaelzelbel.substack.com/subscribe"
+  say ""
+}
+
 # --- The run ---------------------------------------------------------------------
 
 as_root() {
@@ -320,22 +345,8 @@ main() {
   log "owner link: ${answer%% *}"
   count_install   # sends at most once per server, and only when asked to
   case "$answer" in
-    link\ *)
-      say ""
-      say "Godspeed Mission Control is installed."
-      say ""
-      say "Open this private link in your browser to make your account:"
-      say ""
-      say "  https://$host${answer#link }"
-      say ""
-      say "Choose a username and password there, and save the recovery code it shows you."
-      say "The link works once, within 24 hours. Run this line again for a new one."
-      say "" ;;
-    owner)
-      say ""
-      say "Godspeed Mission Control is installed and up to date, and your account already exists."
-      say "Sign in at https://$host with your username and password."
-      say "" ;;
+    link\ *) finished_words "$host" "${answer#link }" ;;
+    owner)   finished_words "$host" ;;
     *)
       stop "Godspeed Mission Control runs at https://$host, but it did not hand out your private link (${answer#error }). Run this line again in a minute." ;;
   esac

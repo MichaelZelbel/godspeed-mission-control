@@ -38,6 +38,16 @@ expect_out "GODSPEED_HOST loses https://, a path and capitals" '^mission\.exampl
 check "GODSPEED_HOST with a space is refused" bash -c "! GODSPEED_INSTALL_LIB=1 bash -c 'source $ROOT/docker/server/install.sh; clean_host \"bad host\"'"
 check "localhost gets Caddy's own certificate, sslip.io a real one" lib 'local_host localhost && ! local_host 203-0-113-7.sslip.io'
 
+# The last words (16 October 2026): where it is, how to start talking to it, where to hear more.
+newsletter='I write about what it does and what broke, free: https://michaelzelbel.substack.com/subscribe'
+first_words="$(lib 'finished_words 203-0-113-7.sslip.io "/setup#invite=abc"')"
+again_words="$(lib 'finished_words 203-0-113-7.sslip.io')"
+check "a first install says where it is" grep -qx 'Your mission control is installed at https://203-0-113-7\.sslip\.io\.' <<<"$first_words"
+check "and how to start talking to it: the private link" bash -c 'grep -qx "To talk to it, open this private link in your browser to make your account:" <<<"$1" && grep -qx "  https://203-0-113-7.sslip.io/setup#invite=abc" <<<"$1"' _ "$first_words"
+check "and ends with the newsletter" test "$(sed '/^$/d' <<<"$first_words" | tail -1)" = "$newsletter"
+check "a run with the account made says so and how to sign in" bash -c 'grep -q "up to date at https://203-0-113-7.sslip.io, and your account already exists\." <<<"$1" && grep -qx "To talk to it, sign in there with your username and password." <<<"$1"' _ "$again_words"
+check "and hands out no link, the newsletter last" bash -c '! grep -q "invite=" <<<"$1" && [ "$(sed "/^\$/d" <<<"$1" | tail -1)" = "$2" ]' _ "$again_words" "$newsletter"
+
 printf 'ID=ubuntu\nPRETTY_NAME="Ubuntu 24.04.5 LTS"\n' > "$WORK/ubuntu"
 printf 'ID=linuxmint\nID_LIKE="ubuntu debian"\n' > "$WORK/mint"
 printf 'ID=fedora\nPRETTY_NAME="Fedora Linux 42"\n' > "$WORK/fedora"
