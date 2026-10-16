@@ -7,7 +7,8 @@ const [name,evidence,mode]=process.argv.slice(2);
 const origin=process.env.GODSPEED_VERIFY_ORIGIN||'https://localhost:48443';
 (async()=>{
  const browser=await chromium.launch({headless:true});
- const context=await browser.newContext({ignoreHTTPSErrors:true,viewport:{width:1440,height:1000},...(mode==='resumed'?{storageState:path.join(evidence,'session.json')}:{})});
+ // A browser in a city's time zone, as a person's is (a runner's is UTC), so the page has one to hand the chat.
+ const context=await browser.newContext({ignoreHTTPSErrors:true,viewport:{width:1440,height:1000},timezoneId:'Europe/Vienna',...(mode==='resumed'?{storageState:path.join(evidence,'session.json')}:{})});
  const page=await context.newPage();page.setDefaultTimeout(60000);
  const errors=[];page.on('pageerror',e=>errors.push(e.message));
  try{
@@ -66,15 +67,22 @@ const origin=process.env.GODSPEED_VERIFY_ORIGIN||'https://localhost:48443';
    const link=new URL(await open.getAttribute('href')),code=link.searchParams.get('start');
    assert.equal(link.origin+link.pathname,'https://t.me/test_godspeed_bot');assert.match(code,/^[A-Za-z0-9_-]{32}$/);
    await page.getByRole('img',{name:'QR code that opens @test_godspeed_bot in Telegram'}).waitFor();
+   // A bot used before shows no Start button: the page shows the message to send instead, to copy.
+   await page.getByText('Used this bot before and see no Start button? Then send it this message:').waitFor();
+   assert.equal(await page.locator('#telegram-start-message').innerText(),'/start '+code);
+   await page.getByRole('button',{name:'Copy'}).waitFor();
    assert.equal((await page.content()).includes(key),false,'the key never comes back to the page');
    await page.screenshot({path:path.join(evidence,'telegram-link-desktop.png'),fullPage:true});
    act({from:999,text:'/start'});act({from:111,text:'/start '+code});
    await page.getByText('Setup is running in your chat with').waitFor({timeout:90000});
    const record=JSON.parse(execFileSync('docker',['exec',name,'cat','/tmp/telegram-record.json'],{encoding:'utf8'}));
    const to=id=>record.sent.filter(m=>m.chat_id===id).map(m=>m.text);
-   assert.ok(to(999).some(t=>t.includes('open me with the button on your Godspeed page')),'a Start without the code is told where the link is');
+   assert.ok(to(999).some(t=>t.includes('send me the message shown on your Godspeed setup page')),'a Start without the code is told to send the message from the page');
    assert.ok(to(111).some(t=>t.includes('Hi Anna')),'the code makes its sender the owner');
-   assert.ok(to(111).some(t=>t.includes('Which AI should I think with')),'and the setup chat begins');
+   assert.ok(to(111).some(t=>t.includes('Step 1 of 2: connect an AI')),'and the setup chat begins');
+   // The page told the chat the browser's time zone along with the key (the city button).
+   const saved=JSON.parse(execFileSync('docker',['exec',name,'cat','/opt/data/full-candidate/telegram/connection.json'],{encoding:'utf8'}));
+   assert.equal(saved.timezone,'Europe/Vienna');assert.equal(saved.web_address,origin);
    const status=await(await context.request.get(origin+'/api/telegram')).json();
    assert.equal(status.phase,'setting-up');assert.equal(status.link,undefined);assert.equal(JSON.stringify(status).includes(key),false);
    await page.screenshot({path:path.join(evidence,'telegram-setting-up.png'),fullPage:true});
@@ -92,6 +100,17 @@ const origin=process.env.GODSPEED_VERIFY_ORIGIN||'https://localhost:48443';
   await page.setViewportSize({width:390,height:844});
   await page.screenshot({path:path.join(evidence,'fresh-import-phone.png'),fullPage:true});
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+  // The dashboard's big "Chat with Godspeed" opens the same chat as the round button, on a phone too.
+  await page.goto(origin+'/dashboard');
+  const big=page.locator('main').getByRole('button',{name:'Chat with Godspeed'});await big.waitFor();
+  assert.ok((await big.boundingBox()).height>=48,'a big button, not a link');
+  await page.screenshot({path:path.join(evidence,'dashboard-phone.png'),fullPage:true});
+  await big.click();await page.getByPlaceholder('Ask Godspeed...').last().waitFor();
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+  await page.setViewportSize({width:1440,height:1000});await page.goto(origin+'/dashboard');
+  await page.locator('main').getByRole('button',{name:'Chat with Godspeed'}).waitFor();
+  await page.screenshot({path:path.join(evidence,'dashboard-desktop.png'),fullPage:true});
+  await page.setViewportSize({width:390,height:844});
   await context.request.post(origin+'/api/query',{data:{table:'notes',operation:'insert',values:{id:'fresh-image-note',title:'Image verification note',content:'A small synthetic note.'}}});
   await page.goto(origin+'/dashboard/notes/fresh-image-note');
   await page.getByRole('button',{name:'Chat with Godspeed',exact:true}).waitFor();

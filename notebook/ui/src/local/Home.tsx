@@ -8,14 +8,22 @@ import {RecentPeopleCard} from '@/components/dashboard/widgets/RecentPeopleCard'
 import {ProfileWidget} from '@/components/dashboard/widgets/ProfileWidget';
 import {ActivityFeed} from '@/components/activity/ActivityFeed';
 import {CaptureEmptyState} from '@/components/notes/CaptureEmptyState';
-import {FileText,Users,MessageCircle} from 'lucide-react';
+import {FileText,Users,MessageCircle,Bot} from 'lucide-react';
+import {openFloatingChat} from '@/components/chat/GlobalAIChatFAB';
 import {peopleCountQuery} from './home-counts.mjs';
 export default function Home(){
  const navigate=useNavigate(),notes=useNotes('all');
  const status=useQuery({queryKey:['candidate-status'],queryFn:async()=>{const r=await fetch('/api/status');if(!r.ok)throw new Error('Could not read connection status');return r.json();},refetchInterval:5000});
  const people=useQuery({queryKey:['home-people-count'],queryFn:async()=>{const r=await fetch('/api/query',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(peopleCountQuery)});if(!r.ok)throw new Error('Could not load people');return r.json();}});
+ // The chat was a small link in the third card, so people did not see they could talk to
+ // Godspeed here (Michael, 16 October 2026). This opens the same floating chat as the round
+ // button, or the chat page where there is none.
+ const chat=()=>{if(!openFloatingChat())navigate('/dashboard/chat');};
  return <div className="space-y-6 max-w-7xl mx-auto">
-  <div><h1 className="text-2xl font-display font-bold">Your notebook</h1><p className="text-sm text-muted-foreground mt-1">Your notes, people and personal knowledge, together.</p></div>
+  <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+   <div><h1 className="text-2xl font-display font-bold">Your notebook</h1><p className="text-sm text-muted-foreground mt-1">Your notes, people and personal knowledge, together.</p></div>
+   <Button size="lg" className="h-14 w-full sm:w-auto px-8 text-base font-semibold gap-3 shadow-md" onClick={chat}><Bot className="h-5 w-5" aria-hidden="true"/>Chat with Godspeed</Button>
+  </div>
   <div className="grid gap-4 sm:grid-cols-3">
    <Card><CardHeader className="flex flex-row items-center justify-between pb-2"><CardTitle className="text-sm font-medium">Notes</CardTitle><FileText className="h-4 w-4 text-muted-foreground"/></CardHeader><CardContent><p className="text-3xl font-bold">{notes.isLoading?'…':notes.isError?'Unavailable':notes.data?.length||0}</p><Link className="text-sm text-primary" to="/dashboard/notes">Open notes</Link></CardContent></Card>
    <Card><CardHeader className="flex flex-row items-center justify-between pb-2"><CardTitle className="text-sm font-medium">People</CardTitle><Users className="h-4 w-4 text-muted-foreground"/></CardHeader><CardContent><p className="text-3xl font-bold">{people.isLoading?'…':people.isError?'Unavailable':people.data?.count||0}</p><Link className="text-sm text-primary" to="/dashboard/people">Open people</Link></CardContent></Card>

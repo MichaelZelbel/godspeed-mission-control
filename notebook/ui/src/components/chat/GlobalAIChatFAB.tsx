@@ -67,6 +67,9 @@ function loadSizeMode(): SizeMode {
 type PageContext={page:string;label:string;toggleEvent?:string;changedEvent?:string};
 // The same conversation opened in its own window (/dashboard/chat?page=identity).
 const PAGE_CHATS:Record<string,PageContext>={identity:{page:'identity',label:BRAIN_PAGE.label}};
+export const OPEN_CHAT_EVENT="godspeed:open-chat";
+// Opens the floating chat when one is on the page; returns false when none answered.
+export function openFloatingChat(){const event=new CustomEvent(OPEN_CHAT_EVENT,{cancelable:true});window.dispatchEvent(event);return event.defaultPrevented;}
 export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChange,pageContext}:{page?:boolean;embedded?:boolean;noteTitle?:string;onOpenChange?:(open:boolean)=>void;pageContext?:PageContext}) {
   const { user, session } = useAuth();
   const location = useLocation();
@@ -79,6 +82,9 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
   useEffect(()=>{openChangeRef.current?.(open);},[open]);
   const toggleEvent=pageContext?.toggleEvent??"godspeed:toggle-note-chat";
   useEffect(()=>{if(!embedded)return;const toggle=()=>setOpen(v=>!v);window.addEventListener(toggleEvent,toggle);return()=>window.removeEventListener(toggleEvent,toggle);},[embedded,toggleEvent]);
+  // The dashboard's "Chat with Godspeed" button opens this same floating chat (OPEN_CHAT_EVENT);
+  // preventDefault tells the button it was opened here, so it does not go to the chat page instead.
+  useEffect(()=>{if(page||embedded)return;const show=(event:Event)=>{event.preventDefault();setOpen(true);};window.addEventListener(OPEN_CHAT_EVENT,show);return()=>window.removeEventListener(OPEN_CHAT_EVENT,show);},[page,embedded]);
   const [confirm, confirmDialog] = useConfirmDialog();
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
