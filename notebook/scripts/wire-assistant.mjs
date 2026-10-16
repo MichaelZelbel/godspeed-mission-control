@@ -111,12 +111,17 @@ for(const [addon,skill] of [['coach','coach'],['journal','interstitial-journal']
  // The coach's talk brief tells the assistant to type `godspeed-coach ...` in that shell.
  shellCommand(bin,[process.execPath,script],' --godspeed '+quote(root));
 }
+// The getting-to-know-you chat's own plugin (core/context-setup.mjs): it tells the assistant, before
+// each turn, that its owner was invited to that chat and has not answered yet, since an invitation a
+// scheduled job delivered is not part of the chat the assistant sees next.
+fs.cpSync(path.join(kit,'notebook','assistant-files','godspeed-context'),path.join(home,'plugins','godspeed-context'),{recursive:true,filter:source=>!/__pycache__/.test(source)});
+atomic(path.join(home,'plugins','godspeed-context','mission-control.txt'),root+'\n');
 let text=fs.existsSync(file)?fs.readFileSync(file,'utf8').replace(/^\uFEFF/,''):`terminal:\n  cwd: ${JSON.stringify(root)}\nskills:\n  external_dirs: [${JSON.stringify(path.join(root,'skills'))}]\nmemory:\n  memory_enabled: false\n`;
-if(!/^plugins:/m.test(text))text+='\nplugins:\n  enabled: ["godspeed-coach", "godspeed-journal", "godspeed-headache"]\n';
+if(!/^plugins:/m.test(text))text+='\nplugins:\n  enabled: ["godspeed-coach", "godspeed-journal", "godspeed-headache", "godspeed-context"]\n';
 else{
  const block=text.match(/^plugins:[^\n]*\n(?:[ \t]+[^\n]*\n|\n)*/m)?.[0]||'';
  const disabled=block.match(/  disabled:\s*\[([^\]]*)\]/)?.[1]||'';
- const names=['godspeed-coach','godspeed-journal','godspeed-headache'].filter(n=>!disabled.includes(n));
+ const names=['godspeed-coach','godspeed-journal','godspeed-headache','godspeed-context'].filter(n=>!disabled.includes(n));
  let updated=block;
  if(/  enabled:\s*\[([^\]]*)\]/.test(block))updated=block.replace(/  enabled:\s*\[([^\]]*)\]/,(_m,old)=>'  enabled: ['+[old.trim(),...names.filter(n=>!old.includes(n)).map(n=>JSON.stringify(n))].filter(Boolean).join(', ')+']');
  else if(/^  enabled:\s*\n/m.test(block))updated=block.replace(/^  enabled:\s*\n((?:    - [^\n]*\n)*)/m,(_m,old)=>'  enabled:\n'+old+names.filter(n=>!old.includes(n)).map(n=>'    - '+JSON.stringify(n)+'\n').join(''));

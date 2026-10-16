@@ -21,6 +21,8 @@ const digest=(...parts)=>createHash('sha256').update(parts.map(String).join('\n'
 // Hostinger's compose.yaml set, or the Hostinger hostname), else the one the setup page was opened
 // at. An address that opens only on this machine is no use on a phone, so none is given then.
 const loopback=link=>{try{return ['127.0.0.1','localhost','[::1]','::1','0.0.0.0'].includes(new URL(link).hostname);}catch{return true;}};
+// The zone on the top-level timezone line of Hermes' config.yaml, "" for none, null without a file.
+export function hermesZone(home){try{return fs.readFileSync(path.join(home,'config.yaml'),'utf8').match(/^timezone:[ \t]*["']?([^"'#\s]*)/m)?.[1]??'';}catch{return null;}}
 export function notebookLink(env,connection,address=notebookAddress){
   let own=null;try{own=address({env}).link;}catch{}
   if(own&&!loopback(own))return own;
@@ -52,9 +54,20 @@ export class TelegramRunner{
         GODSPEED_TG_STATE:path.join(this.dir,'setup.json'),GODSPEED_TG_LOG:path.join(this.dir,'setup.log'),
         GODSPEED_TG_FINISH:`${JSON.stringify(process.execPath)} ${JSON.stringify(this.finish)}`}};
   }
+  // A city named later in the getting-to-know-you chat (notebook/core/context-setup.mjs) changes
+  // Hermes' clock, which a running gateway read once at its start (hermes_time keeps it), so "remind
+  // me at 9:00" would still be read on the old clock. The gateway is started again, half a minute
+  // after the change and only while that chat is not in the middle of an answer (16 October 2026).
+  zoneChanged(){
+    const home=this.env.HERMES_HOME;if(!home||this.child?.kind!=='gateway')return false;
+    const zone=hermesZone(home);if(zone===null||zone===this.child.zone)return false;
+    try{if(Date.now()-fs.statSync(path.join(home,'config.yaml')).mtimeMs<30000)return false;}catch{return false;}
+    try{const chat=JSON.parse(fs.readFileSync(path.join(this.env.GODSPEED_WORKSPACE||'','.godspeed','context-setup.json'),'utf8'));if(Date.now()-Date.parse(chat.updated_at)<60000)return false;}catch{}
+    return true;
+  }
   tick(){
     const plan=this.plan();
-    if(this.child){if(!plan||plan.key!==this.child.key)this.stop();return;}
+    if(this.child){if(!plan||plan.key!==this.child.key||this.zoneChanged())this.stop();return;}
     if(!plan){this.report('idle');return;}
     if(plan.key!==this.lastKey){this.failures=0;this.notBefore=0;}
     if(this.now()<this.notBefore){this.report('waiting-to-retry');return;}
@@ -62,7 +75,7 @@ export class TelegramRunner{
   }
   start(plan){
     const started=this.now(),child=this.spawnProcess(plan.command,plan.args,{env:plan.env,stdio:'inherit',detached:true});
-    this.child={key:plan.key,kind:plan.kind,process:child,started,stopping:false};this.lastKey=plan.key;
+    this.child={key:plan.key,kind:plan.kind,process:child,started,stopping:false,zone:plan.kind==='gateway'&&this.env.HERMES_HOME?hermesZone(this.env.HERMES_HOME):undefined};this.lastKey=plan.key;
     this.report(plan.kind);
     const done=code=>{
       const ended=this.child;if(!ended||ended.process!==child)return;this.child=null;this.lastExit={kind:plan.kind,code,at:new Date(this.now()).toISOString()};

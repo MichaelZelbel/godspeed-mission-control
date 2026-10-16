@@ -5,6 +5,7 @@ import {topicDefinitions,topicToolNames,topicTool} from './topic-tools.mjs';
 import {assistantMutationContext,assertAssistantTable} from '../core/assistant-mutations.mjs';
 import {memoryDefinitions,memoryToolNames,memoryTool,searchNotes,relatedTo,readFile} from './memory-tools.mjs';
 import {notebookAddress} from '../core/notebook-address.mjs';
+import {contextStatus,markContext,setTimezone,keepAbout} from '../core/context-setup.mjs';
 import {linkTargets} from '../core/graph.mjs';
 import {recordType,existingPerson,samePersonAnswer,collectionShape} from './save-record.mjs';
 const schema={type:'object',properties:{},additionalProperties:true};
@@ -21,6 +22,9 @@ export const listableTypes=new Set(['notes','note_folders','contacts','contact_g
 const definitions=[
   ...topicDefinitions,
   ...memoryDefinitions,
+  // The getting-to-know-you chat after the technical setup (core/context-setup.mjs, recipe
+  // context-setup): what is known already, where the chat stands, and the three things it keeps.
+  {name:'context_setup',description:'The getting-to-know-you chat that follows the setup; use it only as the context-setup recipe says. action "status": what is known already (where the chat stands, the time zone and whether it came from their computer or an answer, whether they told you about themselves, their goals) and where they see it in the notebook. "start", "done", "skip": where the chat stands (skip when they skipped all of it). "timezone" with city: their city, as your clock and the notebook\'s. "about" with text and words: keeps what they told you about themselves where you read it before you help; text is their own words, a file they sent, or the summary they confirmed. "goal" with title and words: files what they want help with first as their first goal. words is their latest message copied exactly.',inputSchema:{type:'object',properties:{action:{type:'string',enum:['status','start','done','skip','timezone','about','goal']},city:{type:'string'},text:{type:'string'},title:{type:'string'},words:{type:'string'}},required:['action']}},
   {name:'get_notebook_link',description:'The web address where the owner opens this notebook in a browser, where it opens, and how they sign in there. Give all of it when they ask for the link to their notebook, or how to open or sign in to it.',inputSchema:{type:'object',properties:{}}},
   {name:'list_note_folders',description:'List visible notebook folders and their note counts before filing a note.',inputSchema:schema},
   {name:'search_notes',description:'Find visible, untrashed notes by words and, when connected, by meaning, including text read out of their attached documents. Returns ids, titles, folders, a matching excerpt and current revision hashes. source native leaves out mirrored Mission Control files, godspeed keeps only them.',inputSchema:{type:'object',properties:{query:{type:'string'},source:{enum:['native','all','godspeed']},limit:{type:'integer'},offset:{type:'integer'},view:{enum:['snippet','metadata']}},required:['query']}},
@@ -100,6 +104,19 @@ export async function mcp(input,{store,query,index,domains,scopes,delegated=fals
       else if(topicToolNames.includes(name))value=topicTool(name,a,{store,query});
       // Each machine's notebook knows its own address (core/notebook-address.mjs); the server passes the port it listens on.
       else if(name==='get_notebook_link')value=(domains.notebookAddress||notebookAddress)();
+      else if(name==='context_setup'){
+        // What it keeps steers every later answer, so only this mission control's own assistant
+        // keeps it, and only with the owner's own latest words, as on the page that shows it.
+        if(delegated)throw Error('Only this mission control\'s own assistant leads the getting-to-know-you chat.');
+        const action=String(a.action||''),shelf=domains.identity,home=shelf?.assistantHome?.()||process.env.HERMES_HOME;
+        if(['about','goal'].includes(action)&&!shelf?.ownerAsked(a.words))throw Error('Keep this only with the owner\'s own words: pass their latest message, copied exactly, as words.');
+        if(action==='status')value=contextStatus(store,{goals:query.rows('goals')});
+        else if(['start','done','skip'].includes(action))value={state:markContext(store,action).state};
+        else if(action==='timezone')value=await setTimezone(store,{city:String(a.city||''),from:'answer',home});
+        else if(action==='about')value=await keepAbout(store,{text:String(a.text||'')});
+        else if(action==='goal'){const title=String(a.title||'').replace(/\s+/g,' ').trim();if(!title)throw Error('Name the goal in a few words.');value=await domains.invoke('personal-operation',{type:'goal-add',title,status:'adopted'});}
+        else throw Error('Choose status, start, done, skip, timezone, about or goal');
+      }
       else if(name==='list_note_folders')value=query.withSnapshot(()=>{
         const notes=visibleRows(query,'notes').filter(n=>!n.is_trashed),folders=new Map(visibleRows(query,'note_folders').map(f=>[f.folder_path||f.path||'',0]));
         for(const note of notes){const folder=note.folder_path||'';folders.set(folder,(folders.get(folder)||0)+1);}

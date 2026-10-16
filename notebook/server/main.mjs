@@ -41,6 +41,7 @@ import {TelegramConnection} from './telegram-connect.mjs';
 import {nativeAgent} from '../core/native-agent.mjs';
 import {NativeScheduler} from '../core/native-scheduler.mjs';
 import {notebookAddress} from '../core/notebook-address.mjs';
+import {showCard as showContextCard,readContext,markContext} from '../core/context-setup.mjs';
 import {visibleRows} from '../core/visibility.mjs';
 import {NoteProcessing} from '../core/processing.mjs';
 import {mediaObjectName,mediaFileName} from '../core/media-names.mjs';
@@ -199,6 +200,13 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         if(route==='/api/telegram/connect'&&req.method==='POST'){const input=JSON.parse(await body(req,4096));return send(res,200,await telegramConnection.connect(input.token,{timezone:input.timezone,address:input.address}));}
         if(route==='/api/telegram/disconnect'&&req.method==='POST')return send(res,200,telegramConnection.disconnect());
         return send(res,404,{error:'Unknown operation'});
+      }
+      // The dashboard's "Tell Godspeed about you" card (core/context-setup.mjs): shown until the
+      // getting-to-know-you chat ended; "Hide" ends it as skipped.
+      if(route==='/api/context-setup'){
+        if(req.method==='GET')return send(res,200,{show:showContextCard(store),state:readContext(store)?.state||null});
+        if(req.method==='POST'){const input=JSON.parse(await body(req,1024));if(input.action!=='skip')return send(res,400,{error:'Use skip'});markContext(store,'skip');return send(res,200,{show:false,state:readContext(store)?.state});}
+        return send(res,405,{error:'Use GET or POST'});
       }
       if(menerioImport.mutating&&(route==='/mcp'||route.startsWith('/api/'))&&!['/api/session','/api/status','/api/chat/options'].includes(route))return send(res,423,{error:'Your Menerio content is being copied. Wait for the import to finish.'});
       if(req.method==='POST'&&route.startsWith('/api/')&&!['/api/chat/stop','/api/backup','/api/functions/draft-event'].includes(route))await store.waitForWriter();

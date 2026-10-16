@@ -70,8 +70,9 @@ for skill in inventory['skills']:
   (folder/'SKILL.md').write_text(text,encoding='utf-8',newline='\n')
  classified.append({'name':name,'classification':'optional connector' if name in media or name in {'phone-errands','browser-post','connect-email'} else 'source only','reason':'Portable recipe with local file contract; chosen media/service provider is configured separately.' if name in media else 'Portable recipe and shared record/runtime operations; no private incident prose or account details.'})
 # The product's own recipes, with no Mission Control original to package from: their folder under
-# notebook/recipes is their source and stays as it is. The tracker recipe owns "track" (D-321).
-for name in ['tracker']:
+# notebook/recipes is their source and stays as it is. The tracker recipe owns "track" (D-321);
+# context-setup leads the getting-to-know-you chat after the technical setup (16 October 2026).
+for name in ['tracker','context-setup']:
  if not (root/'notebook/recipes'/name/'SKILL.md').exists():raise ValueError('Missing product recipe '+name)
  classified.append({'name':name,'classification':'source only','reason':'Portable recipe and shared record/runtime operations; no private incident prose or account details.'})
 (root/'notebook/data/recipe-inventory.json').write_text(json.dumps(classified,indent=2)+'\n',encoding='utf-8',newline='\n')

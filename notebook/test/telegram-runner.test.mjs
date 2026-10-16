@@ -72,3 +72,20 @@ test('a new key or a disconnect stops what runs; a finished chat of another bot 
  f.write('connection.json',null);await tick(f.runner);await tick(f.runner);
  assert.deepEqual(f.signals.at(-1),[2,'SIGTERM']);assert.equal(f.started.length,2);assert.equal(f.state().state,'idle');
 });
+
+test('a city named later in the chat restarts the gateway, once that chat is not mid-answer',async()=>{
+ const f=fixture(),home=path.join(f.dir,'hermes'),workspace=path.join(f.dir,'workspace');fs.mkdirSync(home);fs.mkdirSync(path.join(workspace,'.godspeed'),{recursive:true});
+ const config=path.join(home,'config.yaml'),chat=path.join(workspace,'.godspeed','context-setup.json'),past=new Date(Date.now()-120000);
+ fs.writeFileSync(config,'model:\n  provider: openrouter\ntimezone: "UTC"\n');fs.utimesSync(config,past,past);
+ Object.assign(f.runner.env,{HERMES_HOME:home,GODSPEED_WORKSPACE:workspace});
+ f.write('connection.json',connection);f.write('setup.json',{bot_id:4242,owner_id:111,chat_id:111,done:true});
+ await tick(f.runner);assert.equal(f.started.length,1);assert.equal(f.runner.child.zone,'UTC');
+ await tick(f.runner);assert.deepEqual(f.signals,[],'the same clock: nothing to do');
+ fs.writeFileSync(config,'model:\n  provider: openrouter\ntimezone: "Europe/Vienna"\n');
+ await tick(f.runner);assert.deepEqual(f.signals,[],'not in the half minute after the change');
+ fs.utimesSync(config,past,past);fs.writeFileSync(chat,JSON.stringify({state:'started',updated_at:new Date().toISOString()}));
+ await tick(f.runner);assert.deepEqual(f.signals,[],'not while the chat that changed it is answering');
+ fs.writeFileSync(chat,JSON.stringify({state:'started',updated_at:past.toISOString()}));
+ await tick(f.runner);assert.deepEqual(f.signals,[[1,'SIGTERM']]);
+ await tick(f.runner);await tick(f.runner);assert.equal(f.started.length,2,'started again at once, with the new clock');assert.equal(f.runner.child.zone,'Europe/Vienna');
+});
