@@ -337,8 +337,18 @@ run_codex()  { printf '%s' "$PROMPT" | TO codex exec --sandbox workspace-write -
 
 if [ -n "$OUT" ]; then
   mkdir -p "$(dirname "$OUT")"
-  "run_$RUNNER" > "$OUT.tmp" 2> "$OUT.stderr"; RC=$?
-  mv -f "$OUT.tmp" "$OUT"
+  # THE ANSWER IS WRITTEN OUTSIDE THE MISSION CONTROL UNTIL IT IS WHOLE (2026-10-16). It used to grow
+  # as answer.txt.tmp in the run folder, where the assistant saw a stray file while saving its
+  # work and deleted it ("rm -f .../answer.txt.tmp && git add ..."). Its answer then went into a
+  # deleted file and the day counted as not finished although it was decided: 21 and 27
+  # September, 4 and 16 October. A file the assistant cannot see, it cannot tidy away.
+  PART="$(mktemp "${TMPDIR:-/tmp}/mc-run-answer.XXXXXX")" || PART="$OUT.tmp"
+  "run_$RUNNER" > "$PART" 2> "$OUT.stderr"; RC=$?
+  if mv -f "$PART" "$OUT" 2>/dev/null; then
+    chmod 644 "$OUT" 2>/dev/null || true   # mktemp makes it private; the answer never was
+  else
+    printf 'mc-run: the answer was lost before it could be saved (%s was gone)\n' "$PART" >> "$OUT.stderr"
+  fi
   # Kept beside the answer, so whoever reads the answer can tell a run that was not held to its list.
   [ -n "$NOT_BOUND" ] && printf '%s\n' "$NOT_BOUND" >> "$OUT.stderr"
 else
