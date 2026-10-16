@@ -7,7 +7,7 @@ import {toolScope} from '../core/api-keys.mjs';
 // so switching a caller is changing which server it talks to (6 October 2026).
 async function setup(){
   let drafted;
-  const provider=async input=>{drafted=input;return {draft:{title:'Fictional climbing trip',happened_at:'2026-10-12',status:'scheduled',participants:['Ani']}};};
+  const provider=async input=>{drafted=input;return {draft:{title:'Fictional climbing trip',happened_at:'2026-10-12',status:'scheduled',impact_level:1,confidence_date:8,confidence_truth:8,participants:['Ani']}};};
   const service=await createService({root:fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-memory-tools-')),port:0,provider});
   const base='http://127.0.0.1:'+service.address.port;
   const raw=async(name,args={})=>{const r=await fetch(base+'/mcp',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:1,method:'tools/call',params:{name,arguments:args}})});assert.equal(r.status,200);return (await r.json()).result;};

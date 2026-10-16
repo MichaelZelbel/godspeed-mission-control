@@ -201,7 +201,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         return send(res,404,{error:'Unknown operation'});
       }
       if(menerioImport.mutating&&(route==='/mcp'||route.startsWith('/api/'))&&!['/api/session','/api/status','/api/chat/options'].includes(route))return send(res,423,{error:'Your Menerio content is being copied. Wait for the import to finish.'});
-      if(req.method==='POST'&&route.startsWith('/api/')&&!['/api/chat/stop','/api/backup'].includes(route))await store.waitForWriter();
+      if(req.method==='POST'&&route.startsWith('/api/')&&!['/api/chat/stop','/api/backup','/api/functions/draft-event'].includes(route))await store.waitForWriter();
       if(route==='/api/latest-work'&&req.method==='GET'){
         const notes=visibleRows(query,'notes').filter(n=>!n.is_trashed),work=visibleRows(query,'work_items').filter(w=>w.state==='verified'&&w.verification&&notes.some(n=>n.id===w.result_id)).sort((a,b)=>b.updated_at.localeCompare(a.updated_at))[0],note=work&&notes.find(n=>n.id===work.result_id);
         return send(res,200,{data:note?[note]:[],verification_current:!!note&&work.verification.content_hash===note._hash,evidence:work?.verification.evidence||null,result_kind:work?.verification.kind||null,reported_passed:work?.verification.kind==='reported-observation'?work.verification.passed:null});

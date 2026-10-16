@@ -5,6 +5,15 @@ test('interactive and background calls remain bounded, with no arbitrary timeout
  for(const timeout_ms of [0,-1,Infinity,'300000',3600000])assert.throws(()=>providerTimeBudget({timeout_ms}),/supported/);
  assert.match(providerTimeoutMessage(300000),/attempt failed/);assert.match(providerTimeoutMessage(600000),/ten minutes/);
 });
+
+test('the short suggestion budget is accepted only for drafting and aborts native requests',async()=>{
+ assert.equal(providerTimeBudget({kind:'draft-event',timeout_ms:20000}),20000);
+ assert.throws(()=>providerTimeBudget({kind:'conversation-chat',timeout_ms:20000}),/supported/);
+ assert.match(providerTimeoutMessage(20000),/20 seconds.*try again/i);
+ let observed;
+ const original=globalThis.fetch;globalThis.fetch=async(url,options)=>{observed=options.signal;return await new Promise((resolve,reject)=>{options.signal.addEventListener('abort',()=>reject(options.signal.reason),{once:true});});};
+ try{const controller=new AbortController(),call=modelProvider({url:'http://localhost/fixture',key:'fictional',model:'fictional'})({kind:'draft-event',timeout_ms:20000,signal:controller.signal});controller.abort();await assert.rejects(call);assert.equal(observed.aborted,true);}finally{globalThis.fetch=original;}
+});
 test('scheduled coaching uses its background budget and preserves the chosen model effort',async()=>{
  const store=new Store(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-background-budget-'))),query=new QueryService(store),calls=[],provider=async input=>{calls.push(input);return 'Which fictional habit feels easiest?';};
  provider.options=async()=>({current:'fictional-model',models:[{id:'fictional-model',efforts:['low','medium']}]});

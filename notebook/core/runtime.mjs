@@ -14,10 +14,11 @@ import {currentHealth} from './health-inputs.mjs';
 // A chat may take ten minutes; Stop ends it sooner. Until 6 October 2026 it was
 // cut off after two, which long answers over many notes regularly needed.
 export function providerTimeBudget(input){
+  if(input.kind==='draft-event'&&input.timeout_ms===20000)return 20000;
   if(input.timeout_ms!==undefined&&![600000,300000].includes(input.timeout_ms))throw Error('Choose the supported chat or scheduled AI time budget');
   return input.timeout_ms||600000;
 }
-export function providerTimeoutMessage(milliseconds){return milliseconds===300000?'The scheduled AI call exceeded five minutes. This attempt failed.':'The AI did not finish within ten minutes. Try a shorter message or a lower effort.';}
+export function providerTimeoutMessage(milliseconds){return milliseconds===20000?'The suggestion did not finish within 20 seconds. Please try again.':milliseconds===300000?'The scheduled AI call exceeded five minutes. This attempt failed.':'The AI did not finish within ten minutes. Try a shorter message or a lower effort.';}
 export function hermesProvider({executable='hermes',home,cwd,model,provider,sourceRoot,spawnProcess}={}){
   if(!['hermes','hermes.exe'].includes(path.basename(executable).toLowerCase()))throw new Error('Choose the verified Hermes runtime');
   const run=async input=>{
