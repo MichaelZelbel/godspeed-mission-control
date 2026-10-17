@@ -6,12 +6,28 @@
 
 - Open this folder in VS Code or Codex: `C:/godspeed/work/trials/godspeed-v2`.
 - Windows notebook: http://127.0.0.1:49175/dashboard
-- Development VPS notebook: https://srv1069233.hstgr.cloud:48443/dashboard
-- Windows download: https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-16-2/GodspeedSetup.exe
-- Linux download: https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-16-2/install-godspeed.sh
-- Source, manifests and checksums: https://github.com/MichaelZelbel/godspeed-mission-control/releases/tag/godspeed-v2-integrated-2026-10-16-2
+- Development VPS notebook: none since 16 October 2026, when the test server srv1069233 expired (its address no longer answers)
+- Windows download: https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-17-1/GodspeedSetup.exe
+- Linux download: https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-17-1/install-godspeed.sh
+- Source, manifests and checksums: https://github.com/MichaelZelbel/godspeed-mission-control/releases/tag/godspeed-v2-integrated-2026-10-17-1
 - One-click Hostinger installation: https://godspeedmissioncontrol.com/hostinger (its coordinator, https://godspeedmissioncontrol.com/godspeed-install, runs on the website since 15 October 2026)
 - Development branch: https://github.com/MichaelZelbel/godspeed-mission-control/tree/main
+
+## 17 October 2026 release: a first goal starts its routines
+
+`godspeed-v2-integrated-2026-10-17-1` installs product ae92c399c293e8cd4f34cf6dc1b025b317961f63 (main 6e1e2af plus the branch `fix/first-goal-starts-routines`, c35f0e8 and ae92c39), approved by Michael on 17 October 2026 ("May I release the fix for the first goal?" "Yes, please."). The Windows installer is built from kit-bootstrap b9ebf68db7032e36edd83f5e745194e1ebf6472c, the head of `codex/godspeed-v2-native-integration`: 5f42a5b of the 16 October release plus only the guide reminder (`.github/`, `AGENTS.md`, `CLAUDE.md`), so the setup scripts are byte for byte those of 5f42a5b and kit-bootstrap needed no new commit. The Linux and Mac installer takes its shared installer from that commit and pins the starter to the product commit.
+
+The fix (c35f0e8, ae92c39): a first goal started none of the six starting routines when anything at all was on Hermes' schedule first, because every Hermes job counted as "Hermes already had routines of its own". On every new one-line server that was the setup's own one-time "Getting to know you" invitation (Hermes keeps a finished one-time job in `cron/jobs.json` for seven days); on a computer a morning brief, a research watch or a reminder made in the chat before the first goal. And on a computer, the getting-to-know-you chat's first answer, the city, wrote the installation record without the record that the routines wait for a first goal, so the goal was taken for one in a mission control set up before 8 October (in the chat and in Settings alike). Now only the reader's own routines count (`ownRoutines` in `notebook/core/starting-routines.mjs`): a job that runs again and works in another folder, or in none and was there before this mission control came to the machine (`metAt`, `hermes-met.json` in the machine's own state, written once at the install or the first tick). The city leaves the "waiting for a first goal" record, and Settings' "Start with one goal" starts the routines when that record says so. Installations the 16 October release left without routines get them at the first tick after the update: a skip decided by the old rule is looked at once more (`OWN_ROUTINES_RULE` 2), and a computer whose installation record the city wrote since 16 October counts as new; a skip the reader's own routines caused stays, and so does a routine the reader removed. Tests: `test/native-runtime.test.mjs` (18), `test/context-setup.test.mjs` (10), `test/starting-routines.test.mjs` (15), all passing on Windows.
+
+Also in readers' hands for the first time, from main since the 16 October release (e09577c):
+
+- Note saves (e4d63e6, f51d3fd): a slow read no longer takes an open note back to an older version, a refused save no longer refuses every save after it (the screen takes the record's current version, typed text is sent once more and never dropped), and a save of a note's text goes through when only its tags or summary changed meanwhile (the server compares against the version the save started from, out of the note's own history).
+- One-time sign-in links sign in again (f578162): the page a link opens sends its origin to itself, and Continue on a sign-in page is let through with a null origin; every other route still refuses one.
+- The one-line server installer waits while a new server installs its own updates, then installs Docker (9e6845d; served from main, so it reached readers when it was pushed).
+- mc-run keeps the growing answer outside the mission control until it is whole (518cb37), so an assistant tidying its folder can no longer turn a decided day into an unfinished one.
+- Timeline moments' impact scale: Everyday, Short-term, Lasting, Life-defining, with a description each, shared by the screens, the field assistance and connected assistants (a8bd9d6, `notebook/core/impact-scale.mjs`; the old words still map).
+- The notebook's Documentation link and the kept upstream Docs links open godspeedmissioncontrol.com/guide (f139085).
+- For developers: the notebook tests clean up their temporary folders (b0c9b02), the guide reminder (26e4969, `.github/guide-check.mjs`), and the server image builds again (6e1e2af: since a8bd9d6 the screens' build step lacked `core/impact-scale.mjs`; no image was published in between).
 
 ## 16 October 2026, second release: the setup in two parts
 
