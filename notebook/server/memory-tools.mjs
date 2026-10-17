@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {visibleRows} from '../core/visibility.mjs';
 import {momentDraft} from '../core/moment-draft.mjs';
+import {impactGuidance} from '../core/impact-scale.mjs';
 import {relatedNotes} from '../core/related.mjs';
 import {STOPWORDS} from '../core/index/stopwords.mjs';
 import {privateFile as markedPrivate} from '../core/context.mjs';
@@ -29,7 +30,7 @@ export const memoryDefinitions = [
   {name: 'add_claim', description: 'Record a fact about the owner, a person or a thing that is true now (or since valid_from): something that is true about them, not a rule or a preference for how to help. A kind of fact with one value at a time (where someone lives, their employer, their birthday) closes its older value with an end date, never deleted; any other kind keeps every value, unless the owner\'s own facts of that kind hold one at a time. A value the owner typed himself is not overwritten but put in his Review for him to decide. Requires evidence_quote. Give valid_from when the words say since when ("moved on 1 June"); without it the start is unknown, and a later value with a date ends it on that date. Relationships between people are not facts.',
     inputSchema: object({subject_type: {enum: ['self', 'contact', 'entity']}, subject_id: str, subject_name: str, attribute: str, value: str, evidence_quote: str, confidence: {enum: ['certain', 'likely', 'unsure']}, valid_from: str, valid_to: str, source_note_id: str}, ['subject_type', 'attribute', 'value'])},
   {name: 'create_moment_with_ai', description: 'Create a timeline entry from a plain description; the model works out title, date and status, then it is saved. Hints override what the model guessed.',
-    inputSchema: object({description: str, happened_at: str, title_hint: str, status_hint: {enum: ['past_fact', 'future_plan', 'ongoing', 'unknown']}, participant_names: strings, person_name: str, entity_names: strings, category_hint: str, impact_level_hint: num, confidence_date_hint: num, confidence_truth_hint: num, document_ids: strings}, ['description'])},
+    inputSchema: object({description: str, happened_at: str, title_hint: str, status_hint: {enum: ['past_fact', 'future_plan', 'ongoing', 'unknown']}, participant_names: strings, person_name: str, entity_names: strings, category_hint: str, impact_level_hint: {type:'integer',minimum:1,maximum:4,description:impactGuidance}, confidence_date_hint: num, confidence_truth_hint: num, document_ids: strings}, ['description'])},
   {name: 'log_interaction', description: 'Record an interaction with a person, dated today in the owner\'s timezone, and update their last contact date. A name several people share is refused with their ids.',
     inputSchema: object({contact_name: str, contact_id: str, type: str, summary: str, action_items: strings, group_id_or_slug: str}, ['type'])},
   {name: 'list_recent_notes', description: 'The most recently changed notes, optionally about a person, a topic or of a type.', inputSchema: object({days: num, limit: num, person: str, topic: str, type: str})},

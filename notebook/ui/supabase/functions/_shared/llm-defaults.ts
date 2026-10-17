@@ -1,3 +1,4 @@
+import {impactGuidance} from "../../../../core/impact-scale.mjs";
 /**
  * Single source of truth for every LLM call site's default configuration.
  *
@@ -219,18 +220,20 @@ Return JSON:
   "happened_at": "YYYY-MM-DD" | null,
   "title": short explicit title (e.g. "Wedding of Michael and Xihui"),
   "description": one-sentence description,
-  "impact_level": integer 1-4 (1=minor, 4=major life event),
+  "impact_level": integer 1-4 (see impact scale below),
   "confidence_date": integer 0-10,
   "confidence_truth": integer 0-10,
   "participants": [ { "name": string, "is_self": boolean } ]
 }
 
 Rules:
-- is_event = true ONLY when a clearly identifiable past event with a specific date is described or documented. Diaries, opinions, prompts, code, articles, recurring routines → false.
+- is_event = true ONLY when a clearly identifiable past event with a specific date is described or documented. Opinions, prompts, code and articles without a personal event are false. Dated diary entries and routine activities are valid events, even with negligible impact.
 - happened_at MUST be an ISO date present in the note (or computable from the OCR).
 - title should describe the event explicitly (not the note's title verbatim).
 - participants lists the real humans involved, marking the OWNER with is_self:true.
-- If unsure, return is_event:false.`;
+- If unsure, return is_event:false.
+
+${impactGuidance}`;
 
 export const INGEST_THOUGHT_METADATA_PROMPT = `Extract metadata from the user's captured note. Return JSON with:
 - "people": array of people mentioned (empty if none)
@@ -272,13 +275,7 @@ export const DRAFT_EVENT_PROMPT = `You are an assistant that helps structure lif
 
 The user will describe something that happened (or will happen). Your job is to extract a structured moment from their description.
 
-IMPACT LEVEL (1-4) — measures structural life impact, NOT emotion:
-1 = Minor (routine activities, small errands, casual meetups)
-2 = Noticeable (starting a hobby, moderate financial decision, moving apartments)
-3 = Strong Impact (changing jobs, moving cities, marriage, founding a company)
-4 = Life-Shaping (immigration, becoming a parent, life-defining decisions)
-
-Default typical personal events to 1-2 unless clearly chapter-changing.
+${impactGuidance}
 
 CONFIDENCE scales (0-10):
 - confidence_date: How certain is the date? 10 = exact date given, 5 = approximate, 0 = pure guess

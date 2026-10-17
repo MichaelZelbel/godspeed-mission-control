@@ -75,7 +75,7 @@ export default function AddEventDialog({ people, onCreated, editEvent, open: con
   const [dateStart, setDateStart] = useState(today);
   const [dateEnd, setDateEnd] = useState("");
   const [status, setStatus] = useState("unknown");
-  const [impactLevel, setImpactLevel] = useState(2);
+  const [impactLevel, setImpactLevel] = useState(1);
   const [confDate, setConfDate] = useState(5);
   const [confTruth, setConfTruth] = useState(5);
   const [matchedPeople, setMatchedPeople] = useState<string[]>([]);
@@ -108,7 +108,7 @@ export default function AddEventDialog({ people, onCreated, editEvent, open: con
       setDateStart(today);
       setDateEnd("");
       setStatus("unknown");
-      setImpactLevel(2);
+      setImpactLevel(1);
       setConfDate(5);
       setConfTruth(5);
       setMatchedPeople([]);

@@ -234,7 +234,7 @@ export default function ReviewQueue() {
           title,
           description: p.description || null,
           happened_at: happenedAt,
-          impact_level: Math.max(1, Math.min(4, Number(p.impact_level) || 2)),
+          impact_level: Math.max(1, Math.min(4, Number(p.impact_level) || 1)),
           confidence_date: Math.max(0, Math.min(10, Number(p.confidence_date) || 7)),
           confidence_truth: Math.max(0, Math.min(10, Number(p.confidence_truth) || 7)),
           person_id: firstContact?.contact_id || null,
