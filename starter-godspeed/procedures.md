@@ -6,8 +6,9 @@ The first time you give your mission control a goal, in the notebook's "Start wi
 or in the chat, it starts four routines on the computer that runs your routines, on your own
 clock. It does this once on each computer that runs your routines: if you add a server later and
 let it run the routines, the server gets the same four, and your computer's stop. A routine you
-later remove stays removed, and a computer whose assistant already had routines of its own gets
-none of these.
+later remove stays removed. A computer whose assistant already ran routines of its own before this
+mission control came, or for another folder, gets none of these; a one-time reminder, and a
+routine you asked for here, such as a morning brief, do not count.
 
 All of them are listed in your notebook under Settings > Routines, each with what it does, when it
 runs next, when it last ran and whether that worked. "Pause" there stops one until you press
