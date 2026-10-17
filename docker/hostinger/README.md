@@ -1,5 +1,30 @@
 # Godspeed Mission Control on Hostinger
 
+## Automatic public-file installation
+
+[Install Godspeed Mission Control on Hostinger](https://www.hostinger.com/docker-hosting?compose_url=https%3A%2F%2Fraw.githubusercontent.com%2FMichaelZelbel%2Fgodspeed-mission-control%2F543e85afa4b55b2f11934381ae039ece474bdcc8%2Fdocker%2Fhostinger%2Fone-click.yaml&REFERRALCODE=GHNMICHAEJC8#pricing)
+
+This button names the real public GitHub file `one-click.yaml` at an immutable commit,
+using Hostinger's documented `compose_url` format. That file automatically detects the VPS
+hostname and creates its own private setup code. It works with the Docker template's existing
+Traefik instead of publishing those same web ports again. No hostname, setup code or other
+environment field is requested.
+
+The website must confirm the person's server ownership through Hostinger before disclosing a
+private account-creation invitation. The public file carries no buyer credentials. Pending
+registration renews automatically until an owner exists, including after a long checkout delay.
+The registration and ownership contract is described in `installer/README.md`.
+
+The public file's HTTP HEAD/GET, exact source bytes, Compose parsing, shell syntax and bootstrap
+logic were checked on 17 October 2026. The new public installer was not executed and no VPS was
+changed during those checks. A correct file URL does not prove a successful paid handoff.
+
+## Separate operator-managed Compose deployment
+
+The remaining instructions describe `compose.yaml`, used by the general Linux server installer
+and by operators supplying their own hostname and private setup code. The automatic button
+above uses `one-click.yaml` instead.
+
 This deployment is for a fresh Docker VPS. It uses the complete tested application,
 keeps its data and certificates in persistent Docker volumes, and limits container
 logs to 30 MB per service. It requires no local configuration files or terminal commands.
@@ -8,7 +33,7 @@ Hostinger's supported purchase link is:
 
 `https://www.hostinger.com/docker-hosting?compose_url=PUBLIC_RAW_COMPOSE_URL`
 
-Current purchase and install link, including Michael's saved Hostinger referral:
+Operator-managed purchase and install link, including Michael's saved Hostinger referral:
 
 [Install Godspeed Mission Control on Hostinger](https://www.hostinger.com/docker-hosting?compose_url=https%3A%2F%2Fraw.githubusercontent.com%2FMichaelZelbel%2Fgodspeed-mission-control%2F5ce3cf68dd955e9b17069f12bc6e882d6e8256e2%2Fdocker%2Fhostinger%2Fcompose.yaml&REFERRALCODE=GHNMICHAEJC8#pricing)
 
