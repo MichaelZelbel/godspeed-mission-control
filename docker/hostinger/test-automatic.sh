@@ -4,7 +4,7 @@ evidence="$PWD/docker/hostinger/evidence"
 mkdir -p "$evidence"
 export GODSPEED_TEST_INSTALL_STATE
 GODSPEED_TEST_INSTALL_STATE=$(mktemp -d)
-node --test docker/hostinger/installer/test.mjs
+GODSPEED_TEST_COMPOSE=1 node --test docker/hostinger/installer/test.mjs docker/hostinger/installer/public-compose.test.mjs
 # The real Hostinger Docker template already owns 80/443 with Traefik. Prove
 # certificate issuance through that unchanged proxy, not only a bare Docker host.
 GODSPEED_TEST_DOCKER=1 GODSPEED_TEST_EVIDENCE="$evidence/traefik" node --test docker/hostinger/installer/test-traefik.mjs
