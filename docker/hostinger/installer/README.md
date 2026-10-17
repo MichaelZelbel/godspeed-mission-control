@@ -6,11 +6,15 @@ The coordinator creates private per-installation Compose URLs for Hostinger's do
 
 Hostinger describes the checkout handoff and referral parameter here: https://www.hostinger.com/support/deploy-on-hostinger-button/
 
-The paid checkout has not been completed. Actual generated deployment, HTTPS issuance and owner handoff have been tested on the authorized disposable VPS. GitHub CI additionally tests the ordinary remote-coordinator deployment with the complete image, account creation, 30-day session, import/chat UI and Docker restart/logout.
+The first paid checkout on 17 October 2026 exposed separate Hostinger handoff and URL-fetch failures and a conflict with its preinstalled Traefik. Manual recovery of that server was not proof of the automatic flow. The purchase-to-deployment handoff still needs a successful automatic retest; local runtime checks alone do not establish that it works.
+
+The generated deployment now uses Hostinger's existing Traefik on ports 80 and 443 instead of binding those ports again. Traefik passes TLS for the VPS hostname to the project's internal Caddy container. Caddy detects the hostname, obtains and renews the certificate using TLS-ALPN-01, and proxies to Godspeed. The default Hostinger template uses HTTP-01 for its own certificates, so its TLS-ALPN traffic remains available for passthrough. No Docker socket, provider changes, extra hostname field or setup code is needed by the Godspeed project. This targets template 1210 as observed on 17 October 2026: host networking, Docker discovery and the `websecure` entrypoint. A differently configured Traefik is a different deployment target.
 
 ## Coordinator deployment
 
 To run a coordinator of your own: copy this folder to /opt/godspeed-hostinger-installer and install godspeed-installer.service, with GODSPEED_INSTALL_ORIGIN set to your coordinator's public HTTPS address. Its GODSPEED_INSTALL_BIND must be the actual Docker host-gateway address (inspect Docker's bridge network). The former test machine used 10.0.0.1. The coordinator is not exposed publicly on that HTTP port; the generated Caddy configuration proxies /godspeed-install over HTTPS when deployed on the coordinator's own server. Other buyer servers use HTTPS directly and do not proxy the coordinator.
+
+For a coordinator deliberately deploying to a bare Docker server without Hostinger's Traefik, set `GODSPEED_INSTALL_HTTPS_PROXY=standalone`. That explicit mode publishes Caddy on 80/443 as before. It is also retained as a separate generic-host test; it is not a substitute for the Hostinger-template test.
 
 The generated configuration says nothing about Telegram. The buyer connects a bot on their own server's web page after the account is made (../README.md, "Telegram, connected after the account"), so a bot's key never reaches this coordinator, the website or its logs.
 
@@ -26,7 +30,7 @@ seed-vps-test.mjs is only an operator tool for the authorized test VPS; it gener
 
 ## Verification
 
-Run node --test docker/hostinger/installer/test.mjs. The workflow_dispatch docker workflow option hostinger-automatic runs the complete pinned image in a disposable GitHub runner. Docker config --variables --format json must return an empty object.
+Run `node --test docker/hostinger/installer/test.mjs`. On a disposable Linux Docker host with ports 80/443 free, run `GODSPEED_TEST_DOCKER=1 node --test docker/hostinger/installer/test-traefik.mjs`. It starts the exact default Hostinger Traefik configuration with pinned test images, uses Pebble to actually validate a TLS-ALPN challenge through Traefik, then checks the callback, private owner creation, persistent session and application restart. It never bypasses ACME validation or contacts a public certificate authority. It removes only its temporary projects and volumes. The workflow_dispatch docker workflow option hostinger-automatic runs this plus the standalone Docker/browser path with the complete pinned application image. Docker config --variables --format json must return an empty object for the buyer's generated configuration.
 
 Live test results: private owner invitation; account creation without setup code; 12-character progress; 30-day login; requested-page return; incorrect-password feedback; logout revokes server session; synthetic expiry shows the expiry message; sign-in again returns to the requested import page. Production srv1328602 was not used for this deployment. Disk usage after deployment: 68 GB used, 125 GB available.
 

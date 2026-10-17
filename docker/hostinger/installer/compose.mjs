@@ -6,11 +6,12 @@ const CADDY = 'caddy:2.10.2-alpine@sha256:4c6e91c6ed0e2fa03efd5b44747b625fec79bc
 // in its data volume) and hands it to the coordinator with the authenticated
 // callback, so this file, which Hostinger fetches and keeps, carries none. An
 // installation started before then still has its code written here.
-export function composeFor(job, { origin, hostnameFile = '/etc/hostname', testing = false, coordinatorProxy }) {
+export function composeFor(job, { origin, hostnameFile = '/etc/hostname', testing = false, coordinatorProxy, proxy = 'traefik' }) {
   for (const value of [job.id, job.callback, ...(job.bootstrap ? [job.bootstrap] : [])]) if (!/^[a-f0-9]{64}$/.test(value)) throw new Error('Invalid installation credential');
   const endpoint = new URL(origin);
   if (endpoint.protocol !== 'https:' && !testing) throw new Error('Installation coordinator requires HTTPS');
   if (!/^[a-zA-Z0-9._:/-]+$/.test(hostnameFile)) throw new Error('Invalid hostname file');
+  if (!['traefik', 'standalone'].includes(proxy)) throw new Error('Invalid HTTPS proxy');
   const hostnameCode = `const fs=require('fs');let h=fs.readFileSync('/run/godspeed-vps-hostname','utf8').trim();if(/^srv[0-9]+$/.test(h))h+='.hstgr.cloud';if(!/^srv[0-9]+\\.hstgr\\.cloud$/.test(h)${testing ? "&&h!=='localhost'" : ''})throw Error('Hostinger server address could not be detected');`;
   const callbackTarget = coordinatorProxy ? `h===${JSON.stringify(endpoint.hostname)}?${JSON.stringify("http://host.docker.internal:" + coordinatorProxy.split(":")[1] + endpoint.pathname + "/api/ready/" + job.id)}:${JSON.stringify(origin + "/api/ready/" + job.id)}` : JSON.stringify(origin + "/api/ready/" + job.id);
   const callbackCode = `${hostnameCode}async function ready(){for(let i=0;i<180;i++){try{const r=await fetch('http://127.0.0.1:47831/health',{signal:AbortSignal.timeout(3000)});if(r.ok){const c=await fetch(${callbackTarget},{method:'POST',headers:{'content-type':'application/json',authorization:'Bearer '+process.env.GODSPEED_INSTALL_CALLBACK},body:JSON.stringify({hostname:h,setup:process.env.GODSPEED_ACCESS_TOKEN}),signal:AbortSignal.timeout(10000)});if(c.ok)return;}}catch{}await new Promise(r=>setTimeout(r,5000));}console.error('Automatic installation handoff could not reach the installation page');}ready();`;
@@ -19,8 +20,16 @@ export function composeFor(job, { origin, hostnameFile = '/etc/hostname', testin
   const setupFile = '/opt/data/full-candidate/.install-setup-code';
   const setupScript = `if [ ! -s ${setupFile} ]; then (umask 077; node -e 'process.stdout.write(require("crypto").randomBytes(32).toString("hex"))' > ${setupFile}); fi; GODSPEED_ACCESS_TOKEN=$$(cat ${setupFile}); export GODSPEED_ACCESS_TOKEN; `;
   if (coordinatorProxy && !/^host\.docker\.internal:[0-9]{2,5}$/.test(coordinatorProxy)) throw new Error('Invalid coordinator proxy');
-  const selfProxy = coordinatorProxy ? `if [ "$$h" = ${shellQuote(endpoint.hostname)} ]; then printf '%s\\n' "$$h {" '  handle /godspeed-install* {' '    reverse_proxy ${coordinatorProxy}' '  }' '  handle {' '    reverse_proxy godspeed:47831' '  }' '}' > /tmp/godspeed-Caddyfile; exec caddy run --adapter caddyfile --config /tmp/godspeed-Caddyfile; fi; ` : '';
-  const hostScript = `h=$$(cat /run/godspeed-vps-hostname | tr -d '\\r\\n'); printf '%s' "$$h" | grep -Eq '^srv[0-9]+(\\.hstgr\\.cloud)?$$${testing ? '|^localhost$$' : ''}' || { echo 'Hostinger server address could not be detected' >&2; exit 1; }; case "$$h" in *.hstgr.cloud${testing ? '|localhost' : ''}) ;; *) h="$$h.hstgr.cloud";; esac; ${selfProxy}exec caddy reverse-proxy --from "$$h" --to godspeed:47831`;
+  // Hostinger template 1210 already owns 80/443 with a host-network Traefik.
+  // Pass this server's TLS connection through it, including TLS-ALPN validation.
+  // Its HTTP-01 resolver owns the HTTP challenge path, so Caddy uses TLS-ALPN.
+  const tls = proxy === 'traefik' ? " '  tls {' '    issuer acme {' '      disable_http_challenge' '    }' '  }'" : '';
+  const caddy = lines => `printf '%s\\n' '{' '  admin off' '}' "$$h {"${tls} ${lines} '}' > /tmp/godspeed-Caddyfile; exec caddy run --adapter caddyfile --config /tmp/godspeed-Caddyfile`;
+  const selfProxy = coordinatorProxy ? `if [ "$$h" = ${shellQuote(endpoint.hostname)} ]; then ${caddy(`'  handle /godspeed-install* {' '    reverse_proxy ${coordinatorProxy}' '  }' '  handle {' '    reverse_proxy godspeed:47831' '  }'`)}; fi; ` : '';
+  const serve = proxy === 'traefik' ? caddy("'  reverse_proxy godspeed:47831'") : 'exec caddy reverse-proxy --from "$$h" --to godspeed:47831';
+  const hostScript = `h=$$(cat /run/godspeed-vps-hostname | tr -d '\\r\\n'); printf '%s' "$$h" | grep -Eq '^srv[0-9]+(\\.hstgr\\.cloud)?$$${testing ? '|^localhost$$' : ''}' || { echo 'Hostinger server address could not be detected' >&2; exit 1; }; case "$$h" in *.hstgr.cloud${testing ? '|localhost' : ''}) ;; *) h="$$h.hstgr.cloud";; esac; ${selfProxy}${serve}`;
+  const router = 'godspeed-' + job.id.slice(0, 12);
+  const rule = 'HostSNIRegexp(`^srv[0-9]+\\.hstgr\\.cloud$$`)' + (testing ? ' || HostSNI(`localhost`)' : '');
   return `name: godspeed-${job.id.slice(0, 12)}
 services:
   godspeed:
@@ -47,7 +56,14 @@ ${testing || coordinatorProxy ? '    extra_hosts: ["host.docker.internal:host-ga
     entrypoint: ["/bin/sh", "-ec"]
     command:
       - ${JSON.stringify(hostScript)}
-    ports: ["80:80", "443:443"]
+${proxy === 'standalone' ? '    ports: ["80:80", "443:443"]' : `    expose: ["443"]
+    labels:
+      traefik.enable: "true"
+      traefik.tcp.routers.${router}.rule: ${JSON.stringify(rule)}
+      traefik.tcp.routers.${router}.entrypoints: websecure
+      traefik.tcp.routers.${router}.tls.passthrough: "true"
+      traefik.tcp.routers.${router}.service: ${router}
+      traefik.tcp.services.${router}.loadbalancer.server.port: "443"`}
 ${coordinatorProxy ? '    extra_hosts: ["host.docker.internal:host-gateway"]\n' : ''}    volumes:
       - godspeed-certificates:/data
       - godspeed-proxy-config:/config

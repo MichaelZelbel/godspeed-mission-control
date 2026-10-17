@@ -15,4 +15,4 @@ const fetcher = async (url, init) => {
     req.on('error', reject); req.on('timeout', () => req.destroy(Error('Fixture timed out'))); req.end(init.body);
   });
 };
-createInstaller({ directory: directory + '/jobs', origin: 'http://host.docker.internal:8794/godspeed-install', testing: true, hostnameFile, fetcher, allowedOrigins: ['http://localhost:8794'] }).server.listen(8794, '0.0.0.0');
+createInstaller({ directory: directory + '/jobs', origin: 'http://host.docker.internal:8794/godspeed-install', testing: true, hostnameFile, proxy: 'standalone', fetcher, allowedOrigins: ['http://localhost:8794'] }).server.listen(8794, '0.0.0.0');
