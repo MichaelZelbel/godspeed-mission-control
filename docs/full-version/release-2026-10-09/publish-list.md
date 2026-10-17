@@ -27,6 +27,7 @@ Run from Git Bash. gh needs `gh auth login` once (it is not signed in on this PC
   past the release; if it has, remake the branch on top: rebuild.sh).
 - The clean install run on the final commits is green (mc-installer-clean-test, branch second-edition-release for A, second-edition-release-cbfc71c for B).
 - For step 6: Integrated Godspeed v2 green on this product commit (A: red, B: green; table above).
+- `node $K/.github/guide-check.mjs` exits 0: every page of the user guide this release touches is reviewed.
 
 ## 1. kit-bootstrap: the setup's pinned commit stays on GitHub
     git -C $KB push origin c91da3a4aa2a1c71f123548ca1aaef08366dcf90:refs/heads/codex/godspeed-v2-native-integration
