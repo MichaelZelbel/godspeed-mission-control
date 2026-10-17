@@ -1,11 +1,11 @@
 import { Link } from "react-router-dom";
 import { Github, Twitter, Linkedin, Mail } from "lucide-react";
-import { BRAND } from "@/lib/brand";
+import { BRAND, GUIDE_URL } from "@/lib/brand";
 import { brandLogo } from "@/lib/brand-assets";
 import { CookieSettingsButton } from "@/components/legal/CookieSettingsButton";
 
 const productLinks = [
-  ...(BRAND.showDocs ? [{ label: "Docs", to: "/docs" }] : []),
+  ...(BRAND.showDocs ? [{ label: "Docs", to: GUIDE_URL, external: true }] : []),
   { label: "Source Code", to: "https://github.com/MichaelZelbel/menerio", external: true },
 ];
 

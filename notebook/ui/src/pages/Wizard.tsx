@@ -29,7 +29,7 @@ import {
   SkipForward,
 } from "lucide-react";
 import confetti from "canvas-confetti";
-import { BRAND } from "@/lib/brand";
+import { BRAND, GUIDE_URL } from "@/lib/brand";
 
 // Per account: one flag for the whole browser made a second account signed in
 // on the same browser skip the setup the first one had finished.
@@ -366,7 +366,7 @@ export default function Wizard() {
                       Go to Dashboard <ArrowRight className="h-4 w-4" />
                     </Button>
                     <div className="flex gap-4 text-sm">
-                      <a href="/docs" className="text-primary hover:underline flex items-center gap-1">
+                      <a href={GUIDE_URL} target="_blank" rel="noopener" className="text-primary hover:underline flex items-center gap-1">
                         <BookOpen className="h-3.5 w-3.5" /> Documentation
                       </a>
                       <a href="/features" className="text-primary hover:underline flex items-center gap-1">

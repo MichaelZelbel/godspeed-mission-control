@@ -26,7 +26,7 @@ import {
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { BRAIN_PAGE } from "@/lib/brain-page";
-import { BRAND } from "@/lib/brand";
+import { BRAND, GUIDE_URL } from "@/lib/brand";
 import { brandLogo } from "@/lib/brand-assets";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
@@ -50,6 +50,9 @@ import {
   SidebarSeparator,
   useSidebar,
 } from "@/components/ui/sidebar";
+
+// A link to another site (the user guide) opens in a new tab, so the notebook stays open.
+const newTab = (url: string) => (/^https?:/.test(url) ? { target: "_blank", rel: "noopener" } : {});
 
 // When the running build was made, in local time. A window still running an
 // old cached build shows an older time than a fresh load does.
@@ -123,7 +126,7 @@ export function DashboardSidebar() {
     { title: "Settings", url: "/dashboard/settings", icon: Settings },
     { title: "Godspeed chat", url: "/chat", icon: Plug },
     { title: "Connect AI", url: "/dashboard/settings?tab=mcp", icon: Plug },
-    ...(BRAND.showDocs ? [{ title: "Documentation", url: "/docs", icon: BookOpen }] : []),
+    ...(BRAND.showDocs ? [{ title: "Documentation", url: GUIDE_URL, icon: BookOpen }] : []),
   ];
 
   return (
@@ -174,7 +177,7 @@ export function DashboardSidebar() {
               {systemItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild isActive={isActive(item.url)} tooltip={item.title}>
-                    <NavLink to={item.url}>
+                    <NavLink to={item.url} {...newTab(item.url)}>
                       <item.icon className="h-4 w-4" />
                       <span>{item.title}</span>
                       {item.title === "My Profile" && !collapsed && (

@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Home, LayoutDashboard, Search, FileQuestion, Loader2 } from "lucide-react";
-import { BRAND } from "@/lib/brand";
+import { BRAND, GUIDE_URL } from "@/lib/brand";
 
 // How long "this page does not exist" is held back while the browser looks for a newer
 // build. Long enough for a service worker update check on a slow phone, short enough that a
@@ -73,7 +73,7 @@ const NotFound = () => {
           className="mt-8 flex gap-2"
           onSubmit={(e) => {
             e.preventDefault();
-            if (query.trim()) navigate(`/docs?q=${encodeURIComponent(query.trim())}`);
+            if (query.trim()) window.open(`${GUIDE_URL}/search?q=${encodeURIComponent(query.trim())}`, "_blank", "noopener");
           }}
         >
           <div className="relative flex-1">
