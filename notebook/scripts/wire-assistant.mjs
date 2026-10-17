@@ -9,6 +9,7 @@ import {starterBorn} from '../core/starter-workspace.mjs';
 import {withTimezone,godspeedHermesSettings,CRON_PROVIDER} from '../core/hermes-config.mjs';
 import {personaOf} from '../core/persona.mjs';
 import {syncSoul,readExtra} from '../core/assistant-soul.mjs';
+import {noteHermesMet} from '../core/starting-routines.mjs';
 const root=process.env.GODSPEED_WORKSPACE,home=process.argv[2];if(!root||!home)throw new Error('Choose the candidate workspace and isolated assistant home');
 const store=new Store(root),port=Number(process.env.GODSPEED_PORT||47831),file=path.join(home,'config.yaml');fs.mkdirSync(home,{recursive:true});
 const kit=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..');
@@ -177,4 +178,8 @@ atomic(file,text);fs.chmodSync(file,0o600);
 // its owner wrote their own SOUL.md, which the notebook's page for these then shows and offers to
 // bring in among the extra instructions.
 try{const persona=personaOf(fs.readFileSync(path.join(root,'AGENTS.md'),'utf8'));if(persona)syncSoul({home,persona,extra:readExtra(root)});}catch(error){console.error('The assistant\'s identity file was not brought in step with AGENTS.md and the extra instructions: '+error.message);}
+// When this mission control first met this Hermes, once: a routine the reader already had in it is
+// theirs, one made afterwards was made for this mission control (core/starting-routines.mjs,
+// ownRoutines). At an install this comes before anything is made in it.
+if(starterBorn(root))try{noteHermesMet(store,{home:path.resolve(home)});}catch{}
 console.log(JSON.stringify({wired:true,isolated:true,port}));

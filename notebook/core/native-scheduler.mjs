@@ -9,7 +9,7 @@ import {beatWhile,HEARTBEAT_EVERY} from './supervisor-health.mjs';
 import {LEGACY_DEVICE} from './device-id.mjs';
 import {starterBorn} from './starter-workspace.mjs';
 import {setHermesTimezone} from './hermes-config.mjs';
-import {FLAG,STARTING_ROUTINES,routineFiles,writeRoutineFiles,prepareCheckIn,saveRoutineResults,readMachineRecord,writeMachineRecord,telegramInHermes,routineStatus} from './starting-routines.mjs';
+import {FLAG,STARTING_ROUTINES,routineFiles,writeRoutineFiles,prepareCheckIn,saveRoutineResults,readMachineRecord,writeMachineRecord,telegramInHermes,routineStatus,ownRoutines,metAt,noteHermesMet,cityFiledFirst,OWN_ROUTINES_RULE} from './starting-routines.mjs';
 const skills={'goal-decision':'next-action','goal-work':'work-item','morning-brief':'morning-brief',coaching:'coach','habit-check':'coach',journal:'interstitial-journal',headache:'headache-tracker'};
 // Hermes' own record of its jobs, as it wrote it.
 export function hermesJobs(home){
@@ -60,9 +60,12 @@ export class NativeScheduler{
    const script=new URL('../../tools/goals.js',import.meta.url);
    await this.run(process.execPath,[fileURLToPath(script),'file','--kind','outcome','--status','adopted','--title',goal.trim(),'--source','Notebook setup, '+new Date().toISOString(),'--godspeed',this.store.root],{cwd:this.store.root,windowsHide:true,env:assistantEnvironment({home:this.home,workspace:this.store.root}),timeout:120000});
   }
-  // The first goal starts the routines, on the first setup only: an installation set up before
-  // is left as it is.
-  const routines=old?null:await this.startRoutines({goal:nativeCardRows(this.store,'goals').find(g=>g.title===goal?.trim())?.id,setup:true});
+  // The first goal starts the routines: at the first setup, and when the mission control is still
+  // waiting for its first goal (the getting-to-know-you chat filed the city before it). An
+  // installation set up before 8 October 2026 is left as it is (startRoutinesNow). Until
+  // 17 October 2026 this asked only whether an installation record was there, so a first goal
+  // given here after the chat's city started nothing.
+  const routines=await this.startRoutines({goal:nativeCardRows(this.store,'goals').find(g=>g.title===goal?.trim())?.id,setup:!old});
   return {configured:true,preserved:!!old,firstWorkPending:false,scheduler:'hermes',...(routines?{routines}:{})};
  }
  // The starting routines (starting-routines.mjs), made once per machine that runs them: at the
@@ -78,27 +81,39 @@ export class NativeScheduler{
  async startRoutinesNow({goal=null,setup=false}={}){
   const root=this.store.root,flag=this.store.get('settings',FLAG),here=readMachineRecord(this.store),now=Date.now();
   let installation=this.store.get('settings','installation');
+  // A skip decided before 17 October 2026 counted every job in Hermes as the reader's own,
+  // Godspeed's own invitation, a morning brief and a chat reminder included (ownRoutines). It is
+  // looked at once more under today's rule, and what that decides stays.
+  const again=here?.state==='skipped'&&here.rule!==OWN_ROUTINES_RULE&&!(flag?.state==='skipped'&&flag.rule===OWN_ROUTINES_RULE);
   // Once per machine, whatever became of it.
-  if(here&&here.state!=='pending')return null;
+  if(here&&here.state!=='pending'&&!again)return null;
   if(here?.retry_after&&Date.parse(here.retry_after)>now)return null;
   // The mission control's first machine already had routines of its own: none were started.
-  if(flag?.state==='skipped')return null;
-  // A mission control set up before, with no record of starting routines, is left alone.
-  if(!flag&&installation&&!setup)return null;
+  if(flag?.state==='skipped'&&!again)return null;
+  // A mission control set up before 8 October 2026, with no record of starting routines, is left
+  // alone; one whose installation record the getting-to-know-you chat's city wrote is new.
+  const waiting=!flag&&!!installation&&cityFiledFirst(this.store,installation);
+  if(!flag&&installation&&!setup&&!waiting)return null;
   // Never for a mission control not made from the starter: the owner's adopted one, live on
   // several machines with routines of its own, gets nothing new.
   if(!starterBorn(root))return null;
+  // When this mission control came to this machine, written once (starting-routines.mjs, metAt).
+  try{noteHermesMet(this.store,{home:this.home,now});}catch{}
   const adopted=nativeCardRows(this.store,'goals').filter(g=>g.status==='adopted').sort((a,b)=>String(a.created_at).localeCompare(String(b.created_at)));
   const serves=goal||flag?.goal||adopted[0]?.id||null,at=new Date(now).toISOString();
   const record=fields=>this.store.saveAsync('settings',{id:FLAG,goal:serves,...fields});
-  if(!adopted.length){if(setup&&!flag)await record({state:'pending',requested_at:at});return null;}
+  if(!adopted.length){if((setup||waiting)&&!flag)await record({state:'pending',requested_at:at});return null;}
   // Routines live in the Hermes of the machine that runs them; another machine makes them there.
   if(installation?.owner&&installation.owner!==this.device){if(!flag)await record({state:'pending',requested_at:at});return {state:'pending',owner:installation.owner};}
-  if(hermesJobs(this.home).length){
-   writeMachineRecord(this.store,{state:'skipped',device:this.device,reason:'This machine\'s Hermes already had routines of its own',decided_at:at});
-   if(!flag||flag.state==='pending')await record({state:'skipped',reason:'Hermes already had routines of its own',decided_at:at});
+  const theirs=ownRoutines(hermesJobs(this.home),{root,since:metAt(this.store)});
+  if(theirs.length){
+   const because=theirs.map(j=>({id:j.id,name:j.name||null}));
+   writeMachineRecord(this.store,{state:'skipped',device:this.device,reason:'This machine\'s Hermes already had routines of its own',rule:OWN_ROUTINES_RULE,because,decided_at:here?.decided_at||at,...(again?{looked_again_at:at}:{})});
+   if(!flag||flag.state==='pending'||again&&flag.state==='skipped')await record({state:'skipped',reason:'Hermes already had routines of its own',rule:OWN_ROUTINES_RULE,decided_at:flag?.decided_at||at});
    return {state:'skipped'};
   }
+  // A skip the old rule decided, undone: its reason no longer holds.
+  const unskip=again&&flag?.state==='skipped'?{reason:null,rule:null,decided_at:null}:null;
   // The goal was told in the chat before any setup: this machine runs the routines, on its own
   // clock.
   if(!installation)installation=await this.store.saveAsync('settings',{id:'installation',owner:this.device,timezone:Intl.DateTimeFormat().resolvedOptions().timeZone,delivery:'notebook'});
@@ -114,11 +129,11 @@ export class NativeScheduler{
   }catch(error){
    const message=String(error?.message||error).slice(0,300);
    writeMachineRecord(this.store,{state:'pending',device:this.device,error:message,retry_after:new Date(now+RETRY_STARTING).toISOString()});
-   if(!flag)await record({state:'pending',requested_at:at});
+   if(!flag||unskip)await record({state:'pending',requested_at:at,...unskip});
    return {state:'pending',error:message};
   }
   writeMachineRecord(this.store,{state:'created',device:this.device,created_at:at,timezone,delivery,jobs});
-  if(flag?.state!=='created')await record({state:'created',first_device:this.device,created_at:at});
+  if(flag?.state!=='created')await record({state:'created',first_device:this.device,created_at:at,...unskip});
   return {state:'created',jobs};
  }
  async createStartingRoutines(delivery,routines=STARTING_ROUTINES){

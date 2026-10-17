@@ -43,6 +43,72 @@ export const STARTING_ROUTINES=[
 const machineFile=store=>path.join(store.state,'starting-routines.json');
 export function readMachineRecord(store){try{const record=JSON.parse(fs.readFileSync(machineFile(store),'utf8'));return record&&typeof record==='object'?record:null;}catch{return null;}}
 export function writeMachineRecord(store,record){atomic(machineFile(store),JSON.stringify(record,null,2)+'\n');}
+
+// WHICH OF HERMES' JOBS ARE THE READER'S OWN ROUTINES (17 October 2026). The starting routines are
+// never put beside routines the reader already had in this Hermes: a Linux or Mac installer uses the
+// reader's own ~/.hermes unless told to set one up beside it. Until this change every job counted,
+// and every job Godspeed itself makes before a first goal kept the routines away for good: the
+// getting-to-know-you invitation the Telegram setup plans (Hermes keeps a one-time job in
+// cron/jobs.json for seven days after it ran, cron.completed_retention_days), a morning brief or a
+// research watch switched on in the chat, a reminder asked for there ("every weekday at seven").
+// Now a job counts only when all of this is true:
+//  - it runs again. A one-time job (Hermes' schedule kind "once", or a repeat count of one) is a
+//    reminder, not a routine, and a job Hermes marked completed never runs again;
+//  - it works in another folder, or in none: every routine made for this mission control (by the
+//    notebook, by Settings > Routines, by its recipes, the morning brief and the research watch)
+//    works in this mission control's folder;
+//  - and, with no folder, it was there before this mission control came to this machine (metAt
+//    below): a reminder asked for in this mission control's chat was made after that. A job with no
+//    date counts, since nothing says it is new.
+// starterBorn() still keeps every routine away from an adopted mission control, whatever its Hermes has.
+export const OWN_ROUTINES_RULE=2;
+const samePlace=(a,b)=>{const real=p=>{try{return fs.realpathSync(p);}catch{return path.resolve(p);}},n=p=>real(String(p)).replace(/[\\/]+$/,'');return process.platform==='win32'?n(a).toLowerCase()===n(b).toLowerCase():n(a)===n(b);};
+export function ownRoutines(jobs,{root,since}){
+ return jobs.filter(job=>{
+  if(job.schedule?.kind==='once'||job.repeat?.times===1||job.state==='completed')return false;
+  const folder=typeof job.workdir==='string'&&job.workdir.trim()?job.workdir:null;
+  if(folder)return !samePlace(folder,root);
+  const made=Date.parse(job.created_at);
+  return !Number.isFinite(made)||!Number.isFinite(since)||made<since;
+ });
+}
+// When this mission control came to this machine: the earliest moment this machine's own state
+// (.godspeed, which never travels with the folder, so a copy from GitHub brings no older date)
+// remembers. The notebook writes one record of it the first time it looks at this Hermes, at the
+// install (wire-assistant.mjs) or at the first tick, and an installation from before that record
+// existed has the others: when the notebook named this machine (device.json), first ticked
+// (routine-results.json), planned the getting-to-know-you chat (context-setup.json), added the
+// archive line to the manual, or decided about the starting routines. A later date than the true
+// one only counts more jobs as the reader's own.
+const MET_FILE='hermes-met.json';
+const readState=(store,name)=>{try{return fs.readFileSync(path.join(store.state,name),'utf8');}catch{return null;}};
+const readStateJson=(store,name)=>{try{return JSON.parse(readState(store,name));}catch{return null;}};
+export function metAt(store){
+ const here=readMachineRecord(store)||{};
+ const times=[readStateJson(store,MET_FILE)?.at,readStateJson(store,'device.json')?.created_at,readStateJson(store,'routine-results.json')?.since,
+  readStateJson(store,'context-setup.json')?.created_at,readState(store,'archive-line-added')?.trim(),here.decided_at,here.created_at];
+ const known=times.map(t=>typeof t==='string'?Date.parse(t):NaN).filter(Number.isFinite);
+ return known.length?Math.min(...known):NaN;
+}
+export function noteHermesMet(store,{home=null,now=Date.now()}={}){
+ if(readStateJson(store,MET_FILE)?.at)return false;
+ const known=metAt(store);
+ atomic(path.join(store.state,MET_FILE),JSON.stringify({at:new Date(Number.isFinite(known)?Math.min(known,now):now).toISOString(),...(home?{home}:{})},null,2)+'\n');
+ return true;
+}
+
+// A computer whose getting-to-know-you chat filed the city before any goal, with the release of
+// 16 October 2026: the city wrote the installation record, and no record of starting routines
+// (setTimezone writes that record now). An installation record with no record of starting routines
+// otherwise means a mission control set up before 8 October 2026, which the routines leave alone;
+// one written since 16 October on a machine where that chat filed the city is this new one, still
+// waiting for its first goal. 16 October is the day setTimezone came, so no older installation is
+// taken for one.
+const CITY_FIRST_SINCE=Date.parse('2026-10-16T00:00:00Z');
+export function cityFiledFirst(store,installation){
+ const written=Date.parse(installation?.created_at);
+ return Number.isFinite(written)&&written>=CITY_FIRST_SINCE&&readStateJson(store,'context-setup.json')?.timezone_from==='answer';
+}
 // A messenger this machine's Hermes can send to (the coach's own test: a Telegram bot in its .env).
 export function telegramInHermes(home){try{return /^\s*TELEGRAM_BOT_TOKEN\s*=\s*\S+/m.test(fs.readFileSync(path.join(home,'.env'),'utf8'));}catch{return false;}}
 

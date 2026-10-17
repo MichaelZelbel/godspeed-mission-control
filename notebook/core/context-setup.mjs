@@ -6,7 +6,7 @@ import {IdentityShelf} from './identity-shelf.mjs';
 import {setConfigValue} from './hermes-config.mjs';
 import {starterBorn} from './starter-workspace.mjs';
 import {hermesJobs} from './native-scheduler.mjs';
-import {telegramInHermes} from './starting-routines.mjs';
+import {telegramInHermes,FLAG} from './starting-routines.mjs';
 
 // GETTING TO KNOW THE OWNER, A PART OF ITS OWN (16 October 2026, Michael's idea). The setup was one
 // chat: an AI, then the city, a briefing and a goal, all before the assistant could talk. Now the
@@ -79,6 +79,11 @@ export async function setTimezone(store,{zone,city,from='answer',home=process.en
   if(!found)return {found:false,city:String(city||zone||'').slice(0,60)};
   const old=store.get('settings','installation');
   await store.saveAsync('settings',{id:'installation',...(old?{}:{owner:store.device,delivery:telegramInHermes(home||'')?'telegram':'notebook'}),timezone:found});
+  // The city is the first answer, before any goal: a new mission control made from the starter
+  // gets the record that its routines wait for that goal, as the Telegram setup's last step gives
+  // it. An installation record without one is read as set up before 8 October 2026, which the
+  // routines leave alone, so until 17 October 2026 a goal told after the city started nothing.
+  if(!old&&!store.get('settings',FLAG)&&starterBorn(store.root))await store.saveAsync('settings',{id:FLAG,goal:null,state:'pending',requested_at:new Date().toISOString()});
   try{setHermesZone(home,found);}catch{}
   writeContext(store,{timezone:found,timezone_from:from});
   return {found:true,zone:found,city:cityOf(found)};

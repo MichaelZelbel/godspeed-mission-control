@@ -174,8 +174,13 @@ test('the recipe is installed for a starter-born assistant, names its doors and 
 
 test('wiring the assistant installs and switches on the plugin that tells it about the invitation',t=>{
   const {root}=workspace(t),home=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-context-wire-'));t.after(()=>fs.rmSync(home,{recursive:true,force:true}));
-  execFileSync(process.execPath,[path.join(kit,'notebook','scripts','wire-assistant.mjs'),home],{env:{...process.env,GODSPEED_WORKSPACE:root,GODSPEED_PORT:'41990',GODSPEED_DEVICE:'local'},windowsHide:true});
+  const wire=()=>execFileSync(process.execPath,[path.join(kit,'notebook','scripts','wire-assistant.mjs'),home],{env:{...process.env,GODSPEED_WORKSPACE:root,GODSPEED_PORT:'41990',GODSPEED_DEVICE:'local'},windowsHide:true});
+  wire();
   assert.ok(fs.existsSync(path.join(home,'plugins','godspeed-context','__init__.py')));
+  // When this mission control first met this Hermes (starting-routines.mjs, ownRoutines): written at
+  // the install, before anything is made in it, and never moved by a later wiring.
+  const met=()=>JSON.parse(fs.readFileSync(path.join(root,'.godspeed','hermes-met.json'),'utf8')).at,first=met();
+  assert.ok(Date.now()-Date.parse(first)<120000,first);wire();assert.equal(met(),first);
   assert.equal(fs.readFileSync(path.join(home,'plugins','godspeed-context','mission-control.txt'),'utf8').trim(),root);
   assert.match(fs.readFileSync(path.join(home,'config.yaml'),'utf8'),/enabled: \[[^\]]*"godspeed-context"/);
 });
