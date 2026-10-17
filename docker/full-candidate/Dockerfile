@@ -5,7 +5,8 @@ WORKDIR /build/notebook/ui
 COPY notebook/ui/package*.json ./
 RUN npm ci --no-audit --no-fund
 COPY notebook/ui/ ./
-COPY notebook/core/progress-assets/ ../core/progress-assets/
+# The UI imports shared files from core (habit artwork, the impact scale); prebuilt-frontend.test.mjs checks every import is here.
+COPY notebook/core/ ../core/
 COPY notebook/scripts/verify-prebuilt-frontend.mjs /verify-prebuilt-frontend.mjs
 RUN if [ "$USE_VERIFIED_FRONTEND" = 1 ]; then node /verify-prebuilt-frontend.mjs /build/notebook/ui "$REVISION"; else npm run build; fi
 
