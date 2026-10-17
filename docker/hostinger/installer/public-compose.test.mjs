@@ -13,27 +13,28 @@ const endpoint = 'https://godspeedmissioncontrol.com/godspeed-install/api/server
 const setup = '0123456789abcdef'.repeat(4);
 const require = createRequire(import.meta.url);
 
-async function registration({ hostname = 'srv123456', token = setup, statuses = [202], unhealthy = 0 } = {}) {
+async function registration({ hostname = 'srv123456', token = setup, statuses = [202], unhealthy = 0, configuredAfter = statuses.length } = {}) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'godspeed-public-register-'));
   const hostnameFile = path.join(directory, 'hostname'); fs.writeFileSync(hostnameFile, hostname + '\n');
-  const calls = [], errors = []; let healthCalls = 0;
+  const calls = [], errors = [], pauses = []; let healthCalls = 0;
   try {
     await vm.runInNewContext(registrationCode({ endpoint, hostnameFile }), {
       require, process: { env: { GODSPEED_ACCESS_TOKEN: token } }, AbortSignal,
-      setTimeout: resolve => { resolve(); }, console: { error: message => errors.push(message) },
+      setTimeout: (resolve, ms) => { pauses.push(ms); resolve(); }, console: { error: message => errors.push(message) },
       fetch: async (url, init) => {
         if (url === 'http://127.0.0.1:47831/health') return new Response('', { status: healthCalls++ < unhealthy ? 503 : 200 });
+        if (url === 'http://127.0.0.1:47831/api/auth/status') return Response.json({ configured: calls.length >= configuredAfter });
         assert.equal(url, endpoint); calls.push(init);
         return new Response('This reply must never become a credential or be logged.', { status: statuses[Math.min(calls.length - 1, statuses.length - 1)] });
       },
     });
-    return { calls, errors, healthCalls };
+    return { calls, errors, healthCalls, pauses };
   } finally { fs.rmSync(directory, { recursive: true, force: true }); }
 }
 
 test('public manifest registers its own persistent secret only after health and retries nondurable responses', async () => {
   const result = await registration({ unhealthy: 2, statuses: [503, 200, 202] });
-  assert.equal(result.calls.length, 3); assert.equal(result.healthCalls, 5);
+  assert.equal(result.calls.length, 3); assert.equal(result.healthCalls, 6);
   for (const call of result.calls) {
     assert.equal(call.method, 'POST'); assert.equal(call.redirect, 'error');
     assert.equal(call.headers['content-type'], 'application/json');
@@ -48,10 +49,20 @@ test('public registration refuses a non-Hostinger hostname or invalid runtime se
   await assert.rejects(registration({ token: 'a public placeholder' }), /setup code/);
 });
 
-test('bounded failure logs no setup secret and HTTPS registration cannot redirect or use a plaintext coordinator', async () => {
-  const result = await registration({ statuses: [403] });
-  assert.equal(result.calls.length, 180); assert.equal(result.errors.length, 1);
-  assert.equal(result.errors.join('').includes(setup), false);
+test('a lost or expired coordinator record is automatically renewed until an owner exists', async () => {
+  const result = await registration({ statuses: [202, 202, 202] });
+  assert.equal(result.calls.length, 3, 'a durable receipt must not end server enrollment');
+  assert.deepEqual(result.pauses, [1200000, 1200000, 1200000]);
+  assert.equal(new Set(result.calls.map(call => call.body)).size, 1, 'renewal must keep the existing server secret');
+  const owned = await registration({ configuredAfter: 0 });
+  assert.equal(owned.calls.length, 0, 'a configured owner needs no setup registration');
+});
+
+test('prolonged failure keeps retrying with a bounded pause and never logs or redirects credentials', async () => {
+  const result = await registration({ statuses: [503], configuredAfter: 200 });
+  assert.equal(result.calls.length, 200, 'registration must recover without a container restart after the old 180-attempt cutoff');
+  assert.ok(result.pauses.every(ms => ms >= 5000 && ms <= 300000));
+  assert.equal(result.pauses.at(-1), 300000); assert.deepEqual(result.errors, []);
   assert.throws(() => registrationCode({ endpoint: 'http://coordinator.example/register' }), /HTTPS/);
 });
 
