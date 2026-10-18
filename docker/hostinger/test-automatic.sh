@@ -32,9 +32,8 @@ if ! test -s "$GODSPEED_TEST_INSTALL_STATE/invitation.txt"; then
   # Do not print synthetic callback keys or invitation fragments. Preserve the actual
   # failing assertion after retries rather than losing its explanation in cleanup.
   node docker/hostinger/installer/verify-test.mjs
-  echo 'Automatic owner invitation was not produced after the readiness checks.' >&2
-  exit 1
 fi
+test -s "$GODSPEED_TEST_INSTALL_STATE/invitation.txt"
 export GODSPEED_VERIFY_INVITATION_URL
 GODSPEED_VERIFY_INVITATION_URL=$(cat "$GODSPEED_TEST_INSTALL_STATE/invitation.txt")
 export GODSPEED_VERIFY_ORIGIN=https://localhost
