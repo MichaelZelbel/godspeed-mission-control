@@ -1,3 +1,7 @@
+# Current rebuild
+
+Read [the fresh repository build and verification record](fresh-repository.md) first. The release remains a draft until its fresh acceptance gates pass.
+
 > Historical record from the previous repository. The old commit IDs, workflow runs, release assets and checksums below are archive references. They are not instructions or acceptance evidence for the fresh public repository. The first beta must be rebuilt and checked against its new commits before publication.
 
 # The first beta, `godspeed-v2-integrated-2026-10-19-1` (2.0.0-beta.1): built and gated, not published

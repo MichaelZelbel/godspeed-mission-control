@@ -8,14 +8,15 @@
 set -euo pipefail
 NEW=${1:?digest sha256:...}; IMG=${2:?image commit}; S=${IMG:0:7}; D8=${NEW:7:8}
 OLD=sha256:ceb11a103fbc4ee7d45c015397b14cb3886e22eb9f878e07bee8735f14e39b64
-OLDLINK=8fc62411be3fd3f2d0148c7eb34bb57b1b944808
+OLDLINK=bc3b63d10097ed46faab8d6e4be5672201b3ad68
 [[ "$NEW" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "not a digest: $NEW"; exit 1; }
 [[ "$IMG" =~ ^[0-9a-f]{40}$ ]] || { echo "not a full commit: $IMG"; exit 1; }
 [ -z "$(git status --porcelain --untracked-files=no)" ] || { echo "this worktree has changes; commit or stash them first"; exit 1; }
-sed -i "s#godspeed-mission-control@$OLD#godspeed-mission-control@$NEW#" docker/hostinger/compose.yaml docker/hostinger/installer/compose.mjs
-grep -c "$NEW" docker/hostinger/compose.yaml docker/hostinger/installer/compose.mjs
+sed -i "s#godspeed-mission-control@$OLD#godspeed-mission-control@$NEW#" docker/hostinger/compose.yaml docker/hostinger/installer/compose.mjs docker/server/browser-compose-traefik.yaml
+node docker/hostinger/installer/public-compose.mjs
+grep -c "$NEW" docker/hostinger/compose.yaml docker/hostinger/installer/compose.mjs docker/server/browser-compose-traefik.yaml
 ! grep -rn "$OLD" docker/ || { echo "the old digest is still named"; exit 1; }
-git add docker/hostinger/compose.yaml docker/hostinger/installer/compose.mjs
+git add docker/hostinger/compose.yaml docker/hostinger/installer/compose.mjs docker/server/browser-compose-traefik.yaml docker/hostinger/one-click.yaml
 git commit -q -F - <<MSG
 Hostinger and the one-line server installer install the image built from $S (v2-sha-$S, digest $D8...)
 

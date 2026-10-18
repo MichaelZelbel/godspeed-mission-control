@@ -1,7 +1,7 @@
 {
   "about": "Which pages of the user guide describe which paths here. Written by scripts/guide-map.mjs in the website repository (MichaelZelbel/godspeedmissioncontrol) from each page's sources, a file cited by more than 3 pages going only to its owners in docs/guide/map-owners.json there: change those and run it again, never this file by hand. .github/guide-check.mjs reads it.",
   "guide": "https://godspeedmissioncontrol.com/guide/",
-  "since": "3dea826023439a064c59b11c48cc2edd5628c5e1",
+  "since": "bc3b63d10097ed46faab8d6e4be5672201b3ad68",
   "ignore": ["**/test/**", "**/tests/**", "**/__tests__/**", "**/fixtures/**", "**/*.test.*", "**/*.spec.*", "**/test-*", "**/test_*", "**/*_test.*", "docs/**", ".github/**", "**/retired/**", "**/vendor/**", "**/node_modules/**", "**/dist/**", "**/package-lock.json", "**/*.min.js", "**/*.gen.*", "notebook/reusable-recipes/**", "installers/GodspeedSetup.exe"],
   "pages": {
     "add-a-skill": ["notebook/ui/src/lib/identity.ts", "skills/first-five-skills.md"],

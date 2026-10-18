@@ -10,7 +10,7 @@ Hostinger's supported purchase link is:
 
 Current purchase and install link, including the author's Hostinger referral:
 
-[Install Godspeed Mission Control on Hostinger](https://www.hostinger.com/docker-hosting?compose_url=https%3A%2F%2Fraw.githubusercontent.com%2FMichaelZelbel%2Fgodspeed-mission-control%2F8fc62411be3fd3f2d0148c7eb34bb57b1b944808%2Fdocker%2Fhostinger%2Fcompose.yaml&REFERRALCODE=GHNMICHAEJC8#pricing)
+[Install Godspeed Mission Control on Hostinger](https://www.hostinger.com/docker-hosting?compose_url=https%3A%2F%2Fraw.githubusercontent.com%2FMichaelZelbel%2Fgodspeed-mission-control%2Fbc3b63d10097ed46faab8d6e4be5672201b3ad68%2Fdocker%2Fhostinger%2Fone-click.yaml&REFERRALCODE=GHNMICHAEJC8#pricing)
 
 The link names the commit whose `compose.yaml` pins the current image
 (`v2-sha-54f72d3`, digest `ceb11a10…`, since the release of 18 October 2026, Hermes installs in a terminal and the assistant gets its notebook; before that `v2-sha-1a9261a`, digest `87ab520b…`, from the release of 17 October 2026, a first goal starts its routines, then `v2-sha-e09577c`, digest `9a82b069…`, from the second release of 16 October 2026, the setup in two parts, then `v2-sha-c2ce006`, digest `bafaadb2…`, from the Identity page release of 15 October 2026, then `v2-sha-02f4ecb`, digest `60df0c65…`, from the notebook label correction of 14 October 2026, then `v2-sha-377124c`, digest `5a154b6d…`, from 13 October 2026, then `v2-sha-d023277`, digest `8682ddd5…`, from the second release of 12 October, then `v2-sha-d457ded`, digest `4dc94340…`, from the first release of 12 October, then `v2-sha-da2098e`, digest `a67da492…`, from 10 October, then `v2-sha-c83b399`, digest `13232a90…`,

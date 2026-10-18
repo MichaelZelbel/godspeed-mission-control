@@ -157,7 +157,7 @@ Download this release's installer, check that it is the published file, and run 
 
 ```bash
 curl -fsSLO https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-19-1/install-godspeed.sh
-echo "78799a903784bdf49e3a3f72d20555ea040f6d2bbb7bfdc7a416838e75864184  install-godspeed.sh" | sha256sum -c - && bash install-godspeed.sh
+echo "960bd6bd39c8d3ab7590bd4079b0d39cfcf3e62d2596b4e93aea5a5b04c29ea6  install-godspeed.sh" | sha256sum -c - && bash install-godspeed.sh
 ```
 
 On a Mac, write `shasum -a 256 -c -` where it says `sha256sum -c -`. The check refuses any other file, and the installer names one exact version of the notebook, so every reader of this release gets the same notebook.
