@@ -1,0 +1,25 @@
+{
+  "_about": "The one caption look for every video. Colours are #RRGGBB. Sizes are pixels on a 1080x1920 (vertical) or 1920x1080 (horizontal) frame; other sizes are scaled. Keep outline at 9 or more: it is what keeps words readable over skin and bright screens.",
+  "font": "Archivo Black",
+  "font_file": "",
+  "fill": "#FFFFFF",
+  "active": "#FFE726",
+  "outline_colour": "#000000",
+  "outline": 9,
+  "shadow": 4,
+  "line_h": 1.18,
+  "lift": 106,
+  "ramp": 190,
+  "accel": 0.65,
+  "uppercase": true,
+  "vertical": {
+    "size": 80,
+    "y": 1530,
+    "max_w": 900
+  },
+  "horizontal": {
+    "size": 64,
+    "y": 930,
+    "max_w": 1500
+  }
+}

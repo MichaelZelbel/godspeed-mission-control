@@ -1,0 +1,310 @@
+#!/usr/bin/env bash
+# mc-decide: your mission control's one decision of the day.
+#
+# WHAT IT DOES. Before anything is written to you in the morning, your mission control decides against your
+# GOALS rather than against whatever queue is shouting loudest. It moves time on the work
+# tracker, works out which goals get attention today and why, lists the forecasts that have come
+# due, and then runs the `next-action` recipe with all of that in front of it. The recipe writes
+# one record for the day, files the work your mission control will do itself, and puts at most one thing in
+# front of you.
+#
+# IT KNOWS NO GOAL AND NO ACTION, AND THAT IS THE DESIGN. Adding a goal means adding a file under
+# `goals/`. It never means another line in here and never another entry in your schedule. Same
+# rule as `due/`: one program, many small files.
+#
+# IT NEVER MESSAGES YOU AND IT NEVER POSTS. Anything that goes outside your machine is filed as
+# blocked until your own words are on it.
+#
+# WHAT IT NEEDS: node, one assistant (hermes, claude or codex), and a `next-action` recipe in
+# your mission control. Everything else it uses is optional and it says so when a piece is missing.
+#
+# RUN IT BY HAND:        mc-decide
+# SEE THE PLAN ONLY:     mc-decide --dry-run
+# ONCE A DAY, ON LINUX or a Mac, in your schedule (`crontab -e`), early enough that the morning
+# message can read what it decided:
+#        10 4 * * *  $HOME/.local/bin/mc-decide >> $HOME/.godspeed/decide.log 2>&1
+# IT ENDS WITH ONE LINE: "decided <day>" and exit 0, or "NOT decided <day>" and exit 1 when the
+# assistant did not finish (the record then says so), or "decided <day>, but the assistant did
+# not finish" and exit 1 when it wrote the record and stopped before its answer.
+set -uo pipefail
+
+GODSPEED=""; DRY=0; TODAY=""; RUNDIR=""; TIMEOUT=1500; EXTRA=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --godspeed) GODSPEED="$2"; shift 2 ;;
+    --date) TODAY="$2"; shift 2 ;;
+    --run-dir) RUNDIR="$2"; shift 2 ;;
+    --timeout) TIMEOUT="$2"; shift 2 ;;
+    # A mission control that has grown things this kit knows nothing about puts them in a file and names it
+    # here, and they are added to the recipe for this run only. That is what keeps the recipe
+    # itself general: an addition never has to be merged into it and then kept out of everybody
+    # else's copy.
+    --extra-prompt-file) EXTRA="$2"; shift 2 ;;
+    --dry-run) DRY=1; shift ;;
+    -h|--help) sed -n '2,28p' "$0"; exit 0 ;;
+    *) echo "mc-decide: I do not know the argument $1" >&2; exit 2 ;;
+  esac
+done
+
+# WINDOWS PROGRAMS GET WINDOWS PATHS (2026-10-09). Hermes on Windows runs its commands with
+# MSYS_NO_PATHCONV=1, so Git Bash no longer turns /c/... into C:/... for node.exe or git.exe, and
+# node then looked for C:\c\... and found nothing: the attention plan came back empty. cygpath
+# exists only in the shells of Windows, and the C:/ form it gives works in bash there too.
+winpath() { if [ -n "$1" ] && command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else printf '%s\n' "$1"; fi; }
+looks_like_godspeed() { [ -d "${1:-}/rules" ] || [ -d "${1:-}/observations" ]; }
+if [ -z "$GODSPEED" ]; then GODSPEED="${GODSPEED_ROOT:-}"; fi
+if [ -z "$GODSPEED" ] || ! looks_like_godspeed "$GODSPEED"; then
+  D="$PWD"; GODSPEED=""
+  for _ in 1 2 3 4 5 6 7 8; do
+    looks_like_godspeed "$D" && { GODSPEED="$D"; break; }
+    P="$(dirname "$D")"; [ "$P" = "$D" ] && break; D="$P"
+  done
+fi
+if [ -z "$GODSPEED" ] && [ -r "$HOME/.godspeed/device.env" ]; then
+  GODSPEED="$(sed -n 's/^[[:space:]]*\(export[[:space:]]*\)\{0,1\}GODSPEED_DIR=//p' "$HOME/.godspeed/device.env" | tail -1 | tr -d '"'"'"' ' | tr -d '\r')"
+fi
+if [ -z "$GODSPEED" ] || ! looks_like_godspeed "$GODSPEED"; then
+  echo "mc-decide: I could not find your mission control. Run this inside it, or pass --godspeed /path/to/godspeed." >&2
+  exit 2
+fi
+GODSPEED="$(winpath "$GODSPEED")"
+cd "$GODSPEED" || exit 2
+export PATH="$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
+[ -n "$TODAY" ] || TODAY="${GODSPEED_TODAY:-$(date -u +%Y-%m-%d)}"
+[ -n "$RUNDIR" ] || RUNDIR="$GODSPEED/routines/next-action/$TODAY"
+RUNDIR="$(winpath "$RUNDIR")"
+HERE="$(winpath "$(cd "$(dirname "$0")" && pwd)")"
+
+# FIND NODE BY RUNNING IT, NEVER BY FINDING IT. A schedule starts a job with almost none of your
+# environment, and on Windows there is a stub on the path called python3 that exists and only
+# prints an advert. The same trap is waiting for every runtime.
+NODE=""
+for c in node nodejs /usr/local/bin/node /usr/bin/node; do
+  "$c" -e '' >/dev/null 2>&1 && { NODE="$c"; break; }
+done
+[ -n "$NODE" ] || { echo "mc-decide: there is no Node.js on this computer, so nothing could be run." >&2; exit 1; }
+
+# A PROGRAM THAT IS NOT INSTALLED IS NOT AN ERROR HERE. Two of the three registers are useful on
+# their own, and a reader may have installed only some of this. Each one that is missing is
+# named once, in the record, and the day still gets decided.
+MISSING=""
+reg() {
+  local name="$1"; shift
+  local bin="$HERE/$name.js"
+  [ -f "$bin" ] || bin="$(winpath "$HOME/.local/bin/$name.js")"
+  if [ ! -f "$bin" ]; then
+    case " $MISSING " in *" mc-$name "*) : ;; *) MISSING="$MISSING mc-$name" ;; esac
+    return 1
+  fi
+  GODSPEED_ROOT="$GODSPEED" "$NODE" "$bin" "$@"
+}
+
+mkdir -p "$RUNDIR"
+# The part that needs no model runs first and is kept even if the model run dies: time passes on
+# the work tracker whether or not anything else works today.
+#
+# A DRY RUN MUST NOT MOVE TIME, AND THAT IS NOT A DETAIL. `tick` writes: it returns dead leases,
+# marks old plans stale, and those lines carry today's date for ever after. A --dry-run that says
+# "nothing was written" at the end while having quietly aged the register is the exact shape of
+# lie this whole program exists to refuse. So a dry run LISTS the work instead of ticking it, and
+# says so.
+if [ "$DRY" -eq 1 ]; then
+  reg work list > "$RUNDIR/tick.txt" 2>/dev/null || true
+else
+  reg work tick > "$RUNDIR/tick.txt" 2>/dev/null || true
+fi
+# THE WEEKLY NUMBERS ARE SETTLED BEFORE ANYTHING IS DECIDED (2026-09-30). Seven days after a move
+# went live, mc-goals reads its goal's weekly number and writes the verdict itself; the run that
+# made the move never grades it. It runs before the attention plan, because a goal whose moves are
+# still out can rest a day and one with nothing in flight cannot. A dry run writes nothing here.
+if [ "$DRY" -eq 1 ]; then
+  reg goals settle --date "$TODAY" --dry-run > "$RUNDIR/settle.txt" 2>/dev/null || true
+else
+  reg goals settle --date "$TODAY" > "$RUNDIR/settle.txt" 2>/dev/null || true
+fi
+# A day already decided keeps the plan it was decided on: a second run by hand (to finish short
+# moves, below) must not recompute which goals are active and move the goalposts under them.
+if [ -s "$RUNDIR/decision.md" ] && [ -s "$RUNDIR/attention.txt" ]; then :; else
+  reg goals attention --date "$TODAY" > "$RUNDIR/attention.txt" 2>/dev/null || true
+fi
+reg forecast due --date "$TODAY"    > "$RUNDIR/forecasts-due.txt" 2>/dev/null || true
+reg work list --all > "$RUNDIR/work.txt" 2>/dev/null || true
+
+# YESTERDAY'S RECORD IS PUT IN FRONT OF TODAY'S RUN, NOT LEFT FOR IT TO GO AND FIND. The recipe
+# asks "what came of what you chose yesterday" and for two days nothing answered it, because the
+# only copy of yesterday sat in a folder the run was never pointed at. A decision that cannot see
+# the last one is a preference, twice. Yesterday is computed by node so a Mac without GNU date
+# still gets it right. The long decision log a mission control may keep is NOT read here: it is too big to
+# hand to a run every morning, and the run folder is the record this recipe answers to.
+YESTERDAY="$("$NODE" -e 'const d=new Date(process.argv[1]+"T00:00:00Z");d.setUTCDate(d.getUTCDate()-1);console.log(d.toISOString().slice(0,10))' "$TODAY")"
+if [ -s "$GODSPEED/routines/next-action/$YESTERDAY/decision.md" ]; then
+  cp "$GODSPEED/routines/next-action/$YESTERDAY/decision.md" "$RUNDIR/yesterday.md"
+else
+  printf 'No decision record for %s (the run did not happen, or the folder is not here).
+' "$YESTERDAY" > "$RUNDIR/yesterday.md"
+fi
+
+# An optional neighbour. A mission control that has it gets its output in the same folder, and a mission control
+# that does not gets a note saying so and nothing else.
+#
+# TELL IT WHICH GODSPEED IT IS READING. Found by running this in a second godspeed on a machine that
+# already had one: the deadlines program worked out the folder for itself and answered from the
+# machine's usual godspeed instead of the one being decided. The run then reported three deadlines
+# that were not in this folder at all. A program that guesses the folder is fine on a machine with
+# one mission control and quietly wrong on a machine with two, so it gets the folder both ways: in
+# the environment and as an option.
+neighbour() { case " $MISSING " in *" $1 "*) : ;; *) MISSING="$MISSING $1" ;; esac; }
+# The deadlines program beside this one comes first (2026-10-09). An `mc-due` found on the path
+# can be the notebook's, which belongs to one folder and refuses --godspeed, so the day was
+# decided with no deadlines at all and nothing said so.
+if [ -f "$HERE/due.js" ]; then
+  GODSPEED_ROOT="$GODSPEED" "$NODE" "$HERE/due.js" --godspeed "$GODSPEED" today > "$RUNDIR/due.txt" 2>/dev/null || true
+elif command -v mc-due >/dev/null 2>&1; then
+  GODSPEED_ROOT="$GODSPEED" mc-due --godspeed "$GODSPEED" today > "$RUNDIR/due.txt" 2>/dev/null || true
+else neighbour mc-due; fi
+[ -n "$MISSING" ] && printf 'not on this computer, so today was decided without it:%s\n' "$MISSING" > "$RUNDIR/missing.txt"
+
+if [ "$DRY" -eq 1 ]; then
+  echo "Attention plan for $TODAY:"; cat "$RUNDIR/attention.txt" 2>/dev/null
+  echo; echo "Open work (listed, not ticked: a dry run does not move time):"; cat "$RUNDIR/tick.txt" 2>/dev/null
+  [ -n "$MISSING" ] && { echo; cat "$RUNDIR/missing.txt"; }
+  echo; echo "Nothing was decided. Nothing in goals/, forecasts/ or work/ was changed."
+  echo "The three files this wrote are in $RUNDIR."
+  exit 0
+fi
+
+# A DECISION ALREADY WRITTEN TODAY IS NOT WRITTEN TWICE. A schedule that fires twice, or a run
+# you start by hand after one that failed, must not produce two plans for one day. The runner's
+# own "it did not run" record does not count as a decision, so a retry after a failure decides.
+# One exception: a day whose moves are short (see below) and were never sent back is finished,
+# not decided again, so running mc-decide a second time by hand completes the moves.
+STANDIN="did not finish and wrote no record of its own"
+ALREADY=0
+if [ -s "$RUNDIR/decision.md" ] && ! grep -q "$STANDIN" "$RUNDIR/decision.md"; then
+  if [ -f "$HERE/check-moves.js" ] && [ ! -s "$RUNDIR/answer-moves.txt" ]      && ! GODSPEED_ROOT="$GODSPEED" "$NODE" "$HERE/check-moves.js" --godspeed "$GODSPEED" --date "$TODAY" >/dev/null 2>&1; then
+    ALREADY=1
+    echo "$TODAY is already decided; its moves are short, so only they are finished now."
+  else
+    echo "$TODAY is already decided ($RUNDIR/decision.md). Nothing was decided twice."
+    exit 0
+  fi
+fi
+
+# mc-run is started with bash below, so it only has to be there, not be executable (2026-10-09).
+# The notebook runs this file from its own copy of the kit, which git writes without the
+# executable bit on Linux and on a Mac, and the routines' daily round there stopped with
+# "mc-run is not installed" unless an older mc-run sat in ~/.local/bin.
+RUNNER="$HERE/mc-run"
+[ -f "$RUNNER" ] || RUNNER="$HOME/.local/bin/mc-run"
+[ -f "$RUNNER" ] || { echo "mc-decide: mc-run is not installed, so no recipe could be carried out." >&2; exit 3; }
+
+PROMPT="Today is $TODAY (UTC). The run folder is $RUNDIR and it already holds settle.txt (each
+goal's weekly number and the verdicts on earlier moves; read it first), attention.txt (the goal
+plan), tick.txt (what time did to the work tracker), work.txt (every item on it),
+forecasts-due.txt and yesterday.md (yesterday's decision, or the line saying there was none),
+plus anything else that was available. Follow the next-action recipe exactly. Write
+$RUNDIR/decision.md, file the work the mission control will do (mc-work-run carries it out later today; you
+take only what fits in two minutes), the day's moves and their one ship-list card for the person, and
+save what you changed. Your final answer is the 'For you today' section in one plain sentence,
+plus the card id or the word nothing."
+
+# Every answer this run asks an assistant for is named here, so the end can tell whether each one
+# came back (see "A RUN WHOSE ASSISTANT DID NOT FINISH" at the bottom).
+ASKED=""
+if [ "$ALREADY" -eq 1 ]; then :
+elif [ -n "$EXTRA" ] && [ -f "$EXTRA" ]; then
+  ASKED="answer.txt"
+  bash "$RUNNER" next-action --godspeed "$GODSPEED" --cwd "$GODSPEED" --prompt-file "$EXTRA" --prompt "$PROMPT" \
+    --timeout "$TIMEOUT" --out "$RUNDIR/answer.txt" \
+    --allowed-tools "Bash Read Grep Glob Write Edit WebSearch WebFetch" || true
+else
+  ASKED="answer.txt"
+  bash "$RUNNER" next-action --godspeed "$GODSPEED" --cwd "$GODSPEED" --prompt "$PROMPT" --timeout "$TIMEOUT" \
+    --out "$RUNDIR/answer.txt" \
+    --allowed-tools "Bash Read Grep Glob Write Edit WebSearch WebFetch" || true
+fi
+
+# A DAY OF PAPER GOES BACK FOR ITS MOVES (2026-09-24). The recipe asks for three moves per active
+# goal, each prepared to the last click. Two test runs read that and made two moves across three
+# goals in eight of their forty minutes. So the count is checked by a program, and a run that
+# falls short is sent back ONCE with the exact gaps, in the same folder, to finish them. A second
+# shortfall is written into the record as it stands, never hidden.
+if [ -s "$RUNDIR/decision.md" ] && [ -f "$HERE/check-moves.js" ]; then
+  GAPS="$(GODSPEED_ROOT="$GODSPEED" "$NODE" "$HERE/check-moves.js" --godspeed "$GODSPEED" --date "$TODAY" 2>&1)"
+  if [ $? -ne 0 ]; then
+    FIX="Today is $TODAY (UTC). Today's decision in $RUNDIR is written, but the moves check
+(mc-check-moves --date $TODAY) says it is not finished:
+$GAPS
+Follow the next-action recipe's Step 3 for exactly these gaps: add the missing moves to
+$RUNDIR/moves.md, each prepared in full (NOW read live, AFTER written out, somebody outside who
+did it), or a line 'FEWER <goal>: <why>' where a goal truly has no more today. Then put every new
+move that needs a yes on today's ship list card (refresh it, do not file a second card),
+republish the moves page, file the APPLY and MAKE items, update the Moves and For you today
+sections of decision.md, and run the check again until it prints OK. Your final answer is the
+'For you today' section in one plain sentence."
+    ASKED="$ASKED answer-moves.txt"
+    bash "$RUNNER" next-action --godspeed "$GODSPEED" --cwd "$GODSPEED" ${EXTRA:+--prompt-file "$EXTRA"} --prompt "$FIX" \
+      --timeout "$TIMEOUT" --out "$RUNDIR/answer-moves.txt" \
+      --allowed-tools "Bash Read Grep Glob Write Edit WebSearch WebFetch" || true
+    GAPS="$(GODSPEED_ROOT="$GODSPEED" "$NODE" "$HERE/check-moves.js" --godspeed "$GODSPEED" --date "$TODAY" 2>&1)" \
+      || printf '\n## Moves check\n\nStill short after one return run:\n\n%s\n' "$GAPS" >> "$RUNDIR/decision.md"
+  fi
+fi
+
+# THE BETS GO ON THE CARDS BY PROGRAM, NOT BY THE RUN (2026-09-30). Each move's BET in moves.md is
+# copied onto its goal's card with the work item that puts it live, so settle finds it in seven
+# days. A run that forgot a command cannot lose a bet this way, and nothing is recorded twice.
+if [ "$DRY" -eq 0 ] && [ -s "$RUNDIR/moves.md" ]; then
+  reg goals bets --moves "$RUNDIR/moves.md" --date "$TODAY" > "$RUNDIR/bets.txt" 2>&1 || true
+fi
+
+# EVERY RUN LEAVES A RECORD DATED TODAY. If the assistant wrote none, this writes the honest
+# version, so a missing file means "it did not run" and can never be mistaken for "there was
+# nothing to decide".
+if [ ! -s "$RUNDIR/decision.md" ]; then
+  {
+    echo "# Decision $TODAY"
+    echo
+    echo "## Not done and why"
+    echo "The decision run did not finish and wrote no record of its own. This file was written by"
+    echo "mc-decide so that the gap is not mistaken for a day with nothing to decide. The goal plan"
+    echo "it was given is in attention.txt next to this file."
+  } > "$RUNDIR/decision.md"
+fi
+
+# Loud on purpose: a register check that fails quietly is worse than no check at all.
+reg goals check    || true
+reg work check     || true
+reg forecast check || true
+
+# Save it, if this mission control is a git repository and you keep one. A mission control that is just a folder is fine
+# and this does nothing at all.
+if [ -d "$GODSPEED/.git" ] && command -v git >/dev/null 2>&1; then
+  for d in goals forecasts work attention routines; do [ -d "$GODSPEED/$d" ] && git -C "$GODSPEED" add "$d" >/dev/null 2>&1; done
+  if ! git -C "$GODSPEED" diff --cached --quiet 2>/dev/null; then
+    git -C "$GODSPEED" commit -q -m "Decision $TODAY" >/dev/null 2>&1 || true
+    git -C "$GODSPEED" remote get-url origin >/dev/null 2>&1 && git -C "$GODSPEED" push -q origin HEAD >/dev/null 2>&1 || true
+  fi
+fi
+
+# A RUN WHOSE ASSISTANT DID NOT FINISH IS A FAILED RUN (2026-10-11). On 8, 9, 10 and 11 October
+# the assistant on Mission Control's server could not start at all. The record above was written
+# each day, as it should be, and then this said "decided" and ended with 0, so the schedule's job
+# check read four good runs and nobody heard for four days. The record stays (it is the honest
+# one) and is saved, but the run now says NOT decided and fails, so whatever started it knows the
+# same morning. An assistant that wrote the record and then ran out of time before its answer
+# (26 September) did decide the day and still did not finish: that is said, and fails, too.
+UNFINISHED=""
+for a in $ASKED; do
+  [ -n "$UNFINISHED" ] && break
+  grep -q '[^[:space:]]' "$RUNDIR/$a" 2>/dev/null || UNFINISHED="$a"
+done
+if grep -q "$STANDIN" "$RUNDIR/decision.md" 2>/dev/null; then
+  echo "NOT decided $TODAY: the assistant did not finish (see $RUNDIR/answer.txt.stderr)"
+  exit 1
+fi
+if [ -n "$UNFINISHED" ]; then
+  echo "decided $TODAY, but the assistant did not finish (see $RUNDIR/$UNFINISHED.stderr): $RUNDIR/decision.md"
+  exit 1
+fi
+echo "decided $TODAY: $RUNDIR/decision.md"

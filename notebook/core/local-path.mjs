@@ -1,0 +1,2 @@
+import fs from 'node:fs';import path from 'node:path';
+export function localPath(root,value){const base=path.resolve(root),target=path.resolve(base,value);if(!target.startsWith(base+path.sep))throw Error('File must stay inside the isolated workspace');let cursor=base;for(const part of path.relative(base,target).split(path.sep)){cursor=path.join(cursor,part);if(fs.existsSync(cursor)&&fs.lstatSync(cursor).isSymbolicLink())throw Error('Isolated file paths must not follow symbolic links');}return target;}

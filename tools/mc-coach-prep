@@ -1,0 +1,242 @@
+#!/usr/bin/env bash
+# mc-coach-prep: every coaching talk is prepared the day before it.
+#
+# WHAT IT DOES. It asks the coach which coming talks have no usable preparation yet
+# (`godspeed-coach prep-due --within-hours 48 --json`) and keeps the ones whose day is today or
+# tomorrow, on the talk's own clock. For each, soonest first, it runs the coach-prep recipe for that
+# one talk through mc-run, then asks the coach whether the file is ready (`godspeed-coach
+# prep-check`). A ready file is what the talk opens from: its opening is sent as written and its
+# talk card goes with every message of the talk. A talk that could not be prepared opens from its
+# brief as before, and a later run, still before the talk, tries again.
+#
+# A TALK THAT ALREADY HAS A PREPARATION (written more than 48 hours before the talk, which the coach
+# counts as out of date) keeps it unless this run writes a new ready one: the older file is copied
+# aside before the run and put back when the new one is not ready.
+#
+# THE TIME BUDGET (--budget-minutes, default 120) bounds when the run FINISHES: a talk starts only if
+# the time already used plus its own limit (--timeout, default 2700 seconds) still fits. A talk that
+# does not fit is named in the summary and is prepared by the next run.
+#
+# IT NEVER CONTACTS ANYONE AND WRITES ONLY THE TALK'S OWN PREPARATION. The recipe reads and writes
+# coach/<area>/prep/<date>.md. With claude that is enforced: it gets only the tools below, its file
+# tools may write only in that talk's prep folder, and mc-run makes the list binding. Hermes and
+# Codex take no tool list, so with them it rests on the recipe's own words, as for mc-research.
+#
+# IT COMMITS ONLY ITS OWN FILES: each preparation it wrote and its run folder
+# (routines/coach-prep/<date>/), by name, and pushes them when the folder has an origin.
+#
+# RUN IT BY HAND:   mc-coach-prep --dry-run               the talks it would prepare now
+#                   mc-coach-prep --area weekly-check-in --talk 2026-10-25
+#                                    prepares that talk now, even further ahead or prepared already
+# The notebook's routine "Coaching talk preparation" runs it every night at 03:00.
+#
+# Exit 0: every talk due was prepared, or none was due. 1: a talk could not be prepared, or did not
+# fit the time. 2: a wrong argument or no mission control. 3: the coach, Node.js or mc-run is missing.
+set -uo pipefail
+
+GODSPEED=""; TODAY=""; BUDGET=120; TIMEOUT=2700; DRY=0; AREA=""; TALK=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --godspeed) GODSPEED="${2:-}"; shift 2 ;;
+    --date) TODAY="${2:-}"; shift 2 ;;
+    --budget-minutes) BUDGET="${2:-}"; shift 2 ;;
+    --timeout) TIMEOUT="${2:-}"; shift 2 ;;
+    --area) AREA="${2:-}"; shift 2 ;;
+    --talk) TALK="${2:-}"; shift 2 ;;
+    --dry-run) DRY=1; shift ;;
+    -h|--help) sed -n '2,33p' "$0"; exit 0 ;;
+    *) echo "mc-coach-prep: I do not know the argument $1" >&2; exit 2 ;;
+  esac
+done
+for n in "$BUDGET" "$TIMEOUT"; do
+  printf '%s' "$n" | grep -Eq '^[0-9]+$' || { echo "mc-coach-prep: --budget-minutes and --timeout are whole numbers, not $n" >&2; exit 2; }
+done
+if [ -n "$AREA$TALK" ]; then
+  printf '%s' "$AREA" | grep -Eq '^[a-z0-9][a-z0-9-]*$' || { echo "mc-coach-prep: --area is the talk's area, one word like weekly-check-in, and goes with --talk" >&2; exit 2; }
+  printf '%s' "$TALK" | grep -Eq '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' || { echo "mc-coach-prep: --talk is the talk's day as YYYY-MM-DD, and goes with --area" >&2; exit 2; }
+fi
+
+winpath() { if [ -n "$1" ] && command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else printf '%s\n' "$1"; fi; }
+looks_like_godspeed() { [ -d "${1:-}/rules" ] || [ -d "${1:-}/observations" ]; }
+if [ -z "$GODSPEED" ]; then GODSPEED="${GODSPEED_ROOT:-}"; fi
+if [ -z "$GODSPEED" ] || ! looks_like_godspeed "$GODSPEED"; then
+  D="$PWD"; GODSPEED=""
+  for _ in 1 2 3 4 5 6 7 8; do
+    looks_like_godspeed "$D" && { GODSPEED="$D"; break; }
+    P="$(dirname "$D")"; [ "$P" = "$D" ] && break; D="$P"
+  done
+fi
+if [ -z "$GODSPEED" ] && [ -r "$HOME/.godspeed/device.env" ]; then
+  GODSPEED="$(sed -n 's/^[[:space:]]*\(export[[:space:]]*\)\{0,1\}GODSPEED_DIR=//p' "$HOME/.godspeed/device.env" | tail -1 | tr -d '"'"'"' ' | tr -d '\r')"
+fi
+looks_like_godspeed "$GODSPEED" || { echo "mc-coach-prep: I could not find your mission control; pass --godspeed DIR." >&2; exit 2; }
+GODSPEED="$(winpath "$GODSPEED")"
+cd "$GODSPEED" || exit 2
+export PATH="$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
+[ -n "$TODAY" ] || TODAY="${GODSPEED_TODAY:-$(date -u +%Y-%m-%d)}"
+HERE="$(winpath "$(cd "$(dirname "$0")" && pwd)")"
+NODE=""
+for c in "${GODSPEED_NODE:-}" node nodejs /usr/local/bin/node /usr/bin/node; do [ -n "$c" ] && "$c" -e '' >/dev/null 2>&1 && { NODE="$c"; break; }; done
+[ -n "$NODE" ] || { echo "mc-coach-prep: there is no Node.js on this computer." >&2; exit 3; }
+RUNNER="$HERE/mc-run"; [ -f "$RUNNER" ] || RUNNER="$HOME/.local/bin/mc-run"
+[ -f "$RUNNER" ] || { echo "mc-coach-prep: mc-run is not installed." >&2; exit 3; }
+# THE COACH. A routine names the coach's own program (GODSPEED_COACH_SCRIPT); by hand it is the
+# godspeed-coach command. Both read and write the same coach/ folder.
+COACH_SCRIPT="$(winpath "${GODSPEED_COACH_SCRIPT:-}")"
+if [ -n "$COACH_SCRIPT" ] && [ -f "$COACH_SCRIPT" ]; then coach() { "$NODE" "$COACH_SCRIPT" "$@" --godspeed "$GODSPEED"; }
+elif command -v godspeed-coach >/dev/null 2>&1; then coach() { godspeed-coach "$@" --godspeed "$GODSPEED"; }
+else echo "mc-coach-prep: the coach (godspeed-coach) is not installed, so no talk can be looked up." >&2; exit 3; fi
+
+# One line per talk, soonest first: start (seconds), area, title, day, time, time zone, file, and
+# the time an older preparation was written (- for none). From prep-due, only the talks whose day is
+# today or tomorrow on the talk's own clock and that have not started; from prep-check (a talk named
+# by hand), that one talk.
+to_lines() { # mode: due | one
+  "$NODE" -e '
+let s = ""; process.stdin.on("data", d => s += d).on("end", () => {
+  let list; try { list = JSON.parse(s.trim() || "[]"); } catch (e) { console.error("the coach did not answer in JSON: " + e.message); process.exit(3); }
+  if (!Array.isArray(list)) list = [list];
+  const now = process.env.GODSPEED_NOW ? Date.parse(process.env.GODSPEED_NOW) : Date.now();
+  const dayIn = (ms, tz) => new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(ms));
+  const offset = (ms, tz) => { const p = {};
+    for (const x of new Intl.DateTimeFormat("en-US", { timeZone: tz, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" }).formatToParts(new Date(ms))) p[x.type] = x.value;
+    return Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour % 24, +p.minute, +p.second) - ms; };
+  const one = v => String(v == null ? "" : v).replace(/[\t\r\n]+/g, " ").trim();
+  const out = [];
+  for (const t of list) {
+    const area = one(t && t.area), date = one(t && t.date), time = one(t && t.time) || "19:00", tz = one(t && t.timezone) || "UTC";
+    const file = one(t && t.file).replace(/\\/g, "/"), title = one(t && t.title) || area;
+    if (!/^[a-z0-9][a-z0-9-]*$/.test(area) || !/^\d{4}-\d{2}-\d{2}$/.test(date) || !/^\d{1,2}:\d{2}$/.test(time)
+        || file !== "coach/" + area + "/prep/" + date + ".md") { console.error("skipped a talk in a shape I do not know: " + JSON.stringify(t)); continue; }
+    const [y, m, d] = date.split("-").map(Number), [hh, mm] = time.split(":").map(Number);
+    const guess = Date.UTC(y, m - 1, d, hh, mm); let at = guess;
+    try { at = guess - offset(guess, tz); at = guess - offset(at, tz); } catch (e) { at = guess; }
+    if (process.argv[1] === "due") {
+      const tomorrow = dayIn(now + 86400000, tz);
+      if (date > tomorrow || at <= now) continue;
+    }
+    out.push([Math.floor(at / 1000), area, title, date, time, tz, file, one(t.prepared) || "-"]);
+  }
+  out.sort((a, b) => a[0] - b[0]);
+  for (const r of out) console.log(r.join("\t"));
+});' "$1"
+}
+ERRF="$(mktemp "${TMPDIR:-/tmp}/mc-coach-prep.XXXXXX")"; trap 'rm -f "$ERRF"' EXIT
+if [ -n "$AREA" ]; then
+  JSON="$(coach prep-check "$AREA" --date "$TALK" --json 2>"$ERRF")"
+  [ -n "$JSON" ] || { echo "mc-coach-prep: the coach does not know the $AREA talk of $TALK: $(tail -1 "$ERRF")" >&2; exit 2; }
+  printf '%s' "$JSON" | grep -q '"talk_day":true' || { echo "mc-coach-prep: $TALK is not a day of the $AREA talk." >&2; exit 2; }
+  LIST="$(printf '%s' "$JSON" | to_lines one 2>"$ERRF")" || { echo "mc-coach-prep: $(tail -1 "$ERRF")" >&2; exit 3; }
+else
+  JSON="$(coach prep-due --within-hours 48 --json 2>"$ERRF")" || { echo "mc-coach-prep: the coach could not say which talks are coming: $(tail -1 "$ERRF")" >&2; exit 3; }
+  LIST="$(printf '%s' "$JSON" | to_lines due 2>"$ERRF")" || { echo "mc-coach-prep: $(tail -1 "$ERRF")" >&2; exit 3; }
+fi
+LIST="$(printf '%s' "$LIST" | tr -d '\r')"
+
+if [ "$DRY" -eq 1 ]; then
+  if [ -z "$LIST" ]; then echo "Nothing to prepare: no talk today or tomorrow is without a preparation."; exit 0; fi
+  echo "Would prepare, soonest first:"
+  printf '%s\n' "$LIST" | while IFS=$'\t' read -r _ A TI D TM ZONE F PR; do
+    OVER=""; [ "$PR" != - ] && [ -f "$GODSPEED/$F" ] && OVER=", over its preparation of $PR"
+    echo "  $TI ($A), $D at $TM $ZONE -> $F$OVER"
+  done
+  exit 0
+fi
+[ -n "$LIST" ] || { echo "nothing to prepare $TODAY"; exit 0; }
+
+RUNDIR="$GODSPEED/routines/coach-prep/$TODAY"; mkdir -p "$RUNDIR"
+SUMMARY="$RUNDIR/summary.txt"
+# The answer's last paragraph, at most 300 characters, for the summary.
+last_paragraph() {
+  "$NODE" -e 'const fs=require("fs");let t="";try{t=fs.readFileSync(process.argv[1],"utf8")}catch(e){}
+const p=t.replace(/\r/g,"").split(/\n[ \t]*\n/).map(s=>s.replace(/\s+/g," ").trim()).filter(Boolean);
+process.stdout.write(Array.from(p.length?p[p.length-1]:"").slice(0,300).join(""));' "$1"
+}
+# The time now, in UTC, on the coach's own clock: GODSPEED_NOW when a rehearsal froze it.
+now_iso() {
+  if [ -n "${GODSPEED_NOW:-}" ]; then "$NODE" -e 'process.stdout.write(new Date(process.argv[1]).toISOString().replace(/\.\d+Z$/,"Z"))' "$GODSPEED_NOW"
+  else date -u +%Y-%m-%dT%H:%M:%SZ; fi
+}
+# A preparation whose PREPARED line is missing or unreadable gets the time the run finished, so the
+# coach can tell how fresh it is; one the recipe dated stays as it is.
+stamp() { # file time
+  "$NODE" -e 'const fs=require("fs"),[f,now]=process.argv.slice(1);let t;try{t=fs.readFileSync(f,"utf8")}catch(e){process.exit(0)}
+const head=t.split(/^## /m)[0],m=head.match(/^PREPARED:[ \t]*(.*)$/m);
+if(m&&/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(m[1].trim()))process.exit(0);
+if(m)t=t.replace(/^PREPARED:.*$/m,"PREPARED: "+now);else if(/^STATE:/m.test(head))t=t.replace(/^(STATE:.*)$/m,"PREPARED: "+now+"\n$1");else process.exit(0);
+fs.writeFileSync(f,t);' "$1" "$2"
+}
+# Ready, as the coach judges it (prep-check), and, for a run that is not by hand, not out of date.
+ready() { # area day
+  local j; j="$(coach prep-check "$1" --date "$2" --json 2>/dev/null)" || return 1
+  [ -n "$AREA" ] && return 0
+  printf '%s' "$j" | grep -q '"stale":true' && return 1
+  return 0
+}
+WROTE=()
+START=$(date +%s); BAD=0; SKIPPED=""
+while IFS=$'\t' read -r AT A TI D TM ZONE F PR <&3; do
+  [ -n "$A" ] || continue
+  if [ $(( $(date +%s) - START + TIMEOUT )) -gt $(( BUDGET * 60 )) ]; then
+    SKIPPED="$SKIPPED $A/$D"; echo "$A $D: skipped for time; the next run prepares it" >> "$SUMMARY"; continue
+  fi
+  BEFORE=""
+  if [ -f "$GODSPEED/$F" ] && coach prep-check "$A" --date "$D" >/dev/null 2>&1; then
+    BEFORE="$RUNDIR/$A-$D.before.md"; cp -p "$GODSPEED/$F" "$BEFORE"
+  fi
+  AGAIN=""; [ "$PR" = - ] && PR=""
+  [ -n "$BEFORE" ] && AGAIN=" That file holds an older preparation${PR:+ (prepared $PR)}; prepare the talk again from today's facts and give PREPARED the time you write it."
+  PROMPT="Today is $TODAY. Now: $(now_iso) (UTC). Prepare the $TI talk (area $A) on $D at $TM ($ZONE). Follow the coach-prep recipe for this one talk and write $F.$AGAIN Write no other file, and never run godspeed-coach talk open: the talk opens by itself at its time. Your final answer is one plain sentence."
+  # Its tools, when claude runs it: reading, the web, the notebook's reading tools, the coach's and
+  # the goals' reading commands, and writing in this talk's prep folder only. mc-run splits the list
+  # at spaces, so a command of several words is written with * between them.
+  TOOLS="Read Grep Glob Edit(/coach/$A/prep/**) WebSearch WebFetch Bash(godspeed-coach*areas*) Bash(godspeed-coach*brief*) Bash(godspeed-coach*prep-check*) Bash(mc-goals*list*) Bash(mc-goals*show*) Bash(mc-prompt-archive*search*) Bash(godspeed-journal*words*) Bash(godspeed-journal*week*) Bash(ls:*) Bash(wc:*)"
+  for t in search_knowledge search_notes get_note list_records retrieve_memory list_note_folders personal_operation; do TOOLS="$TOOLS mcp__notebook__$t"; done
+  ANSWER="$RUNDIR/$A-$D.answer.txt"
+  bash "$RUNNER" coach-prep --godspeed "$GODSPEED" --cwd "$GODSPEED" --prompt "$PROMPT" --timeout "$TIMEOUT" \
+    --out "$ANSWER" --allowed-tools "$TOOLS" < /dev/null > /dev/null 2>&1 || true
+  [ -f "$GODSPEED/$F" ] && stamp "$GODSPEED/$F" "$(now_iso)"
+  if ready "$A" "$D" && { [ -z "$BEFORE" ] || ! cmp -s "$BEFORE" "$GODSPEED/$F"; }; then
+    rm -f "$BEFORE"; WROTE+=("$F")
+    echo "$A $D: prepared ($F): $(last_paragraph "$ANSWER")" >> "$SUMMARY"
+  else
+    WHY="$(coach prep-check "$A" --date "$D" 2>&1 | tr -d '\r' | tail -1)"
+    if [ -n "$BEFORE" ]; then
+      cp -p "$BEFORE" "$GODSPEED/$F" && rm -f "$BEFORE"
+      echo "$A $D: NOT PREPARED again ($WHY); its earlier preparation stays" >> "$SUMMARY"
+    else
+      [ -f "$GODSPEED/$F" ] && WROTE+=("$F")
+      echo "$A $D: NOT PREPARED ($WHY); the talk opens from its brief unless the next run prepares it" >> "$SUMMARY"
+    fi
+    BAD=$((BAD+1))
+  fi
+done 3<<< "$LIST"
+
+if [ -d "$GODSPEED/.git" ] && command -v git >/dev/null 2>&1; then
+  gl() { git --literal-pathspecs -C "$GODSPEED" "$@"; }
+  # ${x[@]+...}: an empty list is no error under set -u, also in the bash 3.2 of a Mac.
+  OWN=(${WROTE[@]+"${WROTE[@]}"})
+  REL="routines/coach-prep/$TODAY"
+  # The run folder's files that differ from the last commit, staged or not (a commit refused earlier
+  # left them staged), and the ones git has not seen yet; as mc-research reads its own folders.
+  while IFS= read -r -d '' f; do case "$f" in *.tmp|*.before.md) ;; *) OWN+=("$f") ;; esac; done < <(
+    { gl diff -z --name-only HEAD -- "$REL" 2>/dev/null || gl ls-files -z -m -d -- "$REL" 2>/dev/null
+      gl ls-files -z -o --exclude-standard -- "$REL" 2>/dev/null; })
+  if [ "${#OWN[@]}" -gt 0 ]; then
+    gl add -A -- "${OWN[@]}" >/dev/null 2>&1
+    KNOWN=()
+    for p in "${OWN[@]}"; do gl ls-files --error-unmatch -- "$p" >/dev/null 2>&1 && KNOWN+=("$p"); done
+    # A computer whose git has no name yet commits the way the notebook's own first commit does
+    # (notebook/core/first-commit.mjs); on a new install the commit was refused without one.
+    IDENT=()
+    if [ -z "$(gl config user.name 2>/dev/null)" ] || [ -z "$(gl config user.email 2>/dev/null)" ]; then
+      IDENT=(-c "user.name=Godspeed Mission Control" -c "user.email=godspeed@localhost")
+    fi
+    if [ "${#KNOWN[@]}" -gt 0 ] && ! gl diff --cached --quiet -- "${KNOWN[@]}" 2>/dev/null; then
+      gl ${IDENT[@]+"${IDENT[@]}"} commit -q -m "Coaching talks prepared $TODAY" -- "${KNOWN[@]}" >/dev/null 2>&1 || true
+      gl remote get-url origin >/dev/null 2>&1 && gl push -q origin HEAD >/dev/null 2>&1 || true
+    fi
+  fi
+fi
+cat "$SUMMARY"
+[ "$BAD" -eq 0 ] && [ -z "$SKIPPED" ]

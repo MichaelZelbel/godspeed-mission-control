@@ -1,0 +1,398 @@
+#!/usr/bin/env bash
+# mc-work-run: carries out the work your mission control filed for itself, one item per assistant run, and
+# lets a check that is not the runner say whether it got done.
+#
+# WHY THIS EXISTS. The daily decision (`mc-decide`) files what the mission control will do for your goals:
+# research how a goal is won, build a measurement, compute a number, draft a thing, find a
+# person. Then it has a few minutes left in its own run, so only the two-minute items ever got
+# done and everything that takes real work sat on the register as "planned" until it went stale.
+# A plan nobody carries out is a to-do list. This program is the carrying out.
+#
+# HOW IT WORKS. It asks the work register for what is runnable now (planned, or a failed item
+# whose retry day has come; never outward work, never something waiting on you), takes ONE item
+# under a lease, gives the assistant the item, the goal it serves, how that goal is won (the
+# playbook) and the newest diagnosis, and lets it work with a time limit. What the assistant
+# says it did is recorded as ATTEMPTED. Then the item's own CHECK is run, and only that check
+# makes it VERIFIED. An item that cannot be done from this machine is reported as failed with
+# the reason, and gets its retry gap from the register, not a hammer. Then the next item.
+#
+# IT NEVER MESSAGES YOU AND IT NEVER POSTS. A finished piece becomes a page when the caller names a
+# publish command, and the assistant's one sentence about it (its SAY line) stays in the item's run
+# folder, where the schedule that called this program reads it and tells you.
+#
+# WHAT IT NEEDS: node, the `mc-work` register, `mc-run` and a `work-item` recipe in your mission control.
+# `mc-goals` is used when it is there, for the goal's own words and its playbook.
+#
+# RUN IT BY HAND:        mc-work-run
+# SEE WHAT WOULD RUN:    mc-work-run --dry-run
+# ONE ITEM ONLY:         mc-work-run --only W-20260915-03
+# TWICE A DAY, in your schedule (`crontab -e`), after the morning message and once after lunch:
+#        45 7  * * *  $HOME/.local/bin/mc-work-run >> $HOME/.godspeed/work.log 2>&1
+#        10 13 * * *  $HOME/.local/bin/mc-work-run >> $HOME/.godspeed/work.log 2>&1
+#
+# OPTIONS
+#   --godspeed DIR               the mission control folder (else found the usual way)
+#   --date YYYY-MM-DD       the day the run is recorded under (default today, UTC)
+#   --max-items N           at most N items in one run (default 2)
+#   --budget SECONDS        stop starting new items after this long (default 2700)
+#   --item-timeout SECONDS  time limit for one assistant run (default 1500)
+#   --apply-tools "A B"     tools that change things outside (click, type, fill), given ONLY to an
+#                           outward item that carries your approval, and to no other item
+#   --allow-tools "A B"     more tools the assistant may use, on top of files, shell and the web:
+#                           a mission control names its own READ-ONLY connections here (its mail search, its
+#                           browser reader). Without them an unattended run cannot read a logged-in
+#                           page or an inbox at all, and says so (2026-09-20, the newsletter numbers).
+#   --only <id>             run this one item and nothing else
+#   --extra-prompt-file F   your mission control's own additions to the recipe, added for this run only
+#   --publish-cmd "<cmd>"   a command that turns a finished file into an https page and prints
+#                           the address; run as: <cmd> <file> --title "<what>"
+#   --dry-run               list what would run; take nothing, run nothing, write nothing
+#
+# EXIT CODES: 0 the run went through (an item the assistant reported as FAILED, or whose check
+# said not yet, is an honest outcome, not a failed run); 1 no Node.js or no register; 2 a wrong
+# argument or no mission control; 3 no mc-run; 4 the run went through, but at least one assistant
+# ended without its RESULT line (it crashed, ran out of time, or never said what it did).
+set -uo pipefail
+
+EXTRA_TOOLS=""; APPLY_TOOLS=""; GODSPEED=""; DRY=0; TODAY=""; MAX=2; BUDGET=2700; ITEM_TIMEOUT=1500; ONLY=""; EXTRA=""; PUBLISH_CMD=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --godspeed) GODSPEED="$2"; shift 2 ;;
+    --date) TODAY="$2"; shift 2 ;;
+    --max-items) MAX="$2"; shift 2 ;;
+    --budget) BUDGET="$2"; shift 2 ;;
+    --item-timeout) ITEM_TIMEOUT="$2"; shift 2 ;;
+    --allow-tools) EXTRA_TOOLS="$2"; shift 2 ;;
+    --apply-tools) APPLY_TOOLS="$2"; shift 2 ;;
+    --only) ONLY="$2"; shift 2 ;;
+    --extra-prompt-file) EXTRA="$2"; shift 2 ;;
+    --publish-cmd) PUBLISH_CMD="$2"; shift 2 ;;
+    --dry-run) DRY=1; shift ;;
+    -h|--help) sed -n '2,54p' "$0"; exit 0 ;;
+    *) echo "mc-work-run: I do not know the argument $1" >&2; exit 2 ;;
+  esac
+done
+
+# WINDOWS PROGRAMS GET WINDOWS PATHS (2026-10-09). Hermes on Windows runs its commands with
+# MSYS_NO_PATHCONV=1, so Git Bash no longer turns /c/... into C:/... for node.exe or git.exe, and
+# this said "mc-work is not installed" while it sat right beside it. cygpath exists only in the
+# shells of Windows, and the C:/ form it gives works in bash there too.
+winpath() { if [ -n "$1" ] && command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else printf '%s\n' "$1"; fi; }
+looks_like_godspeed() { [ -d "${1:-}/rules" ] || [ -d "${1:-}/observations" ]; }
+if [ -z "$GODSPEED" ]; then GODSPEED="${GODSPEED_ROOT:-}"; fi
+if [ -z "$GODSPEED" ] || ! looks_like_godspeed "$GODSPEED"; then
+  D="$PWD"; GODSPEED=""
+  for _ in 1 2 3 4 5 6 7 8; do
+    looks_like_godspeed "$D" && { GODSPEED="$D"; break; }
+    P="$(dirname "$D")"; [ "$P" = "$D" ] && break; D="$P"
+  done
+fi
+if [ -z "$GODSPEED" ] && [ -r "$HOME/.godspeed/device.env" ]; then
+  GODSPEED="$(sed -n 's/^[[:space:]]*\(export[[:space:]]*\)\{0,1\}GODSPEED_DIR=//p' "$HOME/.godspeed/device.env" | tail -1 | tr -d '"'"'"' ' | tr -d '\r')"
+fi
+if [ -z "$GODSPEED" ] || ! looks_like_godspeed "$GODSPEED"; then
+  echo "mc-work-run: I could not find your mission control. Run this inside it, or pass --godspeed /path/to/godspeed." >&2
+  exit 2
+fi
+GODSPEED="$(winpath "$GODSPEED")"
+cd "$GODSPEED" || exit 2
+export PATH="$PATH:$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin"  # after the caller's own PATH, so a test (or a mission control) that names its own programs is obeyed; cron's short PATH still finds the rest
+[ -n "$TODAY" ] || TODAY="${GODSPEED_TODAY:-$(date -u +%Y-%m-%d)}"
+RUNDIR="$GODSPEED/routines/work/$TODAY"
+HERE="$(winpath "$(cd "$(dirname "$0")" && pwd)")"
+ts() { date -u +%H:%M:%SZ; }
+log() { echo "$(ts) $*"; }
+
+# FIND NODE BY RUNNING IT, NEVER BY FINDING IT (the python3 stub on Windows prints an advert).
+NODE=""
+for c in node nodejs /usr/local/bin/node /usr/bin/node; do
+  "$c" -e '' >/dev/null 2>&1 && { NODE="$c"; break; }
+done
+[ -n "$NODE" ] || { echo "mc-work-run: there is no Node.js on this computer, so nothing could be run." >&2; exit 1; }
+
+MISSING=""
+reg() {
+  local name="$1"; shift
+  local bin="$HERE/$name.js"
+  [ -f "$bin" ] || bin="$(winpath "$HOME/.local/bin/$name.js")"
+  if [ ! -f "$bin" ]; then
+    case " $MISSING " in *" mc-$name "*) : ;; *) MISSING="$MISSING mc-$name" ;; esac
+    return 1
+  fi
+  GODSPEED_ROOT="$GODSPEED" "$NODE" "$bin" "$@"
+}
+reg work help >/dev/null 2>&1 || { echo "mc-work-run: mc-work is not installed, so there is no register to run from." >&2; exit 1; }
+
+# TIME PASSES FIRST, AND A DRY RUN DOES NOT MOVE IT. `tick` returns dead leases and marks old
+# plans stale; those lines carry today's date for ever. A dry run that quietly aged the register
+# while saying "nothing was written" is the exact lie this register exists to refuse.
+if [ "$DRY" -eq 1 ]; then reg work list >/dev/null 2>&1 || true
+else reg work tick 2>/dev/null | sed 's/^/tick: /'; fi
+
+# WHAT IS RUNNABLE, IN WHAT ORDER. The register already leaves out outward work, work waiting on
+# a person or a missing capability, retries whose day has not come, and anything under a live
+# lease. This program adds the order. First an item whose job is to find out how a goal is won
+# (KIND learn, a playbook), because doing without knowing how it is won is what this whole
+# arrangement exists to stop. Then what gets MADE for a goal of the person's life. Then other
+# research. LAST the mission control's own machinery: an item with no goal, or one whose goal has AREA godspeed.
+# Until 2026-09-20 the rest ran in the order filed, and on that day three of four slots went to
+# the mission control repairing itself while the two items for the money goal waited a second day.
+ORDER_SCRIPT='
+let s=""; process.stdin.on("data",d=>s+=d).on("end",()=>{
+  let rows=[]; try { rows=JSON.parse(s); } catch(e) { rows=[]; }
+  const only=process.argv[1]||"";
+  if (only) rows=rows.filter(r=>r.id===only);
+  const learn=(r)=>String(r.KIND||"do")==="learn";
+  const play=(r)=>learn(r)&&/playbooks\//.test(String(r["DONE WHEN"]||""));
+  const fs=require("fs"); const areas={};
+  const area=(g)=>{ if(!g) return "godspeed"; if(!(g in areas)){ try { const m=fs.readFileSync("goals/"+g+".md","utf8").match(/^AREA:\s*(.+)$/m); areas[g]=m?m[1].trim().toLowerCase():"other"; } catch(e) { areas[g]="other"; } } return areas[g]; };
+  const own=(r)=>area(String(r.GOAL||"").trim())==="godspeed";
+  const apply=(r)=>String(r.OUTWARD||"")==="yes"&&String(r.APPROVED||"")!=="";
+  const rank=(r)=>apply(r)?-1:(play(r)&&!own(r)?0:(!learn(r)&&!own(r)?1:(learn(r)&&!own(r)?2:3)));
+  rows.sort((a,b)=>(rank(a)-rank(b))||String(a.id).localeCompare(String(b.id)));
+  for (const r of rows) console.log(r.id+"\t"+(r.KIND||"do")+"\t"+(r.WHAT||""));
+});'
+# A dry run asks next not to write either: next moves a step whose time passed before any morning
+# message showed it to the next day (2026-10-13), and a dry run must leave the register as it was.
+NEXT_DRY=""; [ "$DRY" -eq 1 ] && NEXT_DRY="--dry-run"
+ORDER_IDS="$(reg work next --json $NEXT_DRY 2>/dev/null | "$NODE" -e "$ORDER_SCRIPT" "$ONLY")"
+RUNDIR_TOUCHED="$(mktemp 2>/dev/null || echo "/tmp/mc-work-touched-$$")"
+: > "$RUNDIR_TOUCHED"
+
+if [ -z "$ORDER_IDS" ]; then
+  [ -n "$ONLY" ] && log "$ONLY is not runnable now (not planned, waiting on someone, outward, or under a lease)"
+  log "nothing runnable now"
+  [ -n "$MISSING" ] && log "not on this computer:$MISSING"
+  exit 0
+fi
+if [ "$DRY" -eq 1 ]; then
+  echo "Would run, in this order (at most $MAX):"
+  printf '%s\n' "$ORDER_IDS" | sed 's/^/  /'
+  echo "Nothing was taken, run or written."
+  exit 0
+fi
+
+# mc-run is started with bash below, so it only has to be there, not be executable (2026-10-09).
+# The notebook runs this file from its own copy of the kit, which git writes without the
+# executable bit on Linux and on a Mac, and the routines' daily round there stopped with
+# "mc-run is not installed" unless an older mc-run sat in ~/.local/bin.
+RUNNER="$HERE/mc-run"
+[ -f "$RUNNER" ] || RUNNER="$HOME/.local/bin/mc-run"
+[ -f "$RUNNER" ] || { echo "mc-work-run: mc-run is not installed, so no recipe could be carried out." >&2; exit 3; }
+
+# The newest file for a goal in a folder, by name (they carry the date), or nothing.
+newest() { ls -1 "$1"/"$2"-*.md 2>/dev/null | sort | tail -1; }
+field() { printf '%s\n' "$1" | sed -n "s/^$2: //p" | head -1; }
+# The first thing in DONE WHEN that looks like a file in the mission control: a path with a slash and a
+# plain-text extension. That file is what gets published when the item verifies.
+path_in() { printf '%s\n' "$1" | grep -oE '[A-Za-z0-9_][A-Za-z0-9_./-]*/[A-Za-z0-9_./-]+\.(md|csv|json|txt|html)' | head -1; }
+
+START="$(date +%s)"
+N=0; DONE=0; VERIFIED=0; UNFINISHED=0
+while IFS=$'\t' read -r ID KIND WHAT; do
+  [ -n "$ID" ] || continue
+  [ "$N" -lt "$MAX" ] || { log "stopping: $MAX item(s) is the limit for one run"; break; }
+  ELAPSED=$(( $(date +%s) - START ))
+  [ "$ELAPSED" -lt "$BUDGET" ] || { log "stopping: ${ELAPSED}s used of a ${BUDGET}s budget"; break; }
+  N=$((N + 1))
+  RUNNER_NAME="work-$TODAY-$(printf '%02d' "$N")"
+  if ! TAKE="$(reg work take "$ID" --runner "$RUNNER_NAME" 2>&1)"; then
+    log "skip $ID: $(printf '%s' "$TAKE" | tail -1)"
+    N=$((N - 1))
+    continue
+  fi
+  log "$ID taken ($KIND): $WHAT"
+  ITEMDIR="$RUNDIR/$ID"; mkdir -p "$ITEMDIR"
+
+  SHOW="$(reg work show "$ID" 2>/dev/null)"
+  GOAL="$(field "$SHOW" GOAL)"
+  DONE_WHEN="$(field "$SHOW" 'DONE WHEN')"
+  # AN APPROVED MOVE MAY WRITE (2026-09-24). Outward work reaches the runner only once the person's
+  # own words are on it (APPROVED), and only then does this one item get the tools that change
+  # things outside: the rest of the run stays read-only, as before.
+  APPROVED=""; ITEM_TOOLS="$EXTRA_TOOLS"
+  # A STEP ON A STANDING PERMISSION (filed with --may) went out without a yes for this one step, so
+  # it is never recorded done unless its UNDO copy, before.txt, was saved first (2026-10-13).
+  MAY_KIND="$(field "$SHOW" MAY)"
+  if [ "$(field "$SHOW" OUTWARD)" = "yes" ]; then
+    APPROVED="$(field "$SHOW" APPROVED)"
+    [ -n "$APPROVED" ] && [ -n "$APPLY_TOOLS" ] && ITEM_TOOLS="${ITEM_TOOLS:+$ITEM_TOOLS }$APPLY_TOOLS"
+  fi
+  {
+    echo "Today is $TODAY (UTC). The mission control is $GODSPEED and that is the folder you are working in."
+    echo
+    echo "## The item, from the work register"
+    printf '%s\n' "$SHOW"
+    if [ -n "$GOAL" ]; then
+      echo; echo "## The goal it serves"
+      reg goals show "$GOAL" 2>/dev/null || echo "(mc-goals is not installed here; the goal card is goals/$GOAL.md if it exists)"
+      PB="$GODSPEED/goals/playbooks/$GOAL.md"
+      echo; echo "## How this goal is won (the playbook)"
+      if [ -f "$PB" ]; then cat "$PB"; else echo "(no playbook yet for $GOAL: how this goal is won has not been researched. If this item IS the playbook, write it; otherwise work from the goal's own words and say in your result that no playbook existed)"; fi
+      DG="$(newest "$GODSPEED/goals/diagnoses" "$GOAL")"
+      echo; echo "## The newest diagnosis of what limits it"
+      if [ -n "$DG" ]; then cat "$DG"; else echo "(none)"; fi
+    fi
+    if [ -n "$EXTRA" ] && [ -f "$EXTRA" ]; then echo; cat "$EXTRA"; fi
+    if [ -n "$APPROVED" ]; then
+      echo
+      echo "## This item is an approved move: apply it"
+      # A STANDING YES (2026-10-12): `mc-work file --may` writes APPROVED as `standing <kind>: "<words>"`,
+      # the person's yes given once on the goal card for every step of one kind. The register lets it
+      # through only while that permission is still on the card and its GOES OUT time has passed.
+      case "$APPROVED" in
+        "standing "*)
+          SKIND="${APPROVED#standing }"; SKIND="${SKIND%%:*}"
+          echo "The person gave a standing yes to every step of this kind ($SKIND), in these words: ${APPROVED#*: }. It covers this one step, exactly as prepared, and nothing beyond it. Without before.txt (below) this step is recorded as failed, whatever it did, because it could not be put back." ;;
+        *) echo "The person said yes to exactly this, in these words: $APPROVED" ;;
+      esac
+      echo "Carry out WHAT at the place it names, exactly as prepared (the AFTER text or file the item or its preview names), and nothing beyond it. First read and save what is there now (NOW) under routines/work/$TODAY/$ID/before.txt so it can be put back. Then apply it with the tools you have: an API or command line first, the signed-in browser if that is the only way. Then read the live place again and quote what it now shows. If the live place differs from what the move expected, or applying it would do anything the yes did not cover, stop and end with RESULT: FAILED naming what differs."
+    fi
+    echo
+    echo "## Where things go"
+    echo "Anything you write for this item goes at the path DONE WHEN names, or under routines/work/$TODAY/$ID/ if it names none. Your final line is the RESULT line the recipe describes; the register is updated by the program that called you, never by you."
+    echo "If you made something the person will open (a draft, an answer, a page), put one line directly above RESULT that starts with SAY: and tells them in one plain sentence what is ready and for what, the way you would say it to them across a table. No file names, no folders, no ids, no tool names: that sentence is the only thing they read before they decide to open it. Housekeeping they will never open gets no SAY line."
+    # RUN THE CHECK BEFORE ANSWERING (18 October 2026). A free model wrote the notes an item asked
+    # for under "### Economy of Language", and the item's CHECK looked for 'Economy of language':
+    # the work was there, the check said no, and the item stayed attempted. The check is the
+    # contract, so the run reads it before the end, the way a person would before handing work over.
+    CHECK_LINE="$(field "$SHOW" CHECK)"
+    if [ -n "$CHECK_LINE" ]; then
+      echo
+      echo "## Before your final line"
+      echo "Run the item's CHECK yourself, from $GODSPEED, exactly as written: $CHECK_LINE"
+      echo "It alone decides whether this item is done, and it runs again after you answer. If it does not exit 0, finish or correct your work until it does. Never change the check, and never make a thing only to satisfy it: if the work cannot be done, end with RESULT: FAILED and say why."
+    fi
+  } > "$ITEMDIR/prompt.txt"
+
+  # WHAT THE ITEM CHANGES IS SAVED WITH THE ITEM. Until 2026-09-21 only the registers and the one
+  # file named in DONE WHEN were saved. An item that repaired a program or wrote a recipe left
+  # that change uncommitted on whichever machine ran it: recorded as verified, present nowhere
+  # else, and blocking every later pull on that machine (2026-09-19, 2026-09-20 and 2026-09-21,
+  # three days running). So the folder's state is read before and after, and what THIS item
+  # touched is added by name. What was already changed before it started is left alone.
+  BEFORE_STATE=""
+  [ -d "$GODSPEED/.git" ] && BEFORE_STATE="$(git -C "$GODSPEED" status --porcelain --untracked-files=all 2>/dev/null | sort)"
+
+  bash "$RUNNER" work-item --godspeed "$GODSPEED" --cwd "$GODSPEED" --prompt-file "$ITEMDIR/prompt.txt" \
+    --timeout "$ITEM_TIMEOUT" --out "$ITEMDIR/answer.txt" \
+    --allowed-tools "Bash Read Grep Glob Write Edit WebSearch WebFetch${ITEM_TOOLS:+ $ITEM_TOOLS}"
+  RC=$?
+  RESULT_LINE="$(grep -a '^RESULT:' "$ITEMDIR/answer.txt" 2>/dev/null | tail -1 | tr -d '\r')"
+  if [ -d "$GODSPEED/.git" ]; then
+    git -C "$GODSPEED" status --porcelain --untracked-files=all 2>/dev/null | sort > "$ITEMDIR/.after-state"
+    printf '%s\n' "$BEFORE_STATE" | sort > "$ITEMDIR/.before-state"
+    # lines that are new or different after the item: " M path", "?? path", "A  path" ...
+    comm -13 "$ITEMDIR/.before-state" "$ITEMDIR/.after-state" | cut -c4- | sed 's/^"//; s/"$//' \
+      | grep -v -E '(^|/)\.env($|\.)|(^|/)secrets/|\.(key|pem|p12|pfx)$|(^|/)node_modules/|\.log$' \
+      >> "$RUNDIR_TOUCHED" 2>/dev/null || true
+    rm -f "$ITEMDIR/.after-state" "$ITEMDIR/.before-state"
+  fi
+
+  if [ "$RC" -ne 0 ] || [ -z "$RESULT_LINE" ]; then
+    WHY="the assistant ended (exit $RC) without a RESULT line; its output is in routines/work/$TODAY/$ID/answer.txt"
+    reg work attempt "$ID" --runner "$RUNNER_NAME" --failed "$WHY" 2>&1 | sed 's/^/  /'
+    log "$ID failed: $WHY"
+    UNFINISHED=$((UNFINISHED + 1))
+    continue
+  fi
+  case "$RESULT_LINE" in
+    "RESULT: FAILED:"*)
+      WHY="$(printf '%s' "$RESULT_LINE" | sed 's/^RESULT: FAILED: *//' | cut -c1-300)"
+      reg work attempt "$ID" --runner "$RUNNER_NAME" --failed "$WHY" 2>&1 | sed 's/^/  /'
+      log "$ID failed: $WHY"
+      continue ;;
+  esac
+  # NO UNDO, NOT DONE (2026-10-13). Every step that goes out keeps what was there before it, so it
+  # can be put back. For a step on a standing permission that copy is routines/work/<day>/<id>/before.txt,
+  # the place the approved-move prompt names; without it the step is recorded failed, never attempted.
+  if [ -n "$MAY_KIND" ] && [ ! -f "$ITEMDIR/before.txt" ]; then
+    WHY="no UNDO: routines/work/$TODAY/$ID/before.txt was not written before the step went out, so it cannot be put back; check the live place by hand"
+    reg work attempt "$ID" --runner "$RUNNER_NAME" --failed "$WHY" 2>&1 | sed 's/^/  /'
+    log "$ID failed: $WHY"
+    continue
+  fi
+  RESULT="$(printf '%s' "$RESULT_LINE" | sed 's/^RESULT: *//' | cut -c1-300)"
+  SAY="$(grep -a '^SAY:' "$ITEMDIR/answer.txt" 2>/dev/null | tail -1 | tr -d '\r' | sed 's/^SAY: *//' | cut -c1-300)"
+  reg work attempt "$ID" --runner "$RUNNER_NAME" --ok --result "$RESULT" 2>&1 | sed 's/^/  /'
+  DONE=$((DONE + 1))
+
+  # THE CHECK, NOT THE RUNNER, SAYS DONE. Exit 0 verifies. Exit 2 means the runner said done and
+  # the check says not: it stays attempted, on the record, for the next decision to re-plan. Exit
+  # 1 means there is no check, and a person or the decision run verifies it by observation.
+  VOUT="$(reg work verify "$ID" 2>&1)"; VRC=$?
+  printf '%s\n' "$VOUT" | sed 's/^/  /'
+  if [ "$VRC" -ne 0 ]; then
+    log "$ID attempted, not verified (verify exit $VRC)"
+    continue
+  fi
+  VERIFIED=$((VERIFIED + 1))
+  log "$ID verified"
+
+  # A FINISHED PIECE BECOMES A PAGE. The page is made by whatever command the caller named; a
+  # mission control with no such command gets the file and no page.
+  FILE="$(path_in "$DONE_WHEN")"
+  URL=""
+  if [ -n "$FILE" ] && [ -f "$GODSPEED/$FILE" ] && [ -n "$PUBLISH_CMD" ]; then
+    URL="$($PUBLISH_CMD "$GODSPEED/$FILE" --title "${SAY:-$WHAT}" 2>/dev/null | grep -oE 'https://[^ ]+' | head -1)"
+    if [ -n "$URL" ]; then
+      reg work link "$ID" --url "$URL" 2>&1 | sed 's/^/  /'
+      log "$ID published: $URL"
+    else
+      log "$ID not published here ($PUBLISH_CMD gave no address)"
+    fi
+  fi
+  # NO SENTENCE FOR THE PERSON, NOTHING TO TELL. The recipe tells the assistant to write a SAY line
+  # only for something the person will open. A playbook rewrite or a repair has none: housekeeping
+  # is recorded, not announced.
+  if [ -n "$URL" ] && [ -z "$SAY" ]; then log "$ID has no sentence for the person: it is on the record and on its page"; fi
+done <<< "$ORDER_IDS"
+
+reg work check 2>/dev/null | grep -E '^PROBLEM' | sed 's/^/  /' || true
+
+# SAVE IT, if this mission control is a git repository. The register, the run records, the playbooks and any
+# file an item named are added by name; nothing else in the folder is swept up.
+FILES_SCRIPT='
+let s=""; process.stdin.on("data",d=>s+=d).on("end",()=>{
+  let rows=[]; try { rows=JSON.parse(s); } catch(e) {}
+  const re=/[A-Za-z0-9_][A-Za-z0-9_./-]*\/[A-Za-z0-9_./-]+\.(md|csv|json|txt|html)/;
+  for (const r of rows) {
+    if (!r.log || !r.log.some(l=>l.event==="VERIFIED"&&l.date===process.argv[1])) continue;
+    const m=String(r["DONE WHEN"]||"").match(re); if (m) console.log(m[0]);
+  }
+});'
+if [ -d "$GODSPEED/.git" ] && command -v git >/dev/null 2>&1; then
+  for d in work goals forecasts attention research routines/work; do [ -e "$GODSPEED/$d" ] && git -C "$GODSPEED" add "$d" >/dev/null 2>&1; done
+  for f in $(reg work list --all --json 2>/dev/null | "$NODE" -e "$FILES_SCRIPT" "$TODAY"); do
+    [ -f "$GODSPEED/$f" ] && git -C "$GODSPEED" add "$f" >/dev/null 2>&1
+  done
+  if [ -s "$RUNDIR_TOUCHED" ]; then
+    sort -u "$RUNDIR_TOUCHED" | while IFS= read -r f; do
+      [ -n "$f" ] || continue
+      git -C "$GODSPEED" add -- "$f" >/dev/null 2>&1 && log "saved with the run: $f"
+    done
+  fi
+  if ! git -C "$GODSPEED" diff --cached --quiet 2>/dev/null; then
+    git -C "$GODSPEED" commit -q -m "Work $TODAY: $DONE attempted, $VERIFIED verified" >/dev/null 2>&1 || true
+    if git -C "$GODSPEED" remote get-url origin >/dev/null 2>&1; then
+      git -C "$GODSPEED" pull --rebase --autostash -q origin HEAD >/dev/null 2>&1 || git -C "$GODSPEED" rebase --abort >/dev/null 2>&1 || true
+      PUSH_OUT="$(git -C "$GODSPEED" push -q origin HEAD 2>&1)" \
+        || log "PUSH FAILED, so today's work exists on this machine only: $(printf '%s' "$PUSH_OUT" | grep -v '^$' | tail -3 | tr '\n' ' ' | cut -c1-300)"
+    fi
+  fi
+fi
+[ -n "$MISSING" ] && log "not on this computer:$MISSING"
+log "run end: $N taken, $DONE attempted, $VERIFIED verified"
+rm -f "$RUNDIR_TOUCHED" 2>/dev/null || true
+
+# AN ASSISTANT THAT DID NOT FINISH FAILS THE RUN (2026-10-11). Each such item was already recorded
+# as failed above, with its retry day; but the run itself ended with 0, so a schedule that runs
+# this every day could not tell a run whose assistant could not even start from a good one. That
+# is how the daily decision beside this one crashed four days running (8 to 11 October) unheard.
+# Exit 4, not 1: the notebook's daily round reads 1 to 3 as "could not start" and drops the lines
+# of the items that did get done.
+if [ "$UNFINISHED" -gt 0 ]; then
+  log "NOT finished: $UNFINISHED of $N assistant run(s) ended without a RESULT line"
+  exit 4
+fi
+exit 0

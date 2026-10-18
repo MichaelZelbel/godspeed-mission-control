@@ -1,0 +1,47 @@
+# Browser installer only. The authenticated SSH process writes the private .env;
+# the person never fills these values. Existing Hostinger Traefik stays untouched.
+name: godspeed-mission-control
+services:
+  godspeed:
+    image: ghcr.io/michaelzelbel/godspeed-mission-control@sha256:ceb11a103fbc4ee7d45c015397b14cb3886e22eb9f878e07bee8735f14e39b64
+    restart: unless-stopped
+    init: true
+    environment:
+      GODSPEED_ACCESS_TOKEN: ${GODSPEED_SETUP_CODE:?Private setup code is required}
+      GODSPEED_DEVICE: vps
+      GODSPEED_COMPUTER: "off"
+      GODSPEED_WEB_ADDRESS: https://${GODSPEED_HOST:?Verified server hostname is required}
+    volumes:
+      - godspeed-data:/opt/data/full-candidate
+    expose: ["47831"]
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
+  https:
+    image: caddy:2.10.2-alpine@sha256:4c6e91c6ed0e2fa03efd5b44747b625fec79bc9cd06ac5235a779726618e530d
+    restart: unless-stopped
+    environment:
+      GODSPEED_HOST: ${GODSPEED_HOST:?Verified server hostname is required}
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - "printf '%s\n' '{' '  admin off' '}' \"$$GODSPEED_HOST {\" '  tls {' '    issuer acme {' '      disable_http_challenge' '    }' '  }' '  reverse_proxy godspeed:47831' '}' > /tmp/godspeed-Caddyfile; exec caddy run --adapter caddyfile --config /tmp/godspeed-Caddyfile"
+    expose: ["443"]
+    labels:
+      traefik.enable: "true"
+      traefik.tcp.routers.godspeed-mission-control.rule: HostSNI(`${GODSPEED_HOST:?Verified server hostname is required}`)
+      traefik.tcp.routers.godspeed-mission-control.entrypoints: websecure
+      traefik.tcp.routers.godspeed-mission-control.tls.passthrough: "true"
+      traefik.tcp.routers.godspeed-mission-control.service: godspeed-mission-control
+      traefik.tcp.services.godspeed-mission-control.loadbalancer.server.port: "443"
+    volumes:
+      - godspeed-certificates:/data
+      - godspeed-proxy-config:/config
+    depends_on:
+      godspeed: {condition: service_healthy}
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
+volumes:
+  godspeed-data: {}
+  godspeed-certificates: {}
+  godspeed-proxy-config: {}

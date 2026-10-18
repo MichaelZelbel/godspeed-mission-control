@@ -1,0 +1,8 @@
+name: godspeed-context
+version: "0.1.0"
+description: >-
+  Tells the model, once per turn before it reads the message (pre_llm_call), that the owner was
+  invited to the getting-to-know-you chat and has not answered yet, or that this chat is under way.
+  Prints nothing otherwise. Installed by the Godspeed Mission Control notebook.
+author: godspeed-mission-control
+kind: standalone

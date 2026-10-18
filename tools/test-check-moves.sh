@@ -1,0 +1,339 @@
+#!/usr/bin/env bash
+# The gate for mc-check-moves: a decision with too few moves, an empty field, or the mission
+# control's own work passed off as "who did this" fails; a full one, or one that says why a goal
+# has fewer, passes. Runs in a throwaway godspeed root.
+# Usage: bash tools/test-check-moves.sh
+set -uo pipefail
+. "$(dirname "$0")/test-guard.bash"
+HERE="$(cd "$(dirname "$0")" && pwd)"
+TMP="$(mktemp -d)"; trap 'rm -rf "$TMP" "$TEST_GUARD_HOME"' EXIT
+D=2026-09-24; RUN="$TMP/routines/next-action/$D"
+mkdir -p "$RUN" "$TMP/goals" "$TMP/work/plans"
+cat > "$RUN/attention.txt" <<'EOF'
+Attention for 2026-09-24
+active:
+  money-goal                         outcome     deadline in 3 day(s)
+    under it: kits (strategy): deadline in 3 day(s)
+  health-goal                        outcome     nothing pressing
+quiet today:
+  friends                            outcome     quiet today
+EOF
+PASS=0; FAIL=0
+ok()  { PASS=$((PASS+1)); printf '  ok   %s\n' "$1"; }
+bad() { FAIL=$((FAIL+1)); printf '  FAIL %s\n' "$1"; }
+run() { node "$HERE/check-moves.js" --godspeed "$TMP" --date "$D" 2>&1; }
+move() { # n goal who after
+  cat <<EOF
+### $1. Change something for $2
+APPLY: W-20260924-0$1
+GOAL: $2
+WHERE: https://example.org/profile
+NOW: "old line"
+AFTER: $4
+WHO DID THIS: $3
+HOW IT LANDS: API, CHECK curl the page
+UNDO: put the old line back
+PERMISSION: ship list
+EOF
+}
+echo "mc-check-moves gate"
+
+OUT="$(run)"; [ $? -eq 1 ] && ok "no moves file fails" || bad "no moves file fails"
+
+{ move 1 money-goal "Simon Willison, his profile README, read today" "the new line"; } > "$RUN/moves.md"
+OUT="$(run)"; [ $? -eq 1 ] && ok "one move for a goal that needs three fails" || bad "one move fails"
+case "$OUT" in *"health-goal: 0 move(s)"*) ok "  and names the goal with none";; *) bad "  names the goal with none: $OUT";; esac
+case "$OUT" in *friends*) bad "  a quiet goal is not counted";; *) ok "  a quiet goal is not counted";; esac
+
+{ move 1 money-goal "his own best video" "x"; move 2 money-goal "a" "y"; move 3 money-goal "b" "z"; echo "FEWER health-goal: waiting on the scale reading"; } > "$RUN/moves.md"
+OUT="$(run)"; case "$OUT" in *"WHO DID THIS must name somebody outside"*) ok "the person's own work as the example fails";; *) bad "own work as example: $OUT";; esac
+
+{ move 1 money-goal "Simon Willison" "work/plans/missing.md"; move 2 money-goal "a" "y"; move 3 money-goal "b" "z"; echo "FEWER health-goal: waiting"; } > "$RUN/moves.md"
+OUT="$(run)"; case "$OUT" in *"not there or empty"*) ok "an AFTER pointing at a missing file fails";; *) bad "missing AFTER file: $OUT";; esac
+
+{ move 1 money-goal "Simon Willison" "x" | grep -v '^UNDO'; move 2 money-goal "a" "y"; move 3 money-goal "b" "z"; echo "FEWER health-goal: waiting"; } > "$RUN/moves.md"
+OUT="$(run)"; case "$OUT" in *"UNDO is missing"*) ok "a missing field fails and is named";; *) bad "missing field: $OUT";; esac
+
+echo "the full plan, written out" > "$TMP/work/plans/readme.md"; echo "with enough words in it to count as a file" >> "$TMP/work/plans/readme.md"
+{ move 1 money-goal "Simon Willison" "work/plans/readme.md"; move 2 money-goal "Justin Welsh" "y"; move 3 money-goal "swyx" "z"; echo "FEWER health-goal: the week's scale reading lands on Sunday"; } > "$RUN/moves.md"
+OUT="$(run)"; [ $? -eq 0 ] && ok "three full moves, and a reason for fewer, pass" || bad "full set passes: $OUT"
+case "$OUT" in *"money-goal 3"*"health-goal 0 (fewer: said why)"*) ok "  and the count is printed";; *) bad "  count printed: $OUT";; esac
+
+{ move 1 money-goal "Simon Willison" "x"; move 2 money-goal "a" "y"; move 3 money-goal "b" "z"; echo "FEWER health-goal: the idea register is empty today"; } > "$RUN/moves.md"
+OUT="$(run)"; case "$OUT" in *"not a reason for fewer"*) ok "a thin register is refused as the reason for fewer";; *) bad "thin register refused: $OUT";; esac
+{ move 1 money-goal "Simon Willison" "x"; move 2 money-goal "a" "y"; move 3 money-goal "b" "z"; echo "FEWER health-goal: LinkedIn has no signed-in session"; } > "$RUN/moves.md"
+OUT="$(run)"; case "$OUT" in *"not a reason for fewer"*) ok "a missing sign-in is refused as the reason for fewer";; *) bad "sign-in refused: $OUT";; esac
+
+{ move 1 money-goal "Simon Willison" "x" | grep -v '^APPLY'; move 2 money-goal "a" "y"; move 3 money-goal "b" "z"; echo "FEWER health-goal: waiting"; } > "$RUN/moves.md"
+OUT="$(run)"; case "$OUT" in *"no \"APPLY"*) ok "a ship-list move with no APPLY line fails";; *) bad "no APPLY: $OUT";; esac
+
+{ move 1 money-goal "Simon Willison" "x"; move 2 money-goal "a" "y"; move 3 money-goal "b" "z"; printf 'FEWER health-goal: two moves prepared; a third was not ready.\nThe register holds fifty ideas to draw from tomorrow.\n'; } > "$RUN/moves.md"
+OUT="$(run)"; case "$OUT" in *"not a reason for fewer"*) ok "a refused reason on the second line of FEWER is still read";; *) bad "second line read: $OUT";; esac
+{ move 1 money-goal "Simon Willison" "x"; move 2 money-goal "a" "y"; move 3 money-goal "b" "z"; echo "FEWER health-goal: a third was not prepared in the time this run had"; } > "$RUN/moves.md"
+OUT="$(run)"; case "$OUT" in *"not a reason for fewer"*) ok "running out of time is refused";; *) bad "time refused: $OUT";; esac
+# Found by a test reader on Hermes (2026-09-30): a brand-new goal got no moves "because the
+# playbook is a draft". The recipe answers that too: read two or three real cases today.
+{ move 1 money-goal "Simon Willison" "x"; move 2 money-goal "a" "y"; move 3 money-goal "b" "z"; echo "FEWER health-goal: playbook is draft (STATUS: draft); the recipe forbids working a goal without knowing how it is won"; } > "$RUN/moves.md"
+OUT="$(run)"; case "$OUT" in *"not a reason for fewer"*) ok "a draft playbook is refused as the reason for fewer";; *) bad "draft playbook refused: $OUT";; esac
+{ move 1 money-goal "Simon Willison" "x"; move 2 money-goal "a" "y"; move 3 money-goal "b" "z"; echo "FEWER health-goal: there is no playbook yet"; } > "$RUN/moves.md"
+OUT="$(run)"; case "$OUT" in *"not a reason for fewer"*) ok "  and so is no playbook";; *) bad "no playbook refused: $OUT";; esac
+{ move 1 money-goal "Simon Willison" "x"; move 2 money-goal "a" "y"; move 3 money-goal "b" "z"; echo "FEWER health-goal: the playbook's next rung is an invitation that waits on his answer of 2026-09-22"; } > "$RUN/moves.md"
+OUT="$(run)"; [ $? -eq 0 ] && ok "  but a reason that only mentions the playbook stands" || bad "  playbook mention: $OUT"
+
+# Found by a test reader on Hermes (2026-09-30): moves headed "### Move 1: ..." were invisible to
+# the check, so FEWER lines covered them and not one field was checked (a bet with no APPLY got
+# through, and no bet reached the goal card).
+{ printf '## money-goal\n\n'; move 1 money-goal "Simon Willison" "x" | sed 's/^### 1\. /### Move 1: /'; move 2 money-goal "a" "y"; move 3 money-goal "b" "z"; echo "FEWER health-goal: the week's scale reading lands on Sunday"; } > "$RUN/moves.md"
+OUT="$(run)"; case "$OUT" in *'heading "### <n>.'*) ok "a move without the numbered heading is found, not skipped";; *) bad "unnumbered heading: $OUT";; esac
+{ move 1 money-goal "Simon Willison" "x"; move 2 money-goal "a" "y"; move 3 money-goal "b" "z" | sed 's/^### 3\. /#### Also: /'; echo "FEWER health-goal: the week's scale reading lands on Sunday"; } > "$RUN/moves.md"
+OUT="$(run)"; case "$OUT" in *'heading "### <n>.'*) ok "  and two moves under one numbered heading are found too";; *) bad "two under one: $OUT";; esac
+
+# --- the weekly number (2026-09-30) ----------------------------------------------------------
+full() { move 1 money-goal "Simon Willison" "x"; move 2 money-goal "Justin Welsh" "y"; move 3 money-goal "swyx" "z"; echo "FEWER health-goal: the week's scale reading lands on Sunday"; }
+full > "$RUN/moves.md"
+OUT="$(run)"; [ $? -eq 0 ] && ok "a goal without a weekly number is checked as before (an older recipe keeps working)" || bad "no LEAD, old rules: $OUT"
+printf 'ID: money-goal\nKIND: outcome\nSTATUS: adopted\nLEAD: people who join the newsletter | total | subscriber mails\n\n## Log\n- 2026-09-10 READ 2 (subscriber mails)\n' > "$TMP/goals/money-goal.md"
+OUT="$(run)"; case "$OUT" in *'needs a line "BET:'*) ok "a move for a goal with a weekly number needs a BET";; *) bad "BET required: $OUT";; esac
+case "$OUT" in *"not read in the last seven days"*) ok "  and a reading older than seven days fails";; *) bad "  stale reading: $OUT";; esac
+printf -- '- 2026-09-23 READ 2 (subscriber mails)\n' >> "$TMP/goals/money-goal.md"
+for i in 1 2 3; do printf 'ID: W-20260924-0%s\nSTATUS: blocked\n\n## Log\n' "$i" > "$TMP/work/W-20260924-0$i.md"; done
+# Found by the final review (2026-09-30): a placeholder APPLY passed, and its bet never reached the card.
+full | awk '{print} /^GOAL:/{print "BET: 2 -> 4"}' | sed 's/^APPLY: W-20260924-01$/APPLY: (filed below)/' > "$RUN/moves.md"
+OUT="$(run)"; case "$OUT" in *"names no work item on the register"*) ok "a bet whose APPLY names no filed work item fails";; *) bad "placeholder APPLY: $OUT";; esac
+full | awk '{print} /^GOAL:/{print "BET: 2 -> 4"}' | sed 's/^APPLY: W-20260924-01$/APPLY:/' > "$RUN/moves.md"
+OUT="$(run)"; case "$OUT" in *'needs "APPLY'*) ok "  and an empty APPLY line is no APPLY line";; *) bad "empty APPLY: $OUT";; esac
+full | awk '{print} /^GOAL:/{print "BET: 2 -> 4 within seven days of going live"}' > "$RUN/moves.md"
+OUT="$(run)"; [ $? -eq 0 ] && ok "every move with a BET, and a reading this week, passes" || bad "BET passes: $OUT"
+full | awk '{print} /^GOAL:/{print "BET: 2 → 4"}' > "$RUN/moves.md"
+OUT="$(run)"; [ $? -eq 0 ] && ok "  the arrow may be →" || bad "  unicode arrow: $OUT"
+# Found by the replay of 2026-09-30: moves that bet on no change ("2 -> 2, this one bets on a reply").
+full | awk '{print} /^GOAL:/{n++; print (n==2 ? "BET: 2 -> 2 (held, not a one-off)" : "BET: 2 -> 4")}' > "$RUN/moves.md"
+OUT="$(run)"; case "$OUT" in *"bets on no change"*) ok "a bet of no change is refused: it is not a move for this goal";; *) bad "no-change bet: $OUT";; esac
+full | awk '{print} /^GOAL:/{print "BET: 2.0 -> 2"}' > "$RUN/moves.md"
+OUT="$(run)"; case "$OUT" in *"bets on no change"*) ok "  also when written 2.0 -> 2";; *) bad "  2.0 -> 2: $OUT";; esac
+full | awk '{print} /^GOAL:/{print "BET: 2 -> 4"}' | grep -v '^APPLY' > "$RUN/moves.md"
+OUT="$(run)"; case "$OUT" in *'a move with a bet needs "APPLY'*) ok "a bet without its APPLY item fails, even off the ship list";; *) bad "APPLY for bets: $OUT";; esac
+full | awk '{print} /^GOAL:/{print "BET: 2 -> 4"}' > "$RUN/moves.md"
+printf 'Weekly numbers on %s.\nread today: money-goal\n' "$D" > "$RUN/settle.txt"
+OUT="$(run)"; case "$OUT" in *"a verdict is due today"*) ok "a goal named under read today needs a reading dated today";; *) bad "read today: $OUT";; esac
+printf -- '- %s READ 3 (subscriber mails)\n' "$D" >> "$TMP/goals/money-goal.md"
+OUT="$(run)"; [ $? -eq 0 ] && ok "  and passes once it has one" || bad "  read today passes: $OUT"
+rm -f "$RUN/settle.txt"
+printf 'ID: money-goal\nKIND: outcome\nSTATUS: adopted\nLEAD: runs this week | per week | the person tells it\n\n## Log\n- 2026-09-20 CHANGED LEAD "" -> "runs this week | per week | the person tells it" because test\n' > "$TMP/goals/money-goal.md"
+OUT="$(run)"; [ $? -eq 0 ] && ok "a weekly number set in the last seven days may wait for its first reading" || bad "grace for a new LEAD: $OUT"
+printf 'ID: money-goal\nKIND: outcome\nSTATUS: adopted\nLEAD: runs this week | per week | the person tells it\n\n## Log\n- 2026-09-10 CHANGED LEAD "" -> "runs this week | per week | the person tells it" because test\n' > "$TMP/goals/money-goal.md"
+OUT="$(run)"; case "$OUT" in *"not read in the last seven days"*) ok "  but not for longer than a week";; *) bad "  grace ends: $OUT";; esac
+# Found by the final review (2026-09-30): a number only the person can tell, not told this week,
+# had no honest way through; the pressure was to re-record an old value as today's reading.
+{ full | awk '{print} /^GOAL:/{print "BET: 2 -> 4"}'; echo "UNREAD money-goal: asked on the card of 2026-09-22 and again today, no answer yet"; } > "$RUN/moves.md"
+for i in 1 2 3; do [ -f "$TMP/work/W-20260924-0$i.md" ] || printf 'ID: W-20260924-0%s\nSTATUS: blocked\n\n## Log\n' "$i" > "$TMP/work/W-20260924-0$i.md"; done
+OUT="$(run)"; [ $? -eq 0 ] && ok "a number the person has not told passes with an UNREAD line that says where it was asked" || bad "UNREAD line: $OUT"
+printf 'Weekly numbers on %s.\nread today: money-goal\n' "$D" > "$RUN/settle.txt"
+OUT="$(run)"; [ $? -eq 0 ] && ok "  also when a verdict is due today" || bad "  UNREAD with read today: $OUT"
+rm -f "$RUN/settle.txt"
+{ full | awk '{print} /^GOAL:/{print "BET: 2 -> 4"}'; echo "UNREAD money-goal:"; } > "$RUN/moves.md"
+OUT="$(run)"; case "$OUT" in *"not read in the last seven days"*) ok "  but an UNREAD line with no reason does not count";; *) bad "  empty UNREAD: $OUT";; esac
+
+# --- WHO DID THIS comes from the goal's research once it has any ---------------------------
+mkdir -p "$TMP/goals/research/kits"
+printf 'CASE: Pieter Levels\nSTART: x\nDID: y\nRESULT: z\nSOURCE: https://example.org (read 2026-09-24)\n\n' > "$TMP/goals/research/kits/cases.md"
+printf 'PERSON: Justin Welsh\nLINK: https://example.org/jw\nWHY: x\nOFFER: y\nSTATUS: unverified\n\n' > "$TMP/goals/research/kits/people.md"
+who3() { { move 1 kits "$1" "x"; move 2 kits "Pieter Levels" "y"; move 3 kits "Pieter Levels" "z"; echo "FEWER health-goal: waiting"; } > "$RUN/moves.md"; run; }
+OUT="$(who3 "Someone Unlisted, read at https://example.org")"
+case "$OUT" in *"WHO DID THIS must name a person or case from goals/research/kits/"*) ok "a name the goal's research does not hold is refused";; *) bad "unlisted name: $OUT";; esac
+OUT="$(who3 "Pieter Levels priced Nomad List in week one (cases.md)")"
+case "$OUT" in *"WHO DID THIS must name a person or case"*) bad "a case from cases.md is accepted: $OUT";; *) ok "a case from cases.md is accepted";; esac
+OUT="$(who3 "justin welsh's profile layout")"
+case "$OUT" in *"WHO DID THIS must name a person or case"*) bad "a person from people.md, any case, accepted: $OUT";; *) ok "a person from people.md is accepted, any letter case";; esac
+# a strategy uses the research of the outcome it serves
+printf 'ID: kits-strategy\nKIND: strategy\nSTATUS: adopted\nSERVES: other-goal, kits\n\n## Log\n' > "$TMP/goals/kits-strategy.md"
+{ move 1 kits-strategy "Someone Unlisted" "x"; move 2 kits-strategy "Pieter Levels" "y"; move 3 kits-strategy "Pieter Levels" "z"; echo "FEWER health-goal: waiting"; } > "$RUN/moves.md"
+OUT="$(run)"
+case "$OUT" in *'for kits-strategy": WHO DID THIS must name a person or case from goals/research/kits/'*) ok "a strategy is held to the research of the outcome it serves";; *) bad "strategy via SERVES: $OUT";; esac
+[ "$(printf '%s\n' "$OUT" | grep -c 'WHO DID THIS must name a person or case')" = "1" ] && ok "  and only the move with the unlisted name" || bad "  only the unlisted move: $OUT"
+rm -r "$TMP/goals/research/kits"
+OUT="$(who3 "Someone Unlisted, read at https://example.org")"
+case "$OUT" in *"WHO DID THIS must name a person or case"*) bad "no research: old behaviour expected: $OUT";; *) ok "with no research for the goal the unlisted name passes this rule again";; esac
+
+# --- a step under a standing permission (2026-10-12) -----------------------------------------
+# A MAY line on the move's goal card, written by mc-goals allow with the person's own words, lets
+# a kind of step go out without a fresh yes; the move names that kind and needs no ship-list line.
+rm -f "$TMP/goals/money-goal.md"
+printf 'ID: yt-goal\r\nKIND: outcome\r\nSTATUS: adopted\r\nMAY: yt-replies | answer comments under my videos | 10 per week | notice | "yes, answer them" 2026-10-12\r\n\r\n## Log\r\n' > "$TMP/goals/yt-goal.md"
+maymove() { move 4 yt-goal "Simon Willison" "the reply, in full" | grep -v '^APPLY' | sed "s/^PERMISSION: .*/PERMISSION: may:$1/"; }
+{ full; maymove yt-replies; } > "$RUN/moves.md"
+OUT="$(run)"; [ $? -eq 0 ] && ok "a move under a MAY line of its goal passes, with no APPLY line and off the ship list" || bad "MAY move passes: $OUT"
+{ full; maymove unknown-kind; } > "$RUN/moves.md"
+OUT="$(run)"; case "$OUT" in *"PERMISSION may:unknown-kind is not a standing permission of yt-goal"*) ok "a kind the goal card has no MAY line for fails, named";; *) bad "unknown MAY kind: $OUT";; esac
+{ full; maymove "yt-replies (notice, at most ten a week)"; } > "$RUN/moves.md"
+OUT="$(run)"; [ $? -eq 0 ] && ok "  the kind may be followed by words of explanation" || bad "  kind with words after it: $OUT"
+{ full; maymove ""; } > "$RUN/moves.md"
+OUT="$(run)"; case "$OUT" in *"PERMISSION may: is not a standing permission of yt-goal"*) ok "  and may: with no kind fails";; *) bad "  may: with no kind: $OUT";; esac
+# health-goal has a standing permission of its own, of another kind: yt-goal's does not cover it.
+printf 'ID: health-goal\nKIND: outcome\nSTATUS: adopted\nMAY: walk-log | note my walks in my own log | 7 per week | alone | "log my walks" 2026-10-12\n\n## Log\n' > "$TMP/goals/health-goal.md"
+{ full; move 4 health-goal "Simon Willison" "x" | grep -v '^APPLY' | sed 's/^PERMISSION: .*/PERMISSION: may:walk-log/'; } > "$RUN/moves.md"
+OUT="$(run)"; [ $? -eq 0 ] && ok "  a goal's own kind passes for that goal" || bad "  health-goal's own kind: $OUT"
+{ full; move 4 health-goal "Simon Willison" "x" | grep -v '^APPLY' | sed 's/^PERMISSION: .*/PERMISSION: may:yt-replies/'; } > "$RUN/moves.md"
+OUT="$(run)"; case "$OUT" in *"PERMISSION may:yt-replies is not a standing permission of health-goal"*) ok "  and another goal's MAY line does not cover it";; *) bad "  MAY of another goal: $OUT";; esac
+# A strategy with no MAY lines of its own moves under those of the outcome it serves (final review
+# I6, 2026-10-13): the first outcome on its SERVES line that has some, one level up.
+printf 'ID: yt-strat\nKIND: strategy\nSTATUS: adopted\nSERVES: no-card-goal, money-plain, yt-goal\n\n## Log\n' > "$TMP/goals/yt-strat.md"
+printf 'ID: money-plain\nKIND: outcome\nSTATUS: adopted\n\n## Log\n' > "$TMP/goals/money-plain.md"
+stratmove() { move 4 "$1" "Simon Willison" "the reply, in full" | grep -v '^APPLY' | sed "s/^PERMISSION: .*/PERMISSION: may:$2/"; }
+{ full; stratmove yt-strat yt-replies; } > "$RUN/moves.md"
+OUT="$(run)"; [ $? -eq 0 ] && ok "a strategy's move under its outcome's MAY line passes" || bad "strategy under its outcome's MAY: $OUT"
+{ full; stratmove yt-strat walk-log; } > "$RUN/moves.md"
+OUT="$(run)"; case "$OUT" in *"PERMISSION may:walk-log is not a standing permission of yt-strat (it has none of its own and uses those of yt-goal, the outcome it serves)"*) ok "  a kind its outcome has no line for fails, and says whose lines it uses";; *) bad "  strategy, unknown kind: $OUT";; esac
+printf 'ID: yt-own\nKIND: strategy\nSTATUS: adopted\nSERVES: yt-goal\nMAY: shorts | cut shorts from my videos | 3 per week | alone | "cut them yourself" 2026-10-12\n\n## Log\n' > "$TMP/goals/yt-own.md"
+{ full; stratmove yt-own yt-replies; } > "$RUN/moves.md"
+OUT="$(run)"; case "$OUT" in *"PERMISSION may:yt-replies is not a standing permission of yt-own;"*) ok "  a strategy with MAY lines of its own uses only those";; *) bad "  own lines first: $OUT";; esac
+printf 'ID: yt-project\nKIND: project\nSTATUS: adopted\nSERVES: yt-own\n\n## Log\n' > "$TMP/goals/yt-project.md"
+{ full; stratmove yt-project shorts; } > "$RUN/moves.md"
+OUT="$(run)"; case "$OUT" in *"PERMISSION may:shorts is not a standing permission of yt-project"*) ok "  and only an outcome's lines are used, one level up";; *) bad "  only an outcome's: $OUT";; esac
+
+# --- every move aims at its goal's limit (2026-10-12) ------------------------------------------
+# Once a goal's research names the one thing that limits it now (LIMIT: under "## The limit now"
+# in brief.md), each move for it says on an AIMS AT line how it moves that limit. A goal whose research names no
+# limit yet (founding, or no research) is not blocked: its moves pass and a NOTE says why.
+mkdir -p "$TMP/goals/research/kits"
+brief() { printf 'GOAL: kits\nUPDATED: %s\nSTATUS: %s\n\n## The limit now\n%s\n\n## What works now\n(nothing yet)\n' "$D" "$1" "$2" > "$TMP/goals/research/kits/brief.md"; }
+aimed() { move "$1" "$2" "Simon Willison" "x" | awk -v a="$3" '{print} /^GOAL:/ && a != "-" {print "AIMS AT: " a}'; }
+aims() { { full; aimed 4 kits "$1"; } > "$RUN/moves.md"; run; }
+brief current "LIMIT: almost nobody sees the kits"
+OUT="$(aims "almost nobody sees the kits: the one page with traffic gets the install line")"; RC=$?
+[ $RC -eq 0 ] && ok "a move whose AIMS AT names its goal's limit passes" || bad "AIMS AT names the limit: $OUT"
+OUT="$(aims "Almost Nobody Sees The Kits, so this puts one on the page people read")"
+[ $? -eq 0 ] && ok "  in any letter case" || bad "  letter case: $OUT"
+OUT="$(aims "the README")"
+case "$OUT" in *"AIMS AT must name this goal's limit (\"almost nobody sees the kits...\")"*) ok "an AIMS AT that does not name the limit fails, quoting it";; *) bad "AIMS AT off the limit: $OUT";; esac
+OUT="$(aims -)"
+case "$OUT" in *"AIMS AT must name this goal's limit"*) ok "  and so does a move with no AIMS AT for a goal that has a limit";; *) bad "  missing AIMS AT: $OUT";; esac
+OUT="$(aims "founding")"
+case "$OUT" in *"AIMS AT must name this goal's limit"*) ok "  and founding is no aim once a limit is named";; *) bad "  founding with a limit: $OUT";; esac
+brief current "LIMIT: almost nobody sees the kits: 178 visitors a fortnight on the one page with traffic"
+OUT="$(aims "almost nobody sees the kits: 178 visitors, and this page is where they land")"
+[ $? -eq 0 ] && ok "a long limit needs only its first 40 characters" || bad "first 40 characters: $OUT"
+OUT="$(aims "the README")"
+case "$OUT" in *"(\"almost nobody sees the kits: 178 visitor...\")"*) ok "  and the refusal quotes those 40";; *) bad "  quotes 40: $OUT";; esac
+{ full; aimed 4 kits-strategy "the README"; } > "$RUN/moves.md"; OUT="$(run)"
+case "$OUT" in *'for kits-strategy": AIMS AT must name this goal'*) ok "a strategy aims at the limit of the outcome it serves";; *) bad "strategy via SERVES: $OUT";; esac
+printf 'GOAL: kits\r\nUPDATED: %s\r\nSTATUS: current\r\n\r\n## The limit now\r\nLIMIT: almost nobody sees the kits\r\n' "$D" > "$TMP/goals/research/kits/brief.md"
+OUT="$(aims "the README")"
+case "$OUT" in *"(\"almost nobody sees the kits...\")"*) ok "a brief written with Windows line endings is read the same";; *) bad "CRLF brief: $OUT";; esac
+OUT="$(aims "almost nobody sees the kits: the install line")"
+[ $? -eq 0 ] && ok "  and passes the same" || bad "  CRLF passes: $OUT"
+# Founding night (review focus 4): no limit named yet must not block the whole day.
+brief founding "nothing named"
+OUT="$(aims "founding")"; RC=$?
+[ $RC -eq 0 ] && ok "a goal whose research names no limit yet accepts AIMS AT: founding" || bad "founding: $OUT"
+case "$OUT" in *"NOTE kits: no LIMIT named yet in its research; AIMS AT not required"*) ok "  and says why in a NOTE";; *) bad "  NOTE: $OUT";; esac
+OUT="$(aims -)"
+[ $? -eq 0 ] && ok "  and a move with no AIMS AT passes too" || bad "  no AIMS AT, no limit: $OUT"
+[ "$(printf '%s\n' "$OUT" | grep -c '^NOTE money-goal: ')" = "1" ] && ok "  one NOTE per goal, also for a goal with no research at all" || bad "  one NOTE per goal: $OUT"
+# A goal with no research folder at all says so, not that its research names no limit (final review M4).
+case "$OUT" in *"NOTE money-goal: has no research yet; AIMS AT not required"*) ok "  and that goal's NOTE says it has no research yet";; *) bad "  no research yet: $OUT";; esac
+brief current "nothing named"; printf '\n## Who to reach and what we offer\nLIMIT: not this one\n' >> "$TMP/goals/research/kits/brief.md"
+OUT="$(aims "the README")"
+case "$OUT" in *"NOTE kits: no LIMIT"*) ok "a LIMIT line outside ## The limit now is not the limit";; *) bad "LIMIT outside its section: $OUT";; esac
+{ full; aimed 4 kits "founding" | grep -v '^UNDO'; } > "$RUN/moves.md"; OUT="$(run)"
+case "$OUT" in *"UNDO is missing"*"NOTE kits"*) ok "a NOTE stands beside the gaps, after them, and never fails a day itself";; *) bad "NOTE with gaps: $OUT";; esac
+rm -r "$TMP/goals/research/kits"
+
+# --- at most one move a day is the person's to do (2026-10-12) -------------------------------
+hisown() { move "$1" "$2" "Simon Willison" "x" | sed 's/^HOW IT LANDS: .*/HOW IT LANDS: only the person can film it; CHECK the video is listed/'; }
+{ move 1 money-goal "Simon Willison" "x"; move 2 money-goal "Justin Welsh" "y"; hisown 3 money-goal; hisown 4 health-goal; } > "$RUN/moves.md"
+OUT="$(run)"; case "$OUT" in *"at most one move a day may be the person's to do; 2 are"*) ok "two moves only the person can make, across goals, fail";; *) bad "two for the person: $OUT";; esac
+case "$OUT" in *"FEWER <goal>: the person's one step today is move <n>"*) ok "  and the refusal says how a goal left short says so";; *) bad "  FEWER hint: $OUT";; esac
+{ move 1 money-goal "Simon Willison" "x"; move 2 money-goal "Justin Welsh" "y"; hisown 3 money-goal; echo "FEWER health-goal: the person's one step today is move 3"; } > "$RUN/moves.md"
+OUT="$(run)"; [ $? -eq 0 ] && ok "  and that FEWER line is a reason the check accepts" || bad "  FEWER person's step: $OUT"
+{ move 1 money-goal "Simon Willison" "x"; move 2 money-goal "Justin Welsh" "y"; hisown 3 money-goal; echo "FEWER health-goal: the week's scale reading lands on Sunday"; } > "$RUN/moves.md"
+OUT="$(run)"; [ $? -eq 0 ] && ok "  one passes" || bad "  one for the person: $OUT"
+case "$OUT" in *"PERSON 1: move 3 (Change something for money-goal)"*) ok "  and the count is printed as a PERSON line";; *) bad "  PERSON line: $OUT";; esac
+
+# --- a carried step only the person can do counts toward the one (2026-10-14) ------------------
+# On 2026-10-14 the card carried two messages only he could send, filed 12 October, beside one new
+# step of his; the check counted one and passed. Carried items are read from the work register.
+carry() { # id filed status [extra line]
+  printf 'ID: %s\nSTATUS: %s\nKIND: do\nKEY: apply-%s\nGOAL: friends\nWHAT: Per routines/next-action/%s/moves.md move 2: he sends Sam the prepared message\nOWNER: person\nNEEDS: authorization\nOUTWARD: yes\nSTALE AFTER: 7\nFILED: %s\nSOURCE: next-action\n%s\n\n## Log\n- %s FILED by next-action for friends\n' \
+    "$1" "$3" "$1" "$2" "$2" "${4:-}" "$2" > "$TMP/work/$1.md"
+}
+nocarry() { rm -f "$TMP/work"/W-2026092[0-3]-*.md "$TMP/work"/W-2026091*.md; }
+mine() { move 1 money-goal "Simon Willison" "x"; move 2 money-goal "Justin Welsh" "y"; move 3 money-goal "swyx" "z"; echo "FEWER health-goal: the week's scale reading lands on Sunday"; }
+carry W-20260922-01 2026-09-22 blocked; carry W-20260922-02 2026-09-22 blocked
+mine > "$RUN/moves.md"
+OUT="$(run)"; case "$OUT" in *"person's to do; 2 are: W-20260922-01 (he sends Sam the prepared message); W-20260922-02"*) ok "two carried steps and none today fail, and are named by id and what";; *) bad "two carried: $OUT";; esac
+case "$OUT" in *'HOLD <work id>: <why>'*) ok "  and the refusal says how to hold one back";; *) bad "  HOLD hint: $OUT";; esac
+case "$OUT" in *"PERSON 2: W-20260922-01"*) ok "  and the PERSON line says 2 on a failing day too";; *) bad "  PERSON 2: $OUT";; esac
+{ mine; echo "HOLD W-20260922-02: Sam is away until the 30th"; } > "$RUN/moves.md"
+OUT="$(run)"; [ $? -eq 0 ] && ok "one carried step plus a HOLD for the other passes" || bad "HOLD passes: $OUT"
+case "$OUT" in *"PERSON 1: W-20260922-01"*) ok "  and the held one is not counted";; *) bad "  held not counted: $OUT";; esac
+{ mine; echo "HOLD W-20260922-02"; } > "$RUN/moves.md"
+OUT="$(run)"; case "$OUT" in *"HOLD W-20260922-02 says no why"*) ok "  a HOLD with no why is refused";; *) bad "  HOLD without why: $OUT";; esac
+rm -f "$TMP/work/W-20260922-02.md"
+{ move 1 money-goal "Simon Willison" "x"; move 2 money-goal "Justin Welsh" "y"; hisown 3 money-goal; echo "FEWER health-goal: the person's one step today is move 3"; } > "$RUN/moves.md"
+OUT="$(run)"; case "$OUT" in *"person's to do; 2 are: move 3 (Change something for money-goal); W-20260922-01"*) ok "one carried step plus one of today's fails";; *) bad "carried plus today: $OUT";; esac
+nocarry
+carry W-20260917-01 2026-09-17 blocked
+carry W-20260922-03 2026-09-22 cancelled; carry W-20260922-04 2026-09-22 verified
+carry W-20260922-05 2026-09-22 blocked 'APPROVED: 2026-09-22 "yes, I do that one"'
+carry W-20260924-09 2026-09-24 blocked
+OUT="$(run)"; [ $? -eq 0 ] && ok "a carried step seven days old or more, cancelled, verified, answered or filed today is not counted" || bad "not counted: $OUT"
+case "$OUT" in *"PERSON 1: move 3"*) ok "  and the count is today's one";; *) bad "  only today's: $OUT";; esac
+nocarry; rm -f "$TMP/work/W-20260924-09.md"
+carry W-20260923-07 2026-09-23 blocked
+{ move 1 money-goal "Simon Willison" "x"; move 2 money-goal "Justin Welsh" "y"; hisown 3 money-goal | sed 's/^APPLY: .*/APPLY: W-20260923-07/'; echo "FEWER health-goal: the person's one step today is move 3"; } > "$RUN/moves.md"
+OUT="$(run)"; [ $? -eq 0 ] && ok "a carried step that is also today's APPLY counts once" || bad "counted once: $OUT"
+case "$OUT" in *"PERSON 1: move 3"*) ok "  as today's move";; *) bad "  as today's move: $OUT";; esac
+nocarry
+
+# --- a dated chance closing within two weeks gets a move (2026-10-14) ------------------------
+# Twice the decision left a chance closing within the week out of the day, writing that it "changes
+# no weekly number". A chance in the goal's research with an idea file, closing from today to
+# fourteen days on, is carried by a move that cites the idea; "IDEA: none ..." is exempt.
+mkdir -p "$TMP/goals/research/health-goal"
+opening() { # until idea [opening text]
+  printf 'OPENING: %s\nUNTIL: %s\nSOURCE: https://example.org/run (read %s)\nMOVE: the mission control asks whether to enter\nIDEA: %s\n\n' \
+    "${3:-A 5 km fun run in the town park on a Sunday morning, 10 euros entry, at most 200 starters, entry closes early}" "$1" "$D" "$2"
+}
+openings() { { printf '# Openings\n\n'; cat; } > "$TMP/goals/research/health-goal/openings.md"; }
+base() { move 1 money-goal "Simon Willison" "x"; move 2 money-goal "Justin Welsh" "y"; move 3 money-goal "swyx" "z"; echo "FEWER health-goal: the week's scale reading lands on Sunday"; }
+carry() { move 4 health-goal "Simon Willison" "x" | awk -v c="$1" '{print} /^GOAL:/{print "CARRIES: " c}'; }
+base > "$RUN/moves.md"
+opening 2026-09-30 ideas/enter-the-fun-run.md | openings
+OUT="$(run)"; RC=$?
+[ $RC -eq 1 ] && ok "a chance closing in six days that no move carries fails" || bad "chance in six days, no move: $OUT"
+case "$OUT" in *'health-goal: the chance "A 5 km fun run in the town park on a Sunday morning, 10 euros entry, at most 200...'*'closes on 2026-09-30 and no move today carries it'*'cite ideas/enter-the-fun-run.md in that move'*) ok "  and names the chance, its date and the idea to cite";; *) bad "  names it: $OUT";; esac
+{ base; carry "ideas/enter-the-fun-run.md, asked on the ship list"; } > "$RUN/moves.md"
+OUT="$(run)"; [ $? -eq 0 ] && ok "  a move citing the idea's path passes" || bad "  cited by path: $OUT"
+{ base; carry "the enter-the-fun-run idea"; } > "$RUN/moves.md"
+OUT="$(run)"; [ $? -eq 0 ] && ok "  and so does one citing the idea's name" || bad "  cited by name: $OUT"
+# Once the person said no, the idea is dropped (or made once done), but its opening stays in
+# openings.md until its UNTIL; the day must not be refused for it every morning (2026-10-14).
+base > "$RUN/moves.md"
+mkdir -p "$TMP/ideas"
+idea() { printf 'GOAL: health-goal\r\nSTATUS: %s\r\nSOURCE: goal research %s\r\n\r\n- %s note\r\n' "$1" "$D" "$D" > "$TMP/ideas/enter-the-fun-run.md"; }
+idea dropped
+OUT="$(run)"; [ $? -eq 0 ] && ok "a chance whose idea file says STATUS dropped needs no move" || bad "dropped idea: $OUT"
+idea "made, 2026-09-23, entered and paid"
+OUT="$(run)"; [ $? -eq 0 ] && ok "  nor one whose idea is made" || bad "made idea: $OUT"
+idea open
+OUT="$(run)"; case "$OUT" in *"no move today carries it"*) ok "  but an open idea is still refused";; *) bad "  open idea: $OUT";; esac
+rm -r "$TMP/ideas"
+OUT="$(run)"; case "$OUT" in *"no move today carries it"*) ok "  and a missing idea file is still required";; *) bad "  missing idea file: $OUT";; esac
+opening 2026-09-24 ideas/enter-the-fun-run.md | openings
+OUT="$(run)"; case "$OUT" in *"no move today carries it"*) ok "  a chance closing today counts too";; *) bad "  closes today: $OUT";; esac
+{ opening 2026-09-30 ideas/enter-the-fun-run.md; opening 2026-09-28 ideas/enter-the-fun-run.md "A second race in the same idea"; } | openings
+OUT="$(run)"
+[ "$(printf '%s\n' "$OUT" | grep -c 'no move today carries it')" = "1" ] && ok "two openings sharing one idea are reported once" || bad "once per idea: $OUT"
+case "$OUT" in *'"A second race in the same idea" closes on 2026-09-28'*) ok "  with the earliest closing date";; *) bad "  earliest date: $OUT";; esac
+opening 2026-10-14 ideas/enter-the-fun-run.md | openings
+OUT="$(run)"; [ $? -eq 0 ] && ok "a chance closing in twenty days needs no move today" || bad "twenty days: $OUT"
+opening 2026-09-20 ideas/enter-the-fun-run.md | openings
+OUT="$(run)"; [ $? -eq 0 ] && ok "a chance that already closed needs no move" || bad "past UNTIL: $OUT"
+opening 2026-09-30 "none (folded into ideas/enter-the-fun-run.md as its earlier step)" | openings
+OUT="$(run)"; [ $? -eq 0 ] && ok "an opening with IDEA none (...) is exempt, even when it mentions an idea file" || bad "IDEA none: $OUT"
+opening "early October" ideas/enter-the-fun-run.md | openings
+OUT="$(run)"; [ $? -eq 0 ] && ok "an UNTIL that is not a date is left to the research check" || bad "UNTIL not a date: $OUT"
+rm -r "$TMP/goals/research/health-goal"
+
+echo; echo "$PASS passed, $FAIL failed"; [ "$FAIL" -eq 0 ]

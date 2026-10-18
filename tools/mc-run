@@ -1,0 +1,357 @@
+#!/usr/bin/env bash
+# mc-run: run one of your mission control's recipes with no one sitting at the computer, through whichever
+# assistant this machine has.
+#
+# WHY THIS EXISTS. A recipe that only runs when you are typing is not a system, it is a habit.
+# But the moment you schedule one, the recipe gets written into the schedule: the command, the
+# model, the flags and the prompt all end up in a line in a crontab that only works on the
+# computer it was typed on, and only for the one program it names. Change assistant and every
+# scheduled job is rubble.
+#
+# So the recipe stays a recipe - a `SKILL.md` in your mission control - and the program that carries it out
+# is ONE line of configuration. Hermes, Claude Code and Codex all get the same recipe, reading
+# the same folder, with the same tools. That is the whole job of this file.
+#
+# USAGE
+#   mc-run <recipe-name> [--cwd DIR] [--prompt-file FILE | --prompt TEXT] [--timeout SECONDS]
+#           [--out FILE] [--allowed-tools "Bash Read Write"] [--godspeed DIR] [--list]
+#
+# The prompt it builds is: the recipe's own text, then whatever extra you passed (usually
+# today's date and where to write), then one line saying which folder and which assistant.
+# The assistant's final answer goes to --out, or to the screen.
+#
+# WHICH ASSISTANT
+#   GODSPEED_RUNNER=hermes|claude|codex, else the runner line in your mission control at
+#   scripts/config/mc-runner.env or ~/.godspeed/device.env, else the first of hermes, claude, codex
+#   that is on this machine.
+#     hermes:  hermes chat --query-file - --quiet --oneshot --yolo --accept-hooks --in "$CWD"
+#              (add -p only if GODSPEED_HERMES_PROFILE is set)
+#     claude:  claude -p --permission-mode acceptEdits --output-format text
+#     codex:   codex exec --sandbox workspace-write --skip-git-repo-check -
+#
+# A TOOL LIST (--allowed-tools) is for claude; Hermes and Codex take none, so with them a
+# recipe's limits rest on the recipe's own words. A list that limits the shell (it names Bash(...)
+# commands, or no shell at all) is binding: claude runs with --restricted and dontAsk, so the
+# settings files on the computer cannot add to it, and it writes only where its Edit(<path>) rules
+# say. A list that grants the whole shell (a bare Bash) changes nothing. See claude_binding below.
+#
+# The exit code is the assistant's own. Nothing in here reads or edits the answer, except that
+# Hermes' waiting lines are taken out of it (see run_hermes).
+set -uo pipefail
+
+SKILL=""; CWD=""; PROMPT_FILE=""; PROMPT_TEXT=""; TIMEOUT=1500; OUT=""; ALLOWED=""; GODSPEED=""; LIST=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --cwd) CWD="$2"; shift 2 ;;
+    --godspeed) GODSPEED="$2"; shift 2 ;;
+    --prompt-file) PROMPT_FILE="$2"; shift 2 ;;
+    --prompt) PROMPT_TEXT="$2"; shift 2 ;;
+    --timeout) TIMEOUT="$2"; shift 2 ;;
+    --out) OUT="$2"; shift 2 ;;
+    --allowed-tools) ALLOWED="$2"; shift 2 ;;
+    --list) LIST=1; shift ;;
+    -h|--help) sed -n '2,40p' "$0"; exit 0 ;;
+    *) if [ -z "$SKILL" ]; then SKILL="$1"; shift; else echo "mc-run: I do not know the argument $1" >&2; exit 2; fi ;;
+  esac
+done
+
+# WINDOWS PROGRAMS GET WINDOWS PATHS (2026-10-09). Hermes on Windows runs its commands with
+# MSYS_NO_PATHCONV=1, so Git Bash no longer turns /c/... into C:/... for the programs it starts,
+# and an assistant told to work in /c/... looks in C:\c\.... cygpath exists only in the shells of
+# Windows, and the C:/ form it gives works in bash there too.
+winpath() { if [ -n "$1" ] && command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else printf '%s\n' "$1"; fi; }
+
+# WHERE IS MY GODSPEED? The same three answers the rest of these programs give, in the same order, so
+# that two programs can never disagree about which folder they are working on.
+looks_like_godspeed() { [ -d "${1:-}/rules" ] || [ -d "${1:-}/observations" ]; }
+if [ -z "$GODSPEED" ]; then GODSPEED="${GODSPEED_ROOT:-}"; fi
+if [ -z "$GODSPEED" ] || ! looks_like_godspeed "$GODSPEED"; then
+  D="${CWD:-$PWD}"; GODSPEED=""
+  for _ in 1 2 3 4 5 6 7 8; do
+    looks_like_godspeed "$D" && { GODSPEED="$D"; break; }
+    P="$(dirname "$D")"; [ "$P" = "$D" ] && break; D="$P"
+  done
+fi
+if [ -z "$GODSPEED" ] && [ -r "$HOME/.godspeed/device.env" ]; then
+  GODSPEED="$(sed -n 's/^[[:space:]]*\(export[[:space:]]*\)\{0,1\}GODSPEED_DIR=//p' "$HOME/.godspeed/device.env" | tail -1 | tr -d '"'"'"' ' | tr -d '\r')"
+fi
+if [ -z "$GODSPEED" ] || ! looks_like_godspeed "$GODSPEED"; then
+  echo "mc-run: I could not find your mission control. Run this inside it, or pass --godspeed /path/to/godspeed." >&2
+  exit 2
+fi
+[ -n "$CWD" ] || CWD="$GODSPEED"
+GODSPEED="$(winpath "$GODSPEED")"; CWD="$(winpath "$CWD")"
+export PATH="$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
+
+# WHERE A RECIPE LIVES. Your own recipes are `skills/<name>/SKILL.md`. A developer tool reads
+# them through the hidden `.claude/skills` link, which is the same room seen from another door,
+# and a single file dropped in as `skills/<name>.md` also works, because that is the shape the
+# kit ships them in and somebody will copy one straight across.
+skill_file() {
+  for p in "$GODSPEED/skills/$1/SKILL.md" "$GODSPEED/.claude/skills/$1/SKILL.md" "$GODSPEED/skills/$1.md"; do
+    [ -f "$p" ] && { printf '%s\n' "$p"; return 0; }
+  done
+  return 1
+}
+if [ "$LIST" -eq 1 ]; then
+  ls -1 "$GODSPEED/skills" 2>/dev/null | sed 's/\.md$//'
+  exit 0
+fi
+[ -n "$SKILL" ] || { echo "mc-run: which recipe? (mc-run --list shows them)" >&2; exit 2; }
+SKILL_FILE="$(skill_file "$SKILL")" || {
+  echo "mc-run: there is no recipe called $SKILL in $GODSPEED/skills. mc-run --list shows what is there." >&2
+  exit 2
+}
+
+RUNNER="${GODSPEED_RUNNER:-}"
+for f in "$GODSPEED/scripts/config/mc-runner.env" "$HOME/.godspeed/device.env"; do
+  [ -n "$RUNNER" ] && break
+  [ -r "$f" ] && RUNNER="$(sed -n 's/^[[:space:]]*\(export[[:space:]]*\)\{0,1\}GODSPEED_RUNNER=//p' "$f" | tail -1 | tr -d '"'"'"' ' | tr -d '\r')"
+done
+if [ -z "$RUNNER" ]; then
+  for c in hermes claude codex; do command -v "$c" >/dev/null 2>&1 && { RUNNER="$c"; break; }; done
+fi
+[ -n "$RUNNER" ] || { echo "mc-run: no assistant on this computer (I looked for hermes, claude and codex)." >&2; exit 3; }
+command -v "$RUNNER" >/dev/null 2>&1 || { echo "mc-run: $RUNNER is the chosen assistant and it is not on this computer." >&2; exit 3; }
+
+# A recipe file opens with a short header between two lines of three dashes. Strip it: it is
+# there for the index that lists your recipes, not for the model, and a prompt that BEGINS with
+# three dashes is read by some of these programs as a command-line option instead of as text.
+PROMPT="$(awk 'NR==1 && /^---$/ {skip=1; next} skip && /^---$/ {skip=0; next} !skip' "$SKILL_FILE")"
+[ -n "$PROMPT_FILE" ] && PROMPT="$PROMPT"$'\n\n'"$(cat "$PROMPT_FILE")"
+[ -n "$PROMPT_TEXT" ] && PROMPT="$PROMPT"$'\n\n'"$PROMPT_TEXT"
+PROMPT="$PROMPT"$'\n\n'"Working directory: $CWD. Godspeed: $GODSPEED. Assistant: $RUNNER."
+
+cd "$CWD" || exit 2
+# A Mac has no `timeout` unless somebody installed one, and a job with no time limit that hangs
+# is worse than one that has to run without a limit. So: use it where it exists, say nothing
+# where it does not, and never fail for its absence.
+# On a server that has the agent cage (server/install.sh puts it there), the run goes through
+# it instead: the same time limit, but it also ends everything the assistant started, holds it
+# to one processor core, and keeps it behind the machine's own services. A command that runs
+# away can then not hold the server for days after the run is over.
+# A run that is ALREADY inside a cage (a cron job that the server caged as a whole, two hours) gets
+# no new cage: agent-cage then keeps the first clock and runs the command with no limit of its own,
+# so a hung goal or decision would run until the job's cage ends everything (2026-10-13). There the
+# run's own limit is kept with timeout, which ends the run and what it started; still in the cage.
+in_cage() { case "$(cat "${MC_RUN_CGROUP_FILE:-/proc/self/cgroup}" 2>/dev/null)" in *"/agent.slice/"*) return 0 ;; esac; return 1; }
+if command -v agent-cage >/dev/null 2>&1 && ! { in_cage && command -v timeout >/dev/null 2>&1; }; then
+  TO() { agent-cage --max "${TIMEOUT}s" -- "$@"; }
+elif command -v timeout >/dev/null 2>&1; then TO() { timeout --kill-after=30 "$TIMEOUT" "$@"; }
+elif command -v gtimeout >/dev/null 2>&1; then TO() { gtimeout "$TIMEOUT" "$@"; }
+else TO() { "$@"; }
+fi
+
+# The tool list as separate words, each Bash(...) pattern one word, never expanded as a file pattern.
+TOOLS_LIST=()
+[ -n "$ALLOWED" ] && read -r -a TOOLS_LIST <<< "$ALLOWED"
+
+# Does the list limit the shell? Not when it names the whole shell: a bare Bash or PowerShell, or
+# one that allows every command.
+limits_shell() {
+  [ "${#TOOLS_LIST[@]}" -gt 0 ] || return 1
+  local w
+  for w in "${TOOLS_LIST[@]}"; do
+    case "$w" in Bash|'Bash(*)'|'Bash(:*)'|PowerShell|'PowerShell(*)'|'PowerShell(:*)') return 1 ;; esac
+  done
+  return 0
+}
+
+# A LIST THAT LIMITS THE SHELL IS BINDING (2026-10-13). For claude, --allowedTools only ADDS
+# approvals to the ones in the settings files on the computer. On a server whose administrator
+# settings allow every command (Bash(*)), the first nightly goal research, whose list named five
+# commands, wrote its own page fetchers in the shell, committed and pushed. So such a list now
+# starts claude with:
+#   --restricted   the settings files of the user, the project and the folder are not read, so
+#                  nothing can add to the list (nor the settings' env, model or apiKeyHelper: the
+#                  login comes from the environment, CLAUDE_CODE_OAUTH_TOKEN, or from claude login).
+#                  The file tools cannot leave the working folder.
+#   --permission-mode dontAsk   instead of acceptEdits, which approves EVERY edit in the working
+#                  folder. The working folder is the mission control, and it holds what later runs
+#                  with the whole shell execute: routines, scripts, recipes, the decision's prompt,
+#                  the hooks. With dontAsk whatever the list does not allow is refused, so a run
+#                  writes only where its Edit(<path>) rules say, e.g. Edit(/goals/research/**), a
+#                  path in the working folder (anchor_rules below says why that is written for it).
+#                  An Edit in the list makes the Write tool exist as well, and Claude Code checks
+#                  every file tool against the Edit rules only: a Write(<path>) rule is never read
+#                  ("Use Edit(...) instead (Edit rules cover all file-editing tools)" in
+#                  $OUT.stderr), so a list names Edit alone.
+#   --tools        the tools the list names, and ToolSearch, which loads the notebook's tools.
+#                  Nothing else exists in the run, so a tool the list forgot cannot be used.
+#   --strict-mcp-config, and --mcp-config with a file holding only the servers the list names
+#                  (mcp__<server>__...), taken from the mission control's .mcp.json: --restricted
+#                  would not start them, and nothing else starts (no browser, no video service).
+# Tested on Claude Code 2.1.296 on 2026-10-13 (the server, as root, whose settings allow Bash(*)):
+# curl refused, no MCP server but the notebook present; writes in dev/, skills/ and .claude/
+# refused, writes in goals/research/ and ideas/ ran; mc-check-research --fetch, WebFetch and the
+# notebook ran. (git push and a write outside the folder were refused the same day before dontAsk.)
+# A Claude Code too old for --restricted gets --setting-sources "" (the settings are not read); one
+# without dontAsk gets its default mode, which in a run with nobody there refuses whatever the list
+# does not allow. One that knows neither switch runs unbound, and says so in $OUT.stderr, where
+# mc-research reads it for the night's summary.
+# A list that grants the whole shell (mc-decide, mc-work-run) cannot be held to anything this way,
+# so it is left alone: its hooks, its deny rules and the notebook's approval keep applying.
+CLAUDE_MODE=(--permission-mode acceptEdits)
+CLAUDE_BIND=()
+NOT_BOUND=""
+MCP_TMP=""
+help_probe() { # what this claude knows; a claude that hangs here must not hold the run
+  if command -v timeout >/dev/null 2>&1; then timeout 30 claude --help 2>&1
+  elif command -v gtimeout >/dev/null 2>&1; then gtimeout 30 claude --help 2>&1
+  else claude --help 2>&1
+  fi
+}
+# A FILE RULE MEANS THE RUN'S FOLDER, WHEREVER THE ASSISTANT HAS cd'd TO (2026-10-15). Claude Code
+# reads a plain path in a Read(...) or Edit(...) rule against its CURRENT folder, and its Bash tool
+# keeps a cd from one command to the next. A research night began with
+# `cd goals/research/financial-security && ls` (read-only, so allowed) and never went back, so
+# Edit(goals/research/**) then meant goals/research/financial-security/goals/research/**: every
+# save was refused, twice, and the goal had no night. So a plain path, and a /path (which Claude
+# Code anchors at the folder it started in), is written here as the absolute path Claude Code reads
+# as one, //<the run's folder>/<path>:
+#   - on Windows Claude Code matches C:\x as /c/x, so C:/x becomes /c/x (cygpath -u is not that:
+#     it writes the Temp folder as /tmp);
+#   - [ ] * ? \ in the folder's name are escaped, or the rule reads them as a pattern;
+#   - a folder reached through a symlink is named twice, as given and where it really is, because
+#     an allow rule holds only when the path asked for AND the file it leads to both match;
+#   - a path with no / in it (*.md) keeps matching at any depth: //<folder>/**/*.md.
+# A rule that is already absolute (//x, ~/x), a carve-out (!x) or one above the folder (../x) is
+# passed as written. Tested with real headless runs (dontAsk, --restricted) that cd into the goal's
+# folder first: Claude Code 2.1.300 on Linux (a folder with a space, one with [ ], one through a
+# symlink) and 2.1.270 on Windows; the plain rule refused every save, the anchored one let the
+# saves in goals/research/ and ideas/ through and refused skills/ and goals/.
+claude_path() { # a folder written as Claude Code matches it
+  local p="$1"
+  case "$p" in [A-Za-z]:/*) p="/$(printf '%s' "${p%%:*}" | tr 'A-Z' 'a-z')/${p#?:/}" ;; esac
+  printf '%s' "$p" | sed 's/[][*?\\]/\\&/g'
+}
+anchor_rules() {
+  local roots=() r phys w tool p out=()
+  r="$(cd "$CWD" 2>/dev/null && pwd)" || return 0
+  r="$(winpath "$r")"; r="${r%/}"; [ -n "$r" ] || return 0
+  roots+=("$(claude_path "$r")")
+  phys="$(cd "$CWD" 2>/dev/null && pwd -P)"; phys="$(winpath "$phys")"; phys="${phys%/}"
+  if [ -n "$phys" ]; then phys="$(claude_path "$phys")"; [ "$phys" = "${roots[0]}" ] || roots+=("$phys"); fi
+  for w in "${TOOLS_LIST[@]}"; do
+    case "$w" in
+      'Read('*')'|'Edit('*')')
+        tool="${w%%(*}"; p="${w#*(}"; p="${p%)}"
+        case "$p" in ./*) p="${p#./}" ;; //*|'~'*) out+=("$w"); continue ;; /*) p="${p#/}" ;; esac
+        case "$p" in ''|.|..|../*|'!'*) out+=("$w"); continue ;; esac
+        case "$p" in */*) ;; *) p="**/$p" ;; esac
+        for r in "${roots[@]}"; do out+=("$tool(/$r/$p)"); done ;;
+      *) out+=("$w") ;;
+    esac
+  done
+  TOOLS_LIST=("${out[@]}")
+}
+claude_binding() {
+  limits_shell || return 0
+  anchor_rules
+  local names="" servers=() w n s help m src="" node=""
+  for w in "${TOOLS_LIST[@]}"; do
+    n="${w%%(*}"
+    case "$n" in
+      '') continue ;;
+      mcp__*) s="${n#mcp__}"; s="${s%%__*}"
+              case " ${servers[*]-} " in *" $s "*) ;; *) servers+=("$s") ;; esac
+              continue ;;
+    esac
+    case ",$names," in *",$n,"*) ;; *) names="${names:+$names,}$n" ;; esac
+    if [ "$n" = Edit ]; then case ",$names," in *",Write,"*) ;; *) names="$names,Write" ;; esac; fi
+  done
+  case ",$names," in *",ToolSearch,"*) ;; *) names="${names:+$names,}ToolSearch" ;; esac
+  help="$(help_probe)"
+  case "$help" in
+    *--restricted*) CLAUDE_BIND=(--restricted --tools "$names") ;;
+    *--setting-sources*) CLAUDE_BIND=(--setting-sources "") ;;
+    *) NOT_BOUND="mc-run: this run was not held to its list of tools: this Claude Code knows neither --restricted nor --setting-sources, so the settings on this computer may allow more; update it with: claude update"
+       echo "$NOT_BOUND" >&2
+       return 0 ;;
+  esac
+  case "$help" in
+    *dontAsk*) CLAUDE_MODE=(--permission-mode dontAsk) ;;
+    *) CLAUDE_MODE=()
+       echo "mc-run: this Claude Code has no dontAsk mode, so the run uses its default mode, which with nobody there refuses whatever the list does not allow" >&2 ;;
+  esac
+  case "$help" in *--strict-mcp-config*) CLAUDE_BIND+=(--strict-mcp-config) ;; esac
+  [ "${#servers[@]}" -gt 0 ] || return 0
+  for m in "$CWD/.mcp.json" "$GODSPEED/.mcp.json"; do [ -f "$m" ] && { src="$m"; break; }; done
+  [ -n "$src" ] || return 0
+  for c in node nodejs; do command -v "$c" >/dev/null 2>&1 && { node="$c"; break; }; done
+  if [ -z "$node" ]; then CLAUDE_BIND+=(--mcp-config "$src"); return 0; fi
+  # The file names the servers' keys only by ${NAME}, as .mcp.json does; it is the person's own
+  # and is removed when the run ends.
+  MCP_TMP="$(mktemp "${TMPDIR:-/tmp}/mc-run-mcp.XXXXXX")" || return 0
+  chmod 600 "$MCP_TMP" 2>/dev/null
+  if "$node" -e 'const fs=require("fs");const [src,dst,...names]=process.argv.slice(1);
+const all=(JSON.parse(fs.readFileSync(src,"utf8")).mcpServers)||{};const out={};
+for(const n of names) if(all[n]) out[n]=all[n];
+fs.writeFileSync(dst,JSON.stringify({mcpServers:out},null,2)+"\n");' "$(winpath "$src")" "$(winpath "$MCP_TMP")" "${servers[@]}" 2>/dev/null; then
+    CLAUDE_BIND+=(--mcp-config "$(winpath "$MCP_TMP")")
+  fi
+}
+trap '[ -n "$MCP_TMP" ] && rm -f "$MCP_TMP"' EXIT
+if [ "$RUNNER" = claude ]; then
+  claude_binding
+elif limits_shell; then
+  echo "mc-run: $RUNNER takes no list of tools, so this run is held to its limits only by the recipe's own words." >&2
+fi
+
+# The prompt goes in on standard input wherever the program allows it: there is no limit on how
+# long it can be that way, and nothing inside it can be mistaken for an option.
+run_claude() {
+  if [ "${#TOOLS_LIST[@]}" -gt 0 ]; then
+    printf '%s' "$PROMPT" | TO claude -p ${CLAUDE_MODE[@]+"${CLAUDE_MODE[@]}"} --output-format text \
+      ${CLAUDE_BIND[@]+"${CLAUDE_BIND[@]}"} --allowedTools "${TOOLS_LIST[@]}"
+  else
+    printf '%s' "$PROMPT" | TO claude -p --permission-mode acceptEdits --output-format text
+  fi
+}
+# Hermes keeps a folder with each saved conversation and puts itself back there when it starts,
+# so changing folder before running it is not enough on its own: `--in` is what actually points
+# it at your mission control. Most people have one Hermes and never need `GODSPEED_HERMES_PROFILE`; set it only if
+# you keep several separate Hermes setups on one machine.
+#
+# HERMES READS THE PROMPT FROM STANDARD INPUT TOO (2026-10-09). Until then it got the prompt as
+# one argument (`hermes -z "$PROMPT"`), and a Windows command line holds at most 32,767
+# characters. The next-action recipe alone is longer, so on Windows the daily round's morning
+# choice could never start: "Argument list too long". `chat --query-file -` reads it from
+# standard input, `--quiet --oneshot` answers once and prints only the answer, and `--yolo
+# --accept-hooks` keep what -z did by itself: no run stops to wait for a yes nobody is there to give.
+# One thing -z never let through: Hermes' waiting line ("  [tool]", a face, "ruminating...") can end
+# up in the answer, whose last paragraph is what the person is told, so it is taken out.
+strip_waiting() { sed -E '/^[[:space:]]*\[tool\][[:space:]].*[[:space:]][a-z]+\.\.\.[[:space:]]*$/d'; }
+run_hermes() {
+  if [ -n "${GODSPEED_HERMES_PROFILE:-}" ]; then
+    printf '%s' "$PROMPT" | TO hermes -p "$GODSPEED_HERMES_PROFILE" chat --query-file - --quiet --oneshot --yolo --accept-hooks --in "$CWD" | strip_waiting
+  else
+    printf '%s' "$PROMPT" | TO hermes chat --query-file - --quiet --oneshot --yolo --accept-hooks --in "$CWD" | strip_waiting
+  fi
+}
+# Codex refuses to work in a folder it has not been told to trust, and says so instead of
+# starting, which is the right way round. `--skip-git-repo-check` is what lets it work on a mission control
+# that is not a git repository, and a mission control is allowed not to be one. `--full-auto` is the retired
+# spelling of the sandbox that may write in the folder it was pointed at.
+run_codex()  { printf '%s' "$PROMPT" | TO codex exec --sandbox workspace-write --skip-git-repo-check -; }
+
+if [ -n "$OUT" ]; then
+  mkdir -p "$(dirname "$OUT")"
+  # THE ANSWER IS WRITTEN OUTSIDE THE MISSION CONTROL UNTIL IT IS WHOLE (2026-10-16). It used to grow
+  # as answer.txt.tmp in the run folder, where the assistant saw a stray file while saving its
+  # work and deleted it ("rm -f .../answer.txt.tmp && git add ..."). Its answer then went into a
+  # deleted file and the day counted as not finished although it was decided: 21 and 27
+  # September, 4 and 16 October. A file the assistant cannot see, it cannot tidy away.
+  PART="$(mktemp "${TMPDIR:-/tmp}/mc-run-answer.XXXXXX")" || PART="$OUT.tmp"
+  "run_$RUNNER" > "$PART" 2> "$OUT.stderr"; RC=$?
+  if mv -f "$PART" "$OUT" 2>/dev/null; then
+    chmod 644 "$OUT" 2>/dev/null || true   # mktemp makes it private; the answer never was
+  else
+    printf 'mc-run: the answer was lost before it could be saved (%s was gone)\n' "$PART" >> "$OUT.stderr"
+  fi
+  # Kept beside the answer, so whoever reads the answer can tell a run that was not held to its list.
+  [ -n "$NOT_BOUND" ] && printf '%s\n' "$NOT_BOUND" >> "$OUT.stderr"
+else
+  "run_$RUNNER"; RC=$?
+fi
+exit "$RC"

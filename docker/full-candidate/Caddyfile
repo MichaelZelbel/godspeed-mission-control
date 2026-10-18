@@ -1,0 +1,6 @@
+{$GODSPEED_CANDIDATE_HOST:localhost} {
+    tls internal
+    reverse_proxy notebook:47831
+    header Strict-Transport-Security "max-age=31536000"
+    header Referrer-Policy "no-referrer"
+}

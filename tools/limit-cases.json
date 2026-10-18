@@ -1,0 +1,22 @@
+{
+  "about": "How a research brief names the one thing that limits its goal now. goals.js limitOf is the rule; check-research, check-moves and Mission Control's trial check must agree with it on every case here. limit is the value read, or null for none. tools/test-limit.js runs them.",
+  "cases": [
+    { "name": "the limit under its own heading", "brief": "GOAL: g\nSTATUS: current\n\n## The limit now\nLIMIT: almost nobody sees the kits\n\n## What works now\n(nothing yet)\n", "limit": "almost nobody sees the kits" },
+    { "name": "a LIMIT under a later section is not the limit", "brief": "GOAL: g\nSTATUS: current\n\n## The limit now\nnothing named\n\n## Who to reach and what we offer\nLIMIT: not this one\n", "limit": null },
+    { "name": "a heading with trailing spaces still opens the section", "brief": "GOAL: g\nSTATUS: current\n\n## The limit now   \nLIMIT: the page has no visitors\n", "limit": "the page has no visitors" },
+    { "name": "a heading with a trailing tab still opens the section", "brief": "GOAL: g\nSTATUS: current\n\n## The limit now\t\nLIMIT: the page has no visitors\n", "limit": "the page has no visitors" },
+    { "name": "Windows line endings read the same", "brief": "GOAL: g\r\nSTATUS: current\r\n\r\n## The limit now\r\nLIMIT: the page has no visitors\r\n\r\n## What works now\r\n(nothing yet)\r\n", "limit": "the page has no visitors" },
+    { "name": "an empty LIMIT is no limit", "brief": "GOAL: g\nSTATUS: current\n\n## The limit now\nLIMIT:\n", "limit": null },
+    { "name": "a LIMIT of only spaces is no limit", "brief": "GOAL: g\nSTATUS: current\n\n## The limit now\nLIMIT:    \n", "limit": null },
+    { "name": "an empty first LIMIT is no limit, whatever follows it", "brief": "GOAL: g\nSTATUS: current\n\n## The limit now\nLIMIT:\nLIMIT: a second line\n", "limit": null },
+    { "name": "the first LIMIT line in the section counts", "brief": "GOAL: g\nSTATUS: current\n\n## The limit now\nLIMIT: the first one\nLIMIT: the second one\n", "limit": "the first one" },
+    { "name": "the value is trimmed at both ends", "brief": "GOAL: g\nSTATUS: current\n\n## The limit now\nLIMIT:    few people open the page   \n", "limit": "few people open the page" },
+    { "name": "a LIMIT that does not start its line is not read", "brief": "GOAL: g\nSTATUS: current\n\n## The limit now\n  LIMIT: indented\n", "limit": null },
+    { "name": "text before the LIMIT line in the section is allowed", "brief": "GOAL: g\nSTATUS: current\n\n## The limit now\nThe research of three nights agrees.\nLIMIT: nobody has heard of the kits\n", "limit": "nobody has heard of the kits" },
+    { "name": "a ### heading does not end the section", "brief": "GOAL: g\nSTATUS: current\n\n## The limit now\n### Why\nthree cases say so\nLIMIT: nobody has heard of the kits\n", "limit": "nobody has heard of the kits" },
+    { "name": "no limit section at all", "brief": "GOAL: g\nSTATUS: current\n\n## What works now\nLIMIT: not in a limit section\n", "limit": null },
+    { "name": "only the first limit section counts", "brief": "GOAL: g\nSTATUS: current\n\n## The limit now\nnothing named\n\n## What works now\n(nothing yet)\n\n## The limit now\nLIMIT: a second section\n", "limit": null },
+    { "name": "the heading must be the whole line", "brief": "GOAL: g\nSTATUS: current\n\n## The limit now and later\nLIMIT: not this one\n", "limit": null },
+    { "name": "the scaffold of a new research folder names none", "brief": "GOAL: g\nUPDATED: 2026-10-13\nSTATUS: founding\n\n## The limit now\nnothing named\n\n## What works now\n(nothing yet)\n", "limit": null }
+  ]
+}

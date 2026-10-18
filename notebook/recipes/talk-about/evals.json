@@ -1,0 +1,446 @@
+{
+  "synthetic_only": true,
+  "cases": [
+    {
+      "id": "spouse",
+      "input": "Ask my spouse about the cat food",
+      "fixture": "profile resolves spouse to synthetic person A; active topics empty",
+      "expected": {
+        "creates_note": false,
+        "creates_reminder": false,
+        "clarification_required": false,
+        "tool": "create_contact_topic",
+        "mode": "one_off",
+        "priority": "normal"
+      }
+    },
+    {
+      "id": "name",
+      "input": "Talk to Alex about the garden",
+      "fixture": "one visible Alex; empty topics",
+      "expected": {
+        "creates_note": false,
+        "creates_reminder": false,
+        "clarification_required": false,
+        "tool": "create_contact_topic"
+      }
+    },
+    {
+      "id": "german",
+      "input": "Mit Alex \u00fcber ges\u00fcnderes Katzenfutter sprechen",
+      "fixture": "one visible Alex; empty topics",
+      "expected": {
+        "creates_note": false,
+        "creates_reminder": false,
+        "clarification_required": false,
+        "tool": "create_contact_topic",
+        "mode": "one_off",
+        "priority": "normal"
+      }
+    },
+    {
+      "id": "priority",
+      "input": "Make the garden topic high priority",
+      "fixture": "one active garden topic version 3",
+      "expected": {
+        "creates_note": false,
+        "creates_reminder": false,
+        "clarification_required": false,
+        "tool": "update_contact_topic",
+        "patch": {
+          "priority": "high"
+        },
+        "expected_version": 3
+      }
+    },
+    {
+      "id": "recurring",
+      "input": "We discussed the weekly check-in",
+      "fixture": "one active recurring topic",
+      "expected": {
+        "creates_note": false,
+        "creates_reminder": false,
+        "clarification_required": false,
+        "tool": "discuss_contact_topic",
+        "close_after": false
+      }
+    },
+    {
+      "id": "close",
+      "input": "We talked about cat food; no need again",
+      "fixture": "one active recurring cat-food topic",
+      "expected": {
+        "creates_note": false,
+        "creates_reminder": false,
+        "clarification_required": false,
+        "tool": "discuss_contact_topic",
+        "close_after": true
+      }
+    },
+    {
+      "id": "duplicate",
+      "input": "Talk to Alex about the garden",
+      "fixture": "exact active garden topic exists",
+      "expected": {
+        "creates_note": false,
+        "creates_reminder": false,
+        "clarification_required": false,
+        "tool": null,
+        "already_saved": true
+      }
+    },
+    {
+      "id": "person-ambiguity",
+      "input": "Talk to Alex about the trip",
+      "fixture": "two visible Alex contacts",
+      "expected": {
+        "creates_note": false,
+        "creates_reminder": false,
+        "clarification_required": true,
+        "tool": null
+      }
+    },
+    {
+      "id": "topic-ambiguity",
+      "input": "We discussed the trip",
+      "fixture": "two active trips with plausible matches",
+      "expected": {
+        "creates_note": false,
+        "creates_reminder": false,
+        "clarification_required": true,
+        "tool": null
+      }
+    },
+    {
+      "id": "hidden",
+      "input": "Add the trip to Alex",
+      "fixture": "matching contact denied by visibility guard",
+      "expected": {
+        "creates_note": false,
+        "creates_reminder": false,
+        "clarification_required": false,
+        "tool": null,
+        "saved": false
+      }
+    },
+    {
+      "id": "unavailable",
+      "input": "Talk to Alex about the garden",
+      "fixture": "topic MCP tools unavailable",
+      "expected": {
+        "creates_note": false,
+        "creates_reminder": false,
+        "clarification_required": false,
+        "tool": null,
+        "saved": false
+      }
+    },
+    {
+      "id": "failure",
+      "input": "Talk to Alex about the garden",
+      "fixture": "create returns database failure",
+      "expected": {
+        "creates_note": false,
+        "creates_reminder": false,
+        "clarification_required": false,
+        "tool": "create_contact_topic",
+        "saved": false
+      }
+    },
+    {
+      "id": "retry",
+      "input": "Save the garden topic",
+      "fixture": "create times out after commit",
+      "expected": {
+        "creates_note": false,
+        "creates_reminder": false,
+        "clarification_required": false,
+        "tool": "create_contact_topic",
+        "retry_same_request_id": true,
+        "retry_same_payload": true
+      }
+    },
+    {
+      "id": "call",
+      "input": "What should I discuss with Alex on our call?",
+      "fixture": "7 active topics over 2 pages, mixed priority",
+      "expected": {
+        "creates_note": false,
+        "creates_reminder": false,
+        "clarification_required": false,
+        "tool": "list_contact_topics",
+        "all_pages": true,
+        "mutations": 0
+      }
+    },
+    {
+      "id": "archive",
+      "input": "Stop bringing up cat food",
+      "fixture": "one active recurring cat-food topic",
+      "expected": {
+        "creates_note": false,
+        "creates_reminder": false,
+        "clarification_required": false,
+        "tool": "archive_contact_topic",
+        "discussion_created": false
+      }
+    },
+    {
+      "id": "reopen",
+      "input": "Bring the garden topic back",
+      "fixture": "one archived garden topic",
+      "expected": {
+        "creates_note": false,
+        "creates_reminder": false,
+        "clarification_required": false,
+        "tool": "reopen_contact_topic"
+      }
+    },
+    {
+      "id": "undo",
+      "input": "Undo that discussion",
+      "fixture": "latest acknowledged discussion event and current version",
+      "expected": {
+        "creates_note": false,
+        "creates_reminder": false,
+        "clarification_required": false,
+        "tool": "undo_contact_topic_event"
+      }
+    },
+    {
+      "id": "date-topic",
+      "input": "Talk to Alex about Friday's trip",
+      "fixture": "one visible Alex; no matching topic",
+      "expected": {
+        "creates_note": false,
+        "creates_reminder": false,
+        "clarification_required": false,
+        "tool": "create_contact_topic"
+      }
+    },
+    {
+      "id": "reminder",
+      "input": "Remind me Friday to call Alex",
+      "fixture": "explicit notification request",
+      "expected": {
+        "creates_note": false,
+        "creates_reminder": false,
+        "clarification_required": false,
+        "skill": "due",
+        "tool": null
+      }
+    },
+    {
+      "id": "conflict",
+      "input": "Make the garden topic low priority",
+      "fixture": "update version conflict; reread now shows archived topic",
+      "expected": {
+        "creates_note": false,
+        "creates_reminder": false,
+        "clarification_required": true,
+        "tool": "update_contact_topic",
+        "blind_retry": false
+      }
+    },
+    {
+      "id": "past-date",
+      "input": "We discussed the garden yesterday",
+      "fixture": "Europe/Berlin date 2026-10-26; one active topic",
+      "expected": {
+        "creates_note": false,
+        "creates_reminder": false,
+        "clarification_required": false,
+        "tool": "discuss_contact_topic",
+        "local_discussion_date": "2026-10-25",
+        "discussed_at": "2026-10-25T12:00:00+01:00"
+      }
+    },
+    {
+      "id": "de-discuss",
+      "input": "Wir haben \u00fcber den Garten gesprochen",
+      "fixture": "one active one-off garden topic",
+      "expected": {
+        "tool": "discuss_contact_topic",
+        "creates_note": false,
+        "creates_reminder": false,
+        "clarification_required": false
+      }
+    },
+    {
+      "id": "de-close",
+      "input": "Wir haben \u00fcber das Katzenfutter gesprochen, nicht wieder ansprechen",
+      "fixture": "one active recurring cat-food topic",
+      "expected": {
+        "tool": "discuss_contact_topic",
+        "creates_note": false,
+        "creates_reminder": false,
+        "clarification_required": false,
+        "close_after": true
+      }
+    },
+    {
+      "id": "de-archive",
+      "input": "Das Katzenfutter nicht mehr ansprechen",
+      "fixture": "one active recurring cat-food topic",
+      "expected": {
+        "tool": "archive_contact_topic",
+        "creates_note": false,
+        "creates_reminder": false,
+        "clarification_required": false
+      }
+    },
+    {
+      "id": "de-reopen",
+      "input": "Den Garten wieder aufnehmen",
+      "fixture": "one archived garden topic",
+      "expected": {
+        "tool": "reopen_contact_topic",
+        "creates_note": false,
+        "creates_reminder": false,
+        "clarification_required": false
+      }
+    },
+    {
+      "id": "de-undo",
+      "input": "Mach das r\u00fcckg\u00e4ngig",
+      "fixture": "latest acknowledged discussion, no later edits",
+      "expected": {
+        "tool": "undo_contact_topic_event",
+        "creates_note": false,
+        "creates_reminder": false,
+        "clarification_required": false
+      }
+    },
+    {
+      "id": "de-priority",
+      "input": "Der Garten hat hohe Priorit\u00e4t",
+      "fixture": "one active garden topic",
+      "expected": {
+        "tool": "update_contact_topic",
+        "creates_note": false,
+        "creates_reminder": false,
+        "clarification_required": false,
+        "patch": {
+          "priority": "high"
+        }
+      }
+    },
+    {
+      "id": "de-recurring",
+      "input": "Bei jedem Gespr\u00e4ch mit Alex \u00fcber den Garten sprechen",
+      "fixture": "no existing garden topic",
+      "expected": {
+        "tool": "create_contact_topic",
+        "creates_note": false,
+        "creates_reminder": false,
+        "clarification_required": false,
+        "mode": "recurring"
+      }
+    },
+    {
+      "id": "de-call",
+      "input": "Was soll ich beim Anruf mit Alex ansprechen?",
+      "fixture": "seven topics over two pages",
+      "expected": {
+        "tool": "list_contact_topics",
+        "creates_note": false,
+        "creates_reminder": false,
+        "clarification_required": false
+      }
+    },
+    {
+      "id": "de-reminder",
+      "input": "Erinnere mich Freitag, Alex anzurufen",
+      "fixture": "explicit reminder",
+      "expected": {
+        "tool": null,
+        "creates_note": false,
+        "creates_reminder": false,
+        "clarification_required": false,
+        "skill": "due"
+      }
+    },
+    {
+      "id": "de-date-topic",
+      "input": "Mit Alex am Freitag \u00fcber die Reise sprechen",
+      "fixture": "no existing trip topic",
+      "expected": {
+        "tool": "create_contact_topic",
+        "creates_note": false,
+        "creates_reminder": false,
+        "clarification_required": false
+      }
+    },
+    {
+      "id": "empty-call",
+      "input": "What should I discuss with Alex?",
+      "fixture": "empty active topic list",
+      "expected": {
+        "tool": "list_contact_topics",
+        "creates_note": false,
+        "creates_reminder": false,
+        "clarification_required": false
+      }
+    },
+    {
+      "id": "repeated-timeout",
+      "input": "Save the garden topic",
+      "fixture": "two consecutive transport timeouts",
+      "expected": {
+        "tool": "create_contact_topic",
+        "creates_note": false,
+        "creates_reminder": false,
+        "clarification_required": false,
+        "acknowledgement": "uncertain",
+        "retry_same_request_id": true,
+        "saved": null
+      }
+    },
+    {
+      "id": "changed-request",
+      "input": "Save the garden topic",
+      "fixture": "RPC rejects request id reused with different payload",
+      "expected": {
+        "tool": "create_contact_topic",
+        "creates_note": false,
+        "creates_reminder": false,
+        "clarification_required": false,
+        "saved": false,
+        "blind_retry": false
+      }
+    }
+  ],
+  "shared_fixture": {
+    "user_id": "00000000-0000-4000-8000-000000000001",
+    "person_id": "00000000-0000-4000-8000-000000000011",
+    "person_name": "Alex",
+    "prior_context": "All unnamed-person inputs refer to this already-resolved synthetic Alex. Spouse case resolves the same synthetic person from profile.",
+    "topic_id": "00000000-0000-4000-8000-000000000021",
+    "version": 3,
+    "receipt": {
+      "person_url": "/dashboard/people/00000000-0000-4000-8000-000000000011",
+      "topic": {
+        "version": 4,
+        "id": "00000000-0000-4000-8000-000000000021"
+      },
+      "replayed": false,
+      "event_id": "00000000-0000-4000-8000-000000000031"
+    },
+    "expected_read_order": [
+      "resolve exact contact from profile/search or verified prior context",
+      "list relevant topics and follow cursors",
+      "one targeted mutation when intended",
+      "read authoritative receipt before confirmation"
+    ],
+    "forbidden_side_effects": [
+      "create person",
+      "create note",
+      "create reminder within this skill",
+      "world write",
+      "local topic storage",
+      "visibility bypass"
+    ],
+    "confirmation": "Use only the returned link and authoritative changed state; never confirm after error.",
+    "list_response_person_url": "/dashboard/people/00000000-0000-4000-8000-000000000011"
+  }
+}

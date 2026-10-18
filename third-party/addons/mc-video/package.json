@@ -1,0 +1,30 @@
+{
+  "name": "mc-video",
+  "version": "1.0.0",
+  "description": "Let your mission control finish your videos: captions in one look, a vertical cut, and HyperFrames for animated slides and overlays. An add-on for Teach It Once.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "mc-video": "bin/mc-video.mjs"
+  },
+  "files": [
+    "bin",
+    "tools",
+    "fonts",
+    "sample",
+    "skill",
+    "setup",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.mjs && python -m unittest discover -s test -p \"test_*.py\""
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/MichaelZelbel/mc-video.git"
+  }
+}

@@ -1,0 +1,11 @@
+.git
+.github
+tools/.tmp-*
+**/__pycache__
+*.pyc
+**/node_modules
+notebook/candidate-workspace
+notebook/dist
+**/*.log
+**/.env
+**/.env.*

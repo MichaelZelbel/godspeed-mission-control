@@ -1,0 +1,214 @@
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { useOrphanNotes, type OrphanNote } from "@/hooks/useOrphanNotes";
+import { supabase } from "@/integrations/supabase/client";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+
+import {
+  FileText,
+  Sparkles,
+  EyeOff,
+  Loader2,
+  ArrowRight,
+} from "lucide-react";
+import { getNotePreviewText } from "@/lib/note-content";
+import { showToast } from "@/lib/toast";
+import { dbErrorMessage, functionErrorMessage } from "@/lib/function-error";
+import { useQueryClient } from "@tanstack/react-query";
+
+interface OrphanNotesDetectorProps {
+  compact?: boolean;
+}
+
+export function OrphanNotesDetector({ compact }: OrphanNotesDetectorProps) {
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const { data, isLoading, isError, error, refetch } = useOrphanNotes({ withContent: !compact });
+  const [computing, setComputing] = useState<string | null>(null);
+  const [dismissed, setDismissed] = useState<Set<string>>(new Set());
+
+  const allOrphans: OrphanNote[] = (data?.orphans ?? []).filter(
+    (n) => !dismissed.has(n.id),
+  );
+  const totalOrphans = allOrphans.length;
+  const orphanNotes = compact ? allOrphans.slice(0, 5) : allOrphans;
+
+  const handleFindConnections = async (noteId: string) => {
+    setComputing(noteId);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      const { error } = await supabase.functions.invoke("compute-connections", {
+        body: { note_id: noteId },
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      // functions.invoke reports failure in the result, it does not throw.
+      if (error) throw error;
+      queryClient.invalidateQueries({ queryKey: ["graph-data"] });
+      queryClient.invalidateQueries({ queryKey: ["orphan-notes"] });
+      showToast.success("Connections computed");
+    } catch (err) {
+      showToast.error(await functionErrorMessage(err, "Failed to compute connections"));
+    } finally {
+      setComputing(null);
+    }
+  };
+
+  // Only hides the note in this view until it is opened again; nothing is
+  // saved, so the label and the toast say exactly that.
+  const handleHideForNow = (noteId: string) => {
+    setDismissed((prev) => new Set(prev).add(noteId));
+    showToast.success("Hidden for now");
+  };
+
+  // A failed read is not "everything is connected".
+  if (isError && !data) {
+    const message = dbErrorMessage(error, "Something went wrong while checking your notes. Try again.");
+    const retry = (
+      <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => void refetch()}>
+        Try again
+      </Button>
+    );
+    if (compact) {
+      return (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Orphan Notes</CardTitle>
+          </CardHeader>
+          <CardContent role="alert" className="space-y-2">
+            <p className="text-xs text-muted-foreground">Orphan notes could not be loaded. {message}</p>
+            {retry}
+          </CardContent>
+        </Card>
+      );
+    }
+    return (
+      <div role="alert" className="space-y-2">
+        <p className="text-sm font-medium text-foreground">Orphan notes could not be loaded</p>
+        <p className="text-sm text-muted-foreground">{message}</p>
+        {retry}
+      </div>
+    );
+  }
+
+  if (isLoading && totalOrphans === 0) return null;
+  if (!isLoading && totalOrphans === 0) {
+    if (compact) return null;
+    return (
+      <p className="text-sm text-muted-foreground">
+        No orphan notes. Everything is connected.
+      </p>
+    );
+  }
+
+  if (compact) {
+    return (
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between pb-2">
+          <CardTitle className="text-base">Orphan Notes</CardTitle>
+          <Badge variant="secondary" className="text-xs">
+            {totalOrphans}
+          </Badge>
+        </CardHeader>
+        <CardContent>
+          <p className="text-xs text-muted-foreground mb-3">
+            {totalOrphans} note{totalOrphans !== 1 ? "s" : ""} with zero connections. Consider linking them.
+          </p>
+          <div className="space-y-1.5">
+            {orphanNotes.slice(0, 3).map((note) => (
+              <button
+                key={note.id}
+                onClick={() => navigate(`/dashboard/notes/${note.id}`)}
+                className="w-full text-left flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-accent transition-colors text-xs"
+              >
+                <FileText className="h-3 w-3 text-muted-foreground shrink-0" />
+                <span className="truncate flex-1">{note.title || "Untitled"}</span>
+                <ArrowRight className="h-3 w-3 text-muted-foreground" />
+              </button>
+            ))}
+          </div>
+          {totalOrphans > 3 && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="w-full mt-2 text-xs"
+              onClick={() => navigate("/dashboard/orphans")}
+            >
+              View all {totalOrphans} orphans
+            </Button>
+          )}
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-foreground">
+          Orphan Notes ({totalOrphans})
+        </h3>
+        <p className="text-xs text-muted-foreground">
+          Notes with zero connections
+        </p>
+      </div>
+      <div className="space-y-2">
+        {orphanNotes.map((note) => {
+            const preview = getNotePreviewText(note.content ?? "");
+            const meta = note.metadata as Record<string, unknown> | null;
+            const type = typeof meta?.type === "string" ? meta.type : null;
+            return (
+              <Card key={note.id} className="p-3">
+                <div className="flex items-start gap-3">
+                  <FileText className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <button
+                      onClick={() => navigate(`/dashboard/notes/${note.id}`)}
+                      className="text-sm font-medium text-foreground hover:text-primary truncate block"
+                    >
+                      {note.title || "Untitled"}
+                    </button>
+                    <p className="text-xs text-muted-foreground truncate mt-0.5">
+                      {preview}
+                    </p>
+                    {type && (
+                      <Badge variant="secondary" className="text-[9px] mt-1">
+                        {type.replace("_", " ")}
+                      </Badge>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-xs gap-1"
+                      onClick={() => handleFindConnections(note.id)}
+                      disabled={computing === note.id}
+                    >
+                      {computing === note.id ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <Sparkles className="h-3 w-3" />
+                      )}
+                      Find
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 text-xs gap-1"
+                      onClick={() => handleHideForNow(note.id)}
+                    >
+                      <EyeOff className="h-3 w-3" />
+                      Hide for now
+                    </Button>
+                  </div>
+                </div>
+              </Card>
+            );
+        })}
+      </div>
+    </div>
+  );
+}

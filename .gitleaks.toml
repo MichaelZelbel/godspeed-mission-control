@@ -1,0 +1,31 @@
+title = "Godspeed Mission Control source scan"
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Content hashes in the maintained recipe provenance manifest, not credentials"
+condition = "AND"
+paths = ['''notebook/data/reusable-recipe-sources\.json$''']
+regexTarget = "match"
+regexes = ['''[a-zA-Z0-9_./-]+": "[0-9a-f]{64}"''']
+
+[[allowlists]]
+description = "Upstream HyperFrames public write-only PostHog ingestion project key"
+condition = "AND"
+paths = ['''notebook/(?:reusable-)?recipes/media-use/scripts/lib/telemetry\.mjs$''']
+regexTarget = "match"
+regexes = ['''POSTHOG_API_KEY = "phc_zjjbX0PnWxERXrMHhkEJWj9A9BhGVLRReICgsfTMmpx"''']
+
+[[allowlists]]
+description = "Synthetic deliberately short code in setup-code strength rejection test"
+condition = "AND"
+paths = ['''notebook/test/setup-code\.test\.mjs$''']
+regexTarget = "match"
+regexes = ['''password123','9f86d081884c7d659a2feaa0c55ad01'''']
+
+[[allowlists]]
+description = "Explicit API documentation placeholder, not an account token"
+condition = "AND"
+paths = ['''notebook/ui/src/content/docs/registry\.tsx$''']
+regexTarget = "match"
+regexes = ['''curl -H "Authorization: Bearer mnr_abc123\.\.\."''']

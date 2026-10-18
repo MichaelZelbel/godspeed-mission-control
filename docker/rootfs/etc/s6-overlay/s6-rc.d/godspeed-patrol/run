@@ -1,0 +1,6 @@
+#!/command/with-contenv sh
+# shellcheck shell=sh
+# The container patrol (usr/local/bin/godspeed-patrol), as the assistant's own account:
+# everything it may stop belongs to that account, so it needs no more than that.
+export HOME=/opt/data
+exec s6-setuidgid hermes /usr/local/bin/godspeed-patrol

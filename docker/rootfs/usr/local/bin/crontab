@@ -1,0 +1,30 @@
+#!/bin/bash
+# crontab, as the Docker image understands it.
+#
+# The installer puts its daily jobs (the prompt archive, the notebook sync) on the clock
+# with `crontab -l` and `crontab -`, exactly as on a laptop. A container has no cron
+# daemon and nowhere lasting to keep a crontab, so this answers the same four calls
+# against one file in the volume, $HERMES_HOME/.godspeed/crontab, which survives an
+# upgrade. The godspeed-cron service runs that file with supercronic and picks up a
+# change by itself.
+#
+#   crontab -l        print the jobs          crontab -        replace them from stdin
+#   crontab FILE      replace them from FILE  crontab -r       remove them all
+set -u
+TAB="${GODSPEED_CRONTAB:-${HERMES_HOME:-/opt/data}/.godspeed/crontab}"
+mkdir -p "$(dirname "$TAB")"
+
+write() {   # $1 source file or - ; replaced in one move so the scheduler never reads half a file
+  local tmp="$TAB.tmp.$$"
+  if [ "$1" = - ]; then cat > "$tmp"; else cat -- "$1" > "$tmp"; fi || { rm -f "$tmp"; exit 1; }
+  mv -f "$tmp" "$TAB"
+}
+
+case "${1:-}" in
+  -l) if [ -s "$TAB" ]; then cat "$TAB"; else echo "no crontab for $(id -un)" >&2; exit 1; fi ;;
+  -r) : > "$TAB" ;;
+  -)  write - ;;
+  -e) echo "crontab: edit $TAB directly; the scheduler picks the change up by itself" >&2; exit 1 ;;
+  "") echo "usage: crontab -l | crontab - | crontab FILE | crontab -r" >&2; exit 1 ;;
+  *)  [ -f "$1" ] || { echo "crontab: $1: no such file" >&2; exit 1; }; write "$1" ;;
+esac

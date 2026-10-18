@@ -1,0 +1,7 @@
+Weekly numbers on 2026-10-18. Every verdict here was worked out by mc-goals from the readings, never by the run that made the move.
+write-the-first-draft-of-my-short-story-the-lighthouse-keepe: words in drafts/lighthouse-keeper.md (total, read from wc -w drafts/lighthouse-keeper.md)
+  now 0, read 2026-10-18; 5000 on 2026-10-10 (-5000)
+  settled earlier: 2026-10-18 W-20261010-03 never-live: not live within seven days of the bet
+  settled earlier: 2026-10-18 W-20261010-04 never-live: not live within seven days of the bet
+  settled earlier: 2026-10-18 W-20261010-05 never-live: not live within seven days of the bet
+read today: none

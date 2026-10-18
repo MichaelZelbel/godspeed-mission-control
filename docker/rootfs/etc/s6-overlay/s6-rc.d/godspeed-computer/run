@@ -1,0 +1,11 @@
+#!/command/with-contenv sh
+# shellcheck shell=sh
+# The computer link (computer use layer 2, D-285; computer/relay.js in the kit). The user's own
+# Windows or Mac computer, when they said yes in its installer, opens one connection out to this
+# container's one published port and lends Godspeed Chrome to the assistant. Nothing answers on
+# that port until someone asks the assistant for a connection code ("connect my computer").
+# GODSPEED_COMPUTER=off keeps it closed. As the assistant's own account, like everything else.
+export HOME=/opt/data
+if [ "${GODSPEED_COMPUTER:-on}" = off ]; then exec sleep infinity; fi
+exec /command/s6-setuidgid hermes env PATH="/opt/hermes/.venv/bin:/opt/data/.local/bin:$PATH" \
+  GODSPEED="${GODSPEED:-/opt/data/godspeed}" node /opt/godspeed/kit/computer/relay.js

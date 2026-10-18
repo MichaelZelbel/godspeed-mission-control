@@ -1,0 +1,266 @@
+#!/bin/sh
+# mc-uninstall: removes Godspeed Mission Control's own programs from this Mac or Linux computer,
+# and leaves your mission control folder where it is, with your notes, your notebook, its photos
+# and files, and its backups.
+#
+# WHY (18 October 2026). The guide's uninstall was nine commands to copy, and even those left the
+# 22 helper files beside the mc- commands in ~/.local/bin behind. This is the one command instead.
+#
+# WHAT IT REMOVES, and nothing else:
+#   - the notebook's background service: the LaunchAgent on a Mac, the systemd service on Linux
+#     (the computer's, with sudo, or your account's own), and on a server its web address
+#     (godspeed-https.service, or the notebook's site in the server's own Caddy);
+#   - the jobs it added to this account's schedule (crontab); your own lines stay;
+#   - its programs in ~/.local/bin: HELPERS below and the mc- commands (PROGRAMS), each by name,
+#     and the links into your mission control folder;
+#   - the browser helper, if you said yes to it;
+#   - ~/.godspeed, this computer's settings for it, its logs, and a Gmail connection made here,
+#     except age-key.txt, which opens the passwords your mission control folder keeps;
+#   - the line in ~/.bashrc and ~/.zshrc that loads the notebook's sign-in.
+# WHAT IT NEVER TOUCHES: your mission control folder, Hermes, Git, Node.js, Homebrew, and the
+# line that puts ~/.local/bin on your PATH (other programs live there too).
+#
+# test-uninstall.sh checks HELPERS and PROGRAMS against what the installer puts in ~/.local/bin,
+# so a new tool cannot be left behind by this again.
+#
+# Usage: mc-uninstall [--yes] [--godspeed <your mission control folder>]
+set -u
+
+HELPERS="check-brief.js check-built-on.js check-keys.js check-moves.js check-research.js check-written.js
+compile-rules.js due.js forecast.js goals.js judge-brief.js limit-cases.json mc-cards.js mc-mail-age.js
+mc-mail-age.json mc-mail-gmail.js mc-mail-himalaya.json mc-mail-imap.js mc-mail-pair.js mc-mail-wire.js
+mc-mail.js mc-notebook.js menerio-connect.js notebook-sync.py observed-state.js prompt-harvest.js
+recipe-shipped-hashes.sh search.js subscriptions.cjs test_world_pull.py work.js world-pull.py"
+PROGRAMS="mc-check-brief mc-check-built-on mc-coach-prep mc-check-keys mc-check-moves mc-check-research mc-check-written
+mc-compile-rules mc-decide mc-due mc-forecast mc-goals mc-install-count mc-judge-brief mc-mail mc-mail.cmd
+mc-menerio-connect mc-menerio-connect.cmd mc-notebook-env mc-notebook-sync mc-observed-state
+mc-observed-state.cmd mc-prompt-archive mc-prompt-archive.cmd mc-prompt-harvest mc-research mc-run
+mc-search mc-search.cmd mc-work mc-work-run godspeed-browser mc-uninstall"
+
+LABEL=com.godspeedmissioncontrol.notebook
+BROWSER_LABEL=com.godspeedmissioncontrol.computer
+SERVICE=godspeed-integrated-notebook.service
+HTTPS_SERVICE=godspeed-https.service
+# Stand-ins for a test: the system's programs and the root of /etc.
+LAUNCHCTL="${MC_UNINSTALL_LAUNCHCTL:-launchctl}"
+SYSTEMCTL="${MC_UNINSTALL_SYSTEMCTL:-systemctl}"
+CRON="${KB_CRONTAB:-crontab}"
+ETC="${MC_UNINSTALL_ETC:-/etc}"
+OS="${MC_UNINSTALL_OS:-$(uname -s 2>/dev/null)}"
+
+YES=""
+GODSPEED=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --yes|-y) YES=1; shift ;;
+    --godspeed) GODSPEED="${2:-}"; shift 2 ;;
+    -h|--help) sed -n '2,27p' "$0"; exit 0 ;;
+    *) echo "mc-uninstall does not know \"$1\". Usage: mc-uninstall [--yes] [--godspeed <folder>]" >&2; exit 2 ;;
+  esac
+done
+
+case "$OS" in
+  MINGW*|MSYS*|CYGWIN*|Windows*)
+    echo "On Windows, uninstall from the Start menu: open Godspeed Mission Control and click Uninstall Godspeed Mission Control."
+    exit 1 ;;
+esac
+if [ -n "${KB_CONTAINER:-}" ]; then
+  echo "This is the server's container. On the server itself, run: cd /opt/godspeed-mission-control && docker compose down"
+  exit 1
+fi
+
+HOMEDIR="${HOME:-}"
+[ -n "$HOMEDIR" ] || { echo "mc-uninstall needs to know your home folder (HOME is empty)." >&2; exit 1; }
+BIN="$HOMEDIR/.local/bin"
+ENVF="$HOMEDIR/.godspeed/device.env"
+
+# Your mission control folder: named, or the one this computer works from, or the usual one.
+if [ -z "$GODSPEED" ]; then GODSPEED="${GODSPEED_DIR:-}"; fi
+if [ -z "$GODSPEED" ]; then GODSPEED="$(sed -n 's/^[[:space:]]*GODSPEED_DIR=//p' "$ENVF" 2>/dev/null | tail -1 | tr -d '\r')"; fi
+if [ -z "$GODSPEED" ] && [ -d "$HOMEDIR/godspeed-v2" ]; then GODSPEED="$HOMEDIR/godspeed-v2"; fi
+GODSPEED="${GODSPEED%/}"
+STATE="${GODSPEED:+$GODSPEED/.godspeed/integrated-runtime}"
+
+say() { printf '%s\n' "$*"; }
+LEFT=""
+left() { LEFT="${LEFT}  $*
+"; }
+
+# --- Asking first ---------------------------------------------------------------------
+if [ -z "$YES" ]; then
+  # In a subshell: in dash a redirection that fails on : ends the whole script.
+  if ! ( : < /dev/tty ) 2>/dev/null; then
+    echo "mc-uninstall asks before it removes anything, and there is nobody at a keyboard here. Run it again with --yes." >&2
+    exit 1
+  fi
+  say "This removes Godspeed Mission Control's programs from this computer: the notebook's background"
+  say "service, its scheduled jobs and its helper files."
+  if [ -n "$GODSPEED" ]; then say "Your mission control folder stays as it is: $GODSPEED"
+  else say "Your mission control folder stays as it is."; fi
+  printf 'Remove the programs? (y/n) [n]: '
+  read -r answer < /dev/tty || answer=""
+  case "$answer" in [Yy]*) ;; *) say "Nothing was removed."; exit 0 ;; esac
+fi
+
+# Root, for the few things the installer put in the system's own folders. Asked once, and only
+# when one of them is here.
+as_root() {
+  if [ "$(id -u)" = 0 ]; then "$@"; return; fi
+  if [ -n "${MC_UNINSTALL_SUDO:-}" ]; then "$MC_UNINSTALL_SUDO" "$@"; return; fi
+  command -v sudo >/dev/null 2>&1 || return 1
+  sudo "$@"
+}
+
+# --- The notebook's background service -----------------------------------------------
+case "$OS" in
+  Darwin)
+    uid="$(id -u)"
+    "$LAUNCHCTL" bootout "gui/$uid/$LABEL" >/dev/null 2>&1 || true
+    "$LAUNCHCTL" bootout "user/$uid/$LABEL" >/dev/null 2>&1 || true
+    # launchd lets go of a notebook that is still stopping a moment after bootout returns.
+    i=0
+    while [ "$i" -lt 20 ] && { "$LAUNCHCTL" print "gui/$uid/$LABEL" >/dev/null 2>&1 || "$LAUNCHCTL" print "user/$uid/$LABEL" >/dev/null 2>&1; }; do
+      sleep 1; i=$((i + 1))
+    done
+    if [ "$i" -ge 20 ]; then say "- The notebook is still stopping. It does not start again once this Mac restarts."; fi
+    plist="${MC_UNINSTALL_LAUNCH_AGENTS:-$HOMEDIR/Library/LaunchAgents}/$LABEL.plist"
+    if [ -f "$plist" ]; then rm -f "$plist"; say "- The notebook no longer starts when you log in."; fi
+    rm -rf "$HOMEDIR/Library/Logs/Godspeed Mission Control"
+    ;;
+  *)
+    if [ -f "$ETC/systemd/system/$SERVICE" ] || [ -f "$ETC/systemd/system/$HTTPS_SERVICE" ]; then
+      ok_root=1
+      for unit in "$SERVICE" "$HTTPS_SERVICE"; do
+        [ -f "$ETC/systemd/system/$unit" ] || continue
+        if as_root "$SYSTEMCTL" disable --now "$unit" >/dev/null 2>&1 && as_root rm -f "$ETC/systemd/system/$unit"; then
+          say "- Stopped and removed $unit."
+        else
+          ok_root=""
+          left "sudo systemctl disable --now $unit && sudo rm $ETC/systemd/system/$unit"
+        fi
+      done
+      [ -z "$ok_root" ] || as_root "$SYSTEMCTL" daemon-reload >/dev/null 2>&1 || true
+    fi
+    user_unit="${XDG_CONFIG_HOME:-$HOMEDIR/.config}/systemd/user/$SERVICE"
+    if [ -f "$user_unit" ]; then
+      "$SYSTEMCTL" --user disable --now "$SERVICE" >/dev/null 2>&1 || true
+      rm -f "$user_unit" "$(dirname "$user_unit")/default.target.wants/$SERVICE"
+      "$SYSTEMCTL" --user daemon-reload >/dev/null 2>&1 || true
+      say "- Stopped and removed the notebook's service."
+    fi
+    # The notebook's site in the server's own Caddy, and the line that brought it in.
+    if [ -f "$ETC/caddy/godspeed-notebook.caddy" ]; then
+      if as_root rm -f "$ETC/caddy/godspeed-notebook.caddy" \
+         && as_root sed -i '/godspeed-notebook\.caddy/d; /Godspeed Mission Control notebook.s web address/d' "$ETC/caddy/Caddyfile"; then
+        as_root "$SYSTEMCTL" reload caddy >/dev/null 2>&1 || true
+        say "- Removed the notebook's web address from this server's Caddy."
+      else
+        left "sudo rm $ETC/caddy/godspeed-notebook.caddy && sudo sed -i '/godspeed-notebook\\.caddy/d' $ETC/caddy/Caddyfile && sudo systemctl reload caddy"
+      fi
+    fi
+    ;;
+esac
+
+# A notebook started by hand from a terminal. The path is passed in the environment, so awk
+# never matches its own line.
+if [ -n "$STATE" ]; then
+  pids="$(ps -axo pid=,command= 2>/dev/null | START="$STATE/start.mjs" awk 'index($0, ENVIRON["START"]) { print $1 }')"
+  if [ -n "$pids" ]; then
+    # shellcheck disable=SC2086  # one process number per word
+    kill $pids 2>/dev/null && say "- Stopped the notebook that was started by hand."
+  fi
+fi
+
+# --- The scheduled jobs ----------------------------------------------------------------
+if command -v "$CRON" >/dev/null 2>&1; then
+  cur="$("$CRON" -l 2>/dev/null)" || cur=""
+  if [ -n "$cur" ]; then
+    kept="$(printf '%s\n' "$cur" | grep -v -e 'prompt-harvest' -e 'mc-notebook-sync' -e 'mc-install-count' \
+             -e "# Keep the mission control's record of what you type" -e '# Keep your notebook current' \
+             -e '# The mission control job, for whatever changed' -e '# Tell .* once that the first morning brief arrived' \
+             -e '# Count once that the first morning brief arrived')"
+    if [ "$kept" != "$cur" ]; then
+      if [ -n "$kept" ]; then printf '%s\n' "$kept" | "$CRON" - 2>/dev/null; else "$CRON" -r 2>/dev/null || printf '' | "$CRON" - 2>/dev/null; fi
+      say "- Removed its scheduled jobs. Your own stay."
+    fi
+  fi
+fi
+
+# --- The browser helper ----------------------------------------------------------------
+case "$OS" in
+  Darwin) browser_home="$HOMEDIR/Library/Application Support/Godspeed/computer" ;;
+  *)      browser_home="${XDG_DATA_HOME:-$HOMEDIR/.local/share}/godspeed/computer" ;;
+esac
+if [ -d "$browser_home" ] || [ -f "$BIN/godspeed-browser" ]; then
+  if [ -f "$browser_home/app/helper.js" ] && command -v node >/dev/null 2>&1; then
+    node "$browser_home/app/helper.js" uninstall >/dev/null 2>&1 || true
+  fi
+  case "$OS" in
+    Darwin)
+      "$LAUNCHCTL" bootout "gui/$(id -u)/$BROWSER_LABEL" >/dev/null 2>&1 || true
+      rm -f "${MC_UNINSTALL_LAUNCH_AGENTS:-$HOMEDIR/Library/LaunchAgents}/$BROWSER_LABEL.plist"
+      rm -rf "$HOMEDIR/Applications/Godspeed Mission Control" ;;
+    *) rm -f "${XDG_CONFIG_HOME:-$HOMEDIR/.config}/autostart/godspeed-computer.desktop" ;;
+  esac
+  rm -rf "$browser_home"
+  rmdir "$(dirname "$browser_home")" 2>/dev/null || true
+  say "- Removed the browser helper."
+fi
+
+# --- The programs in ~/.local/bin ------------------------------------------------------
+n=0
+for name in $HELPERS $PROGRAMS; do
+  if [ -f "$BIN/$name" ] || [ -L "$BIN/$name" ]; then rm -f "$BIN/$name" && n=$((n + 1)); fi
+done
+# Links into the mission control folder (the commands of a folder that carries its own).
+if [ -n "$GODSPEED" ] && [ -d "$BIN" ]; then
+  for f in "$BIN"/*; do
+    [ -L "$f" ] || continue
+    case "$(readlink "$f" 2>/dev/null)" in "$GODSPEED"/*) rm -f "$f" && n=$((n + 1)) ;; esac
+  done
+fi
+[ "$n" -eq 0 ] || say "- Removed $n of its programs from $BIN."
+
+# --- Its line in your shell's settings -------------------------------------------------
+for rc in "$HOMEDIR/.bashrc" "$HOMEDIR/.zshrc"; do
+  [ -f "$rc" ] && grep -q 'mc-notebook-env' "$rc" 2>/dev/null || continue
+  grep -v 'mc-notebook-env' "$rc" > "$rc.mc-uninstall.$$" && cat "$rc.mc-uninstall.$$" > "$rc"
+  rm -f "$rc.mc-uninstall.$$"
+done
+
+# --- ~/.godspeed -----------------------------------------------------------------------
+kept_key=""
+# A mission control folder that IS the home folder keeps its notebook in ~/.godspeed too, so then
+# nothing there is touched.
+if [ -n "$GODSPEED" ] && [ "$(cd "$GODSPEED" 2>/dev/null && pwd -P)" = "$(cd "$HOMEDIR" && pwd -P)" ]; then
+  say "- Left ~/.godspeed as it is: your mission control folder is your home folder, and its notebook is in there."
+elif [ -d "$HOMEDIR/.godspeed" ]; then
+  had_mail=""; [ -e "$HOMEDIR/.godspeed/mail/imap/password.age" ] && had_mail=1
+  for f in "$HOMEDIR/.godspeed"/* "$HOMEDIR/.godspeed"/.[!.]*; do
+    [ -e "$f" ] || [ -L "$f" ] || continue
+    if [ "$(basename "$f")" = age-key.txt ]; then kept_key=1; continue; fi
+    rm -rf "$f"
+  done
+  rmdir "$HOMEDIR/.godspeed" 2>/dev/null || true
+  if [ -n "$had_mail" ]; then say "- Removed this computer's settings for it (~/.godspeed), with the Gmail connection made here."
+  else say "- Removed this computer's settings for it (~/.godspeed)."; fi
+fi
+
+say ""
+say "Godspeed Mission Control's programs are removed from this computer."
+if [ -n "$GODSPEED" ] && [ -d "$GODSPEED" ]; then
+  say "Your mission control folder is still here, with your notebook, photos, files and backups: $GODSPEED"
+  say "Delete it yourself only if you want all of it gone."
+fi
+if [ -n "$kept_key" ]; then
+  say "Kept ~/.godspeed/age-key.txt: it opens the passwords your mission control folder keeps. Delete it together with the folder."
+fi
+say "Hermes, the program that ran your assistant, stays. If nothing else uses it: rm -rf ~/.hermes ~/.local/bin/hermes ~/.local/bin/hermes-agent ~/.local/bin/hermes-acp"
+say "If you connected Gmail, also remove its app password at https://myaccount.google.com/apppasswords"
+if [ -n "$LEFT" ]; then
+  say ""
+  say "These need the administrator's rights, which this account could not use. Run them, or ask whoever runs this computer:"
+  printf '%s' "$LEFT"
+  exit 1
+fi
+exit 0
