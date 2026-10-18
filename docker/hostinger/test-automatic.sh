@@ -10,6 +10,8 @@ coordinator=$!
 compose=(docker compose -f "$GODSPEED_TEST_INSTALL_STATE/compose.yaml" -f "$PWD/docker/hostinger/installer/traefik-test.yaml")
 cleanup() {
   "${compose[@]}" logs > "$evidence/containers.log" 2>&1 || true
+  node docker/hostinger/installer/diagnose-test.mjs > "$evidence/handoff-diagnostics.json" 2>/dev/null || true
+  "${compose[@]}" exec -T godspeed node -e 'fetch("http://host.docker.internal:8794/godspeed-install/health",{signal:AbortSignal.timeout(5000)}).then(r=>console.log(JSON.stringify({coordinatorReachable:r.ok,status:r.status})),e=>console.log(JSON.stringify({coordinatorReachable:false,errorCode:e.cause?.code||e.code||e.name})))' > "$evidence/callback-connectivity.json" 2>/dev/null || true
   "${compose[@]}" down --volumes >/dev/null 2>&1 || true
   kill "$coordinator" 2>/dev/null || true
 }
