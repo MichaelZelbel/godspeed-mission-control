@@ -1,0 +1,19 @@
+# Disposable GitHub runner models the edge Hostinger already provides.
+# Production HTTPS labels remain exactly as the downloaded Compose generated them.
+services:
+  fixture-traefik:
+    image: traefik:v3.6@sha256:31267173a15b4944e797a76ffd9c419707c8d8b32fe5b610f80cd0cfa05f372d
+    command:
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --entrypoints.web.address=:80
+      - --entrypoints.websecure.address=:443
+    ports: ["127.0.0.1:80:80", "127.0.0.1:443:443"]
+    volumes: ["/var/run/docker.sock:/var/run/docker.sock:ro"]
+  https:
+    labels:
+      # Route plain HTTP through the real edge to Caddy's unchanged 308 redirect.
+      traefik.tcp.routers.fixture-http.rule: HostSNI(`*`)
+      traefik.tcp.routers.fixture-http.entrypoints: web
+      traefik.tcp.routers.fixture-http.service: fixture-http
+      traefik.tcp.services.fixture-http.loadbalancer.server.port: "80"

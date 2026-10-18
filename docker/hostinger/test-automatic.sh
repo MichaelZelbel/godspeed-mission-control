@@ -4,10 +4,10 @@ evidence="$PWD/docker/hostinger/evidence"
 mkdir -p "$evidence"
 export GODSPEED_TEST_INSTALL_STATE
 GODSPEED_TEST_INSTALL_STATE=$(mktemp -d)
-node --test docker/hostinger/installer/test.mjs
+node --test docker/hostinger/installer/test.mjs docker/hostinger/installer/local-traefik-fixture.test.mjs
 node docker/hostinger/installer/runner.mjs &
 coordinator=$!
-compose=(docker compose -f "$GODSPEED_TEST_INSTALL_STATE/compose.yaml")
+compose=(docker compose -f "$GODSPEED_TEST_INSTALL_STATE/compose.yaml" -f "$PWD/docker/hostinger/installer/traefik-test.yaml")
 cleanup() {
   "${compose[@]}" logs > "$evidence/containers.log" 2>&1 || true
   "${compose[@]}" down --volumes >/dev/null 2>&1 || true
@@ -28,7 +28,13 @@ for attempt in $(seq 1 90); do
   if node docker/hostinger/installer/verify-test.mjs 2>/dev/null; then break; fi
   sleep 2
 done
-test -s "$GODSPEED_TEST_INSTALL_STATE/invitation.txt"
+if ! test -s "$GODSPEED_TEST_INSTALL_STATE/invitation.txt"; then
+  # Do not print synthetic callback keys or invitation fragments. Preserve the actual
+  # failing assertion after retries rather than losing its explanation in cleanup.
+  node docker/hostinger/installer/verify-test.mjs
+  echo 'Automatic owner invitation was not produced after the readiness checks.' >&2
+  exit 1
+fi
 export GODSPEED_VERIFY_INVITATION_URL
 GODSPEED_VERIFY_INVITATION_URL=$(cat "$GODSPEED_TEST_INSTALL_STATE/invitation.txt")
 export GODSPEED_VERIFY_ORIGIN=https://localhost
