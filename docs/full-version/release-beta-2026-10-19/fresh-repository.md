@@ -35,8 +35,8 @@ Every replacement gate is pending when this preparation commit is created. Earli
 1. Windows fresh/update and wizard fresh/update, downgrade refusal, update check and uninstall using this exact EXE and manifest.
 2. Linux fresh and upgrade using the unchanged assertions and privately retained previous-version fixtures.
 3. The engine's real corrected goal-day acceptance for the new release commit.
-4. One complete real Hermes goal loop with the approved zero-price model and no paid fallback, including checked draft work, readings, settlement and the next decision. Partial successes and failed verification are not a pass.
+4. One complete real Hermes goal loop with the approved zero-price model and no paid fallback, including checked work, readings, settlement and the next decision. Partial successes and failed verification are not a pass.
 5. A new integrated image built from the replacement release commit, native/browser/persistence checks, signature/scan results and the normal server gate. The automatic one-click Hostinger gate is explicitly waived; the separate diagnostic branch is not part of this release. Existing reporting-only vulnerability findings must not be described as absent.
-6. The final digest pins, website parity/build/guide checks, database/publication checks and an independent install from the public download path using these exact new installer bytes. The additional personal laptop remains deferred.
+6. The final digest pins, website parity/build/guide checks, database/publication checks and an independent install from the public download path using these exact new installer bytes.
 
 Keep prior assets and evidence immutable. Do not run the historical publish list, image-pin script or website-pin script without adapting their stale commit/hash assumptions. Re-read live draft and remote identities before any authorized publication. The release tag ultimately names the metadata/assets commit, while the runtime and archive identify the reviewed source above.
