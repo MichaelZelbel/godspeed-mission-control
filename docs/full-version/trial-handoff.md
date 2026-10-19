@@ -1,6 +1,6 @@
 # Current fresh repository beta
 
-The first beta is rebuilt from source `bc3b63d10097ed46faab8d6e4be5672201b3ad68` with bootstrap `86da1dd27fea804ab131a8494b79a2ccf868e847`. The release files and their checksums are in [the current rebuild record](release-beta-2026-10-19/fresh-repository.md). The exact installer SHA-256 is `960bd6bd39c8d3ab7590bd4079b0d39cfcf3e62d2596b4e93aea5a5b04c29ea6`. Publication waits for the required fresh acceptance results. The older handoff below records the previous repository and does not establish the status of this rebuild.
+The replacement beta is rebuilt from reviewed source `a621d5f2649f3931943634b86101ba8134e672fc` with bootstrap `86da1dd27fea804ab131a8494b79a2ccf868e847`. The release files and their checksums are in [the current rebuild record](release-beta-2026-10-19/fresh-repository.md). The exact installer SHA-256 is `bec3e561db067ba4e58ca05d60ac92f6626e3ffa7b8bf3920b3dd97f89227c27`. The earlier candidate 503703 failed its real goal-loop work check; its results do not certify this replacement. Publication waits for every required replacement acceptance gate. The older handoff below is historical.
 
 # Godspeed Mission Control v2 handoff
 
