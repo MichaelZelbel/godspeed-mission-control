@@ -650,11 +650,11 @@ cmds.bets = (a) => {
     const c = S.read(goal);
     if (!parseLead(c.f.LEAD) || betsOf(c).some(x => x.work === work)) continue;
     const title = b.split('\n')[0].replace(/^#+\s*\d+\.\s*/, '').replace(/"/g, "'").trim();
-    // Only a work item that exists can put a move live, so only its bet is recorded (2026-09-30:
-    // a run called this before filing its items, and "APPLY: (filed below)" became a bet on an
-    // item called "(filed"). The moves check refuses such a move, so when mc-decide runs this after
-    // the check every bet names a filed item, and a run that called it too early is recorded then.
-    if (!workCard(work)) { skipped.push(`"${title}": APPLY ${work} names no work item on the register yet`); continue; }
+    // Repeat the shared target check here: bets can be called directly, and mc-decide can call
+    // this after a failed moves check. An existing learn/preparation ID is not the apply action.
+    const permission = field('PERMISSION');
+    const issue = L.applyTargetProblem(workCard(work), { goal, shipList: !/^may:/i.test(permission) && /ship list/i.test(permission) });
+    if (issue) { skipped.push(`"${title}": APPLY ${work} ${issue}`); continue; }
     L.logLine(c, d, 'BET', `${work} ${bet[1]} -> ${bet[2]} "${title}"`);
     S.write(c);
     n++;

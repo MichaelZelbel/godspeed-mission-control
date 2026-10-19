@@ -57,6 +57,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { parseCard, applyTargetProblem } = require('./mc-cards.js');
 
 const args = process.argv.slice(2);
 const opt = (name, dflt) => { const i = args.indexOf('--' + name); return i >= 0 && args[i + 1] ? args[i + 1] : dflt; };
@@ -247,6 +248,10 @@ for (const b of blocks) {
   // The item exists by the time this runs, so a bet names it or it is lost (final review of D-266:
   // "APPLY: (filed below)" passed, and mc-goals bets could record nothing for it).
   else if (lead && !(/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(applyTo) && fs.existsSync(path.join(ROOT, 'work', applyTo + '.md')))) problems.push(`move "${title}": its APPLY (${applyTo}) names no work item on the register; file the item and write its id there, or the bet never reaches ${goal}'s card`);
+  else if (lead) {
+    const issue = applyTargetProblem(parseCard(read(path.join(ROOT, 'work', applyTo + '.md')) || ''), { goal, shipList: onList });
+    if (issue) problems.push(`move "${title}": its APPLY (${applyTo}) ${issue}`);
+  }
   else if (!lead && !/^APPLY:\s*\S+/m.test(b) && onList && !his) problems.push(`move "${title}": on the ship list but no "APPLY: <work id>" line, so an answer by number cannot reach it`);
   const after = (f.AFTER || '').trim();
   const file = after.match(/([A-Za-z0-9_.-]+\/[A-Za-z0-9_./-]+\.(?:md|txt|html|json|csv))/);

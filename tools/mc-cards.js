@@ -208,7 +208,21 @@ function runNode(fromFile, godspeed, name, args, env) {
   return { ok: r.status === 0, missing: false, out: r.stdout || '', err: r.stderr || '' };
 }
 
+// A move's bet follows the referenced work card, not the heading the model wrote above it.
+// Check this both before accepting moves and before recording bets: the latter can be called
+// directly, or after a failed moves check. This never approves, rewrites or rebinds an item.
+function applyTargetProblem(card, { goal, shipList = false } = {}) {
+  if (!card) return 'names no work item on the register yet';
+  const f = card.f;
+  const kind = (f.KIND || 'do').trim(); // Older work cards use the same do default as mc-work.
+  if (kind !== 'do') return `has KIND ${kind}; a move's APPLY must name a do item`;
+  if ((f.GOAL || '').trim() !== goal) return `has GOAL ${f.GOAL || '(none)'}; expected ${goal}`;
+  if (!(f.CHECK || '').trim()) return 'needs a CHECK that verifies its live result';
+  if (shipList && !/^apply-.+/.test((f.KEY || '').trim())) return `has KEY ${f.KEY || '(none)'}; a ship-list move needs its apply- item, not its preparation`;
+  return null;
+}
+
 module.exports = {
   godspeedRoot, today, isoDate, addDays, daysBetween, readText, oneLine, die, say, parseArgs, flag, alias,
-  parseCard, renderCard, safeId, store, logLine, q, machineWords, sibling, runNode,
+  parseCard, renderCard, safeId, store, logLine, q, machineWords, sibling, runNode, applyTargetProblem,
 };

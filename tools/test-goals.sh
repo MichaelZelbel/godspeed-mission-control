@@ -240,12 +240,13 @@ mkmoves() { # file goal work bet-line
 }
 M="$TMP/moves.md"
 hg read readers 3 --where "inbox" --date 2026-10-02 >/dev/null 2>&1
-W1="$(hw file --what "Newsletter line on the project page" --done-when "the page shows the line" --goal readers --key nl-line --source test --date 2026-10-02 | cut -d: -f1)"
+W1="$(hw file --what "Newsletter line on the project page" --done-when "the page shows the line" --check 'test -s live/newsletter-one.md' --goal readers --key nl-line --source test --date 2026-10-02 | cut -d: -f1)"
 mkmoves "$M" readers "$W1" "3 -> 5 within seven days of going live"
 OUT="$(hg bets --moves "$M" --date 2026-10-02 2>&1)"; contains "a bet is read from the day's moves" "$OUT" "1 bet(s) recorded"
 OUT="$(hg bets --moves "$M" --date 2026-10-02 2>&1)"; contains "  and never recorded twice" "$OUT" "0 bet(s) recorded"
 check "  it is a BET line on the card" "$(grep -c "BET $W1 3 -> 5" "$TMP/goals/readers.md")" "1"
 OUT="$(hg settle --date 2026-10-02 2>&1)"; contains "a bet whose move is not live yet waits" "$OUT" "not live yet, bet placed 2026-10-02"
+mkdir -p "$TMP/live"; printf 'The published newsletter line\n' > "$TMP/live/newsletter-one.md"
 hw verify "$W1" --evidence "read the live page, https://example.org/page" --date 2026-10-02 >/dev/null 2>&1
 OUT="$(hg settle --date 2026-10-05 2>&1)"; contains "a live move is not judged before its seven days" "$OUT" "verdict due 2026-10-09"
 OUT="$(hg attention --date 2026-10-05 2>&1)"; contains "a goal with a move out says so" "$OUT" "1 move(s) in flight"
@@ -258,19 +259,21 @@ OUT="$(hg settle --date 2026-10-11 2>&1)"; missing "  written once" "$OUT" "sett
 contains "  and shown as settled earlier" "$OUT" "settled earlier: 2026-10-10 $W1 worked"
 OUT="$(hg attention --date 2026-10-11 2>&1)"; contains "with nothing in flight the goal asks for moves again" "$OUT" "nothing in flight"
 
-W2="$(hw file --what "A second line" --done-when "shown" --goal readers --key nl-two --source test --date 2026-10-11 | cut -d: -f1)"
+W2="$(hw file --what "A second line" --done-when "shown" --check 'test -s live/newsletter-two.md' --goal readers --key nl-two --source test --date 2026-10-11 | cut -d: -f1)"
 mkmoves "$M" readers "$W2" "6 → 8"
 OUT="$(hg bets --moves "$M" --date 2026-10-11 2>&1)"; contains "the arrow may be written as → too" "$OUT" "1 bet(s) recorded"
+printf 'The second published newsletter line\n' > "$TMP/live/newsletter-two.md"
 hw verify "$W2" --evidence "read the live page, https://example.org/two" --date 2026-10-11 >/dev/null 2>&1
 hg read readers 6 --where "inbox" --date 2026-10-18 >/dev/null 2>&1
 OUT="$(hg settle --date 2026-10-18 2>&1)"; contains "no gain in seven days is flat" "$OUT" "$W2 flat: 6 -> 6"
 
-W3="$(hw file --what "A third line" --done-when "shown" --goal readers --key nl-three --source test --date 2026-10-19 | cut -d: -f1)"
+W3="$(hw file --what "A third line" --done-when "shown" --check 'test -s live/newsletter-three.md' --goal readers --key nl-three --source test --date 2026-10-19 | cut -d: -f1)"
 mkmoves "$M" readers "$W3" "6 -> 7"; hg bets --moves "$M" --date 2026-10-19 >/dev/null 2>&1
+printf 'The third published newsletter line\n' > "$TMP/live/newsletter-three.md"
 hw verify "$W3" --evidence "read the live page, https://example.org/three" --date 2026-10-19 >/dev/null 2>&1
 OUT="$(hg settle --date 2026-10-30 2>&1)"; contains "no reading within three days of the due day is unread" "$OUT" "$W3 unread: no reading between 2026-10-26 and 2026-10-29"
 
-W4="$(hw file --what "Waits on the person" --done-when "sent" --goal readers --key nl-four --owner person --source test --date 2026-10-19 | cut -d: -f1)"
+W4="$(hw file --what "Waits on the person" --done-when "sent" --check 'test -s live/person-sent.md' --goal readers --key nl-four --owner person --source test --date 2026-10-19 | cut -d: -f1)"
 mkmoves "$M" readers "$W4" "6 -> 7"; hg bets --moves "$M" --date 2026-10-19 >/dev/null 2>&1
 OUT="$(hg settle --date 2026-10-30 2>&1)"; contains "a move not live within seven days of its bet closes as never-live" "$OUT" "$W4 never-live: not live within seven days"
 printf '%s\n' '- 2026-10-30 BET W-19990101-99 1 -> 2 "gone"' >> "$TMP/goals/readers.md"
@@ -279,8 +282,9 @@ OUT="$(hg settle --date 2026-10-30 2>&1)"; contains "a bet on a work item that d
 hg file --kind outcome --title "Fewer headache days" --id headaches --area health --status adopted --source "said it on 2026-09-30" >/dev/null 2>&1
 hg change headaches --set "LEAD=days with a headache | per week | the person tells it" --why "test" >/dev/null 2>&1
 hg read headaches 3 --where "he said three this week" --date 2026-10-01 >/dev/null 2>&1
-W5="$(hw file --what "Evening screen cut-off in his calendar" --done-when "in the calendar" --goal headaches --key hd-one --source test --date 2026-10-01 | cut -d: -f1)"
+W5="$(hw file --what "Evening screen cut-off in his calendar" --done-when "in the calendar" --check 'test -s live/calendar.md' --goal headaches --key hd-one --source test --date 2026-10-01 | cut -d: -f1)"
 mkmoves "$M" headaches "$W5" "3 -> 1"; hg bets --moves "$M" --date 2026-10-01 >/dev/null 2>&1
+printf 'Evening screen cut-off event\n' > "$TMP/live/calendar.md"
 hw verify "$W5" --evidence "saw it in the calendar, https://example.org/cal" --date 2026-10-01 >/dev/null 2>&1
 hg read headaches 1 --where "he said one this week" --date 2026-10-08 >/dev/null 2>&1
 OUT="$(hg settle --date 2026-10-08 --dry-run 2>&1)"; contains "--dry-run shows the verdict" "$OUT" "$W5 worked: 3 -> 1"
@@ -334,7 +338,7 @@ rm -rf "$R2"
 
 # Found by a test reader (2026-09-30): the run called bets itself before filing its items, and
 # "APPLY: (filed below)" put a bet on the card for a work item called "(filed".
-W6="$(hw file --what "A later line" --done-when "shown" --goal readers --key nl-six --source test --date 2026-10-30 | cut -d: -f1)"
+W6="$(hw file --what "A later line" --done-when "shown" --check 'test -s live/newsletter-six.md' --goal readers --key nl-six --source test --date 2026-10-30 | cut -d: -f1)"
 mkmoves "$M" readers "(filed below, id to follow)" "6 -> 9"
 OUT="$(hg bets --moves "$M" --date 2026-10-30 2>&1)"; contains "an APPLY that names no work item records no bet" "$OUT" "0 bet(s) recorded"
 contains "  and says which move and why" "$OUT" "no work item on the register"

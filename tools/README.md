@@ -174,7 +174,11 @@ one of the others is not installed.
   on the number (BET, copied onto the card by `mc-goals bets`), and seven days
   after a move went live `mc-goals settle` writes the verdict from the readings
   (RESULT: worked, moved, flat, unread or never-live). The run that made the
-  move never grades it. A goal can also carry **standing permissions**
+  move never grades it. Both the moves check and `mc-goals bets` require its
+  APPLY to name a `do` item for that goal with a CHECK of its live result;
+  a ship-list move must name its `apply-` item, not a preparation or research
+  item. Recording the bet never approves that item.
+  A goal can also carry **standing permissions**
   (`mc-goals allow`, `mc-goals may`): your own words, given once, for one kind of
   step and a number per week, so those steps stop waiting for a yes each time.
   Money, sign-ups, bookings, cancellations, a first or bulk message and anything
