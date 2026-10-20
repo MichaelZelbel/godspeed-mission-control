@@ -23,7 +23,7 @@ import {RecoveryRunner} from '../core/recovery-runner.mjs';
 import {BackupRunner} from '../core/backup-runner.mjs';
 import {BackupSchedule} from '../core/backup-schedule.mjs';
 import {FactClosing} from '../core/fact-closing.mjs';
-import {saveConversationState,retainCompletedConversation} from '../core/conversation-state.mjs';
+import {saveConversationState,retainCompletedConversation,bindConversationSession,conversationRuntimeId} from '../core/conversation-state.mjs';
 import { importExport,exportRecords } from '../core/import.mjs';
 import { kinds } from '../core/jobs/scheduler.mjs';
 import { MediaSync } from '../core/sync/media.mjs';
@@ -440,7 +440,17 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         if(previous){if(previous.request_hash!==requestHash)throw Error('Chat retry differs from the retained request');if(previous.state==='verified')return send(res,200,{data:previous.result,error:null});throw Error('This interrupted chat request needs review before replay');}
         const controller=new AbortController();if(isChat&&id)chatRequests.set(id,controller);
         try{
-          if(isChat){const person=input.contact_id||input.person_id||input.personId;if(person){input.contact_id=person;input.person_id=person;input.conversation_id='notebook:person:'+person;}input.message||=input.messages?.filter(m=>m.role==='user').at(-1)?.content||'';input.conversation_id||='notebook:'+(input.note_id?'note:'+input.note_id:input.collection_id?'collection:'+input.collection_id:'general');const sourceId=id?'chat-input-'+id:undefined;if(!sourceId||!store.get('conversation_messages',sourceId))await store.saveAsync('conversation_messages',{id:sourceId,role:'user',content:input.message,conversation_id:input.conversation_id,note_id:input.note_id||null,contact_id:input.person_id||null,source_app:'notebook-chat'},undefined,{signal:controller.signal});}
+          if(isChat){
+            const person=input.contact_id||input.person_id||input.personId;
+            if(person){input.contact_id=person;input.person_id=person;input.conversation_id='notebook:person:'+person;}
+            input.message||=input.messages?.filter(m=>m.role==='user').at(-1)?.content||'';
+            input.conversation_id||='notebook:'+(input.note_id?'note:'+input.note_id:input.collection_id?'collection:'+input.collection_id:'general');
+            await store.withLockAsync(()=>{
+              bindConversationSession(store,input);
+              const sourceId=id?'chat-input-'+id:undefined;
+              if(!sourceId||!store.get('conversation_messages',sourceId))store.saveUnderLock('conversation_messages',{id:sourceId,role:'user',content:input.message,conversation_id:conversationRuntimeId(input),note_id:input.note_id||null,contact_id:input.person_id||null,source_app:'notebook-chat'});
+            },{signal:controller.signal});
+          }
           if(receiptId)await store.saveAsync('command_receipts',{id:receiptId,state:'attempted',request_hash:requestHash},undefined,{signal:controller.signal});
           const data=name.startsWith('mc-api-keys')?apiKeys.invoke(name,input):await domains.invoke(name,{...input,...(isChat?{signal:controller.signal}:{})});
           if(isChat)await retainCompletedConversation(store,input,data,{asyncWriter:true,signal:controller.signal});

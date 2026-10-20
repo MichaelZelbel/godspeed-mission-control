@@ -1,4 +1,5 @@
 import {momentDraft} from './moment-draft.mjs';
+import {conversationRuntimeId,bindConversationSession} from './conversation-state.mjs';
 import {draftEvent} from './draft-event.mjs';
 import {momentDates} from './timestamps.mjs';
 import {NOTE_TYPES,processNote} from './proposals.mjs';
@@ -203,7 +204,11 @@ export class Domains {
       const contact_id=input.contact_id||input.person_id||input.personId;
       if(contact_id)input={...input,contact_id,person_id:contact_id,conversation_id:'notebook:person:'+contact_id};
     }
-    if(['conversation-chat','note-chat','collection-chat'].includes(name)&&!input.message)input={...input,message:input.messages?.filter(m=>m.role==='user').at(-1)?.content||''};
+    if(['conversation-chat','note-chat','collection-chat'].includes(name)){
+      if(input.conversation_session===undefined)bindConversationSession(this.store,input);
+      input={...input,conversation_id:conversationRuntimeId(input)};
+      if(!input.message)input={...input,message:input.messages?.filter(m=>m.role==='user').at(-1)?.content||''};
+    }
     if(name==='conversation-chat'&&this.nativeAgent){
       if(input.contact_id&&!visibleRows(this.query,'contacts').some(p=>p.id===input.contact_id))throw Error('Choose an available person');
       const files=input.uploadedFiles||[];if(files.length)chatAttachments(this.mediaRoot,files);

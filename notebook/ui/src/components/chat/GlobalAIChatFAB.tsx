@@ -90,6 +90,8 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
   const [confirm, confirmDialog] = useConfirmDialog();
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isClearing, setIsClearing] = useState(false);
+  const clearingRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const [sizeMode, setSizeModeState] = useState<SizeMode>(() => embedded ? "docked" : loadSizeMode());
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -275,9 +277,9 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
         .then((res) => {
           if (!res) return;
           if (chatKeyRef.current === key) {
-            setState((prev) => withSummary(prev, res.summary, res.upTo, res.messageCount));
+            setState((prev) => withSummary(prev, res.summary, res.upTo, res.messageCount, from.session_id));
           } else {
-            saveChatState(userId, ctx, withSummary(loadChatState(userId, ctx), res.summary, res.upTo, res.messageCount));
+            saveChatState(userId, ctx, withSummary(loadChatState(userId, ctx), res.summary, res.upTo, res.messageCount, from.session_id));
           }
         })
         .finally(() => {
@@ -290,7 +292,7 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
   const sendMessage = useCallback(async (override?: unknown) => {
     // A message handed in (openFloatingChat) is sent as if typed; a click or key event is not one.
     const text = (typeof override === "string" ? override : input).trim();
-    if ((!text&&!files.length) || isLoading || requestRef.current || !session) return;
+    if ((!text&&!files.length) || isLoading || clearingRef.current || requestRef.current || !session) return;
 
     setError(null);
     const sentKey = chatKey;
@@ -333,7 +335,7 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
 
 
       const { data, error: fnErr } = await supabase.functions.invoke(chatFn, {
-        body: {...invokeBody,message:userMsg.content,conversation_id:'notebook:'+contextKey,talk_id:talkId||undefined,page:pageChat?.page,page_label:pageChat?.label,files:files.length?files:state.messages.slice().reverse().find(m=>m.attachments?.length)?.attachments||[],model:model||undefined,effort:effort||undefined,request_id:requestRef.current},
+        body: {...invokeBody,conversation_session:state.session_id||'',message:userMsg.content,conversation_id:'notebook:'+contextKey,talk_id:talkId||undefined,page:pageChat?.page,page_label:pageChat?.label,files:files.length?files:state.messages.slice().reverse().find(m=>m.attachments?.length)?.attachments||[],model:model||undefined,effort:effort||undefined,request_id:requestRef.current},
       });
 
       // A non-2xx answer (out of credits is a 402) arrives as fnErr with
@@ -438,7 +440,7 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
   // A message handed in with openFloatingChat goes out once the panel is open and free; after a
   // moment, so the conversation the panel just loaded is the one it is added to.
   const sendRef=useRef(sendMessage);sendRef.current=sendMessage;
-  useEffect(()=>{if(!pendingMessage||!open||!session||isLoading||requestRef.current)return;const message=pendingMessage;const timer=setTimeout(()=>{setPendingMessage(null);void sendRef.current(message);},60);return()=>clearTimeout(timer);},[pendingMessage,open,session,isLoading]);
+  useEffect(()=>{if(!pendingMessage||!open||!session||isLoading||clearingRef.current||requestRef.current)return;const message=pendingMessage;const timer=setTimeout(()=>{setPendingMessage(null);void sendRef.current(message);},60);return()=>clearTimeout(timer);},[pendingMessage,open,session,isLoading]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     // Enter sends; Shift+Enter inserts a newline. This matches the in-note and
@@ -451,10 +453,22 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
   };
 
   const handleClear = async () => {
-    if (!(await confirm({ title: "Clear this conversation?", description: "The messages are removed from this chat. Changes already made to your data stay.", confirmLabel: "Clear", destructive: true }))) return;
-    clearChatState(user?.id, contextKey);
-    setState({ messages: [], summary: "", summarizedUpTo: 0 });
-    setError(null);
+    if (!(await confirm({ title: "Clear this conversation?", description: "Start a fresh conversation. Earlier messages stay in your archive. Saved notes and changes stay.", confirmLabel: "Clear", destructive: true }))) return;
+    if (requestRef.current || clearingRef.current) return;
+    const clearedKey = chatKey;
+    clearingRef.current = true;
+    setIsClearing(true);
+    try {
+      const cleared = await clearChatState(user?.id, contextKey);
+      deliver(clearedKey, user?.id, contextKey, cleared);
+      setFiles([]);
+      setError(null);
+    } catch (error: any) {
+      setError(error.message || "This conversation could not be cleared. Please try again.");
+    } finally {
+      clearingRef.current = false;
+      setIsClearing(false);
+    }
   };
 
   if (!user) return null;
@@ -542,7 +556,7 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
                   </span>
                 )}
               </div>
-              {page&&<Button variant="ghost" className="h-11" onClick={handleClear} disabled={isLoading}>Clear conversation</Button>}
+              {page&&<Button variant="ghost" className="h-11" onClick={handleClear} disabled={isLoading || isClearing}>Clear conversation</Button>}
               {!page&&<div className="flex items-center gap-1">
                 <a className="inline-flex h-11 w-11 sm:h-10 sm:w-10 items-center justify-center rounded hover:bg-muted" href={'/dashboard/chat'+(pageChat?'?page='+encodeURIComponent(pageChat.page):noteId?'?note='+encodeURIComponent(noteId):personId?'?person='+encodeURIComponent(personId):'')} target="_blank" rel="noreferrer" aria-label="Open chat in a new window" title="Open chat in a new window"><ExternalLink className="h-4 w-4"/></a>
                 {!embedded&&<span className="text-[10px] text-muted-foreground hidden xl:inline mr-1">Ctrl+Shift+K</span>}
@@ -552,6 +566,7 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
                     size="icon"
                     className="h-11 w-11 sm:h-7 sm:w-7"
                     onClick={handleClear}
+                    disabled={isLoading || isClearing}
                     title="Clear conversation"
                   >
                     <Trash2 className="h-3.5 w-3.5" />
@@ -700,7 +715,7 @@ export function GlobalAIChatFAB({page=false,embedded=false,noteTitle,onOpenChang
             </div>
 
             <div className="shrink-0 pt-3 pb-1 px-1">
-              <ChatComposer compact={embedded} value={input} onChange={setInput} onSend={sendMessage} onStop={stopReply} busy={isLoading} files={files} onFiles={setFiles} model={model} effort={effort} onModel={setModel} onEffort={setEffort} reply={state.messages.filter(m=>m.role==='assistant').at(-1)?.content||''} context={pageChat?'This page: '+pageChat.label:noteId?undefined:personId?'Current person: '+(contextTitle||'Loading...'):collectionId?'Current collection':'Your notebook / Relevant notes and people'} onError={setError}/>
+              <ChatComposer compact={embedded} value={input} onChange={setInput} onSend={sendMessage} onStop={stopReply} busy={isLoading || isClearing} files={files} onFiles={setFiles} model={model} effort={effort} onModel={setModel} onEffort={setEffort} reply={state.messages.filter(m=>m.role==='assistant').at(-1)?.content||''} context={pageChat?'This page: '+pageChat.label:noteId?undefined:personId?'Current person: '+(contextTitle||'Loading...'):collectionId?'Current collection':'Your notebook / Relevant notes and people'} onError={setError}/>
               <p className="text-[11px] text-muted-foreground text-center pt-2">Enter to send · Shift+Enter for a new line</p>
             </div>
           </div>

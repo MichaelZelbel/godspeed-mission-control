@@ -63,7 +63,10 @@ export function NoteChatPanel({ note, onClose, onNoteChanged }: NoteChatPanelPro
   );
   const [input, setInput] = useState("");
   const [confirm, confirmDialog] = useConfirmDialog();
+  useEffect(()=>{const changed=(event:Event)=>{if((event as CustomEvent).detail?.key===contextKey)setState(loadChatState(user?.id,contextKey));};window.addEventListener('godspeed:chat-history-updated',changed);return()=>window.removeEventListener('godspeed:chat-history-updated',changed);},[contextKey,user?.id]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isClearing, setIsClearing] = useState(false);
+  const clearingRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -116,8 +119,8 @@ export function NoteChatPanel({ note, onClose, onNoteChanged }: NoteChatPanelPro
     void summarizeChat("note-chat", from)
       .then((res) => {
         if (!res) return;
-        if (mountedRef.current) setState((prev) => withSummary(prev, res.summary, res.upTo, res.messageCount));
-        else saveChatState(userId, ctx, withSummary(loadChatState(userId, ctx), res.summary, res.upTo, res.messageCount));
+        if (mountedRef.current) setState((prev) => withSummary(prev, res.summary, res.upTo, res.messageCount, from.session_id));
+        else saveChatState(userId, ctx, withSummary(loadChatState(userId, ctx), res.summary, res.upTo, res.messageCount, from.session_id));
       })
       .finally(() => {
         summarizingRef.current = false;
@@ -126,7 +129,7 @@ export function NoteChatPanel({ note, onClose, onNoteChanged }: NoteChatPanelPro
 
   const sendMessage = useCallback(async () => {
     const text = input.trim();
-    if ((!text&&!files.length)||isLoading||requestRef.current||!session) return;
+    if ((!text&&!files.length)||isLoading||clearingRef.current||requestRef.current||!session) return;
 
     setError(null);
     const sentUserId = user?.id;
@@ -148,6 +151,7 @@ export function NoteChatPanel({ note, onClose, onNoteChanged }: NoteChatPanelPro
       const flushed = await flushNoteSave(note.id);
       const { data, error: fnErr } = await supabase.functions.invoke("note-chat", {
         body: {
+          conversation_session:state.session_id||'',
           files:files.length?files:state.messages.slice().reverse().find(m=>m.attachments?.length)?.attachments||[],model:model||undefined,effort:effort||undefined,request_id:requestRef.current,
           note_id: note.id,
           base_updated_at: flushed.updatedAt,
@@ -270,10 +274,21 @@ export function NoteChatPanel({ note, onClose, onNoteChanged }: NoteChatPanelPro
   };
 
   const handleClear = async () => {
-    if (!(await confirm({ title: "Clear this conversation?", description: "The messages are removed from this chat. Changes already made to your data stay.", confirmLabel: "Clear", destructive: true }))) return;
-    clearChatState(user?.id, contextKey);
-    setState({ messages: [], summary: "", summarizedUpTo: 0 });
-    setError(null);
+    if (!(await confirm({ title: "Clear this conversation?", description: "Start a fresh conversation. Earlier messages stay in your archive. Saved notes and changes stay.", confirmLabel: "Clear", destructive: true }))) return;
+    if (requestRef.current || clearingRef.current) return;
+    clearingRef.current = true;
+    setIsClearing(true);
+    try {
+      const cleared = await clearChatState(user?.id, contextKey);
+      deliver(user?.id, contextKey, cleared);
+      setFiles([]);
+      setError(null);
+    } catch (error: any) {
+      setError(error.message || "This conversation could not be cleared. Please try again.");
+    } finally {
+      clearingRef.current = false;
+      setIsClearing(false);
+    }
   };
 
   return (
@@ -296,6 +311,7 @@ export function NoteChatPanel({ note, onClose, onNoteChanged }: NoteChatPanelPro
               size="icon"
               className="h-7 w-7"
               onClick={handleClear}
+                    disabled={isLoading || isClearing}
               title="Clear conversation"
             >
               <Trash2 className="h-3.5 w-3.5" />
@@ -415,7 +431,7 @@ export function NoteChatPanel({ note, onClose, onNoteChanged }: NoteChatPanelPro
 
       {/* Input */}
       <div className="p-3 border-t border-border shrink-0">
-        <ChatComposer value={input} onChange={setInput} onSend={sendMessage} onStop={stopReply} busy={isLoading} files={files} onFiles={setFiles} model={model} effort={effort} onModel={setModel} onEffort={setEffort} reply={state.messages.filter(m=>m.role==='assistant').slice(-1)[0]?.content||''}  onError={setError}/>
+        <ChatComposer value={input} onChange={setInput} onSend={sendMessage} onStop={stopReply} busy={isLoading || isClearing} files={files} onFiles={setFiles} model={model} effort={effort} onModel={setModel} onEffort={setEffort} reply={state.messages.filter(m=>m.role==='assistant').slice(-1)[0]?.content||''}  onError={setError}/>
       </div>
       {confirmDialog}
     </div>

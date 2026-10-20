@@ -33,6 +33,7 @@ export interface PersistedChatMessage {
 
 
 export interface PersistedChatState {
+  session_id?: string;
   messages: PersistedChatMessage[];
   summary: string; // rolling summary of older turns
   summarizedUpTo: number; // index in messages already folded into summary
@@ -67,8 +68,8 @@ export function loadChatState(userId: string | undefined, contextKey: string): P
 export function saveChatState(userId: string | undefined, contextKey: string, state: PersistedChatState): void {
   saveFileChat(contextKey, state);
 }
-export function clearChatState(userId: string | undefined, contextKey: string): void {
-  clearFileChat(contextKey);
+export function clearChatState(userId: string | undefined, contextKey: string): Promise<PersistedChatState> {
+  return clearFileChat(contextKey);
 }
 
 /**
@@ -133,7 +134,9 @@ export function withSummary(
   summary: string,
   upTo: number,
   messageCountAtRequest: number,
+  sessionId?: string,
 ): PersistedChatState {
+  if (state.session_id !== sessionId) return state;
   if (!summary.trim()) return state;
   if (state.messages.length < messageCountAtRequest) return state;
   if (upTo <= state.summarizedUpTo) return state;

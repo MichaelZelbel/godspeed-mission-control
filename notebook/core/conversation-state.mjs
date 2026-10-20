@@ -1,4 +1,14 @@
 import {hash} from './records/store.mjs';
+import {randomUUID} from 'node:crypto';
+
+const conversationRecord=(store,key)=>store.get('note_conversations','chat-'+hash(key).slice(0,24));
+export const conversationRuntimeId=input=>input.conversation_session?input.conversation_id+':session:'+input.conversation_session:input.conversation_id;
+export function bindConversationSession(store,input){
+ if(!input.conversation_id?.startsWith('notebook:'))return;
+ const session=conversationRecord(store,input.conversation_id.slice(9))?.state?.session_id||'';
+ if((session||input.conversation_session!==undefined)&&input.conversation_session!==session)throw Object.assign(Error('This conversation was cleared in another window. Reopen it before sending a message.'),{code:'CONFLICT'});
+ input.conversation_session=session;
+}
 
 const sameMessage=(a,b)=>a.role===b.role&&a.content===b.content;
 const prefix=(short,long)=>short.length<=long.length&&short.every((message,i)=>sameMessage(message,long[i]));
@@ -7,10 +17,12 @@ export function saveConversationState(store,input,{asyncWriter=false,signal}={})
  if(typeof key!=='string'||!key||key.length>400||!Array.isArray(state?.messages)||state.messages.some(m=>!['user','assistant'].includes(m.role)||typeof m.content!=='string'))throw Error('Invalid conversation state');
  return (asyncWriter?store.withLockAsync.bind(store):store.withLock.bind(store))(()=>{
   const id='chat-'+hash(key).slice(0,24),old=store.get('note_conversations',id),current=old?.state;
-  if(current&&hash(current)===hash(state))return {ok:true,state:current,unchanged:true};
   if(input.clear===true){
-   if(state.messages.length||!current||!input.expected_state||hash(input.expected_state)!==hash(current))throw Object.assign(Error('Conversation changed before clearing. Reopen it and review the current history.'),{code:'CONFLICT'});
+   if(state.messages.length||!input.expected_state||(current&&hash(input.expected_state)!==hash(current)))throw Object.assign(Error('Conversation changed before clearing. Reopen it and review the current history.'),{code:'CONFLICT'});
+   state={messages:[],summary:'',summarizedUpTo:0,session_id:randomUUID()};
   }else if(current){
+   if((state.session_id||'')!==(current.session_id||''))return {ok:true,state:current,ignored_stale:true};
+   if(hash(current)===hash(state))return {ok:true,state:current,unchanged:true};
    if(prefix(state.messages,current.messages)&&state.messages.length<current.messages.length)return {ok:true,state:current,ignored_stale:true};
    if(!prefix(current.messages,state.messages)){
     // Every competing branch remains available, but cannot replace another reply.
@@ -29,6 +41,8 @@ export function retainCompletedConversation(store,input,result,{asyncWriter=fals
  const key=input.conversation_id.slice('notebook:'.length),id='chat-'+hash(key).slice(0,24);
  return (asyncWriter?store.withLockAsync.bind(store):store.withLock.bind(store))(()=>{
   const old=store.get('note_conversations',id);
+  // A reply already running when another window clears belongs to its old session.
+  if((input.conversation_session||'')!==(old?.state?.session_id||''))return;
   if(input.request_id&&old?.completed_request_ids?.includes(input.request_id))return;
   const state=old?.state||{messages:[],summary:'',summarizedUpTo:0},messages=[...state.messages];
   if(messages.at(-1)?.role!=='user'||messages.at(-1)?.content!==input.message)messages.push({role:'user',content:input.message,...(input.files?.length?{attachments:input.files}:{})});
