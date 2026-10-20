@@ -25,4 +25,14 @@ Four unchanged bootstrap fixture suites passed under Windows PowerShell 5.1: bac
 | `windows-manifest.json` | 963284 | `36e1ebfbc9efe2dd12e192c7686696175e38318c955d8aa5cfc66c072392acef` |
 | `Godspeed-v2-integrated-source.tar.gz` | 40189390 | `e7a0488f9f260282bafd7bdeafe1070cadbb53a0ad51bf86b632fb82b737c992` |
 
-Server image publication and anonymous download readback are recorded after their checks finish.
+## Publication and public readback
+
+Published as the latest release on 20 October 2026, release ID 418715885, targeting installer/assets commit `4466c121f2a8b4e3bf6a580ac597ac313334f974`. It is not marked as a GitHub prerelease, so ordinary `releases/latest/download` updates receive it, as for the preceding limited beta. The prior release and its tag were not changed.
+
+All five files were downloaded anonymously through their ordinary latest-download URLs. Each redirect selected this release, each payload matched the reviewed local SHA-256, the downloaded checksum file verified all four payloads, and the manifest named beta.2 with reviewed source `d02745dd7b2ece9a578122c78a56872f6d713a7d`. The checksum file's own SHA-256 is `9142a5fccc7003d073882efb97b2b4d8b8501b95a17a827baed047481c86880d`. Independently rebuilding the source archive with Git produced identical bytes; the bundled Node passed all four pause regressions again from the extracted source archive.
+
+The standard integrated workflow [39472139313](https://github.com/MichaelZelbel/godspeed-mission-control/actions/runs/39472139313) passed native Linux installation, update and recovery, all prebuild checks, the Docker build, the complete installed-server suite and browser check, publication, keyless signing and the reporting-only scan. The scan still reports dependency vulnerabilities; a successful reporting step is not a claim that the image is free of them.
+
+The tested server image is `ghcr.io/michaelzelbel/godspeed-mission-control@sha256:45cb11062d11ddac41cc238027111cbfa8936f19f6cf574b85a2a9cb17e10511`. Anonymous registry readback matched the manifest's digest and its configuration's exact reviewed-source label. Signing is verified by the successful workflow step; signature cryptography was not independently checked locally.
+
+Exactly four active server Compose files were repinned to that immutable digest, with no other behavioral changes. Their generator matches the committed public file. All 27 public/standalone/Traefik source checks passed in Linux, including actual Docker Compose parsing; no containers were started by those checks. Personal running installations were not reinstalled by this hotfix release.
