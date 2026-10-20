@@ -25,4 +25,14 @@ The unchanged bootstrap backup-location, native-error, update-copy-retention and
 | `windows-manifest.json` | 963786 | `5525ad82dba6e163b4e2f704ffa24f93a3e3159abaf089a8d4bd721ac3173e99` |
 | `Godspeed-v2-integrated-source.tar.gz` | 40189577 | `17d6dce4ba8d3d99e585ff99e6fc9d7b535db4e4660e183f00f0148ac94f1a9f` |
 
-Public release, installed-server checks and anonymous download readback are added after verification.
+## Publication and public readback
+
+Published as latest on 20 October 2026, release ID 418777854, targeting installer/assets commit `295a8e974f3479998bf3d52d2ea7a4be57cc81a5`. As with the preceding limited beta, it is not marked as a GitHub prerelease so ordinary `releases/latest/download` updates receive it. The prior release and tag were preserved.
+
+All five release files were downloaded anonymously through their ordinary latest-download URLs. Every redirect selected this release, every payload matched the checked local SHA-256, the downloaded checksum file verified all four payloads, and the downloaded manifest named beta.3 and reviewed source `9b8b3d022899f8d3112218aa3d65762ba4c4fd7d`. SHA256SUMS itself is `c3ad5547d8c69f29dd1be93908dd379dcc5d94b60ebbc9b015e8779004e32c4e`.
+
+The [exact-source integrated workflow](https://github.com/MichaelZelbel/godspeed-mission-control/actions/runs/39481873383) passed native Linux install/update/recovery, the prebuild checks and the new reset regressions, Docker build, the entire installed-server suite and browser checks, publication, keyless signing and the reporting scan. Reporting success does not mean the image has no dependency vulnerabilities. The [packaged-installer Mac/Linux workflow](https://github.com/MichaelZelbel/godspeed-mission-control/actions/runs/39482612277) also passed every job: actual Mac LaunchAgent install/restart/update/removal, the native mail executable on both Mac architectures and ARM Linux, and Linux uninstall. The [packaged-installer integrated workflow](https://github.com/MichaelZelbel/godspeed-mission-control/actions/runs/39482612364) has passed native Linux install/update/recovery with the newly published source pins; its second image build is not the image shipped here.
+
+The tested server image is `ghcr.io/michaelzelbel/godspeed-mission-control@sha256:dd115e265cb2abba07f25d971e376d9c8dc4f3c2f90b945328d11bdd46d9cccf`. Anonymous registry readback verified the manifest digest and the exact reviewed-source label in its configuration. The signature is verified by CI's successful signing step; signature cryptography was not independently checked locally.
+
+Exactly four active server Compose files changed only to select that digest, at public configuration source `5327793b83c209a166fe4b507e3a11ad882f2574`. The generated public Hostinger file matches its source. All 27 public/standalone/Traefik checks passed under checksum-verified Linux Node 22.19.0, with actual Docker Compose parsing and no containers started. Existing personal installations were not changed.
