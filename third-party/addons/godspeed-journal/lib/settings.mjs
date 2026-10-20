@@ -6,6 +6,7 @@ import path from "node:path";
 
 export const DEFAULTS = Object.freeze({
   version: 1,
+  capture_enabled: true,          // false: no new entries or check-ins until explicitly resumed
   language: "en",                 // en | de: the fixed messages (nudge, evening, weekly)
   timezone: "UTC",                // setup writes the real one; the server runs on UTC
   feedback: "check",              // off: only "Saved." | check: done question + done check | coach: check + one reflective question when a task closes

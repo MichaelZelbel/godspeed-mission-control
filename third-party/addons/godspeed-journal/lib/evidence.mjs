@@ -219,6 +219,7 @@ export function closingEntry(t, post, s) {
 // about to be asked (the side question looks at one task, on the person's prompt, so it must be
 // quick). Nothing is read when no task is open.
 export function checkRecord(mcDir, s, entries, now, { only = null, timeoutMs = 20000 } = {}) {
+  if (s.capture_enabled === false) return { verdicts: new Map(), closes: [] };
   const all = openTasks(entries);
   const look = all.filter((t) => minutesBetween(new Date(t.started), now) <= RECENT_MINUTES && (!only || only.includes(t.id)));
   if (!look.length) return { verdicts: new Map(), closes: [] };

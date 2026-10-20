@@ -32,6 +32,13 @@ is the failure this recipe exists to prevent.
 
 ## Save first, always
 
+Read `godspeed-journal config get capture_enabled` before saving. When it is false, say
+`Journal capture is paused. I haven't saved this entry.` in their language and stop. Never
+save it as a note, tracker, or other record instead. Resume only when they explicitly ask:
+`godspeed-journal config set capture_enabled on`. Pausing is
+`godspeed-journal config set capture_enabled off`. A command that says capture is paused
+has saved nothing; never reply `Saved.` to that failure.
+
 Run the `godspeed-journal` command BEFORE writing any reply, with the person's words verbatim in
 `--words` and `--source telegram-voice`, `telegram` or `desk`. Never make them wait for a
 thought before their entry is safe. One entry can hold several moves ("finished the invoice,

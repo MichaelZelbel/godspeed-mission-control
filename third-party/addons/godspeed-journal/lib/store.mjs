@@ -3,6 +3,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { localParts, now } from "./clock.mjs";
+import { loadSettings } from "./settings.mjs";
 
 const ARRAYS = new Set(["done_means", "met", "missed"]);
 const ORDER = ["at", "kind", "task", "title", "done_means", "met", "missed", "evidence", "evidence_id", "evidence_at", "source"];
@@ -46,6 +47,11 @@ export function parse(text) {
 }
 
 export function writeEntry(mcDir, settings, entry, at = now()) {
+  // Re-read the person's switch at the write boundary. Chat commands and background
+  // workers can still hold settings loaded before Settings paused capture.
+  if (settings.capture_enabled === false || loadSettings(mcDir).capture_enabled === false) {
+    throw new Error("Journal capture is paused. Resume it in Settings before saving an entry.");
+  }
   const p = localParts(at, settings.timezone);
   const rel = path.join("routines", "journal", "entries", p.y, p.m, p.d);
   fs.mkdirSync(path.join(mcDir, rel), { recursive: true });

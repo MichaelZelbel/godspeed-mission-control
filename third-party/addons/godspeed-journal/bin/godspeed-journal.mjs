@@ -147,7 +147,9 @@ const commands = {
     if (c) process.stdout.write(c + "\n");
   },
   tick() {
+    if (s.capture_enabled === false) return;
     pullQuietly(mcDir, syncMode);
+    if (loadSettings(mcDir).capture_enabled === false) return;
     let es = entries();
     const { verdicts, closes } = checkRecord(mcDir, s, es, at);
     for (const c of closes) writeEntry(mcDir, s, c, at);
@@ -162,12 +164,14 @@ const commands = {
   // whatever just produced proof (a posting job). --needs only prints what the record has to
   // cover, for a job that keeps a copy of it for a machine that cannot read it live.
   evidence() {
+    if (s.capture_enabled === false) return;
     if (f.needs) {
       const n = recordNeeds(entries(), at);
       if (n) console.log(JSON.stringify(n));
       return;
     }
     pullQuietly(mcDir, syncMode);
+    if (loadSettings(mcDir).capture_enabled === false) return;
     const es = entries();
     const { closes } = checkRecord(mcDir, s, es, at);
     for (const c of closes) writeEntry(mcDir, s, c, at);

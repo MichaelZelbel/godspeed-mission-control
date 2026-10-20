@@ -20,6 +20,7 @@ const CLOSED_NOTE_MINUTES = 12 * 60;
 const LOOSE_NOTE_MINUTES = 24 * 60;
 
 export function contextBlock(entries, s, now) {
+  if (s.capture_enabled === false) return "[godspeed-journal] Journal capture is paused. Do not save entries, ask journal questions, or resume capture unless the person explicitly asks. Never save a rejected entry somewhere else.";
   const open = recentTasks(entries, now);
   const closedFromRecord = tasksFrom(entries).filter((t) => t.evidence && t.evidence.closed <= now.toISOString() &&
     minutesBetween(new Date(t.evidence.closed), now) <= CLOSED_NOTE_MINUTES);

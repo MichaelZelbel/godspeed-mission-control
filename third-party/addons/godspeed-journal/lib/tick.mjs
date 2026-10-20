@@ -16,6 +16,7 @@ const DAY = 24 * 60;
 const HELD = new Set(["closed", "unsure", "unreadable"]);
 
 export function dueMessages(entries, s, now, verdicts = new Map()) {
+  if (s.capture_enabled === false) return { messages: [], records: [] };
   const messages = []; const records = [];
   const lp = localParts(now, s.timezone);
   const when = (iso) => whenSaid(iso, now, s.timezone, s.language);

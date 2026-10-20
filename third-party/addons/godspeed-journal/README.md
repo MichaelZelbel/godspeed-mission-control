@@ -120,6 +120,9 @@ therefore shows as "at least" the time you were seen on it, or "time unknown", n
 Say what you want in your own words; your assistant runs `godspeed-journal config set <key>
 <value>` and tells you what changed:
 
+- **Capture**: Settings > Your journal > Pause journal capture stops new entries from chat and
+  commands, along with check-ins. Existing entries remain readable. Enable journal capture
+  resumes it. The command is `godspeed-journal config set capture_enabled off` or `on`.
 - **Check-ins**: on or off, and after how long a task has to run first. "No check-ins" or "check
   in after four hours."
 - **Quiet hours**: a stretch of the day check-ins never interrupt. "Quiet after nine."
