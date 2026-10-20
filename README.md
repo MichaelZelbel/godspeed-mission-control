@@ -8,7 +8,11 @@ A new release comes out most weeks. I write about what my AI does for me and wha
 
 Version 2 is the current edition, here on `main`. Its installers set up a new, separate folder. They do not move an existing version 1 Godspeed folder or your Menerio account.
 
-## New in this release, the first beta (19 October 2026)
+## New in 2.0.0-beta.2 (20 October 2026)
+
+Pausing the journal now stops new journal entries from chat and stops its check-ins. Resuming starts it again. Your saved entries stay in place. Updating keeps your folder, notes and settings.
+
+## The first beta (19 October 2026)
 
 This is the first beta of version 2, 2.0.0-beta.1: the version for the first people who install and use it on their own. It brings everything below. Updating keeps your folder, your notes and your settings.
 
@@ -143,11 +147,11 @@ The notebook no longer calls every installation a test installation. Its unavail
 
 ## Windows
 
-[Download GodspeedSetup.exe](https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-19-1/GodspeedSetup.exe), then run it.
+[Download GodspeedSetup.exe](https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-20-1/GodspeedSetup.exe), then run it.
 
 This uses Godspeed's original setup wizard and shared installer, then connects the integrated notebook. On a PC that already has Godspeed, the wizard selects a separate installation by default. The notebook opens at [http://127.0.0.1:47831/dashboard](http://127.0.0.1:47831/dashboard). Connect your own model account in Settings to use the assistant. The installer is unsigned.
 
-The executable is also [committed in this repository](installers/GodspeedSetup.exe). The [download page](https://github.com/MichaelZelbel/godspeed-mission-control/releases/tag/godspeed-v2-integrated-2026-10-19-1) lists the same file and its checksums.
+The executable is also [committed in this repository](installers/GodspeedSetup.exe). The [download page](https://github.com/MichaelZelbel/godspeed-mission-control/releases/tag/godspeed-v2-integrated-2026-10-20-1) lists the same file and its checksums.
 
 ## Linux or Mac
 
@@ -156,8 +160,8 @@ This uses Godspeed's shared native installer for Git, Node.js, Hermes and the Go
 Download this release's installer, check that it is the published file, and run it:
 
 ```bash
-curl -fsSLO https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-19-1/install-godspeed.sh
-echo "bec3e561db067ba4e58ca05d60ac92f6626e3ffa7b8bf3920b3dd97f89227c27  install-godspeed.sh" | sha256sum -c - && bash install-godspeed.sh
+curl -fsSLO https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-20-1/install-godspeed.sh
+echo "0c57ec493ef032ee443cc334fb2c8987d646a03409a84354aed8dd63074421d3  install-godspeed.sh" | sha256sum -c - && bash install-godspeed.sh
 ```
 
 On a Mac, write `shasum -a 256 -c -` where it says `sha256sum -c -`. The check refuses any other file, and the installer names one exact version of the notebook, so every reader of this release gets the same notebook.
