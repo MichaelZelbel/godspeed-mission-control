@@ -1,7 +1,7 @@
 # Replacement beta after the APPLY-reference fix
 
 Version: `2.0.0-beta.1`. Release: `godspeed-v2-integrated-2026-10-19-1`.
-Status: built for verification; keep the release draft until every required gate passes.
+Status: published on 20 October 2026 for a limited beta. [Download the release](https://github.com/MichaelZelbel/godspeed-mission-control/releases/tag/godspeed-v2-integrated-2026-10-19-1).
 
 The installed product, starter and native notebook hook are pinned to reviewed source `a621d5f2649f3931943634b86101ba8134e672fc`. The shared bootstrap remains `86da1dd27fea804ab131a8494b79a2ccf868e847`. This source descends from the sole clean public root `bc3b63d10097ed46faab8d6e4be5672201b3ad68`; no earlier repository history is imported. The release metadata and installer assets are a separate commit on that reviewed source.
 
@@ -28,15 +28,16 @@ The mistake was reproduced before the fix: both positive controls passed and fou
 
 These are source regression results. They do not replace installation or real model acceptance. Current source and reachable-history secret/privacy scans are recorded separately before the preparation branch is pushed.
 
-## Required replacement gates
+## Publication and verification, 20 October 2026
 
-Every replacement gate is pending when this preparation commit is created. Earlier candidate passes do not certify these changed bytes.
+The release was published at 10:20 UTC and targets metadata/assets commit `770eb12da1ba591d4e6f6c4cef57f68a51759cbf`. All five release files were downloaded anonymously after publication and matched their reviewed hashes, including `SHA256SUMS` (`a681df50b38435026a42da14bd0bde40e7815c90618c65a34ef0c3b210932603`). The latest Windows download returned HTTP 200. The runtime and source archive remain pinned to the reviewed source above.
 
-1. Windows fresh/update and wizard fresh/update, downgrade refusal, update check and uninstall using this exact EXE and manifest.
-2. Linux fresh and upgrade using the unchanged assertions and privately retained previous-version fixtures.
-3. The engine's real corrected goal-day acceptance for the new release commit.
-4. One complete real Hermes goal loop with the approved zero-price model and no paid fallback, including checked work, readings, settlement and the next decision. Partial successes and failed verification are not a pass.
-5. A new integrated image built from the replacement release commit, native/browser/persistence checks, signature/scan results and the normal server gate. The automatic one-click Hostinger gate is explicitly waived; the separate diagnostic branch is not part of this release. Existing reporting-only vulnerability findings must not be described as absent.
-6. The final digest pins, website parity/build/guide checks, database/publication checks and an independent install from the public download path using these exact new installer bytes.
+The replacement passed Linux fresh installation and upgrade with the original assertions, a separate install from the public Unix download path, the engine's real goal-day acceptance and a complete real Hermes goal loop using the approved free model without a paid fallback. The latter produced work that passed its own check, recorded its result and used it in the next decision. Research recorded an incomplete-night gap; this is not certification of completed founding research. The rebuilt signed image and normal server checks passed. Reporting-only vulnerability findings remain recorded; this release does not claim an absence of them.
 
-Keep prior assets and evidence immutable. Do not run the historical publish list, image-pin script or website-pin script without adapting their stale commit/hash assumptions. Re-read live draft and remote identities before any authorized publication. The release tag ultimately names the metadata/assets commit, while the runtime and archive identify the reviewed source above.
+The exact Windows EXE passed a fresh wizard installation, including the final-page checks (run `39188390189`). On 20 October, five unchanged bootstrap fixture suites passed under Windows PowerShell 5.1. Targeted native Windows notebook tests passed 66 checks with no failures; 19 Unix/Mac or POSIX-only checks were skipped. The changed validators passed their focused cases and the goals and moves regression suites again.
+
+Full silent fresh/update, update wizard, original-old-installer refusal, update discovery and uninstall were **not rerun on this exact rebuilt EXE**. The earlier package's acceptance results remain historical evidence. Both packages carry the same bootstrap, Node runtime and data format; no Windows installer, updater, uninstaller, notebook storage migration or core/server implementation changed. The package includes rebuilt frontend bytes and the goal-validator changes, so earlier passes are not represented as exact-package certification. The limited beta accepts this remaining integration uncertainty alongside the exact fresh installation and local regression evidence. GitHub-hosted Windows execution is not a launch requirement.
+
+The maintainer confirms everyday use of the updated computer and server installations. Mac setup remains experimental: automated source checks support it, but an ordinary physical-Mac installation has not been verified and is outside this beta's scope. Fresh ChatGPT account sign-in and real new-bot Telegram onboarding remain unverified; isolated AI-selection and Telegram setup tests passed. Automatic Hostinger checkout remains waived while support investigates. An unspecified outside-user trial is not a beta launch requirement.
+
+This record verifies the published software release. Website and book publication are tracked separately and are not claimed complete here. Prior assets and test evidence remain unchanged.
