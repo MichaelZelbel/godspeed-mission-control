@@ -541,6 +541,12 @@ fetch_repo() {
     git -C "$dir" update-ref "refs/godspeed-before-update/$old" "$old" \
       && git -C "$dir" -c advice.detachedHead=false checkout -q --detach FETCH_HEAD \
       || die "Could not update $name. Its previous commit is retained."
+    # Only the version just replaced is kept reachable; the ones earlier updates kept go
+    # (21 October 2026: until then every update kept one more and none was ever let go).
+    git -C "$dir" for-each-ref --format='%(refname)' refs/godspeed-before-update/ 2>/dev/null \
+      | while IFS= read -r kept; do
+          [ "$kept" = "refs/godspeed-before-update/$old" ] || git -C "$dir" update-ref -d "$kept" >/dev/null 2>&1 || true
+        done
     ok "$name updated"
   else
     if [ -n "$branch" ]; then

@@ -20,9 +20,12 @@ if [ -f candidate.env ]; then
     stamp=$(date -u +%Y%m%d-%H%M%S)
     cp -p candidate.env "candidate.env.before-$stamp"
     # The data first: a checked backup in the data volume, made by the version that wrote it.
+    # --before-update (notebook/core/update-copy.mjs): only what an update can change, and in a
+    # folder with Git only what its commit does not hold. A version from before 21 October 2026
+    # ignores the word and makes its whole backup.
     if [ -n "$("${compose[@]}" ps -q notebook 2>/dev/null)" ]; then
       echo 'Saving a backup before the update...' >&2
-      "${compose[@]}" exec -T notebook node /opt/godspeed/kit/notebook/bin/godspeed.mjs backup "$backups/before-update-$stamp" >/dev/null \
+      "${compose[@]}" exec -T notebook node /opt/godspeed/kit/notebook/bin/godspeed.mjs backup "$backups/before-update-$stamp" --before-update >/dev/null \
         || { echo 'The backup before the update did not finish, so nothing was changed. Run this again when the server answers.' >&2; exit 1; }
       update_copy="$backups/before-update-$stamp"
     else
@@ -43,10 +46,17 @@ for attempt in $(seq 1 30); do
   if "${compose[@]}" exec -T notebook node --input-type=module -e 'const r=await fetch("http://127.0.0.1:47831/health");process.exit(r.ok?0:1)' >/dev/null 2>&1; then healthy=1; break; fi
   sleep 2
 done
-# The new image answers, so the update worked: the newest three backups made before updates stay
-# and older ones go, by the new version's own rule (notebook/core/upgrade-copies.mjs). Until 15
-# October 2026 every update added one and none was removed. Nothing goes after an update whose
-# server did not answer, and a backup made with manage.sh backup is never touched.
+# The new image answers, so the update worked: the backup made before it stays and older ones go,
+# by the new version's own rule (notebook/core/upgrade-copies.mjs). Until 15 October 2026 every
+# update added one and none was removed; until 21 October 2026 the newest three stayed. Nothing
+# goes after an update whose server did not answer, and a backup made with manage.sh backup is
+# never touched. Likewise the settings: those from before this update stay beside the new ones,
+# to go back to, and those from before earlier updates go. Until 21 October 2026 none went.
+if [ -n "${stamp:-}" ] && [ -n "$healthy" ]; then
+  for old in candidate.env.before-*; do
+    if [ -f "$old" ] && [ "$old" != "candidate.env.before-$stamp" ]; then rm -f -- "$old"; fi
+  done
+fi
 if [ -n "$update_copy" ] && [ -n "$healthy" ]; then
   "${compose[@]}" exec -T notebook node /opt/godspeed/kit/notebook/bin/godspeed.mjs prune-backups "$backups" --made "$update_copy" >/dev/null 2>&1 \
     || echo "Older backups made before updates could not all be removed. They are in $backups in the data volume." >&2

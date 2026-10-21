@@ -385,10 +385,26 @@ setup_path() {
 }
 
 # --- The copies made before updates -------------------------------------------------
-# After an update that worked, the newest three of the copies made before updating stay and
-# older ones go, by the new version's own rule (notebook/core/upgrade-copies.mjs). Until 15
-# October 2026 every update added one, about 250 MB on a grown notebook, and none was removed:
-# One server had 35, 7.2 GB, after eight days of updates, and its disk was 97% full. It is
+# The copy made before an update (notebook/core/update-copy.mjs): only what an update can change,
+# and in a folder with Git only what its commit does not already hold, so a grown mission control
+# takes megabytes and seconds, not gigabytes and minutes (one took 8.33 GB and sixteen minutes
+# until 21 October 2026). The version being installed makes it: the copy reads files and keeps
+# the commit, it does not read the notebook's records, so the version that wrote them need not
+# make it. A version without that copy (none this installer installs) leaves it to the previous
+# version's whole backup, as every update did until then. Prints the reason when it fails.
+make_update_copy() {
+  local cli="$version/notebook/bin/godspeed.mjs"
+  if [ -f "$version/notebook/core/update-copy.mjs" ]; then
+    "$node" "$cli" backup "$backup_dir" --before-update 2>&1 >/dev/null
+  else
+    [ -f "$state/versions/${before:-none}/notebook/bin/godspeed.mjs" ] && cli="$state/versions/$before/notebook/bin/godspeed.mjs"
+    "$node" "$cli" backup "$backup_dir" 2>&1 >/dev/null
+  fi
+}
+# After an update that worked, the copy it made stays and older ones go, by the new version's own
+# rule (notebook/core/upgrade-copies.mjs). Until 15 October 2026 every update added one, about
+# 250 MB on a grown notebook, and none was removed: One server had 35, 7.2 GB, after eight days
+# of updates, and its disk was 97% full; until 21 October 2026 the newest three stayed. It is
 # called only once every step of the update worked, never during one or after one that failed,
 # and a copy it cannot remove never fails the update that worked.
 prune_update_copies() {
@@ -538,22 +554,21 @@ elif [ "$manager" = launchd ]; then
   stop_started_by_hand
 fi
 
-# Before the new version is wired in, keep a checked backup of the knowledge and media
-# (release-contract.md line 15), using the previous notebook's own backup command. Only on an
-# upgrade: a first install has nothing to back up yet. Until 7 October 2026 the new version's
-# init and wire-assistant ran with no backup and no way back. Added 7 October 2026.
+# Before the new version is wired in, keep a checked backup of what the update can change and of
+# the media (release-contract.md line 15; make_update_copy above). Only on an upgrade: a first
+# install has nothing to back up yet. Until 7 October 2026 the new version's init and
+# wire-assistant ran with no backup and no way back. Added 7 October 2026.
 upgrading=""
 backup_dir=""
 before=$(cat "$state/version" 2>/dev/null || true)
 if [ -n "$before" ]; then
   upgrading=1
   backup_dir="$state/backups/$(date -u +%Y%m%d-%H%M%S)-$before"
-  backup_cli="$state/versions/$before/notebook/bin/godspeed.mjs"
-  [ -f "$backup_cli" ] || backup_cli="$version/notebook/bin/godspeed.mjs"
-  if "$node" "$backup_cli" backup "$backup_dir" >/dev/null 2>&1; then
+  if why=$(make_update_copy); then
     echo "A backup of your knowledge and media was made at: $backup_dir" >&2
   else
     echo 'The pre-upgrade backup could not be made, so the upgrade was not started.' >&2
+    [ -z "$why" ] || printf '%s\n' "$why" | sed -n '1,3p' >&2
     exit 1
   fi
 fi
@@ -668,8 +683,8 @@ if [ -n "$started" ]; then
     [ "$old" = "$(basename "$version")" ] || [ "$old" = "$previous" ] || rm -rf "${state:?}/versions/$old"
   done
   rm -rf "${state:?}/source" "$state"/versions/.incoming.* "$state"/runtime/.download.*
-  # The new notebook answers, so the update worked: the newest three copies made before
-  # updates stay, older ones go. A notebook that did not answer ended the installation above.
+  # The new notebook answers, so the update worked: the copy it made before stays, older ones
+  # go. A notebook that did not answer ended the installation above.
   prune_update_copies
 
   # The web address, now that the notebook's web door answers.

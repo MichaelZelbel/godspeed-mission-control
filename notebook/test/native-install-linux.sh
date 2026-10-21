@@ -3,8 +3,9 @@
 # runner): install one version, upgrade to another without naming the machine again,
 # and come back after the notebook is killed. Until 6 October 2026 nothing ran it before
 # a reader did, and its upgrade had never once started the new version. Since 15 October 2026
-# also: an update that worked keeps the newest three copies made before updates, and one whose
-# notebook does not answer is undone and removes none.
+# also: an update that worked keeps the copy it made before it (the newest three until 21 October
+# 2026) and one whose notebook does not answer is undone and removes none; since 21 October 2026
+# the copy holds what an update can change and never work/.
 set -euo pipefail
 here=$(cd "$(dirname "$0")/../.." && pwd)
 work=$(mktemp -d)
@@ -52,6 +53,8 @@ before=$(systemctl show -p MainPID --value "$service")
 plant() { mkdir -p "$state/backups/$1" && echo '{"format":1,"files":[]}' > "$state/backups/$1/backup.json"; }
 for day in 01 02 03 04; do plant "202610$day-120000-$first"; done
 mkdir -p "$state/backups/.partial-20261001-110000-$first" "$state/backups/my own folder"
+# The owner's work in progress, which no update writes and no copy before one holds.
+mkdir -p "$root/work" && head -c 1048576 /dev/zero > "$root/work/recording.bin"
 copies() { local n=0 dir; for dir in "$state"/backups/2*/; do [ -f "$dir/backup.json" ] && n=$((n+1)); done; echo "$n"; }
 
 echo '== an upgrade that does not name the machine again'
@@ -65,9 +68,10 @@ answers || fail 'the upgraded notebook does not answer'
 [ -d "$state/versions/$first" ] || fail 'the previous version was removed'
 made=$(cd "$state/backups" && ls -d 2*-"$first" | sort | tail -1)
 [[ "$made" > 20261005 ]] && [ -f "$state/backups/$made/backup.json" ] || fail 'the upgrade made no copy before it'
-[ "$(copies)" = 3 ] || fail "the upgrade kept $(copies) copies made before updates, not the newest three"
-[ -d "$state/backups/20261004-120000-$first" ] && [ -d "$state/backups/20261003-120000-$first" ] || fail 'a newest copy made before updates was removed'
-[ ! -e "$state/backups/20261001-120000-$first" ] && [ ! -e "$state/backups/20261002-120000-$first" ] || fail 'an older copy made before updates was kept'
+grep -q '"kind": "update-copy"' "$state/backups/$made/backup.json" || fail 'the copy made before the update is not the copy of what an update can change'
+[ -d "$state/backups/$made/notebook" ] && [ ! -e "$state/backups/$made/work" ] || fail 'the copy made before the update holds work/ or not the notebook'
+[ "$(copies)" = 1 ] || fail "the upgrade kept $(copies) copies made before updates, not only its own"
+for day in 01 02 03 04; do [ ! -e "$state/backups/202610$day-120000-$first" ] || fail 'an older copy made before updates was kept'; done
 [ ! -e "$state/backups/.partial-20261001-110000-$first" ] || fail 'a copy that stopped part-way was kept'
 [ -d "$state/backups/my own folder" ] || fail 'a folder no installer made was removed'
 
@@ -80,11 +84,11 @@ if GODSPEED_SKIP_UI=1 install "$third"; then fail 'an update whose notebook neve
 [ "$(cat "$state/version")" = "$second" ] || fail 'the version that ran before was not put back'
 answers || fail 'the notebook that ran before does not answer again'
 while IFS= read -r name; do [ -e "$state/backups/$name" ] || fail "the failed update removed $name"; done < "$work/kept"
-[ "$(copies)" = 4 ] || fail "after a failed update there are $(copies) copies, not the three before it and the one it made"
+[ "$(copies)" = 2 ] || fail "after a failed update there are $(copies) copies, not the one before it and the one it made"
 
 echo '== a notebook killed from outside comes back'
 sudo systemctl kill -s KILL "$service"
 sleep 8
 systemctl is-active --quiet "$service" || fail 'systemd did not restart a killed notebook'
 answers || fail 'the restarted notebook does not answer'
-echo 'Installed, upgraded with the machine name kept and the newest three copies made before updates, a failed update undone with every copy kept, and restarted after a kill.'
+echo 'Installed, upgraded with the machine name kept and only its own copy made before the update, a failed update undone with every copy kept, and restarted after a kill.'

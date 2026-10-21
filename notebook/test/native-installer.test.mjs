@@ -140,12 +140,29 @@ function updateCopies(){
   return {state,backups,older,made};
 }
 
-test('after an update that worked, the newest three copies made before updates stay and older ones go',options,()=>{
-  const {state,backups,older,made}=updateCopies();
+test('after an update that worked, the copy it made before stays and older ones go',options,()=>{
+  const {state,backups,made}=updateCopies();
   const result=sh('prune_update_copies',{state,version:product,node:slash(process.execPath),backup_dir:backups+'/'+made});
   assert.equal(result.status,0,result.err);
   assert.equal(result.err,'','nothing to report when it worked');
-  assert.deepEqual(fs.readdirSync(backups).sort(),[older[3],older[4],made,'my own folder'].sort());
+  assert.deepEqual(fs.readdirSync(backups).sort(),[made,'my own folder'].sort());
+});
+
+// The copy before an update (core/update-copy.mjs), made by the version being installed: what an
+// update can change, never work/. Until 21 October 2026 the whole folder, 8.33 GB on one computer.
+test('the copy made before an update holds what an update can change and says why when it cannot be made',options,()=>{
+  const state=scratch('update-copy'),root=state+'/mission control',backup_dir=state+'/backups/20261021-120000-'+'b'.repeat(40);
+  for(const [name,text] of [['AGENTS.md','manual'],['notebook/Note.md','a page'],['work/recording.bin','x'.repeat(4096)]]){fs.mkdirSync(path.dirname(root+'/'+name),{recursive:true});fs.writeFileSync(root+'/'+name,text);}
+  const env={state,version:product,node:slash(process.execPath),backup_dir,before:'a'.repeat(40),GODSPEED_WORKSPACE:root,GODSPEED_MEDIA_ROOT:state+'/media'};
+  const made=sh('make_update_copy',env);
+  assert.equal(made.status,0,made.err+made.out);
+  const manifest=JSON.parse(fs.readFileSync(backup_dir+'/backup.json','utf8'));
+  assert.equal(manifest.kind,'update-copy');
+  assert.deepEqual(manifest.files.map(f=>f.path).sort(),['AGENTS.md','notebook/Note.md']);
+  assert.equal(fs.existsSync(backup_dir+'/work'),false,'work/ is never in it');
+  const again=sh('make_update_copy',env);
+  assert.notEqual(again.status,0,'a copy that already exists is not made again');
+  assert.match(again.out,/already exists/,'and the reason is what it prints');
 });
 
 test('an installation that made no copy before it (a first one) removes none',options,()=>{
