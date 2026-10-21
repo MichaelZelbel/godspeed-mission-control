@@ -66,6 +66,13 @@ test('every wiring of a mission control made from the starter gives its Hermes t
  assert.ok(!fs.existsSync(path.join(home,'plugins','godspeed_notebook','plugin.yaml')),'not a general plugin: Hermes would list it among them');
  // mc-watch and mc-subs, which the watch and subscription recipes name, exist with the original assistant too.
  for(const name of ['mc-watch','mc-subs'])assert.match(fs.readFileSync(path.join(home,'bin',name),'utf8'),new RegExp('personal-command\\.mjs\' \''+name.slice(3)+'\' "\\$@"'));
+ // The add-ons' context plugins are enabled, the Charm Challenge's too (spec 2026-10-21), each with
+ // its mission control, its recipe and its command.
+ assert.deepEqual(configList(readConfigValue(text,['plugins','enabled'])),['godspeed-coach','godspeed-journal','godspeed-headache','godspeed-charm','godspeed-context']);
+ assert.equal(fs.readFileSync(path.join(home,'plugins','godspeed-charm','mission-control.txt'),'utf8'),root+'\n');
+ assert.match(fs.readFileSync(path.join(home,'plugins','godspeed-charm','__init__.py'),'utf8'),/GODSPEED_CHARM_SCRIPT/);
+ assert.match(fs.readFileSync(path.join(home,'skills','charm-challenge','SKILL.md'),'utf8'),/^---\nname: charm-challenge\n/);
+ assert.match(fs.readFileSync(path.join(home,'bin','godspeed-charm'),'utf8'),/godspeed-charm\.mjs/);
  // Wiring again changes nothing.
  wire(root,home);assert.equal(fs.readFileSync(path.join(home,'config.yaml'),'utf8'),text);
 });

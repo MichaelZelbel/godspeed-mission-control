@@ -14,6 +14,7 @@ import {headacheLog} from './native-personal.mjs';
 import {contextBlock} from '../../third-party/addons/godspeed-headache/lib/context.mjs';
 import {loadSettings as headacheSettings} from '../../third-party/addons/godspeed-headache/lib/settings.mjs';
 import {now as clockNow} from '../../third-party/addons/godspeed-coach/lib/clock.mjs';
+import {charmBlock} from './charm-operation.mjs';
 // Full write baselines stay outside the enumerable prompt object.
 const writeSnapshots=new WeakMap();
 export const collectionWriteSnapshot=context=>writeSnapshots.get(context)||[];
@@ -71,6 +72,12 @@ function buildChatContext(query,input){
    }else context.personal.food=null;
   }catch{context.personal.food=null;}
   try{const log=headacheLog(reader),settings=headacheSettings(query.store.root);context.personal.headache={tracker:log.tracker?.id||null,open:contextBlock(log.episodes,settings,clockNow())||'No headache is open.'};}catch{context.personal.headache={tracker:null,open:'The headache tracker could not be read.'};}
+  // The Charm Challenge (spec 2026-10-21): its [godspeed-charm] block for THIS chat, as the bot's and
+  // Claude Code's show it before every message, its steps said as charm operations (this chat has
+  // no shell). Only here does a bare yes or no answer an open question. A note's or a collection's
+  // chat runs no operations, so it gets none. Nothing runs, or the record cannot be read: no block,
+  // and the chat goes on.
+  try{context.personal.charm=input.note_id||input.collection_id?null:charmBlock(reader,input.conversation_id);}catch{context.personal.charm=null;}
   for(const type of ['notes','contacts','entities','world_claims','moments','profile_facts','goals','media_analysis']){
     const selected=pick(type,type==='notes'?8:4);context[type]=selected.rows;context.retrieval.counts[type]=selected.total;
   }

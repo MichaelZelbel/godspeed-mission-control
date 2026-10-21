@@ -78,6 +78,23 @@ test('the headache add-on carries the notebook\'s own YAML module',()=>{
   assert.equal(read('../../third-party/addons/godspeed-headache/lib/yaml.mjs'),read('../core/records/yaml.mjs'));
 });
 
+// The Charm Challenge (spec 2026-10-21) ships its recipe from its add-on, as the headache tracker does:
+// the copy is the add-on's, byte for byte, listed and with a known revision, and the add-on writes the
+// notebook's record files with the notebook's own YAML module.
+test('the charm-challenge recipe is the charm add-on\'s own, listed, and its YAML module is the notebook\'s',()=>{
+  const recipe=read('../recipes/charm-challenge/SKILL.md');
+  assert.equal(recipe,read('../../third-party/addons/godspeed-charm/skill/charm-challenge/SKILL.md'));
+  assert.match(recipe,/^---\nname: charm-challenge\ndescription: The Charm Challenge/);
+  assert.ok(recipe.match(/^description: (.*)$/m)[1].length<1024,'fits Hermes\' limit for a description');
+  assert.doesNotMatch(recipe,/[–—]/,'no long dashes');
+  const inventory=JSON.parse(read('../data/recipe-inventory.json'));
+  assert.deepEqual(inventory.find(r=>r.name==='charm-challenge'),{...inventory.find(r=>r.name==='headache-tracker'),name:'charm-challenge'});
+  assert.ok(JSON.parse(read('../data/recipe-revisions.json'))['charm-challenge/SKILL.md'].includes(digest(recipe)),'charm-challenge ships a known revision');
+  assert.equal(read('../../third-party/addons/godspeed-charm/lib/yaml.mjs'),read('../core/records/yaml.mjs'));
+  const source=JSON.parse(read('../../third-party/addons/sources.json')).find(s=>s.name==='godspeed-charm');
+  assert.ok(source.files.includes('skill/charm-challenge/SKILL.md')&&source.files.includes('hermes/plugin/godspeed-charm/__init__.py'));
+});
+
 // The tracker recipe claims every "track" and hands a habit and a headache on, in the order of the
 // design: habit, headache, tracker, new tracker (D-321).
 test('the tracker recipe takes every "track" and hands habits and headaches on',()=>{

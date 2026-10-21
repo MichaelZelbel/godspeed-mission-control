@@ -13,6 +13,8 @@ import {trackerOperation,TRACKER_OPERATIONS} from './tracker-operations.mjs';
 import {proposalState,card,findTracker} from './trackers.mjs';
 import {isHabitRef,assertHabitProgressRequest} from './habit-trackers.mjs';
 import {headacheOperation,headacheArgs} from './headache-operation.mjs';
+import {charmOperation,charmArgs,charmConversation,charmNow} from './charm-operation.mjs';
+import {isYes,isNo,isExplicitReset} from '../../third-party/addons/godspeed-charm/lib/words.mjs';
 import {cycleOperation,cycleTracker,DELETE_MS} from './cycle-operations.mjs';
 import {foodOperation,foodTracker} from './food-operations.mjs';
 import {mealOf} from './food.mjs';
@@ -43,6 +45,7 @@ A message that starts with "track journal" or "track Tagebuch" names the journal
 cycle {action:track|over|forecast|leave-out|count|heads-up|talk|decline|delete,flow?:spotting|light|medium|heavy|unspecified,pain?:0-3,pain_where?:[belly|back|head],symptoms?:[cramps|headache|bloating|breast tenderness|acne|low mood|irritable|low energy|poor sleep|cravings|digestion|discharge],note?,on?:YYYY-MM-DD,start?:YYYY-MM-DD,why?:outlier|pregnancy|breastfeeding|contraception,enabled?:boolean,talk?,confirm?,language}: her period and cycle; personal.cycle is her cycle tracker (null: none yet). track is a day ("track period, heavy, cramps 2"; a headache named as one of the day's symptoms is a symptom here): flow is the amount she said, unspecified when she says she has her period without an amount, left out for a day of symptoms only; with no cycle tracker it asks its setup question, and her yes is tracker-create with that question's id. "period over" is over. "when is my next period?" is forecast. Her answer to "Leave this one out of the forecast?": yes is leave-out, no is count. A cycle affected by pregnancy, breastfeeding or starting or stopping hormonal contraception is leave-out with why and start (the day it began; without start, the cycle she is in now). "tell me two days before my period" is heads-up {enabled:true}, stopping it {enabled:false}. "my health talk may read my cycle" is talk {talk:"health"}. "delete my cycle tracker" is delete; her yes to that question is delete {confirm:<personal.cycle.deletion.request_id>}. A question about a fertile window, ovulation, safe days, conceiving or avoiding pregnancy, contraception or a diagnosis is decline: never answer it yourself. Pass language. Relay the operation's reply as the answer.
 food {action:track|answer|remember|correct|today|target|settings|talk|search|status,items?:[{food,item,grams?,count?,unit?,assumed?}],meal?:breakfast|lunch|dinner|snack|none,preset?,question?,grams?,name?,entry_id?,remove?,totals?,sex?:female|male,age?,height_cm?,weight_kg?,activity?:sedentary|light|moderate|very|extra,goal?:lose|keep|gain,numbers?,eating_disorder?,pregnant?,breastfeeding?,talk?,on?:YYYY-MM-DD,at?:HH:MM,language}: what she eats; personal.food is her food tracker (null: none yet) with its open questions, and personal.food.candidates the food table's matches for her words, each with its id. track is a meal: one item per food, food is a candidate's id (choose the plain food she means; when none fits, ask her and write nothing), item her word for it, grams only when she said a weight, count and unit when she said pieces or a container ("half a pack": count 0.5, unit "pack"), and for a piece of a standard size or a food with no amount you may add your typical weight as grams with assumed:true; never assume the size of a pack, bowl, plate, glass or can: leave grams out and code asks her once. With no food tracker it asks its setup question; her yes is tracker-create with that question's id, with answers:[{grams}] when she gave the asked amounts in the same message, and eating_disorder:true when she says she has or had one. Her answer to an amount question is answer {grams} (the size of the whole pack, bowl or glass, or the grams of the item). "remember this as my usual lunch" is remember {name:"lunch"}; "track usual lunch" is track {preset:"lunch"}. "the eggs were three" is correct {item:"eggs",count:3}; "delete the eggs" is correct {item:"eggs",remove:true}. "what did I eat today?" is today, with totals:true when she asks for calories or totals. "set my food target" is target with what she said about herself (never guess her age, height, weight, activity or goal). "stop showing calories" is settings {numbers:false}; "show calories again" {numbers:true}; pregnancy, breastfeeding or an eating disorder she mentions go in settings or target as true. Pass language. Every number in the answer is the operation's: relay its reply as the answer, word for word.
 headache {action:start|log|set|med|end|cancel,at?,from?,to?,pain?,side?,quality?,symptoms?:[word],triggers?:[word],meds?:[{med,dose?}],taken?,episode?}: a headache or migraine, with or without "track". start: one going on now (at: when it began, as he said it: HH:MM, "yesterday HH:MM" or -30m); log: one already over (from and to); set: more about one (pain, side, what it feels like, a symptom, a trigger he named, a corrected time); med: a pill or other medicine; end: it is over (at, if he said when); cancel: it was a mistake. The open headaches are in personal.headache with their ids; without episode it is the open one. Pain is only a number he gave; never guess a trigger; never do clock sums.
+charm {action:start|status|asked|answer|slip|stop,answer?:yes|no,words}: the Charm Challenge, 21 days of charming the AI into the result instead of arguing with it. personal.charm is its [godspeed-charm] block for this chat (null: none runs), and the notebook names this chat itself. words is their message as they wrote it. start, status and stop only when they ask for that ("start the Charm Challenge", "how is my Charm Challenge?", "stop the Charm Challenge"). asked when the block's rule says this message was or might be a slip: first do everything it asked; the notebook ends your reply with the one question, so never write it yourself. answer only when the block shows an open question for this chat and the message is a plain yes or no. slip only for a plain "charm slip" or "reset my Charm Challenge". Never a reset without a yes. Every other charm reply is the operation's own line.
 Every operation MUST contain source_quote. Copy the entire current user message exactly into that field, including the request verb. Without it, no operation can run. Use supplied IDs; ask to resolve ambiguity. ISO dates must include timezone. No outward actions or credentials. Never claim a change persisted until the operation succeeds.`;
 const required=(value,label)=>{if(typeof value!=='string'||!value.trim())throw Error(label+' is required');return value.trim();};
 const date=(value,label)=>{required(value,label);if(!Number.isFinite(Date.parse(value))||!/(Z|[+-]\d\d:\d\d)$/.test(value))throw Error(label+' needs an ISO date with timezone');return new Date(value).toISOString();};
@@ -90,8 +93,9 @@ const measured=op=>op.value!==undefined&&op.value!==null&&op.value!=='';
 // A reading is written by mc-goals into the goal's own card (tools/goals.js read), the same line
 // the morning decision writes and settle judges by, so it is a card command in either runtime.
 const readsLead=(domains,op)=>op.type==='goal-reading'||op.type==='goal-outcome'&&measured(op)&&!!leadOf(domains.query.rows('goals').find(g=>g.id===op.id));
-// A headache is written by the headache add-on into its tracker's files (headache-operation.mjs).
-const outsideRecords=(domains,op)=>NATIVE.includes(op.type)||op.type==='headache'||habitTrack(domains,op)||readsLead(domains,op)||op.type==='routine-change'&&!!domains.nativeScheduler||process.env.GODSPEED_ORIGINAL_RUNTIME==='on'&&['goal-add','goal-change','goal-outcome','forecast-settle'].includes(op.type)||['obligation-complete','obligation-snooze'].includes(op.type)&&dueRows(domains.store).some(d=>d.id===op.id)||op.type==='obligation-add'&&dueFilesHere(domains);
+// A headache is written by the headache add-on into its tracker's files (headache-operation.mjs),
+// and the Charm Challenge by the charm add-on into its own (charm-operation.mjs).
+const outsideRecords=(domains,op)=>NATIVE.includes(op.type)||op.type==='headache'||op.type==='charm'||habitTrack(domains,op)||readsLead(domains,op)||op.type==='routine-change'&&!!domains.nativeScheduler||process.env.GODSPEED_ORIGINAL_RUNTIME==='on'&&['goal-add','goal-change','goal-outcome','forecast-settle'].includes(op.type)||['obligation-complete','obligation-snooze'].includes(op.type)&&dueRows(domains.store).some(d=>d.id===op.id)||op.type==='obligation-add'&&dueFilesHere(domains);
 // The same domains, reading and writing a staged view of the store.
 const staged=(domains,store)=>{const query=new domains.query.constructor(store);query.nativeHermesHome=domains.query.nativeHermesHome;return Object.assign(Object.create(Object.getPrototypeOf(domains)),domains,{store,query});};
 // A copy of the records to try a change on, without the workspace lock and
@@ -150,7 +154,12 @@ export function personalOperation(domains,input){
   if(type==='goal-outcome'&&measured(input)&&readsLead(domains,input))return goalReading(domains,{id:input.id,value:input.value,where:input.where,on:input.on,source_quote:input.source_quote});
   return type==='goal-add'?query.rows('goals').find(r=>r.title===input.title):query.rows(card==='goals'?'goals':'forecasts').find(r=>r.id===input.id)||result;
  }
- if(type==='addon-command'){const result=addonCommand(store,input);if(input.addon!=='headache')ensureNativeSchedules(store,input.addon);return result;}
+ if(type==='addon-command'){
+  // A charm refusal is its own answer, {ok:false,reply,state}, as a success is {ok:true,...} (R4).
+  let result;try{result=addonCommand(store,input);}catch(error){if(input.addon==='charm'&&error.refusal)return {result:error.output};throw error;}
+  // The headache and the Charm Challenge have no routine of their own to schedule.
+  if(!['headache','charm'].includes(input.addon))ensureNativeSchedules(store,input.addon);return result;
+ }
  if(type==='card-command')return cardCommand(store,input,{delegated});
  if(type==='due-command')return dueCommand(store,input.args);
  if(type==='subscription-command')return subscriptionCommand(store,input.args);
@@ -191,6 +200,8 @@ export function personalOperation(domains,input){
  if(TRACKER_OPERATIONS.includes(type))return trackerOperation(domains,input);
  // Headaches: the headache add-on, the one owner of the Headaches tracker (headache-operation.mjs).
  if(type==='headache')return headacheOperation(domains,input);
+ // The Charm Challenge: the charm add-on, the one owner of its count (charm-operation.mjs).
+ if(type==='charm')return charmOperation(domains,input);
  // The cycle tracker: a specialist on the tracker base (cycle-operations.mjs).
  if(type==='cycle')return cycleOperation(domains,input);
  // The food tracker: a specialist on the tracker base (food-operations.mjs).
@@ -294,6 +305,22 @@ function cycleChecks(domains,message,op){
   else if(!/(?<!\p{L})(?:delete|remove|lösch\p{L}*|entfern\p{L}*)/iu.test(message)||!/(?<!\p{L})(?:cycle|period|tracker|zyklus|periode)/iu.test(message))throw Error('Say that you want your cycle tracker deleted');
  }
 }
+// What a charm operation does must be what the person said (spec 2026-10-21): a reset without a
+// real yes throws away up to 20 days, the worst outcome there. So slip needs the plain words of a
+// reset, answer an open question in THIS chat and the yes or no the message is, and asked a
+// challenge that runs. The question belongs to the conversation that asked it.
+function charmChecks(domains,message,op,conversationId){
+ const conversation=charmConversation(conversationId);
+ charmArgs(op,conversation);
+ if(!['asked','answer','slip'].includes(op.action))return;
+ const {state}=charmNow(domains.store);
+ if(op.action==='slip'&&!isExplicitReset(message))throw Error('Only a plain "charm slip" or "reset my Charm Challenge" goes back to 21 at once; for anything else, ask first (asked).');
+ if(op.action==='asked'&&!state.running)throw Error('No Charm Challenge is running, so there is no slip to ask about.');
+ if(op.action==='answer'){
+  if(!state.open.some(q=>q.conversation===conversation))throw Error('There is no open question about a slip in this chat, so a yes or no here answers something else.');
+  if(!(op.answer==='yes'?isYes(message):isNo(message)))throw Error('An answer to the slip question is a plain yes or a no, the one the message says.');
+ }
+}
 // What the food tracker writes must be what she said (D-321 step 5): every item a food she named, grams
 // and counts she said (a typical weight only when marked assumed), a unit and a meal she said; the
 // target's facts about her in her own words; the settings in words. A barcode is looked up by the chat
@@ -385,6 +412,9 @@ export function validateConversationOperations(domains,input,operations){
   // What she eats (D-321 step 5): a meal, an amount, a preset, a correction, the day, the target, the
   // settings; what each action may write is checked below (foodChecks).
   'food':/(?<!\p{L})(?:track|food|meal|ate|eat|eaten|had|breakfast|lunch|dinner|supper|snack|essen|gegessen|frühstück|mittag|abend|calor|kalor|kcal|target|ziel|remember|merk|speicher|usual|wie immer|today|heute|what|was|were|war|delete|remove|lösch|entfern|show|zeig|stop|pregnan|schwanger|breastfeed|still|eating disorder|essstörung|talk|gespräch|yes|ja|\d)/iu,
+  // The Charm Challenge (spec 2026-10-21): a slip can be any message at all, so what each action may
+  // do is checked against the message below (charmChecks).
+  'charm':/[\p{L}\p{N}]/u,
   'cycle':/(?<!\p{L})(?:track|period|periode|regel|menstru|cycle|zyklus|cramp|krampf|krämpf|spotting|schmier|blut|bleed|pms|fertil|fruchtbar|ovulat|eisprung|pregnan|schwanger|still|breastfeed|pill|pille|contracept|verhüt|diagnos|delete|lösch|remove|entfern|heads|tell me|sag mir|bescheid|erinner|remind|warn|vorwarn|leave|weg|count|zähl|yes|ja|no|nein|over|vorbei|when|wann|next|nächste|talk|gespräch|ended|aufgehört)/iu
  };
  // What each operation does, in the words a person uses. A request that says
@@ -398,13 +428,17 @@ export function validateConversationOperations(domains,input,operations){
   'habit-agree':'agree|try|commit|stimme','habit-observe':'record|log|track|notiere','habit-progress':'pause|resume|restart|continue|exempt|excuse|change|hide|show|pausiere|ändere','journal-add':'journal|write|record|log|notiere|schreibe','journal-switch':'enable|disable|turn|start|stop|switch|aktiviere|deaktiviere',
   'health-add':'record|log|save|track|notiere|speichere','memory-confirm':'remember|save|correct|update|merke|speichere|korrigiere','memory-propose':'remember|save|merke|speichere',
   'routine-change':'pause|resume|schedule|change|stop|start|move|pausiere|ändere|verschiebe','forecast-settle':'settle|record|resolve|log|notiere',
-  'tracker-hold':'track|tracke','tracker-create':'track|create|start|make','track':'track|tracke','tracker-correct':'change|correct|fix|delete|remove|lösche|korrigiere','headache':'track|tracke|log|record|save|note|notiere|speichere','cycle':'track|tracke|delete|remove|lösche','food':'track|tracke|remember|save|merke|speichere|delete|remove|lösche|set|change'};
+  'tracker-hold':'track|tracke','tracker-create':'track|create|start|make','track':'track|tracke','tracker-correct':'change|correct|fix|delete|remove|lösche|korrigiere','headache':'track|tracke|log|record|save|note|notiere|speichere','cycle':'track|tracke|delete|remove|lösche','food':'track|tracke|remember|save|merke|speichere|delete|remove|lösche|set|change','charm':'start|stop|reset|restart|end|starte|stoppe|beende|setze'};
  const refuses=type=>{const v=verbs[type];if(!v)return false;
   return new RegExp("(?<!\\p{L})(?:do not|don.t|dont|never|must not|should not|niemals)(?!\\s+forget)\\s+(?:[\\p{L}']+\\s+){0,2}?(?:"+v+")",'iu').test(message)||new RegExp("(?<!\\p{L})(?:"+v+")\\p{L}*\\s+(?:(?:mich|mir|das|es|dies|ihn|sie|uns)\\s+)?nicht(?!\\p{L})",'iu').test(message);};
  for(const operation of operations){
   const quote=operation.source_quote;
+  // The slip question and the count change nothing a person asked to keep: a slip is often an angry
+  // "never change the format again" or "if I wanted garbage", and must still be asked about, never
+  // refused (spec: when unsure, ask). Every other charm action is checked like any other.
+  const asking=operation.type==='charm'&&['asked','status'].includes(operation.action);
   // A provider-selected substring cannot turn a refusal or hypothetical into permission.
-  if(!quote||!message.includes(quote)||!intents[operation.type]?.test(quote)||!intents[operation.type]?.test(message)||refuses(operation.type)||/\b(?:do not|don.t|never|must not|should not|nicht|niemals)\s+(?:remember|save|add|create|allow|approve|authori[sz]e|edit|change|write|speichere|erlaube)/i.test(message)||/\b(?:if I|suppose|hypothetically|for example|someone said|quoted|wenn ich|beispielsweise)\b/i.test(message))throw Object.assign(Error('A proposed change needs your explicit request.'),{code:'UNAUTHORIZED_OPERATION',operation_type:operation.type,source_quote_matches:typeof quote==='string'&&message.includes(quote)});
+  if(!quote||!message.includes(quote)||!intents[operation.type]?.test(quote)||!intents[operation.type]?.test(message)||!asking&&(refuses(operation.type)||/\b(?:do not|don.t|never|must not|should not|nicht|niemals)\s+(?:remember|save|add|create|allow|approve|authori[sz]e|edit|change|write|speichere|erlaube)/i.test(message)||/\b(?:if I|suppose|hypothetically|for example|someone said|quoted|wenn ich|beispielsweise)\b/i.test(message)))throw Object.assign(Error('A proposed change needs your explicit request.'),{code:'UNAUTHORIZED_OPERATION',operation_type:operation.type,source_quote_matches:typeof quote==='string'&&message.includes(quote)});
   if(operation.type==='habit-observe'&&operation.answer==='done'&&/\b(?:did not|didn.t|haven.t|have not|not done|skipped|nicht|nein)\b/i.test(message))throw Error('Habit completion contradicts the actual user reply');
   // A reading of a weekly number is a number they said, as a number of its own ("1,400" and
   // "1400" both count), for a goal that has a weekly number.
@@ -469,6 +503,7 @@ export function validateConversationOperations(domains,input,operations){
    for(const key of ['triggers','symptoms'])for(const x of [].concat(operation[key]??[]))if(!named(x))throw Error('A '+(key==='triggers'?'trigger':'symptom')+' must be one you named');
    for(const m of [].concat(operation.meds??[]))if(!named(typeof m==='string'?m:m?.med)&&!/(?<!\p{L})(?:pill|tablet|tablette|painkiller|schmerzmittel|schmerztablette|medicine|medikament)/iu.test(message))throw Error('A medicine must be one you named');
   }
+  if(operation.type==='charm')charmChecks(domains,message,operation,input.conversation_id);
   // Which talk looks at a tracker, the way round they said it: "may also look at" gives it to the
   // talk, "no longer needs" takes it away.
   if(operation.type==='tracker-talk'){
@@ -534,7 +569,8 @@ export function conversationOperations(domains,input,operations){
   if(!outside[i])continue;const id=receipt(i),previous=domains.store.get('command_receipts',id);
   if(previous){if(previous.state!=='verified')throw Error('Previous operation needs review');results[i]=previous.result;continue;}
   domains.store.save('command_receipts',{id,state:'attempted',source_id:sourceId,operation:operation.type});
-  results[i]=personalOperation(domains,{...operation,source_id:sourceId});
+  // A charm question belongs to this chat: its conversation is set here, whatever the model wrote.
+  results[i]=personalOperation(domains,{...operation,source_id:sourceId,...(operation.type==='charm'?{conversation:input.conversation_id}:{})});
   domains.store.save('command_receipts',{id,state:'verified',source_id:sourceId,operation:operation.type,result:results[i]});
  }
  domains.store.save('command_receipts',{id:planId,state:'verified',plan_hash:digest,results});

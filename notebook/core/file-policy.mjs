@@ -5,7 +5,7 @@ export const recordsFolder='notebook';
 export const legacyRecordsFolder='records';
 // assistant: the owner's extra instructions for the assistant (assistant/extra-instructions.md),
 // which its program reads right after "who it is" (assistant-soul.mjs).
-export const durableRoots=[recordsFolder,'coach','journal','routines/journal','routines/headache','profile','rules','observations','goals','work','due','world','prompts','ideas','inbox','forecasts','skills','assistant-state','assistant'];
+export const durableRoots=[recordsFolder,'coach','journal','routines/journal','routines/headache','routines/charm','profile','rules','observations','goals','work','due','world','prompts','ideas','inbox','forecasts','skills','assistant-state','assistant'];
 export const durableFiles=['AGENTS.md','CLAUDE.md','README.md','procedures.md','decisions.md','MEMORY.md','FULL-ALPHA.md'];
 // Inside a durable root but device-private: kept on this machine, never put in
 // the knowledge repository and never indexed. assistant-state/history is the

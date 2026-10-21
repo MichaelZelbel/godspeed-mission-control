@@ -17,6 +17,9 @@ const talkOf=value=>{if(value===undefined||value===null||value==='')return null;
 // Headaches have their own tracker (D-321, step 3): the headache add-on keeps its rows, with its
 // rules for open headaches, pills and pain, so the generic track never writes them.
 const HEADACHES='The Headaches tracker is kept by the headache tracker: say it as a headache ("track headache since 6:30, right side") and use the headache operation or the headache-tracker recipe, never track.';
+// The Charm Challenge keeps its own count (spec 2026-10-21): the charm add-on writes its rows, a
+// start, a slip question, a reset, so the generic track never writes or corrects one of them.
+const CHARM='The Charm Challenge keeps its own count: say "start the Charm Challenge" or "charm slip".';
 // The food tracker's rows are worked out by its own operation from the food table (D-321 step 5).
 const FOOD='The food tracker is kept by the food operation: food {action:"track",items:[{food:<id from food search>,item,grams?,count?,unit?,assumed?}]}, as the food-tracker recipe says; never track.';
 // "track journal" and "track Tagebuch" name the journal (16 October 2026): their words are a journal
@@ -44,6 +47,7 @@ export function trackerOperation(domains,raw){
   // A habit the coach keeps, or the headache tracker's word, is never a new tracker (the order of D-321).
   const habit=findHabits(store,name)[0];if(habit)throw Error(habit.title+' is a habit: track it with its id from tracker-list, and the coach records the day.');
   const existing=findTracker(store,name).candidates;if(existing.some(c=>c.tracker.specialist==='headache'))throw Error(HEADACHES);
+  if(existing.some(c=>c.tracker.specialist==='charm'))throw Error(CHARM);
   if(existing.some(c=>c.tracker.specialist==='food'))throw Error(FOOD);
   if(existing.length)throw Error('There is already a tracker called '+name+'; track it instead');
   // "track food", "track lunch, ..." belongs to the food tracker (D-321 step 5): its own question, its items.
@@ -135,7 +139,7 @@ export function trackerOperation(domains,raw){
  // A habit's day is the coach's: its own track() on its own file (habit-trackers.mjs).
  if(type==='habit-progress'||['track','tracker-correct'].includes(type)&&isHabitRef(store,input.tracker))return habitOperation(store,input,{now,zone,today:dayOf(now,zone),assistant:domains.assistant===true});
  if(type==='track'){
-  let c=resolve(store,input.tracker),under=false;if(c.tracker.specialist==='headache')throw Error(HEADACHES);
+  let c=resolve(store,input.tracker),under=false;if(c.tracker.specialist==='headache')throw Error(HEADACHES);if(c.tracker.specialist==='charm')throw Error(CHARM);
   if(c.tracker.specialist==='cycle')return cycleOperation(domains,{...input,action:input.data?.ended===true||input.ended===true?'over':'track'});
   if(c.tracker.specialist==='food'){if(Array.isArray(input.items)||input.preset)return foodOperation(domains,{...input,action:'track'});throw Error(FOOD);}
   const word=typeof input.new_name==='string'?input.new_name.trim():'';
@@ -161,7 +165,7 @@ export function trackerOperation(domains,raw){
   return {collection_id:c.id,entry_id:entry.id,replaced:false,reply:under?'Tracked under '+c.name+': '+withoutName(c,said):said};
  }
  if(type==='tracker-correct'){
-  const c=resolve(store,input.tracker);if(c.tracker.specialist==='headache')throw Error(HEADACHES);
+  const c=resolve(store,input.tracker);if(c.tracker.specialist==='headache')throw Error(HEADACHES);if(c.tracker.specialist==='charm')throw Error(CHARM);
   if(c.tracker.specialist==='food')return foodOperation(domains,{...input,action:'correct',grams:input.data?.grams??input.value});
   const all=entries(store,c);
   // Without an entry id it is the last entry he made or changed.
