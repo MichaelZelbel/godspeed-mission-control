@@ -64,7 +64,7 @@ The command also accepts the usual `GODSPEED_WORKSPACE`, `GODSPEED_ROOT` and
 On the one-line Docker server, the server installer also creates a host launcher
 at `<server installation>/.godspeed/model.mjs`. Its `model-host.json` identifies
 that installation. A host add-on uses it to call the fixed `godspeed` Compose
-service over standard input and output. The helper and selected connection stay
+service as its `hermes` account over standard input and output. The helper and selected connection stay
 inside the existing container. The launcher opens no network port and forwards no
 credential. It refuses another workspace, service or executable. An existing
 global `godspeed-model` command belonging to a native installation is preserved.
