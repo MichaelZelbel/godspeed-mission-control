@@ -80,6 +80,26 @@ test("--stickers only on telegram with the sticker plugin next to this one", { s
   } finally { fs.rmSync(d, { recursive: true, force: true }); }
 });
 
+test("--stickers reads the one-line list the notebook writes, enabled: [\"a\", \"b\"], too", { skip }, () => {
+  const d = tmp();
+  try {
+    const s = stub(d, ECHO);
+    const plugins = path.join(d, "plugins"); const mine = path.join(plugins, "godspeed-charm");
+    fs.cpSync(PLUGIN, mine, { recursive: true });
+    fs.mkdirSync(path.join(plugins, "hermes-telegram-stickers"));
+    const k = { platform: "telegram", session_id: "t" };
+    const config = (text) => fs.writeFileSync(path.join(d, "config.yaml"), text);
+    config('terminal:\n  cwd: "/x"\nplugins:\n  enabled: ["godspeed-coach", "godspeed-charm", "hermes-telegram-stickers"]\n');
+    assert.ok(call(k, { script: s, folder: mine }).argv.includes("--stickers"));
+    config("plugins:\n  enabled: [godspeed-charm, 'hermes-telegram-stickers']  # by hand\n");
+    assert.ok(call(k, { script: s, folder: mine }).argv.includes("--stickers"));
+    config('plugins:\n  enabled: ["godspeed-coach", "godspeed-charm"]\n  disabled: ["hermes-telegram-stickers"]\n');
+    assert.ok(!call(k, { script: s, folder: mine }).argv.includes("--stickers"));
+    config("plugins:\n  enabled: []\n");
+    assert.ok(!call(k, { script: s, folder: mine }).argv.includes("--stickers"));
+  } finally { fs.rmSync(d, { recursive: true, force: true }); }
+});
+
 test("returns None when the command fails, prints nothing, or takes too long", { skip }, () => {
   const d = tmp();
   try {

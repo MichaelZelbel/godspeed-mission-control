@@ -8,6 +8,7 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { T } from "../lib/texts.mjs";
+import { readEvents } from "../lib/record.mjs";
 
 const BIN = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "bin", "godspeed-charm.mjs");
 
@@ -456,4 +457,37 @@ test("words from a file arrive as written", () => {
   assert.equal(r.status, 0, r.stderr);
   assert.equal(json(r).state.open[0].words, "why \"this\" again?\nseriously");
   gone(dir);
+});
+
+test("a Telegram button's answer: --words \"(button)\" is kept as the event's words", () => {
+  const dir = mission();
+  run(dir, ["start"]);
+  run(dir, ["asked", "--conversation", "telegram:s1", "--words", "useless thing"], { day: "2026-10-30" });
+  const r = run(dir, ["answer", "yes", "--conversation", "telegram:s1", "--words", "(button)", "--json"], { day: "2026-10-30" });
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(json(r).state.restarts, 1);
+  const reset = readEvents(dir).find((e) => e.kind === "reset");
+  assert.equal(reset.words, "(button)");
+  assert.equal(reset.conversation, "telegram:s1");
+  gone(dir);
+});
+
+test("texts: the question and the button words in both languages, as JSON, with or without a mission control", () => {
+  const want = Object.fromEntries(["en", "de"].map((l) => [l, {
+    question: T[l].question(), buttonYes: T[l].buttonYes(), buttonNo: T[l].buttonNo(),
+    noOpenQuestion: T[l].noOpenQuestion(), buttonFailed: T[l].buttonFailed(),
+  }]));
+  assert.equal(want.en.buttonYes, "Yes");
+  assert.equal(want.en.buttonNo, "No");
+  assert.equal(want.de.buttonYes, "Ja");
+  assert.equal(want.de.buttonNo, "Nein");
+  const dir = mission();
+  const r = run(dir, ["texts"]);
+  assert.equal(r.status, 0, r.stderr);
+  assert.deepEqual(JSON.parse(r.stdout), want);
+  gone(dir);
+  const nowhere = run(path.join(os.tmpdir(), "no-such-mission-control-" + process.pid), ["texts"]);
+  assert.equal(nowhere.status, 0, nowhere.stderr);
+  assert.deepEqual(JSON.parse(nowhere.stdout), want);
+  for (const l of ["en", "de"]) assert.doesNotMatch(T[l].buttonFailed(), /[\u2013\u2014]/);
 });

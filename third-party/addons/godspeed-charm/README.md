@@ -43,6 +43,7 @@ godspeed-charm answer no --conversation telegram:123 --words "that didn't count"
 godspeed-charm context --conversation telegram:123
 godspeed-charm context --conversation telegram:123 --stickers   # the sticker plugin is installed
 godspeed-charm context --hook claude
+godspeed-charm texts      # the question and the button words, as JSON, for the Telegram buttons
 ```
 
 Every command takes `--json` (it then prints `{ok, reply, state}`), `--language en|de` for one
@@ -66,6 +67,11 @@ the Godspeed notebook and refuses to install without one.
 
 - The notebook's own chat, through its `charm` operation.
 - Telegram, through Hermes: the plugin hands the current state to the assistant before every turn.
+  The question after a slip comes as its own message with two buttons, Yes and No (Ja and Nein in
+  German); a tap answers it, the message then says what happened, and the buttons go. Only you can
+  tap them (the one id in `TELEGRAM_ALLOWED_USERS`), only in your private chat with the bot, and
+  each message is answered once; a tap on a question from another day changes nothing. Typing yes
+  or no works as well. When no button can be sent, the question stays in the reply.
   When the hermes-telegram-stickers plugin is installed too, the finish gets one celebration sticker.
 - Claude Code, through a UserPromptSubmit hook. Scheduled and assistant-runtime runs get no block.
 - Codex gets no block, an accepted limit: there the challenge works only when you ask for it.
@@ -74,7 +80,9 @@ the Godspeed notebook and refuses to install without one.
 
 - `routines/charm/settings.json`: your time zone (where a day ends) and the reply language.
 - The notebook collection "Charm Challenge": every start, question, reset, kept answer, finish and
-  stop is one row.
+  stop is one row. An answer given by a button has "(button)" as its words.
+- `.godspeed/charm-buttons/`: one small file per Telegram button (which conversation asked, when,
+  and the answer it gives), kept 30 days.
 
 ## License
 

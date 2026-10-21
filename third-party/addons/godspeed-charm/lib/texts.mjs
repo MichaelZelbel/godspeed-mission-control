@@ -41,6 +41,10 @@ const EN = {
   askFirst: () => `Only "charm slip" starts over right away, so nothing has changed yet.`,
   resetToday: (s) => `There was a reset today already, so nothing changed. Still ${count(s.daysToGo, "day", "days")} to go.`,
   notAnAnswer: () => "That was neither a yes nor a no, so the question stays open.",
+  // The Telegram buttons under the question, and what the message says when a tap did not go through.
+  buttonYes: () => "Yes",
+  buttonNo: () => "No",
+  buttonFailed: () => "That did not go through, so nothing changed. Tap again, or write yes or no.",
 };
 
 const DE = {
@@ -59,6 +63,9 @@ const DE = {
   askFirst: () => `Nur "charm slip" setzt sofort zurück, also hat sich noch nichts geändert.`,
   resetToday: (s) => `Heute gab es schon einen Neustart, also hat sich nichts geändert. Noch ${count(s.daysToGo, "Tag", "Tage")}.`,
   notAnAnswer: () => "Das war weder ein Ja noch ein Nein, also bleibt die Frage offen.",
+  buttonYes: () => "Ja",
+  buttonNo: () => "Nein",
+  buttonFailed: () => "Das hat nicht geklappt, also hat sich nichts geändert. Tippe noch mal oder schreib Ja oder Nein.",
 };
 
 // T[lang] is never undefined: a language this add-on does not speak (a settings file saying "fr",
@@ -69,3 +76,11 @@ const LANGUAGES = { en: EN, de: DE };
 export const T = new Proxy(LANGUAGES, { get: (all, key) => (typeof key === "string" && !(key in all) ? all.en : all[key]) });
 // The language a reply comes in: the first of the candidates this add-on speaks, else English.
 export const pickLanguage = (...candidates) => candidates.find((l) => typeof l === "string" && Object.hasOwn(LANGUAGES, l)) || "en";
+
+// What the Telegram buttons need, in every language this add-on speaks: the question they sit under
+// (taken out of the reply word for word), their two labels, and the edits a tap can make. The Hermes
+// plugin reads these through `godspeed-charm texts`, so no sentence is typed twice.
+export const buttonTexts = () => Object.fromEntries(Object.entries(LANGUAGES).map(([l, t]) => [l, {
+  question: t.question(), buttonYes: t.buttonYes(), buttonNo: t.buttonNo(),
+  noOpenQuestion: t.noOpenQuestion(), buttonFailed: t.buttonFailed(),
+}]));

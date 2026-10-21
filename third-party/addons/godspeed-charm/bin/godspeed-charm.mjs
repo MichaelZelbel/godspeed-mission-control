@@ -15,7 +15,7 @@ import { loadSettings, setSetting, DEFAULTS } from "../lib/settings.mjs";
 import { hasNotebook } from "../lib/notebook.mjs";
 import { readEvents, appendEvent, localDate } from "../lib/record.mjs";
 import { charmState } from "../lib/count.mjs";
-import { T, pickLanguage } from "../lib/texts.mjs";
+import { T, pickLanguage, buttonTexts } from "../lib/texts.mjs";
 import { isYes, isNo, isExplicitReset } from "../lib/words.mjs";
 import { contextBlock } from "../lib/context.mjs";
 import { briefText, isFinishDay } from "../lib/brief.mjs";
@@ -27,6 +27,8 @@ const PATH_FLAGS = ["godspeed", "words-file", "extra-skills-dir"];
 const FLAGS = new Set(["json", "scheduled", "no-write", "stickers", "yes", "no-hermes", "no-claude"]);
 // setup and check install and inspect; they need no record, no settings and no day.
 const INSTALL = ["setup", "check"];
+// help and texts only print what this add-on says; they need no mission control at all.
+const WORDS_ONLY = ["help", "texts"];
 function parseArgs(argv) {
   const pos = []; const f = {};
   for (let i = 0; i < argv.length; i++) {
@@ -76,16 +78,16 @@ function prepare() {
   if (f.language !== undefined && !["en", "de"].includes(f.language)) die("--language can be en or de.");
 
   mcDir = findMissionControl({ arg: f.godspeed });
-  if (!mcDir && cmd !== "help" && cmd !== "setup") die("Could not find your mission control folder. Run this from inside it, or add --godspeed <folder>.");
+  if (!mcDir && !WORDS_ONLY.includes(cmd) && cmd !== "setup") die("Could not find your mission control folder. Run this from inside it, or add --godspeed <folder>.");
   // The record lives in the notebook (every Godspeed Mission Control has one); config and help work without it.
-  if (mcDir && !["help", "config", ...INSTALL].includes(cmd) && !hasNotebook(mcDir)) die("The Charm Challenge keeps its record in the Godspeed notebook, and this mission control has none.");
+  if (mcDir && ![...WORDS_ONLY, "config", ...INSTALL].includes(cmd) && !hasNotebook(mcDir)) die("The Charm Challenge keeps its record in the Godspeed notebook, and this mission control has none.");
   s = { ...DEFAULTS };
-  if (mcDir && cmd !== "help" && !INSTALL.includes(cmd)) s = loadSettings(mcDir);
+  if (mcDir && !WORDS_ONLY.includes(cmd) && !INSTALL.includes(cmd)) s = loadSettings(mcDir);
   // --language wins for this one reply (German in, German out); then the settings; then English.
   lang = pickLanguage(f.language, s.language);
   say = T[lang];
   at = now();
-  if (!["help", "config", ...INSTALL].includes(cmd)) today = localDate(at, s.timezone);
+  if (![...WORDS_ONLY, "config", ...INSTALL].includes(cmd)) today = localDate(at, s.timezone);
 }
 
 // Events written by one command get one millisecond each, so a finish settled first and a start
@@ -241,6 +243,12 @@ const commands = {
       return null;
     }
     die("godspeed-charm config [show | get <key> | set <key> <value>]");
+  },
+  // The question and the button words in both languages, as JSON, for the Hermes plugin's Telegram
+  // buttons: it takes the question out of the reply and sends it under Yes / No.
+  texts() {
+    console.log(JSON.stringify(buttonTexts()));
+    return null;
   },
   help() {
     console.log(fs.readFileSync(new URL("../README.md", import.meta.url), "utf8").split("## Use")[1]?.split("\n## ")[0]?.trim() || "See README.md");
