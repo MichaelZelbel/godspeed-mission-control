@@ -1,0 +1,32 @@
+# The form for a new discussion in the Ideas category (the file name is the category's slug).
+# GitHub discussion category forms syntax:
+# https://docs.github.com/en/discussions/managing-discussions-for-your-community/creating-discussion-category-forms
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Others vote for an idea with the arrow beside it. The ideas with the most votes get looked at first.
+
+        Everything here is public, so leave out keys, passwords and private details. Something broken? [Report it here](https://github.com/MichaelZelbel/godspeed-mission-control/issues/new/choose) instead.
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What would you like it to do?
+      description: Describe it in your own words. No technical terms needed.
+    validations:
+      required: true
+
+  - type: textarea
+    id: why
+    attributes:
+      label: What would that let you do?
+      description: Why it matters to you. A real example from your day helps most.
+    validations:
+      required: true
+
+  - type: textarea
+    id: tried
+    attributes:
+      label: Anything you tried instead?
+      description: A way around it you use today, or another tool. Leave this empty if there is none.

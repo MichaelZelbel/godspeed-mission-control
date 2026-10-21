@@ -1,0 +1,16 @@
+# The chooser readers see under New issue. Contact links take https addresses only: GitHub drops a
+# mailto: link from the chooser, so the support address is written in the last link's text.
+blank_issues_enabled: false
+contact_links:
+  - name: An idea for a new feature
+    url: https://github.com/MichaelZelbel/godspeed-mission-control/discussions/categories/ideas
+    about: Share it in Ideas, where others can vote for it.
+  - name: A question about using it
+    url: https://github.com/MichaelZelbel/godspeed-mission-control/discussions/categories/q-a
+    about: Ask in Q&A, where other people who use it can answer too.
+  - name: Known issues
+    url: https://godspeedmissioncontrol.com/guide/known-issues
+    about: What does not work yet, and what to do instead.
+  - name: A security problem, or no GitHub account
+    url: https://godspeedmissioncontrol.com/guide/get-help
+    about: Write to support@ownward.studio. A problem someone could misuse never goes into a public report.

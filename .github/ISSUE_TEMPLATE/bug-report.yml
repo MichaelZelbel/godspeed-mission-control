@@ -1,0 +1,126 @@
+# The bug report form readers see under New issue. GitHub issue forms syntax:
+# https://docs.github.com/en/communities/using-templates-to-encourage-useful-issues-and-pull-requests/syntax-for-issue-forms
+# The log places and the private-things list follow the guide's Get help page
+# (content/guide/get-help.md in the website repository); change them together.
+name: Something is broken
+description: Something in Godspeed Mission Control does not work as it should.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before you start:
+
+        - Look at [Known issues](https://godspeedmissioncontrol.com/guide/known-issues) first. Your problem may be there already, with what to do about it.
+        - Everything you write here is public. Take API keys, passwords, tokens and setup codes out of anything you paste, and write `REMOVED` in their place.
+        - A problem someone could misuse goes to support@ownward.studio, never here.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Tell it the way you would tell a friend. One problem per report. You can drag a screenshot in here too.
+    validations:
+      required: true
+
+  - type: textarea
+    id: just-before
+    attributes:
+      label: What did you do just before?
+      description: The steps that led to it, one per line. Say whether it happens again when you do the same thing.
+      placeholder: |
+        1. I opened Settings.
+        2. I clicked Check now.
+        3. A red message appeared.
+        It happens every time.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect instead?
+
+  - type: dropdown
+    id: install-route
+    attributes:
+      label: How did you install it?
+      description: >-
+        If you rented a server at Hostinger and pasted a line into it, choose the one-line server.
+        The [install pages](https://godspeedmissioncontrol.com/guide/choose-an-installation) show each way.
+      options:
+        - "Windows: the setup program, GodspeedSetup.exe"
+        - "Mac: the one line in Terminal"
+        - "Linux computer: the one line in a terminal"
+        - "One-line server: the line that ends in /server"
+        - "Server without Docker: the Mac and Linux line, run on a server"
+        - "Hostinger: the one-click Deploy button"
+        - "Another way"
+        - "I am not sure"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: system
+    attributes:
+      label: Which system?
+      description: For a server, choose Linux.
+      options:
+        - Windows 11
+        - Windows 10
+        - Mac with Apple silicon (M1 or newer)
+        - Mac with Intel
+        - Linux
+        - Something else
+
+  - type: input
+    id: release
+    attributes:
+      label: Which release?
+      description: >-
+        In your notebook, open **Settings** and scroll down to **About**, near the bottom.
+        Copy the **Version** and the **Release code**.
+        If the notebook does not open, your health address shows the version:
+        `http://127.0.0.1:47831/health` on your computer, or your server's address followed by `/health`.
+        If it never got installed, write the day you downloaded it.
+      placeholder: "For example: Version 2.0.0-beta.3, release code 9b8b3d0"
+
+  - type: textarea
+    id: error-message
+    attributes:
+      label: The exact error message
+      description: Copy and paste it as text, word for word. If there was none, leave this empty.
+      render: text
+
+  - type: markdown
+    attributes:
+      value: |
+        **Where to find the health line and the log**
+
+        The health line: open `http://127.0.0.1:47831/health` on your computer, or your server's address followed by `/health`. Copy the line it shows. It holds no keys.
+
+        The log: copy the last 50 lines or so of the one that fits your problem.
+
+        - **Windows, while installing or updating:** `%LOCALAPPDATA%\Godspeed\setup-log.txt`. Press Windows+R, paste the path and press Enter.
+        - **Windows, the running notebook:** `service-error.log` in `%LOCALAPPDATA%\Godspeed Mission Control Full Alpha State`. If Hermes would not install, `hermes-install-error.log` in the same folder.
+        - **Mac, while installing or updating:** the last lines in the Terminal window.
+        - **Mac, the running notebook:** `~/Library/Logs/Godspeed Mission Control/notebook.log`. In Finder, press Shift+Cmd+G and paste the path.
+        - **Linux, or a server without Docker:** run `journalctl -u godspeed-integrated-notebook.service -n 50`. Add `--user` after `journalctl` if it shows no entries.
+        - **The one-line server:** log in as root and run `tail -n 50 install.log` and `docker compose logs --tail 50` in `/opt/godspeed-mission-control`.
+
+        Before you paste, search it for `key`, `token`, `password`, `secret` and `invite`, and replace what follows with `REMOVED`. Also take out notes, names and e-mail addresses it quotes. [Get help](https://godspeedmissioncontrol.com/guide/get-help) has the whole list.
+
+  - type: textarea
+    id: health-and-logs
+    attributes:
+      label: The health line and the log lines
+      description: Paste them here, with private things taken out.
+      render: text
+
+  - type: checkboxes
+    id: private-removed
+    attributes:
+      label: Private things
+      options:
+        - label: I took API keys, passwords, tokens and setup codes out of everything I pasted.
+          required: true
