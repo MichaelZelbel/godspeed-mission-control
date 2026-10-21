@@ -188,6 +188,14 @@ On a server, the installer also gives the notebook a web address with HTTPS. A s
 
 [Install Godspeed Mission Control v2 on Hostinger](https://godspeedmissioncontrol.com/hostinger). This prepares a private deployment configuration for Hostinger's Deploy button, then gives you your new server's setup link. Hostinger charges for the server; complete its checkout yourself. The image it installs is pinned to one exact build.
 
+## Problems and ideas
+
+- **Something does not work?** Look at [Known issues](https://godspeedmissioncontrol.com/guide/known-issues) first. It may be there already, with what to do about it.
+- **Something broken that is not listed there?** [Report it here](https://github.com/MichaelZelbel/godspeed-mission-control/issues/new/choose). A short form asks what happened and where to find the log. You need a free GitHub account.
+- **An idea for a new feature?** Share it in [Ideas](https://github.com/MichaelZelbel/godspeed-mission-control/discussions/categories/ideas), where others can vote for it.
+- **A question about using it?** Ask in [Q&A](https://github.com/MichaelZelbel/godspeed-mission-control/discussions/categories/q-a).
+- **A security problem, or no GitHub account?** Write to [support@ownward.studio](mailto:support@ownward.studio). A problem someone could misuse never goes into a public report.
+
 ## Status
 
 Version 2 is in its first beta. Windows and Linux core flows have been checked. On a Mac, the notebook starting by itself, `mc-uninstall` and connecting Gmail were checked on GitHub's Mac test computers, but not a whole install on a real Mac. Actual two-week user outcomes remain unverified. Some historical memory reviews lack enough information for Undo and report that limitation. The wider release and recipe checks remain incomplete. See [the trial handoff](docs/full-version/trial-handoff.md) for the remaining limits.
