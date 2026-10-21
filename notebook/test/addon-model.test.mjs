@@ -6,7 +6,7 @@ import path from 'node:path';
 import http from 'node:http';
 import {EventEmitter} from 'node:events';
 import {PassThrough} from 'node:stream';
-import {execFileSync} from 'node:child_process';
+import {execFileSync,spawn} from 'node:child_process';
 import {addonModel,modelInput} from '../core/addon-model.mjs';
 import {installModelCommand} from '../scripts/install-model-command.mjs';
 
@@ -68,4 +68,13 @@ test('an installed wrapper honors an explicit different workspace and rejects du
  const {launcher}=installModelCommand({root:first.root,home:first.home});
  const metadata=JSON.parse(execFileSync(process.execPath,[launcher,'--workspace',second.root,'--check'],{env:{...process.env,GODSPEED_MODEL_WORKSPACE:first.root},encoding:'utf8'}));assert.equal(metadata.model,'second-workspace');
  assert.throws(()=>execFileSync(process.execPath,[launcher,'--workspace',second.root,'--workspace',first.root,'--check'],{stdio:'pipe'}));
+});
+test('the host command preserves profile text when UTF-8 characters cross input chunks',async t=>{
+ const f=fixture(t);fs.unlinkSync(path.join(f.state,'assistant.json'));let captured;
+ const server=http.createServer(async(req,res)=>{let bytes='';req.setEncoding('utf8');for await(const chunk of req)bytes+=chunk;captured=JSON.parse(bytes);res.end(JSON.stringify({choices:[{message:{content:'checked'}}]}));});await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>new Promise(resolve=>server.close(resolve)));
+ fs.writeFileSync(path.join(f.state,'provider.json'),JSON.stringify({url:'http://127.0.0.1:'+server.address().port+'/chat',key:'test-only',model:'owner'}));
+ const {launcher}=installModelCommand({root:f.root,home:f.home});
+ const child=spawn(process.execPath,[launcher,'--workspace',f.root],{stdio:['pipe','pipe','pipe']}),bytes=Buffer.from(JSON.stringify({...input,prompt:'Grüße aus Köln 🐈'})),at=bytes.indexOf(Buffer.from('ü'))+1;let stdout='',stderr='';child.stdout.on('data',x=>stdout+=x);child.stderr.on('data',x=>stderr+=x);
+ child.stdin.write(bytes.subarray(0,at));await new Promise(resolve=>setTimeout(resolve,30));child.stdin.end(bytes.subarray(at));
+ const code=await new Promise(resolve=>child.on('close',resolve));assert.equal(code,0,stderr);assert.equal(JSON.parse(stdout).text,'checked');assert.equal(captured.messages[1].content,'Grüße aus Köln 🐈');
 });
