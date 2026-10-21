@@ -8,6 +8,12 @@ A new release comes out most weeks. I write about what my AI does for me and wha
 
 Version 2 is the current edition, here on `main`. Its installers set up a new, separate folder. They do not move an existing version 1 Godspeed folder or your Menerio account.
 
+## Coming in the next release: a small copy before each update
+
+Before every update the installer saves a copy of your notebook, so you can go back if the update goes wrong. Until now that copy took your whole folder, also your work folder with its recordings and downloads. On a grown mission control it was gigabytes and many minutes, and an update refused to start when the disk had no room for it. Old copies also piled up.
+
+Now the copy holds only what an update can change, never your work folder. When your folder is a Git repository, it holds only what Git does not already keep, and Git keeps the rest. On one computer it took 85 MB and a few seconds instead of 8.33 GB and sixteen minutes. Once an update has worked, its copy stays as your way back and every older one is removed, also the full copies earlier versions left behind.
+
 ## New in 2.0.0-beta.3 (20 October 2026)
 
 Clearing a conversation now starts a fresh AI conversation. Late replies cannot restore the cleared chat. Your saved notes stay in place. Updating keeps your folder, notes and settings.
