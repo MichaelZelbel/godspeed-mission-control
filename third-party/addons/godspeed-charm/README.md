@@ -50,6 +50,32 @@ reply in that language, and `--words-file <file>` in place of `--words` for word
 line breaks. Exit 0 means done, 2 means refused with nothing written (the reply says why), 1 is
 an error.
 
+## Install
+
+```
+node bin/godspeed-charm.mjs setup
+node bin/godspeed-charm.mjs check
+```
+
+Setup puts the recipe into your skills folder, writes `routines/charm/settings.json` (time zone and
+language), installs the `godspeed-charm` command, adds the Hermes plugin when Hermes is there, and
+adds the Claude Code hook to `.claude/settings.json`. Every step is safe to run again. It needs
+the Godspeed notebook and refuses to install without one.
+
+## Where it works
+
+- The notebook's own chat, through its `charm` operation.
+- Telegram, through Hermes: the plugin hands the current state to the assistant before every turn.
+  When the hermes-telegram-stickers plugin is installed too, the finish gets one celebration sticker.
+- Claude Code, through a UserPromptSubmit hook. Scheduled and assistant-runtime runs get no block.
+- Codex gets no block, an accepted limit: there the challenge works only when you ask for it.
+
+## Files
+
+- `routines/charm/settings.json`: your time zone (where a day ends) and the reply language.
+- The notebook collection "Charm Challenge": every start, question, reset, kept answer, finish and
+  stop is one row.
+
 ## License
 
 MIT

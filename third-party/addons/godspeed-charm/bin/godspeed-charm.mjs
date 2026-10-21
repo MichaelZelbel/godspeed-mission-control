@@ -23,8 +23,10 @@ import { decodeArgv, readWordsFile, restoreShellEnv, startedFromGitBash, gitBash
 
 // The values that name a file or folder. From Git Bash these are turned into Windows paths;
 // the person's words never are (lib/argv.mjs).
-const PATH_FLAGS = ["godspeed", "words-file"];
-const FLAGS = new Set(["json", "scheduled", "no-write", "stickers"]);
+const PATH_FLAGS = ["godspeed", "words-file", "extra-skills-dir"];
+const FLAGS = new Set(["json", "scheduled", "no-write", "stickers", "yes", "no-hermes", "no-claude"]);
+// setup and check install and inspect; they need no record, no settings and no day.
+const INSTALL = ["setup", "check"];
 function parseArgs(argv) {
   const pos = []; const f = {};
   for (let i = 0; i < argv.length; i++) {
@@ -74,16 +76,16 @@ function prepare() {
   if (f.language !== undefined && !["en", "de"].includes(f.language)) die("--language can be en or de.");
 
   mcDir = findMissionControl({ arg: f.godspeed });
-  if (!mcDir && cmd !== "help") die("Could not find your mission control folder. Run this from inside it, or add --godspeed <folder>.");
+  if (!mcDir && cmd !== "help" && cmd !== "setup") die("Could not find your mission control folder. Run this from inside it, or add --godspeed <folder>.");
   // The record lives in the notebook (every Godspeed Mission Control has one); config and help work without it.
-  if (mcDir && !["help", "config"].includes(cmd) && !hasNotebook(mcDir)) die("The Charm Challenge keeps its record in the Godspeed notebook, and this mission control has none.");
+  if (mcDir && !["help", "config", ...INSTALL].includes(cmd) && !hasNotebook(mcDir)) die("The Charm Challenge keeps its record in the Godspeed notebook, and this mission control has none.");
   s = { ...DEFAULTS };
-  if (mcDir && cmd !== "help") s = loadSettings(mcDir);
+  if (mcDir && cmd !== "help" && !INSTALL.includes(cmd)) s = loadSettings(mcDir);
   // --language wins for this one reply (German in, German out); then the settings; then English.
   lang = pickLanguage(f.language, s.language);
   say = T[lang];
   at = now();
-  if (!["help", "config"].includes(cmd)) today = localDate(at, s.timezone);
+  if (!["help", "config", ...INSTALL].includes(cmd)) today = localDate(at, s.timezone);
 }
 
 // Events written by one command get one millisecond each, so a finish settled first and a start
@@ -248,9 +250,16 @@ const commands = {
 
 try {
   prepare();
-  if (!Object.hasOwn(commands, cmd)) die(`Unknown command "${cmd}". Try: godspeed-charm help`);
-  const result = commands[cmd]();
-  if (result) console.log(f.json ? JSON.stringify({ ok: true, reply: result.reply, state: result.state }) : result.reply);
+  if (INSTALL.includes(cmd)) {
+    const { setup, check } = await import("../lib/setup.mjs");
+    if (cmd === "setup") process.exitCode = await setup(f);
+    else if (!mcDir) die("Could not find your mission control folder. Run this from inside it, or add --godspeed <folder>.");
+    else process.exitCode = await check(mcDir, f);
+  } else {
+    if (!Object.hasOwn(commands, cmd)) die(`Unknown command "${cmd}". Try: godspeed-charm help`);
+    const result = commands[cmd]();
+    if (result) console.log(f.json ? JSON.stringify({ ok: true, reply: result.reply, state: result.state }) : result.reply);
+  }
 } catch (e) {
   if (e instanceof Refusal) {
     if (f?.json) console.log(JSON.stringify({ ok: false, reply: e.reply, state: e.state }));
