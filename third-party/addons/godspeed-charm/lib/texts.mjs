@@ -1,0 +1,56 @@
+// Every sentence the Charm Challenge says, in English and German. A text is a function of the
+// state from count.mjs, so the same words come out whichever way in it is asked (the command, the
+// morning brief, the context block). Plain and friendly, never a scold, no long dashes.
+import { LENGTH } from "./count.mjs";
+
+const DAYS = {
+  en: ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"],
+  de: ["Sonntag", "Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag"],
+};
+const MONTHS = {
+  en: ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"],
+  de: ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"],
+};
+
+// "Wednesday 11 November" / "Mittwoch, 11. November" for a YYYY-MM-DD day. Calendar arithmetic
+// in UTC, so the machine's own zone never moves the weekday.
+export function formatDay(date, lang = "en") {
+  const [y, m, d] = String(date).split("-").map(Number);
+  const l = lang === "de" ? "de" : "en";
+  const weekday = DAYS[l][new Date(Date.UTC(y, m - 1, d)).getUTCDay()];
+  return l === "de" ? `${weekday}, ${d}. ${MONTHS.de[m - 1]}` : `${weekday} ${d} ${MONTHS.en[m - 1]}`;
+}
+
+const count = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+
+const EN = {
+  started: (end) => `Charm Challenge started. ${LENGTH} days to go, done on ${formatDay(end, "en")}.`,
+  status: (s) => `${count(s.daysToGo, "day", "days")} to go, done on ${formatDay(s.end, "en")}. Longest run so far: ${count(s.longestRun, "day", "days")}. Restarts: ${s.restarts}.`,
+  question: () => `That sounded like a slip. Back to ${LENGTH}? Yes / No.`,
+  yes: (s) => `Back to ${LENGTH}. Done on ${formatDay(s.end, "en")}. Restarts: ${s.restarts}.`,
+  no: (s) => `Fair enough. Still ${count(s.daysToGo, "day", "days")} to go.`,
+  briefLine: (s) => `Charm Challenge: day ${s.day} of ${LENGTH}, ${count(s.daysToGo, "day", "days")} to go.`,
+  finish: (s) => `Charm Challenge done: ${LENGTH} days. Restarts on the way: ${s.restarts}.` + (s.kept > 0 ? ` You talked me out of ${count(s.kept, "reset", "resets")}.` : ""),
+  stopped: () => "Charm Challenge stopped. Say the word and we start a new one.",
+  alreadyRunning: (s) => `Charm Challenge is already running: day ${s.day} of ${LENGTH}, ${count(s.daysToGo, "day", "days")} to go. Start over from ${LENGTH}? Yes / No.`,
+  notRunning: () => "No Charm Challenge is running. Say the word and we start one.",
+  noOpenQuestion: () => "There is no open question about a slip here, so nothing changed.",
+  askFirst: () => `Only an explicit "charm slip" starts over right away. Anything else needs the question first: ask "That sounded like a slip. Back to ${LENGTH}? Yes / No." and wait for the answer.`,
+};
+
+const DE = {
+  started: (end) => `Charm Challenge gestartet. Noch ${LENGTH} Tage, fertig am ${formatDay(end, "de")}.`,
+  status: (s) => `Noch ${count(s.daysToGo, "Tag", "Tage")}, fertig am ${formatDay(s.end, "de")}. Längste Serie bisher: ${count(s.longestRun, "Tag", "Tage")}. Neustarts: ${s.restarts}.`,
+  question: () => `Das klang nach einem Ausrutscher. Zurück auf ${LENGTH}? Ja / Nein.`,
+  yes: (s) => `Zurück auf ${LENGTH}. Fertig am ${formatDay(s.end, "de")}. Neustarts: ${s.restarts}.`,
+  no: (s) => `Alles klar. Noch ${count(s.daysToGo, "Tag", "Tage")}.`,
+  briefLine: (s) => `Charm Challenge: Tag ${s.day} von ${LENGTH}, noch ${count(s.daysToGo, "Tag", "Tage")}.`,
+  finish: (s) => `Charm Challenge geschafft: ${LENGTH} Tage. Neustarts unterwegs: ${s.restarts}.` + (s.kept > 0 ? ` Du hast mich ${s.kept === 1 ? "einmal" : s.kept + " Mal"} vom Zurücksetzen abgebracht.` : ""),
+  stopped: () => "Charm Challenge beendet. Sag Bescheid, dann starten wir eine neue.",
+  alreadyRunning: (s) => `Die Charm Challenge läuft schon: Tag ${s.day} von ${LENGTH}, noch ${count(s.daysToGo, "Tag", "Tage")}. Noch mal von vorn bei ${LENGTH}? Ja / Nein.`,
+  notRunning: () => "Gerade läuft keine Charm Challenge. Sag Bescheid, dann starten wir eine.",
+  noOpenQuestion: () => "Hier gibt es keine offene Frage zu einem Ausrutscher, also hat sich nichts geändert.",
+  askFirst: () => `Nur ein ausdrückliches "charm slip" setzt sofort zurück. Alles andere braucht erst die Frage: frag "Das klang nach einem Ausrutscher. Zurück auf ${LENGTH}? Ja / Nein." und warte auf die Antwort.`,
+};
+
+export const T = { en: EN, de: DE };
