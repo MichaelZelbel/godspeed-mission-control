@@ -19,6 +19,7 @@ docker network create "$network" >/dev/null
 docker volume create "$volume" >/dev/null
 docker run -d --name "$name" --network "$network" --memory=2g --cpus=2 \
   --label com.docker.compose.project=godspeed-mission-control --label com.docker.compose.service=godspeed \
+  --label com.docker.compose.config-hash=addon-model-verification \
   --label com.docker.compose.container-number=1 --label com.docker.compose.oneoff=False \
   --mount "type=volume,src=$volume,dst=/opt/data/full-candidate" \
   -e "GODSPEED_ACCESS_TOKEN=$GODSPEED_VERIFY_SETUP_CODE" -e GODSPEED_TELEGRAM_API=http://127.0.0.1:8081 \
