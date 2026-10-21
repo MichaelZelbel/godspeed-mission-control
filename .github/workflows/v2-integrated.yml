@@ -15,7 +15,7 @@ name: Integrated Godspeed v2
 on:
   push:
     branches: [main]
-    paths: [.github/workflows/v2-integrated.yml, 'notebook/**', 'third-party/addons/godspeed-coach/**', 'docker/full-candidate/**', 'docker/rootfs/**', 'docker/test/**', install-godspeed.sh, install-godspeed-dev.sh]
+    paths: [.github/workflows/v2-integrated.yml, 'notebook/**', 'third-party/addons/godspeed-coach/**', 'third-party/addons/godspeed-charm/**', 'docker/full-candidate/**', 'docker/rootfs/**', 'docker/test/**', install-godspeed.sh, install-godspeed-dev.sh]
   workflow_dispatch:
 permissions:
   contents: read
@@ -59,6 +59,10 @@ jobs:
         run: |
           node notebook/scripts/run-tests.mjs third-party/addons/godspeed-coach/test/prep.test.mjs notebook/test/starting-routines.test.mjs
           bash tools/test-coach-prep.sh
+      - name: Charm Challenge
+        run: |
+          node --test "third-party/addons/godspeed-charm/test/*.test.mjs"
+          node notebook/scripts/run-tests.mjs notebook/test/charm-operation.test.mjs notebook/test/charm-brief.test.mjs notebook/test/charm-tracker-list.test.mjs
       - name: Original folder and integrated core checks
         run: node notebook/scripts/run-tests.mjs notebook/test/starter-workspace.test.mjs notebook/test/assistant-starter-wiring.test.mjs notebook/test/computer-wiring-on-existing-server.test.mjs notebook/test/windows-command-files.test.mjs notebook/test/final-core-contracts.test.mjs notebook/test/telegram-replies.test.mjs notebook/test/native-runtime.test.mjs
       - name: Clearing chat starts a fresh conversation and keeps earlier messages archived
