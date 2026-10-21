@@ -123,3 +123,14 @@ test("clock: GODSPEED_CHARM_NOW wins over GODSPEED_NOW, then real time", () => {
     if (keep.n === undefined) delete process.env.GODSPEED_NOW; else process.env.GODSPEED_NOW = keep.n;
   }
 });
+
+test("saveSettings writes through a temporary file and leaves none behind", () => {
+  const dir = mission();
+  saveSettings(dir, { version: 1, timezone: "Europe/Berlin", language: "de" });
+  saveSettings(dir, { version: 1, timezone: "Europe/Berlin", language: "en" });
+  assert.deepEqual(loadSettings(dir), { version: 1, timezone: "Europe/Berlin", language: "en" });
+  assert.deepEqual(fs.readdirSync(path.dirname(settingsFile(dir))), ["settings.json"]);
+  const src = fs.readFileSync(new URL("../lib/settings.mjs", import.meta.url), "utf8");
+  assert.match(src, /renameSync|atomic/);
+  gone(dir);
+});

@@ -173,7 +173,7 @@ export function withNotebookLock(mcDir, work, { timeoutMs = 20000 } = {}) {
 }
 
 // ---- Writing ------------------------------------------------------------------------------------
-function atomic(file, text) {
+export function atomic(file, text) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const tmp = file + "." + randomUUID() + ".tmp";
   const fd = fs.openSync(tmp, "wx");

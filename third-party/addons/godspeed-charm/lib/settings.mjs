@@ -2,6 +2,7 @@
 // machine and a person can read it.
 import fs from "node:fs";
 import path from "node:path";
+import { atomic } from "./notebook.mjs";
 
 export const DEFAULTS = Object.freeze({
   version: 1,
@@ -32,9 +33,10 @@ export function loadSettings(mcDir) {
   return { ...DEFAULTS, ...parsed };
 }
 
+// Written to a temporary file and renamed into place (the notebook writer's own way), so a crash
+// or a full disk halfway through never leaves a half-written file that stops every command.
 export function saveSettings(mcDir, s) {
-  fs.mkdirSync(path.dirname(settingsFile(mcDir)), { recursive: true });
-  fs.writeFileSync(settingsFile(mcDir), JSON.stringify(s, null, 2) + "\n");
+  atomic(settingsFile(mcDir), JSON.stringify(s, null, 2) + "\n");
 }
 
 export function validateSettings(s) {

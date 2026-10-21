@@ -81,3 +81,23 @@ test("no text has a long dash or a broken value", () => {
     }
   }
 });
+
+test("an unknown language falls back to English, never to nothing", () => {
+  assert.equal(T.fr, T.en);
+  assert.equal(T[undefined], T.en);
+  assert.equal(T[""], T.en);
+  assert.deepEqual(Object.keys(T), ["en", "de"]);
+});
+
+test("the German start-over question reads naturally", () => {
+  const mid = state([ev("start", "2026-10-21")], "2026-10-30");
+  assert.equal(T.de.alreadyRunning(mid), "Die Charm Challenge läuft schon: Tag 10 von 21, noch 12 Tage. Noch mal von vorn mit 21 Tagen? Ja / Nein.");
+});
+
+test("the refusals added with the command", () => {
+  const reset = state([ev("start", "2026-10-21"), ev("reset", "2026-10-30")], "2026-10-30");
+  assert.equal(T.en.resetToday(reset), "There was a reset today already, so nothing changed. Still 21 days to go.");
+  assert.equal(T.de.resetToday(reset), "Heute gab es schon einen Neustart, also hat sich nichts geändert. Noch 21 Tage.");
+  assert.equal(T.en.notAnAnswer(), "That was neither a yes nor a no, so the question stays open.");
+  assert.equal(T.de.notAnAnswer(), "Das war weder ein Ja noch ein Nein, also bleibt die Frage offen.");
+});

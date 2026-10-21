@@ -36,6 +36,8 @@ const EN = {
   notRunning: () => "No Charm Challenge is running. Say the word and we start one.",
   noOpenQuestion: () => "There is no open question about a slip here, so nothing changed.",
   askFirst: () => `Only an explicit "charm slip" starts over right away. Anything else needs the question first: ask "That sounded like a slip. Back to ${LENGTH}? Yes / No." and wait for the answer.`,
+  resetToday: (s) => `There was a reset today already, so nothing changed. Still ${count(s.daysToGo, "day", "days")} to go.`,
+  notAnAnswer: () => "That was neither a yes nor a no, so the question stays open.",
 };
 
 const DE = {
@@ -47,10 +49,17 @@ const DE = {
   briefLine: (s) => `Charm Challenge: Tag ${s.day} von ${LENGTH}, noch ${count(s.daysToGo, "Tag", "Tage")}.`,
   finish: (s) => `Charm Challenge geschafft: ${LENGTH} Tage. Neustarts unterwegs: ${s.restarts}.` + (s.kept > 0 ? ` Du hast mich ${s.kept === 1 ? "einmal" : s.kept + " Mal"} vom Zurücksetzen abgebracht.` : ""),
   stopped: () => "Charm Challenge beendet. Sag Bescheid, dann starten wir eine neue.",
-  alreadyRunning: (s) => `Die Charm Challenge läuft schon: Tag ${s.day} von ${LENGTH}, noch ${count(s.daysToGo, "Tag", "Tage")}. Noch mal von vorn bei ${LENGTH}? Ja / Nein.`,
+  alreadyRunning: (s) => `Die Charm Challenge läuft schon: Tag ${s.day} von ${LENGTH}, noch ${count(s.daysToGo, "Tag", "Tage")}. Noch mal von vorn mit ${LENGTH} Tagen? Ja / Nein.`,
   notRunning: () => "Gerade läuft keine Charm Challenge. Sag Bescheid, dann starten wir eine.",
   noOpenQuestion: () => "Hier gibt es keine offene Frage zu einem Ausrutscher, also hat sich nichts geändert.",
   askFirst: () => `Nur ein ausdrückliches "charm slip" setzt sofort zurück. Alles andere braucht erst die Frage: frag "Das klang nach einem Ausrutscher. Zurück auf ${LENGTH}? Ja / Nein." und warte auf die Antwort.`,
+  resetToday: (s) => `Heute gab es schon einen Neustart, also hat sich nichts geändert. Noch ${count(s.daysToGo, "Tag", "Tage")}.`,
+  notAnAnswer: () => "Das war weder ein Ja noch ein Nein, also bleibt die Frage offen.",
 };
 
-export const T = { en: EN, de: DE };
+// T[lang] is never undefined: a language this add-on does not speak (a settings file saying "fr",
+// a missing value) gets the English texts rather than a crash in the middle of a reply.
+const LANGUAGES = { en: EN, de: DE };
+export const T = new Proxy(LANGUAGES, { get: (all, lang) => (typeof lang === "string" && Object.hasOwn(all, lang) ? all[lang] : all.en) });
+// The language a reply comes in: the first of the candidates this add-on speaks, else English.
+export const pickLanguage = (...candidates) => candidates.find((l) => typeof l === "string" && Object.hasOwn(LANGUAGES, l)) || "en";
