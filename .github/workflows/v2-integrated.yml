@@ -57,7 +57,7 @@ jobs:
           python3 notebook/test/habit-progress-telegram-native.test.py
       - name: Coaching talks prepared the day before
         run: |
-          node notebook/scripts/run-tests.mjs third-party/addons/godspeed-coach/test/prep.test.mjs notebook/test/starting-routines.test.mjs
+          node notebook/scripts/run-tests.mjs third-party/addons/godspeed-coach/test/prep.test.mjs notebook/test/starting-routines.test.mjs notebook/test/coach-prep-recipe.test.mjs
           bash tools/test-coach-prep.sh
       - name: Original folder and integrated core checks
         run: |
