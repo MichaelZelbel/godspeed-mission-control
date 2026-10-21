@@ -76,6 +76,33 @@ test('a broken charm row or settings file does not break tracker-list: the track
  assert.equal(charm.charm,null);assert.equal(charm.brief,null);assert.equal(result.trackers.length,2);
 });
 
+// "See the record" opens the collection's own page, which names each row by its primary field: the
+// time on the person's clock, never the exact UTC moment (the Task 7 review, 21 October 2026).
+test('the record page names each row by its time on the person\'s clock',async()=>{
+ const {store,query}=fixture();
+ process.env.GODSPEED_CHARM_NOW='2026-10-25T21:30:40.412Z';
+ addonCommand(store,{addon:'charm',args:['slip','--words','charm slip']});
+ const tracker=findTracker(store.root);
+ const rows=query.rows('collection_items').filter(r=>r.collection_id===tracker.id).sort((a,b)=>String(a.data.at).localeCompare(String(b.data.at)));
+ // 21:30 UTC on 25 October is 22:30 in Berlin: summer time ended that morning.
+ assert.deepEqual(rows.map(r=>[r.title,r.data.kind,r.data.at]),[['2026-10-21 10:00','start','2026-10-21T08:00:00.000Z'],['2026-10-25 22:30','reset','2026-10-25T21:30:40.412Z']]);
+ assert.ok(rows.every(r=>!/T\d{2}:\d{2}/.test(r.title)),'no row is named by a raw timestamp');
+});
+
+// Rows written before 21 October 2026 carry the exact UTC moment in `when`; rows after it carry the
+// person's own clock. Read together, they are put in one order on that clock.
+test('rows from before and after the readable record read in one order, on the person\'s clock',async()=>{
+ const {store,query,domains}=fixture();
+ // A reset at 09:30 his time (08:30 UTC), then a stop from an older version, written as 09:00 UTC.
+ process.env.GODSPEED_CHARM_NOW='2026-10-25T08:30:00Z';
+ addonCommand(store,{addon:'charm',args:['slip','--words','charm slip']});
+ query.execute({table:'collection_items',operation:'insert',values:{collection_id:findTracker(store.root).id,data:{kind:'stop',when:'2026-10-25T09:00:00.000Z',date:'2026-10-25'}}});
+ process.env.GODSPEED_CHARM_NOW='2026-10-25T10:00:00Z';
+ const charm=charmOf(await list(domains)).charm;
+ // Read on UTC instead, the reset would come after the stop and not count.
+ assert.deepEqual({running:charm.running,restarts:charm.restarts,started:charm.started,longestRun:charm.longestRun},{running:false,restarts:1,started:'2026-10-25',longestRun:4});
+});
+
 test('no challenge ever started: no charm tracker in the list',async()=>{
  const {domains}=fixture({start:false});
  assert.equal(charmOf(await list(domains)),undefined);

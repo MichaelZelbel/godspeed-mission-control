@@ -39,12 +39,13 @@ export function charmArgs(input,conversation,{wordsFile}={}){
  return args;
 }
 // The challenge as the notebook holds it: the oldest live tracker that names the charm specialist
-// (as the add-on's own findTracker picks it), its rows read the way the add-on reads them, counted
-// on the person's local day. `reader` is the store, or chat-context's snapshot of it.
+// (as the add-on's own findTracker picks it), its rows read the way the add-on reads them (their
+// times on the settings' clock), counted on the person's local day. `reader` is the store, or
+// chat-context's snapshot of it.
 export function charmNow(reader){
  const tracker=reader.list('collections').filter(c=>c.tracker&&typeof c.tracker==='object'&&c.tracker.specialist==='charm').sort((a,b)=>String(a.created_at).localeCompare(String(b.created_at)))[0]||null;
  const settings=loadSettings(reader.root),today=localDate(clockNow(),settings.timezone);
- const events=tracker?eventsFromItems(reader.list('collection_items').filter(i=>i.collection_id===tracker.id)):[];
+ const events=tracker?eventsFromItems(reader.list('collection_items').filter(i=>i.collection_id===tracker.id),settings.timezone):[];
  return {state:charmState(events,today),settings,today,tracker};
 }
 // One charm tracker as the Trackers shelf shows it (spec 2026-10-21, "Notebook card"): its count over
@@ -55,7 +56,7 @@ export function charmNow(reader){
 export function charmCard(reader,tracker,items=reader.list('collection_items')){
  try{
   const settings=loadSettings(reader.root),today=localDate(clockNow(),settings.timezone);
-  const charm=charmState(eventsFromItems(items.filter(i=>i.collection_id===tracker.id)),today);
+  const charm=charmState(eventsFromItems(items.filter(i=>i.collection_id===tracker.id),settings.timezone),today);
   return {charm,brief:briefText(charm,today,pickLanguage(settings.language))||null};
  }catch{return {charm:null,brief:null};}
 }

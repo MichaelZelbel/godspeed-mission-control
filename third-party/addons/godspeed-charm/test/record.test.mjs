@@ -40,8 +40,56 @@ test("row title and schema", () => {
   appendEvent(dir, { kind: "reset", when: "2026-10-22T08:00:00Z" });
   const [item] = readItems(dir, findTracker(dir));
   assert.equal(item.title, "Reset 2026-10-22");
-  assert.deepEqual(findTracker(dir).field_schema.map((f) => f.key), ["when", "kind", "date", "words", "conversation"]);
+  assert.deepEqual(findTracker(dir).field_schema.map((f) => f.key), ["when", "kind", "date", "words", "conversation", "at"]);
+  assert.deepEqual(findTracker(dir).field_schema.filter((f) => f.primary).map((f) => f.key), ["when"]);
   gone(dir);
+});
+
+// The record page (the collection's own page, "See the record" on the card) names each row by its
+// primary field, `when`. Until 21 October 2026 that was the exact UTC moment, so every row read
+// "2026-10-12T08:00:00.000Z". Now `when` is the person's own clock, as the headache's rows are, and
+// the exact moment is kept beside it in `at`, so events within one minute still read in order.
+test("a row reads as the time on the person's clock; the exact moment keeps the order", () => {
+  const dir = mission();
+  saveSettings(dir, { version: 1, timezone: "Europe/Berlin", language: "en" });
+  const e = appendEvent(dir, { kind: "reset", when: "2026-10-12T08:00:40.412Z", words: "yes" });
+  appendEvent(dir, { kind: "asked", when: "2026-10-12T08:00:05.000Z", words: "garbage", conversation: "c1" });
+  assert.deepEqual(e, { kind: "reset", when: "2026-10-12T08:00:40.412Z", date: "2026-10-12", words: "yes" });
+  const rows = readItems(dir, findTracker(dir)).map((i) => i.data).sort((a, b) => a.at.localeCompare(b.at));
+  assert.deepEqual(rows.map((d) => [d.kind, d.when, d.at, d.date]), [
+    ["asked", "2026-10-12 10:00", "2026-10-12T08:00:05.000Z", "2026-10-12"],
+    ["reset", "2026-10-12 10:00", "2026-10-12T08:00:40.412Z", "2026-10-12"],
+  ]);
+  const events = readEvents(dir);
+  assert.deepEqual(events.map((x) => [x.kind, x.when]), [["asked", "2026-10-12T08:00:05.000Z"], ["reset", "2026-10-12T08:00:40.412Z"]]);
+  // Late in the evening in Berlin is already the next day in the title, as on the person's clock.
+  appendEvent(dir, { kind: "kept", when: "2026-10-12T22:30:00.000Z", conversation: "c1" });
+  assert.ok(readItems(dir, findTracker(dir)).some((i) => i.data.when === "2026-10-13 00:30" && i.data.date === "2026-10-13"));
+  gone(dir);
+});
+
+test("rows from before keep reading, and a time changed in the notebook counts", async () => {
+  const { eventsFromItems } = await import("../lib/record.mjs");
+  const berlin = "Europe/Berlin";
+  // Written before 21 October 2026: `when` is the exact moment itself.
+  assert.deepEqual(eventsFromItems([{ data: { kind: "start", when: "2026-10-21T08:00:00Z", date: "2026-10-21" } }], berlin), [{ kind: "start", when: "2026-10-21T08:00:00Z", date: "2026-10-21" }]);
+  // `at` agrees with `when` to the minute: the exact moment.
+  const at = "2026-10-12T08:00:40.412Z";
+  assert.equal(eventsFromItems([{ data: { kind: "reset", when: "2026-10-12 10:00", at, date: "2026-10-12" } }], berlin)[0].when, at);
+  // He changed the time in the notebook (its editor writes "2026-10-12T09:15"): his time counts.
+  for (const when of ["2026-10-12 09:15", "2026-10-12T09:15"]) assert.equal(eventsFromItems([{ data: { kind: "reset", when, at, date: "2026-10-12" } }], berlin)[0].when, "2026-10-12T07:15:00.000Z", when);
+  // A row he added by hand, with no exact moment: his time, on his clock.
+  assert.equal(eventsFromItems([{ data: { kind: "kept", when: "2026-10-12 23:30" } }], berlin)[0].when, "2026-10-12T21:30:00.000Z");
+  assert.equal(eventsFromItems([{ data: { kind: "kept", when: "2026-10-12 23:30" } }], berlin)[0].date, "2026-10-12");
+  // Old and new rows together still read in time order.
+  const mixed = eventsFromItems([
+    { data: { kind: "reset", when: "2026-10-12 10:00", at, date: "2026-10-12" } },
+    { data: { kind: "start", when: "2026-10-03T08:00:00Z", date: "2026-10-03" } },
+    { data: { kind: "asked", when: "2026-10-12 09:59", at: "2026-10-12T07:59:59.000Z", date: "2026-10-12" } },
+  ], berlin);
+  assert.deepEqual(mixed.map((x) => x.kind), ["start", "asked", "reset"]);
+  // Nothing readable as a time is skipped, as before.
+  assert.deepEqual(eventsFromItems([{ data: { kind: "start", when: "soon" } }, { data: { kind: "start", when: "2026-10-12 25:00" } }], berlin), []);
 });
 
 test("the day is the local day in the settings timezone", () => {
