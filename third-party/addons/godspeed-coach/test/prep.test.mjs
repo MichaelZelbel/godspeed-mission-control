@@ -131,7 +131,7 @@ test("without a ready preparation the brief is as before", () => {
 
 test("a talk they start themselves uses the next scheduled talk's preparation within a week, else today's or yesterday's", () => {
   // Monday 2026-10-19: the next work talk is Wednesday the 21st.
-  const next = mission({ "coach/work/prep/2026-10-21.md": prep(), "coach/work/prep/2026-10-19.md": prep({ talk: "2026-10-19 10:00", opening: "Today's." }) });
+  const next = mission({ "coach/work/prep/2026-10-21.md": prep({ prepared: "2026-10-19T07:00:00Z" }), "coach/work/prep/2026-10-19.md": prep({ talk: "2026-10-19 10:00", opening: "Today's.", prepared: "2026-10-19T07:00:00Z" }) });
   assert.equal(prepForBrief(work(next), "2026-10-19").date, "2026-10-21");
   assert.match(cli(next, "2026-10-19T08:00:00Z", "brief", "work").out, /--from-prep "coach\/work\/prep\/2026-10-21\.md"/);
   assert.equal(prepForBrief(work(next), "2026-10-14"), null, "a talk day uses only its own preparation");
@@ -149,7 +149,7 @@ test("a talk they start themselves uses the next scheduled talk's preparation wi
 });
 
 test("a preparation one talk already opened with is not carried again, so the scheduled talk never repeats its opening", () => {
-  const mc = mission({ "coach/work/prep/2026-10-21.md": prep() });
+  const mc = mission({ "coach/work/prep/2026-10-21.md": prep({ prepared: "2026-10-19T07:00:00Z" }) });
   // Monday they start the talk themselves, from Wednesday's preparation.
   assert.equal(cli(mc, "2026-10-19T08:00:00Z", "talk", "open", "work", "--from-prep", "coach/work/prep/2026-10-21.md").code, 0);
   assert.equal(prepForBrief(work(mc), "2026-10-21"), null);
@@ -212,7 +212,7 @@ test("prep-due leaves out a talk that is prepared or already open, and lists one
     "coach/work/prep/2026-10-21.md": prep({ state: "draft" }),
     "coach/relationships/talks/2026-10-23.md": "TALK: relationships\nDATE: 2026-10-23\nSTATE: opened\n\n## The opening\nHi.\n",
   });
-  assert.deepEqual(JSON.parse(cli(mc, "2026-10-15T21:00:00Z", "prep-due", "--within-hours", "200", "--json").out).map((x) => x.area), ["work"]);
+  assert.deepEqual(JSON.parse(cli(mc, "2026-10-17T11:00:00Z", "prep-due", "--within-hours", "200", "--json").out).map((x) => x.area), ["work"]);
   // Today's talk has started: the next one is a week on.
   const sunday = threeAreas();
   assert.deepEqual(prepDue(sunday, S, new Date("2026-10-18T17:30:00Z"), 24 * 8).map((x) => `${x.area} ${x.date}`), ["work 2026-10-21", "relationships 2026-10-23", "health 2026-10-25"]);
@@ -223,7 +223,7 @@ test("prep-due leaves out a talk that is prepared or already open, and lists one
 // prepares it anew, and until then the brief and the open command keep using it.
 test("prep-due lists a stale preparation again, and the brief and talk open keep using it until a fresh one replaces it", () => {
   // Wednesday 2026-10-21 19:00 in Berlin is 17:00 UTC.
-  const at = "2026-10-20T08:00:00Z";
+  const at = "2026-10-20T12:00:00Z";
   const listed = (text) => JSON.parse(cli(mission({ "coach/work/prep/2026-10-21.md": text }), at, "prep-due", "--within-hours", "40", "--json").out);
   // Three days before: stale. Thirty hours before: fresh. Exactly 48 hours before: still fresh.
   assert.deepEqual(listed(prep({ prepared: "2026-10-18T17:00:00Z" })), [{ area: "work", title: "Work and money", date: "2026-10-21", time: "19:00", timezone: "Europe/Berlin", file: "coach/work/prep/2026-10-21.md", stale: true, prepared: "2026-10-18T17:00:00Z" }]);
@@ -306,7 +306,7 @@ test("the recipe: a prepared talk opens as written, and the talk goes on like tw
   assert.doesNotMatch(text, /[–—]/, "no long dash in the recipe");
 });
 
-// This copy's own parts: a talk asked for in the chat is opened as seen (--shown), and without a
+// A talk asked for in the chat is opened as seen (--shown), and without a
 // messenger a talk that waits for the chat carries its talk card after its line.
 test("in the chat: the --from-prep command ends with --shown, and a waiting talk carries its talk card", () => {
   const mc = mission({ "coach/work/prep/2026-10-21.md": prep(), "coach/settings.json": JSON.stringify({ timezone: "Europe/Berlin", git_sync: "off", talk_delivery: "chat" }) });
@@ -325,7 +325,7 @@ test("in the chat: the --from-prep command ends with --shown, and a waiting talk
 // with the coach-prep recipe) asks the coach about one talk after it ran: is the file ready to open
 // the talk, and is it fresh? A person can ask the same. It only reads.
 test("prep-check says whether one talk's preparation can open it, and whether it is stale", () => {
-  const at = "2026-10-20T08:00:00Z";
+  const at = "2026-10-20T12:00:00Z";
   const check = (files, ...args) => cli(mission(files), at, "prep-check", "work", ...args);
   const none = check({}, "--date", "2026-10-21");
   assert.equal(none.code, 1);

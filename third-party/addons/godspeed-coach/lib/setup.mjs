@@ -104,6 +104,27 @@ async function stepSettings(mcDir, f) {
   return { written, failed: false };
 }
 
+// PowerShell picks a .ps1 over a .cmd of the same name in the same folder, and under the
+// Restricted or AllSigned policy it refuses the .ps1 instead of falling back to the .cmd. So the
+// PowerShell launcher is written only where every PowerShell on this computer would run it.
+const RUNS_LOCAL_SCRIPTS = new Set(["unrestricted", "remotesigned", "bypass"]);
+export function ps1Allowed(policies) {
+  return policies.length > 0 && policies.every((p) => RUNS_LOCAL_SCRIPTS.has(String(p.policy).trim().toLowerCase()));
+}
+
+// The policy a new PowerShell window gets, so the one this process may have been started with
+// (PSExecutionPolicyPreference, which Claude Code sets to Bypass for its own shells) is left out.
+export function powershellPolicies() {
+  const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => k.toLowerCase() !== "psexecutionpolicypreference"));
+  const found = [];
+  for (const exe of ["powershell.exe", "pwsh.exe"]) {
+    const r = spawnSync(exe, ["-NoProfile", "-NonInteractive", "-Command", "Get-ExecutionPolicy"], { encoding: "utf8", env, timeout: 30000, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
+    if (r.error && r.error.code === "ENOENT") continue;
+    found.push({ exe, policy: r.status === 0 ? r.stdout.trim() : "unknown" });
+  }
+  return found;
+}
+
 function stepCommand() {
   say("The godspeed-coach command");
   const app = path.join(P.appHome(), "app");
@@ -113,15 +134,24 @@ function stepCommand() {
   }
   const dir = P.binDir();
   fs.mkdirSync(dir, { recursive: true });
-  for (const l of P.launchers(app)) { const file = path.join(dir, l.name); fs.rmSync(file, { force: true }); fs.writeFileSync(file, l.body, { mode: l.mode }); }
+  const policies = isWin ? powershellPolicies() : [];
+  const ps1 = isWin && ps1Allowed(policies);
+  const ps1File = path.join(dir, "godspeed-coach.ps1");
+  // Only a .ps1 this installer wrote is ever removed; one the person wrote is theirs.
+  if (isWin && !ps1 && fs.existsSync(ps1File) && fs.readFileSync(ps1File, "utf8").includes(P.LAUNCHER_STAMP)) fs.rmSync(ps1File, { force: true });
+  for (const l of P.launchers(app, process.platform, { ps1 })) { const file = path.join(dir, l.name); fs.rmSync(file, { force: true }); fs.writeFileSync(file, l.body, { mode: l.mode }); }
+  if (ps1) ok("PowerShell gets its own launcher, so words with line breaks arrive whole");
+  else if (isWin && policies.length) warn(`PowerShell runs no scripts on this computer (${policies.map((p) => `${p.exe}: ${p.policy}`).join(", ")}), so from PowerShell the command goes through cmd.exe, which cannot carry a line break. Words with line breaks then need --words-file <file> (a talk's opening: --opening-file <file>). Set-ExecutionPolicy -Scope CurrentUser RemoteSigned, then this setup again, lifts that.`);
   if (P.onPath(dir)) ok(`godspeed-coach is ready to type (${dir})`);
   else warn(`${dir} is not on this terminal's PATH. Open a new terminal; if godspeed-coach is still unknown, use ${path.join(dir, isWin ? "godspeed-coach.cmd" : "godspeed-coach")}`);
   return path.join(dir, "godspeed-coach");
 }
 
 async function stepHermes(mcDir, f, bin) {
+  // --no-hermes means Hermes is not even asked for its version.
+  if (f["no-hermes"]) return { skipped: true };
   const hv = run("hermes", ["--version"]);
-  if (f["no-hermes"] || (hv.status !== 0 && !f["hermes-profile"])) return { skipped: true };
+  if (hv.status !== 0 && !f["hermes-profile"]) return { skipped: true };
   say("Hermes: the open talk before every turn, the talks and the habit check");
   const hp = hermesArgs(f["hermes-profile"]);
   const cfgPath = run("hermes", [...hp, "config", "path"]).stdout.trim().split("\n").pop();
@@ -235,6 +265,7 @@ export async function check(mcDir, f = {}) {
   const s = loadSettings(mcDir);
   line(fs.existsSync(path.join(P.binDir(), isWin ? "godspeed-coach.cmd" : "godspeed-coach")), "godspeed-coach command", "run godspeed-coach setup again", true);
   line(P.onPath(P.binDir()), "command folder on PATH", "open a new terminal, or add " + P.binDir() + " to your PATH");
+  if (isWin) line(fs.existsSync(path.join(P.binDir(), "godspeed-coach.ps1")), "PowerShell launcher (words with line breaks arrive whole)", "PowerShell runs no scripts here, so from PowerShell pass words with line breaks with --words-file <file>");
   const problems = validateSettings(s);
   line(problems.length === 0, "settings", problems.join(" "), true);
   line(fs.existsSync(path.join(P.skillsRoom(mcDir), P.RECIPE, "SKILL.md")), "recipe", "run godspeed-coach setup again", true);

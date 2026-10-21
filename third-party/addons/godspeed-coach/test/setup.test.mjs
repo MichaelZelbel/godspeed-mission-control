@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-import { claudeHookMerge, gateScript, tickScript, wantTick, telegramConfigured, TALK_PROMPT } from "../lib/setup.mjs";
+import { claudeHookMerge, gateScript, tickScript, wantTick, telegramConfigured, TALK_PROMPT, ps1Allowed, powershellPolicies } from "../lib/setup.mjs";
 import * as P from "../lib/paths.mjs";
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -23,31 +23,37 @@ test("scripts, prompt and the one-host rule", () => {
 });
 
 test("the Linux launcher names the Node that ran setup; Windows keeps node", () => {
-  const [sh] = P.launchers("/home/ai/.godspeed-coach/app", "linux", "/home/ai/.hermes/tools/node-26.7.0-linux-x64/bin/node");
-  assert.equal(sh.body, '#!/bin/sh\nexec "/home/ai/.hermes/tools/node-26.7.0-linux-x64/bin/node" "/home/ai/.godspeed-coach/app/bin/godspeed-coach.mjs" "$@"\n');
-  assert.match(P.launchers("C:\\app", "win32")[0].body, /^#!\/bin\/sh\nexec node "C:\/app\/bin\/godspeed-coach\.mjs"/);
+  const linux = P.launchers("/home/ai/.godspeed-coach/app", "linux", { nodeBin: "/home/ai/.hermes/tools/node-26.7.0-linux-x64/bin/node", ps1: true });
+  assert.deepEqual(linux.map((l) => l.name), ["godspeed-coach"], "no .cmd or .ps1 off Windows");
+  assert.equal(linux[0].body, '#!/bin/sh\nexec "/home/ai/.hermes/tools/node-26.7.0-linux-x64/bin/node" "/home/ai/.godspeed-coach/app/bin/godspeed-coach.mjs" "$@"\n');
+  assert.match(P.launchers("C:\\app", "win32")[0].body, /\nMSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='\*' exec node "C:\/app\/bin\/godspeed-coach\.mjs" "\$@"\n$/);
 });
 
 test("the one-line installer finds Hermes' own Node and reads questions from the terminal", () => {
   const s = fs.readFileSync(path.join(ROOT, "install.sh"), "utf8");
   assert.match(s, /\$HOME"\/\.hermes\/tools\/node-\*\/bin\/node/);
   assert.match(s, /setup "\$@" < \/dev\/tty/);
-  // A stranger gets the add-on from Godspeed Mission Control, public, never from the private
-  // repository it is developed in (18 October 2026): the copy beside the script, else that folder.
-  assert.match(s, /https:\/\/github\.com\/MichaelZelbel\/godspeed-mission-control\.git/);
-  assert.match(s, /ADDON="third-party\/addons\/godspeed-coach"/);
-  assert.match(s, /\$HERE\/bin\/godspeed-coach\.mjs/);
-  const commands = s.split("\n").filter(l => !l.startsWith("#")).join("\n");
-  assert.doesNotMatch(commands, /MichaelZelbel\/godspeed-coach/);
+  assert.match(s, /codeload\.github\.com\/MichaelZelbel\/godspeed-coach/);
 });
 
 test("setup without Hermes: recipe, settings, command, hook, and it is repeatable", () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), "coach-setup-"));
   const mcDir = path.join(home, "godspeed"); fs.mkdirSync(path.join(mcDir, ".claude"), { recursive: true }); fs.writeFileSync(path.join(mcDir, "AGENTS.md"), "");
-  const env = { ...process.env, HOME: home, USERPROFILE: home, GODSPEED_COACH_APP: path.join(home, ".godspeed-coach") };
+  // A stand-in hermes that leaves a mark if anything calls it: --no-hermes never asks Hermes.
+  const fake = path.join(home, "fakebin"); fs.mkdirSync(fake);
+  const mark = path.join(home, "hermes-was-called");
+  fs.writeFileSync(path.join(fake, "hermes.cmd"), `@echo off\r\necho x> "${mark}"\r\n`);
+  fs.writeFileSync(path.join(fake, "hermes"), `#!/bin/sh\necho x > "${mark}"\n`, { mode: 0o755 });
+  const env = { ...process.env, HOME: home, USERPROFILE: home, GODSPEED_COACH_APP: path.join(home, ".godspeed-coach"), PATH: `${fake}${path.delimiter}${process.env.PATH}` };
   const args = [BIN, "setup", "--godspeed", mcDir, "--yes", "--no-hermes", "--timezone", "Europe/Berlin", "--language", "en"];
   const r1 = spawnSync(process.execPath, args, { encoding: "utf8", env });
   assert.equal(r1.status, 0, r1.stdout + r1.stderr);
+  assert.equal(fs.existsSync(mark), false, "hermes was called");
+  if (process.platform === "win32") {
+    // The PowerShell launcher exists exactly where PowerShell would run it.
+    assert.equal(fs.existsSync(path.join(P.binDir(home), "godspeed-coach.ps1")), ps1Allowed(powershellPolicies()), r1.stdout);
+    assert.match(fs.readFileSync(path.join(P.binDir(home), "godspeed-coach.cmd"), "utf8"), /--end-of-cmd-args/);
+  }
   assert.ok(fs.existsSync(path.join(mcDir, "skills", "coach", "SKILL.md")));
   assert.ok(fs.existsSync(path.join(mcDir, "coach", "README.md")));
   assert.equal(JSON.parse(fs.readFileSync(path.join(mcDir, "coach", "settings.json"), "utf8")).timezone, "Europe/Berlin");
@@ -63,4 +69,17 @@ test("the Hermes plugin compiles", () => {
   if (!py) return;
   const r = spawnSync(py, ["-c", `import ast,sys; ast.parse(open(sys.argv[1],encoding="utf-8").read())`, path.join(ROOT, "hermes", "plugin", "godspeed-coach", "__init__.py")], { encoding: "utf8" });
   assert.equal(r.status, 0, r.stderr);
+});
+
+// This repository is private: a stranger who reads the README gets the coach with Godspeed
+// Mission Control, which is public. Only the maintainer's note at the end names this repository.
+test("the README sends a stranger to Godspeed Mission Control, never to this private repository", () => {
+  const readme = fs.readFileSync(path.join(ROOT, "README.md"), "utf8");
+  const [forReaders, forMaintainer = ""] = readme.split("\n## For the maintainer\n");
+  assert.doesNotMatch(forReaders, /MichaelZelbel\/godspeed-coach|teach-it-once-kit/);
+  assert.match(forReaders, /^git clone --depth 1 https:\/\/github\.com\/MichaelZelbel\/godspeed-mission-control\.git$/m);
+  assert.match(forReaders, /^node godspeed-mission-control\/third-party\/addons\/godspeed-coach\/bin\/godspeed-coach\.mjs setup --godspeed <your mission control folder>$/m);
+  assert.match(forMaintainer, /^npx --yes github:MichaelZelbel\/godspeed-coach setup/m);
+  const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8"));
+  assert.deepEqual(pkg.repository, { type: "git", url: "https://github.com/MichaelZelbel/godspeed-mission-control.git", directory: "third-party/addons/godspeed-coach" });
 });

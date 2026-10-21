@@ -18,7 +18,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { parseDoc } from "./header.mjs";
-import { localParts, addDays, zonedToUtc } from "./clock.mjs";
+import { localParts, addDays, zonedToUtc, now as clockNow } from "./clock.mjs";
+import { researchEvidenceProblem } from "./prep-evidence.mjs";
 import { listAreas, isTalkDay, nextTalkDay } from "./areas.mjs";
 import { talkFile, talkDates, readTalk } from "./talks.mjs";
 
@@ -52,13 +53,15 @@ export function readPrep(file) {
 
 // Why a prepared talk cannot open a talk, in words; null when it can. Ready means STATE ready with
 // an opening and a talk card, and for this area when the file names one.
-export function prepProblem(p, area = null) {
+export function prepProblem(p, area = null, now = clockNow()) {
   if (!p) return "there is no such file";
   if (area && p.head.AREA && p.head.AREA.trim().toLowerCase() !== area.slug) return `it is for the ${p.head.AREA.trim()} talk, not the ${area.title} talk`;
   if (p.state !== "ready") return `its STATE is ${p.state || "missing"}, not ready`;
   const empty = [["The opening", p.opening], ["Talk card", p.card]].filter(([, v]) => !v).map(([k]) => `"${k}"`);
   if (empty.length) return `its section${empty.length > 1 ? "s" : ""} ${empty.join(" and ")} ${empty.length > 1 ? "are" : "is"} empty`;
-  return null;
+  const at = preparedAt(p);
+  if (at && at.getTime() > now.getTime() + 60_000) return "its PREPARED time is in the future";
+  return researchEvidenceProblem(p, area, now);
 }
 
 // The day of another talk of this area that already opened with this preparation's opening, or null.
@@ -70,7 +73,7 @@ export function prepUsedOn(area, p, exceptYmd) {
   return talkDates(area).find((d) => d !== exceptYmd && same(readTalk(area, d)?.sections["The opening"]) === same(p.opening)) || null;
 }
 
-const usable = (area, p, ymd) => !prepProblem(p, area) && !prepUsedOn(area, p, ymd);
+const usable = (area, p, ymd, now = clockNow()) => !prepProblem(p, area, now) && !prepUsedOn(area, p, ymd);
 
 // Fresh means PREPARED at most PREP_FRESH_HOURS before the talk starts: the world and his week move,
 // and a preparation written three days ahead is out of date by the evening it opens. A file with no
@@ -81,9 +84,9 @@ export function preparedAt(p) {
   const t = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(raw) ? Date.parse(raw) : NaN;
   return Number.isNaN(t) ? null : new Date(t);
 }
-export function prepStale(p, talkAt) {
+export function prepStale(p, talkAt, now = clockNow()) {
   const t = preparedAt(p);
-  return !t || talkAt.getTime() - t.getTime() > PREP_FRESH_HOURS * 3600000;
+  return !t || t.getTime() > now.getTime() + 60_000 || talkAt.getTime() - t.getTime() > PREP_FRESH_HOURS * 3600000;
 }
 
 // Which prepared talk the brief for <ymd> carries, or null for the brief as before. On a scheduled
@@ -125,8 +128,8 @@ export function prepDue(mcDir, s, now, hours) {
     if (!next || next.at.getTime() > until) continue;
     if (fs.existsSync(talkFile(a, next.d))) continue;
     const p = readPrep(prepFile(a, next.d));
-    const ready = usable(a, p, next.d);
-    const stale = ready && prepStale(p, next.at);
+    const ready = usable(a, p, next.d, now);
+    const stale = ready && prepStale(p, next.at, now);
     if (ready && !stale) continue;
     out.push({ at: next.at.getTime(), area: a.slug, title: a.title, date: next.d, time: a.time, timezone: tz, file: rel(mcDir, prepFile(a, next.d)), stale, ...(stale ? { prepared: preparedAt(p)?.toISOString().replace(/\.\d+Z$/, "Z") || "" } : {}) });
   }
