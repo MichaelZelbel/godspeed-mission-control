@@ -160,7 +160,11 @@ const commands = {
     if (given === undefined) die('godspeed-charm answer needs yes or no, for example: godspeed-charm answer yes --conversation telegram:123 --words "yes"');
     const state = settle();
     // Only the conversation that asked can answer (a bare yes elsewhere answers something else).
-    if (!state.open.some((q) => q.conversation === conversation)) refuse(say.noOpenQuestion(), state);
+    const open = state.open.find((q) => q.conversation === conversation);
+    // A Telegram button answers only the question it was sent with: --asked-when names that question
+    // by the moment it was asked, so a button from yesterday, or from a question answered since,
+    // never answers a newer one.
+    if (!open || (f["asked-when"] !== undefined && open.when !== f["asked-when"])) refuse(say.noOpenQuestion(), state);
     if (isYes(given)) {
       write("reset", extras());
       const after = load();

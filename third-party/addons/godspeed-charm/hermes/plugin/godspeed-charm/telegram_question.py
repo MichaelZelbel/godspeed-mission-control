@@ -119,15 +119,40 @@ class QuestionTelegram:
         self._texts = value
         return value
 
+    @staticmethod
+    def report(stdout):
+        """The last {ok, reply, state} object a `--json` command printed, or None."""
+        for line in reversed((stdout or "").splitlines()):
+            if line.strip().startswith("{"):
+                try:
+                    value = json.loads(line)
+                except ValueError:
+                    continue
+                if isinstance(value, dict) and "ok" in value and "reply" in value:
+                    return value
+        return None
+
+    def asked_when(self, conversation):
+        """The moment the question open in `conversation` was asked, from the record, or None."""
+        try:
+            r = self.run("status", "--json")
+            value = self.report(r.stdout) if r.returncode == 0 else None
+            questions = ((value or {}).get("state") or {}).get("open") or []
+            return next((q.get("when") for q in questions if isinstance(q, dict)
+                         and q.get("conversation") == conversation and isinstance(q.get("when"), str)), None)
+        except (OSError, ValueError, subprocess.SubprocessError):
+            return None
+
     def answer(self, token):
-        """The command's reply to a tap: what happened, or why nothing did (exit 2)."""
+        """The command's reply to a tap: what happened, or why nothing did (exit 2). The question
+        is named by the moment it was asked, so the tap answers that question or none."""
         r = self.run("answer", token["answer"], "--conversation", token["conversation"],
-                     "--words", "(button)", "--json", "--language", token["language"], timeout=25)
+                     "--asked-when", token["askedWhen"], "--words", "(button)", "--json",
+                     "--language", token["language"], timeout=25)
         if r.returncode not in (0, 2):
             raise RuntimeError("godspeed-charm answer failed")
-        lines = [line for line in (r.stdout or "").splitlines() if line.strip().startswith("{")]
-        value = json.loads(lines[-1]) if lines else None
-        if not isinstance(value, dict) or not isinstance(value.get("reply"), str) or not value["reply"]:
+        value = self.report(r.stdout)
+        if not value or not isinstance(value.get("reply"), str) or not value["reply"]:
             raise RuntimeError("godspeed-charm answer gave no reply")
         return value["reply"]
 
@@ -185,15 +210,22 @@ class QuestionTelegram:
             return None
 
     def load(self, key):
+        """("ok", token), ("missing", None) when no such token was ever kept here (or it is past
+        its 30 days), or ("error", None) when it is there but cannot be read or trusted: then the
+        question may well be open, and the tap must not say that nothing is."""
         try:
             with open(os.path.join(self.folder(), key + ".json"), encoding="utf-8") as f:
                 token = json.load(f)
-        except (OSError, ValueError, RuntimeError):
-            return None
+        except FileNotFoundError:
+            return "missing", None
+        except Exception:
+            return "error", None
         ok = (isinstance(token, dict) and token.get("version") == 1 and token.get("key") == key
               and HEX.match(str(token.get("group") or "")) and token.get("answer") in ("yes", "no")
-              and isinstance(token.get("conversation"), str) and token["conversation"])
-        return token if ok else None
+              and isinstance(token.get("conversation"), str) and token["conversation"]
+              and isinstance(token.get("askedWhen"), str) and token["askedWhen"]
+              and isinstance(token.get("language"), str))
+        return ("ok", token) if ok else ("error", None)
 
     def bind(self, tokens, message_id):
         folder = self.folder()
@@ -247,16 +279,16 @@ class QuestionTelegram:
         return InlineKeyboardMarkup([[InlineKeyboardButton(words["buttonYes"], callback_data=PREFIX + tokens["yes"]),
                                       InlineKeyboardButton(words["buttonNo"], callback_data=PREFIX + tokens["no"])]])
 
-    def offer(self, entry, text):
-        """The reply without the question, after arranging the question's own message with its
-        buttons; None when the reply goes as written (no button can be sent, or the exact question
-        is not in it, though the buttons still come then)."""
+    def prepare(self, entry, text):
+        """What the reply becomes when the question goes as its own message:
+        {"text", "found", "language", "question"}. None when no button can be sent here (no
+        owner's private chat, no single Telegram client, the add-on's words or the question's
+        moment unknown): the reply then goes as written, question and all. Sends nothing yet."""
         route = entry.get("route")
-        if not self.active or not route:
+        if not self.active or not route or not entry.get("askedWhen") or not self.client():
             return None
-        client = self.client()
         words = self.texts()
-        if not client or not words:
+        if not words:
             return None
         cleaned, found = remove_question(text, {lang: w["question"] for lang, w in words.items()})
         reply = str(entry.get("reply") or "")
@@ -264,16 +296,27 @@ class QuestionTelegram:
             (lang for lang, w in words.items() if w["question"] in reply), None) or "en"
         if language not in words:
             language = "en"
+        return {"text": (cleaned or POINTER) if found else text, "found": found is not None,
+                "language": language, "question": words[language]["question"]}
+
+    def post(self, entry, language):
+        """Last of all, once the reply is known to go out: the two tokens and the question's
+        message, scheduled on the bot's own loop. False when it cannot be arranged."""
+        client, words = self.client(), self.texts()
+        if not client or not words or language not in words:
+            return False
         app, loop = client
-        tokens = self.issue(entry, route, app.bot.id, language)
+        try:
+            bot_id = app.bot.id
+        except Exception:
+            return False
+        tokens = self.issue(entry, entry["route"], bot_id, language)
         if not tokens:
-            return None
-        if self.deliver(app, loop, route, tokens, words[language]) is None:
+            return False
+        if self.deliver(app, loop, entry["route"], tokens, words[language]) is None:
             self.discard(tokens)
-            return None
-        if found is None:
-            return None
-        return cleaned or POINTER
+            return False
+        return True
 
     def deliver(self, app, loop, route, tokens, words):
         """Schedules the question's message on the bot's own loop; never waits for it."""
@@ -283,24 +326,32 @@ class QuestionTelegram:
             return None
 
     async def send(self, app, route, tokens, words, delay):
-        if delay:
-            await asyncio.sleep(delay)
-        chat = int(route["chatId"])
-        kwargs = {"chat_id": chat, "text": words["question"], "reply_markup": self.markup(tokens, words)}
-        if route.get("replyTo"):
-            kwargs["reply_to_message_id"] = int(route["replyTo"])
-        if route.get("threadId"):
-            kwargs["message_thread_id"] = int(route["threadId"])
+        chat = None
         try:
+            chat = int(route["chatId"])
+            if delay:
+                await asyncio.sleep(delay)
+            kwargs = {"chat_id": chat, "text": words["question"], "reply_markup": self.markup(tokens, words)}
+            if route.get("replyTo"):
+                kwargs["reply_to_message_id"] = int(route["replyTo"])
+            if route.get("threadId"):
+                kwargs["message_thread_id"] = int(route["threadId"])
             message = await app.bot.send_message(**kwargs)
-        except Exception:
-            await asyncio.to_thread(self.discard, tokens)
-            # The question was taken out of the reply, so it must still arrive. Plain words are
-            # enough: a typed yes or no answers it everywhere.
+        except (Exception, asyncio.CancelledError) as error:
+            # Whatever stopped it (the keyboard, the route, Telegram, a shutdown during the wait):
+            # the question was taken out of the reply, so it must still arrive. Plain words are
+            # enough, since a typed yes or no answers it everywhere.
             try:
-                await app.bot.send_message(chat_id=chat, text=words["question"])
+                self.discard(tokens)
             except Exception:
                 pass
+            if chat is not None:
+                try:
+                    await app.bot.send_message(chat_id=chat, text=words["question"])
+                except Exception:
+                    pass
+            if isinstance(error, asyncio.CancelledError):
+                raise
             return False
         try:
             await asyncio.to_thread(self.bind, tokens, message.message_id)
@@ -319,6 +370,12 @@ class QuestionTelegram:
                                                 text=str(text)[:4096], reply_markup=reply_markup)
         except Exception:
             pass
+
+    async def failed(self, context, message, words, language):
+        """The tap did not go through: the question stays, with its buttons, and says so."""
+        if words:
+            await self.edit(context, message, words[language]["question"] + "\n\n" + words[language]["buttonFailed"],
+                            reply_markup=getattr(message, "reply_markup", None))
 
     async def callback(self, update, context):
         query = update.callback_query
@@ -340,18 +397,27 @@ class QuestionTelegram:
         except Exception:
             pass
         words = await asyncio.to_thread(self.texts)
-        token = await asyncio.to_thread(self.load, match.group(1))
-        if token is None:
-            # A button whose token is gone (old, or never made here) answers nothing.
+        # The message's own text says its language when the token cannot.
+        shown = next((lang for lang, w in (words or {}).items() if w["question"] == getattr(message, "text", None)), "en")
+        found, token = await asyncio.to_thread(self.load, match.group(1))
+        if found == "missing":
+            # A button whose token was never kept here, or is past its 30 days, answers nothing.
             if words:
-                language = next((lang for lang, w in words.items() if w["question"] == getattr(message, "text", None)), "en")
-                await self.edit(context, message, words[language]["noOpenQuestion"])
+                await self.edit(context, message, words[shown]["noOpenQuestion"])
+            return
+        if found != "ok":
+            await self.failed(context, message, words, shown)
             return
         if (token.get("ownerId") != owner or token.get("chatId") != chat_id or token.get("botId") != str(context.bot.id)
                 or token.get("messageId") != str(message.message_id)):
             return
-        language = token.get("language") if words and token.get("language") in words else "en"
-        if not await asyncio.to_thread(self.claim, token):
+        language = token["language"] if words and token["language"] in words else shown
+        try:
+            claimed = await asyncio.to_thread(self.claim, token)
+        except Exception:
+            await self.failed(context, message, words, language)
+            return
+        if not claimed:
             # This message was answered already: the command is not run again, so nothing is written.
             if words:
                 await self.edit(context, message, words[language]["noOpenQuestion"])
@@ -360,10 +426,11 @@ class QuestionTelegram:
             reply = await asyncio.to_thread(self.answer, token)
         except Exception:
             # Nothing is known to have changed: give the tap back, so a second one can try.
-            await asyncio.to_thread(self.release, token)
-            if words:
-                await self.edit(context, message, words[language]["question"] + "\n\n" + words[language]["buttonFailed"],
-                                reply_markup=getattr(message, "reply_markup", None))
+            try:
+                await asyncio.to_thread(self.release, token)
+            except Exception:
+                pass
+            await self.failed(context, message, words, language)
             return
         await self.edit(context, message, reply)
 

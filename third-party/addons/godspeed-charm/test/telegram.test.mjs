@@ -297,3 +297,142 @@ test("a tap whose command fails says so, keeps the buttons, and a second tap can
     assert.equal(readEvents(dir).length, before + 1);
   } finally { gone(dir); }
 });
+
+// The model asking in a turn, the add-on command run for real at `now`.
+const askAt = (turn, now, { json = true } = {}) => ({
+  do: "tool", session: SESSION, turn, now,
+  command: `godspeed-charm asked --conversation "${CONVERSATION}" --words "useless"${json ? " --json" : ""}`,
+  run: ["asked", "--conversation", CONVERSATION, "--words", "useless", ...(json ? ["--json"] : [])],
+});
+const kinds = (dir, kind) => readEvents(dir).filter((e) => e.kind === kind).length;
+
+test("a Yes on yesterday's message answers nothing once today asked again; today's message answers", { skip }, () => {
+  const dir = mission();
+  try {
+    assert.equal(charm(dir, ["start"], at("2026-10-21")).status, 0);
+    const out = drive(dir, [
+      { do: "register" },
+      askAt("t-1", at("2026-10-22")), reply(`Done.\n\n${Q}`, { turn: "t-1" }),
+      askAt("t-2", at("2026-10-23")), reply(`Done.\n\n${Q}`, { turn: "t-2" }),
+      { do: "tap", message: 0, button: 0, now: at("2026-10-23", 9) },
+      { do: "files" },
+      { do: "tap", message: 1, button: 0, now: at("2026-10-23", 9) },
+    ]);
+    assert.equal(sends(out).length, 2);
+    assert.deepEqual(edits(out).map((e) => e.text), [T.en.noOpenQuestion(), "Back to 21. Done on Friday 13 November. Restarts: 1."]);
+    assert.equal(kinds(dir, "reset"), 1);
+    assert.equal(readEvents(dir).find((e) => e.kind === "reset").date, "2026-10-23");
+  } finally { gone(dir); }
+});
+
+test("a Yes on a morning message already answered by a typed no answers nothing after an afternoon question", { skip }, () => {
+  const dir = mission();
+  try {
+    assert.equal(charm(dir, ["start"], at("2026-10-21")).status, 0);
+    const out = drive(dir, [
+      { do: "register" },
+      askAt("t-1", at("2026-10-22", 7)), reply(`Done.\n\n${Q}`, { turn: "t-1" }),
+      { do: "charm", args: ["answer", "no", "--conversation", CONVERSATION, "--words", "no"], now: at("2026-10-22", 8) },
+      askAt("t-2", at("2026-10-22", 12)), reply(`Done.\n\n${Q}`, { turn: "t-2" }),
+      { do: "tap", message: 0, button: 0, now: at("2026-10-22", 13) },
+      { do: "tap", message: 1, button: 1, now: at("2026-10-22", 13) },
+    ]);
+    assert.equal(out.results[3].status, 0, out.results[3].output);
+    assert.deepEqual(edits(out).map((e) => e.text), [T.en.noOpenQuestion(), "Fair enough. Still 20 days to go."]);
+    assert.equal(kinds(dir, "reset"), 0);
+    assert.equal(kinds(dir, "kept"), 2);
+  } finally { gone(dir); }
+});
+
+test("asked without --json: the question's moment is looked up; with no open question there are no buttons", { skip }, () => {
+  const dir = mission();
+  try {
+    assert.equal(charm(dir, ["start"], at("2026-10-21")).status, 0);
+    const plain = askAt("t-1", at("2026-10-22", 7), { json: false });
+    const out = drive(dir, [
+      { do: "register" }, plain, reply(`Done.\n\n${Q}`, { turn: "t-1" }), { do: "files" },
+      { do: "charm", args: ["answer", "no", "--conversation", CONVERSATION, "--words", "no"], now: at("2026-10-22", 8) },
+      { do: "tool", session: SESSION, turn: "t-2", command: plain.command, output: Q }, reply(`Done.\n\n${Q}`, { turn: "t-2" }),
+    ]);
+    const asked = readEvents(dir).find((e) => e.kind === "asked");
+    const tokens = Object.values(out.results[3].files).filter((f) => typeof f === "object" && f.key);
+    assert.equal(tokens.length, 2);
+    for (const t of tokens) assert.equal(t.askedWhen, asked.when);
+    // Nothing open any more: the reply keeps its question, and no second button message comes.
+    assert.equal(out.results[6].text, null);
+    assert.equal(sends(out).length, 1);
+  } finally { gone(dir); }
+});
+
+test("a reply that is held back sends no question; the question is scheduled only after the other plugins' work", { skip }, () => {
+  const dir = mission();
+  try {
+    const a = asked(dir);
+    const held = drive(dir, [{ do: "register" }, { do: "bus", kind: "silent-voice" }, tool(a), reply(`Done.\n\n${Q}`), { do: "files" }]);
+    assert.equal(held.results[3].text, "[SILENT]");
+    assert.equal(sends(held).length, 0);
+    assert.deepEqual(held.results[4].files, {});
+    assert.deepEqual(held.probe, [{ scheduled: 0, sent: 0 }]);
+    const voiced = drive(dir, [{ do: "register" }, { do: "bus", kind: "voice" }, tool(a), reply(`Done.\n\n${Q}`)]);
+    assert.equal(voiced.results[3].text, "Done.");
+    assert.deepEqual(voiced.probe, [{ scheduled: 0, sent: 0 }]);
+    assert.equal(sends(voiced).length, 1);
+  } finally { gone(dir); }
+});
+
+test("a send that breaks before Telegram, or is cut short while waiting, still delivers the plain question", { skip }, () => {
+  const dir = mission();
+  try {
+    const a = asked(dir);
+    const markup = drive(dir, [{ do: "register" }, { do: "fail", markup: 1 }, tool(a), reply(`Done.\n\n${Q}`), { do: "files" }]);
+    assert.equal(markup.results[3].text, "Done.");
+    assert.deepEqual(markup.calls.map((c) => c.method), ["send_message"]);
+    assert.equal(markup.calls[0].text, Q);
+    assert.equal(markup.calls[0].reply_markup ?? null, null);
+    assert.deepEqual(markup.results[4].files, {});
+    const cut = drive(dir, [{ do: "register" }, tool(a), reply(`Done.\n\n${Q}`, { wait: false }), { do: "cancel" }, { do: "files" }],
+      { GODSPEED_CHARM_BUTTON_DELAY: "30" });
+    assert.equal(cut.results[2].text, "Done.");
+    assert.deepEqual(cut.calls.map((c) => c.method), ["send_message"]);
+    assert.equal(cut.calls[0].text, Q);
+    assert.equal(cut.calls[0].reply_markup ?? null, null);
+    assert.deepEqual(cut.results[4].files, {});
+  } finally { gone(dir); }
+});
+
+test("a token folder that cannot be written: the tap says it did not go through and keeps the buttons", { skip }, () => {
+  const dir = mission();
+  try {
+    const a = asked(dir);
+    const before = readEvents(dir).length;
+    const out = drive(dir, [
+      { do: "register" }, tool(a), reply(`Done.\n\n${Q}`),
+      { do: "break", method: "claim" }, { do: "tap", button: 0 },
+      { do: "mend", method: "claim" }, { do: "tap", button: 0 },
+    ]);
+    const [failed, answered] = edits(out);
+    assert.equal(failed.text, `${Q}\n\n${T.en.buttonFailed()}`);
+    assert.deepEqual(failed.reply_markup, sends(out)[0].reply_markup);
+    assert.equal(answered.text, "Back to 21. Done on Thursday 12 November. Restarts: 1.");
+    assert.equal(readEvents(dir).length, before + 1);
+  } finally { gone(dir); }
+});
+
+test("a token that cannot be read is not a missing one: the tap says it did not go through and keeps the buttons", { skip }, () => {
+  const dir = mission();
+  try {
+    const a = asked(dir);
+    const before = readEvents(dir).length;
+    const out = drive(dir, [
+      { do: "register" }, tool(a), reply(`Done.\n\n${Q}`),
+      { do: "corrupt", button: 0 }, { do: "tap", button: 0 },
+    ]);
+    assert.equal(edits(out).length, 1);
+    assert.equal(edits(out)[0].text, `${Q}\n\n${T.en.buttonFailed()}`);
+    assert.deepEqual(edits(out)[0].reply_markup, sends(out)[0].reply_markup);
+    assert.equal(readEvents(dir).length, before);
+    // The other button's token is fine and still answers.
+    const no = drive(dir, [{ do: "register" }, tool(a), reply(`Done.\n\n${Q}`), { do: "corrupt", button: 0 }, { do: "tap", button: 1 }]);
+    assert.equal(edits(no)[0].text, "Fair enough. Still 20 days to go.");
+  } finally { gone(dir); }
+});

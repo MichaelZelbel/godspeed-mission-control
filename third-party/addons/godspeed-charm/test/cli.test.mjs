@@ -491,3 +491,31 @@ test("texts: the question and the button words in both languages, as JSON, with 
   assert.deepEqual(JSON.parse(nowhere.stdout), want);
   for (const l of ["en", "de"]) assert.doesNotMatch(T[l].buttonFailed(), /[\u2013\u2014]/);
 });
+
+test("answer --asked-when answers only the question asked at that moment", () => {
+  const dir = mission();
+  run(dir, ["start"]);
+  const ask = () => json(run(dir, ["asked", "--conversation", "telegram:s1", "--words", "useless", "--json"], { day: "2026-10-30" }));
+  const answer = (when) => run(dir, ["answer", "yes", "--conversation", "telegram:s1", "--words", "(button)", "--asked-when", when, "--json"], { day: "2026-10-30" });
+  const first = ask().state.open[0].when;
+  const before = rows(dir);
+  const wrong = answer("2026-10-29T08:00:00.000Z");
+  assert.equal(wrong.status, 2);
+  assert.equal(json(wrong).reply, T.en.noOpenQuestion());
+  assert.equal(json(wrong).state.open.length, 1);
+  assert.equal(rows(dir), before);
+  // A newer question in the same conversation: the older moment answers nothing.
+  const second = ask().state.open[0].when;
+  assert.notEqual(second, first);
+  const stale = answer(first);
+  assert.equal(stale.status, 2);
+  assert.equal(json(stale).reply, T.en.noOpenQuestion());
+  assert.equal(json(stale).state.restarts, 0);
+  const right = answer(second);
+  assert.equal(right.status, 0, right.stderr);
+  assert.equal(json(right).state.restarts, 1);
+  // Answered: the same moment answers nothing again.
+  assert.equal(answer(second).status, 2);
+  assert.equal(run(dir, ["answer", "yes", "--conversation", "telegram:s1", "--asked-when"], { day: "2026-10-30" }).status, 1);
+  gone(dir);
+});

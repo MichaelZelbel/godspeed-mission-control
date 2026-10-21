@@ -49,7 +49,8 @@ godspeed-charm texts      # the question and the button words, as JSON, for the 
 Every command takes `--json` (it then prints `{ok, reply, state}`), `--language en|de` for one
 reply in that language, and `--words-file <file>` in place of `--words` for words with quotes or
 line breaks. Exit 0 means done, 2 means refused with nothing written (the reply says why), 1 is
-an error.
+an error. `answer --asked-when <moment>` answers only the open question asked at that moment (the
+`when` of the question in `state.open`); the Telegram buttons use it.
 
 ## Install
 
@@ -69,9 +70,11 @@ the Godspeed notebook and refuses to install without one.
 - Telegram, through Hermes: the plugin hands the current state to the assistant before every turn.
   The question after a slip comes as its own message with two buttons, Yes and No (Ja and Nein in
   German); a tap answers it, the message then says what happened, and the buttons go. Only you can
-  tap them (the one id in `TELEGRAM_ALLOWED_USERS`), only in your private chat with the bot, and
-  each message is answered once; a tap on a question from another day changes nothing. Typing yes
-  or no works as well. When no button can be sent, the question stays in the reply.
+  tap them (the one id in `TELEGRAM_ALLOWED_USERS`), only in your private chat with the bot. Each
+  message answers only its own question, and only once: a tap on a question from another day, or
+  on one that was answered or asked again since, changes nothing. Typing yes or no works as well.
+  The question comes only with a reply that goes out; when no button can be sent, it stays in the
+  reply.
   When the hermes-telegram-stickers plugin is installed too, the finish gets one celebration sticker.
 - Claude Code, through a UserPromptSubmit hook. Scheduled and assistant-runtime runs get no block.
 - Codex gets no block, an accepted limit: there the challenge works only when you ask for it.

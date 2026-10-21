@@ -14,8 +14,10 @@ import importlib.util
 import json
 import os
 import re
+import subprocess
 import sys
 import threading
+import time
 import types
 
 PLUGIN = sys.argv[1]
@@ -30,6 +32,9 @@ class Button:
 
 class Keyboard:
     def __init__(self, rows):
+        if FAIL["markup"]:
+            FAIL["markup"] -= 1
+            raise RuntimeError("synthetic keyboard failure")
         self.inline_keyboard = rows
 
 
@@ -58,7 +63,8 @@ sys.modules.update({"telegram": telegram, "telegram.ext": telegram_ext,
                     "gateway": gateway, "gateway.session_context": session_context})
 
 CALLS = []
-FAIL = {"send": 0}
+FAIL = {"send": 0, "markup": 0}
+PROBE = []  # what the stand-in voice filter saw when it ran
 
 
 def keyboard(markup):
@@ -148,10 +154,28 @@ def step_register(s):
     return {"handlers": [h.pattern for h in app.handlers], "hooks": sorted(hooks)}
 
 
+def charm(args, now=None):
+    """The real add-on command, as the model would run it in Hermes' terminal at `now`."""
+    env = dict(os.environ)
+    if now:
+        env["GODSPEED_CHARM_NOW"] = now
+    r = subprocess.run([os.environ["GODSPEED_NODE"], os.environ["GODSPEED_CHARM_SCRIPT"], *args],
+                       capture_output=True, text=True, encoding="utf-8", env=env)
+    return r.returncode, (r.stdout + r.stderr).strip()
+
+
+def step_charm(s):
+    code, output = charm(s["args"], s.get("now"))
+    return {"status": code, "output": output}
+
+
 def step_tool(s):
     ROUTE.clear()
     ROUTE.update(route_for(s["session"], s.get("route")))
     result = s.get("result")
+    if s.get("run"):
+        code, output = charm(s["run"], s.get("now"))
+        result = json.dumps({"output": output, "exit_code": code, "error": None})
     if result is None:
         result = json.dumps({"output": s.get("output", ""), "exit_code": s.get("exit_code", 0), "error": None})
     for cb in hooks.get("post_tool_call", []):
@@ -164,9 +188,10 @@ def step_reply(s):
     outs = [cb(response_text=s["text"], session_id=s["session"], turn_id=s["turn"],
                platform=s.get("platform", "telegram"), model="test-model")
             for cb in hooks.get("transform_llm_output", [])]
-    for future in list(sending):
-        future.result(60)
-    sending.clear()
+    if s.get("wait", True):
+        for future in list(sending):
+            future.result(60)
+        sending.clear()
     # Hermes: the first callback that returns a non-empty string wins.
     return {"text": next((o for o in outs if isinstance(o, str) and o), None), "outs": outs}
 
@@ -194,12 +219,25 @@ def step_tap(s):
     return {"answered": answered}
 
 
+def probe():
+    PROBE.append({"scheduled": len(sending), "sent": len([c for c in CALLS if c["method"] == "send_message"])})
+
+
 def step_bus(s):
-    if s["kind"] == "voice":
+    if s["kind"] == "silent-voice":
+        bus = sys.modules["godspeed_progress_output_v1"]
+
+        def held(**kwargs):
+            # A stand-in for a reader check that holds the reply back.
+            probe()
+            return "[SILENT]"
+        bus.voice_transform = held
+    elif s["kind"] == "voice":
         bus = sys.modules["godspeed_progress_output_v1"]
 
         def voice(**kwargs):
             # A stand-in for the owner's voice filter: repairs a long dash, then hands on to the coach.
+            probe()
             text = kwargs["response_text"].replace("\u2014", ",")
             append = getattr(bus, "append", None)
             combined = append(**dict(kwargs, response_text=text)) if callable(append) else None
@@ -231,6 +269,43 @@ def step_files(s):
 
 def step_fail(s):
     FAIL["send"] = int(s.get("send", 0))
+    FAIL["markup"] = int(s.get("markup", 0))
+    return {}
+
+
+def step_cancel(s):
+    """Cuts the scheduled sends short while they wait, as a shutdown would, and waits for what
+    they do then. (A send cancelled before its coroutine even started runs no code at all.)"""
+    time.sleep(0.5)
+    for future in list(sending):
+        future.cancel()
+    sending.clear()
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline and not any(c["method"] == "send_message" for c in CALLS):
+        time.sleep(0.05)
+    time.sleep(0.2)
+    return {}
+
+
+def step_break(s):
+    """Makes one method of the plugin's Telegram object fail, the way a broken disk would."""
+    def broken(*a, **k):
+        raise PermissionError("synthetic: the token folder cannot be written")
+    setattr(plugin._question, s["method"], broken)
+    return {}
+
+
+def step_mend(s):
+    delattr(plugin._question, s["method"])
+    return {}
+
+
+def step_corrupt(s):
+    sent = [c for c in CALLS if c["method"] == "send_message" and c.get("reply_markup")]
+    data = sent[s.get("message", -1)]["reply_markup"][0][s.get("button", 0)]["data"]
+    file = os.path.join(os.environ["GODSPEED_CHARM_DIR"], ".godspeed", "charm-buttons", data[5:] + ".json")
+    with open(file, "w", encoding="utf-8") as f:
+        f.write("{ not json")
     return {}
 
 
@@ -250,10 +325,12 @@ def step_unload(s):
 
 
 STEPS = {"register": step_register, "tool": step_tool, "reply": step_reply, "tap": step_tap,
-         "bus": step_bus, "files": step_files, "fail": step_fail, "env": step_env, "unload": step_unload}
+         "bus": step_bus, "files": step_files, "fail": step_fail, "env": step_env, "unload": step_unload,
+         "charm": step_charm, "cancel": step_cancel, "break": step_break, "mend": step_mend,
+         "corrupt": step_corrupt}
 
 results = []
 # UTF-8 both ways, whatever the console code page (Windows reads stdin as cp1252 otherwise).
 for step in json.loads(sys.stdin.buffer.read().decode("utf-8"))["steps"]:
     results.append(STEPS[step["do"]](step))
-print(json.dumps({"results": results, "calls": CALLS}))
+print(json.dumps({"results": results, "calls": CALLS, "probe": PROBE}))

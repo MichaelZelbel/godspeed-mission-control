@@ -219,6 +219,11 @@ def on_charm_tool(**kwargs):
             reply = output
         if not any(w["question"] in reply for w in words.values()):
             return None
+        # A button answers only its own question, named by the moment it was asked. Without
+        # --json the command did not say that moment: the record does. No moment, no buttons.
+        asked_when = asked_when or _question.asked_when(conversation)
+        if not asked_when:
+            return None
         language = _flag(rest, "language")
         entry = {"conversation": conversation, "askedWhen": asked_when, "reply": reply,
                  "language": language if language in words else None,
@@ -282,7 +287,12 @@ def _compose(text, kwargs):
 def on_charm_reply(**kwargs):
     """On Telegram, after a slip question was asked in this turn: the reply without the question,
     which comes as its own message with Yes and No. None (the reply as written) otherwise, and
-    whenever no button can be sent, so the question is never lost."""
+    whenever no button can be sent, so the question is never lost.
+
+    The order matters: take the question out, let the other plugins' work in (_compose), and
+    only when the reply is known to go out make the tokens and schedule the question's message.
+    A reply held back (a SILENT marker) sends no question: a slip question never arrives alone,
+    without the work it belongs to."""
     try:
         key = (str(kwargs.get("session_id") or ""), str(kwargs.get("turn_id") or ""))
         with _pending_lock:
@@ -292,8 +302,20 @@ def on_charm_reply(**kwargs):
         text = str(kwargs.get("response_text") or "")
         if not text.strip() or text.strip() in SILENT:
             return None
-        out = _question.offer(entry, text)
-        return None if out is None else _compose(out, kwargs)
+        plan = _question.prepare(entry, text)
+        if plan is None:
+            return None
+        out = _compose(plan["text"], kwargs)
+        if out.strip() in SILENT:
+            return out
+        if not _question.post(entry, plan["language"]):
+            # No buttons after all: the question stays in the reply.
+            if not plan["found"]:
+                return out if out != text else None
+            if out == plan["text"]:
+                return None  # nothing else changed it: the reply exactly as the model wrote it
+            return out.rstrip() + "\n\n" + plan["question"]
+        return out if plan["found"] or out != text else None
     except Exception:
         return None
 
