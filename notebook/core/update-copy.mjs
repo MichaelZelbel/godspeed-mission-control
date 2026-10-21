@@ -168,9 +168,11 @@ function copyOne(root,destination,name,copied){
 function size(root,names){let bytes=0,count=0;for(const name of names){try{bytes+=fs.statSync(path.join(root,...name.split('/'))).size;count++;}catch{}}return {bytes,count};}
 function mediaFiles(mediaRoot){const out=[],links=[];if(fs.existsSync(mediaRoot))for(const child of fs.readdirSync(mediaRoot))walk(mediaRoot,child,out,links);return out;}
 
-// Makes the copy at destination, a new folder. Returns what it holds.
-export function makeUpdateCopy(store,mediaRoot,destination){
+// Makes the copy at destination, a new folder. Returns what it holds. refName names the ref that
+// keeps its commit when the folder's name alone is not unique (a Menerio import's job/backup).
+export function makeUpdateCopy(store,mediaRoot,destination,{refName}={}){
   destination=path.resolve(destination);
+  if(refName!==undefined&&(typeof refName!=='string'||!refName.startsWith(updateCopyRefs)))throw Error('A copy\'s ref belongs under '+updateCopyRefs);
   if(fs.existsSync(destination))throw new Error('Backup destination already exists');
   const root=store.root,hashed=new Map(),first=look(root,hashed),media=mediaFiles(mediaRoot);
   // Room for the files it saves, for those Git converted (checked once and saved should Git not
@@ -193,7 +195,7 @@ export function makeUpdateCopy(store,mediaRoot,destination){
       at=new Date().toISOString();records=store.scan(true).size;
     });
     if(fs.existsSync(mediaRoot))fs.cpSync(mediaRoot,path.join(partial,'media'),{recursive:true});
-    if(now.commit){ref=refFor(name);git(root,['update-ref','-m','Godspeed Mission Control: before an update',ref,now.commit]);pinned=true;}
+    if(now.commit){ref=refName||refFor(name);git(root,['update-ref','-m','Godspeed Mission Control: before an update',ref,now.commit]);pinned=true;}
     const files=[...copied.keys()].sort().map(file=>({path:file,sha256:hash(fs.readFileSync(path.join(partial,...file.split('/'))))}));
     for(const file of mediaFiles(path.join(partial,'media')))files.push({path:'media/'+file,sha256:hash(fs.readFileSync(path.join(partial,'media',...file.split('/'))))});
     const manifest={format:now.commit?updateCopyFormat:1,kind:'update-copy',at,records,workspace:root,scope:{roots:updateCopyRoots,files:updateCopyFiles},

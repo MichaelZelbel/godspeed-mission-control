@@ -72,3 +72,20 @@ test('the owner name from the import fills the placeholder "Owner", never a name
  const b=await fixture({profile:imported}),second=planMerge(b.store,b.staged,b.mediaRoot);applyMerge({...b,digest:second.digest});
  assert.equal(b.store.get('profiles','owner').display_name,'Keep my account');
 });
+
+// The copy before an import (core/update-copy.mjs): until 21 October 2026 each import made a
+// whole copy of the folder in its job folder and none was ever removed.
+test('once an import worked, the copies earlier imports made go, and what else their job folders hold stays',async()=>{
+ const f=await fixture(),jobs=path.join(f.store.state,'menerio-import');
+ const job=n=>{const dir=path.join(jobs,`0000000${n}-0000-4000-8000-000000000000`);fs.mkdirSync(dir,{recursive:true});return dir;};
+ const first=job(1),second=job(2);fs.writeFileSync(path.join(first,'bundle.txt'),'the Menerio export it downloaded');
+ fs.mkdirSync(path.join(f.root,'work'));fs.writeFileSync(path.join(f.root,'work','recording.bin'),Buffer.alloc(4096,1));
+ applyMerge({...f,jobRoot:first,digest:planMerge(f.store,f.staged,f.mediaRoot).digest});
+ assert.ok(fs.existsSync(path.join(first,'backup','backup.json')));
+ assert.equal(JSON.parse(fs.readFileSync(path.join(first,'backup','backup.json'),'utf8')).kind,'update-copy');
+ assert.ok(!fs.existsSync(path.join(first,'backup','work')),'only what an import can change');
+ applyMerge({...f,jobRoot:second,digest:planMerge(f.store,f.staged,f.mediaRoot).digest});
+ assert.ok(fs.existsSync(path.join(second,'backup','backup.json')),'the copy before the import that worked stays');
+ assert.equal(fs.existsSync(path.join(first,'backup')),false,'the one an earlier import made goes');
+ assert.equal(fs.readFileSync(path.join(first,'bundle.txt'),'utf8'),'the Menerio export it downloaded');
+});

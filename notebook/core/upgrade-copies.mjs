@@ -39,6 +39,14 @@ function pinOf(copy){
   return {repository:manifest.workspace,ref:manifest.git.ref,commit:manifest.git.commit};
 }
 
+// Removes a copy and lets go of the ref it kept, if any. Used for the copies other jobs make with
+// update-copy.mjs (a Menerio import's, core/migration-merge.mjs).
+export function removeCopy(copy){
+  const pin=pinOf(copy);
+  fs.rmSync(copy,{recursive:true,force:true,maxRetries:3});
+  return pin&&git(pin.repository,['update-ref','-d',pin.ref,pin.commit]).status===0?pin.ref:null;
+}
+
 // made: the copy this update just made, by name or by its path in the folder. It always stays,
 // and with it the newest others up to keep. Without a whole copy just made nothing is removed.
 export function pruneUpgradeCopies(folder,{made,keep=upgradeCopiesKept}={}){

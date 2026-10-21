@@ -1,8 +1,27 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {Store,hash,atomic} from './records/store.mjs';
-import {backup} from './archives.mjs';
+import {makeUpdateCopy,refFor} from './update-copy.mjs';
+import {removeCopy} from './upgrade-copies.mjs';
 import {verifyBundle} from './migration.mjs';
+
+// THE COPY BEFORE AN IMPORT (21 October 2026). An import writes the notebook's records and media,
+// which is what an update can change, so the copy it makes first is the same one
+// (core/update-copy.mjs): in a folder with Git only what the commit does not hold. Until then each
+// import made a whole copy of every durable folder in its job folder, and none was ever removed.
+// Once an import worked, its copy stays as the way back and the copies earlier imports made go.
+// Only those copies: what else a job folder holds (the Menerio export it downloaded) stays.
+const jobName=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+export function pruneImportCopies(jobRoot){
+  const parent=path.dirname(jobRoot),own=path.basename(jobRoot),removed=[];
+  for(const entry of fs.readdirSync(parent,{withFileTypes:true})){
+    if(!entry.isDirectory()||entry.name===own||!jobName.test(entry.name))continue;
+    const copy=path.join(parent,entry.name,'backup');
+    if(!fs.existsSync(path.join(copy,'backup.json')))continue;
+    try{removeCopy(copy);removed.push(entry.name);}catch{}
+  }
+  return removed;
+}
 
 export const workspaceDigest=store=>hash([...store.scan().values()].map(r=>[r.type,r.id,r._hash]).sort((a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b))));
 export function planMerge(store,staged,mediaRoot){
@@ -54,7 +73,7 @@ export function applyMerge({root,device,staged,bundle,mediaRoot,jobRoot,digest})
   verifyBundle(bundle);const store=new Store(root,{device});
   let plan=planMerge(store,staged,mediaRoot);
   if(plan.digest!==digest)throw new Error('Your content changed since the preview. Preview again before importing.');
-  const snapshot=path.join(jobRoot,'backup');backup(store,mediaRoot,snapshot);
+  const snapshot=path.join(jobRoot,'backup');makeUpdateCopy(store,mediaRoot,snapshot,{refName:refFor('import-'+path.basename(jobRoot))});
   const created=[];
   try{
     store.withLock(()=>{
@@ -77,5 +96,7 @@ export function applyMerge({root,device,staged,bundle,mediaRoot,jobRoot,digest})
   }
   store.scan();if(store.problems.length)throw new Error('The imported copy needs review. Your backup has been retained.');
   const receipt={...plan.summary,completedAt:new Date().toISOString(),backupSaved:true,sourceUnchanged:true};
-  atomic(path.join(jobRoot,'receipt.json'),JSON.stringify(receipt));return receipt;
+  atomic(path.join(jobRoot,'receipt.json'),JSON.stringify(receipt));
+  pruneImportCopies(jobRoot);
+  return receipt;
 }
