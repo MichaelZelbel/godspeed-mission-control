@@ -17,7 +17,7 @@ class HostModelTests(unittest.TestCase):
                 return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content="answer", tool_calls=[]))])
         def resolve(**kwargs):
             self.assertEqual(kwargs, {"requested": "owner-provider", "target_model": "owner-model"})
-            return {"api_key": "host-key", "base_url": "https://owner.example", "api_mode": "responses"}
+            return {"provider": "owner-provider", "api_key": "host-key", "base_url": "https://owner.example", "api_mode": "responses"}
         def client(provider, **kwargs):
             self.assertEqual(provider, "owner-provider")
             self.assertEqual(kwargs["model"], "owner-model")
@@ -40,6 +40,16 @@ class HostModelTests(unittest.TestCase):
         for config in [{}, {"model": {"provider": "auto", "default": "x"}}, {"model": {"provider": "specific"}}]:
             with self.assertRaises(ValueError):
                 module.selected(config)
+
+    def test_unexpected_provider_and_custom_endpoint_are_refused_before_request(self):
+        def never(*args, **kwargs):
+            self.fail("an unexpected route must not obtain a client or send text")
+        payload = {"system": "x", "prompt": "y", "timeout_ms": 1000, "max_tokens": 128}
+        config = {"model": {"provider": "owner", "default": "chosen"}}
+        with self.assertRaises(ValueError):
+            module.request(payload, load_config=lambda: config, resolve_runtime=lambda **kwargs: {"provider": "other"}, resolve_client=never)
+        with self.assertRaises(ValueError):
+            module.request(payload, load_config=lambda: config, resolve_runtime=lambda **kwargs: {"provider": "custom", "base_url": "https://other.example"}, resolve_client=never, expected_route=lambda *args: ("custom", "https://owner.example"))
 
 
 if __name__ == "__main__":

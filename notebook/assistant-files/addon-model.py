@@ -24,12 +24,16 @@ def selected(config):
     return provider, name
 
 
-def request(payload, *, load_config, resolve_runtime, resolve_client):
+def request(payload, *, load_config, resolve_runtime, resolve_client, expected_route=None):
     config = load_config()
     provider, model = selected(config)
     if payload.get("describe"):
         return {"configured": True, "provider": provider, "model": model}
     runtime = resolve_runtime(requested=provider, target_model=model)
+    expected, endpoint = expected_route(provider, config) if expected_route else (provider, None)
+    effective = runtime.get("provider")
+    if effective != expected or (endpoint and str(runtime.get("base_url", "")).rstrip("/") != endpoint.rstrip("/")):
+        raise ValueError("The resolved connection does not match the model provider selected in Godspeed")
     # A named custom provider can normalize to 'custom'; it is still the exact
     # selected endpoint. The resolver is never called with 'auto'.
     client, resolved = resolve_client(
@@ -51,7 +55,7 @@ def request(payload, *, load_config, resolve_runtime, resolve_client):
     text = message.content
     if not isinstance(text, str) or not text.strip():
         raise ValueError("The connected model returned no text")
-    return {"text": text, "provider": provider, "model": model}
+    return {"text": text, "provider": effective, "model": model}
 
 
 def main():
@@ -64,14 +68,19 @@ def main():
     except ImportError:
         pass
     from hermes_cli.config import load_config_readonly
-    from hermes_cli.runtime_provider import resolve_runtime_provider
-    from agent.auxiliary_client import resolve_provider_client
+    from hermes_cli.runtime_provider import resolve_runtime_provider, _get_named_custom_provider, expand_direct_api_alias
+    from agent.auxiliary_client import resolve_provider_client, _normalize_aux_provider
+    def expected_route(provider, config):
+        named = _get_named_custom_provider(provider)
+        if named:
+            return "custom", named.get("base_url")
+        return expand_direct_api_alias(_normalize_aux_provider(provider), (config.get("model") or {}).get("base_url"))
     # Runtime constructors can print diagnostics. Never mix them into the
     # protocol or preserve them alongside strangers' profiles.
     with contextlib.redirect_stdout(io.StringIO()):
         result = request(payload, load_config=load_config_readonly,
                          resolve_runtime=resolve_runtime_provider,
-                         resolve_client=resolve_provider_client)
+                         resolve_client=resolve_provider_client, expected_route=expected_route)
     print(json.dumps(result))
 
 

@@ -6,6 +6,7 @@ import path from 'node:path';
 import http from 'node:http';
 import {EventEmitter} from 'node:events';
 import {PassThrough} from 'node:stream';
+import {execFileSync} from 'node:child_process';
 import {addonModel,modelInput} from '../core/addon-model.mjs';
 import {installModelCommand} from '../scripts/install-model-command.mjs';
 
@@ -59,6 +60,12 @@ test('API-only Godspeed keeps credentials inside host, has no tools, and respect
 test('fresh installation exposes a stable workspace launcher plus shell and Windows command forms',t=>{
  const f=fixture(t),out=installModelCommand({root:f.root,home:f.home,platform:'win32'});
  assert.ok(fs.readFileSync(out.launcher,'utf8').includes('notebook/bin/godspeed-model.mjs'));
- for(const file of [out.command,out.command+'.cmd']){const text=fs.readFileSync(file,'utf8');assert.ok(text.includes('--workspace'));assert.ok(text.includes('model.mjs'));assert.ok(!text.includes('API_KEY'));}
+ for(const file of [out.command,out.command+'.cmd']){const text=fs.readFileSync(file,'utf8');assert.ok(text.includes('GODSPEED_MODEL_WORKSPACE'));assert.ok(!text.includes('--workspace'));assert.ok(text.includes('model.mjs'));assert.ok(!text.includes('API_KEY'));}
  const wiring=fs.readFileSync(new URL('../scripts/wire-assistant.mjs',import.meta.url),'utf8');assert.match(wiring,/installModelCommand\(\{root,home\}\)/);
+});
+test('an installed wrapper honors an explicit different workspace and rejects duplicate selectors',t=>{
+ const first=fixture(t),second=fixture(t);fs.unlinkSync(path.join(second.state,'assistant.json'));fs.writeFileSync(path.join(second.state,'provider.json'),JSON.stringify({url:'https://owner.example/v1/chat/completions',key:'test-only',model:'second-workspace'}));
+ const {launcher}=installModelCommand({root:first.root,home:first.home});
+ const metadata=JSON.parse(execFileSync(process.execPath,[launcher,'--workspace',second.root,'--check'],{env:{...process.env,GODSPEED_MODEL_WORKSPACE:first.root},encoding:'utf8'}));assert.equal(metadata.model,'second-workspace');
+ assert.throws(()=>execFileSync(process.execPath,[launcher,'--workspace',second.root,'--workspace',first.root,'--check'],{stdio:'pipe'}));
 });

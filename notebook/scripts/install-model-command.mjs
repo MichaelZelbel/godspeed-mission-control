@@ -10,7 +10,7 @@ export function installModelCommand({root,home,node=process.execPath,platform=pr
  const state=path.join(root,'.godspeed'),bin=path.join(home,'bin');fs.mkdirSync(state,{recursive:true});fs.mkdirSync(bin,{recursive:true});
  const launcher=path.join(state,'model.mjs');fs.writeFileSync(launcher,'import '+JSON.stringify(pathToFileURL(script).href)+';\n',{mode:0o600});
  const quote=value=>"'"+String(value).replaceAll('\\','/').replaceAll("'","'\\''")+"'";
- const shell=path.join(bin,'godspeed-model');fs.writeFileSync(shell,'#!/bin/sh\nexec '+quote(node)+' '+quote(launcher)+' --workspace '+quote(root)+' "$@"\n',{mode:0o700});if(platform!=='win32')fs.chmodSync(shell,0o700);
- if(platform==='win32')fs.writeFileSync(shell+'.cmd',commandFile(at=>'"'+at(node)+'" "'+at(launcher)+'" --workspace "'+at(root)+'" %*\r\n',{folder:bin}));
+ const shell=path.join(bin,'godspeed-model');fs.writeFileSync(shell,'#!/bin/sh\nGODSPEED_MODEL_WORKSPACE='+quote(root)+'; export GODSPEED_MODEL_WORKSPACE\nexec '+quote(node)+' '+quote(launcher)+' "$@"\n',{mode:0o700});if(platform!=='win32')fs.chmodSync(shell,0o700);
+ if(platform==='win32')fs.writeFileSync(shell+'.cmd',commandFile(at=>'set "GODSPEED_MODEL_WORKSPACE='+at(root)+'"\r\n"'+at(node)+'" "'+at(launcher)+'" %*\r\n',{folder:bin}));
  return {launcher,command:shell};
 }

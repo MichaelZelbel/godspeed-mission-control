@@ -3,6 +3,7 @@ import {addonModel} from '../core/addon-model.mjs';
 
 try{
  const args=process.argv.slice(2),at=args.indexOf('--workspace');
+ if(args.filter(arg=>arg==='--workspace').length>1)throw Error('Choose exactly one Godspeed workspace');
  const root=at>=0?args[at+1]:process.env.GODSPEED_MODEL_WORKSPACE||process.env.GODSPEED_WORKSPACE||process.env.GODSPEED_ROOT||process.env.GODSPEED_DIR;
  if(!root||args.some((arg,i)=>arg!=='--workspace'&&!(at>=0&&i===at+1)&&!['--check','--describe'].includes(arg)))throw Error('Use godspeed-model --workspace FOLDER [--check]');
  const describe=args.includes('--check')||args.includes('--describe');let text='';
