@@ -25,4 +25,10 @@ On the maintainer's PC (`C:\godspeed`, live notebook running) the copy took 1.8 
 
 The EXE and manifest were built with `docs/full-version/release-beta-2026-10-19/build-exe.sh` (Node 22.19.0, Windows PowerShell 5.1, Inno Setup 6); the manifest names beta.4, the source and bootstrap above, and 5,540 checked files. The source archive is `git archive --prefix=godspeed-mission-control/` of the reviewed source. The root Unix installer and its packaged copy have identical bytes and pin product, starter and notebook hook to that source.
 
-Public release, installed-server checks and anonymous download readback are added after verification.
+## Publication
+
+Published on 21 October 2026 at Michael's explicit approval ("Yes, please publish Beta 4"). GitHub release 419578905, [godspeed-v2-integrated-2026-10-21-1](https://github.com/MichaelZelbel/godspeed-mission-control/releases/tag/godspeed-v2-integrated-2026-10-21-1), is Latest and targets `61f7d950abb3513d73fc7a03e63e41d13e8c5929`; `main` was fast-forwarded to `aa4573d5e61f7c9515b3907813a949b44476f3c5` (server pins `330c67f6`, Hostinger link). The website branch `guide/update-copies` (`b0dfbd4`) was merged and deployed through Lovable (deployment 46a58aa4-ea69-4142-8aba-137a21c5a881).
+
+Anonymous readback with `verify-public.sh` ended ALL PASS: releases/latest names the tag; all five files through the latest and the tag addresses hash-check and SHA256SUMS verifies them; the manifest names 2.0.0-beta.4 and source `5a7bd7c`; godspeedmissioncontrol.com/windows and teachitonce.com/windows give the beta.4 EXE; godspeedmissioncontrol.com/install and main's raw install-godspeed.sh give the beta.4 installer; the ghcr.io `v2-sha-5a7bd7c` image is `sha256:f5f6a2d30a7511c14a9725582d924d88dbad00431b8065e7e954ad0c9a710c11` and main's three server Compose files and the pin commit's one-click file select it; the guide pages install-linux and back-up show the new release and the retention text.
+
+Real install before publication: on the maintainer's Windows desktop PC (X30) the build carrying these fixes updated an existing beta.3 install in 2 minutes 14 seconds (setup result ok), the notebook answered about 20 seconds after it started, the update copy was 82 MB, and the earlier copy and its ref were removed. That build differs from the published EXE only by its version label.
