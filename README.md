@@ -8,11 +8,13 @@ A new release comes out most weeks. I write about what my AI does for me and wha
 
 Version 2 is the current edition, here on `main`. Its installers set up a new, separate folder. They do not move an existing version 1 Godspeed folder or your Menerio account.
 
-## Coming in the next release: a small copy before each update
+## New in 2.0.0-beta.4 (21 October 2026): a small copy before each update
 
 Before every update the installer saves a copy of your notebook, so you can go back if the update goes wrong. Until now that copy took your whole folder, also your work folder with its recordings and downloads. On a grown mission control it was gigabytes and many minutes, and an update refused to start when the disk had no room for it. Old copies also piled up.
 
 Now the copy holds only what an update can change, never your work folder. When your folder is a Git repository, it holds only what Git does not already keep, and Git keeps the rest. On one computer it took 85 MB and a few seconds instead of 8.33 GB and sixteen minutes. Once an update has worked, its copy stays as your way back and every older one is removed, also the full copies earlier versions left behind. Importing from Menerio makes the same small copy first, and only the newest import's copy stays.
+
+The update itself is faster too: it reads your notebook once instead of five times. On Windows it waits for a slow first start instead of calling it failed; on one computer the notebook needed two minutes after an update, and the setup used to give up after one. Updating keeps your folder, notes and settings.
 
 ## New in 2.0.0-beta.3 (20 October 2026)
 
@@ -157,11 +159,11 @@ The notebook no longer calls every installation a test installation. Its unavail
 
 ## Windows
 
-[Download GodspeedSetup.exe](https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-20-2/GodspeedSetup.exe), then run it.
+[Download GodspeedSetup.exe](https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-21-1/GodspeedSetup.exe), then run it.
 
 This uses Godspeed's original setup wizard and shared installer, then connects the integrated notebook. On a PC that already has Godspeed, the wizard selects a separate installation by default. The notebook opens at [http://127.0.0.1:47831/dashboard](http://127.0.0.1:47831/dashboard). Connect your own model account in Settings to use the assistant. The installer is unsigned.
 
-The executable is also [committed in this repository](installers/GodspeedSetup.exe). The [download page](https://github.com/MichaelZelbel/godspeed-mission-control/releases/tag/godspeed-v2-integrated-2026-10-20-2) lists the same file and its checksums.
+The executable is also [committed in this repository](installers/GodspeedSetup.exe). The [download page](https://github.com/MichaelZelbel/godspeed-mission-control/releases/tag/godspeed-v2-integrated-2026-10-21-1) lists the same file and its checksums.
 
 ## Linux or Mac
 
@@ -170,8 +172,8 @@ This uses Godspeed's shared native installer for Git, Node.js, Hermes and the Go
 Download this release's installer, check that it is the published file, and run it:
 
 ```bash
-curl -fsSLO https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-20-2/install-godspeed.sh
-echo "144f1647244a98768bf0b6fc1c2666b71eb1b82d4be6b8a1b421d7ae436e57d4  install-godspeed.sh" | sha256sum -c - && bash install-godspeed.sh
+curl -fsSLO https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-21-1/install-godspeed.sh
+echo "68560ed5c2ec7547c3a76648c552439f9756a0fdf2366df9f07a208fb6ae0a1b  install-godspeed.sh" | sha256sum -c - && bash install-godspeed.sh
 ```
 
 On a Mac, write `shasum -a 256 -c -` where it says `sha256sum -c -`. The check refuses any other file, and the installer names one exact version of the notebook, so every reader of this release gets the same notebook.
