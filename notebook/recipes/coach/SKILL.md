@@ -17,6 +17,13 @@ coming talk), `prep/<date>.md` (a talk prepared ahead, when a job writes one), `
 The `godspeed-coach` command reads and writes all of it. Never write a talk record or a habit day
 line by hand when a command does it.
 
+An opening, what was prepared or the person's words that run over more than one line go in a
+file, never on the command line: write them with your file tool, exactly as they are, to a file of
+their own somewhere temporary (never inside `coach/`), and pass `--opening-file <file>` in place of
+`--opening`, `--prepared-file <file>` in place of `--prepared`, or `--words-file <file>` in place
+of `--words`. No shell can cut or change what is in a file. If the command answers that it reached godspeed-coach cut short, nothing was saved: run it
+again with the file.
+
 ## Opening a talk
 
 The talk job wakes you with a brief that starts `COACH TALK DUE: <area>`. The brief holds the

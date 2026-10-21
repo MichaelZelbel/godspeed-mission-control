@@ -62,6 +62,7 @@
     "watches": ["notebook/core/procedures.mjs", "notebook/core/watch-commands.mjs", "notebook/recipes/watch/**", "starter-godspeed/skills/research-watch/**"],
     "weekly-review": ["notebook/ui/src/pages/WeeklyReview.tsx", "starter-godspeed/skills/weekly-review/**"],
     "where-your-data-lives": ["notebook/server/web-auth.mjs", "notebook/ui/src/components/settings/AiVisibilitySettings.tsx", "tools/mc-mail-imap.js"],
+    "wingman": ["notebook/bin/godspeed-model.mjs"],
     "write-a-skill": ["notebook/core/conversation-state.mjs", "skills/craft-skill-interview.md", "skills/plan-my-day.md", "skills/skill-test-checklist.md"]
   }
 }
