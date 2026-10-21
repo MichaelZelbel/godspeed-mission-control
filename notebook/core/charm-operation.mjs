@@ -12,6 +12,7 @@ import {loadSettings} from '../../third-party/addons/godspeed-charm/lib/settings
 import {now as clockNow} from '../../third-party/addons/godspeed-charm/lib/clock.mjs';
 import {contextBlock} from '../../third-party/addons/godspeed-charm/lib/context.mjs';
 import {pickLanguage} from '../../third-party/addons/godspeed-charm/lib/texts.mjs';
+import {briefText} from '../../third-party/addons/godspeed-charm/lib/brief.mjs';
 
 export const CHARM_ACTIONS=['start','status','asked','answer','slip','stop'];
 // This chat's conversation as the challenge names it: "notebook:<the chat's id>" (the notebook's own
@@ -45,6 +46,18 @@ export function charmNow(reader){
  const settings=loadSettings(reader.root),today=localDate(clockNow(),settings.timezone);
  const events=tracker?eventsFromItems(reader.list('collection_items').filter(i=>i.collection_id===tracker.id)):[];
  return {state:charmState(events,today),settings,today,tracker};
+}
+// One charm tracker as the Trackers shelf shows it (spec 2026-10-21, "Notebook card"): its count over
+// its own rows on the person's local day, and the morning brief's own line for today (the finish
+// line on the finish day). Read only: a finish that is due is said and left for a command to settle
+// (R10). A record that cannot be counted, a broken row or settings file, is {charm:null,brief:null},
+// and the tracker still lists.
+export function charmCard(reader,tracker,items=reader.list('collection_items')){
+ try{
+  const settings=loadSettings(reader.root),today=localDate(clockNow(),settings.timezone);
+  const charm=charmState(eventsFromItems(items.filter(i=>i.collection_id===tracker.id)),today);
+  return {charm,brief:briefText(charm,today,pickLanguage(settings.language))||null};
+ }catch{return {charm:null,brief:null};}
 }
 // The [godspeed-charm] block for this chat, said as charm operations (the chat has no shell);
 // null when no challenge runs and it is not the finish day.

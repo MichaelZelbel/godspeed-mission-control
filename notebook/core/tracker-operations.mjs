@@ -9,6 +9,7 @@ import {cycleOperation,cycleCreate} from './cycle-operations.mjs';
 import {CYCLE_WORDS} from './cycle.mjs';
 import {foodOperation,foodCreate,foodSummary} from './food-operations.mjs';
 import {FOOD_WORDS} from './food.mjs';
+import {charmCard} from './charm-operation.mjs';
 export const TRACKER_OPERATIONS=['tracker-hold','tracker-create','track','tracker-correct','tracker-list','tracker-talk','habit-progress'];
 const tz=store=>store.get('settings','installation')?.timezone||'UTC';
 // The coaching talk that reads a tracker, by its area's name (coach/<area>/: health, work,
@@ -193,12 +194,16 @@ export function trackerOperation(domains,raw){
   const visible=new Set(visibleRows(query,'collections').map(r=>r.id));
   const items=store.list('collection_items'),list=trackers(store).filter(c=>visible.has(c.id)).map(c=>{
    const all=entries(store,c,items),made=[...all].sort((a,b)=>String(a.updated_at).localeCompare(String(b.updated_at))||String(a.created_at).localeCompare(String(b.created_at))).at(-1),todays=all.filter(i=>String(i.data?.when).slice(0,10)===today).at(-1);
-   return {id:c.id,name:c.name,names:c.tracker.names||[c.name],cadence:c.tracker.cadence==='any'?'any':'daily',talks:talksOf(c.tracker),specialist:c.tracker.specialist||null,status:trackerStatus(store,c,now,all),hash:c._hash,
+   // The Charm Challenge adds its count and its brief line, read only (charm-operation.mjs charmCard);
+   // a running challenge is never resting, however long ago its last row was written.
+   const charm=c.tracker.specialist==='charm'?charmCard(store,c,items):null;
+   return {id:c.id,name:c.name,names:c.tracker.names||[c.name],cadence:c.tracker.cadence==='any'?'any':'daily',talks:talksOf(c.tracker),specialist:c.tracker.specialist||null,status:charm?.charm?.running?'active':trackerStatus(store,c,now,all),hash:c._hash,
     fields:own(c).map(({key,label,type,unit,options,min,max})=>({key,label,type,...(unit?{unit}:{}),...(options?{options}:{}),...(min!==undefined?{min}:{}),...(max!==undefined?{max}:{})})),
     last:made?{id:made.id,when:made.data?.when,data:made.data,hash:made._hash}:null,today:todays?{id:todays.id,hash:todays._hash}:null,
     ...(from?{recent:all.filter(i=>String(i.data?.when).slice(0,10)>=from).map(i=>({id:i.id,when:i.data?.when,data:i.data,hash:i._hash}))}:{}),
     // The food tracker adds its days' totals and the target's last change, the one line its talk hears.
-    ...(c.tracker.specialist==='food'?{food:foodSummary(domains,c,{from,today})}:{})};
+    ...(c.tracker.specialist==='food'?{food:foodSummary(domains,c,{from,today})}:{}),
+    ...(charm?{charm:charm.charm,brief:charm.brief}:{})};
   }).concat(habitTrackerList(store,{today,from,now,zone,calendarDays:input.calendarDays===undefined?14:Number(input.calendarDays)})).filter(t=>!talk||t.talks.includes(talk)&&t.status==='active');
   const pending=store.list('tracker_proposals').filter(p=>proposalState(store,p,now)==='pending').map(p=>({id:p.id,name:p.name,created_at:p.created_at,question:holdQuestion(p,today)}));
   return {trackers:list,pending};
