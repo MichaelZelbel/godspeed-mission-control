@@ -146,6 +146,8 @@ export default function Notes() {
   const [searchType, setSearchType] = useState<SearchMode>("semantic");
   const [searchScope, setSearchScope] = useState<SearchScope>("all");
   const [semanticResults, setSemanticResults] = useState<SemanticSearchResult[] | null>(null);
+  const [keywordResults, setKeywordResults] = useState<SemanticSearchResult[] | null>(null);
+  const searchControllerRef = useRef<AbortController | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [topicFilter, setTopicFilter] = useState<string | null>(null);
   const [personFilter, setPersonFilter] = useState<string | null>(null);
@@ -605,17 +607,22 @@ export default function Notes() {
   // click handler still sees this render's searchType ("exact"), so without
   // it switching back to Smart ran only the keyword search.
   const handleSearch = useCallback(
-    (q: string, type: SearchMode = searchType) => {
+    (q: string, type: SearchMode = searchType, scope: SearchScope = searchScope) => {
+      searchControllerRef.current?.abort();
+      const controller=new AbortController();searchControllerRef.current=controller;
+      if(debounceRef.current)clearTimeout(debounceRef.current);
       setSearchQuery(q);
       setSemanticResults(null);
+      setKeywordResults(null);
       if (!q.trim()) return;
-      ilikeSearch.mutate(q);
+      const showWords=(data:SemanticSearchResult[])=>{if(!controller.signal.aborted)setKeywordResults(data);};
+      ilikeSearch.mutate({query:q,signal:controller.signal,complete:type==='exact',onWords:showWords},{onSuccess:showWords});
       if (type === "semantic") {
         if (debounceRef.current) clearTimeout(debounceRef.current);
         debounceRef.current = setTimeout(() => {
           semanticSearch.mutate(
-            { query: q, scope: searchScope },
-            { onSuccess: (data) => setSemanticResults(data.results as SemanticSearchResult[]) }
+            { query: q, scope, signal:controller.signal },
+            { onSuccess: (data) => {if(!controller.signal.aborted)setSemanticResults(data.results as SemanticSearchResult[]);} }
           );
         }, 300);
       }
@@ -624,7 +631,7 @@ export default function Notes() {
   );
 
   useEffect(() => {
-    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current);searchControllerRef.current?.abort(); };
   }, []);
 
   // ?q=... opens the search with that text (the topic chips on an analysed
@@ -641,9 +648,9 @@ export default function Notes() {
 
   const searchResults: SemanticSearchResult[] | null = useMemo(() => {
     if (!searchMode || !searchQuery.trim()) return null;
-    if (searchType === "exact") return ilikeSearch.data || null;
-    return semanticResults || ilikeSearch.data || null;
-  }, [searchMode, searchQuery, searchType, semanticResults, ilikeSearch.data]);
+    if (searchType === "exact") return keywordResults;
+    return semanticResults || keywordResults;
+  }, [searchMode, searchQuery, searchType, semanticResults, keywordResults]);
 
   const currentNotes = useMemo(() => {
     let notes: (Note | SemanticSearchResult)[];
@@ -722,7 +729,7 @@ export default function Notes() {
       whole(trashNotes.find((n) => n.id === selectedId)) ||
       whole(favNotes.find((n) => n.id === selectedId)) ||
       // Also check current search results (semantic/ilike may return notes not yet in cache)
-      (searchResults ?? []).find((n) => n.id === selectedId) ||
+      whole((searchResults ?? []).find((n) => n.id === selectedId)) ||
       null;
     if (!selectedNoteRow) return fallback;
     if (!fallback) return selectedNoteRow;
@@ -761,9 +768,12 @@ export default function Notes() {
   
 
   const exitSearch = () => {
+    searchControllerRef.current?.abort();
+    if(debounceRef.current)clearTimeout(debounceRef.current);
     setSearchMode(false);
     setSearchQuery("");
     setSemanticResults(null);
+    setKeywordResults(null);
   };
 
   const clearAllFilters = () => {
@@ -1177,13 +1187,7 @@ export default function Notes() {
                       className="h-6 px-2 text-[10px] gap-1"
                       onClick={() => {
                         setSearchScope(s);
-                        setSemanticResults(null);
-                        if (searchQuery.trim()) {
-                          semanticSearch.mutate(
-                            { query: searchQuery, scope: s },
-                            { onSuccess: (data) => setSemanticResults(data.results as SemanticSearchResult[]) }
-                          );
-                        }
+                        handleSearch(searchQuery,searchType,s);
                       }}
                     >
                       {s === "media" && <Image className="h-3 w-3" />}
