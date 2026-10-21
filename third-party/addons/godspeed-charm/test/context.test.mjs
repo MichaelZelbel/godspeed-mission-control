@@ -196,7 +196,8 @@ test("the notebook channel: the same steps as charm operations, never a shell co
   const finish = contextBlock(charmState([ev("start", "2026-10-21")], "2026-11-11"), S, { conversation: "notebook:c1", today: "2026-11-11", channel: "notebook" });
   all.push(finish);
   assert.match(finish, /Charm Challenge done: 21 days/);
-  assert.ok(finish.includes('if they want one: charm {action:"start", words:<their message>}'), finish);
+  // The notebook starts only on a message that names the challenge, so the offer says how to ask.
+  assert.ok(finish.includes('when they ask for one by name ("start the Charm Challenge"): charm {action:"start", words:<their message>}'), finish);
   // Without a conversation id: no question can be recorded, only the words reset.
   const bare = block(running(), { channel: "notebook" });
   all.push(bare);

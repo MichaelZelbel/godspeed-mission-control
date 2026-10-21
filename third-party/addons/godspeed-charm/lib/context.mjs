@@ -140,7 +140,7 @@ function finishBlock(state, lang, conv, stickers, notebook) {
   const L = [
     `[godspeed-charm] The person finished the Charm Challenge today: ${LENGTH} days in a row.`,
     "Once in this conversation (skip this if you already did it here): at the start of your reply, in the language of their message, " +
-      `say ${said(lang, (l) => T[l].finish(state))} and offer a new round; ${notebook ? `if they want one: ${NOTEBOOK.start}` : `if they want one, run ${startCommand(conv)}`}.`,
+      `say ${said(lang, (l) => T[l].finish(state))} and offer a new round; ${notebook ? `when they ask for one by name ("start the Charm Challenge"): ${NOTEBOOK.start}` : `if they want one, run ${startCommand(conv)}`}.`,
   ];
   if (stickers) L.push("End that reply with the tag [[sticker:party]]: the hermes-telegram-stickers plugin turns it into one celebrating sticker.");
   L.push("Then answer their message as usual. The challenge is over: don't ask about slips.", notebook ? NOTEBOOK.replies : COMMANDS);
