@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { atomic, hash, retrying, Store } from './records/store.mjs';
 import {durable,durableRoots,durableFiles,recordsFolder,legacyRecordsFolder} from './file-policy.mjs';
+import {asWholeBackup} from './update-copy.mjs';
 const reserve=256*1024*1024;
 function existingParent(target){
   let current=path.resolve(target);
@@ -9,7 +10,7 @@ function existingParent(target){
   if(!fs.statSync(current).isDirectory())throw Error('Archive storage location must be a directory');
   return fs.realpathSync(current);
 }
-function requireSpace(destination,bytes,count,operation){
+export function requireSpace(destination,bytes,count,operation){
   const filesystem=existingParent(destination),capacity=fs.statfsSync(filesystem,{bigint:true});
   // Logical bytes count each copied pathname, including hard links. Transactions
   // retain staged bytes while publishing a second copy; allow metadata and writes.
@@ -30,7 +31,9 @@ export function readBackupManifest(source){
   if(!fs.existsSync(source)||!fs.statSync(source).isDirectory())throw Error('There is no backup folder at '+source+'. Name the folder a backup was saved in');
   if(!fs.existsSync(file))throw Error('The folder '+source+' is not a backup: it has no backup.json. Name the folder a backup was saved in, such as one in .godspeed/backups');
   let manifest;try{manifest=JSON.parse(fs.readFileSync(file,'utf8').replace(/^\uFEFF/,''));}catch{throw Error('The backup at '+source+' is damaged: its backup.json cannot be read');}
-  if(manifest?.format!==1||!Array.isArray(manifest.files))throw Error('Backup integrity manifest required');
+  // Format 2 is a copy made before an update in a folder with Git (update-copy.mjs): it holds
+  // only what that commit does not, so it is restored through the repository.
+  if(![1,2].includes(manifest?.format)||!Array.isArray(manifest.files)||manifest.format===2&&!(manifest.kind==='update-copy'&&/^[0-9a-f]{40,64}$/.test(manifest.git?.commit||'')))throw Error('Backup integrity manifest required');
   return manifest;
 }
 function restoreSpace(source,destination){
@@ -78,7 +81,8 @@ export function backup(store,mediaRoot,destination){
   }catch(error){try{fs.rmSync(partial,{recursive:true,force:true});}catch{}throw error;}
   return destination;
 }
-export function restore(store,mediaRoot,source,{deviceConfig=false}={}){
+export function restore(store,mediaRoot,source,{deviceConfig=false,repository}={}){
+  if(readBackupManifest(source).format===2)return asWholeBackup(source,store.state,whole=>restore(store,mediaRoot,whole,{deviceConfig}),{repository});
   const manifest=readBackupManifest(source);
   for(const entry of manifest.files){
     const target=path.resolve(source,String(entry?.path));
@@ -97,7 +101,8 @@ export function restore(store,mediaRoot,source,{deviceConfig=false}={}){
   if(deviceConfig&&fs.existsSync(path.join(source,'device-config')))for(const name of fs.readdirSync(path.join(source,'device-config')))fs.cpSync(path.join(source,'device-config',name),path.join(store.state,name),{recursive:true});
   return count;
 }
-export function restoreSeparateCopy(store,source){
+export function restoreSeparateCopy(store,source,{repository,named=source}={}){
+  if(readBackupManifest(source).format===2)return asWholeBackup(source,store.state,whole=>restoreSeparateCopy(store,whole,{named:source}),{repository});
   const destination=path.join(store.state,'restored-copies',Date.now()+'-'+hash(source+Math.random()).slice(0,12)),workspace=path.join(destination,'workspace'),media=path.join(destination,'media');
   restoreSpace(source,destination);
   const target=new Store(workspace,{device:store.device}),records=restore(target,media,source),manifest=readBackupManifest(source),as=restoredName(source);
@@ -111,6 +116,6 @@ export function restoreSeparateCopy(store,source){
   // The restored copy matches the backup byte for byte (verified above); any
   // reference or duplicate-uid problem it carried is reported here, not a reason
   // to refuse the restore (7 October 2026).
-  const result={verified:true,workspace,media,records,problems:target.problems.map(p=>({file:p.file||null,error:p.error})),compared_files:compared,excluded_files:excluded,source,at:new Date().toISOString()};
+  const result={verified:true,workspace,media,records,problems:target.problems.map(p=>({file:p.file||null,error:p.error})),compared_files:compared,excluded_files:excluded,source:named,at:new Date().toISOString()};
   atomic(path.join(destination,'verification.json'),JSON.stringify(result,null,2));return result;
 }

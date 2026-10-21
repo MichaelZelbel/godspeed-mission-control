@@ -21,13 +21,13 @@ import {rememberFile} from '../core/native-personal.mjs';
 // A refusal reads as one plain sentence, not a program's stack trace (GODSPEED_DEBUG=1 shows that too).
 for(const event of ['uncaughtException','unhandledRejection'])process.on(event,error=>{process.stderr.write('Error: '+(error?.message||String(error))+'\n'+(process.env.GODSPEED_DEBUG?String(error?.stack||'')+'\n':''));process.exit(1);});
 const args=process.argv.slice(2),root=process.env.GODSPEED_WORKSPACE;
-// After an update that worked, the installers keep the newest three of the copies they made
-// before updating and remove older ones (core/upgrade-copies.mjs). It reads only that folder, so
-// it needs no workspace and never opens the notebook the new version is running.
+// After an update that worked, the installers keep the copy they made before it and remove older
+// ones (core/upgrade-copies.mjs). It reads only that folder (and, for a copy made with Git, removes
+// the ref that copy kept), so it needs no workspace and never opens the notebook the new version runs.
 if(args[0]==='prune-backups'){
  const option=name=>{const at=args.indexOf(name);return at>1?args[at+1]:undefined;};
  const folder=args[1],made=option('--made'),keep=option('--keep');
- if(!folder||folder.startsWith('--')||!made)throw Error('prune-backups FOLDER --made COPY [--keep 3]');
+ if(!folder||folder.startsWith('--')||!made)throw Error('prune-backups FOLDER --made COPY [--keep 1]');
  const {pruneUpgradeCopies}=await import('../core/upgrade-copies.mjs');
  const outcome=pruneUpgradeCopies(folder,{made,...(keep===undefined?{}:{keep:Number(keep)})});
  console.log(JSON.stringify(outcome,null,2));process.exit(outcome.failed.length?1:0);
@@ -90,8 +90,19 @@ else if(command==='record'){
 // What is no longer true ends: the daily closing, by hand (core/fact-closing.mjs).
 else if(command==='world'&&verb==='close')result=await (await import('../core/fact-closing.mjs')).closeFacts({store,query,dryRun:args.includes('--dry-run')});
 else if(command==='world'&&verb==='event')result=store.save('moments',JSON.parse(fs.readFileSync(rest[0],'utf8')));
-else if(command==='backup'){if(!verb)throw new Error('Name a new folder for the backup: backup FOLDER');result=backup(store,media,path.resolve(verb));}
-else if(command==='restore'){if(!verb)throw new Error('Name the backup folder to restore: restore FOLDER');result=restore(store,media,path.resolve(verb));}
+// --before-update: what the installers ask for before they update (core/update-copy.mjs): only what
+// an update can change, and in a folder with Git only what its commit does not already hold. An
+// older notebook ignores the word and makes its whole backup, so one call serves every version.
+else if(command==='backup'){
+  if(!verb||verb.startsWith('--'))throw new Error('Name a new folder for the backup: backup FOLDER [--before-update]');
+  result=rest.includes('--before-update')?(await import('../core/update-copy.mjs')).makeUpdateCopy(store,media,path.resolve(verb)):backup(store,media,path.resolve(verb));
+}
+else if(command==='restore'){
+  if(!verb||verb.startsWith('--'))throw new Error('Name the backup folder to restore: restore FOLDER [--repository PATH]');
+  const at=rest.indexOf('--repository'),repository=at>=0?rest[at+1]:undefined;
+  if(at>=0&&!repository)throw new Error('Name the repository after --repository');
+  result=restore(store,media,path.resolve(verb),{repository});
+}
 else if(command==='import'){
   if(!verb)throw new Error('Name the export file to import: import FILE');
   if(!fs.existsSync(verb))throw new Error('There is no file at '+path.resolve(verb));
@@ -121,5 +132,5 @@ else if(command==='convert-notebook'){
   const {renamed=[],rewritten=[],problems,...summary}=outcome;
   result={...summary,renamed:renamed.length,rewritten:rewritten.length,...(problems?{problems}:{}),first_renames:renamed.slice(0,10).map(r=>r.from+' -> '+r.to),full_list:list};
 }
-else throw new Error('Commands: init, record list/get/save/merge/remove/display-name, memory search/lookup, world claim/event/close [--dry-run], backup FOLDER, prune-backups FOLDER --made COPY [--keep 3], restore FOLDER, import FILE, export [FILE], validate, sync folder [PATH...], menerio chunks ARCHIVE_SOURCE_DIR, convert-notebook [--dry-run]');
+else throw new Error('Commands: init, record list/get/save/merge/remove/display-name, memory search/lookup, world claim/event/close [--dry-run], backup FOLDER [--before-update], prune-backups FOLDER --made COPY [--keep 1], restore FOLDER [--repository PATH], import FILE, export [FILE], validate, sync folder [PATH...], menerio chunks ARCHIVE_SOURCE_DIR, convert-notebook [--dry-run]');
 console.log(JSON.stringify(result,null,2));

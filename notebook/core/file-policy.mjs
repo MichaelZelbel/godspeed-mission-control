@@ -16,6 +16,20 @@ export const durableFiles=['AGENTS.md','CLAUDE.md','README.md','procedures.md','
 // and then failed.
 export const devicePrivatePaths=['assistant-state/history'];
 export function devicePrivate(name){const value=String(name).split('\\').join('/');return devicePrivatePaths.some(p=>value===p||value.startsWith(p+'/'));}
+// What an update can change, and so all that the copy an installer makes before one has to hold
+// (core/update-copy.mjs): every durable path but work/, and never the assistant's undo archive.
+// work/ is the owner's work in progress and what it produced (recordings, installers, downloads,
+// build copies); no update writes there (test/update-copy.test.mjs runs the real init and holds
+// it to that), and it is where a grown mission control keeps its gigabytes: on one, 6.9 of the
+// 8.3 GB a copy before each update took until 21 October 2026, most of it in no Git history.
+export const updateUntouchedRoots=['work'];
+export const updateCopyRoots=[...durableRoots.filter(root=>!updateUntouchedRoots.includes(root)),'conflicts'];
+export const updateCopyFiles=durableFiles;
+export function inUpdateCopy(name){
+  const value=String(name).split('\\').join('/');
+  if(devicePrivate(value)||updateUntouchedRoots.some(root=>value===root||value.startsWith(root+'/')))return false;
+  return durable(value)||/^conflicts\/[\w-]+\.json$/.test(value);
+}
 // durable: may be written through the transaction writer and belongs in this
 // machine's own backups. shared: also leaves this machine, into the knowledge
 // repository, the search index and the AI's context. The archive is the first
