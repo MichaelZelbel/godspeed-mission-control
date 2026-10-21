@@ -42,16 +42,32 @@ const COMMANDS =
 // Starting while it runs asks whether to start over, a question that belongs to this conversation.
 const startCommand = (conv) => `godspeed-charm start ${conv ? `--conversation ${quoted(conv)} ` : ""}--words "<their words>"`;
 
-// contextBlock(state, settings, {conversation, scheduled, today, language, stickers}): "" when
-// scheduled, or when no challenge runs and it is not the finish day. `conversation` names where
+// The notebook's own chat has no shell: there the model returns `charm` operations, the notebook
+// runs the command for it, names the conversation itself and adds each reply to the answer. The
+// question after a slip is added at the end of the model's own reply, so the model never writes it.
+const op = (fields) => `charm {${fields}, words:<their message>}`;
+const NOTEBOOK = {
+  asked: op('action:"asked"'),
+  slip: op('action:"slip"'),
+  start: op('action:"start"'),
+  yes: op('action:"answer", answer:"yes"'),
+  no: op('action:"answer", answer:"no"'),
+  replies: "The notebook adds each charm operation's reply to your answer itself, in the language of their message: never write those sentences yourself.",
+};
+
+// contextBlock(state, settings, {conversation, scheduled, today, language, stickers, channel}): ""
+// when scheduled, or when no challenge runs and it is not the finish day. `conversation` names where
 // this message came from ("telegram:<chat>", "claude:<session>", "notebook:<id>"): only there does
 // a bare yes or no answer the open question. `stickers` is true only when the caller knows the
-// hermes-telegram-stickers plugin will turn a tag into a sticker (R13).
-export function contextBlock(state, settings = {}, { conversation = "", scheduled = false, today, language, stickers = false } = {}) {
+// hermes-telegram-stickers plugin will turn a tag into a sticker (R13). `channel` is "shell" (the
+// default: the steps are godspeed-charm commands) or "notebook" (the notebook's own chat, where
+// the same steps are charm operations).
+export function contextBlock(state, settings = {}, { conversation = "", scheduled = false, today, language, stickers = false, channel = "shell" } = {}) {
   if (scheduled || !state) return "";
   const lang = pickLanguage(language, settings?.language);
   const conv = typeof conversation === "string" ? conversation.trim() : "";
-  if (isFinishDay(state, today)) return finishBlock(state, lang, conv, stickers === true);
+  const notebook = channel === "notebook";
+  if (isFinishDay(state, today)) return finishBlock(state, lang, conv, stickers === true, notebook);
   if (!state.running) return "";
 
   const L = [
@@ -60,7 +76,20 @@ export function contextBlock(state, settings = {}, { conversation = "", schedule
   ];
   if (state.resetToday) {
     L.push("A reset already happened today: don't ask about slips today.");
-    L.push('If they report a slip themselves ("charm slip", "I yelled at Copilot"): run godspeed-charm slip --words "<their words>" and use its reply.');
+    L.push(notebook
+      ? `If they report a slip themselves: a plain "charm slip" or "reset my Charm Challenge" is ${NOTEBOOK.slip}; a story of venting at an AI changes nothing today, so it needs no charm operation.`
+      : 'If they report a slip themselves ("charm slip", "I yelled at Copilot"): run godspeed-charm slip --words "<their words>" and use its reply.');
+  } else if (conv && notebook) {
+    L.push(SLIP, ONLY_AI);
+    L.push(
+      `If this message is a slip, or might be one: first do everything it asked, then add the operation ${NOTEBOOK.asked}. ` +
+        `The notebook ends your reply with the one question itself, in the language of their message, so never write it yourself: ` +
+        `${said(lang, (l) => T[l].question())}. When unsure, ask. ${KIND}`,
+    );
+    L.push(
+      `If they report a slip themselves, here or about another AI: a plain "charm slip" or "reset my Charm Challenge" is ${NOTEBOOK.slip}, ` +
+        `which goes back to ${LENGTH} at once; a story ("I yelled at Copilot") is ${NOTEBOOK.asked}.`,
+    );
   } else if (conv) {
     L.push(SLIP, ONLY_AI);
     L.push(
@@ -80,24 +109,26 @@ export function contextBlock(state, settings = {}, { conversation = "", schedule
         `in the language of their message: ${said(lang, (l) => NO_ID[l]())}. When unsure, say it. ${KIND}`,
     );
     L.push('This conversation has no id here, so no question can be recorded and a bare yes or no cannot answer one: the person resets only in words ("charm slip").');
-    L.push(
-      'If they report a slip themselves ("charm slip", "reset my Charm Challenge", "I yelled at Copilot"): run godspeed-charm slip --words "<their words>". ' +
-        "When it refuses, end your reply with the sentence above.",
-    );
+    L.push(notebook
+      ? `If they say "charm slip" or "reset my Charm Challenge": ${NOTEBOOK.slip}. For a story of venting at an AI, end your reply with the sentence above.`
+      : 'If they report a slip themselves ("charm slip", "reset my Charm Challenge", "I yelled at Copilot"): run godspeed-charm slip --words "<their words>". ' +
+        "When it refuses, end your reply with the sentence above.");
   }
-  L.push(`If they ask to start the Charm Challenge while it runs: run ${startCommand(conv)}.`);
+  L.push(`If they ask to start the Charm Challenge while it runs: ${notebook ? NOTEBOOK.start : `run ${startCommand(conv)}`}.`);
   const open = conv ? state.open?.find((q) => q.conversation === conv) : null;
   if (open) {
     const words = shortWords(open.words);
     L.push(
       "Open question in this conversation: " +
         (words ? `after their words ${quoted(words)} earlier today, you asked whether to go back to ${LENGTH}. ` : `earlier today you asked whether to go back to ${LENGTH}. `) +
-        `If this message answers it with a yes ("yes", "ja", "reset", "fair"), run godspeed-charm answer yes --conversation ${quoted(conv)} --words "<their words>"; ` +
-        `with a no ("no", "nein", "that didn't count"), run godspeed-charm answer no --conversation ${quoted(conv)} --words "<their words>". ` +
+        (notebook
+          ? `If this message answers it with a yes ("yes", "ja", "reset", "fair"): ${NOTEBOOK.yes}; with a no ("no", "nein", "that didn't count"): ${NOTEBOOK.no}. `
+          : `If this message answers it with a yes ("yes", "ja", "reset", "fair"), run godspeed-charm answer yes --conversation ${quoted(conv)} --words "<their words>"; ` +
+            `with a no ("no", "nein", "that didn't count"), run godspeed-charm answer no --conversation ${quoted(conv)} --words "<their words>". `) +
         "Anything else leaves it open: answer the message as usual.",
     );
   }
-  L.push(COMMANDS);
+  L.push(notebook ? NOTEBOOK.replies : COMMANDS);
   return L.join("\n");
 }
 
@@ -105,13 +136,13 @@ export function contextBlock(state, settings = {}, { conversation = "", schedule
 // new round, together and once per conversation, and no more slip questions. A sticker only when
 // the caller says the sticker plugin is there: a model left to judge that for itself could send a
 // raw tag to someone without the plugin.
-function finishBlock(state, lang, conv, stickers) {
+function finishBlock(state, lang, conv, stickers, notebook) {
   const L = [
     `[godspeed-charm] The person finished the Charm Challenge today: ${LENGTH} days in a row.`,
     "Once in this conversation (skip this if you already did it here): at the start of your reply, in the language of their message, " +
-      `say ${said(lang, (l) => T[l].finish(state))} and offer a new round; if they want one, run ${startCommand(conv)}.`,
+      `say ${said(lang, (l) => T[l].finish(state))} and offer a new round; ${notebook ? `if they want one: ${NOTEBOOK.start}` : `if they want one, run ${startCommand(conv)}`}.`,
   ];
   if (stickers) L.push("End that reply with the tag [[sticker:party]]: the hermes-telegram-stickers plugin turns it into one celebrating sticker.");
-  L.push("Then answer their message as usual. The challenge is over: don't ask about slips.", COMMANDS);
+  L.push("Then answer their message as usual. The challenge is over: don't ask about slips.", notebook ? NOTEBOOK.replies : COMMANDS);
   return L.join("\n");
 }

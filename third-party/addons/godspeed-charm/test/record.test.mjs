@@ -148,3 +148,16 @@ test("appendEvent gives up on a busy notebook after lockTimeoutMs, writing nothi
   assert.equal(readEvents(dir).length, 1);
   gone(dir);
 });
+
+// The notebook reads the same rows through its own records (chat-context.mjs): the same events,
+// in the same order, from the items it already holds.
+test("eventsFromItems reads rows the way readEvents does", async () => {
+  const { eventsFromItems } = await import("../lib/record.mjs");
+  const dir = mission();
+  appendEvent(dir, { kind: "start", when: "2026-10-21T08:00:00Z" });
+  appendEvent(dir, { kind: "asked", when: "2026-10-22T08:00:00Z", words: "garbage", conversation: "notebook:c1" });
+  const items = readItems(dir, findTracker(dir)).reverse();
+  assert.deepEqual(eventsFromItems(items), readEvents(dir));
+  assert.deepEqual(eventsFromItems([{ data: null }, { data: { kind: "start" } }, {}]), []);
+  gone(dir);
+});

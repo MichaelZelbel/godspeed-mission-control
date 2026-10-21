@@ -28,10 +28,16 @@ const toEvent = (item) => {
   return event;
 };
 
-// The events in time order. No tracker yet is an empty list; a row nobody can read is skipped.
-export function readEvents(mcDir) {
-  const events = readItems(mcDir, findTracker(mcDir)).map(toEvent).filter(Boolean);
+// The events of a list of rows, in time order; a row nobody can read is skipped. The notebook reads
+// its own copy of the rows through this (its chat-context.mjs), so both read them the same way.
+export function eventsFromItems(items) {
+  const events = (Array.isArray(items) ? items : []).map((item) => (item && typeof item === "object" ? toEvent(item) : null)).filter(Boolean);
   return events.map((e, i) => [e, i]).sort((a, b) => a[0].when.localeCompare(b[0].when) || a[1] - b[1]).map((p) => p[0]);
+}
+
+// The events in time order. No tracker yet is an empty list.
+export function readEvents(mcDir) {
+  return eventsFromItems(readItems(mcDir, findTracker(mcDir)));
 }
 
 // Writes one event. The day comes from the settings' timezone (a corrupt settings file throws, so

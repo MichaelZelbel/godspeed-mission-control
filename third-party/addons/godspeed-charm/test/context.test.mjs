@@ -161,3 +161,53 @@ test("the brief text: the line, the finish line, or nothing", () => {
   assert.equal(briefText(written, "2026-11-12", "en"), "");
   assert.equal(briefText(charmState([], "2026-11-12"), "2026-11-12", "en"), "");
 });
+
+// The notebook's own chat has no shell: the same steps, said as the `charm` operations the notebook
+// runs for the model, and the question is added by the notebook, never written by the model.
+test("the notebook channel: the same steps as charm operations, never a shell command", () => {
+  const all = [];
+  const b = block(running(), { conversation: "notebook:c1", channel: "notebook" });
+  all.push(b);
+  assert.match(b, /day 10 of 21, 12 days to go, done on Wednesday 11 November/);
+  assert.match(b, /insults, sarcasm, contempt/);
+  assert.match(b, /When unsure, ask/);
+  assert.ok(b.includes('first do everything it asked, then add the operation charm {action:"asked", words:<their message>}'), b);
+  assert.match(b, /The notebook ends your reply with the one question itself/);
+  assert.ok(b.includes('"That sounded like a slip. Back to 21? Yes / No."'));
+  assert.match(b, /in the language of their message, so never write it yourself: "That sounded like a slip/);
+  assert.ok(b.includes('a plain "charm slip" or "reset my Charm Challenge" is charm {action:"slip", words:<their message>}'));
+  assert.ok(b.includes('a story ("I yelled at Copilot") is charm {action:"asked", words:<their message>}'));
+  assert.ok(b.includes('If they ask to start the Charm Challenge while it runs: charm {action:"start", words:<their message>}.'));
+  assert.match(b, /The notebook adds each charm operation's reply to your answer itself/);
+  // The open question of this conversation, answered with an operation.
+  const open = block(running([ev("asked", "2026-10-30", { conversation: "notebook:c1", words: "garbage again" })]), { conversation: "notebook:c1", channel: "notebook" });
+  all.push(open);
+  assert.ok(open.includes('charm {action:"answer", answer:"yes", words:<their message>}'), open);
+  assert.ok(open.includes('charm {action:"answer", answer:"no", words:<their message>}'));
+  assert.match(open, /Anything else leaves it open/);
+  // A reset today: only a plain request is an operation, and a story changes nothing.
+  const reset = block(charmState([ev("start", "2026-10-21"), ev("reset", "2026-10-30")], "2026-10-30"), { conversation: "notebook:c1", channel: "notebook" });
+  all.push(reset);
+  assert.match(reset, /don't ask about slips today/);
+  assert.ok(reset.includes('charm {action:"slip", words:<their message>}'));
+  assert.match(reset, /a story of venting at an AI changes nothing today/);
+  assert.doesNotMatch(reset, /action:"asked"/);
+  // The finish day: a new round is a start operation.
+  const finish = contextBlock(charmState([ev("start", "2026-10-21")], "2026-11-11"), S, { conversation: "notebook:c1", today: "2026-11-11", channel: "notebook" });
+  all.push(finish);
+  assert.match(finish, /Charm Challenge done: 21 days/);
+  assert.ok(finish.includes('if they want one: charm {action:"start", words:<their message>}'), finish);
+  // Without a conversation id: no question can be recorded, only the words reset.
+  const bare = block(running(), { channel: "notebook" });
+  all.push(bare);
+  assert.match(bare, /bare yes or no cannot answer/);
+  assert.ok(bare.includes('charm {action:"slip", words:<their message>}'));
+  assert.doesNotMatch(bare, /action:"asked"/);
+  for (const text of all) {
+    assert.doesNotMatch(text, /run godspeed-charm|godspeed-charm (?:start|status|asked|answer|slip|stop)|--words|--conversation|--language/, text);
+    assert.ok(!/[—–]/.test(text), text);
+    assert.ok(!/undefined|NaN|null/.test(text), text);
+  }
+  // The shell channel stays the default.
+  assert.equal(block(running(), { conversation: "telegram:1" }), block(running(), { conversation: "telegram:1", channel: "shell" }));
+});
