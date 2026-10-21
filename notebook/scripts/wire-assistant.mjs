@@ -9,6 +9,7 @@ import {starterBorn} from '../core/starter-workspace.mjs';
 import {withTimezone,godspeedHermesSettings,CRON_PROVIDER} from '../core/hermes-config.mjs';
 import {personaOf} from '../core/persona.mjs';
 import {syncSoul,readExtra} from '../core/assistant-soul.mjs';
+import {installModelCommand} from './install-model-command.mjs';
 import {noteHermesMet} from '../core/starting-routines.mjs';
 import {keepOutOfGit} from '../core/first-commit.mjs';
 const root=process.env.GODSPEED_WORKSPACE,home=process.argv[2];if(!root||!home)throw new Error("Set GODSPEED_WORKSPACE to your mission control folder and name your assistant's home folder");
@@ -24,6 +25,7 @@ const kit=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..');
 // integrated adapters below. Dependencies stay beside their original wrappers.
 const commandHome=path.join(home,'bin');
 fs.mkdirSync(commandHome,{recursive:true});
+installModelCommand({root,home});
 // Every Windows command file lives in commandHome; windows-command-file.mjs says why
 // the paths in it are written the way they are.
 const cmd=write=>commandFile(write,{folder:commandHome});
