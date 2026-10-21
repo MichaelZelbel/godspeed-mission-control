@@ -122,3 +122,22 @@ test("events given out of order are read in time order", () => {
   assert.equal(s.restarts, 1);
   assert.equal(s.started, "2026-10-22");
 });
+
+test("a duplicate reset on the same day still closes open questions", () => {
+  const s = charmState([
+    ev("start", "2026-10-21"),
+    { kind: "reset", date: "2026-10-25", when: "2026-10-25T08:00:00Z" },
+    { kind: "asked", date: "2026-10-25", when: "2026-10-25T09:00:00Z", conversation: "A", words: "ugh" },
+    { kind: "reset", date: "2026-10-25", when: "2026-10-25T09:30:00Z" },
+  ], "2026-10-25");
+  assert.deepEqual(s.open, []);
+  assert.equal(s.restarts, 1);
+});
+
+test("one open question per conversation; one kept closes all earlier asks of it", () => {
+  const asked = (h) => ({ kind: "asked", date: "2026-10-25", when: `2026-10-25T${h}:00:00Z`, conversation: "C", words: `w${h}` });
+  const base = [ev("start", "2026-10-21"), asked("09"), asked("10")];
+  assert.deepEqual(charmState(base, "2026-10-25").open.map((o) => o.words), ["w10"]);
+  const s = charmState([...base, { kind: "kept", date: "2026-10-25", when: "2026-10-25T11:00:00Z", conversation: "C" }], "2026-10-25");
+  assert.deepEqual(s.open, []);
+});

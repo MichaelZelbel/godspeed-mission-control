@@ -8,12 +8,18 @@ const NO = ["no", "nope", "nein", "that didn't count", "didn't count", "das zäh
 export const isYes = (words) => YES.includes(clean(words));
 export const isNo = (words) => NO.includes(clean(words));
 
-// Only a plain request to reset counts; telling a story about venting at an AI is a question, not a reset.
+// Only a short, plain request counts, because a hit resets without asking. Questions, negations and
+// stories fall through to false, the safe direction: the assistant then asks yes/no.
 const RESET_PATTERNS = [
-  /\bcharm slip\b/,
-  /\b(reset|restart)\b.*\bcharm challenge\b/,
-  /\bcharm challenge\b.*(zurücksetz|zurück ?gesetzt|neu starten|\breset\b)/,
-  /(setz|zurücksetz).*\bcharm challenge\b/,
-  /\bzurück auf 21\b/,
+  /^charm slip$/,
+  /^(please )?(reset|restart) (my|the) charm challenge$/,
+  /^(bitte )?charm challenge (zurücksetzen|neu starten)$/,
+  /^(bitte )?setz(e)? (meine|die) charm challenge (zurück|neu)$/,
+  /^(bitte )?zurück auf 21$/,
 ];
-export const isExplicitReset = (words) => { const w = clean(words); return RESET_PATTERNS.some((r) => r.test(w)); };
+const NEGATION = /(don't|dont|do not|never|nicht|kein|keine|nie)/;
+export const isExplicitReset = (words) => {
+  if (String(words ?? "").includes("?")) return false;
+  const w = clean(words);
+  return !NEGATION.test(w) && RESET_PATTERNS.some((r) => r.test(w));
+};

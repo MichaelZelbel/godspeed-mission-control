@@ -26,21 +26,22 @@ export function charmState(events, today) {
   let longest = 0, ended = null, finishedOn = null;
   const resetDates = new Set();
   const asked = []; // open questions, in the order asked
+  const dropAsked = (conversation) => { for (let i = asked.length - 1; i >= 0; i--) if (asked[i].conversation === conversation) asked.splice(i, 1); };
 
   for (const e of run.slice(1)) {
     if (ended) break; // after a stop or finish only a new start counts, and that begins a new list
     if (e.kind === "reset") {
+      asked.length = 0; // any reset answers every open question, even a duplicate one
       if (resetDates.has(e.date)) continue; // one restart per local day
       resetDates.add(e.date);
       longest = Math.max(longest, daysBetween(runStart, e.date));
       runStart = e.date;
-      asked.length = 0; // a reset answers every open question
       state.resetToday = state.resetToday || e.date === today;
     } else if (e.kind === "kept") {
       state.kept++;
-      const at = asked.findIndex((a) => a.conversation === (e.conversation ?? ""));
-      if (at >= 0) asked.splice(at, 1);
+      dropAsked(e.conversation ?? "");
     } else if (e.kind === "asked") {
+      dropAsked(e.conversation ?? ""); // at most one open question per conversation: the latest
       if (e.date === today) asked.push({ conversation: e.conversation ?? "", words: e.words ?? "", when: e.when });
     } else if (e.kind === "finish") {
       ended = e.date; finishedOn = e.date;

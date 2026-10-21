@@ -23,3 +23,17 @@ test("no in English and German, straight or curly apostrophe", () => {
   for (const w of ["nein", "No", "no.", "that didn't count", "That didn\u2019t count!", "Nein!"]) assert.equal(isNo(w), true, w);
   for (const w of ["yes", "ja", "", "nobody"]) assert.equal(isNo(w), false, w);
 });
+
+test("questions, negations and look-alike words are not explicit resets", () => {
+  for (const w of [
+    "should I reset my Charm Challenge?", "don't reset my Charm Challenge", "how many times did I reset my charm challenge",
+    "did my charm challenge reset?", "Ich setze die Charm Challenge fort", "Das Gesetz und die Charm Challenge",
+    "what is a charm slip?", "what is a charm slip", "bitte die Charm Challenge nicht zurücksetzen",
+  ]) assert.equal(isExplicitReset(w), false, w);
+});
+
+test("plain imperative requests stay explicit resets", () => {
+  for (const w of ["please reset my Charm Challenge", "Reset the charm challenge.", "setz meine Charm Challenge zurück", "Bitte zurück auf 21!"]) {
+    assert.equal(isExplicitReset(w), true, w);
+  }
+});
