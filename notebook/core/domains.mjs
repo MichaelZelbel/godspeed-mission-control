@@ -508,7 +508,9 @@ export class Domains {
           }
           if(name==='conversation-chat'&&structured.operations!==undefined){
             if(!Array.isArray(structured.operations))throw Error('operations must be a list');
-            validateConversationOperations(this,input,structured.operations.filter(op=>!(input.retained_coach_reply&&op.type==='coach-reply'&&op.id===input.talk_id)));
+            // A slip question the checks leave out (R15) is taken out of the answer's operations.
+            const checked=structured.operations.filter(op=>!(input.retained_coach_reply&&op.type==='coach-reply'&&op.id===input.talk_id)),kept=validateConversationOperations(this,input,checked);
+            structured.operations=structured.operations.filter(op=>!checked.includes(op)||kept.includes(op));
           }
           break;
         }catch(error){

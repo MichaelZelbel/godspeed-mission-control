@@ -18,7 +18,6 @@ specific={
 'keep-a-note':'Search notes and workspace files first. Save the user\'s useful words in a note, or a confirmed dated claim through write_fact. Save an event through record_event. Confirm the saved result once. AI guesses go into review_queue.',
 'talk-about':'Use contact_topics and apply_contact_topic_command. Resolve the exact person first. Use a fresh request UUID, expected_version and create/update/discuss/archive/reopen/undo. Reuse an identical request after timeout. A recurring topic stays active after discussion; one_off completes. Never substitute a parallel reminder.',
 'headache-tracker':'Record what the user said in health_episodes and medications, without guessing pain or dosage. Keep onset, end, symptoms, reported triggers and medicine times. Corrections retain prior versions. Count distinct medication days in the requested timezone. Offer patterns, not diagnosis.',
-'charm-challenge':'Use the packaged charm command to keep the 21-day Charm Challenge count in the notebook. Do the requested work first, ask once when a message sounded like a slip, and reset only after an explicit yes. Keep the person\'s words with every event. Never lecture or refuse work because of a slip.',
 'interstitial-journal':'Use the packaged journal command to capture a timestamped entry, intention, switch or end. Retain the user\'s words, distinguish advice and check the saved entry. Its files share the workspace and backup path.',
 'subscription-review':'Read subscription records and actual usage evidence, price, renewal and cancellation dates. Compare keeping, changing and cancelling. Prepare one evidence-based recommendation. Cancellation and payment always need the user\'s explicit approval.',
 'grill-me':'Interview one unresolved proposal until its audience, outcome, constraints, evidence, alternatives and failure conditions are clear. Ask only the next question that changes the decision. Preserve answers verbatim and mark assumptions.',
@@ -51,7 +50,7 @@ for skill in inventory['skills']:
  if not purpose:raise ValueError('Unclassified recipe '+name)
  folder=root/'notebook/recipes'/name;folder.mkdir(parents=True,exist_ok=True)
  text='---\nname: '+name+'\ndescription: '+purpose.split('.')[0]+'.\n---\n\n# '+name.replace('-',' ').capitalize()+'\n\n'+purpose+'\n\n## Shared contract\n\nRead AGENTS.md and profile/voice.md. Search existing knowledge before asking for a life fact. Use the notebook MCP or documented file CLI. Files hold durable state; never write SQLite directly. Resolve people and references by stable ID, not name alone. Keep model inference in the review queue until the user accepts it. Verify saved work. Keep credentials outside synced files. Buying, booking, sending, publishing and deleting external data require explicit approval. Do not use employer or client names in examples.\n'
- native={'coach':('godspeed-coach','coach'),'interstitial-journal':('godspeed-journal','interstitial-journal'),'headache-tracker':('godspeed-headache','headache-tracker'),'charm-challenge':('godspeed-charm','charm-challenge'),'phone-errands':('mc-phone','phone-errands'),'video-finishing':('mc-video','video-finishing')}
+ native={'coach':('godspeed-coach','coach'),'interstitial-journal':('godspeed-journal','interstitial-journal'),'headache-tracker':('godspeed-headache','headache-tracker'),'phone-errands':('mc-phone','phone-errands'),'video-finishing':('mc-video','video-finishing')}
  reusable=root/'notebook/reusable-recipes'/name
  starter=root/'starter-godspeed/skills'/name
  # A recipe the starter ships too is the starter's, byte for byte (2026-10-13): the notebook installs
@@ -77,6 +76,14 @@ for skill in inventory['skills']:
 # (18 October 2026).
 for name in ['tracker','context-setup','cycle-tracker','food-tracker','coach-prep']:
  if not (root/'notebook/recipes'/name/'SKILL.md').exists():raise ValueError('Missing product recipe '+name)
+ classified.append({'name':name,'classification':'source only','reason':'Portable recipe and shared record/runtime operations; no private incident prose or account details.'})
+# The product's own add-ons with no Mission Control original either: the add-on that ships the recipe
+# is its source, copied here as the native recipes above are (the Charm Challenge, 21 October 2026).
+# They are never in the source inventory, which inventory.py rewrites from Mission Control's skills.
+for name,(addon,recipe) in {'charm-challenge':('godspeed-charm','charm-challenge')}.items():
+ source=root/'third-party/addons'/addon/'skill'/recipe
+ if not (source/'SKILL.md').exists():raise ValueError('Missing maintained workflow '+name)
+ shutil.copytree(source,root/'notebook/recipes'/name,dirs_exist_ok=True)
  classified.append({'name':name,'classification':'source only','reason':'Portable recipe and shared record/runtime operations; no private incident prose or account details.'})
 (root/'notebook/data/recipe-inventory.json').write_text(json.dumps(classified,indent=2)+'\n',encoding='utf-8',newline='\n')
 print('Classified',len(classified),'recipes; packaged',len(classified)-len(company),'portable recipes')

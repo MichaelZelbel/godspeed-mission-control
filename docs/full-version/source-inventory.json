@@ -2101,11 +2101,6 @@
       "bytes": 2365
     },
     {
-      "name": "charm-challenge",
-      "source": "skills/charm-challenge/SKILL.md",
-      "bytes": 3393
-    },
-    {
       "name": "coach",
       "source": "skills/coach/SKILL.md",
       "bytes": 9847

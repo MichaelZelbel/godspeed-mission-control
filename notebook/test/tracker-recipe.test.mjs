@@ -93,6 +93,16 @@ test('the charm-challenge recipe is the charm add-on\'s own, listed, and its YAM
   assert.equal(read('../../third-party/addons/godspeed-charm/lib/yaml.mjs'),read('../core/records/yaml.mjs'));
   const source=JSON.parse(read('../../third-party/addons/sources.json')).find(s=>s.name==='godspeed-charm');
   assert.ok(source.files.includes('skill/charm-challenge/SKILL.md')&&source.files.includes('hermes/plugin/godspeed-charm/__init__.py'));
+  // The product's own add-on recipe has no Mission Control original: it is not in the source
+  // inventory, which a fresh inventory run rewrites from Mission Control's skills.
+  assert.ok(!JSON.parse(read('../../docs/full-version/source-inventory.json')).skills.some(s=>s.name==='charm-challenge'));
+  // "track charm challenge" is handed to it, after food and before the trackers' own names.
+  const tracker=read('../recipes/tracker/SKILL.md');
+  const order=['**Food, a meal or something they ate or drank**','**The Charm Challenge**','**One of the trackers\' names','**Anything else**'].map(x=>tracker.indexOf(x));
+  assert.ok(order.every(i=>i>0)&&order.every((i,n)=>!n||i>order[n-1]),'the hand-off order');
+  assert.match(tracker,/"track charm challenge", "track charm slip"[^\n]*\n?[^\n]*load the charm-challenge recipe/);
+  assert.match(tracker,/Never `track` on the Charm Challenge tracker \(`"specialist":"charm"`\)/);
+  assert.ok(JSON.parse(read('../data/recipe-revisions.json'))['tracker/SKILL.md'].includes(digest(tracker)),'tracker ships a known revision');
 });
 
 // The tracker recipe claims every "track" and hands a habit and a headache on, in the order of the

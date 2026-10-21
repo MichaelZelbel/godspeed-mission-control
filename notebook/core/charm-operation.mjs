@@ -57,14 +57,17 @@ export function charmOperation(domains,input){
  // Words that start with a dash would be read as a flag, and a very long message is safest out of
  // the command line: both go in a file of their own, which the add-on reads as it is.
  const long=words.startsWith('-')||words.length>8000;let file=null;
- if(long&&input.action!=='status'){file=path.join(store.state,'charm-words',randomUUID()+'.txt');fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,words);}
  const language=spoken(input.language)||pickLanguage((()=>{try{return loadSettings(store.root).language;}catch{return 'en';}})());
  try{
+  if(long&&input.action!=='status'){file=path.join(store.state,'charm-words',randomUUID()+'.txt');fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,words);}
   const saved=JSON.parse(addonCommand(store,{addon:'charm',args:charmArgs(input,conversation,{wordsFile:file})}).result);
   return {ok:true,reply:saved.reply,state:saved.state,language};
  }catch(error){
-  // A refusal (R4): nothing was written, and its reply is a plain sentence for the person.
-  if(error.refusal)return {ok:false,reply:error.refusal.reply,state:error.refusal.state,language};
+  // A refusal (R4): nothing was written, and its reply is a plain sentence for the person, in the
+  // language it carries when it has one of its own (the notebook's own refusals are English).
+  if(error.refusal&&input.action!=='asked')return {ok:false,reply:error.refusal.reply,state:error.refusal.state,language:error.refusal.language||language};
+  // The slip question is best-effort (R15): whatever stops it, the chat goes on without it.
+  if(input.action==='asked')return {ok:false,reply:'',error:String(error?.message||error),language};
   throw error;
  }finally{if(file)fs.rmSync(file,{force:true});}
 }

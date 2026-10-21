@@ -41,7 +41,7 @@ tracker-correct {tracker,entry_id?,value?,data?,remove?:boolean}: the user corre
 tracker-talk {tracker,talk,remove?:boolean,instead?:boolean}: the user says a coaching talk may look at a supplied tracker ("The health talk may also look at my sleep tracker"), or no longer needs it (remove:true, "The health talk no longer needs my sleep tracker"). talk is the coaching area, such as health. Any number of talks may look at a tracker: adding one never asks and the others keep looking at it; instead:true only when his own words say this talk should look at it instead of the others. A supplied habit tracker (specialist habit) the same way ("The work talk may also look at my stretching habit"): its own area's talk always looks at it and is never removed.
 habit-progress {tracker,action:display|pause|resume|exempt|schedule,display?:standard|calm,on?:YYYY-MM-DD,from?:YYYY-MM-DD,to?:YYYY-MM-DD,days?:daily or mon,wed,fri,words?}: only for supplied habit trackers. Calm hides streak pressure. Pause/resume records dated status. Exempt excuses an inclusive date range for holiday, illness or outages without spending protection. Schedule records the effective date. Never infer that an unanswered day means not done.
 Never invent a tracker; never create one without his yes. Relay the operation's reply as the answer.
-A message that starts with "track journal" or "track Tagebuch" names the journal: it is journal-add {content:<the words after it>}, never a tracker. Any other message that starts with "track" goes, in this order: the name of a supplied habit tracker (specialist habit) is track {tracker:<its id>,answer?:done|no|skip}; a headache, a pill or a pain level is headache; the period, the cycle or a cycle symptom ("track period", "track Periode", "track cramps") is cycle; food, a meal or something she ate or drank ("track food, ...", "track lunch, ...", "track usual breakfast") is food; a supplied tracker's name or other name is track; only a name nothing supplied has is tracker-hold.
+A message that starts with "track journal" or "track Tagebuch" names the journal: it is journal-add {content:<the words after it>}, never a tracker. Any other message that starts with "track" goes, in this order: the name of a supplied habit tracker (specialist habit) is track {tracker:<its id>,answer?:done|no|skip}; a headache, a pill or a pain level is headache; the period, the cycle or a cycle symptom ("track period", "track Periode", "track cramps") is cycle; food, a meal or something she ate or drank ("track food, ...", "track lunch, ...", "track usual breakfast") is food; the Charm Challenge ("track charm challenge", "track charm slip") is charm, never a tracker; a supplied tracker's name or other name is track; only a name nothing supplied has is tracker-hold.
 cycle {action:track|over|forecast|leave-out|count|heads-up|talk|decline|delete,flow?:spotting|light|medium|heavy|unspecified,pain?:0-3,pain_where?:[belly|back|head],symptoms?:[cramps|headache|bloating|breast tenderness|acne|low mood|irritable|low energy|poor sleep|cravings|digestion|discharge],note?,on?:YYYY-MM-DD,start?:YYYY-MM-DD,why?:outlier|pregnancy|breastfeeding|contraception,enabled?:boolean,talk?,confirm?,language}: her period and cycle; personal.cycle is her cycle tracker (null: none yet). track is a day ("track period, heavy, cramps 2"; a headache named as one of the day's symptoms is a symptom here): flow is the amount she said, unspecified when she says she has her period without an amount, left out for a day of symptoms only; with no cycle tracker it asks its setup question, and her yes is tracker-create with that question's id. "period over" is over. "when is my next period?" is forecast. Her answer to "Leave this one out of the forecast?": yes is leave-out, no is count. A cycle affected by pregnancy, breastfeeding or starting or stopping hormonal contraception is leave-out with why and start (the day it began; without start, the cycle she is in now). "tell me two days before my period" is heads-up {enabled:true}, stopping it {enabled:false}. "my health talk may read my cycle" is talk {talk:"health"}. "delete my cycle tracker" is delete; her yes to that question is delete {confirm:<personal.cycle.deletion.request_id>}. A question about a fertile window, ovulation, safe days, conceiving or avoiding pregnancy, contraception or a diagnosis is decline: never answer it yourself. Pass language. Relay the operation's reply as the answer.
 food {action:track|answer|remember|correct|today|target|settings|talk|search|status,items?:[{food,item,grams?,count?,unit?,assumed?}],meal?:breakfast|lunch|dinner|snack|none,preset?,question?,grams?,name?,entry_id?,remove?,totals?,sex?:female|male,age?,height_cm?,weight_kg?,activity?:sedentary|light|moderate|very|extra,goal?:lose|keep|gain,numbers?,eating_disorder?,pregnant?,breastfeeding?,talk?,on?:YYYY-MM-DD,at?:HH:MM,language}: what she eats; personal.food is her food tracker (null: none yet) with its open questions, and personal.food.candidates the food table's matches for her words, each with its id. track is a meal: one item per food, food is a candidate's id (choose the plain food she means; when none fits, ask her and write nothing), item her word for it, grams only when she said a weight, count and unit when she said pieces or a container ("half a pack": count 0.5, unit "pack"), and for a piece of a standard size or a food with no amount you may add your typical weight as grams with assumed:true; never assume the size of a pack, bowl, plate, glass or can: leave grams out and code asks her once. With no food tracker it asks its setup question; her yes is tracker-create with that question's id, with answers:[{grams}] when she gave the asked amounts in the same message, and eating_disorder:true when she says she has or had one. Her answer to an amount question is answer {grams} (the size of the whole pack, bowl or glass, or the grams of the item). "remember this as my usual lunch" is remember {name:"lunch"}; "track usual lunch" is track {preset:"lunch"}. "the eggs were three" is correct {item:"eggs",count:3}; "delete the eggs" is correct {item:"eggs",remove:true}. "what did I eat today?" is today, with totals:true when she asks for calories or totals. "set my food target" is target with what she said about herself (never guess her age, height, weight, activity or goal). "stop showing calories" is settings {numbers:false}; "show calories again" {numbers:true}; pregnancy, breastfeeding or an eating disorder she mentions go in settings or target as true. Pass language. Every number in the answer is the operation's: relay its reply as the answer, word for word.
 headache {action:start|log|set|med|end|cancel,at?,from?,to?,pain?,side?,quality?,symptoms?:[word],triggers?:[word],meds?:[{med,dose?}],taken?,episode?}: a headache or migraine, with or without "track". start: one going on now (at: when it began, as he said it: HH:MM, "yesterday HH:MM" or -30m); log: one already over (from and to); set: more about one (pain, side, what it feels like, a symptom, a trigger he named, a corrected time); med: a pill or other medicine; end: it is over (at, if he said when); cancel: it was a mistake. The open headaches are in personal.headache with their ids; without episode it is the open one. Pain is only a number he gave; never guess a trigger; never do clock sums.
@@ -308,10 +308,19 @@ function cycleChecks(domains,message,op){
 // What a charm operation does must be what the person said (spec 2026-10-21): a reset without a
 // real yes throws away up to 20 days, the worst outcome there. So slip needs the plain words of a
 // reset, answer an open question in THIS chat and the yes or no the message is, and asked a
-// challenge that runs. The question belongs to the conversation that asked it.
+// challenge that runs. The question belongs to the conversation that asked it. A stop throws a run
+// away too, so start, status and stop need a message that names the challenge, and stop one that
+// says stop: "Stop. This is garbage, fix the date." is a slip, never a stop (the Task 5 review).
+// The stop word is next to the name, either way round: "stop the Charm Challenge", "Beende die Charm
+// Challenge", "Charm Challenge stoppen"; "the challenge ... I want it to end well" is no stop.
+const CHARM_NAMED=/charm|challenge/iu,STOPS="stop|end|quit|cancel|beende\\p{L}*|stopp\\p{L}*|abbrech\\p{L}*|aufhör\\p{L}*|hör\\p{L}* auf";
+const CHARM_STOP=[new RegExp("(?<!\\p{L})(?:"+STOPS+")\\s+(?:[\\p{L}'-]+\\s+){0,3}?(?:charm|challenge)","iu"),new RegExp("(?:charm|challenge)\\p{L}*\\s+(?:[\\p{L}'-]+\\s+){0,2}?(?:"+STOPS+")(?!\\p{L})","iu")];
 function charmChecks(domains,message,op,conversationId){
  const conversation=charmConversation(conversationId);
  charmArgs(op,conversation);
+ if(op.action==='stop'&&!CHARM_STOP.some(r=>r.test(message)))throw Error('Only "stop the Charm Challenge" stops it; nothing was stopped.');
+ if(op.action==='start'&&!CHARM_NAMED.test(message))throw Error('Only "start the Charm Challenge" starts it.');
+ if(op.action==='status'&&!CHARM_NAMED.test(message))throw Error('Ask about the Charm Challenge by name ("how is my Charm Challenge?").');
  if(!['asked','answer','slip'].includes(op.action))return;
  const {state}=charmNow(domains.store);
  if(op.action==='slip'&&!isExplicitReset(message))throw Error('Only a plain "charm slip" or "reset my Charm Challenge" goes back to 21 at once; for anything else, ask first (asked).');
@@ -372,9 +381,16 @@ function foodChecks(domains,message,op){
  if(action==='talk'&&!/(?<!\p{L})(?:talk|gespräch|coach)/iu.test(message))throw Error('Say which talk may read your food tracker');
  if(action==='talk'&&op.remove===true&&!TALK_AWAY.test(message))throw Error('Say that the talk no longer needs your food tracker');
 }
+// The slip question is best-effort (ruling R15): a charm "asked" whose quote is not the message's own
+// words, or that fails its own checks, is left out, never the chat, so the work the model did still
+// reaches the person. It records only an open question, so leaving it out loses no count.
+const askable=(domains,input,message,op)=>{try{const quote=op.source_quote;if(typeof quote!=='string'||!quote||!message.includes(quote)||!/[\p{L}\p{N}]/u.test(quote))return false;charmChecks(domains,message,op,input.conversation_id);return true;}catch{return false;}};
+// Checks the operations against the message and returns the ones that go ahead: every one, or the
+// error that stops them, except a slip question that cannot go ahead, which is left out (R15).
 export function validateConversationOperations(domains,input,operations){
  if(!Array.isArray(operations)||operations.length>10)throw Error('Invalid conversation operations');
  const message=String(input.message||input.messages?.filter(m=>m.role==='user').at(-1)?.content||'');
+ operations=operations.filter(op=>!(op&&op.type==='charm'&&op.action==='asked')||askable(domains,input,message,op));
  // Authorization is checked independently of the model's explanation.
  const intents={
   'goal-add':/\b(?:my goal is|adopt|set|add|remember|create|mein ziel|lege|speichere)\b[\s\S]*(?:goal|ziel)|\b(?:my goal is|mein ziel ist)\b/i,
@@ -523,6 +539,7 @@ export function validateConversationOperations(domains,input,operations){
   nativeArguments(operation);const [table,field]=exists[operation.type]||[];
   if(table&&!domains.query.rows(table).some(r=>r.id===operation[field]))throw Error('Choose an existing '+(table==='habits'?'habit':'coaching talk'));
  }
+ return operations;
 }
 // Which request this is, so a retry of it never runs twice and a new one always runs: its request
 // id; else the user message with these words saved after the conversation's last answer (the one
@@ -544,8 +561,9 @@ export function conversationOperations(domains,input,operations){
  const digest=hash(operations),plan=domains.store.get('command_receipts',planId);
  if(plan&&plan.plan_hash!==digest)throw Error('Request retry conflicts with its saved operation plan; reload the original result');
  if(plan?.state==='verified'&&Array.isArray(plan.results))return plan.results;
- validateConversationOperations(domains,input,operations);
- for(const operation of operations){
+ // A slip question left out by the checks (R15) is not run; its result says so, with no line.
+ const kept=validateConversationOperations(domains,input,operations),dropped=operations.map(op=>!kept.includes(op));
+ for(const operation of kept){
   if(!operation.source_quote||!message.includes(operation.source_quote))throw Error('Operation needs an exact source quote from the explicit user request');
   if(operation.evidence_quote&&!message.includes(operation.evidence_quote))throw Error('Memory evidence must occur in the user message');
  }
@@ -566,7 +584,7 @@ export function conversationOperations(domains,input,operations){
  });
  if(!outside.some(Boolean))return results;
  for(const [i,operation] of operations.entries()){
-  if(!outside[i])continue;const id=receipt(i),previous=domains.store.get('command_receipts',id);
+  if(!outside[i])continue;if(dropped[i]){results[i]={ok:false,reply:'',dropped:true};continue;}const id=receipt(i),previous=domains.store.get('command_receipts',id);
   if(previous){if(previous.state!=='verified')throw Error('Previous operation needs review');results[i]=previous.result;continue;}
   domains.store.save('command_receipts',{id,state:'attempted',source_id:sourceId,operation:operation.type});
   // A charm question belongs to this chat: its conversation is set here, whatever the model wrote.

@@ -84,7 +84,8 @@ export function addonCommand(store,{addon,args}){
  const timezone=store.get('settings','installation')?.timezone||'UTC',load=addon==='charm'?charmSettings:addon==='headache'?headacheSettings:addon==='coach'?coachSettings:journalSettings,save=addon==='charm'?saveCharm:addon==='headache'?saveHeadache:addon==='coach'?saveCoach:saveJournal;
  // The charm's settings name the day boundary of its count, so a file it cannot read stops it
  // (its loadSettings throws) rather than filing events on a guessed day: a refusal, said plainly.
- let settings;try{settings=load(store.root);}catch(error){if(addon!=='charm')throw error;throw refusal('The Charm Challenge cannot read its settings (routines/charm/settings.json), so nothing was changed. Fix or remove that file and try again.');}
+ // The sentence is the notebook's own, in English, so the chat puts it in the person's language.
+ let settings;try{settings=load(store.root);}catch(error){if(addon!=='charm')throw error;const said=refusal('The Charm Challenge cannot read its settings file, so nothing was changed.');said.refusal.language='en';throw said;}
  if(settings.timezone!==timezone)save(store.root,{...settings,timezone});
  if(addon==='coach'&&settings.daily_table)localPath(store.root,settings.daily_table);
  if(args[0]==='config'&&args[1]==='set'&&args[2]==='daily_table'&&args[3])localPath(store.root,args[3]);

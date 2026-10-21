@@ -51,8 +51,11 @@ test('a refusal is a plain sentence, never "Personal command failed"',async()=>{
  const {domains}=fixture();
  const stopped=await op(domains,{action:'stop',words:'stop the Charm Challenge'});
  assert.deepEqual({ok:stopped.ok,reply:stopped.reply},{ok:false,reply:'No Charm Challenge is running. Say the word and we start one.'});
- // Asking and answering belong to a notebook chat: without one, a plain error, nothing written.
- await assert.rejects(op(domains,{action:'asked',words:'garbage'}),/Only a chat in the notebook/);
+ // Answering belongs to a notebook chat: without one, a plain error, nothing written. The slip
+ // question is best-effort (R15): it is {ok:false} with no line, never an error.
+ await assert.rejects(op(domains,{action:'answer',answer:'yes',words:'yes'}),/Only a chat in the notebook/);
+ const asked=await op(domains,{action:'asked',words:'garbage'});
+ assert.deepEqual({ok:asked.ok,reply:asked.reply},{ok:false,reply:''});assert.match(asked.error,/Only a chat in the notebook/);
  await assert.rejects(op(domains,{action:'dance'}),/start, status, asked, answer, slip or stop/);
 });
 
@@ -162,11 +165,74 @@ test('/charm runs the command like /headache, a refusal included; nothing is sch
  assert.ok(!store.get('jobs','journal-tick'));assert.ok(!store.get('jobs','coach-tick'));
 });
 
-test('the chat block: empty when nothing runs, quiet when the record cannot be read',()=>{
- const {store,query}=fixture();
+test('the chat block: empty when nothing runs, quiet when the record cannot be read, and the chat goes on',async()=>{
+ const {store,query,domains}=fixture();
  assert.equal(chatContext(query,{message:'hello',conversation_id:'c1'}).personal.charm,null);
- fs.mkdirSync(path.join(store.root,'routines','charm'),{recursive:true});fs.writeFileSync(path.join(store.root,'routines','charm','settings.json'),'{not json');
+ await say(domains,'start the Charm Challenge',[{action:'start'}]);
+ assert.match(chatContext(query,{message:'hello',conversation_id:'c1'}).personal.charm,/^\[godspeed-charm\]/,'a running challenge has its block');
+ fs.writeFileSync(path.join(store.root,'routines','charm','settings.json'),'{not json');
  assert.equal(chatContext(query,{message:'hello',conversation_id:'c1'}).personal.charm,null);
+ const r=await say(domains,'hello, what is on today?',[],{reply:'Nothing urgent today.'});
+ assert.equal(r.reply,'Nothing urgent today.');
+ // A charm line it cannot give is said plainly, in English, and the chat translates it: no file path.
+ const de=await say(domains,'wie steht meine Charm Challenge?',[{action:'status'}],{language:'de'});
+ assert.equal(de.reply,'The Charm Challenge cannot read its settings file, so nothing was changed.');
+ assert.deepEqual(de.calls.map(c=>c.kind),['conversation-chat','reply-language'],'the English line is handed to the rewrite');
+ assert.deepEqual(de.calls[1].input,{language:'de',lines:['The Charm Challenge cannot read its settings file, so nothing was changed.']});
+});
+
+// A lost run is the worst outcome (spec 2026-10-21): start, status and stop act only on a message that
+// names the challenge, and stop only on one that says stop too (the review probe of Task 5).
+test('stop, start and status need the person to name the Charm Challenge',async()=>{
+ const {store,domains}=fixture();
+ await assert.rejects(say(domains,'yes, let us go',[{action:'start'}]),/start the Charm Challenge/);
+ await say(domains,'Charm Challenge starten',[{action:'start'}],{language:'de'});
+ process.env.GODSPEED_CHARM_NOW='2026-10-24T08:00:00Z';
+ await assert.rejects(say(domains,'Stop. This is garbage, fix the date.',[{action:'stop'}],{reply:'Fixed the date.'}),/stop the Charm Challenge/);
+ await assert.rejects(say(domains,'How is the challenge going? I want it to end well.',[{action:'stop'}]),/stop the Charm Challenge/,'ends well is not a stop');
+ await assert.rejects(say(domains,'how many days to go?',[{action:'status'}]),/Charm Challenge/);
+ assert.equal(readEvents(store.root).some(e=>e.kind==='stop'),false,'nothing was stopped');
+ let r=await say(domains,'how is my Charm Challenge?',[{action:'status'}]);
+ assert.equal(r.reply,'18 days to go, done on Wednesday 11 November. Longest run so far: 3 days. Restarts: 0.');
+ r=await say(domains,'Beende die Charm Challenge',[{action:'stop'}],{language:'de'});
+ assert.equal(r.reply,'Charm Challenge beendet. Sag Bescheid, dann starten wir eine neue.');
+});
+
+// The slip question is best-effort (ruling R15): a question that cannot be recorded is left out, and
+// the work the model did still reaches the person.
+test('a slip question that cannot be checked or recorded is dropped, and the work reply stands',async()=>{
+ const {store,domains}=fixture();
+ // No challenge runs: the question is dropped, not the chat.
+ let r=await say(domains,'why is this garbage again',[{action:'asked'}],{reply:'Here is the fixed list.'});
+ assert.equal(r.reply,'Here is the fixed list.');
+ await say(domains,'start the Charm Challenge',[{action:'start'}]);
+ process.env.GODSPEED_CHARM_NOW='2026-10-23T08:00:00Z';
+ // A quote that is not an exact copy of a long message of several lines.
+ const long='why is this garbage again?\nI told you twice: the date is the 30th,\nnot the 3rd.';
+ r=await say(domains,long,[{action:'asked',source_quote:'why is this garbage again? I told you twice'}],{reply:'Fixed: the 30th.'});
+ assert.equal(r.reply,'Fixed: the 30th.');
+ assert.equal(readEvents(store.root).some(e=>e.kind==='asked'),false,'no question was recorded');
+ // The command itself fails while asking: no question line, the work reply stands, the request is done.
+ process.env.GODSPEED_CHARM_LAUNCHER='cmd';
+ try{
+  r=await say(domains,'useless, do it again',[{action:'asked'}],{reply:'Done again.'});
+  assert.equal(r.reply,'Done again.');
+  assert.equal(r.operation_results[0].ok,false);
+  // Every other action keeps failing loudly.
+  await assert.rejects(say(domains,'how is my Charm Challenge?',[{action:'status'}]),/Personal command failed/);
+ }finally{delete process.env.GODSPEED_CHARM_LAUNCHER;}
+ assert.equal(readEvents(store.root).some(e=>e.kind==='asked'),false);
+});
+
+test('"track charm challenge" never holds or starts a tracker of that name',async()=>{
+ const {store,domains}=fixture();
+ const said='The Charm Challenge keeps its own count: say "start the Charm Challenge" or "charm slip".';
+ for(const name of ['Charm challenge','charm','The Charm Challenge','Charm-Challenge'])await assert.rejects(domains.invoke('personal-operation',{type:'tracker-hold',name,words:'track '+name}),error=>error.message===said,name);
+ await assert.rejects(domains.invoke('personal-operation',{type:'tracker-create',name:'Charm Challenge',unit:'days'}),error=>error.message===said);
+ assert.equal(store.list('tracker_proposals').length,0);assert.equal(store.list('collections').length,0);
+ // A tracker merely named alike is still a tracker.
+ await domains.invoke('personal-operation',{type:'tracker-hold',name:'Charm bracelet polish',words:'track charm bracelet polish'});
+ assert.equal(store.list('tracker_proposals').length,1);
 });
 
 test('the assistant is told where the charm command and its mission control are, as for the headache',async()=>{

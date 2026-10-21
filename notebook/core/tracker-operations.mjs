@@ -20,6 +20,8 @@ const HEADACHES='The Headaches tracker is kept by the headache tracker: say it a
 // The Charm Challenge keeps its own count (spec 2026-10-21): the charm add-on writes its rows, a
 // start, a slip question, a reset, so the generic track never writes or corrects one of them.
 const CHARM='The Charm Challenge keeps its own count: say "start the Charm Challenge" or "charm slip".';
+// Its name is never a new tracker either, before or after the challenge first ran ("track charm challenge").
+const CHARM_NAME=/^(?:the\s+)?charm(?:[\s-]*challenge)?$/i;
 // The food tracker's rows are worked out by its own operation from the food table (D-321 step 5).
 const FOOD='The food tracker is kept by the food operation: food {action:"track",items:[{food:<id from food search>,item,grams?,count?,unit?,assumed?}]}, as the food-tracker recipe says; never track.';
 // "track journal" and "track Tagebuch" name the journal (16 October 2026): their words are a journal
@@ -42,6 +44,7 @@ export function trackerOperation(domains,raw){
  if(type==='tracker-hold'){
   const name=titleOf(input.name);if(!name)throw Error('Say what to track');
   if(JOURNAL_NAME.test(name))throw Error(JOURNAL_ENTRY);
+  if(CHARM_NAME.test(name))throw Error(CHARM);
   // "track period" (and "track Periode", "track cramps") belongs to the cycle tracker (D-321 step 4).
   if(input.specialist==='cycle'||CYCLE_WORDS.test(name))return cycleOperation(domains,{...input,action:'track'});
   // A habit the coach keeps, or the headache tracker's word, is never a new tracker (the order of D-321).
@@ -84,6 +87,7 @@ export function trackerOperation(domains,raw){
   if(p){const said=wordsOf(input);if(assistant&&!said)throw Error("Pass the person's answer as words: only their yes to the question creates the tracker.");if(said&&p.words&&norm(said)===norm(p.words))throw Error('That is the message that asked for the tracker. Ask the question, and create it only when they answer yes.');}
   const name=titleOf(input.name||p?.name);if(!name)throw Error('Say what the tracker is called');
   if(JOURNAL_NAME.test(name))throw Error(JOURNAL_ENTRY);
+  if(CHARM_NAME.test(name))throw Error(CHARM);
   if(findTracker(store,name).candidates.length)throw Error('There is already a tracker called '+name);
   const cadence=input.cadence?(input.cadence==='any'?'any':'daily'):p?.cadence||'daily';
   // "Yes, but in inches" or "as often as I like" rebuilds the columns from the
