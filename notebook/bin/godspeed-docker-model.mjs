@@ -18,7 +18,7 @@ export function dockerModelArgs(root,args){
   else throw Error('Use the installed Godspeed model command with --workspace and optional --check');
  }
  if(args.filter(arg=>arg==='--workspace').length>1)throw Error('Choose exactly one Godspeed workspace');
- return ['compose','-p','godspeed-mission-control','--project-directory',root,'-f',path.join(root,'compose.yaml'),'--env-file',path.join(root,'.env'),'exec','-T','godspeed','timeout','245','node','/opt/godspeed/kit/notebook/bin/godspeed-model.mjs','--workspace',INNER_WORKSPACE,...(describe?['--check']:[])];
+ return ['compose','-p','godspeed-mission-control','--project-directory',root,'-f',path.join(root,'compose.yaml'),'--env-file',path.join(root,'.env'),'exec','-T','--user','hermes','godspeed','timeout','245','node','/opt/godspeed/kit/notebook/bin/godspeed-model.mjs','--workspace',INNER_WORKSPACE,...(describe?['--check']:[])];
 }
 export async function dockerModelMain(root,args){
  const commandArgs=dockerModelArgs(root,args),describe=commandArgs.at(-1)==='--check';let input='';

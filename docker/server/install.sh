@@ -179,7 +179,7 @@ done
 args=()
 [ "$describe" = no ] || args+=(--check)
 exec "$docker" compose -p godspeed-mission-control --project-directory "$install" -f "$install/compose.yaml" --env-file "$install/.env" \
-  exec -T godspeed timeout 245 node /opt/godspeed/kit/notebook/bin/godspeed-model.mjs --workspace /opt/data/full-candidate/workspace "${args[@]}"
+  exec -T --user hermes godspeed timeout 245 node /opt/godspeed/kit/notebook/bin/godspeed-model.mjs --workspace /opt/data/full-candidate/workspace "${args[@]}"
 MODEL
     } > "$command_dir/godspeed-model"
     chmod 755 "$command_dir/godspeed-model"
