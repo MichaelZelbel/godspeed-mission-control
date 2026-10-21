@@ -2,7 +2,7 @@ import test from 'node:test';import assert from 'node:assert/strict';import fs f
 import {execFileSync,spawnSync} from 'node:child_process';import {fileURLToPath} from 'node:url';
 import {Store,hash} from '../core/records/store.mjs';
 import {backup,restore,restoreSeparateCopy} from '../core/archives.mjs';
-import {makeUpdateCopy,folderCommit} from '../core/update-copy.mjs';
+import {makeUpdateCopy,folderCommit,workspaceForCopy} from '../core/update-copy.mjs';
 import {inUpdateCopy} from '../core/file-policy.mjs';
 
 // THE COPY AN UPDATE MAKES BEFORE IT CHANGES ANYTHING (core/update-copy.mjs). Until 21 October
@@ -50,7 +50,7 @@ test('in a folder with Git the copy holds only what its commit does not, and nev
   assert.deepEqual(saved.filter(name=>!name.startsWith('notebook/_system/')),['assistant-state/state.json','media/photo.bin',page(f.added),page(f.edited),'skills/uncommitted/SKILL.md'].sort());
   assert.ok(!saved.some(name=>name.startsWith('work/')||name.startsWith('assistant-state/history')||name==='AGENTS.md'||name.includes('Kept')),'nothing Git holds as it is, nothing in work/, not the undo archive');
   assert.deepEqual(manifest.absent,['goals/finished.md']);
-  assert.equal(manifest.records,f.store.scan(true).size);
+  assert.equal(manifest.records,null,'a copy made with Git counts its records when it is laid out to restore');
   assert.ok(result.bytes<10000,'a few kilobytes, not the 256 KB recording');
   assert.deepEqual(read(f.root,'.git/index'),index,'the owner\'s index is never written');
   assert.equal(git(f.root,'status','--porcelain','--ignored'),status,'nor anything in the folder');
@@ -76,30 +76,53 @@ test('restoring the copy gives back exactly what an update can change, and only 
 });
 
 // A Windows Git set to convert line endings (core.autocrlf, Git for Windows' own default) calls a
-// file unchanged whose bytes on disk are not the commit's. The copy compares bytes, never Git's view.
-test('files Git checked out with other line endings are left to the commit when Git gives them back exactly, and every file comes back byte for byte',()=>{
+// file unchanged whose bytes on disk are not the commit's. The copy reads only the files Git's
+// index says were touched, and keeps those byte for byte; one nobody touched since Git wrote it
+// comes back with the commit's own bytes.
+test('files Git checked out with other line endings are kept exactly once touched, otherwise as the commit holds them',()=>{
   const f=repository();
-  write(f.root,'rules/two-lines.md','one\ntwo\n');git(f.root,'add','rules/two-lines.md');git(f.root,'commit','-q','-m','A rule');
+  write(f.root,'rules/two-lines.md','one\ntwo\n');write(f.root,'rules/untouched.md','a\nb\n');git(f.root,'add','rules');git(f.root,'commit','-q','-m','Rules');
   // Git itself writes the files with CRLF, as a checkout or a pull on such a computer does.
   git(f.root,'config','core.autocrlf','true');
-  for(const name of ['AGENTS.md','rules/two-lines.md']){fs.rmSync(path.join(f.root,...name.split('/')));git(f.root,'checkout','--',name);}
+  for(const name of ['AGENTS.md','rules/two-lines.md','rules/untouched.md']){fs.rmSync(path.join(f.root,...name.split('/')));git(f.root,'checkout','--',name);}
   assert.deepEqual(read(f.root,'AGENTS.md'),Buffer.from('# Fictional manual\r\n'));
-  assert.equal(git(f.root,'status','--porcelain','--','AGENTS.md','rules'),'','Git calls both unchanged');
-  // And an editor saved one with mixed line endings, which Git's checkout would not give back.
+  assert.equal(git(f.root,'status','--porcelain','--','AGENTS.md','rules'),'','Git calls them unchanged');
+  // The index no longer names AGENTS.md's commit (as after the notebook's own commits, which move
+  // the branch without the folder's index), and an editor saved the rule with mixed line endings.
+  const other=execFileSync('git',['-C',f.root,'hash-object','-w','--stdin'],{input:'something else\n',encoding:'utf8'}).trim();
+  git(f.root,'update-index','--cacheinfo','100644,'+other+',AGENTS.md');
   write(f.root,'rules/two-lines.md','one\r\ntwo\n');
   const copy=makeUpdateCopy(f.store,f.media,path.join(f.base,'backups','20261021-120000-001')).path,manifest=JSON.parse(read(copy,'backup.json'));
   assert.deepEqual(Object.keys(manifest.converted),['AGENTS.md'],'left to the commit and Git\'s own checkout');
-  assert.ok(!manifest.files.some(entry=>entry.path==='AGENTS.md'));
+  assert.ok(!manifest.files.some(entry=>entry.path==='AGENTS.md'||entry.path==='rules/untouched.md'));
   assert.ok(manifest.files.some(entry=>entry.path==='rules/two-lines.md'),'one Git would not give back exactly is saved');
   assert.deepEqual(fs.readdirSync(path.dirname(copy)),['20261021-120000-001'],'nothing of the check is left');
   const target=new Store(path.join(f.base,'restored'));restore(target,path.join(f.base,'restored-media'),copy);
   assert.deepEqual(read(target.root,'AGENTS.md'),Buffer.from('# Fictional manual\r\n'));
   assert.deepEqual(read(target.root,'rules/two-lines.md'),Buffer.from('one\r\ntwo\n'));
+  assert.deepEqual(read(target.root,'rules/untouched.md'),Buffer.from('a\nb\n'),'untouched since Git wrote it: the commit\'s own bytes');
   assert.deepEqual(read(target.root,'skills/committed/SKILL.md'),Buffer.from('A committed recipe\n'),'a file Git never converted keeps its own line endings');
   // Git's settings changed since: the commit's own bytes, which Git counts as the same file.
   git(f.root,'config','core.autocrlf','false');
   const later=new Store(path.join(f.base,'later'));restore(later,path.join(f.base,'later-media'),copy);
   assert.deepEqual(read(later.root,'AGENTS.md'),Buffer.from('# Fictional manual\n'));
+});
+
+// What makes it seconds and not minutes (21 October 2026: seven minutes on one PC): no notebook
+// is opened and no committed file Git's index calls unchanged is read.
+test('the copy opens no notebook and reads no committed file Git calls unchanged',t=>{
+  const f=repository();
+  const reads=[],readFile=fs.readFileSync,inside=file=>{const name=path.relative(f.root,String(file));return name&&!name.startsWith('..')&&!path.isAbsolute(name)?name.split(path.sep).join('/'):null;};
+  t.mock.method(fs,'readFileSync',(file,...rest)=>{const name=inside(file);if(name)reads.push(name);return readFile(file,...rest);});
+  const result=makeUpdateCopy(workspaceForCopy(f.root),f.media,path.join(f.base,'backups','20261021-120000-001'));
+  t.mock.restoreAll();
+  assert.equal(result.kind,'git');assert.ok(result.took_ms.total>=0);
+  const committedUnchanged=['AGENTS.md','skills/committed/SKILL.md','work/committed-plan.md',path.relative(f.root,f.store.file(f.kept)).split(path.sep).join('/')];
+  assert.deepEqual(reads.filter(name=>committedUnchanged.includes(name)),[],'no unchanged committed file is opened');
+  const held=new Set(JSON.parse(read(result.path,'backup.json')).files.map(entry=>entry.path));
+  assert.deepEqual(reads.filter(name=>name.startsWith('notebook/')&&!held.has(name)),[],'of the notebook only what the copy holds is read');
+  const target=new Store(path.join(f.base,'restored'));
+  assert.equal(restore(target,path.join(f.base,'restored-media'),result.path),f.store.scan(true).size);
 });
 
 test('a file Git calls unchanged but whose checkout would give other bytes is saved',()=>{
@@ -153,8 +176,8 @@ test('a copy that stops part-way leaves neither a folder nor a ref',t=>{
   t.mock.restoreAll();
   assert.deepEqual(fs.readdirSync(parent),[]);
   assert.equal(git(f.root,'for-each-ref','refs/godspeed/'),'');
-  const copyFile=fs.copyFileSync;let copies=0;
-  t.mock.method(fs,'copyFileSync',(...args)=>{if(++copies===2)throw Object.assign(Error('EIO: a fictional read error'),{code:'EIO'});return copyFile(...args);});
+  const writeFile=fs.writeFileSync;let copies=0;
+  t.mock.method(fs,'writeFileSync',(file,...args)=>{if(String(file).includes('.partial-')&&++copies===2)throw Object.assign(Error('EIO: a fictional read error'),{code:'EIO'});return writeFile(file,...args);});
   assert.throws(()=>makeUpdateCopy(f.store,f.media,path.join(parent,'20261021-120000-002')),/fictional read error/);
   t.mock.restoreAll();
   assert.deepEqual(fs.readdirSync(parent),[]);assert.equal(git(f.root,'for-each-ref','refs/godspeed/'),'');
