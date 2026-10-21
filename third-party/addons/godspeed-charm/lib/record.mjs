@@ -36,7 +36,9 @@ export function readEvents(mcDir) {
 
 // Writes one event. The day comes from the settings' timezone (a corrupt settings file throws, so
 // nothing is filed on a guessed day). The first write creates the tracker.
-export function appendEvent(mcDir, event, now = clockNow()) {
+// lockTimeoutMs: how long to wait for a busy notebook before giving up (default the lock's own 20 s);
+// the context block waits only a moment, since a hook that stalls holds up the person's message.
+export function appendEvent(mcDir, event, now = clockNow(), { lockTimeoutMs } = {}) {
   const tz = loadSettings(mcDir).timezone;
   const when = new Date(event.when);
   if (Number.isNaN(when.getTime())) throw new Error(`"${event.when}" is not a time.`);
@@ -49,7 +51,7 @@ export function appendEvent(mcDir, event, now = clockNow()) {
   withNotebookLock(mcDir, () => {
     const tracker = findTracker(mcDir) || createTracker(mcDir, { fields: FIELDS.map((f) => ({ ...f })), names: [...NAMES], now });
     writeItems(mcDir, tracker, { put: [{ data, title }] }, now);
-  });
+  }, lockTimeoutMs > 0 ? { timeoutMs: lockTimeoutMs } : undefined);
   return written;
 }
 

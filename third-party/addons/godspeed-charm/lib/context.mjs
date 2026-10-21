@@ -19,6 +19,7 @@ function shortWords(words, max = 160) {
   const one = String(words ?? "").replace(/\s+/g, " ").trim();
   return one.length > max ? one.slice(0, max - 3).trimEnd() + "..." : one;
 }
+// A value inside the note, quoted so that quotes in it cannot break the sentence around it.
 const quoted = (value) => JSON.stringify(String(value));
 
 // Where no conversation id reached the block, nothing can be recorded, so the reply offers the
@@ -34,20 +35,24 @@ const SLIP =
   '("The deadline is wrong. Check the client\'s message and fix the draft.").';
 const ONLY_AI = "Only how they talk to you or to another AI they mention counts; never ask about anger at people, traffic or the weather.";
 const KIND = "At most once per message. Never lecture, and never refuse or delay the work because of a slip.";
+// A refusal's text is for the model, never for the person: only a success is passed on.
 const COMMANDS =
-  "After a godspeed-charm command, reply with its reply word for word; pass --language de when their message is German, " +
-  "and --words-file <file> instead of --words when their words hold quotes or line breaks.";
+  "When a godspeed-charm command succeeds, use its reply word for word. When it refuses, never pass its text on; do what this note says. " +
+  "Pass --language de when their message is German, and --words-file <file> instead of --words when their words hold quotes or line breaks.";
+// Starting while it runs asks whether to start over, a question that belongs to this conversation.
+const startCommand = (conv) => `godspeed-charm start ${conv ? `--conversation ${quoted(conv)} ` : ""}--words "<their words>"`;
 
-// contextBlock(state, settings, {conversation, scheduled, today, language}): "" when scheduled, or
-// when no challenge runs and it is not the finish day. `conversation` names where this message
-// came from ("telegram:<chat>", "claude:<session>", "notebook:<id>"): only there does a bare
-// yes or no answer the open question.
-export function contextBlock(state, settings = {}, { conversation = "", scheduled = false, today, language } = {}) {
+// contextBlock(state, settings, {conversation, scheduled, today, language, stickers}): "" when
+// scheduled, or when no challenge runs and it is not the finish day. `conversation` names where
+// this message came from ("telegram:<chat>", "claude:<session>", "notebook:<id>"): only there does
+// a bare yes or no answer the open question. `stickers` is true only when the caller knows the
+// hermes-telegram-stickers plugin will turn a tag into a sticker (R13).
+export function contextBlock(state, settings = {}, { conversation = "", scheduled = false, today, language, stickers = false } = {}) {
   if (scheduled || !state) return "";
   const lang = pickLanguage(language, settings?.language);
-  if (isFinishDay(state, today)) return finishBlock(state, lang);
-  if (!state.running) return "";
   const conv = typeof conversation === "string" ? conversation.trim() : "";
+  if (isFinishDay(state, today)) return finishBlock(state, lang, conv, stickers === true);
+  if (!state.running) return "";
 
   const L = [
     `[godspeed-charm] The person is doing the Charm Challenge: day ${state.day} of ${LENGTH}, ${days(state.daysToGo)} to go, ` +
@@ -55,7 +60,7 @@ export function contextBlock(state, settings = {}, { conversation = "", schedule
   ];
   if (state.resetToday) {
     L.push("A reset already happened today: don't ask about slips today.");
-    L.push('If they ask to reset in words ("charm slip", "reset my Charm Challenge"): run godspeed-charm slip --words "<their words>".');
+    L.push('If they report a slip themselves ("charm slip", "I yelled at Copilot"): run godspeed-charm slip --words "<their words>" and use its reply.');
   } else if (conv) {
     L.push(SLIP, ONLY_AI);
     L.push(
@@ -65,8 +70,8 @@ export function contextBlock(state, settings = {}, { conversation = "", schedule
     L.push(`When you ask, record it in the same turn: godspeed-charm asked --conversation ${quoted(conv)} --words "<their words>"`);
     L.push(
       'If they report a slip themselves, here or about another AI ("charm slip", "reset my Charm Challenge", "I yelled at Copilot"): ' +
-        'run godspeed-charm slip --words "<their words>". It resets only on a plain request like "charm slip"; anything else it refuses, ' +
-        "and you end your reply with the question above instead (and record it).",
+        'run godspeed-charm slip --words "<their words>". It resets only on a plain request like "charm slip". ' +
+        `When it refuses, run godspeed-charm asked --conversation ${quoted(conv)} --words "<their words>" and end your reply with its reply.`,
     );
   } else {
     L.push(SLIP, ONLY_AI);
@@ -75,12 +80,18 @@ export function contextBlock(state, settings = {}, { conversation = "", schedule
         `in the language of their message: ${said(lang, (l) => NO_ID[l]())}. When unsure, say it. ${KIND}`,
     );
     L.push('This conversation has no id here, so no question can be recorded and a bare yes or no cannot answer one: the person resets only in words ("charm slip").');
-    L.push('If they report a slip themselves ("charm slip", "reset my Charm Challenge"): run godspeed-charm slip --words "<their words>".');
+    L.push(
+      'If they report a slip themselves ("charm slip", "reset my Charm Challenge", "I yelled at Copilot"): run godspeed-charm slip --words "<their words>". ' +
+        "When it refuses, end your reply with the sentence above.",
+    );
   }
+  L.push(`If they ask to start the Charm Challenge while it runs: run ${startCommand(conv)}.`);
   const open = conv ? state.open?.find((q) => q.conversation === conv) : null;
   if (open) {
+    const words = shortWords(open.words);
     L.push(
-      `Open question in this conversation: after their words "${shortWords(open.words)}" earlier today, you asked whether to go back to ${LENGTH}. ` +
+      "Open question in this conversation: " +
+        (words ? `after their words ${quoted(words)} earlier today, you asked whether to go back to ${LENGTH}. ` : `earlier today you asked whether to go back to ${LENGTH}. `) +
         `If this message answers it with a yes ("yes", "ja", "reset", "fair"), run godspeed-charm answer yes --conversation ${quoted(conv)} --words "<their words>"; ` +
         `with a no ("no", "nein", "that didn't count"), run godspeed-charm answer no --conversation ${quoted(conv)} --words "<their words>". ` +
         "Anything else leaves it open: answer the message as usual.",
@@ -90,17 +101,17 @@ export function contextBlock(state, settings = {}, { conversation = "", schedule
   return L.join("\n");
 }
 
-// The finish day (needsFinish, or the finish written today): the finish line once, a new round,
-// one celebrating sticker where the sticker plugin is installed, and no more slip questions.
-function finishBlock(state, lang) {
-  return [
+// The finish day (needsFinish, or the finish written today): the finish line and the offer of a
+// new round, together and once per conversation, and no more slip questions. A sticker only when
+// the caller says the sticker plugin is there: a model left to judge that for itself could send a
+// raw tag to someone without the plugin.
+function finishBlock(state, lang, conv, stickers) {
+  const L = [
     `[godspeed-charm] The person finished the Charm Challenge today: ${LENGTH} days in a row.`,
-    "Say this once, at the start of your reply and in the language of their message, unless you already said it in this conversation: " +
-      `${said(lang, (l) => T[l].finish(state))}. Then answer their message as usual.`,
-    'Offer a new round; if they want one, run godspeed-charm start --words "<their words>" and reply with its reply word for word.',
-    "On Telegram, if the hermes-telegram-stickers plugin is installed (your instructions then mention tags like [[sticker:done]]), " +
-      "end that reply with [[sticker:party]] for one celebrating sticker; otherwise add no tag.",
-    "The challenge is over: don't ask about slips.",
-    "Pass --language de to godspeed-charm when their message is German.",
-  ].join("\n");
+    "Once in this conversation (skip this if you already did it here): at the start of your reply, in the language of their message, " +
+      `say ${said(lang, (l) => T[l].finish(state))} and offer a new round; if they want one, run ${startCommand(conv)}.`,
+  ];
+  if (stickers) L.push("End that reply with the tag [[sticker:party]]: the hermes-telegram-stickers plugin turns it into one celebrating sticker.");
+  L.push("Then answer their message as usual. The challenge is over: don't ask about slips.", COMMANDS);
+  return L.join("\n");
 }

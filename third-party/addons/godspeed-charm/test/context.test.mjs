@@ -33,6 +33,13 @@ test("while running: the day, the end date, the rule and how to record the quest
   assert.ok(b.includes('godspeed-charm slip --words "<their words>"'));
   assert.match(b, /--language de/);
   assert.doesNotMatch(b, /Open question/);
+  // A start while it runs opens its question here, so the conversation goes with it.
+  assert.ok(b.includes('godspeed-charm start --conversation "telegram:1" --words "<their words>"'));
+  // Only a success is passed on word for word; a refusal's text never reaches the person.
+  assert.match(b, /When a godspeed-charm command succeeds, use its reply word for word\. When it refuses, never pass its text on; do what this note says\./);
+  assert.doesNotMatch(b, /After a godspeed-charm command, reply with its reply/);
+  // A story slip: slip refuses, then asked, and the reply ends with asked's reply.
+  assert.ok(b.includes('When it refuses, run godspeed-charm asked --conversation "telegram:1" --words "<their words>" and end your reply with its reply.'));
 });
 
 test("the open question shows only in its own conversation", () => {
@@ -54,6 +61,7 @@ test("a reset today: no asking about slips today", () => {
   const b = block(s, { conversation: "telegram:1" });
   assert.match(b, /A reset already happened today: don't ask about slips today\./);
   assert.doesNotMatch(b, /asked --conversation/);
+  assert.ok(b.includes('godspeed-charm slip --words "<their words>" and use its reply'));
   assert.doesNotMatch(b, /That sounded like a slip/);
   assert.match(b, /21 days to go/);
 });
@@ -65,10 +73,17 @@ test("the finish day: the finish line once, a new round, the sticker, no slip qu
   assert.ok(b.startsWith("[godspeed-charm]"));
   assert.ok(b.includes('"Charm Challenge done: 21 days. Restarts on the way: 0. You talked me out of 1 reset."'));
   assert.ok(b.includes('"Charm Challenge geschafft: 21 Tage. Neustarts unterwegs: 0. Du hast mich einmal vom Zurücksetzen abgebracht."'));
-  assert.match(b, /unless you already said it in this conversation/);
-  assert.match(b, /new round/);
-  assert.match(b, /\[\[sticker:party\]\]/);
-  assert.match(b, /hermes-telegram-stickers/);
+  // The finish line and the offer of a new round together, once per conversation.
+  const once = b.split("\n").find((l) => l.startsWith("Once in this conversation"));
+  assert.ok(once, b);
+  assert.match(once, /skip this if you already did it here/);
+  assert.match(once, /Charm Challenge done: 21 days/);
+  assert.match(once, /offer a new round/);
+  assert.ok(b.includes('godspeed-charm start --conversation "telegram:1" --words "<their words>"'));
+  // No sticker unless the caller says the sticker plugin is there (R13).
+  assert.doesNotMatch(b, /sticker/i);
+  const withStickers = contextBlock(due, S, { conversation: "telegram:1", today: "2026-11-11", stickers: true });
+  assert.match(withStickers, /\[\[sticker:party\]\]/);
   assert.doesNotMatch(b, /That sounded like a slip/);
   assert.doesNotMatch(b, /asked --conversation/);
   // Written already: the same, on that day only.
@@ -95,6 +110,21 @@ test("without a conversation: no recording, and a bare yes or no answers nothing
   assert.doesNotMatch(b, /answer yes/);
 });
 
+test("their words are quoted safely, and a question without words reads without them", () => {
+  const nested = running([ev("asked", "2026-10-30", { conversation: "c", words: 'he said "fix it" or else' })]);
+  const line = block(nested, { conversation: "c" }).split("\n").find((l) => l.startsWith("Open question"));
+  assert.ok(line.includes('after their words "he said \\"fix it\\" or else" earlier today'), line);
+  for (const words of [undefined, "", "   "]) {
+    const bare = running([ev("asked", "2026-10-30", { conversation: "c", ...(words === undefined ? {} : { words }) })]);
+    const l = block(bare, { conversation: "c" }).split("\n").find((x) => x.startsWith("Open question"));
+    assert.ok(l, "the open question is still named");
+    assert.doesNotMatch(l, /""/);
+    assert.doesNotMatch(l, /after their words/);
+    assert.match(l, /earlier today you asked whether to go back to 21/);
+    assert.match(l, /answer yes --conversation "c"/);
+  }
+});
+
 test("their words are kept short and on one line", () => {
   const long = "x".repeat(500) + "\nsecond line";
   const s = running([ev("asked", "2026-10-30", { conversation: "c", words: long })]);
@@ -111,8 +141,8 @@ test("no long dashes, no broken values, in any block", () => {
     [charmState([ev("start", "2026-10-21"), ev("reset", "2026-10-30")], "2026-10-30"), "2026-10-30"],
     [charmState([ev("start", "2026-10-21")], "2026-11-11"), "2026-11-11"],
   ];
-  for (const language of ["en", "de"]) for (const conversation of ["c", undefined]) for (const [s, today] of states) {
-    const b = contextBlock(s, { ...S, language }, { conversation, today });
+  for (const language of ["en", "de"]) for (const conversation of ["c", undefined]) for (const stickers of [false, true]) for (const [s, today] of states) {
+    const b = contextBlock(s, { ...S, language }, { conversation, today, stickers });
     assert.ok(b.length > 0);
     assert.ok(!/[—–]/.test(b), b);
     assert.ok(!/undefined|NaN|null/.test(b), b);

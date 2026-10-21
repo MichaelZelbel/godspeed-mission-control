@@ -24,7 +24,7 @@ import { decodeArgv, readWordsFile, restoreShellEnv, startedFromGitBash, gitBash
 // The values that name a file or folder. From Git Bash these are turned into Windows paths;
 // the person's words never are (lib/argv.mjs).
 const PATH_FLAGS = ["godspeed", "words-file"];
-const FLAGS = new Set(["json", "scheduled", "no-write"]);
+const FLAGS = new Set(["json", "scheduled", "no-write", "stickers"]);
 function parseArgs(argv) {
   const pos = []; const f = {};
   for (let i = 0; i < argv.length; i++) {
@@ -42,51 +42,59 @@ function parseArgs(argv) {
   return { pos, f };
 }
 
-// The launchers say how they handed the arguments over (lib/argv.mjs). The markers are read once
-// and taken out of the environment.
-const launched = decodeArgv(process.argv.slice(2), process.env);
-const fromGitBash = startedFromGitBash(process.env);
-delete process.env[LAUNCHER_ENV]; delete process.env[CMDLINE_ENV];
-restoreShellEnv(process.env);
-const [cmd = "help", ...rest] = launched.argv;
-const { pos, f, error: argError } = parseArgs(rest);
 // The context block runs before every message the person sends: whatever goes wrong there, the
-// assistant must still answer, so it prints nothing and exits 0 instead of an error.
-const QUIET = cmd === "context";
+// assistant must still answer, so it prints nothing and exits 0 instead of an error. That holds
+// from the very first step (reading the arguments, finding mission control), so everything below
+// runs inside the one try at the end of this file, and this guess holds until the arguments are read.
+let QUIET = process.argv[2] === "context";
 function die(msg) { if (QUIET) process.exit(0); console.error(msg); process.exit(1); }
-if (launched.error) die(launched.error);
-if (argError) die(argError);
-if (fromGitBash) for (const k of PATH_FLAGS) if (typeof f[k] === "string") f[k] = gitBashPath(f[k]);
-// Words that hold a line break or a quote travel safest in a file: no shell reads a file's
-// contents, so nothing on the way can cut or change them.
-if (f["words-file"] !== undefined) {
-  if (f.words !== undefined) die("Give the words once: either --words or --words-file, not both.");
-  try { f.words = readWordsFile(f["words-file"]); } catch (e) { die(e.message); }
-}
-if (f.language !== undefined && !["en", "de"].includes(f.language)) die("--language can be en or de.");
-for (const k of ["words", "conversation"]) if (f[k] !== undefined && typeof f[k] !== "string") die(`--${k} needs a value.`);
+let cmd, pos, f, mcDir, s, lang, say, at, today;
 
-const mcDir = findMissionControl({ arg: f.godspeed });
-if (!mcDir && cmd !== "help") die("Could not find your mission control folder. Run this from inside it, or add --godspeed <folder>.");
-// The record lives in the notebook (every Godspeed Mission Control has one); config and help work without it.
-if (mcDir && !["help", "config"].includes(cmd) && !hasNotebook(mcDir)) die("The Charm Challenge keeps its record in the Godspeed notebook, and this mission control has none.");
-let s = { ...DEFAULTS };
-if (mcDir && cmd !== "help") { try { s = loadSettings(mcDir); } catch (e) { die(`godspeed-charm: ${e.message}`); } }
-// --language wins for this one reply (German in, German out); then the settings; then English.
-const lang = pickLanguage(f.language, s.language);
-const say = T[lang];
-const at = now();
-let today;
+function prepare() {
+  // The launchers say how they handed the arguments over (lib/argv.mjs). The markers are read once
+  // and taken out of the environment.
+  const launched = decodeArgv(process.argv.slice(2), process.env);
+  const fromGitBash = startedFromGitBash(process.env);
+  delete process.env[LAUNCHER_ENV]; delete process.env[CMDLINE_ENV];
+  restoreShellEnv(process.env);
+  let rest;
+  [cmd = "help", ...rest] = launched.argv;
+  QUIET = cmd === "context";
+  const parsed = parseArgs(rest);
+  pos = parsed.pos; f = parsed.f;
+  if (launched.error) die(launched.error);
+  if (parsed.error) die(parsed.error);
+  if (fromGitBash) for (const k of PATH_FLAGS) if (typeof f[k] === "string") f[k] = gitBashPath(f[k]);
+  // Words that hold a line break or a quote travel safest in a file: no shell reads a file's
+  // contents, so nothing on the way can cut or change them.
+  if (f["words-file"] !== undefined) {
+    if (f.words !== undefined) die("Give the words once: either --words or --words-file, not both.");
+    try { f.words = readWordsFile(f["words-file"]); } catch (e) { die(e.message); }
+  }
+  if (f.language !== undefined && !["en", "de"].includes(f.language)) die("--language can be en or de.");
+
+  mcDir = findMissionControl({ arg: f.godspeed });
+  if (!mcDir && cmd !== "help") die("Could not find your mission control folder. Run this from inside it, or add --godspeed <folder>.");
+  // The record lives in the notebook (every Godspeed Mission Control has one); config and help work without it.
+  if (mcDir && !["help", "config"].includes(cmd) && !hasNotebook(mcDir)) die("The Charm Challenge keeps its record in the Godspeed notebook, and this mission control has none.");
+  s = { ...DEFAULTS };
+  if (mcDir && cmd !== "help") s = loadSettings(mcDir);
+  // --language wins for this one reply (German in, German out); then the settings; then English.
+  lang = pickLanguage(f.language, s.language);
+  say = T[lang];
+  at = now();
+  if (!["help", "config"].includes(cmd)) today = localDate(at, s.timezone);
+}
 
 // Events written by one command get one millisecond each, so a finish settled first and a start
 // written after it never share a time and always read back in the order they happened.
 let written = 0;
 const load = () => charmState(readEvents(mcDir), today);
-function write(kind, extra = {}) {
+function write(kind, extra = {}, { lockTimeoutMs } = {}) {
   const event = { kind, when: new Date(at.getTime() + written++).toISOString() };
   if (extra.words) event.words = extra.words;
   if (extra.conversation) event.conversation = extra.conversation;
-  appendEvent(mcDir, event, at);
+  appendEvent(mcDir, event, at, { lockTimeoutMs });
 }
 // The end date has come and the finish is not written yet: write it first, so every command acts on
 // the settled count (status on the end date says the finish line, never "0 days to go").
@@ -123,7 +131,9 @@ const commands = {
       const asked = load();
       return done(say.alreadyRunning(asked), asked);
     }
-    return done(say.alreadyRunning(state), state);
+    // No question could be opened (no conversation, or a reset already today, so the count is at
+    // 21 anyway): say how far it is and ask nothing a yes could not answer.
+    return done(say.alreadyRunningNoQuestion(state), state);
   },
   status() {
     const state = settle();
@@ -163,10 +173,12 @@ const commands = {
     const words = need("words", 'godspeed-charm slip --words "charm slip"');
     const state = settle();
     if (!state.running) refuse(say.notRunning(), state);
+    // A day that already had a reset: nothing more changes today and nothing is asked. A plain
+    // "charm slip" gets today's reset confirmed (two resets on one day count as one, so none is
+    // written); a story gets told it changes nothing.
+    if (state.resetToday) return done(isExplicitReset(words) ? say.yes(state) : say.resetToday(state), state);
     // Only a plain request resets without asking; a story about yelling at an AI gets the question.
     if (!isExplicitReset(words)) refuse(say.askFirst(), state);
-    // Two resets on one day count as one restart; the second is not written at all.
-    if (state.resetToday) return done(say.yes(state), state);
     write("reset", extras());
     const after = load();
     return done(say.yes(after), after);
@@ -201,8 +213,12 @@ const commands = {
       conversation = `claude:${input.session_id}`;
     }
     let state = load();
-    if (state.needsFinish) { try { write("finish"); state = load(); } catch { /* said again on the next message */ } }
-    const block = contextBlock(state, s, { conversation, today, language: lang });
+    // A busy notebook gets a moment, not the lock's usual 20 seconds: the person's message is
+    // waiting (Hermes gives this hook 5 seconds). Unwritten, the finish is still said, and written
+    // by the next command.
+    if (state.needsFinish) { try { write("finish", {}, { lockTimeoutMs: 1500 }); state = load(); } catch { /* written next time */ } }
+    // --stickers: the caller knows the hermes-telegram-stickers plugin turns a tag into a sticker.
+    const block = contextBlock(state, s, { conversation, today, language: lang, stickers: f.stickers === true });
     if (!block) return null;
     if (f.hook === "claude") console.log(JSON.stringify({ hookSpecificOutput: { hookEventName: "UserPromptSubmit", additionalContext: block } }));
     else process.stdout.write(block + "\n");
@@ -231,13 +247,13 @@ const commands = {
 };
 
 try {
+  prepare();
   if (!Object.hasOwn(commands, cmd)) die(`Unknown command "${cmd}". Try: godspeed-charm help`);
-  if (!["help", "config"].includes(cmd)) today = localDate(at, s.timezone);
   const result = commands[cmd]();
   if (result) console.log(f.json ? JSON.stringify({ ok: true, reply: result.reply, state: result.state }) : result.reply);
 } catch (e) {
   if (e instanceof Refusal) {
-    if (f.json) console.log(JSON.stringify({ ok: false, reply: e.reply, state: e.state }));
+    if (f?.json) console.log(JSON.stringify({ ok: false, reply: e.reply, state: e.state }));
     console.error(e.reply);
     process.exitCode = 2;
   } else die(`godspeed-charm: ${e.message}`);

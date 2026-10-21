@@ -41,6 +41,7 @@ godspeed-charm asked --conversation telegram:123 --words "why do you give me thi
 godspeed-charm answer yes --conversation telegram:123 --words "yes"
 godspeed-charm answer no --conversation telegram:123 --words "that didn't count"
 godspeed-charm context --conversation telegram:123
+godspeed-charm context --conversation telegram:123 --stickers   # the sticker plugin is installed
 godspeed-charm context --hook claude
 ```
 

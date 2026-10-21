@@ -52,10 +52,15 @@ test("singular forms, and no zero-resets sentence", () => {
 test("alreadyRunning asks, askFirst explains", () => {
   const mid = state([ev("start", "2026-10-21")], "2026-10-30");
   assert.equal(T.en.alreadyRunning(mid), "Charm Challenge is already running: day 10 of 21, 12 days to go. Start over from 21? Yes / No.");
-  assert.match(T.en.askFirst(), /charm slip/);
-  assert.match(T.en.askFirst(), /Yes \/ No/);
   assert.match(T.de.alreadyRunning(mid), /Ja \/ Nein/);
-  assert.match(T.de.askFirst(), /charm slip/);
+  // askFirst is a refusal the model should not pass on; if it does, it still reads as a plain
+  // sentence to the person, never as an instruction to the model.
+  assert.equal(T.en.askFirst(), 'Only "charm slip" starts over right away, so nothing has changed yet.');
+  assert.equal(T.de.askFirst(), 'Nur "charm slip" setzt sofort zurück, also hat sich noch nichts geändert.');
+  for (const lang of ["en", "de"]) assert.doesNotMatch(T[lang].askFirst(), /\bask\b|frag|Yes \/ No|Ja \/ Nein|wait|warte/);
+  // Without a recorded question, no question.
+  assert.equal(T.en.alreadyRunningNoQuestion(mid), "Charm Challenge is already running: day 10 of 21, 12 days to go.");
+  assert.equal(T.de.alreadyRunningNoQuestion(mid), "Die Charm Challenge läuft schon: Tag 10 von 21, noch 12 Tage.");
 });
 
 test("German texts", () => {
@@ -87,6 +92,12 @@ test("an unknown language falls back to English, never to nothing", () => {
   assert.equal(T[undefined], T.en);
   assert.equal(T[""], T.en);
   assert.deepEqual(Object.keys(T), ["en", "de"]);
+  // Only unknown language names fall back; symbols and Object's own names stay what they are.
+  assert.equal(T[Symbol.toPrimitive], undefined);
+  assert.equal(T[Symbol.iterator], undefined);
+  assert.equal(String(T), "[object Object]");
+  assert.equal(`${T}`, "[object Object]");
+  assert.equal(typeof T.hasOwnProperty, "function");
 });
 
 test("the German start-over question reads naturally", () => {

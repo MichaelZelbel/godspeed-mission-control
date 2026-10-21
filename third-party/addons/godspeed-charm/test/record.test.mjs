@@ -134,3 +134,17 @@ test("saveSettings writes through a temporary file and leaves none behind", () =
   assert.match(src, /renameSync|atomic/);
   gone(dir);
 });
+
+test("appendEvent gives up on a busy notebook after lockTimeoutMs, writing nothing", () => {
+  const dir = mission();
+  const lock = path.join(dir, ".godspeed", "workspace.lock");
+  fs.writeFileSync(lock, JSON.stringify({ pid: process.pid, thread: 0, token: "held", at: new Date().toISOString() }));
+  const started = Date.now();
+  assert.throws(() => appendEvent(dir, { kind: "start", when: "2026-10-21T08:00:00Z" }, new Date(), { lockTimeoutMs: 300 }), /busy/);
+  assert.ok(Date.now() - started < 3000);
+  assert.equal(collections(dir).length, 0);
+  fs.rmSync(lock);
+  appendEvent(dir, { kind: "start", when: "2026-10-21T08:00:00Z" }, new Date(), { lockTimeoutMs: 300 });
+  assert.equal(readEvents(dir).length, 1);
+  gone(dir);
+});

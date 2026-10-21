@@ -78,6 +78,38 @@ test("start while running writes no start, asks whether to start over, and opens
   gone(dir);
 });
 
+test("start while running asks no question it could not take a yes to", () => {
+  const dir = mission();
+  run(dir, ["start"]);
+  // No conversation: nothing can be recorded, so nothing is asked.
+  const bare = run(dir, ["start", "--json"], { day: "2026-10-30" });
+  assert.equal(bare.status, 0, bare.stderr);
+  assert.equal(json(bare).reply, "Charm Challenge is already running: day 10 of 21, 12 days to go.");
+  assert.deepEqual(json(bare).state.open, []);
+  // A reset already happened today: the count is at 21 anyway, and no question opens.
+  run(dir, ["slip", "--words", "charm slip"], { day: "2026-10-31" });
+  const reset = run(dir, ["start", "--conversation", "telegram:1", "--json", "--language", "de"], { day: "2026-10-31" });
+  assert.equal(json(reset).reply, "Die Charm Challenge läuft schon: Tag 1 von 21, noch 21 Tage.");
+  assert.deepEqual(json(reset).state.open, []);
+  assert.equal(rowsOf(dir, "asked"), 0);
+  gone(dir);
+});
+
+test("a slip story on a day that already had a reset: nothing changes and nothing is asked", () => {
+  const dir = mission();
+  run(dir, ["start"]);
+  run(dir, ["slip", "--words", "charm slip"], { day: "2026-10-30" });
+  const before = rows(dir);
+  const story = run(dir, ["slip", "--words", "I yelled at Copilot", "--json"], { day: "2026-10-30" });
+  assert.equal(story.status, 0, story.stderr);
+  assert.equal(json(story).reply, "There was a reset today already, so nothing changed. Still 21 days to go.");
+  assert.equal(rows(dir), before);
+  const explicit = run(dir, ["slip", "--words", "charm slip"], { day: "2026-10-30" });
+  assert.equal(explicit.stdout.trim(), "Back to 21. Done on Friday 20 November. Restarts: 1.");
+  assert.equal(rows(dir), before);
+  gone(dir);
+});
+
 test("a yes in another conversation answers nothing and writes nothing; in its own it resets", () => {
   const dir = mission();
   run(dir, ["start"]);
@@ -283,9 +315,10 @@ test("context --hook claude: the hook's JSON for its own session, silent for SDK
     assert.equal(quiet.stdout, "", JSON.stringify(env));
     assert.equal(quiet.stderr, "");
   }
-  for (const bad of ["", "not json", "[]"]) {
+  for (const bad of ["", "not json", "[]", "{}", JSON.stringify({ session_id: "" })]) {
     const quiet = run(dir, ["context", "--hook", "claude"], { day: "2026-10-30", input: bad });
     assert.equal(quiet.status, 0);
+    assert.equal(quiet.stdout, "", JSON.stringify(bad));
     assert.equal(quiet.stderr, "");
   }
   gone(dir);
@@ -327,15 +360,62 @@ test("context never breaks a chat: corrupt settings, a corrupt row, no mission c
   gone(nowhere);
 });
 
-test("context on the finish day: the finish line, the sticker, no slip question; it settles the finish", () => {
+test("context stays quiet even when finding mission control or reading the arguments fails", () => {
+  // A device.env that is a folder makes reading it throw (EISDIR) inside findMissionControl.
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "charm-home-"));
+  fs.mkdirSync(path.join(home, ".godspeed", "device.env"), { recursive: true });
+  const env = { GODSPEED_CHARM_DIR: "", HOME: home, USERPROFILE: home };
+  const spawn = (args, extra = {}) => spawnSync(process.execPath, [BIN, ...args], {
+    encoding: "utf8", cwd: home, windowsHide: true, input: extra.input,
+    env: { ...process.env, GODSPEED_SCHEDULED_RUN: "", CLAUDE_CODE_ENTRYPOINT: "cli", GODSPEED_CHARM_LAUNCHER: "", ...env, ...extra.env },
+  });
+  for (const [args, input] of [[["context", "--conversation", "telegram:1"]], [["context", "--hook", "claude"], JSON.stringify({ session_id: "abc" })]]) {
+    const r = spawn(args, { input });
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(r.stdout, "");
+    assert.equal(r.stderr, "");
+  }
+  // Elsewhere the same failure is an error a person sees, without a stack trace.
+  const s = spawn(["status"]);
+  assert.equal(s.status, 1);
+  assert.match(s.stderr, /^godspeed-charm: /);
+  // Arguments the .cmd launcher cut short: the context still says nothing.
+  const cut = spawn(["context", "--conversation", "telegram:1"], { env: { GODSPEED_CHARM_LAUNCHER: "cmd" } });
+  assert.equal(cut.status, 0);
+  assert.equal(cut.stdout + cut.stderr, "");
+  gone(home);
+});
+
+test("the finish write in context waits at most a moment for a busy notebook, and the block still comes", () => {
+  const dir = mission();
+  run(dir, ["start"]);
+  // Another writer (this test process, alive) holds the notebook's lock.
+  const lock = path.join(dir, ".godspeed", "workspace.lock");
+  fs.writeFileSync(lock, JSON.stringify({ pid: process.pid, thread: 0, token: "held-by-test", at: new Date().toISOString() }));
+  const started = Date.now();
+  const r = run(dir, ["context", "--conversation", "telegram:1"], { day: "2026-11-11" });
+  const took = Date.now() - started;
+  assert.equal(r.status, 0, r.stderr);
+  assert.ok(took < 8000, `context took ${took} ms`);
+  assert.match(r.stdout, /Charm Challenge done: 21 days/);
+  assert.equal(r.stderr, "");
+  assert.equal(rowsOf(dir, "finish"), 0);
+  fs.rmSync(lock);
+  run(dir, ["context", "--conversation", "telegram:1"], { day: "2026-11-11" });
+  assert.equal(rowsOf(dir, "finish"), 1);
+  gone(dir);
+});
+
+test("context on the finish day: the finish line, no slip question, a sticker only with --stickers; it settles the finish", () => {
   const dir = mission();
   run(dir, ["start"]);
   const r = run(dir, ["context", "--conversation", "telegram:1"], { day: "2026-11-11" });
   assert.equal(r.status, 0, r.stderr);
   assert.match(r.stdout, /Charm Challenge done: 21 days\. Restarts on the way: 0\./);
-  assert.match(r.stdout, /\[\[sticker:party\]\]/);
+  assert.doesNotMatch(r.stdout, /sticker/i);
   assert.doesNotMatch(r.stdout, /That sounded like a slip/);
   assert.equal(rowsOf(dir, "finish"), 1);
+  assert.match(run(dir, ["context", "--conversation", "telegram:1", "--stickers"], { day: "2026-11-11" }).stdout, /\[\[sticker:party\]\]/);
   // Later the same day it still says it (once per conversation is the model's to keep); the day after, nothing.
   assert.match(run(dir, ["context", "--conversation", "telegram:1"], { day: "2026-11-11" }).stdout, /Charm Challenge done/);
   assert.equal(rowsOf(dir, "finish"), 1);
