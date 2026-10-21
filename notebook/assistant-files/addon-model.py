@@ -58,15 +58,19 @@ def request(payload, *, load_config, resolve_runtime, resolve_client, expected_r
     return {"text": text, "provider": effective, "model": model}
 
 
+def load_host_environment():
+    try:
+        from dotenv import load_dotenv
+        load_dotenv(Path(os.environ["HERMES_HOME"]) / ".env", override=True)
+    except ImportError:
+        pass
+
+
 def main():
     # The caller controls only text and bounded budgets. Connection settings and
     # credentials come exclusively from the installation's verified Hermes home.
     payload = json.loads(sys.stdin.read(600001))
-    try:
-        from dotenv import load_dotenv
-        load_dotenv(Path(os.environ["HERMES_HOME"]) / ".env", override=False)
-    except ImportError:
-        pass
+    load_host_environment()
     from hermes_cli.config import load_config_readonly
     from hermes_cli.runtime_provider import resolve_runtime_provider, _get_named_custom_provider, expand_direct_api_alias
     from agent.auxiliary_client import resolve_provider_client, _normalize_aux_provider

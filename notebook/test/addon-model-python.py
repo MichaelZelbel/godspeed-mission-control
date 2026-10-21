@@ -2,6 +2,9 @@ import importlib.util
 from pathlib import Path
 from types import SimpleNamespace
 import unittest
+import os
+import tempfile
+from unittest.mock import patch
 
 spec = importlib.util.spec_from_file_location("addon_model", Path(__file__).parents[1] / "assistant-files" / "addon-model.py")
 module = importlib.util.module_from_spec(spec)
@@ -9,6 +12,16 @@ spec.loader.exec_module(module)
 
 
 class HostModelTests(unittest.TestCase):
+    @unittest.skipUnless(importlib.util.find_spec("dotenv"), "python-dotenv is supplied by the Hermes runtime")
+    def test_current_host_credentials_override_stale_caller_environment(self):
+        with tempfile.TemporaryDirectory() as folder:
+            Path(folder, ".env").write_text("OPENAI_API_KEY=current-host-test-key\nOPENAI_BASE_URL=https://current.example\n", encoding="utf-8")
+            with patch.dict(os.environ, {"HERMES_HOME": folder, "OPENAI_API_KEY": "stale-caller-test-key", "OPENAI_BASE_URL": "https://stale.example", "HOST_ENV_ONLY_TEST": "kept"}):
+                module.load_host_environment()
+                self.assertEqual(os.environ["OPENAI_API_KEY"], "current-host-test-key")
+                self.assertEqual(os.environ["OPENAI_BASE_URL"], "https://current.example")
+                self.assertEqual(os.environ["HOST_ENV_ONLY_TEST"], "kept")
+
     def test_selected_connection_is_used_without_tools_agent_or_fallback(self):
         calls = []
         class Completions:

@@ -60,3 +60,11 @@ ask for that update rather than ask for another AI account.
 `GODSPEED_MODEL_WORKSPACE` can name the workspace when `--workspace` is absent.
 The command also accepts the usual `GODSPEED_WORKSPACE`, `GODSPEED_ROOT` and
 `GODSPEED_DIR` locations. Credentials stay in the host's existing private files.
+
+On the one-line Docker server, the server installer also creates a host launcher
+at `<server installation>/.godspeed/model.mjs`. Its `model-host.json` identifies
+that installation. A host add-on uses it to call the fixed `godspeed` Compose
+service over standard input and output. The helper and selected connection stay
+inside the existing container. The launcher opens no network port and forwards no
+credential. It refuses another workspace, service or executable. An existing
+global `godspeed-model` command belonging to a native installation is preserved.

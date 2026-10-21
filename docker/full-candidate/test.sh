@@ -18,6 +18,8 @@ GODSPEED_VERIFY_SETUP_CODE=$(openssl rand -hex 32)
 docker network create "$network" >/dev/null
 docker volume create "$volume" >/dev/null
 docker run -d --name "$name" --network "$network" --memory=2g --cpus=2 \
+  --label com.docker.compose.project=godspeed-mission-control --label com.docker.compose.service=godspeed \
+  --label com.docker.compose.container-number=1 --label com.docker.compose.oneoff=False \
   --mount "type=volume,src=$volume,dst=/opt/data/full-candidate" \
   -e "GODSPEED_ACCESS_TOKEN=$GODSPEED_VERIFY_SETUP_CODE" -e GODSPEED_TELEGRAM_API=http://127.0.0.1:8081 \
   -e GODSPEED_PROMPT_HARVEST_FIRST=3 -e GODSPEED_PROMPT_HARVEST_EVERY=5 "$image" >/dev/null
@@ -35,6 +37,31 @@ docker exec "$name" sh -c 'for i in 1 2 3 4 5; do sh -c "sleep 0.2 &"; done; sle
 left=$(docker exec "$name" sh -c 'ps -eo stat= | grep -c "^Z" || true')
 [ "$left" = 0 ] || { echo "$left finished programs were never collected."; exit 1; }
 echo "Finished programs are collected by the image's own init."
+docker exec -u hermes "$name" node /opt/godspeed/kit/docker/full-candidate/test-addon-model.mjs | tee "$evidence/addon-model.log"
+# The add-on may run on the Linux host while Godspeed runs in its existing
+# container. Exercise that exact boundary against another local fake request.
+docker exec -d -u hermes "$name" node /opt/godspeed/kit/docker/full-candidate/test-addon-model.mjs --serve
+for attempt in $(seq 1 50); do
+  docker exec "$name" test -f /tmp/godspeed-addon-model-ready.json && break
+  sleep 0.2
+done
+docker exec "$name" test -f /tmp/godspeed-addon-model-ready.json
+model_host=$(mktemp -d)
+mkdir -p "$model_host/.godspeed"
+cp notebook/bin/godspeed-docker-model.mjs "$model_host/.godspeed/model.mjs"
+printf '%s\n' '{"format":1,"kind":"godspeed-docker","service":"godspeed","workspace":"/opt/data/full-candidate/workspace"}' > "$model_host/.godspeed/model-host.json"
+printf 'name: godspeed-mission-control\nservices:\n  godspeed:\n    image: %s\n' "$image" > "$model_host/compose.yaml"
+: > "$model_host/.env"
+printf '%s\n' '{"system":"Return a fictional verdict only.","prompt":"A wholly invented profile.","timeout_ms":20000,"max_tokens":128}' \
+  | node "$model_host/.godspeed/model.mjs" --workspace "$model_host" > "$evidence/addon-host-model.json"
+node -e 'const r=require(process.argv[1]);if(r.provider!=="custom"||r.model!=="fictional-addon-model"||JSON.parse(r.text).verdict!=="like")process.exit(1)' "$evidence/addon-host-model.json"
+docker exec -u hermes "$name" node -e 'const fs=require("fs"),p=JSON.parse(fs.readFileSync("/tmp/godspeed-addon-model-ready.json"));process.kill(p.pid,"SIGTERM")'
+for attempt in $(seq 1 50); do
+  if ! docker exec "$name" test -f /tmp/godspeed-addon-model-ready.json; then break; fi
+  sleep 0.2
+done
+rm -rf "$model_host"
+echo 'A host add-on used the fixed-service Docker model proxy and the selected local endpoint.'
 # The mail tool on this server (18 October 2026): the assistant has it and it answers, and the
 # command handed out for connecting Gmail is one the server's own terminal can run. Until then the
 # server had no mail tool, and the command named a node path that exists only in the container.

@@ -7,7 +7,7 @@ import http from 'node:http';
 import {EventEmitter} from 'node:events';
 import {PassThrough} from 'node:stream';
 import {execFileSync,spawn} from 'node:child_process';
-import {addonModel,modelInput} from '../core/addon-model.mjs';
+import {addonModel,modelInput,modelConnection} from '../core/addon-model.mjs';
 import {installModelCommand} from '../scripts/install-model-command.mjs';
 
 function fixture(t){
@@ -18,6 +18,10 @@ function fixture(t){
  return {root,state,home,runtime};
 }
 const input={system:'Evaluate only this fictional profile.',prompt:'Invented person who likes sailing.'};
+test('the packaged server runtime uses its own virtual environment and source root',t=>{
+ const f=fixture(t),bin=path.join(f.runtime,'bin'),venv=path.join(f.runtime,'.venv','bin');fs.mkdirSync(bin,{recursive:true});fs.mkdirSync(venv,{recursive:true});fs.writeFileSync(path.join(venv,'python3'),'');
+ fs.writeFileSync(path.join(f.state,'assistant.json'),JSON.stringify({verified:true,home:f.home,executable:path.join(bin,'hermes')}));const connection=modelConnection(f.root);assert.equal(connection.python,path.join(venv,'python3'));assert.equal(connection.sourceRoot,f.runtime);
+});
 function fakeSpawn(reply,{code=0,delay=0,onSpawn=()=>{}}={}){
  return (executable,args,options)=>{
   const child=new EventEmitter();child.stdout=new PassThrough();child.stderr=new PassThrough();child.stdin=new PassThrough();let bytes='';child.stdin.on('data',chunk=>bytes+=chunk);

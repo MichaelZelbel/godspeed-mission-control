@@ -20,10 +20,11 @@ export function modelConnection(root){
   const descriptor=read(descriptorFile);
   if(!descriptor.verified||!path.isAbsolute(descriptor.home||'')||!path.isAbsolute(descriptor.executable||''))throw Error('Connect the Godspeed assistant before using an add-on');
   const executable=descriptor.executable,folder=path.dirname(executable),windows=/\.exe$/i.test(executable);
-  const candidates=[path.join(folder,windows?'python.exe':'python3'),path.join(folder,windows?'python.exe':'python')];
+  const packaged=path.resolve(folder,'..'),packagedPython=path.join(packaged,'.venv','bin','python3');
+  const candidates=[path.join(folder,windows?'python.exe':'python3'),path.join(folder,windows?'python.exe':'python'),packagedPython];
   const python=candidates.find(p=>fs.existsSync(p));
   if(!python)throw Error('The connected Godspeed assistant Python runtime was not found');
-  const sourceRoot=descriptor.sourceRoot||path.resolve(folder,'../..');
+  const sourceRoot=descriptor.sourceRoot||(python===packagedPython?packaged:path.resolve(folder,'../..'));
   return {kind:'hermes',state,descriptor,python,sourceRoot};
  }
  const file=path.join(state,'provider.json');
