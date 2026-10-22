@@ -18,30 +18,11 @@
 // needs no AI and deletes a key from the chat as soon as it has read it, as the first setup does.
 import fs from 'node:fs';
 import path from 'node:path';
-import {randomBytes} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
-import {backupStatus,connectHermesBackup,removeBackupAI} from '../core/backup-ai.mjs';
-import {routineAIStatus,writeRecord,readRecord} from '../core/routine-ai.mjs';
-import {modelConnection,runHermesHelper} from '../core/addon-model.mjs';
-import {atomic} from '../core/records/store.mjs';
-
-export const REQUEST_FILE='backup-request.json';
-export const FLOW_STATE='backup-setup.json';// the backup chat's own state, which says when a request is done
-export const REQUEST_MINUTES=30;
-export const HANDED_OVER='One moment: the backup AI setup takes over this chat for a few minutes. No AI reads what you send it, and a key is deleted from the chat as soon as it is read. I am back right after.';
-
-// What /backupai leaves for the runner (docker/full-candidate/telegram-runner.mjs). A request still
-// open (not older than REQUEST_MINUTES, and its chat not done) is kept, so pressing it twice opens
-// one chat.
-export function requestBackupChat(dir,now=new Date()){
- fs.mkdirSync(dir,{recursive:true});
- const file=path.join(dir,REQUEST_FILE),json=name=>{try{return JSON.parse(fs.readFileSync(path.join(dir,name),'utf8'));}catch{return null;}};
- const open=json(REQUEST_FILE),flow=json(FLOW_STATE);
- if(open?.id&&now-Date.parse(open.at)<REQUEST_MINUTES*60000&&!(flow?.request===open.id&&flow.done))return open;
- const request={id:randomBytes(8).toString('hex'),at:now.toISOString()};
- atomic(file,JSON.stringify(request)+'\n');try{fs.chmodSync(file,0o600);}catch{}
- return request;
-}
+import {requestBackupChat,HANDED_OVER} from '../core/backup-request.mjs';
+export {requestBackupChat,REQUEST_FILE,FLOW_STATE,REQUEST_MINUTES,HANDED_OVER} from '../core/backup-request.mjs';
+// What show, set, remove and check need is loaded only for them: /backupai itself must answer at once.
+const notebook=async()=>({...await import('../core/backup-ai.mjs'),...await import('../core/routine-ai.mjs'),...await import('../core/addon-model.mjs')});
 
 function option(args,name,fallback){const at=args.indexOf(name);return at>=0?args[at+1]:fallback;}
 async function stdin(){let text='';process.stdin.setEncoding('utf8');for await(const chunk of process.stdin){text+=chunk;if(text.length>100000)throw Error('Too much input');}return text;}
@@ -56,6 +37,7 @@ export async function main(args=process.argv.slice(2),{env=process.env,write=tex
  if(!root||!home)throw Error('Set GODSPEED_WORKSPACE and HERMES_HOME, or name them with --workspace and --home');
  const state=path.join(path.resolve(root),'.godspeed');fs.mkdirSync(state,{recursive:true});
  const json=value=>write(JSON.stringify(value)+'\n');
+ const {backupStatus,connectHermesBackup,removeBackupAI,routineAIStatus,writeRecord,readRecord,modelConnection,runHermesHelper}=await notebook();
  if(command==='show'){const main=routineAIStatus({home,state});json({main:{provider:main.provider,model:main.model},...backupStatus({home,state})});return 0;}
  if(command==='set'){
   const entry=JSON.parse(await read());
