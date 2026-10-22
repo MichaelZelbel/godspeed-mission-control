@@ -8,6 +8,20 @@ A new release comes out most weeks. I write about what my AI does for me and wha
 
 Version 2 is the current edition, here on `main`. Its installers set up a new, separate folder. They do not move an existing version 1 Godspeed folder or your Menerio account.
 
+## Coming in the next release: a backup AI
+
+Your mission control thinks with one AI, the one you connected at setup. When that AI fails, for example during an outage, when its usage limit is reached or when its sign-in runs out, the routines that need it stop until you fix it.
+
+Now you can connect a second AI yourself as a backup, for example Claude when your main AI is ChatGPT, or the other way round. Godspeed uses it only when the main AI fails, and only for that one request; the next request tries the main AI first again. It never adds a backup by itself, so your work never moves to another paid service unless you chose it.
+
+- On a computer, and in the notebook on a server: Settings, Your AI, Backup AI. Choose the service, the model and your key, and Settings tests it before keeping it. A ChatGPT plan or another sign-in can be the backup too; the user guide says how.
+- On the one-line server, in Telegram: send `/backupai`. A short setup takes over the chat for a few minutes. It needs no AI, so it works even while your main AI is down, and it deletes your key from the chat as soon as it has read it.
+- Settings shows your backup, how often it answered while your main AI was failing, and a button to remove it. Its check now asks the main AI and the backup each on their own, so a working backup no longer hides a main AI that is broken.
+- Add-ons that ask Godspeed for an answer get the backup too, and the answer says when the backup gave it.
+- When your main AI has been failing for more than an hour while the backup does the work, Godspeed tells you once.
+
+Updating keeps your folder, notes and settings. Nothing changes until you connect a backup.
+
 ## New in 2.0.0-beta.4 (21 October 2026): a small copy before each update
 
 Before every update the installer saves a copy of your notebook, so you can go back if the update goes wrong. Until now that copy took your whole folder, also your work folder with its recordings and downloads. On a grown mission control it was gigabytes and many minutes, and an update refused to start when the disk had no room for it. Old copies also piled up.
