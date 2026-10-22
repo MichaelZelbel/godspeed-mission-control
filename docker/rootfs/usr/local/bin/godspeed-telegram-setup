@@ -1021,14 +1021,22 @@ def step_backup(chat):
         question = "Which one do you want as your backup instead?"
     else:
         question = about + "\n\nWhich one do you want as your backup?"
+    # Exactly the choices the first setup offers for the main AI (step_brain), plus Not now. The
+    # main AI's own service is offered too, and answered in plain words: Hermes' fallback list
+    # cannot hold a second ChatGPT account (a plan has one sign-in in Hermes), and a second key or
+    # model of the same service usually fails with it, so a backup is another service. Settings
+    # says the same (notebook/server/main.mjs, SAME_SERVICE).
     while True:
-        slug = chat.ask(question, [(s, label) for s, label in TOP_BRAINS if s != main_slug]
-                        + [("more", "Another provider"), ("backup:none", "Not now")])
+        slug = chat.ask(question, list(TOP_BRAINS) + [("more", "Another provider"), ("backup:none", "Not now")])
         if slug == "backup:none":
             chat.send("All right, nothing changed. Send /backupai whenever you want a backup AI.")
             return
         if slug == "more":
-            slug = chat.ask("Which one?", [(s, label) for s, label in more_brains() if s != main_slug])
+            slug = chat.ask("Which one?", more_brains())
+        if slug == main_slug:
+            question = ("That is the service your main AI uses already. A backup steps in when the main AI fails, "
+                        "so it has to be another service. Which one do you want as your backup?")
+            continue
         ok = backup_chatgpt(chat) if slug == "openai-codex" else backup_key(chat, slug)
         if ok:
             chat.send("%s is your backup AI now, and it answered a first test question. It steps in only "
