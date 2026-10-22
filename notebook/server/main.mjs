@@ -39,6 +39,7 @@ import { WebAuth, safeReturn } from './web-auth.mjs';
 import { MenerioImport } from './menerio-import.mjs';
 import {TelegramConnection} from './telegram-connect.mjs';
 import {hermesSettingsFor,connectRoutineAI,routineAIStatus,checkRoutineAI,baseAddress} from '../core/routine-ai.mjs';
+import {withBackup,readBackupEndpoint,backupEntryFor,connectBackupAI,removeBackupAI,backupStatus} from '../core/backup-ai.mjs';
 import {goalOverview} from '../core/goal-overview.mjs';
 import {nativeAgent} from '../core/native-agent.mjs';
 import {NativeScheduler} from '../core/native-scheduler.mjs';
@@ -87,8 +88,14 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   const githubSignIn=new GitHubSignIn();
   const syncRunner=new SyncRunner(root,{onResult:result=>{sync.last=result;atomic(path.join(store.state,'sync-status.json'),JSON.stringify(result));}});
   const providerPath=path.join(store.state,'provider.json');
-  if(!provider&&fs.existsSync(providerPath))provider=modelProvider(JSON.parse(fs.readFileSync(providerPath,'utf8')));
-  provider ||= modelProvider({url:process.env.GODSPEED_MODEL_URL,key:process.env.GODSPEED_MODEL_KEY,model:process.env.GODSPEED_MODEL});
+  // The backup AI the person connected in Settings (core/backup-ai.mjs): the notebook's own calls
+  // try the main address first and the backup only when that failed, for that request only. It is
+  // read when needed, so connecting or removing it counts from the next request on. A main AI
+  // that runs through Hermes needs none of this: Hermes uses its own fallback chain.
+  const backupFor=()=>{const saved=readBackupEndpoint(store.state);try{return saved?modelProvider(saved):null;}catch{return null;}};
+  const guarded=main=>withBackup(main,backupFor,{state:store.state,model:()=>readBackupEndpoint(store.state)?.model});
+  if(!provider&&fs.existsSync(providerPath))provider=guarded(modelProvider(JSON.parse(fs.readFileSync(providerPath,'utf8'))));
+  provider ||= guarded(modelProvider({url:process.env.GODSPEED_MODEL_URL,key:process.env.GODSPEED_MODEL_KEY,model:process.env.GODSPEED_MODEL}));
   const assistantPath=process.env.GODSPEED_ASSISTANT_CONFIG||path.join(store.state,'assistant.json');
   if(!provider&&fs.existsSync(assistantPath)){const descriptor=JSON.parse(fs.readFileSync(assistantPath,'utf8').replace(/^\uFEFF/,''));if(descriptor.verified)provider=hermesProvider({executable:descriptor.executable,home:descriptor.home,cwd:store.root,sourceRoot:descriptor.sourceRoot});}
   // What the supervisor reads as "alive" (supervisor-health.mjs): an AI call
@@ -290,7 +297,8 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         const routines=routineAI&&input.routines!==false;
         if(routines)hermesSettingsFor(config);
         await chosen({kind:'connection-test',contract:'Reply with Connected.'});
-        atomic(providerPath,JSON.stringify(config));fs.chmodSync(providerPath,0o600);provider=chosen;domains.provider=chosen;scheduler.executor=jobExecutor(chosen,query);
+        const kept=guarded(chosen);
+        atomic(providerPath,JSON.stringify(config));fs.chmodSync(providerPath,0o600);provider=kept;domains.provider=kept;scheduler.executor=jobExecutor(kept,query);
         if(!routines)return send(res,200,{connected:true,routines:routineAI?{available:true,...routineAIStatus(routineAI)}:{available:false}});
         connectRoutineAI({...routineAI,config});
         return send(res,200,{connected:true,routines:{available:true,...await checkRoutineAI({...routineAI,executable:descriptor.executable,cwd:store.root,sourceRoot:descriptor.sourceRoot})}});
@@ -299,6 +307,23 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       // work and its checks, what went out, the research brief, and the routines' AI (core/goal-overview.mjs).
       if(route==='/api/goals/overview'&&req.method==='GET')return send(res,200,{...goalOverview({store,query}),ai:routineAI?{available:true,...routineAIStatus(routineAI)}:{available:false}});
       if(route==='/api/routine-ai'&&req.method==='GET')return send(res,200,routineAI?{available:true,...routineAIStatus(routineAI)}:{available:false});
+      // A BACKUP AI the person connects in Settings (core/backup-ai.mjs, discussion #20): never added
+      // by Godspeed itself. Tested like the main one before anything is saved, then kept in Hermes'
+      // fallback chain (when the routines run through Hermes) and as the notebook's second address.
+      const backupHome=routineAI?.home||null;
+      if(route==='/api/backup-ai'&&req.method==='GET')return send(res,200,{hermes:!!backupHome,...backupStatus({home:backupHome,state:store.state})});
+      if(route==='/api/backup-ai'&&req.method==='POST'){
+        const input=JSON.parse(await body(req)),address=String(input.url||'').trim(),config={url:!address||/\/chat\/completions\/?$/.test(address)?address:baseAddress(address)+'/chat/completions',key:typeof input.key==='string'?input.key.trim():input.key,model:typeof input.model==='string'?input.model.trim():input.model};
+        const candidate=modelProvider(config);if(!candidate)throw new Error('Provide a model endpoint, key and model name');
+        const entry=backupEntryFor(config);
+        let main=null;try{main=JSON.parse(fs.readFileSync(providerPath,'utf8'));}catch{}
+        const hermesMain=backupHome?routineAIStatus(routineAI):null;
+        if((main&&main.url===config.url&&main.model===config.model&&main.key===config.key)||(hermesMain&&hermesMain.provider===entry.provider&&hermesMain.model===entry.model&&(entry.provider!=='custom'||hermesMain.base_url===entry.base_url)))
+          throw new Error('This is your main AI already. A backup is a different service or model, used when the main one fails.');
+        await candidate({kind:'connection-test',contract:'Reply with Connected.'});
+        return send(res,200,{connected:true,hermes:!!backupHome,...connectBackupAI({home:backupHome,state:store.state,config})});
+      }
+      if(route==='/api/backup-ai/remove'&&req.method==='POST')return send(res,200,{hermes:!!backupHome,...removeBackupAI({home:backupHome,state:store.state})});
       if(route==='/api/routine-ai/check'&&req.method==='POST'){if(!routineAI)throw new Error('This notebook runs no routines through Hermes');return send(res,200,{available:true,...await checkRoutineAI({...routineAI,executable:descriptor.executable,cwd:store.root,sourceRoot:descriptor.sourceRoot})});}
       if(route==='/api/sync/configure'&&req.method==='POST'){
         // A computer not yet signed in to GitHub signs in once, then the same check runs again (github-sign-in.mjs).

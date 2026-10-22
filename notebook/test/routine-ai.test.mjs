@@ -121,3 +121,29 @@ test('the Settings form connects the routines\' AI through the server, and leave
   assert.notEqual(refused.status,200);assert.match(refused.data.error,/space or a quotation mark/);
  }finally{await service.close();}
 });
+
+// With a backup AI in Hermes' chain (core/backup-ai.mjs) a request through Hermes is answered by the
+// backup whenever the main one fails, so the check asks each on its own, by name.
+test('with a backup connected, the check asks the main one and the backup each on their own',async t=>{
+ const {home:h,state}=home(t);
+ const {connectBackupAI}=await import('../core/backup-ai.mjs');
+ connectRoutineAI({home:h,state,config:{url:'https://openrouter.ai/api/v1',key:'sk-or-fictional',model:'fictional/model'}});
+ connectBackupAI({home:h,state,config:{url:'https://api.openai.com/v1',key:'sk-fictional-backup',model:'gpt-backup'}});
+ const asked=[];let mainUp=false;
+ const ask=async({route})=>{asked.push(route);if(route==='main'&&!mainUp)throw Error('The AI account reached a usage limit. It answers again once the limit resets.');return {text:'Connected'};};
+ const down=await checkRoutineAI({executable:'hermes',home:h,cwd:h,state,ask,now:()=>new Date('2026-10-22T10:00:00Z')});
+ assert.deepEqual(down.check,{at:'2026-10-22T10:00:00.000Z',ok:false,error:'The AI account reached a usage limit. It answers again once the limit resets.',backup:{ok:true,model:'gpt-backup'}});
+ assert.deepEqual(asked,['main','backup']);
+ assert.equal(JSON.parse(fs.readFileSync(path.join(state,'backup-ai.json'),'utf8')).main_failing_since,'2026-10-22T10:00:00.000Z');
+ mainUp=true;const up=await checkRoutineAI({executable:'hermes',home:h,cwd:h,state,ask});
+ assert.equal(up.check.ok,true);assert.equal(up.check.backup.ok,true);
+ assert.equal(JSON.parse(fs.readFileSync(path.join(state,'backup-ai.json'),'utf8')).main_failing_since,undefined);
+ // The request itself goes to the helper godspeed-model uses, naming the route, with no tools.
+ const runtime=path.join(path.dirname(h),'runtime');fs.mkdirSync(runtime);fs.writeFileSync(path.join(runtime,'hermes'),'');fs.writeFileSync(path.join(runtime,'python3'),'');
+ const helper=fakeHermes(JSON.stringify({text:'Connected',provider:'openai-api',model:'gpt-backup',backup:true}));let sent='';
+ const spawnProcess=(command,args,options)=>{const child=helper.spawnProcess(command,args,options);child.stdin.on('data',d=>sent+=d);return child;};
+ const {askDirectly}=await import('../core/routine-ai.mjs');
+ const result=await askDirectly({executable:path.join(runtime,'hermes'),home:h,cwd:path.dirname(h),sourceRoot:runtime,spawnProcess,route:'backup'});
+ assert.equal(result.backup,true);assert.ok(helper.calls[0][0].endsWith('addon-model.py'));
+ const request=JSON.parse(sent);assert.equal(request.route,'backup');assert.equal(request.max_tokens,128);assert.equal(request.tools,undefined);
+});
