@@ -102,7 +102,7 @@ test('the sign-in through the notebook server, for the main AI and the backup',{
   assert.deepEqual(fallbackChain(fs.readFileSync(path.join(home,'config.yaml'),'utf8')),[{provider:'openai-codex',model:'gpt-fictional',key:false}]);
   assert.equal((await call('backup-ai')).data.backup.via,'settings');
   // The plan is the backup now, so it cannot also be the main AI.
-  const both=await call('ai-signin/start',{as:'main'});assert.equal(both.status,400);assert.match(both.data.error,/Your backup AI is your ChatGPT plan/);
+  const both=await call('ai-signin/start',{as:'main'});assert.equal(both.status,400);assert.match(both.data.error,/That is the service your backup AI uses\. Remove the backup first, or choose another service for your main AI\./);
   await call('backup-ai/remove',{});
   await call('ai-signin/start',{as:'main'});
   assert.equal((await settle()).state,'connected');
