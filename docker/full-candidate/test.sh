@@ -39,6 +39,10 @@ left=$(docker exec "$name" sh -c 'ps -eo stat= | grep -c "^Z" || true')
 [ "$left" = 0 ] || { echo "$left finished programs were never collected."; exit 1; }
 echo "Finished programs are collected by the image's own init."
 docker exec -u hermes "$name" node /opt/godspeed/kit/docker/full-candidate/test-addon-model.mjs | tee "$evidence/addon-model.log"
+# A backup AI the person connected, against this image's own Hermes (test-backup-ai.mjs): the
+# chain the notebook writes is the one Hermes reads, and godspeed-model, Hermes' chat and the
+# Settings check go to the backup only when the main AI fails, and never without one.
+docker exec -u hermes "$name" node /opt/godspeed/kit/docker/full-candidate/test-backup-ai.mjs | tee "$evidence/backup-ai.log"
 # The add-on may run on the Linux host while Godspeed runs in its existing
 # container. Exercise that exact boundary against another local fake request.
 docker exec -d -u hermes "$name" node /opt/godspeed/kit/docker/full-candidate/test-addon-model.mjs --serve
