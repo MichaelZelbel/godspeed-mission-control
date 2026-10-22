@@ -128,12 +128,12 @@ describe("the same choices for the main AI and the backup", () => {
 
   it("says why the plan cannot be both the main AI and the backup, and lets the person try again after a failure", async () => {
     serve({ "ai-signin": () => [200, { available: true, state: "failed", as: "main", error: "The code ran out. Nothing is broken: start again for a new code." }],
-      "ai-signin/start": () => [400, { error: "Your backup AI is your ChatGPT plan. Remove the backup first, or choose another service for your main AI." }] });
+      "ai-signin/start": () => [400, { error: "That is the service your backup AI uses. Remove the backup first, or choose another service for your main AI." }] });
     const connected = vi.fn();
     render(<PlanSignIn as="main" onConnected={connected} />);
     expect(await screen.findByText(/The code ran out/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
-    expect(await screen.findByText(/Your backup AI is your ChatGPT plan/)).toBeInTheDocument();
+    expect(await screen.findByText(/That is the service your backup AI uses/)).toBeInTheDocument();
     expect(connected).not.toHaveBeenCalled();
   });
 
