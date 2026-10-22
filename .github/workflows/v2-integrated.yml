@@ -61,7 +61,7 @@ jobs:
           bash tools/test-coach-prep.sh
       - name: Original folder and integrated core checks
         run: |
-          node notebook/scripts/run-tests.mjs notebook/test/starter-workspace.test.mjs notebook/test/assistant-starter-wiring.test.mjs notebook/test/computer-wiring-on-existing-server.test.mjs notebook/test/windows-command-files.test.mjs notebook/test/final-core-contracts.test.mjs notebook/test/telegram-replies.test.mjs notebook/test/native-runtime.test.mjs notebook/test/addon-model.test.mjs notebook/test/docker-model-proxy.test.mjs notebook/test/backup-ai.test.mjs notebook/test/backup-ai-telegram.test.mjs notebook/test/routine-ai.test.mjs
+          node notebook/scripts/run-tests.mjs notebook/test/starter-workspace.test.mjs notebook/test/assistant-starter-wiring.test.mjs notebook/test/computer-wiring-on-existing-server.test.mjs notebook/test/windows-command-files.test.mjs notebook/test/final-core-contracts.test.mjs notebook/test/telegram-replies.test.mjs notebook/test/native-runtime.test.mjs notebook/test/addon-model.test.mjs notebook/test/docker-model-proxy.test.mjs notebook/test/backup-ai.test.mjs notebook/test/backup-ai-telegram.test.mjs notebook/test/routine-ai.test.mjs notebook/test/plan-signin.test.mjs
           python3 notebook/test/addon-model-python.py
       - name: Clearing chat starts a fresh conversation and keeps earlier messages archived
         run: node notebook/scripts/run-tests.mjs notebook/test/chat-reset.test.mjs notebook/test/conversation-state.test.mjs notebook/test/scoped-chat-state.test.mjs

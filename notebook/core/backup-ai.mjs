@@ -125,9 +125,11 @@ export function connectBackupAI({home,state,config,now=new Date()}){
  noteConnected(state,{provider:entry?.provider||'api',model:endpoint.model,base_url:baseAddress(endpoint.url),via:'settings',now});
  return backupStatus({home,state});
 }
-// Connecting any Hermes provider (the Telegram chat: a ChatGPT sign-in or a key of any service).
+// Connecting any Hermes provider: a ChatGPT plan (Settings or Telegram) or a key of any service (Telegram).
+// The notebook's own address for an earlier backup goes: this one is reached through Hermes.
 export function connectHermesBackup({home,state,entry,via='telegram',now=new Date()}){
  const clean=setHermesBackup(home,entry);
+ try{fs.unlinkSync(path.join(state,BACKUP_FILE));}catch{}
  noteConnected(state,{provider:clean.provider,model:clean.model,base_url:clean.base_url||null,via,now});
  return backupStatus({home,state});
 }
