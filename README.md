@@ -14,8 +14,10 @@ Your mission control thinks with one AI, the one you connected at setup. When th
 
 Now you can connect a second AI yourself as a backup, for example Claude when your main AI is ChatGPT, or the other way round. Godspeed uses it only when the main AI fails, and only for that one request; the next request tries the main AI first again. It never adds a backup by itself, so your work never moves to another paid service unless you chose it.
 
-- On a computer, and in the notebook on a server: Settings, Your AI, Backup AI. Choose the service, the model and your key, and Settings tests it before keeping it. A ChatGPT plan or another sign-in can be the backup too; the user guide says how.
-- On the one-line server, in Telegram: send `/backupai`. A short setup takes over the chat for a few minutes. It needs no AI, so it works even while your main AI is down, and it deletes your key from the chat as soon as it has read it.
+- You connect the backup the same ways as your main AI, in the same places, and it is tested before it is kept.
+- On a computer, and in the notebook on a server: Settings, Your AI, Backup AI. Sign in with your ChatGPT plan right there, or use a key of OpenRouter, OpenAI or another service. Your main AI can now be signed in with a ChatGPT plan in Settings too, as it already could in Telegram.
+- On the one-line server, in Telegram: send `/backupai`. It offers the same AIs as the first setup. A short setup takes over the chat for a few minutes. It needs no AI, so it works even while your main AI is down, and it deletes your key from the chat as soon as it has read it.
+- A backup is another service than your main AI: when one service fails, its other models usually fail with it.
 - Settings shows your backup, how often it answered while your main AI was failing, and a button to remove it. Its check now asks the main AI and the backup each on their own, so a working backup no longer hides a main AI that is broken.
 - Add-ons that ask Godspeed for an answer get the backup too, and the answer says when the backup gave it.
 - When your main AI has been failing for more than an hour while the backup does the work, Godspeed tells you once.
