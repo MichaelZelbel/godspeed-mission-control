@@ -754,8 +754,9 @@ def backup_run(name, rules, backup_state=None, extra=None, timeout=90):
 
 def test_backup_key():
     good, bad = "sk-or-backup-good-0123456789", "sk-or-backup-bad-0123456789"
-    r = backup_run("/backupai: a backup by key, tried before it is saved, the main AI untouched", [
-        {"when": BACKUP_ASK, "do": [{"from": 111, "press": "openrouter"}]},
+    r = backup_run("/backupai: the main setup's own choices, a backup by key, tried before it is saved, the main AI untouched", [
+        {"when": BACKUP_ASK, "do": [{"from": 111, "press": "openai-codex"}]},
+        {"when": "That is the service your main AI uses already", "do": [{"from": 111, "press": "openrouter"}]},
         {"when": "Send me your OpenRouter API key", "do": [{"from": 111, "text": bad}]},
         {"when": "did not answer with that key", "do": [{"from": 111, "text": good}]},
     ])
@@ -763,9 +764,13 @@ def test_backup_key():
     check("it finishes and says the chat is done for this request", r["rc"] == 0 and r["state"].get("done") is True
           and r["state"].get("request") == "fictional0request")
     check("it explains what a backup is, naming the main AI", any_has(to_anna, "<b>Backup AI.</b>", "your main AI, ChatGPT, fails"))
-    asked = next((m for m in r["fake"].sent if BACKUP_ASK in m["text"]), {"buttons": []})
-    check("the main AI's own service is not offered as its backup, and Not now is",
-          "openai-codex" not in asked["buttons"] and "openrouter" in asked["buttons"] and "backup:none" in asked["buttons"])
+    asked = next((m for m in r["fake"].sent if BACKUP_ASK in m["text"]), {"buttons": [], "labels": []})
+    main_setup = load("tg_setup_backup_list", PROGRAM)
+    check("it offers exactly the main setup's choices, with their labels, and Not now",
+          asked["buttons"] == [s for s, _ in main_setup.TOP_BRAINS] + ["more", "backup:none"]
+          and asked["labels"] == [l for _, l in main_setup.TOP_BRAINS] + ["Another provider", "Not now"])
+    check("the main AI's own service is answered in plain words, and asked again",
+          any_has(to_anna, "That is the service your main AI uses already. A backup steps in when the main AI fails"))
     check("the /backupai the gateway had read is not taken for an answer", not any_has(to_anna, "Tap one of the buttons"))
     check("a key that does not answer is said and not saved; the one that answers is saved with OpenRouter's default model",
           any_has(to_anna, "OpenRouter did not answer with that key")
