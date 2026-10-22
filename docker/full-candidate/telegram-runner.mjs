@@ -5,6 +5,8 @@ import {createHash} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 import {passedEnvironment} from '../../notebook/core/assistant-files.mjs';
 import {notebookAddress} from '../../notebook/core/notebook-address.mjs';
+import {REQUEST_FILE,REQUEST_MINUTES,FLOW_STATE as BACKUP_STATE} from '../../notebook/scripts/backup-ai.mjs';
+const HANDOVER_MS=4000;
 
 // Telegram on the one-click server, switched on from the web page instead of a redeploy.
 // The page (notebook/server/telegram-connect.mjs) writes the bot's key to
@@ -34,16 +36,38 @@ export class TelegramRunner{
   constructor({dir,env=process.env,spawnProcess=spawn,interval=2000,now=Date.now,kill=(pid,signal)=>process.kill(-pid,signal),
     python=env.GODSPEED_TG_PYTHON||'/opt/hermes/.venv/bin/python3',hermes=env.GODSPEED_TG_HERMES_BIN||'/opt/hermes/bin/hermes',
     setup=path.join(kit,'docker/rootfs/usr/local/bin/godspeed-telegram-setup'),finish=path.join(kit,'notebook/scripts/telegram-setup-finish.mjs'),
-    address=notebookAddress}={}){
-    Object.assign(this,{dir,env,spawnProcess,interval,now,kill,python,hermes,setup,finish,address});
+    backup=path.join(kit,'notebook/scripts/backup-ai.mjs'),address=notebookAddress}={}){
+    Object.assign(this,{dir,env,spawnProcess,interval,now,kill,python,hermes,setup,finish,backup,address});
     this.child=null;this.failures=0;this.notBefore=0;this.lastKey=null;this.lastExit=null;
   }
   read(name){try{return JSON.parse(fs.readFileSync(path.join(this.dir,name),'utf8'));}catch{return null;}}
   // What should run now, from the two files alone, so a restarted container picks up the same.
+  // THE BACKUP AI CHAT (22 October 2026): /backupai in Telegram, a Hermes quick command, leaves a
+  // request (notebook/scripts/backup-ai.mjs telegram-request). A few seconds later, so the gateway
+  // has sent its "one moment", the gateway stops and the setup program runs its backup flow with the
+  // owner it already knows; once that flow says done for this request, the gateway takes the bot
+  // again. A request older than REQUEST_MINUTES is ignored, so the assistant is never kept away
+  // longer than that, whatever happens in the backup chat.
+  backupRequest(){
+    const request=this.read(REQUEST_FILE);if(!request?.id||!request.at)return null;
+    const age=this.now()-Date.parse(request.at);
+    if(!(age>=HANDOVER_MS&&age<REQUEST_MINUTES*60000))return null;
+    const flow=this.read(BACKUP_STATE);
+    return flow?.request===request.id&&flow.done?null:request;
+  }
   plan(){
     const connection=this.read('connection.json');if(!connection?.token)return null;
     const setup=this.read('setup.json')||{};
-    if(setup.done&&String(setup.bot_id)===String(connection.bot_id)&&setup.owner_id&&setup.chat_id)
+    const owned=setup.done&&String(setup.bot_id)===String(connection.bot_id)&&setup.owner_id&&setup.chat_id;
+    const request=owned?this.backupRequest():null;
+    if(request)
+      return {kind:'backup',key:'backup:'+request.id,command:this.python,args:[this.setup],
+        env:{...this.env,PATH:path.dirname(this.python)+path.delimiter+(this.env.PATH||''),GODSPEED_TELEGRAM_TOKEN:connection.token,
+          GODSPEED_TG_FLOW:'backup',GODSPEED_TG_HERMES:this.hermes,GODSPEED_TG_REQUEST:request.id,
+          GODSPEED_TG_OWNER_ID:String(setup.owner_id),GODSPEED_TG_CHAT_ID:String(setup.chat_id),GODSPEED_TG_OWNER_NAME:String(setup.owner_name||''),
+          GODSPEED_TG_STATE:path.join(this.dir,BACKUP_STATE),GODSPEED_TG_LOG:path.join(this.dir,'backup-setup.log'),
+          GODSPEED_TG_BACKUP:`${JSON.stringify(process.execPath)} ${JSON.stringify(this.backup)}`}};
+    if(owned)
       return {kind:'gateway',key:'gateway:'+digest(connection.token,setup.owner_id,setup.chat_id),command:this.hermes,args:['gateway','run'],
         // The assistant with tools sees only what passedEnvironment allows (assistant-files.mjs).
         env:{...passedEnvironment(this.env),TELEGRAM_BOT_TOKEN:connection.token,TELEGRAM_ALLOWED_USERS:String(setup.owner_id),TELEGRAM_HOME_CHANNEL:String(setup.chat_id)}};

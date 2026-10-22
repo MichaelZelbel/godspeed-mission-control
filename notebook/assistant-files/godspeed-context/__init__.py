@@ -13,6 +13,7 @@ the chat is under way, this says so. Every failure returns None: it never breaks
 """
 import json
 import os
+import re
 import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -50,17 +51,58 @@ def context_block(state):
     return None
 
 
+# A BACKUP AI (22 October 2026): a second AI the owner connects themselves, used only when the main
+# one fails (notebook/core/backup-ai.mjs). When a message asks about one, the assistant is told the
+# way that exists on this installation: /backupai in Telegram on the one-click server (the notebook
+# writes backup-command.txt here then), Settings everywhere. A key must never be typed into the chat,
+# where the main AI would read it.
+BACKUP_WORDS = re.compile(
+    r"\b(?:backup|back-up|fallback|second|spare|reserve|ersatz|zweite[nrs]?)[\s-]*(?:ai|ki|model|modell|llm|provider)\b"
+    r"|\b(?:ai|ki|model|modell)[\s-]*(?:backup|fallback)\b|/backupai\b", re.I)
+
+
+def backup_block(message, command=None):
+    """The block for a message about a backup AI, or None."""
+    if isinstance(message, list):
+        message = " ".join(str(p.get("text", "")) for p in message if isinstance(p, dict))
+    if not isinstance(message, str) or not BACKUP_WORDS.search(message):
+        return None
+    where = ("they send %s here in Telegram: it opens a short setup that needs no AI and deletes a key from "
+             "the chat once it has read it. Or, in the notebook: Settings, Your AI, Backup AI." % command) if command else (
+             "in the notebook: Settings, Your AI, Backup AI. A ChatGPT plan or another sign-in as the backup: "
+             "the guide page godspeedmissioncontrol.com/guide/backup-ai.")
+    return ("[godspeed-backup-ai] A backup AI is a second AI your owner connects themselves. Godspeed uses it "
+            "only when the main AI fails, and only for that one request. To connect, see or remove it, %s "
+            "Tell them that. Never ask for an API key in this chat, and do not change the AI settings yourself." % where)
+
+
+def _backup_command():
+    try:
+        with open(os.path.join(HERE, "backup-command.txt"), encoding="utf-8") as f:
+            return f.read().strip() or None
+    except OSError:
+        return None
+
+
 def on_pre_llm_call(**kwargs):
     try:
         # A scheduled run is not a conversation with the owner.
         if str(kwargs.get("platform") or "") == "cron" or os.environ.get("GODSPEED_SCHEDULED_RUN"):
             return None
+        blocks = []
+        try:
+            blocks.append(backup_block(kwargs.get("user_message"), _backup_command()))
+        except Exception:
+            pass
         root = _mission_control()
-        if not root:
-            return None
-        with open(os.path.join(root, ".godspeed", "context-setup.json"), encoding="utf-8") as f:
-            block = context_block(json.load(f))
-        return {"context": block} if block else None
+        if root:
+            try:
+                with open(os.path.join(root, ".godspeed", "context-setup.json"), encoding="utf-8") as f:
+                    blocks.append(context_block(json.load(f)))
+            except Exception:
+                pass
+        blocks = [b for b in blocks if b]
+        return {"context": "\n\n".join(blocks)} if blocks else None
     except Exception:
         return None
 
