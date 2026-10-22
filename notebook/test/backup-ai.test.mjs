@@ -176,14 +176,18 @@ test('the notebook server tries the backup address for its own calls when the ma
  try{
   assert.equal((await call('backup-ai')).data.configured,false);
   assert.equal((await call('provider',{url:main.url,key:'main-key',model:'main-model'})).status,200);
-  // The same AI again is not a backup.
-  const same=await call('backup-ai',{url:main.url,key:'main-key',model:'main-model'});
-  assert.equal(same.status,400);assert.match(same.data.error,/main AI already/);
+  // The main AI's service is not a backup, also with another model or key: it fails with the main AI.
+  for(const again of [{url:main.url,key:'main-key',model:'main-model'},{url:main.url,key:'other-key',model:'other-model'}]){
+   const same=await call('backup-ai',again);assert.equal(same.status,400);assert.match(same.data.error,/That is the service your main AI uses already\. A backup steps in when the main AI fails, so it has to be another service\./);
+  }
   const added=await call('backup-ai',{url:backup.url,key:'backup-key',model:'backup-model'});
   assert.equal(added.status,200,JSON.stringify(added.data));
   assert.deepEqual([added.data.configured,added.data.hermes,added.data.backup.provider,added.data.backup.model],[true,false,'api','backup-model']);
   assert.ok(!JSON.stringify(added.data).includes('backup-key'));
   assert.equal(backup.seen.length,1,'tested before it was saved');
+  // Nor can the main AI move to the backup's service: the backup would be no backup.
+  const swap=await call('provider',{url:backup.url,key:'backup-key',model:'other-model'});
+  assert.equal(swap.status,400);assert.match(swap.data.error,/That is the service your backup AI uses\. Remove the backup first/);
   // The main address fails: the notebook's own request is answered by the backup.
   mainUp=false;
   assert.equal(await service.domains.provider({kind:'fictional-small-job',contract:'Reply with Connected.'}),'Connected');

@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {atomic} from './records/store.mjs';
-import {setConfigValue,readConfigValue} from './hermes-config.mjs';
+import {setConfigValue,readConfigValue,deleteConfigValue} from './hermes-config.mjs';
 import {hermesProvider} from './runtime.mjs';
 import {hermesHelper,runHermesHelper} from './addon-model.mjs';
 import {fallbackChain,noteMainAnswered,noteMainFailed} from './backup-ai.mjs';
@@ -113,9 +113,26 @@ export async function checkRoutineAI({executable,home,cwd,state,sourceRoot,spawn
  writeRecord(state,{...readRecord(state),check});
  return {...routineAIStatus({home,state}),check};
 }
-// One short request to the main connection or the backup, by name (assistant-files/addon-model.py).
-export async function askDirectly({executable,home,cwd,sourceRoot,spawnProcess,route}){
+// One short request to the main connection or the backup, by name, or to the models of a ChatGPT
+// plan just signed in ("plan", the first that answers; assistant-files/addon-model.py).
+export async function askDirectly({executable,home,cwd,sourceRoot,spawnProcess,route,timeoutMs=route==='plan'?480000:120000}){
  const connection=hermesHelper({verified:true,executable,home,sourceRoot},path.join(path.resolve(cwd),'.godspeed'));
- return runHermesHelper({connection,root:cwd,spawnProcess,deadline:Date.now()+120000,
-  request:{system:'Reply with the single word Connected.',prompt:'Are you there?',timeout_ms:120000,max_tokens:128,route}});
+ return runHermesHelper({connection,root:cwd,spawnProcess,deadline:Date.now()+timeoutMs,
+  request:{system:'Reply with the single word Connected.',prompt:'Are you there?',timeout_ms:Math.min(timeoutMs,120000),max_tokens:128,route}});
+}
+
+// A CHATGPT PLAN AS THE MAIN AI, signed in from Settings (core/plan-signin.mjs): the model section
+// names the plan and the model that answered. An address or key left from an earlier main AI goes,
+// since the plan has its own. Nothing is written before a model of the plan answered.
+export function connectPlanMain({home,state,model,now=new Date()}){
+ if(!model||!String(model).trim())throw Error('Name the model the routines should use');
+ const configFile=path.join(home,'config.yaml');fs.mkdirSync(home,{recursive:true});
+ let text=read(configFile).replace(/\r\n/g,'\n').replace(/^model:[ \t]*(?!\{\}|#|$)[^\n]*$/m,'model:');
+ text=setConfigValue(text,['model','provider'],JSON.stringify('openai-codex'));
+ text=setConfigValue(text,['model','default'],JSON.stringify(String(model).trim()));
+ text=deleteConfigValue(deleteConfigValue(text,['model','base_url']),['model','api_key']);
+ writePrivate(configFile,text);
+ const record={...readRecord(state),connected:{provider:'openai-codex',model:String(model).trim(),base_url:null,at:now.toISOString()}};
+ delete record.check;writeRecord(state,record);
+ return routineAIStatus({home,state});
 }

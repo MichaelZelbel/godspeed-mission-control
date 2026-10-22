@@ -14,11 +14,17 @@ type Check={at:string;ok:boolean;reply?:string;error?:string;backup?:{ok:boolean
 export type RoutineAI={available:boolean;provider?:string|null;model?:string|null;base_url?:string|null;source?:'settings'|'hermes'|'none';key?:boolean|null;check?:Check|null};
 async function call(route:string,body?:unknown){const r=await fetch('/api/'+route,{method:body?'POST':'GET',headers:{'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});const data=await r.json();if(!r.ok)throw new Error(data.error);return data;}
 export const routineAIStatus=()=>call('routine-ai') as Promise<RoutineAI>;
+// THE CHOICES, the same for the main AI and the backup (22 October 2026, discussion #20): a key of
+// OpenRouter, OpenAI or another OpenAI-compatible service, and, where Hermes runs the routines, a
+// ChatGPT plan signed in right here (PlanSignIn, core/plan-signin.mjs), as the one-line server's
+// Telegram setup signs it in.
 const SERVICES=[
   {id:'openrouter',name:'OpenRouter',url:'https://openrouter.ai/api/v1/chat/completions'},
   {id:'openai',name:'OpenAI',url:'https://api.openai.com/v1/chat/completions'},
+  {id:'chatgpt',name:'ChatGPT (sign in with your ChatGPT plan)',url:'',plan:true},
   {id:'other',name:'Another service',url:''},
 ];
+export const servicesFor=(hermes:boolean)=>SERVICES.filter(s=>hermes||!s.plan);
 // The AI service in the words a person knows it by.
 export function serviceName(provider?:string|null,base?:string|null){
   const known:Record<string,string>={openrouter:'OpenRouter','openai-api':'OpenAI','openai-codex':'your ChatGPT account',nous:'Nous Portal',anthropic:'Anthropic',gemini:'Google Gemini',copilot:'GitHub Copilot'};
@@ -71,7 +77,8 @@ export function ConnectAI(){
     <form className="space-y-3" onSubmit={submit}>
       <p>Connect the AI account you pay for. The key stays on this device and never goes into your notes.</p>
       <label className="block">Your AI service
-        <select className="block border bg-background rounded p-2 min-h-11" value={service} onChange={e=>setService(e.target.value)}>{SERVICES.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
+        <select className="block border bg-background rounded p-2 min-h-11" value={service} onChange={e=>setService(e.target.value)}>{servicesFor(!!data?.available).map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
+      {service==='chatgpt'?<PlanSignIn as="main" onConnected={signedIn=>{setError('');setDone('Connected. Your ChatGPT plan ('+signedIn.model+') now powers the routines, the chat and the notebook.');qc.invalidateQueries({queryKey:['routine-ai']});qc.invalidateQueries({queryKey:['backup-ai']});qc.invalidateQueries({queryKey:['candidate-status']});}}/>:<>
       {service==='other'&&<label className="block">Its address, as the service gives it (OpenAI-compatible)
         <Input required type="url" placeholder="https://…/v1" value={address} onChange={e=>setAddress(e.target.value)}/></label>}
       <label className="block">Model, written the way your service writes it
@@ -79,7 +86,7 @@ export function ConnectAI(){
       <label className="block">Key
         <Input required type="password" autoComplete="off" spellCheck={false} value={key} onChange={e=>setKey(e.target.value)}/></label>
       {data?.available&&<label className="flex gap-2 items-start"><input type="checkbox" className="mt-1" checked={useForRoutines} onChange={e=>setRoutines(e.target.checked)}/><span>Use it for the daily routines and the chat too{data.source==='hermes'?'. Unticked, they keep the account you signed in to in Hermes.':'.'}</span></label>}
-      <Button className="min-h-11" disabled={busy}>{busy?<><Loader2 className="h-4 w-4 animate-spin mr-2" aria-hidden="true"/>Testing…</>:'Test and connect'}</Button>
+      <Button className="min-h-11" disabled={busy}>{busy?<><Loader2 className="h-4 w-4 animate-spin mr-2" aria-hidden="true"/>Testing…</>:'Test and connect'}</Button></>}
       {done&&<p role="status">{done}</p>}
       {error&&<p role="alert" className="text-red-500">{error}</p>}
     </form>
@@ -93,7 +100,6 @@ export function ConnectAI(){
 export type BackupStatus={hermes?:boolean;configured:boolean;removed?:boolean;more?:number;
   backup:null|{provider:string;model:string;base_url?:string|null;via:'settings'|'telegram'|'hermes';at?:string|null};
   usage?:{answers:number;last_answer_at:string|null;main_failing_since:string|null;last_main_error:string|null}};
-export const BACKUP_GUIDE='https://godspeedmissioncontrol.com/guide/backup-ai';
 const whereFrom={settings:'You connected it here.',telegram:'You connected it in Telegram.',hermes:'It is set in Hermes itself.'};
 export function BackupState({status,removing,onRemove}:{status?:BackupStatus;removing:boolean;onRemove:()=>void}){
   if(!status)return null;
@@ -125,19 +131,52 @@ export function BackupAI(){
     <p>A second AI that steps in only when your main AI fails, for example during an outage or when its usage limit is reached. It answers only that one request; the next one tries your main AI first again. Godspeed never adds one by itself.</p>
     {status.isLoading?<p role="status">Reading your backup AI…</p>:<BackupState status={status.data} removing={removing} onRemove={remove}/>}
     <form className="space-y-3" onSubmit={submit} aria-label="Connect a backup AI">
-      <p>{status.data?.configured?'Connect another one in its place:':'Connect one with an API key:'}</p>
+      <p>{status.data?.configured?'Connect another one in its place, the same ways as your main AI:':'Connect one the same ways as your main AI:'}</p>
       <label className="block">Backup AI service
-        <select className="block border bg-background rounded p-2 min-h-11" value={service} onChange={e=>setService(e.target.value)}>{SERVICES.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
+        <select className="block border bg-background rounded p-2 min-h-11" value={service} onChange={e=>setService(e.target.value)}>{servicesFor(!!status.data?.hermes).map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
+      {service==='chatgpt'?<PlanSignIn as="backup" onConnected={signedIn=>{setError('');setDone('Connected as your backup: your ChatGPT plan ('+signedIn.model+'). It answered a test just now, and it steps in only when your main AI fails.');qc.invalidateQueries({queryKey:['backup-ai']});qc.invalidateQueries({queryKey:['routine-ai']});}}/>:<>
       {service==='other'&&<label className="block">Its address, as the service gives it (OpenAI-compatible)
         <Input required type="url" placeholder="https://…/v1" value={address} onChange={e=>setAddress(e.target.value)}/></label>}
       <label className="block">Backup model, written the way your service writes it
         <Input required spellCheck={false} placeholder={service==='openrouter'?'for example vendor/model-name':''} value={model} onChange={e=>setModel(e.target.value)}/></label>
       <label className="block">Backup key
         <Input required type="password" autoComplete="off" spellCheck={false} value={key} onChange={e=>setKey(e.target.value)}/></label>
-      <Button className="min-h-11" disabled={busy}>{busy?<><Loader2 className="h-4 w-4 animate-spin mr-2" aria-hidden="true"/>Testing…</>:'Test and connect as backup'}</Button>
+      <Button className="min-h-11" disabled={busy}>{busy?<><Loader2 className="h-4 w-4 animate-spin mr-2" aria-hidden="true"/>Testing…</>:'Test and connect as backup'}</Button></>}
       {done&&<p role="status">{done}</p>}
       {error&&<p role="alert" className="text-red-500">{error}</p>}
     </form>
-    <p className="text-muted-foreground">A ChatGPT plan or another sign-in as your backup: see <a className="underline" href={BACKUP_GUIDE} target="_blank" rel="noreferrer">Connect a backup AI</a> in the user guide.</p>
+  </div>;
+}
+
+// THE CHATGPT PLAN SIGN-IN, one for both forms (core/plan-signin.mjs): Hermes gives an address and a
+// code, the person types the code there, and once it went through the plan's first model that answers
+// is saved as the main AI or the backup. Nothing is saved that did not answer.
+export type SignIn={available?:boolean;state:'idle'|'starting'|'waiting'|'connecting'|'connected'|'failed';as?:'main'|'backup';url?:string;code?:string;error?:string;model?:string};
+const ACTIVE=['starting','waiting','connecting'];
+export function PlanSignIn({as,onConnected,every=2500}:{as:'main'|'backup';onConnected:(s:SignIn)=>void;every?:number}){
+  const [status,setStatus]=useState<SignIn|null>(null),[error,setError]=useState(''),[copied,setCopied]=useState(false);
+  const mine=status?.as===as?status:null,active=!!mine&&ACTIVE.includes(mine.state);
+  // A sign-in already under way (Settings opened again while it waits) is picked up.
+  useEffect(()=>{call('ai-signin').then(setStatus).catch(()=>{});},[]);
+  useEffect(()=>{if(!active)return;const timer=setInterval(()=>{call('ai-signin').then(setStatus).catch((e:any)=>setError(e.message));},every);return ()=>clearInterval(timer);},[active,every]);
+  // Reported once, and only for a sign-in this form saw under way.
+  const saw=useRef(false),told=useRef(false);if(active)saw.current=true;
+  useEffect(()=>{if(mine?.state==='connected'&&saw.current&&!told.current){told.current=true;onConnected(mine);}},[mine?.state]);
+  const start=async()=>{setError('');told.current=false;saw.current=false;try{setStatus(await call('ai-signin/start',{as}));}catch(e:any){setError(e.message);}};
+  const cancel=async()=>{setError('');try{setStatus(await call('ai-signin/cancel',{}));}catch(e:any){setError(e.message);}};
+  const copy=async()=>{try{await navigator.clipboard.writeText(mine?.code||'');setCopied(true);}catch{}};
+  return <div className="space-y-3" role="group" aria-label={as==='backup'?'Sign in with ChatGPT for your backup AI':'Sign in with ChatGPT'}>
+    {mine?.state==='starting'?<p className="flex gap-2 items-center" role="status"><Loader2 className="h-4 w-4 animate-spin" aria-hidden="true"/>Asking ChatGPT for a sign-in code…</p>
+    :mine?.state==='waiting'?<div className="space-y-2" role="status">
+      <p>Open this page on your phone or computer: <a className="underline" href={mine.url} target="_blank" rel="noreferrer">{mine.url}</a></p>
+      <p>Type this code there: <code className="text-lg font-mono">{mine.code}</code> <Button type="button" variant="outline" className="min-h-11 ml-2" onClick={copy}>{copied?'Copied':'Copy code'}</Button></p>
+      <p>Sign in with your ChatGPT account. The code lasts 15 minutes, and this page notices as soon as it went through.</p>
+      <Button type="button" variant="outline" className="min-h-11" onClick={cancel}>Cancel</Button></div>
+    :mine?.state==='connecting'?<p className="flex gap-2 items-center" role="status"><Loader2 className="h-4 w-4 animate-spin" aria-hidden="true"/>You are signed in to ChatGPT. Finding a model your plan may use; this can take a minute.</p>
+    :<>
+      <p>{as==='backup'?'Sign in with the ChatGPT account whose plan steps in when your main AI fails.':'Sign in with the ChatGPT account whose plan Godspeed should use.'} Any plan with Codex works; Plus or higher is best for daily use.</p>
+      {mine?.state==='failed'&&<p className="flex gap-2 items-start" role="alert"><AlertTriangle className="h-5 w-5 shrink-0 text-amber-500" aria-hidden="true"/><span>{mine.error}</span></p>}
+      <Button type="button" className="min-h-11" onClick={start}>{mine?.state==='failed'?'Try again':'Sign in with ChatGPT'}</Button></>}
+    {error&&<p role="alert" className="text-red-500">{error}</p>}
   </div>;
 }

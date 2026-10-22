@@ -144,6 +144,31 @@ class BackupTests(unittest.TestCase):
         result = module.request({**self.payload, "entry": trial}, load_config=lambda: self.config, resolve_runtime=resolve, resolve_client=client)
         self.assertEqual(result["model"], "plan-model")
 
+    def test_the_plan_sign_in_finds_the_first_model_that_answers_before_anything_is_saved(self):
+        tried = []
+
+        class Completions:
+            def create(self, **kwargs):
+                tried.append(kwargs["model"])
+                if kwargs["model"] != "plan-two":
+                    raise RuntimeError("HTTP 400: The model is not supported when using Codex with a ChatGPT account")
+                return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content="ready", tool_calls=[]))])
+
+        def resolve(**kwargs):
+            self.assertEqual(kwargs["requested"], "openai-codex")
+            return {"provider": "openai-codex", "api_key": "plan-token", "base_url": "https://chatgpt.example"}
+
+        def client(provider, **kwargs):
+            return SimpleNamespace(chat=SimpleNamespace(completions=Completions())), kwargs["model"]
+        # A new installation has no main AI yet: the plan is still tried.
+        result = module.request({**self.payload, "route": "plan"}, load_config=lambda: {}, resolve_runtime=resolve,
+                                resolve_client=client, models_of_plan=lambda: ["plan-one", "plan-two", "plan-three"])
+        self.assertEqual((result["provider"], result["model"]), ("openai-codex", "plan-two"))
+        self.assertEqual(tried, ["plan-one", "plan-two"])
+        with self.assertRaises(RuntimeError):
+            module.request({**self.payload, "route": "plan"}, load_config=lambda: {}, resolve_runtime=resolve,
+                           resolve_client=client, models_of_plan=lambda: ["plan-one"])
+
     def test_backup_entry_is_read_as_hermes_reads_it(self):
         self.assertIsNone(module.backup_entry({}))
         self.assertIsNone(module.backup_entry({"fallback_providers": [{"provider": "x"}, {"model": "y"}, "z"]}))

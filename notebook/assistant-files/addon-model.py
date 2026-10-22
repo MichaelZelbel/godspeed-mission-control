@@ -9,7 +9,9 @@ discussion #20): the first entry of Hermes' fallback chain (`fallback_providers`
 Godspeed writes only when the person connects a backup). It is tried only when the
 selected model failed, only for this request, and the answer says so ("backup": true).
 The notebook's Settings check asks for one of the two by name ("route": "main" or
-"backup"); an add-on cannot, since godspeed-model accepts no such field.
+"backup"), a backup is tried before it is saved ("route": "backup" with an "entry"), and a
+ChatGPT plan just signed in in Settings has its models tried ("route": "plan"); an add-on
+can do none of this, since godspeed-model accepts no such field.
 """
 import contextlib
 import io
@@ -93,8 +95,41 @@ def ask(payload, provider, model, *, resolve_runtime, resolve_client, expected_r
     return {"text": text, "provider": effective, "model": model}
 
 
-def request(payload, *, load_config, resolve_runtime, resolve_client, expected_route=None):
+PLAN = "openai-codex"
+
+
+def plan_models():
+    """The ChatGPT plan's models in the order Hermes offers them, as the server's Telegram setup tries
+    them (godspeed-telegram-setup, codex_models): Hermes' default first, at most eight."""
+    from hermes_cli.codex_models import DEFAULT_CODEX_MODELS
+    from hermes_cli.models import get_default_model_for_provider
+    first = get_default_model_for_provider(PLAN)
+    return list(dict.fromkeys(m for m in [first] + list(DEFAULT_CODEX_MODELS) if m))[:8]
+
+
+def request(payload, *, load_config, resolve_runtime, resolve_client, expected_route=None, models_of_plan=plan_models):
     config = load_config()
+    route = payload.get("route")
+    if route == "plan":
+        # Settings' ChatGPT plan sign-in (core/plan-signin.mjs), for the main AI or the backup alike:
+        # which of the plan's models answers, tried before anything is saved. Which ones a plan may
+        # use differs; the first that answers wins.
+        last = None
+        for name in models_of_plan():
+            try:
+                return ask(payload, PLAN, name, resolve_runtime=resolve_runtime, resolve_client=resolve_client,
+                           expected_route=expected_route)
+            except Exception as error:
+                last = error
+        raise last or ValueError("The ChatGPT plan has no model to try")
+    if route == "backup" and payload.get("entry"):
+        trial = backup_entry({"fallback_providers": [payload.get("entry")]})
+        if not trial:
+            raise ValueError("Name the backup's provider and model")
+        answer = ask(payload, trial["provider"], trial["model"], resolve_runtime=resolve_runtime,
+                     resolve_client=resolve_client, expected_route=expected_route,
+                     base_url=str(trial.get("base_url") or "").strip() or None, api_key=entry_key(trial))
+        return {**answer, "backup": True}
     provider, model = selected(config)
     backup = backup_entry(config)
     if payload.get("describe"):
@@ -102,15 +137,12 @@ def request(payload, *, load_config, resolve_runtime, resolve_client, expected_r
         if backup:
             described["backup"] = {"provider": backup["provider"], "model": backup["model"]}
         return described
-    route = payload.get("route")
-    # The Telegram backup chat tests a backup before it is saved ("entry", with route "backup"
-    # only), so a new one that does not answer never replaces one that does.
-    trial = backup_entry({"fallback_providers": [payload.get("entry")]}) if route == "backup" and payload.get("entry") else None
-    if route == "backup" and payload.get("entry") and not trial:
-        raise ValueError("Name the backup's provider and model")
+    # (Above: the Telegram backup chat and Settings test a backup before it is saved, "entry" with
+    # route "backup", so a new one that does not answer never replaces one that does. It needs no
+    # main AI, which a new installation may not have yet.)
 
     def through_backup():
-        chosen = trial or backup
+        chosen = backup
         if not chosen:
             raise ValueError("No backup AI is connected")
         answer = ask(payload, chosen["provider"], chosen["model"], resolve_runtime=resolve_runtime,
