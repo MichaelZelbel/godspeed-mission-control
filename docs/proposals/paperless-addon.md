@@ -234,8 +234,10 @@ new notes.
 
 **F11. A tag that keeps a document out.** Documents with the user's "Not in notebook" tag get no
 note. When the tag is added to a document that already has one, the add-on removes the note it
-wrote. Whether such a document is still read by the AI for sorting is open question 1.
-*Test:* the kit's doctor letter with that tag has no note after a run; adding the tag to a noted
+wrote. Such a document is still sorted and filed into the cloud drive like any other: the user's own
+AI reads it once for that (Michael's choice, 22 October 2026). A deadline in it still becomes a
+Godspeed deadline, named only by the document's title and date.
+*Test:* the kit's doctor letter with that tag is sorted and filed but has no note after a run; adding the tag to a noted
 document removes its note on the next run.
 
 **F12. Only the AI the user chose.** Every AI call goes through Godspeed's own connection
@@ -303,6 +305,8 @@ creates none.
 - Godspeed sorts by default, and the sorting can be set to "Paperless sorts" or "nobody sorts"
   (22 October 2026).
 - Only an AI the user already uses may read their papers (22 October 2026).
+- **"Not in notebook" documents are still sorted and filed;** they only get no note (22 October
+  2026).
 - **Deadlines from letters are in the first version** (F15), even though Godspeed needs a small change
   for it (22 October 2026).
 - **The notebook keeps each document's full text,** with the summary, key facts and links, even
@@ -322,15 +326,13 @@ creates none.
 
 To go through together, one at a time, most important first.
 
-1. Documents with "Not in notebook": still sorted by the AI, or not read by it at all? Doctors'
-   letters are the real case.
-2. How long does the server keep documents once they are filed in the drive: all of them (the phone
+1. How long does the server keep documents once they are filed in the drive: all of them (the phone
    app can show and search everything), or only recent ones (less on a server that could be broken
    into)?
-3. How does the user see what happened (progress, "Check this" documents, removed documents): a line
+2. How does the user see what happened (progress, "Check this" documents, removed documents): a line
    in the morning brief, a weekly summary, or only when asked?
-4. Is the tax check (L1) the next step after the first version?
-5. The add-on's name.
+3. Is the tax check (L1) the next step after the first version?
+4. The add-on's name.
 
 ## 10. Calls Mission Control made while writing this
 
@@ -343,7 +345,8 @@ These were settled without Michael, each as a sensible default; any of them can 
 - What the add-on may create (F6).
 - Every document gets a note, the archive without an AI summary at first; the note link lives in
   Paperless; the user's own lines in a note survive updates (F10).
-- Adding "Not in notebook" later removes the note the add-on wrote (F11).
+- Adding "Not in notebook" later removes the note the add-on wrote; a deadline from such a document
+  names only its title and date (F11).
 - No AI route or backup of its own (F12).
 - Setup by talking to the assistant, no page of its own in the first version (F1, F2).
 - Google Drive first; the drive connection reuses the Google sign-in Godspeed's notebook already
