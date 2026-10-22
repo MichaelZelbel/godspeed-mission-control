@@ -5,7 +5,7 @@ import {createHash} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 import {passedEnvironment} from '../../notebook/core/assistant-files.mjs';
 import {notebookAddress} from '../../notebook/core/notebook-address.mjs';
-import {REQUEST_FILE,REQUEST_MINUTES,FLOW_STATE as BACKUP_STATE} from '../../notebook/scripts/backup-ai.mjs';
+import {REQUEST_FILE,REQUEST_MINUTES,FLOW_STATE as BACKUP_STATE} from '../../notebook/core/backup-request.mjs';
 const HANDOVER_MS=4000;
 
 // Telegram on the one-click server, switched on from the web page instead of a redeploy.
