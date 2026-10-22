@@ -65,5 +65,101 @@ class HostModelTests(unittest.TestCase):
             module.request(payload, load_config=lambda: config, resolve_runtime=lambda **kwargs: {"provider": "custom", "base_url": "https://other.example"}, resolve_client=never, expected_route=lambda *args: ("custom", "https://owner.example"))
 
 
+class BackupTests(unittest.TestCase):
+    """A backup AI the person connected (discussion #20): Hermes' first fallback entry, tried only
+    when the selected model failed, only for that request, and named in the answer."""
+    payload = {"system": "contract", "prompt": "fictional profile", "timeout_ms": 3000, "max_tokens": 128}
+    config = {"model": {"provider": "openai-codex", "default": "plan-model"},
+              "fallback_providers": [{"provider": "openrouter", "model": "backup/model",
+                                      "base_url": "https://openrouter.ai/api/v1", "api_key": "backup-test-key"}]}
+
+    def route(self, main_works):
+        resolved, sent = [], []
+
+        class Completions:
+            def __init__(self, model):
+                self.model = model
+
+            def create(self, **kwargs):
+                sent.append(kwargs["model"])
+                if kwargs["model"] == "plan-model" and not main_works:
+                    raise RuntimeError("HTTP 429: usage limit reached")
+                return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content="from " + kwargs["model"], tool_calls=[]))])
+
+        def resolve(**kwargs):
+            resolved.append(kwargs)
+            if kwargs["requested"] == "openrouter":
+                return {"provider": "openrouter", "api_key": kwargs.get("explicit_api_key"), "base_url": kwargs.get("explicit_base_url")}
+            return {"provider": kwargs["requested"], "api_key": "plan-token", "base_url": "https://chatgpt.example"}
+
+        def client(provider, **kwargs):
+            return SimpleNamespace(chat=SimpleNamespace(completions=Completions(kwargs["model"]))), kwargs["model"]
+        return resolved, sent, resolve, client
+
+    def test_main_answers_first_and_the_backup_is_not_touched(self):
+        resolved, sent, resolve, client = self.route(main_works=True)
+        result = module.request(self.payload, load_config=lambda: self.config, resolve_runtime=resolve, resolve_client=client)
+        self.assertEqual(result, {"text": "from plan-model", "provider": "openai-codex", "model": "plan-model"})
+        self.assertEqual(sent, ["plan-model"])
+        self.assertEqual(resolved, [{"requested": "openai-codex", "target_model": "plan-model"}])
+
+    def test_backup_answers_only_when_the_main_one_failed_and_says_so(self):
+        resolved, sent, resolve, client = self.route(main_works=False)
+        result = module.request(self.payload, load_config=lambda: self.config, resolve_runtime=resolve, resolve_client=client)
+        self.assertEqual(result, {"text": "from backup/model", "provider": "openrouter", "model": "backup/model", "backup": True})
+        self.assertEqual(sent, ["plan-model", "backup/model"])
+        self.assertEqual(resolved[1], {"requested": "openrouter", "target_model": "backup/model",
+                                       "explicit_api_key": "backup-test-key", "explicit_base_url": "https://openrouter.ai/api/v1"})
+
+    def test_without_a_backup_the_failure_is_todays(self):
+        _, sent, resolve, client = self.route(main_works=False)
+        config = {"model": self.config["model"]}
+        with self.assertRaises(RuntimeError):
+            module.request(self.payload, load_config=lambda: config, resolve_runtime=resolve, resolve_client=client)
+        self.assertEqual(sent, ["plan-model"])
+
+    def test_the_settings_check_asks_each_one_by_name(self):
+        _, sent, resolve, client = self.route(main_works=False)
+        with self.assertRaises(RuntimeError):
+            module.request({**self.payload, "route": "main"}, load_config=lambda: self.config, resolve_runtime=resolve, resolve_client=client)
+        self.assertEqual(sent, ["plan-model"], "the main check never falls back")
+        result = module.request({**self.payload, "route": "backup"}, load_config=lambda: self.config, resolve_runtime=resolve, resolve_client=client)
+        self.assertEqual((result["model"], result["backup"]), ("backup/model", True))
+        self.assertEqual(sent, ["plan-model", "backup/model"])
+        with self.assertRaises(ValueError):
+            module.request({**self.payload, "route": "backup"}, load_config=lambda: {"model": self.config["model"]}, resolve_runtime=resolve, resolve_client=client)
+
+    def test_a_backup_is_tried_before_it_is_saved(self):
+        resolved, sent, resolve, client = self.route(main_works=True)
+        trial = {"provider": "openrouter", "model": "trial/model", "api_key": "trial-test-key"}
+        result = module.request({**self.payload, "route": "backup", "entry": trial}, load_config=lambda: {"model": self.config["model"]},
+                                resolve_runtime=resolve, resolve_client=client)
+        self.assertEqual((result["model"], result["backup"]), ("trial/model", True))
+        self.assertEqual(resolved[0]["explicit_api_key"], "trial-test-key")
+        self.assertEqual(sent, ["trial/model"], "the main one is not asked")
+        with self.assertRaises(ValueError):
+            module.request({**self.payload, "route": "backup", "entry": {"provider": "x"}}, load_config=lambda: self.config,
+                           resolve_runtime=resolve, resolve_client=client)
+        # Only the backup check can name an entry; a normal request ignores it.
+        result = module.request({**self.payload, "entry": trial}, load_config=lambda: self.config, resolve_runtime=resolve, resolve_client=client)
+        self.assertEqual(result["model"], "plan-model")
+
+    def test_backup_entry_is_read_as_hermes_reads_it(self):
+        self.assertIsNone(module.backup_entry({}))
+        self.assertIsNone(module.backup_entry({"fallback_providers": [{"provider": "x"}, {"model": "y"}, "z"]}))
+        self.assertEqual(module.backup_entry({"fallback_model": {"provider": "anthropic", "model": "old"}})["model"], "old")
+        self.assertEqual(module.backup_entry({"fallback_providers": [{"provider": "a", "model": "first"}], "fallback_model": {"provider": "b", "model": "second"}})["model"], "first")
+        with patch.dict(os.environ, {"FICTIONAL_BACKUP_KEY": "from-env"}):
+            self.assertEqual(module.entry_key({"key_env": "FICTIONAL_BACKUP_KEY"}), "from-env")
+        self.assertIsNone(module.entry_key({"provider": "openai-codex"}))
+
+    def test_check_names_the_backup_without_asking_it(self):
+        def never(**kwargs):
+            self.fail("check must not resolve credentials or infer")
+        result = module.request({"describe": True}, load_config=lambda: self.config, resolve_runtime=never, resolve_client=never)
+        self.assertEqual(result, {"configured": True, "provider": "openai-codex", "model": "plan-model",
+                                  "backup": {"provider": "openrouter", "model": "backup/model"}})
+
+
 if __name__ == "__main__":
     unittest.main()

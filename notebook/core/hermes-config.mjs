@@ -72,6 +72,26 @@ export function setConfigValue(text,keys,value){
  }
  return text;
 }
+// ONE KEY OF config.yaml REMOVED, with every line that belongs to it (the list or the section under
+// it); everything else stays as it was. Removing a key that is not there changes nothing.
+export function deleteConfigValue(text,keys){
+ text=String(text||'').replace(/^﻿/,'').replace(/\r\n/g,'\n');
+ const lines=linesOf(text);let from=0,to=lines.length,indent=0;
+ for(let depth=0;depth<keys.length;depth++){
+  const pattern=new RegExp('^'+' '.repeat(indent)+escapeKey(keys[depth])+':(?:[ \\t]+(.*?))?[ \\t]*$');
+  let found=-1;for(let i=from;i<to;i++){if(pattern.test(lines[i].line)){found=i;break;}}
+  if(found===-1)return text;
+  const end=childrenEnd(lines,found,indent);
+  if(depth===keys.length-1){
+   // Blank lines and comments after the key's own lines belong to what follows, not to the key.
+   let stop=end;while(stop>found+1&&(!lines[stop-1].line.trim()||/^\s*#/.test(lines[stop-1].line)))stop--;
+   const start=lines[found].at,cut=stop<lines.length?lines[stop].at:text.length;
+   return text.slice(0,start)+text.slice(cut);
+  }
+  from=found+1;to=end;indent+=2;
+ }
+ return text;
+}
 // The value of one key as written (the text after "key:", or the list under it), or null.
 export function readConfigValue(text,keys){
  text=String(text||'').replace(/^﻿/,'').replace(/\r\n/g,'\n');
@@ -146,6 +166,25 @@ export function godspeedHermesSettings(text){
  for(const [name,target] of QUICK_ALIASES)if(readConfigValue(out,['quick_commands',name])===null){out=setConfigValue(out,['quick_commands',name,'type'],'alias');out=setConfigValue(out,['quick_commands',name,'target'],JSON.stringify(target));}
  const current=Number(readConfigValue(out,['cron','script_timeout_seconds']));
  if(!(current>=SCRIPT_TIMEOUT_SECONDS))out=setConfigValue(out,['cron','script_timeout_seconds'],String(SCRIPT_TIMEOUT_SECONDS));
+ return out;
+}
+
+// /backupai IN TELEGRAM (22 October 2026, core/backup-ai.mjs): a Hermes quick command of type exec,
+// which Hermes runs without any AI, so it works when the main AI is the one that fails. It exists
+// only where the one-click server's Telegram runner can hand the chat to the backup setup
+// (docker/full-candidate/telegram-runner.mjs); everywhere else Godspeed's own command is taken out
+// again. A /backupai the owner defined for something else is theirs and stays.
+// where: {node, script, dir} on the one-click server, else null.
+export const BACKUP_COMMAND='backupai';
+export function backupQuickCommand(text,where){
+ const command=readConfigValue(text,['quick_commands',BACKUP_COMMAND,'command']);
+ const exists=readConfigValue(text,['quick_commands',BACKUP_COMMAND])!==null,ours=typeof command==='string'&&/backup-ai\.mjs/.test(command);
+ if(!where)return ours?deleteConfigValue(text,['quick_commands',BACKUP_COMMAND]):text;
+ if(exists&&!ours)return text;
+ const quote=s=>"'"+String(s).replaceAll("'","'\\''")+"'";
+ const line=[quote(where.node),quote(where.script),'telegram-request','--dir',quote(where.dir)].join(' ');
+ let out=setConfigValue(text,['quick_commands',BACKUP_COMMAND,'type'],'exec');
+ out=setConfigValue(out,['quick_commands',BACKUP_COMMAND,'command'],JSON.stringify(line));
  return out;
 }
 

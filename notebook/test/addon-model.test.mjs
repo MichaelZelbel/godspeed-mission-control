@@ -82,3 +82,44 @@ test('the host command preserves profile text when UTF-8 characters cross input 
  child.stdin.write(bytes.subarray(0,at));await new Promise(resolve=>setTimeout(resolve,30));child.stdin.end(bytes.subarray(at));
  const code=await new Promise(resolve=>child.on('close',resolve));assert.equal(code,0,stderr);assert.equal(JSON.parse(stdout).text,'checked');assert.equal(captured.messages[1].content,'Grüße aus Köln 🐈');
 });
+
+// A BACKUP AI THE PERSON CONNECTED (discussion #20): an add-on gets it without a setup of its own,
+// the main connection first, the backup only when that failed, and the answer says which answered.
+function endpoint(t,reply){
+ const seen=[];const server=http.createServer(async(req,res)=>{let bytes='';for await(const chunk of req)bytes+=chunk;seen.push({authorization:req.headers.authorization,body:JSON.parse(bytes)});const [status,body]=reply(seen.length);res.statusCode=status;res.end(JSON.stringify(body));});
+ return new Promise(resolve=>server.listen(0,'127.0.0.1',()=>{t.after(()=>new Promise(r=>server.close(r)));resolve({url:'http://127.0.0.1:'+server.address().port+'/v1/chat/completions',seen});}));
+}
+const answer=content=>[200,{choices:[{message:{content}}]}];
+test('API-only Godspeed: the main address first, the backup address only when it failed, and the answer names it',async t=>{
+ const f=fixture(t);fs.unlinkSync(path.join(f.state,'assistant.json'));let mainUp=false;
+ const main=await endpoint(t,()=>mainUp?answer('from the main one'):[503,{error:{message:'overloaded'}}]),backup=await endpoint(t,()=>answer('from the backup'));
+ fs.writeFileSync(path.join(f.state,'provider.json'),JSON.stringify({url:main.url,key:'main-key-test-only',model:'main-model'}));
+ // No backup: today's behaviour, the main one's failure.
+ await assert.rejects(addonModel({root:f.root,input}),/HTTP 503/);assert.equal(backup.seen.length,0);
+ fs.writeFileSync(path.join(f.state,'provider-backup.json'),JSON.stringify({url:backup.url,key:'backup-key-test-only',model:'backup-model'}));
+ assert.deepEqual(await addonModel({root:f.root,describe:true}),{configured:true,provider:'configured-api',model:'main-model',backup:{provider:'configured-api',model:'backup-model'}});
+ const result=await addonModel({root:f.root,input});
+ assert.deepEqual(result,{text:'from the backup',provider:'configured-api',model:'backup-model',backup:true});
+ assert.equal(backup.seen[0].authorization,'Bearer backup-key-test-only');assert.equal(backup.seen[0].body.model,'backup-model');assert.equal(backup.seen[0].body.tools,undefined);
+ // The next request tries the main one first again.
+ mainUp=true;assert.deepEqual(await addonModel({root:f.root,input}),{text:'from the main one',provider:'configured-api',model:'main-model'});
+ assert.equal(main.seen.length,3);assert.equal(backup.seen.length,1);
+ const receipts=fs.readFileSync(path.join(f.state,'model-requests.jsonl'),'utf8').trim().split('\n').map(l=>JSON.parse(l));
+ assert.deepEqual(receipts.map(r=>[r.state,r.model,r.backup||false]),[['failed',undefined,false],['answered','backup-model',true],['answered','main-model',false]]);
+ for(const privateText of ['key-test-only','Invented person','from the'])assert.ok(!JSON.stringify(receipts).includes(privateText));
+ const usage=JSON.parse(fs.readFileSync(path.join(f.state,'backup-ai.json'),'utf8'));assert.equal(usage.answers,1);assert.equal(usage.main_failing_since,undefined,'the main one answered again');
+ // A backup that was removed is gone.
+ mainUp=false;fs.unlinkSync(path.join(f.state,'provider-backup.json'));
+ await assert.rejects(addonModel({root:f.root,input}),/HTTP 503/);assert.equal(backup.seen.length,1);
+});
+test('a Hermes installation reports the backup its helper used, and remembers the main one failing',async t=>{
+ const f=fixture(t);
+ const result=await addonModel({root:f.root,input,spawnProcess:fakeSpawn({text:'ok',provider:'openrouter',model:'backup-model',backup:true})});
+ assert.deepEqual(result,{text:'ok',provider:'openrouter',model:'backup-model',backup:true});
+ const usage=JSON.parse(fs.readFileSync(path.join(f.state,'backup-ai.json'),'utf8'));assert.equal(usage.answers,1);assert.ok(usage.main_failing_since);
+ const last=JSON.parse(fs.readFileSync(path.join(f.state,'model-requests.jsonl'),'utf8').trim().split('\n').at(-1));assert.equal(last.backup,true);
+ await addonModel({root:f.root,input,spawnProcess:fakeSpawn({text:'ok',provider:'openai-codex',model:'main'})});
+ assert.equal(JSON.parse(fs.readFileSync(path.join(f.state,'backup-ai.json'),'utf8')).main_failing_since,undefined);
+ // An add-on can never ask for a route of its own.
+ assert.throws(()=>modelInput({...input,route:'backup'}));
+});
