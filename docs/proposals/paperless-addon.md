@@ -274,6 +274,25 @@ a deadline.
 date and a link to the document, also after a second run; a kit letter whose deadline has passed
 creates none.
 
+**F16. Messages only when the user can act.** A document the add-on could not place ("Check this"),
+or a deadline coming up, reaches the user as one short message with a link; several "Check this"
+documents from one run come as one message. Everything else is silent. "How far is the pile?" and
+similar questions are answered any time.
+*Test:* a run over the kit sends exactly one message, naming the blurry document; a second run
+with nothing new sends none.
+
+**F17. The documents collection.** The add-on keeps one collection in the user's Godspeed notebook,
+"Documents", with one item per document it handled: when it was added, the document's date,
+title, sender, type, tags, its folder in the drive, its status (sorted, check this, kept out of the
+notebook), its deadline if it has one, and links to the note, to the document in Paperless and to
+the file in the drive. The list can be sorted and filtered, so "did it do anything today?" is
+answered by opening the collection. An item changes when its document changes. A "Not in notebook"
+document gets an item with only when it was added, its drive folder and the status "kept out", no
+title and no content. The notes themselves go into one notebook folder, "Documents".
+*Test:* after a run over the kit, the collection has one item per document with every field
+filled as its expected-result file says; renaming a document updates its item; the doctor's letter
+with "Not in notebook" has an item without a title.
+
 ### Later
 
 - **L1. The tax check.** "What do I have for my 2025 tax return?" lists the documents tagged for
@@ -305,6 +324,9 @@ creates none.
 - Godspeed sorts by default, and the sorting can be set to "Paperless sorts" or "nobody sorts"
   (22 October 2026).
 - Only an AI the user already uses may read their papers (22 October 2026).
+- **The user hears from the add-on only when they can act** (F16), and **every document it handles
+  appears in a "Documents" collection in the notebook** (F17), so checking what it did is opening
+  one list (22 October 2026).
 - **The server keeps every document,** not only recent ones, so the phone app can search them all;
   the notebook holds every letter's text on that server anyway (22 October 2026).
 - **"Not in notebook" documents are still sorted and filed;** they only get no note (22 October
@@ -328,10 +350,8 @@ creates none.
 
 To go through together, one at a time, most important first.
 
-1. How does the user see what happened (progress, "Check this" documents, removed documents): a line
-   in the morning brief, a weekly summary, or only when asked?
-2. Is the tax check (L1) the next step after the first version?
-3. The add-on's name.
+1. Is the tax check (L1) the next step after the first version?
+2. The add-on's name.
 
 ## 10. Calls Mission Control made while writing this
 
@@ -344,6 +364,8 @@ These were settled without Michael, each as a sensible default; any of them can 
 - What the add-on may create (F6).
 - Every document gets a note, the archive without an AI summary at first; the note link lives in
   Paperless; the user's own lines in a note survive updates (F10).
+- All notes go into one notebook folder, "Documents"; the collection is the overview (F17).
+- A "Not in notebook" document's collection item has no title, only date, folder and status (F17).
 - Adding "Not in notebook" later removes the note the add-on wrote; a deadline from such a document
   names only its title and date (F11).
 - No AI route or backup of its own (F12).
