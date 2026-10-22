@@ -61,8 +61,8 @@ by its owner or its host, can run out of space, or can be broken into, so it mus
 place a document exists.
 
 - **On the phone,** a document lives only until it is uploaded.
-- **On the server,** Paperless reads it, the add-on sorts it, and Paperless keeps a working copy so
-  the phone app can show and search it.
+- **On the server,** Paperless reads it, the add-on sorts it, and Paperless keeps a working copy of
+  every document, for good, so the phone app can show and search all of them.
 - **In the user's cloud drive,** every sorted document is filed as a searchable PDF named
   `<date> <title>.pdf` in the folder it belongs in. This is the copy that matters. The user finds it
   there exactly where they would have put it themselves.
@@ -305,6 +305,8 @@ creates none.
 - Godspeed sorts by default, and the sorting can be set to "Paperless sorts" or "nobody sorts"
   (22 October 2026).
 - Only an AI the user already uses may read their papers (22 October 2026).
+- **The server keeps every document,** not only recent ones, so the phone app can search them all;
+  the notebook holds every letter's text on that server anyway (22 October 2026).
 - **"Not in notebook" documents are still sorted and filed;** they only get no note (22 October
   2026).
 - **Deadlines from letters are in the first version** (F15), even though Godspeed needs a small change
@@ -326,13 +328,10 @@ creates none.
 
 To go through together, one at a time, most important first.
 
-1. How long does the server keep documents once they are filed in the drive: all of them (the phone
-   app can show and search everything), or only recent ones (less on a server that could be broken
-   into)?
-2. How does the user see what happened (progress, "Check this" documents, removed documents): a line
+1. How does the user see what happened (progress, "Check this" documents, removed documents): a line
    in the morning brief, a weekly summary, or only when asked?
-3. Is the tax check (L1) the next step after the first version?
-4. The add-on's name.
+2. Is the tax check (L1) the next step after the first version?
+3. The add-on's name.
 
 ## 10. Calls Mission Control made while writing this
 
