@@ -1,6 +1,6 @@
-# The documents add-on: what it should do
+# The Clerk: what it should do
 
-**Status: second draft for discussion, 22 October 2026; open questions being answered one at a time.** Feature request:
+**Status: all open questions answered, 22 October 2026. Next: the build plan.** Feature request:
 [discussion #18](https://github.com/MichaelZelbel/godspeed-mission-control/discussions/18).
 This document is the basis we build and test against. Every feature below has a test that a
 machine can run, and the add-on is done when all of its "first version" tests pass.
@@ -19,8 +19,8 @@ you have to install it, configure it, secure it, keep it updated and back it up,
 the sorting start. That hurdle is real. The first user put it off for a year for exactly that
 reason, and when he finally set it up, it took an afternoon, with an AI doing the work.
 
-This add-on removes the hurdle. **It is a Godspeed add-on that scans, sorts and files your
-documents. Paperless-ngx is the engine underneath, and the user never has to think about it:**
+This add-on removes the hurdle. **The Clerk (`godspeed-clerk`) is a Godspeed add-on that scans,
+sorts and files your documents. Paperless-ngx is the engine underneath, and the user never has to think about it:**
 the add-on installs it, configures it, keeps it running and sorts what arrives. The user installs
 an app on their phone, connects it once, and scans. Each document then ends up, named and sorted,
 in the right folder of their own cloud drive, and Godspeed knows what it says.
@@ -103,7 +103,7 @@ Decided by Michael on 22 October 2026, as proposed by Mission Control.
 flowchart LR
   P[Phone app] -->|HTTPS upload| PL[(Paperless-ngx on the server)]
   PL -->|reads the text| PL
-  PL -->|new documents| G[Godspeed documents add-on]
+  PL -->|new documents| G[The Clerk]
   G -->|the user's own AI connection| AI{{AI the user chose}}
   AI --> G
   G -->|title, sender, type, tags, date, folder| PL
@@ -327,6 +327,9 @@ with "Not in notebook" has an item without a title.
 - **The user hears from the add-on only when they can act** (F16), and **every document it handles
   appears in a "Documents" collection in the notebook** (F17), so checking what it did is opening
   one list (22 October 2026).
+- **The tax check (L1) comes right after the first version** (22 October 2026).
+- **The name is The Clerk,** command and repository `godspeed-clerk`, next to The Wingman (22
+  October 2026).
 - **The server keeps every document,** not only recent ones, so the phone app can search them all;
   the notebook holds every letter's text on that server anyway (22 October 2026).
 - **"Not in notebook" documents are still sorted and filed;** they only get no note (22 October
@@ -341,17 +344,10 @@ with "Not in notebook" has an item without a title.
 - The author's own Godspeed runs this add-on exactly like any user's. The private sorting he
   tests with today is replaced by it.
 
-### Proposed by Mission Control, open for his yes
-
-- **The inbox tag is the queue,** because Paperless already puts it on every new document.
-- **Tax-year tags** are named "Tax <year>" in the user's language.
 
 ## 9. Open questions
 
-To go through together, one at a time, most important first.
-
-1. Is the tax check (L1) the next step after the first version?
-2. The add-on's name.
+None left. Every question was answered on 22 October 2026; the answers are in section 8.
 
 ## 10. Calls Mission Control made while writing this
 
@@ -370,6 +366,8 @@ These were settled without Michael, each as a sensible default; any of them can 
   names only its title and date (F11).
 - No AI route or backup of its own (F12).
 - Setup by talking to the assistant, no page of its own in the first version (F1, F2).
+- The inbox tag is the queue, because Paperless already puts it on every new document (F5).
+- Tax-year tags are named "Tax <year>" in the user's language (F5).
 - Google Drive first; the drive connection reuses the Google sign-in Godspeed's notebook already
   offers for Drive where it can, so the user connects Google once.
 
