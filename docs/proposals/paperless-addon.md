@@ -213,8 +213,10 @@ every document, title, tag and date of the original.
 
 **F10. One notebook note per document.** Title, sender, date, type, tags, a two-sentence summary,
 the key facts (amounts, reference numbers, deadlines), and links to the document in Paperless and
-in the cloud drive; whether the note also keeps the full text is open question 1. The notes are
-visible to the assistant's search. Every document the account owns gets a note, the existing
+in the cloud drive, and the document's full text, so Godspeed can answer anything from it without
+looking it up (Michael's choice, 22 October 2026). Notes travel wherever the user's notebook syncs,
+for example a private Git repository; the setup says so in plain words, and the "Not in notebook"
+tag (F11) keeps any document out entirely. The notes are visible to the assistant's search. Every document the account owns gets a note, the existing
 archive too:
 - documents Godspeed sorts get their summary from the same AI answer that sorted them, so no
   second call;
@@ -231,7 +233,7 @@ new notes.
 
 **F11. A tag that keeps a document out.** Documents with the user's "Not in notebook" tag get no
 note. When the tag is added to a document that already has one, the add-on removes the note it
-wrote. Whether such a document is still read by the AI for sorting is open question 3.
+wrote. Whether such a document is still read by the AI for sorting is open question 2.
 *Test:* the kit's doctor letter with that tag has no note after a run; adding the tag to a noted
 document removes its note on the next run.
 
@@ -251,8 +253,9 @@ keep getting answers, and it can say how far it is ("212 of 640 sorted").
 *Test:* with a batch size of 2 and five documents, the first run sorts 2, reports 3 waiting, and
 the next runs finish the rest.
 
-**F14. Private by default.** Logs name documents by number only, never their text. Nothing about a
-document goes into git or into any file outside the user's Godspeed, Paperless and cloud drive.
+**F14. Private by default.** Logs name documents by number only, never their text. A document's
+content lives in exactly three places: Paperless, the user's cloud drive, and the user's notebook
+(which syncs the way the user's notebook syncs). The add-on writes it nowhere else.
 *Test:* after a run over the kit, no log line contains a sentence from a kit document.
 
 ### Later
@@ -287,6 +290,8 @@ document goes into git or into any file outside the user's Godspeed, Paperless a
 - Godspeed sorts by default, and the sorting can be set to "Paperless sorts" or "nobody sorts"
   (22 October 2026).
 - Only an AI the user already uses may read their papers (22 October 2026).
+- **The notebook keeps each document's full text,** with the summary, key facts and links, even
+  though the notebook syncs to a private Git repository (22 October 2026).
 - The test kit is in English; the user's language is a setting, and we do not test how well an AI
   reads other languages (22 October 2026).
 - None of the author's own documents go into the repository in any form (22 October 2026).
@@ -302,20 +307,17 @@ document goes into git or into any file outside the user's Godspeed, Paperless a
 
 To go through together, one at a time, most important first.
 
-1. Does the notebook keep the full text of each document, or a summary, the key facts and the
-   links? Full text lets Godspeed answer anything from the letter; it also makes the notebook much
-   bigger and carries every word wherever the notebook syncs.
-2. Should deadlines (L1) be in the first version? The add-on model gives an add-on no way to create
+1. Should deadlines (L1) be in the first version? The add-on model gives an add-on no way to create
    a Godspeed deadline yet, so this also needs a small change in Godspeed.
-3. Documents with "Not in notebook": still sorted by the AI, or not read by it at all? Doctors'
+2. Documents with "Not in notebook": still sorted by the AI, or not read by it at all? Doctors'
    letters are the real case.
-4. How long does the server keep documents once they are filed in the drive: all of them (the phone
+3. How long does the server keep documents once they are filed in the drive: all of them (the phone
    app can show and search everything), or only recent ones (less on a server that could be broken
    into)?
-5. How does the user see what happened (progress, "Check this" documents, removed documents): a line
+4. How does the user see what happened (progress, "Check this" documents, removed documents): a line
    in the morning brief, a weekly summary, or only when asked?
-6. Is the tax check (L2) the next step after the first version?
-7. The add-on's name.
+5. Is the tax check (L2) the next step after the first version?
+6. The add-on's name.
 
 ## 10. Calls Mission Control made while writing this
 
