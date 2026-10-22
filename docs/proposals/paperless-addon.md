@@ -76,7 +76,7 @@ disk (its "storage paths"). Filing into the cloud drive is therefore the add-on'
 
 ## 5. Connection and security
 
-Proposed by Mission Control; the user's yes is open question 1.
+Decided by Michael on 22 October 2026, as proposed by Mission Control.
 
 - **HTTPS always.** Nothing travels unencrypted, not even inside a private network.
 - **Default: a secure public address.** On a server, Godspeed's installer already gives the
@@ -213,7 +213,7 @@ every document, title, tag and date of the original.
 
 **F10. One notebook note per document.** Title, sender, date, type, tags, a two-sentence summary,
 the key facts (amounts, reference numbers, deadlines), and links to the document in Paperless and
-in the cloud drive; whether the note also keeps the full text is open question 2. The notes are
+in the cloud drive; whether the note also keeps the full text is open question 1. The notes are
 visible to the assistant's search. Every document the account owns gets a note, the existing
 archive too:
 - documents Godspeed sorts get their summary from the same AI answer that sorted them, so no
@@ -231,7 +231,7 @@ new notes.
 
 **F11. A tag that keeps a document out.** Documents with the user's "Not in notebook" tag get no
 note. When the tag is added to a document that already has one, the add-on removes the note it
-wrote. Whether such a document is still read by the AI for sorting is open question 4.
+wrote. Whether such a document is still read by the AI for sorting is open question 3.
 *Test:* the kit's doctor letter with that tag has no note after a run; adding the tag to a noted
 document removes its note on the next run.
 
@@ -281,7 +281,8 @@ document goes into git or into any file outside the user's Godspeed, Paperless a
   one documents folder they point the add-on to, after they confirmed a folder plan (open question
   answered 22 October 2026). They are the documents' real home; a rented server is not trusted as
   their home ("that would be the real end of the user journey", 22 October 2026).
-- **Connection and security are decided in this document,** not left open (22 October 2026).
+- **Connection and security** as in section 5: HTTPS always, a secure public address with a
+  second login factor by default, Tailscale as an option, never required (22 October 2026).
 - Paperless-ngx is the first engine (discussion #18).
 - Godspeed sorts by default, and the sorting can be set to "Paperless sorts" or "nobody sorts"
   (22 October 2026).
@@ -294,7 +295,6 @@ document goes into git or into any file outside the user's Godspeed, Paperless a
 
 ### Proposed by Mission Control, open for his yes
 
-- The connection and security design in section 5 (open question 1).
 - **The inbox tag is the queue,** because Paperless already puts it on every new document.
 - **Tax-year tags** are named "Tax <year>" in the user's language.
 
@@ -302,22 +302,20 @@ document goes into git or into any file outside the user's Godspeed, Paperless a
 
 To go through together, one at a time, most important first.
 
-1. **Security:** the default in section 5 (secure public address with a second factor, Tailscale as
-   an option) or Tailscale required?
-2. Does the notebook keep the full text of each document, or a summary, the key facts and the
+1. Does the notebook keep the full text of each document, or a summary, the key facts and the
    links? Full text lets Godspeed answer anything from the letter; it also makes the notebook much
    bigger and carries every word wherever the notebook syncs.
-3. Should deadlines (L1) be in the first version? The add-on model gives an add-on no way to create
+2. Should deadlines (L1) be in the first version? The add-on model gives an add-on no way to create
    a Godspeed deadline yet, so this also needs a small change in Godspeed.
-4. Documents with "Not in notebook": still sorted by the AI, or not read by it at all? Doctors'
+3. Documents with "Not in notebook": still sorted by the AI, or not read by it at all? Doctors'
    letters are the real case.
-5. How long does the server keep documents once they are filed in the drive: all of them (the phone
+4. How long does the server keep documents once they are filed in the drive: all of them (the phone
    app can show and search everything), or only recent ones (less on a server that could be broken
    into)?
-6. How does the user see what happened (progress, "Check this" documents, removed documents): a line
+5. How does the user see what happened (progress, "Check this" documents, removed documents): a line
    in the morning brief, a weekly summary, or only when asked?
-7. Is the tax check (L2) the next step after the first version?
-8. The add-on's name.
+6. Is the tax check (L2) the next step after the first version?
+7. The add-on's name.
 
 ## 10. Calls Mission Control made while writing this
 
