@@ -49,7 +49,8 @@ What the user does, and what the add-on does meanwhile:
    user.
 4. **The user scans.** From here on it is the add-on's job. Each document gets a real title, the
    sender, the type, tags and the date printed on it; a searchable PDF with a clean name lands in
-   the right folder of the user's drive; Godspeed's notebook gets a note about it.
+   the right folder of the user's drive; Godspeed's notebook gets a note about it; and a letter that
+   asks for something by a date becomes a Godspeed deadline.
 5. **The add-on keeps it running:** updates Paperless to versions it has tested, restarts it when it
    stops, watches the disk, and says in plain words when something needs the user.
 
@@ -94,7 +95,7 @@ Decided by Michael on 22 October 2026, as proposed by Mission Control.
   only one VPN at a time, so it clashes with a work VPN on the same phone. A secure public address
   works for everyone without that.
 - **Godspeed on a home computer instead of a server:** the phone reaches it only at home, or through
-  Tailscale. Supporting this is in "Later" (L7).
+  Tailscale. Supporting this is in "Later" (L6).
 
 ## 6. How a paper travels
 
@@ -109,7 +110,7 @@ flowchart LR
   G -->|searchable PDF, clean name| CD[(User's cloud drive)]
   G -->|nightly restore copy| CD
   G -->|one note per document| N[Godspeed notebook]
-  G -.->|later: a letter with a deadline| D[Godspeed deadlines]
+  G -->|a letter with a deadline| D[Godspeed deadlines]
 ```
 
 **Where the add-on runs.** On the computer or server where the user's Godspeed runs its routines,
@@ -176,7 +177,7 @@ and not the file name), and loses the inbox tag.
 
 **F6. Respect what the user did.** Never remove a tag the user set. Never replace a title the user
 typed. Never sort a document without the inbox tag. The only things it may create are senders,
-"Tax <year>" tags and the "Check this" tag; never a document type (outside the starter set) or any
+"Tax <year>" tags and the "Check this" and "Important" tags; never a document type (outside the starter set) or any
 other tag. Never delete anything.
 *Test:* a kit document uploaded with a typed title and an extra tag keeps both; a document sorted
 before the run is unchanged afterwards.
@@ -233,7 +234,7 @@ new notes.
 
 **F11. A tag that keeps a document out.** Documents with the user's "Not in notebook" tag get no
 note. When the tag is added to a document that already has one, the add-on removes the note it
-wrote. Whether such a document is still read by the AI for sorting is open question 2.
+wrote. Whether such a document is still read by the AI for sorting is open question 1.
 *Test:* the kit's doctor letter with that tag has no note after a run; adding the tag to a noted
 document removes its note on the next run.
 
@@ -258,17 +259,29 @@ content lives in exactly three places: Paperless, the user's cloud drive, and th
 (which syncs the way the user's notebook syncs). The add-on writes it nowhere else.
 *Test:* after a run over the kit, no log line contains a sentence from a kit document.
 
+**F15. Deadlines from letters.** A letter that asks the user to do something by a date ("pay by
+15 November", "object within one month of this notice") becomes a deadline in Godspeed, which then
+reminds the user as it gets close, the way Godspeed reminds about any deadline. A deadline that has
+already passed when the letter is read (an old letter from the backlog) is written into the note but
+creates no deadline. Each letter creates its deadline once: Paperless keeps the link in a custom
+field, so reading the letter again changes nothing, and when the user changes the date in Godspeed,
+the add-on leaves it alone. The document is also tagged "Important" until the date has passed.
+This needs a small change in Godspeed itself: the add-on model gets a way for an add-on to create
+a deadline.
+*Test:* the kit's letter with a deadline in the future creates exactly one deadline with the right
+date and a link to the document, also after a second run; a kit letter whose deadline has passed
+creates none.
+
 ### Later
 
-- **L1. Deadlines.** A letter that asks for something by a date becomes a deadline in Godspeed.
-- **L2. The tax check.** "What do I have for my 2025 tax return?" lists the documents tagged for
+- **L1. The tax check.** "What do I have for my 2025 tax return?" lists the documents tagged for
   that year and names what is usually there but missing, judged from last year's papers.
-- **L3. Questions in the chat.** Documents tagged "Check this" come to the user as short questions
+- **L2. Questions in the chat.** Documents tagged "Check this" come to the user as short questions
   ("Who sent this one?") and the answer is applied.
-- **L4. More cloud drives:** OneDrive, Dropbox, Nextcloud and others after Google Drive.
-- **L5. Mail.** PDFs that arrive by email go into Paperless the same way scans do.
-- **L6. An Android app** chosen, tested and named in the setup the way the iPhone app is.
-- **L7. Godspeed on a home computer** instead of a server.
+- **L3. More cloud drives:** OneDrive, Dropbox, Nextcloud and others after Google Drive.
+- **L4. Mail.** PDFs that arrive by email go into Paperless the same way scans do.
+- **L5. An Android app** chosen, tested and named in the setup the way the iPhone app is.
+- **L6. Godspeed on a home computer** instead of a server.
 
 ## 8. Decisions
 
@@ -290,6 +303,8 @@ content lives in exactly three places: Paperless, the user's cloud drive, and th
 - Godspeed sorts by default, and the sorting can be set to "Paperless sorts" or "nobody sorts"
   (22 October 2026).
 - Only an AI the user already uses may read their papers (22 October 2026).
+- **Deadlines from letters are in the first version** (F15), even though Godspeed needs a small change
+  for it (22 October 2026).
 - **The notebook keeps each document's full text,** with the summary, key facts and links, even
   though the notebook syncs to a private Git repository (22 October 2026).
 - The test kit is in English; the user's language is a setting, and we do not test how well an AI
@@ -307,17 +322,15 @@ content lives in exactly three places: Paperless, the user's cloud drive, and th
 
 To go through together, one at a time, most important first.
 
-1. Should deadlines (L1) be in the first version? The add-on model gives an add-on no way to create
-   a Godspeed deadline yet, so this also needs a small change in Godspeed.
-2. Documents with "Not in notebook": still sorted by the AI, or not read by it at all? Doctors'
+1. Documents with "Not in notebook": still sorted by the AI, or not read by it at all? Doctors'
    letters are the real case.
-3. How long does the server keep documents once they are filed in the drive: all of them (the phone
+2. How long does the server keep documents once they are filed in the drive: all of them (the phone
    app can show and search everything), or only recent ones (less on a server that could be broken
    into)?
-4. How does the user see what happened (progress, "Check this" documents, removed documents): a line
+3. How does the user see what happened (progress, "Check this" documents, removed documents): a line
    in the morning brief, a weekly summary, or only when asked?
-5. Is the tax check (L2) the next step after the first version?
-6. The add-on's name.
+4. Is the tax check (L1) the next step after the first version?
+5. The add-on's name.
 
 ## 10. Calls Mission Control made while writing this
 
