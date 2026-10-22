@@ -1,6 +1,6 @@
 # The documents add-on: what it should do
 
-**Status: second draft for discussion, 22 October 2026.** Feature request:
+**Status: second draft for discussion, 22 October 2026; open questions being answered one at a time.** Feature request:
 [discussion #18](https://github.com/MichaelZelbel/godspeed-mission-control/discussions/18).
 This document is the basis we build and test against. Every feature below has a test that a
 machine can run, and the add-on is done when all of its "first version" tests pass.
@@ -41,8 +41,9 @@ What the user does, and what the add-on does meanwhile:
    set of document types and tags in the user's language, a secure web address, the user's login,
    and the nightly safety copy. If the machine is too small (memory, disk), it says so in plain
    words before installing anything.
-2. **The user connects their cloud drive** once (Google Drive in the first version) and says where
-   documents should go (see open question 1).
+2. **The user connects their cloud drive** once (Google Drive in the first version) and points the
+   add-on at their main documents folder. The add-on reads the folder names inside it, proposes which
+   kind of document goes where, and the user confirms the plan once.
 3. **The user installs the phone app and connects it.** The add-on hands over the address and
    login, and confirms when the first scan has arrived. This is the only technical step left to the
    user.
@@ -75,7 +76,7 @@ disk (its "storage paths"). Filing into the cloud drive is therefore the add-on'
 
 ## 5. Connection and security
 
-Proposed by Mission Control; the user's yes is open question 2.
+Proposed by Mission Control; the user's yes is open question 1.
 
 - **HTTPS always.** Nothing travels unencrypted, not even inside a private network.
 - **Default: a secure public address.** On a server, Godspeed's installer already gives the
@@ -168,7 +169,7 @@ Then it removes the inbox tag. Field by field:
 - *Tax-year tags:* "Tax <year>" in the user's language means "needed for that year's tax return",
   and the year is the one the document is about (a 2024 tax assessment that arrives in 2026 is
   "Tax 2024"). Which papers count follows the country set in the add-on's settings.
-- *Folder:* chosen from the user's folder plan (open question 1), the way a tag is chosen.
+- *Folder:* chosen from the user's folder plan (F8), the way a tag is chosen.
 *Test:* every kit document gets the title, sender, type, tags, date and folder its expected-result
 file names (date exact, type exact, folder exact, tags at least the expected ones, title not empty
 and not the file name), and loses the inbox tag.
@@ -186,13 +187,22 @@ filed into a guessed folder, and it is not retried every hour.
 *Test:* the blurry kit document and a forced invalid answer both end with "Check this", no new
 sender or tag, and no file in the cloud drive.
 
-**F8. File into the cloud drive.** Every sorted document goes into the user's cloud drive as a
-searchable PDF named `<date> <title>.pdf`, in its folder, within the hour. When the user changes a
+**F8. File into the cloud drive.** The user points the add-on at their main documents folder in
+the drive. The add-on reads the folder names inside it (and their subfolders), proposes a folder
+plan in plain words ("insurance letters go to Insurance/<sender>", "tax papers to Taxes/<year>"),
+and the user confirms or corrects it once; later changes to the plan are made by talking to
+Godspeed. It files only inside that folder, and creates a new subfolder only where the plan says
+so (a new year, a new sender). If the drive allows access to that one folder only, that is all
+the add-on asks for; if it can only grant access to the whole drive, the add-on says so in plain
+words before the user agrees. Every sorted document goes in as a searchable PDF named
+`<date> <title>.pdf`, in its folder, within the hour. When the user changes a
 document's title, date or folder in Paperless, the add-on moves and renames the file it put there.
 It never deletes or changes a file in the drive that it did not put there, and it never deletes a
 filed document: a document deleted in Paperless stays in the drive and is reported.
-*Test:* against a test drive, the kit ends up as one correctly named file per sorted document in
-the expected folders; renaming one in Paperless renames the file; a file the test placed in the
+*Test:* against a test drive with a made-up existing folder tree, the proposed plan maps each kit
+document type to one of those folders; after the plan is confirmed, the kit ends up as one
+correctly named file per sorted document in the expected folders, and nothing is written outside
+the documents folder; renaming one in Paperless renames the file; a file the test placed in the
 drive by hand is untouched; deleting a document in Paperless leaves its file.
 
 **F9. A restore copy, and rebuilding from it.** Every night the add-on writes Paperless's full
@@ -203,7 +213,7 @@ every document, title, tag and date of the original.
 
 **F10. One notebook note per document.** Title, sender, date, type, tags, a two-sentence summary,
 the key facts (amounts, reference numbers, deadlines), and links to the document in Paperless and
-in the cloud drive; whether the note also keeps the full text is open question 3. The notes are
+in the cloud drive; whether the note also keeps the full text is open question 2. The notes are
 visible to the assistant's search. Every document the account owns gets a note, the existing
 archive too:
 - documents Godspeed sorts get their summary from the same AI answer that sorted them, so no
@@ -221,7 +231,7 @@ new notes.
 
 **F11. A tag that keeps a document out.** Documents with the user's "Not in notebook" tag get no
 note. When the tag is added to a document that already has one, the add-on removes the note it
-wrote. Whether such a document is still read by the AI for sorting is open question 5.
+wrote. Whether such a document is still read by the AI for sorting is open question 4.
 *Test:* the kit's doctor letter with that tag has no note after a run; adding the tag to a noted
 document removes its note on the next run.
 
@@ -267,7 +277,9 @@ document goes into git or into any file outside the user's Godspeed, Paperless a
 - **The installer installs and initializes Paperless,** yes by default when there is none, exactly
   the way it was done by hand on 22 October, so the user never deals with Paperless's setup (22
   October 2026).
-- **Documents end up in the user's own cloud drive folders;** a rented server is not trusted as
+- **Documents are filed into the folders the user already has** in their cloud drive, inside the
+  one documents folder they point the add-on to, after they confirmed a folder plan (open question
+  answered 22 October 2026). They are the documents' real home; a rented server is not trusted as
   their home ("that would be the real end of the user journey", 22 October 2026).
 - **Connection and security are decided in this document,** not left open (22 October 2026).
 - Paperless-ngx is the first engine (discussion #18).
@@ -282,7 +294,7 @@ document goes into git or into any file outside the user's Godspeed, Paperless a
 
 ### Proposed by Mission Control, open for his yes
 
-- The connection and security design in section 5 (open question 2).
+- The connection and security design in section 5 (open question 1).
 - **The inbox tag is the queue,** because Paperless already puts it on every new document.
 - **Tax-year tags** are named "Tax <year>" in the user's language.
 
@@ -290,26 +302,22 @@ document goes into git or into any file outside the user's Godspeed, Paperless a
 
 To go through together, one at a time, most important first.
 
-1. **Which folders in the cloud drive?** Either the add-on keeps its own folder tree (for example
-   `Documents/<year>/<type>/`) and can see nothing else in the drive, or it files into the folders
-   the user already has, which means it may look at their whole drive (or at least the one folder
-   they point it to, if the drive allows that limit).
-2. **Security:** the default in section 5 (secure public address with a second factor, Tailscale as
+1. **Security:** the default in section 5 (secure public address with a second factor, Tailscale as
    an option) or Tailscale required?
-3. Does the notebook keep the full text of each document, or a summary, the key facts and the
+2. Does the notebook keep the full text of each document, or a summary, the key facts and the
    links? Full text lets Godspeed answer anything from the letter; it also makes the notebook much
    bigger and carries every word wherever the notebook syncs.
-4. Should deadlines (L1) be in the first version? The add-on model gives an add-on no way to create
+3. Should deadlines (L1) be in the first version? The add-on model gives an add-on no way to create
    a Godspeed deadline yet, so this also needs a small change in Godspeed.
-5. Documents with "Not in notebook": still sorted by the AI, or not read by it at all? Doctors'
+4. Documents with "Not in notebook": still sorted by the AI, or not read by it at all? Doctors'
    letters are the real case.
-6. How long does the server keep documents once they are filed in the drive: all of them (the phone
+5. How long does the server keep documents once they are filed in the drive: all of them (the phone
    app can show and search everything), or only recent ones (less on a server that could be broken
    into)?
-7. How does the user see what happened (progress, "Check this" documents, removed documents): a line
+6. How does the user see what happened (progress, "Check this" documents, removed documents): a line
    in the morning brief, a weekly summary, or only when asked?
-8. Is the tax check (L2) the next step after the first version?
-9. The add-on's name.
+7. Is the tax check (L2) the next step after the first version?
+8. The add-on's name.
 
 ## 10. Calls Mission Control made while writing this
 
