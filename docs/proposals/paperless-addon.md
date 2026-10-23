@@ -219,9 +219,13 @@ before the run is unchanged afterwards.
 invalid twice, the document gets a "Check this" tag, only the safe fields are applied, it stays
 in the drive's "To sort" folder instead of a guessed one, and it is not retried every hour. In
 "Paperless sorts" and "nobody sorts" there is no tag; the status "check this" lives in the
-collection (F17) and the message (F16).
+collection (F17) and the message (F16). Being unsure is judged field by field: when the AI is
+unsure about the type or the tags but the sender it read has a folder of the same name in the
+documents folder (or a sender in Paperless of the same name), the document still gets that sender
+and is filed there; only the uncertain fields are left for the user.
 *Test:* the blurry kit document and a forced invalid answer both end with "Check this", no new
-sender or tag, and their only file in the cloud drive in "To sort".
+sender or tag, and their only file in the cloud drive in "To sort"; a ticket whose type the AI is
+unsure of, from a sender that has a folder of its own, is filed into that folder.
 
 **F8. File into the cloud drive.** The user points the add-on at their main documents folder in
 the drive. The add-on reads the folder names inside it (and their subfolders), proposes a folder
@@ -395,10 +399,33 @@ date.
 
 **F16. Messages only when the user can act.** A document the add-on could not place ("Check this"),
 a deadline whose date needs a check, a deadline coming up, or lost drive access reaches the user as
-one short message with a link; everything of that kind from one run comes as one message.
-Everything else is silent. "How far is the pile?" and similar questions are answered any time.
+one short message; everything of that kind from one run comes as one message. The message names
+each document by its title in words the user understands, links to the document itself in the
+drive (never to a list where it cannot be found), and asks for exactly what is missing (F19).
+Folder names and messages are in the language the user talks to Godspeed in, not the language of
+their papers. Everything else is silent. "How far is the pile?" and similar questions are answered
+any time.
 *Test:* a run over the kit sends exactly one message, naming the blurry document and the letter
-whose deadline needs a check; a second run with nothing new sends none.
+whose deadline needs a check, each with a link that opens that document's file in the drive; a
+second run with nothing new sends none.
+
+**F19. Answer in the chat, and the add-on learns.** (Moved from "Later" on 23 October 2026, after
+the first real "Check this" message left Michael unable to say where a paper belonged.) A document
+the add-on could not place comes to the user as a short question in the chat, with the likely
+answers as numbered choices ("Who sent the ICE ticket Krefeld to Bad Homburg? 1 Deutsche Bahn, into
+your folder Deutsche Bahn. 2 Another folder: say which."). The user answers in plain words or with
+a number, and the add-on applies it: it sets the sender (an existing one, or a new one named like
+the folder), files the document into the folder the user named, and takes off "Check this". At any
+time the user can also say where a sender's papers go ("Deutsche Bahn papers go into the Deutsche
+Bahn folder", "hotel bookings go into Travel") or move a single paper ("the hotel booking goes into
+Travel"); the add-on keeps that as part of the folder plan and uses it for every later document
+from that sender or of that kind, so the same question is never asked twice. It only ever names
+folders inside the documents folder, and a folder the user names that does not exist yet is made
+there after the user's yes.
+*Test:* a kit document left in "To sort" produces one question with numbered choices; answering
+"1" files it into that folder and removes "Check this"; answering "the Travel folder" files it into
+Travel; after "Deutsche Bahn papers go into the Deutsche Bahn folder", a second Deutsche Bahn
+document is filed there without a question; a folder name outside the documents folder is refused.
 
 **F17. The documents collection.** The add-on keeps one collection in the user's Godspeed notebook,
 "Documents", with one item per document it handled: when it was added, the document's date,
@@ -430,8 +457,7 @@ a run finds every file, note and deadline again and makes none twice.
 
 - **L1. The tax check.** "What do I have for my 2025 tax return?" lists the documents tagged for
   that year and names what is usually there but missing, judged from last year's papers.
-- **L2. Questions in the chat.** Documents tagged "Check this" come to the user as short questions
-  ("Who sent this one?") and the answer is applied.
+- **L2.** Moved into the first version as F19.
 - **L3. More cloud drives:** OneDrive, Dropbox, Nextcloud and others after Google Drive.
 - **L4. Mail.** PDFs that arrive by email go into Paperless the same way scans do.
 - **L5. An Android app** chosen, tested and named in the setup the way the iPhone app is.

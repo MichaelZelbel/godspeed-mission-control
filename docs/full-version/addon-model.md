@@ -132,3 +132,53 @@ unless processing has meanwhile proposed the same thing from the note's new word
 
 So an add-on that takes its note back out of the notebook, for example by emptying the note and
 moving it to the trash in one update, also takes back what processing proposed from it.
+
+## Deadlines an add-on keeps
+
+An add-on that finds a date the user must keep, such as a documents add-on reading "pay by
+20 November" in a letter, makes it a Godspeed deadline. It is an ordinary deadline: a file in the
+mission control's `due/` folder, shown in the deadline list, said by the deadline reminders and
+the morning brief as its day comes, and closed or moved by the user the usual way. The add-on
+sends no reminders of its own, so nothing is reminded twice.
+
+The add-on reaches its deadlines on the same door as its notes, the one that answers only on the
+same machine: `POST http://127.0.0.1:47831/api/functions/addon-deadlines`. Every request names
+the add-on (`addon`: small letters, digits and dashes) and an action. The answer is
+`{"data": ...}`; a request that cannot be done is HTTP 400 with `{"error": "<a plain sentence>"}`.
+
+Each deadline has the add-on's own `key`: letters, digits and `. _ : # / -`, at most 120, for
+example the letter's mark and which request in it this is (`5d41402abc4b2a76#2`). One add-on makes
+one deadline per key, however often it asks, also after it lost its own records or stopped half
+way, so it should ask again rather than remember.
+
+Make one:
+
+```json
+{"addon":"your-add-on","action":"create","key":"5d41402abc4b2a76#1","title":"Pay the invented water bill of 212.40 EUR","due":"2026-11-20","done_when":"The bill is paid.","cost":"A reminder fee and interest.","link":"https://paperless.example/documents/7/details"}
+```
+
+`due` is the last day, `YYYY-MM-DD`; `start` (optional) the first day it can be done, otherwise
+today. `title`, `done_when` (what is true when it is done) and `cost` (what passing the day costs)
+are one line each, in the user's language, because the reminders say them. `link` is an http or
+https address. The answer is `{"created": true, "deadline": {...}}`, or `{"created": false,
+"deadline": {...}}` when that key already has one, which is then left as it is.
+
+Look up its deadlines: `{"addon":"your-add-on","action":"list"}` answers `{"deadlines":[...]}`,
+each `{key, slug, title, due, start, state, touched, closed_on, link}`. `state` is `open`,
+`unopened` (it starts later), `closed`, `dropped` or `needs-a-look` (someone broke its file by
+hand).
+
+Change one: `{"addon":"your-add-on","action":"update","key":"5d41402abc4b2a76#1","due":"2026-11-27"}`,
+with `due`, `title` or both, for example when the letter's date was corrected. **A deadline the
+user touched is the user's.** Once they changed its title or a date (also a day to aim for), or
+closed or dropped it, `touched` is `true` and an update answers `{"updated": false, "touched":
+true}` and changes nothing, for good. Otherwise `{"updated": true}`.
+
+A Godspeed from before this answers HTTP 400, "Processing function has not been ported:
+addon-deadlines". The add-on then makes no deadline and should tell the user once that updating
+Godspeed lets it keep their deadlines.
+
+In the file, three lines say whose a deadline is: `ADDON`, `ADDON-KEY` and `ADDON-STATE`, a
+fingerprint of its title and dates as the add-on last wrote them. `mc-due add --addon <name>
+--addon-key <key>` and `mc-due addon-update` are the commands behind the door; an add-on uses the
+door, which runs them under the notebook's lock in the right mission control.

@@ -34,6 +34,15 @@ Some add-ons write a note for each thing they handle, for example one note per s
 
 For add-on authors: `docs/full-version/addon-model.md`, "Notes an add-on writes".
 
+## Also coming in the next release: deadlines from add-ons
+
+An add-on can now give Godspeed a deadline it found, for example a documents add-on that reads "pay by 20 November" in a scanned letter. It is a normal deadline: it is in your deadline list, your deadline reminders and your morning brief mention it as the day comes, and you close or move it the way you close or move any deadline. The add-on sends no reminders of its own, so nothing reminds you twice.
+
+- Once you change such a deadline's day or name, or close or drop it, it is yours: the add-on can never change it again.
+- An add-on makes each deadline once, also when it reads the same letter again.
+
+For add-on authors: `docs/full-version/addon-model.md`, "Deadlines an add-on keeps".
+
 ## New in 2.0.0-beta.4 (21 October 2026): a small copy before each update
 
 Before every update the installer saves a copy of your notebook, so you can go back if the update goes wrong. Until now that copy took your whole folder, also your work folder with its recordings and downloads. On a grown mission control it was gigabytes and many minutes, and an update refused to start when the disk had no room for it. Old copies also piled up.

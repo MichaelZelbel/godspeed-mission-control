@@ -21,6 +21,7 @@ import { fileContext } from './context.mjs';
 import {Connectors} from './connectors.mjs';
 import {visibleRows,knowledgeContext} from './visibility.mjs';
 import {chatContext,chatAttachments,retrievedContext,collectionWriteSnapshot,noteWriteSnapshot} from './chat-context.mjs';
+import {addonDeadlines} from './addon-deadlines.mjs';
 import {personalOperation,conversationOperations,validateConversationOperations,operationContract,requestIdentity} from './personal-operations.mjs';
 import {TRACKER_OPERATIONS} from './tracker-operations.mjs';
 import {cycleTracker} from './cycle-operations.mjs';
@@ -239,6 +240,8 @@ export class Domains {
     }
     if(name==='import-goal-files')return importGoalFiles(this.store);
     if(name==='personal-operation')return personalOperation(this,input);
+    // An add-on's own deadlines, on the local door (addon-deadlines.mjs, discussion #27).
+    if(name==='addon-deadlines')return addonDeadlines(this.store,input);
     if(['configure-connector','run-connector','gdrive-proxy','gdrive-sync','github-import-vault','github-people-sync','github-proxy','github-sync-export','github-sync-pull','send-patch','embed-document','delete-my-account'].includes(name))return new Connectors(this).invoke(name,input);
     if(['backfill-profile-extraction','backfill-moment-profile-extraction','backfill-metadata','backfill-media-analysis'].includes(name)){
       if(name==='backfill-media-analysis'){
