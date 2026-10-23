@@ -4,6 +4,7 @@ import path from 'node:path';
 import { threadId } from 'node:worker_threads';
 import { randomUUID, createHash } from 'node:crypto';
 import { durable,durableRoots,durableFiles,recordsFolder,legacyRecordsFolder,isRecordPath } from '../file-policy.mjs';
+import { touchesSuggestions, suggestionChanges } from '../review-sources.mjs';
 import { encode as encodeFile, decode as decodeFile, safe as safeName, candidate, fits, folderFor, nameFor, candidateName, systemPath, isReadable, key as nameKey, childrenOf, own } from './layout.mjs';
 
 export const hash = value => createHash('sha256').update(Buffer.isBuffer(value) || typeof value === 'string' ? value : JSON.stringify(value)).digest('hex');
@@ -694,6 +695,7 @@ export class Store {
     const purged=new Set(records.filter(r=>r.removed_at&&r.purged===true).map(r=>r.uid));
     if(purged.size)removeKeys=[...removeKeys,...[...this.records.values()].filter(r=>r.type==='record_history'&&purged.has(r.source_uid)).map(r=>'record_history/'+r.id)];
     if(this.watching)this.freshen([...records.flatMap(r=>[this.fileOf.get(r.type+'/'+r.id),this.fileOf.get(this.keyOfUid?.get(r.uid))]),...removeKeys.map(k=>this.fileOf.get(k))]);
+    records=this.withSuggestionChanges(records);
     const history=[];
     for(const record of records){
       const old=this.records.get(record.type+'/'+record.id)||removeKeys.map(k=>this.records.get(k)).find(r=>r?.uid===record.uid);
@@ -738,6 +740,29 @@ export class Store {
     const items=[...deletes.filter(recase),...writes,...deletes.filter(item=>!recase(item))];
     const staged=this.stage(items);
     this.publish(staged);this.prune(staged.manifest.filter(item=>item.delete).map(item=>path.resolve(this.root,item.file)));this.refreshView(records,removeKeys,targets,checked);
+  }
+  // A note trashed, deleted or with the quoted words taken out withdraws the suggestions it
+  // made, and brings them back when it comes back (review-sources.mjs). Here, so every way a note
+  // is saved does it, in the same write: the screens, the local door add-ons use, the assistant's
+  // tools, the chat. A suggestion this same write also changes is changed from that version.
+  withSuggestionChanges(records){
+    const notes=records.filter(r=>r.type==='notes'&&touchesSuggestions(this.records.get('notes/'+r.id),r));
+    if(!notes.length)return records;
+    const out=[...records],at=new Map(out.map((r,i)=>[r.type+'/'+r.id,i])),now=new Date().toISOString();
+    const current=item=>{const i=at.get('review_queue/'+item.id);return i===undefined?item:out[i];};
+    const bySource=new Map();
+    for(const item of [...this.ofType('review_queue'),...records.filter(r=>r.type==='review_queue'&&!this.records.has('review_queue/'+r.id))]){
+      if(!item.source_note_id)continue;let list=bySource.get(item.source_note_id);if(!list)bySource.set(item.source_note_id,list=[]);list.push(item);
+    }
+    for(const note of notes){
+      const items=(bySource.get(note.id)||[]).map(current);
+      for(const {item,patch} of suggestionChanges(this.records.get('notes/'+note.id),note,items,now)){
+        const key='review_queue/'+item.id,i=at.get(key);
+        if(i!==undefined)out[i]={...out[i],...patch};
+        else{at.set(key,out.length);out.push(this.prepare('review_queue',patch,this.records.get(key)));}
+      }
+    }
+    return out;
   }
   // A folder left empty by a record moving or going away goes too, up to the
   // notebook folder: Git never carries an empty folder, so it would only stay

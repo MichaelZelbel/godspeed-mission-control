@@ -5,6 +5,7 @@ import {momentDraft} from './moment-draft.mjs';
 import {impactGuidance} from './impact-scale.mjs';
 import {recordJob, contentFingerprint} from './processing.mjs';
 import {fieldList} from './fields.mjs';
+import {WITHDRAWN} from './review-sources.mjs';
 
 // What processing a note gives: tags and metadata on the note itself, its
 // people linked by name, and proposals for the review queue. Each proposal
@@ -112,7 +113,9 @@ export async function processNote(domains, input, {cites, factSuppressed, factSu
   const saved = [];
   for (const s of shaped.filter(Boolean)) {
     const fingerprint = hash([note.uid, s.type, s.payload]);
-    if (query.rows('review_queue').some(r => r.fingerprint === fingerprint)) continue;
+    // A suggestion withdrawn because its words left the note does not keep the same thing from
+    // being proposed again from the note's new words (review-sources.mjs).
+    if (query.rows('review_queue').some(r => r.fingerprint === fingerprint && r.status !== WITHDRAWN)) continue;
     if (['add_profile_entry', 'add_claim'].includes(s.type) && factSuppressed(query, {...factSubject(s.payload), value: String(s.payload.value).trim()})) continue;
     saved.push(store.save('review_queue', {title: s.title || 'Review suggestion', suggestion_type: s.type, payload: s.payload, description: s.evidence_quote, source_note_id: note.id, fingerprint, status: 'pending_review', origin: 'ai', confidence_score: s.confidence}));
   }
