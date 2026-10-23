@@ -40,7 +40,7 @@ const definitions=[
   {name:'write_fact',description:'Record a confirmed fact and close earlier single-valued claims. AI inference must instead create a pending review_queue record.',inputSchema:schema},
   {name:'record_event',description:'Append a timeline event. Earlier events are never replaced.',inputSchema:schema},
   {name:'structural_change',description:'Rename, change a name, merge or remove a user-requested record. Read every affected record first. Supply expected_hash for the source and expected keyed by type/id for every other changed record, including incoming links and a merge target.',inputSchema:{type:'object',properties:{type:{type:'string'},id:{type:'string'},action:{enum:['display-name','rename','merge','remove']},expected_hash:{type:'string'},expected:{type:'object'},options:{type:'object'}},required:['type','id','action','expected_hash']}},
-  {name:'review_suggestions',description:'Apply, reject, snooze or roll back user-reviewed suggestions. Never accept inferred personal facts without user approval.',inputSchema:schema},
+  {name:'review_suggestions',description:'Decide on the suggestions waiting in the owner\'s Review page, when the owner asks. action remove (or rollback), block (never suggest it again) or snooze, with ids: the suggestions to decide on; without ids, every waiting one. action keep files what a model inferred, so it needs words: the owner\'s request copied exactly from their latest message. Never keep inferred personal facts the owner did not ask to keep.',inputSchema:{type:'object',properties:{action:{enum:['remove','rollback','block','snooze','keep']},ids:{type:'array',items:{type:'string'}},words:{type:'string',description:'For keep: the owner\'s request, copied exactly from their message.'},until:{type:'string'}},required:['action']}},
   {name:'validate_knowledge',description:'Validate file identity and typed references without changing invalid files.',inputSchema:schema},
   // The assistant's path to the page that shows who it is (core/identity-shelf.mjs). Hermes' own file tools
   // ask a person before writing AGENTS.md or SOUL.md and refuse where nobody can answer (the
@@ -181,7 +181,12 @@ export async function mcp(input,{store,query,index,domains,scopes,delegated=fals
       else if(name==='write_fact')value=domains.writeFact(a);
       else if(name==='record_event')value=query.execute({table:'moments',operation:'insert',values:a}).data;
       else if(name==='structural_change'){value=a.type==='moments'&&['remove','display-name'].includes(a.action)?query.execute({table:'moments',operation:a.action==='remove'?'delete':'update',values:{title:a.options?.name},filters:[['eq','id',a.id]],expected:{[a.id]:a.expected_hash},assistant:true}).data:store.structural(a.type,a.id,a.action,{...a.options,target:a.options?.target||a.options?.target_id});if(a.type==='notes'&&a.action==='remove')await retireShares(owner,[value?.id||a.id]);}
-      else if(name==='review_suggestions')value=await domains.invoke('review-queue-bulk',a);
+      else if(name==='review_suggestions'){
+        // Keeping a suggestion files what a model inferred, so only on the owner's own request, in their
+        // words (identity-shelf.mjs ownerAsked); removing, rolling back and snoozing take it away.
+        if(['keep','accept'].includes(a.action||a.decision)&&!domains.identity?.ownerAsked?.(a.words))throw Error('Keep a suggestion only when the owner asked for it: pass their request as words, copied exactly from their latest message. Removing, rolling back and snoozing need no words.');
+        value=await domains.invoke('review-queue-bulk',a);
+      }
       else if(name==='validate_knowledge'){store.scan();value={problems:store.problems};}
       else throw new Error('Unknown tool');
       result={content:[{type:'text',text:typeof value==='string'?value:JSON.stringify(value)}]};
