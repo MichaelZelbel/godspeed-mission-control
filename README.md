@@ -24,6 +24,16 @@ Now you can connect a second AI yourself as a backup, for example Claude when yo
 
 Updating keeps your folder, notes and settings. Nothing changes until you connect a backup.
 
+## Also coming in the next release: add-ons that write many notes
+
+Some add-ons write a note for each thing they handle, for example one note per scanned letter, with its summary and key facts already in it. Until now your notebook's AI read every one of those notes again, at most 40 a day and oldest first, so a pile of a few hundred letters held your own notes back for weeks.
+
+- An add-on can now mark its notes so that your notebook's AI does not read them again. You still find them in search, and your assistant still finds them when you ask about a letter. Your own notes are read as before.
+- When you move a note to the trash, or take out the sentence a suggestion came from, the suggestions from that note you had not kept yet leave the Review Queue. Restore the note and they are back. What you kept stays.
+- **Classify unclassified vault notes** no longer counts the notes it does not classify.
+
+For add-on authors: `docs/full-version/addon-model.md`, "Notes an add-on writes".
+
 ## New in 2.0.0-beta.4 (21 October 2026): a small copy before each update
 
 Before every update the installer saves a copy of your notebook, so you can go back if the update goes wrong. Until now that copy took your whole folder, also your work folder with its recordings and downloads. On a grown mission control it was gigabytes and many minutes, and an update refused to start when the disk had no room for it. Old copies also piled up.
