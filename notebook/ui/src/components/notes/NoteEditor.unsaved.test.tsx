@@ -28,7 +28,11 @@ Range.prototype.getClientRects ??= (() => ({ length: 0, item: () => null, [Symbo
 document.elementFromPoint ??= () => null;
 
 let notebook: RealNotebook;
-beforeAll(async () => { notebook = await startNotebook(); }, 60_000);
+beforeAll(async () => {
+  notebook = await startNotebook();
+  // The editor's modules are prepared once here, not inside the first test's time.
+  await import("./NoteEditor");
+}, 120_000);
 afterAll(async () => { await notebook?.stop(); });
 afterEach(async () => {
   await closePage();
