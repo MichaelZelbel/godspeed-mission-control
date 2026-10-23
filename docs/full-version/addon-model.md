@@ -83,3 +83,52 @@ service as its `hermes` account over standard input and output. The helper and s
 inside the existing container. The launcher opens no network port and forwards no
 credential. It refuses another workspace, service or executable. An existing
 global `godspeed-model` command belonging to a native installation is preserved.
+
+## Notes an add-on writes
+
+An add-on writes notes the way the notebook's own screens do, through the door that answers
+only on the same machine: `POST http://127.0.0.1:47831/api/query` with
+`{"table":"notes","operation":"insert","values":{...}}`, and `"operation":"update"` with
+`"filters":[["eq","id","<the note's id>"]]` to change one.
+
+A few minutes after a note is written, the notebook's own processing reads it: it adds a type,
+topics, a summary and tags, links the people it names, and proposes facts, timeline entries and
+new people for the Review Queue. It reads one note at a time, oldest first, at most 40 a day by
+default.
+
+### Searchable, not processed
+
+An add-on that writes many notes and has already put what matters into them, such as one note
+per scanned letter with its summary and key facts, marks each note with `"skip_processing": true`:
+
+```json
+{"table":"notes","operation":"insert","values":{"title":"Invoice from an invented roofer","content":"...","folder_path":"Documents","source_app":"your-add-on","skip_processing":true}}
+```
+
+Such a note stays visible to the assistant and is found by search exactly like any other note.
+Processing never queues it, the bulk runs (Classify, Enrich from notes and timeline, Enrich
+profiles now) leave it out, and it never counts against the daily limit, so the user's own notes
+are not held back behind a pile of letters. The user can still process one such note from its own
+menu. Setting the field to `false`, or removing it, makes the note a candidate again; marking a
+note that was waiting takes it out of the queue. An add-on that wrote notes before it set the mark
+can add it to them with an update.
+
+`"ai_visibility": "hidden"` is something else: it hides a note from the assistant and from
+search.
+
+### When a note goes, its suggestions go
+
+What processing proposed from a note waits in the Review Queue only while the note still holds
+it. When a note goes to the trash or is deleted, every suggestion from it that is still waiting is
+withdrawn. When an edit takes out of the note's title and text the sentence a suggestion quotes,
+that suggestion is withdrawn. It happens in the same write as the change to the note, whichever
+way the note was saved. A suggestion the user already kept stays; one they removed or blocked is
+not touched.
+
+A withdrawn suggestion has `"status": "withdrawn"` and a `withdrawn_reason` of `source_trashed`,
+`source_removed` or `source_text_gone`. It is not shown or counted in the Review Queue and cannot
+be kept. When the note comes back from the trash, or the sentence comes back, it waits again,
+unless processing has meanwhile proposed the same thing from the note's new words.
+
+So an add-on that takes its note back out of the notebook, for example by emptying the note and
+moving it to the trash in one update, also takes back what processing proposed from it.
