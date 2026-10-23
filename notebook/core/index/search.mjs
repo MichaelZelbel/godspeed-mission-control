@@ -349,5 +349,6 @@ export class SearchIndex {
     }
     return out;
   }
-  close() { this.closed = true; this.db.close(); }
+  // A second stop signal runs the shutdown again; closing twice threw "database is not open".
+  close() { if (this.closed) return; this.closed = true; this.db.close(); }
 }
