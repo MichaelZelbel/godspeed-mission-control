@@ -440,6 +440,16 @@ phone app.
   agree.
 - *A folder that does not exist yet.* A storage path the user creates in Paperless becomes a new
   folder of that name inside the documents folder, never anywhere else.
+- *Details settled while building (23 October 2026):* the "To sort" storage path never matches
+  automatically, so Paperless never learns to put a paper there; if the user already has a storage
+  path or saved view called "To sort", the add-on's own is called "To sort (The Clerk)" and theirs is
+  never touched; storage paths documents already had when the user said yes are never taken as
+  picks; a storage path Paperless's own matching sets when a document arrives is treated like its
+  other guesses (F5: kept unless the add-on's AI is sure it is wrong), while a storage path that
+  changes after the add-on has seen the document counts as the user's pick.
+- *In "Paperless sorts" and "nobody sorts"* the add-on changes no document, so its "To sort" page is
+  a saved view of the documents that have no storage path yet, which needs no change to any
+  document; the message links to it there too, never to the notebook collection.
 - Users who already run Paperless with their own storage paths are asked first (F4); without their
   yes the add-on leaves Paperless's storage paths alone and the user can still sort by picking a
   sender, which the add-on follows the same way.
