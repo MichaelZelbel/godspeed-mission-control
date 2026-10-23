@@ -3,7 +3,7 @@ import {conversationRuntimeId,bindConversationSession} from './conversation-stat
 import {draftEvent} from './draft-event.mjs';
 import {momentDates} from './timestamps.mjs';
 import {NOTE_TYPES,processNote} from './proposals.mjs';
-import {NoteProcessing,PIPELINE,contentFingerprint} from './processing.mjs';
+import {NoteProcessing,PIPELINE,contentFingerprint,skipsProcessing} from './processing.mjs';
 export {momentDraft,NOTE_TYPES};
 import {groupContext} from './group-context.mjs';
 import {noteConnections,linkSuggestions} from './related.mjs';
@@ -253,7 +253,8 @@ export class Domains {
       // on past one that fails; three failures in a row end the run. Until
       // 7 October 2026 they took every note, trashed and hidden ones too,
       // ignored the person and the limit, paid for done notes again, and the
-      // first hidden note stopped the run.
+      // first hidden note stopped the run. A note marked skip_processing is
+      // never waiting (processing.mjs).
       if(!this.provider)throw new Error('Choose and configure a model provider before analysis');
       const limit=Math.max(1,Math.min(500,Number(input.limit)||200)),person=input.contact_id||null,newest=(a,b)=>String(b.updated_at||'').localeCompare(String(a.updated_at||''))||String(b.created_at||'').localeCompare(String(a.created_at||''));
       let sources,run;
@@ -265,7 +266,7 @@ export class Domains {
         const about=n=>!person||n.contact_id===person||documents.has(n.id)||(Array.isArray(n.metadata?.matched_people)&&n.metadata.matched_people.some(p=>p?.contact_id===person));
         // Done: classified, for Classify; else processed for this very text (or imported as processed).
         const done=n=>{if(name==='backfill-metadata')return !!n.metadata?.type;const job=jobs.get(n.id);return job?job.state==='completed'&&job.fingerprint===contentFingerprint(n):n.processing_status==='processed';};
-        sources=visibleRows(this.query,'notes').filter(n=>!n.is_trashed&&about(n)&&!done(n));run=n=>this.invoke('process-note',{note_id:n.id});
+        sources=visibleRows(this.query,'notes').filter(n=>!n.is_trashed&&!skipsProcessing(n)&&about(n)&&!done(n));run=n=>this.invoke('process-note',{note_id:n.id});
       }
       const results=[],errors=[];let inRow=0;
       for(const source of sources.sort(newest).slice(0,limit)){try{results.push(await run(source));inRow=0;}catch(error){errors.push({id:source.id,error:error.message});if(++inRow>=3)break;}}
