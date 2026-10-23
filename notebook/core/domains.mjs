@@ -5,6 +5,8 @@ import {momentDates} from './timestamps.mjs';
 import {NOTE_TYPES,processNote} from './proposals.mjs';
 import {NoteProcessing,PIPELINE,contentFingerprint,skipsProcessing} from './processing.mjs';
 import {WITHDRAWN} from './review-sources.mjs';
+import {screenSuggestions,knownRecords,logFiltered} from './suggestion-filter.mjs';
+import {sameValue as sameThing,valueKey} from './same-thing.mjs';
 export {momentDraft,NOTE_TYPES};
 import {groupContext} from './group-context.mjs';
 import {noteConnections,linkSuggestions} from './related.mjs';
@@ -160,7 +162,12 @@ export class Domains {
       const current=c=>claimHolds(c,asOf),closure_evidence={source_type:input.source_type||'manual',source_id:input.source_id||null,quote:input.evidence_quote||null};
       const target=input.replaces_claim_id?all.find(c=>c.id===input.replaces_claim_id):null;
       if(input.replaces_claim_id&&(!target||!current(target)||target._hash!==input.replaces_claim_hash))throw Error('The fact selected for correction changed; reload before replacing it');
-      const sameValue=all.filter(r=>String(r.value??'').toLowerCase()===value.toLowerCase()),existing=sameValue.find(current)||sameValue[0];
+      // The same value is the same once written one way (same-thing.mjs), the rule a suggestion is
+      // screened by too: until 23 October 2026 "+44 7700 900123" and "+44.7700.900123" were two phone numbers
+      // here, and a suggestion's check was another rule again.
+      // An email or a phone number is that kind under any name ("work email" and "email").
+      const typed=['email','phone'].includes(valueKey(value).type)?theirs.filter(seen).filter(r=>!all.includes(r)&&sameThing(r.value,value)):[];
+      const sameValue=[...all.filter(r=>String(r.value??'').toLowerCase()===value.toLowerCase()||sameThing(r.value,value)),...typed],existing=sameValue.find(current)||sameValue[0];
       if (existing&&(current(existing)||input.origin==='review_queue')) {
         const changed=target&&target.id!==existing.id&&current(existing)?[this.store.prepare('claims',{valid_to:asOf,closure_evidence},target)]:[];
         if(changed.length)this.store.commit(changed);
@@ -455,18 +462,25 @@ export class Domains {
         if(!['add_profile_entry','add_claim','add_contact','add_moment','add_relationship','connect_note_person'].includes(suggestion.type))throw new Error('Unsupported inference proposal '+suggestion.type);
         if(!suggestion.evidence_quote||!cites(source,suggestion.evidence_quote))throw new Error('Inference cites text absent from its source');
       }
+      // What the notebook already has or was already offered is left out, as for a processed note
+      // (suggestion-filter.mjs). Until 23 October 2026 these runs (a person's Enrich, profile
+      // suggestions, an event's facts) queued everything.
+      const note=input.note_id?source:null;
+      const screened=screenSuggestions(suggestions.suggestions.map(s=>({...s,source_note_id:input.note_id||null})),knownRecords(this.query),{fields,note});
       // A type the notebook does not know is left out: the model once wrote
       // the name of this function ("process-note") as the note's type.
       if(input.note_id&&suggestions.metadata&&typeof suggestions.metadata==='object'){const metadata={...suggestions.metadata};if(!NOTE_TYPES.includes(metadata.type))delete metadata.type;this.store.save('notes',{id:source.id,metadata:{...metadata,...source.metadata},tags:[...new Set([...(source.tags||[]),...(suggestions.tags||[])])]},source._hash);}
+      logFiltered(this.store.state,screened.dropped,{note,source:name});
       const saved = [];
-      for (const suggestion of suggestions.suggestions || []) {
+      for (const suggestion of screened.kept) {
         const fingerprint = hash([source.uid, suggestion.type, suggestion.payload]);
         if (this.query.rows('review_queue').some(r => r.fingerprint === fingerprint && r.status !== WITHDRAWN)) continue;
         // A fact the person answered with Never Again is not proposed again.
         if (['add_profile_entry','add_claim'].includes(suggestion.type)&&factSuppressed(this.query,{...factSubject(suggestion.payload||{}),value:String(suggestion.payload?.value||'').trim()})) continue;
         saved.push(this.store.save('review_queue', { title: suggestion.title || 'Review suggestion', suggestion_type: suggestion.type, payload: suggestion.type === 'add_moment' ? momentDates(suggestion.payload || {}) : suggestion.payload || {}, description: suggestion.evidence_quote || null, source_note_id: input.note_id || null, fingerprint, status: 'pending_review', origin: 'ai', confidence_score: suggestion.confidence || null }));
       }
-      return { success: true, suggestions: saved.map(r=>({...r,...r.payload,review_id:r.id})), processed: saved.length,created:0,linked:0,message:'Saved '+saved.length+' proposals for review.' };
+      const leftOut=screened.dropped.length;
+      return { success: true, suggestions: saved.map(r=>({...r,...r.payload,review_id:r.id})), processed: saved.length,left_out:leftOut,created:0,linked:0,message:'Saved '+saved.length+' proposals for review.'+(leftOut?' Left out '+leftOut+' the notebook already has or had already suggested.':'') };
     }
     if(['note-chat','collection-chat','conversation-chat'].includes(name)&&input.mode==='summarize')return this.summarizeChat(input);
     if (['note-chat','collection-chat','conversation-chat','weekly-review','generate_collection_schema'].includes(name)) {

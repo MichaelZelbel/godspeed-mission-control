@@ -37,6 +37,14 @@ export function recordJob(store, query, note, patch) {
   const old = jobFor(query, note.id);
   return store.save('note_ai_jobs', {id: old?.id || jobId(note.id), note_id: note.id, pipeline: PIPELINE, user_id: 'owner', references: [{type: 'notes', id: note.id, uid: note.uid, field: 'note_id'}], ...patch});
 }
+// The same, waiting while another program (a sync, an add-on) writes. Until 23 October 2026 the
+// automatic run saved "done" without waiting; when that save met another writer it was lost, the
+// note's record still said "running", and the next round processed the same text again: a letter was
+// processed three times in seven minutes and proposed the same things three times.
+export function recordJobSoon(store, query, note, patch) {
+  const old = jobFor(query, note.id);
+  return store.saveAsync('note_ai_jobs', {id: old?.id || jobId(note.id), note_id: note.id, pipeline: PIPELINE, user_id: 'owner', references: [{type: 'notes', id: note.id, uid: note.uid, field: 'note_id'}], ...patch});
+}
 
 export class NoteProcessing {
   constructor({store, query, domains, device}) { this.store = store; this.query = query; this.domains = domains; this.device = device; this.status = {state: 'idle', last_run: null, last_error: null, processed_today: 0}; }
@@ -81,14 +89,14 @@ export class NoteProcessing {
     this.running = true;
     const {note, fingerprint, job} = next, attempts = job?.desired_fingerprint === fingerprint ? (job.attempts || 0) + 1 : 1;
     try {
-      recordJob(this.store, this.query, note, {state: 'running', desired_fingerprint: fingerprint, attempts, automatic: true, day, runs_today: (job?.automatic ? runsToday(job, day) : 0) + 1, execution_started_at: new Date(now).toISOString(), last_error: null});
+      await recordJobSoon(this.store, this.query, note, {state: 'running', desired_fingerprint: fingerprint, attempts, automatic: true, day, runs_today: (job?.automatic ? runsToday(job, day) : 0) + 1, execution_started_at: new Date(now).toISOString(), last_error: null});
       await this.domains.invoke('process-note', {note_id: note.id, reason: 'automatic'});
-      recordJob(this.store, this.query, note, {state: 'completed', fingerprint, desired_fingerprint: fingerprint, attempts, automatic: true, day, last_error: null, next_eligible_at: null});
+      await recordJobSoon(this.store, this.query, note, {state: 'completed', fingerprint, desired_fingerprint: fingerprint, attempts, automatic: true, day, last_error: null, next_eligible_at: null});
       this.status = {...this.status, state: 'idle', last_run: new Date().toISOString(), last_error: null, processed_today: doneToday + 1};
       return {processed: 1, note_id: note.id};
     } catch (error) {
       const later = new Date(now + settings.retry_minutes * 60000 * attempts).toISOString();
-      try { recordJob(this.store, this.query, note, {state: attempts >= settings.max_attempts ? 'failed' : 'pending', desired_fingerprint: fingerprint, attempts, automatic: true, day, last_error: String(error.message).slice(0, 300), next_eligible_at: attempts >= settings.max_attempts ? null : later}); } catch {}
+      try { await recordJobSoon(this.store, this.query, note, {state: attempts >= settings.max_attempts ? 'failed' : 'pending', desired_fingerprint: fingerprint, attempts, automatic: true, day, last_error: String(error.message).slice(0, 300), next_eligible_at: attempts >= settings.max_attempts ? null : later}); } catch {}
       this.status = {...this.status, state: 'idle', last_run: new Date().toISOString(), last_error: error.message};
       return {processed: 0, failed: note.id, error: error.message};
     } finally { this.running = false; }

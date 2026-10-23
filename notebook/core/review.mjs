@@ -1,6 +1,7 @@
 import { hash,atomic,safe } from './records/store.mjs';
 import {QueryService,claimHolds} from './query.mjs';
 import {fieldList} from './fields.mjs';
+import {sameIndex,personKey,relationKey} from './same-thing.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 const NOT_UNDOABLE='Godspeed cannot tell exactly what this change did, so it cannot undo it. Correct it on the profile or person instead.';
@@ -100,9 +101,12 @@ export class Review {
       // A person of that name (or nickname) who exists already is the one
       // meant: Keep links the suggestion to them and creates no one, so Undo
       // removes no one. Until 6 October 2026 every Keep made a new person.
-      const name=same(p.name),existing=this.query.rows('contacts').filter(c=>!c.merged_into&&[c.name,...(c.aliases||[])].some(n=>typeof n==='string'&&same(n)===name));
+      // A name is compared as the suggestions are screened (same-thing.mjs): in any case, with or
+      // without accents, and as nickname plus surname.
+      const name=personKey(p.name),people=this.query.rows('contacts').filter(c=>!c.merged_into),existing=people.filter(c=>[c.name,...(c.aliases||[])].some(n=>typeof n==='string'&&personKey(n)===name));
       if(existing.length>1)throw Error('Several people are called '+p.name+'. Add or merge them on the People page instead.');
-      if(existing.length)linked={type:'contacts',id:existing[0].id};else save('contacts',{name:p.name,aliases:p.aliases||[],notes:p.notes||null});
+      const alike=existing[0]||sameIndex({contacts:people}).known.find({kind:'person',names:[name]})?.thing.record;
+      if(alike)linked={type:'contacts',id:alike.id};else save('contacts',{name:p.name,aliases:p.aliases||[],notes:p.notes||null});
     }
     else if(type==='add_entity')save('entities',{name:p.name,entity_type:p.entity_type||'other',description:p.description||null});
     else if(type==='add_alias'){
@@ -110,9 +114,19 @@ export class Review {
     }else if(type==='add_moment'){
       // A timeline entry needs a title and a date; proposals from before 6 October 2026 could lack both.
       if(!String(p.title||'').trim()||!/^\d{4}-\d{2}-\d{2}/.test(String(p.happened_at||'')))throw new Error('This suggestion has no title or no date, so it cannot become a timeline entry. Remove it instead.');
-      const moment=save('moments',{...p,source:'note_auto',status:p.status||'past_fact'});
-      for(const [i,participant] of (p.participants||[]).entries())if(participant.contact_id)save('moment_participants',{id:'review-'+item.uid+'-'+i,moment_id:moment.id,person_id:participant.contact_id});
-    }else if(type==='add_relationship')save('contact_relationships',p);
+      // The same entry on the timeline already (same-thing.mjs) is the one meant: Keep links to it
+      // and adds no second one, so Undo removes nothing.
+      const moments=sameIndex({moments:this.query.rows('moments'),participants:this.query.rows('moment_participants')}),already=moments.known.find(moments.read({type:'add_moment',payload:p,source_note_id:item.source_note_id}),{wide:false})?.thing.record;
+      if(already)linked={type:'moments',id:already.id};
+      else{
+        const moment=save('moments',{...p,source:'note_auto',status:p.status||'past_fact'});
+        for(const [i,participant] of (p.participants||[]).entries())if(participant.contact_id)save('moment_participants',{id:'review-'+item.uid+'-'+i,moment_id:moment.id,person_id:participant.contact_id});
+      }
+    }else if(type==='add_relationship'){
+      // The same two people with the same meaning, in either direction, is one relationship.
+      const already=sameIndex({relationships:this.query.rows('contact_relationships')}).known.find({kind:'relationship',key:relationKey(p)})?.thing.record;
+      if(already)linked={type:'contact_relationships',id:already.id};else save('contact_relationships',p);
+    }
     else if(type==='group_member_suggestion'){
       // A membership that exists already is kept as it is. A new one starts in
       // the group's first stage: until 6 October 2026 it had no stage at all,
