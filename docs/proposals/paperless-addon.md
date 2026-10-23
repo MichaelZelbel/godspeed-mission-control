@@ -373,8 +373,16 @@ its temporary folder contains a sentence from a kit document.
 15 November", "object within one month of this notice") becomes a deadline in Godspeed, which then
 reminds the user as it gets close, the way Godspeed reminds about any deadline. The rules for
 reading dates, because a deadline set too late is the one mistake that costs money:
+- *Only what the letter asks the user to do:* pay, reply, object, send, sign, appear, contact.
+  Options the user may use are not requests: the cancellation, change, return or withdrawal terms
+  of a booking, a ticket or an order become no deadline; they go into the note's key facts. (Found
+  on 23 October 2026: a hotel booking's free-cancellation date became "cancel the booking", for a
+  trip the user was taking.)
 - *Several in one letter:* each request with a date becomes its own deadline, named by what it
-  asks ("pay the invoice", "object to the notice").
+  asks ("pay the invoice", "object to the notice"), in the language the user talks to Godspeed in.
+- *A time limit tied to another date in the letter* ("before your arrival", "before the
+  appointment", "ten days before the contract ends") is counted from that date when the letter
+  prints it.
 - *A date written in the letter* is taken as written.
 - *A period* ("within one month of this notice"): counted from the day the letter names as its
   start, when that day is printed in it. When the start is a day the letter does not print (the day
@@ -382,8 +390,10 @@ reading dates, because a deadline set too late is the one mistake that costs mon
   which gives the earliest possible end, and marks the deadline "check the date" (F16): when a
   letter counts as delivered depends on the country's rules. The upload day is never taken as the
   day of receipt.
-- *No usable date at all:* a request with a period but no date on the letter to count from gets no
-  deadline; the document gets "Check this" and the message asks for the date.
+- *No usable date at all:* a request whose day cannot be worked out from anything printed in the
+  letter gets no deadline and no message; it goes into the note's key facts and the collection item
+  as "date unclear". The add-on never asks the user to tell it a date in the chat (F19: the chat is
+  not where papers are dealt with).
 - *Vague wording* ("promptly", "as soon as possible") with no date or period gets no deadline and no
   message; the request goes into the note's key facts.
 - *Already passed* when the letter is read (an old letter from the backlog): written into the note,
@@ -401,14 +411,22 @@ date and a link to the document, also after a second run; a kit letter whose dea
 creates none; the letter with two requests creates two; the letter whose period runs from receipt
 creates one counted from its printed date and marked "check the date"; a vague request creates
 none; after the user moves a deadline's date, a run that reads the letter again leaves the user's
-date.
+date; a hotel booking with free cancellation until a date and "please contact the property before
+arrival" creates one deadline only, to contact the property, on the day before the printed arrival
+date, named in the user's chat language; a request with no workable day creates no deadline and
+sends no message; after the user drops a deadline the add-on made, it neither makes it again nor
+puts "Important" back on the document.
 
 **F16. Messages only when the user can act.** A document the add-on could not place ("Check this"),
 a deadline whose date needs a check, a deadline coming up, or lost drive access reaches the user as
 one short message; everything of that kind from one run comes as one message. For documents to
 sort, the message is one line ("2 papers are waiting to be sorted") with one link that opens
 Paperless's "To sort" page (F19), where exactly those documents are listed with a picture of their
-first page; it never links to a list where they cannot be found. Folder names and messages are in
+first page; it never links to a list where they cannot be found. A deadline whose date needs a check
+is named in one plain sentence with its date and the paper's title ("Pay the tax office by 14
+November: counted from the letter's date, the real day may be later; check it on the paper"), and
+links to the paper in Paperless; the user corrects the date in their deadline list if needed, never
+by telling the assistant. Folder names and messages are in
 the language the user talks to Godspeed in, not the language of their papers. Everything else is
 silent. "How far is the pile?" and similar questions are answered any time.
 *Test:* a run over the kit sends exactly one message, counting the blurry document and naming the
