@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 
 // A real notebook with an empty workspace, for screen tests that need its
 // actual answers (versions, refused saves, the conflict pile). It runs in a
-// process of its own (notebook-server.mjs). `away` makes every request the
+// process of its own (notebook/test/screen-test-notebook.mjs). `away` makes every request the
 // screen sends fail as a browser's does while the notebook restarts.
 export interface RealNotebook {
   base: string;
@@ -23,7 +23,7 @@ export interface RealNotebook {
   stop: () => Promise<void>;
 }
 
-const helper = fileURLToPath(new globalThis.URL("./notebook-server.mjs", import.meta.url).href);
+const helper = fileURLToPath(new globalThis.URL("../../../test/screen-test-notebook.mjs", import.meta.url).href);
 
 export async function startNotebook(): Promise<RealNotebook> {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "godspeed-screen-"));
