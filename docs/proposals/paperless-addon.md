@@ -204,7 +204,8 @@ Then it removes the inbox tag. Field by field:
   add-on's record, kept in its own records and the collection, never a Paperless field.
 *Test:* every kit document gets the title, sender, type, tags, date and folder its expected-result
 file names (date exact, type exact, folder exact, tags at least the expected ones, title not empty
-and not the file name), and loses the inbox tag.
+and not the file name), and loses the inbox tag. The unreadable scan is the exception for the title:
+under F7 it keeps its scan title.
 
 **F6. Respect what the user did.** Never remove a tag the user set. Never replace a title the user
 typed. Never sort a document without the inbox tag. The only things it may create are senders,
@@ -237,10 +238,23 @@ folder (F9), and creates a new subfolder only where the plan says so (a new year
   sort" as a searchable PDF named `<upload day> <title>.pdf`. The add-on compares the size and
   checksum Google reports with its own before it counts the document as "in drive".
 - *Filing:* once sorted, within the hour, the same file is renamed to `<date> <title>.pdf` and moved
-  into its folder, so there is never a second copy to tidy up. The folder comes from the plan, in
-  every sorting setting (F4), using the type, sender and date the document has in Paperless after
-  sorting, whoever sorted it. When the plan gives no clear answer, the add-on's AI picks a folder
-  from the plan; when it is not confident, the file stays in "To sort" with the status "check this".
+  into its folder, so there is never a second copy to tidy up. While the title is still the scan's
+  or the file's name (someone sorted it without retyping it), the name is `<date> <type> <sender>.pdf`.
+  Whether a document can be filed depends on whether its folder can be decided, never on its title.
+  The folder comes from the plan, in every sorting setting (F4), using the type, sender and date
+  the document has in Paperless after sorting, whoever sorted it. When the plan gives no clear
+  answer, the add-on's AI picks a folder from the plan; when it is not confident, the file stays in
+  "To sort" with the status "check this".
+- *The user's own folders:* when the plan files by sender, the AI is shown the names of all the
+  sender folders the user already has (a shortlist only when there are more than about a thousand)
+  and picks one of them, or says none fits; a new sender folder is made only when it is sure none
+  fits, so a "Dr. Vossberg dental practice" letter goes into an existing "Dentist Vossberg" folder
+  instead of a look-alike next to it. Inside a sender folder it picks among the user's own
+  subfolders, and makes a new one only for a missing year where the existing ones are years. Names
+  count as the same without the AI only when their words are the same, allowing for plurals of
+  common words ("Insurance", "Insurances") but not of names ("Peters" is not "Petersen"). A place a
+  document was filed in is kept: only a change that affects its folder, decided with confidence,
+  moves it.
 - *Same name:* when a file of that name is already in the folder, the new one gets " (2)", " (3)"
   and so on. A file is never overwritten.
 - *Changes:* when the user changes a document's title, date, type or sender in Paperless and that
