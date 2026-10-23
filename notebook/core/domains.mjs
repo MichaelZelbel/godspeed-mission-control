@@ -4,6 +4,7 @@ import {draftEvent} from './draft-event.mjs';
 import {momentDates} from './timestamps.mjs';
 import {NOTE_TYPES,processNote} from './proposals.mjs';
 import {NoteProcessing,PIPELINE,contentFingerprint,skipsProcessing} from './processing.mjs';
+import {WITHDRAWN} from './review-sources.mjs';
 export {momentDraft,NOTE_TYPES};
 import {groupContext} from './group-context.mjs';
 import {noteConnections,linkSuggestions} from './related.mjs';
@@ -457,7 +458,7 @@ export class Domains {
       const saved = [];
       for (const suggestion of suggestions.suggestions || []) {
         const fingerprint = hash([source.uid, suggestion.type, suggestion.payload]);
-        if (this.query.rows('review_queue').some(r => r.fingerprint === fingerprint)) continue;
+        if (this.query.rows('review_queue').some(r => r.fingerprint === fingerprint && r.status !== WITHDRAWN)) continue;
         // A fact the person answered with Never Again is not proposed again.
         if (['add_profile_entry','add_claim'].includes(suggestion.type)&&factSuppressed(this.query,{...factSubject(suggestion.payload||{}),value:String(suggestion.payload?.value||'').trim()})) continue;
         saved.push(this.store.save('review_queue', { title: suggestion.title || 'Review suggestion', suggestion_type: suggestion.type, payload: suggestion.type === 'add_moment' ? momentDates(suggestion.payload || {}) : suggestion.payload || {}, description: suggestion.evidence_quote || null, source_note_id: input.note_id || null, fingerprint, status: 'pending_review', origin: 'ai', confidence_score: suggestion.confidence || null }));
