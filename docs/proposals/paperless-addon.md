@@ -183,7 +183,10 @@ AI), or nobody sorts. In the last two the add-on only reads: it writes nothing i
 all, no field, no tag, none of its own bookkeeping, and leaves the inbox tag for whoever sorts. It
 tells new documents apart by its own records (F18). The drive copy, the choice of drive folder
 (F8), the notebook notes, the collection and the deadlines happen in every setting, because they
-are the add-on's own work, not Paperless's.
+are the add-on's own work, not Paperless's. The one exception, only with the user's yes when they
+confirm the folder plan: the add-on keeps Paperless's list of storage paths and its "To sort" page
+level with the folder plan (F19), because that list is where the user sorts. A storage path the
+user picks is followed in every setting.
 *Test:* with "Paperless sorts" and "nobody sorts", a run over the kit leaves every document,
 tag, sender, type and custom field in Paperless exactly as it was (compared through the API before
 and after), and still files every document and writes every note.
@@ -200,8 +203,9 @@ Then it removes the inbox tag. Field by field:
 - *Tax-year tags:* "Tax <year>" in the user's language means "needed for that year's tax return",
   and the year is the one the document is about (a 2024 tax assessment that arrives in 2026 is
   "Tax 2024"). Which papers count follows the country set in the add-on's settings.
-- *Folder:* chosen from the user's folder plan (F8), the way a tag is chosen. The folder is the
-  add-on's record, kept in its own records and the collection, never a Paperless field.
+- *Folder:* chosen from the user's folder plan (F8), the way a tag is chosen, kept in the add-on's
+  own records and the collection, and set as the document's storage path in Paperless (F19), so
+  Paperless shows it and learns from it.
 *Test:* every kit document gets the title, sender, type, tags, date and folder its expected-result
 file names (date exact, type exact, folder exact, tags at least the expected ones, title not empty
 and not the file name), and loses the inbox tag. The unreadable scan is the exception for the title:
@@ -210,14 +214,16 @@ under F7 it keeps its scan title.
 **F6. Respect what the user did.** Never remove a tag the user set. Never replace a title the user
 typed. Never sort a document without the inbox tag. The only things it may create are senders,
 "Tax <year>" tags and the "Check this" and "Important" tags, and only when Godspeed sorts (F4);
-never a document type (outside the starter set), a custom field or any other tag. Never delete
-anything in Paperless.
+never a document type (outside the starter set), a custom field or any other tag. With the user's
+yes (F4) it also creates the storage paths that mirror the folder plan and the "To sort" saved
+view (F19), and changes only those it created. Never delete anything in Paperless.
 *Test:* a kit document uploaded with a typed title and an extra tag keeps both; a document sorted
 before the run is unchanged afterwards.
 
 **F7. Say when unsure.** When the text is unreadable, the AI is not confident, or its answer is
 invalid twice, the document gets a "Check this" tag, only the safe fields are applied, it stays
-in the drive's "To sort" folder instead of a guessed one, and it is not retried every hour. In
+in the drive's "To sort" folder instead of a guessed one and shows on Paperless's "To sort" page
+(F19), and it is not retried every hour. In
 "Paperless sorts" and "nobody sorts" there is no tag; the status "check this" lives in the
 collection (F17) and the message (F16). Being unsure is judged field by field: when the AI is
 unsure about the type or the tags but the sender it read has a folder of the same name in the
@@ -399,33 +405,51 @@ date.
 
 **F16. Messages only when the user can act.** A document the add-on could not place ("Check this"),
 a deadline whose date needs a check, a deadline coming up, or lost drive access reaches the user as
-one short message; everything of that kind from one run comes as one message. The message names
-each document by its title in words the user understands, links to the document itself in the
-drive (never to a list where it cannot be found), and asks for exactly what is missing (F19).
-Folder names and messages are in the language the user talks to Godspeed in, not the language of
-their papers. Everything else is silent. "How far is the pile?" and similar questions are answered
-any time.
-*Test:* a run over the kit sends exactly one message, naming the blurry document and the letter
-whose deadline needs a check, each with a link that opens that document's file in the drive; a
-second run with nothing new sends none.
+one short message; everything of that kind from one run comes as one message. For documents to
+sort, the message is one line ("2 papers are waiting to be sorted") with one link that opens
+Paperless's "To sort" page (F19), where exactly those documents are listed with a picture of their
+first page; it never links to a list where they cannot be found. Folder names and messages are in
+the language the user talks to Godspeed in, not the language of their papers. Everything else is
+silent. "How far is the pile?" and similar questions are answered any time.
+*Test:* a run over the kit sends exactly one message, counting the blurry document and naming the
+letter whose deadline needs a check, with a link that opens the "To sort" page listing exactly the
+documents waiting; a second run with nothing new sends none.
 
-**F19. Answer in the chat, and the add-on learns.** (Moved from "Later" on 23 October 2026, after
-the first real "Check this" message left Michael unable to say where a paper belonged.) A document
-the add-on could not place comes to the user as a short question in the chat, with the likely
-answers as numbered choices ("Who sent the ICE ticket Krefeld to Bad Homburg? 1 Deutsche Bahn, into
-your folder Deutsche Bahn. 2 Another folder: say which."). The user answers in plain words or with
-a number, and the add-on applies it: it sets the sender (an existing one, or a new one named like
-the folder), files the document into the folder the user named, and takes off "Check this". At any
-time the user can also say where a sender's papers go ("Deutsche Bahn papers go into the Deutsche
-Bahn folder", "hotel bookings go into Travel") or move a single paper ("the hotel booking goes into
-Travel"); the add-on keeps that as part of the folder plan and uses it for every later document
-from that sender or of that kind, so the same question is never asked twice. It only ever names
-folders inside the documents folder, and a folder the user names that does not exist yet is made
-there after the user's yes.
-*Test:* a kit document left in "To sort" produces one question with numbered choices; answering
-"1" files it into that folder and removes "Check this"; answering "the Travel folder" files it into
-Travel; after "Deutsche Bahn papers go into the Deutsche Bahn folder", a second Deutsche Bahn
-document is filed there without a question; a folder name outside the documents folder is refused.
+**F19. Sort in Paperless, and the drive follows.** (Decided by Michael on 23 October 2026, after the
+first real "Check this" message left him unable to say where a paper belonged, and after asking in
+the chat with numbered choices was rejected as disconnected from the papers themselves.) A paper the
+add-on could not place is sorted where Paperless is built for it: the user sees the paper with a
+picture of its first page and picks where it belongs from a list, in the Paperless web page or the
+phone app.
+- *The list is the user's own folders.* Paperless's "storage path" field means "where this
+  document belongs". When the user confirms the folder plan (F8), the add-on creates one storage
+  path in Paperless for each folder a paper can go into: every existing folder the plan uses (for a
+  plan by sender, every sender folder, named like the folder) and one for "To sort". Folders the
+  add-on makes later get a storage path too. Each storage path's own file layout in Paperless
+  mirrors the drive folder, so Paperless's files and the drive look alike, and each is set to
+  Paperless's automatic matching, so Paperless learns from the user's picks.
+- *The "To sort" page.* The add-on creates a saved view in Paperless called "To sort" that shows
+  exactly the documents waiting for the user (no folder decided, or "Check this"), shown in the
+  sidebar and on the dashboard, and visible in the phone app's saved views. The message (F16)
+  links to it.
+- *Picking a folder files the paper.* When a document's storage path is set or changed in Paperless,
+  by the user or by Paperless's own matching, the add-on moves its drive file into that folder at
+  its next run, takes off "Check this", and keeps the choice: a sender whose paper the user put
+  into a folder is filed there from then on (part of the folder plan). When Godspeed sorts, the
+  add-on sets the storage path itself for every paper it places, so the list and the drive always
+  agree.
+- *A folder that does not exist yet.* A storage path the user creates in Paperless becomes a new
+  folder of that name inside the documents folder, never anywhere else.
+- Users who already run Paperless with their own storage paths are asked first (F4); without their
+  yes the add-on leaves Paperless's storage paths alone and the user can still sort by picking a
+  sender, which the add-on follows the same way.
+*Test:* after the plan is confirmed, Paperless has one storage path per plan folder and a "To sort"
+saved view showing exactly the kit documents left in "To sort"; setting the blurry document's
+storage path to a plan folder moves its drive file there at the next run, removes "Check this" and
+removes it from the "To sort" view; a second document from the same sender is filed into that
+folder without being shown in "To sort"; a storage path the user creates becomes a folder inside the
+documents folder; with the user's "no" at setup, Paperless's storage paths are unchanged and a
+sender picked by the user still files the paper.
 
 **F17. The documents collection.** The add-on keeps one collection in the user's Godspeed notebook,
 "Documents", with one item per document it handled: when it was added, the document's date,
@@ -457,7 +481,7 @@ a run finds every file, note and deadline again and makes none twice.
 
 - **L1. The tax check.** "What do I have for my 2025 tax return?" lists the documents tagged for
   that year and names what is usually there but missing, judged from last year's papers.
-- **L2.** Moved into the first version as F19.
+- **L2. Questions in the chat:** dropped; papers to sort are sorted in Paperless instead (F19).
 - **L3. More cloud drives:** OneDrive, Dropbox, Nextcloud and others after Google Drive.
 - **L4. Mail.** PDFs that arrive by email go into Paperless the same way scans do.
 - **L5. An Android app** chosen, tested and named in the setup the way the iPhone app is.
@@ -502,6 +526,13 @@ a run finds every file, note and deadline again and makes none twice.
 - The test kit is in English; the user's language is a setting, and we do not test how well an AI
   reads other languages (22 October 2026).
 - None of the author's own documents go into the repository in any form (22 October 2026).
+- **Papers the add-on cannot place are sorted in Paperless,** on a "To sort" page, by picking one of
+  the user's own drive folders from Paperless's storage path list, and the drive follows; the
+  message is one line with one link to that page. Questions in the chat were tried and rejected
+  (F19, 23 October 2026).
+- **The add-on speaks the language the user talks to Godspeed in,** not the language of the papers:
+  its "To sort" folder and messages are English for an English speaker with German papers (23
+  October 2026).
 - The author's own Godspeed runs this add-on exactly like any user's. The private sorting he
   tests with today is replaced by it.
 
