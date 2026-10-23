@@ -91,7 +91,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   const store = new Store(root,{device,watch:true}), index = new SearchIndex(store,{background:true}), query = new QueryService(store), sync = new FileSync(store);
   const stopIndexing=store.onChange(({changed,gone})=>{try{index.update(changed);index.forget(gone);}catch{}});
   // Meaning search, when a service is connected (Settings, or GODSPEED_EMBEDDINGS_*).
-  const connectMeaning=config=>{index.meaning=new MeaningIndex(index,{config});};
+  const connectMeaning=config=>{index.meaning?.close();index.meaning=new MeaningIndex(index,{config});};
   connectMeaning(embeddingConfig(store.state));
   const githubSignIn=new GitHubSignIn();
   const syncRunner=new SyncRunner(root,{onResult:result=>{sync.last=result;atomic(path.join(store.state,'sync-status.json'),JSON.stringify(result));}});
@@ -444,7 +444,22 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       }
       if(route==='/api/import'&&req.method==='POST')return send(res,200,importExport(query,JSON.parse(await body(req,100*1024*1024))));
       if(route==='/api/export')return send(res,200,exportRecords(store));
-      if (route === '/api/search') { const types=url.searchParams.get('types')?.split(',').filter(Boolean)||null,passages=!types?.includes('note_chunks'),found=await index.searchHybrid(url.searchParams.get('q') || '',{limit:Number(url.searchParams.get('limit'))||200,types:types?.includes('notes')&&passages?[...types,'note_chunks']:types}); return send(res, 200, { data: passages?index.passagesAsNotes(found.rows):found.rows, mode: found.mode, note: found.note||null, error: null }); }
+      if (route === '/api/search') {
+        const controller=new AbortController(),abort=()=>{if(!res.writableEnded)controller.abort();};req.once('aborted',abort);res.once('close',abort);
+        try {
+          const types=url.searchParams.get('types')?.split(',').filter(Boolean)||null,passages=!types?.includes('note_chunks');
+          const found=await index.searchHybrid(url.searchParams.get('q') || '',{limit:Number(url.searchParams.get('limit'))||200,types:types?.includes('notes')&&passages?[...types,'note_chunks']:types,wordsOnly:url.searchParams.get('mode')==='words',expandWords:url.searchParams.get('expand')==='1',signal:controller.signal});
+          let data=passages?index.passagesAsNotes(found.rows):found.rows;
+          // Search lists need dates, flags and a preview, never every complete
+          // note body. Keep previews distinct so the editor fetches fresh text.
+          if(url.searchParams.get('format')==='notes')data=data.flatMap(hit=>{
+            if(hit.type!=='notes')return [];const note=store.get('notes',hit.id);if(!note||note.removed_at||note.is_trashed)return [];
+            const {content,...fields}=note;return [{...fields,content_preview:String(content||'').slice(0,800),similarity:hit.similarity??null,match_source:hit.via==='passage'?'media':'note',snippet:hit.snippet}];
+          });
+          if(controller.signal.aborted)return;
+          return send(res,200,{data,mode:found.mode,note:found.note||null,error:null});
+        } finally {req.off('aborted',abort);res.off('close',abort);}
+      }
       if(route==='/api/embeddings'){
         if(req.method==='GET'){const config=embeddingConfig(store.state);return send(res,200,{configured:!!config,url:config?.url||null,model:config?.model||null,dimensions:config?.dimensions||null,has_key:!!config?.key,status:index.meaning?.status||null});}
         if(req.method==='DELETE'){saveEmbeddingConfig(store.state,null);connectMeaning(null);return send(res,200,{configured:false});}
@@ -507,6 +522,8 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         const receiptId=isChat&&id?'chat-request-'+id:null,requestHash=hash({name,input}),previous=receiptId?store.get('command_receipts',receiptId):null;
         if(previous){if(previous.request_hash!==requestHash)throw Error('Chat retry differs from the retained request');if(previous.state==='verified')return send(res,200,{data:previous.result,error:null});throw Error('This interrupted chat request needs review before replay');}
         const controller=new AbortController();if(isChat&&id)chatRequests.set(id,controller);
+        const isSearch=name==='search-notes-semantic',abortSearch=()=>{if(!res.writableEnded)controller.abort();};
+        if(isSearch){req.once('aborted',abortSearch);res.once('close',abortSearch);}
         try{
           if(isChat){
             const person=input.contact_id||input.person_id||input.personId;
@@ -520,14 +537,14 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
             },{signal:controller.signal});
           }
           if(receiptId)await store.saveAsync('command_receipts',{id:receiptId,state:'attempted',request_hash:requestHash},undefined,{signal:controller.signal});
-          const data=name.startsWith('mc-api-keys')?apiKeys.invoke(name,input):await domains.invoke(name,{...input,...(isChat?{signal:controller.signal}:{})});
+          const data=name.startsWith('mc-api-keys')?apiKeys.invoke(name,input):await domains.invoke(name,{...input,...(isChat||isSearch?{signal:controller.signal}:{})});
           if(isChat)await retainCompletedConversation(store,input,data,{asyncWriter:true,signal:controller.signal});
           if(receiptId)await store.saveAsync('command_receipts',{id:receiptId,state:'verified',result:data},undefined,{signal:controller.signal});
           return send(res,200,name==='backfill-media-analysis'?data:{data,error:null});
         }catch(error){
           if(receiptId&&store.get('command_receipts',receiptId)?.state==='attempted')await store.saveAsync('command_receipts',{id:receiptId,state:'needs_review',error:error.message,...(error.code==='UNAUTHORIZED_OPERATION'?{rejected_operation_type:error.operation_type,source_quote_matches:error.source_quote_matches}:{})});
           throw error;
-        }finally{if(isChat&&id)chatRequests.delete(id);}
+        }finally{if(isChat&&id)chatRequests.delete(id);if(isSearch){req.off('aborted',abortSearch);res.off('close',abortSearch);}}
       }
       if (route.startsWith('/api/')) return send(res, 404, { error: 'Unknown operation' });
       const requested = path.resolve(uiRoot, '.' + route); if (requested !== uiRoot && !requested.startsWith(uiRoot + path.sep)) return send(res, 403, { error: 'Invalid path' });
@@ -613,7 +630,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   // editor) bring the assistant's own identity file in step with them (assistant-soul.mjs).
   let soulDebounce;const followPersona=()=>{clearTimeout(soulDebounce);soulDebounce=setTimeout(()=>{try{shelf.followPersona();}catch{}},2000);soulDebounce.unref?.();};
   const rootWatcher=fs.watch(store.root,(event,name)=>{if(durableRoots.includes(name)){watchRoot(name);changed(name)(event,null);}else if(durableFiles.includes(name)){changed('')(event,name);if(name==='AGENTS.md')followPersona();}});
-  return { server, store, index, query, domains, scheduler, sync, mediaSync,address: server.address(), webAddress: webServer?.address() || null, close: async () => { if (webServer) await new Promise(resolve => webServer.close(resolve)); clearInterval(meaningTimer);clearInterval(processingTimer);clearInterval(backupTimer);clearInterval(factTimer);stopIndexing();store.unwatch();githubSignIn.close();planSignIn?.cancel();clearTimeout(soulDebounce);await syncRunner.close();await menerioImport.close();rootWatcher.close();for(const watcher of watchers.values())watcher.close();clearTimeout(debounce);clearTimeout(indexDebounce);clearInterval(telegramTimer);clearInterval(interval);clearInterval(jobs);clearInterval(syncTimer);clearInterval(mediaTimer); await new Promise(resolve => server.close(resolve)); index.close(); } };
+  return { server, store, index, query, domains, scheduler, sync, mediaSync,address: server.address(), webAddress: webServer?.address() || null, close: async () => { index.meaning?.close(); index.expansionWorker?.close(); if (webServer) await new Promise(resolve => webServer.close(resolve)); clearInterval(meaningTimer);clearInterval(processingTimer);clearInterval(backupTimer);clearInterval(factTimer);stopIndexing();store.unwatch();githubSignIn.close();planSignIn?.cancel();clearTimeout(soulDebounce);await syncRunner.close();await menerioImport.close();rootWatcher.close();for(const watcher of watchers.values())watcher.close();clearTimeout(debounce);clearTimeout(indexDebounce);clearInterval(telegramTimer);clearInterval(interval);clearInterval(jobs);clearInterval(syncTimer);clearInterval(mediaTimer); await new Promise(resolve => server.close(resolve)); await index.close(); } };
 }
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const root = process.env.GODSPEED_WORKSPACE;

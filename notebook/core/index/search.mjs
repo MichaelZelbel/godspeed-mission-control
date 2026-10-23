@@ -5,6 +5,7 @@ import {durableRoots,durableFiles,shared,recordsFolder,devicePrivate} from '../f
 import {hash,decode,encode} from '../records/store.mjs';
 import {candidate} from '../records/layout.mjs';
 import {mergeRanked} from './meaning.mjs';
+import {MeaningWorker} from './meaning-worker-client.mjs';
 import {STOPWORDS} from './stopwords.mjs';
 
 // The search index: one SQLite file beside the notebook, rebuilt from the
@@ -55,6 +56,10 @@ export function queryWords(query) {
 const CLITIC = /['’´`](s|re|ve|ll|d|m|t)?$/i;
 export function queryTerms(query) {
   return String(query || '').split(/\s+/).map(term => term.replace(/[?!.,;:)\]}"”]+$/u, '').replace(CLITIC, '')).map(queryWords).filter(words => words.length).slice(0, 12);
+}
+function searchTerms(query) {
+  const all = queryTerms(query), meaningful = all.filter(t => t.length > 1 || !STOPWORDS.has(t[0].toLowerCase()));
+  return meaningful.length ? meaningful : all;
 }
 
 export class SearchIndex {
@@ -287,10 +292,9 @@ export class SearchIndex {
   // longer words, and failing all of that, any of the words will do.
   // any: a document holding any of the words, those with the rarest first
   // (bm25), instead of one holding all of them; for short facts.
-  search(query, { limit = 200, types = null, any = false } = {}) {
+  search(query, { limit = 200, types = null, any = false, insideWords = true } = {}) {
     // Common words go, unless the query is nothing but common words.
-    const all = queryTerms(query), meaningful = all.filter(t => t.length > 1 || !STOPWORDS.has(t[0].toLowerCase()));
-    const terms = meaningful.length ? meaningful : all, words = terms.flat();
+    const terms = searchTerms(query), words = terms.flat();
     if (!words.length) return [];
     const typeFilter = types?.length ? ' AND d.type IN (' + types.map(() => '?').join(',') + ')' : '', typeArgs = types?.length ? types : [];
     const run = match => this.db.prepare(`SELECT d.uid, d.type, d.id, d.title, snippet(docs_fts, 1, '[', ']', '…', 14) AS snippet, bm25(docs_fts, 4.0, 1.0) AS rank
@@ -298,7 +302,13 @@ export class SearchIndex {
     const quote = w => '"' + w.replaceAll('"', '""') + '"';
     const quoted = terms.map(t => t.length === 1 ? quote(t[0]) + '*' : quote(t.join(' ')));
     let rows = run(quoted.join(any ? ' OR ' : ' AND '));
-    if (rows.length < Math.min(limit, 20) && terms.every(t => t.length === 1) && words.every(w => w.length >= 3)) {
+    // A complete title must remain findable even when a long note's BM25
+    // score trails hundreds of short body matches. Rank title candidates
+    // before applying the result limit, not after the browser receives it.
+    const exact = this.db.prepare(`SELECT uid, type, id, title, 0 AS rank FROM docs d WHERE title=? COLLATE NOCASE${typeFilter} LIMIT ?`).all(String(query).trim(), ...typeArgs, limit);
+    const titles = run('title : (' + quoted.join(any ? ' OR ' : ' AND ') + ')');
+    const titleSeen = new Set(); rows = [...exact, ...titles, ...rows].filter(row => !titleSeen.has(row.uid) && titleSeen.add(row.uid)).slice(0, limit);
+    if (insideWords && rows.length < Math.min(limit, 20) && terms.every(t => t.length === 1) && words.every(w => w.length >= 3)) {
       // Inside longer words (German compounds): slower, so only when needed.
       const seen = new Set(rows.map(r => r.uid)), like = words.map(() => "(docs_fts.title || ' ' || docs_fts.body) LIKE ? ESCAPE '\\'").join(' AND ');
       const extra = this.db.prepare(`SELECT d.uid, d.type, d.id, d.title, NULL AS snippet, 0 AS rank FROM docs_fts JOIN docs d ON d.rowid = docs_fts.rowid WHERE ${like}${typeFilter} LIMIT ?`)
@@ -320,19 +330,32 @@ export class SearchIndex {
   }
   // Words and, when a meaning service is connected (this.meaning, meaning.mjs),
   // meaning: one ranked list. Says which it used.
-  async searchHybrid(query, { limit = 50, types = null, any = false } = {}) {
-    const words = this.search(query, { limit: Math.max(limit, 100), types, any });
-    if (!this.meaning?.ready) return { rows: words.slice(0, limit), mode: 'words', note: 'Searching by words only: no meaning service is connected.' };
+  async searchHybrid(query, { limit = 50, types = null, any = false, wordsOnly = false, expandWords = false, signal } = {}) {
+    // The immediate browser pass uses FTS only. Compound-word expansion is
+    // retained in the later full pass, whose body scan can be much slower.
+    let words = this.search(query, { limit: Math.max(limit, 100), types, any, insideWords: false });
+    const terms = searchTerms(query), pieces = terms.flat(); let expansionNote = null;
+    if ((!wordsOnly || expandWords) && (words.length < Math.min(limit, 20) || words[0]?.loose) && terms.length && terms.every(term => term.length === 1) && pieces.every(word => word.length >= 3)) {
+      this.expansionWorker ||= new MeaningWorker(this.file);
+      try {
+        const extra = await this.expansionWorker.request({kind: 'inside', words: pieces, types, limit: Math.max(limit, 100)}, {signal});
+        if (extra.length) {
+          const seen = new Set(); words = [...(words[0]?.loose ? [] : words), ...extra].filter(row => !seen.has(row.uid) && seen.add(row.uid));
+        }
+      } catch (error) {if (signal?.aborted) throw error; expansionNote = 'Some additional word matches are unavailable right now; the indexed matches are shown.';}
+    }
+    if (wordsOnly) return {rows: words.slice(0, limit), mode: 'words', ...(expansionNote ? {note: expansionNote} : {})};
+    if (!this.meaning?.ready) return { rows: words.slice(0, limit), mode: 'words', note: expansionNote || 'Searching by words only: no meaning service is connected.' };
     let meanings = [];
-    try { meanings = await this.meaning.search(query, { limit: Math.max(limit, 100), types }); }
-    catch (error) { return { rows: words.slice(0, limit), mode: 'words', note: 'Meaning search is unavailable right now (' + error.message + '); these are word matches.' }; }
+    try { meanings = await this.meaning.search(query, { limit: Math.max(limit, 100), types, signal }); }
+    catch (error) { if (signal?.aborted) throw error; return { rows: words.slice(0, limit), mode: 'words', note: 'Meaning search is unavailable right now (' + error.message + '); these are word matches.' }; }
     const known = new Map(words.map(r => [r.uid, r])), missing = meanings.filter(m => !known.has(m.uid)).map(m => m.uid);
     if (missing.length) {
       const rows = this.db.prepare(`SELECT uid, type, id, title FROM docs WHERE uid IN (${missing.map(() => '?').join(',')})`).all(...missing);
       for (const r of rows) known.set(r.uid, { uid: r.uid, type: r.type, id: r.id, title: r.title });
     }
     const rows = mergeRanked(words, meanings.filter(m => known.has(m.uid)).map(m => ({ ...known.get(m.uid), similarity: m.similarity })), { limit });
-    return { rows, mode: 'words and meaning' };
+    return { rows, mode: 'words and meaning', ...(expansionNote ? {note: expansionNote} : {}) };
   }
   // A passage read out of a note's PDF (note_chunks) is found as its note: the
   // hit becomes the note, once, at the passage's place in the list.
@@ -349,5 +372,5 @@ export class SearchIndex {
     }
     return out;
   }
-  close() { this.closed = true; this.db.close(); }
+  close() { this.closed = true; const current = this.meaning?.close(), closing = [...(this.meaningWorkers || [])].map(worker => worker.close()); this.meaningWorkers?.clear(); this.db.close(); return Promise.all([current, this.expansionWorker?.close(), ...closing]); }
 }

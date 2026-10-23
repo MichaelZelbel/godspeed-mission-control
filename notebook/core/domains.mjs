@@ -411,7 +411,7 @@ export class Domains {
       // search showed nothing (6 October 2026). Both are given.
       const question=String(input.query||input.search_query||'').trim(),limit=Math.min(Number(input.limit)||20,100);
       if(!question)return {results:[],notes:[],mode:'words',semantic:false};
-      const found=await this.index.searchHybrid(question,{limit:limit*3,types:['notes','media_analysis','note_chunks']});
+      const found=await this.index.searchHybrid(question,{limit:limit*3,types:['notes','media_analysis','note_chunks'],signal:input.signal});
       const notes=new Map(searchable().map(n=>[n.id,n])),attached=id=>this.store.get('media_analysis',id)?.note_id||this.store.get('note_chunks',id)?.note_id;
       const seen=new Set(),results=[];
       for(const row of found.rows){const id=row.type==='notes'?row.id:attached(row.id),note=id&&notes.get(id);if(!note||seen.has(id))continue;seen.add(id);results.push({...note,similarity:row.similarity??Math.min(1,row.score*30),matched:row.matched||'words'});if(results.length>=limit)break;}

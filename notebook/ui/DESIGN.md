@@ -107,3 +107,7 @@ Plan: a page under System, next to My Profile, and in the command palette. Four 
 Review: no jargon on the page (no markdown, commit, repository or persona); the file a part lives in is named once, in small print, because the book teaches the folder. A rule's sentence says which list heading it is read after. Nothing is deleted without a way back: a removed rule or instruction stays among its earlier versions. The persona is shown reflowed, because the file's fixed line width means nothing on a phone, and unchanged words are no change however the file wraps them.
 
 Phone 390: one column, 16px gutters from the page, section actions wrap under their heading, every action 44px high, the editor dialog scrolls within 92% of the screen height. Checked in a real browser at 1366px and 390px against a fictional starter workspace (no personal data).
+
+# Search responsiveness
+
+The focused design read, preserved components, progressive states and verification plan for the 21 October search repair are in [DESIGN-search-performance.md](DESIGN-search-performance.md).
