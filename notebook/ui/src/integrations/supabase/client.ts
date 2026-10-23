@@ -1,16 +1,23 @@
 // Compatibility vocabulary for reused screens. All requests reach the local file service.
 import {createRecordWrites} from './record-writes.mjs';
+import {noticeServerAnswer} from '@/lib/unsaved-notes';
 export const SUPABASE_URL = location.origin;
 export const SUPABASE_PUBLISHABLE_KEY = '';
 async function request(route:string,body?:any) {
   try {
     const response=await fetch('/api/'+route,{method:body===undefined?'GET':'POST',headers:{'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});
     const context=response.clone();const result=await response.json();
+    // The notebook answered: text waiting since it last did not is sent now (lib/unsaved-notes.ts).
+    if(response.ok)noticeServerAnswer();
     if(!response.ok)return {data:null,error:{message:result.error||'Request failed',code:result.code,context}};
     return result;
   }catch(e:any){return {data:null,error:{message:e.message}};}
 }
 const writes = createRecordWrites({send:(state:any)=>request(state.rpc?'rpc':'query',state)});
+// The version of a record this screen holds, and pinning an older one for text kept on this device
+// from an earlier visit (record-writes.mjs, lib/unsaved-notes.ts).
+export const recordVersion=(table:string,id:string)=>{const key=table+'/'+id,hash=writes.versions.get(key);return hash?{hash,snapshot:writes.snapshots.get(key)}:null;};
+export const pinRecordVersion=(table:string,id:string,hash:string,baseline?:Record<string,unknown>)=>writes.pin(table,id,hash,baseline);
 class Query implements PromiseLike<any> {
   state:any; signal?:AbortSignal;
   constructor(table?:string,rpc?:string,args?:any){this.state={table,rpc,args,filters:[],orders:[]};}

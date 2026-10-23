@@ -11,6 +11,8 @@ import {GlobalAIChatFAB} from '@/components/chat/GlobalAIChatFAB';
 import { AuthScreen, AuthShell } from '@/components/auth/AuthScreen';
 
 import {DashboardLayout} from '@/components/layout/DashboardLayout';
+// Note text the notebook has not confirmed yet, sent again from the moment the page opens (#29).
+import {KeepUnsavedNotes} from '@/hooks/useUnsavedNotes';
 const Notes=lazy(()=>import('./pages/Notes')),People=lazy(()=>import('./pages/People')),World=lazy(()=>import('./pages/World'));
 const Profile=lazy(()=>import('./pages/Profile')),Collections=lazy(()=>import('./pages/Collections')),CollectionDetail=lazy(()=>import('./pages/CollectionDetail'));
 const CollectionSchema=lazy(()=>import('./pages/CollectionSchema')),CollectionTemplates=lazy(()=>import('./pages/CollectionTemplates'));
@@ -36,7 +38,7 @@ function Layout(){
   if(loading)return <AuthShell><h2>Opening Godspeed Mission Control</h2><p role="status">Checking your sign-in…</p></AuthShell>;
   if(!user&&authError)return <AuthShell><h2>Let’s reconnect</h2><p className="auth-intro" role="alert">{authError}</p><button className="auth-primary" onClick={refreshSession}>Try again</button></AuthShell>;
   if(!user)return <AuthScreen/>;
-  return <DashboardLayout/>;
+  return <><KeepUnsavedNotes/><DashboardLayout/></>;
 }
 export default function App(){return <ThemeProvider attribute="class" defaultTheme="dark"><TooltipProvider><Toaster/><Sonner/><BrowserRouter><AuthProvider><Routes><Route path="/setup" element={<AuthScreen/>}/><Route path="/shared/:token" element={<Suspense fallback={<p>Opening...</p>}><SharedNote/></Suspense>}/><Route element={<Layout/>}>
   <Route path="/" element={<Navigate to="/dashboard" replace/>}/><Route path="/dashboard" element={<Home/>}/>

@@ -125,6 +125,8 @@ import {
   NOTE_UPDATE_ACK_EVENT,
 
 } from "@/lib/note-ai-edit";
+import { unsavedNotes, sameNoteContent, type NoteText } from "@/lib/unsaved-notes";
+import { useUnsavedNotesKeeper, useUnsavedNoteStatus } from "@/hooks/useUnsavedNotes";
 
 import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -190,6 +192,20 @@ function editorToMarkdown(editor: { getJSON: () => any }): string {
 }
 
 /**
+ * Text typed in this note that the notebook does not have yet, kept on this
+ * device (lib/unsaved-notes.ts, #29): what the editor shows instead of the
+ * saved version when the note is opened, and sends again.
+ */
+function unsavedTextFor(note: Pick<Note, "id" | "content" | "title">): NoteText {
+  const kept = unsavedNotes.get(note.id);
+  const out: NoteText = {};
+  if (!kept) return out;
+  if (kept.content !== undefined && !sameNoteContent(kept.content, note.content)) out.content = kept.content;
+  if (kept.title !== undefined && kept.title !== (note.title ?? "")) out.title = kept.title;
+  return out;
+}
+
+/**
  * Visible text of a Markdown string: syntax stripped, whitespace collapsed.
  * Used as the tolerant fallback when checking that an AI edit is on screen.
  */
@@ -239,13 +255,27 @@ function formatRelativeSaved(ts: number): string {
 }
 
 interface SaveIndicatorProps {
-  status: "idle" | "saving" | "saved" | "error";
+  status: "idle" | "saving" | "saved" | "error" | "retrying";
   lastSavedAt: number | null;
   tick: number;
 }
 
 function SaveIndicator({ status, lastSavedAt }: SaveIndicatorProps) {
   if (status === "idle" && !lastSavedAt) return null;
+  // The notebook did not answer: the text is kept on this device and sent
+  // again (lib/unsaved-notes.ts, #29). It stays on screen until it is saved.
+  if (status === "retrying") {
+    return (
+      <span
+        role="status"
+        title="The notebook did not answer. Your text is kept on this device and saved as soon as the notebook answers."
+        className="flex items-center gap-1 text-[11px] font-medium text-warning shrink-0 px-1.5 py-0.5 rounded bg-warning/10"
+      >
+        <AlertCircle className="h-3 w-3" />
+        Not saved yet. Trying again…
+      </span>
+    );
+  }
   if (status === "saving") {
     return (
       <span className="flex items-center gap-1 text-[11px] text-muted-foreground shrink-0">
@@ -469,7 +499,12 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
     if (!m || !html || !html.includes("[[")) return html;
     return resolveWikilinksInHtml(html, m);
   }, []);
-  const [title, setTitle] = useState(note.title);
+  // Text typed here before that the notebook has not confirmed (a failed save,
+  // a closed tab): shown instead of the saved version and sent again.
+  const [restored] = useState(() => unsavedTextFor(note));
+  useUnsavedNotesKeeper();
+  const unsavedStatus = useUnsavedNoteStatus(note.id);
+  const [title, setTitle] = useState(restored.title ?? note.title);
   const [tagInput, setTagInput] = useState("");
   const [showTagInput, setShowTagInput] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -502,10 +537,10 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
   const syncTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const editorContainerRef = useRef<HTMLDivElement>(null);
   const titleInputRef = useRef<HTMLInputElement>(null);
-  const lastLocalContentRef = useRef(note.content ?? "");
-  const pendingSaveContentRef = useRef<string | null>(null);
-  const lastLocalTitleRef = useRef(note.title ?? "");
-  const pendingSaveTitleRef = useRef<string | null>(null);
+  const lastLocalContentRef = useRef(restored.content ?? note.content ?? "");
+  const pendingSaveContentRef = useRef<string | null>(restored.content ?? null);
+  const lastLocalTitleRef = useRef(restored.title ?? note.title ?? "");
+  const pendingSaveTitleRef = useRef<string | null>(restored.title ?? null);
   const activeNoteIdRef = useRef(note.id);
   const flushSavesRef = useRef<() => void>(() => {});
 
@@ -520,7 +555,7 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error" | "retrying">("idle");
   const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
   const [savedTick, setSavedTick] = useState(0);
   useEffect(() => {
@@ -584,7 +619,9 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
           },
           onError: () => {
             savingRef.current = false;
-            // Keep the pending payload so unmount/next keystroke retries it.
+            // Keep the pending payload: the copy kept on this device is sent
+            // again until it is saved (lib/unsaved-notes.ts), and so is the
+            // next keystroke's.
             setSaveStatus("error");
             const queued = queuedContentRef.current;
             queuedContentRef.current = null;
@@ -595,6 +632,55 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
     },
     [note.id, updateNote],
   );
+
+  // ---------------------------------------------------------------------
+  // Unsaved text kept on this device (lib/unsaved-notes.ts, #29).
+  //
+  // Every change to the text or title is kept before it is sent and let go
+  // only when the notebook confirms it. While this editor shows the note it
+  // sends what is typed itself; the keeper sends again whatever failed, also
+  // after the editor is gone.
+  // ---------------------------------------------------------------------
+  useEffect(() => {
+    const noteId = note.id;
+    const release = unsavedNotes.hold(noteId);
+    // What the notebook already has is not unsaved; what it lacks goes now.
+    unsavedNotes.confirm(noteId, { content: note.content ?? "", title: note.title ?? "" });
+    if (unsavedNotes.get(noteId)) {
+      setSaveStatus("saving");
+      void unsavedNotes.flush(noteId).then((saved) => {
+        if (!saved || activeNoteIdRef.current !== noteId) return;
+        setSaveStatus("saved");
+        setLastSavedAt(Date.now());
+      });
+    }
+    return release;
+    // Only when a note is opened here (the editor is keyed by note id).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [note.id]);
+
+  // Saved by the keeper, or found saved: nothing of it is pending here any more.
+  useEffect(() => unsavedNotes.subscribe((noteId, confirmed) => {
+    if (!confirmed || noteId !== activeNoteIdRef.current) return;
+    if (confirmed.content !== undefined) {
+      lastSavedContentRef.current = confirmed.content;
+      if (pendingSaveContentRef.current !== null && sameNoteContent(pendingSaveContentRef.current, confirmed.content)) pendingSaveContentRef.current = null;
+      if (queuedContentRef.current !== null && sameNoteContent(queuedContentRef.current, confirmed.content)) queuedContentRef.current = null;
+    }
+    if (confirmed.title !== undefined && pendingSaveTitleRef.current === confirmed.title) pendingSaveTitleRef.current = null;
+  }), []);
+
+  // "Not saved yet. Trying again..." until the notebook takes the text.
+  const unsavedBefore = useRef(unsavedStatus);
+  useEffect(() => {
+    const before = unsavedBefore.current;
+    unsavedBefore.current = unsavedStatus;
+    if (before !== "retrying" || unsavedStatus === "retrying") return;
+    if (unsavedStatus === "saved") {
+      setSaveStatus("saved");
+      setLastSavedAt(Date.now());
+    } else setSaveStatus("saving");
+  }, [unsavedStatus]);
 
   const handleOpenAutocomplete = useCallback((pos: number) => {
     // Get caret position from editor view
@@ -743,7 +829,7 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
     content: (() => {
       // Convert Markdown deterministically to HTML so checklists and other
       // block constructs always render as real TipTap nodes on first load.
-      return resolveWikilinks(contentToEditorHtml(note.content, note));
+      return resolveWikilinks(contentToEditorHtml(restored.content ?? note.content, note));
     })(),
     editable: !note.is_trashed && !note.is_external,
     onUpdate: ({ editor: e, transaction }) => {
@@ -757,6 +843,8 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
       // list items). Always persist what the editor produced.
       lastLocalContentRef.current = md;
       pendingSaveContentRef.current = md;
+      // Kept on this device before anything is sent (#29).
+      unsavedNotes.keep(note.id, { content: md });
       if (contentSaveTimer.current) clearTimeout(contentSaveTimer.current);
       setSaveStatus("saving");
       contentSaveTimer.current = setTimeout(() => {
@@ -813,43 +901,36 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
   // NoteEditor is remounted per note (key={note.id}) and torn down on
   // navigation, so merely *cancelling* the 800ms content/title timers here
   // silently dropped the last burst of edits when the user switched notes or
-  // clicked a wikilink within the debounce window. The pending payload lives
-  // in the refs; firing updateNote.mutate persists it (the mutation runs on
-  // the shared query client, so it completes after this instance is gone).
+  // clicked a wikilink within the debounce window. The pending text is kept on
+  // this device (lib/unsaved-notes.ts) and sent by its keeper, which outlives
+  // this editor and sends it again until the notebook confirms it. Until
+  // 23 October 2026 it was sent once and forgotten: a save that failed while
+  // the notebook restarted lost the text for good (#29).
   // Only the unrelated export timer is cancelled; saved changes queue on the server.
   useEffect(() => {
     const flushSaves = () => {
       const noteId = activeNoteIdRef.current;
       const pendingContent = queuedContentRef.current ?? pendingSaveContentRef.current;
-      // The callbacks settle the header's status after a flush on tab switch,
-      // which cancels the debounce timer: without them it said "Saving..."
-      // until the next keystroke although the text was saved. (After unmount
-      // they do not run; the hook's own error toast still does.)
-      const settled = {
-        onSuccess: () => {
+      const pendingTitle = pendingSaveTitleRef.current;
+      const unsaved: NoteText = {};
+      if (pendingContent !== null && pendingContent !== lastSavedContentRef.current) unsaved.content = pendingContent;
+      if (pendingTitle !== null) unsaved.title = pendingTitle;
+      if (unsaved.content !== undefined || unsaved.title !== undefined) unsavedNotes.keep(noteId, unsaved);
+      if (unsavedNotes.get(noteId)) {
+        // The status settles when the notebook answers: a flush on tab switch
+        // cancels the debounce timer, and the header said "Saving..." until
+        // the next keystroke although the text was saved. A failure shows as
+        // "Not saved yet" while the keeper tries again.
+        void unsavedNotes.flush(noteId).then((saved) => {
+          if (!saved || activeNoteIdRef.current !== noteId) return;
           setSaveStatus("saved");
           setLastSavedAt(Date.now());
-        },
-        onError: () => setSaveStatus("error"),
-      };
-      if (pendingContent !== null && pendingContent !== lastSavedContentRef.current) {
-        updateNote.mutate({ id: noteId, content: pendingContent }, {
-          ...settled,
-          onSuccess: () => {
-            if (activeNoteIdRef.current === noteId) lastSavedContentRef.current = pendingContent;
-            settled.onSuccess();
-          },
         });
-        pendingSaveContentRef.current = null;
       } else if (pendingContent !== null) {
         // Already saved; only the debounce timer was left.
         pendingSaveContentRef.current = null;
-        settled.onSuccess();
-      }
-      const pendingTitle = pendingSaveTitleRef.current;
-      if (pendingTitle !== null) {
-        updateNote.mutate({ id: noteId, title: pendingTitle }, settled);
-        pendingSaveTitleRef.current = null;
+        setSaveStatus("saved");
+        setLastSavedAt(Date.now());
       }
       if (contentSaveTimer.current) clearTimeout(contentSaveTimer.current);
       if (titleSaveTimer.current) clearTimeout(titleSaveTimer.current);
@@ -872,19 +953,27 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
   // Sync when note changes
   useEffect(() => {
     const noteChanged = activeNoteIdRef.current !== note.id;
+    // Text kept for a note opened in this same editor is shown instead of the
+    // saved version, as when an editor opens with it (#29).
+    let kept: NoteText = {};
     if (noteChanged) {
       flushSavesRef.current();
       activeNoteIdRef.current = note.id;
-      pendingSaveContentRef.current = null;
-      pendingSaveTitleRef.current = null;
+      kept = unsavedTextFor(note);
+      pendingSaveContentRef.current = kept.content ?? null;
+      pendingSaveTitleRef.current = kept.title ?? null;
     }
     const incomingMatchesPendingTitle = pendingSaveTitleRef.current === note.title;
     const incomingMatchesLastLocalTitle = lastLocalTitleRef.current === note.title;
     const titleInputFocused = document.activeElement === titleInputRef.current;
     if (noteChanged || incomingMatchesPendingTitle || incomingMatchesLastLocalTitle || (!pendingSaveTitleRef.current && !titleInputFocused)) {
-      setTitle(note.title);
-      lastLocalTitleRef.current = note.title ?? "";
-      if (incomingMatchesPendingTitle || noteChanged) pendingSaveTitleRef.current = null;
+      const shownTitle = kept.title ?? note.title;
+      setTitle(shownTitle);
+      lastLocalTitleRef.current = shownTitle ?? "";
+      if (incomingMatchesPendingTitle) {
+        pendingSaveTitleRef.current = null;
+        unsavedNotes.confirm(note.id, { title: note.title ?? "" });
+      }
     }
     setShowTagInput(false);
     // Info panel and Markdown source mode are only reset for a different note.
@@ -920,12 +1009,16 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
     if (!editor) return;
 
     if (!noteChanged && (incomingMatchesPendingSave || incomingMatchesLastLocal || pendingSaveContentRef.current || editor.isFocused)) {
-      if (incomingMatchesPendingSave || incomingMatchesLastLocal) pendingSaveContentRef.current = null;
+      if (incomingMatchesPendingSave || incomingMatchesLastLocal) {
+        pendingSaveContentRef.current = null;
+        // The notebook has this text: the copy kept on this device can go.
+        unsavedNotes.confirm(note.id, { content: note.content ?? "" });
+      }
       editor.setEditable(!note.is_trashed && !note.is_external, false);
       return;
     }
 
-    const editorContent = resolveWikilinks(contentToEditorHtml(note.content, note));
+    const editorContent = resolveWikilinks(contentToEditorHtml(kept.content ?? note.content, note));
     const currentHtml = editor.getHTML();
     const incomingMatchesEditor = normalizeEditorHtml(editorContent) === normalizeEditorHtml(currentHtml);
 
@@ -933,14 +1026,15 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
       if (!incomingMatchesEditor) {
         setEditorContentWithAttachments(editorContent, note.id);
       }
-      lastLocalContentRef.current = note.content ?? "";
-      pendingSaveContentRef.current = null;
+      lastLocalContentRef.current = kept.content ?? note.content ?? "";
+      pendingSaveContentRef.current = kept.content ?? null;
     } else if (!incomingMatchesEditor && !incomingMatchesPendingSave && !incomingMatchesLastLocal && !pendingSaveContentRef.current && !editor.isFocused) {
       setEditorContentWithAttachments(editorContent, note.id);
       lastLocalContentRef.current = note.content ?? "";
     }
-    if (incomingMatchesPendingSave || incomingMatchesEditor) {
+    if ((incomingMatchesPendingSave || incomingMatchesEditor) && kept.content === undefined) {
       pendingSaveContentRef.current = null;
+      unsavedNotes.confirm(note.id, { content: note.content ?? "" });
     }
     editor.setEditable(!note.is_trashed && !note.is_external, false);
   }, [note.id, note.content, note.updated_at, note.title, note.folder_path, note.is_external, note.is_trashed, editor, setEditorContentWithAttachments]);
@@ -1048,6 +1142,7 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
           }
           queuedContentRef.current = null;
           pendingSaveContentRef.current = null;
+          unsavedNotes.discard(note.id, ["content"]);
           setEditorContentWithAttachments(html, note.id);
           lastLocalContentRef.current = content;
           lastSavedContentRef.current = content;
@@ -1139,6 +1234,7 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
     setTitle(val);
     lastLocalTitleRef.current = val;
     pendingSaveTitleRef.current = val;
+    unsavedNotes.keep(note.id, { title: val });
     if (titleSaveTimer.current) clearTimeout(titleSaveTimer.current);
     setSaveStatus("saving");
     titleSaveTimer.current = setTimeout(async () => {
@@ -1156,10 +1252,8 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
             setSaveStatus("saved");
             setLastSavedAt(Date.now());
           },
-          onError: () => {
-            if (pendingSaveTitleRef.current === val) pendingSaveTitleRef.current = null;
-            setSaveStatus("error");
-          },
+          // A failed title stays pending, like text: the keeper sends it again (#29).
+          onError: () => setSaveStatus("error"),
         }
       );
       triggerGitHubSync(note.id);
@@ -1173,6 +1267,8 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
     const tags = [...new Set([...(duplicateTarget.tags || []), ...(note.tags || [])])];
     await updateNote.mutateAsync({ id: duplicateTarget.id, content: mergedContent, tags });
     await updateNote.mutateAsync({ id: note.id, is_trashed: true, trashed_at: new Date().toISOString() });
+    // Its text went into the other note; the title it was renamed to is not kept.
+    unsavedNotes.discard(note.id);
     setDuplicateTarget(null);
     showToast.success("Notes merged");
     navigate(`/dashboard/notes/${duplicateTarget.id}`);
@@ -1442,11 +1538,13 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
       setEditorContentWithAttachments(resolveWikilinks(contentToEditorHtml(sourceText, { ...note, is_external: false })));
       lastLocalContentRef.current = sourceText;
       pendingSaveContentRef.current = sourceText;
+      unsavedNotes.keep(note.id, { content: sourceText });
       // trigger save
       if (contentSaveTimer.current) clearTimeout(contentSaveTimer.current);
       contentSaveTimer.current = setTimeout(() => {
         const md = editorToMarkdown(editor);
         pendingSaveContentRef.current = md;
+        unsavedNotes.keep(note.id, { content: md });
         saveContentNow(md);
         triggerGitHubSync(note.id);
       }, 800);
@@ -1771,7 +1869,7 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
           />
           <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 empty:hidden">
             {!note.is_trashed && !note.is_external && (
-              <SaveIndicator status={saveStatus} lastSavedAt={lastSavedAt} tick={savedTick} />
+              <SaveIndicator status={unsavedStatus === "retrying" ? "retrying" : saveStatus} lastSavedAt={lastSavedAt} tick={savedTick} />
             )}
             {!note.is_trashed && <ProcessingIndicator note={note} credits={credits} />}
             {note.entity_type && (
@@ -1812,6 +1910,7 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
               setSourceText(e.target.value);
               if (contentSaveTimer.current) clearTimeout(contentSaveTimer.current);
               pendingSaveContentRef.current = e.target.value;
+              unsavedNotes.keep(note.id, { content: e.target.value });
               lastLocalContentRef.current = e.target.value;
               contentSaveTimer.current = setTimeout(() => {
                 saveContentNow(e.target.value);
@@ -1956,7 +2055,7 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="sm:justify-between gap-2">
-            <AlertDialogCancel onClick={() => { setTitle(note.title); lastLocalTitleRef.current = note.title ?? ""; pendingSaveTitleRef.current = null; setDuplicateTarget(null); }}>
+            <AlertDialogCancel onClick={() => { setTitle(note.title); lastLocalTitleRef.current = note.title ?? ""; pendingSaveTitleRef.current = null; unsavedNotes.discard(note.id, ["title"]); setDuplicateTarget(null); }}>
               Rename
             </AlertDialogCancel>
             <Button variant="outline" onClick={mergeDuplicate}>Merge</Button>

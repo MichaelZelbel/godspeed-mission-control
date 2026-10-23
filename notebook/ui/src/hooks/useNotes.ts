@@ -1,10 +1,11 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { useQuery as usePowerSyncQuery } from "@powersync/tanstack-react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { showToast } from "@/lib/toast";
 import { dbErrorMessage } from "@/lib/function-error";
-import { saveNoteText, refusedNoteReason, OTHER_VERSION_KEPT } from "@/lib/note-save.mjs";
+import { saveNoteText, refusedNoteReason, isConflict, OTHER_VERSION_KEPT } from "@/lib/note-save.mjs";
+import { unsavedNotes, type NoteText, type SendOutcome } from "@/lib/unsaved-notes";
 import { triggerCreditsRefresh } from "@/lib/credits-events";
 import { ilikeContains, escapeLike as escapeLikeFilter, pgOrValue, fetchAllPages } from "@/lib/postgrest";
 import { extractSearchTerms, rankNotesByTerms, trailingPrefix } from "@/lib/search-terms";
@@ -276,58 +277,160 @@ export function useCreateNote() {
   });
 }
 
+// Writes a note change on the local-first path (SQLite); the connector uploads it.
+async function updateNoteLocal(id: string, updates: NoteUpdate): Promise<Note> {
+  const db = getDb();
+  const sets: string[] = [];
+  const params: unknown[] = [];
+  for (const [key, value] of Object.entries(updates)) {
+    const serialized = toSqliteValue(key, value);
+    if (serialized === undefined) continue;
+    sets.push(`${key} = ?`);
+    params.push(serialized);
+  }
+  // Device-local ordering only; the connector strips updated_at on
+  // upload so the server trigger stays authoritative.
+  sets.push("updated_at = ?");
+  params.push(new Date().toISOString());
+  await db.execute(`UPDATE notes SET ${sets.join(", ")} WHERE id = ?`, [
+    ...params,
+    id,
+  ]);
+  const row = await db.get<NoteRow>("SELECT * FROM notes WHERE id = ?", [id]);
+  return rowToNote(row);
+}
+
+// One note's save, as the server is asked for it. `updates` is read at each
+// try: the keeper of unsaved text (lib/unsaved-notes.ts) passes the newest
+// text, so a second try after a refusal never sends an older one.
+async function sendNoteUpdate(id: string, updates: () => NoteUpdate): Promise<{ note: Note; sent: NoteUpdate }> {
+  let sent = updates();
+  if (isLocalFirstActive()) return { note: await updateNoteLocal(id, sent), sent };
+  // NOTE_COLUMNS, not `*`: the row is merged into every cached list and
+  // persisted to IndexedDB, and `*` carried the note's embedding vector
+  // (thousands of floats) back on every autosave.
+  // A refused save of typed text is sent once more with the note's current
+  // version (lib/note-save.mjs): the other version is kept for review,
+  // the editor's text is never dropped. Until 16 October 2026 every later
+  // save of the note failed the same way.
+  const first = sent;
+  const { data, error, kept } = await saveNoteText(
+    () => {
+      sent = updates();
+      return supabase
+        .from("notes" as any)
+        .update(sent)
+        .eq("id", id)
+        .select(NOTE_COLUMNS)
+        .single();
+    },
+    first,
+  );
+  if (error) throw error;
+  if (kept) showToast.info(OTHER_VERSION_KEPT);
+  return { note: data as unknown as Note, sent };
+}
+
+// What a saved note changes on screen: every cached list and the open note.
+function applySavedNote(qc: QueryClient, note: Note, variables: Record<string, unknown>) {
+  // On the local-first path the list cache holds raw SQLite rows (the
+  // PowerSync hook's `select` maps them per observer, not in the cache),
+  // where is_trashed is 0 or 1. The boolean filter below would keep only
+  // the row just merged and collapse the list to one note until the next
+  // table change. The live query re-runs on the write anyway, so leave it.
+  const queries = isLocalFirstActive() ? [] : qc.getQueriesData<Note[]>({ queryKey: ["notes"] });
+  for (const [key, current] of queries) {
+    if (!current) continue;
+    const filter = (key?.[1] as string) ?? "all";
+    const exists = current.some((item) => item.id === note.id);
+    const merged = exists
+      ? current.map((item) => (item.id === note.id ? { ...item, ...note } : item))
+      : [...current, note];
+    const next = merged.filter((item) => {
+      if (filter === "trash") return item.is_trashed === true;
+      if (filter === "favorites") return item.is_trashed === false && item.is_favorite === true;
+      return item.is_trashed === false; // "all"
+    });
+    qc.setQueryData<Note[]>(key, next);
+  }
+  // The open editor reads from ["note", id] - patch it directly.
+  qc.setQueryData<Note | null>(["note", note.id], note);
+  qc.invalidateQueries({ queryKey: ["note-ai-state"] });
+
+  // A content-only autosave must NOT invalidate the (expensive) notes list:
+  // for large vaults that meant refetching every note body on every
+  // keystroke burst, and a late-resolving stale list response could
+  // overwrite the just-saved content in the cache.
+  const listVisibleFields = [
+    "title",
+    "tags",
+    "folder_path",
+    "is_favorite",
+    "is_pinned",
+    "is_trashed",
+    "trashed_at",
+    "metadata",
+  ] as const;
+  const listVisibleChanged = listVisibleFields.some(
+    (field) => variables[field] !== undefined,
+  );
+  if (listVisibleChanged) {
+    qc.invalidateQueries({ queryKey: ["notes"], refetchType: "inactive" });
+    broadcastInvalidation([["notes"], ["note", note.id]]);
+  } else {
+    broadcastInvalidation([["note", note.id]]);
+  }
+
+  // Relevant writes enqueue analysis in the same server transaction,
+  // including uploads from offline clients.
+}
+
+/**
+ * Sends a note's unsaved text and title for the keeper of unsaved text
+ * (lib/unsaved-notes.ts), which tries again until the notebook confirms it,
+ * also after the note's editor is gone. The same request as the editor's own
+ * saves; `unsaved` is read at each try.
+ */
+export async function saveUnsavedNoteText(qc: QueryClient, id: string, unsaved: () => NoteText | null): Promise<SendOutcome> {
+  const first = unsaved();
+  if (!first) return { sent: {} };
+  let latest: NoteText = first;
+  try {
+    const { note, sent } = await sendNoteUpdate(id, () => (latest = unsaved() ?? latest));
+    applySavedNote(qc, note, { id, ...sent });
+    return { sent: sent as NoteText, version: (note as unknown as { _hash?: string })?._hash ?? null };
+  } catch (error) {
+    // A note deleted meanwhile has nowhere to keep the text; anything else is tried again.
+    if ((error as { message?: string })?.message === "Expected one record") {
+      const { data, error: readError } = await supabase.from("notes" as any).select("id").eq("id", id).maybeSingle();
+      if (!readError && !data) return { sent: latest, gone: true };
+    }
+    throw error;
+  }
+}
+
+const textChange = (updates: Record<string, unknown>) =>
+  typeof updates.content === "string" || typeof updates.title === "string";
+
 export function useUpdateNote() {
   const qc = useQueryClient();
 
   return useMutation({
     mutationFn: async ({ id, ...updates }: NoteUpdate & { id: string }) => {
-      if (isLocalFirstActive()) {
-        const db = getDb();
-        const sets: string[] = [];
-        const params: unknown[] = [];
-        for (const [key, value] of Object.entries(updates)) {
-          const serialized = toSqliteValue(key, value);
-          if (serialized === undefined) continue;
-          sets.push(`${key} = ?`);
-          params.push(serialized);
-        }
-        // Device-local ordering only; the connector strips updated_at on
-        // upload so the server trigger stays authoritative.
-        sets.push("updated_at = ?");
-        params.push(new Date().toISOString());
-        await db.execute(`UPDATE notes SET ${sets.join(", ")} WHERE id = ?`, [
-          ...params,
-          id,
-        ]);
-        const row = await db.get<NoteRow>("SELECT * FROM notes WHERE id = ?", [id]);
-        return rowToNote(row);
-      }
-      // NOTE_COLUMNS, not `*`: the row is merged into every cached list and
-      // persisted to IndexedDB, and `*` carried the note's embedding vector
-      // (thousands of floats) back on every autosave.
-      // A refused save of typed text is sent once more with the note's current
-      // version (lib/note-save.mjs): the other version is kept for review,
-      // the editor's text is never dropped. Until 16 October 2026 every later
-      // save of the note failed the same way.
-      const { data, error, kept } = await saveNoteText(
-        () => supabase
-          .from("notes" as any)
-          .update(updates)
-          .eq("id", id)
-          .select(NOTE_COLUMNS)
-          .single(),
-        updates,
-      );
-      if (error) throw error;
-      if (kept) showToast.info(OTHER_VERSION_KEPT);
-      return data as unknown as Note;
+      return (await sendNoteUpdate(id, () => updates)).note;
     },
     // Most callers fire and forget (favourite, pin, tags, drag-to-folder, bulk
-    // actions, and the editor's final flush on unmount, whose own callbacks
-    // never run once the editor is gone). Without this a refused write left
-    // the UI showing the change with nothing saved and no word about it.
+    // actions). Without this a refused write left the UI showing the change
+    // with nothing saved and no word about it.
     onError: (error: Error, variables) => {
-      const { id: _id, ...updates } = (variables || {}) as Record<string, unknown>;
+      const { id, ...updates } = (variables || {}) as Record<string, unknown>;
+      // Typed text is kept on this device and sent again until it is saved
+      // (lib/unsaved-notes.ts): an open editor says so in its save status,
+      // and the keeper says it once when no editor shows the note.
+      if (typeof id === "string" && textChange(updates) && unsavedNotes.get(id)) {
+        unsavedNotes.failed(id, error);
+        if (!isConflict(error)) return;
+      }
       const reason = refusedNoteReason(error, updates) ?? dbErrorMessage(error, "Please try again.");
       showToast.batched.error("note:update-failed", (n) =>
         n === 1
@@ -336,56 +439,8 @@ export function useUpdateNote() {
       );
     },
     onSuccess: (note, variables) => {
-      // On the local-first path the list cache holds raw SQLite rows (the
-      // PowerSync hook's `select` maps them per observer, not in the cache),
-      // where is_trashed is 0 or 1. The boolean filter below would keep only
-      // the row just merged and collapse the list to one note until the next
-      // table change. The live query re-runs on the write anyway, so leave it.
-      const queries = isLocalFirstActive() ? [] : qc.getQueriesData<Note[]>({ queryKey: ["notes"] });
-      for (const [key, current] of queries) {
-        if (!current) continue;
-        const filter = (key?.[1] as string) ?? "all";
-        const exists = current.some((item) => item.id === note.id);
-        const merged = exists
-          ? current.map((item) => (item.id === note.id ? { ...item, ...note } : item))
-          : [...current, note];
-        const next = merged.filter((item) => {
-          if (filter === "trash") return item.is_trashed === true;
-          if (filter === "favorites") return item.is_trashed === false && item.is_favorite === true;
-          return item.is_trashed === false; // "all"
-        });
-        qc.setQueryData<Note[]>(key, next);
-      }
-      // The open editor reads from ["note", id] - patch it directly.
-      qc.setQueryData<Note | null>(["note", note.id], note);
-      qc.invalidateQueries({ queryKey: ["note-ai-state"] });
-
-      // A content-only autosave must NOT invalidate the (expensive) notes list:
-      // for large vaults that meant refetching every note body on every
-      // keystroke burst, and a late-resolving stale list response could
-      // overwrite the just-saved content in the cache.
-      const listVisibleFields = [
-        "title",
-        "tags",
-        "folder_path",
-        "is_favorite",
-        "is_pinned",
-        "is_trashed",
-        "trashed_at",
-        "metadata",
-      ] as const;
-      const listVisibleChanged = listVisibleFields.some(
-        (field) => (variables as Record<string, unknown>)[field] !== undefined,
-      );
-      if (listVisibleChanged) {
-        qc.invalidateQueries({ queryKey: ["notes"], refetchType: "inactive" });
-        broadcastInvalidation([["notes"], ["note", note.id]]);
-      } else {
-        broadcastInvalidation([["note", note.id]]);
-      }
-
-      // Relevant writes enqueue analysis in the same server transaction,
-      // including uploads from offline clients.
+      applySavedNote(qc, note, variables as Record<string, unknown>);
+      unsavedNotes.confirm(note.id, variables as NoteText, (note as unknown as { _hash?: string })?._hash ?? null);
     },
   });
 }
@@ -405,7 +460,9 @@ export function useDeleteNote() {
         .eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => {
+    onSuccess: (_result, id) => {
+      // Deleted for good: text kept for it on this device has nowhere to go.
+      unsavedNotes.discard(id);
       qc.invalidateQueries({ queryKey: ["notes"] });
       broadcastInvalidation([["notes"]]);
 

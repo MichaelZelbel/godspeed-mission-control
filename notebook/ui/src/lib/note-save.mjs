@@ -25,6 +25,12 @@ export async function saveNoteText(save,updates){
   return {...result,kept:false};
 }
 
+// When a note's text could not be saved and no editor shows the note (lib/unsaved-notes.ts, #29).
+// An open editor says it in its save status instead.
+export const NOT_SAVED_YET='The notebook did not answer, so a change to your note is not saved yet. The text is kept on this device and saved as soon as the notebook answers.';
+export const SAVED_AFTER_WAITING='The note text that was waiting is saved now.';
+export const DELETED_WHILE_WAITING='A note was deleted before its last change could be saved, so that change is gone with it.';
+
 export const OTHER_VERSION_KEPT='This note was also changed somewhere else at the same moment. Your text is saved, and the other version is kept in Settings under "Review conflicting edits".';
 
 // The sentence after "Could not save ..." for a refused note save.
