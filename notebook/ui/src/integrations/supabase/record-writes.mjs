@@ -23,11 +23,25 @@ export function createRecordWrites({send}) {
   // Per record: writes in flight, and the tick at which the latest one was
   // answered. `clock` advances with every answered write.
   const writing=new Map(),answered=new Map();let clock=0;
+  // Text a note kept on this device from an earlier visit (lib/unsaved-notes.ts,
+  // #29) was typed on a version this visit never saw. Pinned, that version is
+  // what the record's next write is stamped with, as if the screen had stayed
+  // open: a change made elsewhere in the meantime is refused and kept for
+  // review instead of being written over unseen. Reads do not replace a pinned
+  // version; the first write the server answers (saved, or refused as a
+  // conflict) releases it. Nothing else is pinned, so no other write changes.
+  const pinned=new Set();
+  const pin=(table,id,hash,baseline)=>{
+    if(!table||!id||typeof hash!=='string'||!hash)return;
+    const key=table+'/'+id;
+    versions.set(key,hash);snapshots.set(key,{...(baseline||{}),id,_hash:hash});pinned.add(key);
+  };
   const rowsOf=data=>Array.isArray(data)?data:data?[data]:[];
   const remember=(table,data,since)=>{
     if(!table)return;
     for(const row of rowsOf(data))if(row&&row.id&&row._hash){
       const key=table+'/'+row.id;
+      if(since!==undefined&&pinned.has(key))continue;
       if(since!==undefined&&((writing.get(key)||0)>0||(answered.get(key)??-1)>since))continue;
       // The notes list carries a preview, not the text: a narrower row of the
       // version already held adds to the copy instead of replacing it.
@@ -84,6 +98,7 @@ export function createRecordWrites({send}) {
       for(const key of keys){count(writing,key,-1);answered.set(key,clock);}
       if(wide){count(wideWriting,state.table,-1);wideAnswered.set(state.table,clock);}
     }
+    if(!result?.error||result.error.code==='CONFLICT')for(const key of keys)pinned.delete(key);
     remember(state.table,result?.data);
     // Refused because the record changed since the screen last saw it: the
     // other version is kept for review, and the screen now holds the current
@@ -106,7 +121,7 @@ export function createRecordWrites({send}) {
     void settled.then(()=>{if(chains.get(key)===settled)chains.delete(key);});
     return queued;
   };
-  return {perform,versions,snapshots};
+  return {perform,versions,snapshots,pin};
 }
 
 // The records a write names, or nothing when its filters do not say which ones
