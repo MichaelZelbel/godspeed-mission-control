@@ -61,6 +61,33 @@ const [origin='https://localhost:48443',session]=process.argv.slice(2);
    const before=problems.length;await page.goto(origin+'/dashboard/media');await page.waitForTimeout(2500);
    assert.deepEqual(problems.slice(before).filter(p=>/MIME/.test(p)),[]);
   });
+  // Issue #29 (23 October 2026): the notebook restarted for about 80 seconds, another note was
+  // opened, the one save sent on leaving the first note failed, and its new text was lost for good.
+  await check('text typed in a note survives a failed save while switching notes',async()=>{
+   const first=await api({table:'notes',operation:'insert',values:{title:'Screen check unsaved text '+stamp,content:'Fictional seed list.'},selection:'*',single:true});
+   const second=await api({table:'notes',operation:'insert',values:{title:'Screen check next note '+stamp,content:'NEXT-NOTE-TEXT'},selection:'*',single:true});
+   const typed='Typed while the notebook restarts '+stamp+'.';
+   const saved=async()=>(await api({table:'notes',operation:'select',selection:'id, content',filters:[['eq','id',first.id]],single:true})).content;
+   await page.goto(origin+'/dashboard/notes/'+first.id);
+   await page.waitForFunction(()=>document.querySelector('main [contenteditable=true]')?.innerText.includes('Fictional seed list.'),null,{timeout:15000});
+   await page.locator('main [contenteditable=true]').first().click();await page.keyboard.press('Control+End');
+   // While the notebook is away, a note's save is answered by the web front door as it was then.
+   const away=route=>/"operation":"update"/.test(route.request().postData()||'')?route.fulfill({status:502,contentType:'text/html',body:'<html><body>502 Bad Gateway</body></html>'}):route.fallback();
+   await page.route('**/api/query',away);
+   await page.keyboard.type(' '+typed);
+   // The other note at once, inside the autosave's pause: the save sent on leaving is the one that fails.
+   await page.locator('main').getByText('Screen check next note '+stamp).first().click();
+   await page.waitForFunction(()=>document.querySelector('main [contenteditable=true]')?.innerText.includes('NEXT-NOTE-TEXT'),null,{timeout:15000});
+   await page.waitForTimeout(1500);
+   assert.ok(!(await saved()).includes(typed),'nothing could be saved while the notebook was away');
+   // The notebook is back. Nothing is typed, clicked or reloaded from here on.
+   await page.unroute('**/api/query',away);
+   const until=Date.now()+40000;
+   while(!(await saved()).includes(typed)&&Date.now()<until)await page.waitForTimeout(1000);
+   const content=await saved();
+   assert.ok(content.includes(typed),'the typed text never reached the notebook; it holds: '+JSON.stringify(content));
+   assert.ok(content.includes('Fictional seed list.'));
+  });
  }finally{await browser.close();}
  console.log(checks.join('\n'));
  if(failed.length)console.log('requests that failed:\n'+failed.join('\n'));
