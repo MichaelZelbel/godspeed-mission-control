@@ -297,6 +297,73 @@ check "  and the file is still not rewritten" "$(cat "$U/due/present.md")" "$BEF
 # A live run: on a computer whose ~/.godspeed/device.env named one mission control, the chat of another
 # (Hermes stands in its own folder; the notebook sets GODSPEED_ROOT, GODSPEED_DIR and GODSPEED_WORKSPACE
 # to it) typed `mc-due list` and got the first one's deadlines, because device.env was read first.
+# --- add-on deadlines --------------------------------------------------------------------------
+# An add-on (a documents add-on reading letters) makes a deadline through the notebook, which runs
+# `add --addon --addon-key`. It is a normal deadline the reminders read. The add-on's key makes it
+# once, and a deadline the person changed or closed is never changed by the add-on again.
+echo "add-on deadlines"
+A="$TMP/addon"
+mkdir -p "$A/due" "$A/world/events" "$A/rules"
+: > "$A/AGENTS.md"
+ad() { GODSPEED_TODAY=2026-10-23 GODSPEED_ROOT="$A" node "$HERE/due.js" --godspeed "$A" "$@"; }
+mk() { ad add "$1" --title "$2" --to "$3" --done-when "Paid" --cost "A reminder fee" --link "http://127.0.0.1:8000/documents/7/details" --addon an-addon --addon-key "$4"; }
+out="$(mk pay-the-invented-water-bill "Pay the invented water bill" 2026-11-20 "a1b2c3#1")"; rc=$?
+check "an add-on deadline is made" "$rc" "0"
+F="$A/due/pay-the-invented-water-bill.md"
+contains "  it names the add-on" "$(cat "$F")" "ADDON: an-addon"
+contains "  and the add-on's key" "$(cat "$F")" "ADDON-KEY: a1b2c3#1"
+contains "  and what the add-on wrote" "$(cat "$F")" "ADDON-STATE: "
+contains "  and where it came from" "$(cat "$F")" "SOURCE: an-addon, 2026-10-23"
+contains "  and is an ordinary window to the last day" "$(cat "$F")" "STRIP: 2026-10-23 2026-11-20"
+contains "  which the reminders read like any other" "$(GODSPEED_TODAY=2026-11-18 ad today)" "Pay the invented water bill"
+out="$(mk another-name "Pay it again" 2026-12-01 "a1b2c3#1")"; rc=$?
+check "the same key again makes no second deadline" "$(ls "$A/due" | grep -c '\.md$')" "1"
+check "  and is not an error" "$rc" "0"
+contains "  it says which one it kept" "$out" "Kept pay-the-invented-water-bill"
+check "  and the first one is as it was" "$(grep '^STRIP' "$F")" "STRIP: 2026-10-23 2026-11-20"
+mk other-addons-key "Another add-on's deadline" 2026-11-30 "a1b2c3#2" >/dev/null
+out="$(ad add third --title "Same key, other add-on" --to 2026-11-30 --done-when d --cost c --addon other-addon --addon-key "a1b2c3#1")"
+check "another add-on's same key is another deadline" "$( [ -f "$A/due/third.md" ] && echo made)" "made"
+out="$(ad add bad-key --title "Bad" --to 2026-11-30 --done-when d --cost c --addon an-addon --addon-key "two words")"; rc=$?
+check "a key with a space is refused" "$rc" "1"
+check "  and nothing is made" "$( [ -f "$A/due/bad-key.md" ] && echo made || echo none)" "none"
+out="$(ad add bad-name --title "Bad" --to 2026-11-30 --done-when d --cost c --addon "An Addon" --addon-key k1)"; rc=$?
+check "an add-on name that is not plain is refused" "$rc" "1"
+out="$(ad addon-update pay-the-invented-water-bill --addon an-addon --to 2026-11-25)"; rc=$?
+check "the add-on moves its untouched deadline" "$rc" "0"
+check "  to the new last day" "$(grep '^STRIP' "$F")" "STRIP: 2026-10-23 2026-11-25"
+contains "  and says so in its log" "$(cat "$F")" "moved by an-addon"
+out="$(ad addon-update pay-the-invented-water-bill --addon an-addon --title "Pay the invented water bill of 40 EUR")"; rc=$?
+check "the add-on renames its untouched deadline" "$(grep '^TITLE' "$F")" "TITLE: Pay the invented water bill of 40 EUR"
+out="$(ad addon-update pay-the-invented-water-bill --addon other-addon --to 2026-11-28)"; rc=$?
+check "another add-on cannot change it" "$rc" "1"
+check "  and it stays" "$(grep '^STRIP' "$F")" "STRIP: 2026-10-23 2026-11-25"
+# Another reader writes the same file in its own shape (the engine's mc-due: another heading, SAID
+# lines): that is not the person changing it.
+sed -i 's/^## Windows$/## Strips/' "$F"; printf -- '- 2026-10-24 SAID brief\n' >> "$F"
+out="$(ad addon-update pay-the-invented-water-bill --addon an-addon --to 2026-11-26)"; rc=$?
+check "another reader's own layout and log lines are no change by the person" "$rc" "0"
+st() { ad state --json | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const r=JSON.parse(s).find(x=>x.slug===process.argv[1]);process.stdout.write(String(JSON.stringify(r&&r.addon)))})' "$1"; }
+contains "state names the add-on, its key and that nobody touched it" "$(st pay-the-invented-water-bill)" '"name":"an-addon","key":"a1b2c3#1","touched":false'
+# The person changes it: by hand, by a target, by closing or dropping it. From then on it is theirs.
+touchcase() {
+  local slug="$1" what="$2"; shift 2
+  mk "$slug" "Invented deadline $slug" 2026-12-10 "k-$slug" >/dev/null
+  local before; "$@" >/dev/null; before="$(cat "$A/due/$slug.md")"
+  out="$(ad addon-update "$slug" --addon an-addon --to 2026-12-20)"; rc=$?
+  check "$what: the add-on's update is refused" "$rc" "4"
+  contains "  in words" "$out" "Left as it is"
+  check "  and the file is as the person left it" "$(cat "$A/due/$slug.md")" "$before"
+  contains "  state says it was touched" "$(st "$slug")" '"touched":true'
+}
+touchcase by-hand "the person changed the last day by hand" sed -i 's/^STRIP: \(.*\) 2026-12-10$/STRIP: \1 2026-12-12/' "$A/due/by-hand.md"
+touchcase new-title "the person renamed it by hand" sed -i 's/^TITLE: .*/TITLE: My own words/' "$A/due/new-title.md"
+touchcase target "the person set a day to aim for" ad target target 2026-12-01
+touchcase closed "the person closed it" ad done closed --evidence "paid it"
+touchcase dropped "the person dropped it" ad drop dropped --yes
+out="$(ad addon-update no-such-thing --addon an-addon --to 2026-12-20)"; rc=$?
+check "an update of a deadline that is not there fails" "$rc" "1"
+
 # `mc-due add` would have filed the reader's reminder there too. The order is now mc-goals' order.
 echo "which mission control"
 P() { if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else printf '%s' "$1"; fi; }

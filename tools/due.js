@@ -508,6 +508,43 @@ function windowWords(s) {
   return s.from + (s.to ? " to " + s.to + ", aiming for " + aim : ", aiming for " + aim);
 }
 const save = (o) => { CACHE.set(o.slug, o); return writeText(o.path, render(o)); };
+
+// ---------------------------------------------------------------- add-on deadlines
+// AN ADD-ON MAKES A DEADLINE, AND FROM THE MOMENT THE PERSON TOUCHES IT, IT IS THEIRS (23 October
+// 2026). A documents add-on reads a letter that says "pay by 20 November" and makes a deadline here,
+// through the notebook. It is an ordinary file in due/, so the reminders, the morning brief and the
+// deadline list treat it like any other. Three lines say whose it is: ADDON (the add-on's name),
+// ADDON-KEY (the add-on's own name for it, e.g. the letter and which request in it) and ADDON-STATE
+// (a fingerprint of the title and the windows as the add-on last wrote them). One add-on makes one
+// deadline per key, whatever it loses or however often it asks. Once the person changed the title or
+// a date, or closed or dropped it, the fingerprint no longer matches, and the add-on can never
+// change it again. The fingerprint is made from what the lines say, not how they are laid out, so
+// another reader writing the file back in its own shape (another heading, its SAID lines) is no
+// change.
+const ADDON_NAME = /^[a-z0-9][a-z0-9-]{0,39}$/;
+const ADDON_KEY = /^[A-Za-z0-9][A-Za-z0-9._:#/-]{0,119}$/;
+function addonState(o) {
+  const what = [String(o.head["TITLE"] || "").trim(), o.strips.map((s) => [s.from, s.to || "", s.target || "", s.moved || ""])];
+  return require("crypto").createHash("sha256").update(JSON.stringify(what)).digest("hex").slice(0, 16);
+}
+function addonTouched(o) {
+  if (!o || o.problem || o.dropped) return true;
+  if (o.strips.some((s) => s.state !== "open")) return true;
+  return addonState(o) !== String(o.head["ADDON-STATE"] || "").trim();
+}
+function addonOf(o) {
+  if (!o || !o.head || !String(o.head["ADDON"] || "").trim()) return null;
+  const s = o.strips[0] || {};
+  return { name: o.head["ADDON"].trim(), key: String(o.head["ADDON-KEY"] || "").trim(), touched: addonTouched(o),
+           due: s.to || "", from: s.from || "", link: String(o.head["LINK"] || "").trim() };
+}
+function findAddon(name, key) {
+  for (const slug of slugs()) {
+    const o = parseFile(slug);
+    if (o && String(o.head["ADDON"] || "").trim() === name && String(o.head["ADDON-KEY"] || "").trim() === key) return o;
+  }
+  return null;
+}
 const logLine = (o, day, t) => o.log.push("- " + day + " " + t);
 
 function currentWindow(o, day) {
@@ -806,6 +843,10 @@ function help() {
   mc-due state [--json]          open or not, for every one, and what closed it
   mc-due --godspeed PATH              a mission control somewhere else
 
+An add-on makes its deadlines through the notebook (add --addon NAME --addon-key KEY, and
+addon-update NAME --addon NAME --to/--title). Once you change or close one, it is yours and the
+add-on can no longer change it.
+
 Without --godspeed it works on the mission control your assistant was started in, else the one
 you are standing in, else GODSPEED_DIR, else the one this computer was joined to.
 
@@ -884,6 +925,15 @@ function cmdList(day, capped) {
 function cmdAdd(day) {
   const slug = slugify(args[1] || "");
   if (!slug) { console.log("Give it a short name:  mc-due add tax --title ..."); return 1; }
+  // Made by an add-on: its name and its own key for it, both or neither. A key it used before is
+  // the deadline it already has, never a second one (see "add-on deadlines" above).
+  const addon = argOf("--addon", ""), addonKey = argOf("--addon-key", "");
+  if (addon || addonKey || has("--addon") || has("--addon-key")) {
+    if (!ADDON_NAME.test(addon)) { console.log("--addon is the add-on's name: small letters, digits and dashes, at most 40."); return 1; }
+    if (!ADDON_KEY.test(addonKey)) { console.log("--addon-key is the add-on's own name for this deadline: letters, digits and . _ : # / -, no spaces, at most 120."); return 1; }
+    const mine = findAddon(addon, addonKey);
+    if (mine) { console.log("Kept " + mine.slug + ": " + addon + " made it before."); return 0; }
+  }
   // Say how to change the one that exists. A practice run met the bare refusal by adding a second
   // tax return beside the wrong one, which left two things reminding about one date.
   if (fs.existsSync(filePath(slug))) {
@@ -936,9 +986,14 @@ function cmdAdd(day) {
     head: {
       "TITLE": argOf("--title", slug), "DONE-WHEN": doneWhen, "COST-IF-MISSED": cost,
       "SELF-CHECK": sc, "SELF-CHECK-ARG": argOf("--self-check-arg", ""),
-      "REPEATS": repeats, "LINK": argOf("--link", ""), "SOURCE": "you, " + day,
+      "REPEATS": repeats, "LINK": argOf("--link", ""), "SOURCE": (addon ? addon : "you") + ", " + day,
     } };
-  logLine(o, day, "created, window " + windowWords(o.strips[0]));
+  if (addon) {
+    o.head["ADDON"] = addon;
+    o.head["ADDON-KEY"] = addonKey;
+    o.head["ADDON-STATE"] = addonState(o);
+  }
+  logLine(o, day, "created" + (addon ? " by " + addon : "") + ", window " + windowWords(o.strips[0]));
   if (!save(o)) return 1;
   const b0 = bandFor(o.strips[0], day);
   if (to) {
@@ -1050,6 +1105,36 @@ function cmdTarget(day) {
   return 0;
 }
 
+// ADDON-UPDATE. The add-on's own deadline, while nobody else touched it: a new last day (a letter's
+// date was corrected) and/or a new title. Exit 4 when the person changed or closed it: it is theirs.
+function cmdAddonUpdate(day) {
+  const slug = args[1], addon = argOf("--addon", ""), to = argOf("--to", ""), title = argOf("--title", "");
+  if (!slug || !addon) { console.log("Which one, and whose?  mc-due addon-update <name> --addon <add-on> [--to YYYY-MM-DD] [--title \"...\"]"); return 1; }
+  roll(day);
+  const o = parseFile(slug);
+  if (!o) { console.log("You have nothing called " + slug + "."); return 1; }
+  if (String(o.head["ADDON"] || "").trim() !== addon) { console.log(slug + " was not made by " + addon + ", so " + addon + " cannot change it."); return 1; }
+  if (addonTouched(o)) { console.log("Left as it is: " + slug + " was changed or closed by you, so it is yours now."); return 4; }
+  if (!to && !title) { console.log("Say what changes: --to YYYY-MM-DD, --title \"...\", or both."); return 1; }
+  if (to && !isDate(to)) { console.log("Every date is written year first, like 2027-03-14."); return 1; }
+  if (title && (/[\r\n]/.test(title) || title.trim().length > 300)) { console.log("Give the title in one line."); return 1; }
+  const s = o.strips[0];
+  if (to && to !== s.to) {
+    const old = s.to;
+    s.to = to;
+    if (s.from > to) s.from = to;
+    logLine(o, day, "moved by " + addon + ": the last day " + (old || "-") + " is now " + to);
+  }
+  if (title && title.trim() !== String(o.head["TITLE"] || "").trim()) {
+    o.head["TITLE"] = title.trim();
+    logLine(o, day, "renamed by " + addon);
+  }
+  o.head["ADDON-STATE"] = addonState(o);
+  if (!save(o)) return 1;
+  console.log("Updated " + slug + ": " + (o.head["TITLE"] || slug) + ", window " + windowWords(s) + ".");
+  return 0;
+}
+
 function cmdDrop() {
   const slug = args[1];
   if (!slug) { console.log("Which one?  mc-due drop <name> --yes"); return 1; }
@@ -1111,9 +1196,11 @@ function cmdCheck(day) {
 function stateRows(day=today(),mutate=false) {
   return load(day,mutate).map((r) => {
     // Never closed and never open: nothing about it can be known until it is fixed.
+    // A deadline an add-on made says whose it is, its key, and whether the person touched it.
+    const addon = addonOf(r.o);
     if (r.problem) return { slug: r.slug, title: r.title, band: r.band, attention: true, sentence: lookSentence(r),
       state: "needs-a-look", problem: r.problem, file: fileOf(r), firstDay: "", lastDay: "", doneWhen: "", closedOn: "",
-      closedBy: "", selfCheck: "none" };
+      closedBy: "", selfCheck: "none", ...(addon ? { addon } : {}) };
     const last = r.o.strips.filter((s) => s.state !== "open").sort((a, b) => (a.closed < b.closed ? -1 : 1)).pop();
     return {
       slug: r.slug, title: r.title, band:r.band, attention:!!r.strip&&sayable(r,day), sentence:r.strip?sentence(r,day):null, state: r.band === "unopened" ? "unopened" : r.strip ? "open" : r.band,
@@ -1122,6 +1209,7 @@ function stateRows(day=today(),mutate=false) {
       doneWhen: (r.o.head["DONE-WHEN"] || "").trim(), closedOn: last ? last.closed : "", closedBy: last ? last.by : "",
       // Anything but "none" closes itself in `mc-due check`, so the stop check never guesses at it.
       selfCheck: (r.o.head["SELF-CHECK"] || "").trim().toLowerCase() || "none",
+      ...(addon ? { addon } : {}),
     };
   });
   }
@@ -1179,6 +1267,7 @@ switch (cmd) {
   case "check": rc = cmdCheck(day); break;
   case "state": rc = cmdState(day); break;
   case "marker": rc = cmdMarker(day); break;
+  case "addon-update": rc = cmdAddonUpdate(day); break;
   // The notebook's due recipe tells the assistant `mc-due help` shows the installed contract.
   case "help": help(); break;
   default: console.log("I do not know \"" + cmd + "\"."); help(); rc = 1;
