@@ -21,7 +21,10 @@ const WAITING = new Set(['pending', 'pending_review']);
 
 const gone = note => !note || !!note.is_trashed || !!note.removed_at;
 const textOf = note => String(note?.title ?? '') + '\n' + String(note?.content ?? '');
-const holds = (note, quote) => typeof quote === 'string' && quote.trim() !== '' && textOf(note).includes(quote);
+// Words compared as words: an editor that saves the same text again may wrap a line, escape a dot
+// or a bracket, or mark a word with stars or underscores, and that takes no sentence out of a note.
+const plain = text => String(text).normalize('NFC').replace(/\\([\\`*_{}[\]()#+\-.!|<>~])/g, '$1').replace(/[*_`]/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
+const holds = (note, quote) => typeof quote === 'string' && plain(quote) !== '' && plain(textOf(note)).includes(plain(quote));
 
 // Whether a change from `before` to `after` can touch the note's suggestions at all.
 export const touchesSuggestions = (before, after) => !!before && (gone(before) !== gone(after) || textOf(before) !== textOf(after));

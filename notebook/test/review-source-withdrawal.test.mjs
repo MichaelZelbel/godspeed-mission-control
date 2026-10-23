@@ -136,3 +136,11 @@ test('one write that trashes the note and also changes a suggestion keeps both c
   assert.equal(after.status, 'withdrawn');
   assert.equal(after.snoozed_until, until);
 });
+
+test('the same words saved again with other line breaks, escapes or emphasis withdraw nothing', async () => {
+  const ctx = setup(), {note} = ctx;
+  await process(ctx, note);
+  // An editor that saves the note again may wrap a line, escape a dot or mark a word.
+  door(ctx, note, {content: 'I moved to *Leipzig* in May.\nWe go climbing\non Monday the 12th\. Fictional Ben lent me  his rope.'});
+  assert.deepEqual(items(ctx, note).map(r => r.status), ['pending_review', 'pending_review', 'pending_review']);
+});
