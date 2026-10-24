@@ -65,6 +65,8 @@ jobs:
           python3 notebook/test/addon-model-python.py
       - name: The Review page gets each thing once, and the shipped suggestion cases get their right answers
         run: node notebook/scripts/run-tests.mjs notebook/test/suggestion-cases.test.mjs notebook/test/same-thing.test.mjs notebook/test/review-suggestions-mcp.test.mjs notebook/test/review-kind.test.mjs notebook/test/note-processing.test.mjs notebook/test/review-source-withdrawal.test.mjs notebook/test/field-names.test.mjs notebook/test/memory-subject.test.mjs
+      - name: An assistant's hashes and lists arrive as the tools declare them, and a changed record still needs its current hash
+        run: node notebook/scripts/run-tests.mjs notebook/test/mcp-object-arguments.test.mjs notebook/test/tracker-talk.test.mjs notebook/test/trackers-mcp.test.mjs notebook/test/food-mcp.test.mjs notebook/test/cycle-mcp.test.mjs notebook/test/assistant-control-records.test.mjs
       - name: Clearing chat starts a fresh conversation and keeps earlier messages archived
         run: node notebook/scripts/run-tests.mjs notebook/test/chat-reset.test.mjs notebook/test/conversation-state.test.mjs notebook/test/scoped-chat-state.test.mjs
       - name: Installers and setup, without Docker

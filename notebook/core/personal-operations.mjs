@@ -18,6 +18,7 @@ import {foodOperation,foodTracker} from './food-operations.mjs';
 import {mealOf} from './food.mjs';
 import {CYCLE_WORDS,PERIOD_WORDS,OVER_WORDS,FLOW_WORDS,WHERE_WORDS,SYMPTOMS} from './cycle.mjs';
 import {nextCalendarRun} from './jobs/calendar.mjs';
+import {expectedHash} from './expected-hash.mjs';
 import {resumeChanges} from './jobs/routine-control.mjs';
 import {readTable} from '../../third-party/addons/godspeed-coach/lib/auto.mjs';
 import {visibleRows} from './visibility.mjs';
@@ -160,7 +161,7 @@ export function personalOperation(domains,input){
  if(type==='lead-command')return leadCommand(domains,input.args);
  if(type==='radar-command')return radarCommand(domains,input.args);
  if(['obligation-complete','obligation-snooze'].includes(type)){
-  const native=dueRows(store).find(d=>d.id===input.id);if(native){if(input.expected&&input.expected!==native._hash)throw Error('Obligation changed; reload before saving');
+  const native=dueRows(store).find(d=>d.id===input.id);if(native){if(input.expected&&expectedHash(input,'deadlines',native.id,input.id)!==native._hash)throw Error('Obligation changed; reload before saving');
    if(type==='obligation-complete'){required(input.evidence,'Completion evidence');return dueCommand(store,['done',native.native_slug,'--evidence',input.evidence]);}
    return dueCommand(store,['target',native.native_slug,date(input.until,'New target').slice(0,10)]);
   }
@@ -197,7 +198,7 @@ export function personalOperation(domains,input){
  if(type==='cycle')return cycleOperation(domains,input);
  // The food tracker: a specialist on the tracker base (food-operations.mjs).
  if(type==='food')return foodOperation(domains,input);
- const old=table=>{const r=store.get(table,required(input.id,'Record ID'));if(!r||r.removed_at)throw Error('Record does not exist');if(input.expected&&input.expected!==r._hash)store.conflict(table,input,r);return r;};
+ const old=table=>{const r=store.get(table,required(input.id,'Record ID'));if(!r||r.removed_at)throw Error('Record does not exist');if(input.expected&&expectedHash(input,table,r.id,input.id)!==r._hash)store.conflict(table,input,r);return r;};
  if(type==='goal-add'){
   const title=required(input.title,'Goal'),status=input.status||'adopted';if(!['adopted','provisional'].includes(status))throw Error('Choose adopted or provisional');
   const existing=query.rows('goals').find(g=>g.title===title&&!g.removed_at);if(existing)return existing;
