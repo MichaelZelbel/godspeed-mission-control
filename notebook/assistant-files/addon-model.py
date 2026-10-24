@@ -15,6 +15,7 @@ can do none of this, since godspeed-model accepts no such field.
 """
 import contextlib
 import io
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -175,6 +176,12 @@ def main():
     # The caller controls only text and bounded budgets. Connection settings and
     # credentials come exclusively from the installation's verified Hermes home.
     payload = json.loads(sys.stdin.read(600001))
+    # Hermes' managed Python has no virtual environment. Its own bootstrap loads the
+    # selected dependency generation from the source root named by the verified launcher.
+    # A broken bootstrap must fail this request, never select another runtime or account.
+    if importlib.util.find_spec("hermes_bootstrap") is not None:
+        with contextlib.redirect_stdout(io.StringIO()):
+            import hermes_bootstrap  # noqa: F401
     load_host_environment()
     from hermes_cli.config import load_config_readonly
     from hermes_cli.runtime_provider import resolve_runtime_provider, _get_named_custom_provider, expand_direct_api_alias

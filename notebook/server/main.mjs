@@ -85,7 +85,7 @@ export function userFacing(error, roots = []) {
   message = message.replace(/[A-Za-z]:[\\/][^\s'"]*|\\\\[^\s'"]+|(?<![\w.])\/(?:home|opt|root|var|tmp|Users|srv|data|mnt|etc|private)\/[^\s'"]*/g, '[path]');
   return message || null;
 }
-export async function createService({ root, mediaRoot, host = '127.0.0.1', port = 47831, webPort, token, uiRoot, provider, device = 'local', authNow } = {}) {
+export async function createService({ root, mediaRoot, host = '127.0.0.1', port = 47831, webPort, localPort, token, uiRoot, provider, device = 'local', authNow } = {}) {
   // The store keeps every record in memory and re-reads only the files its
   // watcher names; the index follows the store's changes row by row.
   const store = new Store(root,{device,watch:true}), index = new SearchIndex(store,{background:true}), query = new QueryService(store), sync = new FileSync(store);
@@ -630,7 +630,17 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   // editor) bring the assistant's own identity file in step with them (assistant-soul.mjs).
   let soulDebounce;const followPersona=()=>{clearTimeout(soulDebounce);soulDebounce=setTimeout(()=>{try{shelf.followPersona();}catch{}},2000);soulDebounce.unref?.();};
   const rootWatcher=fs.watch(store.root,(event,name)=>{if(durableRoots.includes(name)){watchRoot(name);changed(name)(event,null);}else if(durableFiles.includes(name)){changed('')(event,name);if(name==='AGENTS.md')followPersona();}});
-  return { server, store, index, query, domains, scheduler, sync, mediaSync,address: server.address(), webAddress: webServer?.address() || null, close: async () => { index.meaning?.close(); index.expansionWorker?.close(); if (webServer) await new Promise(resolve => webServer.close(resolve)); clearInterval(meaningTimer);clearInterval(processingTimer);clearInterval(backupTimer);clearInterval(factTimer);stopIndexing();store.unwatch();githubSignIn.close();planSignIn?.cancel();clearTimeout(soulDebounce);await syncRunner.close();await menerioImport.close();rootWatcher.close();for(const watcher of watchers.values())watcher.close();clearTimeout(debounce);clearTimeout(indexDebounce);clearInterval(telegramTimer);clearInterval(interval);clearInterval(jobs);clearInterval(syncTimer);clearInterval(mediaTimer); await new Promise(resolve => server.close(resolve)); await index.close(); } };
+  let localServer = null;
+  const close = async () => { index.meaning?.close(); index.expansionWorker?.close(); if (localServer) await new Promise(resolve => localServer.close(resolve)); if (webServer) await new Promise(resolve => webServer.close(resolve)); clearInterval(meaningTimer);clearInterval(processingTimer);clearInterval(backupTimer);clearInterval(factTimer);stopIndexing();store.unwatch();githubSignIn.close();planSignIn?.cancel();clearTimeout(soulDebounce);await syncRunner.close();await menerioImport.close();rootWatcher.close();for(const watcher of watchers.values())watcher.close();clearTimeout(debounce);clearTimeout(indexDebounce);clearInterval(telegramTimer);clearInterval(interval);clearInterval(jobs);clearInterval(syncTimer);clearInterval(mediaTimer); await new Promise(resolve => server.close(resolve)); await index.close(); };
+  // A container's main door listens on its network interface and always needs sign-in.
+  // Add-ons and tools in that same container may use this opt-in, loopback-only door,
+  // with the exact Host/Origin guards and API contract of a native local installation.
+  if (localPort !== undefined && localPort !== null) {
+    localServer = http.createServer(handle(false, new WebAuth(store.state, { token, remote: false, now: authNow })));
+    try { await listen(localServer, Number(localPort), '127.0.0.1'); }
+    catch (error) { await close(); throw error; }
+  }
+  return { server, store, index, query, domains, scheduler, sync, mediaSync,address: server.address(), webAddress: webServer?.address() || null, localAddress: localServer?.address() || null, close };
 }
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const root = process.env.GODSPEED_WORKSPACE;
@@ -644,7 +654,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   process.on('uncaughtException', error => { console.error('Godspeed Mission Control: uncaughtException, the server restarts:', error); process.exit(1); });
   // This machine's own name, never one shared by every PC (device-id.mjs).
   const {machineDevice,claimLegacyOwner}=await import('../core/device-id.mjs'),device=machineDevice(root);
-  const service = await createService({ root, mediaRoot: process.env.GODSPEED_MEDIA_ROOT, host: process.env.GODSPEED_BIND || '127.0.0.1', port: Number(process.env.GODSPEED_PORT || 47831), webPort: process.env.GODSPEED_WEB_PORT || undefined, token: process.env.GODSPEED_ACCESS_TOKEN,device:device.id });
+  const service = await createService({ root, mediaRoot: process.env.GODSPEED_MEDIA_ROOT, host: process.env.GODSPEED_BIND || '127.0.0.1', port: Number(process.env.GODSPEED_PORT || 47831), webPort: process.env.GODSPEED_WEB_PORT || undefined, localPort: process.env.GODSPEED_LOCAL_PORT || undefined, token: process.env.GODSPEED_ACCESS_TOKEN,device:device.id });
   // At start, and on any later tick that finds the old shared name as the owner.
   const claim=service.scheduler.claimLegacy=async()=>{if(await claimLegacyOwner(service.store,device))console.log('This machine ('+device.id+') now runs the routines the old shared name "local" ran');};
   try{await claim();}catch(error){console.error('The routines of the old shared name "local" could not be taken over: '+error.message);}

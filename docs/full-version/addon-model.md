@@ -84,6 +84,30 @@ inside the existing container. The launcher opens no network port and forwards n
 credential. It refuses another workspace, service or executable. An existing
 global `godspeed-model` command belonging to a native installation is preserved.
 
+For a native Hermes installation, Godspeed follows the verified assistant launcher to
+its own Python and source folder. When that installation uses Hermes' package manager,
+its own bootstrap selects its installed dependencies before the helper reads the current
+home's model settings. No alternate interpreter, provider or login is selected.
+
+## The local notebook API in Docker
+
+The integrated Docker image sets `GODSPEED_LOCAL_PORT=47832`. This opens a second
+notebook API listener on `127.0.0.1` **inside the Godspeed container only**. It shares
+the running notebook's store and the native local API contract: notes, collections and
+`addon-deadlines` use the same routes and protections. Requests must use a local Host;
+cross-origin browser requests are refused.
+
+This port must never be published by Compose or proxied through the public HTTPS server.
+A host add-on reaches it through the installation's fixed `godspeed` service with
+`docker compose exec -T`, sending the request body over standard input. It does not copy
+the owner's session or bearer credentials. The existing network-facing notebook port
+47831 still requires owner sign-in, even for a loopback request to that port.
+
+The extra listener is opt-in outside the Docker image: `GODSPEED_LOCAL_PORT` names its
+port. Native installations keep their existing local API on 47831 without an extra
+listener. This Docker local door is a next-build capability; the beta.5 image does not
+have it.
+
 ## Notes an add-on writes
 
 An add-on writes notes the way the notebook's own screens do, through the door that answers

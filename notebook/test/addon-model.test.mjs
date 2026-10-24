@@ -22,6 +22,16 @@ test('the packaged server runtime uses its own virtual environment and source ro
  const f=fixture(t),bin=path.join(f.runtime,'bin'),venv=path.join(f.runtime,'.venv','bin');fs.mkdirSync(bin,{recursive:true});fs.mkdirSync(venv,{recursive:true});fs.writeFileSync(path.join(venv,'python3'),'');
  fs.writeFileSync(path.join(f.state,'assistant.json'),JSON.stringify({verified:true,home:f.home,executable:path.join(bin,'hermes')}));const connection=modelConnection(f.root);assert.equal(connection.python,path.join(venv,'python3'));assert.equal(connection.sourceRoot,f.runtime);
 });
+test('an add-on follows the native package-manager Hermes launcher to its own Python and source',t=>{
+ const f=fixture(t),source=path.join(f.home,'hermes-agent'),python=path.join(f.home,'tools','python-current','bin','python3');
+ const put=(file,text='')=>{fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,text);return file;};
+ put(python);put(path.join(source,'hermes_cli','__init__.py'));
+ const inner=put(path.join(source,'.hermes','bin','hermes'),"#!/bin/sh\nexec \""+python+"\" -I -c 'import sys\nsys.path.insert(0, '\"'\"'"+source+"'\"'\"')\nimport hermes_bootstrap\n' \"$@\"\n");
+ const outer=put(path.join(f.root,'.local','bin','hermes'),'#!/bin/sh\nexec "'+inner+'" "$@"\n');
+ fs.writeFileSync(path.join(f.state,'assistant.json'),JSON.stringify({verified:true,home:f.home,executable:outer}));
+ const connection=modelConnection(f.root);
+ assert.equal(connection.python,python);assert.equal(connection.sourceRoot,source);assert.equal(connection.descriptor.home,f.home);
+});
 function fakeSpawn(reply,{code=0,delay=0,onSpawn=()=>{}}={}){
  return (executable,args,options)=>{
   const child=new EventEmitter();child.stdout=new PassThrough();child.stderr=new PassThrough();child.stdin=new PassThrough();let bytes='';child.stdin.on('data',chunk=>bytes+=chunk);
