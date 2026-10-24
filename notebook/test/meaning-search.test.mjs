@@ -49,7 +49,7 @@ test('"knee doctor" finds "Orthopäde Termin" by meaning, which words alone cann
     // A removed note's vectors go.
     store.save('notes',{id:ortho.id,removed_at:new Date().toISOString()});index.update([store.get('notes',ortho.id)]);
     await index.meaning.step();assert.ok(!(await index.searchHybrid('knee doctor')).rows.some(r=>r.id===ortho.id));
-  }finally{index.close();await service.close();}
+  }finally{await index.close();await service.close();}
 });
 
 test('the notebook connects to a service, keeps its key private, and the notes search uses words and meaning',async()=>{
@@ -78,7 +78,7 @@ test('the chat is given the notes word-and-meaning search ranks first, without a
     const kinds=[];let given;domains.provider=async input=>{kinds.push(input.kind);if(input.kind==='conversation-chat')given=input.context;return {reply:'Monday at nine.'};};
     await domains.invoke('conversation-chat',{message:'What did I note about the knee doctor?',conversation_id:'fictional'});
     assert.equal(given.notes[0].id,ortho.id);assert.match(given.retrieval.method,/meaning/);assert.ok(!kinds.includes('retrieval-expansion'));
-  }finally{index.close();await service.close();}
+  }finally{await index.close();await service.close();}
 });
 
 test('the best match by meaning is near the top even when many documents hold one of the words',async()=>{
