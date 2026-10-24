@@ -724,15 +724,31 @@ export function useIlikeSearch() {
   const { user } = useAuth();
 
   return useMutation({
-    mutationFn: async (query: string): Promise<SemanticSearchResult[]> => {
+    mutationFn: async (input: string | { query: string; signal?: AbortSignal; complete?: boolean; onWords?: (rows:SemanticSearchResult[])=>void }): Promise<SemanticSearchResult[]> => {
+      const {query,signal,complete,onWords}=typeof input==='string'?{query:input,signal:undefined,complete:false,onWords:undefined}:input;
       const q = query.toLowerCase();
       const terms = extractSearchTerms(query);
       if (isLocalFirstActive()) {
         const notes = await searchNotesLocal(user!.id, q, terms);
         return rankNotesByTerms(notes, q, terms).map((n) => ({ ...n, similarity: null }));
       }
-      const notes = await fetchKeywordCandidates(user!.id, q, terms);
-      return rankNotesByTerms(notes, q, terms).map((n) => ({ ...n, similarity: null }));
+      const checkCancelled=()=>{if(signal?.aborted)throw signal.reason||new DOMException('Search cancelled.','AbortError');};
+      const request=async(expand=false):Promise<SemanticSearchResult[]>=>{
+        checkCancelled();
+        const response=await fetch('/api/search?'+new URLSearchParams({q:query,types:'notes',mode:'words',format:'notes',limit:'50',...(expand?{expand:'1'}:{})}),{signal});
+        const result=await response.json();checkCancelled();if(!response.ok)throw new Error(result.error||'Search could not reach the server.');
+        const notes=result.data as Note[];
+        // The word index established body matches even when their text is
+        // beyond the compact preview. Rank titles without dropping those hits.
+        const ranked=rankNotesByTerms(notes.map(n=>({...n,content:(n as any).content_preview||(n as any).snippet||''})),q,terms);
+        const order=new Map(ranked.map((n,i)=>[n.id,i]));
+        return [...notes].sort((a,b)=>(order.get(a.id)??ranked.length)-(order.get(b.id)??ranked.length)).map(n=>({...n,similarity:null}));
+      };
+      const words=await request();onWords?.(words);
+      // Exact search also finds words inside compounds. That slower scan runs
+      // in the search worker, after already showing the indexed word matches.
+      if(complete)try{return await request(true);}catch(error){if(signal?.aborted)throw error;}
+      return words;
     },
   });
 }
@@ -747,16 +763,19 @@ export function useSemanticSearch() {
       threshold = 0.5,
       limit = 20,
       scope = "all",
+      signal,
     }: {
       query: string;
       threshold?: number;
       limit?: number;
       scope?: "all" | "notes" | "media";
+      signal?: AbortSignal;
     }): Promise<{ results: SemanticSearchResult[]; mode: string }> => {
       const res = await supabase.functions.invoke("search-notes-semantic", {
         // caller: 'app' keeps hidden-from-AI notes in local search results.
         // MCP server passes caller: 'mcp' itself to filter them out.
         body: { query, threshold, limit, scope, caller: "app" },
+        signal,
       });
       if (res.error) throw res.error;
       // Trigger credits refresh after semantic search

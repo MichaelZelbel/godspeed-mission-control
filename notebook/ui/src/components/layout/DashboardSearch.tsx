@@ -125,31 +125,33 @@ export function DashboardSearch() {
 
   // Debounced search - both passes feed one stable, append-only list
   useEffect(() => {
+    // Invalidate and cancel the previous query before the debounce starts:
+    // its slow meaning response must never appear under freshly typed text.
+    const reqId = ++requestIdRef.current;
+    const controller = new AbortController();
+    setVisible([]);
     if (!query.trim()) {
-      requestIdRef.current += 1;
-      setVisible([]);
       setStatus("idle");
-      return;
+      return () => controller.abort();
     }
 
     setStatus("pending");
 
     const timer = setTimeout(async () => {
-      const reqId = ++requestIdRef.current;
-      setVisible([]);
       setStatus("running");
 
       // Either pass may fail on its own; only when both do is the empty list
       // a failure rather than "No results found".
       let failures = 0;
       try {
-        const ilike = await ilikeSearch.mutateAsync(query);
+        const ilike = await ilikeSearch.mutateAsync({query,signal:controller.signal});
         if (requestIdRef.current !== reqId) return;
         commit((prev) => pinTitleHits(mergeStable(prev, ilike, MAX_RESULTS), query));
       } catch { failures += 1; }
+      if(controller.signal.aborted)return;
 
       try {
-        const res = await semanticSearch.mutateAsync({ query, limit: MAX_RESULTS, threshold: 0.25 });
+        const res = await semanticSearch.mutateAsync({ query, limit: MAX_RESULTS, threshold: 0.25, signal:controller.signal });
         if (requestIdRef.current !== reqId) return;
         // Append-only: rows already rendered keep their exact position so a row
         // can never jump out from under the user's cursor mid-click.
@@ -159,7 +161,7 @@ export function DashboardSearch() {
       if (requestIdRef.current === reqId) setStatus(failures === 2 ? "failed" : "done");
     }, 150);
 
-    return () => clearTimeout(timer);
+    return () => {clearTimeout(timer);controller.abort();};
   }, [query, commit, setVisible]);
 
   const selectNote = useCallback((noteId: string) => {
