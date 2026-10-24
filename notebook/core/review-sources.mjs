@@ -24,6 +24,8 @@ const textOf = note => String(note?.title ?? '') + '\n' + String(note?.content ?
 // Words compared as words: an editor that saves the same text again may wrap a line, escape a dot
 // or a bracket, or mark a word with stars or underscores, and that takes no sentence out of a note.
 const plain = text => String(text).normalize('NFC').replace(/\\([\\`*_{}[\]()#+\-.!|<>~])/g, '$1').replace(/[*_`]/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
+// The same comparison tells whether a note processed again quoted words it already had (suggestion-filter.mjs).
+export const plainWords = plain;
 const holds = (note, quote) => typeof quote === 'string' && plain(quote) !== '' && plain(textOf(note)).includes(plain(quote));
 
 // Whether a change from `before` to `after` can touch the note's suggestions at all.

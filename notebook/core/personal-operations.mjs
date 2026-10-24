@@ -18,9 +18,12 @@ import {foodOperation,foodTracker} from './food-operations.mjs';
 import {mealOf} from './food.mjs';
 import {CYCLE_WORDS,PERIOD_WORDS,OVER_WORDS,FLOW_WORDS,WHERE_WORDS,SYMPTOMS} from './cycle.mjs';
 import {nextCalendarRun} from './jobs/calendar.mjs';
+import {expectedHash} from './expected-hash.mjs';
 import {resumeChanges} from './jobs/routine-control.mjs';
 import {readTable} from '../../third-party/addons/godspeed-coach/lib/auto.mjs';
 import {visibleRows} from './visibility.mjs';
+import {screenSuggestions,knownRecords} from './suggestion-filter.mjs';
+import {fieldList} from './fields.mjs';
 import {checkOutboundURL} from './outbound-fetch.mjs';
 export const operationContract=`Return JSON {reply,language,notes_created?:[{title,content}],operations?:[{type,source_quote,...fields}]}. language is the two-letter code of the language the user's current message is written in (en, de, ...); write reply in that language. Use an operation only when the user's current message explicitly requests that change. source_quote must be exact user words requesting it, never a note quote. Supported operations:
 goal-add {title,measure,status?:adopted|provisional}; goal-change {id,title?,measure?,lead?:"<what is counted> | total or per week | <where it is read>",status?:adopted|provisional|paused|achieved|retired,reason}; goal-outcome {id,evidence,value?,outcome};
@@ -158,7 +161,7 @@ export function personalOperation(domains,input){
  if(type==='lead-command')return leadCommand(domains,input.args);
  if(type==='radar-command')return radarCommand(domains,input.args);
  if(['obligation-complete','obligation-snooze'].includes(type)){
-  const native=dueRows(store).find(d=>d.id===input.id);if(native){if(input.expected&&input.expected!==native._hash)throw Error('Obligation changed; reload before saving');
+  const native=dueRows(store).find(d=>d.id===input.id);if(native){if(input.expected&&expectedHash(input,'deadlines',native.id,input.id)!==native._hash)throw Error('Obligation changed; reload before saving');
    if(type==='obligation-complete'){required(input.evidence,'Completion evidence');return dueCommand(store,['done',native.native_slug,'--evidence',input.evidence]);}
    return dueCommand(store,['target',native.native_slug,date(input.until,'New target').slice(0,10)]);
   }
@@ -195,7 +198,7 @@ export function personalOperation(domains,input){
  if(type==='cycle')return cycleOperation(domains,input);
  // The food tracker: a specialist on the tracker base (food-operations.mjs).
  if(type==='food')return foodOperation(domains,input);
- const old=table=>{const r=store.get(table,required(input.id,'Record ID'));if(!r||r.removed_at)throw Error('Record does not exist');if(input.expected&&input.expected!==r._hash)store.conflict(table,input,r);return r;};
+ const old=table=>{const r=store.get(table,required(input.id,'Record ID'));if(!r||r.removed_at)throw Error('Record does not exist');if(input.expected&&expectedHash(input,table,r.id,input.id)!==r._hash)store.conflict(table,input,r);return r;};
  if(type==='goal-add'){
   const title=required(input.title,'Goal'),status=input.status||'adopted';if(!['adopted','provisional'].includes(status))throw Error('Choose adopted or provisional');
   const existing=query.rows('goals').find(g=>g.title===title&&!g.removed_at);if(existing)return existing;
@@ -249,7 +252,12 @@ export function personalOperation(domains,input){
   const subject=memorySubject(domains,input);
    if(type==='memory-confirm')return domains.writeFact({...subject,label:required(input.label,'Fact label'),...memoryCorrection(domains,input,subject),value:required(input.value,'Fact value'),source_type:'conversation',source_id:input.source_id,evidence_quote:input.evidence_quote});
   const fingerprint=hash([input.source_id,subject.subject_type,subject.subject_id,input.label,input.value]);const existing=query.rows('review_queue').find(r=>r.fingerprint===fingerprint);if(existing)return existing;
-  return store.save('review_queue',{title:'Remember '+required(input.label,'Fact label'),suggestion_type:'add_claim',payload:{...subject,label:input.label,value:required(input.value,'Fact value'),source_type:'conversation',source_id:input.source_id,evidence_quote:input.evidence_quote},description:input.evidence_quote,status:'pending_review',fingerprint,origin:'conversation'});
+  const proposal={title:'Remember '+required(input.label,'Fact label'),suggestion_type:'add_claim',payload:{...subject,label:input.label,value:required(input.value,'Fact value'),source_type:'conversation',source_id:input.source_id,evidence_quote:input.evidence_quote},description:input.evidence_quote,status:'pending_review',fingerprint,origin:'conversation'};
+  // A fact the notebook already has, or one suggested before in other words, is not asked again
+  // (same-thing.mjs); the answer says which.
+  const screened=screenSuggestions([{...proposal,type:'add_claim',evidence_quote:input.evidence_quote}],knownRecords(query),{fields:fieldList(store.root)});
+  if(screened.dropped.length){const why=screened.dropped[0];return {saved:false,reason:why.reason,message:(why.reason==='known_fact'?'Already remembered':'Already suggested before')+' ('+why.detail+')'};}
+  return store.save('review_queue',proposal);
  }
  // A resume passes the same review guard as the routine controls (resumeChanges).
  if(type==='routine-change'){const j=old('jobs');if(input.paused!==undefined&&typeof input.paused!=='boolean')throw Error('Pause must be true or false');if(input.calendar&&(!/^([01]\d|2[0-3]):[0-5]\d$/.test(input.calendar.time)||input.calendar.weekdays?.some(d=>!Number.isInteger(d)||d<0||d>6)))throw Error('Calendar needs a valid local time and weekdays');const settings=store.get('settings','installation')||{};return store.save('jobs',{id:j.id,...(input.paused!==undefined?{paused:input.paused}:{}),...(input.calendar?{calendar:input.calendar,next_run:nextCalendarRun({...j,calendar:input.calendar},settings.timezone||'UTC')}:{}),...(input.paused===false?resumeChanges(store,settings,j):{})},j._hash);}

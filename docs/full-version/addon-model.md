@@ -182,3 +182,80 @@ In the file, three lines say whose a deadline is: `ADDON`, `ADDON-KEY` and `ADDO
 fingerprint of its title and dates as the add-on last wrote them. `mc-due add --addon <name>
 --addon-key <key>` and `mc-due addon-update` are the commands behind the door; an add-on uses the
 door, which runs them under the notebook's lock in the right mission control.
+
+## A web address for an add-on
+
+On a Linux server installed with Godspeed's Mac and Linux installer, the notebook's web address
+comes from Caddy: Godspeed's own (the `godspeed-https` service, whose configuration the installer
+writes whole on every update) or the server's own (`caddy.service`, to which the installer adds the
+notebook's site, `/etc/caddy/godspeed-notebook.caddy`). Both read the folder
+`/etc/caddy/godspeed-addons/`. An add-on that needs a web address writes a file of its own there and
+never edits a Caddy file that Godspeed or the server's owner writes. Godspeed never writes in the
+folder, and an update never takes a file out of it.
+
+There are two kinds of file. Name each after the add-on and end it in `.caddy`.
+
+**A site of its own**, in `/etc/caddy/godspeed-addons/<add-on>.caddy`: the server's name with a port
+of its own, or a name of its own, never the notebook's own address (Caddy refuses two sites for one
+address).
+
+```caddy
+# The invented archive's web address. your-add-on writes this file.
+srv1.example.com:48444 {
+	reverse_proxy 127.0.0.1:8000
+}
+```
+
+**Paths on the notebook's own address**, in `/etc/caddy/godspeed-addons/paths/<add-on>.caddy`, such
+as `https://srv1.example.com/your-add-on/` (with the notebook's port, `:48443`, where the server's
+Caddy already served that name). Caddy handles them before the notebook's own pages, so
+put everything in a `handle_path` or `handle` block under a path with the add-on's name, and never
+take a path the notebook uses.
+
+Such a path is open to anyone who has the address. To show it only to whoever is signed in to the
+notebook, ask the notebook's web door first: its `/api/session` answers 200 for a visit that is
+signed in and 401 otherwise. The web door is `127.0.0.1:47833` unless the installation chose another
+port; the `reverse_proxy` line in the notebook's site names it. A visit that is not signed in is sent
+to the notebook's address, which asks for the sign-in:
+
+```caddy
+# your-add-on's pictures, for whoever is signed in to the notebook. your-add-on writes this file.
+redir /your-add-on /your-add-on/ 308
+handle_path /your-add-on/* {
+	forward_auth 127.0.0.1:47833 {
+		uri /api/session
+		@signin status 401
+		handle_response @signin {
+			redir * / 302
+		}
+	}
+	root * /var/lib/your-add-on/pictures
+	file_server
+}
+```
+
+Write `redir * / 302`, with the star: in `redir / 302` Caddy takes the `/` for a path to match, and a
+visit that is not signed in is let through.
+
+### Caddy takes the file
+
+Caddy reads the folder when it reads its configuration again:
+
+- When `/etc/systemd/system/godspeed-https.service` exists, Godspeed brings its own Caddy. It has no
+  admin endpoint, so a change is a restart: `systemctl restart godspeed-https.service`. A file it
+  cannot read stops it, and the notebook's address with it.
+- Otherwise it is the server's Caddy: `systemctl reload caddy`. A reload it refuses leaves it
+  serving what it served before.
+
+So check the file before Caddy takes it, with the program and the configuration the service runs:
+`caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile` for the server's Caddy, and for
+Godspeed's own the program and the `--config` file named in the `ExecStart=` line of
+`godspeed-https.service`. When the check, the reload or the restart fails, take the file out again
+and reload or restart once more. A file Caddy cannot read would also stop Godspeed's next update from
+setting the notebook's address.
+
+The installer makes the folder once Caddy reads it. A Godspeed from before this has none: the add-on
+should not make the folder itself, since nothing would read it, and should tell the user once that
+updating Godspeed gives it its address. The one-line Docker server's Caddy runs in a container of its
+own and reads no such folder, and a computer has none. When Godspeed is uninstalled its Caddy stops
+reading the folder; the folder and the add-ons' files stay.

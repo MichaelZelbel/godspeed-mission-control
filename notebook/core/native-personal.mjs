@@ -13,6 +13,7 @@ import {brief} from '../../third-party/addons/godspeed-coach/lib/brief.mjs';
 import {setHead,parseDoc,appendToSection} from '../../third-party/addons/godspeed-coach/lib/header.mjs';
 import {parseAuto} from '../../third-party/addons/godspeed-coach/lib/auto.mjs';
 import {localPath} from './local-path.mjs';
+import {expectedHash} from './expected-hash.mjs';
 import {readEntries,writeEntry} from '../../third-party/addons/godspeed-journal/lib/store.mjs';
 import {loadSettings as journalSettings,saveSettings as saveJournal} from '../../third-party/addons/godspeed-journal/lib/settings.mjs';
 import {readEntries as headacheEntries} from '../../third-party/addons/godspeed-headache/lib/store.mjs';
@@ -48,7 +49,7 @@ export function nativeOperation(store,input){
   openTalk(area,day,{opening:input.question,read:typeof input.sources==='string'?input.sources:JSON.stringify(input.sources||{})});return nativeRows(store,'coach_talks').find(t=>t.area===area.slug&&t.id.endsWith(day));
  }
  if(['coach-reply','coach-close'].includes(input.type)){
-  const talk=nativeRows(store,'coach_talks').find(t=>t.id===input.id);if(!talk)throw Error('Native coaching talk missing');if(input.expected&&input.expected!==talk._hash)throw Error('Coaching talk changed; reload before saving');
+  const talk=nativeRows(store,'coach_talks').find(t=>t.id===input.id);if(!talk)throw Error('Native coaching talk missing');if(input.expected&&expectedHash(input,'coach_talks',talk.id)!==talk._hash)throw Error('Coaching talk changed; reload before saving');
   const area=findArea(store.root,talk.area),ymd=talk.id.slice(-10);rememberFile(store,path.join(store.root,talk.native_file));
   if(input.type==='coach-reply'){if(talk.status!=='open')throw Error('Coaching talk is closed');addSaid(area,ymd,input.content);}else setTalkState(area,ymd,'held');return nativeRows(store,'coach_talks').find(t=>t.id===talk.id);
  }

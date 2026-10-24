@@ -93,8 +93,12 @@ test('an event review Undo remains append-only and refuses a later correction wi
 test('scoped MCP review Keep and Undo accept complete hashes but refuse hidden/later-edited targets',async t=>{
  const env=fixture(t),scopes=['profile','world','notes','contacts','actions','media','stats','collections'],scoped={...env,scopes};
  const hashes=()=>Object.fromEntries([...env.store.scan().values()].map(r=>[r.type+'/'+r.id,r._hash]));
- const invoke=async(action,item)=>{const answer=await call(scoped,'review_suggestions',{action,scope:{ids:[item.id]},expected:hashes()});assert.equal(answer.result.isError,undefined,answer.result.content[0].text);return JSON.parse(answer.result.content[0].text);};
- env.domains.writeFact({label:'Home city',value:'Town A'});const item=review(env.store);assert.equal((await invoke('keep',item)).succeeded,1);
+ // Keep files an inferred fact, so it needs the owner's own request (ownerAsked, identity-shelf.mjs).
+ env.domains.identity={ownerAsked:words=>words==='Keep the home city'};
+ const invoke=async(action,item)=>{const answer=await call(scoped,'review_suggestions',{action,scope:{ids:[item.id]},expected:hashes(),...(action==='keep'?{words:'Keep the home city'}:{})});assert.equal(answer.result.isError,undefined,answer.result.content[0].text);return JSON.parse(answer.result.content[0].text);};
+ env.domains.writeFact({label:'Home city',value:'Town A'});const item=review(env.store);
+ const unasked=await call(scoped,'review_suggestions',{action:'keep',scope:{ids:[item.id]},expected:hashes()});assert.equal(unasked.result.isError,true);assert.match(unasked.result.content[0].text,/owner asked/);assert.equal(env.store.get('review_queue',item.id).status,'pending_review');
+ assert.equal((await invoke('keep',item)).succeeded,1);
  const applied=env.store.get('review_queue',item.id),newClaim=applied.target_entity_id;assert.equal(env.store.get('claims',newClaim).value,'Town B');
  const undone=await invoke('rollback',item);assert.equal(undone.succeeded,1,JSON.stringify(undone.errors));assert.deepEqual(env.query.rows('profile_facts').filter(r=>r.is_current).map(r=>r.value),['Town A']);assert.ok(env.store.get('claims',newClaim).removed_at);
  // Generic saves cannot repurpose historical receipt links as hidden-record access.
