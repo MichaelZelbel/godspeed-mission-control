@@ -33,7 +33,7 @@ Server image: `sha256:70a07e63bad57ee9cf114a86be3261db533191af28927453a81d5ea8fc
 
 `SHA256SUMS`: `55fb24f0f66702060a3f4ec9cfa878a33caa4941fe13df71e255396ff87649e1`.
 
-Publication and anonymous readback are recorded after they complete. Production update is a separate operation through the normal released native installer.
+Production update is a separate operation through the normal released native installer.
 
 ## Publication and anonymous readback
 
