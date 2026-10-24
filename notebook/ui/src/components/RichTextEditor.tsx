@@ -24,6 +24,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { AudioEmbed } from "@/components/notes/extensions/AudioEmbed";
 import { PdfEmbed } from "@/components/notes/extensions/PdfEmbed";
 import { TaskListShortcut } from "@/components/notes/extensions/TaskListShortcut";
+import { OpenLinksOnClick } from "@/components/notes/extensions/OpenLinksOnClick";
 import { VideoEmbed } from "@/components/notes/extensions/VideoEmbed";
 import { markdownToHtml, tiptapJsonToMarkdown } from "@/utils/markdown-converter";
 import { WikiLinkMark } from "@/components/editor/WikiLinkMark";
@@ -110,6 +111,7 @@ export function RichTextEditor({
       StarterKit.configure({ heading: { levels: [1, 2, 3] }, link: false, underline: false }),
       UnderlineExt,
       LinkExt.configure({ openOnClick: false, HTMLAttributes: { rel: "noopener noreferrer", target: null } }),
+      OpenLinksOnClick.configure({ onNavigate: onInternalNavigate }),
       TextAlign.configure({ types: ["heading", "paragraph"] }),
       Highlight.configure({ multicolor: true }),
       TaskList,
@@ -179,41 +181,8 @@ export function RichTextEditor({
       onWikiLinkClick?.(slug, wikiLink);
       return;
     }
-    // Generic anchor: distinguish same-origin (internal) vs cross-origin (external).
-    const anchor = target.closest?.("a[href]") as HTMLAnchorElement | null;
-    if (!anchor) return;
-    const href = anchor.getAttribute("href") || "";
-    if (!href || href.startsWith("#")) return;
-    // Skip non-http(s) schemes (mailto:, tel:, data:, attachment-link with href="#", etc.)
-    if (!/^(https?:)?\/\//i.test(href) && !href.startsWith("/")) return;
-    let url: URL;
-    try {
-      url = new URL(href, window.location.href);
-    } catch {
-      return;
-    }
-    const isInternalHost =
-      url.host === window.location.host ||
-      INTERNAL_APP_HOSTS.includes(url.host) ||
-      url.host.endsWith(".lovable.app");
-    if (isInternalHost) {
-      // Internal link: stay in the same window, prefer SPA navigation.
-      anchor.removeAttribute("target");
-      if (event.defaultPrevented) return;
-      if (event.button !== 0) return;
-      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-      event.preventDefault();
-      const path = url.pathname + url.search + url.hash;
-      if (onInternalNavigate) {
-        onInternalNavigate(path);
-      } else {
-        window.location.assign(path);
-      }
-    } else {
-      // External link: open in a new tab with safe rel.
-      if (!anchor.getAttribute("target")) anchor.setAttribute("target", "_blank");
-      if (!anchor.getAttribute("rel")) anchor.setAttribute("rel", "noreferrer noopener");
-    }
+    // Every other link is opened by OpenLinksOnClick, as in a note. Until 23 October 2026 this
+    // left a web link to the browser, which follows none while the editor is editable (#26).
   };
 
   return (
