@@ -1,7 +1,7 @@
 # The Clerk: what it should do
 
 **Status: first version built (batches 1 to 4, 22 to 24 October 2026) and running on the author's server; release waits for the real-iPhone check and publishing. Earlier: all open questions answered, 22 October 2026, and revised the same day after an outside
-review found gaps in backups, recovery, filing and deadlines (section 10). Next: the build plan.**
+review found gaps in backups, recovery, filing and deadlines (section 10).**
 Feature request:
 [discussion #18](https://github.com/MichaelZelbel/godspeed-mission-control/discussions/18).
 This document is the basis we build and test against. Every feature below has a test that a
