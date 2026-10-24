@@ -8,7 +8,13 @@ A new release comes out most weeks. I write about what my AI does for me and wha
 
 Version 2 is the current edition, here on `main`. Its installers set up a new, separate folder. They do not move an existing version 1 Godspeed folder or your Menerio account.
 
-## Coming in the next release: a backup AI
+## New in 2.0.0-beta.5 (24 October 2026)
+
+Search by meaning keeps the notebook responsive. Links in a note open when clicked, and text you type stays in the editor if saving fails. The Review page checks for repeats before adding a suggestion.
+
+Add-ons can ask the AI you connected with `godspeed-model`, use your backup when needed, write searchable notes without queuing processing, and keep deadlines. [The add-on interface](docs/full-version/addon-model.md) describes those commands.
+
+### A backup AI
 
 Your mission control thinks with one AI, the one you connected at setup. When that AI fails, for example during an outage, when its usage limit is reached or when its sign-in runs out, the routines that need it stop until you fix it.
 
@@ -24,7 +30,7 @@ Now you can connect a second AI yourself as a backup, for example Claude when yo
 
 Updating keeps your folder, notes and settings. Nothing changes until you connect a backup.
 
-## Also coming in the next release: add-ons that write many notes
+### add-ons that write many notes
 
 Some add-ons write a note for each thing they handle, for example one note per scanned letter, with its summary and key facts already in it. Until now your notebook's AI read every one of those notes again, at most 40 a day and oldest first, so a pile of a few hundred letters held your own notes back for weeks.
 
@@ -34,7 +40,7 @@ Some add-ons write a note for each thing they handle, for example one note per s
 
 For add-on authors: `docs/full-version/addon-model.md`, "Notes an add-on writes".
 
-## Also coming in the next release: deadlines from add-ons
+### deadlines from add-ons
 
 An add-on can now give Godspeed a deadline it found, for example a documents add-on that reads "pay by 20 November" in a scanned letter. It is a normal deadline: it is in your deadline list, your deadline reminders and your morning brief mention it as the day comes, and you close or move it the way you close or move any deadline. The add-on sends no reminders of its own, so nothing reminds you twice.
 
@@ -43,7 +49,7 @@ An add-on can now give Godspeed a deadline it found, for example a documents add
 
 For add-on authors: `docs/full-version/addon-model.md`, "Deadlines an add-on keeps".
 
-## Also coming in the next release: a Review page without repeats
+### a Review page without repeats
 
 When your notebook reads a new note, its AI suggests facts, timeline entries and people for your Review page. Until now everything it answered went there, also what your notebook already knew, and the same things again each time the note was saved: a phone number you had saved long ago, the same trip three times, a hotel's booking number as a fact about you.
 
@@ -57,7 +63,7 @@ When your notebook reads a new note, its AI suggests facts, timeline entries and
 
 What was left out is listed in `.godspeed/suggestion-filter.jsonl` in your mission control folder. Updating keeps your folder, notes and settings, and suggestions already waiting stay where they are.
 
-## Also coming in the next release: tracker changes from Claude Code
+### tracker changes from Claude Code
 
 Asked in Claude Code to change a tracker, a habit or a meal you already have, for example "the health talk should also look at my workouts tracker", your notebook refused with "Read the current record hash before editing", although Claude Code had just read the tracker. Claude Code sent the version it had read as text, because the notebook never said that it takes a list of versions there.
 
@@ -65,7 +71,7 @@ Asked in Claude Code to change a tracker, a habit or a meal you already have, fo
 - A change to something that changed after the AI read it is still refused, as before.
 - The same works for goals, routines and deadlines: an AI app can name the version of what it changes in the same way as for a tracker.
 
-## Also coming in the next release: web addresses for add-ons
+### web addresses for add-ons
 
 Some add-ons need a web address on your server, for example a documents add-on whose archive you open on your phone. Until now such an add-on changed the file that gives your notebook its address, and on a server where Godspeed brings its own Caddy every update took that change out again, so the add-on's address was gone until the add-on noticed, up to an hour later.
 
@@ -74,7 +80,7 @@ Some add-ons need a web address on your server, for example a documents add-on w
 
 Your server gets the folder when you update it. For add-on authors: `docs/full-version/addon-model.md`, "A web address for an add-on".
 
-## Also coming in the next release: Godspeed inside another project's folder
+### Godspeed inside another project's folder
 
 Checked out inside the folder of a JavaScript project whose settings say its files are ES modules, for example an add-on's own repository, Godspeed's tools took that setting for their own: the deadline tool stopped with "require is not defined", and the notebook, which uses it, did not start. Godspeed now carries its own setting, so its tools and the notebook work wherever it is checked out, and the helper that lends your computer's browser works wherever it is installed.
 
