@@ -53,5 +53,12 @@ only the model resolver and bootstrap changes returns
 source still gives the Python-runtime error; its service and settings were not changed.
 The check used made-up local model configuration and made no external inference request.
 
+A full tools-free request also passed through that installation's real package-manager
+Python, bootstrap and provider adapter to a local pretend HTTP API. The response used
+the configured `custom` provider and `clerk-test` model, made exactly one request and
+sent no tools. This ran from a local-only snapshot of the stopped disposable native
+machine, with networking disabled except loopback and without starting its notebook or
+Paperless services. No production source, credentials or services were involved.
+
 The packaged Docker image was not rebuilt or published in this change. A later release
 must include this source in its tested image before add-ons can use the new Docker door.
