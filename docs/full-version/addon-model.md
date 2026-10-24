@@ -105,8 +105,8 @@ the owner's session or bearer credentials. The existing network-facing notebook 
 
 The extra listener is opt-in outside the Docker image: `GODSPEED_LOCAL_PORT` names its
 port. Native installations keep their existing local API on 47831 without an extra
-listener. This Docker local door is a next-build capability; the beta.5 image does not
-have it.
+listener. This Docker local door is available from Godspeed Mission Control 2.0.0-beta.6;
+the beta.5 image does not have it.
 
 ## Notes an add-on writes
 
