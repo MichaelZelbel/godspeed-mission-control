@@ -24,6 +24,7 @@ import { AudioEmbed } from "./extensions/AudioEmbed";
 import { FileUploadHandler } from "./extensions/FileUploadHandler";
 import { WikilinkExtension } from "./extensions/WikilinkExtension";
 import { TaskListShortcut } from "./extensions/TaskListShortcut";
+import { OpenLinksOnClick } from "./extensions/OpenLinksOnClick";
 import { Note, useNoteProcessingState, useUpdateNote, useDeleteNote, useProcessNote, useCreateNote, useDuplicateNote } from "@/hooks/useNotes";
 import { useSharedNote, useShareNote, useUnshareNote, useCopyShareLink, ShareNoteResult } from "@/hooks/useNoteSharing";
 import { ModerationResult } from "@/lib/moderateContent";
@@ -744,6 +745,8 @@ export function NoteEditor({ chatOpen:showChat=false, note, onNoteDeleted, showL
       }),
       UnderlineExt,
       LinkExt.configure({ openOnClick: false }),
+      // A click on a link opens it (issue #26): in a new tab, or a notebook page in this one.
+      OpenLinksOnClick.configure({ onNavigate: (path: string) => navigate(path) }),
       TextAlign.configure({ types: ["heading", "paragraph"] }),
       Highlight.configure({ multicolor: true }),
       TaskList,

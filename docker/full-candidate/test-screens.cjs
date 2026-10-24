@@ -38,6 +38,37 @@ const [origin='https://localhost:48443',session]=process.argv.slice(2);
    await page.getByRole('menuitem',{name:'Add tag'}).click();
    await page.waitForFunction(()=>{const e=document.activeElement;return e&&e.tagName==='INPUT'&&e.closest('main');},null,{timeout:5000});
   });
+  // Issue #26 (23 October 2026): a note opens ready for typing, and there the browser follows no
+  // link by itself, so a click on a web link in a note opened nothing. Only a real browser shows it.
+  await check('a web link in a note opens in a new tab when clicked, and a link to another note opens that note in the app',async()=>{
+   const other=await api({table:'notes',operation:'insert',values:{title:'Screen check link target '+stamp,content:'LINK-TARGET-NOTE',folder_path:'Screen checks'},selection:'*',single:true});
+   const web='https://example.com/godspeed-screen-check-'+stamp,inApp=origin+'/dashboard/notes/'+other.id;
+   const links=await api({table:'notes',operation:'insert',values:{title:'Screen check links '+stamp,content:'Read [the fictional page]('+web+') first.\n\nThen [the other note]('+inApp+').\n\nNever this: [unsafe link](javascript:document.title=\'opened\')',folder_path:'Screen checks'},selection:'*',single:true});
+   // The web page is answered here, so the check needs no internet.
+   await context.route(web,route=>route.fulfill({status:200,contentType:'text/html',body:'<title>Fictional page</title><p>Fictional page</p>'}));
+   const notePath='/dashboard/notes/'+links.id;
+   await page.goto(origin+notePath);
+   const editor=page.locator('main [contenteditable=true]').first();
+   const external=editor.locator('a[href="'+web+'"]');await external.waitFor();
+   for(const how of [{},{modifiers:['Control']},{button:'middle'}]){
+    const opened=context.waitForEvent('page',{timeout:8000});
+    await external.click(how);
+    const tab=await opened;await tab.waitForURL(web);
+    assert.equal(new URL(page.url()).pathname,notePath,'the note\'s own tab moved');
+    await tab.close();
+   }
+   const none=()=>context.waitForEvent('page',{timeout:2000}).then(p=>p.url(),()=>null);
+   let extra=none();
+   await editor.getByText('unsafe link').last().click();
+   assert.equal(await extra,null,'the unsafe link opened a page');
+   assert.notEqual(await page.title(),'opened','the unsafe link ran');
+   assert.equal(new URL(page.url()).pathname,notePath);
+   extra=none();
+   await editor.locator('a[href="'+inApp+'"]').click();
+   await page.waitForURL(u=>u.pathname==='/dashboard/notes/'+other.id,{timeout:8000});
+   await page.waitForFunction(()=>document.querySelector('main [contenteditable=true]')?.innerText.includes('LINK-TARGET-NOTE'),null,{timeout:15000});
+   assert.equal(await extra,null,'the link to another note opened a new page');
+  });
   await check('the floating chat button steps aside while a chat is docked beside a collection',async()=>{
    await page.goto(origin+'/collections/'+collection.slug);await page.locator('main').getByRole('button',{name:'AI chat'}).click();
    await page.getByPlaceholder('Ask Godspeed...').last().waitFor();
