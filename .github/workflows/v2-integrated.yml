@@ -75,7 +75,7 @@ jobs:
           # the configuration it writes, add-ons' folder and all, in a real Caddy.
           caddy=$(bash -c 'set -euo pipefail; GODSPEED_INSTALLER_FUNCTIONS_ONLY=1; . notebook/scripts/install-native-notebook.sh; state="$RUNNER_TEMP/caddy"; install_caddy')
           export GODSPEED_TEST_CADDY="$caddy"
-          node notebook/scripts/run-tests.mjs notebook/test/native-installer.test.mjs notebook/test/native-start-script.test.mjs notebook/test/setup-code.test.mjs notebook/test/native-web-address.test.mjs notebook/test/server-address.test.mjs notebook/test/web-door.test.mjs
+          node notebook/scripts/run-tests.mjs notebook/test/native-installer.test.mjs notebook/test/native-start-script.test.mjs notebook/test/setup-code.test.mjs notebook/test/native-web-address.test.mjs notebook/test/server-address.test.mjs notebook/test/web-door.test.mjs notebook/test/docker-local-door.test.mjs
           bash docker/full-candidate/test-package-update.sh
           python3 docker/test/test-telegram-setup.py
       - name: Docker Hub images through Google's mirror (Docker Hub limits GitHub's shared runners; images stay pinned by digest)

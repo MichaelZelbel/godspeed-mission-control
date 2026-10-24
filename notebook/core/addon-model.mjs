@@ -4,6 +4,7 @@ import {fileURLToPath} from 'node:url';
 import {runChild} from './child-process.mjs';
 import {assistantEnvironment} from './assistant-files.mjs';
 import {readBackupEndpoint,noteMainAnswered,noteMainFailed,noteBackupAnswered} from './backup-ai.mjs';
+import {hermesPython} from './runtime.mjs';
 
 const read=file=>JSON.parse(fs.readFileSync(file,'utf8').replace(/^﻿/,''));
 const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
@@ -21,9 +22,13 @@ export function hermesHelper(descriptor,state){
  const executable=descriptor.executable,folder=path.dirname(executable),windows=/\.exe$/i.test(executable);
  const packaged=path.resolve(folder,'..'),packagedPython=path.join(packaged,'.venv','bin','python3');
  const candidates=[path.join(folder,windows?'python.exe':'python3'),path.join(folder,windows?'python.exe':'python'),packagedPython];
- const python=candidates.find(p=>fs.existsSync(p));
+ const legacy=candidates.find(p=>fs.existsSync(p));
+ // Native Hermes also ships a shell launcher that selects a package-manager Python. The
+ // notebook's model picker already follows that launcher; add-ons use the same resolver.
+ const installed=legacy?null:hermesPython({...descriptor,platform:windows?'win32':'linux'});
+ const python=legacy||installed?.python;
  if(!python)throw Error('The connected Godspeed assistant Python runtime was not found');
- const sourceRoot=descriptor.sourceRoot||(python===packagedPython?packaged:path.resolve(folder,'../..'));
+ const sourceRoot=descriptor.sourceRoot||installed?.source||(python===packagedPython?packaged:path.resolve(folder,'../..'));
  return {kind:'hermes',state,descriptor,python,sourceRoot};
 }
 export function modelConnection(root){

@@ -4,6 +4,9 @@ from types import SimpleNamespace
 import unittest
 import os
 import tempfile
+import subprocess
+import sys
+import json
 from unittest.mock import patch
 
 spec = importlib.util.spec_from_file_location("addon_model", Path(__file__).parents[1] / "assistant-files" / "addon-model.py")
@@ -12,6 +15,31 @@ spec.loader.exec_module(module)
 
 
 class HostModelTests(unittest.TestCase):
+    def test_package_manager_dependencies_are_loaded_through_its_own_bootstrap(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            source, generation = root / "hermes-source", root / "selected-dependencies"
+            source.mkdir()
+            generation.mkdir()
+            (generation / "store_only_dependency.py").write_text("loaded = True\n", encoding="utf-8")
+            (source / "hermes_bootstrap.py").write_text("import sys\nsys.path.insert(0, " + repr(str(generation)) + ")\n", encoding="utf-8")
+            modules = {
+                "hermes_cli/__init__.py": "",
+                "hermes_cli/config.py": "import store_only_dependency\ndef load_config_readonly():\n    return {'model': {'provider': 'owner-provider', 'default': 'owner-model'}}\n",
+                "hermes_cli/runtime_provider.py": "resolve_runtime_provider = _get_named_custom_provider = expand_direct_api_alias = None\n",
+                "agent/__init__.py": "",
+                "agent/auxiliary_client.py": "resolve_provider_client = _normalize_aux_provider = None\n",
+            }
+            for relative, content in modules.items():
+                file = source / relative
+                file.parent.mkdir(parents=True, exist_ok=True)
+                file.write_text(content, encoding="utf-8")
+            helper = Path(__file__).parents[1] / "assistant-files" / "addon-model.py"
+            env = {**os.environ, "PYTHONPATH": str(source), "HERMES_HOME": str(root / "owner-home")}
+            done = subprocess.run([sys.executable, str(helper)], input='{"describe":true}', text=True, capture_output=True, env=env)
+            self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+            self.assertEqual(json.loads(done.stdout), {"configured": True, "provider": "owner-provider", "model": "owner-model"})
+
     @unittest.skipUnless(importlib.util.find_spec("dotenv"), "python-dotenv is supplied by the Hermes runtime")
     def test_current_host_credentials_override_stale_caller_environment(self):
         with tempfile.TemporaryDirectory() as folder:
