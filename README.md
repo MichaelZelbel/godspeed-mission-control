@@ -57,6 +57,14 @@ When your notebook reads a new note, its AI suggests facts, timeline entries and
 
 What was left out is listed in `.godspeed/suggestion-filter.jsonl` in your mission control folder. Updating keeps your folder, notes and settings, and suggestions already waiting stay where they are.
 
+## Also coming in the next release: tracker changes from Claude Code
+
+Asked in Claude Code to change a tracker, a habit or a meal you already have, for example "the health talk should also look at my workouts tracker", your notebook refused with "Read the current record hash before editing", although Claude Code had just read the tracker. Claude Code sent the version it had read as text, because the notebook never said that it takes a list of versions there.
+
+- The notebook now tells every AI app you connect what each part of such a request looks like, so a list of versions arrives as a list. It also reads the text Claude Code sent until now.
+- A change to something that changed after the AI read it is still refused, as before.
+- The same works for goals, routines and deadlines: an AI app can name the version of what it changes in the same way as for a tracker.
+
 ## New in 2.0.0-beta.4 (21 October 2026): a small copy before each update
 
 Before every update the installer saves a copy of your notebook, so you can go back if the update goes wrong. Until now that copy took your whole folder, also your work folder with its recordings and downloads. On a grown mission control it was gigabytes and many minutes, and an update refused to start when the disk had no room for it. Old copies also piled up.
