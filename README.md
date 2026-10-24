@@ -34,6 +34,50 @@ Some add-ons write a note for each thing they handle, for example one note per s
 
 For add-on authors: `docs/full-version/addon-model.md`, "Notes an add-on writes".
 
+## Also coming in the next release: deadlines from add-ons
+
+An add-on can now give Godspeed a deadline it found, for example a documents add-on that reads "pay by 20 November" in a scanned letter. It is a normal deadline: it is in your deadline list, your deadline reminders and your morning brief mention it as the day comes, and you close or move it the way you close or move any deadline. The add-on sends no reminders of its own, so nothing reminds you twice.
+
+- Once you change such a deadline's day or name, or close or drop it, it is yours: the add-on can never change it again.
+- An add-on makes each deadline once, also when it reads the same letter again.
+
+For add-on authors: `docs/full-version/addon-model.md`, "Deadlines an add-on keeps".
+
+## Also coming in the next release: a Review page without repeats
+
+When your notebook reads a new note, its AI suggests facts, timeline entries and people for your Review page. Until now everything it answered went there, also what your notebook already knew, and the same things again each time the note was saved: a phone number you had saved long ago, the same trip three times, a hotel's booking number as a fact about you.
+
+- Your notebook now checks every suggestion against what it already has, by one rule for "the same thing" that keeping a suggestion uses too. A fact is the same when it is about the same person, of the same kind and has the same value, also written another way: +44 7700 900123 and 07700 900 123, € 120,50 and 120.50 €, 15 June 2041 and 2041-06-15, an email in capitals. A timeline entry is the same on the same day from the same note, or with nearly the same title a day apart. A person is the same by name or nickname. Keep never adds a second copy of something you have.
+- Nothing is suggested twice, whatever you did with it the first time: kept, removed or blocked.
+- A note processed again after you edited it brings only what your new words say.
+- A note was sometimes processed again with the same text, when it finished while another program was writing to your mission control folder. That no longer happens.
+- The AI is asked to leave out details of documents, bookings and invoices, such as booking and invoice numbers or a hotel's phone number, and timeline entries for routine things, such as a letter arriving.
+- Each card on the Review page says what it is: Timeline entry, Fact about you, Fact about a person by name, or New person. Facts no longer have a calendar icon, and pointing at the icon says what Keep does.
+- Your assistant can now remove, roll back, block or snooze waiting suggestions when you ask it to. Keeping one still needs your own words.
+
+What was left out is listed in `.godspeed/suggestion-filter.jsonl` in your mission control folder. Updating keeps your folder, notes and settings, and suggestions already waiting stay where they are.
+
+## Also coming in the next release: tracker changes from Claude Code
+
+Asked in Claude Code to change a tracker, a habit or a meal you already have, for example "the health talk should also look at my workouts tracker", your notebook refused with "Read the current record hash before editing", although Claude Code had just read the tracker. Claude Code sent the version it had read as text, because the notebook never said that it takes a list of versions there.
+
+- The notebook now tells every AI app you connect what each part of such a request looks like, so a list of versions arrives as a list. It also reads the text Claude Code sent until now.
+- A change to something that changed after the AI read it is still refused, as before.
+- The same works for goals, routines and deadlines: an AI app can name the version of what it changes in the same way as for a tracker.
+
+## Also coming in the next release: web addresses for add-ons
+
+Some add-ons need a web address on your server, for example a documents add-on whose archive you open on your phone. Until now such an add-on changed the file that gives your notebook its address, and on a server where Godspeed brings its own Caddy every update took that change out again, so the add-on's address was gone until the add-on noticed, up to an hour later.
+
+- Your server now has a folder for add-ons' web addresses, `/etc/caddy/godspeed-addons/`. Each add-on puts a file of its own there, and Godspeed never writes in it, so an update keeps every add-on's address.
+- An add-on can also add a path to your notebook's own address, such as `https://<your server>/pictures/`, and show it only to whoever is signed in to your notebook.
+
+Your server gets the folder when you update it. For add-on authors: `docs/full-version/addon-model.md`, "A web address for an add-on".
+
+## Also coming in the next release: Godspeed inside another project's folder
+
+Checked out inside the folder of a JavaScript project whose settings say its files are ES modules, for example an add-on's own repository, Godspeed's tools took that setting for their own: the deadline tool stopped with "require is not defined", and the notebook, which uses it, did not start. Godspeed now carries its own setting, so its tools and the notebook work wherever it is checked out, and the helper that lends your computer's browser works wherever it is installed.
+
 ## New in 2.0.0-beta.4 (21 October 2026): a small copy before each update
 
 Before every update the installer saves a copy of your notebook, so you can go back if the update goes wrong. Until now that copy took your whole folder, also your work folder with its recordings and downloads. On a grown mission control it was gigabytes and many minutes, and an update refused to start when the disk had no room for it. Old copies also piled up.

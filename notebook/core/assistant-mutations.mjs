@@ -18,6 +18,15 @@ export function assertAssistantLinks(query,type,value,seen=new Set(),historicalT
   for(const target of value.applied_targets||[]){const table=target.type==='claim'?'claims':target.type;if(!historicalTargets.has(table+'/'+target.id))assertAssistantRecord(query,table,target.id,seen);}
  }
 }
+// A suggestion the assistant may see, about people and things it may see; its note may be in the trash.
+function visibleSuggestion(query,record){
+ if(!record||record.removed_at||!visibleRows(query,'review_queue').some(r=>r.id===record.id))throw Error('Choose a visible existing record');
+ const p=record.payload||{},people=new Set(visibleRows(query,'contacts').map(c=>c.id)),things=new Set(visibleRows(query,'entities').map(e=>e.id));
+ const about=[p.contact_id,['contact','person'].includes(p.subject_type)?p.subject_id:null,p.source_type==='contact'?p.source_id:null,p.target_type==='contact'?p.target_id:null,...(Array.isArray(p.participants)?p.participants.map(x=>x?.contact_id):[])].filter(Boolean);
+ const entities=[p.entity_id,p.subject_type==='entity'?p.subject_id:null,p.source_type==='entity'?p.source_id:null,p.target_type==='entity'?p.target_id:null].filter(Boolean);
+ if(about.some(id=>!people.has(id))||entities.some(id=>!things.has(id)))throw Error('Choose a visible existing record');
+ return record;
+}
 // Records that decide what an assistant may see, approve, share, run or be
 // told. No assistant writes them, through any tool: until 6 October 2026
 // save_record could switch off hide_sensitive_from_ai, record the owner's
@@ -50,7 +59,29 @@ const derivedScopes={event_corrections:'world',user_self_aliases:'profile',note_
 export function assistantMutationContext({store,query,domains,scopes},input,toolName) {
  const ownerStore=store,guard=Object.create(store),expected=input.expected||input.expected_hashes||{};
  ownerStore.scan();const initialUids=new Set([...ownerStore.records.values()].map(r=>r.uid));
- guard.scan=()=>{ownerStore.scan();guard.records=ownerStore.records;return guard.records;};
+ // REVIEW DECISIONS BY AN ASSISTANT (23 October 2026). No tool shows an assistant a suggestion's
+ // version hash, so "remove these suggestions" always failed with "Read the current record hash
+ // before editing", and a suggestion whose note had gone to the trash with "Choose a visible existing
+ // record". A decision changes only the suggestion's status, and the review code checks that status
+ // itself (a suggestion no longer waiting is refused; Undo compares every record it made with the
+ // version it left, review.mjs), so review_suggestions needs no hash for the suggestion, nor for a
+ // record its Undo receipt names in the version the receipt saw, and an unchanged suggestion's own
+ // links are not checked again. Everything it touches must still be visible to the assistant.
+ const reviewDecision=next=>{
+  if(toolName!=='review_suggestions'||next.type!=='review_queue')return false;
+  const old=ownerStore.records.get('review_queue/'+next.id);
+  return !!old&&['payload','references','suggestion_type','source_note_id'].every(k=>JSON.stringify(next[k]??null)===JSON.stringify(old[k]??null));
+ };
+ const receipted=new Set(toolName==='review_suggestions'?[...ownerStore.records.values()].filter(r=>r.type==='review_queue'&&Array.isArray(r.applied_targets)&&(!input.ids&&!input.review_ids&&!input.scope?.ids||[...(input.ids||[]),...(input.review_ids||[]),...(input.scope?.ids||[])].includes(r.id))).flatMap(r=>r.applied_targets.filter(t=>t.after_hash&&ownerStore.records.get((t.type==='claim'?'claims':t.type)+'/'+t.id)?._hash===t.after_hash).map(t=>(t.type==='claim'?'claims':t.type)+'/'+t.id)):[]);
+ // The guard reads the store's records as they are now, always. Until 23 October 2026 it kept the
+ // records it had last read and could build a list of a type of its own that no later write
+ // refreshed: on a server (whose store watches the folder), a review decision's own job record,
+ // saved a moment before, was then "not visible", and the assistant was told "Choose a visible
+ // existing record" for a suggestion it had just rolled back. A view made from the guard (a
+ // transaction's) still keeps records of its own.
+ Object.defineProperty(guard,'records',{configurable:true,enumerable:true,get(){return ownerStore.records;},set(value){Object.defineProperty(this,'records',{value,writable:true,configurable:true,enumerable:true});}});
+ guard.scan=()=>{ownerStore.scan();return ownerStore.records;};
+ guard.ofType=function(type){if(this!==guard)return Object.getPrototypeOf(ownerStore).ofType.call(this,type);ownerStore.scan();return ownerStore.ofType(type);};
  guard.get=(type,id)=>{const record=ownerStore.get(type,id);if(record)assertAssistantRecord(query,type,id);return record;};
  const guardedQuery=new QueryService(guard);
  guard.commit=(records,options={})=>{
@@ -60,8 +91,8 @@ export function assistantMutationContext({store,query,domains,scopes},input,tool
     const old=ownerStore.records.get(next.type+'/'+next.id)||[...ownerStore.records.values()].find(r=>r.uid===next.uid);
     if(next.type==='collections'&&(next.agent_instructions??null)!==(old?.agent_instructions??null))throw Error(instructionsRefused);
     if(old){
-     const current=assertAssistantRecord(guardedQuery,old.type,old.id),supplied=expected[old.type+'/'+old.id]||expected[old.id]||(old.id===input.id||old.id===input.value?.id?input.expected_hash||input.expected:undefined)||input.options?.expected?.[old.id]||(old.id===(input.options?.target||input.options?.target_id)?input.options?.expected_hash:undefined)||(old.type==='contact_topics'&&old.id===input.topic_id&&old.version===input.expected_version?current._hash:undefined);
-     if(initialUids.has(old.uid)){
+     const current=reviewDecision(next)?visibleSuggestion(guardedQuery,old):assertAssistantRecord(guardedQuery,old.type,old.id),supplied=expected[old.type+'/'+old.id]||expected[old.id]||(old.id===input.id||old.id===input.value?.id?input.expected_hash||input.expected:undefined)||input.options?.expected?.[old.id]||(old.id===(input.options?.target||input.options?.target_id)?input.options?.expected_hash:undefined)||(old.type==='contact_topics'&&old.id===input.topic_id&&old.version===input.expected_version?current._hash:undefined);
+     if(initialUids.has(old.uid)&&!reviewDecision(next)&&!receipted.has(old.type+'/'+old.id)){
       if(typeof supplied!=='string'||!supplied.trim())throw Error('Read the current record hash before editing');
       if(supplied!==current._hash)ownerStore.conflict(old.type,next,current);
      }
@@ -74,6 +105,7 @@ export function assistantMutationContext({store,query,domains,scopes},input,tool
    for(const key of options.removeKeys||[])projected.records.delete(key);
    for(const next of records)projected.records.set(next.type+'/'+next.id,next);
    const projectedQuery=new QueryService(projected);for(const next of records){
+    if(reviewDecision(next))continue;
     const historicalTargets=new Set(),prior=ownerStore.records.get('review_queue/'+next.id);
     // A rollback receipt describes what was written, including records this
     // same authorized Undo now tombstones. Its original targets were already
