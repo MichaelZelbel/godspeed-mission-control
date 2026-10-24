@@ -3,6 +3,7 @@ import path from 'node:path';
 import {hash} from '../records/store.mjs';
 import {QueryService} from '../query.mjs';
 import {visibleRows} from '../visibility.mjs';
+import {MeaningWorker} from './meaning-worker-client.mjs';
 
 // Search by meaning, as an optional plug. Any service that answers the
 // OpenAI-style POST <address>/embeddings works: OpenRouter, OpenAI, a local
@@ -41,7 +42,7 @@ export function embedder(config, {fetchImpl = fetch} = {}) {
   const url = embeddingsUrl(config.url);
   return async (texts, {signal} = {}) => {
     const response = await fetchImpl(url, {method: 'POST', headers: {'Content-Type': 'application/json', ...(config.key ? {Authorization: 'Bearer ' + config.key} : {})},
-      body: JSON.stringify({model: config.model, input: texts, ...(config.dimensions ? {dimensions: config.dimensions} : {})}), signal: signal || AbortSignal.timeout(60000)});
+      body: JSON.stringify({model: config.model, input: texts, ...(config.dimensions ? {dimensions: config.dimensions} : {})}), signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(60000)]) : AbortSignal.timeout(60000)});
     if (!response.ok) { let reason = ''; try { const body = await response.json(); reason = String(body?.error?.message || body?.message || '').slice(0, 200); } catch {} throw Object.assign(new Error('The embeddings service answered ' + response.status + (reason ? ': ' + reason : '')), {upstreamStatus: response.status}); }
     const body = await response.json(), data = Array.isArray(body?.data) ? [...body.data].sort((a, b) => (a.index ?? 0) - (b.index ?? 0)) : null;
     if (!data || data.length !== texts.length || data.some(d => !Array.isArray(d.embedding) || !d.embedding.length)) throw new Error('The embeddings service gave no vector for every text');
@@ -85,14 +86,15 @@ export class VectorStore {
     // laptop, to read 9,000 digests (7 October 2026).
     db.exec(`CREATE TABLE IF NOT EXISTS vectors (uid TEXT NOT NULL, chunk INTEGER NOT NULL, model TEXT NOT NULL, digest TEXT NOT NULL, vec BLOB NOT NULL, PRIMARY KEY (uid, chunk));
       CREATE INDEX IF NOT EXISTS vectors_model ON vectors(model);
-      CREATE INDEX IF NOT EXISTS vectors_digests ON vectors(model, uid, digest) WHERE chunk=0;`);
+      CREATE INDEX IF NOT EXISTS vectors_digests ON vectors(model, uid, digest) WHERE chunk=0;
+      CREATE INDEX IF NOT EXISTS vectors_model_uids ON vectors(model, uid);`);
     this.cache = null;
   }
   // uid -> digest the stored vectors were made from, for one model.
   digests(model) { return new Map(this.db.prepare('SELECT uid, digest FROM vectors WHERE model=? AND chunk=0').all(model).map(r => [r.uid, r.digest])); }
   // How many numbers each stored vector of the space has (0 when none is stored).
   size(model) { const row = this.db.prepare('SELECT length(vec) AS bytes FROM vectors WHERE model=? LIMIT 1').get(model); return row ? row.bytes / 4 : 0; }
-  clear(model) { if (this.db.prepare('DELETE FROM vectors WHERE model=?').run(model).changes) this.cache = null; }
+  clear(model) { if (this.db.prepare('DELETE FROM vectors WHERE model=?').run(model).changes) this.cache = null; this.worker?.notify({kind: 'clear', space: model}); }
   put(uid, digest, model, vectors) {
     const size = this.size(model);
     if (vectors.some(v => v.length !== (size || vectors[0].length))) throw new Error('Vectors of different sizes cannot be kept together');
@@ -104,9 +106,10 @@ export class VectorStore {
       this.db.exec('COMMIT');
     } catch (error) { this.db.exec('ROLLBACK'); throw error; }
     this.cache = null;
+    this.worker?.notify({kind: 'put', uid, space: model, vectors});
   }
-  remove(uids) { if (!uids.length) return; const del = this.db.prepare('DELETE FROM vectors WHERE uid=?'); this.db.exec('BEGIN'); try { for (const uid of uids) del.run(uid); this.db.exec('COMMIT'); } catch (e) { this.db.exec('ROLLBACK'); throw e; } this.cache = null; }
-  dropOtherModels(model) { const n = this.db.prepare('DELETE FROM vectors WHERE model<>?').run(model).changes; if (n) this.cache = null; return n; }
+  remove(uids) { if (!uids.length) return; const del = this.db.prepare('DELETE FROM vectors WHERE uid=?'); this.db.exec('BEGIN'); try { for (const uid of uids) del.run(uid); this.db.exec('COMMIT'); } catch (e) { this.db.exec('ROLLBACK'); throw e; } this.cache = null; this.worker?.notify({kind: 'remove', uids}); }
+  dropOtherModels(model) { const n = this.db.prepare('DELETE FROM vectors WHERE model<>?').run(model).changes; if (n) this.cache = null; this.worker?.notify({kind: 'keep', space: model}); return n; }
   count(model) { return this.db.prepare('SELECT COUNT(DISTINCT uid) n, COUNT(*) c FROM vectors WHERE model=?').get(model); }
   // Every vector of the model in one block of memory, read once and kept
   // until something changes: a scan of 30,000 is a fraction of a second.
@@ -139,10 +142,16 @@ export class VectorStore {
 export class MeaningIndex {
   constructor(index, {config, embed = config ? embedder(config) : null} = {}) {
     this.index = index; this.config = config; this.embed = embed; this.vectors = new VectorStore(index.db); this.space = vectorSpace(config);
+    this.worker = new MeaningWorker(index.file); this.vectors.worker = this.worker;
+    (index.meaningWorkers ||= new Set()).add(this.worker);
+    this.abort = new AbortController(); this.closed = false;
     this.status = {configured: !!config, model: config?.model || null, dimensions: config?.dimensions || null, indexed: 0, pending: 0, last_error: null, last_run: null};
     // Another model, size or service: what was embedded before cannot be compared, and is made again.
     if (config) this.vectors.dropOtherModels(this.space);
     this.queryCache = new Map(); this.empty = new Set();
+    // Preparing the cache is background work, including after a restart.
+    // HTTP readiness and the first word matches never wait for this promise.
+    if (embed) void this.worker.request({kind: 'warm', space: this.space}).catch(error => {if (!this.closed) this.status.last_error = error.message;});
   }
   get ready() { return !!this.embed; }
   // The records whose text may go to the embeddings service: what may reach
@@ -175,7 +184,7 @@ export class MeaningIndex {
   }
   // One round: remove vectors of documents gone, embed up to `budget` passages.
   async step({budget = 512, signal} = {}) {
-    if (!this.embed || this.running) return 0;
+    if (!this.embed || this.running || this.closed) return 0;
     this.running = true;
     try {
       const {todo, stale, total} = this.pending();
@@ -189,7 +198,8 @@ export class MeaningIndex {
           owners.push({doc: todo[i], from: batch.length, count: parts.length}); batch.push(...parts); used += parts.length;
         }
         if (!batch.length) continue;
-        const {vectors} = await this.embed(batch, {signal});
+        const {vectors} = await this.embed(batch, {signal: signal ? AbortSignal.any([signal, this.abort.signal]) : this.abort.signal});
+        if (this.closed) return 0;
         this.checkSize(vectors);
         for (const o of owners) { this.vectors.put(o.doc.uid, o.doc.digest, this.space, vectors.slice(o.from, o.from + o.count)); done++; }
       }
@@ -210,21 +220,23 @@ export class MeaningIndex {
     this.vectors.clear(this.space); this.empty.clear(); this.queryCache.clear();
     throw new Error('The embeddings service changed the size of its answers; meaning search is being built again');
   }
-  async queryVector(text) {
+  async queryVector(text, {signal} = {}) {
     const key = hash(this.space + '\0' + text);
     if (this.queryCache.has(key)) return this.queryCache.get(key);
-    const {vectors} = await this.embed([text]);
+    const {vectors} = await this.embed([text], {signal: signal ? AbortSignal.any([signal, this.abort.signal]) : this.abort.signal});
+    if (this.closed) throw new Error('Meaning search has closed');
     if (this.queryCache.size > 200) this.queryCache.delete(this.queryCache.keys().next().value);
     this.queryCache.set(key, vectors[0]);
     return vectors[0];
   }
-  async search(text, {limit = 50, types = null} = {}) {
+  async search(text, {limit = 50, types = null, signal} = {}) {
     if (!this.embed || !String(text || '').trim()) return [];
-    const vector = await this.queryVector(String(text).slice(0, 2000));
+    const vector = await this.queryVector(String(text).slice(0, 2000), {signal});
     this.checkSize([vector]);
     const allowed = types?.length ? new Set(this.index.db.prepare(`SELECT uid FROM docs WHERE type IN (${types.map(() => '?').join(',')})`).all(...types).map(r => r.uid)) : null;
-    return this.vectors.search(this.space, vector, {limit, uids: allowed});
+    return this.worker.search(this.space, vector, {limit, uids: allowed, signal});
   }
+  close() {this.closed = true; this.abort.abort(); this.index.meaningWorkers?.delete(this.worker); return this.worker.close();}
 }
 
 // Word and meaning results as one list: reciprocal rank fusion, so a note

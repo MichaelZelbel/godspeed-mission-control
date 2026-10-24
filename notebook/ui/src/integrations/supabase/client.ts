@@ -2,9 +2,9 @@
 import {createRecordWrites} from './record-writes.mjs';
 export const SUPABASE_URL = location.origin;
 export const SUPABASE_PUBLISHABLE_KEY = '';
-async function request(route:string,body?:any) {
+async function request(route:string,body?:any,signal?:AbortSignal) {
   try {
-    const response=await fetch('/api/'+route,{method:body===undefined?'GET':'POST',headers:{'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});
+    const response=await fetch('/api/'+route,{method:body===undefined?'GET':'POST',headers:{'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body),signal});
     const context=response.clone();const result=await response.json();
     if(!response.ok)return {data:null,error:{message:result.error||'Request failed',code:result.code,context}};
     return result;
@@ -51,7 +51,7 @@ const storage=(bucket:string)=>({
 });
 export const supabase:any={
   from:(table:string)=>new Query(table),rpc:(name:string,args:any)=>new Query(undefined,name,args),
-  functions:{invoke:(name:string,options:any={})=>request('functions/'+name,options.body||{})},
+  functions:{invoke:(name:string,options:any={})=>request('functions/'+name,options.body||{},options.signal)},
   storage:{from:storage},
   auth:{getSession:async()=>({data:{session:{access_token:'local-session',user:{id:'owner'}}},error:null}),getUser:async()=>({data:{user:{id:'owner'}},error:null}),onAuthStateChange:()=>({data:{subscription:{unsubscribe(){}}}})},
   channel:()=>({on(){return this;},subscribe(){return this;},unsubscribe(){}}),removeChannel:async()=>{},

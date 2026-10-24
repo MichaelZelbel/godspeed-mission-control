@@ -8,7 +8,7 @@ import {Store} from '../core/records/store.mjs';import {SearchIndex} from '../co
 // search failed with "Invalid typed array length".
 const embedOf=size=>async texts=>({vectors:texts.map(t=>{const v=new Float32Array(size);v[0]=/knie|knee|orthop|mrt/i.test(t)?1:0;v[1]=/milk|bread|einkauf/i.test(t)?1:0;v[size-1]+=0.01;const n=Math.hypot(...v)||1;return v.map(x=>x/n);})});
 const config=(dimensions,url='https://embeddings.example/v1')=>({url,model:'text-embedding-3-small',...(dimensions?{dimensions}:{})});
-const fixture=t=>{const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-meaning-space-'));const store=new Store(root);const knee=store.save('notes',{title:'Orthopäde Termin',content:'Montag 9 Uhr, MRT besprechen.'});store.save('notes',{title:'Einkauf',content:'Milk and bread.'});const index=new SearchIndex(store);t.after(()=>{index.close();fs.rmSync(root,{recursive:true,force:true});});return {store,index,knee};};
+const fixture=t=>{const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-meaning-space-'));const store=new Store(root);const knee=store.save('notes',{title:'Orthopäde Termin',content:'Montag 9 Uhr, MRT besprechen.'});store.save('notes',{title:'Einkauf',content:'Milk and bread.'});const index=new SearchIndex(store);t.after(async()=>{await index.close();fs.rmSync(root,{recursive:true,force:true});});return {store,index,knee};};
 const titles=result=>result.rows.map(r=>r.title),top=result=>result.rows[0]?.title+' by '+result.rows[0]?.matched;
 
 test('the same model at another size is embedded again, and search keeps working',async t=>{
