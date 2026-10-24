@@ -34,3 +34,11 @@ Server image: `sha256:70a07e63bad57ee9cf114a86be3261db533191af28927453a81d5ea8fc
 `SHA256SUMS`: `55fb24f0f66702060a3f4ec9cfa878a33caa4941fe13df71e255396ff87649e1`.
 
 Publication and anonymous readback are recorded after they complete. Production update is a separate operation through the normal released native installer.
+
+## Publication and anonymous readback
+
+Published GitHub release 422814991 at 15:31:14 UTC on 24 October 2026 as Latest, with draft and prerelease both false: https://github.com/MichaelZelbel/godspeed-mission-control/releases/tag/godspeed-v2-integrated-2026-10-24-2 . All five release files were downloaded back from the draft; all four payloads passed SHA256SUMS, and the manifest's version and source commits matched before publication. The tag selects delivery commit `7127d299cc4f8fec7e6a1870a3a261f3cfde8087`; the shipped runtime and source archive remain the immutable runtime identified above.
+
+Website main `a79adb84362c3e8f4abe37d6acd782376324c957` updated the release installer hashes, corresponding guide checks and immutable server pin. Its build, TypeScript, guide lint and exact-source compose parity tests passed. Public readback then passed anonymously with exit 0 and ALL PASS: Latest and tag downloads of all five files, SHA256SUMS, manifest, both Windows short links, Unix short link and main installer, anonymous registry digest, all three server Compose pins, immutable one-click pin, website server installer parity, website purchase pin and guide contents. The unchanged beta.5 behavior pages retained their accurate beta.5 checks. The source, installer and image pins all select this release's tested runtime.
+
+The public readback log and repeatable verifier are retained with the private release build receipts. No real Windows installation was updated. After ALL PASS, the maintainer's normal native update and the separate Clerk fresh-public-install walkthroughs were handed to their owners; their results are recorded separately.
