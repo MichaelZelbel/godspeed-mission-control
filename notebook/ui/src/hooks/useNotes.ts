@@ -48,6 +48,7 @@ export interface Note {
   structured_fields: Record<string, unknown>;
   related: RelatedItem[];
   ai_visibility?: "visible" | "hidden";
+  skip_processing?: boolean | null;
   processing_status?: string | null;
   processed_at?: string | null;
   processing_error?: string | null;
@@ -90,7 +91,7 @@ type NoteUpdate = {
 // length, not its text: the real notebook's 1,372 notes were 10 MB of text per
 // list load. An open note is always read whole (useNote).
 const NOTE_LIST_COLUMNS =
-  "id, user_id, title, content_preview, metadata, tags, is_favorite, is_pinned, is_trashed, trashed_at, entity_type, source_app, source_id, source_url, folder_path, is_external, sync_status, structured_fields, related, ai_visibility, processing_status, processed_at, processing_error, created_at, updated_at";
+  "id, user_id, title, content_preview, metadata, tags, is_favorite, is_pinned, is_trashed, trashed_at, entity_type, source_app, source_id, source_url, folder_path, is_external, sync_status, structured_fields, related, ai_visibility, skip_processing, processing_status, processed_at, processing_error, created_at, updated_at";
 
 const NOTE_COLUMNS =
   "id, user_id, title, content, metadata, tags, is_favorite, is_pinned, is_trashed, trashed_at, entity_type, source_app, source_id, source_url, folder_path, is_external, sync_status, structured_fields, related, ai_visibility, processing_status, processed_at, processing_error, created_at, updated_at";

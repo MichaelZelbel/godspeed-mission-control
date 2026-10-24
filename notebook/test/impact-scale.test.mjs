@@ -25,8 +25,11 @@ test('field assistance explains all four levels and accepts mundane breakfast',a
   assert.equal(result.draft.impact_level,1);assert.equal(result.draft.title,'Breakfast');
 });
 
-test('note processing permits routine moments while keeping the durable-fact requirement',()=>{
-  assert.match(CONTRACT,/durable facts/);assert.match(CONTRACT,/routine|mundane/);assert.match(CONTRACT,/Everyday/);
+// Until 23 October 2026 processing asked for routine moments too; on a real notebook every timeline
+// suggestion decided one at a time had been removed (proposals.mjs MOMENTS_AND_DOCUMENTS). A moment
+// that does come is still shaped and gets the Everyday impact.
+test('note processing asks for moments worth looking back on, not routine ones, and keeps the durable-fact requirement',()=>{
+  assert.match(CONTRACT,/durable facts/);assert.match(CONTRACT,/look back on; never for .*routine task/);assert.doesNotMatch(CONTRACT,/also include routine/);assert.match(CONTRACT,/Everyday/);
   const result=shapeProposal({type:'add_moment',payload:{title:'Breakfast',description:'I will have breakfast now',happened_at:'2026-10-17',status:'future_plan'},evidence_quote:'I will have breakfast now'},{note:{id:'journal'},person:()=>null,today:'2026-10-17',cites:()=>true});
   assert.equal(result.payload.impact_level,1);
 });

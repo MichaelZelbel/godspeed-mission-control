@@ -39,7 +39,11 @@ test('a preparation written in the recipe\'s shape is one the coach opens a talk
   const filled=shape.replace('<area>','weekly-check-in').replace('<talk date> <time>','2026-10-25 18:00').replace(/<the time you write it[^>]*>/,'2026-10-24T03:20:00Z')
     .replace(/^(## .+)$/gm,'$1\nA fictional line.');
   const file=path.join(root,'coach','weekly-check-in','prep','2026-10-25.md');fs.writeFileSync(file,filled);
-  assert.equal(prepProblem(readPrep(file),readArea(path.join(root,'coach','weekly-check-in'))),null,filled);
+  const prep=readPrep(file),area=readArea(path.join(root,'coach','weekly-check-in'));
+  // The fixture's talk is on a fixed date. Read it at that time, rather than
+  // accidentally testing a future preparation against the machine's clock.
+  assert.equal(prepProblem(prep,area,new Date('2026-10-25T17:00:00Z')),null,filled);
+  assert.equal(prepProblem(prep,area,new Date('2026-10-23T17:00:00Z')),'its PREPARED time is in the future');
   for(const section of ['## The opening','## Talk card'])assert.ok(shape.includes(section),section);
   assert.match(shape,/^STATE: ready$/m);assert.match(shape,/^PREPARED: /m);
 });

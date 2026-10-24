@@ -149,6 +149,43 @@ pin_image() {
     && grep -qx "    image: $2" "$1"
 }
 
+# A host add-on asks the installed container for a model answer. No model key or
+# subscription login leaves that container; no new port or Docker socket mount.
+install_model_command() {
+  local command_dir="${GODSPEED_MODEL_COMMAND_DIR:-/usr/local/bin}"
+  mkdir -p "$DIR/.godspeed" "$command_dir" || return 1
+  curl -fsSL "$GODSPEED_RAW/notebook/bin/godspeed-docker-model.mjs" -o "$DIR/.godspeed/model.mjs.new" \
+    || { rm -f "$DIR/.godspeed/model.mjs.new"; return 1; }
+  mv -f "$DIR/.godspeed/model.mjs.new" "$DIR/.godspeed/model.mjs" || return 1
+  printf '%s\n' '{"format":1,"kind":"godspeed-docker","service":"godspeed","workspace":"/opt/data/full-candidate/workspace"}' > "$DIR/.godspeed/model-host.json"
+  # An existing command can belong to another native Godspeed installation.
+  # Leave it alone: an add-on bound here uses this folder's model.mjs first.
+  if [ ! -e "$command_dir/godspeed-model" ] && [ ! -L "$command_dir/godspeed-model" ]; then
+    {
+      printf '#!/bin/bash\n# Godspeed Docker model command\ninstall=%q\ndocker=%q\n' "$DIR" "$(command -v docker)"
+      cat <<'MODEL'
+describe=no
+chosen=no
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --workspace)
+      [ "$chosen" = no ] && [ "$#" -ge 2 ] && [ -d "$2" ] && [ "$(cd "$2" && pwd -P)" = "$(cd "$install" && pwd -P)" ] \
+        || { echo 'This model command belongs to a different Godspeed server installation.' >&2; exit 1; }
+      chosen=yes; shift 2 ;;
+    --check|--describe) describe=yes; shift ;;
+    *) echo 'Use godspeed-model with --workspace and optional --check.' >&2; exit 1 ;;
+  esac
+done
+args=()
+[ "$describe" = no ] || args+=(--check)
+exec "$docker" compose -p godspeed-mission-control --project-directory "$install" -f "$install/compose.yaml" --env-file "$install/.env" \
+  exec -T --user hermes godspeed timeout 245 node /opt/godspeed/kit/notebook/bin/godspeed-model.mjs --workspace /opt/data/full-candidate/workspace "${args[@]}"
+MODEL
+    } > "$command_dir/godspeed-model"
+    chmod 755 "$command_dir/godspeed-model"
+  fi
+}
+
 # --- The machine ---------------------------------------------------------------
 
 # Docker for Debian and Ubuntu comes from Docker's own installer; elsewhere Docker must be there.
@@ -495,6 +532,7 @@ main() {
   fi
   # A new image keeps the HTTPS service waiting for the app; make sure it runs now.
   compose up -d >>"$LOG" 2>&1
+  install_model_command || stop "Godspeed runs, but its connection for add-ons could not be installed. Check this server can reach github.com, then run this installer again."
   step "Getting the security certificate for https://$host (up to $(minutes "$CERT_WAIT"))."
   wait_certificate "$host"
 

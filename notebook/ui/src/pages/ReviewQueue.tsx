@@ -25,6 +25,7 @@ import { useAddClaim } from "@/hooks/useClaims";
 import { invalidateFactViews } from "@/hooks/useFacts";
 import { revertFactItem } from "@/lib/review-fact-revert";
 import {runReviewOperation,reviewJobCounts} from "@/lib/review-operation.mjs";
+import { reviewKind } from "@/lib/review-kind.mjs";
 import { normalizeAttribute, isReservedAttribute } from "@/lib/claims";
 import {
   UserPlus,
@@ -59,7 +60,8 @@ const typeConfig: Record<string, { icon: typeof UserPlus; label: string; color: 
   resolve_relationship_conflict: { icon: AlertTriangle, label: "Relationship conflict", color: "text-yellow-500" },
   adjudicate_relationship: { icon: Eye, label: "Relationship evidence", color: "text-primary" },
   add_entity: { icon: Globe, label: "Add to World", color: "text-teal-500" },
-  add_claim: { icon: Calendar, label: "Dated fact", color: "text-sky-500" },
+  // A fact about a person, never a calendar: that is the timeline entry's icon.
+  add_claim: { icon: User, label: "Fact", color: "text-sky-500" },
   unknown_profile_field: { icon: Sparkles, label: "New profile field", color: "text-fuchsia-500" },
 
 };
@@ -73,6 +75,16 @@ const truncateText = (text: string | null | undefined, length = 200) => {
 
 export default function ReviewQueue() {
   const { user } = useAuth();
+  // People's names, for "Fact about <name>" on a card.
+  const { data: personNames = new Map<string, string>() } = useQuery({
+    queryKey: ["review-person-names", user?.id],
+    queryFn: async () => {
+      const { data } = await supabase.from("contacts").select("id,name");
+      return new Map<string, string>(((data || []) as any[]).map((c) => [c.id, c.name]));
+    },
+    enabled: !!user,
+    staleTime: 60_000,
+  });
   // ?contact_id=<id> comes from a person's "N pending profile suggestions"
   // badge. It used to be ignored, so the person landed in the whole queue.
   const [searchParams, setSearchParams] = useSearchParams();
@@ -982,6 +994,7 @@ export default function ReviewQueue() {
             const { item } = entry;
             const config = typeConfig[item.suggestion_type] || typeConfig.link_note;
             const Icon = config.icon;
+            const kind = reviewKind(item, personNames);
             const payload = item.payload as any;
             // A merge that already happened cannot be taken back from here.
             const carriedOut = !!item.applied_at && FINAL_CHANGES.includes(item.suggestion_type);
@@ -990,8 +1003,11 @@ export default function ReviewQueue() {
               <Card key={item.id} className="transition-all hover:shadow-lg">
                 <CardHeader className="pb-2">
                   <div className="flex items-start gap-3">
-                    <Icon className={`h-5 w-5 mt-0.5 ${config.color}`} />
+                    <span title={kind.hint} aria-label={kind.label} className="shrink-0">
+                      <Icon className={`h-5 w-5 mt-0.5 ${config.color}`} aria-hidden="true" />
+                    </span>
                     <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium text-muted-foreground" title={kind.hint}>{kind.label}</p>
                       <div className="flex items-center gap-2 flex-wrap">
                         <CardTitle className="text-base">{item.title}</CardTitle>
                         {item.is_sensitive && <Badge variant="outline" className="text-[10px]">Sensitive</Badge>}

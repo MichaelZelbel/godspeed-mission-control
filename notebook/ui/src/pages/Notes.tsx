@@ -91,6 +91,7 @@ import { useSearchParams, useParams, useNavigate, useLocation } from "react-rout
 import { cn } from "@/lib/utils";
 import { brandLogo } from "@/lib/brand-assets";
 import { escapeLike, pgOrValue } from "@/lib/postgrest";
+import { vaultCounts } from "@/lib/vault-counts";
 
 
 type SearchMode = "semantic" | "exact";
@@ -802,37 +803,7 @@ export default function Notes() {
     project: "bg-indigo-500/15 text-indigo-700 dark:text-indigo-400",
   };
 
-  const { topicCounts, peopleCounts, typeCounts, unclassifiedCount } = useMemo(() => {
-    const topics: Record<string, number> = {};
-    const people: Record<string, number> = {};
-    const types: Record<string, number> = {};
-    let unclassified = 0;
-    for (const note of allNotes) {
-      const meta = note.metadata as Record<string, unknown> | null;
-      if (!meta || !meta.type) { unclassified++; continue; }
-      if (Array.isArray(meta.topics)) for (const t of meta.topics as string[]) topics[t] = (topics[t] || 0) + 1;
-      // Normalize people names: use canonical_name from matched_people when available
-      const matchedMap = new Map<string, string>();
-      if (Array.isArray(meta.matched_people)) {
-        for (const m of meta.matched_people as Array<{ name: string; canonical_name: string }>) {
-          matchedMap.set(m.name.toLowerCase(), m.canonical_name);
-        }
-      }
-      if (Array.isArray(meta.people)) {
-        for (const p of meta.people as string[]) {
-          const canonical = matchedMap.get(p.toLowerCase()) || p;
-          people[canonical] = (people[canonical] || 0) + 1;
-        }
-      }
-      if (typeof meta.type === "string") types[meta.type] = (types[meta.type] || 0) + 1;
-    }
-    return {
-      topicCounts: Object.entries(topics).sort((a, b) => b[1] - a[1]),
-      peopleCounts: Object.entries(people).sort((a, b) => b[1] - a[1]),
-      typeCounts: Object.entries(types).sort((a, b) => b[1] - a[1]),
-      unclassifiedCount: unclassified,
-    };
-  }, [allNotes]);
+  const { topicCounts, peopleCounts, typeCounts, unclassifiedCount } = useMemo(() => vaultCounts(allNotes), [allNotes]);
 
   const [isBackfilling, setIsBackfilling] = useState(false);
   const handleBackfill = useCallback(async () => {

@@ -38,7 +38,9 @@ import {durableRoots,durableFiles} from '../core/file-policy.mjs';
 import { WebAuth, safeReturn } from './web-auth.mjs';
 import { MenerioImport } from './menerio-import.mjs';
 import {TelegramConnection} from './telegram-connect.mjs';
-import {hermesSettingsFor,connectRoutineAI,routineAIStatus,checkRoutineAI,baseAddress} from '../core/routine-ai.mjs';
+import {hermesSettingsFor,connectRoutineAI,routineAIStatus,checkRoutineAI,baseAddress,askDirectly,connectPlanMain} from '../core/routine-ai.mjs';
+import {withBackup,readBackupEndpoint,backupEntryFor,connectBackupAI,connectHermesBackup,removeBackupAI,backupStatus,fallbackChain} from '../core/backup-ai.mjs';
+import {PlanSignIn,PLAN_PROVIDER} from '../core/plan-signin.mjs';
 import {goalOverview} from '../core/goal-overview.mjs';
 import {nativeAgent} from '../core/native-agent.mjs';
 import {NativeScheduler} from '../core/native-scheduler.mjs';
@@ -53,6 +55,13 @@ import {retireShares} from '../core/shares.mjs';
 import {installFoodTable,foodTableWanted} from '../core/food-table.mjs';
 import {IdentityShelf} from '../core/identity-shelf.mjs';
 import {VERSION} from '../core/version.mjs';
+
+// A backup AI is another service than the main AI, in Settings and in /backupai alike: when one
+// service fails, its other models and keys usually fail with it, and Hermes counts the same service
+// behind itself as no backup (core/backup-ai.mjs).
+const SAME_SERVICE='That is the service your main AI uses already. A backup steps in when the main AI fails, so it has to be another service.';
+const BACKUP_SERVICE='That is the service your backup AI uses. Remove the backup first, or choose another service for your main AI.';
+export const sameService=(one,other)=>!!one?.provider&&!!other?.provider&&one.provider===other.provider&&(one.provider!=='custom'||String(one.base_url||'').replace(/\/+$/,'')===String(other.base_url||'').replace(/\/+$/,''));
 
 // What the browser is told each built file is. A module script sent as
 // octet-stream is refused outright: the PDF reader's worker (.mjs) was, so
@@ -87,8 +96,17 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   const githubSignIn=new GitHubSignIn();
   const syncRunner=new SyncRunner(root,{onResult:result=>{sync.last=result;atomic(path.join(store.state,'sync-status.json'),JSON.stringify(result));}});
   const providerPath=path.join(store.state,'provider.json');
-  if(!provider&&fs.existsSync(providerPath))provider=modelProvider(JSON.parse(fs.readFileSync(providerPath,'utf8')));
-  provider ||= modelProvider({url:process.env.GODSPEED_MODEL_URL,key:process.env.GODSPEED_MODEL_KEY,model:process.env.GODSPEED_MODEL});
+  // The backup AI the person connected in Settings (core/backup-ai.mjs): the notebook's own calls
+  // try the main address first and the backup only when that failed, for that request only. It is
+  // read when needed, so connecting or removing it counts from the next request on. A main AI
+  // that runs through Hermes needs none of this: Hermes uses its own fallback chain.
+  // A backup only Hermes can reach (a ChatGPT plan) is asked through Hermes, which tries its own main
+  // AI and then that backup.
+  const backupFor=()=>{const saved=readBackupEndpoint(store.state);if(saved){try{return modelProvider(saved);}catch{return null;}}
+    try{return routineAI&&fallbackChain(fs.readFileSync(path.join(routineAI.home,'config.yaml'),'utf8')).length?hermesProvider({executable:descriptor.executable,home:descriptor.home,cwd:store.root,sourceRoot:descriptor.sourceRoot}):null;}catch{return null;}};
+  const guarded=main=>withBackup(main,backupFor,{state:store.state,model:()=>readBackupEndpoint(store.state)?.model});
+  if(!provider&&fs.existsSync(providerPath))provider=guarded(modelProvider(JSON.parse(fs.readFileSync(providerPath,'utf8'))));
+  provider ||= guarded(modelProvider({url:process.env.GODSPEED_MODEL_URL,key:process.env.GODSPEED_MODEL_KEY,model:process.env.GODSPEED_MODEL}));
   const assistantPath=process.env.GODSPEED_ASSISTANT_CONFIG||path.join(store.state,'assistant.json');
   if(!provider&&fs.existsSync(assistantPath)){const descriptor=JSON.parse(fs.readFileSync(assistantPath,'utf8').replace(/^\uFEFF/,''));if(descriptor.verified)provider=hermesProvider({executable:descriptor.executable,home:descriptor.home,cwd:store.root,sourceRoot:descriptor.sourceRoot});}
   // What the supervisor reads as "alive" (supervisor-health.mjs): an AI call
@@ -102,6 +120,20 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   if(originalRuntime){domains.nativeAgent=nativeAgent({...descriptor,cwd:store.root,providerFile:providerPath});domains.nativeScheduler=scheduler;query.nativeHermesHome=descriptor.home;}
   // Where the routines' AI is set: the Hermes home the routines run in (core/routine-ai.mjs).
   const routineAI=originalRuntime&&descriptor?.verified&&descriptor.home?{home:descriptor.home,state:store.state}:null;
+  // A CHATGPT PLAN SIGNED IN FROM SETTINGS (core/plan-signin.mjs), one sign-in for the main AI and the
+  // backup alike. Once Hermes holds it, the plan's first model that answers is saved: as the main AI
+  // (the notebook's own address then goes, so the notebook, the chat and the routines use the plan),
+  // or as the backup.
+  const planSignIn=routineAI?new PlanSignIn({executable:descriptor.executable,home:descriptor.home,cwd:store.root,onSignedIn:async as=>{
+    const found=await askDirectly({executable:descriptor.executable,home:descriptor.home,cwd:store.root,sourceRoot:descriptor.sourceRoot,route:'plan'});
+    if(as==='backup'){connectHermesBackup({home:descriptor.home,state:store.state,entry:{provider:PLAN_PROVIDER,model:found.model},via:'settings'});return found;}
+    connectPlanMain({...routineAI,model:found.model});
+    try{fs.unlinkSync(providerPath);}catch{}
+    const hermes=hermesProvider({executable:descriptor.executable,home:descriptor.home,cwd:store.root,sourceRoot:descriptor.sourceRoot});
+    provider=hermes;domains.provider=hermes;scheduler.executor=jobExecutor(hermes,query);
+    await checkRoutineAI({...routineAI,executable:descriptor.executable,cwd:store.root,sourceRoot:descriptor.sourceRoot});
+    return found;
+  }}):null;
   domains.sync={reconcile:()=>syncRunner.run(),pendingConflicts:()=>sync.pendingConflicts()};domains.index=index;
   mediaRoot = path.resolve(mediaRoot || path.join(store.state, 'media')); fs.mkdirSync(mediaRoot, { recursive: true });
   domains.mediaRoot=mediaRoot;
@@ -289,8 +321,14 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
         const chosen=modelProvider(config);if(!chosen)throw new Error('Provide a model endpoint, key and model name');
         const routines=routineAI&&input.routines!==false;
         if(routines)hermesSettingsFor(config);
+        // The main AI is not the backup's service either (SAME_SERVICE): the backup would be no backup.
+        try{const want=hermesSettingsFor(config),saved=readBackupEndpoint(store.state);
+          const backups=[saved&&backupEntryFor(saved),routineAI&&fallbackChain(fs.readFileSync(path.join(routineAI.home,'config.yaml'),'utf8'))[0]];
+          if(backups.some(b=>sameService(want,b)))throw Object.assign(new Error(BACKUP_SERVICE),{backupService:true});}
+        catch(error){if(error.backupService)throw error;}
         await chosen({kind:'connection-test',contract:'Reply with Connected.'});
-        atomic(providerPath,JSON.stringify(config));fs.chmodSync(providerPath,0o600);provider=chosen;domains.provider=chosen;scheduler.executor=jobExecutor(chosen,query);
+        const kept=guarded(chosen);
+        atomic(providerPath,JSON.stringify(config));fs.chmodSync(providerPath,0o600);provider=kept;domains.provider=kept;scheduler.executor=jobExecutor(kept,query);
         if(!routines)return send(res,200,{connected:true,routines:routineAI?{available:true,...routineAIStatus(routineAI)}:{available:false}});
         connectRoutineAI({...routineAI,config});
         return send(res,200,{connected:true,routines:{available:true,...await checkRoutineAI({...routineAI,executable:descriptor.executable,cwd:store.root,sourceRoot:descriptor.sourceRoot})}});
@@ -299,6 +337,36 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       // work and its checks, what went out, the research brief, and the routines' AI (core/goal-overview.mjs).
       if(route==='/api/goals/overview'&&req.method==='GET')return send(res,200,{...goalOverview({store,query}),ai:routineAI?{available:true,...routineAIStatus(routineAI)}:{available:false}});
       if(route==='/api/routine-ai'&&req.method==='GET')return send(res,200,routineAI?{available:true,...routineAIStatus(routineAI)}:{available:false});
+      // A BACKUP AI the person connects in Settings (core/backup-ai.mjs, discussion #20): never added
+      // by Godspeed itself. Tested like the main one before anything is saved, then kept in Hermes'
+      // fallback chain (when the routines run through Hermes) and as the notebook's second address.
+      const backupHome=routineAI?.home||null;
+      if(route==='/api/backup-ai'&&req.method==='GET')return send(res,200,{hermes:!!backupHome,...backupStatus({home:backupHome,state:store.state})});
+      if(route==='/api/backup-ai'&&req.method==='POST'){
+        const input=JSON.parse(await body(req)),address=String(input.url||'').trim(),config={url:!address||/\/chat\/completions\/?$/.test(address)?address:baseAddress(address)+'/chat/completions',key:typeof input.key==='string'?input.key.trim():input.key,model:typeof input.model==='string'?input.model.trim():input.model};
+        const candidate=modelProvider(config);if(!candidate)throw new Error('Provide a model endpoint, key and model name');
+        const entry=backupEntryFor(config);
+        // A backup is another service than the main AI (the one Hermes runs, and the notebook's own
+        // address), as in /backupai: when one service fails, its other models and keys usually fail
+        // with it, and Hermes counts the same service behind itself as no backup.
+        let main=null;try{main=backupEntryFor(JSON.parse(fs.readFileSync(providerPath,'utf8')));}catch{}
+        const hermesMain=backupHome?routineAIStatus(routineAI):null;
+        if(sameService(entry,main)||sameService(entry,hermesMain))throw new Error(SAME_SERVICE);
+        await candidate({kind:'connection-test',contract:'Reply with Connected.'});
+        return send(res,200,{connected:true,hermes:!!backupHome,...connectBackupAI({home:backupHome,state:store.state,config})});
+      }
+      // The ChatGPT plan sign-in (planSignIn above): its state, start it for the main AI or the
+      // backup, cancel it. The plan cannot be both: Hermes counts a plan behind itself as no backup.
+      if(route==='/api/ai-signin'&&req.method==='GET')return send(res,200,planSignIn?{available:true,...planSignIn.view()}:{available:false,state:'idle'});
+      if(route==='/api/ai-signin/start'&&req.method==='POST'){
+        if(!planSignIn)throw new Error('A ChatGPT plan is signed in where Hermes runs your routines; this notebook has none.');
+        const as=JSON.parse(await body(req)).as;
+        if(as==='backup'&&routineAIStatus(routineAI).provider===PLAN_PROVIDER)throw new Error(SAME_SERVICE);
+        if(as==='main'&&fallbackChain(fs.existsSync(path.join(backupHome,'config.yaml'))?fs.readFileSync(path.join(backupHome,'config.yaml'),'utf8'):'')[0]?.provider===PLAN_PROVIDER)throw new Error(BACKUP_SERVICE);
+        return send(res,200,{available:true,...await planSignIn.start(as)});
+      }
+      if(route==='/api/ai-signin/cancel'&&req.method==='POST')return send(res,200,planSignIn?{available:true,...planSignIn.cancel()}:{available:false,state:'idle'});
+      if(route==='/api/backup-ai/remove'&&req.method==='POST')return send(res,200,{hermes:!!backupHome,...removeBackupAI({home:backupHome,state:store.state})});
       if(route==='/api/routine-ai/check'&&req.method==='POST'){if(!routineAI)throw new Error('This notebook runs no routines through Hermes');return send(res,200,{available:true,...await checkRoutineAI({...routineAI,executable:descriptor.executable,cwd:store.root,sourceRoot:descriptor.sourceRoot})});}
       if(route==='/api/sync/configure'&&req.method==='POST'){
         // A computer not yet signed in to GitHub signs in once, then the same check runs again (github-sign-in.mjs).
@@ -562,7 +630,7 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
   // editor) bring the assistant's own identity file in step with them (assistant-soul.mjs).
   let soulDebounce;const followPersona=()=>{clearTimeout(soulDebounce);soulDebounce=setTimeout(()=>{try{shelf.followPersona();}catch{}},2000);soulDebounce.unref?.();};
   const rootWatcher=fs.watch(store.root,(event,name)=>{if(durableRoots.includes(name)){watchRoot(name);changed(name)(event,null);}else if(durableFiles.includes(name)){changed('')(event,name);if(name==='AGENTS.md')followPersona();}});
-  return { server, store, index, query, domains, scheduler, sync, mediaSync,address: server.address(), webAddress: webServer?.address() || null, close: async () => { index.meaning?.close(); index.expansionWorker?.close(); if (webServer) await new Promise(resolve => webServer.close(resolve)); clearInterval(meaningTimer);clearInterval(processingTimer);clearInterval(backupTimer);clearInterval(factTimer);stopIndexing();store.unwatch();githubSignIn.close();clearTimeout(soulDebounce);await syncRunner.close();await menerioImport.close();rootWatcher.close();for(const watcher of watchers.values())watcher.close();clearTimeout(debounce);clearTimeout(indexDebounce);clearInterval(telegramTimer);clearInterval(interval);clearInterval(jobs);clearInterval(syncTimer);clearInterval(mediaTimer); await new Promise(resolve => server.close(resolve)); await index.close(); } };
+  return { server, store, index, query, domains, scheduler, sync, mediaSync,address: server.address(), webAddress: webServer?.address() || null, close: async () => { index.meaning?.close(); index.expansionWorker?.close(); if (webServer) await new Promise(resolve => webServer.close(resolve)); clearInterval(meaningTimer);clearInterval(processingTimer);clearInterval(backupTimer);clearInterval(factTimer);stopIndexing();store.unwatch();githubSignIn.close();planSignIn?.cancel();clearTimeout(soulDebounce);await syncRunner.close();await menerioImport.close();rootWatcher.close();for(const watcher of watchers.values())watcher.close();clearTimeout(debounce);clearTimeout(indexDebounce);clearInterval(telegramTimer);clearInterval(interval);clearInterval(jobs);clearInterval(syncTimer);clearInterval(mediaTimer); await new Promise(resolve => server.close(resolve)); await index.close(); } };
 }
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const root = process.env.GODSPEED_WORKSPACE;

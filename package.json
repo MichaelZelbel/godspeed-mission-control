@@ -1,0 +1,5 @@
+{
+  "private": true,
+  "description": "Godspeed Mission Control. This file only says that the product's .js files are CommonJS wherever it is checked out, also inside a folder whose package.json says \"type\": \"module\" (tools/test-nested-checkout.js). The notebook, the add-ons and the recipes keep their own package.json.",
+  "type": "commonjs"
+}

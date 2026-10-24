@@ -33,6 +33,7 @@ trap 'rm -rf "$WORK"' EXIT
 lib() { GODSPEED_INSTALL_LIB=1 GODSPEED_DIR="$WORK/dir" bash -c "source '$ROOT/docker/server/install.sh'; $1"; }
 
 check "the script parses" bash -n docker/server/install.sh
+check "the add-on model proxy is installed without Node, and another installation's command is preserved" lib "GODSPEED_RAW=file://$ROOT; GODSPEED_MODEL_COMMAND_DIR=$WORK/model-bin; mkdir -p \"\$GODSPEED_MODEL_COMMAND_DIR\"; install_model_command && test -s \"\$DIR/.godspeed/model.mjs\" && grep -q godspeed-docker \"\$DIR/.godspeed/model-host.json\" && bash -n \"\$GODSPEED_MODEL_COMMAND_DIR/godspeed-model\" && printf 'keep another installation\n' > \"\$GODSPEED_MODEL_COMMAND_DIR/godspeed-model\" && install_model_command && grep -qx 'keep another installation' \"\$GODSPEED_MODEL_COMMAND_DIR/godspeed-model\""
 expect_out "a public address becomes <a-b-c-d>.sslip.io" '^203-0-113-7\.sslip\.io$' lib 'sslip_host 203.0.113.7'
 check "an impossible address is refused" bash -c "! GODSPEED_INSTALL_LIB=1 bash -c 'source $ROOT/docker/server/install.sh; sslip_host 300.1.2.3'"
 check "a home-network address is not taken as public" lib 'is_private_ipv4 192.168.1.20 && is_private_ipv4 10.0.0.5 && is_private_ipv4 172.20.1.1 && is_private_ipv4 100.101.102.103 && is_private_ipv4 127.0.0.1'

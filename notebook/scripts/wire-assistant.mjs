@@ -6,9 +6,10 @@ import {ApiKeys,ASSISTANT_KEY_NAME} from '../core/api-keys.mjs';
 import {installSkillTree} from '../core/packaged-skills.mjs';
 import {commandFile} from './windows-command-file.mjs';
 import {starterBorn} from '../core/starter-workspace.mjs';
-import {withTimezone,godspeedHermesSettings,CRON_PROVIDER} from '../core/hermes-config.mjs';
+import {withTimezone,godspeedHermesSettings,CRON_PROVIDER,backupQuickCommand,BACKUP_COMMAND} from '../core/hermes-config.mjs';
 import {personaOf} from '../core/persona.mjs';
 import {syncSoul,readExtra} from '../core/assistant-soul.mjs';
+import {installModelCommand} from './install-model-command.mjs';
 import {noteHermesMet} from '../core/starting-routines.mjs';
 import {keepOutOfGit} from '../core/first-commit.mjs';
 const root=process.env.GODSPEED_WORKSPACE,home=process.argv[2];if(!root||!home)throw new Error("Set GODSPEED_WORKSPACE to your mission control folder and name your assistant's home folder");
@@ -24,6 +25,7 @@ const kit=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..');
 // integrated adapters below. Dependencies stay beside their original wrappers.
 const commandHome=path.join(home,'bin');
 fs.mkdirSync(commandHome,{recursive:true});
+installModelCommand({root,home});
 // Every Windows command file lives in commandHome; windows-command-file.mjs says why
 // the paths in it are written the way they are.
 const cmd=write=>commandFile(write,{folder:commandHome});
@@ -186,6 +188,15 @@ if(starterBorn(root)){
  text=godspeedHermesSettings(text);
  const provider=path.join(home,'plugins',CRON_PROVIDER,'__init__.py'),source=fs.readFileSync(path.join(kit,'notebook','assistant-files','godspeed-cron-provider.py'),'utf8').replace(/\r\n/g,'\n');
  if(!fs.existsSync(provider)||fs.readFileSync(provider,'utf8')!==source){fs.mkdirSync(path.dirname(provider),{recursive:true});atomic(provider,source);}
+}
+// /backupai in Telegram on the one-click server, where its Telegram runner hands the chat to the
+// backup AI setup (hermes-config.mjs, core/backup-ai.mjs); on every other installation a backup AI
+// is connected in Settings. The context plugin names the way that exists here when someone asks.
+{
+ const runner=process.env.GODSPEED_ORIGINAL_RUNTIME==='on'&&!!process.env.GODSPEED_TELEGRAM_DIR&&!['on','off'].includes(process.env.GODSPEED_TELEGRAM||'');
+ text=backupQuickCommand(text,runner?{node:process.execPath,script:path.join(kit,'notebook','scripts','backup-ai.mjs'),dir:process.env.GODSPEED_TELEGRAM_DIR}:null);
+ const marker=path.join(home,'plugins','godspeed-context','backup-command.txt');
+ if(runner)atomic(marker,'/'+BACKUP_COMMAND+'\n');else fs.rmSync(marker,{force:true});
 }
 atomic(file,text);fs.chmodSync(file,0o600);
 // Hermes reads its own SOUL.md before AGENTS.md, as the assistant's identity, and seeds it with

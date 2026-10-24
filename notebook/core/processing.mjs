@@ -12,6 +12,13 @@ import {visibleRows} from './visibility.mjs';
 export const PIPELINE = 'analysis';
 const DEFAULTS = {enabled: true, daily_limit: 40, quiet_minutes: 2, min_chars: 30, retry_minutes: 30, max_attempts: 3};
 export const contentFingerprint = note => hash([String(note.title || ''), String(note.content || '')]);
+// A note its writer marked skip_processing: true (an add-on that already wrote its summary and
+// facts, one note per scanned letter) stays visible and searchable like any note, but processing
+// never takes it: not in the queue, not in a bulk run, and it never counts against the daily limit.
+// Only the note's own "process" still runs on it, because the person asked for that one note.
+// Until 23 October 2026 the only way out was ai_visibility: hidden, which also hid the note from
+// search, and a pile of a few hundred letters held the person's own notes back for weeks.
+export const skipsProcessing = note => note?.skip_processing === true;
 const jobId = noteId => 'analysis-' + hash(noteId).slice(0, 24);
 const today = (timezone, at = new Date()) => new Intl.DateTimeFormat('en-CA', {timeZone: timezone || 'UTC'}).format(at);
 // How many times a note was processed on `day`; a record written before runs
@@ -30,6 +37,14 @@ export function recordJob(store, query, note, patch) {
   const old = jobFor(query, note.id);
   return store.save('note_ai_jobs', {id: old?.id || jobId(note.id), note_id: note.id, pipeline: PIPELINE, user_id: 'owner', references: [{type: 'notes', id: note.id, uid: note.uid, field: 'note_id'}], ...patch});
 }
+// The same, waiting while another program (a sync, an add-on) writes. Until 23 October 2026 the
+// automatic run saved "done" without waiting; when that save met another writer it was lost, the
+// note's record still said "running", and the next round processed the same text again: a letter was
+// processed three times in seven minutes and proposed the same things three times.
+export function recordJobSoon(store, query, note, patch) {
+  const old = jobFor(query, note.id);
+  return store.saveAsync('note_ai_jobs', {id: old?.id || jobId(note.id), note_id: note.id, pipeline: PIPELINE, user_id: 'owner', references: [{type: 'notes', id: note.id, uid: note.uid, field: 'note_id'}], ...patch});
+}
 
 export class NoteProcessing {
   constructor({store, query, domains, device}) { this.store = store; this.query = query; this.domains = domains; this.device = device; this.status = {state: 'idle', last_run: null, last_error: null, processed_today: 0}; }
@@ -40,7 +55,7 @@ export class NoteProcessing {
   // made it a candidate, and it was processed and paid for again.
   candidates(settings = processingSettings(this.store), now = Date.now()) {
     const quiet = now - settings.quiet_minutes * 60000, jobs = new Map(this.query.rows('note_ai_jobs').filter(j => (j.pipeline || PIPELINE) === PIPELINE).map(j => [j.note_id, j]));
-    return visibleRows(this.query, 'notes').filter(n => !n.is_trashed && !n.removed_at && n.ai_visibility !== 'hidden' && String(n.created_at || n.updated_at || '') >= settings.since && String(n.content || '').trim().length + String(n.title || '').trim().length >= settings.min_chars)
+    return visibleRows(this.query, 'notes').filter(n => !n.is_trashed && !n.removed_at && n.ai_visibility !== 'hidden' && !skipsProcessing(n) && String(n.created_at || n.updated_at || '') >= settings.since && String(n.content || '').trim().length + String(n.title || '').trim().length >= settings.min_chars)
       .map(n => ({note: n, job: jobs.get(n.id), fingerprint: contentFingerprint(n)}))
       .filter(({job, fingerprint}) => !job || job.fingerprint !== fingerprint && !(job.state === 'failed' && job.desired_fingerprint === fingerprint && (job.attempts || 0) >= settings.max_attempts))
       .filter(({job}) => !job?.next_eligible_at || Date.parse(job.next_eligible_at) <= now)
@@ -74,14 +89,14 @@ export class NoteProcessing {
     this.running = true;
     const {note, fingerprint, job} = next, attempts = job?.desired_fingerprint === fingerprint ? (job.attempts || 0) + 1 : 1;
     try {
-      recordJob(this.store, this.query, note, {state: 'running', desired_fingerprint: fingerprint, attempts, automatic: true, day, runs_today: (job?.automatic ? runsToday(job, day) : 0) + 1, execution_started_at: new Date(now).toISOString(), last_error: null});
+      await recordJobSoon(this.store, this.query, note, {state: 'running', desired_fingerprint: fingerprint, attempts, automatic: true, day, runs_today: (job?.automatic ? runsToday(job, day) : 0) + 1, execution_started_at: new Date(now).toISOString(), last_error: null});
       await this.domains.invoke('process-note', {note_id: note.id, reason: 'automatic'});
-      recordJob(this.store, this.query, note, {state: 'completed', fingerprint, desired_fingerprint: fingerprint, attempts, automatic: true, day, last_error: null, next_eligible_at: null});
+      await recordJobSoon(this.store, this.query, note, {state: 'completed', fingerprint, desired_fingerprint: fingerprint, attempts, automatic: true, day, last_error: null, next_eligible_at: null});
       this.status = {...this.status, state: 'idle', last_run: new Date().toISOString(), last_error: null, processed_today: doneToday + 1};
       return {processed: 1, note_id: note.id};
     } catch (error) {
       const later = new Date(now + settings.retry_minutes * 60000 * attempts).toISOString();
-      try { recordJob(this.store, this.query, note, {state: attempts >= settings.max_attempts ? 'failed' : 'pending', desired_fingerprint: fingerprint, attempts, automatic: true, day, last_error: String(error.message).slice(0, 300), next_eligible_at: attempts >= settings.max_attempts ? null : later}); } catch {}
+      try { await recordJobSoon(this.store, this.query, note, {state: attempts >= settings.max_attempts ? 'failed' : 'pending', desired_fingerprint: fingerprint, attempts, automatic: true, day, last_error: String(error.message).slice(0, 300), next_eligible_at: attempts >= settings.max_attempts ? null : later}); } catch {}
       this.status = {...this.status, state: 'idle', last_run: new Date().toISOString(), last_error: error.message};
       return {processed: 0, failed: note.id, error: error.message};
     } finally { this.running = false; }

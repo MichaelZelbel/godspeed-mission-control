@@ -1,8 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {atomic} from './records/store.mjs';
-import {setConfigValue,readConfigValue} from './hermes-config.mjs';
+import {setConfigValue,readConfigValue,deleteConfigValue} from './hermes-config.mjs';
 import {hermesProvider} from './runtime.mjs';
+import {hermesHelper,runHermesHelper} from './addon-model.mjs';
+import {fallbackChain,noteMainAnswered,noteMainFailed} from './backup-ai.mjs';
 
 // THE AI THE ROUTINES THINK WITH (18 October 2026). Every installer ends with "connect your own AI
 // account in Settings", and until this change that form powered only the notebook's own small jobs
@@ -48,7 +50,7 @@ const envValue=(text,name)=>{const m=new RegExp('^\\s*(?:export\\s+)?'+name+'\\s
 const read=file=>{try{return fs.readFileSync(file,'utf8').replace(/^\uFEFF/,'');}catch{return '';}};
 const writePrivate=(file,text)=>{atomic(file,text);if(process.platform!=='win32')try{fs.chmodSync(file,0o600);}catch{}};
 export function readRecord(state){try{const r=JSON.parse(fs.readFileSync(path.join(state,RECORD),'utf8'));return r&&typeof r==='object'?r:{};}catch{return {};}}
-const writeRecord=(state,record)=>atomic(path.join(state,RECORD),JSON.stringify(record,null,2)+'\n');
+export const writeRecord=(state,record)=>atomic(path.join(state,RECORD),JSON.stringify(record,null,2)+'\n');
 
 // Writes the endpoint into Hermes' own home: the model section of config.yaml and the key in .env
 // (or, for a custom address, in config.yaml, which is private to this account).
@@ -88,8 +90,21 @@ export function routineAIStatus({home,state}){
 // THE CHECK: one short request through Hermes, as the routines make theirs (the model and key
 // from Hermes' own home, no tools), so "the routines can reach the AI" is something seen, not
 // assumed. Its result is kept beside the notebook's other machine state.
-export async function checkRoutineAI({executable,home,cwd,state,sourceRoot,spawnProcess,now=()=>new Date()}){
+export async function checkRoutineAI({executable,home,cwd,state,sourceRoot,spawnProcess,now=()=>new Date(),ask=askDirectly}){
  const started=now();let check;
+ // WITH A BACKUP AI IN HERMES' CHAIN (core/backup-ai.mjs), a request through Hermes is answered by
+ // the backup whenever the main one fails, so "the routines reached it" would hide a main connection
+ // that is broken. Then each is asked on its own, through the helper godspeed-model uses (the
+ // assistant's own model settings and credentials, no tools, never the other one).
+ const backup=fallbackChain(read(path.join(home,'config.yaml')))[0];
+ if(backup){
+  const one=async route=>{try{await ask({executable,home,cwd,sourceRoot,spawnProcess,route});return {ok:true};}catch(error){return {ok:false,error:String(error?.message||error).slice(0,300)};}};
+  const main=await one('main'),second=await one('backup');
+  if(main.ok)noteMainAnswered(state);else noteMainFailed(state,main.error,started);
+  check={at:started.toISOString(),ok:main.ok,...(main.ok?{}:{error:main.error}),backup:{...second,model:backup.model}};
+  writeRecord(state,{...readRecord(state),check});
+  return {...routineAIStatus({home,state}),check};
+ }
  try{
   const ask=hermesProvider({executable,home,cwd,sourceRoot,spawnProcess});
   const reply=await ask({kind:'connection-test',contract:'Reply with the single word Connected.',timeout_ms:300000});
@@ -97,4 +112,27 @@ export async function checkRoutineAI({executable,home,cwd,state,sourceRoot,spawn
  }catch(error){check={at:started.toISOString(),ok:false,error:String(error?.message||error).slice(0,300)};}
  writeRecord(state,{...readRecord(state),check});
  return {...routineAIStatus({home,state}),check};
+}
+// One short request to the main connection or the backup, by name, or to the models of a ChatGPT
+// plan just signed in ("plan", the first that answers; assistant-files/addon-model.py).
+export async function askDirectly({executable,home,cwd,sourceRoot,spawnProcess,route,timeoutMs=route==='plan'?480000:120000}){
+ const connection=hermesHelper({verified:true,executable,home,sourceRoot},path.join(path.resolve(cwd),'.godspeed'));
+ return runHermesHelper({connection,root:cwd,spawnProcess,deadline:Date.now()+timeoutMs,
+  request:{system:'Reply with the single word Connected.',prompt:'Are you there?',timeout_ms:Math.min(timeoutMs,120000),max_tokens:128,route}});
+}
+
+// A CHATGPT PLAN AS THE MAIN AI, signed in from Settings (core/plan-signin.mjs): the model section
+// names the plan and the model that answered. An address or key left from an earlier main AI goes,
+// since the plan has its own. Nothing is written before a model of the plan answered.
+export function connectPlanMain({home,state,model,now=new Date()}){
+ if(!model||!String(model).trim())throw Error('Name the model the routines should use');
+ const configFile=path.join(home,'config.yaml');fs.mkdirSync(home,{recursive:true});
+ let text=read(configFile).replace(/\r\n/g,'\n').replace(/^model:[ \t]*(?!\{\}|#|$)[^\n]*$/m,'model:');
+ text=setConfigValue(text,['model','provider'],JSON.stringify('openai-codex'));
+ text=setConfigValue(text,['model','default'],JSON.stringify(String(model).trim()));
+ text=deleteConfigValue(deleteConfigValue(text,['model','base_url']),['model','api_key']);
+ writePrivate(configFile,text);
+ const record={...readRecord(state),connected:{provider:'openai-codex',model:String(model).trim(),base_url:null,at:now.toISOString()}};
+ delete record.check;writeRecord(state,record);
+ return routineAIStatus({home,state});
 }
