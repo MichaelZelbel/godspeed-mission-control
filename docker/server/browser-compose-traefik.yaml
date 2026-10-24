@@ -3,7 +3,7 @@
 name: godspeed-mission-control
 services:
   godspeed:
-    image: ghcr.io/michaelzelbel/godspeed-mission-control@sha256:cfcc97ee120ceeaa8ccd9df1be8bd0467a8d21664054523a26b6fd39ee017fc2
+    image: ghcr.io/michaelzelbel/godspeed-mission-control@sha256:70a07e63bad57ee9cf114a86be3261db533191af28927453a81d5ea8fc330291
     restart: unless-stopped
     init: true
     environment:
