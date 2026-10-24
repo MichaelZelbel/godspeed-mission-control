@@ -65,6 +65,19 @@ Asked in Claude Code to change a tracker, a habit or a meal you already have, fo
 - A change to something that changed after the AI read it is still refused, as before.
 - The same works for goals, routines and deadlines: an AI app can name the version of what it changes in the same way as for a tracker.
 
+## Also coming in the next release: web addresses for add-ons
+
+Some add-ons need a web address on your server, for example a documents add-on whose archive you open on your phone. Until now such an add-on changed the file that gives your notebook its address, and on a server where Godspeed brings its own Caddy every update took that change out again, so the add-on's address was gone until the add-on noticed, up to an hour later.
+
+- Your server now has a folder for add-ons' web addresses, `/etc/caddy/godspeed-addons/`. Each add-on puts a file of its own there, and Godspeed never writes in it, so an update keeps every add-on's address.
+- An add-on can also add a path to your notebook's own address, such as `https://<your server>/pictures/`, and show it only to whoever is signed in to your notebook.
+
+Your server gets the folder when you update it. For add-on authors: `docs/full-version/addon-model.md`, "A web address for an add-on".
+
+## Also coming in the next release: Godspeed inside another project's folder
+
+Checked out inside the folder of a JavaScript project whose settings say its files are ES modules, for example an add-on's own repository, Godspeed's tools took that setting for their own: the deadline tool stopped with "require is not defined", and the notebook, which uses it, did not start. Godspeed now carries its own setting, so its tools and the notebook work wherever it is checked out, and the helper that lends your computer's browser works wherever it is installed.
+
 ## New in 2.0.0-beta.4 (21 October 2026): a small copy before each update
 
 Before every update the installer saves a copy of your notebook, so you can go back if the update goes wrong. Until now that copy took your whole folder, also your work folder with its recordings and downloads. On a grown mission control it was gigabytes and many minutes, and an update refused to start when the disk had no room for it. Old copies also piled up.
