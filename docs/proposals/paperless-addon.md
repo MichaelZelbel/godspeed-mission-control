@@ -1,6 +1,6 @@
 # The Clerk: what it should do
 
-**Status: all open questions answered, 22 October 2026, and revised the same day after an outside
+**Status: first version built (batches 1 to 4, 22 to 24 October 2026) and running on the author's server; release waits for the real-iPhone check and publishing. Earlier: all open questions answered, 22 October 2026, and revised the same day after an outside
 review found gaps in backups, recovery, filing and deadlines (section 10). Next: the build plan.**
 Feature request:
 [discussion #18](https://github.com/MichaelZelbel/godspeed-mission-control/discussions/18).
@@ -173,7 +173,10 @@ never updates. Updates only to versions the add-on was tested with. Before an up
 fresh restore copy and keeps a copy of Paperless's database, its settings and the version it ran.
 When the new version does not come up healthy, it puts all of that back, not only the old version,
 because an update may already have changed the database. Restarts Paperless when it stops. Warns
-before the disk is full. Says what needs the user in plain words, and nothing otherwise.
+before the disk is full. Says what needs the user in plain words, and nothing otherwise. Updates
+run only at night. On a Paperless the add-on installed that has become shared (no drive export, F9),
+updates still run, using the copy the update itself keeps on the server (settled while building, 24
+October 2026).
 *Test:* an update forced to fail after it has changed the database ends on the previous version
 with the previous database, every document present and readable; a stopped Paperless is running
 again on the next check.
@@ -197,7 +200,9 @@ type (from the user's list), tags, the date printed on the document, and the fol
 Then it removes the inbox tag. Field by field:
 - *Title:* replaced only when it is a file name such as "Scan 2026-10-22 16-17-01" or the upload's
   file name; a title a person typed stays.
-- *Date:* replaced only when it is missing or equals the upload day (what phone apps put there).
+- *Date:* replaced only when it is missing or equals the upload day (what phone apps put there);
+  a date one day either side of the upload day counts as the upload day, because phone and server
+  can be in different time zones.
 - *Sender and type:* set only when empty, so a value from the user or from a Paperless rule stays.
 - *Tags:* only added, never removed (except the inbox tag at the end).
 - *Tax-year tags:* "Tax <year>" in the user's language means "needed for that year's tax return",
@@ -299,7 +304,10 @@ version that made the export, because Paperless can only import an export into t
 wrote it, then imports it and only then updates as usual (F3). Paperless's export leaves out
 sign-in tokens, so the phone signs in once more, and the setup says so. The add-on takes its own
 records back from the same folder; anything newer than them it finds again through the marks on
-its files, notes and deadlines (F18), so nothing is filed, noted or reminded twice.
+its files, notes and deadlines (F18), so nothing is filed, noted or reminded twice. Settled while
+building (24 October 2026): each installation has its own copy folder; the first copy is made right
+after the add-on is resumed, not only the next night; when the drive holds copies of two servers
+made the same week, the rebuild asks which one to use.
 *Test:* after a run over the kit and a restore copy, the test server is thrown away; a fresh
 installation rebuilds Paperless with every document, title, tag and date of the original and the
 confirmed folder plan, and its next run makes no second file, note, collection item or deadline.
