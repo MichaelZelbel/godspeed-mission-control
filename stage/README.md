@@ -1,11 +1,11 @@
 # stage
 
-Not for you: `stage.sh` and `stage.mjs`.
+Not for you: `stage.sh`, `stage.mjs` and `check-public-lines.sh`.
 
-The two files here are not programs you type, and the installer does not put them on your
-computer. They are how the installers themselves know which version to install. That is why
-they are here and not in `tools/`: everything in `tools/` is copied onto every user's computer
-as a program, and these are not programs for users.
+The files here are not programs you type, and the installer does not put them on your
+computer. They are how the installers themselves know which version to install, and one check
+on the lines that lead to them. That is why they are here and not in `tools/`: everything in
+`tools/` is copied onto every user's computer as a program, and these are not programs for users.
 
 `stage.json`, at the top of this repository, is the **stage file**: one file saying
 everything one published version is made of. The commit of this repository the version
@@ -57,6 +57,16 @@ a server edition cannot be called `constructor`, even though the pattern those n
 matched by would have let it through. `stage.schema.json` writes the list down under
 `neverNamedFields`; `stage/stage.mjs` reads it from there, `stage/stage.sh` repeats it, and
 `stage/stage-cases/inherited-names.txt` is the list all three tests sweep.
+
+`stage/check-public-lines.sh` is the other side of the same thing: the readers say which version
+an installer installs, and this check says that the lines people copy lead to the public stage at
+all. It reads every file holding a public line of this repository - the README, the Docker and
+server pages, the installers themselves and the server container's setup links - and fails, naming
+the file and the line, when one of them names the `main` branch (whatever was merged today) or a
+dated release tag (a version that is no longer current). Addresses allowed on purpose are listed in
+the script with the reason. `sh stage/check-public-lines.sh` reads the checkout you are in, and a
+folder given after it reads another copy of those files, which is how its test shows it failing on
+an older commit. Its own test is `bash stage/test-check-public-lines.sh`.
 
 Three tests keep the two readers one reader, each one command from the root of a checkout:
 `node stage/test-stage.mjs`, `bash stage/test-stage-sh.sh` (which runs the whole list under

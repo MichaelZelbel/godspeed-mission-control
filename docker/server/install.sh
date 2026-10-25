@@ -6,7 +6,8 @@
 #
 #   curl -fsSL https://teachitonce.com/server | bash
 #
-# (the same file as https://raw.githubusercontent.com/MichaelZelbel/godspeed-mission-control/main/docker/server/install.sh)
+# (the same file as https://raw.githubusercontent.com/MichaelZelbel/godspeed-mission-control/beta/docker/server/install.sh,
+#  on beta, the public stage, which holds the version the maintainer released)
 #
 # What it does: installs Docker if the server has none, puts the very compose.yaml that
 # Hostinger's one-click deploys (docker/hostinger/compose.yaml) in /opt/godspeed-mission-control
