@@ -224,6 +224,15 @@ run_all() { # <shell>
   same "  and no field of it can be read either" "$CODE" "1"
   same "    with nothing on stdout" "$OUT" ""
 
+  # The freeze publishes a candidate's Windows setup on the tag candidate/<version> and writes
+  # that tag into the stage file, so a release tag may hold one slash between two parts.
+  printf '%s\n' "  a candidate's stage file, whose release tag holds one slash"
+  run_one "$CASES/ok-candidate-tag.json" check
+  same "  it is read and checked" "$CODE" "0"
+  same "    and check prints nothing" "$OUT$ERRS" ""
+  run_one "$CASES/ok-candidate-tag.json" get windowsSetup.releaseTag
+  same "    and its release tag reads back whole as candidate/2.0.0-beta.7" "$OUT" "candidate/2.0.0-beta.7"
+
   run_one "$CASES/ok-later-stage.json" get previous.version
   same "a stage that replaced another names its previous version" "$OUT" "2.0.0-beta.6"
   run_one "$CASES/ok-later-stage.json" get previous.stageCommit

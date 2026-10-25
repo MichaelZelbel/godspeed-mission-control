@@ -115,10 +115,27 @@ names_never_given() { # <dotted path>: 0 when any step of it is such a name
   done
 }
 
-is_plain() { # a file name or a release tag
+is_plain() { # a file name
   _p=$1
   case $_p in '' | *[!0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ._-]*) return 1 ;; esac
   return 0
+}
+
+is_tag_part() { # one part of a release tag: not empty, never starting with a dot, never two in a row
+  _t=$1
+  case $_t in '' | .* | *..* | *[!0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ._-]*) return 1 ;; esac
+  return 0
+}
+
+is_release_tag() { # a GitHub release tag: one part, or two joined by exactly one slash
+  # A candidate's setup is published on candidate/<version>, so a tag may hold one slash. It is a
+  # Git ref, and Git takes no empty part, no part starting with a dot and no two dots in a row.
+  _r=$1
+  case $_r in
+    */*/*) return 1 ;;
+    */*)   is_tag_part "${_r%%/*}" && is_tag_part "${_r#*/}" ;;
+    *)     is_tag_part "$_r" ;;
+  esac
 }
 
 # ------------------------------------------------------------------------------ reading the file
@@ -424,7 +441,7 @@ check_stage() {
       notwhat "Windows setup file name" "a file name" "$LOOK_VAL"
     fi
     look windowsSetup.releaseTag
-    if [ "$LOOK_FOUND" -eq 1 ] && { [ "$LOOK_KIND" != s ] || ! is_plain "$LOOK_VAL"; }; then
+    if [ "$LOOK_FOUND" -eq 1 ] && { [ "$LOOK_KIND" != s ] || ! is_release_tag "$LOOK_VAL"; }; then
       notwhat "Windows setup release tag" "a GitHub release tag" "$LOOK_VAL"
     fi
     look windowsSetup.sha256
