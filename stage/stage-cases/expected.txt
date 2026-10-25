@@ -8,6 +8,10 @@
 # stopped at instead, and stage/test-stage-agree.sh holds each reader to its own words rather
 # than to one shared sentence.
 # Every one of them must leave exit 1, one line on stderr and nothing on stdout.
+# The last two hold a sound value under a name no stage file gives a field - an add-on and a server
+# edition called constructor, each pinned the way a real one is. The name of an add-on and of an
+# edition is matched by a pattern, which the lowercase inherited names fit, so there the value
+# cannot be what the refusal is about: both readers must refuse the name itself.
 bad-not-json.json|is not JSON|is not JSON in the layout a stage file is written in: line 1
 bad-format.json|says stage format 2, which this reader does not understand.|
 bad-missing-field.json|names no product commit.|
@@ -22,3 +26,5 @@ bad-unknown-field.json|holds serverImage, which a stage file does not name.|
 bad-duplicate-field.json|names withdrawn twice; a stage file names each field once.|
 bad-inherited-field.json|holds toString, which a stage file does not name.|
 bad-inherited-proto.json|holds kitBootstrap.__proto__, which a stage file does not name.|
+bad-inherited-addon.json|holds addons.constructor, which a stage file does not name.|
+bad-inherited-edition.json|holds serverEditions.constructor, which a stage file does not name.|

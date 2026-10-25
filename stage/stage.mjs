@@ -58,6 +58,26 @@ const own = (o, k) => isObject(o) && Object.hasOwn(o, k);
 const ownValue = (o, k) => (own(o, k) ? o[k] : undefined);
 
 /**
+ * Own fields are not enough on their own: where stage.schema.json names an edition or an add-on by
+ * a pattern, a stage file may call it anything that pattern matches, and `constructor` matches it.
+ * A file could then really hold addons.constructor, and own fields or not, this reader would read
+ * it - while the same name reaches JavaScript's own constructor everywhere else. So the schema
+ * writes down the names a stage file never gives a field, this reader reads that list out of it,
+ * and no field is named one of them, at any level and whatever its value, and no field asked for
+ * is either. stage/stage.sh repeats the same list.
+ */
+let neverNamed = new Set();
+function namesNeverGiven(schema) {
+  const names = ownValue(ownValue(schema, "neverNamedFields"), "names");
+  if (!Array.isArray(names) || names.length === 0 || names.some((n) => typeof n !== "string")) {
+    process.stderr.write("stage.schema.json names no field names a stage file never gives a field, so nothing can be checked.\n");
+    process.exit(1);
+  }
+  return new Set(names);
+}
+const neverGiven = (name) => neverNamed.has(name);
+
+/**
  * A refusal is one plain sentence on one line, so whatever a stage file holds has to fit on one.
  * JSON lets a string hold a newline, a tab or any other control character as an escape, so a
  * sound JSON file can carry a value that would break the sentence that refuses it into two lines.
@@ -166,8 +186,11 @@ function checkAgainst(value, schema, file, path, key) {
     }
   }
   for (const child of Object.keys(value)) {
-    if (own(properties, child)) continue;
     const childPath = path ? `${path}.${child}` : child;
+    if (neverGiven(child)) {
+      refuse(`${file} holds ${oneLine(childPath)}, which a stage file does not name.`);
+    }
+    if (own(properties, child)) continue;
     const match = patterns.find(([shape]) => new RegExp(shape).test(child));
     if (match) checkAgainst(ownValue(value, child), match[1], file, childPath, child);
     else if (closed) {
@@ -254,7 +277,9 @@ function readStage(file) {
   if (twice !== null) {
     refuse(`${file} names ${oneLine(twice)} twice; a stage file names each field once.`);
   }
-  checkAgainst(value, loadSchema(), file, "", undefined);
+  const schema = loadSchema();
+  neverNamed = namesNeverGiven(schema);
+  checkAgainst(value, schema, file, "", undefined);
   return value;
 }
 
@@ -271,7 +296,7 @@ function fieldsOf(value, path = "", into = []) {
 function valueAt(value, path) {
   let here = value;
   for (const step of path.split(".")) {
-    if (!own(here, step)) return undefined;
+    if (neverGiven(step) || !own(here, step)) return undefined;
     here = ownValue(here, step);
   }
   return here;

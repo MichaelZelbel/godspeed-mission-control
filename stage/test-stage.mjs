@@ -110,13 +110,28 @@ if (inherited.length >= 12) ok(`  ${inherited.length} inherited names are swept`
 else bad("at least twelve inherited names are swept", `only ${inherited.length}`);
 const ends = (name, text, words) =>
   (String(text).replace(/\n+$/, "").endsWith(words) ? ok(name) : bad(name, `[${text}] does not end in [${words}]`));
+const written = JSON.parse(readFileSync(join(ROOT, "stage.schema.json"), "utf8")).neverNamedFields;
+same("  stage.schema.json writes the list down, so the reader reads it rather than invents it",
+  (written && Array.isArray(written.names) ? written.names : []).join(" "), inherited.join(" "));
+
+// Every value put in below is one no rule can object to - the pin of a real add-on, the image of
+// the real edition - so each refusal is about the name and nothing else. It has to be: addons and
+// serverEditions name their children by a pattern, and a lowercase inherited name is a name that
+// pattern matches, so a wrong value would refuse the file for the wrong reason and prove nothing.
+const COMMIT = "fecb22dd6f0376ebec810fa733a50eb880484f2e";
+const DIGEST = stage.serverEditions.server.image;
 const stageText = readFileSync(STAGE, "utf8");
 const copy = join(work, "inherited.json");
+const places = (name) => [
+  [name, stageText.replace("{\n", `{\n  "${name}": "${COMMIT}",\n`)],
+  [`kitBootstrap.${name}`, stageText.replace('"kitBootstrap": {\n', `"kitBootstrap": {\n    "${name}": "${COMMIT}",\n`)],
+  [`windowsSetup.${name}`, stageText.replace('"windowsSetup": {\n', `"windowsSetup": {\n    "${name}": "${COMMIT}",\n`)],
+  [`addons.${name}`, stageText.replace('"addons": {\n', `"addons": {\n    "${name}": "${COMMIT}",\n`)],
+  [`serverEditions.${name}`, stageText.replace('"serverEditions": {\n', `"serverEditions": {\n    "${name}": {\n      "image": "${DIGEST}"\n    },\n`)],
+  [`serverEditions.server.${name}`, stageText.replace('"server": {\n', `"server": {\n      "${name}": "${DIGEST}",\n`)],
+];
 for (const name of inherited) {
-  for (const [where, text] of [
-    [name, stageText.replace("{\n", `{\n  "${name}": "x",\n`)],
-    [`kitBootstrap.${name}`, stageText.replace('"kitBootstrap": {\n', `"kitBootstrap": {\n    "${name}": "x",\n`)],
-  ]) {
+  for (const [where, text] of places(name)) {
     writeFileSync(copy, text);
     const got = reader(copy, "check");
     same(`  a stage file holding ${where} is refused with exit 1`, got.code, 1);
@@ -124,7 +139,8 @@ for (const name of inherited) {
     same("    and one sentence on stderr", got.err.split("\n").filter(Boolean).length, 1);
     ends("    saying a stage file does not name it", got.err, `holds ${where}, which a stage file does not name.`);
   }
-  for (const path of [name, `kitBootstrap.${name}`, `addons.${name}`, `serverEditions.server.${name}`]) {
+  for (const path of [name, `kitBootstrap.${name}`, `windowsSetup.${name}`, `addons.${name}`,
+                      `serverEditions.${name}`, `serverEditions.server.${name}`]) {
     const got = reader(STAGE, "get", path);
     same(`  get ${path} leaves 2, so nothing is answered out of JavaScript`, got.code, 2);
     same("    and prints nothing", got.out, "");
@@ -231,6 +247,21 @@ const bentRun = (() => {
 })();
 same("the reader checks the published schema, not a copy of its rules", bentRun.code, 1);
 holds("  so a schema that wants format 7 refuses this file", bentRun.err, "which this reader does not understand");
+
+// The names a stage file never gives a field are read out of the schema too: a schema that adds
+// the edition's own name to the list must refuse the real stage.json for naming it.
+const bentNames = JSON.parse(readFileSync(join(ROOT, "stage.schema.json"), "utf8"));
+bentNames.neverNamedFields.names = [...bentNames.neverNamedFields.names, "server"];
+writeFileSync(join(bentRoot, "stage.schema.json"), JSON.stringify(bentNames, null, 2) + "\n");
+const bentNamesRun = (() => {
+  try {
+    return { code: 0, err: "", out: execFileSync(process.execPath, [join(bentTools, "stage.mjs"), STAGE, "check"], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }) };
+  } catch (e) {
+    return { code: e.status, out: String(e.stdout ?? ""), err: String(e.stderr ?? "") };
+  }
+})();
+same("  the names a stage file never gives a field are read out of the schema as well", bentNamesRun.code, 1);
+holds("    so a schema that adds server to the list refuses the real stage.json", bentNamesRun.err, "holds serverEditions.server, which a stage file does not name.");
 
 console.log(`${pass} of ${pass + fail} pass.`);
 process.exitCode = fail ? 1 : 0;

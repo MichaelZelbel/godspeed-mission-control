@@ -94,6 +94,27 @@ is_name() { # the name of an edition or an add-on: lowercase words joined by one
   return 0
 }
 
+# The names stage.schema.json's neverNamedFields says a stage file never gives a field - the names
+# JavaScript gives to every object it builds. This reader has no prototypes and would never find
+# one by itself, but stage/stage.mjs builds its objects with JSON.parse, which hands it every one
+# of them, so a file allowed to hold one would read differently in the two readers. The names of an
+# edition and of an add-on are matched by a pattern here, and constructor matches it, so the list
+# has to be refused by name: own fields are not enough where the file may name its own fields.
+NEVER_NAMED='toString constructor __proto__ hasOwnProperty valueOf isPrototypeOf propertyIsEnumerable toLocaleString __defineGetter__ __defineSetter__ __lookupGetter__ __lookupSetter__'
+
+never_named() { # <name>: 0 when a stage file never gives a field this name
+  case " $NEVER_NAMED " in *" $1 "*) return 0 ;; esac
+  return 1
+}
+
+names_never_given() { # <dotted path>: 0 when any step of it is such a name
+  _rest=$1
+  while :; do
+    never_named "${_rest%%.*}" && return 0
+    case $_rest in *.*) _rest=${_rest#*.} ;; *) return 1 ;; esac
+  done
+}
+
 is_plain() { # a file name or a release tag
   _p=$1
   case $_p in '' | *[!0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ._-]*) return 1 ;; esac
@@ -376,7 +397,7 @@ check_stage() {
   if [ "$LOOK_FOUND" -eq 1 ]; then
     editions=0
     for e in $(children serverEditions); do
-      is_name "$e" || notnamed "serverEditions.$e"
+      if ! is_name "$e" || never_named "$e"; then notnamed "serverEditions.$e"; fi
       editions=$((editions + 1))
       an_object "serverEditions.$e" "server edition $e" "an object"
       look "serverEditions.$e.image"
@@ -423,7 +444,7 @@ check_stage() {
   look addons
   if [ "$LOOK_FOUND" -eq 1 ]; then
     for a in $(children addons); do
-      is_name "$a" || notnamed "addons.$a"
+      if ! is_name "$a" || never_named "$a"; then notnamed "addons.$a"; fi
       a_commit "addons.$a" "pin of the add-on $a"
     done
   fi
@@ -482,6 +503,7 @@ check_stage() {
 cmd_get() { # <path>
   _p=$1
   _missing="$FILE has no readable field $_p; the fields command lists the ones it has."
+  names_never_given "$_p" && nofield "$_missing"
   look "$_p"
   [ "$LOOK_FOUND" -eq 1 ] || nofield "$_missing"
   case $LOOK_KIND in

@@ -106,12 +106,13 @@ done < "$CASES/expected.txt"
 # JSON.parse, so JavaScript hands it toString, constructor, __proto__ and the rest for free, while
 # stage/stage.sh has no prototypes and never sees one: that is exactly where the two readers could
 # answer differently about one same file. Every name on stage/stage-cases/inherited-names.txt is
-# put in five places and asked for in four, and the two readers are held to one same sentence and
+# put in six places and asked for in six, and the two readers are held to one same sentence and
 # one same exit code throughout.
-# Where addons and serverEditions name their children by a pattern, a lowercase inherited name is
-# a name a stage file may hold there, so the refusal is about the value instead. This test does not
-# fix which of the two sentences it is; it holds both readers to the same one, which is what one
-# reader in two languages means.
+# Every value put in is one no rule can object to - the pin of a real add-on, the real edition's
+# image - so each refusal is about the name and nothing else. Where addons and serverEditions name
+# their children by a pattern, a lowercase inherited name is a name that pattern matches, so a
+# wrong value would refuse the file for the wrong reason and prove nothing: there both readers
+# refuse the name itself, out of the list stage.schema.json writes down.
 printf '%s\n' "  no name JavaScript gives every object is a field, in either reader"
 # The copies are named relative to the root, like everything else here: Git Bash rewrites an
 # absolute POSIX path on its way to node.exe but not on its way to a shell, and each reader names
@@ -133,21 +134,27 @@ refuse_alike() { # <file> <what it is>: both readers refuse it, in one same sent
   same "    and both say it in the same words" "$b" "$a"
 }
 
+COMMIT=fecb22dd6f0376ebec810fa733a50eb880484f2e
+DIGEST=$(node_reader "$STAGE" get serverEditions.server.image)
 inhcount=0
 while IFS= read -r name; do
   case $name in '' | '#'*) continue ;; esac
   inhcount=$((inhcount + 1))
-  { head -n 1 "$STAGE"; printf '  "%s": "x",\n' "$name"; tail -n +2 "$STAGE"; } > "$INH/root.json"
+  { head -n 1 "$STAGE"; printf '  "%s": "%s",\n' "$name" "$COMMIT"; tail -n +2 "$STAGE"; } > "$INH/root.json"
   refuse_alike "$INH/root.json" "a root field $name"
   for parent in kitBootstrap windowsSetup addons; do
-    awk -v n="$name" -v p="  \"$parent\": {" '{ print } $0 == p { printf "    \"%s\": \"x\",\n", n }' \
-      "$STAGE" > "$INH/$parent.json"
+    awk -v n="$name" -v c="$COMMIT" -v p="  \"$parent\": {" \
+      '{ print } $0 == p { printf "    \"%s\": \"%s\",\n", n, c }' "$STAGE" > "$INH/$parent.json"
     refuse_alike "$INH/$parent.json" "$parent.$name"
   done
-  awk -v n="$name" '{ print } $0 == "    \"server\": {" { printf "      \"%s\": \"x\",\n", n }' \
+  awk -v n="$name" -v d="$DIGEST" '{ print } $0 == "  \"serverEditions\": {" { printf "    \"%s\": {\n      \"image\": \"%s\"\n    },\n", n, d }' \
+    "$STAGE" > "$INH/named-edition.json"
+  refuse_alike "$INH/named-edition.json" "serverEditions.$name"
+  awk -v n="$name" -v d="$DIGEST" '{ print } $0 == "    \"server\": {" { printf "      \"%s\": \"%s\",\n", n, d }' \
     "$STAGE" > "$INH/edition.json"
   refuse_alike "$INH/edition.json" "serverEditions.server.$name"
-  for path in "$name" "kitBootstrap.$name" "addons.$name" "serverEditions.server.$name"; do
+  for path in "$name" "kitBootstrap.$name" "windowsSetup.$name" "addons.$name" \
+              "serverEditions.$name" "serverEditions.server.$name"; do
     a=$(node_reader "$STAGE" get "$path" 2> "$TMP/inh-node.err"); ae=$?
     b=$(sh_reader "$STAGE" get "$path" 2> "$TMP/inh-sh.err"); be=$?
     same "  get $path: the Node reader leaves 2" "$ae" "2"

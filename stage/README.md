@@ -46,10 +46,14 @@ Both refuse it instead, with the same sentence, so the withdrawn answer still fa
 A stage file's fields are also only the ones it names itself. JavaScript gives every object
 it builds a handful of names of its own - `toString`, `constructor`, `__proto__`,
 `hasOwnProperty` and the rest - and `stage/stage.mjs` builds its objects out of `JSON.parse`,
-so it is handed all of them for free. None of them is a field: both readers refuse a stage file
-that holds one, in the same sentence, and both answer exit 2 when one is asked for, so neither
-ever prints something JavaScript made up rather than something the file says. The names they
-are held to are in `stage/stage-cases/inherited-names.txt`.
+so it is handed all of them for free. None of them is a field, at any level and whatever its
+value: both readers refuse a stage file that holds one, in the same sentence, and both answer
+exit 2 when one is asked for, so neither ever prints something JavaScript made up rather than
+something the file says. That holds where a stage file names its own fields too - an add-on or
+a server edition cannot be called `constructor`, even though the pattern those names are
+matched by would have let it through. `stage.schema.json` writes the list down under
+`neverNamedFields`; `stage/stage.mjs` reads it from there, `stage/stage.sh` repeats it, and
+`stage/stage-cases/inherited-names.txt` is the list all three tests sweep.
 
 Three tests keep the two readers one reader, each one command from the root of a checkout:
 `node stage/test-stage.mjs`, `bash stage/test-stage-sh.sh` (which runs the whole list under

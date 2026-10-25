@@ -33,6 +33,25 @@ CR=$(printf '\r')
 while IFS= read -r l; do printf '%s%s\n' "$l" "$CR" >> "$TMP/crlf.json"; done < "$STAGE"
 tr -d '\n' < "$STAGE" > "$TMP/compact.json"
 
+# A copy of stage.json with one field more, written in the same layout: <the line it goes after>,
+# <the file holding the lines to put in>, <the copy to write>.
+insert_after() {
+  awk -v anchor="$1" -v add="$2" '
+    { print }
+    $0 == anchor { while ((getline line < add) > 0) print line; close(add) }
+  ' "$STAGE" > "$3"
+}
+
+# Values no rule can object to: the pin of a real add-on and the real edition's image. The names
+# of an add-on and of an edition are matched by a pattern that the lowercase inherited names fit,
+# so only a sound value proves the refusal is about the name.
+COMMIT=fecb22dd6f0376ebec810fa733a50eb880484f2e
+DIGEST=$(sed -n 's/^ *"image": "\([^"]*\)".*$/\1/p' "$STAGE" | head -n 1)
+case $DIGEST in
+  *@sha256:*) ;;
+  *) printf 'the image of the server edition could not be read out of %s\n' "$STAGE" >&2; exit 1 ;;
+esac
+
 run_one() { # <shell> ...reader arguments: fills OUT, ERRS, CODE
   OUT=$("$RUNSH" "$READER" "$@" 2> "$TMP/err.txt")
   CODE=$?
@@ -107,20 +126,36 @@ run_all() { # <shell>
   if [ "$cases" -ge 8 ]; then ok "  $cases malformed cases were run"; else bad "at least eight malformed cases ($cases)"; fi
 
   # No name JavaScript gives every object is a field of a stage file. This reader has no
-  # prototypes to inherit one from, so it refuses them already; the sweep is here because
-  # stage/stage.mjs is the reader that had to be taught to, and both are held to the same list,
-  # stage/stage-cases/inherited-names.txt.
+  # prototypes to inherit one from, so for a field the schema names itself it refuses them
+  # already; where the schema names an add-on or an edition by a pattern it does not, because a
+  # lowercase inherited name is a name that pattern matches, so this reader keeps the list
+  # stage.schema.json writes down and refuses those by name. stage/stage.mjs is held to the same
+  # list, stage/stage-cases/inherited-names.txt, in the same six places.
   printf '%s\n' "  no name JavaScript gives every object is a field"
   inhcount=0
   while IFS= read -r name; do
     case $name in '' | '#'*) continue ;; esac
     inhcount=$((inhcount + 1))
-    { head -n 1 "$STAGE"; printf '  "%s": "x",\n' "$name"; tail -n +2 "$STAGE"; } > "$TMP/inh-root.json"
-    awk -v n="$name" '{ print } $0 == "  \"kitBootstrap\": {" { printf "    \"%s\": \"x\",\n", n }' \
-      "$STAGE" > "$TMP/inh-kb.json"
-    for where in "$name" "kitBootstrap.$name"; do
+    printf '  "%s": "%s",\n' "$name" "$COMMIT" > "$TMP/add.txt"
+    insert_after '{' "$TMP/add.txt" "$TMP/inh-root.json"
+    printf '    "%s": "%s",\n' "$name" "$COMMIT" > "$TMP/add.txt"
+    insert_after '  "kitBootstrap": {' "$TMP/add.txt" "$TMP/inh-kb.json"
+    printf '    "%s": "%s",\n' "$name" "$COMMIT" > "$TMP/add.txt"
+    insert_after '  "windowsSetup": {' "$TMP/add.txt" "$TMP/inh-ws.json"
+    printf '    "%s": "%s",\n' "$name" "$COMMIT" > "$TMP/add.txt"
+    insert_after '  "addons": {' "$TMP/add.txt" "$TMP/inh-addon.json"
+    printf '    "%s": {\n      "image": "%s"\n    },\n' "$name" "$DIGEST" > "$TMP/add.txt"
+    insert_after '  "serverEditions": {' "$TMP/add.txt" "$TMP/inh-edition.json"
+    printf '      "%s": "%s",\n' "$name" "$DIGEST" > "$TMP/add.txt"
+    insert_after '    "server": {' "$TMP/add.txt" "$TMP/inh-server.json"
+    for where in "$name" "kitBootstrap.$name" "windowsSetup.$name" "addons.$name" \
+                 "serverEditions.$name" "serverEditions.server.$name"; do
       case $where in
         kitBootstrap.*) copy=$TMP/inh-kb.json ;;
+        windowsSetup.*) copy=$TMP/inh-ws.json ;;
+        addons.*) copy=$TMP/inh-addon.json ;;
+        serverEditions.server.*) copy=$TMP/inh-server.json ;;
+        serverEditions.*) copy=$TMP/inh-edition.json ;;
         *) copy=$TMP/inh-root.json ;;
       esac
       run_one "$copy" check
@@ -135,7 +170,8 @@ run_all() { # <shell>
           bad "    saying a stage file does not name it ([$ERRS] does not end in it)" ;;
       esac
     done
-    for path in "$name" "kitBootstrap.$name" "addons.$name" "serverEditions.server.$name"; do
+    for path in "$name" "kitBootstrap.$name" "windowsSetup.$name" "addons.$name" \
+                "serverEditions.$name" "serverEditions.server.$name"; do
       run_one "$STAGE" get "$path"
       same "  get $path leaves 2" "$CODE" "2"
       same "    and prints nothing" "$OUT" ""
