@@ -214,6 +214,13 @@ same("a stage that replaced another is read", reader(later, "check").code, 0);
 same("  and names its previous version", reader(later, "get", "previous.version").out, "2.0.0-beta.6\n");
 same("  and the commit of the stage file it came from", reader(later, "get", "previous.stageCommit").out, "9390da492a0035a41b0eb02584234e269bca6dc8\n");
 
+// ----------------------------------------------------------- a candidate's own release tag
+// The freeze publishes a candidate's Windows setup on the tag candidate/<version>, and writes
+// that tag into the stage file. A release tag may therefore hold one slash between two parts.
+const candidate = join(CASES, "ok-candidate-tag.json");
+same("a candidate's stage file, whose release tag holds one slash, is read", reader(candidate, "check").code, 0);
+same("  and its release tag reads back whole", reader(candidate, "get", "windowsSetup.releaseTag").out, "candidate/2.0.0-beta.7\n");
+
 // ------------------------------------------------------------------------- the command line
 same("no arguments prints the usage and leaves 0 through --help", reader("--help").code, 0);
 same("a command it does not know leaves 2", reader(STAGE, "sing").code, 2);
@@ -227,6 +234,25 @@ same("  names the commit pattern", schema.properties.productCommit.pattern, "^[0
 same("  names the SHA-256 pattern", schema.properties.windowsSetup.properties.sha256.pattern, "^[0-9a-f]{64}$");
 holds("  names the digest pattern", Object.values(schema.properties.serverEditions.patternProperties)[0].properties.image.pattern, "@sha256:[0-9a-f]{64}$");
 holds("  names the version pattern", schema.properties.version.pattern, "^[0-9]+\\.[0-9]+\\.[0-9]+");
+
+// The release tag rule itself, not only the files that break it: a tag is one part, or two parts
+// joined by exactly one slash, because a candidate's setup is published on candidate/<version>.
+// A part is never empty, never starts with a dot, and no tag holds two dots in a row, because a
+// tag is a Git ref and Git takes none of those.
+const tagRule = new RegExp(schema.properties.windowsSetup.properties.releaseTag.pattern);
+for (const tag of ["godspeed-v2-integrated-2026-10-24-2", "candidate/2.0.0-beta.7", "v2.0.0", "2.0.0-beta.7"]) {
+  if (tagRule.test(tag)) ok(`  a release tag may be ${tag}`);
+  else bad(`a release tag may be ${tag}`, "the schema's pattern does not take it");
+}
+for (const tag of ["candidate//x", "/x", "x/", "a/b/c", "candidate/2..0", "a..b", "candidate/.hidden", ".hidden", ""]) {
+  if (!tagRule.test(tag)) ok(`  a release tag is not ${JSON.stringify(tag)}`);
+  else bad(`a release tag is not ${JSON.stringify(tag)}`, "the schema's pattern takes it");
+}
+
+// The Windows setup's file name is a file name, not a ref: it keeps the rule it had, with no slash.
+const fileRule = new RegExp(schema.properties.windowsSetup.properties.file.pattern);
+same("  and the Windows setup file name takes no slash", fileRule.test("Godspeed/Setup.exe"), false);
+same("    while it still takes GodspeedSetup.exe", fileRule.test("GodspeedSetup.exe"), true);
 
 // The reader reads the published schema, it does not carry a copy: bend the schema and the
 // reader must bend with it.

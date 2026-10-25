@@ -200,6 +200,41 @@ for pair in "$DUP $CASES/ok-clean.json" "$CASES/ok-clean.json $DUP"; do
   same "    and both say what is wrong in the same words" "$berr" "$aerr"
 done
 
+# ------------------------------- a candidate's release tag, read the same by both readers
+# The freeze publishes a candidate's Windows setup on the tag candidate/<version> and writes that
+# tag into the stage file, so a release tag may hold one slash between two parts. The six files
+# that break that rule are swept by the expected.txt loop above, which holds both readers to one
+# same sentence; here the tag a candidate really carries is read by both and the two are compared.
+printf '%s\n' "  a candidate's stage file, whose release tag holds one slash"
+CANDIDATE=$CASES/ok-candidate-tag.json
+a=$(node_reader "$CANDIDATE" get windowsSetup.releaseTag 2>&1); ae=$?
+b=$(sh_reader "$CANDIDATE" get windowsSetup.releaseTag 2>&1); be=$?
+printf '  %-38s node[%s] shell[%s]\n' "windowsSetup.releaseTag" "$a" "$b"
+same "  the Node reader reads it" "$ae" "0"
+same "  the shell reader reads it" "$be" "0"
+same "    and both read it the same" "$b" "$a"
+same "    and it is the candidate's own tag" "$a" "candidate/2.0.0-beta.7"
+node_reader "$CANDIDATE" fields > "$TMP/cand-node.txt" 2>&1
+same "    the Node reader lists its fields" "$?" "0"
+sh_reader "$CANDIDATE" fields > "$TMP/cand-sh.txt" 2>&1
+same "    the shell reader lists its fields" "$?" "0"
+if diff -u "$TMP/cand-node.txt" "$TMP/cand-sh.txt" > "$TMP/cand.diff"; then
+  ok "    both readers name the same fields of it"
+else
+  bad "    both readers name the same fields of it"
+  cat "$TMP/cand.diff"
+fi
+while IFS= read -r path; do
+  [ -n "$path" ] || continue
+  a=$(node_reader "$CANDIDATE" get "$path" 2>&1); ae=$?
+  b=$(sh_reader "$CANDIDATE" get "$path" 2>&1); be=$?
+  if [ "$ae" -ne 0 ] || [ "$be" -ne 0 ]; then
+    bad "    $path: a reader failed on the candidate's stage file (node exit $ae, shell exit $be)"
+  else
+    same "    $path reads the same in both readers" "$b" "$a"
+  fi
+done < "$TMP/cand-node.txt"
+
 # ----------------------------------- every value, against the record and the file that holds it
 printf '\n%s\n' "every value of stage.json, against the record and the files the release named"
 get() { node_reader "$STAGE" get "$1"; }

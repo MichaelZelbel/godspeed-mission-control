@@ -132,10 +132,11 @@
         "releaseTag": {
           "title": "Windows setup release tag",
           "description": "a GitHub release tag",
+          "comment": "A tag of one part, or of two parts joined by exactly one slash, because a candidate's setup is published on candidate/<version>, as candidate/2.0.0-beta.7. A part holds letters, digits, a dot, a hyphen or an underscore; it is never empty, it never starts with a dot, and no tag holds two dots in a row, because a tag is a Git ref and Git takes none of those.",
           "type": "string",
           "minLength": 1,
-          "pattern": "^[A-Za-z0-9._-]+$",
-          "examples": ["godspeed-v2-integrated-2026-10-24-2"]
+          "pattern": "^(?!.*\\.\\.)[A-Za-z0-9_-][A-Za-z0-9._-]*(/[A-Za-z0-9_-][A-Za-z0-9._-]*)?$",
+          "examples": ["godspeed-v2-integrated-2026-10-24-2", "candidate/2.0.0-beta.7"]
         },
         "sha256": {
           "title": "Windows setup SHA-256",
