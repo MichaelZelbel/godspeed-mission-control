@@ -14,6 +14,16 @@ What you install changes only when a version is released. Until now the install 
 
 A released version can also be taken back. If something is wrong with it, the installers refuse it from then on and install the version before it instead, so a line or a link you saved cannot put it on your computer either.
 
+## Coming in the next release: voice replies
+
+Talk to your assistant while you walk or drive, and listen to the answer. When you send it a voice note in Telegram, it answers with a voice note and the same answer as text, so you can listen now and read or search it later. Ask in writing for a spoken answer ("answer me with a voice note"), and you get one too, with the text.
+
+- It is on by default in your Telegram chat. Send `/voice off` there to get text only, `/voice tts` to have every answer spoken, and `/voice on` to go back. It does not make the Hermes app on your computer read every answer aloud.
+- The voice is a free Microsoft voice that speaks the language of the answer. Or use your own ElevenLabs voice: in Settings, Voice replies, enter your ElevenLabs key, the voice, the model and its voice settings (stability, similarity, style, as on the ElevenLabs voice page). Godspeed makes a short sample first, plays it to you, and keeps the voice only if the sample worked. The key stays on your device, with your other keys.
+- The written answer always arrives. When the voice service refuses, for example because your ElevenLabs credits are used up, you get the text and Godspeed tells you once why the voice note is missing.
+
+Updating keeps your folder, notes and settings. A chat where you already chose `/voice off` keeps it.
+
 ## New in 2.0.0-beta.5 (24 October 2026)
 
 Search by meaning keeps the notebook responsive. Links in a note open when clicked, and text you type stays in the editor if saving fails. The Review page checks for repeats before adding a suggestion.
