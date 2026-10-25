@@ -1,9 +1,11 @@
 name: godspeed-context
-version: "0.2.0"
+version: "0.3.0"
 description: >-
   Tells the model, once per turn before it reads the message (pre_llm_call), that the owner was
-  invited to the getting-to-know-you chat and has not answered yet, or that this chat is under way,
-  and, when the message asks about a backup AI, where the owner connects one on this installation.
-  Prints nothing otherwise. Installed by the Godspeed Mission Control notebook.
+  invited to the getting-to-know-you chat and has not answered yet, or that this chat is under way;
+  when the message asks about a backup AI, where the owner connects one on this installation; and
+  when it asks for a spoken answer or about voice replies, to send the voice note with the same text
+  and how voice replies work. Prints nothing otherwise. Installed by the Godspeed Mission Control
+  notebook.
 author: godspeed-mission-control
 kind: standalone
