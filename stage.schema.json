@@ -1,0 +1,184 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/MichaelZelbel/godspeed-mission-control/blob/main/stage.schema.json",
+  "title": "stage",
+  "description": "an object",
+  "comment": "One stage: everything one published version of Godspeed Mission Control is made of, so that an installer reads its pins from one file instead of carrying its own copy. Both readers, tools/stage.mjs and tools/stage.sh, check a stage file against the rules written here; tools/stage.mjs reads this file itself, tools/stage.sh carries the same rules, because an installer runs before Node is installed. A stage file must be written the way JSON.stringify(stage, null, 2) writes it: two spaces a level, one field a line, no tabs, no backslash escapes, Unix line endings. tools/stage.sh refuses anything else rather than guess. A title holding {} is filled in with the name of the edition or add-on the message is about.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "stageFormat",
+    "version",
+    "productCommit",
+    "kitBootstrap",
+    "serverEditions",
+    "windowsSetup",
+    "addons",
+    "previous",
+    "withdrawn"
+  ],
+  "properties": {
+    "stageFormat": {
+      "title": "stage format",
+      "description": "1",
+      "comment": "The number of this file format. A reader that does not know the number refuses the file instead of reading it wrongly.",
+      "const": 1,
+      "examples": [1]
+    },
+    "version": {
+      "title": "version",
+      "description": "a version like 2.0.0-beta.6",
+      "comment": "The version a stranger installs from this stage.",
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(-[0-9A-Za-z.]+)?$",
+      "examples": ["2.0.0-beta.6"]
+    },
+    "productCommit": {
+      "title": "product commit",
+      "description": "a 40-character commit",
+      "comment": "The one commit of this repository the version runs: the runtime, the starter folder and the notebook hook all come from it.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$",
+      "examples": ["9390da492a0035a41b0eb02584234e269bca6dc8"]
+    },
+    "kitBootstrap": {
+      "title": "kit bootstrap",
+      "description": "an object",
+      "comment": "The two commits of MichaelZelbel/kit-bootstrap this version was installed and built with.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["unixEngineCommit", "windowsBootstrapCommit"],
+      "properties": {
+        "unixEngineCommit": {
+          "title": "shared Unix engine commit",
+          "description": "a 40-character commit",
+          "comment": "What install-godspeed.sh fetches setup-godspeed.sh from and passes as KB_BRANCH.",
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$",
+          "examples": ["86da1dd27fea804ab131a8494b79a2ccf868e847"]
+        },
+        "windowsBootstrapCommit": {
+          "title": "Windows bootstrap commit",
+          "description": "a 40-character commit",
+          "comment": "What the Windows setup was built with.",
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$",
+          "examples": ["5364e82b44ab0b093e04262c680a21d666faf5e1"]
+        }
+      }
+    },
+    "serverEditions": {
+      "title": "server editions",
+      "description": "an object naming at least one edition",
+      "comment": "The server image of each edition, by digest, keyed by the edition's name. Today there is one edition, server: the image every server compose file selects.",
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": false,
+      "patternProperties": {
+        "^[a-z0-9]+(-[a-z0-9]+)*$": {
+          "title": "server edition {}",
+          "description": "an object",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["image"],
+          "properties": {
+            "image": {
+              "title": "server image of the {} edition",
+              "description": "pinned by digest",
+              "comment": "image@sha256:<64 hex>. A tag is not a pin: it can be moved after a stranger read it.",
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9._/-]*@sha256:[0-9a-f]{64}$",
+              "examples": ["ghcr.io/michaelzelbel/godspeed-mission-control@sha256:70a07e63bad57ee9cf114a86be3261db533191af28927453a81d5ea8fc330291"]
+            }
+          }
+        }
+      }
+    },
+    "windowsSetup": {
+      "title": "Windows setup",
+      "description": "an object",
+      "comment": "The published Windows installer of this version.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["file", "releaseTag", "sha256"],
+      "properties": {
+        "file": {
+          "title": "Windows setup file name",
+          "description": "a file name",
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9._-]+$",
+          "examples": ["GodspeedSetup.exe"]
+        },
+        "releaseTag": {
+          "title": "Windows setup release tag",
+          "description": "a GitHub release tag",
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9._-]+$",
+          "examples": ["godspeed-v2-integrated-2026-10-24-2"]
+        },
+        "sha256": {
+          "title": "Windows setup SHA-256",
+          "description": "a 64-character SHA-256",
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$",
+          "examples": ["4a1c63c8a14af59a0c5b295b63a2bc5e45f6637174b706f1b2b7826fd513c2a5"]
+        }
+      }
+    },
+    "addons": {
+      "title": "add-ons",
+      "description": "an object",
+      "comment": "The pinned commit of every carried add-on, by name, as third-party/addons/sources.json held them at the product commit.",
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^[a-z0-9]+(-[a-z0-9]+)*$": {
+          "title": "pin of the add-on {}",
+          "description": "a 40-character commit",
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$",
+          "examples": ["fecb22dd6f0376ebec810fa733a50eb880484f2e"]
+        }
+      }
+    },
+    "previous": {
+      "title": "previous stage",
+      "description": "null, or the stage this one replaced",
+      "comment": "null in the first stage entry. Later entries name the version they replaced and the commit of the stage file it came from.",
+      "type": ["null", "object"],
+      "additionalProperties": false,
+      "required": ["version", "stageCommit"],
+      "properties": {
+        "version": {
+          "title": "previous version",
+          "description": "a version like 2.0.0-beta.6",
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(-[0-9A-Za-z.]+)?$",
+          "examples": ["2.0.0-beta.5"]
+        },
+        "stageCommit": {
+          "title": "previous stage commit",
+          "description": "a 40-character commit",
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$",
+          "examples": ["9390da492a0035a41b0eb02584234e269bca6dc8"]
+        }
+      }
+    },
+    "withdrawn": {
+      "title": "withdrawn list",
+      "description": "a list of versions",
+      "comment": "The versions that were taken back. An installer goes on only when the withdrawn answer is exactly no.",
+      "type": "array",
+      "items": {
+        "title": "withdrawn version",
+        "description": "a version",
+        "type": "string",
+        "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(-[0-9A-Za-z.]+)?$",
+        "examples": ["2.0.0-beta.5"]
+      }
+    }
+  }
+}
