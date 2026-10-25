@@ -1,10 +1,11 @@
 name: tools-test
+# No pull_request trigger since 25 October 2026: the `required` check (required.yml) runs this
+# same list on every pull request, so requiring it here as well would only duplicate the work.
+# The push to main keeps running it.
 on:
   push:
     branches: [main]
     paths: ['tools/**', 'starter-godspeed/**', 'package.json', 'computer/package.json', '.github/workflows/tools-test.yml']
-  pull_request:
-    paths: ['tools/**', 'starter-godspeed/**', 'package.json', 'computer/package.json']
 jobs:
   test:
     runs-on: ubuntu-latest
