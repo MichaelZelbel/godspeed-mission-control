@@ -131,3 +131,19 @@ test("words prints what was said, day by day, and refuses a silly window", () =>
   assert.equal(run(h, "2026-09-30T08:00:00Z", "words", "--days", "90").status, 1);
   assert.match(run(h, "2026-10-12T08:00:00Z", "words").stdout, /Nothing said/);
 });
+
+test("paused capture saves nothing and asks nothing until it is switched back on", () => {
+  const h = mcDir();
+  run(h, "2026-09-22T08:40:00Z", "start", "Edit video");
+  assert.match(run(h, "2026-09-22T08:41:00Z", "config", "set", "capture_enabled", "off").stdout, /capture_enabled = off/);
+  const files = () => fs.readdirSync(path.join(h, "routines", "journal", "entries"), { recursive: true }).filter((f) => f.endsWith(".md")).length;
+  const before = files();
+  const r = run(h, "2026-09-22T08:42:00Z", "note", "this must not be saved");
+  assert.equal(r.status, 1); assert.match(r.stderr, /capture is paused/);
+  assert.equal(files(), before);
+  assert.equal(run(h, "2026-09-22T11:45:00Z", "tick").stdout, "");
+  assert.match(run(h, "2026-09-22T11:46:00Z", "context").stdout, /Journal capture is paused/);
+  run(h, "2026-09-22T11:47:00Z", "config", "set", "capture_enabled", "on");
+  assert.equal(run(h, "2026-09-22T11:48:00Z", "note", "back again").status, 0);
+  assert.equal(files(), before + 1);
+});

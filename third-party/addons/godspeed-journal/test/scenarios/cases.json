@@ -35,5 +35,12 @@
     "setup": [["start", "Chimney cleaner letter", "--done-means", "letter signed"],
               ["done", "chimney", "--missed", "letter signed"]],
     "message": "what's the capital of Portugal?",
-    "expect_files": { "met": 0, "note": 0 }, "reply_not_matches": "(?i)letter|chimney|signed" }
+    "expect_files": { "met": 0, "note": 0 }, "reply_not_matches": "(?i)letter|chimney|signed" },
+  { "name": "track journal names the journal, so it is an entry",
+    "setup": [["start", "Weekly plan", "--done-means", "all fields filled in"]],
+    "message": "Track journal. Done with the weekly plan, all fields filled in.",
+    "expect_files": { "done": 1 }, "reply_max_lines": 2 },
+  { "name": "any other track message is not a journal entry",
+    "setup": [], "message": "track starting the video edit",
+    "expect_files": { "start": 0, "note": 0, "done": 0 } }
 ]

@@ -46,11 +46,22 @@ node godspeed-mission-control/third-party/addons/godspeed-journal/bin/godspeed-j
 > Assistant: run that setup line with `--godspeed <this mission control folder>` and pass its
 > questions to the person.
 
+Any folder that holds this add-on, the one this README is in, works the same way: run
+`node bin/godspeed-journal.mjs setup --godspeed <your mission control folder>` inside it, and it
+installs the copy that folder holds.
+
 It finds your mission control, copies the recipe into its skills folder and saves that in its own
 history, puts the `godspeed-journal` command next to the kit's other commands, wires the Hermes
 plugin and the check-in job when Hermes is there, and adds the Claude Code hook when `.claude`
 exists. Run the same line again any time; it keeps your settings and any recipe you wrote
 yourself under the same name, and touches nothing else.
+
+On Windows it also writes a PowerShell launcher next to the command, so a call from PowerShell
+hands your words over exactly as given, line breaks, quotes and umlauts included. cmd.exe cannot
+carry a line break (it stops reading at the first one and drops the rest), so a command that
+reaches the journal cut short through it is refused, never half saved. Where PowerShell is set
+to run no scripts at all, setup says so and leaves that launcher out; words that run over
+several lines then go in with `--words-file`.
 
 ## Use
 
@@ -76,6 +87,9 @@ Prefer typing it yourself:
 ```
 godspeed-journal start "Edit the invoice" --done-means "sent and filed"
 godspeed-journal done "invoice" --met "sent and filed"
+
+# words that run over several lines, from any shell: put them in a file first
+godspeed-journal note --words-file words.txt --task invoice
 
 # what is still open
 godspeed-journal open

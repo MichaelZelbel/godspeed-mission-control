@@ -44,6 +44,13 @@ Run the `godspeed-journal` command BEFORE writing any reply, with the person's w
 thought before their entry is safe. One entry can hold several moves ("finished the invoice,
 now the video, done means cut and thumbnail"): save each move, in order.
 
+Words that run over more than one line go in a file, never on the command line: write them
+with your file tool, exactly as they arrived, to a file of their own somewhere temporary (never
+inside the journal), and pass `--words-file <file>` in place of `--words`. A note takes it too:
+`godspeed-journal note --words-file <file> --task <task> --source desk`. No shell can cut or
+change what is in a file. If the command answers that it reached the journal cut short, nothing
+was saved: save it again with `--words-file`.
+
 - Starting something: `godspeed-journal start "<short title in their words>" --done-means "<item>" ... --words "<verbatim>"`
 - Adding to what done means: `godspeed-journal define [<task>] --done-means "<item>" ...`
 - Finishing: first `godspeed-journal open --json` if you need the definition, then decide met and
@@ -53,7 +60,8 @@ now the video, done means cut and thumbnail"): save each move, in order.
   `godspeed-journal met [<task>] --met "<item>" --words "<verbatim>"`. When the block lists the
   task under "Finished without" and their words say one of those items happened, it is `met`,
   never a note and never a second done.
-- Anything else (a thought, a feeling, "still on it"): `godspeed-journal note "<verbatim>" [--task <task>]`
+- Anything else (a thought, a feeling, "still on it"): `godspeed-journal note "<verbatim>" [--task <task>]`,
+  or `godspeed-journal note --words-file <file> [--task <task>]` when it runs over more than one line
 
 Titles are three to six words, the person's own. A title names the thing, never the act of
 starting it: "Blogartikel", not "starting the blog article"; never begin one with starting,
@@ -137,7 +145,8 @@ reply in one line with what changed. The keys:
 `godspeed-journal config set` refuses a wrong value with a sentence; pass that sentence on.
 Once a check-in, the evening list or the weekly summary is switched on, the machine that runs the
 routines sends it within 15 minutes of its time: to Telegram when that is connected, otherwise as a
-note in "From your routines" in the notebook. Say where it will arrive.
+note in "From your routines" in the notebook. Say where it will arrive. Where there is neither,
+nothing is sent and entries still save: say that plainly.
 
 ## Asking about the past
 

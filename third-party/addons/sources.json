@@ -1,7 +1,7 @@
 [
   {
     "name": "godspeed-coach",
-    "commit": "085eb63febce37b87dbf947eac2b840dc0c5fdc3",
+    "commit": "c2800f4f16cafbe7285a925da230982ccb1febb8",
     "license": "MIT",
     "files": [
       "LICENSE",
@@ -50,6 +50,7 @@
       "test/progress.test.mjs",
       "test/readers.test.mjs",
       "test/setup.test.mjs",
+      "test/sync.test.mjs",
       "test/talks.test.mjs",
       "test/tick.test.mjs",
       "test/windows-launchers.test.mjs"
@@ -58,7 +59,7 @@
   },
   {
     "name": "godspeed-headache",
-    "commit": "d07d6a0250ff3266ed3ddff2416cbd788c6dfb2c",
+    "commit": "8a42a14a34e5ce55630af4e58bfe02370b49933e",
     "license": "MIT",
     "files": [
       "LICENSE",
@@ -88,13 +89,14 @@
       "test/core.test.mjs",
       "test/no-window.test.mjs",
       "test/notebook.test.mjs",
+      "test/sync.test.mjs",
       "test/windows-launchers.test.mjs"
     ],
     "activation": "Explicit setup only. No connector or outward action is enabled by packaging."
   },
   {
     "name": "godspeed-journal",
-    "commit": "d370b082fec8ef85eee54b4be1f64b502b00447d",
+    "commit": "bc89a704cea5986aebb9a939b14b206a248fc9ad",
     "license": "MIT",
     "files": [
       "LICENSE",
@@ -102,6 +104,7 @@
       "bin/godspeed-journal.mjs",
       "hermes/plugin/godspeed-journal/__init__.py",
       "hermes/plugin/godspeed-journal/plugin.yaml",
+      "lib/argv.mjs",
       "lib/clock.mjs",
       "lib/context.mjs",
       "lib/evidence.mjs",
@@ -116,6 +119,7 @@
       "lib/tick.mjs",
       "package.json",
       "skill/interstitial-journal/SKILL.md",
+      "test/argv.test.mjs",
       "test/cli.test.mjs",
       "test/clock.test.mjs",
       "test/core.test.mjs",
@@ -129,7 +133,9 @@
       "test/settings.test.mjs",
       "test/setup.test.mjs",
       "test/store.test.mjs",
-      "test/sync.test.mjs"
+      "test/sync.test.mjs",
+      "test/texts.test.mjs",
+      "test/windows-launchers.test.mjs"
     ],
     "activation": "Explicit setup only. No connector or outward action is enabled by packaging."
   },
