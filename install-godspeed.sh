@@ -44,12 +44,28 @@ STAGE_REF=${GODSPEED_STAGE_REF:-beta}
 PUBLIC_STAGE_REF=beta
 STAGE_RAW=${GODSPEED_STAGE_RAW:-https://raw.githubusercontent.com/MichaelZelbel/godspeed-mission-control}
 STAGE_RAW=${STAGE_RAW%/}
-# The name of a branch or tag and nothing else: nothing that climbs out of the repository with
-# "..", no empty step, no name a shell or a web address would read as something of its own.
-case $STAGE_REF in
-  '' | -* | .* | /* | */ | *..* | *//* | *[!A-Za-z0-9._/-]*)
-    stop "Nothing was installed and nothing on this computer was changed, because GODSPEED_STAGE_REF=$STAGE_REF is not the name of a branch or tag of Godspeed Mission Control." ;;
-esac
+# The name of a branch or tag and nothing else. These are git's own rules for a ref name, written
+# out here because git is not on the computer yet when this runs: every part between the slashes
+# holds something, starts with no dot and ends in no ".lock", and the whole name holds no "..", no
+# slash at either end, no two slashes in a row and no dot at the end. The characters are narrowed
+# further to letters, digits, dot, underscore, hyphen and slash, which leaves out the space, the
+# control characters and everything a shell or a web address would read as something of its own.
+# installers/install-godspeed.sh holds this same rule, because it has to judge a ref before it may
+# fetch anything from that ref.
+ref_is_a_name() { # <ref>: true when it could be the name of a branch or tag
+  case $1 in '' | -* | /* | */ | *//* | *..* | *. | *[!A-Za-z0-9._/-]*) return 1 ;; esac
+  _rest=$1
+  while :; do
+    case $_rest in
+      */*) _part=${_rest%%/*}; _rest=${_rest#*/} ;;
+      *)   _part=$_rest;       _rest='' ;;
+    esac
+    case $_part in '' | .* | *.lock) return 1 ;; esac
+    [ -n "$_rest" ] || return 0
+  done
+}
+ref_is_a_name "$STAGE_REF" \
+  || stop "Nothing was installed and nothing on this computer was changed, because GODSPEED_STAGE_REF=$STAGE_REF is not the name of a branch or tag of Godspeed Mission Control."
 
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
@@ -61,19 +77,22 @@ unreadable() { # <address> <the reader's own reason, or nothing>
   stop "Nothing was installed and nothing on this computer was changed, because the version list of Godspeed Mission Control at $1 could not be read."
 }
 
+# These three reads say nothing of their own: curl's "(22) ... 404" before a sentence of ours would
+# only make a reader look for a fault of their own, so its talking is turned off and what went
+# wrong is said in the one sentence below it.
 READER=$work/stage.sh
 reader_url=$STAGE_RAW/$STAGE_REF/stage/stage.sh
-curl -fsSL "$reader_url" -o "$READER" \
+curl -fsL "$reader_url" -o "$READER" 2>/dev/null \
   || stop "Nothing was installed and nothing on this computer was changed, because the reader of the version list of Godspeed Mission Control could not be read from $reader_url."
 
 stage_url=$STAGE_RAW/$STAGE_REF/stage.json
-curl -fsSL "$stage_url" -o "$work/stage.json" || unreadable "$stage_url" ''
+curl -fsL "$stage_url" -o "$work/stage.json" 2>/dev/null || unreadable "$stage_url" ''
 public_url=$STAGE_RAW/$PUBLIC_STAGE_REF/stage.json
 if [ "$STAGE_REF" = "$PUBLIC_STAGE_REF" ]; then
   # The stage asked for is the public one: one read is enough.
   cp "$work/stage.json" "$work/public.json"
 else
-  curl -fsSL "$public_url" -o "$work/public.json" || unreadable "$public_url" ''
+  curl -fsL "$public_url" -o "$work/public.json" 2>/dev/null || unreadable "$public_url" ''
 fi
 
 # Checked before it is believed, and the reader's own sentence is folded into one sentence of

@@ -5,8 +5,12 @@ import test from 'node:test';import assert from 'node:assert/strict';import fs f
 // to install, with stage/stage.sh of the same ref, and refuses a version that was taken back.
 // Nothing here reaches the network: GODSPEED_STAGE_RAW points at a folder of stage files, and a
 // stand-in curl serves it and the two downloads the installer makes, writing down every address
-// it was asked for. On Windows it runs only when GODSPEED_TEST_BASH names a bash (Git Bash),
-// since `bash` there may be WSL's.
+// it was asked for and saying its own reason on stderr when it fails, the way a real curl does.
+// On Windows it runs only when GODSPEED_TEST_BASH names a bash (Git Bash), since `bash` there may
+// be WSL's.
+// What a reader is told is held to one plain sentence - no reason of curl's own - and the ref a
+// stage is named by is held to the names git check-ref-format accepts, narrowed to the characters
+// a web address and a shell keep plain; git itself is asked about the table when it is there.
 const repo=fileURLToPath(new URL('../..',import.meta.url)).replace(/[\\/]$/,'');
 const installer=path.join(repo,'install-godspeed.sh').replaceAll('\\','/');
 const forwarder=path.join(repo,'installers','install-godspeed.sh').replaceAll('\\','/');
@@ -47,7 +51,9 @@ function stages(refs){
 
 // The stand-in downloads: a curl that writes every address down and serves file:// off the disk,
 // the kit-bootstrap engine and the notebook hook. Anything else it is asked for fails, so a
-// download the installer should not have made cannot quietly work.
+// download the installer should not have made cannot quietly work. When it fails it says its own
+// reason on stderr first, the way a real curl does, because an installer that lets that reason
+// through sends a reader looking for a fault of their own instead of reading the one sentence.
 function fakeBin(){
   const dir=scratch('bin'),calls=dir+'/calls',said=dir+'/said';
   const engine=dir+'/engine.sh',hook=dir+'/hook.sh';
@@ -67,15 +73,16 @@ function fakeBin(){
     'for a; do [ "$prev" != -o ] || out=$a; case "$a" in file://*|https://*) url=$a ;; esac; prev=$a; done',
     'printf \'%s\\n\' "$url" >> "$FAKE_CALLS"',
     'serve() { if [ -n "$out" ]; then cp "$1" "$out"; else cat "$1"; fi; }',
+    'fail() { printf \'curl: (%s) %s\\n\' "$1" "$2" >&2; exit "$1"; }',
     'case "$url" in',
     '  file://*)',
     '    p=${url#file://}',
     '    case $p in /[A-Za-z]:/*) p=${p#/} ;; esac',   // file:///C:/x on Windows
-    '    [ -f "$p" ] || exit 7',
+    "    [ -f \"$p\" ] || fail 37 \"Couldn't open file ${p}\"",
     '    serve "$p" ;;',
     '  */kit-bootstrap/*/setup-godspeed.sh) serve "$FAKE_ENGINE" ;;',
     '  */notebook/scripts/install-native-notebook.sh) serve "$FAKE_HOOK" ;;',
-    '  *) exit 7 ;;',
+    '  *) fail 22 "The requested URL returned error: 404" ;;',
     'esac',''].join('\n'),{mode:0o755});
   fs.mkdirSync(said);
   return {dir,calls,said,engine,hook};
@@ -101,6 +108,37 @@ function install({refs,ref,args=[],env={}}){
     ...(ref===undefined?{}:{GODSPEED_STAGE_REF:ref}),GODSPEED_V2_INSTALL_DIR:root,...env}});
   return {...result,bin,where,root,asked:asked(bin)};
 }
+
+// The same through installers/install-godspeed.sh, which installs nothing itself: `root` is a
+// folder that is never made, so a refusal can be held to leaving nothing behind.
+function forward({refs,ref,args=[],env={}}){
+  const bin=fakeBin(),where=stages(refs);
+  const result=run(forwarder,{args,bin,env:{GODSPEED_STAGE_RAW:where.raw,
+    ...(ref===undefined?{}:{GODSPEED_STAGE_REF:ref}),...env}});
+  return {...result,bin,where,root:scratch('forward')+'/godspeed',asked:asked(bin)};
+}
+
+// A ref the installer accepts, pointed at a base address that holds nothing: what it asked for
+// says which ref it was going to read, without a folder of that name having to exist.
+function reached(ref){
+  const bin=fakeBin(),where=stages({beta:{stage:stage()}}),raw=where.raw+'/nowhere';
+  const result=run(installer,{bin,env:{GODSPEED_STAGE_RAW:raw,GODSPEED_STAGE_REF:ref,
+    GODSPEED_V2_INSTALL_DIR:scratch('reached')+'/godspeed'}});
+  return {...result,raw,asked:asked(bin)};
+}
+
+// The ref check in both installers is git's own check-ref-format written out in shell, because git
+// is not on the computer when an installer runs. This table says what each name is; the case below
+// asks git itself about every one of them, so the table cannot drift away from git.
+const refsGitRefuses=['candidate/.hidden','candidate.lock','candidate.','a.lock/b','.lock','a/.b',
+  'a/b.lock','a/b.','.hidden','../../etc','..','.','...','-x','/beta','beta/','a//b','a b',
+  'be~ta','be^ta','be:ta','be?ta','be*ta','be[ta','be\\ta','@','a@{b}'];
+// Names git itself allows that both installers narrow away anyway, because a ref also has to stay
+// plain inside a web address and inside a shell.
+const refsWeNarrow=['beta;rm','beta|x','beta&&x','beta$(x)','beta%2e','#beta','a,b','a+b','a=b'];
+// And the names a stage really uses, which have to keep working.
+const refsAccepted=['beta','release/beta-7','godspeed-v2-integrated-2026-10-24-2','a_b','A.B',
+  'x.locky','lock','a./b','HEAD'];
 
 test('the commits the installer installs are the ones its stage file names, and beta is the stage it reads without being told',options,()=>{
   const beta=stage({product:'a1',engine:'b2'});
@@ -143,13 +181,18 @@ test('GODSPEED_STAGE_REF picks which stage file is read, and the public one is r
   assert.ok(run1.asked[0].endsWith('/release/beta-7/stage/stage.sh'),'the reader comes from the same ref');
 });
 
-// A refusal downloads nothing past the stage files and leaves no Godspeed folder behind.
+// A refusal downloads nothing past the stage files and leaves no Godspeed folder behind, and what
+// it says is the one plain sentence: not curl's own reason, and nothing else either.
 function refused(result,sentence){
   assert.notEqual(result.status,0,'it went on: '+result.out);
   assert.match(result.err,sentence);
+  assert.doesNotMatch(result.err,/^\s*curl:/m,"curl's own reason is left visible: "+result.err);
   assert.equal(result.err.trim().split('\n').length,1,'one plain sentence, not several: '+result.err);
+  // The stage files, their reader, and - for the forwarder - the installer it was to run: reading
+  // any of those changes nothing. Anything else means a download it should never have made.
   for(const url of result.asked)
-    assert.ok(url.endsWith('/stage.json')||url.endsWith('/stage/stage.sh'),'it downloaded '+url);
+    assert.ok(url.endsWith('/stage.json')||url.endsWith('/stage/stage.sh')||url.endsWith('/install-godspeed.sh'),
+      'it downloaded '+url);
   assert.equal(fs.existsSync(result.root),false,'it made the Godspeed folder');
 }
 
@@ -188,12 +231,34 @@ test('a stage file that cannot be read as a stage file stops the installer',opti
   refused(other,/at .*\/beta\/stage\.json could not be read:/);
 });
 
-test('a ref that is not the name of a branch or tag is refused before anything is read',options,()=>{
-  for(const ref of ['../../etc','.hidden','-x','a b','beta/','/beta','a//b','beta;rm']){
+test('a ref that is not the name of a branch or tag is refused by both installers, before anything is read',options,()=>{
+  const sentence=/is not the name of a branch or tag of Godspeed Mission Control\./;
+  for(const ref of [...refsGitRefuses,...refsWeNarrow]){
     const result=install({refs:{beta:{stage:stage()}},ref});
-    refused(result,/is not the name of a branch or tag of Godspeed Mission Control\./);
+    refused(result,sentence);
     assert.deepEqual(result.asked,[],ref+' was read anyway');
+    const onward=forward({refs:{beta:{stage:stage(),installer:'#!/bin/sh\nexit 0\n'}},ref});
+    refused(onward,sentence);
+    assert.deepEqual(onward.asked,[],ref+' was read anyway by installers/install-godspeed.sh');
   }
+});
+
+test('the names a stage really uses are accepted, and read from the ref they name',options,()=>{
+  for(const ref of refsAccepted){
+    const got=reached(ref);
+    assert.deepEqual(got.asked,[got.raw+'/'+ref+'/stage/stage.sh'],ref+' was not read');
+    assert.match(got.err,/the reader of the version list of Godspeed Mission Control could not be read from/);
+    assert.doesNotMatch(got.err,/is not the name of a branch or tag/,ref+' was refused');
+  }
+});
+
+test('the ref check refuses the names git check-ref-format refuses, and no name git accepts for its own reasons',
+  {skip:spawnSync('git',['--version']).status!==0&&'git is not on this machine'},()=>{
+  const gitTakes=ref=>spawnSync('git',['check-ref-format','--allow-onelevel',ref]).status===0;
+  for(const ref of refsGitRefuses)assert.equal(gitTakes(ref),false,'git takes '+ref+', so this table is wrong');
+  for(const ref of refsAccepted)assert.equal(gitTakes(ref),true,'git refuses '+ref+', so this table is wrong');
+  // The narrowed ones are this repository's own choice, not git's: git has nothing against them.
+  for(const ref of refsWeNarrow)assert.equal(gitTakes(ref),true,'git refuses '+ref+' already');
 });
 
 test('installers/install-godspeed.sh runs the root installer of the stage it is given, with the arguments it was given',options,()=>{
@@ -214,6 +279,13 @@ test('installers/install-godspeed.sh runs the root installer of the stage it is 
   const refusedRef=run(forwarder,{args:[],bin:fakeBin(),env:{GODSPEED_STAGE_RAW:where.raw,GODSPEED_STAGE_REF:'../x',FORWARDED:said}});
   assert.notEqual(refusedRef.status,0);
   assert.match(refusedRef.err,/is not the name of a branch or tag of Godspeed Mission Control\./);
+});
+
+test('a stage whose installer cannot be read stops installers/install-godspeed.sh with one plain sentence',options,()=>{
+  const result=forward({refs:{beta:{stage:stage()}},ref:'no-such-branch'});
+  refused(result,/the installer of Godspeed Mission Control could not be read from .*\/no-such-branch\/install-godspeed\.sh\./);
+  // It asked for that one address and for nothing else, and curl's own reason is not in sight.
+  assert.deepEqual(result.asked,[result.where.raw+'/no-such-branch/install-godspeed.sh']);
 });
 
 test('neither installer names a commit, a release tag or a version any more',()=>{
