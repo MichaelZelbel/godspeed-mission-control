@@ -1,7 +1,7 @@
 [
   {
     "name": "godspeed-coach",
-    "commit": "c2800f4f16cafbe7285a925da230982ccb1febb8",
+    "commit": "cd6de5b7dbc7283d4f0860eb1a2c4c9fb48ea0ae",
     "license": "MIT",
     "files": [
       "LICENSE",
@@ -50,6 +50,7 @@
       "test/progress.test.mjs",
       "test/readers.test.mjs",
       "test/setup.test.mjs",
+      "test/sync-burst.test.mjs",
       "test/sync.test.mjs",
       "test/talks.test.mjs",
       "test/tick.test.mjs",
@@ -59,7 +60,7 @@
   },
   {
     "name": "godspeed-headache",
-    "commit": "8a42a14a34e5ce55630af4e58bfe02370b49933e",
+    "commit": "93b7a8c297aed89ca31770c64638860ff87b46fc",
     "license": "MIT",
     "files": [
       "LICENSE",
@@ -89,6 +90,7 @@
       "test/core.test.mjs",
       "test/no-window.test.mjs",
       "test/notebook.test.mjs",
+      "test/sync-burst.test.mjs",
       "test/sync.test.mjs",
       "test/windows-launchers.test.mjs"
     ],
@@ -96,7 +98,7 @@
   },
   {
     "name": "godspeed-journal",
-    "commit": "bc89a704cea5986aebb9a939b14b206a248fc9ad",
+    "commit": "fcbff25dbb0b5e03e7688dd481a1ddfe183a3f9b",
     "license": "MIT",
     "files": [
       "LICENSE",
@@ -133,6 +135,7 @@
       "test/settings.test.mjs",
       "test/setup.test.mjs",
       "test/store.test.mjs",
+      "test/sync-burst.test.mjs",
       "test/sync.test.mjs",
       "test/texts.test.mjs",
       "test/windows-launchers.test.mjs"

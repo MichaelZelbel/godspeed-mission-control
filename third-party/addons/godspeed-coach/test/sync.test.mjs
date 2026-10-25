@@ -5,8 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { commitCoach, rebaseInProgress } from "../lib/sync.mjs";
-import { area } from "./helpers.mjs";
+import { commitCoach, commitFolder, pullQuietly, pullRebase, rebaseInProgress } from "../lib/sync.mjs";
 
 const git = (cwd, ...a) => spawnSync("git", a, { cwd, encoding: "utf8" });
 function repo() {
@@ -19,14 +18,16 @@ function repo() {
   return { mcDir, remote };
 }
 
-const BIN = fileURLToPath(new URL("../bin/godspeed-coach.mjs", import.meta.url));
 const SYNC = pathToFileURL(fileURLToPath(new URL("../lib/sync.mjs", import.meta.url))).href;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const gitPath = (mcDir, name) => path.resolve(mcDir, git(mcDir, "rev-parse", "--git-path", name).stdout.trim());
 const lockFile = (mcDir) => gitPath(mcDir, "godspeed-addons-sync.lock");
+const queueFiles = (mcDir) => { try { return fs.readdirSync(gitPath(mcDir, "godspeed-addons-sync.queue")).filter((n) => !n.startsWith(".")); } catch { return []; } };
 const dirty = (mcDir) => git(mcDir, "status", "--porcelain", "-uall", "--", "coach").stdout.trim();
 const remoteFiles = (remote) => git(remote, "ls-tree", "-r", "--name-only", "main").stdout;
-const ahead = (mcDir) => git(mcDir, "rev-list", "--count", "@{u}..HEAD").stdout.trim() !== "0";
+// Another add-on's folder beside this one's: they share the lock and the queue.
+const OTHER = "routines/other-addon";
+const has = (remote, file) => remoteFiles(remote).split(/\r?\n/).includes(file);
 function entry(mcDir, name) {
   fs.mkdirSync(path.join(mcDir, "coach"), { recursive: true });
   fs.writeFileSync(path.join(mcDir, "coach", name), name);
@@ -127,49 +128,6 @@ test("a rebase the person started by hand is never touched: commitCoach reports 
   assert.ok(fs.existsSync(path.join(mcDir, "coach", "x.md")));
 });
 
-// Several saves in quick succession each start a sync in the background, while something else
-// holds git's index (the first sync's pull, or another job committing in the same folder). Until
-// 0.5.1 every sync that met that gave up at once and nothing tried again, so the changes stayed on
-// disk and no other machine saw them.
-test("a burst of saves while git's index is busy: every change is committed and pushed", async () => {
-  const { mcDir, remote } = repo();
-  fs.mkdirSync(path.join(mcDir, "coach", "health"), { recursive: true });
-  fs.writeFileSync(path.join(mcDir, "coach", "settings.json"), JSON.stringify({ timezone: "Europe/Berlin", git_sync: "auto" }));
-  fs.writeFileSync(path.join(mcDir, "coach", "health", "area.md"), area());
-  git(mcDir, "add", "."); git(mcDir, "commit", "-qm", "settings"); git(mcDir, "push", "-q");
-  const env = { ...process.env, GODSPEED_COACH_APP: fs.mkdtempSync(path.join(os.tmpdir(), "coach-app-")) };
-  delete env.GODSPEED_COACH_GIT_SYNC; delete env.GODSPEED_COACH_DIR;
-  const say = (...a) => spawnSync(process.execPath, [BIN, ...a, "--godspeed", mcDir], { encoding: "utf8", env: { ...env, GODSPEED_NOW: "2026-09-29T10:00:00Z" } });
-  const indexLock = gitPath(mcDir, "index.lock");
-  fs.writeFileSync(indexLock, "");
-  for (const r of [
-    say("habit", "add", "health", "head-lifts", "--title", "Face-down head lifts", "--done-means", "a few holds", "--days", "daily"),
-    say("habit", "add", "health", "stretch", "--title", "Morning stretch", "--done-means", "ten minutes", "--days", "daily"),
-    say("habit", "track", "did head lifts"),
-    say("habit", "track", "head lifts", "--answer", "no", "--date", "yesterday"),
-    say("habit", "track", "did the morning stretch"),
-  ]) assert.equal(r.status, 0, r.stderr);
-  assert.notEqual(dirty(mcDir), "", "the saves are on disk");
-  await sleep(2500);
-  fs.rmSync(indexLock, { force: true });
-  assert.ok(await until(() => !dirty(mcDir) && !ahead(mcDir) && !fs.existsSync(lockFile(mcDir))), `left behind: ${dirty(mcDir) || "nothing"}`);
-  assert.equal(git(remote, "rev-parse", "main:coach").stdout, git(mcDir, "rev-parse", "HEAD:coach").stdout, "the other machines get what was saved");
-});
-
-test("a sync that finds another one running waits for it instead of giving up", async () => {
-  const { mcDir, remote } = repo();
-  entry(mcDir, "waits.md");
-  fs.writeFileSync(lockFile(mcDir), JSON.stringify({ pid: process.pid, host: os.hostname(), token: "the-other-sync" }));
-  const done = syncInChild(mcDir);
-  await sleep(1500);
-  assert.match(dirty(mcDir), /waits\.md/, "nothing is committed while the other sync holds the lock");
-  fs.rmSync(lockFile(mcDir));
-  assert.equal(await done, "pushed");
-  assert.equal(dirty(mcDir), "");
-  assert.match(remoteFiles(remote), /coach\/waits\.md/);
-  assert.equal(fs.existsSync(lockFile(mcDir)), false);
-});
-
 test("a lock left by a sync that died, or one nobody has touched for too long, is taken over", () => {
   const { mcDir } = repo();
   const dead = spawnSync(process.execPath, ["-e", ""]).pid;
@@ -232,4 +190,78 @@ test("a commit an earlier push could not send goes out with the next sync, even 
   assert.equal(commitCoach(mcDir, "x", "auto"), "pushed");
   assert.match(remoteFiles(remote), /kept-local\.md/);
   assert.equal(commitCoach(mcDir, "x", "auto"), "nothing");
+});
+
+// A sync that finds the lock taken queues its folder and leaves; the sync holding the lock commits
+// it, for any add-on, however long it holds the lock (here its push is held until the test lets go).
+test("saves that arrive while another sync holds the lock for long are committed by it, another add-on's included", async () => {
+  const { mcDir, remote } = repo();
+  const f = (p) => p.replace(/\\/g, "/");
+  const pushing = path.join(path.dirname(mcDir), "pushing"), held = path.join(path.dirname(mcDir), "held");
+  fs.writeFileSync(held, "");
+  hook(mcDir, "pre-push", `touch "${f(pushing)}"\nwhile [ -f "${f(held)}" ]; do sleep 0.1; done\nexit 0`);
+  entry(mcDir, "first.md");
+  const done = syncInChild(mcDir);
+  assert.ok(await until(() => fs.existsSync(pushing)), "the first sync is pushing, and holds the lock");
+  entry(mcDir, "second.md");
+  assert.equal(commitCoach(mcDir, "coach: second", "auto"), "queued");
+  fs.mkdirSync(path.join(mcDir, OTHER), { recursive: true }); fs.writeFileSync(path.join(mcDir, OTHER, "entry.md"), "x");
+  assert.equal(commitFolder(mcDir, OTHER, "other: entry", "auto"), "queued");
+  fs.rmSync(held);
+  assert.equal(await done, "pushed");
+  for (const file of ["coach/first.md", "coach/second.md", `${OTHER}/entry.md`]) assert.ok(has(remote, file), file);
+  assert.match(git(remote, "log", "--format=%s", "main").stdout, /^other: entry$/m, "each add-on's folder is committed on its own");
+  assert.equal(git(mcDir, "status", "--porcelain", "-uall").stdout.trim(), "");
+  assert.deepEqual(queueFiles(mcDir), []);
+  assert.equal(fs.existsSync(lockFile(mcDir)), false);
+});
+
+test("an entry no try could commit (git's index locked throughout) stays queued, and the next sync of any add-on commits it", () => {
+  const { mcDir, remote } = repo();
+  const indexLock = gitPath(mcDir, "index.lock");
+  entry(mcDir, "stuck.md");
+  fs.writeFileSync(indexLock, "");
+  assert.equal(commitCoach(mcDir, "coach: stuck", "auto", { pauses: [20, 20] }), "commit-failed");
+  assert.deepEqual(queueFiles(mcDir), [encodeURIComponent("coach")]);
+  fs.rmSync(indexLock);
+  assert.equal(commitFolder(mcDir, OTHER, "other: nothing new", "auto"), "nothing");
+  assert.ok(has(remote, "coach/stuck.md"));
+  assert.deepEqual(queueFiles(mcDir), []);
+});
+
+test("the tick's pull takes its turn too, and commits what was queued meanwhile", () => {
+  const { mcDir, remote } = repo();
+  fs.writeFileSync(lockFile(mcDir), JSON.stringify({ pid: process.pid, host: os.hostname(), token: "another sync" }));
+  entry(mcDir, "queued.md");
+  assert.equal(commitCoach(mcDir, "coach: queued", "auto"), "queued");
+  fs.rmSync(lockFile(mcDir)); // that sync ended without looking at the queue (it was killed)
+  pullQuietly(mcDir, "auto");
+  assert.ok(has(remote, "coach/queued.md"));
+  assert.deepEqual(queueFiles(mcDir), []);
+});
+
+test("a rebase the person starts while a sync pulls is left alone: a sync aborts only its own", () => {
+  const { mcDir, remote } = repo();
+  const other = path.join(path.dirname(mcDir), "other");
+  git(path.dirname(mcDir), "clone", "-q", remote, other);
+  git(other, "config", "user.email", "o@o"); git(other, "config", "user.name", "o");
+  fs.writeFileSync(path.join(other, "theirs.md"), "x"); git(other, "add", "."); git(other, "commit", "-qm", "theirs"); git(other, "push", "-q");
+  // Local work the person is about to rebase, and a branch it will stop on with a conflict.
+  fs.writeFileSync(path.join(mcDir, "conflict.txt"), "base\n"); git(mcDir, "add", "."); git(mcDir, "commit", "-qm", "base");
+  git(mcDir, "checkout", "-qb", "side"); fs.writeFileSync(path.join(mcDir, "conflict.txt"), "side\n"); git(mcDir, "commit", "-qam", "side");
+  git(mcDir, "checkout", "-q", "main"); fs.writeFileSync(path.join(mcDir, "conflict.txt"), "main\n"); git(mcDir, "commit", "-qam", "main");
+  // The person's rebase begins after the sync looked for one and fetched, just before its own rebase.
+  let onto = null;
+  const run = (args, timeout) => {
+    if (args[0] === "rebase" && args[1] === "--autostash") {
+      assert.notEqual(git(mcDir, "rebase", "side").status, 0, "the person's rebase stops on a conflict");
+      onto = fs.readFileSync(path.join(gitPath(mcDir, "rebase-merge"), "onto"), "utf8");
+    }
+    return spawnSync("git", ["-C", mcDir, ...args], { encoding: "utf8", timeout });
+  };
+  assert.equal(pullRebase(mcDir, run), false);
+  assert.ok(onto, "the person's rebase began in the window");
+  assert.equal(rebaseInProgress(mcDir), true, "the person's rebase is still there");
+  assert.equal(fs.readFileSync(path.join(gitPath(mcDir, "rebase-merge"), "onto"), "utf8"), onto);
+  assert.equal(git(mcDir, "rebase", "--abort").status, 0, "and it is still the person's to finish or abort");
 });

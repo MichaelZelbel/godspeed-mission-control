@@ -25,14 +25,20 @@ check='--check' in sys.argv;args=[a for a in sys.argv[1:] if a!='--check']
 source=pathlib.Path(args[0]);pins=json.loads(pins_file.read_text(encoding='utf-8')) if pins_file.exists() else []
 
 if check:
+    # What the pinned commit holds decides, never the list in sources.json alone: a file left out of
+    # both the list and the copy is as wrong as a changed one.
     wrong=[]
     for pin in pins:
         root,name=source/'dev'/pin['name'],pin['name']
-        for p in pin['files']:
+        expected=selected(name,git(root,'ls-tree','-r','--name-only',pin['commit']).decode().splitlines())
+        here=[p[len(f'third-party/addons/{name}/'):] for p in git(product,'ls-files','--cached','--others','--exclude-standard','--',f'third-party/addons/{name}').decode().splitlines()]
+        wrong+=[f'{name}/{p} (in the commit, missing from the pinned list)' for p in expected if p not in pin['files']]
+        wrong+=[f'{name}/{p} (in the pinned list, not in the commit)' for p in pin['files'] if p not in expected]
+        wrong+=[f'{name}/{p} (copied, not in the commit)' for p in here if p not in expected]
+        for p in expected:
             copy=target/name/p
-            if not copy.is_file() or copy.read_bytes()!=git(root,'show',f"{pin['commit']}:{p}"):wrong.append(f'{name}/{p}')
-        here=git(product,'ls-files','--cached','--others','--exclude-standard','--',f'third-party/addons/{name}').decode().splitlines()
-        wrong+=[f'{p} (not in the pinned list)' for p in here if p[len(f'third-party/addons/{name}/'):] not in pin['files']]
+            if not copy.is_file():wrong.append(f'{name}/{p} (missing from the copy)')
+            elif copy.read_bytes()!=git(root,'show',f"{pin['commit']}:{p}"):wrong.append(f'{name}/{p} (differs from the commit)')
     print('\n'.join(wrong) or 'Every carried add-on matches the commit it is pinned to.');sys.exit(1 if wrong else 0)
 
 for name in args[1:] or ADDONS:
