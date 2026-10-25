@@ -45,6 +45,19 @@ function noSuchField(sentence) {
 const isObject = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
 
 /**
+ * A field is a field only where the object really holds it. Every object JSON.parse builds also
+ * carries the names JavaScript gives to all of them - toString, constructor, hasOwnProperty,
+ * __proto__ and the rest - and a bare lookup finds those too, so it answers out of JavaScript
+ * instead of out of the file: a stage file whose root field is named toString would be waved
+ * through, and a reader asked for toString would print a built-in function. tools/stage.sh has no
+ * such names to find and rightly refuses both. So every name this reader asks a stage file or
+ * stage.schema.json about goes through these two, and nothing reads a name off a parsed object
+ * any other way.
+ */
+const own = (o, k) => isObject(o) && Object.hasOwn(o, k);
+const ownValue = (o, k) => (own(o, k) ? o[k] : undefined);
+
+/**
  * A refusal is one plain sentence on one line, so whatever a stage file holds has to fit on one.
  * JSON lets a string hold a newline, a tab or any other control character as an escape, so a
  * sound JSON file can carry a value that would break the sentence that refuses it into two lines.
@@ -66,8 +79,9 @@ function render(v) {
 
 /** The plain name of what a schema node describes; {} becomes the edition or add-on it is about. */
 function nameOf(schema, path, key) {
-  const title = typeof schema.title === "string" ? schema.title : oneLine(path);
-  return title.replace("{}", key === undefined ? "" : oneLine(key));
+  const title = ownValue(schema, "title");
+  const plain = typeof title === "string" ? title : oneLine(path);
+  return plain.replace("{}", key === undefined ? "" : oneLine(key));
 }
 
 function typeOk(value, type) {
@@ -88,10 +102,13 @@ function typeOk(value, type) {
 
 /** True when a leaf value is what its schema says, used for the items of a list. */
 function leafOk(value, schema) {
-  if (schema.type !== undefined && !typeOk(value, schema.type)) return false;
-  if (schema.pattern !== undefined && typeof value === "string" && !new RegExp(schema.pattern).test(value)) return false;
-  if (schema.minLength !== undefined && typeof value === "string" && value.length < schema.minLength) return false;
-  if ("const" in schema && value !== schema.const) return false;
+  const type = ownValue(schema, "type");
+  const pattern = ownValue(schema, "pattern");
+  const minLength = ownValue(schema, "minLength");
+  if (type !== undefined && !typeOk(value, type)) return false;
+  if (pattern !== undefined && typeof value === "string" && !new RegExp(pattern).test(value)) return false;
+  if (minLength !== undefined && typeof value === "string" && value.length < minLength) return false;
+  if (own(schema, "const") && value !== ownValue(schema, "const")) return false;
   return true;
 }
 
@@ -103,51 +120,61 @@ function leafOk(value, schema) {
  */
 function checkAgainst(value, schema, file, path, key) {
   const name = nameOf(schema, path, key);
+  const type = ownValue(schema, "type");
+  const says = ownValue(schema, "description");
+  const pattern = ownValue(schema, "pattern");
+  const minLength = ownValue(schema, "minLength");
+  const items = ownValue(schema, "items");
 
-  if (schema.type !== undefined && !typeOk(value, schema.type)) {
-    refuse(`the ${name} in ${file} is not ${schema.description}: ${render(value)}.`);
+  if (type !== undefined && !typeOk(value, type)) {
+    refuse(`the ${name} in ${file} is not ${says}: ${render(value)}.`);
   }
-  if ("const" in schema && value !== schema.const) {
+  if (own(schema, "const") && value !== ownValue(schema, "const")) {
     refuse(`${file} says ${name} ${render(value)}, which this reader does not understand.`);
   }
   if (typeof value === "string") {
-    if (schema.pattern !== undefined && !new RegExp(schema.pattern).test(value)) {
-      refuse(`the ${name} in ${file} is not ${schema.description}: ${render(value)}.`);
+    if (pattern !== undefined && !new RegExp(pattern).test(value)) {
+      refuse(`the ${name} in ${file} is not ${says}: ${render(value)}.`);
     }
-    if (schema.minLength !== undefined && value.length < schema.minLength) {
-      refuse(`the ${name} in ${file} is not ${schema.description}: ${render(value)}.`);
+    if (minLength !== undefined && value.length < minLength) {
+      refuse(`the ${name} in ${file} is not ${says}: ${render(value)}.`);
     }
   }
-  if (Array.isArray(value) && isObject(schema.items)) {
+  if (Array.isArray(value) && isObject(items)) {
     for (const item of value) {
-      if (!leafOk(item, schema.items)) {
-        refuse(`the ${name} in ${file} holds ${render(item)}, which is not ${schema.items.description}.`);
+      if (!leafOk(item, items)) {
+        refuse(`the ${name} in ${file} holds ${render(item)}, which is not ${ownValue(items, "description")}.`);
       }
     }
   }
   if (!isObject(value)) return;
 
-  const properties = isObject(schema.properties) ? schema.properties : {};
-  const patterns = isObject(schema.patternProperties) ? Object.entries(schema.patternProperties) : [];
+  const named = ownValue(schema, "properties");
+  const properties = isObject(named) ? named : {};
+  const byPattern = ownValue(schema, "patternProperties");
+  const patterns = isObject(byPattern) ? Object.entries(byPattern) : [];
+  const required = ownValue(schema, "required");
+  const closed = ownValue(schema, "additionalProperties") === false;
+  const minProperties = ownValue(schema, "minProperties");
 
   for (const [child, childSchema] of Object.entries(properties)) {
-    if (child in value) checkAgainst(value[child], childSchema, file, path ? `${path}.${child}` : child, key);
+    if (own(value, child)) checkAgainst(ownValue(value, child), childSchema, file, path ? `${path}.${child}` : child, key);
   }
-  for (const want of Array.isArray(schema.required) ? schema.required : []) {
-    if (!(want in value)) {
-      refuse(`${file} names no ${nameOf(properties[want] ?? {}, want, key)}.`);
+  for (const want of Array.isArray(required) ? required : []) {
+    if (!own(value, want)) {
+      refuse(`${file} names no ${nameOf(ownValue(properties, want) ?? {}, want, key)}.`);
     }
   }
   for (const child of Object.keys(value)) {
-    if (child in properties) continue;
+    if (own(properties, child)) continue;
     const childPath = path ? `${path}.${child}` : child;
-    const match = patterns.find(([pattern]) => new RegExp(pattern).test(child));
-    if (match) checkAgainst(value[child], match[1], file, childPath, child);
-    else if (schema.additionalProperties === false) {
+    const match = patterns.find(([shape]) => new RegExp(shape).test(child));
+    if (match) checkAgainst(ownValue(value, child), match[1], file, childPath, child);
+    else if (closed) {
       refuse(`${file} holds ${oneLine(childPath)}, which a stage file does not name.`);
     }
   }
-  if (schema.minProperties !== undefined && Object.keys(value).length < schema.minProperties) {
+  if (minProperties !== undefined && Object.keys(value).length < minProperties) {
     refuse(`${file} names no ${name}.`);
   }
 }
@@ -244,14 +271,14 @@ function fieldsOf(value, path = "", into = []) {
 function valueAt(value, path) {
   let here = value;
   for (const step of path.split(".")) {
-    if (!isObject(here) || !(step in here)) return undefined;
-    here = here[step];
+    if (!own(here, step)) return undefined;
+    here = ownValue(here, step);
   }
   return here;
 }
 
 function versionOf(stage) {
-  return stage.version;
+  return ownValue(stage, "version");
 }
 
 function main(argv) {
@@ -267,12 +294,13 @@ function main(argv) {
     }
     const installed = readStage(argv[1]);
     const asked = argv[3] !== undefined && argv[3] !== "" ? argv[3] : versionOf(installed);
-    const versionRule = loadSchema().properties.version;
+    const versionRule = ownValue(ownValue(loadSchema(), "properties"), "version") ?? {};
     if (!leafOk(asked, versionRule)) {
-      refuse(`${oneLine(asked)} is not ${versionRule.description}.`);
+      refuse(`${oneLine(asked)} is not ${ownValue(versionRule, "description")}.`);
     }
     const published = readStage(argv[2]);
-    const listed = [...installed.withdrawn, ...published.withdrawn].includes(asked);
+    const takenBack = [...(ownValue(installed, "withdrawn") ?? []), ...(ownValue(published, "withdrawn") ?? [])];
+    const listed = takenBack.includes(asked);
     process.stdout.write((listed ? "yes" : "no") + "\n");
     return 0;
   }

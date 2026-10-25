@@ -94,6 +94,44 @@ for (const [file, words] of expected) {
   holds(`    saying what is wrong`, got.err, words);
 }
 
+// --------------------------------------- no name JavaScript gives every object is a field
+// A stage file's fields are the ones it names itself. The names every JavaScript object carries -
+// toString, constructor, __proto__ and the rest - are not among them, and this reader builds its
+// objects with JSON.parse, which hands it every one of those names for free: a lookup that does
+// not ask for an own field would wave such a field through and would print a built-in function
+// when asked for it. tools/stage-cases/inherited-names.txt is the one list this test,
+// tools/test-stage-sh.sh and tools/test-stage-agree.sh all sweep.
+console.log("  no name JavaScript gives every object is a field");
+const inherited = readFileSync(join(CASES, "inherited-names.txt"), "utf8")
+  .split("\n")
+  .map((line) => line.trim())
+  .filter((line) => line && !line.startsWith("#"));
+if (inherited.length >= 12) ok(`  ${inherited.length} inherited names are swept`);
+else bad("at least twelve inherited names are swept", `only ${inherited.length}`);
+const ends = (name, text, words) =>
+  (String(text).replace(/\n+$/, "").endsWith(words) ? ok(name) : bad(name, `[${text}] does not end in [${words}]`));
+const stageText = readFileSync(STAGE, "utf8");
+const copy = join(work, "inherited.json");
+for (const name of inherited) {
+  for (const [where, text] of [
+    [name, stageText.replace("{\n", `{\n  "${name}": "x",\n`)],
+    [`kitBootstrap.${name}`, stageText.replace('"kitBootstrap": {\n', `"kitBootstrap": {\n    "${name}": "x",\n`)],
+  ]) {
+    writeFileSync(copy, text);
+    const got = reader(copy, "check");
+    same(`  a stage file holding ${where} is refused with exit 1`, got.code, 1);
+    same("    and prints nothing on stdout", got.out, "");
+    same("    and one sentence on stderr", got.err.split("\n").filter(Boolean).length, 1);
+    ends("    saying a stage file does not name it", got.err, `holds ${where}, which a stage file does not name.`);
+  }
+  for (const path of [name, `kitBootstrap.${name}`, `addons.${name}`, `serverEditions.server.${name}`]) {
+    const got = reader(STAGE, "get", path);
+    same(`  get ${path} leaves 2, so nothing is answered out of JavaScript`, got.code, 2);
+    same("    and prints nothing", got.out, "");
+    holds("    and says it has no such field", got.err, "has no readable field");
+  }
+}
+
 // A refusal is one sentence on one line, and it names the value that is wrong - so a value that
 // holds a newline of its own has to be named the way the file writes it, escaped, or the sentence
 // arrives as two lines and a caller reading one line of it reads half a sentence. JSON lets a

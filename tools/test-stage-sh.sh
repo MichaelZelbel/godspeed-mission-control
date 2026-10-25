@@ -106,6 +106,45 @@ run_all() { # <shell>
   done < "$CASES/expected.txt"
   if [ "$cases" -ge 8 ]; then ok "  $cases malformed cases were run"; else bad "at least eight malformed cases ($cases)"; fi
 
+  # No name JavaScript gives every object is a field of a stage file. This reader has no
+  # prototypes to inherit one from, so it refuses them already; the sweep is here because
+  # tools/stage.mjs is the reader that had to be taught to, and both are held to the same list,
+  # tools/stage-cases/inherited-names.txt.
+  printf '%s\n' "  no name JavaScript gives every object is a field"
+  inhcount=0
+  while IFS= read -r name; do
+    case $name in '' | '#'*) continue ;; esac
+    inhcount=$((inhcount + 1))
+    { head -n 1 "$STAGE"; printf '  "%s": "x",\n' "$name"; tail -n +2 "$STAGE"; } > "$TMP/inh-root.json"
+    awk -v n="$name" '{ print } $0 == "  \"kitBootstrap\": {" { printf "    \"%s\": \"x\",\n", n }' \
+      "$STAGE" > "$TMP/inh-kb.json"
+    for where in "$name" "kitBootstrap.$name"; do
+      case $where in
+        kitBootstrap.*) copy=$TMP/inh-kb.json ;;
+        *) copy=$TMP/inh-root.json ;;
+      esac
+      run_one "$copy" check
+      same "  a stage file holding $where is refused with exit 1" "$CODE" "1"
+      same "    and prints nothing on stdout" "$OUT" ""
+      lines=$(printf '%s\n' "$ERRS" | grep -c .)
+      same "    and one sentence on stderr" "$lines" "1"
+      case $ERRS in
+        *"holds $where, which a stage file does not name.")
+          ok "    saying a stage file does not name it" ;;
+        *)
+          bad "    saying a stage file does not name it ([$ERRS] does not end in it)" ;;
+      esac
+    done
+    for path in "$name" "kitBootstrap.$name" "addons.$name" "serverEditions.server.$name"; do
+      run_one "$STAGE" get "$path"
+      same "  get $path leaves 2" "$CODE" "2"
+      same "    and prints nothing" "$OUT" ""
+      holds "    and says it has no such field" "$ERRS" "has no readable field"
+    done
+  done < "$CASES/inherited-names.txt"
+  if [ "$inhcount" -ge 12 ]; then ok "  $inhcount inherited names were swept"
+  else bad "at least twelve inherited names were swept (only $inhcount)"; fi
+
   printf '%s\n' "  a sound file in a layout this reader does not read"
   for odd in crlf compact; do
     run_one "$TMP/$odd.json" check

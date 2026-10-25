@@ -1,0 +1,22 @@
+# The names JavaScript gives to every object it builds. A stage file names none of them, and
+# neither reader may answer about one: not as a field the file holds, and not as a field asked
+# for. tools/test-stage.mjs, tools/test-stage-sh.sh and tools/test-stage-agree.sh all sweep this
+# one list, so a name added here is swept by all three. One name a line; a # line is a comment.
+#
+# Why they are a trap only for the Node reader: JSON.parse builds plain objects, every plain
+# object inherits these names from Object.prototype, and a bare lookup finds an inherited name as
+# readily as one the file wrote. __proto__ is worse than the rest - JSON.parse makes it an own
+# field - so a stage file can really carry one. tools/stage.sh has no prototypes to inherit from
+# and refuses all of them already.
+toString
+constructor
+__proto__
+hasOwnProperty
+valueOf
+isPrototypeOf
+propertyIsEnumerable
+toLocaleString
+__defineGetter__
+__defineSetter__
+__lookupGetter__
+__lookupSetter__

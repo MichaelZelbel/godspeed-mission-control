@@ -481,6 +481,14 @@ readers would keep a different one of the two - `JSON.parse` the last, the shell
 parser the first - so a file like that could be withdrawn in one reader and not in the other.
 Both refuse it instead, with the same sentence, so the withdrawn answer still fails closed.
 
+A stage file's fields are also only the ones it names itself. JavaScript gives every object
+it builds a handful of names of its own - `toString`, `constructor`, `__proto__`,
+`hasOwnProperty` and the rest - and `tools/stage.mjs` builds its objects out of `JSON.parse`,
+so it is handed all of them for free. None of them is a field: both readers refuse a stage file
+that holds one, in the same sentence, and both answer exit 2 when one is asked for, so neither
+ever prints something JavaScript made up rather than something the file says. The names they
+are held to are in `tools/stage-cases/inherited-names.txt`.
+
 Three tests keep the two readers one reader, each one command from the root of a checkout:
 `node tools/test-stage.mjs`, `bash tools/test-stage-sh.sh` (which runs the whole list under
 every shell on the machine) and `bash tools/test-stage-agree.sh` (which asks both readers for

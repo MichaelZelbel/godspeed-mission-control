@@ -101,6 +101,66 @@ while IFS='|' read -r file words shwords; do
   fi
 done < "$CASES/expected.txt"
 
+# ------------------------------- no name JavaScript gives every object, asked of both readers
+# A stage file's fields are the ones it names itself. tools/stage.mjs builds its objects with
+# JSON.parse, so JavaScript hands it toString, constructor, __proto__ and the rest for free, while
+# tools/stage.sh has no prototypes and never sees one: that is exactly where the two readers could
+# answer differently about one same file. Every name on tools/stage-cases/inherited-names.txt is
+# put in five places and asked for in four, and the two readers are held to one same sentence and
+# one same exit code throughout.
+# Where addons and serverEditions name their children by a pattern, a lowercase inherited name is
+# a name a stage file may hold there, so the refusal is about the value instead. This test does not
+# fix which of the two sentences it is; it holds both readers to the same one, which is what one
+# reader in two languages means.
+printf '%s\n' "  no name JavaScript gives every object is a field, in either reader"
+# The copies are named relative to the root, like everything else here: Git Bash rewrites an
+# absolute POSIX path on its way to node.exe but not on its way to a shell, and each reader names
+# the file it was handed, so only a relative path reads the same in both sentences.
+INH=.stage-agree-inherited
+rm -rf "$INH"
+mkdir "$INH" || exit 1
+trap 'rm -rf "$TMP" "$TEST_GUARD_HOME" "$ROOT/$INH"' EXIT
+
+refuse_alike() { # <file> <what it is>: both readers refuse it, in one same sentence
+  a=$(node_reader "$1" check 2>&1); ae=$?
+  b=$(sh_reader "$1" check 2>&1); be=$?
+  printf '  %-36s node(%s) %s\n' "$2" "$ae" "$a"
+  printf '  %-36s shell(%s) %s\n' "" "$be" "$b"
+  same "  $2: the Node reader refuses it with exit 1" "$ae" "1"
+  same "  $2: the shell reader refuses it with exit 1" "$be" "1"
+  same "    the Node reader says it on one line" "$(printf '%s\n' "$a" | grep -c .)" "1"
+  same "    the shell reader says it on one line" "$(printf '%s\n' "$b" | grep -c .)" "1"
+  same "    and both say it in the same words" "$b" "$a"
+}
+
+inhcount=0
+while IFS= read -r name; do
+  case $name in '' | '#'*) continue ;; esac
+  inhcount=$((inhcount + 1))
+  { head -n 1 "$STAGE"; printf '  "%s": "x",\n' "$name"; tail -n +2 "$STAGE"; } > "$INH/root.json"
+  refuse_alike "$INH/root.json" "a root field $name"
+  for parent in kitBootstrap windowsSetup addons; do
+    awk -v n="$name" -v p="  \"$parent\": {" '{ print } $0 == p { printf "    \"%s\": \"x\",\n", n }' \
+      "$STAGE" > "$INH/$parent.json"
+    refuse_alike "$INH/$parent.json" "$parent.$name"
+  done
+  awk -v n="$name" '{ print } $0 == "    \"server\": {" { printf "      \"%s\": \"x\",\n", n }' \
+    "$STAGE" > "$INH/edition.json"
+  refuse_alike "$INH/edition.json" "serverEditions.server.$name"
+  for path in "$name" "kitBootstrap.$name" "addons.$name" "serverEditions.server.$name"; do
+    a=$(node_reader "$STAGE" get "$path" 2> "$TMP/inh-node.err"); ae=$?
+    b=$(sh_reader "$STAGE" get "$path" 2> "$TMP/inh-sh.err"); be=$?
+    same "  get $path: the Node reader leaves 2" "$ae" "2"
+    same "  get $path: the shell reader leaves 2" "$be" "2"
+    same "    the Node reader prints nothing" "$a" ""
+    same "    the shell reader prints nothing" "$b" ""
+    same "    and both say what is missing in the same words" "$(cat "$TMP/inh-sh.err")" "$(cat "$TMP/inh-node.err")"
+  done
+done < "$CASES/inherited-names.txt"
+if [ "$inhcount" -ge 12 ]; then ok "  $inhcount inherited names were swept in both readers"
+else bad "at least twelve inherited names were swept (only $inhcount)"; fi
+rm -rf "$INH"
+
 # ---------------------------------------------------------- the same withdrawn answer, four pairs
 printf '%s\n' "  the withdrawn answer, both readers, all four pairs"
 for pair in "ok-clean ok-clean no" "ok-clean ok-withdrawn yes" "ok-withdrawn ok-clean yes" "ok-withdrawn ok-withdrawn yes"; do

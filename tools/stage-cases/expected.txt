@@ -20,3 +20,5 @@ bad-control-character.json|is not a version like 2.0.0-beta.6: "2.0.0-beta.6\nan
 bad-withdrawn.json|holds the first one, which is not a version.|
 bad-unknown-field.json|holds serverImage, which a stage file does not name.|
 bad-duplicate-field.json|names withdrawn twice; a stage file names each field once.|
+bad-inherited-field.json|holds toString, which a stage file does not name.|
+bad-inherited-proto.json|holds kitBootstrap.__proto__, which a stage file does not name.|
