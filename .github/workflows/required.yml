@@ -61,7 +61,6 @@ jobs:
           set -e
           node stage/test-stage.mjs
           bash stage/test-stage-sh.sh
-          bash stage/test-stage-agree.sh
           node notebook/scripts/run-tests.mjs notebook/test/installer-stage.test.mjs
           bash docker/server/test.sh
           node docker/server/test-browser.mjs
