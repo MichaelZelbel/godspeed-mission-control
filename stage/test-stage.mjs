@@ -1,9 +1,9 @@
 #!/usr/bin/env node
-// The gate for tools/stage.mjs, the stage reader for Node. It reads the real stage.json, every
+// The gate for stage/stage.mjs, the stage reader for Node. It reads the real stage.json, every
 // field of it, the whole file as checked JSON, and the withdrawn answer in all four pairs; then
-// it holds the reader to the malformed files in tools/stage-cases/, which tools/test-stage-sh.sh
+// it holds the reader to the malformed files in stage/stage-cases/, which stage/test-stage-sh.sh
 // holds the shell reader to as well, so the two cannot drift apart.
-// Run: node tools/test-stage.mjs   (from the root of a checkout of this kit)
+// Run: node stage/test-stage.mjs   (from the root of a checkout of this kit)
 import { createRequire } from "node:module";
 import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync, mkdtempSync, rmSync } from "node:fs";
@@ -12,7 +12,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const require = createRequire(import.meta.url);
-require("./test-guard.cjs"); // never a real mission control (test-guard.bash says why)
+require("../tools/test-guard.cjs"); // never a real mission control (test-guard.bash says why)
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "..");
@@ -78,7 +78,7 @@ for (const path of ["thereIsNoSuchField", "kitBootstrap", "addons.not-an-addon",
 }
 
 // ------------------------------------------------------------------ every malformed file
-console.log("  the malformed files of tools/stage-cases/");
+console.log("  the malformed files of stage/stage-cases/");
 const expected = readFileSync(join(CASES, "expected.txt"), "utf8")
   .split("\n")
   .filter((line) => line && !line.startsWith("#"))
@@ -99,8 +99,8 @@ for (const [file, words] of expected) {
 // toString, constructor, __proto__ and the rest - are not among them, and this reader builds its
 // objects with JSON.parse, which hands it every one of those names for free: a lookup that does
 // not ask for an own field would wave such a field through and would print a built-in function
-// when asked for it. tools/stage-cases/inherited-names.txt is the one list this test,
-// tools/test-stage-sh.sh and tools/test-stage-agree.sh all sweep.
+// when asked for it. stage/stage-cases/inherited-names.txt is the one list this test,
+// stage/test-stage-sh.sh and stage/test-stage-agree.sh all sweep.
 console.log("  no name JavaScript gives every object is a field");
 const inherited = readFileSync(join(CASES, "inherited-names.txt"), "utf8")
   .split("\n")
@@ -178,7 +178,7 @@ const refusedPair = reader("withdrawn", join(CASES, "bad-pattern.json"), clean);
 same("  a malformed installed stage is refused, so the answer fails closed", refusedPair.code, 1);
 same("    and no answer is printed", refusedPair.out, "");
 
-// JSON.parse keeps the last of two fields with one name and tools/stage.sh keeps the first, so a
+// JSON.parse keeps the last of two fields with one name and stage/stage.sh keeps the first, so a
 // file that names withdrawn twice would read differently in the two readers. Neither answers from
 // it: the withdrawn question fails closed, whichever of the two stages holds the duplicate.
 const duplicate = join(CASES, "bad-duplicate-field.json");

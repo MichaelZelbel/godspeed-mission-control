@@ -1,13 +1,13 @@
 #!/bin/sh
 # The gate that the two stage readers are one reader. It takes the real stage.json and asks both
-# tools/stage.mjs and tools/stage.sh for the same things: the list of fields, the value of every
+# stage/stage.mjs and stage/stage.sh for the same things: the list of fields, the value of every
 # field on it, the whole file as checked JSON, the refusal of every malformed file in
-# tools/stage-cases/, and the withdrawn answer in all four pairs. Then it checks each value in
+# stage/stage-cases/, and the withdrawn answer in all four pairs. Then it checks each value in
 # stage.json against the release record it came from and against the file that holds the same pin
 # today, printing what it compared with what.
-# Run: bash tools/test-stage-agree.sh   (from the root of a checkout of this kit)
+# Run: bash stage/test-stage-agree.sh   (from the root of a checkout of this kit)
 set -u
-. "$(dirname "$0")/test-guard.bash"
+. "$(dirname "$0")/../tools/test-guard.bash"
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 # Everything below names its files the way a reader of this kit types them, from the root. On
@@ -15,7 +15,7 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd)
 # into a Windows one on its way to node.exe but not on its way to a shell, and the readers name
 # the file they were handed.
 cd "$ROOT" || exit 1
-CASES=tools/stage-cases
+CASES=stage/stage-cases
 STAGE=stage.json
 RECORD=docs/full-version/release-beta6-2026-10-24.md
 
@@ -28,8 +28,8 @@ ok()   { PASS=$((PASS + 1)); printf '  ok   %s\n' "$1"; }
 bad()  { FAIL=$((FAIL + 1)); printf '  FAIL %s\n' "$1"; }
 same() { if [ "$2" = "$3" ]; then ok "$1"; else bad "$1 (wanted [$3], got [$2])"; fi; }
 
-node_reader() { node tools/stage.mjs "$@"; }
-sh_reader()   { sh tools/stage.sh "$@"; }
+node_reader() { node stage/stage.mjs "$@"; }
+sh_reader()   { sh stage/stage.sh "$@"; }
 
 printf 'the two stage readers, on %s\n' "$STAGE"
 
@@ -102,10 +102,10 @@ while IFS='|' read -r file words shwords; do
 done < "$CASES/expected.txt"
 
 # ------------------------------- no name JavaScript gives every object, asked of both readers
-# A stage file's fields are the ones it names itself. tools/stage.mjs builds its objects with
+# A stage file's fields are the ones it names itself. stage/stage.mjs builds its objects with
 # JSON.parse, so JavaScript hands it toString, constructor, __proto__ and the rest for free, while
-# tools/stage.sh has no prototypes and never sees one: that is exactly where the two readers could
-# answer differently about one same file. Every name on tools/stage-cases/inherited-names.txt is
+# stage/stage.sh has no prototypes and never sees one: that is exactly where the two readers could
+# answer differently about one same file. Every name on stage/stage-cases/inherited-names.txt is
 # put in five places and asked for in four, and the two readers are held to one same sentence and
 # one same exit code throughout.
 # Where addons and serverEditions name their children by a pattern, a lowercase inherited name is

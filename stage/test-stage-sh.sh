@@ -1,14 +1,14 @@
 #!/bin/sh
-# The gate for tools/stage.sh, the stage reader installers use. It runs the whole case list under
+# The gate for stage/stage.sh, the stage reader installers use. It runs the whole case list under
 # every shell on this machine - /bin/bash, dash and sh where they are there - because the reader
 # has to answer the same in the Mac's own bash 3.2, in dash and in bash 5. The malformed files
-# are the ones in tools/stage-cases/ that tools/test-stage.mjs holds the Node reader to, and the
-# words their refusal must hold are in tools/stage-cases/expected.txt, so the two readers cannot
+# are the ones in stage/stage-cases/ that stage/test-stage.mjs holds the Node reader to, and the
+# words their refusal must hold are in stage/stage-cases/expected.txt, so the two readers cannot
 # drift apart.
-# Itself POSIX, so it runs under dash as well: bash tools/test-stage-sh.sh
-# Run: bash tools/test-stage-sh.sh   (from the root of a checkout of this kit)
+# Itself POSIX, so it runs under dash as well: bash stage/test-stage-sh.sh
+# Run: bash stage/test-stage-sh.sh   (from the root of a checkout of this kit)
 set -u
-. "$(dirname "$0")/test-guard.bash"
+. "$(dirname "$0")/../tools/test-guard.bash"
 
 HERE=$(cd "$(dirname "$0")" && pwd)
 ROOT=$(cd "$HERE/.." && pwd)
@@ -42,7 +42,7 @@ run_one() { # <shell> ...reader arguments: fills OUT, ERRS, CODE
 
 run_all() { # <shell>
   RUNSH=$1
-  printf '\n%s\n' "tools/stage.sh under $RUNSH"
+  printf '\n%s\n' "stage/stage.sh under $RUNSH"
 
   run_one "$STAGE" check
   same "the real stage.json is read and checked" "$CODE" "0"
@@ -88,7 +88,7 @@ run_all() { # <shell>
     holds "  and says so in one sentence" "$ERRS" "has no readable field"
   done
 
-  printf '%s\n' "  the malformed files of tools/stage-cases/"
+  printf '%s\n' "  the malformed files of stage/stage-cases/"
   cases=0
   while IFS='|' read -r file words shwords; do
     case $file in '' | '#'*) continue ;; esac
@@ -108,8 +108,8 @@ run_all() { # <shell>
 
   # No name JavaScript gives every object is a field of a stage file. This reader has no
   # prototypes to inherit one from, so it refuses them already; the sweep is here because
-  # tools/stage.mjs is the reader that had to be taught to, and both are held to the same list,
-  # tools/stage-cases/inherited-names.txt.
+  # stage/stage.mjs is the reader that had to be taught to, and both are held to the same list,
+  # stage/stage-cases/inherited-names.txt.
   printf '%s\n' "  no name JavaScript gives every object is a field"
   inhcount=0
   while IFS= read -r name; do
@@ -175,7 +175,7 @@ run_all() { # <shell>
   same "    and no answer is printed" "$OUT" ""
 
   # This reader's own parser keeps the first of two fields with one name and JSON.parse in
-  # tools/stage.mjs keeps the last, so a file that names withdrawn twice would read differently in
+  # stage/stage.mjs keeps the last, so a file that names withdrawn twice would read differently in
   # the two. Neither answers from it, whichever of the two stages holds the duplicate.
   for pair in "bad-duplicate-field ok-clean installed" "ok-clean bad-duplicate-field public"; do
     set -- $pair

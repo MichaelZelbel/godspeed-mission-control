@@ -6,16 +6,16 @@
 // stage.schema.json - the published schema itself, not a copy of its rules - and answers one
 // question at a time, so an installer never parses JSON by hand.
 //
-// tools/stage.sh answers the same questions with the same words and the same exit codes, for
-// installers that run before Node is installed. Keep the two in step; tools/test-stage-agree.sh
+// stage/stage.sh answers the same questions with the same words and the same exit codes, for
+// installers that run before Node is installed. Keep the two in step; stage/test-stage-agree.sh
 // proves they are.
 //
-//   node tools/stage.mjs <stage file> check          read it and check it; print nothing
-//   node tools/stage.mjs <stage file> fields         every field it can read, one a line
-//   node tools/stage.mjs <stage file> get <field>    print one field, for example productCommit,
+//   node stage/stage.mjs <stage file> check          read it and check it; print nothing
+//   node stage/stage.mjs <stage file> fields         every field it can read, one a line
+//   node stage/stage.mjs <stage file> get <field>    print one field, for example productCommit,
 //                                                    serverEditions.server.image, addons.mc-video
-//   node tools/stage.mjs <stage file> json           the whole checked file as JSON
-//   node tools/stage.mjs withdrawn <installed stage> <public stage> [version]
+//   node stage/stage.mjs <stage file> json           the whole checked file as JSON
+//   node stage/stage.mjs withdrawn <installed stage> <public stage> [version]
 //                                                    yes when either file lists the version
 //
 // Exit: 0 answered, 1 the file is refused (one plain sentence on stderr), 2 the file is sound
@@ -28,9 +28,9 @@ import { fileURLToPath } from "node:url";
 const HERE = dirname(fileURLToPath(import.meta.url));
 
 const USAGE = [
-  "usage: node tools/stage.mjs <stage file> check|fields|json",
-  "       node tools/stage.mjs <stage file> get <field>",
-  "       node tools/stage.mjs withdrawn <installed stage> <public stage> [version]",
+  "usage: node stage/stage.mjs <stage file> check|fields|json",
+  "       node stage/stage.mjs <stage file> get <field>",
+  "       node stage/stage.mjs withdrawn <installed stage> <public stage> [version]",
 ].join("\n");
 
 function refuse(sentence) {
@@ -49,7 +49,7 @@ const isObject = (v) => v !== null && typeof v === "object" && !Array.isArray(v)
  * carries the names JavaScript gives to all of them - toString, constructor, hasOwnProperty,
  * __proto__ and the rest - and a bare lookup finds those too, so it answers out of JavaScript
  * instead of out of the file: a stage file whose root field is named toString would be waved
- * through, and a reader asked for toString would print a built-in function. tools/stage.sh has no
+ * through, and a reader asked for toString would print a built-in function. stage/stage.sh has no
  * such names to find and rightly refuses both. So every name this reader asks a stage file or
  * stage.schema.json about goes through these two, and nothing reads a name off a parsed object
  * any other way.
@@ -114,7 +114,7 @@ function leafOk(value, schema) {
 
 /**
  * Checks one value against one node of the schema, and refuses with one plain sentence at the
- * first thing that is wrong. The order is the one tools/stage.sh keeps too: the type, then the
+ * first thing that is wrong. The order is the one stage/stage.sh keeps too: the type, then the
  * one value the schema fixes, then every field that is there in the order the schema names them,
  * then the fields that are missing, then the fields a stage file does not name.
  */
@@ -181,7 +181,7 @@ function checkAgainst(value, schema, file, path, key) {
 
 /**
  * The field a file names twice, as a dotted path, or null when it names each of them once.
- * JSON.parse keeps the last of two fields with one name and tools/stage.sh keeps the first, so a
+ * JSON.parse keeps the last of two fields with one name and stage/stage.sh keeps the first, so a
  * file like that reads differently in the two readers: both refuse it rather than answer from it.
  * The text came through JSON.parse already, so this walk only has to find the strings that are
  * field names, and in JSON a string a colon follows is a field's name and nothing else is.
@@ -232,7 +232,7 @@ function loadSchema() {
       if (e.code !== "ENOENT") throw e;
     }
   }
-  process.stderr.write("stage.schema.json is not beside stage.json or in tools/, so nothing can be checked.\n");
+  process.stderr.write("stage.schema.json is not beside stage.json or in stage/, so nothing can be checked.\n");
   process.exit(1);
 }
 

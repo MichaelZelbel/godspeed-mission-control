@@ -1,15 +1,15 @@
 #!/bin/sh
 # The stage reader for installers. The same questions, the same words and the same exit codes as
-# tools/stage.mjs, in POSIX shell: no jq, no Node, no Python, because an installer runs before
+# stage/stage.mjs, in POSIX shell: no jq, no Node, no Python, because an installer runs before
 # Node is installed and on servers that have none. It runs in the Mac's own /bin/bash 3.2 as well
 # as in dash and bash 5.
 #
-#   sh tools/stage.sh <stage file> check          read it and check it; print nothing
-#   sh tools/stage.sh <stage file> fields         every field it can read, one a line
-#   sh tools/stage.sh <stage file> get <field>    print one field, for example productCommit,
+#   sh stage/stage.sh <stage file> check          read it and check it; print nothing
+#   sh stage/stage.sh <stage file> fields         every field it can read, one a line
+#   sh stage/stage.sh <stage file> get <field>    print one field, for example productCommit,
 #                                                 serverEditions.server.image, addons.mc-video
-#   sh tools/stage.sh <stage file> json           the whole checked file as JSON
-#   sh tools/stage.sh withdrawn <installed stage> <public stage> [version]
+#   sh stage/stage.sh <stage file> json           the whole checked file as JSON
+#   sh stage/stage.sh withdrawn <installed stage> <public stage> [version]
 #                                                 yes when either file lists the version
 #
 # Exit: 0 answered, 1 the file is refused (one plain sentence on stderr), 2 the file is sound but
@@ -19,8 +19,8 @@
 # This reader has no JSON parser. It reads the one layout a stage file is written in - the one
 # JSON.stringify(stage, null, 2) writes: two spaces a level, one field a line, no tabs, no
 # backslash escapes, Unix line endings - and refuses anything else with a plain sentence rather
-# than guess at it. stage.schema.json carries the rules it checks; tools/stage.mjs reads that file
-# itself, this one repeats its rules, and tools/test-stage-agree.sh proves the two answer alike.
+# than guess at it. stage.schema.json carries the rules it checks; stage/stage.mjs reads that file
+# itself, this one repeats its rules, and stage/test-stage-agree.sh proves the two answer alike.
 set -u
 LC_ALL=C
 export LC_ALL
@@ -30,9 +30,9 @@ CR=$(printf '\r')
 NL='
 '
 
-USAGE="usage: sh tools/stage.sh <stage file> check|fields|json
-       sh tools/stage.sh <stage file> get <field>
-       sh tools/stage.sh withdrawn <installed stage> <public stage> [version]"
+USAGE="usage: sh stage/stage.sh <stage file> check|fields|json
+       sh stage/stage.sh <stage file> get <field>
+       sh stage/stage.sh withdrawn <installed stage> <public stage> [version]"
 
 FILE=''
 flat=''
@@ -106,7 +106,7 @@ is_plain() { # a file name or a release tag
 #                                             o object, a list. A list's items are <path>#1, #2...
 # and every field a reader may print ends up in $fieldlist, in the file's own order.
 # A file that names one field twice is refused rather than read: $flat keeps both lines and look
-# answers from the first, while JSON.parse in tools/stage.mjs keeps the last of the two, so the
+# answers from the first, while JSON.parse in stage/stage.mjs keeps the last of the two, so the
 # two readers would answer differently - about the withdrawn list as well - from one same file.
 
 look() { # <path>: sets LOOK_FOUND, LOOK_KIND, LOOK_VAL
@@ -314,7 +314,7 @@ parse_file() { # <file>: fills $flat and $fieldlist, or refuses
 }
 
 # ------------------------------------------------------------ the rules stage.schema.json names
-# The same order tools/stage.mjs walks the schema in: the fields that are there, in the order the
+# The same order stage/stage.mjs walks the schema in: the fields that are there, in the order the
 # schema names them, then the fields that are missing, then the fields a stage file does not name.
 
 a_commit() { # <path> <plain name>

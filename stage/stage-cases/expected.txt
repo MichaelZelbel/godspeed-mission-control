@@ -1,11 +1,11 @@
 # The malformed stage files beside this one, and the words the refusal must hold. Both
-# tools/test-stage.mjs and tools/test-stage-sh.sh read this list, so the Node reader and the
+# stage/test-stage.mjs and stage/test-stage-sh.sh read this list, so the Node reader and the
 # shell reader are held to the same bytes and the same sentence. One file a line:
 #   <file name>|<words the one sentence on stderr must hold>|<the shell reader's own words>
 # The third field is empty for nearly every case, and the two readers refuse the file in one
 # same sentence. It is filled only where the shell reader cannot reach the rule the file breaks,
 # because the file is not in the layout that reader reads at all: there it names the line it
-# stopped at instead, and tools/test-stage-agree.sh holds each reader to its own words rather
+# stopped at instead, and stage/test-stage-agree.sh holds each reader to its own words rather
 # than to one shared sentence.
 # Every one of them must leave exit 1, one line on stderr and nothing on stdout.
 bad-not-json.json|is not JSON|is not JSON in the layout a stage file is written in: line 1
