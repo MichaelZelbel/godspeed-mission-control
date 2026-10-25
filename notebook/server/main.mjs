@@ -41,6 +41,7 @@ import {TelegramConnection} from './telegram-connect.mjs';
 import {hermesSettingsFor,connectRoutineAI,routineAIStatus,checkRoutineAI,baseAddress,askDirectly,connectPlanMain} from '../core/routine-ai.mjs';
 import {withBackup,readBackupEndpoint,backupEntryFor,connectBackupAI,connectHermesBackup,removeBackupAI,backupStatus,fallbackChain} from '../core/backup-ai.mjs';
 import {PlanSignIn,PLAN_PROVIDER} from '../core/plan-signin.mjs';
+import {voiceStatus,saveVoice} from '../core/voice-replies.mjs';
 import {goalOverview} from '../core/goal-overview.mjs';
 import {nativeAgent} from '../core/native-agent.mjs';
 import {NativeScheduler} from '../core/native-scheduler.mjs';
@@ -367,6 +368,13 @@ export async function createService({ root, mediaRoot, host = '127.0.0.1', port 
       }
       if(route==='/api/ai-signin/cancel'&&req.method==='POST')return send(res,200,planSignIn?{available:true,...planSignIn.cancel()}:{available:false,state:'idle'});
       if(route==='/api/backup-ai/remove'&&req.method==='POST')return send(res,200,{hermes:!!backupHome,...removeBackupAI({home:backupHome,state:store.state})});
+      // VOICE REPLIES (core/voice-replies.mjs, discussion #41): the voice the assistant answers voice
+      // notes with, kept in Hermes' own home. An ElevenLabs voice is kept only after a sample worked.
+      if(route==='/api/voice'&&req.method==='GET')return send(res,200,backupHome?voiceStatus({home:backupHome,state:store.state}):{available:false});
+      if(route==='/api/voice'&&req.method==='POST'){
+        if(!backupHome)throw new Error('Voice replies are made where Hermes runs your assistant; this notebook has none.');
+        return send(res,200,await saveVoice({home:backupHome,state:store.state,input:JSON.parse(await body(req,16384))}));
+      }
       if(route==='/api/routine-ai/check'&&req.method==='POST'){if(!routineAI)throw new Error('This notebook runs no routines through Hermes');return send(res,200,{available:true,...await checkRoutineAI({...routineAI,executable:descriptor.executable,cwd:store.root,sourceRoot:descriptor.sourceRoot})});}
       if(route==='/api/sync/configure'&&req.method==='POST'){
         // A computer not yet signed in to GitHub signs in once, then the same check runs again (github-sign-in.mjs).
