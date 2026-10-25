@@ -17,7 +17,11 @@ may use sudo):
 curl -fsSL https://teachitonce.com/server | bash
 ```
 
-(The same file is `docker/server/install.sh` on main.) It installs Docker if the server has
+(The same file is `docker/server/install.sh` on the public stage, `beta`.) It installs the current
+public version, which changes only when the maintainer releases one; `GODSPEED_STAGE_REF` installs
+another stage, for example a candidate before it is released to everybody
+(`curl -fsSL https://teachitonce.com/server | GODSPEED_STAGE_REF=candidate/2.0.0-beta.7 bash`), and
+a version that was taken back is refused. It installs Docker if the server has
 none, puts the very `compose.yaml` that Hostinger's one-click deploys
 (`docker/hostinger/compose.yaml`, image pinned by digest) in `/opt/godspeed-mission-control`
 with its two settings in `.env` (readable by root only), starts it, waits until the page
@@ -50,8 +54,9 @@ part in the chat, then, whenever you like, a short chat in which your assistant 
 - **The install count** is sent only with `GODSPEED_INSTALL_COUNT=yes` in front of `bash`: the
   word "installed", the kind `docker-server` and a random number, once, to godspeedmissioncontrol.com,
   which counts it and keeps no address. Without it, nothing.
-- **Trying a version before it is released.** `compose.yaml` on main pins the released image. To
-  run another one on a test server, name it:
+- **Trying a version before it is released.** The stage this line installs names the image it runs,
+  and by default that is the public stage, `beta`. To run a whole other stage on a test server, name
+  it with `GODSPEED_STAGE_REF`, as above. To run one single image, name that instead:
   `curl -fsSL https://teachitonce.com/server | GODSPEED_IMAGE=ghcr.io/michaelzelbel/godspeed-mission-control:v2-sha-<commit> bash`.
   Every commit on main that passes the "Integrated Godspeed v2" check is published under that
   tag (the full 40-character commit). The choice is kept, so running the line again stays on it;
@@ -67,7 +72,7 @@ throw away, with `GODSPEED_HOST=localhost` and Caddy's own certificate).
 On the server, as root:
 
 ```
-curl -fsSL https://raw.githubusercontent.com/MichaelZelbel/godspeed-mission-control/main/docker/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/MichaelZelbel/godspeed-mission-control/beta/docker/install.sh | bash
 ```
 
 It installs Docker if it is missing, starts the container and runs setup inside it.
@@ -80,7 +85,7 @@ By hand, with Docker already installed:
 
 ```
 mkdir godspeed-mission-control && cd godspeed-mission-control
-curl -fsSLO https://raw.githubusercontent.com/MichaelZelbel/godspeed-mission-control/main/docker/compose.yaml
+curl -fsSLO https://raw.githubusercontent.com/MichaelZelbel/godspeed-mission-control/beta/docker/compose.yaml
 docker compose up -d
 docker compose exec godspeed godspeed-setup
 ```

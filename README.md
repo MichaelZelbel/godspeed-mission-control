@@ -6,7 +6,13 @@ New here and not a reader yet? The first chapters are free: [download the free s
 
 A new release comes out most weeks. I write about what my AI does for me and what I will not let it do in a free newsletter: [subscribe on Substack](https://michaelzelbel.substack.com/subscribe).
 
-Version 2 is the current edition, here on `main`. Its installers set up a new, separate folder. They do not move an existing version 1 Godspeed folder or your Menerio account.
+Version 2 is the current edition. The lines below install the current public version, which is the branch `beta` of this repository; `main` is where the work goes on, and a change merged into it reaches nobody until the next version is released. The installers set up a new, separate folder. They do not move an existing version 1 Godspeed folder or your Menerio account.
+
+## New in 2.0.0-beta.7
+
+What you install changes only when a version is released. Until now the install lines took whatever had been merged that day, so a change made in the morning was on a stranger's computer in the afternoon, tried or not. They now read the current public version, and it moves only when the maintainer releases one. Nothing inside Godspeed changes, and updating keeps your folder, notes and settings.
+
+A released version can also be taken back. If something is wrong with it, the installers refuse it from then on and install the version before it instead, so a line or a link you saved cannot put it on your computer either.
 
 ## New in 2.0.0-beta.5 (24 October 2026)
 
@@ -235,26 +241,43 @@ The notebook no longer calls every installation a test installation. Its unavail
 
 ## Windows
 
-[Download GodspeedSetup.exe](https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-21-1/GodspeedSetup.exe), then run it.
+[Download GodspeedSetup.exe](https://github.com/MichaelZelbel/godspeed-mission-control/releases/latest/download/GodspeedSetup.exe), then run it.
+
+That is the release marked Latest, the current public version. It changes only when a version is released, and a version that was taken back is not it any more.
 
 This uses Godspeed's original setup wizard and shared installer, then connects the integrated notebook. On a PC that already has Godspeed, the wizard selects a separate installation by default. The notebook opens at [http://127.0.0.1:47831/dashboard](http://127.0.0.1:47831/dashboard). Connect your own model account in Settings to use the assistant. The installer is unsigned.
 
-The executable is also [committed in this repository](installers/GodspeedSetup.exe). The [download page](https://github.com/MichaelZelbel/godspeed-mission-control/releases/tag/godspeed-v2-integrated-2026-10-21-1) lists the same file and its checksums.
+The executable is also [committed in this repository](installers/GodspeedSetup.exe). The [download page](https://github.com/MichaelZelbel/godspeed-mission-control/releases/latest) lists the same file and its checksums.
 
 ## Linux or Mac
 
 This uses Godspeed's shared native installer for Git, Node.js, Hermes and the Godspeed folders, then adds the notebook. Docker is not required for this route. On a Mac, the notebook starting by itself, `mc-uninstall` and connecting Gmail were checked on GitHub's Mac test computers; the whole one-line install on a real Mac has not been checked yet.
 
-Download this release's installer, check that it is the published file, and run it:
+Paste this line into a Terminal window:
 
 ```bash
-curl -fsSLO https://github.com/MichaelZelbel/godspeed-mission-control/releases/download/godspeed-v2-integrated-2026-10-21-1/install-godspeed.sh
-echo "68560ed5c2ec7547c3a76648c552439f9756a0fdf2366df9f07a208fb6ae0a1b  install-godspeed.sh" | sha256sum -c - && bash install-godspeed.sh
+curl -fsSL https://godspeedmissioncontrol.com/install | bash
 ```
 
-On a Mac, write `shasum -a 256 -c -` where it says `sha256sum -c -`. The check refuses any other file, and the installer names one exact version of the notebook, so every reader of this release gets the same notebook.
+It installs the current public version. That version changes only when the maintainer releases one, so pasting the line again next month gives you what was released, not whatever was changed yesterday. A version that was taken back is refused in one plain sentence, and nothing on the computer is changed.
 
-On a computer that already has Godspeed, download and check it the same way, then use the original installer's separate-folder option:
+If you would rather have the file in front of you first, this is the same installer from the same version:
+
+```bash
+curl -fsSLO https://raw.githubusercontent.com/MichaelZelbel/godspeed-mission-control/beta/install-godspeed.sh
+bash install-godspeed.sh
+```
+
+To install another stage than the public one, name it with `GODSPEED_STAGE_REF`, for example a release candidate before it is released to everybody:
+
+```bash
+curl -fsSLO https://raw.githubusercontent.com/MichaelZelbel/godspeed-mission-control/candidate/2.0.0-beta.7/install-godspeed.sh
+GODSPEED_STAGE_REF=candidate/2.0.0-beta.7 bash install-godspeed.sh
+```
+
+Take the installer from the stage you are installing, as above: each stage's installer and the version it installs belong together.
+
+On a computer that already has Godspeed, use the original installer's separate-folder option:
 
 ```bash
 bash install-godspeed.sh --beside --godspeed "$HOME/godspeed-v2"
@@ -264,7 +287,7 @@ The notebook opens locally at `http://127.0.0.1:47831/dashboard`. On Linux it st
 
 The default folder is `~/godspeed-v2`. The original installer also accepts `--godspeed` and `--repo`.
 
-`install-godspeed.sh` at the top of this repository is the release's installer, so `curl -fsSL https://godspeedmissioncontrol.com/install | bash` installs the same version, without the check. For development only: `install-godspeed-dev.sh` installs the development branch's newest commit, so it can differ from one day to the next. It is not for readers.
+`install-godspeed.sh` at the top of each stage is that stage's installer, and the short line above fetches it from the public stage, so both lines install the same version. It names no version itself: it reads the version it installs from `stage.json` beside it, the one file that says what a published version is made of (`stage/README.md`). For development only: `install-godspeed-dev.sh` installs the development branch's newest commit, so it can differ from one day to the next. It is not for readers.
 
 On a server, the installer also gives the notebook a web address with HTTPS. A server is a Linux computer without a desktop whose public address has a name in public DNS; another name can be given with `GODSPEED_HOST=notebook.example.com`. The address is `https://` plus that name, or that name with `:48443` when the server's own Caddy already serves it. At the end the installer prints a private link that makes your account (username, password, and a recovery code to keep); after that you sign in there. Ports 80 and 443 must be free or held by Caddy, and the installer needs sudo once. The assistant and the routines on the server keep using `http://127.0.0.1:47831`, which asks no sign-in and answers only on the server itself.
 
