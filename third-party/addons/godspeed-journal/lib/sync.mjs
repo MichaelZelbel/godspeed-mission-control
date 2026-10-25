@@ -11,9 +11,15 @@
 //   finds the lock taken leaves; after giving the lock back the holder looks once more and takes
 //   it again when an item arrived meanwhile, so no save waits for a sync that has finished.
 // - An item that fails (git's index locked past every try, a push that keeps failing, a rebase in
-//   progress) stays, and the next save or tick tries it again.
-// - A lock is taken over only when the process that wrote it is gone. A holder checks before every
-//   git step that the lock is still its own, and stops when it is not.
+//   progress) stays, and so do the other items of its folder for that turn: one commit holds the
+//   whole folder, so they would only fail the same way, each after its own tries.
+// - While items wait, one background sync per mission control folder stays and tries again, at
+//   pauses growing to a quarter of an hour, for as long as they wait: they never depend on the next
+//   save. Any other sync that would stay leaves them to it. The next save or tick tries them too.
+// - A lock is taken over only when the process that wrote it is gone, or when its holder has not
+//   touched it for ten minutes, twice as long as any git step may run (after a restart, its process
+//   number can belong to another program). A holder touches it and checks that it is still its own
+//   before every git step, and stops when it is not.
 // - Only the journal's, the coach's and the headache tracker's folders are ever committed, and a
 //   folder that does not exist is skipped.
 // - A rebase in progress is never touched; a sync aborts only a rebase that HEAD's reflog shows it
@@ -34,10 +40,14 @@ export const commitJournal = (mcDir, message, mode, options) => commitFolder(mcD
 const FOLDERS = ["routines/journal", "coach", "routines/headache"]; // the only folders a sync ever commits
 const LOCK = "godspeed-addons-sync.lock";
 const ITEMS = "godspeed-addons-sync";
+const RETRY = "godspeed-addons-sync.retry"; // says which background sync stays to try again
 export const LIMITS = Object.freeze({
   rebaseWaitMs: 60000,                   // how long a rebase in progress is waited out before a sync leaves it be
   pushTries: 3,
   pauses: [500, 1000, 2000, 4000, 8000], // between the tries of a git step that failed
+  retryFirstMs: 30000,                   // the sync that stays while items wait tries again after this,
+  retryMaxMs: 900000,                    // doubling the pause up to a quarter of an hour
+  staleMs: 600000,                      // a lock untouched this long is abandoned: the longest git step (a push) stops at 5 min
 });
 const FAILED = new Set(["busy", "commit-failed", "push-failed"]);
 const LOST = new Error("The sync lock is no longer this sync's.");
@@ -130,9 +140,12 @@ function pidAlive(pid) {
 }
 
 // Taken over only when the sync that wrote it is gone: its process no longer runs on this computer,
-// or it never finished writing the lock (empty or unreadable for a minute). A lock whose process
-// is alive is never taken, however old.
-function abandoned(text, mtimeMs) {
+// it never finished writing the lock (empty or unreadable for a minute), or its holder stopped
+// touching it. A holder touches the lock before every git step and no git step runs half as long
+// as staleMs, so a lock that old has no git step running for it, though its process number may
+// belong to another program by now (Windows hands numbers out again, after a restart too).
+function abandoned(text, mtimeMs, staleMs) {
+  if (Date.now() - mtimeMs > staleMs) return true;
   let lock;
   try { lock = JSON.parse(text); } catch { return Date.now() - mtimeMs > 60000; }
   return lock.host === os.hostname() && Number.isInteger(lock.pid) && !pidAlive(lock.pid);
@@ -150,7 +163,7 @@ function drop(file, judged) {
 
 // The lock, or null when a live sync holds it (after waiting up to waitMs).
 // { file: null }: there is nowhere to keep a lock (a read-only .git), so this goes ahead without.
-function takeLock(file, waitMs = 0) {
+function takeLock(file, waitMs, staleMs) {
   const body = JSON.stringify({ pid: process.pid, host: os.hostname(), at: new Date().toISOString(), token: token() });
   const end = Date.now() + waitMs;
   for (let spin = 0; spin < 200; spin++) {
@@ -159,7 +172,7 @@ function takeLock(file, waitMs = 0) {
     catch (e) { if (!["EEXIST", "EPERM", "EACCES", "EBUSY"].includes(e.code)) return { file: null }; }
     let text = null, mtimeMs = 0;
     try { mtimeMs = fs.statSync(file).mtimeMs; text = fs.readFileSync(file, "utf8"); } catch {}
-    if (text !== null && abandoned(text, mtimeMs)) { drop(file, text); continue; }
+    if (text !== null && abandoned(text, mtimeMs, staleMs)) { drop(file, text); continue; }
     if (text !== null && Date.now() >= end) return null; // its holder will see the items
     sleep(text === null ? 50 : 250);                     // being written or deleted right now
   }
@@ -169,6 +182,13 @@ function takeLock(file, waitMs = 0) {
 function owns(lock) {
   if (!lock.file) return true;
   try { return fs.readFileSync(lock.file, "utf8") === lock.body; } catch { return false; }
+}
+
+// Says the holder is still at work: a lock touched within staleMs is never taken over.
+function touch(lock) {
+  if (!lock.file) return;
+  const now = new Date();
+  try { fs.utimesSync(lock.file, now, now); } catch {}
 }
 
 function giveBack(lock) {
@@ -210,15 +230,17 @@ function round(mcDir, git, { folder, message, mode }, o) {
 }
 
 // Every item not yet tried by this sync, again and again while new ones arrive. A rebase in
-// progress ends the work for now: every item waits for the next sync.
+// progress ends the work for now: every item waits. A failed item's folder waits too, for this turn.
 function work(mcDir, git, dir, o, failed, results) {
   const due = () => items(dir).filter((i) => !failed.has(i.name));
+  const wait = (r, which) => { for (const i of items(dir)) if (which(i) && !failed.has(i.name)) { failed.add(i.name); results.set(i.name, r); } };
   for (let list = due(); list.length; list = due()) {
     for (const item of list) {
+      if (failed.has(item.name)) continue;
       const r = round(mcDir, git, item, o);
       results.set(item.name, r);
-      if (r === "busy") { for (const i of items(dir)) failed.add(i.name); return; }
-      if (FAILED.has(r)) failed.add(item.name);
+      if (r === "busy") { wait(r, () => true); return; }
+      if (FAILED.has(r)) wait(r, (i) => i.folder === item.folder);
       else try { fs.unlinkSync(item.file); } catch { failed.add(item.name); }
     }
   }
@@ -233,12 +255,12 @@ function takeTurns(mcDir, o, { first = null, waitMs = 0 } = {}) {
   const failed = new Set(), results = new Map();
   let held = false;
   for (;;) {
-    const lock = takeLock(file, waitMs);
+    const lock = takeLock(file, waitMs, o.staleMs);
     waitMs = 0;
     if (!lock) return held ? results : null;
     held = true;
     try {
-      const git = (args, timeout, env) => { if (!owns(lock)) throw LOST; return g(mcDir, args, timeout, env); };
+      const git = (args, timeout, env) => { if (!owns(lock)) throw LOST; touch(lock); return g(mcDir, args, timeout, env); };
       if (first) { const f = first; first = null; f(git); }
       work(mcDir, git, dir, o, failed, results);
     } catch (e) { if (e !== LOST) throw e; }
@@ -258,17 +280,52 @@ export function commitFolder(mcDir, folder, message, mode, options = {}) {
   return results.get(name) ?? "nothing";
 }
 
-// What the background sync runs: the items that are waiting.
+// What the background sync runs: the items that are waiting, in a turn of its own or, when a live
+// sync holds the lock, in that sync's turn. Either way it stays while items still wait: the holder
+// may be a tick or a command, which does not stay.
 export function syncQueued(mcDir, options = {}) {
   if (!fs.existsSync(path.join(mcDir, ".git"))) return;
-  takeTurns(mcDir, { ...LIMITS, ...options });
+  const o = { ...LIMITS, ...options };
+  takeTurns(mcDir, o);
+  retryWhileWaiting(mcDir, o);
 }
 
-// After a save: its work item first, here and now, then the sync in the background.
+// Sleeps ms, a second at a time; false as soon as nothing waits any more.
+function pauseWhile(ms, waiting) {
+  for (const end = Date.now() + ms; Date.now() < end; sleep(Math.min(1000, end - Date.now()))) if (!waiting()) return false;
+  return waiting();
+}
+
+// Items still wait (a rebase someone else left in progress, git's index locked past every try, a
+// push that keeps failing, or another sync's turn still running). One background sync per mission
+// control folder stays and tries again at growing pauses, without holding the lock in between, for
+// as long as items wait, so they go out once the cause is gone instead of waiting for the next save.
+// Which one stays is a second lock, the retry mark, taken over like the sync lock (its holder
+// touches it at every wake); any other sync leaves. A pause ends early once nothing waits. After
+// giving the mark back the holder looks once more, so an item that arrived just then is not left
+// without one. It ends when nothing waits or the mission control folder is gone.
+function retryWhileWaiting(mcDir, o) {
+  const dir = gitPath(mcDir, ITEMS), file = gitPath(mcDir, RETRY);
+  const waiting = () => fs.existsSync(path.join(mcDir, ".git")) && items(dir).length > 0;
+  while (dir && file && waiting()) {
+    const mark = takeLock(file, 0, o.retryMaxMs + o.staleMs); // untouched past a pause and a long turn: its sync is gone
+    if (!mark) return;
+    try {
+      for (let pause = o.retryFirstMs; pauseWhile(pause, waiting) && owns(mark); pause = Math.min(pause * 2, o.retryMaxMs)) {
+        touch(mark);
+        takeTurns(mcDir, o);
+      }
+    } finally { giveBack(mark); }
+  }
+}
+
+// After a save: its work item first, here and now, then the sync in the background. That runs from
+// the home folder: a sync waiting to try again must not keep the folder it was started from in use
+// (Windows does not let anyone remove a folder a running program has as its own).
 export function syncInBackground(mcDir, message, mode) {
   if (mode === "off" || !fs.existsSync(path.join(mcDir, ".git"))) return;
   addItem(mcDir, { folder: FOLDER, mode, message });
-  spawn(process.execPath, [BIN, "_sync", "--godspeed", mcDir], { detached: true, stdio: "ignore", windowsHide: true }).unref();
+  spawn(process.execPath, [BIN, "_sync", "--godspeed", path.resolve(mcDir)], { cwd: os.homedir(), detached: true, stdio: "ignore", windowsHide: true }).unref();
 }
 
 // Before a tick reads the entries. It waits a while for its turn, so it never pulls in the middle of

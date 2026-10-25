@@ -139,8 +139,10 @@ A time later than now means yesterday; an end before its start means the next da
   numeric columns to compare on headache and free days
 - `git_sync`: auto (commit and push each entry), commit, or off. It works per mission control
   folder in effect: one push sends every local commit, so commit-only entries go out with the next
-  push of an add-on set to auto. An entry that cannot be committed or pushed straight away waits in
-  git's own folder and goes out with the next save.
+  push of an add-on set to auto. An entry that cannot be committed or pushed straight away (another
+  program in the middle of a pull, git busy, no network) waits in git's own folder, and one sync
+  stays and tries again until it goes out, at pauses of up to a quarter of an hour. The next save
+  tries it too.
 
 ## What it is not
 

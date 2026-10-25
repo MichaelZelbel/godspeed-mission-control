@@ -156,9 +156,10 @@ Say what you want in your own words; your assistant runs `godspeed-journal confi
 - **Syncing** (`git_sync`): `auto` (the default) commits and pushes each entry, `commit` only
   commits, `off` leaves git alone. It works per mission control folder in effect: one push sends
   every local commit, so what an add-on set to `commit` saved goes out with the next push of one
-  set to `auto`. An entry that cannot be committed or pushed straight away waits in git's own
-  folder and goes out with the next save, or the next check-in round on the computer that sends
-  them.
+  set to `auto`. An entry that cannot be committed or pushed straight away (another program in
+  the middle of a pull, git busy, no network) waits in git's own folder, and one sync stays and
+  tries again until it goes out, at pauses of up to a quarter of an hour. The next save, or the next
+  check-in round on the computer that sends them, tries it too.
 
 ## What a check-in looks like
 

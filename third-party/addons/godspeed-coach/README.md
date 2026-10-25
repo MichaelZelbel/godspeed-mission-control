@@ -129,10 +129,12 @@ godspeed-coach talk open health --opening-file opening.txt --prepared-file prepa
   anyone for you. Each area can add its own limits.
 - Five active habits at most, by design. More than that is a list, not a habit.
 - Changes reach your other computers through your mission control's git history. One that cannot
-  be committed or pushed straight away waits in git's own folder and goes out with the next save,
-  or the next round on the computer that sends the talks. `git_sync` (auto, commit or off) works
-  per mission control folder in effect: one push sends every local commit, so commit-only changes
-  go out with the next push of an add-on set to auto.
+  be committed or pushed straight away (another program in the middle of a pull, git busy, no
+  network) waits in git's own folder, and one sync stays and tries again until it goes out, at
+  pauses of up to a quarter of an hour. The next save, or the next round on the computer that sends
+  the talks, tries it too. `git_sync` (auto,
+  commit or off) works per mission control folder in effect: one push sends every local commit, so
+  commit-only changes go out with the next push of an add-on set to auto.
 
 ## For the maintainer
 

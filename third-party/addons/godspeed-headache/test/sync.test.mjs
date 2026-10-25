@@ -45,6 +45,12 @@ function syncInChild(mcDir) {
   let out = ""; child.stdout.on("data", (d) => { out += d; });
   return new Promise((resolve) => child.on("exit", () => resolve(out.trim())));
 }
+// syncQueued in a process of its own, the way the background sync a save starts runs it.
+function backgroundSync(mcDir, options) {
+  const code = `import { syncQueued } from ${JSON.stringify(SYNC)}; syncQueued(${JSON.stringify(mcDir)}, ${JSON.stringify(options)});`;
+  const child = spawn(process.execPath, ["--input-type=module", "-e", code], { stdio: ["ignore", "ignore", "inherit"] });
+  return new Promise((resolve) => child.on("exit", resolve));
+}
 async function until(check, ms = 90000) {
   for (const end = Date.now() + ms; Date.now() < end; await sleep(100)) if (check()) return true;
   return check();
@@ -131,7 +137,7 @@ test("a rebase the person started by hand is never touched: the sync reports bus
   assert.equal(workItems(mcDir).length, 1, "the item stays for the next sync");
 });
 
-test("a lock whose process is gone is taken over; one whose process still runs never is, however old", () => {
+test("a lock whose process is gone is taken over; one whose process still runs never is while it is kept fresh", () => {
   const { mcDir } = repo();
   const dead = spawnSync(process.execPath, ["-e", ""]).pid;
   fs.writeFileSync(lockFile(mcDir), JSON.stringify({ pid: dead, host: os.hostname(), token: "died" }));
@@ -140,7 +146,7 @@ test("a lock whose process is gone is taken over; one whose process still runs n
   assert.equal(fs.existsSync(lockFile(mcDir)), false);
 
   liveLock(mcDir);
-  const old = new Date(Date.now() - 24 * 3600000); fs.utimesSync(lockFile(mcDir), old, old);
+  const nineMinutes = new Date(Date.now() - 9 * 60000); fs.utimesSync(lockFile(mcDir), nineMinutes, nineMinutes);
   const before = fs.readFileSync(lockFile(mcDir), "utf8");
   entry(mcDir, "while-alive.md");
   assert.equal(commitHeadache(mcDir, "x", "auto"), "queued");
@@ -149,6 +155,39 @@ test("a lock whose process is gone is taken over; one whose process still runs n
   fs.rmSync(lockFile(mcDir));
   syncQueued(mcDir);
   assert.equal(dirty(mcDir), "");
+});
+
+// A sync killed while it held the lock (the computer shut down, its program was stopped) leaves the
+// lock behind, and after a restart Windows can give its process number to another program: that
+// lock looked alive forever, and no add-on on the computer synced again.
+test("a lock nobody touched for longer than any git step runs is taken over, though its process number is in use", () => {
+  const { mcDir, remote } = repo();
+  liveLock(mcDir); // process.pid: a number that is in use
+  const old = new Date(Date.now() - 11 * 60000); fs.utimesSync(lockFile(mcDir), old, old);
+  entry(mcDir, "after-restart.md");
+  assert.equal(commitHeadache(mcDir, "headache: after restart", "auto"), "pushed");
+  assert.ok(has(remote, "routines/headache/after-restart.md"));
+  assert.equal(fs.existsSync(lockFile(mcDir)), false);
+});
+
+test("a sync touches its lock before every git step, so a long turn keeps it", async () => {
+  const { mcDir, remote } = repo();
+  const push = holdPush(mcDir);
+  const seen = path.join(path.dirname(mcDir), "lock-age");
+  const f = (p) => p.replace(/\\/g, "/");
+  hook(mcDir, "pre-commit", `node -e "const fs=require('fs');fs.appendFileSync('${f(seen)}',String(Date.now()-fs.statSync('${f(lockFile(mcDir))}').mtimeMs)+'\\\\n')"\nexit 0`);
+  entry(mcDir, "first.md");
+  const done = syncInChild(mcDir);
+  assert.ok(await until(push.pushing), "the sync holds the lock, in its push");
+  const old = new Date(Date.now() - 3600000); fs.utimesSync(lockFile(mcDir), old, old); // as if the turn had been long
+  entry(mcDir, "second.md");
+  fs.writeFileSync(path.join(itemsDir(mcDir), `${"9".repeat(15)}-second.json`), JSON.stringify({ folder: "routines/headache", mode: "auto", message: "headache: second" }));
+  push.release();
+  assert.equal(await done, "pushed");
+  assert.ok(has(remote, "routines/headache/second.md"));
+  const ages = fs.readFileSync(seen, "utf8").trim().split(/\s+/).map(Number);
+  assert.equal(ages.length, 2, "both commits ran the hook");
+  assert.ok(ages[1] < 60000, `the lock was touched just before the second commit (${ages[1]} ms old)`);
 });
 
 test("a rebase another program is running only delays the sync", async () => {
@@ -295,6 +334,123 @@ test("a folder that does not exist is skipped, never committed as a deletion", (
   assert.equal(commitHeadache(mcDir, "headache: gone", "auto"), "nothing");
   assert.ok(has(remote, "routines/headache/kept.md"));
   assert.match(git(mcDir, "ls-tree", "-r", "--name-only", "HEAD").stdout, /routines\/headache\/kept\.md/);
+});
+
+// A folder whose commit keeps failing (no git identity yet, git's index locked) used to cost every
+// one of its waiting items a full round of tries, so a turn grew with every save while it failed.
+test("waiting items of one folder whose commit fails cost one round of tries, not one each", () => {
+  const { mcDir } = repo();
+  fs.mkdirSync(itemsDir(mcDir), { recursive: true });
+  for (let i = 0; i < 5; i++) {
+    entry(mcDir, `e${i}.md`);
+    fs.writeFileSync(path.join(itemsDir(mcDir), `00000000000000${i}-x.json`), JSON.stringify({ folder: "routines/headache", mode: "auto", message: "headache: x" }));
+  }
+  fs.writeFileSync(gitPath(mcDir, "index.lock"), "");
+  const trace = path.join(path.dirname(mcDir), "trace.log");
+  process.env.GIT_TRACE = trace;
+  try { assert.equal(commitHeadache(mcDir, "headache: stuck", "auto", { pauses: [10, 10] }), "commit-failed"); }
+  finally { delete process.env.GIT_TRACE; }
+  const adds = fs.readFileSync(trace, "utf8").split("\n").filter((l) => /built-in: git add\b/.test(l)).length;
+  assert.equal(adds, 3, "one try and two more, for all six items together");
+  assert.equal(workItems(mcDir).length, 6, "every item still waits");
+});
+
+test("a background sync waiting to try again keeps no folder in use but the repository's", async () => {
+  const { mcDir } = repo();
+  const rebaseDir = gitPath(mcDir, "rebase-merge");
+  fs.mkdirSync(rebaseDir); // the background sync waits it out, holding the lock
+  const from = fs.mkdtempSync(path.join(os.tmpdir(), "hj-started-from-"));
+  entry(mcDir, "saved.md");
+  const code = `import { syncInBackground } from ${JSON.stringify(SYNC)}; syncInBackground(${JSON.stringify(mcDir)}, "headache: saved", "commit");`;
+  assert.equal(spawnSync(process.execPath, ["--input-type=module", "-e", code], { cwd: from }).status, 0);
+  try {
+    assert.ok(await until(() => fs.existsSync(lockFile(mcDir)), 30000), "the background sync holds the lock");
+    fs.rmSync(from, { recursive: true }); // Windows refuses while a running program has it as its folder
+  } finally { fs.rmSync(rebaseDir, { recursive: true }); } // so the sync ends, whatever happened
+  assert.ok(await until(() => dirty(mcDir) === "" && !fs.existsSync(lockFile(mcDir)), 90000));
+});
+
+// What happened on 25 October 2026, 14:35: another program had left a rebase in progress in the
+// mission control folder (it stayed for two hours). Two saves a second apart, the journal's
+// `done` and then `start`, each wrote a work item and started a background sync. Both syncs waited
+// the rebase out, gave up, and ended; nothing tried again until the next save, two and a half hours
+// later, so the computer that sends the check-ins asked about a task that was already done. A
+// background sync that leaves items waiting now tries again by itself.
+test("two saves whose background syncs both give up are committed by themselves once the rebase is over, with no further save", async () => {
+  const { mcDir } = repo();
+  const rebaseDir = gitPath(mcDir, "rebase-merge");
+  fs.mkdirSync(rebaseDir);
+  const o = { rebaseWaitMs: 200, retryFirstMs: 300, retryMaxMs: 600 };
+  fs.mkdirSync(itemsDir(mcDir), { recursive: true });
+  const save = (name, label) => {
+    entry(mcDir, name);
+    fs.writeFileSync(path.join(itemsDir(mcDir), `${String(Date.now()).padStart(15, "0")}-${label}.json`), JSON.stringify({ folder: "routines/headache", mode: "commit", message: `headache: ${label}` }));
+    return backgroundSync(mcDir, o);
+  };
+  const first = save("143518-done.md", "done");
+  const second = save("143519-start.md", "start");
+  await sleep(1500); // both syncs have met the rebase, waited it out, and given up at least once
+  assert.match(dirty(mcDir), /143518-done\.md/);
+  assert.match(dirty(mcDir), /143519-start\.md/);
+  assert.equal(workItems(mcDir).length, 2, "both items are still waiting");
+  fs.rmSync(rebaseDir, { recursive: true }); // the rebase is over; nobody saves anything
+  assert.ok(await until(() => dirty(mcDir) === "" && workItems(mcDir).length === 0, 30000), `still waiting: ${dirty(mcDir)}`);
+  const committed = git(mcDir, "log", "--name-only", "--format=", "-n", "5").stdout;
+  assert.match(committed, /143518-done\.md/); assert.match(committed, /143519-start\.md/);
+  await Promise.all([first, second]); // and the background syncs end once nothing waits
+});
+
+// However long items wait, one background sync stays for them, and only one: a save made while it
+// waits starts a sync that tries once, finds one staying already, and leaves.
+test("while items wait, one background sync stays to try again and later ones leave", async () => {
+  const { mcDir } = repo();
+  const rebaseDir = gitPath(mcDir, "rebase-merge");
+  fs.mkdirSync(rebaseDir);
+  const o = { rebaseWaitMs: 200, retryFirstMs: 300, retryMaxMs: 600 };
+  fs.mkdirSync(itemsDir(mcDir), { recursive: true });
+  const ended = [];
+  const save = (i) => {
+    entry(mcDir, `s${i}.md`);
+    fs.writeFileSync(path.join(itemsDir(mcDir), `00000000000000${i}-s.json`), JSON.stringify({ folder: "routines/headache", mode: "commit", message: "headache: s" }));
+    return backgroundSync(mcDir, o).then(() => ended.push(i));
+  };
+  const syncs = [save(0)];
+  try {
+    await sleep(1500); // the first has given up once and stays
+    syncs.push(save(1));
+    assert.ok(await until(() => ended.includes(1), 30000), "a later sync leaves once it gave up");
+    syncs.push(save(2));
+    assert.ok(await until(() => ended.includes(2), 30000), "and so does the next");
+    assert.deepEqual(ended, [1, 2], "the first stays while the items wait");
+    assert.equal(workItems(mcDir).length, 3);
+  } finally { fs.rmSync(rebaseDir, { recursive: true }); }
+  await Promise.all(syncs);
+  assert.equal(dirty(mcDir), ""); assert.deepEqual(workItems(mcDir), []);
+});
+
+// A tick or a command that waits for its result holds the lock and gives up, and does not stay. A
+// save made meanwhile found the lock taken; its background sync stays all the same.
+test("a save made while a tick holds the lock and gives up is committed once the cause is gone, with no further save or tick", async () => {
+  const { mcDir } = repo();
+  const rebaseDir = gitPath(mcDir, "rebase-merge");
+  fs.mkdirSync(rebaseDir);
+  const o = { rebaseWaitMs: 3000, retryFirstMs: 300, retryMaxMs: 600 };
+  entry(mcDir, "tick.md");
+  const code = `import { commitHeadache } from ${JSON.stringify(SYNC)}; console.log(commitHeadache(${JSON.stringify(mcDir)}, "headache: tick", "commit", ${JSON.stringify(o)}));`;
+  const child = spawn(process.execPath, ["--input-type=module", "-e", code], { stdio: ["ignore", "pipe", "inherit"] });
+  let out = ""; child.stdout.on("data", (d) => { out += d; });
+  const tick = new Promise((resolve) => child.on("exit", () => resolve(out.trim())));
+  let saved;
+  try {
+    assert.ok(await until(() => fs.existsSync(lockFile(mcDir)), 30000), "the tick holds the lock, waiting the rebase out");
+    entry(mcDir, "saved.md");
+    fs.writeFileSync(path.join(itemsDir(mcDir), `${"9".repeat(15)}-saved.json`), JSON.stringify({ folder: "routines/headache", mode: "commit", message: "headache: saved" }));
+    saved = backgroundSync(mcDir, o);
+    assert.equal(await tick, "busy", "the tick gave up and ended");
+    assert.match(dirty(mcDir), /saved.md/);
+  } finally { fs.rmSync(rebaseDir, { recursive: true }); } // the rebase is over; nobody saves, no tick runs
+  assert.ok(await until(() => dirty(mcDir) === "" && workItems(mcDir).length === 0, 30000), `still waiting: ${dirty(mcDir)}`);
+  await saved;
 });
 
 // Finding: a rebase is aborted only when it is provably the sync's own.
