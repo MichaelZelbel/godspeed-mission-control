@@ -1,0 +1,156 @@
+name: scenarios
+# The proving scenarios a candidate runs before the maintainer is asked for "go" (godspeed-dev,
+# releases/godspeed-2.0.0-beta.7-stages/plan.md, "Proving scenarios" 1, 2 and 5). Started by hand
+# with the stage ref to prove: a candidate tag (candidate/2.0.0-beta.7), or beta, or main.
+# Each scenario runs on a fresh GitHub machine, installs the way a stranger does, and ends with one
+# line: PASS <name>, or FAIL <name>: <what went wrong>. A scenario that cannot run fails.
+on:
+  workflow_dispatch:
+    inputs:
+      stage:
+        description: The stage to prove (a branch or tag holding stage.json, e.g. candidate/2.0.0-beta.7)
+        required: true
+        default: beta
+      mac:
+        description: Also install on a Mac (once per candidate)
+        type: boolean
+        default: false
+permissions:
+  contents: read
+env:
+  STAGE_REF: ${{ inputs.stage }}
+  RAW: https://raw.githubusercontent.com/MichaelZelbel/godspeed-mission-control
+jobs:
+  stage:
+    name: the stage file
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.read.outputs.version }}
+      product: ${{ steps.read.outputs.product }}
+      image: ${{ steps.read.outputs.image }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.stage }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with: { node-version: '22.19.0' }
+      - name: Read and check it
+        id: read
+        run: |
+          set -e
+          node stage/stage.mjs stage.json check
+          {
+            echo "version=$(node stage/stage.mjs stage.json get version)"
+            echo "product=$(node stage/stage.mjs stage.json get productCommit)"
+            echo "image=$(node stage/stage.mjs stage.json get serverEditions.server.image)"
+          } | tee -a "$GITHUB_OUTPUT"
+
+  linux-install:
+    name: a stranger's Linux install
+    needs: stage
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      PRODUCT: ${{ needs.stage.outputs.product }}
+    steps:
+      - name: The line, from the stage's own address
+        run: curl -fsSL "$RAW/$STAGE_REF/install-godspeed.sh" | GODSPEED_STAGE_REF="$STAGE_REF" bash
+      - name: It installed what the stage names
+        run: |
+          root="$HOME/godspeed-v2"
+          got=$(cat "$root/.godspeed/integrated-runtime/version" 2>/dev/null || echo none)
+          [ "$got" = "$PRODUCT" ] || { echo "FAIL linux-install: runtime $got, the stage names $PRODUCT"; exit 1; }
+          curl -fsSL "$RAW/$STAGE_REF/stage.json" -o expected.json
+          cmp -s expected.json "$root/.godspeed/stage.json" || { echo "FAIL linux-install: the kept stage file is not the stage's"; exit 1; }
+          for _ in $(seq 1 30); do curl -fsS http://127.0.0.1:47831/health >/dev/null 2>&1 && break; sleep 2; done
+          curl -fsS http://127.0.0.1:47831/health >/dev/null || { echo "FAIL linux-install: the notebook does not answer"; exit 1; }
+          echo "PASS linux-install: runtime $got, stage $STAGE_REF, notebook answers" | tee -a "$GITHUB_STEP_SUMMARY"
+
+  mac-install:
+    name: a stranger's Mac install
+    if: inputs.mac
+    needs: stage
+    runs-on: macos-latest
+    timeout-minutes: 60
+    env:
+      PRODUCT: ${{ needs.stage.outputs.product }}
+    steps:
+      - name: The line, from the stage's own address
+        run: curl -fsSL "$RAW/$STAGE_REF/install-godspeed.sh" | GODSPEED_STAGE_REF="$STAGE_REF" /bin/bash
+      - name: It installed what the stage names
+        run: |
+          root="$HOME/godspeed-v2"
+          got=$(cat "$root/.godspeed/integrated-runtime/version" 2>/dev/null || echo none)
+          [ "$got" = "$PRODUCT" ] || { echo "FAIL mac-install: runtime $got, the stage names $PRODUCT"; exit 1; }
+          for _ in $(seq 1 30); do curl -fsS http://127.0.0.1:47831/health >/dev/null 2>&1 && break; sleep 2; done
+          curl -fsS http://127.0.0.1:47831/health >/dev/null || { echo "FAIL mac-install: the notebook does not answer"; exit 1; }
+          echo "PASS mac-install: runtime $got, notebook answers" | tee -a "$GITHUB_STEP_SUMMARY"
+
+  docker-server:
+    name: a stranger's Docker server
+    needs: stage
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      IMAGE: ${{ needs.stage.outputs.image }}
+    steps:
+      - name: Docker Hub images through Google's mirror (Docker Hub limits GitHub's shared runners; images stay pinned by digest)
+        run: |
+          f=/etc/docker/daemon.json; [ -s "$f" ] || echo '{}' | sudo tee "$f" >/dev/null
+          sudo jq '. + {"registry-mirrors": ["https://mirror.gcr.io"]}' "$f" | sudo tee "$f.new" >/dev/null && sudo mv "$f.new" "$f"
+          sudo systemctl restart docker
+      - name: The /server line, against the stage
+        run: curl -fsSL "$RAW/$STAGE_REF/docker/server/install.sh" | sudo GODSPEED_STAGE_REF="$STAGE_REF" GODSPEED_HOST=localhost bash
+      - name: It runs the image the stage names, and is healthy
+        run: |
+          id=$(sudo docker ps -q --filter label=com.docker.compose.service=godspeed | head -1)
+          [ -n "$id" ] || { echo "FAIL docker-server: no godspeed container is running"; exit 1; }
+          got=$(sudo docker inspect -f '{{.Config.Image}}' "$id")
+          [ "$got" = "$IMAGE" ] || { echo "FAIL docker-server: runs $got, the stage names $IMAGE"; exit 1; }
+          for _ in $(seq 1 60); do [ "$(sudo docker inspect -f '{{.State.Health.Status}}' "$id")" = healthy ] && break; sleep 5; done
+          [ "$(sudo docker inspect -f '{{.State.Health.Status}}' "$id")" = healthy ] || { echo "FAIL docker-server: the container is not healthy"; exit 1; }
+          echo "PASS docker-server: runs $got and is healthy" | tee -a "$GITHUB_STEP_SUMMARY"
+
+  linux-update:
+    name: an update from the current public version
+    needs: stage
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      PRODUCT: ${{ needs.stage.outputs.product }}
+    steps:
+      - name: Today's public line
+        run: curl -fsSL https://godspeedmissioncontrol.com/install | bash
+      - name: Something of the owner's in the notebook and the settings
+        run: |
+          set -e
+          root="$HOME/godspeed-v2"; rt="$root/.godspeed/integrated-runtime"
+          node_bin=$(find "$rt/runtime" -maxdepth 3 -path '*/node-v*/bin/node' 2>/dev/null | sort | tail -n 1); node_bin=${node_bin:-node}
+          GODSPEED_WORKSPACE="$root" GODSPEED_MEDIA_ROOT="$rt/media" "$node_bin" "$rt/versions/$(cat "$rt/version")/notebook/bin/godspeed.mjs" export "$RUNNER_TEMP/before.json"
+          mkdir -p "$root/work" && echo "the owner's own file" > "$root/work/scenario-5.txt"
+          echo "GODSPEED_SCENARIO_FIVE=kept" >> "$HOME/.godspeed/device.env"
+          cat "$rt/version" > "$RUNNER_TEMP/version-before"
+      - name: The line again, against the stage
+        run: curl -fsSL "$RAW/$STAGE_REF/install-godspeed.sh" | GODSPEED_STAGE_REF="$STAGE_REF" bash
+      - name: It ends on the stage's version, everything kept
+        run: |
+          root="$HOME/godspeed-v2"; rt="$root/.godspeed/integrated-runtime"
+          got=$(cat "$rt/version"); before=$(cat "$RUNNER_TEMP/version-before")
+          [ "$got" = "$PRODUCT" ] || { echo "FAIL linux-update: runtime $got after the update, the stage names $PRODUCT"; exit 1; }
+          grep -qx "the owner's own file" "$root/work/scenario-5.txt" || { echo "FAIL linux-update: the owner's file is gone"; exit 1; }
+          grep -qx "GODSPEED_SCENARIO_FIVE=kept" "$HOME/.godspeed/device.env" || { echo "FAIL linux-update: the setting is gone"; exit 1; }
+          node_bin=$(find "$rt/runtime" -maxdepth 3 -path '*/node-v*/bin/node' 2>/dev/null | sort | tail -n 1); node_bin=${node_bin:-node}
+          GODSPEED_WORKSPACE="$root" GODSPEED_MEDIA_ROOT="$rt/media" "$node_bin" "$rt/versions/$got/notebook/bin/godspeed.mjs" export "$RUNNER_TEMP/after.json"
+          "$node_bin" -e '
+            const fs=require("fs");const rd=f=>JSON.parse(fs.readFileSync(f,"utf8"));
+            const list=x=>Array.isArray(x)?x:(x.records||x.items||Object.values(x).find(Array.isArray)||[]);
+            const key=r=>JSON.stringify([r.type||r.kind||"",r.id||r.slug||r.path||JSON.stringify(r)]);
+            const after=new Set(list(rd(process.argv[2])).map(key));
+            const lost=list(rd(process.argv[1])).filter(r=>!after.has(key(r)));
+            if(lost.length){console.log("FAIL linux-update: "+lost.length+" notebook records are gone");process.exit(1)}
+          ' "$RUNNER_TEMP/before.json" "$RUNNER_TEMP/after.json"
+          for _ in $(seq 1 30); do curl -fsS http://127.0.0.1:47831/health >/dev/null 2>&1 && break; sleep 2; done
+          curl -fsS http://127.0.0.1:47831/health >/dev/null || { echo "FAIL linux-update: the notebook does not answer"; exit 1; }
+          echo "PASS linux-update: $before to $got, notebook, file and setting kept" | tee -a "$GITHUB_STEP_SUMMARY"

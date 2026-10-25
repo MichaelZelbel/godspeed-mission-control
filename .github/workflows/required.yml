@@ -56,6 +56,17 @@ jobs:
         with: { node-version: '22.19.0' }
       - name: the product checked out inside an add-on's folder, the notebook too
         run: node tools/test-nested-checkout.js
+      - name: The stage file, its readers, and the installers that read it
+        run: |
+          set -e
+          node stage/test-stage.mjs
+          bash stage/test-stage-sh.sh
+          bash stage/test-stage-agree.sh
+          node notebook/scripts/run-tests.mjs notebook/test/installer-stage.test.mjs
+          bash docker/server/test.sh
+          node docker/server/test-browser.mjs
+          bash stage/test-check-public-lines.sh
+          bash stage/check-public-lines.sh
       - name: The guide check and this gate prove themselves
         run: |
           node .github/guide-check.mjs --self-test
