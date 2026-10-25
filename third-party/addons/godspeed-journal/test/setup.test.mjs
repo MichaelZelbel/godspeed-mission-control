@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-import { claudeHookMerge, tickScript, hermesArgs, wantTick, telegramConfigured } from "../lib/setup.mjs";
+import { claudeHookMerge, tickScript, hermesArgs, wantTick, telegramConfigured, ps1Allowed, powershellPolicies } from "../lib/setup.mjs";
 import * as P from "../lib/paths.mjs";
 
 const BIN = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "bin", "godspeed-journal.mjs");
@@ -50,6 +50,12 @@ test("setup with no Hermes and no git: recipe, settings, command, and it is repe
   assert.equal(r1.status, 0, r1.stdout + r1.stderr);
   assert.ok(fs.existsSync(path.join(mcDir, "skills", "interstitial-journal", "SKILL.md")));
   assert.match(r1.stdout, /✓ godspeed-journal command/);
+  if (isWin) {
+    // The PowerShell launcher exists exactly where PowerShell would run it.
+    const ps1 = path.join(P.binDir(home), "godspeed-journal.ps1");
+    assert.equal(fs.existsSync(ps1), ps1Allowed(powershellPolicies()), r1.stdout);
+    assert.match(fs.readFileSync(path.join(P.binDir(home), "godspeed-journal.cmd"), "utf8"), /--end-of-cmd-args/);
+  }
   const s = JSON.parse(fs.readFileSync(path.join(mcDir, "routines", "journal", "settings.json"), "utf8"));
   assert.equal(s.timezone, "Europe/Berlin"); assert.equal(s.nudge.enabled, false); assert.equal(s.evening.enabled, true);
 

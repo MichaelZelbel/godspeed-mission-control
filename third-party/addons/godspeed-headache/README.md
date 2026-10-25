@@ -137,7 +137,12 @@ A time later than now means yesterday; an end before its start means the next da
 - `overuse_days`: painkiller days in 30 at which the recipe mentions it, default 10
 - `daily_table`, `daily_columns`: a CSV with a `date` column in your mission control, and the
   numeric columns to compare on headache and free days
-- `git_sync`: auto (commit and push each entry), commit, or off
+- `git_sync`: auto (commit and push each entry), commit, or off. It works per mission control
+  folder in effect: one push sends every local commit, so commit-only entries go out with the next
+  push of an add-on set to auto. An entry that cannot be committed or pushed straight away (another
+  program in the middle of a pull, git busy, no network) waits in git's own folder, and one sync
+  stays and tries again until it goes out, at pauses of up to a quarter of an hour. The next save
+  tries it too.
 
 ## What it is not
 

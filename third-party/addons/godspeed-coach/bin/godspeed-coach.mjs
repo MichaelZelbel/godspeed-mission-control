@@ -16,7 +16,7 @@ import { gate, NO_WAKE } from "../lib/gate.mjs";
 import { dueTick } from "../lib/tick.mjs";
 import { contextBlock, waitingTalks } from "../lib/context.mjs";
 import { readPrep, prepProblem, prepDue, prepPath, prepCheck } from "../lib/prep.mjs";
-import { commitCoach, syncInBackground, pullQuietly } from "../lib/sync.mjs";
+import { commitCoach, syncInBackground, syncQueued, pullQuietly } from "../lib/sync.mjs";
 import { decodeArgv, readTextFile, restoreShellEnv, startedFromGitBash, gitBashPath, LAUNCHER_ENV, CMDLINE_ENV } from "../lib/argv.mjs";
 
 const FLAGS = new Set(["json", "yes", "no-hermes", "no-claude", "all", "scheduled", "remove", "shown"]);
@@ -407,7 +407,7 @@ const commands = {
   },
   async setup() { const { setup } = await import("../lib/setup.mjs"); process.exitCode = await setup(f); },
   async check() { const { check } = await import("../lib/setup.mjs"); process.exitCode = await check(mcDir, f); },
-  _sync() { commitCoach(mcDir, pos.join(" ") || "coach: changes", syncMode); },
+  _sync() { syncQueued(mcDir); },
   help() {
     console.log(fs.readFileSync(new URL("../README.md", import.meta.url), "utf8").split("## Use")[1]?.split("\n## ")[0] || "See README.md");
   },
