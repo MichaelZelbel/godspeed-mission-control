@@ -11,6 +11,8 @@ const wrapper = resolve(import.meta.dirname, 'install-browser.sh');
 const helpers = resolve(import.meta.dirname, 'install.sh');
 const setup = 'a'.repeat(64), job = 'b'.repeat(64), callback = 'c'.repeat(64);
 const pin = `https://raw.githubusercontent.com/MichaelZelbel/godspeed-mission-control/${'d'.repeat(40)}`;
+// The image this commit's stage file names: what the private .env must tell Compose to run.
+const stageImage = JSON.parse(readFileSync(resolve(root, 'stage.json'), 'utf8')).serverEditions.server.image;
 const quote = s => `'${s.replaceAll("'", "'\\''")}'`;
 function bash(body, { input = '', env = {} } = {}) {
   const r = spawnSync('bash', ['-c', `GODSPEED_INSTALL_LIB=1 source ${quote(helpers)}\nGODSPEED_BROWSER_LIB=1 source ${quote(wrapper)}\n${body}`], {
@@ -59,9 +61,13 @@ function freshMock(dir) {
   return `${base}\n${noDocker}
 BROWSER_DIR=${quote(dir)}; GODSPEED_RAW=${quote(pin)}
 browser_host(){ echo srv123.hstgr.cloud; }
-browser_load_helpers(){ :; }
+browser_load_helpers(){ browser_bind_helpers; }
 command(){ if [ "$1" = -v ] && [ "$2" = docker ]; then [ -f "$BROWSER_DIR/docker-installed" ]; else builtin command "$@"; fi; }
-browser_fetch(){ cp ${quote(resolve(root, 'docker/hostinger/compose.yaml'))} "$2"; }
+browser_fetch(){ case "$1" in
+  */stage.json) cp ${quote(resolve(root, 'stage.json'))} "$2" ;;
+  */stage/stage.sh) cp ${quote(resolve(root, 'stage/stage.sh'))} "$2" ;;
+  *) cp ${quote(resolve(root, 'docker/hostinger/compose.yaml'))} "$2" ;;
+ esac; }
 docker(){ case "$1 \${2:-}" in 'info '|'compose version') [ -f "$BROWSER_DIR/docker-installed" ] ;; 'volume inspect'|'network inspect') return 1 ;; *) return 0 ;; esac; }
 install_docker(){ printf installed > "$BROWSER_DIR/docker-installed"; }
 compose(){ printf '%s\\n' "$*" >> "$BROWSER_DIR/compose-calls"; }
@@ -155,7 +161,7 @@ test('existing Godspeed returns login without pulling, restarting or changing it
   const r = bash(`${base}\n${traefik}
 GODSPEED_RAW=${quote(pin)}
 browser_host(){ echo srv123.hstgr.cloud; }
-browser_load_helpers(){ :; }
+browser_load_helpers(){ browser_bind_helpers; }
 browser_existing(){ BROWSER_EXISTING=existing-app; }
 https_ready(){ return 0; }
 browser_existing_link(){ echo /login; }
@@ -255,8 +261,37 @@ test('fresh plain OS mock installs Docker, creates private own settings and star
     assert.equal(output(r).mode, 'standalone');
     assert.equal(readFileSync(`${dir}/docker-installed`, 'utf8'), 'installed');
     assert.equal(readFileSync(`${dir}/compose-calls`, 'utf8'), 'config --quiet\npull -q\nup -d\n');
-    assert.match(readFileSync(`${dir}/.env`, 'utf8'), /^GODSPEED_HOST=srv123\.hstgr\.cloud\nGODSPEED_SETUP_CODE=[a-f0-9]{64}\n$/);
+    assert.match(readFileSync(`${dir}/.env`, 'utf8'), /^GODSPEED_HOST=srv123\.hstgr\.cloud\nGODSPEED_SETUP_CODE=[a-f0-9]{64}\nGODSPEED_SERVER_IMAGE=\S+\n$/);
     assert.equal(statSync(`${dir}/.env`).mode & 0o777, 0o600);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("the private .env names the image the commit's stage file names", () => {
+  const dir = mkdtempSync(`${tmpdir()}/godspeed-browser-unit-`);
+  try {
+    const r = bash(`${freshMock(dir)}\nbrowser_run`);
+    assert.equal(r.status, 0, `${r.stdout}\n${r.stderr}`);
+    const env = readFileSync(`${dir}/.env`, 'utf8');
+    assert.match(env, new RegExp(`^GODSPEED_SERVER_IMAGE=${stageImage.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'm'));
+    // The compose file it keeps beside those settings takes its image from exactly that name.
+    assert.match(readFileSync(`${dir}/compose.yaml`, 'utf8'), /^ {4}image: \$\{GODSPEED_SERVER_IMAGE:-\S+\}$/m);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('a stage file the reader refuses stops the browser install before anything is changed', () => {
+  const dir = mkdtempSync(`${tmpdir()}/godspeed-browser-unit-`);
+  try {
+    const r = bash(`${freshMock(dir)}
+browser_fetch(){ case "$1" in
+  */stage.json) printf 'not a stage file\\n' > "$2" ;;
+  */stage/stage.sh) cp ${quote(resolve(root, 'stage/stage.sh'))} "$2" ;;
+  *) cp ${quote(resolve(root, 'docker/hostinger/compose.yaml'))} "$2" ;;
+ esac; }
+browser_run`);
+    assert.equal(r.status, 1);
+    assert.deepEqual(output(r), { ok: false, error: 'source_unavailable' });
+    assert.ok(!existsSync(`${dir}/.env`), 'no private settings were written');
+    assert.ok(!existsSync(`${dir}/docker-installed`), 'no package was installed');
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
@@ -280,7 +315,11 @@ test('immutable source validation rejects mutable branches before downloads or h
 test('standalone and Traefik browser manifests use the same released application without public host ports in Traefik mode', () => {
   const manifest = readFileSync(resolve(import.meta.dirname, 'browser-compose-traefik.yaml'), 'utf8');
   const standalone = readFileSync(resolve(root, 'docker/hostinger/compose.yaml'), 'utf8');
-  assert.equal(manifest.match(/image: (ghcr[^\n]+)/)?.[1], standalone.match(/image: (ghcr[^\n]+)/)?.[1]);
+  // Both take the image from the installers' one setting, and both fall back, when used on their
+  // own without an installer, to the same image: the one the stage file of this commit names.
+  const godspeedImage = file => file.match(/^ {4}image: \$\{GODSPEED_SERVER_IMAGE:-(\S+)\}$/m)?.[1];
+  assert.equal(godspeedImage(manifest), stageImage);
+  assert.equal(godspeedImage(standalone), stageImage);
   assert.ok(!/^\s*ports:/m.test(manifest));
   assert.ok(manifest.includes('tls.passthrough: "true"'));
   assert.ok(manifest.includes('disable_http_challenge'));
@@ -296,6 +335,18 @@ test('Docker renders both browser modes and their Caddy shell without starting c
     assert.equal(parsed.name, 'godspeed-mission-control');
     assert.equal(parsed.services.godspeed.environment.GODSPEED_WEB_ADDRESS, 'https://srv123.hstgr.cloud');
     for (const service of Object.values(parsed.services)) assert.match(service.image, /@sha256:[a-f0-9]{64}$/);
+    // Used on its own, without an installer, it runs the image the stage file names.
+    assert.equal(parsed.services.godspeed.image, stageImage);
+    // With the private settings an installer wrote, it runs the image named there, and Caddy
+    // stays the pinned one.
+    const envFile = `${mkdtempSync(`${tmpdir()}/godspeed-browser-env-`)}/.env`;
+    const chosen = 'ghcr.io/michaelzelbel/godspeed-mission-control@sha256:' + '1'.repeat(64);
+    writeFileSync(envFile, `GODSPEED_HOST=srv123.hstgr.cloud\nGODSPEED_SETUP_CODE=${setup}\nGODSPEED_SERVER_IMAGE=${chosen}\n`);
+    try {
+      const withEnv = JSON.parse(execFileSync('docker', ['compose', '-f', resolve(root, file), '--env-file', envFile, 'config', '--format', 'json'], { encoding: 'utf8' }));
+      assert.equal(withEnv.services.godspeed.image, chosen);
+      assert.equal(withEnv.services.https.image, parsed.services.https.image);
+    } finally { rmSync(resolve(envFile, '..'), { recursive: true, force: true }); }
     if (mode === 'traefik') {
       assert.equal(parsed.services.https.ports?.length || 0, 0);
       assert.equal(parsed.services.https.labels['traefik.tcp.routers.godspeed-mission-control.rule'], 'HostSNI(`srv123.hstgr.cloud`)');

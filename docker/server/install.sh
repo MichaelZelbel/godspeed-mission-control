@@ -9,26 +9,32 @@
 # (the same file as https://raw.githubusercontent.com/MichaelZelbel/godspeed-mission-control/main/docker/server/install.sh)
 #
 # What it does: installs Docker if the server has none, puts the very compose.yaml that
-# Hostinger's one-click deploys (docker/hostinger/compose.yaml, the image pinned by digest)
-# in /opt/godspeed-mission-control with its two settings in .env, starts it, waits until the
-# web page answers over HTTPS, and prints one private link. That link opens the account page
-# with the setup code already filled in: the reader picks a username and password, saves the
-# recovery code, and goes on to Connect Telegram, exactly like a Hostinger reader.
+# Hostinger's one-click deploys (docker/hostinger/compose.yaml) in /opt/godspeed-mission-control
+# with its settings in .env, starts it, waits until the web page answers over HTTPS, and prints
+# one private link. That link opens the account page with the setup code already filled in: the
+# reader picks a username and password, saves the recovery code, and goes on to Connect Telegram,
+# exactly like a Hostinger reader.
+#
+# Which version: the stage file of this line's stage (stage.json at GODSPEED_STAGE_REF, by default
+# the branch beta) names the server image, and that image is what runs. A change merged into main
+# reaches nobody until the stage moves.
 #
 # The address: GODSPEED_HOST if you set it (your own domain, pointed at this server), otherwise
 # this server's public IPv4 address as <a-b-c-d>.sslip.io, a free name that points back at that
 # address, so the HTTPS certificate is a real one without you owning a domain.
 #
-# Safe to run again: it keeps the setup code, the address and all data, updates to the image
-# compose.yaml pins today, and never makes a second owner. Before the account exists it prints a
-# fresh link (the old one stops working); after that it says to sign in.
+# Safe to run again: it keeps the setup code, the address and all data, moves the server to the
+# image the stage names today, and never makes a second owner. Before the account exists it prints
+# a fresh link (the old one stops working); after that it says to sign in.
 #
 # Settings, all optional:
 #   GODSPEED_HOST=name.example.com     use your own domain instead of <ip>.sslip.io
 #   GODSPEED_INSTALL_COUNT=yes         send one anonymous note that the install worked (default: nothing is sent)
+#   GODSPEED_STAGE_REF=beta            the branch or tag whose stage file says which version to
+#                                      install (default beta, the version everybody gets)
 #   GODSPEED_IMAGE=ghcr.io/michaelzelbel/godspeed-mission-control:v2-sha-<commit>
 #                                      try one version before it is released to everybody (kept for
-#                                      later runs; GODSPEED_IMAGE=release goes back to the released one)
+#                                      later runs; GODSPEED_IMAGE=release goes back to the stage's)
 #   GODSPEED_APT_WAIT=900              seconds to wait for a new server to finish installing its own
 #                                      updates before Docker is installed (default 15 minutes)
 # docker/README.md, "Any Linux server, one line", has the rest; docker/server/test.sh tests it.
@@ -37,8 +43,15 @@
 # Everything is inside functions and the last line calls main, so a download that breaks off
 # halfway runs nothing at all.
 
-GODSPEED_RAW="${GODSPEED_RAW:-https://raw.githubusercontent.com/MichaelZelbel/godspeed-mission-control/main}"
-GODSPEED_SELF_URL="${GODSPEED_SELF_URL:-$GODSPEED_RAW/docker/server/install.sh}"
+# The stage this line installs, and where its files come from. GODSPEED_RAW is built from the two
+# in stage_setup, not here, because a ref that is not a plain branch or tag name must be refused
+# before any address is made out of it; a GODSPEED_RAW given by hand still wins over both.
+GODSPEED_STAGE_REF="${GODSPEED_STAGE_REF:-beta}"
+GODSPEED_RAW_BASE="${GODSPEED_RAW_BASE:-https://raw.githubusercontent.com/MichaelZelbel/godspeed-mission-control}"
+GODSPEED_RAW="${GODSPEED_RAW:-}"
+GODSPEED_SELF_URL="${GODSPEED_SELF_URL:-}"
+STAGE_EDITION=server                     # the server edition of stage.json this line installs
+STAGE_PUBLIC_REF=beta                    # the stage everybody gets, whose withdrawn list also counts
 DIR="${GODSPEED_DIR:-/opt/godspeed-mission-control}"
 PROJECT=godspeed-mission-control
 CERT_WAIT="${GODSPEED_CERT_WAIT:-300}"   # seconds to wait for the HTTPS certificate
@@ -134,19 +147,114 @@ local_host() {
   is_ipv4 "$1"
 }
 
-# --- A version to try before it is released ---------------------------------------------
-# (16 October 2026.) The compose.yaml on main pins the released image by digest, the same one
-# Hostinger's one-click installs. GODSPEED_IMAGE names another image of this product, one the
-# "Integrated Godspeed v2" check built and published for a commit (:v2-sha-<commit>, or @sha256:...),
-# and this server runs that one instead. It is kept in .env, so running the line again stays on it
-# (going back to the older released image could meet data the newer one already changed);
-# GODSPEED_IMAGE=release goes back to what compose.yaml pins.
+# --- Which version this server runs ------------------------------------------------------
+# (25 October 2026.) One file says what a published version is made of: stage.json at the top of
+# the repository, read with its own reader stage/stage.sh (no jq, no Node: a server may have
+# neither). Both come from the same ref, the stage, so the compose file, the helper files and the
+# image all belong to one version. GODSPEED_STAGE_REF names it, beta by default: the version
+# everybody gets. A candidate can be installed before it is promoted with
+# GODSPEED_STAGE_REF=candidate/<version>. GODSPEED_RAW_BASE is the address the ref hangs off; the
+# tests point it at a folder of their own.
+
+# 0 for a plain branch or tag name, like beta or candidate/2.0.0-beta.7. Nothing that would make
+# the address mean something else: no scheme, no "..", no empty step, no trailing slash.
+stage_ref_ok() {
+  [[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9._/-]*$ ]] || return 1
+  case "$1" in *..* | *//* | */ | *.lock) return 1 ;; esac
+  return 0
+}
+
+# The stage and the addresses that follow from it, before anything is downloaded.
+stage_setup() {
+  stage_ref_ok "$GODSPEED_STAGE_REF" \
+    || stop "GODSPEED_STAGE_REF should be the name of a branch or a tag, like beta or candidate/2.0.0-beta.7, and it is $GODSPEED_STAGE_REF. Nothing was changed."
+  [ -n "$GODSPEED_RAW" ] || GODSPEED_RAW="$GODSPEED_RAW_BASE/$GODSPEED_STAGE_REF"
+  [ -n "$GODSPEED_SELF_URL" ] || GODSPEED_SELF_URL="$GODSPEED_RAW/docker/server/install.sh"
+}
+
+# The stage file of the ref at $1 and the reader for it, into the folder $2.
+STAGE_DIR=""       # where the stage file being installed and its reader were put
+STAGE_VERSION=""   # the version that stage file names
+STAGE_IMAGE=""     # the image its server edition names
+# Nothing here writes to the log: this runs before the install folder exists.
+stage_download() {
+  mkdir -p "$2" \
+    && curl -fsSL "$1/stage.json" -o "$2/stage.json" 2>/dev/null \
+    && curl -fsSL "$1/stage/stage.sh" -o "$2/stage.sh" 2>/dev/null
+}
+# One field of the stage file in STAGE_DIR, in the reader's own words when it refuses the file.
+stage_get() { sh "$STAGE_DIR/stage.sh" "$STAGE_DIR/stage.json" get "$1"; }
+
+# Which version this run installs, before anything is installed, downloaded or changed: the stage
+# file of GODSPEED_STAGE_REF, refused when it cannot be read, and refused when the version it names
+# was taken back, by its own withdrawn list or by the public stage's. The answer must be exactly
+# "no", so every failure fails closed.
+read_stage() { # [a folder of its own for the stage file and its reader; one is made when none is given]
+  local work="${1:-}" reason answer public
+  [ -n "$work" ] || work="$(mktemp -d)" \
+    || stop "Could not make a temporary folder to read which version to install in. Nothing was changed."
+  mkdir -p "$work" || stop "Could not make the folder $work to read which version to install in. Nothing was changed."
+  STAGE_DIR="$work"
+  stage_download "$GODSPEED_RAW" "$work" \
+    || { rm -rf "$work"; stop "Could not read which version to install from $GODSPEED_RAW/stage.json. Check that this server can reach github.com, or name another stage with GODSPEED_STAGE_REF; nothing was changed."; }
+  reason="$(sh "$work/stage.sh" "$work/stage.json" check 2>&1)" \
+    || { rm -rf "$work"; stop "Which version to install could not be read: $reason Nothing was changed."; }
+  STAGE_VERSION="$(stage_get version)"
+  STAGE_IMAGE="$(stage_get "serverEditions.$STAGE_EDITION.image")" \
+    || { rm -rf "$work"; stop "The stage file at $GODSPEED_RAW/stage.json names no $STAGE_EDITION edition to install. Nothing was changed."; }
+  # The public stage's withdrawn list counts as well, so a saved link to an older stage cannot
+  # install a version that was taken back. The stage being installed is its own public stage when
+  # it is the public one, and whenever GODSPEED_RAW was given by hand (the tests, the browser
+  # installer): then there is no other ref to ask.
+  public="$work/stage.json"
+  if [ "$GODSPEED_STAGE_REF" != "$STAGE_PUBLIC_REF" ] && [ "$GODSPEED_RAW" = "$GODSPEED_RAW_BASE/$GODSPEED_STAGE_REF" ]; then
+    curl -fsSL "$GODSPEED_RAW_BASE/$STAGE_PUBLIC_REF/stage.json" -o "$work/public.json" 2>/dev/null \
+      || { rm -rf "$work"; stop "Could not read the stage everybody gets from $GODSPEED_RAW_BASE/$STAGE_PUBLIC_REF/stage.json, which says whether $STAGE_VERSION was taken back. Check that this server can reach github.com, then run this line again; nothing was changed."; }
+    public="$work/public.json"
+  fi
+  answer="$(sh "$work/stage.sh" withdrawn "$work/stage.json" "$public" "$STAGE_VERSION" 2>&1)"
+  case "$answer" in
+    no) ;;
+    yes) rm -rf "$work"
+         stop "Godspeed Mission Control $STAGE_VERSION was taken back and cannot be installed. Run this line again without GODSPEED_STAGE_REF to install the version everybody gets; nothing was changed." ;;
+    *)   rm -rf "$work"
+         stop "Whether Godspeed Mission Control $STAGE_VERSION was taken back could not be read: $answer Nothing was changed." ;;
+  esac
+  log "stage $GODSPEED_STAGE_REF: version $STAGE_VERSION, image $STAGE_IMAGE"
+}
+
+# --- A version to try before the stage names it ------------------------------------------
+# (16 October 2026, rewritten 25 October.) GODSPEED_IMAGE names another image of this product, one
+# the "Integrated Godspeed v2" check built and published for a commit (:v2-sha-<commit>, or
+# @sha256:...), and this server runs that one instead of the stage's. It is kept in .env, so
+# running the line again stays on it (going back to an older image could meet data the newer one
+# already changed); GODSPEED_IMAGE=release goes back to the stage's image.
 IMAGE_REPO=ghcr.io/michaelzelbel/godspeed-mission-control
 test_image() { [[ "$1" =~ ^ghcr\.io/michaelzelbel/godspeed-mission-control(:v2-sha-[0-9a-f]{40}|@sha256:[0-9a-f]{64})$ ]]; }
-# Puts image $2 on the godspeed service's image line of compose file $1; the HTTPS service's stays.
-pin_image() {
-  sed -i -E "s#^(    image: )ghcr\.io/michaelzelbel/godspeed-mission-control[@:][^[:space:]]*\$#\1$2#" "$1" \
-    && grep -qx "    image: $2" "$1"
+
+# The image this run starts (IMAGE) and the version to try it came from, if any (TRY): what the
+# reader asks for now, else what an earlier run was told to try, else the stage's image.
+IMAGE=""
+TRY=""
+decide_image() {
+  case "${GODSPEED_IMAGE:-}" in
+    "") ;;
+    release) TRY="" ;;
+    *) test_image "$GODSPEED_IMAGE" || stop "GODSPEED_IMAGE should name one version of Godspeed Mission Control, like $IMAGE_REPO:v2-sha-<commit>, or be release. Nothing was changed."
+       TRY="$GODSPEED_IMAGE" ;;
+  esac
+  test_image "$TRY" || TRY=""
+  IMAGE="${TRY:-$STAGE_IMAGE}"
+}
+
+# The install's settings: the address, the setup code, the image the compose file starts, and the
+# version to try when there is one, so a later run stays on it. Only root may read them.
+write_env() { # <host> <setup code>
+  ( umask 077
+    { printf 'GODSPEED_HOST=%s\nGODSPEED_SETUP_CODE=%s\nGODSPEED_SERVER_IMAGE=%s\n' "$1" "$2" "$IMAGE"
+      [ -z "$TRY" ] || printf 'GODSPEED_IMAGE=%s\n' "$TRY"
+    } > "$DIR/.env.new" ) || return 1
+  mv -f "$DIR/.env.new" "$DIR/.env" && chmod 600 "$DIR/.env"
 }
 
 # A host add-on asks the installed container for a model answer. No model key or
@@ -430,7 +538,7 @@ as_root() {
   command -v sudo >/dev/null 2>&1 || stop "This needs the server's administrator account. Log in as root and run this line again."
   say "This needs the server's administrator rights, so it asks sudo (it may ask for your password)."
   local pass=() v
-  for v in GODSPEED_HOST GODSPEED_IMAGE GODSPEED_RAW GODSPEED_SELF_URL GODSPEED_DIR GODSPEED_INSTALL_COUNT DO_NOT_TRACK GODSPEED_CERT_WAIT GODSPEED_START_WAIT GODSPEED_APT_WAIT; do
+  for v in GODSPEED_HOST GODSPEED_IMAGE GODSPEED_STAGE_REF GODSPEED_RAW_BASE GODSPEED_RAW GODSPEED_SELF_URL GODSPEED_DIR GODSPEED_INSTALL_COUNT DO_NOT_TRACK GODSPEED_CERT_WAIT GODSPEED_START_WAIT GODSPEED_APT_WAIT; do
     [ -n "${!v:-}" ] && pass+=("$v=${!v}")
   done
   if [ -n "$SELF_FILE" ] && [ -f "$SELF_FILE" ]; then
@@ -442,12 +550,20 @@ as_root() {
 
 main() {
   set -uo pipefail
+  stage_setup   # before sudo is asked for: a stage that is not a branch or tag name is refused here
   as_root
 
   say "Installing Godspeed Mission Control on this server."
   case "$(uname -m)" in x86_64|amd64) ;; *)
     stop "This server's processor is $(uname -m). Godspeed Mission Control runs on ordinary x86-64 (Intel or AMD) servers for now, so nothing was changed." ;;
   esac
+
+  # Which version, before anything is installed, downloaded or changed: a stage file that cannot be
+  # read and a version that was taken back both stop the run here, with nothing touched.
+  read_stage
+  rm -rf "$STAGE_DIR"
+  say "Installing Godspeed Mission Control $STAGE_VERSION, the version the $GODSPEED_STAGE_REF line names."
+
   mkdir -p "$DIR" && chmod 700 "$DIR" || stop "Could not create the folder $DIR."
   log "install started"
 
@@ -471,20 +587,14 @@ main() {
   [ -z "$elsewhere" ] || stop "Godspeed Mission Control already runs on this server, started from $elsewhere (for example by your hosting company's one-click install). Manage it there; nothing was changed."
 
   # The settings: kept from an earlier run, otherwise made now.
-  local host="" code="" ip="" first=yes image=""
+  local host="" code="" ip="" first=yes
   if [ -f "$DIR/.env" ]; then
     first=no
     host="$(sed -n 's/^GODSPEED_HOST=//p' "$DIR/.env" | tail -1)"
     code="$(sed -n 's/^GODSPEED_SETUP_CODE=//p' "$DIR/.env" | tail -1)"
-    image="$(sed -n 's/^GODSPEED_IMAGE=//p' "$DIR/.env" | tail -1)"
+    TRY="$(sed -n 's/^GODSPEED_IMAGE=//p' "$DIR/.env" | tail -1)"
   fi
-  case "${GODSPEED_IMAGE:-}" in
-    "") ;;
-    release) image="" ;;
-    *) test_image "$GODSPEED_IMAGE" || stop "GODSPEED_IMAGE should name one version of Godspeed Mission Control, like $IMAGE_REPO:v2-sha-<commit>, or be release. Nothing was changed."
-       image="$GODSPEED_IMAGE" ;;
-  esac
-  test_image "$image" || image=""
+  decide_image
   if [ -n "${GODSPEED_HOST:-}" ]; then
     host="$(clean_host "$GODSPEED_HOST")" || stop "GODSPEED_HOST should be a name like mission.example.com, without https:// and without a path."
   elif [ -z "$host" ]; then
@@ -508,19 +618,16 @@ main() {
     fi
   fi
 
-  # The one definition of what runs: the same compose.yaml as Hostinger's one-click.
+  # The one definition of what runs: the same compose.yaml as Hostinger's one-click, from the same
+  # ref as the stage file, and used exactly as it is downloaded. Which image it starts is the one
+  # setting GODSPEED_SERVER_IMAGE in .env, so nothing is ever edited into this file here.
   curl -fsSL "$GODSPEED_RAW/docker/hostinger/compose.yaml" -o "$DIR/compose.yaml.new" 2>>"$LOG" \
     && grep -q "^name: $PROJECT" "$DIR/compose.yaml.new" \
     || { rm -f "$DIR/compose.yaml.new"; stop "Could not download Godspeed Mission Control's settings file. Check that this server can reach github.com, then run this line again."; }
-  if [ -n "$image" ]; then
-    pin_image "$DIR/compose.yaml.new" "$image" || { rm -f "$DIR/compose.yaml.new"; stop "Could not set the version to try ($image) in the settings file, so nothing was changed."; }
-    step "Using the version to try instead of the released one: $image"
-  fi
   mv -f "$DIR/compose.yaml.new" "$DIR/compose.yaml"
-  ( umask 077; printf 'GODSPEED_HOST=%s\nGODSPEED_SETUP_CODE=%s\n' "$host" "$code" > "$DIR/.env.new"
-    [ -z "$image" ] || printf 'GODSPEED_IMAGE=%s\n' "$image" >> "$DIR/.env.new" ) && mv -f "$DIR/.env.new" "$DIR/.env"
-  chmod 600 "$DIR/.env"
-  log "address $host, first run: $first${image:+, image $image}"
+  [ -z "$TRY" ] || step "Using the version to try instead of the one the $GODSPEED_STAGE_REF line names: $TRY"
+  write_env "$host" "$code" || stop "Could not write the settings in $DIR/.env, so nothing was changed."
+  log "address $host, first run: $first, image $IMAGE${TRY:+ (the version to try)}"
 
   if [ "$first" = yes ]; then step "Downloading Godspeed Mission Control (a few minutes)."; else step "Updating Godspeed Mission Control if there is a newer version."; fi
   compose pull -q >>"$LOG" 2>&1 || stop "The download did not finish. Check that the server has internet and at least $NEED_GB GB of free disk space, then run this line again. What went wrong is written in $LOG."

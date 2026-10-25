@@ -2,6 +2,8 @@
 # Authenticated browser installer. --detach receives canonical private JSON on
 # stdin; the website revokes its temporary SSH key as soon as launch finishes.
 # Only a public, immutable GODSPEED_RAW is accepted. Never enable shell tracing.
+# The version it installs is the one the stage file of that same commit names (stage.json, read
+# with stage/stage.sh); it writes that image into the private .env as GODSPEED_SERVER_IMAGE.
 
 BROWSER_DIR="${GODSPEED_DIR:-/opt/godspeed-mission-control-browser}"
 BROWSER_PROJECT=godspeed-mission-control
@@ -37,12 +39,26 @@ browser_metadata() {
   BROWSER_JOB="${BASH_REMATCH[1]}"; BROWSER_CALLBACK="${BASH_REMATCH[2]}"
 }
 browser_fetch() { curl --proto '=https' --tlsv1.2 -fsS --max-time 60 "$1" -o "$2" 2>/dev/null; }
-browser_load_helpers() {
-  browser_fetch "$GODSPEED_RAW/docker/server/install.sh" "$BROWSER_TEMP/install.sh" || browser_fail source_unavailable
-  GODSPEED_INSTALL_LIB=1 GODSPEED_DIR="$BROWSER_DIR" source "$BROWSER_TEMP/install.sh"
+# The stage file of the commit and its reader, through this installer's own hardened download and
+# never plain curl. It replaces the installer's own stage_download, both here (for a test that
+# loads the two files as libraries) and again after install.sh has been sourced.
+browser_stage_download() {
+  mkdir -p "$2" && browser_fetch "$1/stage.json" "$2/stage.json" && browser_fetch "$1/stage/stage.sh" "$2/stage.sh"
+}
+stage_download() { browser_stage_download "$@"; }
+# What the one-line installer's own helpers do here instead of what they do on a screen: no
+# sentences, every failure one safe JSON error, and downloads through browser_fetch. Its own
+# function, so a test that loads the helpers from this checkout binds them the same way.
+browser_bind_helpers() {
   stop() { browser_fail "$BROWSER_ERROR"; }
   step() { browser_progress; }
   say() { :; }
+  stage_download() { browser_stage_download "$@"; }
+}
+browser_load_helpers() {
+  browser_fetch "$GODSPEED_RAW/docker/server/install.sh" "$BROWSER_TEMP/install.sh" || browser_fail source_unavailable
+  GODSPEED_INSTALL_LIB=1 GODSPEED_DIR="$BROWSER_DIR" source "$BROWSER_TEMP/install.sh"
+  browser_bind_helpers
 }
 browser_host() {
   local host; host="$(tr -d '\r\n' < /etc/hostname)"
@@ -201,6 +217,10 @@ browser_run() {
   [ "$mode" != traefik ] || manifest=docker/server/browser-compose-traefik.yaml
   browser_fetch "$GODSPEED_RAW/$manifest" "$BROWSER_TEMP/compose.yaml"
   grep -qx "name: $BROWSER_PROJECT" "$BROWSER_TEMP/compose.yaml" || browser_fail invalid_compose_source
+  # Which version this compose file runs: the stage file of this same commit says so, and its image
+  # goes into the private .env below. Read before anything on the server is changed.
+  read_stage "$BROWSER_TEMP/stage"
+  decide_image
   BROWSER_ERROR=installation_folder_conflict
   mkdir -p "$BROWSER_DIR"; chmod 700 "$BROWSER_DIR"
   exec 9>"$BROWSER_DIR/install.lock"; flock -n 9 || browser_fail installation_already_running
@@ -226,7 +246,7 @@ browser_run() {
   [ ! -L "$DIR/.env" ] && [ ! -L "$DIR/.env.new" ] && [ ! -L "$DIR/compose.yaml" ] || browser_fail private_settings_unavailable
   code="$(sed -n 's/^GODSPEED_SETUP_CODE=//p' "$DIR/.env" 2>/dev/null || true)"
   [[ "$code" =~ ^[a-f0-9]{64}$ ]] || code="$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')"
-  printf 'GODSPEED_HOST=%s\nGODSPEED_SETUP_CODE=%s\n' "$host" "$code" > "$DIR/.env.new"
+  printf 'GODSPEED_HOST=%s\nGODSPEED_SETUP_CODE=%s\nGODSPEED_SERVER_IMAGE=%s\n' "$host" "$code" "$IMAGE" > "$DIR/.env.new"
   chmod 600 "$DIR/.env.new"; mv "$DIR/.env.new" "$DIR/.env"
   cp "$BROWSER_TEMP/compose.yaml" "$DIR/compose.yaml"
   BROWSER_ERROR=invalid_compose_source; compose config --quiet >>"$LOG" 2>&1
