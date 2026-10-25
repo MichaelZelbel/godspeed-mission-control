@@ -76,6 +76,32 @@ def backup_block(message, command=None):
             "Tell them that. Never ask for an API key in this chat, and do not change the AI settings yourself." % where)
 
 
+# VOICE REPLIES (25 October 2026, notebook/core/voice-replies.mjs): a voice note is answered with a
+# voice note and the same text by Hermes itself. A written request for a spoken answer is the
+# assistant's to do with its text_to_speech tool, and without this it sent the voice note with a
+# line like "Here is your voice note" instead of the answer. When a message asks about voice replies,
+# the assistant is told how they work here and where the voice is chosen.
+VOICE_WORDS = re.compile(
+    r"\b(?:voice|audio|spoken)[\s-]*(?:notes?|messages?|memos?|repl(?:y|ies)|answers?)\b"
+    r"|\b(?:sprach|audio)[\s-]*(?:nachricht|memo|antwort)|\bgesprochene?n? antwort|\bvorles|\blies\b[^.?!]*\bvor\b"
+    r"|\bread\b[^.?!]{0,40}\baloud\b|\bout loud\b|\bsprich\b|\bals audio\b|\belevenlabs\b|/voice\b", re.I)
+
+
+def voice_block(message):
+    """The block for a message that asks for a spoken answer or about voice replies, or None."""
+    if isinstance(message, list):
+        message = " ".join(str(p.get("text", "")) for p in message if isinstance(p, dict))
+    if not isinstance(message, str) or not VOICE_WORDS.search(message):
+        return None
+    return ("[godspeed-voice] If this message asks for a spoken answer (a voice note, an audio message, "
+            "reading aloud), write your whole answer as usual and also call text_to_speech once with the "
+            "same words, so they get the voice note and the text. If it asks how voice replies work: a voice "
+            "note they send is answered with a voice note and the same text; /voice off in a chat stops "
+            "that there, /voice tts makes every answer spoken, /voice on goes back. The voice (the free one "
+            "or their ElevenLabs voice) is chosen in the notebook: Settings, Voice replies. Never ask for "
+            "an ElevenLabs key in this chat.")
+
+
 def _backup_command():
     try:
         with open(os.path.join(HERE, "backup-command.txt"), encoding="utf-8") as f:
@@ -92,6 +118,10 @@ def on_pre_llm_call(**kwargs):
         blocks = []
         try:
             blocks.append(backup_block(kwargs.get("user_message"), _backup_command()))
+        except Exception:
+            pass
+        try:
+            blocks.append(voice_block(kwargs.get("user_message")))
         except Exception:
             pass
         root = _mission_control()
