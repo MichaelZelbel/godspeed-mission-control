@@ -137,6 +137,51 @@ function checkAgainst(value, schema, file, path, key) {
   }
 }
 
+/**
+ * The field a file names twice, as a dotted path, or null when it names each of them once.
+ * JSON.parse keeps the last of two fields with one name and tools/stage.sh keeps the first, so a
+ * file like that reads differently in the two readers: both refuse it rather than answer from it.
+ * The text came through JSON.parse already, so this walk only has to find the strings that are
+ * field names, and in JSON a string a colon follows is a field's name and nothing else is.
+ */
+function namedTwice(text) {
+  const open = [];
+  const inner = () => open[open.length - 1];
+  let i = 0;
+  while (i < text.length) {
+    const ch = text[i];
+    if (ch === "{" || ch === "[") {
+      const parent = inner();
+      let path = "";
+      if (parent) path = parent.list ? `${parent.path}#${++parent.items}` : parent.field;
+      open.push({ list: ch === "[", path, field: path, items: 0, named: new Set() });
+      i++;
+    } else if (ch === "}" || ch === "]") {
+      open.pop();
+      i++;
+    } else if (ch === '"') {
+      let j = i + 1;
+      while (j < text.length && text[j] !== '"') j += text[j] === "\\" ? 2 : 1;
+      let after = j + 1;
+      while (after < text.length && " \t\r\n".includes(text[after])) after++;
+      const here = inner();
+      if (text[after] === ":" && here !== undefined && !here.list) {
+        const name = JSON.parse(text.slice(i, j + 1));
+        const path = here.path ? `${here.path}.${name}` : name;
+        if (here.named.has(name)) return path;
+        here.named.add(name);
+        here.field = path;
+        i = after + 1;
+      } else {
+        i = j + 1;
+      }
+    } else {
+      i++;
+    }
+  }
+  return null;
+}
+
 function loadSchema() {
   for (const candidate of [join(HERE, "..", "stage.schema.json"), join(HERE, "stage.schema.json")]) {
     try {
@@ -162,6 +207,10 @@ function readStage(file) {
     value = JSON.parse(text);
   } catch {
     refuse(`${file} is not JSON.`);
+  }
+  const twice = namedTwice(text);
+  if (twice !== null) {
+    refuse(`${file} names ${twice} twice; a stage file names each field once.`);
   }
   checkAgainst(value, loadSchema(), file, "", undefined);
   return value;

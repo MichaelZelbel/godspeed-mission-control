@@ -104,6 +104,26 @@ for pair in "ok-clean ok-clean no" "ok-clean ok-withdrawn yes" "ok-withdrawn ok-
   same "  the shell reader says $3" "$b" "$3"
 done
 
+# A file that names one field twice is the one file the two readers would read differently:
+# JSON.parse keeps the last of the two and the shell reader's own parser the first. Neither
+# answers the withdrawn question from it, so the answer cannot be yes in one reader and no in the
+# other; both refuse, and in the same words.
+printf '%s\n' "  a file that names a field twice, asked the withdrawn question by both"
+DUP=$CASES/bad-duplicate-field.json
+for pair in "$DUP $CASES/ok-clean.json" "$CASES/ok-clean.json $DUP"; do
+  set -- $pair
+  a=$(node_reader withdrawn "$1" "$2" 2.0.0-beta.6 2> "$TMP/dup-node.err"); ae=$?
+  b=$(sh_reader withdrawn "$1" "$2" 2.0.0-beta.6 2> "$TMP/dup-sh.err"); be=$?
+  aerr=$(cat "$TMP/dup-node.err")
+  berr=$(cat "$TMP/dup-sh.err")
+  printf '  installed %-44s node(%s)[%s] shell(%s)[%s]\n' "$1" "$ae" "$aerr" "$be" "$berr"
+  same "  the Node reader refuses it with exit 1" "$ae" "1"
+  same "  the shell reader refuses it with exit 1" "$be" "1"
+  same "    the Node reader answers neither yes nor no" "$a" ""
+  same "    the shell reader answers neither yes nor no" "$b" ""
+  same "    and both say what is wrong in the same words" "$berr" "$aerr"
+done
+
 # ----------------------------------- every value, against the record and the file that holds it
 printf '\n%s\n' "every value of stage.json, against the record and the files the release named"
 get() { node_reader "$STAGE" get "$1"; }

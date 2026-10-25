@@ -46,6 +46,7 @@ badlayout() { refuse "$FILE is not JSON in the layout a stage file is written in
 miss()      { refuse "$FILE names no $1."; }
 notwhat()   { refuse "the $1 in $FILE is not $2: $3."; }
 notnamed()  { refuse "$FILE holds $1, which a stage file does not name."; }
+twice()     { refuse "$FILE names $1 twice; a stage file names each field once."; }
 
 # ---------------------------------------------------------------- the patterns the schema names
 is_hex() { # <string> <length>: lowercase hex, exactly that long
@@ -104,6 +105,9 @@ is_plain() { # a file name or a release tag
 #   <dotted path><tab><kind><tab><value>      kind: s string, n number, b true/false, z null,
 #                                             o object, a list. A list's items are <path>#1, #2...
 # and every field a reader may print ends up in $fieldlist, in the file's own order.
+# A file that names one field twice is refused rather than read: $flat keeps both lines and look
+# answers from the first, while JSON.parse in tools/stage.mjs keeps the last of the two, so the
+# two readers would answer differently - about the withdrawn list as well - from one same file.
 
 look() { # <path>: sets LOOK_FOUND, LOOK_KIND, LOOK_VAL
   LOOK_FOUND=0
@@ -253,6 +257,9 @@ parse_file() { # <file>: fills $flat and $fieldlist, or refuses
         case $k in '' | *[!A-Za-z0-9_-]*) badlayout "line $lineno names a field this reader will not read" ;; esac
         eval "p=\$pre$depth"
         path=$p$k
+        case $NL$flat in
+          *"$NL$path$TAB"*) twice "$path" ;;
+        esac
         case $kind in
           member)
             v=${body#*\": }

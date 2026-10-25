@@ -112,6 +112,20 @@ const refusedPair = reader("withdrawn", join(CASES, "bad-pattern.json"), clean);
 same("  a malformed installed stage is refused, so the answer fails closed", refusedPair.code, 1);
 same("    and no answer is printed", refusedPair.out, "");
 
+// JSON.parse keeps the last of two fields with one name and tools/stage.sh keeps the first, so a
+// file that names withdrawn twice would read differently in the two readers. Neither answers from
+// it: the withdrawn question fails closed, whichever of the two stages holds the duplicate.
+const duplicate = join(CASES, "bad-duplicate-field.json");
+for (const [installed, published, which] of [[duplicate, clean, "installed"], [clean, duplicate, "public"]]) {
+  const got = reader("withdrawn", installed, published, "2.0.0-beta.6");
+  same(`  a ${which} stage that names a field twice is refused`, got.code, 1);
+  same("    and no answer is printed", got.out, "");
+  holds("    with a plain sentence", got.err, "names withdrawn twice; a stage file names each field once.");
+}
+const duplicateFields = reader(duplicate, "get", "withdrawn");
+same("  and no field of it can be read either", duplicateFields.code, 1);
+same("    with nothing on stdout", duplicateFields.out, "");
+
 // ------------------------------------------------------------- a later stage, with a previous
 const later = join(CASES, "ok-later-stage.json");
 same("a stage that replaced another is read", reader(later, "check").code, 0);

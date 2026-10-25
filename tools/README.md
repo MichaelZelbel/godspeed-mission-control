@@ -476,6 +476,11 @@ the one `JSON.stringify(stage, null, 2)` writes: two spaces a level, one field a
 tabs, no backslash escapes, Unix line endings - and refuses anything else with a plain
 sentence rather than guess at it. Write a stage file that way or it will not be read.
 
+A stage file also names each field once. JSON allows the same field twice, and the two
+readers would keep a different one of the two - `JSON.parse` the last, the shell reader's own
+parser the first - so a file like that could be withdrawn in one reader and not in the other.
+Both refuse it instead, with the same sentence, so the withdrawn answer still fails closed.
+
 Three tests keep the two readers one reader, each one command from the root of a checkout:
 `node tools/test-stage.mjs`, `bash tools/test-stage-sh.sh` (which runs the whole list under
 every shell on the machine) and `bash tools/test-stage-agree.sh` (which asks both readers for

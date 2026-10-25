@@ -131,6 +131,20 @@ run_all() { # <shell>
   same "  a malformed installed stage is refused, so the answer fails closed" "$CODE" "1"
   same "    and no answer is printed" "$OUT" ""
 
+  # This reader's own parser keeps the first of two fields with one name and JSON.parse in
+  # tools/stage.mjs keeps the last, so a file that names withdrawn twice would read differently in
+  # the two. Neither answers from it, whichever of the two stages holds the duplicate.
+  for pair in "bad-duplicate-field ok-clean installed" "ok-clean bad-duplicate-field public"; do
+    set -- $pair
+    run_one withdrawn "$CASES/$1.json" "$CASES/$2.json" 2.0.0-beta.6
+    same "  a $3 stage that names a field twice is refused" "$CODE" "1"
+    same "    and no answer is printed" "$OUT" ""
+    holds "    with a plain sentence" "$ERRS" "names withdrawn twice; a stage file names each field once."
+  done
+  run_one "$CASES/bad-duplicate-field.json" get withdrawn
+  same "  and no field of it can be read either" "$CODE" "1"
+  same "    with nothing on stdout" "$OUT" ""
+
   run_one "$CASES/ok-later-stage.json" get previous.version
   same "a stage that replaced another names its previous version" "$OUT" "2.0.0-beta.6"
   run_one "$CASES/ok-later-stage.json" get previous.stageCommit
