@@ -13,7 +13,12 @@ RUN if [ "$USE_VERIFIED_FRONTEND" = 1 ]; then node /verify-prebuilt-frontend.mjs
 # Includes the approved computer-use layer. The digest is immutable.
 FROM ghcr.io/michaelzelbel/godspeed-mission-control@sha256:358bf1b87b22898c0bd1a173226004558e41a3d16fc39214ecedab7fb550de20
 USER root
-RUN uv pip install --python /opt/hermes/.venv/bin/python3 --no-cache faster-whisper==1.2.1
+# Voice notes: faster-whisper understands them, and edge-tts is the free voice that answers them
+# (notebook/core/voice-replies.mjs). This Hermes asks for edge-tts 7.2.7, which Microsoft's speech
+# service has refused since mid-October 2026 (HTTP 403); 7.3.1, the version current Hermes asks for,
+# works. Hermes' own installer cannot replace it here: the assistant's account may not write to this
+# environment, so the version installed now is the one it imports.
+RUN uv pip install --python /opt/hermes/.venv/bin/python3 --no-cache faster-whisper==1.2.1 edge-tts==7.3.1
 # A real init as process 1, so every finished program is collected. This image replaces the base's
 # own entrypoint (s6-overlay's /init, which collected them), and the base's /usr/bin/tini is a shim
 # that only hands on to that /init. With the notebook's supervisor as process 1 nothing collected
