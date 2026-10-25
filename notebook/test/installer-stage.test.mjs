@@ -17,6 +17,10 @@ const forwarder=path.join(repo,'installers','install-godspeed.sh').replaceAll('\
 const realReader=path.join(repo,'stage','stage.sh');
 const bash=process.env.GODSPEED_TEST_BASH||'bash';
 const options={skip:process.platform==='win32'&&!process.env.GODSPEED_TEST_BASH&&'set GODSPEED_TEST_BASH to a bash'};
+// The server image leaves installers/ out (.dockerignore) and runs these tests inside itself, so the
+// tests of installers/install-godspeed.sh run only where it is shipped: a checkout, as in required.
+const notShipped=fs.existsSync(forwarder)?false:'installers/ is not shipped here (the server image leaves it out)';
+const forwarderOptions={skip:options.skip||notShipped};
 const slash=p=>p.replaceAll('\\','/');
 const scratch=name=>slash(fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-stage-'+name+'-')));
 const text=file=>fs.readFileSync(file,'utf8');
@@ -231,7 +235,7 @@ test('a stage file that cannot be read as a stage file stops the installer',opti
   refused(other,/at .*\/beta\/stage\.json could not be read:/);
 });
 
-test('a ref that is not the name of a branch or tag is refused by both installers, before anything is read',options,()=>{
+test('a ref that is not the name of a branch or tag is refused by both installers, before anything is read',forwarderOptions,()=>{
   const sentence=/is not the name of a branch or tag of Godspeed Mission Control\./;
   for(const ref of [...refsGitRefuses,...refsWeNarrow]){
     const result=install({refs:{beta:{stage:stage()}},ref});
@@ -261,7 +265,7 @@ test('the ref check refuses the names git check-ref-format refuses, and no name 
   for(const ref of refsWeNarrow)assert.equal(gitTakes(ref),true,'git refuses '+ref+' already');
 });
 
-test('installers/install-godspeed.sh runs the root installer of the stage it is given, with the arguments it was given',options,()=>{
+test('installers/install-godspeed.sh runs the root installer of the stage it is given, with the arguments it was given',forwarderOptions,()=>{
   const said=scratch('forwarded');
   const standIn=['#!/bin/sh','printf \'%s\\n\' "$*" > "$FORWARDED/args"',
     '{ echo "ref=$GODSPEED_STAGE_REF"; echo "raw=$GODSPEED_STAGE_RAW"; } > "$FORWARDED/stage"',''].join('\n');
@@ -281,14 +285,14 @@ test('installers/install-godspeed.sh runs the root installer of the stage it is 
   assert.match(refusedRef.err,/is not the name of a branch or tag of Godspeed Mission Control\./);
 });
 
-test('a stage whose installer cannot be read stops installers/install-godspeed.sh with one plain sentence',options,()=>{
+test('a stage whose installer cannot be read stops installers/install-godspeed.sh with one plain sentence',forwarderOptions,()=>{
   const result=forward({refs:{beta:{stage:stage()}},ref:'no-such-branch'});
   refused(result,/the installer of Godspeed Mission Control could not be read from .*\/no-such-branch\/install-godspeed\.sh\./);
   // It asked for that one address and for nothing else, and curl's own reason is not in sight.
   assert.deepEqual(result.asked,[result.where.raw+'/no-such-branch/install-godspeed.sh']);
 });
 
-test('neither installer names a commit, a release tag or a version any more',()=>{
+test('neither installer names a commit, a release tag or a version any more',{skip:notShipped},()=>{
   for(const file of [installer,forwarder]){
     const source=text(file);
     assert.doesNotMatch(source,/\b[0-9a-f]{40}\b/,file+' still names a commit');
