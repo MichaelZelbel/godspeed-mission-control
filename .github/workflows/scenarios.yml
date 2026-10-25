@@ -124,7 +124,7 @@ jobs:
           sudo jq '. + {"registry-mirrors": ["https://mirror.gcr.io"]}' "$f" | sudo tee "$f.new" >/dev/null && sudo mv "$f.new" "$f"
           sudo systemctl restart docker
       - name: The /server line, against the stage
-        run: curl -fsSL "$RAW/$STAGE_REF/docker/server/install.sh" | sudo GODSPEED_STAGE_REF="$STAGE_REF" GODSPEED_HOST=localhost bash
+        run: curl -fsSL https://godspeedmissioncontrol.com/server | sudo GODSPEED_STAGE_REF="$STAGE_REF" GODSPEED_HOST=localhost bash
       - name: It runs the image the stage names, and is healthy
         run: |
           fail() { echo "FAIL docker-server: $1" | tee -a "$GITHUB_STEP_SUMMARY" "$RUNNER_TEMP/failed"; exit 1; }
