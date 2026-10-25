@@ -295,6 +295,35 @@ browser_run`);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
+test('a version the public stage took back after this link was made stops the browser install', () => {
+  const dir = mkdtempSync(`${tmpdir()}/godspeed-browser-unit-`);
+  // Beside the install folder, never inside it: anything of ours in there is a folder conflict.
+  const aside = mkdtempSync(`${tmpdir()}/godspeed-browser-stage-`);
+  try {
+    // The commit this link names cannot know of a withdrawal made after it: the public stage says
+    // so, and it is read from the branch beta, never from the link's own commit.
+    const stage = JSON.parse(readFileSync(resolve(root, 'stage.json'), 'utf8'));
+    const takenBack = `${aside}/public-stage.json`;
+    writeFileSync(takenBack, `${JSON.stringify({ ...stage, withdrawn: [stage.version] }, null, 2)}\n`);
+    const r = bash(`${freshMock(dir)}
+browser_fetch(){ printf '%s\\n' "$1" >> ${quote(`${aside}/fetched`)}; case "$1" in
+  */beta/stage.json) cp ${quote(takenBack)} "$2" ;;
+  */stage.json) cp ${quote(resolve(root, 'stage.json'))} "$2" ;;
+  */stage/stage.sh) cp ${quote(resolve(root, 'stage/stage.sh'))} "$2" ;;
+  *) cp ${quote(resolve(root, 'docker/hostinger/compose.yaml'))} "$2" ;;
+ esac; }
+browser_run`);
+    assert.equal(r.status, 1);
+    assert.deepEqual(output(r), { ok: false, error: 'source_unavailable' });
+    assert.ok(!existsSync(`${dir}/.env`), 'no private settings were written');
+    assert.ok(!existsSync(`${dir}/docker-installed`), 'no package was installed');
+    // It asked the public stage itself, through this installer's own download and at that one
+    // address; a read from the link's commit would have answered "not taken back" forever.
+    assert.match(readFileSync(`${aside}/fetched`, 'utf8'),
+      /^https:\/\/raw\.githubusercontent\.com\/MichaelZelbel\/godspeed-mission-control\/beta\/stage\.json$/m);
+  } finally { for (const d of [dir, aside]) rmSync(d, { recursive: true, force: true }); }
+});
+
 test('shared Docker and certificate failures retain one safe JSON error after stdout suppression', () => {
   for (const [helper, code] of [['install_docker', 'docker_install_failed'], ['wait_certificate', 'certificate_pending']]) {
     const dir = mkdtempSync(`${tmpdir()}/godspeed-browser-unit-`);

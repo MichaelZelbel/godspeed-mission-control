@@ -196,6 +196,9 @@ stage_download() {
     && curl -fsSL "$1/stage.json" -o "$2/stage.json" 2>/dev/null \
     && curl -fsSL "$1/stage/stage.sh" -o "$2/stage.sh" 2>/dev/null
 }
+# The public stage's own file, the address $1 into the file $2. Its own function, like the one
+# above, so the browser installer can put its hardened download in place of this plain curl.
+stage_file_download() { curl -fsSL "$1" -o "$2" 2>/dev/null; }
 # One field of the stage file in STAGE_DIR, in the reader's own words when it refuses the file.
 stage_get() { sh "$STAGE_DIR/stage.sh" "$STAGE_DIR/stage.json" get "$1"; }
 
@@ -204,7 +207,7 @@ stage_get() { sh "$STAGE_DIR/stage.sh" "$STAGE_DIR/stage.json" get "$1"; }
 # was taken back, by its own withdrawn list or by the public stage's. The answer must be exactly
 # "no", so every failure fails closed.
 read_stage() { # [a folder of its own for the stage file and its reader; one is made when none is given]
-  local work="${1:-}" reason answer public
+  local work="${1:-}" reason answer public public_url
   [ -n "$work" ] || work="$(mktemp -d)" \
     || stop "Could not make a temporary folder to read which version to install in. Nothing was changed."
   mkdir -p "$work" || stop "Could not make the folder $work to read which version to install in. Nothing was changed."
@@ -216,14 +219,17 @@ read_stage() { # [a folder of its own for the stage file and its reader; one is 
   STAGE_VERSION="$(stage_get version)"
   STAGE_IMAGE="$(stage_get "serverEditions.$STAGE_EDITION.image")" \
     || { rm -rf "$work"; stop "The stage file at $GODSPEED_RAW/stage.json names no $STAGE_EDITION edition to install. Nothing was changed."; }
-  # The public stage's withdrawn list counts as well, so a saved link to an older stage cannot
-  # install a version that was taken back. The stage being installed is its own public stage when
-  # it is the public one, and whenever GODSPEED_RAW was given by hand (the tests, the browser
-  # installer): then there is no other ref to ask.
+  # The public stage's withdrawn list counts as well, so no saved link installs a version that was
+  # taken back since it was saved: not a link naming an older stage, and not the link to one
+  # immutable commit the website hands the browser installer. The public stage is always the same
+  # file, $GODSPEED_STAGE_RAW/beta/stage.json, and the one read above is enough only when it is
+  # that very file - which is how the public line and the tests of it read once and reach nothing
+  # else.
   public="$work/stage.json"
-  if [ "$GODSPEED_STAGE_REF" != "$STAGE_PUBLIC_REF" ] && [ "$GODSPEED_RAW" = "$GODSPEED_STAGE_RAW/$GODSPEED_STAGE_REF" ]; then
-    curl -fsSL "$GODSPEED_STAGE_RAW/$STAGE_PUBLIC_REF/stage.json" -o "$work/public.json" 2>/dev/null \
-      || { rm -rf "$work"; stop "Could not read the stage everybody gets from $GODSPEED_STAGE_RAW/$STAGE_PUBLIC_REF/stage.json, which says whether $STAGE_VERSION was taken back. Check that this server can reach github.com, then run this line again; nothing was changed."; }
+  public_url="$GODSPEED_STAGE_RAW/$STAGE_PUBLIC_REF/stage.json"
+  if [ "$GODSPEED_RAW" != "$GODSPEED_STAGE_RAW/$STAGE_PUBLIC_REF" ]; then
+    stage_file_download "$public_url" "$work/public.json" \
+      || { rm -rf "$work"; stop "Could not read the stage everybody gets from $public_url, which says whether $STAGE_VERSION was taken back. Check that this server can reach github.com, then run this line again; nothing was changed."; }
     public="$work/public.json"
   fi
   answer="$(sh "$work/stage.sh" withdrawn "$work/stage.json" "$public" "$STAGE_VERSION" 2>&1)"

@@ -3,7 +3,9 @@
 # stdin; the website revokes its temporary SSH key as soon as launch finishes.
 # Only a public, immutable GODSPEED_RAW is accepted. Never enable shell tracing.
 # The version it installs is the one the stage file of that same commit names (stage.json, read
-# with stage/stage.sh); it writes that image into the private .env as GODSPEED_SERVER_IMAGE.
+# with stage/stage.sh); it writes that image into the private .env as GODSPEED_SERVER_IMAGE. A
+# version the public stage has taken back since the website saved this link is refused, so an old
+# link installs nothing: that read, like every other, goes through browser_fetch.
 
 BROWSER_DIR="${GODSPEED_DIR:-/opt/godspeed-mission-control-browser}"
 BROWSER_PROJECT=godspeed-mission-control
@@ -39,13 +41,15 @@ browser_metadata() {
   BROWSER_JOB="${BASH_REMATCH[1]}"; BROWSER_CALLBACK="${BASH_REMATCH[2]}"
 }
 browser_fetch() { curl --proto '=https' --tlsv1.2 -fsS --max-time 60 "$1" -o "$2" 2>/dev/null; }
-# The stage file of the commit and its reader, through this installer's own hardened download and
-# never plain curl. It replaces the installer's own stage_download, both here (for a test that
-# loads the two files as libraries) and again after install.sh has been sourced.
+# The stage file of the commit and its reader, and the public stage's own file, through this
+# installer's own hardened download and never plain curl. They replace the installer's own
+# stage_download and stage_file_download, both here (for a test that loads the two files as
+# libraries) and again after install.sh has been sourced.
 browser_stage_download() {
   mkdir -p "$2" && browser_fetch "$1/stage.json" "$2/stage.json" && browser_fetch "$1/stage/stage.sh" "$2/stage.sh"
 }
 stage_download() { browser_stage_download "$@"; }
+stage_file_download() { browser_fetch "$1" "$2"; }
 # What the one-line installer's own helpers do here instead of what they do on a screen: no
 # sentences, every failure one safe JSON error, and downloads through browser_fetch. Its own
 # function, so a test that loads the helpers from this checkout binds them the same way.
@@ -54,6 +58,7 @@ browser_bind_helpers() {
   step() { browser_progress; }
   say() { :; }
   stage_download() { browser_stage_download "$@"; }
+  stage_file_download() { browser_fetch "$1" "$2"; }
 }
 browser_load_helpers() {
   browser_fetch "$GODSPEED_RAW/docker/server/install.sh" "$BROWSER_TEMP/install.sh" || browser_fail source_unavailable
@@ -218,7 +223,8 @@ browser_run() {
   browser_fetch "$GODSPEED_RAW/$manifest" "$BROWSER_TEMP/compose.yaml"
   grep -qx "name: $BROWSER_PROJECT" "$BROWSER_TEMP/compose.yaml" || browser_fail invalid_compose_source
   # Which version this compose file runs: the stage file of this same commit says so, and its image
-  # goes into the private .env below. Read before anything on the server is changed.
+  # goes into the private .env below. The public stage says whether that version was taken back
+  # since this link was made. Both are read before anything on the server is changed.
   read_stage "$BROWSER_TEMP/stage"
   decide_image
   BROWSER_ERROR=installation_folder_conflict

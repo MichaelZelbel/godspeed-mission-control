@@ -81,6 +81,7 @@ CANDIDATE_REF=candidate/2.0.0-beta.7
 CANDIDATE_VER=2.0.0-beta.7
 TRY_IMG="ghcr.io/michaelzelbel/godspeed-mission-control:v2-sha-$sha"
 OTHER_IMG="ghcr.io/michaelzelbel/godspeed-mission-control@sha256:$sha${sha:0:24}"
+COMMIT=dddddddddddddddddddddddddddddddddddddddd   # the immutable commit a browser link names
 CODE=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
 
 # make_stage <remote folder> <ref> [python statements changing d, the stage read from stage.json]
@@ -107,19 +108,24 @@ check "the stage folders the next checks read are stage files both readers take"
   make_stage own-withdrawn beta \"d['withdrawn']=[d['version']]\" &&
   make_stage public-withdrawn beta \"d['withdrawn']=['$CANDIDATE_VER']\" &&
   make_stage public-withdrawn '$CANDIDATE_REF' \"d['version']='$CANDIDATE_VER'\" &&
+  make_stage clean '$COMMIT' \"d['version']='$CANDIDATE_VER'; d['serverEditions']['server']['image']='$OTHER_IMG'\" &&
+  make_stage commit-withdrawn beta \"d['withdrawn']=['$CANDIDATE_VER']\" &&
+  make_stage commit-withdrawn '$COMMIT' \"d['version']='$CANDIDATE_VER'\" &&
   make_stage no-stage beta && rm '$WORK/no-stage/beta/stage.json' &&
   make_stage malformed beta && printf 'not a stage file\n' > '$WORK/malformed/beta/stage.json'"
 
 # run_stage <remote folder> <ref or -> <GODSPEED_IMAGE or -> <the .env an earlier run left, or ->
+#           [GODSPEED_RAW given by hand, the shape the browser installer has, or -]
 # The installer's own way from the base address to the settings it writes, as its own library:
 # the same calls, in the same order, as main makes.
 run_stage() {
-  local root="$1" ref="$2" img="$3" env0="$4" dir="$WORK/run"
+  local root="$1" ref="$2" img="$3" env0="$4" raw="${5:--}" dir="$WORK/run"
   rm -rf "$dir" "$WORK/stage-work"; mkdir -p "$dir" || return 1
   [ "$env0" = - ] || printf '%s\n' "$env0" > "$dir/.env"
   local vars=(GODSPEED_INSTALL_LIB=1 "GODSPEED_DIR=$dir" "GODSPEED_STAGE_RAW=$(file_url "$WORK/$root")")
   [ "$ref" = - ] || vars+=("GODSPEED_STAGE_REF=$ref")
   [ "$img" = - ] || vars+=("GODSPEED_IMAGE=$img")
+  [ "$raw" = - ] || vars+=("GODSPEED_RAW=$raw")
   env "${vars[@]}" bash -c "source '$ROOT/docker/server/install.sh'
     stage_setup
     read_stage '$WORK/stage-work'
@@ -128,11 +134,11 @@ run_stage() {
     write_env localhost $CODE"
 }
 env_line() { grep -qx "$1" "$WORK/run/.env"; }
-# "refused WHAT PATTERN remote ref": the run stops, says that in one plain sentence, and leaves
-# the install's settings unwritten.
+# "refused WHAT PATTERN remote [ref [GODSPEED_RAW]]": the run stops, says that in one plain
+# sentence, and leaves the install's settings unwritten.
 refused() {
   local what="$1" pat="$2" out rc
-  out="$(run_stage "$3" "${4:--}" - - 2>&1)"; rc=$?
+  out="$(run_stage "$3" "${4:--}" - - "${5:--}" 2>&1)"; rc=$?
   if [ "$rc" -ne 0 ] && printf '%s' "$out" | grep -qE -- "$pat" \
      && [ "$(printf '%s\n' "$out" | grep -c .)" = 1 ] && [ ! -e "$WORK/run/.env" ]; then pass "$what"
   else fail "$what"; printf '      got (exit %s): %s\n' "$rc" "$out" | head -5; fi
@@ -198,6 +204,19 @@ refused "a version on the stage's own withdrawn list is refused, nothing changed
   "^Godspeed Mission Control $STAGE_VER was taken back and cannot be installed\. .*nothing was changed\.$" own-withdrawn
 refused "a version on the public stage's withdrawn list is refused, nothing changed" \
   "^Godspeed Mission Control $CANDIDATE_VER was taken back and cannot be installed\. .*nothing was changed\.$" public-withdrawn "$CANDIDATE_REF"
+# A link to one immutable commit - the shape the browser installer is handed, GODSPEED_RAW given by
+# hand - is held to the public stage's withdrawn list too, so a link saved before a version was
+# taken back installs nothing afterwards. The public stage is read from the base address, never
+# from the link's own commit, which could not know of a later withdrawal.
+refused "a version the public stage took back after a link was made is refused, nothing changed" \
+  "^Godspeed Mission Control $CANDIDATE_VER was taken back and cannot be installed\. .*nothing was changed\.$" \
+  commit-withdrawn - "$(file_url "$WORK/commit-withdrawn/$COMMIT")"
+run_stage clean - - - "$(file_url "$WORK/clean/$COMMIT")" >/dev/null 2>&1
+check "and a link to a commit the public stage did not take back installs that commit's image" bash -c "
+  $(declare -f env_line)
+  WORK='$WORK'
+  env_line 'GODSPEED_SERVER_IMAGE=$OTHER_IMG'"
+
 refused "a malformed stage file is refused, nothing changed" \
   '^Which version to install could not be read: .* Nothing was changed\.$' malformed
 refused "a missing stage file is refused, nothing changed" \
