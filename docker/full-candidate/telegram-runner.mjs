@@ -6,6 +6,8 @@ import {fileURLToPath} from 'node:url';
 import {passedEnvironment} from '../../notebook/core/assistant-files.mjs';
 import {notebookAddress} from '../../notebook/core/notebook-address.mjs';
 import {REQUEST_FILE,REQUEST_MINUTES,FLOW_STATE as BACKUP_STATE} from '../../notebook/core/backup-request.mjs';
+import {chatVoiceDefaults} from '../../notebook/core/voice-replies.mjs';
+import {starterBorn} from '../../notebook/core/starter-workspace.mjs';
 const HANDOVER_MS=4000;
 
 // Telegram on the one-click server, switched on from the web page instead of a redeploy.
@@ -97,7 +99,16 @@ export class TelegramRunner{
     if(this.now()<this.notBefore){this.report('waiting-to-retry');return;}
     this.start(plan);
   }
+  // VOICE REPLIES (25 October 2026, notebook/core/voice-replies.mjs): a voice note in the owner's chat
+  // is answered with a voice note and the text, unless that chat chose otherwise (/voice off). The
+  // gateway reads the chats' modes once, when it starts, so the default is written right before; the
+  // setup chat may have finished only now. A mission control the owner brought keeps its assistant.
+  voiceDefaults(chat){
+    const home=this.env.HERMES_HOME,root=this.env.GODSPEED_WORKSPACE;if(!home||!root||!chat)return;
+    try{if(starterBorn(root))chatVoiceDefaults({home,chats:[String(chat)]});}catch{}
+  }
   start(plan){
+    if(plan.kind==='gateway')this.voiceDefaults(plan.env.TELEGRAM_HOME_CHANNEL);
     const started=this.now(),child=this.spawnProcess(plan.command,plan.args,{env:plan.env,stdio:'inherit',detached:true});
     this.child={key:plan.key,kind:plan.kind,process:child,started,stopping:false,zone:plan.kind==='gateway'&&this.env.HERMES_HOME?hermesZone(this.env.HERMES_HOME):undefined};this.lastKey=plan.key;
     this.report(plan.kind);

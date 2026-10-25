@@ -12,6 +12,7 @@ import {syncSoul,readExtra} from '../core/assistant-soul.mjs';
 import {installModelCommand} from './install-model-command.mjs';
 import {noteHermesMet} from '../core/starting-routines.mjs';
 import {keepOutOfGit} from '../core/first-commit.mjs';
+import {godspeedVoiceSettings,chatVoiceDefaults,ownerChats} from '../core/voice-replies.mjs';
 const root=process.env.GODSPEED_WORKSPACE,home=process.argv[2];if(!root||!home)throw new Error("Set GODSPEED_WORKSPACE to your mission control folder and name your assistant's home folder");
 // The notebook is opened only where its records are needed (a starter-made mission control, or a
 // server's key): opening it reads every one of its files, and this runs at every install and every
@@ -186,6 +187,9 @@ if(starterBorn(root))text=withTimezone(text,store.get('settings','installation')
 // the owner's and keeps its assistant as it was.
 if(starterBorn(root)){
  text=godspeedHermesSettings(text);
+ // The voice the assistant answers voice notes with (core/voice-replies.mjs): the multilingual free
+ // voice, or the ElevenLabs voice chosen in Settings with its command where this version keeps it.
+ text=godspeedVoiceSettings(text,{home,state:store.state});
  const provider=path.join(home,'plugins',CRON_PROVIDER,'__init__.py'),source=fs.readFileSync(path.join(kit,'notebook','assistant-files','godspeed-cron-provider.py'),'utf8').replace(/\r\n/g,'\n');
  if(!fs.existsSync(provider)||fs.readFileSync(provider,'utf8')!==source){fs.mkdirSync(path.dirname(provider),{recursive:true});atomic(provider,source);}
 }
@@ -199,6 +203,10 @@ if(starterBorn(root)){
  if(runner)atomic(marker,'/'+BACKUP_COMMAND+'\n');else fs.rmSync(marker,{force:true});
 }
 atomic(file,text);fs.chmodSync(file,0o600);
+// A voice note in the owner's Telegram chat is answered with a voice note and the text, by default and
+// only there (core/voice-replies.mjs says why not through voice.auto_tts); a chat's own choice stays.
+// The gateway reads it when it starts next.
+if(starterBorn(root))try{chatVoiceDefaults({home,chats:ownerChats({home}),config:text});}catch(error){console.error('Voice replies were not switched on for the Telegram chat: '+error.message);}
 // Hermes reads its own SOUL.md before AGENTS.md, as the assistant's identity, and seeds it with
 // "You are Hermes Agent, built by Nous Research ..." (core/assistant-soul.mjs says why and how).
 // It is written from the persona paragraph of AGENTS.md, the one place the name and character are
