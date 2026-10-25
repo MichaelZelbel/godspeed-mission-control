@@ -4,7 +4,8 @@
 # field on it, the whole file as checked JSON, the refusal of every malformed file in
 # stage/stage-cases/, and the withdrawn answer in all four pairs. Then it checks each value in
 # stage.json against the release record it came from and against the file that holds the same pin
-# today, printing what it compared with what.
+# today, printing what it compared with what, and it holds the Mac and Linux installers to naming
+# no version at all, since they read stage.json rather than pinning anything themselves.
 # Run: bash stage/test-stage-agree.sh   (from the root of a checkout of this kit)
 set -u
 . "$(dirname "$0")/../tools/test-guard.bash"
@@ -213,6 +214,15 @@ compare() { # <what> <the value in stage.json> <the file that must hold it too> 
   else bad "  $file does not hold the $what [$look]"; fi
 }
 
+pins_nothing() { # <file>: a file that names no version of its own, because it reads stage.json
+  file=$1
+  printf '  reading %s, which pins nothing of its own: it reads the stage file instead\n' "$file"
+  if found=$(grep -nE '[0-9a-f]{40}' "$file"); then bad "  $file still names a commit: $found"
+  else ok "  $file names no commit"; fi
+  if found=$(grep -nE 'godspeed-v[0-9][0-9A-Za-z.]*-[0-9A-Za-z]' "$file"); then bad "  $file still names a release tag: $found"
+  else ok "  $file names no release tag"; fi
+}
+
 VERSION=$(get version)
 PRODUCT=$(get productCommit)
 ENGINE=$(get kitBootstrap.unixEngineCommit)
@@ -234,8 +244,6 @@ compare "Windows setup release tag" "$TAG" "$RECORD"
 compare "Windows setup SHA-256" "$EXESHA" "$RECORD"
 
 printf '%s\n' "  against the files that pin the same thing today:"
-compare "product commit" "$PRODUCT" install-godspeed.sh
-compare "shared Unix engine commit" "$ENGINE" install-godspeed.sh
 compare "version" "$VERSION" installers/windows-manifest.json
 compare "product commit" "$PRODUCT" installers/windows-manifest.json
 compare "Windows bootstrap commit" "$BOOTSTRAP" installers/windows-manifest.json
@@ -243,6 +251,14 @@ for f in docker/hostinger/compose.yaml docker/hostinger/one-click.yaml \
          docker/server/browser-compose-traefik.yaml docker/hostinger/installer/compose.mjs; do
   compare "server image" "$IMAGE" "$f"
 done
+
+# The Mac and Linux line stopped pinning anything on 25 October 2026: install-godspeed.sh reads the
+# stage file of the stage it is told to install, and installers/install-godspeed.sh runs that
+# installer rather than being a second copy of it. So the thing to ask about those two is the other
+# way round from the files above: neither of them may name a version at all.
+printf '%s\n' "  and the two files that pin nothing, because they read the stage file instead:"
+pins_nothing install-godspeed.sh
+pins_nothing installers/install-godspeed.sh
 
 # ------------------------------------- the add-on pins, as they were at the product commit
 printf '%s\n' "  the add-on pins, at the product commit, not at today's main:"
