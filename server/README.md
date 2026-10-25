@@ -29,6 +29,11 @@ Log in to the machine you rented and paste this one line:
 curl -fsSL https://godspeedmissioncontrol.com/server | bash
 ```
 
+It installs the current public version, the stage `beta`, which changes only when the maintainer
+releases one; `GODSPEED_STAGE_REF` installs another stage, for example
+`curl -fsSL https://godspeedmissioncontrol.com/server | GODSPEED_STAGE_REF=candidate/2.0.0-beta.7 bash`,
+and a version that was taken back is refused.
+
 It first explains the ChatGPT choice. The route uses ChatGPT's included Codex allowance rather
 than API billing; Plus or higher is the practical choice for work that runs every day. Then it
 asks whether a repository already holds your folder. Paste its address to fetch it, or press Enter

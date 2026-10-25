@@ -7,7 +7,10 @@ the server as the login you were given:
 curl -fsSL https://godspeedmissioncontrol.com/server | bash
 ```
 
-That does everything below, explains the ChatGPT choice, asks whether a
+That installs the current public version, the stage `beta`, which changes only
+when the maintainer releases one; `GODSPEED_STAGE_REF` installs another stage,
+for example `candidate/2.0.0-beta.7`, and a version that was taken back is
+refused. It does everything below, explains the ChatGPT choice, asks whether a
 repository already holds your folder, and makes a checked private GitHub
 repository when the answer is no. It shows you two codes to type on your phone.
 `steps/build-the-server.md` is the step-by-step account of what it does.
@@ -196,7 +199,7 @@ If you have no repository yet, the one-line installer does this for you. By hand
 start from the book's starter rooms and make one:
 
 ```
-git clone --depth 1 https://github.com/MichaelZelbel/godspeed-mission-control.git ~/teach-it-once-kit
+git clone --depth 1 --branch beta https://github.com/MichaelZelbel/godspeed-mission-control.git ~/teach-it-once-kit
 cp -R ~/teach-it-once-kit/starter-godspeed/. ~/godspeed/
 cd ~/godspeed && git init -b main && git add -A && git commit -m "My folder"
 gh repo create YOUR-REPO --private --source . --push
@@ -266,7 +269,7 @@ The one-line installer does this as root, between the gateway service and the ha
 it is one line, as root, and it is safe to run again:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/MichaelZelbel/godspeed-mission-control/main/server/install-watchdog.sh | bash
+curl -fsSL https://raw.githubusercontent.com/MichaelZelbel/godspeed-mission-control/beta/server/install-watchdog.sh | bash
 ```
 
 What it builds, and why it is on root's crontab and not on `hermes cron`: the gateway's clock stops
@@ -291,7 +294,7 @@ delete the block from root's crontab.
 The quick way is one more pasted line, as root:
 
 ```
-curl -fsSL https://raw.githubusercontent.com/MichaelZelbel/godspeed-mission-control/main/server/open-the-door.sh | bash
+curl -fsSL https://raw.githubusercontent.com/MichaelZelbel/godspeed-mission-control/beta/server/open-the-door.sh | bash
 ```
 
 By hand, the same four things. Tailscale: `curl -fsSL https://tailscale.com/install.sh | sh`,
