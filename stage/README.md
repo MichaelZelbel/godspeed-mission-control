@@ -14,7 +14,10 @@ each server edition by digest, the Windows setup with its release tag and its SH
 pinned commit of every carried add-on, the stage this one replaced, and the versions that
 were taken back. `stage.schema.json` beside it names every field, its type and its pattern:
 a commit is forty lowercase hex, a digest is `<image>@sha256:` and sixty-four hex, a version
-looks like `2.0.0-beta.6`.
+looks like `2.0.0-beta.6`. A release tag is one part, or two parts joined by exactly one slash,
+because a candidate's setup is published on `candidate/<version>`, as `candidate/2.0.0-beta.7`;
+a part is never empty, never starts with a dot, and no tag holds two dots in a row, because a tag
+is a Git ref and Git takes none of those.
 
 `stage/stage.mjs` reads a stage file in Node and `stage/stage.sh` reads it in POSIX shell,
 without `jq`, Node or Python, because an installer runs before Node is installed and on
