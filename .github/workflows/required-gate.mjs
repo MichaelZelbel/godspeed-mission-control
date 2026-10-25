@@ -5,9 +5,11 @@
 //   1. Every other check run on the head commit passed. The latest run per check name counts;
 //      runs named `required` (this gate itself) and runs that were `skipped` are left out; runs
 //      still queued or in progress are waited for.
-//   2. On a pull request, a login listed in the repository variable REQUIRED_REVIEWERS approved
-//      the head commit, and none of them asked for changes. A push to main or a manual run needs
-//      no review.
+//   2. On a pull request, the latest review of the head commit from each login listed in the
+//      repository variable REQUIRED_REVIEWERS is read: at least one of those latest reviews must
+//      be an approval, and none of them may ask for changes. "Latest" means the latest review of
+//      any kind, so a later comment leaves a login with no approval standing. A push to main or a
+//      manual run needs no review.
 //
 // Everything below the environment is a plain function over data, and the waiting takes its
 // clock, its sleeping and its reading of the checks as arguments. That is what lets `--self-test`
@@ -21,7 +23,6 @@ import { parseArgs } from "node:util";
 
 const API = "https://api.github.com";
 const GOOD = new Set(["success", "neutral"]);
-const NO_OPINION = new Set(["COMMENTED", "PENDING"]);
 
 // ---------------------------------------------------------------------------
 // The checks on the head commit
@@ -105,7 +106,9 @@ export function reviewerList(value) {
 }
 
 // Passes when at least one listed login's latest review of this very commit approves it, and no
-// listed login's latest review asks for changes.
+// listed login's latest review asks for changes. Every review of that commit counts towards
+// "latest", whatever its state: a login who comments after approving has no approval standing any
+// more, which is what the ticket's "the latest review from each login is considered" asks for.
 export function reviewVerdict({
   reviews = [],
   headSha,
@@ -124,13 +127,12 @@ export function reviewVerdict({
   }
   const wanted = new Map(listed.map((login) => [login.toLowerCase(), login]));
 
-  // The latest review of the head commit from each listed login. A comment is not a decision.
+  // The latest review of the head commit from each listed login, of whatever kind.
   const latest = new Map();
   for (const item of reviews) {
     const login = String(item.user?.login || "").toLowerCase();
     if (!wanted.has(login)) continue;
     if (item.commit_id !== headSha) continue;
-    if (NO_OPINION.has(item.state)) continue;
     const at = Date.parse(item.submitted_at || "") || 0;
     const seen = latest.get(login);
     const newer = !seen || at > seen.at || (at === seen.at && Number(item.id) > Number(seen.item.id));
@@ -147,11 +149,15 @@ export function reviewVerdict({
       return { ok: true, line: `the review passed: ${wanted.get(login)} approved ${headSha}` };
     }
   }
+  const states = [...latest]
+    .map(([login, { item }]) => `${wanted.get(login)} ${item.state}`)
+    .join(", ");
   return {
     ok: false,
     line:
       `the review failed: no listed reviewer approved ${headSha} ` +
-      `(REQUIRED_REVIEWERS: ${listed.join(", ")})`,
+      `(REQUIRED_REVIEWERS: ${listed.join(", ")})` +
+      (states ? `; latest: ${states}` : "; no listed reviewer reviewed this commit"),
   };
 }
 
@@ -372,8 +378,48 @@ const CASES = [
       pullRequest({
         fetchReviews: async () => [
           reviewOf(BOT, "APPROVED", SHA, T1),
+          reviewOf(BOT, "CHANGES_REQUESTED", SHA, T3),
+        ],
+      }),
+  },
+  {
+    // The ticket: "the latest review from each login is considered". A comment is a review, so
+    // after it the login has no approval standing any more.
+    name: "a comment after an approval fails: the latest review is no longer the approval",
+    want: false,
+    says: `the review failed: no listed reviewer approved ${SHA} ` +
+      `(REQUIRED_REVIEWERS: ${BOT}); latest: ${BOT} COMMENTED`,
+    args: () =>
+      pullRequest({
+        fetchReviews: async () => [
+          reviewOf(BOT, "APPROVED", SHA, T1),
           reviewOf(BOT, "COMMENTED", SHA, T3),
-          reviewOf(BOT, "CHANGES_REQUESTED", SHA, T2),
+        ],
+      }),
+  },
+  {
+    name: "an approval after a comment passes",
+    want: true,
+    says: `the review passed: ${BOT} approved ${SHA}`,
+    args: () =>
+      pullRequest({
+        fetchReviews: async () => [
+          reviewOf(BOT, "COMMENTED", SHA, T1),
+          reviewOf(BOT, "APPROVED", SHA, T3),
+        ],
+      }),
+  },
+  {
+    name: "one login's comment does not spend another login's approval",
+    want: true,
+    says: "the review passed: second-app[bot] approved",
+    args: () =>
+      pullRequest({
+        requiredReviewers: `${BOT}, second-app[bot]`,
+        fetchReviews: async () => [
+          reviewOf(BOT, "APPROVED", SHA, T1),
+          reviewOf(BOT, "COMMENTED", SHA, T3),
+          reviewOf("second-app[bot]", "APPROVED", SHA, T2),
         ],
       }),
   },
