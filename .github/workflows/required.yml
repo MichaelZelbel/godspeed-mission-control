@@ -61,6 +61,10 @@ jobs:
           set -e
           node stage/test-stage.mjs
           bash stage/test-stage-sh.sh
+          # The agreement test compares the add-on pins with sources.json at the stage's own product
+          # commit, which a shallow checkout does not hold; without it, it compares with today's.
+          git fetch -q --depth 1 origin "$(node stage/stage.mjs stage.json get productCommit)"
+          bash stage/test-stage-agree.sh
           node notebook/scripts/run-tests.mjs notebook/test/installer-stage.test.mjs
           bash docker/server/test.sh
           node docker/server/test-browser.mjs

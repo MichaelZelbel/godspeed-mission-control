@@ -155,7 +155,10 @@ jobs:
           set -e
           root="$HOME/godspeed-v2"; rt="$root/.godspeed/integrated-runtime"
           node_bin=$(find "$rt/runtime" -maxdepth 3 -path '*/node-v*/bin/node' 2>/dev/null | sort | tail -n 1); node_bin=${node_bin:-node}
-          GODSPEED_WORKSPACE="$root" GODSPEED_MEDIA_ROOT="$rt/media" "$node_bin" "$rt/versions/$(cat "$rt/version")/notebook/bin/godspeed.mjs" export "$RUNNER_TEMP/before.json"
+          notebook() { GODSPEED_WORKSPACE="$root" GODSPEED_MEDIA_ROOT="$rt/media" "$node_bin" "$rt/versions/$(cat "$rt/version")/notebook/bin/godspeed.mjs" "$@"; }
+          echo '{"title":"Scenario five","content":"A note the owner wrote before the update"}' > "$RUNNER_TEMP/note.json"
+          notebook record save notes "$RUNNER_TEMP/note.json"
+          notebook export "$RUNNER_TEMP/before.json"
           mkdir -p "$root/work" && echo "the owner's own file" > "$root/work/scenario-5.txt"
           echo "GODSPEED_SCENARIO_FIVE=kept" >> "$HOME/.godspeed/device.env"
           cat "$rt/version" > "$RUNNER_TEMP/version-before"
@@ -174,8 +177,9 @@ jobs:
           grep -qx "the owner's own file" "$root/work/scenario-5.txt" || fail "the owner's file is gone"
           grep -qx "GODSPEED_SCENARIO_FIVE=kept" "$HOME/.godspeed/device.env" || fail "the setting is gone"
           node_bin=$(find "$rt/runtime" -maxdepth 3 -path '*/node-v*/bin/node' 2>/dev/null | sort | tail -n 1); node_bin=${node_bin:-node}
-          GODSPEED_WORKSPACE="$root" GODSPEED_MEDIA_ROOT="$rt/media" "$node_bin" "$rt/versions/$got/notebook/bin/godspeed.mjs" export "$RUNNER_TEMP/after.json" \
-            || fail "the notebook could not be exported after the update"
+          notebook() { GODSPEED_WORKSPACE="$root" GODSPEED_MEDIA_ROOT="$rt/media" "$node_bin" "$rt/versions/$got/notebook/bin/godspeed.mjs" "$@"; }
+          notebook record list notes | grep -qF "A note the owner wrote before the update" || fail "the owner's note is gone from the notebook"
+          notebook export "$RUNNER_TEMP/after.json" || fail "the notebook could not be exported after the update"
           lost=$("$node_bin" -e '
             const fs=require("fs");const rd=f=>JSON.parse(fs.readFileSync(f,"utf8"));
             const list=x=>Array.isArray(x)?x:(x.records||x.items||Object.values(x).find(Array.isArray)||[]);
@@ -186,7 +190,7 @@ jobs:
           ' "$RUNNER_TEMP/before.json" "$RUNNER_TEMP/after.json" 2>&1) || fail "${lost:-the two exports could not be compared}"
           for _ in $(seq 1 30); do curl -fsS http://127.0.0.1:47831/health >/dev/null 2>&1 && break; sleep 2; done
           curl -fsS http://127.0.0.1:47831/health >/dev/null || fail "the notebook does not answer"
-          echo "PASS linux-update: $before to $got, notebook, file and setting kept" | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "PASS linux-update: $before to $got, the note, every notebook record, the file and the setting kept" | tee -a "$GITHUB_STEP_SUMMARY"
       - name: Say so when it failed before its checks
         if: failure()
         run: '[ -s "$RUNNER_TEMP/failed" ] || echo "FAIL linux-update: a step before the checks failed (its step log says how)" | tee -a "$GITHUB_STEP_SUMMARY"'
