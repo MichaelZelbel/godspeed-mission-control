@@ -12,7 +12,7 @@ import { dueMessages } from "../lib/tick.mjs";
 import { contextBlock } from "../lib/context.mjs";
 import { checkRecord, recordNeeds } from "../lib/evidence.mjs";
 import { dayReport, weekReport, renderWeek, wordsReport, renderWords } from "../lib/report.mjs";
-import { commitJournal, syncInBackground, pullQuietly } from "../lib/sync.mjs";
+import { commitJournal, syncInBackground, syncQueued, pullQuietly } from "../lib/sync.mjs";
 import { decodeArgv, readWordsFile, restoreShellEnv, startedFromGitBash, gitBashPath, LAUNCHER_ENV, CMDLINE_ENV } from "../lib/argv.mjs";
 
 const REPEATABLE = new Set(["done-means", "met", "missed"]);
@@ -242,7 +242,7 @@ const commands = {
   },
   async setup() { const { setup } = await import("../lib/setup.mjs"); process.exitCode = await setup(f); },
   async check() { const { check } = await import("../lib/setup.mjs"); process.exitCode = await check(mcDir, f); },
-  _sync() { commitJournal(mcDir, pos.join(" ") || "journal: entries", syncMode); },
+  _sync() { syncQueued(mcDir); },
   help() {
     console.log(fs.readFileSync(new URL("../README.md", import.meta.url), "utf8").split("## Use")[1]?.split("\n## ")[0] || "See README.md");
   },

@@ -153,6 +153,12 @@ Say what you want in your own words; your assistant runs `godspeed-journal confi
 - **Language**: `en` or `de`, for the check-in and evening texts. "Journal in German."
 - **Prefix required**: whether an entry has to start with "journal" (or "j:") to count as one.
   "I don't want to say journal first."
+- **Syncing** (`git_sync`): `auto` (the default) commits and pushes each entry, `commit` only
+  commits, `off` leaves git alone. It works per mission control folder in effect: one push sends
+  every local commit, so what an add-on set to `commit` saved goes out with the next push of one
+  set to `auto`. An entry that cannot be committed or pushed straight away waits in git's own
+  folder and goes out with the next save, or the next check-in round on the computer that sends
+  them.
 
 ## What a check-in looks like
 

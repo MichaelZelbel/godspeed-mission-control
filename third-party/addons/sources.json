@@ -1,7 +1,7 @@
 [
   {
     "name": "godspeed-coach",
-    "commit": "cd6de5b7dbc7283d4f0860eb1a2c4c9fb48ea0ae",
+    "commit": "23f33c424ed4705b77d3e51b8906f24e685c0ce6",
     "license": "MIT",
     "files": [
       "LICENSE",
@@ -60,7 +60,7 @@
   },
   {
     "name": "godspeed-headache",
-    "commit": "93b7a8c297aed89ca31770c64638860ff87b46fc",
+    "commit": "15646d22e31a547b95c22f50ba42a8a9ca4a513a",
     "license": "MIT",
     "files": [
       "LICENSE",
@@ -98,7 +98,7 @@
   },
   {
     "name": "godspeed-journal",
-    "commit": "fcbff25dbb0b5e03e7688dd481a1ddfe183a3f9b",
+    "commit": "38780c3d2267cb63040e2b20a812b588b1ddae2f",
     "license": "MIT",
     "files": [
       "LICENSE",

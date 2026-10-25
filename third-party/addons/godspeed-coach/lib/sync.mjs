@@ -2,20 +2,24 @@
 // folder is ever staged or committed, with an explicit pathspec, so a person's half-finished work
 // in the same folder is never swept into an add-on's commit.
 //
-// Every save starts a sync of its own in the background, so a burst of entries starts several at
-// once, often while something else is using git in the same folder. They used to give up when
-// they met each other, and those entries stayed on this computer only. Now:
-// - A sync first writes its folder into a queue in git's own folder, then takes the lock. One that
-//   finds the lock taken leaves: the sync holding it commits everything queued, for every add-on
-//   that uses this file (journal, coach, headache), each with its own folder as the pathspec. It
-//   looks at the queue once more after giving the lock back, so no save waits for a sync that has
-//   already finished.
-// - What a sync cannot finish (git's index locked for long, a rebase that is not its own, a push
-//   that keeps failing) stays in the queue, and the next sync of any of these add-ons finishes it.
-//   A commit whose push failed stays on this computer until then.
-// - A git step that fails while another git command holds the index is tried again after a pause;
-//   a push another machine beat is pulled and pushed again.
-// - A rebase is waited out for a while and never aborted unless this sync's own pull started it.
+// How a burst of saves all gets there (they used to meet each other's syncs, give up, and stay on
+// this computer only):
+// - Each save writes a work item of its own, a file with a unique name in git's own folder, before
+//   it starts the background sync. A save always leaves a record, and no record replaces another.
+// - Syncs take turns through one lock. The sync holding it commits each item's folder and deletes
+//   the item only once its commit, and its push when the item asks for one, worked. A sync that
+//   finds the lock taken leaves; after giving the lock back the holder looks once more and takes
+//   it again when an item arrived meanwhile, so no save waits for a sync that has finished.
+// - An item that fails (git's index locked past every try, a push that keeps failing, a rebase in
+//   progress) stays, and the next save or tick tries it again.
+// - A lock is taken over only when the process that wrote it is gone. A holder checks before every
+//   git step that the lock is still its own, and stops when it is not.
+// - Only the journal's, the coach's and the headache tracker's folders are ever committed, and a
+//   folder that does not exist is skipped.
+// - A rebase in progress is never touched; a sync aborts only a rebase that HEAD's reflog shows it
+//   started itself.
+// - git_sync works per repository in effect: one push sends every local commit on the branch, so an
+//   add-on set to commit only is pushed along with the next push of an add-on set to auto.
 import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
@@ -27,18 +31,19 @@ const BIN = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "bin",
 const FOLDER = "coach";
 export const commitCoach = (mcDir, message, mode, options) => commitFolder(mcDir, FOLDER, message, mode, options);
 
-// Shared by every add-on that uses this file, so their syncs in one folder take turns too.
+const FOLDERS = ["routines/journal", "coach", "routines/headache"]; // the only folders a sync ever commits
 const LOCK = "godspeed-addons-sync.lock";
-const QUEUE = "godspeed-addons-sync.queue";
+const ITEMS = "godspeed-addons-sync";
 export const LIMITS = Object.freeze({
-  staleMs: 10 * 60000,    // a lock untouched this long belongs to a sync that hangs; every git step touches it
-  rebaseWaitMs: 60000,    // how long a rebase in progress is waited out before a sync leaves it be
+  rebaseWaitMs: 60000,                   // how long a rebase in progress is waited out before a sync leaves it be
   pushTries: 3,
   pauses: [500, 1000, 2000, 4000, 8000], // between the tries of a git step that failed
 });
 const FAILED = new Set(["busy", "commit-failed", "push-failed"]);
+const LOST = new Error("The sync lock is no longer this sync's.");
 
-const g = (mcDir, args, timeout = 60000) => spawnSync("git", ["-C", mcDir, ...args], { encoding: "utf8", timeout, windowsHide: true });
+const g = (mcDir, args, timeout = 60000, env) =>
+  spawnSync("git", ["-C", mcDir, ...args], { encoding: "utf8", timeout, windowsHide: true, env: env && { ...process.env, ...env } });
 const sleep = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 const token = () => `${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 // git prints these relative to the folder it ran in, or absolute (a linked worktree).
@@ -64,27 +69,18 @@ function rebaseOver(mcDir, waitMs) {
   return true;
 }
 
-// The rebase in progress is the one this sync just started: from this HEAD, onto this upstream.
-function ownRebase(mcDir, onto, head) {
-  for (const which of ["rebase-merge", "rebase-apply"]) {
-    const p = gitPath(mcDir, which);
-    if (!p || !fs.existsSync(p)) continue;
-    const read = (f) => { try { return fs.readFileSync(path.join(p, f), "utf8").trim(); } catch { return ""; } };
-    return read("onto") === onto && read("orig-head") === head;
-  }
-  return false;
-}
-
-// Brings in what the other machines pushed. A rebase that stops on a conflict is put back as it
-// was, but only when it is provably this one's; a rebase the person began in the meantime is left
-// alone. True when this branch now contains its upstream.
-export function pullRebase(mcDir, git = (args, timeout) => g(mcDir, args, timeout), timeout = 60000) {
+// Brings in what the other machines pushed. The rebase runs under a reflog name of its own, so
+// HEAD's reflog says "godspeed-sync <token> (start)" where the person's says "rebase (start)". A
+// rebase that stops is aborted only when the newest start in that reflog is this one. True when
+// the branch now contains its upstream.
+export function pullRebase(mcDir, git = (args, timeout, env) => g(mcDir, args, timeout, env), timeout = 60000) {
   if (git(["fetch", "-q"], timeout).status !== 0) return false;
   const up = git(["rev-parse", "-q", "--verify", "@{u}"]).stdout.trim();
-  const head = git(["rev-parse", "HEAD"]).stdout.trim();
   if (!up || git(["merge-base", "--is-ancestor", up, "HEAD"]).status === 0) return true;
-  if (git(["rebase", "--autostash", "-q", up], timeout).status === 0) return true;
-  if (ownRebase(mcDir, up, head)) git(["rebase", "--abort"]);
+  const action = `godspeed-sync ${token()}`;
+  if (git(["rebase", "--merge", "--autostash", "-q", up], timeout, { GIT_REFLOG_ACTION: action }).status === 0) return true;
+  const start = git(["reflog", "show", "--format=%gs", "-n", "200", "HEAD"]).stdout.split("\n").find((l) => l.includes("(start)"));
+  if (rebaseInProgress(mcDir) && start && start.startsWith(`${action} (start)`)) git(["rebase", "--abort"]);
   return false;
 }
 
@@ -96,30 +92,35 @@ function tries(step, pauses) {
   return r;
 }
 
-// The queue: one file per add-on folder waiting for a sync, written whole (a temporary file renamed
-// into place), holding a token that changes with every write.
-function enqueue(dir, item, { onlyIfAbsent = false } = {}) {
-  const t = token();
-  const tmp = path.join(dir, `.${t}`);
-  const file = path.join(dir, encodeURIComponent(item.folder));
+// One work item per save: a new file under a unique name, written whole elsewhere and renamed into
+// place, so a sync never reads half of one and nothing ever writes over one.
+function addItem(mcDir, item) {
+  const dir = gitPath(mcDir, ITEMS);
+  if (!dir) return null;
+  const name = `${String(Date.now()).padStart(15, "0")}-${token()}.json`;
+  const tmp = path.join(dir, `.${name}.tmp`);
   try {
     fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(tmp, JSON.stringify({ token: t, mode: item.mode, message: item.message }));
-    if (onlyIfAbsent) fs.linkSync(tmp, file);
-    else for (let i = 0; ; i++) try { fs.renameSync(tmp, file); break; } catch (e) { if (i > 20) throw e; sleep(25); }
-    return t;
-  } catch { return null; }
-  finally { try { fs.unlinkSync(tmp); } catch {} }
+    fs.writeFileSync(tmp, JSON.stringify(item));
+    fs.renameSync(tmp, path.join(dir, name));
+    return name;
+  } catch {
+    try { fs.unlinkSync(tmp); } catch {}
+    return null;
+  }
 }
 
-function queued(dir) {
+// The items waiting, oldest first. One that names any other folder, or no valid mode, is not ours
+// and is left alone.
+function items(dir) {
   let names = [];
-  try { names = fs.readdirSync(dir).filter((n) => !n.startsWith(".")); } catch { return []; }
-  return names.flatMap((n) => {
-    const file = path.join(dir, n);
+  try { names = fs.readdirSync(dir).filter((n) => n.endsWith(".json") && !n.startsWith(".")).sort(); } catch { return []; }
+  return names.flatMap((name) => {
+    const file = path.join(dir, name);
     try {
-      const q = JSON.parse(fs.readFileSync(file, "utf8"));
-      return [{ file, folder: decodeURIComponent(n), token: q.token, mode: q.mode === "commit" ? "commit" : "auto", message: String(q.message || "") }];
+      const { folder, mode, message } = JSON.parse(fs.readFileSync(file, "utf8"));
+      if (!FOLDERS.includes(folder) || !["auto", "commit"].includes(mode)) return [];
+      return [{ name, file, folder, mode, message: String(message || `${folder}: entries`) }];
     } catch { return []; }
   });
 }
@@ -128,17 +129,16 @@ function pidAlive(pid) {
   try { process.kill(pid, 0); return true; } catch (e) { return e.code === "EPERM"; }
 }
 
-// A lock can be taken over when the sync that holds it died (this computer, process gone), or
-// when nobody has touched it for longer than any git step takes.
-function stale(text, mtimeMs, staleMs) {
-  if (Date.now() - mtimeMs > staleMs) return true;
-  try {
-    const { pid, host } = JSON.parse(text);
-    return host === os.hostname() && Number.isInteger(pid) && !pidAlive(pid);
-  } catch { return false; } // still being written
+// Taken over only when the sync that wrote it is gone: its process no longer runs on this computer,
+// or it never finished writing the lock (empty or unreadable for a minute). A lock whose process
+// is alive is never taken, however old.
+function abandoned(text, mtimeMs) {
+  let lock;
+  try { lock = JSON.parse(text); } catch { return Date.now() - mtimeMs > 60000; }
+  return lock.host === os.hostname() && Number.isInteger(lock.pid) && !pidAlive(lock.pid);
 }
 
-// Moves a stale lock out of the way, unless another sync took the lock between the look and now.
+// Moves an abandoned lock out of the way, unless another sync took the lock between the look and now.
 function drop(file, judged) {
   const aside = `${file}.${token()}.stale`;
   try { fs.renameSync(file, aside); } catch { return; }
@@ -148,9 +148,9 @@ function drop(file, judged) {
   try { fs.unlinkSync(aside); } catch {}
 }
 
-// The lock, or null when another sync holds it (after waiting up to waitMs for it).
+// The lock, or null when a live sync holds it (after waiting up to waitMs).
 // { file: null }: there is nowhere to keep a lock (a read-only .git), so this goes ahead without.
-function takeLock(file, { staleMs }, waitMs = 0) {
+function takeLock(file, waitMs = 0) {
   const body = JSON.stringify({ pid: process.pid, host: os.hostname(), at: new Date().toISOString(), token: token() });
   const end = Date.now() + waitMs;
   for (let spin = 0; spin < 200; spin++) {
@@ -159,24 +159,23 @@ function takeLock(file, { staleMs }, waitMs = 0) {
     catch (e) { if (!["EEXIST", "EPERM", "EACCES", "EBUSY"].includes(e.code)) return { file: null }; }
     let text = null, mtimeMs = 0;
     try { mtimeMs = fs.statSync(file).mtimeMs; text = fs.readFileSync(file, "utf8"); } catch {}
-    if (text !== null && stale(text, mtimeMs, staleMs)) { drop(file, text); continue; }
-    if (text !== null && Date.now() >= end) return null; // alive: its holder will see the queue
+    if (text !== null && abandoned(text, mtimeMs)) { drop(file, text); continue; }
+    if (text !== null && Date.now() >= end) return null; // its holder will see the items
     sleep(text === null ? 50 : 250);                     // being written or deleted right now
   }
   return null;
 }
 
-function touch(lock) {
-  if (!lock.file) return;
-  const t = new Date();
-  try { fs.utimesSync(lock.file, t, t); } catch {}
+function owns(lock) {
+  if (!lock.file) return true;
+  try { return fs.readFileSync(lock.file, "utf8") === lock.body; } catch { return false; }
 }
 
 function giveBack(lock) {
   if (!lock.file) return;
   for (let i = 0; i < 10; i++) {
     try {
-      if (fs.readFileSync(lock.file, "utf8") !== lock.body) return; // taken over: no longer ours
+      if (fs.readFileSync(lock.file, "utf8") !== lock.body) return; // no longer ours
       fs.unlinkSync(lock.file); return;
     } catch (e) { if (e.code === "ENOENT") return; sleep(50); }
   }
@@ -200,8 +199,9 @@ function push(mcDir, git, o) {
 }
 
 function round(mcDir, git, { folder, message, mode }, o) {
+  if (!FOLDERS.includes(folder) || !fs.existsSync(path.join(mcDir, folder))) return "nothing";
   if (!rebaseOver(mcDir, o.rebaseWaitMs)) return "busy";
-  if (fs.existsSync(path.join(mcDir, folder)) && tries(() => git(["add", "--", folder]), o.pauses).status !== 0) return "commit-failed";
+  if (tries(() => git(["add", "--", folder]), o.pauses).status !== 0) return "commit-failed";
   const staged = git(["diff", "--cached", "--quiet", "--", folder]).status === 1;
   if (staged && tries(() => git(["commit", "-m", message, "--", folder]), o.pauses).status !== 0) return "commit-failed";
   if (mode === "commit" || !git(["remote"]).stdout.trim()) return staged ? "committed" : "nothing";
@@ -209,74 +209,70 @@ function round(mcDir, git, { folder, message, mode }, o) {
   return push(mcDir, git, o);
 }
 
-// One folder, again while saves keep landing in it as it works.
-function settle(mcDir, git, item, o) {
-  let out = "nothing";
-  for (let i = 0; i < 5; i++) {
-    const r = round(mcDir, git, item, o);
-    if (r !== "nothing") out = r;
-    if (r === "nothing" || FAILED.has(r) || !git(["status", "--porcelain", "--", item.folder]).stdout.trim()) break;
-  }
-  return out;
-}
-
-// Everything in the queue that this sync has not handled yet. A folder is taken off the queue
-// before its commit, so a save queued in the meantime is either in that commit or queued again.
-// What fails goes back on the queue for the next sync, unless a newer save queued it already.
-function drain(mcDir, git, dir, o, seen, results, extra) {
-  for (let pass = 0; pass < 50; pass++) {
-    const items = [...extra.splice(0), ...queued(dir).filter((q) => seen.get(q.folder) !== q.token)];
-    if (!items.length) return;
-    for (const q of items) {
-      if (q.file) { seen.set(q.folder, q.token); try { fs.unlinkSync(q.file); } catch {} }
-      const r = settle(mcDir, git, q, o);
-      if (r !== "nothing" || !results.has(q.folder)) results.set(q.folder, r);
-      if (FAILED.has(r)) { const t = enqueue(dir, q, { onlyIfAbsent: true }); if (t) seen.set(q.folder, t); }
+// Every item not yet tried by this sync, again and again while new ones arrive. A rebase in
+// progress ends the work for now: every item waits for the next sync.
+function work(mcDir, git, dir, o, failed, results) {
+  const due = () => items(dir).filter((i) => !failed.has(i.name));
+  for (let list = due(); list.length; list = due()) {
+    for (const item of list) {
+      const r = round(mcDir, git, item, o);
+      results.set(item.name, r);
+      if (r === "busy") { for (const i of items(dir)) failed.add(i.name); return; }
+      if (FAILED.has(r)) failed.add(item.name);
+      else try { fs.unlinkSync(item.file); } catch { failed.add(item.name); }
     }
   }
 }
 
-// Takes the lock, does `first` (if any), then everything queued; gives the lock back and looks at
-// the queue once more, taking the lock again when a save queued itself while this one held it.
-// null: another sync holds the lock, and it does all of that instead.
-function takeTurns(mcDir, o, { first = null, extra = [], waitMs = 0 } = {}) {
-  const file = gitPath(mcDir, LOCK), dir = gitPath(mcDir, QUEUE);
+// Takes the lock, does `first` (if any) and the work; gives the lock back and looks once more,
+// taking the lock again when an item arrived while it held it. null: a live sync holds the lock,
+// and it does the work instead.
+function takeTurns(mcDir, o, { first = null, waitMs = 0 } = {}) {
+  const file = gitPath(mcDir, LOCK), dir = gitPath(mcDir, ITEMS);
   if (!file || !dir) return null;
-  const seen = new Map(), results = new Map();
+  const failed = new Set(), results = new Map();
   let held = false;
-  for (let pass = 0; pass < 50; pass++) {
-    const lock = takeLock(file, o, pass ? 0 : waitMs);
+  for (;;) {
+    const lock = takeLock(file, waitMs);
+    waitMs = 0;
     if (!lock) return held ? results : null;
     held = true;
     try {
-      const git = (args, timeout) => { touch(lock); return g(mcDir, args, timeout); };
-      if (first) { first(git); first = null; }
-      drain(mcDir, git, dir, o, seen, results, extra);
-    } finally { giveBack(lock); }
-    if (!queued(dir).some((q) => seen.get(q.folder) !== q.token)) return results;
+      const git = (args, timeout, env) => { if (!owns(lock)) throw LOST; return g(mcDir, args, timeout, env); };
+      if (first) { const f = first; first = null; f(git); }
+      work(mcDir, git, dir, o, failed, results);
+    } catch (e) { if (e !== LOST) throw e; }
+    finally { giveBack(lock); }
+    if (!items(dir).some((i) => !failed.has(i.name))) return results;
   }
-  return results;
 }
 
+// Saves and commits now, in this process (a tick, or a command that waits for its result).
+// "queued": a live sync holds the lock and commits this one.
 export function commitFolder(mcDir, folder, message, mode, options = {}) {
-  if (mode === "off" || !fs.existsSync(path.join(mcDir, ".git"))) return "off";
-  const o = { ...LIMITS, ...options };
-  const item = { folder, message, mode };
-  const dir = gitPath(mcDir, QUEUE);
-  // Queued before the lock is tried: whoever holds the lock then will see it.
-  const inQueue = dir ? enqueue(dir, item) : null;
-  const results = takeTurns(mcDir, o, { extra: inQueue ? [] : [item] });
+  if (mode === "off" || !FOLDERS.includes(folder) || !fs.existsSync(path.join(mcDir, ".git"))) return "off";
+  const name = addItem(mcDir, { folder, mode, message });
+  if (!name) return "commit-failed";
+  const results = takeTurns(mcDir, { ...LIMITS, ...options });
   if (!results) return "queued";
-  return results.get(folder) ?? "nothing";
+  return results.get(name) ?? "nothing";
 }
 
+// What the background sync runs: the items that are waiting.
+export function syncQueued(mcDir, options = {}) {
+  if (!fs.existsSync(path.join(mcDir, ".git"))) return;
+  takeTurns(mcDir, { ...LIMITS, ...options });
+}
+
+// After a save: its work item first, here and now, then the sync in the background.
 export function syncInBackground(mcDir, message, mode) {
-  if (mode === "off") return;
-  spawn(process.execPath, [BIN, "_sync", message, "--godspeed", mcDir], { detached: true, stdio: "ignore", windowsHide: true }).unref();
+  if (mode === "off" || !fs.existsSync(path.join(mcDir, ".git"))) return;
+  addItem(mcDir, { folder: FOLDER, mode, message });
+  spawn(process.execPath, [BIN, "_sync", "--godspeed", mcDir], { detached: true, stdio: "ignore", windowsHide: true }).unref();
 }
 
 // Before a tick reads the entries. It waits a while for its turn, so it never pulls in the middle of
-// a sync, and it commits whatever was queued meanwhile, like any sync holding the lock.
+// a sync, and it does the waiting items too, like any sync holding the lock.
 export function pullQuietly(mcDir, mode) {
   if (mode !== "auto" || !fs.existsSync(path.join(mcDir, ".git"))) return;
   takeTurns(mcDir, LIMITS, { waitMs: 60000, first: (git) => { if (!rebaseInProgress(mcDir)) pullRebase(mcDir, git, 15000); } });
