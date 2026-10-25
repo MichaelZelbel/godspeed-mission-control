@@ -117,7 +117,7 @@ run_stage() {
   local root="$1" ref="$2" img="$3" env0="$4" dir="$WORK/run"
   rm -rf "$dir" "$WORK/stage-work"; mkdir -p "$dir" || return 1
   [ "$env0" = - ] || printf '%s\n' "$env0" > "$dir/.env"
-  local vars=(GODSPEED_INSTALL_LIB=1 "GODSPEED_DIR=$dir" "GODSPEED_RAW_BASE=$(file_url "$WORK/$root")")
+  local vars=(GODSPEED_INSTALL_LIB=1 "GODSPEED_DIR=$dir" "GODSPEED_STAGE_RAW=$(file_url "$WORK/$root")")
   [ "$ref" = - ] || vars+=("GODSPEED_STAGE_REF=$ref")
   [ "$img" = - ] || vars+=("GODSPEED_IMAGE=$img")
   env "${vars[@]}" bash -c "source '$ROOT/docker/server/install.sh'
@@ -138,18 +138,23 @@ refused() {
   else fail "$what"; printf '      got (exit %s): %s\n' "$rc" "$out" | head -5; fi
 }
 
+# The same rule, and the same name for it, as the Mac and Linux line's install-godspeed.sh: the
+# names git itself would take for a branch or a tag, and nothing a shell or a web address would
+# read as something of its own.
 check "a plain branch or tag name is the stage ref, anything else is refused" lib '
-  stage_ref_ok beta && stage_ref_ok candidate/2.0.0-beta.7 && stage_ref_ok v2.0.0_rc-1 &&
-  ! stage_ref_ok ../../etc/passwd && ! stage_ref_ok https://evil.example/x && ! stage_ref_ok -x &&
-  ! stage_ref_ok "a b" && ! stage_ref_ok "x?y" && ! stage_ref_ok "a;rm -rf /" && ! stage_ref_ok beta/ &&
-  ! stage_ref_ok a//b && ! stage_ref_ok beta.lock && ! stage_ref_ok ""'
+  ref_is_a_name beta && ref_is_a_name candidate/2.0.0-beta.7 && ref_is_a_name v2.0.0_rc-1 &&
+  ref_is_a_name release-2.0 &&
+  ! ref_is_a_name ../../etc/passwd && ! ref_is_a_name https://evil.example/x && ! ref_is_a_name -x &&
+  ! ref_is_a_name "a b" && ! ref_is_a_name "x?y" && ! ref_is_a_name "a;rm -rf /" && ! ref_is_a_name beta/ &&
+  ! ref_is_a_name a//b && ! ref_is_a_name beta.lock && ! ref_is_a_name a/b.lock && ! ref_is_a_name "" &&
+  ! ref_is_a_name /x && ! ref_is_a_name a/.b && ! ref_is_a_name .hidden && ! ref_is_a_name x.'
 expect_out "and the refusal says in one sentence what a stage ref looks like" \
   '^GODSPEED_STAGE_REF should be the name of a branch or a tag, like beta or candidate/2\.0\.0-beta\.7, and it is \.\./x\. Nothing was changed\.$' \
   lib 'GODSPEED_STAGE_REF=../x; stage_setup'
 check "beta is the stage by default, and GODSPEED_STAGE_REF picks another" bash -c "
-  { out=\$(GODSPEED_INSTALL_LIB=1 GODSPEED_RAW_BASE=https://example.test/kit bash -c \"source '$ROOT/docker/server/install.sh'; stage_setup; printf '%s %s' \\\"\\\$GODSPEED_RAW\\\" \\\"\\\$GODSPEED_SELF_URL\\\"\")
+  { out=\$(GODSPEED_INSTALL_LIB=1 GODSPEED_STAGE_RAW=https://example.test/kit bash -c \"source '$ROOT/docker/server/install.sh'; stage_setup; printf '%s %s' \\\"\\\$GODSPEED_RAW\\\" \\\"\\\$GODSPEED_SELF_URL\\\"\")
     [ \"\$out\" = 'https://example.test/kit/beta https://example.test/kit/beta/docker/server/install.sh' ]; } &&
-  [ \"\$(GODSPEED_INSTALL_LIB=1 GODSPEED_RAW_BASE=https://example.test/kit GODSPEED_STAGE_REF=$CANDIDATE_REF bash -c \"source '$ROOT/docker/server/install.sh'; stage_setup; printf '%s' \\\"\\\$GODSPEED_RAW\\\"\")\" = https://example.test/kit/$CANDIDATE_REF ]"
+  [ \"\$(GODSPEED_INSTALL_LIB=1 GODSPEED_STAGE_RAW=https://example.test/kit GODSPEED_STAGE_REF=$CANDIDATE_REF bash -c \"source '$ROOT/docker/server/install.sh'; stage_setup; printf '%s' \\\"\\\$GODSPEED_RAW\\\"\")\" = https://example.test/kit/$CANDIDATE_REF ]"
 
 run_stage clean - - - >/dev/null 2>&1
 check "the image in .env is the stage file's" bash -c "
@@ -326,12 +331,12 @@ DIR="${GODSPEED_DIR:-/opt/godspeed-mission-control}"
 # of on github.com. "beta" is this checkout, so the stage file is the real stage.json and the
 # compose file, the helper files and the image all come from the one stage, as on a real server.
 mkdir -p "$WORK/remote" && ln -sfn "$ROOT" "$WORK/remote/beta"
-export GODSPEED_HOST=localhost GODSPEED_RAW_BASE="$(file_url "$WORK/remote")"
+export GODSPEED_HOST=localhost GODSPEED_STAGE_RAW="$(file_url "$WORK/remote")"
 E2E_STAGE_IMG="$(sh stage/stage.sh stage.json get serverEditions.server.image)"
 command -v docker >/dev/null 2>&1 && had_docker=yes || had_docker=no
 echo "Docker before the first run: $had_docker"
-echo "The stage this install reads: $GODSPEED_RAW_BASE/beta/stage.json, naming $E2E_STAGE_IMG"
-curl -fsSL "$GODSPEED_RAW_BASE/beta/docker/server/install.sh" | bash > "$WORK/run1.txt" 2>&1; rc1=$?   # the way the book prints it
+echo "The stage this install reads: $GODSPEED_STAGE_RAW/beta/stage.json, naming $E2E_STAGE_IMG"
+curl -fsSL "$GODSPEED_STAGE_RAW/beta/docker/server/install.sh" | bash > "$WORK/run1.txt" 2>&1; rc1=$?   # the way the book prints it
 echo "----- what the reader sees, first run -----"; cat "$WORK/run1.txt"; echo "-------------------------------------------"
 check "the first run succeeds" test "$rc1" -eq 0
 check "Docker is there afterwards" docker info
@@ -356,7 +361,7 @@ invite_status() { curl -sk -o /dev/null -w '%{http_code}' -H 'Content-Type: appl
 check "the server accepts the printed link" test "$(invite_status "$link")" = 200
 
 # Run again before the account exists: a fresh link, and the first one stops working.
-curl -fsSL "$GODSPEED_RAW_BASE/beta/docker/server/install.sh" | bash > "$WORK/run-again.txt" 2>&1; rc=$?
+curl -fsSL "$GODSPEED_STAGE_RAW/beta/docker/server/install.sh" | bash > "$WORK/run-again.txt" 2>&1; rc=$?
 echo "----- what the reader sees, run again before making the account -----"; cat "$WORK/run-again.txt"; echo "---------------------------------------------------------------------"
 check "running it again before the account succeeds" test "$rc" -eq 0
 fresh="$(grep -oE 'https://localhost/setup#invite=[a-f0-9]{64}' "$WORK/run-again.txt" | head -1)"
@@ -371,7 +376,7 @@ dc() { docker compose -p godspeed-mission-control --project-directory "$DIR" -f 
 dc stop https >/dev/null 2>&1
 python3 -m http.server 80 --bind 0.0.0.0 >/dev/null 2>&1 &
 other=$!; sleep 1
-curl -fsSL "$GODSPEED_RAW_BASE/beta/docker/server/install.sh" | bash > "$WORK/run-busy.txt" 2>&1; rc=$?
+curl -fsSL "$GODSPEED_STAGE_RAW/beta/docker/server/install.sh" | bash > "$WORK/run-busy.txt" 2>&1; rc=$?
 echo "----- what the reader sees when port 80 is taken -----"; cat "$WORK/run-busy.txt"; echo "------------------------------------------------------"
 check "a taken port 80 stops the run" test "$rc" -ne 0
 check "with one sentence naming the port and the program" grep -q 'already uses port 80 (python3' "$WORK/run-busy.txt"
@@ -389,7 +394,7 @@ else
   echo "SKIP  the browser path (no node with playwright here; set PLAYWRIGHT_NODE_PATH)"
 fi
 code1="$(sed -n 's/^GODSPEED_SETUP_CODE=//p' "$DIR/.env")"
-curl -fsSL "$GODSPEED_RAW_BASE/beta/docker/server/install.sh" | bash > "$WORK/run2.txt" 2>&1; rc2=$?
+curl -fsSL "$GODSPEED_STAGE_RAW/beta/docker/server/install.sh" | bash > "$WORK/run2.txt" 2>&1; rc2=$?
 echo "----- what the reader sees, second run -----"; cat "$WORK/run2.txt"; echo "--------------------------------------------"
 check "the second run succeeds" test "$rc2" -eq 0
 if grep -q 'account already exists' "$WORK/run2.txt"; then

@@ -47,7 +47,8 @@
 # in stage_setup, not here, because a ref that is not a plain branch or tag name must be refused
 # before any address is made out of it; a GODSPEED_RAW given by hand still wins over both.
 GODSPEED_STAGE_REF="${GODSPEED_STAGE_REF:-beta}"
-GODSPEED_RAW_BASE="${GODSPEED_RAW_BASE:-https://raw.githubusercontent.com/MichaelZelbel/godspeed-mission-control}"
+GODSPEED_STAGE_RAW="${GODSPEED_STAGE_RAW:-https://raw.githubusercontent.com/MichaelZelbel/godspeed-mission-control}"
+GODSPEED_STAGE_RAW="${GODSPEED_STAGE_RAW%/}"
 GODSPEED_RAW="${GODSPEED_RAW:-}"
 GODSPEED_SELF_URL="${GODSPEED_SELF_URL:-}"
 STAGE_EDITION=server                     # the server edition of stage.json this line installs
@@ -153,22 +154,35 @@ local_host() {
 # neither). Both come from the same ref, the stage, so the compose file, the helper files and the
 # image all belong to one version. GODSPEED_STAGE_REF names it, beta by default: the version
 # everybody gets. A candidate can be installed before it is promoted with
-# GODSPEED_STAGE_REF=candidate/<version>. GODSPEED_RAW_BASE is the address the ref hangs off; the
-# tests point it at a folder of their own.
+# GODSPEED_STAGE_REF=candidate/<version>. GODSPEED_STAGE_RAW is the address the ref hangs off, the
+# same name and the same value the Mac and Linux line uses; the tests point it at a folder of their
+# own.
 
-# 0 for a plain branch or tag name, like beta or candidate/2.0.0-beta.7. Nothing that would make
-# the address mean something else: no scheme, no "..", no empty step, no trailing slash.
-stage_ref_ok() {
-  [[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9._/-]*$ ]] || return 1
-  case "$1" in *..* | *//* | */ | *.lock) return 1 ;; esac
-  return 0
+# The name of a branch or tag and nothing else. These are git's own rules for a ref name, written
+# out because this judges the ref before anything is fetched from it, and the Mac and Linux line's
+# install-godspeed.sh holds the same rule for the same reason: every part between the slashes holds
+# something, starts with no dot and ends in no ".lock", and the whole name holds no "..", no slash
+# at either end, no two slashes in a row and no dot at the end. The characters are narrowed further
+# to letters, digits, dot, underscore, hyphen and slash, which leaves out the space, the control
+# characters and everything a shell or a web address would read as something of its own.
+ref_is_a_name() { # <ref>: true when it could be the name of a branch or tag
+  case $1 in '' | -* | /* | */ | *//* | *..* | *. | *[!A-Za-z0-9._/-]*) return 1 ;; esac
+  local rest=$1 part
+  while :; do
+    case $rest in
+      */*) part=${rest%%/*}; rest=${rest#*/} ;;
+      *)   part=$rest;       rest='' ;;
+    esac
+    case $part in '' | .* | *.lock) return 1 ;; esac
+    [ -n "$rest" ] || return 0
+  done
 }
 
 # The stage and the addresses that follow from it, before anything is downloaded.
 stage_setup() {
-  stage_ref_ok "$GODSPEED_STAGE_REF" \
+  ref_is_a_name "$GODSPEED_STAGE_REF" \
     || stop "GODSPEED_STAGE_REF should be the name of a branch or a tag, like beta or candidate/2.0.0-beta.7, and it is $GODSPEED_STAGE_REF. Nothing was changed."
-  [ -n "$GODSPEED_RAW" ] || GODSPEED_RAW="$GODSPEED_RAW_BASE/$GODSPEED_STAGE_REF"
+  [ -n "$GODSPEED_RAW" ] || GODSPEED_RAW="$GODSPEED_STAGE_RAW/$GODSPEED_STAGE_REF"
   [ -n "$GODSPEED_SELF_URL" ] || GODSPEED_SELF_URL="$GODSPEED_RAW/docker/server/install.sh"
 }
 
@@ -207,9 +221,9 @@ read_stage() { # [a folder of its own for the stage file and its reader; one is 
   # it is the public one, and whenever GODSPEED_RAW was given by hand (the tests, the browser
   # installer): then there is no other ref to ask.
   public="$work/stage.json"
-  if [ "$GODSPEED_STAGE_REF" != "$STAGE_PUBLIC_REF" ] && [ "$GODSPEED_RAW" = "$GODSPEED_RAW_BASE/$GODSPEED_STAGE_REF" ]; then
-    curl -fsSL "$GODSPEED_RAW_BASE/$STAGE_PUBLIC_REF/stage.json" -o "$work/public.json" 2>/dev/null \
-      || { rm -rf "$work"; stop "Could not read the stage everybody gets from $GODSPEED_RAW_BASE/$STAGE_PUBLIC_REF/stage.json, which says whether $STAGE_VERSION was taken back. Check that this server can reach github.com, then run this line again; nothing was changed."; }
+  if [ "$GODSPEED_STAGE_REF" != "$STAGE_PUBLIC_REF" ] && [ "$GODSPEED_RAW" = "$GODSPEED_STAGE_RAW/$GODSPEED_STAGE_REF" ]; then
+    curl -fsSL "$GODSPEED_STAGE_RAW/$STAGE_PUBLIC_REF/stage.json" -o "$work/public.json" 2>/dev/null \
+      || { rm -rf "$work"; stop "Could not read the stage everybody gets from $GODSPEED_STAGE_RAW/$STAGE_PUBLIC_REF/stage.json, which says whether $STAGE_VERSION was taken back. Check that this server can reach github.com, then run this line again; nothing was changed."; }
     public="$work/public.json"
   fi
   answer="$(sh "$work/stage.sh" withdrawn "$work/stage.json" "$public" "$STAGE_VERSION" 2>&1)"
@@ -538,7 +552,7 @@ as_root() {
   command -v sudo >/dev/null 2>&1 || stop "This needs the server's administrator account. Log in as root and run this line again."
   say "This needs the server's administrator rights, so it asks sudo (it may ask for your password)."
   local pass=() v
-  for v in GODSPEED_HOST GODSPEED_IMAGE GODSPEED_STAGE_REF GODSPEED_RAW_BASE GODSPEED_RAW GODSPEED_SELF_URL GODSPEED_DIR GODSPEED_INSTALL_COUNT DO_NOT_TRACK GODSPEED_CERT_WAIT GODSPEED_START_WAIT GODSPEED_APT_WAIT; do
+  for v in GODSPEED_HOST GODSPEED_IMAGE GODSPEED_STAGE_REF GODSPEED_STAGE_RAW GODSPEED_RAW GODSPEED_SELF_URL GODSPEED_DIR GODSPEED_INSTALL_COUNT DO_NOT_TRACK GODSPEED_CERT_WAIT GODSPEED_START_WAIT GODSPEED_APT_WAIT; do
     [ -n "${!v:-}" ] && pass+=("$v=${!v}")
   done
   if [ -n "$SELF_FILE" ] && [ -f "$SELF_FILE" ]; then
