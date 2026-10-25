@@ -90,15 +90,19 @@ run_all() { # <shell>
 
   printf '%s\n' "  the malformed files of tools/stage-cases/"
   cases=0
-  while IFS='|' read -r file words; do
+  while IFS='|' read -r file words shwords; do
     case $file in '' | '#'*) continue ;; esac
     cases=$((cases + 1))
+    # Where this reader stops at the layout before it reaches the rule the file breaks, it refuses
+    # in its own words, which expected.txt names in its third field. Everywhere else - every field
+    # empty there - both readers say the one same sentence.
+    [ -n "$shwords" ] || shwords=$words
     run_one "$CASES/$file" check
     same "  $file is refused with exit 1" "$CODE" "1"
     same "    and prints nothing on stdout" "$OUT" ""
     lines=$(printf '%s\n' "$ERRS" | grep -c .)
     same "    and one sentence on stderr" "$lines" "1"
-    holds "    saying what is wrong" "$ERRS" "$words"
+    holds "    saying what is wrong" "$ERRS" "$shwords"
   done < "$CASES/expected.txt"
   if [ "$cases" -ge 8 ]; then ok "  $cases malformed cases were run"; else bad "at least eight malformed cases ($cases)"; fi
 

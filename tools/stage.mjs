@@ -44,15 +44,30 @@ function noSuchField(sentence) {
 
 const isObject = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
 
-/** The value as a message says it: a string bare, anything else as JSON. */
+/**
+ * A refusal is one plain sentence on one line, so whatever a stage file holds has to fit on one.
+ * JSON lets a string hold a newline, a tab or any other control character as an escape, so a
+ * sound JSON file can carry a value that would break the sentence that refuses it into two lines.
+ * Such a value goes into the sentence the way the file writes it, quoted and escaped; anything a
+ * line can hold goes in bare, so an ordinary refusal reads as plainly as it did before.
+ */
+function oneLine(s) {
+  for (const ch of s) {
+    const c = ch.codePointAt(0);
+    if (c < 0x20 || c === 0x7f || c === 0x2028 || c === 0x2029) return JSON.stringify(s);
+  }
+  return s;
+}
+
+/** The value as a message says it: a string bare, anything else as JSON, always on one line. */
 function render(v) {
-  return typeof v === "string" ? v : JSON.stringify(v);
+  return typeof v === "string" ? oneLine(v) : JSON.stringify(v);
 }
 
 /** The plain name of what a schema node describes; {} becomes the edition or add-on it is about. */
 function nameOf(schema, path, key) {
-  const title = typeof schema.title === "string" ? schema.title : path;
-  return title.replace("{}", key === undefined ? "" : key);
+  const title = typeof schema.title === "string" ? schema.title : oneLine(path);
+  return title.replace("{}", key === undefined ? "" : oneLine(key));
 }
 
 function typeOk(value, type) {
@@ -129,7 +144,7 @@ function checkAgainst(value, schema, file, path, key) {
     const match = patterns.find(([pattern]) => new RegExp(pattern).test(child));
     if (match) checkAgainst(value[child], match[1], file, childPath, child);
     else if (schema.additionalProperties === false) {
-      refuse(`${file} holds ${childPath}, which a stage file does not name.`);
+      refuse(`${file} holds ${oneLine(childPath)}, which a stage file does not name.`);
     }
   }
   if (schema.minProperties !== undefined && Object.keys(value).length < schema.minProperties) {
@@ -210,7 +225,7 @@ function readStage(file) {
   }
   const twice = namedTwice(text);
   if (twice !== null) {
-    refuse(`${file} names ${twice} twice; a stage file names each field once.`);
+    refuse(`${file} names ${oneLine(twice)} twice; a stage file names each field once.`);
   }
   checkAgainst(value, loadSchema(), file, "", undefined);
   return value;
@@ -254,7 +269,7 @@ function main(argv) {
     const asked = argv[3] !== undefined && argv[3] !== "" ? argv[3] : versionOf(installed);
     const versionRule = loadSchema().properties.version;
     if (!leafOk(asked, versionRule)) {
-      refuse(`${asked} is not ${versionRule.description}.`);
+      refuse(`${oneLine(asked)} is not ${versionRule.description}.`);
     }
     const published = readStage(argv[2]);
     const listed = [...installed.withdrawn, ...published.withdrawn].includes(asked);

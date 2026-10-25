@@ -94,6 +94,30 @@ for (const [file, words] of expected) {
   holds(`    saying what is wrong`, got.err, words);
 }
 
+// A refusal is one sentence on one line, and it names the value that is wrong - so a value that
+// holds a newline of its own has to be named the way the file writes it, escaped, or the sentence
+// arrives as two lines and a caller reading one line of it reads half a sentence. JSON lets a
+// string hold any control character as an escape, so a file can be sound JSON and hold one. The
+// version in bad-control-character.json opens with a sound version, so a reader that stopped at
+// the newline would take the file.
+console.log("  a value, a field name and a version asked for that hold a newline");
+const twoLines = '"2.0.0-beta.6\\nand a second line"';
+const controlChar = reader(join(CASES, "bad-control-character.json"), "check");
+same("  a value holding a newline is refused", controlChar.code, 1);
+same("    on one line", controlChar.err.split("\n").filter(Boolean).length, 1);
+holds("    naming the value the way the file writes it", controlChar.err, twoLines);
+same("    and prints nothing on stdout", controlChar.out, "");
+
+// The same for a field's name, which reaches a sentence by another road than a field's value.
+const oddName = join(work, "odd-field-name.json");
+const renamed = JSON.parse(readFileSync(STAGE, "utf8"));
+renamed.serverEditions = { "ser\nver": renamed.serverEditions.server };
+writeFileSync(oddName, JSON.stringify(renamed, null, 2) + "\n");
+const oddRun = reader(oddName, "check");
+same("  a field named with a newline in it is refused", oddRun.code, 1);
+same("    on one line", oddRun.err.split("\n").filter(Boolean).length, 1);
+holds("    naming the field the way the file writes it", oddRun.err, '"serverEditions.ser\\nver"');
+
 // ------------------------------------------------------------------ the withdrawn answer
 console.log("  the withdrawn answer");
 const clean = join(CASES, "ok-clean.json");
@@ -108,6 +132,10 @@ same("  a version the public stage lists is withdrawn", reader("withdrawn", clea
 const notAVersion = reader("withdrawn", clean, clean, "beta six");
 same("  a version that is not one is refused", notAVersion.code, 1);
 holds("    with a plain sentence", notAVersion.err, "is not a version like 2.0.0-beta.6");
+const askedTwoLines = reader("withdrawn", clean, clean, "2.0.0-beta.6\nand a second line");
+same("  a version asked for that holds a newline is refused", askedTwoLines.code, 1);
+same("    on one line", askedTwoLines.err.split("\n").filter(Boolean).length, 1);
+holds("    naming it the way it was handed over", askedTwoLines.err, twoLines);
 const refusedPair = reader("withdrawn", join(CASES, "bad-pattern.json"), clean);
 same("  a malformed installed stage is refused, so the answer fails closed", refusedPair.code, 1);
 same("    and no answer is printed", refusedPair.out, "");

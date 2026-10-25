@@ -76,7 +76,7 @@ done
 
 # --------------------------------------------------- the same refusal for every malformed file
 printf '%s\n' "  every malformed file, refused by both"
-while IFS='|' read -r file words; do
+while IFS='|' read -r file words shwords; do
   case $file in '' | '#'*) continue ;; esac
   a=$(node_reader "$CASES/$file" check 2>&1); ae=$?
   b=$(sh_reader "$CASES/$file" check 2>&1); be=$?
@@ -84,12 +84,20 @@ while IFS='|' read -r file words; do
   printf '  %-28s shell(%s) %s\n' "" "$be" "$b"
   same "  $file: the Node reader refuses it with exit 1" "$ae" "1"
   same "  $file: the shell reader refuses it with exit 1" "$be" "1"
-  case $a in *"$words"*) ok "    the Node reader says what is wrong" ;; *) bad "    the Node reader says what is wrong" ;; esac
-  case $b in *"$words"*) ok "    the shell reader says what is wrong" ;; *) bad "    the shell reader says what is wrong" ;; esac
-  # The two say it in the same words, except for a file that is no JSON at all: there the Node
-  # reader has JSON.parse's verdict and the shell reader names the line it stopped at.
-  if [ "$file" != "bad-not-json.json" ]; then
+  # One sentence is one line, whatever the file holds: a value that holds a newline of its own
+  # would otherwise break the sentence that refuses it in two.
+  same "  $file: the Node reader says it on one line" "$(printf '%s\n' "$a" | grep -c .)" "1"
+  same "  $file: the shell reader says it on one line" "$(printf '%s\n' "$b" | grep -c .)" "1"
+  case $a in *"$words"*) ok "    the Node reader says what is wrong" ;; *) bad "    the Node reader says what is wrong ([$a] holds no [$words])" ;; esac
+  # The two say it in the same words, except where the file is not in the layout the shell reader
+  # reads at all: there that reader stops at the line it cannot read before it reaches the rule
+  # the Node reader names. expected.txt names its own words for those, and holds each reader to
+  # its own; for every other case the third field is empty and the sentence must be the same one.
+  if [ -z "$shwords" ]; then
+    case $b in *"$words"*) ok "    the shell reader says what is wrong" ;; *) bad "    the shell reader says what is wrong ([$b] holds no [$words])" ;; esac
     same "    and both say it in the same words" "$b" "$a"
+  else
+    case $b in *"$shwords"*) ok "    the shell reader says what is wrong in its own words" ;; *) bad "    the shell reader says what is wrong in its own words ([$b] holds no [$shwords])" ;; esac
   fi
 done < "$CASES/expected.txt"
 
