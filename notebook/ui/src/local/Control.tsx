@@ -15,6 +15,7 @@ import {RecordSyncForm} from './RecordSync';
 import {routineRow} from './routine-row.mjs';
 import {AboutTab} from '@/components/settings/AboutTab';
 import {ConnectAI} from './ConnectAI';
+import {VoiceReplies} from './VoiceReplies';
 // A routine Settings offers: a kind's name, or {kind,label} with the original assistant.
 const kindOf=(k:any)=>typeof k==='string'?k:k?.kind||'';
 async function call(route:string,body?:any){const r=await fetch('/api/'+route,{method:body?'POST':'GET',headers:{'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});const data=await r.json();if(!r.ok)throw new Error(data.error);return data;}
@@ -46,6 +47,7 @@ export default function Control(){
     <Button asChild className="min-h-11 gap-2"><Link to="/dashboard/settings/import"><Download className="h-4 w-4" aria-hidden="true"/>Import from Menerio</Link></Button>
     <ConnectAI/>
     <TelegramSettings/>
+    <VoiceReplies/>
     <details className="border rounded p-4"><summary>Privacy, suggestions and notifications</summary><AiVisibilitySettings/><AISuggestionPreferences/><Notifications/></details>
     <details id="connect-other-assistants" className="border rounded p-4"><summary>Connect other assistants</summary><ApiKeysManager/></details>
     <button className="border rounded p-2" onClick={()=>action('assistant/open',{})}>Open the Windows assistant</button>
