@@ -28,6 +28,7 @@ jobs:
     outputs:
       version: ${{ steps.read.outputs.version }}
       product: ${{ steps.read.outputs.product }}
+      engine: ${{ steps.read.outputs.engine }}
       image: ${{ steps.read.outputs.image }}
     steps:
       - uses: actions/checkout@v4
@@ -44,6 +45,7 @@ jobs:
           {
             echo "version=$(node stage/stage.mjs stage.json get version)"
             echo "product=$(node stage/stage.mjs stage.json get productCommit)"
+            echo "engine=$(node stage/stage.mjs stage.json get kitBootstrap.unixEngineCommit)"
             echo "image=$(node stage/stage.mjs stage.json get serverEditions.server.image)"
           } | tee -a "$GITHUB_OUTPUT"
 
@@ -54,19 +56,24 @@ jobs:
     timeout-minutes: 60
     env:
       PRODUCT: ${{ needs.stage.outputs.product }}
+      ENGINE: ${{ needs.stage.outputs.engine }}
     steps:
       - name: The line, from the stage's own address
-        run: curl -fsSL "$RAW/$STAGE_REF/install-godspeed.sh" | GODSPEED_STAGE_REF="$STAGE_REF" bash
+        run: curl -fsSL "$RAW/$STAGE_REF/install-godspeed.sh" | GODSPEED_STAGE_REF="$STAGE_REF" bash -x 2> >(tee "$RUNNER_TEMP/trace.log" >&2)
       - name: It installed what the stage names
         run: |
           root="$HOME/godspeed-v2"
           got=$(cat "$root/.godspeed/integrated-runtime/version" 2>/dev/null || echo none)
           [ "$got" = "$PRODUCT" ] || { echo "FAIL linux-install: runtime $got, the stage names $PRODUCT"; exit 1; }
+          { grep -qF "kit-bootstrap/$ENGINE/setup-godspeed.sh" "$RUNNER_TEMP/trace.log" && grep -qF "KB_BRANCH=$ENGINE" "$RUNNER_TEMP/trace.log"; } \
+            || { echo "FAIL linux-install: the installer did not run kit-bootstrap $ENGINE, the stage's"; exit 1; }
+          grep -qF "GODSPEED_STARTER_REF=$PRODUCT" "$RUNNER_TEMP/trace.log" \
+            || { echo "FAIL linux-install: the installer did not make the mission control from starter $PRODUCT, the stage's"; exit 1; }
           curl -fsSL "$RAW/$STAGE_REF/stage.json" -o expected.json
           cmp -s expected.json "$root/.godspeed/stage.json" || { echo "FAIL linux-install: the kept stage file is not the stage's"; exit 1; }
           for _ in $(seq 1 30); do curl -fsS http://127.0.0.1:47831/health >/dev/null 2>&1 && break; sleep 2; done
           curl -fsS http://127.0.0.1:47831/health >/dev/null || { echo "FAIL linux-install: the notebook does not answer"; exit 1; }
-          echo "PASS linux-install: runtime $got, stage $STAGE_REF, notebook answers" | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "PASS linux-install: runtime and starter $got, kit-bootstrap $ENGINE, stage $STAGE_REF, notebook answers" | tee -a "$GITHUB_STEP_SUMMARY"
 
   mac-install:
     name: a stranger's Mac install
@@ -76,14 +83,19 @@ jobs:
     timeout-minutes: 60
     env:
       PRODUCT: ${{ needs.stage.outputs.product }}
+      ENGINE: ${{ needs.stage.outputs.engine }}
     steps:
       - name: The line, from the stage's own address
-        run: curl -fsSL "$RAW/$STAGE_REF/install-godspeed.sh" | GODSPEED_STAGE_REF="$STAGE_REF" /bin/bash
+        run: curl -fsSL "$RAW/$STAGE_REF/install-godspeed.sh" | GODSPEED_STAGE_REF="$STAGE_REF" /bin/bash -x 2> >(tee "$RUNNER_TEMP/trace.log" >&2)
       - name: It installed what the stage names
         run: |
           root="$HOME/godspeed-v2"
           got=$(cat "$root/.godspeed/integrated-runtime/version" 2>/dev/null || echo none)
           [ "$got" = "$PRODUCT" ] || { echo "FAIL mac-install: runtime $got, the stage names $PRODUCT"; exit 1; }
+          { grep -qF "kit-bootstrap/$ENGINE/setup-godspeed.sh" "$RUNNER_TEMP/trace.log" && grep -qF "KB_BRANCH=$ENGINE" "$RUNNER_TEMP/trace.log"; } \
+            || { echo "FAIL mac-install: the installer did not run kit-bootstrap $ENGINE, the stage's"; exit 1; }
+          grep -qF "GODSPEED_STARTER_REF=$PRODUCT" "$RUNNER_TEMP/trace.log" \
+            || { echo "FAIL mac-install: the installer did not make the mission control from starter $PRODUCT, the stage's"; exit 1; }
           for _ in $(seq 1 30); do curl -fsS http://127.0.0.1:47831/health >/dev/null 2>&1 && break; sleep 2; done
           curl -fsS http://127.0.0.1:47831/health >/dev/null || { echo "FAIL mac-install: the notebook does not answer"; exit 1; }
           echo "PASS mac-install: runtime $got, notebook answers" | tee -a "$GITHUB_STEP_SUMMARY"
@@ -120,6 +132,7 @@ jobs:
     timeout-minutes: 90
     env:
       PRODUCT: ${{ needs.stage.outputs.product }}
+      ENGINE: ${{ needs.stage.outputs.engine }}
     steps:
       - name: Today's public line
         run: curl -fsSL https://godspeedmissioncontrol.com/install | bash
@@ -133,12 +146,16 @@ jobs:
           echo "GODSPEED_SCENARIO_FIVE=kept" >> "$HOME/.godspeed/device.env"
           cat "$rt/version" > "$RUNNER_TEMP/version-before"
       - name: The line again, against the stage
-        run: curl -fsSL "$RAW/$STAGE_REF/install-godspeed.sh" | GODSPEED_STAGE_REF="$STAGE_REF" bash
+        run: curl -fsSL "$RAW/$STAGE_REF/install-godspeed.sh" | GODSPEED_STAGE_REF="$STAGE_REF" bash -x 2> >(tee "$RUNNER_TEMP/trace.log" >&2)
       - name: It ends on the stage's version, everything kept
         run: |
           root="$HOME/godspeed-v2"; rt="$root/.godspeed/integrated-runtime"
           got=$(cat "$rt/version"); before=$(cat "$RUNNER_TEMP/version-before")
           [ "$got" = "$PRODUCT" ] || { echo "FAIL linux-update: runtime $got after the update, the stage names $PRODUCT"; exit 1; }
+          { grep -qF "kit-bootstrap/$ENGINE/setup-godspeed.sh" "$RUNNER_TEMP/trace.log" && grep -qF "KB_BRANCH=$ENGINE" "$RUNNER_TEMP/trace.log"; } \
+            || { echo "FAIL linux-update: the installer did not run kit-bootstrap $ENGINE, the stage's"; exit 1; }
+          grep -qF "GODSPEED_STARTER_REF=$PRODUCT" "$RUNNER_TEMP/trace.log" \
+            || { echo "FAIL linux-update: the installer did not make the mission control from starter $PRODUCT, the stage's"; exit 1; }
           grep -qx "the owner's own file" "$root/work/scenario-5.txt" || { echo "FAIL linux-update: the owner's file is gone"; exit 1; }
           grep -qx "GODSPEED_SCENARIO_FIVE=kept" "$HOME/.godspeed/device.env" || { echo "FAIL linux-update: the setting is gone"; exit 1; }
           node_bin=$(find "$rt/runtime" -maxdepth 3 -path '*/node-v*/bin/node' 2>/dev/null | sort | tail -n 1); node_bin=${node_bin:-node}
