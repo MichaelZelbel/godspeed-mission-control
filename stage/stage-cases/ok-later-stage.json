@@ -1,0 +1,31 @@
+{
+  "stageFormat": 1,
+  "version": "2.0.0-beta.7",
+  "productCommit": "9390da492a0035a41b0eb02584234e269bca6dc8",
+  "kitBootstrap": {
+    "unixEngineCommit": "86da1dd27fea804ab131a8494b79a2ccf868e847",
+    "windowsBootstrapCommit": "5364e82b44ab0b093e04262c680a21d666faf5e1"
+  },
+  "serverEditions": {
+    "server": {
+      "image": "ghcr.io/michaelzelbel/godspeed-mission-control@sha256:70a07e63bad57ee9cf114a86be3261db533191af28927453a81d5ea8fc330291"
+    }
+  },
+  "windowsSetup": {
+    "file": "GodspeedSetup.exe",
+    "releaseTag": "godspeed-v2-integrated-2026-10-24-2",
+    "sha256": "4a1c63c8a14af59a0c5b295b63a2bc5e45f6637174b706f1b2b7826fd513c2a5"
+  },
+  "addons": {
+    "godspeed-coach": "085eb63febce37b87dbf947eac2b840dc0c5fdc3",
+    "godspeed-headache": "d07d6a0250ff3266ed3ddff2416cbd788c6dfb2c",
+    "godspeed-journal": "d370b082fec8ef85eee54b4be1f64b502b00447d",
+    "mc-phone": "ceab2992233c6f360accb1542624fcf527a22df8",
+    "mc-video": "fecb22dd6f0376ebec810fa733a50eb880484f2e"
+  },
+  "previous": {
+    "version": "2.0.0-beta.6",
+    "stageCommit": "9390da492a0035a41b0eb02584234e269bca6dc8"
+  },
+  "withdrawn": []
+}

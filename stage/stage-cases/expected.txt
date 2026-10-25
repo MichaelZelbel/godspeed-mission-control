@@ -1,0 +1,30 @@
+# The malformed stage files beside this one, and the words the refusal must hold. Both
+# stage/test-stage.mjs and stage/test-stage-sh.sh read this list, so the Node reader and the
+# shell reader are held to the same bytes and the same sentence. One file a line:
+#   <file name>|<words the one sentence on stderr must hold>|<the shell reader's own words>
+# The third field is empty for nearly every case, and the two readers refuse the file in one
+# same sentence. It is filled only where the shell reader cannot reach the rule the file breaks,
+# because the file is not in the layout that reader reads at all: there it names the line it
+# stopped at instead, and stage/test-stage-agree.sh holds each reader to its own words rather
+# than to one shared sentence.
+# Every one of them must leave exit 1, one line on stderr and nothing on stdout.
+# The last two hold a sound value under a name no stage file gives a field - an add-on and a server
+# edition called constructor, each pinned the way a real one is. The name of an add-on and of an
+# edition is matched by a pattern, which the lowercase inherited names fit, so there the value
+# cannot be what the refusal is about: both readers must refuse the name itself.
+bad-not-json.json|is not JSON|is not JSON in the layout a stage file is written in: line 1
+bad-format.json|says stage format 2, which this reader does not understand.|
+bad-missing-field.json|names no product commit.|
+bad-missing-image.json|names no server image of the server edition.|
+bad-pattern.json|is not a 40-character commit: 9390DA492A0035A41B0EB02584234E269BCA6DC8.|
+bad-pattern-image-tag.json|is not pinned by digest: ghcr.io/michaelzelbel/godspeed-mission-control:v2-sha-|
+bad-pattern-sha256.json|is not a 64-character SHA-256: 4a1c63c8a14af59a0c5b295b63a2bc5e4.|
+bad-pattern-version.json|is not a version like 2.0.0-beta.6: beta six.|
+bad-control-character.json|is not a version like 2.0.0-beta.6: "2.0.0-beta.6\nand a second line".|the layout a stage file is written in: line 3 holds a backslash.
+bad-withdrawn.json|holds the first one, which is not a version.|
+bad-unknown-field.json|holds serverImage, which a stage file does not name.|
+bad-duplicate-field.json|names withdrawn twice; a stage file names each field once.|
+bad-inherited-field.json|holds toString, which a stage file does not name.|
+bad-inherited-proto.json|holds kitBootstrap.__proto__, which a stage file does not name.|
+bad-inherited-addon.json|holds addons.constructor, which a stage file does not name.|
+bad-inherited-edition.json|holds serverEditions.constructor, which a stage file does not name.|
