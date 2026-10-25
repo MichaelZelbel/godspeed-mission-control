@@ -530,13 +530,13 @@ def test_one_click_happy():
     check("setup is marked done", r["state"].get("done") is True)
     check("neither the key nor the start code is in any log",
           all(x not in r["log"] and x not in r["out"] for x in (TOKEN, CODE)))
-    # Version 2's PUBLISHED installers, never the build commit (GODSPEED_REVISION) whose own
-    # installers/ folder still held the previous product, and never version 1's latest release.
-    check("another computer is sent to version 2's published installers, not the build commit",
-          any_has(to_anna, "/main/installers/GodspeedSetup.exe",
-                  "/main/installers/install-godspeed.sh",
+    # The promoted version: the release marked Latest and beta's install-godspeed.sh, never the
+    # build commit (GODSPEED_REVISION) whose own installers/ folder still held the previous product.
+    check("another computer is sent to the promoted installers, not the build commit",
+          any_has(to_anna, "releases/latest/download/GodspeedSetup.exe",
+                  "/beta/install-godspeed.sh",
                   "--repo https://github.com/anna/notebook.git")
-          and not any_has(to_anna, REVISION) and not any_has(to_anna, "releases/latest")
+          and not any_has(to_anna, REVISION)
           and not any_has(to_anna, "Same folder"))
 
 
@@ -669,28 +669,33 @@ def links_for(env):
                 os.environ[k] = v
 
 
+# The Windows link: the release marked Latest, which only a promotion moves.
+LATEST_EXE = ("https://github.com/MichaelZelbel/godspeed-mission-control"
+              "/releases/latest/download/GodspeedSetup.exe")
+
+
 def test_one_click_links():
-    print("== the install links for another computer never point at the build commit")
+    print("== the install links for another computer name the promoted version, not the build commit")
     build = REVISION  # the image's GODSPEED_REVISION, the commit it was built from
-    # Default: main, whose installers/ folder always holds the current published pair.
+    # Default: the public stage, beta, which holds the version the maintainer promoted.
     exe, sh = links_for({"GODSPEED_TG_FLOW": "notebook", "GODSPEED_REVISION": build})
-    check("notebook default points at main's installers, not the build commit",
-          "/main/installers/GodspeedSetup.exe" in exe
-          and "/main/installers/install-godspeed.sh" in sh
-          and build not in exe and build not in sh and "releases/latest" not in exe)
+    check("notebook default: the release marked Latest and beta's install-godspeed.sh",
+          exe == LATEST_EXE and sh.endswith("/beta/install-godspeed.sh")
+          and build not in exe and build not in sh)
     # A deployment may pin a release tag or a known-good commit; the build commit stays unused.
     exe, sh = links_for({"GODSPEED_TG_FLOW": "notebook", "GODSPEED_REVISION": build, "GODSPEED_INSTALLER_REF": "v2.6.0"})
-    check("a pinned installer ref is honoured, and the build commit is still not used",
-          "/raw/v2.6.0/installers/GodspeedSetup.exe" in exe and "/v2.6.0/installers/install-godspeed.sh" in sh
+    check("a pinned installer ref is honoured for the one-liner, and the Windows link stays Latest",
+          sh.endswith("/v2.6.0/install-godspeed.sh") and exe == LATEST_EXE
           and build not in exe and build not in sh)
-    # A ref that tries to climb out of installers/ is refused and falls back to main.
+    # A ref that tries to climb out of the repository is refused and falls back to beta.
     exe, sh = links_for({"GODSPEED_TG_FLOW": "notebook", "GODSPEED_INSTALLER_REF": "../../etc/passwd"})
-    check("a ref that tries to climb out is refused and falls back to main",
-          "/main/installers/" in exe and ".." not in exe and ".." not in sh)
-    # Version 1 (the plain terminal flow) is unchanged: the release asset and main.
+    check("a ref that tries to climb out is refused and falls back to beta",
+          sh.endswith("/beta/install-godspeed.sh") and exe == LATEST_EXE
+          and ".." not in exe and ".." not in sh)
+    # The plain terminal flow hands out the same promoted pair.
     exe, sh = links_for({})
-    check("the plain (non-notebook) flow is unchanged: the release asset and main",
-          exe.endswith("releases/latest/download/GodspeedSetup.exe") and sh.endswith("/main/install-godspeed.sh"))
+    check("the plain (non-notebook) flow: the release asset and beta",
+          exe == LATEST_EXE and sh.endswith("/beta/install-godspeed.sh"))
 
 
 # --- The backup AI chat (GODSPEED_TG_FLOW=backup), after /backupai on the one-click server ---------

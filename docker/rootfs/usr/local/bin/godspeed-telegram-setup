@@ -99,26 +99,23 @@ NOTEBOOK_URL = os.environ.get("GODSPEED_TG_NOTEBOOK_URL", "").strip()
 if not re.fullmatch(r"https?://[A-Za-z0-9.:\[\]-]+(?:/[A-Za-z0-9._~/-]*)?", NOTEBOOK_URL):
     NOTEBOOK_URL = ""
 
+# The installers this server hands its owner for their other computers. Both name the version the
+# maintainer promoted, not whatever was merged today: the Windows setup is the release marked
+# Latest, which only a promotion moves, and the Mac and Linux one-liner is install-godspeed.sh at
+# the top of the public stage branch, beta. Until 25 October 2026 they read main, so every merge
+# reached these owners the same day, tried or not.
 WINDOWS_EXE = "https://github.com/MichaelZelbel/godspeed-mission-control/releases/latest/download/GodspeedSetup.exe"
-ONE_LINER = "https://raw.githubusercontent.com/MichaelZelbel/godspeed-mission-control/main/install-godspeed.sh"
+ONE_LINER = "https://raw.githubusercontent.com/MichaelZelbel/godspeed-mission-control/beta/install-godspeed.sh"
 if FLOW == "notebook":
-    # The one-click server is version 2; the latest release and main are still version 1, so a
-    # reader sent there got the other product (until 6 October 2026). Send them to version 2's
-    # PUBLISHED installers instead.
-    #
-    # NOT GODSPEED_REVISION, the commit the image was built from: a commit's installers/ folder
-    # is filled by a LATER commit, so the build at b327fe0 carried the previous product's
-    # installers (pinning 5961989, ~69 commits behind), and linking to the build commit served
-    # that stale product to every reader. Fixed 7 October 2026.
-    #
-    # GODSPEED_INSTALLER_REF pins a release tag or a known-good commit when the image sets one;
-    # otherwise main, whose installers/ folder always holds the current published pair (version 2
-    # is developed on main since 9 October 2026; until then it was codex/godspeed-v2-completeness).
-    _ref = os.environ.get("GODSPEED_INSTALLER_REF", "").strip() or "main"
+    # An image may send the one-click server's readers to another ref with GODSPEED_INSTALLER_REF
+    # (a release tag or a known-good commit); an invalid value falls back to beta. Never
+    # GODSPEED_REVISION, the commit the image was built from: a commit's installers/ folder is
+    # filled by a LATER commit, so linking to the build commit served every reader a stale product
+    # (the build at b327fe0 carried the previous one; fixed 7 October 2026).
+    _ref = os.environ.get("GODSPEED_INSTALLER_REF", "").strip() or "beta"
     if ".." in _ref or not re.fullmatch(r"[0-9A-Za-z][0-9A-Za-z._/-]{0,99}", _ref):
-        _ref = "main"
-    WINDOWS_EXE = "https://github.com/MichaelZelbel/godspeed-mission-control/raw/%s/installers/GodspeedSetup.exe" % _ref
-    ONE_LINER = "https://raw.githubusercontent.com/MichaelZelbel/godspeed-mission-control/%s/installers/install-godspeed.sh" % _ref
+        _ref = "beta"
+    ONE_LINER = "https://raw.githubusercontent.com/MichaelZelbel/godspeed-mission-control/%s/install-godspeed.sh" % _ref
 
 
 SECRETS = []   # keys the reader sent, masked in every log line like the bot token
