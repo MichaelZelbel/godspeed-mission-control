@@ -30,6 +30,9 @@ for attempt in $(seq 1 90); do
 done
 docker exec "$name" node -e "fetch('http://127.0.0.1:47831/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 docker exec "$name" /opt/hermes/.venv/bin/python3 -c 'import faster_whisper; print("Packaged local dictation dependency verified.")'
+# The free voice that answers voice notes, as the assistant's own account loads it through Hermes:
+# Hermes' first-use installer may not put back the edge-tts Microsoft refuses (Dockerfile says why).
+docker exec -u hermes -w /opt/hermes "$name" /opt/hermes/.venv/bin/python3 -c 'from tools.tts_tool import _importable, _import_edge_tts; import edge_tts.constants as c, importlib.metadata as m; assert _importable(_import_edge_tts); v = m.version("edge-tts"); assert v == "7.3.1" and c.SEC_MS_GEC_VERSION.startswith("2-"), v; print("The free voice (edge-tts " + v + ") is the one Hermes loads.")'
 # The image's own init collects every finished program, with no --init from the host (this
 # container runs without one): a program whose parent has gone, as git's background maintenance
 # after every fetch is, must not stay behind (Dockerfile says why).
