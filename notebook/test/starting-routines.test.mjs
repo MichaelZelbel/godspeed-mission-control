@@ -114,6 +114,9 @@ function scriptFixture(t,{brief}={}){
 const runScript=(home,name,env={})=>spawnSync(python,[path.join(home,'scripts',name)],{cwd:path.join(home,'scripts'),encoding:'utf8',env:{...process.env,PYTHONIOENCODING:'utf-8',...env},timeout:120000});
 const berlinDay=new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Berlin'}).format(new Date());
 const plus=days=>new Date(Date.parse(berlinDay+'T12:00:00Z')+days*86400000).toISOString().slice(0,10);
+// A Berlin wall-clock time with the offset Berlin has on that day: +02:00 in summer, +01:00 in winter.
+// Until 26 October 2026 these fixtures wrote +02:00, which put "00:01 today" on yesterday once the clocks went back.
+const berlinAt=(day,time)=>day+'T'+time+(new Date(day+'T'+time+'Z').toLocaleString('en-US',{timeZone:'Europe/Berlin',timeZoneName:'longOffset'}).split('GMT')[1]||'+00:00');
 function addDue(root){execFileSync(process.execPath,[path.join(tools,'due.js'),'add','tax','--title','Tax return','--from',plus(-30),'--to',plus(2),'--done-when','it is filed','--cost','a late fee','--godspeed',root],{cwd:root,env:{...process.env,GODSPEED_ROOT:root,GODSPEED_DIR:root,GODSPEED_TODAY:berlinDay},windowsHide:true});}
 
 test('deadline reminders: the dates that need a mention today, without a morning brief',{skip:!havePython&&'no Python here'},t=>{
@@ -127,10 +130,10 @@ test('deadline reminders: the dates that need a mention today, without a morning
 });
 
 test('deadline reminders say nothing on a day a morning brief carries the dates, and speak when it is paused',{skip:!havePython&&'no Python here'},t=>{
- const brief={id:'brief',name:'Morning brief',skill:'morning-brief',enabled:true,state:'scheduled',next_run_at:berlinDay+'T23:59:00+02:00',last_run_at:null};
+ const brief={id:'brief',name:'Morning brief',skill:'morning-brief',enabled:true,state:'scheduled',next_run_at:berlinAt(berlinDay,'23:59:00'),last_run_at:null};
  const later=scriptFixture(t,{brief});addDue(later.root);
  const quiet=runScript(later.home,'godspeed-deadline-reminders.py');assert.equal(quiet.status,0,quiet.stderr);assert.equal(quiet.stdout,'','the brief will carry them');
- const ran=scriptFixture(t,{brief:{...brief,last_run_at:berlinDay+'T00:01:00+02:00',next_run_at:plus(1)+'T06:00:00+02:00'}});addDue(ran.root);
+ const ran=scriptFixture(t,{brief:{...brief,last_run_at:berlinAt(berlinDay,'00:01:00'),next_run_at:berlinAt(plus(1),'06:00:00')}});addDue(ran.root);
  assert.equal(runScript(ran.home,'godspeed-deadline-reminders.py').stdout,'','the brief carried them this morning');
  const paused=scriptFixture(t,{brief:{...brief,enabled:false,state:'paused'}});addDue(paused.root);
  assert.match(runScript(paused.home,'godspeed-deadline-reminders.py').stdout,/Tax return/);
@@ -185,7 +188,7 @@ test('without a morning brief, the daily round shows the steps going out tonight
  const again=runScript(home,'godspeed-daily-round-choose.py');assert.equal(again.status,0,again.stderr);assert.equal(again.stdout,'');
 });
 test('with a morning brief still to come today, the daily round leaves the steps to the brief',{skip:(!havePython||!bash)&&'no Python or bash here'},t=>{
- const brief={id:'brief',name:'Morning brief',skill:'morning-brief',enabled:true,state:'scheduled',next_run_at:berlinDay+'T23:59:00+02:00',last_run_at:null};
+ const brief={id:'brief',name:'Morning brief',skill:'morning-brief',enabled:true,state:'scheduled',next_run_at:berlinAt(berlinDay,'23:59:00'),last_run_at:null};
  const {root,home}=scriptFixture(t,{brief});decidingAssistant(root,home);
  const step=standingStep(root);
  const run=runScript(home,'godspeed-daily-round-choose.py');
