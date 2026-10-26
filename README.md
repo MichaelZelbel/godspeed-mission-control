@@ -1,5 +1,23 @@
 # Godspeed Mission Control
 
+A personal AI that runs on your own computer or server and works from one folder of plain files you own: your goals, notes, people, deadlines and the routines it runs for you. It thinks with the AI account you already have (ChatGPT or Claude), writes you a briefing every morning, and keeps what it learns in that folder.
+
+Free and open source. No account with us; you connect your own AI after installing.
+
+- **Windows:** [download GodspeedSetup.exe](https://github.com/MichaelZelbel/godspeed-mission-control/releases/latest/download/GodspeedSetup.exe) and run it.
+- **Mac or Linux:** `curl -fsSL https://godspeedmissioncontrol.com/install | bash` (on a Mac, checked on GitHub's Mac test machines, not yet a whole install on a real Mac)
+- **A Linux server:** `curl -fsSL https://godspeedmissioncontrol.com/server | bash`
+
+Six months of its maintainer's own use, counted in his own folder on 26 October 2026:
+
+- **115 mornings** with a written briefing, since 4 July 2026.
+- **365 decisions** written down, each with its reason.
+- **181 jobs** it set itself and finished, each confirmed by a check it ran afterwards, since 13 September 2026.
+
+Each install in detail, and what every version changed, are further down.
+
+## About this version
+
 Godspeed with the integrated notebook, for readers of [Teach It Once: Make AI your mission control for life and work](https://leanpub.com/teachitonce). It includes Menerio's notebook functionality: notes, collections, people, world knowledge, timeline, media, comments and memory review, alongside Godspeed's goals, chat, routines and recovery controls.
 
 New here and not a reader yet? The first chapters are free: [download the free sample of *Teach It Once* on Leanpub](https://leanpub.com/teachitonce).
