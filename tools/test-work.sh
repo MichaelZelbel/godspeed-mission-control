@@ -160,6 +160,18 @@ OUT="$(hw verify $CH5 2>&1)"; check "a learn item whose answer was only reported
 mkdir -p "$TMP/research"; printf '## Answer\nAbout forty percent of readers reach chapter 5, from the reading log.\n' > "$TMP/research/chapter-5.md"
 OUT="$(hw verify $CH5 2>&1)"; contains "  once the answer is written where it was promised, it verifies" "$OUT" "verified by its check"
 
+# --- a repair mends this machine, and reaches nobody else (2026-10-27) -------------------------------------
+OUT="$(hw file --what "Install the fixed nightly upgrade over the broken copy" --done-when "the upgrade's own check passes again on this machine" --kind repair --key fix-upgrade --source test 2>&1)"
+contains "a repair item files as planned" "$OUT" ": planned"
+REP="$(idof fix-upgrade)"
+check "  KIND repair" "$(grep -c '^KIND: repair' "$TMP/work/$REP.md")" "1"
+OUT="$(hw list 2>&1)"; contains "list shows the repair kind" "$OUT" "planned    repair $REP"
+OUT="$(hw next --json 2>&1)"; contains "next carries KIND repair in JSON" "$OUT" "\"KIND\":\"repair\""
+OUT="$(hw file --what "Tell the host about the fault" --done-when "the host has the report" --kind repair --outward yes --key rep-out --source test 2>&1)"; check "an outward repair is refused" "$?" "1"
+contains "  and says why" "$OUT" "never outward"
+check "  and files nothing" "$(idof rep-out)" "none"
+OUT="$(hw help 2>&1)"; contains "help names the repair kind" "$OUT" "--kind do|learn|repair"
+
 # --- sweep by goal, check ---------------------------------------------------------------------------
 hw file --what "Write the chapter" --done-when "chapter in the manuscript" --key chapter --goal book --source test >/dev/null
 OUT="$(hw sweep --goal book --stale --reason "book deadline moved" 2>&1)"
@@ -173,6 +185,11 @@ sed -i 's/^KIND: do$/KIND: ponder/' "$TMP/work/W-20260913-02.md"
 OUT="$(hw check 2>&1)"; check "a KIND that is neither do nor learn is a problem" "$?" "1"
 contains "  and named" "$OUT" "PROBLEM W-20260913-02: KIND ponder"
 sed -i 's/^KIND: ponder$/KIND: do/' "$TMP/work/W-20260913-02.md"
+OUT="$(hw check 2>&1)"; check "a repair item is no problem" "$?" "0"
+sed -i 's/^OUTWARD: no$/OUTWARD: yes/' "$TMP/work/$REP.md"
+OUT="$(hw check 2>&1)"; check "a repair edited to be outward is a problem" "$?" "1"
+contains "  and named" "$OUT" "PROBLEM $REP: a repair that is outward"
+sed -i 's/^OUTWARD: yes$/OUTWARD: no/' "$TMP/work/$REP.md"
 sed -i 's/^STATUS: verified/STATUS: verified/; s/^OUTWARD: no/OUTWARD: yes/' "$TMP/work/W-20260913-01.md"
 OUT="$(hw check 2>&1)"; check "check fails on outward work moved without approval" "$?" "1"
 

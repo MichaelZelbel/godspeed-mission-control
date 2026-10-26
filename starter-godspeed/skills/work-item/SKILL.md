@@ -37,6 +37,9 @@ check) until it does, or end with the FAILED line below.
   the mission control would prepare for it. Unknown is where the sources disagree or this person's case
   differs, written as the experiment that would settle it. Then mark it current:
   `mc-goals playbook <id> --current`.
+- If the item is a **repair** (its KIND says so), the fault is the deliverable: done means it no
+  longer happens, shown by running again the check that found it. Finding the cause and writing
+  down the fix is only half of it.
 - Anything a person will read is written for a person: common words, every technical term
   explained in the same sentence or dropped, no path, no tool name, no id, and whatever words
   the mission control's own rules ban (`rules/machine-words.txt`, and the voice file if the mission control has one).
@@ -49,7 +52,15 @@ check) until it does, or end with the FAILED line below.
   do nothing the yes did not cover.
 - Message the person whose mission control this is, in any channel. A finished piece reaches them through
   the program that called you, not from you.
-- Write outside the mission control folder, or change anything on the register (`mc-work`).
+- Write outside the mission control folder, or change anything on the register (`mc-work`). The
+  one exception is a machine repair: the prompt then says "This item is a machine repair". You
+  may then change the files outside the folder that the mission control itself installed or runs
+  on this computer (its scheduled scripts and programs, and their settings), and only to repair
+  the fault the item names. Copy each file whole before you change it, to the place the prompt
+  names. Never touch a password, a key or a token, an account, a payment, or anything that
+  reaches another person. Then run again, live, the check that found the fault, and quote what it
+  says now. A repair written down for later is not a repair: if you cannot make it from here,
+  end with the FAILED line and say what it needs.
 - Commit. The program that called you commits.
 - Produce a substitute. If the item cannot be done from here, because it needs a login, a device
   you do not have, or a fact you could not find after searching, stop and say so in the FAILED
