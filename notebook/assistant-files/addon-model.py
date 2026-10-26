@@ -12,6 +12,10 @@ The notebook's Settings check asks for one of the two by name ("route": "main" o
 "backup"), a backup is tried before it is saved ("route": "backup" with an "entry"), and a
 ChatGPT plan just signed in in Settings has its models tried ("route": "plan"); an add-on
 can do none of this, since godspeed-model accepts no such field.
+
+When Hermes itself does not load with the Python this runs on, the answer says so ("reason":
+"runtime", with the missing module's name when one is missing) before anything is asked, so the
+caller can try another Python of the same Hermes and the person hears the real cause.
 """
 import contextlib
 import io
@@ -172,38 +176,77 @@ def load_host_environment():
         pass
 
 
-def main():
-    # The caller controls only text and bounded budgets. Connection settings and
-    # credentials come exclusively from the installation's verified Hermes home.
-    payload = json.loads(sys.stdin.read(600001))
-    # Hermes' managed Python has no virtual environment. Its own bootstrap loads the
-    # selected dependency generation from the source root named by the verified launcher.
-    # A broken bootstrap must fail this request, never select another runtime or account.
-    if importlib.util.find_spec("hermes_bootstrap") is not None:
-        with contextlib.redirect_stdout(io.StringIO()):
-            import hermes_bootstrap  # noqa: F401
-    load_host_environment()
-    from hermes_cli.config import load_config_readonly
-    from hermes_cli.runtime_provider import resolve_runtime_provider, _get_named_custom_provider, expand_direct_api_alias
-    from agent.auxiliary_client import resolve_provider_client, _normalize_aux_provider
+class HermesNotLoaded(Exception):
+    """Hermes itself did not load with this Python: its bootstrap or one of its modules failed,
+    before any model was asked (26 October 2026). As root, a Hermes owned by another account had
+    its launcher's Python refuse to finish Hermes' own update and then miss a module it needs; the
+    add-on was told to check its usage allowance. `missing` names the module, nothing else."""
+
+    def __init__(self, missing=None):
+        super().__init__("Hermes did not load")
+        self.missing = missing
+
+
+def missing_module(error):
+    """The name of the module whose absence stopped Hermes loading, from the error or what caused
+    it, or None. Only a plain dotted name: it is all of the program's own words that leave here."""
+    import re
+    seen = set()
+    while error is not None and id(error) not in seen:
+        seen.add(id(error))
+        name = getattr(error, "name", None) if isinstance(error, ImportError) else None
+        if isinstance(name, str) and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_.]{0,99}", name):
+            return name
+        error = error.__cause__ or error.__context__
+    return None
+
+
+def load_hermes():
+    """Hermes' bootstrap and the parts of it the helper uses, or HermesNotLoaded. Nothing has been
+    asked of any model yet, so the caller may try another Python of the same Hermes installation
+    (core/addon-model.mjs); a failure after this point never is."""
+    try:
+        # Hermes' managed Python has no virtual environment. Its own bootstrap loads the
+        # selected dependency generation from the source root named by the verified launcher.
+        # A broken bootstrap fails this Python, never selects another account or provider.
+        if importlib.util.find_spec("hermes_bootstrap") is not None:
+            with contextlib.redirect_stdout(io.StringIO()):
+                import hermes_bootstrap  # noqa: F401
+        load_host_environment()
+        from hermes_cli.config import load_config_readonly
+        from hermes_cli.runtime_provider import resolve_runtime_provider, _get_named_custom_provider, expand_direct_api_alias
+        from agent.auxiliary_client import resolve_provider_client, _normalize_aux_provider
+    except (Exception, SystemExit) as error:
+        raise HermesNotLoaded(missing_module(error)) from None
+
     def expected_route(provider, base_url):
         named = _get_named_custom_provider(provider)
         if named:
             return "custom", named.get("base_url")
         return expand_direct_api_alias(_normalize_aux_provider(provider), base_url)
+    return dict(load_config=load_config_readonly, resolve_runtime=resolve_runtime_provider,
+                resolve_client=resolve_provider_client, expected_route=expected_route)
+
+
+def main():
+    # The caller controls only text and bounded budgets. Connection settings and
+    # credentials come exclusively from the installation's verified Hermes home.
+    payload = json.loads(sys.stdin.read(600001))
+    hermes = load_hermes()
     # Runtime constructors can print diagnostics. Never mix them into the
     # protocol or preserve them alongside strangers' profiles.
     with contextlib.redirect_stdout(io.StringIO()):
-        result = request(payload, load_config=load_config_readonly,
-                         resolve_runtime=resolve_runtime_provider,
-                         resolve_client=resolve_provider_client, expected_route=expected_route)
+        result = request(payload, **hermes)
     print(json.dumps(result))
 
 
 def reason(error):
-    """Which of the two everyday failures this was, as a fixed word, never the provider's own text
-    (it can name accounts or carry a key's prefix): "limit", "sign-in" or None."""
+    """Which everyday failure this was, as a fixed word, never the provider's own text (it can
+    name accounts or carry a key's prefix): "runtime" (Hermes did not load), "limit", "sign-in"
+    or None."""
     import re
+    if isinstance(error, HermesNotLoaded):
+        return "runtime"
     text = "%s %s" % (type(error).__name__, error)
     if re.search(r"rate.?limit|too many requests|usage limit|quota|insufficient_quota|\b429\b", text, re.I):
         return "limit"
@@ -212,10 +255,20 @@ def reason(error):
     return None
 
 
+def failure(error):
+    """The one line the caller reads when there is no answer."""
+    if isinstance(error, HermesNotLoaded):
+        answer = {"error": "Godspeed could not load its AI program (Hermes) on this computer.", "reason": "runtime"}
+        if error.missing:
+            answer["missing"] = error.missing
+        return answer
+    return {"error": "The selected Godspeed model could not answer. Check its connection and usage allowance.",
+            "reason": reason(error)}
+
+
 if __name__ == "__main__":
     try:
         main()
     except Exception as error:
-        print(json.dumps({"error": "The selected Godspeed model could not answer. Check its connection and usage allowance.",
-                          "reason": reason(error)}))
+        print(json.dumps(failure(error)))
         sys.exit(1)
