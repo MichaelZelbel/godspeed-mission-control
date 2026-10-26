@@ -712,7 +712,11 @@ def chat_db(c):
 
 
 def chat_session(c, con):
-    """The stored conversation the gateway currently routes the owner's chat to."""
+    """The stored conversation the gateway currently routes the owner's chat to, or None while it
+    routes none: the routine is there from the moment a chat app is connected, and a chat app
+    connected today has nothing routed until the first message (native-scheduler.mjs,
+    followChatTidy). Nothing to tidy up is not a failure. More than one chat is: acting then could
+    summarise the wrong conversation, which is the one thing this must never do."""
     scope = os.path.join(c["home"], "sessions")
     try:
         rows = [row for row in con.execute(
@@ -720,7 +724,9 @@ def chat_session(c, con):
             (scope, CHAT_KEY_LIKE)).fetchall() if CHAT_KEY.match(row[0] or "")]
     except sqlite3.Error as error:
         fail("The assistant's routing table could not be read: %s" % error)
-    if len(rows) != 1:
+    if not rows:
+        return None
+    if len(rows) > 1:
         fail("Expected one chat of the owner's in the assistant's routing table, found %d." % len(rows))
     try:
         entry = json.loads(rows[0][1] or "{}")
@@ -830,12 +836,16 @@ def chat_tidy(c):
     con = chat_db(c)
     try:
         target = a.session or chat_session(c, con)
-        tokens, last, leases = chat_state(con, target)
+        state = chat_state(con, target) if target else None
     finally:
         try:
             con.close()
         except sqlite3.Error:
             pass
+    if not target:
+        chat_log("skip: the assistant routes no chat of the owner's yet")
+        return ""
+    tokens, last, leases = state
     idle_min = (time.time() - last) / 60 if last else None
     if idle_min is None:
         chat_log("chat %s: no messages" % target)

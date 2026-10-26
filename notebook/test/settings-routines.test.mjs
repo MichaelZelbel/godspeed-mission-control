@@ -1,6 +1,7 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import {fileURLToPath} from 'node:url';import {execFileSync} from 'node:child_process';
 import {NativeScheduler,nativeJobs} from '../core/native-scheduler.mjs';import {Store} from '../core/records/store.mjs';import {QueryService} from '../core/query.mjs';import {Domains} from '../core/domains.mjs';
-import {installStarter} from '../core/starter-workspace.mjs';import {readMachineRecord} from '../core/starting-routines.mjs';import {runCommand} from '../core/child-process.mjs';
+import {installStarter} from '../core/starter-workspace.mjs';import {readMachineRecord,telegramInHermes,chatAppInHermes} from '../core/starting-routines.mjs';import {runCommand} from '../core/child-process.mjs';
+import {DatabaseSync} from 'node:sqlite';
 import {cronCalendar,calendarCron,retimeWhat} from '../core/routine-times.mjs';import {enableKinds,readNotebookRoutines,JOURNAL_JOB,CHAT_TIDY_JOB,CHAT_TIDY_SCRIPT,deliveryFor} from '../core/notebook-routines.mjs';
 import {personalOperation} from '../core/personal-operations.mjs';import {readArea} from '../../third-party/addons/godspeed-coach/lib/areas.mjs';
 
@@ -163,6 +164,28 @@ test('the night chat tidy-up is made once where a chat app is connected, and nev
  // A routine the person removed stays removed.
  hermes.write(hermes.jobs().filter(j=>j.name!==CHAT_TIDY_JOB));
  await scheduler.followChatTidy();assert.equal(mine().length,0);
+});
+
+test('any chat app Hermes routes the same way gets the night tidy-up, with no new code',async t=>{
+ const {home,hermes,scheduler}=await withGoal(t);
+ const mine=()=>hermes.jobs().filter(j=>j.name===CHAT_TIDY_JOB);
+ assert.equal(chatAppInHermes(home),false,'no chat app at all');
+ await scheduler.followChatTidy();assert.equal(mine().length,0);
+ // What this Hermes has is no Telegram bot, but a private chat the gateway routes through another
+ // app: the shape the routine itself reads the table for (agent:main:<app>:dm:<id>).
+ const db=new DatabaseSync(path.join(home,'state.db'));
+ db.exec('create table gateway_routing(scope text, session_key text, entry_json text)');
+ const route=(key,id)=>db.prepare('insert into gateway_routing values (?,?,?)').run(path.join(home,'sessions'),key,JSON.stringify({session_id:id}));
+ route('agent:main:telegram:group:8','a-group-chat');
+ assert.equal(chatAppInHermes(home),false,'a group chat is not the owner\'s own chat');
+ route('agent:main:signal:dm:7','the-owners-chat');
+ db.close();
+ assert.equal(telegramInHermes(home),false,'still no Telegram bot in Hermes');
+ assert.equal(chatAppInHermes(home),true);
+ await scheduler.followChatTidy();
+ assert.equal(mine().length,1,'the routine is made for that chat app too');
+ assert.equal(mine()[0].schedule.expr,'30 1 * * *');assert.equal(mine()[0].deliver,'local');
+ await scheduler.followChatTidy();assert.equal(mine().length,1,'once');
 });
 
 test('/radar and /subs are short names for their recipes in Telegram, and an owner\'s own short name stays',async()=>{

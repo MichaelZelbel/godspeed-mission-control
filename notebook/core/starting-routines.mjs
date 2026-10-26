@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import {DatabaseSync} from 'node:sqlite';
 import {fileURLToPath} from 'node:url';
 import {hash,atomic} from './records/store.mjs';
 import {addArea,findArea,listAreas,rhythmWords,nextTalkDay} from '../../third-party/addons/godspeed-coach/lib/areas.mjs';
@@ -121,6 +122,27 @@ export function cityFiledFirst(store,installation){
 }
 // A messenger this machine's Hermes can send to (the coach's own test: a Telegram bot in its .env).
 export function telegramInHermes(home){try{return /^\s*TELEGRAM_BOT_TOKEN\s*=\s*\S+/m.test(fs.readFileSync(path.join(home,'.env'),'utf8'));}catch{return false;}}
+
+// A CHAT APP THIS MACHINE'S HERMES HAS, whichever one (27 October 2026). telegramInHermes above is
+// the coach's own test and knows one app by the name of its key; what the night chat tidy-up needs
+// is "this install has a chat app", because it is made for every install that has one. The gateway's
+// routing table says it for any app: it keys the owner's own chat of a chat app as
+// agent:main:<app>:dm:<id> (today agent:main:telegram:dm:<id>), which is also how the routine finds
+// the chat. So a chat app counts when Hermes has a Telegram bot in its .env (true from the moment
+// the owner connects it, before the first message is routed), or when the gateway already routes a
+// private chat through any app: a second chat app Hermes routes the same way needs no new code here
+// either. The table is read read-only and a database that cannot be read counts as no chat app.
+export const OWNER_CHAT_KEY_LIKE='agent:main:%:dm:%';
+export function routedOwnerChats(home){
+ const file=path.join(home,'state.db');if(!fs.existsSync(file))return [];
+ let db;
+ try{
+  db=new DatabaseSync(file,{readOnly:true});
+  return db.prepare('select session_key from gateway_routing where scope = ? and session_key like ?')
+   .all(path.join(home,'sessions'),OWNER_CHAT_KEY_LIKE).map(row=>row.session_key);
+ }catch{return [];}finally{try{db?.close();}catch{}}
+}
+export function chatAppInHermes(home){return telegramInHermes(home)||routedOwnerChats(home).length>0;}
 
 const kit=fileURLToPath(new URL('../../',import.meta.url));
 const runner=fileURLToPath(new URL('./routine-scripts/godspeed_routines.py',import.meta.url));

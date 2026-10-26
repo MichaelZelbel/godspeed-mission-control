@@ -175,7 +175,7 @@ test('a dry run opens and closes the chat and summarises nothing',needs,async t=
  assert.deepEqual(chat.asked().map(a=>a.method),['session.resume','session.close']);
 });
 
-test('without one chat of the owner\'s in the routing table it does nothing at all',needs,async t=>{
+test('two chats of the owner\'s in the routing table stop it: it could be the wrong one',needs,async t=>{
  const chat=home(t,{plan:{'session.resume':resumed(),'session.compress':compressed}});
  const db=new DatabaseSync(path.join(chat.hermes,'state.db'));
  db.prepare('insert into gateway_routing values (?,?,?)').run(path.join(chat.hermes,'sessions'),'agent:main:telegram:dm:99',JSON.stringify({session_id:OTHER}));
@@ -184,6 +184,19 @@ test('without one chat of the owner\'s in the routing table it does nothing at a
  assert.equal(code,1);
  assert.match(log,/Expected one chat of the owner's in the assistant's routing table, found 2\./);
  assert.deepEqual(chat.asked(),[]);
+});
+
+test('a chat app connected but no message yet: nothing to tidy up, and no failed run',needs,async t=>{
+ // The routine is made the moment a chat app is connected (native-scheduler.mjs, followChatTidy),
+ // which on a fresh install is before the first message gives the gateway anything to route.
+ const chat=home(t,{plan:{'session.resume':resumed(),'session.compress':compressed}});
+ const db=new DatabaseSync(path.join(chat.hermes,'state.db'));
+ db.exec('delete from gateway_routing');db.close();
+ const {code,said,log}=chat.run();
+ assert.equal(code,0,'a night with no chat to tidy up is not a failure');
+ assert.equal(said,'');
+ assert.match(log,/skip: the assistant routes no chat of the owner's yet/);
+ assert.deepEqual(chat.asked(),[],'the control channel was never started');
 });
 
 test('the routing table decides which chat app it is, so another one needs no new code',needs,async t=>{

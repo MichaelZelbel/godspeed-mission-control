@@ -9,7 +9,7 @@ import {beatWhile,HEARTBEAT_EVERY} from './supervisor-health.mjs';
 import {LEGACY_DEVICE} from './device-id.mjs';
 import {starterBorn} from './starter-workspace.mjs';
 import {setHermesTimezone} from './hermes-config.mjs';
-import {FLAG,STARTING_ROUTINES,routineFiles,writeRoutineFiles,prepareCheckIn,saveRoutineResults,readMachineRecord,writeMachineRecord,telegramInHermes,routineStatus,ownRoutines,metAt,noteHermesMet,cityFiledFirst,OWN_ROUTINES_RULE} from './starting-routines.mjs';
+import {FLAG,STARTING_ROUTINES,routineFiles,writeRoutineFiles,prepareCheckIn,saveRoutineResults,readMachineRecord,writeMachineRecord,telegramInHermes,chatAppInHermes,routineStatus,ownRoutines,metAt,noteHermesMet,cityFiledFirst,OWN_ROUTINES_RULE} from './starting-routines.mjs';
 import {cronOf,cronCalendar,calendarCron,retimeWhat,isTalkGate,isCoachTick,talkArea,moveTalk} from './routine-times.mjs';
 import {readNotebookRoutines,rememberNotebookRoutine,enableKind,deliveryFor,journalWanted,journalOnTheClock,JOURNAL_JOB,JOURNAL_SCRIPT,JOURNAL_WHAT,CHAT_TIDY_JOB,CHAT_TIDY_SCRIPT,CHAT_TIDY_SCHEDULE,CHAT_TIDY_WHAT} from './notebook-routines.mjs';
 import {loadSettings as coachSettings,saveSettings as saveCoach} from '../../third-party/addons/godspeed-coach/lib/settings.mjs';
@@ -214,13 +214,15 @@ export class NativeScheduler{
  }
  // THE NIGHT CHAT TIDY-UP (notebook-routines.mjs): one routine on every install whose Hermes has a
  // chat app connected, because that is where a chat grows long enough that summarising it in front
- // of a message makes the person wait minutes for an answer. It is made once: a second wiring, a
- // restart or an update finds it by the id this machine remembers or by its name and makes no
- // second one, and a routine the person removed stays removed, as the journal's does. Nothing on a
- // mission control not made from the starter (the owner's adopted one, live on several machines,
- // with routines of its own).
+ // of a message makes the person wait minutes for an answer. Which chat app it is does not matter
+ // here: chatAppInHermes asks whether this Hermes has one at all (starting-routines.mjs), and the
+ // routine itself reads the gateway's routing table to find the chat, so a chat app Hermes routes
+ // the same way needs no new code. It is made once: a second wiring, a restart or an update finds
+ // it by the id this machine remembers or by its name and makes no second one, and a routine the
+ // person removed stays removed, as the journal's does. Nothing on a mission control not made from
+ // the starter (the owner's adopted one, live on several machines, with routines of its own).
  async followChatTidy(){
-  const root=this.store.root;if(!starterBorn(root)||!telegramInHermes(this.home))return null;
+  const root=this.store.root;if(!starterBorn(root)||!chatAppInHermes(this.home))return null;
   const mine=readNotebookRoutines(this.store),entry=mine.jobs.find(j=>j.key==='chat-tidy'),jobs=hermesJobs(this.home);
   const job=(entry&&jobs.find(j=>j.id===entry.id))||jobs.find(j=>j.name===CHAT_TIDY_JOB);
   if(job){if(!entry)rememberNotebookRoutine(this.store,{id:job.id,key:'chat-tidy',name:CHAT_TIDY_JOB,what:CHAT_TIDY_WHAT});return job.id;}
