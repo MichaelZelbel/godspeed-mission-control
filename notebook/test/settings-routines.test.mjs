@@ -1,7 +1,7 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import {fileURLToPath} from 'node:url';import {execFileSync} from 'node:child_process';
 import {NativeScheduler,nativeJobs} from '../core/native-scheduler.mjs';import {Store} from '../core/records/store.mjs';import {QueryService} from '../core/query.mjs';import {Domains} from '../core/domains.mjs';
 import {installStarter} from '../core/starter-workspace.mjs';import {readMachineRecord} from '../core/starting-routines.mjs';import {runCommand} from '../core/child-process.mjs';
-import {cronCalendar,calendarCron,retimeWhat} from '../core/routine-times.mjs';import {enableKinds,readNotebookRoutines,JOURNAL_JOB,deliveryFor} from '../core/notebook-routines.mjs';
+import {cronCalendar,calendarCron,retimeWhat} from '../core/routine-times.mjs';import {enableKinds,readNotebookRoutines,JOURNAL_JOB,CHAT_TIDY_JOB,CHAT_TIDY_SCRIPT,deliveryFor} from '../core/notebook-routines.mjs';
 import {personalOperation} from '../core/personal-operations.mjs';import {readArea} from '../../third-party/addons/godspeed-coach/lib/areas.mjs';
 
 // THE SETTINGS CONTROLS FOR HERMES' ROUTINES, 18 October 2026. Routine times was refused for every
@@ -135,6 +135,34 @@ test('the routine scripts run the journal\'s tick and say a queued notice once',
  const run=()=>execFileSync(python,[path.join(home,'scripts','godspeed-journal-checkins.py')],{cwd:path.join(home,'scripts'),encoding:'utf8',env:{...process.env,PYTHONIOENCODING:'utf-8'},windowsHide:true});
  assert.equal(run().trim(),'Last night\'s backup failed.','the notice, and the journal had nothing due');
  assert.equal(run().trim(),'','said once');
+});
+
+test('the night chat tidy-up is made once where a chat app is connected, and never delivers to the chat',async t=>{
+ const {root,home,store,hermes,scheduler}=await withGoal(t);
+ const mine=()=>hermes.jobs().filter(j=>j.name===CHAT_TIDY_JOB);
+ await scheduler.followChatTidy();
+ assert.equal(mine().length,0,'no chat app connected: there is no long chat to tidy up');
+ fs.writeFileSync(path.join(home,'.env'),'TELEGRAM_BOT_TOKEN=123:abc\nTELEGRAM_HOME_CHANNEL=42\n');
+ await scheduler.followChatTidy();
+ const made=mine()[0];assert.ok(made,'a chat app is connected: the routine exists');
+ assert.equal(made.schedule.expr,'30 1 * * *','nightly at 01:30 on the install\'s clock');
+ assert.equal(made.script,CHAT_TIDY_SCRIPT);assert.equal(made.no_agent,true,'no AI');
+ assert.equal(made.workdir,root);assert.equal(made.deliver,'local','nothing is delivered to the chat');
+ assert.match(fs.readFileSync(path.join(home,'scripts',CHAT_TIDY_SCRIPT),'utf8'),/main\("chat-tidy"\)/);
+ const config=JSON.parse(fs.readFileSync(path.join(home,'scripts','godspeed-routines.json'),'utf8'));
+ assert.ok('hermes_python' in config&&'hermes_source' in config,'the install names the assistant\'s own Python, not a path written by hand');
+ const q=new QueryService(store);q.nativeHermesHome=home;
+ assert.match(q.rows('jobs').find(j=>j.title===CHAT_TIDY_JOB).what,/01:30/,'its row says what it does');
+ // A second wiring, a restart and an update find it and make no second one.
+ await scheduler.followChatTidy();await scheduler.followChatTidy();await scheduler.tick().catch(()=>null);
+ assert.equal(mine().length,1,'once');
+ // Every other routine moves to Telegram; this one's log never does.
+ await scheduler.followDelivery();
+ assert.equal(mine()[0].deliver,'local','the night tidy-up still delivers nothing');
+ assert.equal(hermes.jobs().find(j=>j.name==='Deadline reminders').deliver,'telegram');
+ // A routine the person removed stays removed.
+ hermes.write(hermes.jobs().filter(j=>j.name!==CHAT_TIDY_JOB));
+ await scheduler.followChatTidy();assert.equal(mine().length,0);
 });
 
 test('/radar and /subs are short names for their recipes in Telegram, and an owner\'s own short name stays',async()=>{

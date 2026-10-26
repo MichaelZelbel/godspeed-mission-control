@@ -2,6 +2,7 @@ import test from 'node:test';import assert from 'node:assert/strict';import fs f
 import {nativeAgent} from '../core/native-agent.mjs';import {NativeScheduler,nativeJobs} from '../core/native-scheduler.mjs';import {Store} from '../core/records/store.mjs';import {Domains} from '../core/domains.mjs';import {QueryService} from '../core/query.mjs';
 import {execFileSync} from 'node:child_process';import {installStarter,adoptedMissionControl} from '../core/starter-workspace.mjs';import {FLAG,readMachineRecord,writeMachineRecord} from '../core/starting-routines.mjs';import {runCommand} from '../core/child-process.mjs';
 import {beginContext,scheduleInvite,setTimezone,writeContext,INVITE_JOB} from '../core/context-setup.mjs';
+import {CHAT_TIDY_JOB} from '../core/notebook-routines.mjs';
 const goalsTool=fileURLToPath(new URL('../../tools/goals.js',import.meta.url));
 // The chat files a goal with the original tool. It finds its mission control from GODSPEED_ROOT or the
 // folder it runs in, never from a flag, so both are this fixture's.
@@ -174,7 +175,13 @@ test('a server that joins later and takes the routines over gets the starting ro
  for(const call of serverHermes.calls.filter(c=>c.args[1]==='create'))assert.equal(call.timezone,'Europe/Berlin','on the reader\'s clock');
  assert.equal(readMachineRecord(server).state,'created');
  assert.equal(fs.readdirSync(path.join(serverRoot,'coach')).filter(n=>n==='weekly-check-in').length,1,'the one weekly check-in, not a second');
- serverScheduler.lastTick=0;await serverScheduler.tick();assert.equal(serverHermes.calls.filter(c=>c.args[1]==='create').length,STARTING.length,'once');
+ serverScheduler.lastTick=0;await serverScheduler.tick();
+ const named=serverHermes.calls.filter(c=>c.args[1]==='create').map(c=>c.args[c.args.indexOf('--name')+1]);
+ assert.equal(named.filter(n=>STARTING.some(([name])=>name===n)).length,STARTING.length,'once');
+ // This server has a chat app, so the tick also gives it the night chat tidy-up, which no goal
+ // starts (notebook-routines.mjs, CHAT_TIDY_JOB), and that one keeps its results to itself.
+ assert.deepEqual(named.filter(n=>!STARTING.some(([name])=>name===n)),[CHAT_TIDY_JOB]);
+ assert.equal(serverHermes.jobs().find(j=>j.name===CHAT_TIDY_JOB).deliver,'local');
  // The computer no longer runs them: its Hermes is not ticked.
  pc.save('settings',{id:'installation',owner:'vps'});pcScheduler.lastTick=0;const before=pcHermes.calls.length;await pcScheduler.tick();
  assert.equal(pcHermes.calls.length,before);
@@ -218,9 +225,11 @@ for(const [label,sent] of [['still waits to be sent',false],['went out, and Herm
   if(sent){const [invite]=hermes.jobs();hermes.write([{...invite,enabled:false,state:'completed',next_run_at:null,last_run_at:new Date().toISOString(),last_status:'ok',repeat:{times:1,completed:1}}]);}
   fileGoal(root,'--status','adopted','--title','Fictional first goal');
   scheduler.lastTick=0;await scheduler.tick();
-  assert.deepEqual(names(hermes.jobs()),[INVITE_JOB,...STARTING_NAMES],'the seven routines, beside the invitation');
+  // The seven, beside the invitation, and the night chat tidy-up this server's chat app brings.
+  assert.deepEqual(names(hermes.jobs()),[INVITE_JOB,...STARTING_NAMES,CHAT_TIDY_JOB]);
   assert.equal(store.get('settings',FLAG).state,'created');assert.equal(readMachineRecord(store).state,'created');
-  assert.deepEqual([...new Set(hermes.jobs().slice(1).map(j=>j.deliver))],['telegram']);
+  assert.deepEqual([...new Set(hermes.jobs().filter(j=>![INVITE_JOB,CHAT_TIDY_JOB].includes(j.name)).map(j=>j.deliver))],['telegram']);
+  assert.equal(hermes.jobs().find(j=>j.name===CHAT_TIDY_JOB).deliver,'local','the night tidy-up sends nothing to the chat');
  });
 }
 

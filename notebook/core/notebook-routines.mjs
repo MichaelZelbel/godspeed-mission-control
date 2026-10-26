@@ -56,6 +56,21 @@ export function journalWanted(root){
  const s=journalSettings(root);
  return s.capture_enabled!==false&&!!(s.nudge?.enabled||s.evening?.enabled||s.weekly?.enabled);
 }
+// THE NIGHT CHAT TIDY-UP (26 October 2026). The assistant keeps a chat app's chat as one long
+// conversation and summarises its older part once it passes its threshold, and it does that before
+// answering the message that crossed the line: a real message waited 4 minutes 9 seconds while 348
+// messages became 43, and all the person saw was "typing". The assistant has no idle-time
+// summarising of its own. So the machine that runs the routines keeps one routine that does it at
+// night, while nobody is waiting: every install whose Hermes has a chat app connected gets it, at
+// 01:30 on the install's clock, with no AI. It summarises only the conversation the gateway's
+// routing table names for the owner's chat, only while the chat is out of use, and only when the
+// chat is long enough to be worth it (godspeed_routines.py, chat_tidy). It sends nothing to the
+// chat: its output is its log, which is why its results are kept here and never delivered
+// (followDelivery leaves this one alone).
+export const CHAT_TIDY_JOB='Night chat tidy-up';
+export const CHAT_TIDY_SCRIPT='godspeed-chat-tidy.py';
+export const CHAT_TIDY_SCHEDULE='30 1 * * *';
+export const CHAT_TIDY_WHAT='Every night at 01:30 it shortens your long chat with your assistant, so the assistant never has to do it while you wait for an answer. It reads the chat, writes a summary of its older part, and sends you nothing.';
 // The journal reads its times on its own clock, which starts as UTC until its setup writes the
 // person's; the installation's zone is the person's, so it becomes the journal's when the journal
 // still has the default one.

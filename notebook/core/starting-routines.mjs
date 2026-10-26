@@ -7,8 +7,9 @@ import {addArea,findArea,listAreas,rhythmWords,nextTalkDay} from '../../third-pa
 import {loadSettings as coachSettings,saveSettings as saveCoach} from '../../third-party/addons/godspeed-coach/lib/settings.mjs';
 import {localParts,addDays,zonedToUtc} from '../../third-party/addons/godspeed-coach/lib/clock.mjs';
 import {TALK_PROMPT,NOTEBOOK_TALK_JOB,NOTEBOOK_TICK_JOB,TALK_JOB,TICK_JOB} from '../../third-party/addons/godspeed-coach/lib/setup.mjs';
-import {JOURNAL_JOB,JOURNAL_SCRIPT} from './notebook-routines.mjs';
+import {JOURNAL_JOB,JOURNAL_SCRIPT,CHAT_TIDY_JOB,CHAT_TIDY_SCRIPT} from './notebook-routines.mjs';
 import {NOTICES_FILE} from './notices.mjs';
+import {hermesPython} from './runtime.mjs';
 
 // The routines a reader's first goal starts (Teach It Once, Chapters 3, 5, 8, 24, 25 and 30): the
 // nightly goal research, the daily round (two routines: one chooses the day's work, one does it),
@@ -124,13 +125,28 @@ export function telegramInHermes(home){try{return /^\s*TELEGRAM_BOT_TOKEN\s*=\s*
 const kit=fileURLToPath(new URL('../../',import.meta.url));
 const runner=fileURLToPath(new URL('./routine-scripts/godspeed_routines.py',import.meta.url));
 
+// THE PYTHON HERMES ITSELF RUNS ON, and Hermes' own folder (runtime.mjs, hermesPython): the night
+// chat tidy-up speaks Hermes' own control channel (python -m tui_gateway.entry), so it needs the
+// interpreter that can import Hermes' modules, not the one Hermes runs a script with. It is looked
+// for the way the model picker and the add-ons look for it, from this machine's own Hermes
+// (.godspeed/assistant.json names the source folder when it knows one), never from a path written
+// by hand. Both are null on a machine where it was not found; the routine then says so in one
+// sentence and does nothing.
+function hermesRuntime({home,state,hermes}){
+ let sourceRoot;try{sourceRoot=JSON.parse(fs.readFileSync(path.join(state,'assistant.json'),'utf8').replace(/^﻿/,'')).sourceRoot;}catch{}
+ if(typeof sourceRoot!=='string'||!path.isAbsolute(sourceRoot))sourceRoot=undefined;
+ if(!hermes||!path.isAbsolute(hermes))return {hermes_python:null,hermes_source:sourceRoot||null};
+ try{const {python,source}=hermesPython({executable:hermes,sourceRoot,home});return {hermes_python:python||null,hermes_source:source||sourceRoot||null};}
+ catch{return {hermes_python:null,hermes_source:sourceRoot||null};}
+}
+
 // Hermes runs only scripts in its own scripts folder, with its own Python on every system.
 export function routineFiles({root,home,state,timezone,node=process.execPath,hermes=null}){
  // tools: the kit's own programs (mc-decide, mc-work-run, due.js), run where they are; bin: the
  // assistant's command folder, first on the path for the recipes they run.
- const config={root,home,bin:path.join(home,'bin'),tools:path.join(kit,'tools'),node,hermes:hermes&&path.isAbsolute(hermes)?hermes:null,coach:path.join(kit,'third-party','addons','godspeed-coach','bin','godspeed-coach.mjs'),coach_app:path.join(state,'coach-app'),journal:path.join(kit,'third-party','addons','godspeed-journal','bin','godspeed-journal.mjs'),journal_app:path.join(state,'journal-app'),notices:path.join(state,NOTICES_FILE),timezone};
+ const config={root,home,bin:path.join(home,'bin'),tools:path.join(kit,'tools'),node,hermes:hermes&&path.isAbsolute(hermes)?hermes:null,...hermesRuntime({home,state,hermes}),coach:path.join(kit,'third-party','addons','godspeed-coach','bin','godspeed-coach.mjs'),coach_app:path.join(state,'coach-app'),journal:path.join(kit,'third-party','addons','godspeed-journal','bin','godspeed-journal.mjs'),journal_app:path.join(state,'journal-app'),notices:path.join(state,NOTICES_FILE),timezone};
  const files={'godspeed_routines.py':fs.readFileSync(runner,'utf8').replace(/\r\n/g,'\n'),'godspeed-routines.json':JSON.stringify(config,null,2)+'\n'};
- for(const routine of [...STARTING_ROUTINES,{key:'journal-tick',name:JOURNAL_JOB,script:JOURNAL_SCRIPT}])files[routine.script]='# Written by the Godspeed Mission Control notebook for the routine "'+routine.name+'".\n# The notebook writes it again when its own folders change; the work is in godspeed_routines.py.\nfrom godspeed_routines import main\n\nmain('+JSON.stringify(routine.key)+')\n';
+ for(const routine of [...STARTING_ROUTINES,{key:'journal-tick',name:JOURNAL_JOB,script:JOURNAL_SCRIPT},{key:'chat-tidy',name:CHAT_TIDY_JOB,script:CHAT_TIDY_SCRIPT}])files[routine.script]='# Written by the Godspeed Mission Control notebook for the routine "'+routine.name+'".\n# The notebook writes it again when its own folders change; the work is in godspeed_routines.py.\nfrom godspeed_routines import main\n\nmain('+JSON.stringify(routine.key)+')\n';
  return files;
 }
 export function writeRoutineFiles(home,files){

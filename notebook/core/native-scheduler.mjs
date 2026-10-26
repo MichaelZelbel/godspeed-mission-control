@@ -11,7 +11,7 @@ import {starterBorn} from './starter-workspace.mjs';
 import {setHermesTimezone} from './hermes-config.mjs';
 import {FLAG,STARTING_ROUTINES,routineFiles,writeRoutineFiles,prepareCheckIn,saveRoutineResults,readMachineRecord,writeMachineRecord,telegramInHermes,routineStatus,ownRoutines,metAt,noteHermesMet,cityFiledFirst,OWN_ROUTINES_RULE} from './starting-routines.mjs';
 import {cronOf,cronCalendar,calendarCron,retimeWhat,isTalkGate,isCoachTick,talkArea,moveTalk} from './routine-times.mjs';
-import {readNotebookRoutines,rememberNotebookRoutine,enableKind,deliveryFor,journalWanted,journalOnTheClock,JOURNAL_JOB,JOURNAL_SCRIPT,JOURNAL_WHAT} from './notebook-routines.mjs';
+import {readNotebookRoutines,rememberNotebookRoutine,enableKind,deliveryFor,journalWanted,journalOnTheClock,JOURNAL_JOB,JOURNAL_SCRIPT,JOURNAL_WHAT,CHAT_TIDY_JOB,CHAT_TIDY_SCRIPT,CHAT_TIDY_SCHEDULE,CHAT_TIDY_WHAT} from './notebook-routines.mjs';
 import {loadSettings as coachSettings,saveSettings as saveCoach} from '../../third-party/addons/godspeed-coach/lib/settings.mjs';
 import {rhythmWords} from '../../third-party/addons/godspeed-coach/lib/areas.mjs';
 import {moveSettingsDeadlines} from './native-due.mjs';
@@ -176,7 +176,10 @@ export class NativeScheduler{
  async followDelivery(){
   const installation=this.store.get('settings','installation'),want=deliveryFor(installation,{telegram:telegramInHermes(this.home)});
   const here=readMachineRecord(this.store),mine=readNotebookRoutines(this.store),created=here?.state==='created'&&Array.isArray(here.jobs);
-  const ids=new Set([...(created?here.jobs.map(j=>j.id):[]),...mine.jobs.map(j=>j.id)]);if(!ids.size)return [];
+  // The night chat tidy-up is the one routine whose results are never delivered: its output is its
+  // log, and it exists only where a chat app is connected, which is where this would send it to the
+  // chat. It stays "local" (notebook-routines.mjs, CHAT_TIDY_JOB).
+  const ids=new Set([...(created?here.jobs.map(j=>j.id):[]),...mine.jobs.filter(j=>j.key!=='chat-tidy').map(j=>j.id)]);if(!ids.size)return [];
   const moved=[];
   for(const job of hermesJobs(this.home).filter(j=>ids.has(j.id)&&['local','telegram'].includes(String(j.deliver||''))&&j.deliver!==want)){await this.command(['edit',job.id,'--deliver',want]);moved.push(job.id);}
   if(created&&here.delivery!==want)writeMachineRecord(this.store,{...here,delivery:want});
@@ -207,6 +210,32 @@ export class NativeScheduler{
   const made=hermesJobs(this.home).find(j=>!before.has(j.id)&&j.name===JOURNAL_JOB);
   if(!made)throw Error('Hermes did not keep the routine "'+JOURNAL_JOB+'"');
   rememberNotebookRoutine(this.store,{id:made.id,key:'journal-tick',name:JOURNAL_JOB,what:JOURNAL_WHAT});
+  return made.id;
+ }
+ // THE NIGHT CHAT TIDY-UP (notebook-routines.mjs): one routine on every install whose Hermes has a
+ // chat app connected, because that is where a chat grows long enough that summarising it in front
+ // of a message makes the person wait minutes for an answer. It is made once: a second wiring, a
+ // restart or an update finds it by the id this machine remembers or by its name and makes no
+ // second one, and a routine the person removed stays removed, as the journal's does. Nothing on a
+ // mission control not made from the starter (the owner's adopted one, live on several machines,
+ // with routines of its own).
+ async followChatTidy(){
+  const root=this.store.root;if(!starterBorn(root)||!telegramInHermes(this.home))return null;
+  const mine=readNotebookRoutines(this.store),entry=mine.jobs.find(j=>j.key==='chat-tidy'),jobs=hermesJobs(this.home);
+  const job=(entry&&jobs.find(j=>j.id===entry.id))||jobs.find(j=>j.name===CHAT_TIDY_JOB);
+  if(job){if(!entry)rememberNotebookRoutine(this.store,{id:job.id,key:'chat-tidy',name:CHAT_TIDY_JOB,what:CHAT_TIDY_WHAT});return job.id;}
+  // A routine the person removed stays removed: it was made once, and its record says so.
+  if(entry)return null;
+  const installation=this.store.get('settings','installation'),timezone=installation?.timezone||Intl.DateTimeFormat().resolvedOptions().timeZone;
+  // 01:30 is read on Hermes' own clock, which is the install's zone (a zone already chosen stays).
+  try{setHermesTimezone(this.home,timezone);}catch{}
+  writeRoutineFiles(this.home,routineFiles({root,home:this.home,state:this.store.state,timezone,hermes:this.executable}));
+  const before=new Set(jobs.map(j=>j.id));
+  // Nothing is delivered: its output is its log, and a failed run reaches the Routines list.
+  await this.command(['create',CHAT_TIDY_SCHEDULE,'--no-agent','--name',CHAT_TIDY_JOB,'--script',CHAT_TIDY_SCRIPT,'--deliver','local','--failure-deliver','local','--workdir',root]);
+  const made=hermesJobs(this.home).find(j=>!before.has(j.id)&&j.name===CHAT_TIDY_JOB);
+  if(!made)throw Error('Hermes did not keep the routine "'+CHAT_TIDY_JOB+'"');
+  rememberNotebookRoutine(this.store,{id:made.id,key:'chat-tidy',name:CHAT_TIDY_JOB,what:CHAT_TIDY_WHAT});
   return made.id;
  }
  // SETTINGS > NOTIFICATIONS (18 October 2026). Its switches came from the hosted notebook (a daily
@@ -297,6 +326,7 @@ export class NativeScheduler{
    await this.startRoutines().catch(()=>null);
    await this.addNewStartingRoutines().catch(()=>null);
    await this.followJournal().catch(()=>null);
+   await this.followChatTidy().catch(()=>null);
    await this.followDelivery().catch(()=>null);
    try{moveSettingsDeadlines(this.store);}catch{}
    await beatWhile(this.command(['tick'],{timeout:this.tickLimit}),()=>this.onProgress?.(),{limitMs:this.tickLimit+60000,every:this.beatEvery});
