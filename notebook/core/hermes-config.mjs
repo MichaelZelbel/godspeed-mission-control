@@ -148,6 +148,33 @@ export const CRON_PROVIDER='godspeed_notebook';
 // (8100 seconds), so Hermes gives scripts 9000 seconds; a larger value the owner chose stays.
 export const SCRIPT_TIMEOUT_SECONDS=9000;
 export const QUICK_ALIASES=[['radar','/mc-radar'],['subs','/subscription-review']];
+// A CHAT THAT ANSWERS AT ONCE AND SAYS NOTHING ELSE. Three things made the Telegram chat on the
+// maintainer's server slow or noisy; all three are Hermes settings, changed there by hand on 25 and
+// 26 October 2026, and each is read out of the Hermes the install puts on the machine (0.21.2):
+//
+// - The answer appeared only once it was fully written. Hermes sends a reply as it is written only
+//   with streaming.enabled, which is off by default ("costs extra edit/draft API calls"), and in a
+//   Telegram private chat its transport is Telegram's own live draft, where the answer grows in one
+//   bubble and only the finished answer stays (display.platforms.telegram.streaming; the master
+//   switch above still gates it).
+// - "Let me check" sentences stayed in the chat: Hermes' mid-turn commentary
+//   (interim_assistant_messages) and its heartbeat while a turn runs long
+//   (long_running_notifications) are both on for Telegram. Hermes reads each of them per platform
+//   first, at display.platforms.<platform>.<key>, before the display-level key and its own defaults
+//   (gateway/display_config.py, resolve_display_setting; gateway/run_turn.py asks for the heartbeat
+//   by that name).
+// - A message waited 4 minutes 9 seconds (26 October 2026) while the long chat was summarised in
+//   front of it. Hermes no longer resets a gateway chat daily, and its own trigger is a share of the
+//   window (0.75 of 272,000 tokens), which a real chat of 224,000 tokens had not reached.
+//   compression.threshold_tokens is Hermes' absolute cap, off by default; 100,000 tokens summarises
+//   long before anyone is kept waiting for it.
+export const COMPRESSION_THRESHOLD_TOKENS=100000;
+// Hermes' own words for true and false (gateway/display_config.py), plus YAML's bare off, and the
+// ways a file says a key holds nothing.
+const HERMES_TRUE=['true','1','yes','on'],HERMES_FALSE=['false','0','no','off'],HERMES_UNSET=['','null','~','none'];
+// The value here is still Hermes' own, not the owner's: the key is missing, or it holds the value
+// Hermes itself writes as its default.
+const hermesOwn=(text,keys,defaults)=>{const now=readConfigValue(text,keys);return now===null||defaults.includes(String(now).trim().replace(/^["']|["']$/g,'').toLowerCase());};
 export function godspeedHermesSettings(text){
  let out=String(text||'');
  out=setConfigValue(out,['memory','memory_enabled'],'false');
@@ -166,6 +193,15 @@ export function godspeedHermesSettings(text){
  for(const [name,target] of QUICK_ALIASES)if(readConfigValue(out,['quick_commands',name])===null){out=setConfigValue(out,['quick_commands',name,'type'],'alias');out=setConfigValue(out,['quick_commands',name,'target'],JSON.stringify(target));}
  const current=Number(readConfigValue(out,['cron','script_timeout_seconds']));
  if(!(current>=SCRIPT_TIMEOUT_SECONDS))out=setConfigValue(out,['cron','script_timeout_seconds'],String(SCRIPT_TIMEOUT_SECONDS));
+ // The settings of a chat that answers at once, explained above. Each goes in where the key is
+ // missing or still holds Hermes' own default; any other value is the owner's and stays.
+ for(const [keys,value,defaults] of [
+  [['streaming','enabled'],'true',HERMES_FALSE],
+  [['display','platforms','telegram','streaming'],'true',HERMES_TRUE],
+  [['display','platforms','telegram','interim_assistant_messages'],'false',HERMES_TRUE],
+  [['display','platforms','telegram','long_running_notifications'],'false',HERMES_TRUE],
+  [['compression','threshold_tokens'],String(COMPRESSION_THRESHOLD_TOKENS),HERMES_UNSET],
+ ])if(hermesOwn(out,keys,defaults))out=setConfigValue(out,keys,value);
  return out;
 }
 
