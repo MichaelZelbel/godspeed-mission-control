@@ -104,9 +104,27 @@ export function withElevenLabsTranscription(text){
  let out=setConfigValue(text,['stt','provider'],JSON.stringify(STT_PROVIDER));
  return setConfigValue(out,['stt','elevenlabs','model_id'],JSON.stringify(STT_MODEL));
 }
+// Godspeed's own: the stt.provider in config.yaml is ElevenLabs and Godspeed's record says Godspeed
+// wrote it. Only that one is Godspeed's to write again or to take away.
+export function godspeedWroteTranscription(config,record={}){
+ return unquote(readConfigValue(config,['stt','provider'])||'')===STT_PROVIDER&&record.stt===STT_PROVIDER;
+}
 export function mayWriteTranscription(config,record={}){
- const provider=unquote(readConfigValue(config,['stt','provider'])||'');
- return !provider||(provider===STT_PROVIDER&&record.stt===STT_PROVIDER);
+ return !unquote(readConfigValue(config,['stt','provider'])||'')||godspeedWroteTranscription(config,record);
+}
+// TAKING IT AWAY AGAIN, when the key that switched it on is replaced by one ElevenLabs refuses the
+// permission: without this, Hermes would keep sending voice notes to ElevenLabs with a key that may
+// not transcribe them, and the page would say ElevenLabs understands them. Hermes understands them
+// here again, as it did before. A section left with nothing under it goes too, as withFreeVoice does.
+export function withoutElevenLabsTranscription(text){
+ let out=deleteConfigValue(text,['stt','provider']);
+ out=deleteConfigValue(out,['stt','elevenlabs','model_id']);
+ return dropEmpty(dropEmpty(out,['stt','elevenlabs']),['stt']);
+}
+function dropEmpty(text,keys){
+ if(readConfigValue(text,keys)!=='')return text;
+ const without=deleteConfigValue(text,keys);
+ return text.split('\n').length-without.split('\n').length===1?without:text;
 }
 // What Settings says about understanding a voice note: where it happens, with which model, and the one
 // sentence about the last answer from ElevenLabs while it still happens on the computer.
@@ -205,15 +223,22 @@ export async function saveVoice({home,state,input={},fetcher,api,node,script,pla
  if(typed){const {setEnvValue}=await import('./routine-ai.mjs');writePrivate(envFile,setEnvValue(read(envFile),KEY_NAME,typed));}
  // UNDERSTANDING THE VOICE NOTE, asked once with a one-second sample, the way the voice was just
  // tried with a sample: a key given now, or a key whose permission is not settled yet (an answer that
- // never arrived is asked again next time). Only an answer of yes writes anything; a refusal and an
- // ElevenLabs that could not be reached leave transcription where it is, and the words go to the page.
+ // never arrived is asked again next time). An answer of yes switches ElevenLabs on; a no switches a
+ // key's own earlier yes off again, so the voice note is understood here rather than with a key that
+ // may not do it; an ElevenLabs that could not be reached leaves everything as it is and is asked
+ // again at the next save. The words go to the page either way.
  const asked=await askedToTranscribe({key,typed,record,fetcher,api});
  let config=withElevenLabs(read(configFile),{home,state,choice,node,script,platform});
  const wrote=asked?.answer==='yes'&&mayWriteTranscription(config,record);
+ const undid=asked?.answer==='no'&&godspeedWroteTranscription(config,record);
  if(wrote)config=withElevenLabsTranscription(config);
+ if(undid)config=withoutElevenLabsTranscription(config);
  writePrivate(configFile,config);
- writeVoiceRecord(state,{...clearFailure(record),service:'elevenlabs',elevenlabs:choice,at:now.toISOString(),
-  ...(wrote?{stt:STT_PROVIDER}:{}),...(asked?{transcribe:{...asked,at:now.toISOString()}}:{})});
+ const next={...clearFailure(record),service:'elevenlabs',elevenlabs:choice,at:now.toISOString()};
+ if(wrote)next.stt=STT_PROVIDER;
+ if(undid)delete next.stt;
+ if(asked)next.transcribe={...asked,at:now.toISOString()};
+ writeVoiceRecord(state,next);
  return {...voiceStatus({home,state}),sample:'data:audio/ogg;base64,'+sample.toString('base64')};
 }
 // Nothing is asked again once the answer is settled (ElevenLabs transcribes, or it said the key may

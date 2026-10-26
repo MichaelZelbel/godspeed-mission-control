@@ -9,7 +9,7 @@ import {spawn,spawnSync,execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {installStarter} from '../core/starter-workspace.mjs';
 import {readConfigValue,configList,godspeedHermesSettings} from '../core/hermes-config.mjs';
-import {PROVIDER,FREE_VOICE,VOICE_MODE_FILE,SPEECH_SCRIPT,ELEVENLABS_DEFAULTS,withElevenLabs,withFreeVoice,godspeedVoiceSettings,speechCommand,chatVoiceDefaults,ownerChats,saveVoice,voiceStatus,elevenLabsChoice,sampleText} from '../core/voice-replies.mjs';
+import {PROVIDER,FREE_VOICE,VOICE_MODE_FILE,SPEECH_SCRIPT,ELEVENLABS_DEFAULTS,withElevenLabs,withFreeVoice,withoutElevenLabsTranscription,godspeedVoiceSettings,speechCommand,chatVoiceDefaults,ownerChats,saveVoice,voiceStatus,elevenLabsChoice,sampleText} from '../core/voice-replies.mjs';
 import {elevenLabsProblem,elevenLabsSpeech,readVoiceRecord,noteVoiceFailed,noteVoiceWorked,failureWords,oneSecondSample,transcribePermissionWords,STT_MODEL,STT_PROVIDER,VOICE_FILE} from '../core/voice-speech.mjs';
 import {readNotices} from '../core/notices.mjs';
 import {TelegramRunner} from '../../docker/full-candidate/telegram-runner.mjs';
@@ -232,6 +232,41 @@ test('a key that may not transcribe leaves voice notes understood here, and Sett
  const yes=await saving(f,{key:KEY},elevenLabs().fetcher);
  assert.equal(JSON.parse(readConfigValue(f.config(),['stt','provider'])),STT_PROVIDER);
  assert.equal(yes.transcribe.words,null);
+});
+
+test('a key that replaces one ElevenLabs allowed, and may not transcribe, has voice notes understood here again',async t=>{
+ const refusal=()=>[401,{detail:{status:'missing_permissions',message:'The API key you used is missing the permission speech_to_text to execute this operation.'}}];
+ const f=installation(t);
+ // The first key may, so ElevenLabs understands the voice notes.
+ await saving(f,{key:KEY},elevenLabs().fetcher);
+ assert.equal(JSON.parse(readConfigValue(f.config(),['stt','provider'])),STT_PROVIDER);
+ // The person replaces it with a key ElevenLabs refuses the permission. Without taking it away again,
+ // Hermes would send every voice note to ElevenLabs with a key that may not transcribe it.
+ const second=await saving(f,{key:'sk_second000000000000000000000000'},elevenLabs(undefined,refusal).fetcher);
+ assert.equal(readConfigValue(f.config(),['stt']),null,'nothing of it is left behind');
+ assert.equal(readConfigValue(f.config(),['model','provider']),'openrouter','and the rest of config.yaml is untouched');
+ assert.deepEqual(second.transcribe,{service:'local',model:null,words:transcribePermissionWords()});
+ assert.equal(readVoiceRecord(f.state).stt,undefined,'Godspeed holds nothing it did not write');
+ assert.equal(JSON.parse(readConfigValue(f.config(),['tts','provider'])),PROVIDER,'the voice itself is still the one that was heard');
+ // A third key that may switches it on again.
+ await saving(f,{key:KEY},elevenLabs().fetcher);
+ assert.equal(JSON.parse(readConfigValue(f.config(),['stt','elevenlabs','model_id'])),'scribe_v2');
+ // The owner's own stt.provider is not Godspeed's to take away, whatever ElevenLabs answers.
+ const owned=installation(t);
+ fs.writeFileSync(path.join(owned.home,'config.yaml'),'stt:\n  provider: openai\n');
+ await saving(owned,{key:KEY},elevenLabs(undefined,refusal).fetcher);
+ assert.equal(readConfigValue(owned.config(),['stt','provider']),'openai');
+ // An ElevenLabs that cannot be reached changes nothing either way: what was switched on stays on
+ // until an answer arrives, and the next save asks again.
+ const kept=await saving(f,{key:KEY},async url=>{if(/speech-to-text/.test(String(url)))throw new TypeError('fetch failed');return new Response(OGG);});
+ assert.equal(JSON.parse(readConfigValue(f.config(),['stt','provider'])),STT_PROVIDER);
+ assert.equal(kept.transcribe.service,'elevenlabs');
+ assert.equal(readVoiceRecord(f.state).transcribe.answer,'unknown');
+ // Only what Godspeed wrote goes: stt settings of the owner's own beside it stay, and the section
+ // goes only when nothing of theirs is under it.
+ assert.equal(withoutElevenLabsTranscription('stt:\n  provider: "elevenlabs"\n  language: de\n  elevenlabs:\n    model_id: "scribe_v2"\n    language_code: de\n'),
+  'stt:\n  language: de\n  elevenlabs:\n    language_code: de\n');
+ assert.equal(withoutElevenLabsTranscription('model:\n  provider: openrouter\nstt:\n  provider: "elevenlabs"\n  elevenlabs:\n    model_id: "scribe_v2"\n'),'model:\n  provider: openrouter\n');
 });
 
 test('a transcription test that cannot reach ElevenLabs changes nothing and says so',async t=>{
