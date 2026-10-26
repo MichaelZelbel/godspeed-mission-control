@@ -248,6 +248,20 @@ while IFS=$'\t' read -r ID KIND WHAT; do
       esac
       echo "Carry out WHAT at the place it names, exactly as prepared (the AFTER text or file the item or its preview names), and nothing beyond it. First read and save what is there now (NOW) under routines/work/$TODAY/$ID/before.txt so it can be put back. Then apply it with the tools you have: an API or command line first, the signed-in browser if that is the only way. Then read the live place again and quote what it now shows. If the live place differs from what the move expected, or applying it would do anything the yes did not cover, stop and end with RESULT: FAILED naming what differs."
     fi
+    # A MACHINE REPAIR MAY REACH OUTSIDE THE FOLDER (2026-10-27). From 9 to 26 October 2026 the
+    # server's nightly Hermes upgrade failed every night. Five runs of the item filed for it found
+    # the cause and the one-line fix (install the corrected script over the installed copy), but
+    # the recipe kept every run inside the mission control's folder, so each wrote the fix into a
+    # note nobody read and closed the report. KIND repair is the one item that may change the
+    # files the mission control installed or runs on this machine, only for the fault it names,
+    # with a copy of each kept first and the fault shown gone by the check that found it.
+    if [ "$KIND" = "repair" ]; then
+      echo
+      echo "## This item is a machine repair"
+      echo "It mends the mission control's own machinery on this computer: the fault WHAT names. For this item, and only for it, you may change files outside $GODSPEED: the ones the mission control itself installed or runs here (its scheduled scripts and programs, and their settings), and only as far as repairing that fault needs."
+      echo "Before you change such a file, copy it whole under routines/work/$TODAY/$ID/before/, keeping its full path beneath that folder (/etc/example/job.conf goes to routines/work/$TODAY/$ID/before/etc/example/job.conf), so it can be put back. Never touch a password, a key or a token, an account, a payment, or anything that reaches another person."
+      echo "Then prove the fault is gone: run again, live, the check that found it, and quote what it says now. A repair written down for later (a note, a file of steps, a card saying what someone should change) is not a repair. If you cannot make the change from here, end with RESULT: FAILED and say what it needs."
+    fi
     echo
     echo "## Where things go"
     echo "Anything you write for this item goes at the path DONE WHEN names, or under routines/work/$TODAY/$ID/ if it names none. Your final line is the RESULT line the recipe describes; the register is updated by the program that called you, never by you."
@@ -279,6 +293,9 @@ while IFS=$'\t' read -r ID KIND WHAT; do
     --allowed-tools "Bash Read Grep Glob Write Edit WebSearch WebFetch${ITEM_TOOLS:+ $ITEM_TOOLS}"
   RC=$?
   RESULT_LINE="$(grep -a '^RESULT:' "$ITEMDIR/answer.txt" 2>/dev/null | tail -1 | tr -d '\r')"
+  if [ "$KIND" = "repair" ] && [ -d "$ITEMDIR/before" ]; then
+    log "$ID kept $(find "$ITEMDIR/before" -type f 2>/dev/null | wc -l | tr -d ' ') file(s) as they were before the repair, under routines/work/$TODAY/$ID/before/"
+  fi
   if [ -d "$GODSPEED/.git" ]; then
     git -C "$GODSPEED" status --porcelain --untracked-files=all 2>/dev/null | sort > "$ITEMDIR/.after-state"
     printf '%s\n' "$BEFORE_STATE" | sort > "$ITEMDIR/.before-state"

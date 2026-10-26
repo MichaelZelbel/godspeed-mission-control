@@ -27,9 +27,15 @@
 //  - `sweep --card` cancels the work under a card you answered. `sweep --goal` marks the work
 //    under a changed goal stale, so a change to a goal reaches the plan beneath it instead of
 //    leaving yesterday's plan running.
-//  - An item has a KIND: `do` (the default) or `learn`. A learn item is a question, and it is
-//    done when the answer is WRITTEN somewhere a reader can open, so its DONE WHEN must name a
+//  - An item has a KIND: `do` (the default), `learn` or `repair`. A learn item is a question, and
+//    it is done when the answer is WRITTEN somewhere a reader can open, so its DONE WHEN must name a
 //    file. "We found out X" in a runner's report closes nothing; the file does.
+//  - A REPAIR ITEM (2026-10-27) mends the mission control's own machinery on the machine the run is
+//    on, and mc-work-run lets that one run change the files outside the folder that the mission
+//    control installed or runs there. Until then every item was held inside the folder, so a run
+//    that had found a broken nightly upgrade script on the server, and the one-line fix, could
+//    only write the fix down; the item counted as done on that note and the upgrade failed for 18
+//    nights (9 to 26 October 2026). A repair reaches nobody else, so it is never outward.
 //  - A STANDING PERMISSION (2026-10-12). Outward work filed with `--may <kind>` rides on a MAY line
 //    the person's own words put on its goal card (`mc-goals allow`). In notice mode it goes out at
 //    its GOES OUT time unless the person stops it first (`stop`); in alone mode when it is ready.
@@ -64,7 +70,7 @@ const PERSON = /^(person|me|you|him|her|them|i)$/i;
 const asOwner = (v) => (PERSON.test(v) ? 'person' : /^mission[ -]?control$/i.test(v) ? 'godspeed' : v);
 const NEEDS = /^(none|person|authorization|capability:.+)$/;
 const asNeeds = (v) => (PERSON.test(v) ? 'person' : v);
-const KINDS = ['do', 'learn'];
+const KINDS = ['do', 'learn', 'repair'];
 // A learn item is done when its answer is in a file. "Names a file" means: a token with a
 // slash in it, ending in .md, .csv, .json or .txt, trailing punctuation ignored.
 const namesFile = (s) => String(s || '').split(/\s+/).map(t => t.replace(/[.,;:)"'\]]+$/, ''))
@@ -345,7 +351,7 @@ cmds.file = (a) => {
   if (a.learn === 'true') die('--learn needs the question, in quotes');
   const question = oneLine(a.learn);
   const kind = oneLine(a.kind || (question ? 'learn' : 'do'));
-  if (!KINDS.includes(kind)) die('--kind must be do or learn');
+  if (!KINDS.includes(kind)) die('--kind must be do, learn or repair');
   const what = oneLine(a.what) || question;
   if (!what) die('--what is required');
   let done = oneLine(a['done-when']);
@@ -361,6 +367,7 @@ cmds.file = (a) => {
   let needs = asNeeds(oneLine(a.needs || 'none'));
   if (!NEEDS.test(needs)) die('--needs must be none, person, authorization or capability:<what is missing>');
   const outward = a.outward === 'yes' ? 'yes' : 'no';
+  if (kind === 'repair' && (outward === 'yes' || a.may !== undefined)) die('a repair mends this machine and reaches nobody else, so it is never outward: file the outward part as an item of its own');
   if (outward === 'yes' && needs === 'none') needs = 'authorization';
   if (owner === 'person' && needs === 'none') needs = 'person';
   const d = a.date || today();
@@ -746,7 +753,8 @@ cmds.check = () => {
   for (const c of all) {
     if (c.id !== c.f.ID) problems.push(`${c.id}: ID field says ${c.f.ID}`);
     if (!STATUSES.includes(c.f.STATUS)) problems.push(`${c.id}: STATUS ${c.f.STATUS}`);
-    if (c.f.KIND && !KINDS.includes(c.f.KIND)) problems.push(`${c.id}: KIND ${c.f.KIND} (do or learn; an old card with none is do)`);
+    if (c.f.KIND && !KINDS.includes(c.f.KIND)) problems.push(`${c.id}: KIND ${c.f.KIND} (do, learn or repair; an old card with none is do)`);
+    if (c.f.KIND === 'repair' && c.f.OUTWARD === 'yes') problems.push(`${c.id}: a repair that is outward; a repair reaches nobody else, so the outward part is an item of its own`);
     if (!OWNERS.test(asOwner(c.f.OWNER || ''))) problems.push(`${c.id}: OWNER ${c.f.OWNER}`);
     if (!NEEDS.test(asNeeds(c.f.NEEDS || ''))) problems.push(`${c.id}: NEEDS ${c.f.NEEDS}`);
     if (!c.f['DONE WHEN']) problems.push(`${c.id}: no DONE WHEN`);
@@ -772,7 +780,10 @@ cmds.help = () => say(`mc-work: dispatched, attempted and verified are three dif
   file --what "..." --done-when "..." [--key K] [--goal G] [--card C] [--check "<shell, exit 0 when done>"]
        [--owner godspeed|person|company:<slug>] [--needs none|person|authorization|capability:<x>] [--outward yes|no]
        [--max-attempts 3] [--stale-after 7] [--source "..."]       a second file with the same open KEY files nothing
-       [--kind do|learn]                a learn item is a question; its DONE WHEN must name a file the answer is written in
+       [--kind do|learn|repair]         a learn item is a question; its DONE WHEN must name a file the answer is written in.
+                                        a repair mends the mission control's own machinery on the machine the run is on:
+                                        mc-work-run lets that run change the files outside the folder the mission control
+                                        installed or runs there, keeping a copy of each first; never outward
        [--learn "<question>" --path <file>]   sugar: KIND learn, WHAT the question, DONE WHEN "the answer ... is written in <file>"
        [--outward yes --goal G --may <kind> --check "<live check>" [--goes-out YYYY-MM-DDTHH:MM]]
                                         outward work on a standing permission of goal G (mc-goals allow; a strategy
