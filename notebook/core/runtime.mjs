@@ -58,12 +58,23 @@ export function hermesProvider({executable='hermes',home,cwd,model,provider,sour
 // The chain is followed here (three steps at most), then the places a venv is kept.
 // {python, source}: python is null when none is found; source is Hermes' own folder, which the
 // helper puts first on Python's path.
-export function hermesPython({executable='hermes',sourceRoot,home,platform=process.platform}={}){
+export function hermesPython(options={}){
+  const {pythons,source}=hermesPythons(options);
+  return {python:pythons[0]||null,source};
+}
+// EVERY PYTHON OF THAT ONE HERMES, in the order they are tried (26 October 2026). The launcher's
+// Python can exist and still not load Hermes for this account: on a server whose Hermes belongs to
+// another account, its launcher ran a managed Python that refused, as root, to finish Hermes' own
+// update, and then lacked a module Hermes needs, while the source's own venv loaded Hermes fine.
+// The add-on connection (core/addon-model.mjs) tries these in order and remembers the one that
+// loaded. They all belong to the verified executable: its launcher's Python, the ones beside it,
+// and the venv or .venv of Hermes' own source folder, never another installation or account.
+export function hermesPythons({executable='hermes',sourceRoot,home,platform=process.platform}={}){
   const exists=file=>{try{return fs.statSync(file).isFile();}catch{return false;}};
   const isSource=dir=>!!dir&&exists(path.join(dir,'hermes_cli','__init__.py'));
   if(platform==='win32'){
     const source=sourceRoot||path.resolve(executable,'../../hermes-agent'),python=path.join(source,'venv','Scripts','python.exe');
-    return {python:exists(python)?python:null,source};
+    return {pythons:exists(python)?[python]:[],source};
   }
   const pythons=[],sources=[sourceRoot];
   const follow=(file,steps)=>{
@@ -84,12 +95,14 @@ export function hermesPython({executable='hermes',sourceRoot,home,platform=proce
   pythons.push(path.join(bin,'python3'),path.join(bin,'python'),path.resolve(real,'../../.venv/bin/python3'),path.resolve(real,'../../venv/bin/python3'));
   if(sourceRoot)pythons.push(path.join(sourceRoot,'venv','bin','python3'),path.join(sourceRoot,'.venv','bin','python3'));
   if(home)pythons.push(path.join(home,'hermes-agent','venv','bin','python3'));
-  const python=pythons.find(file=>path.isAbsolute(file)&&exists(file))||null;
+  const usable=file=>path.isAbsolute(file)&&exists(file),python=pythons.find(usable)||null;
   // Hermes' own folder: named by the launcher, else the one holding hermes_cli near the launcher or
   // the venv (the folder that holds venv/ or .venv/).
   if(python)sources.push(path.resolve(python,'../../..'));
   const source=sources.find(isSource)||sourceRoot||(python?path.resolve(python,'../../..'):path.resolve(executable,'../..'));
-  return {python,source};
+  // Last, the venv Hermes' own source folder keeps, also when the launcher names another Python.
+  if(isSource(source))pythons.push(path.join(source,'venv','bin','python3'),path.join(source,'.venv','bin','python3'));
+  return {pythons:[...new Set(pythons.filter(usable))],source};
 }
 // The words a person sees when an AI program could not answer.
 export function childFailure(error,timeoutMs,unstarted){

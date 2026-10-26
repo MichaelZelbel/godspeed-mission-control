@@ -1,5 +1,5 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';
-import {hermesPython} from '../core/runtime.mjs';
+import {hermesPython,hermesPythons} from '../core/runtime.mjs';
 
 // The model list under the chat runs a small helper with the Python Hermes runs on
 // (assistant-files/chat-options.py). Until 18 October 2026 that Python was looked for only where the
@@ -42,4 +42,17 @@ test('Hermes 0.22: a launcher hands on to the source\'s own launcher, which runs
  const inner=file(path.join(source,'.hermes','bin','hermes'),"#!/bin/sh\nexec "+python+" -I -c 'import os, re, sys\nsys.path.insert(0, '\"'\"'"+source+"'\"'\"')\nfrom hermes_cli.main import main\n' \"$@\"\n");
  const outer=file(path.join(root,'.local','bin','hermes'),'#!/bin/sh\nexec '+inner+' "$@"\n');
  assert.deepEqual(hermesPython({executable:outer,home:path.join(root,'.hermes'),platform:'linux'}),{python,source});
+});
+
+// 26 October 2026, a server updated as root: root's own `hermes` handed on to the launcher of a
+// Hermes another account owns, whose managed Python could not load Hermes as root, while the source's
+// own venv did. Every Python of that one Hermes is a candidate, the launcher's first, the source's venv
+// last; the add-on connection tries them in order (core/addon-model.mjs).
+test('every Python of the one Hermes, the launcher\'s first and its source\'s own venv after it',t=>{
+ const root=temporary(t),source=path.join(root,'opt','hermes-src');file(path.join(source,'hermes_cli','__init__.py'));
+ const managed=file(path.join(source,'.hermes','tools','python-3.14.7','bin','python3')),venv=file(path.join(source,'venv','bin','python3'));
+ const inner=file(path.join(source,'.hermes','bin','hermes'),"#!/bin/sh\nexec "+managed+" -I -c 'import sys\nsys.path.insert(0, '\"'\"'"+source+"'\"'\"')\nimport hermes_bootstrap\n' \"$@\"\n");
+ const outer=file(path.join(root,'root','.local','bin','hermes'),'#!/bin/sh\nexec '+inner+' "$@"\n');
+ assert.deepEqual(hermesPythons({executable:outer,home:path.join(root,'root','.hermes'),platform:'linux'}),{pythons:[managed,venv],source});
+ assert.deepEqual(hermesPython({executable:outer,home:path.join(root,'root','.hermes'),platform:'linux'}),{python:managed,source},'the first one is still the model list\'s');
 });
