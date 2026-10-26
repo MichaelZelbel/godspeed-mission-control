@@ -41,6 +41,7 @@ case "${FAKE_MODE:-ok}" in
   short)    [ -n "$P" ] && { mkdir -p "$(dirname "$P")"; echo "too short" > "$P"; }; echo "RESULT: wrote $P" > "$OUT"; exit 0 ;;
   *)        [ -n "${FAKE_TOUCH:-}" ] && printf 'repaired\n' > "$FAKE_TOUCH"
             [ -n "${FAKE_BEFORE:-}" ] && printf '%s\n' "$FAKE_BEFORE" > "$(dirname "$OUT")/before.txt"
+            [ -n "${FAKE_KEEP:-}" ] && { mkdir -p "$(dirname "$OUT")/before/$(dirname "$FAKE_KEEP")"; printf 'as it was\n' > "$(dirname "$OUT")/before/$FAKE_KEEP"; }
             [ -n "$P" ] && { mkdir -p "$(dirname "$P")"; { echo "# Answer"; for i in $(seq 1 80); do printf 'word%s ' "$i"; done; echo; echo; echo "## Sources"; echo "- https://example.org/a"; } > "$P"; }
             echo "scratch line"; [ -n "${FAKE_SAY:-}" ] && echo "SAY: $FAKE_SAY"
             echo "RESULT: wrote $P with 80 words" ;;
@@ -171,6 +172,25 @@ if command -v git >/dev/null 2>&1; then
   contains "a program the item repaired is saved with the run" "$(git -C "$TMP" show --stat --format= HEAD 2>/dev/null)" "tool.sh"
   missing "  and a file that was already changed before the run is left alone" "$(git -C "$TMP" show --stat --format= HEAD 2>/dev/null)" "already-dirty.txt"
 fi
+
+# --- a machine repair may reach outside the folder, keeping a copy first (2026-10-27) -----------------------------
+# From 9 to 26 October 2026 five runs found the server's broken upgrade and its one-line fix, and
+# could only write the fix into a note, because every run was held inside the folder.
+hw file --what "Put the fixed nightly upgrade script back in place" --done-when "the upgrade's own check passes again on this machine" --kind repair --key upgrade --source test >/dev/null
+RID="$(grep -l 'KEY: upgrade$' "$TMP/work"/W-*.md | head -1 | xargs basename | sed 's/.md$//')"
+OUT="$(FAKE_KEEP="etc/example/job.conf" run --only "$RID" 2>&1)"
+contains "a repair item is taken as a repair" "$OUT" "$RID taken (repair)"
+PS="$(cat "$TMP/routines/work/2026-09-15/$RID/prompt-seen.txt")"
+contains "  and told it is a machine repair" "$PS" "## This item is a machine repair"
+contains "  that it may change what the mission control installed or runs outside its folder" "$PS" "you may change files outside "
+contains "  only for the fault the item names" "$PS" "only as far as repairing that fault needs"
+contains "  to copy each file whole first, under the item's own run folder" "$PS" "copy it whole under routines/work/2026-09-15/$RID/before/"
+contains "  never a secret, an account, a payment or anything outward" "$PS" "Never touch a password, a key or a token, an account, a payment"
+contains "  to prove the fault gone with the check that found it" "$PS" "run again, live, the check that found it"
+contains "  and that a repair written down for later does not count" "$PS" "A repair written down for later"
+contains "the copies it kept are named in the run" "$OUT" "$RID kept 1 file(s) as they were before the repair"
+missing "an item of another kind is never told it may reach outside" "$(cat "$TMP/routines/work/2026-09-15/W-20260915-02/prompt-seen.txt")" "machine repair"
+missing "  and neither is a do item" "$(cat "$TMP/routines/work/2026-09-15/W-20260915-01/prompt-seen.txt")" "machine repair"
 
 # --- the budget and the limit -----------------------------------------------------------------------------------
 hw file --what "One more" --done-when "research/one.md exists" --key one --source test >/dev/null
