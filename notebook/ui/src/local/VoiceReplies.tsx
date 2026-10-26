@@ -13,14 +13,17 @@ export type VoiceStatus={available:boolean;
   voice?:{service:'edge'|'elevenlabs'|'hermes';voice_id?:string|null;model?:string;provider?:string;stability?:number|null;similarity_boost?:number|null;style?:number|null};
   elevenlabs?:{voice_id?:string;model:string;stability:number;similarity_boost:number;style:number};
   key?:boolean;chats?:{voice_only:number;all:number;off:number};auto_tts?:boolean|null;
+  transcribe?:{service:'elevenlabs'|'local'|'hermes';model?:string|null;provider?:string;words?:string|null};
   failing?:{since:string;error:string|null;at:string|null}|null;sample?:string};
 async function call(route:string,body?:unknown){const r=await fetch('/api/'+route,{method:body?'POST':'GET',headers:{'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});const data=await r.json();if(!r.ok)throw new Error(data.error);return data;}
 const when=(at:string)=>{const d=new Date(at);return isNaN(d.getTime())?at:d.toLocaleString(undefined,{dateStyle:'medium',timeStyle:'short'});};
-const MODELS=['eleven_multilingual_v2','eleven_v3','eleven_flash_v2_5','eleven_turbo_v2_5'];
+// eleven_v4_turbo first: it is the fastest of them and what a voice note gets unless another is picked.
+const MODELS=['eleven_v4_turbo','eleven_multilingual_v2','eleven_v3','eleven_flash_v2_5','eleven_turbo_v2_5'];
+export const DEFAULT_MODEL=MODELS[0];
 
 export function VoiceState({status}:{status?:VoiceStatus}){
   if(!status?.available||!status.voice)return null;
-  const {voice,chats,failing}=status;
+  const {voice,chats,failing,transcribe}=status;
   const settings=[voice.stability!=null&&'stability '+voice.stability,voice.similarity_boost!=null&&'similarity '+voice.similarity_boost,voice.style!=null&&'style '+voice.style].filter(Boolean).join(', ');
   return <div className="space-y-2">
     {voice.service==='elevenlabs'?<p>Your assistant speaks with your ElevenLabs voice <strong>{voice.voice_id}</strong> (model {voice.model}{settings?'; '+settings:''}).</p>
@@ -30,6 +33,10 @@ export function VoiceState({status}:{status?:VoiceStatus}){
       :chats?.all?<p>In your Telegram chat every answer is spoken. Send <code>/voice on</code> there to have only your voice notes answered with a voice note.</p>
       :status.auto_tts===false&&!chats?.voice_only?<p>Spoken answers are switched off in Hermes' own settings, so your voice notes get text. Send <code>/voice on</code> in your Telegram chat to switch voice replies on there.</p>
       :null}
+    {/* Where the voice note is understood, and the one sentence when it stays on this computer
+        because the ElevenLabs key may not transcribe or could not be asked. */}
+    {transcribe?.service==='elevenlabs'?<p>Your voice notes are understood by ElevenLabs{transcribe.model?<> ({transcribe.model})</>:null}, which is quicker than understanding them on this computer.</p>
+      :transcribe?.words?<p>{transcribe.words}</p>:null}
     {failing&&<p className="flex gap-2 items-start" role="alert"><AlertTriangle className="h-5 w-5 shrink-0 text-amber-500" aria-hidden="true"/><span>The last voice note could not be made on {when(failing.at||failing.since)}. {failing.error} Your answers still arrive as text.</span></p>}
   </div>;
 }
@@ -38,7 +45,7 @@ export function VoiceReplies(){
   const qc=useQueryClient();
   const status=useQuery({queryKey:['voice'],queryFn:()=>call('voice') as Promise<VoiceStatus>});
   const data=status.data;
-  const [key,setKey]=useState(''),[voiceId,setVoiceId]=useState(''),[model,setModel]=useState('eleven_multilingual_v2');
+  const [key,setKey]=useState(''),[voiceId,setVoiceId]=useState(''),[model,setModel]=useState(DEFAULT_MODEL);
   const [stability,setStability]=useState('0.5'),[similarity,setSimilarity]=useState('0.75'),[style,setStyle]=useState('0');
   const [busy,setBusy]=useState(false),[error,setError]=useState(''),[done,setDone]=useState(''),[sample,setSample]=useState('');
   // The form starts with the ElevenLabs voice chosen before, so tuning it means changing one number.

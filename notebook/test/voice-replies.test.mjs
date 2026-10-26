@@ -9,8 +9,8 @@ import {spawn,spawnSync,execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {installStarter} from '../core/starter-workspace.mjs';
 import {readConfigValue,configList,godspeedHermesSettings} from '../core/hermes-config.mjs';
-import {PROVIDER,FREE_VOICE,VOICE_MODE_FILE,SPEECH_SCRIPT,withElevenLabs,withFreeVoice,godspeedVoiceSettings,speechCommand,chatVoiceDefaults,ownerChats,saveVoice,voiceStatus,elevenLabsChoice,sampleText} from '../core/voice-replies.mjs';
-import {elevenLabsProblem,elevenLabsSpeech,readVoiceRecord,noteVoiceFailed,noteVoiceWorked,failureWords,VOICE_FILE} from '../core/voice-speech.mjs';
+import {PROVIDER,FREE_VOICE,VOICE_MODE_FILE,SPEECH_SCRIPT,ELEVENLABS_DEFAULTS,withElevenLabs,withFreeVoice,godspeedVoiceSettings,speechCommand,chatVoiceDefaults,ownerChats,saveVoice,voiceStatus,elevenLabsChoice,sampleText} from '../core/voice-replies.mjs';
+import {elevenLabsProblem,elevenLabsSpeech,readVoiceRecord,noteVoiceFailed,noteVoiceWorked,failureWords,oneSecondSample,transcribePermissionWords,STT_MODEL,STT_PROVIDER,VOICE_FILE} from '../core/voice-speech.mjs';
 import {readNotices} from '../core/notices.mjs';
 import {TelegramRunner} from '../../docker/full-candidate/telegram-runner.mjs';
 
@@ -98,11 +98,16 @@ test('the owner\'s chat is found where each installation keeps it',t=>{
  assert.deepEqual(ownerChats({home:temporary(t),env:{GODSPEED_TELEGRAM:'on',GODSPEED_CANDIDATE_BOT_OWNER:'8080',TELEGRAM_HOME_CHANNEL:'8080'}}),['8080']);
 });
 
-// A stand-in for ElevenLabs: the request as it arrived, and the answer it gives.
-function elevenLabs(answer=()=>[200,OGG]){
- const calls=[];
- const fetcher=async(url,init)=>{calls.push({url,init,body:JSON.parse(init.body)});const [status,body]=answer(calls.length);return new Response(Buffer.isBuffer(body)?body:JSON.stringify(body),{status});};
- return {calls,fetcher};
+// A stand-in for ElevenLabs: the requests as they arrived, and the answers it gives. Speaking and
+// understanding are two of its endpoints, so each has its own answer; `calls` stays the spoken ones.
+function elevenLabs(answer=()=>[200,OGG],transcribe=()=>[200,{text:'This is one second of sound.'}]){
+ const calls=[],transcribed=[];
+ const fetcher=async(url,init)=>{
+  const send=([status,body])=>new Response(Buffer.isBuffer(body)?body:JSON.stringify(body),{status});
+  if(/\/speech-to-text/.test(String(url))){transcribed.push({url,init,form:init.body});return send(transcribe(transcribed.length));}
+  calls.push({url,init,body:JSON.parse(init.body)});return send(answer(calls.length));
+ };
+ return {calls,transcribed,fetcher};
 }
 function installation(t){
  const base=temporary(t),home=path.join(base,'hermes'),state=path.join(base,'workspace','.godspeed');fs.mkdirSync(home,{recursive:true});fs.mkdirSync(state,{recursive:true});
@@ -157,8 +162,117 @@ test('a refused sample keeps nothing and says why in plain words',async t=>{
  // A server that cannot reach ElevenLabs, and an answer that is no voice recording.
  await assert.rejects(saveVoice({home:f.home,state:f.state,input:{service:'elevenlabs',key:KEY,voice_id:VOICE},fetcher:async()=>{throw new TypeError('fetch failed');}}),/could not be reached/);
  await assert.rejects(saveVoice({home:f.home,state:f.state,input:{service:'elevenlabs',key:KEY,voice_id:VOICE},fetcher:elevenLabs(()=>[200,Buffer.from('<html>')]).fetcher}),/something else than a voice recording/);
- assert.equal(elevenLabsChoice({voice_id:VOICE}).model,'eleven_multilingual_v2');
+ assert.equal(elevenLabsChoice({voice_id:VOICE}).model,ELEVENLABS_DEFAULTS.model);
  assert.match(elevenLabsProblem(500,''),/problem of its own/);assert.match(elevenLabsProblem(418,'teapot'),/HTTP 418\)\. ElevenLabs says: teapot/);
+});
+
+// THE FAST MODEL AND UNDERSTANDING THE VOICE NOTE (26 October 2026). A spoken answer is made in
+// eleven_v4_turbo unless the person picked another model, and the key they save is asked once, with
+// one second of sound, whether it may transcribe; when it may, Hermes understands the voice note with
+// ElevenLabs Scribe instead of the local Whisper, which takes seconds longer on a small server.
+const saving=(f,input,fetcher)=>saveVoice({home:f.home,state:f.state,input:{service:'elevenlabs',voice_id:VOICE,...input},fetcher,node:where.node,script:where.script,platform:'linux'});
+
+test('a spoken answer is asked for in eleven_v4_turbo, and a model somebody picked stays theirs',async t=>{
+ const f=installation(t),{calls,fetcher}=elevenLabs();
+ assert.equal(ELEVENLABS_DEFAULTS.model,'eleven_v4_turbo');
+ assert.equal(elevenLabsChoice({voice_id:VOICE}).model,'eleven_v4_turbo','nothing picked: the fast one');
+ const status=await saving(f,{key:KEY},fetcher);
+ assert.equal(calls[0].body.model_id,'eleven_v4_turbo','the sample is made in it');
+ assert.equal(JSON.parse(readConfigValue(f.config(),['tts','providers',PROVIDER,'model'])),'eleven_v4_turbo','and so is every voice note after it');
+ assert.equal(status.voice.model,'eleven_v4_turbo');
+ assert.equal(status.elevenlabs.model,'eleven_v4_turbo','the form offers it');
+ // Another model picked in Settings is asked for, kept, and offered again next time.
+ const picked=await saving(f,{model:'eleven_multilingual_v2'},fetcher);
+ assert.equal(calls[1].body.model_id,'eleven_multilingual_v2');
+ assert.equal(picked.elevenlabs.model,'eleven_multilingual_v2');
+ assert.equal(voiceStatus(f).elevenlabs.model,'eleven_multilingual_v2','it stays after a restart');
+ assert.equal(JSON.parse(readConfigValue(f.config(),['tts','providers',PROVIDER,'model'])),'eleven_multilingual_v2');
+});
+
+test('a key that may transcribe makes Hermes understand voice notes with ElevenLabs Scribe v2',async t=>{
+ const f=installation(t),{transcribed,fetcher}=elevenLabs();
+ const status=await saving(f,{key:KEY},fetcher);
+ assert.equal(transcribed.length,1,'the key is asked once');
+ assert.match(transcribed[0].url,/\/v1\/speech-to-text$/);
+ assert.equal(transcribed[0].init.headers['xi-api-key'],KEY);
+ assert.equal(transcribed[0].form.get('model_id'),STT_MODEL);
+ const sent=Buffer.from(await transcribed[0].form.get('file').arrayBuffer());
+ assert.equal(sent.subarray(0,4).toString('latin1'),'RIFF','a sound file, made here');
+ assert.equal(sent.length,oneSecondSample().length,'one second of it');
+ // The keys Hermes reads: stt.provider, and the model at stt.elevenlabs.model_id.
+ assert.equal(JSON.parse(readConfigValue(f.config(),['stt','provider'])),STT_PROVIDER);
+ assert.equal(JSON.parse(readConfigValue(f.config(),['stt','elevenlabs','model_id'])),'scribe_v2');
+ assert.equal(readConfigValue(f.config(),['model','provider']),'openrouter','the rest of config.yaml is untouched');
+ assert.deepEqual(status.transcribe,{service:'elevenlabs',model:'scribe_v2',words:null});
+ // Tuning the same voice again asks nothing again and writes the same thing.
+ const before=f.config();
+ await saving(f,{},fetcher);
+ assert.equal(transcribed.length,1,'asked when a key is saved, not at every save');
+ assert.equal(f.config(),before);
+});
+
+test('a key that may not transcribe leaves voice notes understood here, and Settings names the permission',async t=>{
+ const refusal=()=>[401,{detail:{status:'missing_permissions',message:'The API key you used is missing the permission speech_to_text to execute this operation.'}}];
+ const f=installation(t),{transcribed,fetcher}=elevenLabs(undefined,refusal);
+ const status=await saving(f,{key:KEY},fetcher);
+ assert.equal(readConfigValue(f.config(),['stt']),null,'nothing about understanding voice notes is written');
+ assert.equal(JSON.parse(readConfigValue(f.config(),['tts','provider'])),PROVIDER,'the voice itself is kept all the same');
+ assert.equal(status.transcribe.service,'local');
+ assert.equal(status.transcribe.words,transcribePermissionWords());
+ assert.match(status.transcribe.words,/allow the key Speech to Text on the ElevenLabs page for API keys/,"ElevenLabs' own name for it");
+ assert.ok(!/[—–]/.test(status.transcribe.words));
+ // One sentence about what to do, and only while it is true: the page reads it from the same place
+ // after a restart, and it is not said twice.
+ assert.equal(voiceStatus(f).transcribe.words,status.transcribe.words);
+ assert.equal(status.transcribe.words.split('. ').length,1,'one sentence');
+ await saving(f,{},fetcher);
+ assert.equal(transcribed.length,1,'a refusal is not asked again until a new key is saved');
+ assert.equal(readVoiceRecord(f.state).transcribe.answer,'no');
+ // A key saved again is asked again, and an answer of yes switches it on.
+ const yes=await saving(f,{key:KEY},elevenLabs().fetcher);
+ assert.equal(JSON.parse(readConfigValue(f.config(),['stt','provider'])),STT_PROVIDER);
+ assert.equal(yes.transcribe.words,null);
+});
+
+test('a transcription test that cannot reach ElevenLabs changes nothing and says so',async t=>{
+ const f=installation(t);
+ const unreachable=async url=>{if(/speech-to-text/.test(String(url)))throw new TypeError('fetch failed');return new Response(OGG);};
+ const status=await saving(f,{key:KEY},unreachable);
+ assert.equal(readConfigValue(f.config(),['stt']),null,'transcription stays where it was');
+ assert.equal(JSON.parse(readConfigValue(f.config(),['tts','provider'])),PROVIDER,'and the voice that was heard is kept');
+ assert.equal(status.transcribe.service,'local');
+ assert.match(status.transcribe.words,/ElevenLabs could not be reached from here/);
+ assert.match(status.transcribe.words,/not known yet whether your key may transcribe/);
+ // A limit, or a problem of its own, is not a missing permission either.
+ const busy=elevenLabs(undefined,()=>[429,{detail:{status:'too_many_requests',message:'Busy'}}]);
+ const again=await saving(f,{key:KEY},busy.fetcher);
+ assert.equal(readConfigValue(f.config(),['stt']),null);
+ assert.match(again.transcribe.words,/did not say whether your key may transcribe/);
+ assert.match(again.transcribe.words,/busy or your plan/);
+ // An answer that never arrived is asked again at the next save, even without a new key.
+ const later=elevenLabs();
+ await saving(f,{},later.fetcher);
+ assert.equal(later.transcribed.length,1,'asked again, because nothing was settled');
+ assert.equal(JSON.parse(readConfigValue(f.config(),['stt','provider'])),STT_PROVIDER);
+});
+
+test('an stt.provider the owner set in Hermes themselves stays, whatever ElevenLabs answers',async t=>{
+ const f=installation(t),owner='stt:\n  provider: openai\n  openai:\n    model: whisper-1\n# the owner’s note\n';
+ fs.writeFileSync(path.join(f.home,'config.yaml'),owner);
+ const status=await saving(f,{key:KEY},elevenLabs().fetcher);
+ assert.equal(readConfigValue(f.config(),['stt','provider']),'openai');
+ assert.equal(readConfigValue(f.config(),['stt','elevenlabs','model_id']),null,'nothing of Godspeed under it');
+ assert.equal(readConfigValue(f.config(),['stt','openai','model']),'whisper-1');
+ assert.match(f.config(),/# the owner’s note\n/);
+ assert.deepEqual(status.transcribe,{service:'hermes',provider:'openai',words:null});
+ assert.equal(readVoiceRecord(f.state).stt,undefined,'Godspeed did not write it, so it never writes it again');
+ assert.match(godspeedVoiceSettings(f.config(),{...where,state:f.state}),/stt:\n  provider: openai\n/,'nor does any later wiring');
+ // Only an stt.provider Godspeed wrote itself is written again, as with tts.provider.
+ const ours=installation(t);
+ await saving(ours,{key:KEY},elevenLabs().fetcher);
+ fs.writeFileSync(path.join(ours.home,'config.yaml'),ours.config().replace('model_id: "scribe_v2"','model_id: "scribe_v1"'));
+ await saving(ours,{key:KEY},elevenLabs().fetcher);
+ assert.equal(JSON.parse(readConfigValue(ours.config(),['stt','elevenlabs','model_id'])),'scribe_v2');
 });
 
 test('Settings shows the voice, what the chats are set to, and the last failure',t=>{

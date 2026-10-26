@@ -7,7 +7,7 @@ import { VoiceReplies } from "./VoiceReplies";
 
 // Voice replies (25 October 2026, discussion #41): which voice answers voice notes, what the chat is
 // set to, and an ElevenLabs voice kept only after its sample worked. Every id and key is made up.
-const free = { available: true, voice: { service: "edge", voice_id: "en-US-AvaMultilingualNeural" }, elevenlabs: { model: "eleven_multilingual_v2", stability: 0.5, similarity_boost: 0.75, style: 0 }, key: false, chats: { voice_only: 1, all: 0, off: 0 }, auto_tts: null, failing: null };
+const free = { available: true, voice: { service: "edge", voice_id: "en-US-AvaMultilingualNeural" }, elevenlabs: { model: "eleven_multilingual_v2", stability: 0.5, similarity_boost: 0.75, style: 0 }, key: false, chats: { voice_only: 1, all: 0, off: 0 }, auto_tts: null, transcribe: { service: "local", model: null, words: null }, failing: null };
 const eleven = { ...free, voice: { service: "elevenlabs", voice_id: "FictionalVoice00001", model: "eleven_v3", stability: 0.3, similarity_boost: 1, style: 0.3 }, elevenlabs: { voice_id: "FictionalVoice00001", model: "eleven_v3", stability: 0.3, similarity_boost: 1, style: 0.3 }, key: true };
 
 function serve(routes: Record<string, (body?: any) => [number, unknown]>) {
@@ -65,6 +65,29 @@ describe("Voice replies in Settings", () => {
     fireEvent.click(screen.getByRole("button", { name: "Use the free voice instead" }));
     expect(await screen.findByText(/speaks with the free voice again/)).toBeInTheDocument();
     expect(calls.at(-1)?.body).toEqual({ service: "edge" });
+  });
+
+  it("offers the fast model first and starts with it, so a voice note comes back in about a second", async () => {
+    serve({ voice: () => [200, { ...free, elevenlabs: { ...free.elevenlabs, model: "eleven_v4_turbo" } }] });
+    show();
+    await screen.findByText(/free voice from Microsoft Edge/);
+    expect((screen.getByLabelText(/^Model/) as HTMLInputElement).value).toBe("eleven_v4_turbo");
+    const offered = Array.from(document.querySelectorAll("#voice-models option")).map(o => o.getAttribute("value"));
+    expect(offered[0]).toBe("eleven_v4_turbo");
+    expect(offered).toContain("eleven_multilingual_v2");
+  });
+
+  it("says once which permission an ElevenLabs key needs to understand voice notes, and says when it does", async () => {
+    const words = "Your ElevenLabs key may not transcribe, so your voice notes are understood on this computer: allow the key Speech to Text on the ElevenLabs page for API keys and save it again to have ElevenLabs understand them, which is quicker.";
+    serve({ voice: () => [200, { ...eleven, transcribe: { service: "local", model: null, words } }] });
+    show();
+    expect(await screen.findAllByText(words)).toHaveLength(1);
+    expect(screen.getByText(words)).toHaveTextContent("Speech to Text");
+    cleanup();
+    serve({ voice: () => [200, { ...eleven, transcribe: { service: "elevenlabs", model: "scribe_v2", words: null } }] });
+    show();
+    expect(await screen.findByText(/Your voice notes are understood by ElevenLabs/)).toHaveTextContent("(scribe_v2)");
+    expect(screen.queryByText(/may not transcribe/)).toBeNull();
   });
 
   it("is not shown where no Hermes runs the assistant", async () => {

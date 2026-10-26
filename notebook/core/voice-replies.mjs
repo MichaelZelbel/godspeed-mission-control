@@ -3,7 +3,7 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {atomic} from './records/store.mjs';
 import {setConfigValue,readConfigValue,deleteConfigValue} from './hermes-config.mjs';
-import {KEY_NAME,SETTINGS,readVoiceRecord,writeVoiceRecord,envValue,elevenLabsSpeech,voiceSettings,VoiceProblem} from './voice-speech.mjs';
+import {KEY_NAME,SETTINGS,STT_PROVIDER,STT_MODEL,readVoiceRecord,writeVoiceRecord,envValue,elevenLabsSpeech,elevenLabsMayTranscribe,voiceSettings,VoiceProblem} from './voice-speech.mjs';
 
 // VOICE REPLIES (25 October 2026, discussion #41 of the public repository). A voice note sent to the
 // assistant in Telegram is answered with a voice note and the same answer as text; a written request
@@ -30,7 +30,11 @@ export const PROVIDER='godspeed-elevenlabs';
 export const FREE_VOICE='en-US-AvaMultilingualNeural';
 export const VOICE_MODE_FILE='gateway_voice_mode.json';
 export const DEFAULT_CHAT_MODE='voice_only';
-export const ELEVENLABS_DEFAULTS={model:'eleven_multilingual_v2',stability:0.5,similarity_boost:0.75,style:0};
+// eleven_v4_turbo speaks one sentence in about a second, where eleven_v3 took about three (measured
+// on a Godspeed server on 26 October 2026), and a voice note that comes back while the person is
+// still holding the phone is a different thing from one that comes back later. Another model can be
+// picked in Settings, and the model somebody picked is what they keep.
+export const ELEVENLABS_DEFAULTS={model:'eleven_v4_turbo',stability:0.5,similarity_boost:0.75,style:0};
 export const SPEECH_SCRIPT=fileURLToPath(new URL('../scripts/elevenlabs-voice.mjs',import.meta.url));
 // Hermes stops a command provider that prints nothing for this long; a long answer on a slow model
 // may take a minute.
@@ -91,6 +95,29 @@ export function godspeedVoiceSettings(text,{home,state,node,script,platform}){
  return text;
 }
 
+// UNDERSTANDING THE VOICE NOTE WITH ELEVENLABS (core/voice-speech.mjs says what Hermes reads and why
+// no package is needed). Hermes is set to it only when the person's key may transcribe, which Settings
+// asks the key once; otherwise the voice note is understood on the computer itself, as before. An
+// stt.provider the owner set in Hermes themselves is theirs and stays, as a tts.provider does: only
+// an empty one, or the one Godspeed wrote itself, is written again.
+export function withElevenLabsTranscription(text){
+ let out=setConfigValue(text,['stt','provider'],JSON.stringify(STT_PROVIDER));
+ return setConfigValue(out,['stt','elevenlabs','model_id'],JSON.stringify(STT_MODEL));
+}
+export function mayWriteTranscription(config,record={}){
+ const provider=unquote(readConfigValue(config,['stt','provider'])||'');
+ return !provider||(provider===STT_PROVIDER&&record.stt===STT_PROVIDER);
+}
+// What Settings says about understanding a voice note: where it happens, with which model, and the one
+// sentence about the last answer from ElevenLabs while it still happens on the computer.
+export function transcribeStatus({config,record={}}){
+ const provider=unquote(readConfigValue(config,['stt','provider'])||'');
+ const asked=record.transcribe||null;
+ if(provider===STT_PROVIDER)return {service:'elevenlabs',model:unquote(readConfigValue(config,['stt','elevenlabs','model_id'])||'')||STT_MODEL,words:null};
+ if(provider&&provider!=='local')return {service:'hermes',provider,words:null};
+ return {service:'local',model:null,words:asked&&asked.answer!=='yes'?asked.words||null:null};
+}
+
 // THE OWNER'S TELEGRAM CHAT, wherever this installation keeps it: TELEGRAM_HOME_CHANNEL in Hermes'
 // .env (the server installer, a computer) or in the gateway's environment, and on the one-click
 // server the setup chat's own record (GODSPEED_TELEGRAM_DIR/setup.json).
@@ -121,7 +148,7 @@ export function chatVoiceDefaults({home,chats,config}){
 
 // WHAT SETTINGS SHOWS: the voice Hermes speaks with (read from config.yaml, so a choice made in Hermes
 // itself shows as that), Godspeed's own copy of an ElevenLabs choice for the form, whether a key is
-// saved, what the Telegram chats are set to, and the last failure.
+// saved, what the Telegram chats are set to, where a voice note is understood, and the last failure.
 export function voiceStatus({home,state}){
  const config=read(path.join(home,'config.yaml')),record=readVoiceRecord(state),provider=unquote(readConfigValue(config,['tts','provider'])||'');
  let voice;
@@ -134,6 +161,7 @@ export function voiceStatus({home,state}){
  return {available:true,voice,elevenlabs:{...ELEVENLABS_DEFAULTS,...(record.elevenlabs||{})},key:!!envValue(read(path.join(home,'.env')),KEY_NAME),
   chats:{voice_only:modes.filter(m=>m==='voice_only').length,all:modes.filter(m=>m==='all').length,off:modes.filter(m=>m==='off').length},
   auto_tts:autoTts===null?null:unquote(autoTts).toLowerCase()==='true',
+  transcribe:transcribeStatus({config,record}),
   failing:record.failing_since?{since:record.failing_since,error:record.last_error||null,at:record.last_failed_at||null}:null};
 }
 
@@ -175,8 +203,25 @@ export async function saveVoice({home,state,input={},fetcher,api,node,script,pla
  // Loaded only here: routine-ai.mjs brings the notebook's runtime, which the Telegram runner, which
  // imports this module for the chat's default, does not need.
  if(typed){const {setEnvValue}=await import('./routine-ai.mjs');writePrivate(envFile,setEnvValue(read(envFile),KEY_NAME,typed));}
- writePrivate(configFile,withElevenLabs(read(configFile),{home,state,choice,node,script,platform}));
- writeVoiceRecord(state,{...clearFailure(record),service:'elevenlabs',elevenlabs:choice,at:now.toISOString()});
+ // UNDERSTANDING THE VOICE NOTE, asked once with a one-second sample, the way the voice was just
+ // tried with a sample: a key given now, or a key whose permission is not settled yet (an answer that
+ // never arrived is asked again next time). Only an answer of yes writes anything; a refusal and an
+ // ElevenLabs that could not be reached leave transcription where it is, and the words go to the page.
+ const asked=await askedToTranscribe({key,typed,record,fetcher,api});
+ let config=withElevenLabs(read(configFile),{home,state,choice,node,script,platform});
+ const wrote=asked?.answer==='yes'&&mayWriteTranscription(config,record);
+ if(wrote)config=withElevenLabsTranscription(config);
+ writePrivate(configFile,config);
+ writeVoiceRecord(state,{...clearFailure(record),service:'elevenlabs',elevenlabs:choice,at:now.toISOString(),
+  ...(wrote?{stt:STT_PROVIDER}:{}),...(asked?{transcribe:{...asked,at:now.toISOString()}}:{})});
  return {...voiceStatus({home,state}),sample:'data:audio/ogg;base64,'+sample.toString('base64')};
+}
+// Nothing is asked again once the answer is settled (ElevenLabs transcribes, or it said the key may
+// not), unless a new key is given: a key is only as settled as the key itself.
+async function askedToTranscribe({key,typed,record,fetcher,api}){
+ const settled=record.transcribe?.answer==='yes'||record.transcribe?.answer==='no';
+ if(!typed&&settled)return record.transcribe;
+ const {may,words}=await elevenLabsMayTranscribe({key,fetcher,api});
+ return {answer:may,words:words||null};
 }
 function clearFailure(record){const out={...record};for(const name of ['failing_since','last_error','last_failed_at','told_for'])delete out[name];return out;}
