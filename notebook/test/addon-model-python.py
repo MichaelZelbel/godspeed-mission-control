@@ -93,6 +93,62 @@ class HostModelTests(unittest.TestCase):
             module.request(payload, load_config=lambda: config, resolve_runtime=lambda **kwargs: {"provider": "custom", "base_url": "https://other.example"}, resolve_client=never, expected_route=lambda *args: ("custom", "https://owner.example"))
 
 
+class HermesDidNotLoadTests(unittest.TestCase):
+    """26 October 2026: the Python an add-on ran on could not load Hermes (a module Hermes needs was
+    missing), and the answer said "Check its connection and usage allowance". A Hermes that does not
+    load is now its own answer, "runtime", given before anything is asked."""
+
+    def run_helper(self, modules, payload='{"describe":true}'):
+        with tempfile.TemporaryDirectory() as folder:
+            source = Path(folder) / "hermes-source"
+            parts = {
+                "hermes_cli/__init__.py": "",
+                "hermes_cli/config.py": "def load_config_readonly():\n    return {'model': {'provider': 'owner-provider', 'default': 'owner-model'}}\n",
+                "hermes_cli/runtime_provider.py": "resolve_runtime_provider = _get_named_custom_provider = expand_direct_api_alias = None\n",
+                "agent/__init__.py": "",
+                "agent/auxiliary_client.py": "resolve_provider_client = _normalize_aux_provider = None\n",
+                **modules,
+            }
+            for relative, content in parts.items():
+                file = source / relative
+                file.parent.mkdir(parents=True, exist_ok=True)
+                file.write_text(content, encoding="utf-8")
+            helper = Path(__file__).parents[1] / "assistant-files" / "addon-model.py"
+            env = {**os.environ, "PYTHONPATH": str(source), "HERMES_HOME": str(Path(folder) / "owner-home")}
+            done = subprocess.run([sys.executable, str(helper)], input=payload, text=True, capture_output=True, env=env)
+            return done.returncode, json.loads(done.stdout)
+
+    def test_a_missing_module_is_named_and_is_no_usage_limit(self):
+        code, answer = self.run_helper({"hermes_cli/config.py": "import godspeed_test_missing_dependency\n"})
+        self.assertEqual(code, 1)
+        self.assertEqual(answer, {"error": "Godspeed could not load its AI program (Hermes) on this computer.",
+                                  "reason": "runtime", "missing": "godspeed_test_missing_dependency"})
+
+    def test_a_bootstrap_that_refuses_and_stops_is_hermes_not_loading(self):
+        code, answer = self.run_helper({"hermes_bootstrap.py": "import sys\nsys.exit('refusing to update: owned by another account')\n"})
+        self.assertEqual(code, 1)
+        self.assertEqual(answer, {"error": "Godspeed could not load its AI program (Hermes) on this computer.", "reason": "runtime"})
+
+    def test_after_hermes_loaded_a_failure_is_never_runtime(self):
+        # Loaded, but no model chosen in the home: the caller must not try another Python.
+        code, answer = self.run_helper({"hermes_cli/config.py": "def load_config_readonly():\n    return {}\n"})
+        self.assertEqual(code, 1)
+        self.assertIsNone(answer["reason"])
+        self.assertNotIn("missing", answer)
+
+    def test_only_a_plain_module_name_leaves(self):
+        try:
+            try:
+                raise ModuleNotFoundError("No module named 'ruamel'", name="ruamel")
+            except ImportError as cause:
+                raise RuntimeError("bootstrap failed") from cause
+        except RuntimeError as error:
+            self.assertEqual(module.missing_module(error), "ruamel")
+        self.assertIsNone(module.missing_module(ModuleNotFoundError("x", name="sk-test key")))
+        self.assertIsNone(module.missing_module(ValueError("no module here")))
+        self.assertEqual(module.reason(module.HermesNotLoaded("ruamel")), "runtime")
+
+
 class BackupTests(unittest.TestCase):
     """A backup AI the person connected (discussion #20): Hermes' first fallback entry, tried only
     when the selected model failed, only for that request, and named in the answer."""
