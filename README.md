@@ -8,7 +8,7 @@ Free and open source. No account with us; you connect your own AI after installi
 - **Mac or Linux:** `curl -fsSL https://godspeedmissioncontrol.com/install | bash` (on a Mac, checked on GitHub's Mac test machines, not yet a whole install on a real Mac)
 - **A Linux server:** `curl -fsSL https://godspeedmissioncontrol.com/server | bash` (it runs in Docker; [what it does](docker/README.md))
 
-Six months of its maintainer's own use, counted in his own folder on 26 October 2026:
+In use by its maintainer since April 2026. Counted in his own folder on 26 October 2026:
 
 - **115 mornings** with a written briefing, since 4 July 2026.
 - **365 decisions** written down, each with its reason.
