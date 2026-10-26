@@ -5,7 +5,8 @@
 # a reader did, and its upgrade had never once started the new version. Since 15 October 2026
 # also: an update that worked keeps the copy it made before it (the newest three until 21 October
 # 2026) and one whose notebook does not answer is undone and removes none; since 21 October 2026
-# the copy holds what an update can change and never work/.
+# the copy holds what an update can change and never work/. Since 26 October 2026: an update that
+# finds a Hermes this account cannot load keeps the one that works, and add-ons still reach it.
 set -euo pipefail
 here=$(cd "$(dirname "$0")/../.." && pwd)
 work=$(mktemp -d)
@@ -17,10 +18,24 @@ cleanup() { sudo systemctl disable --now "$service" >/dev/null 2>&1 || true; sud
 trap cleanup EXIT
 
 # What the original installer leaves behind, as far as this step reads it: the folder
-# with its manual and rules, and Hermes (a stand-in that answers every cron command).
-mkdir -p "$root/rules" "$work/bin" "$work/hermes"
+# with its manual and rules, and Hermes: a stand-in that answers every cron command, in a source
+# folder with the parts of Hermes the add-on connection loads and a venv whose Python is this
+# machine's, so the installer's check of it (scripts/choose-assistant.mjs) runs for real. One more,
+# whose source needs a module that is not there, plays a Hermes this account cannot load.
+fake_hermes() {
+  local dir=$1 needs=${2:-}
+  mkdir -p "$dir/hermes_cli" "$dir/agent" "$dir/venv/bin"
+  : > "$dir/hermes_cli/__init__.py"; : > "$dir/agent/__init__.py"
+  { [ -z "$needs" ] || echo "import $needs"; printf 'def load_config_readonly():\n    return {"model": {"provider": "test-provider", "default": "test-model"}}\n'; } > "$dir/hermes_cli/config.py"
+  echo 'resolve_runtime_provider = _get_named_custom_provider = expand_direct_api_alias = None' > "$dir/hermes_cli/runtime_provider.py"
+  echo 'resolve_provider_client = _normalize_aux_provider = None' > "$dir/agent/auxiliary_client.py"
+  ln -s "$(command -v python3)" "$dir/venv/bin/python3"
+  printf '#!/bin/sh\nexit 0\n' > "$dir/venv/bin/hermes"; chmod +x "$dir/venv/bin/hermes"
+}
+mkdir -p "$root/rules" "$work/bin" "$work/hermes" "$work/broken-bin"
 echo '# Test mission control' > "$root/AGENTS.md"
-printf '#!/bin/sh\nexit 0\n' > "$work/bin/hermes"; chmod +x "$work/bin/hermes"
+fake_hermes "$work/hermes-agent"; ln -s "$work/hermes-agent/venv/bin/hermes" "$work/bin/hermes"
+fake_hermes "$work/broken-hermes" godspeed_test_missing_dependency; ln -s "$work/broken-hermes/venv/bin/hermes" "$work/broken-bin/hermes"
 export PATH="$work/bin:$PATH" HERMES_HOME="$work/hermes"
 
 # Two versions with the same files and different names: this commit's tree, and one
@@ -40,7 +55,8 @@ install() { GODSPEED_FOOD_TABLE=off GODSPEED_PRODUCT_REPOSITORY="file://$work/pr
 answers() { for _ in $(seq 1 30); do curl -fsS http://127.0.0.1:47831/health >/dev/null 2>&1 && return 0; sleep 2; done; return 1; }
 
 echo '== a first installation, as the server called production'
-GODSPEED_DEVICE=production install "$first"
+GODSPEED_DEVICE=production install "$first" 2>&1 | tee "$work/first.log"
+! grep -q 'does not load for this account' "$work/first.log" || fail 'a Hermes that loads was reported as one that does not'
 systemctl is-active --quiet "$service" || fail 'the notebook is not running after installation'
 grep -qx "User=$(id -un)" "/etc/systemd/system/$service" || fail 'the service does not run as the installing account'
 [ "$(cat "$state/version")" = "$first" ] || fail 'the installed version is not the one named'
@@ -75,6 +91,24 @@ for day in 01 02 03 04; do [ ! -e "$state/backups/202610$day-120000-$first" ] ||
 [ ! -e "$state/backups/.partial-20261001-110000-$first" ] || fail 'a copy that stopped part-way was kept'
 [ -d "$state/backups/my own folder" ] || fail 'a folder no installer made was removed'
 
+echo '== an update that finds a Hermes this account cannot load keeps the one that works'
+# As on a server updated as root on 26 October 2026: the first hermes on the PATH is another one,
+# which cannot load Hermes for this account. Until then the update wrote it over the one that worked.
+model() { "$(ls -d "$state"/runtime/node-v*/bin/node | head -1)" "$root/.godspeed/model.mjs" --workspace "$root" --check; }
+said=$(PATH="$work/broken-bin:$PATH" GODSPEED_SKIP_UI=1 install "$second" 2>&1) || fail "the update stopped: $said"
+grep -qF "\"executable\":\"$work/bin/hermes\"" "$root/.godspeed/assistant.json" || fail "the update replaced a Hermes that loads with one that does not: $(cat "$root/.godspeed/assistant.json")"
+grep -qF "The Hermes found at $work/broken-bin/hermes does not load for this account (the Python module godspeed_test_missing_dependency is missing), so Godspeed keeps using the one at $work/bin/hermes, which does." <<<"$said" || fail "the update did not say why it kept the Hermes it had: $said"
+answers || fail 'the notebook does not answer after that update'
+[ "$(model)" = '{"configured":true,"provider":"test-provider","model":"test-model"}' ] || fail "an add-on's connection check does not pass after that update: $(model 2>&1)"
+# With no Hermes that loads, the update says so and goes on, and an add-on hears why.
+cp "$work/hermes-agent/hermes_cli/config.py" "$work/config.py"; cp "$work/broken-hermes/hermes_cli/config.py" "$work/hermes-agent/hermes_cli/config.py"
+said=$(GODSPEED_SKIP_UI=1 install "$second" 2>&1) || fail "an update with no Hermes that loads stopped: $said"
+grep -qF "Hermes, the AI program Godspeed uses, does not load for this account at $work/bin/hermes (the Python module godspeed_test_missing_dependency is missing)." <<<"$said" || fail "the update did not say that no Hermes loads: $said"
+! model 2>"$work/model.err" || fail 'the connection check passed with no Hermes that loads'
+grep -qF 'Godspeed could not load its AI program (Hermes) on this computer: the Python module godspeed_test_missing_dependency is missing.' "$work/model.err" || fail "an add-on is not told why: $(cat "$work/model.err")"
+cp "$work/config.py" "$work/hermes-agent/hermes_cli/config.py"
+answers || fail 'the notebook does not answer after an update with no Hermes that loads'
+
 echo '== an update whose notebook never answers'
 printf 'process.exit(1);\n' > "$work/product/notebook/scripts/supervise.mjs"
 git -C "$work/product" -c user.name=test -c user.email=test@example.invalid commit -q -am 'version three, which never answers'
@@ -91,4 +125,4 @@ sudo systemctl kill -s KILL "$service"
 sleep 8
 systemctl is-active --quiet "$service" || fail 'systemd did not restart a killed notebook'
 answers || fail 'the restarted notebook does not answer'
-echo 'Installed, upgraded with the machine name kept and only its own copy made before the update, a failed update undone with every copy kept, and restarted after a kill.'
+echo 'Installed, upgraded with the machine name kept and only its own copy made before the update, a Hermes that loads kept over one that does not, a failed update undone with every copy kept, and restarted after a kill.'

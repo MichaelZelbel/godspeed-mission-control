@@ -602,10 +602,11 @@ if [ ! -f "$root/.godspeed/sync-config.json" ] && git -C "$root" remote get-url 
   "$node" "$version/notebook/bin/godspeed.mjs" sync folder || echo 'The notebook was not joined to the repository; it works on this machine alone until it is.' >&2
 fi
 "$node" "$version/notebook/scripts/wire-assistant.mjs" "$HERMES_HOME"
-"$node" --input-type=module - "$assistant" <<'NODE'
-import fs from 'node:fs';import path from 'node:path';
-fs.writeFileSync(path.join(process.env.GODSPEED_WORKSPACE,'.godspeed/assistant.json'),JSON.stringify({verified:true,executable:process.argv[2],home:process.env.HERMES_HOME}),{mode:0o600});
-NODE
+# Which Hermes the notebook and its add-ons use (.godspeed/assistant.json): the one found above,
+# checked the way an add-on's connection is. The one used until now stays when the one found does not
+# load for this account and it does; when none loads, this says so and the installation goes on.
+# Until 26 October 2026 every run wrote the one found unchecked (scripts/choose-assistant.mjs).
+"$node" --no-warnings "$version/notebook/scripts/choose-assistant.mjs" "$root" "$assistant"
 # The mail tool in the Hermes this notebook uses, after wire-assistant.mjs gave it the notebook tool.
 # The shared installer wires only the default Hermes; one set up beside it had no mail tool until
 # 8 October 2026. Never stops an install: email is optional.

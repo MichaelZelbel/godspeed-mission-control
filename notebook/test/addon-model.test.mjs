@@ -9,6 +9,7 @@ import {PassThrough} from 'node:stream';
 import {execFileSync,spawn} from 'node:child_process';
 import {addonModel,modelInput,modelConnection,assistantCheck} from '../core/addon-model.mjs';
 import {installModelCommand} from '../scripts/install-model-command.mjs';
+import {chooseAssistant} from '../scripts/choose-assistant.mjs';
 
 function fixture(t){
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-addons-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
@@ -213,4 +214,76 @@ test('the installer\'s check says whether Hermes loads, through its own Python o
  const asked=[];await assistantCheck({root:f.root,executable:f.executable,home:f.home,spawnProcess:fakeSpawn(described[1],{onSpawn:c=>asked.push(c.input)})});
  assert.deepEqual(asked,[{describe:true}]);
  assert.equal(fs.existsSync(f.memory),false,'a check remembers nothing');
+});
+
+// WHICH HERMES AN UPDATE LEAVES THE NOTEBOOK AND ITS ADD-ONS (26 October 2026,
+// scripts/choose-assistant.mjs). An update run as root on a server wrote root's own launcher of a
+// Hermes another account owns, which could not load Hermes as root, over the one that worked, and
+// nothing checked. The installer now checks the Hermes it finds the way an add-on's connection is
+// checked, and keeps the one before when only that one works. The check itself (assistantCheck) is
+// tested above; here a stand-in answers for each executable.
+function installation(t,before){
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'godspeed-choose-assistant-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ const put=name=>{const file=path.join(root,name,'hermes');fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,'');return file;};
+ const found=put('found'),earlier=put('earlier'),home=path.join(root,'home');
+ fs.mkdirSync(path.join(root,'.godspeed'));
+ if(before)fs.writeFileSync(path.join(root,'.godspeed','assistant.json'),JSON.stringify({verified:true,executable:before==='earlier'?earlier:before,home}));
+ const descriptor=()=>JSON.parse(fs.readFileSync(path.join(root,'.godspeed','assistant.json'),'utf8'));
+ return {root,found,earlier,home,descriptor};
+}
+const works={loads:true,direct:true,configured:true},onlyThroughAnother={loads:true,direct:false,configured:true},broken={loads:false,why:'the Python module ruamel is missing'};
+async function choose(f,answers){
+ const said=[],checked=[];
+ const chosen=await chooseAssistant({root:f.root,found:f.found,home:f.home,say:line=>said.push(line),check:async({executable,home,root})=>{assert.equal(home,f.home);assert.equal(root,f.root);checked.push(executable);return answers[executable];}});
+ return {chosen,said,checked};
+}
+
+test('the Hermes found is written and nothing said when it loads through its own Python',async t=>{
+ const f=installation(t,'earlier');
+ const r=await choose(f,{[f.found]:works});
+ assert.equal(r.chosen,f.found);assert.deepEqual(r.said,[]);assert.deepEqual(r.checked,[f.found],'the one before is not even checked');
+ assert.deepEqual(f.descriptor(),{verified:true,executable:f.found,home:f.home});
+});
+
+test('a Hermes found that does not load never replaces the one that did, and the installer says why',async t=>{
+ const f=installation(t,'earlier');
+ const r=await choose(f,{[f.found]:broken,[f.earlier]:works});
+ assert.equal(r.chosen,f.earlier);assert.equal(f.descriptor().executable,f.earlier);assert.equal(f.descriptor().home,f.home);
+ assert.deepEqual(r.said,[`The Hermes found at ${f.found} does not load for this account (the Python module ruamel is missing), so Godspeed keeps using the one at ${f.earlier}, which does.`]);
+ // Also when the one before loads only through another Python of its own installation.
+ assert.equal((await choose(f,{[f.found]:broken,[f.earlier]:onlyThroughAnother})).chosen,f.earlier);
+});
+
+test('a Hermes found that starts only through another Python gives way to one that starts through its own',async t=>{
+ const f=installation(t,'earlier');
+ const r=await choose(f,{[f.found]:onlyThroughAnother,[f.earlier]:works});
+ assert.equal(r.chosen,f.earlier);
+ assert.match(r.said[0],/does not start with its own Python for this account, so Godspeed keeps using the one at /);
+ // When the one before is no better, the one found stays, and nothing needs saying: add-ons reach it.
+ const same=await choose(f,{[f.found]:onlyThroughAnother,[f.earlier]:onlyThroughAnother});
+ assert.equal(same.chosen,f.found);assert.deepEqual(same.said,[]);
+ const worse=await choose(f,{[f.found]:onlyThroughAnother,[f.earlier]:broken});
+ assert.equal(worse.chosen,f.found);assert.equal(f.descriptor().executable,f.found);
+});
+
+test('when no Hermes loads, the installer says so plainly and goes on with the one found',async t=>{
+ const f=installation(t,'earlier');
+ const r=await choose(f,{[f.found]:broken,[f.earlier]:broken});
+ assert.equal(r.chosen,f.found);assert.equal(f.descriptor().executable,f.found);
+ assert.deepEqual(r.said,[`Hermes, the AI program Godspeed uses, does not load for this account at ${f.found} (the Python module ruamel is missing). Until it does, add-ons and the assistant cannot reach an AI; everything else was installed. Run hermes once as this account to see why.`]);
+ // A first installation has no Hermes before it, and one whose Hermes is gone has none to go back to.
+ for(const before of [null,path.join(f.root,'removed','hermes')]){
+  const g=installation(t,before),seen=await choose(g,{[g.found]:broken});
+  assert.equal(seen.chosen,g.found);assert.deepEqual(seen.checked,[g.found]);assert.match(seen.said[0],/does not load for this account/);
+ }
+ // The same Hermes as before is checked once.
+ const g=installation(t,null);fs.writeFileSync(path.join(g.root,'.godspeed','assistant.json'),JSON.stringify({verified:true,executable:g.found,home:g.home}));
+ assert.deepEqual((await choose(g,{[g.found]:broken})).checked,[g.found]);
+});
+
+test('the installer lets this step choose, after the assistant is wired and before the notebook starts',()=>{
+ const script=fs.readFileSync(new URL('../scripts/install-native-notebook.sh',import.meta.url),'utf8').replaceAll('\r','');
+ const wire=script.indexOf('scripts/wire-assistant.mjs" "$HERMES_HOME"'),choose=script.indexOf('"$node" --no-warnings "$version/notebook/scripts/choose-assistant.mjs" "$root" "$assistant"'),start=script.indexOf('native-start-script.mjs" "$state/start.mjs"');
+ assert.ok(wire>0&&choose>wire&&start>choose,'wired, then chosen, then started');
+ assert.doesNotMatch(script,/assistant\.json'\),JSON\.stringify\(\{verified:true,executable:process\.argv\[2\]/,'the unchecked write is gone');
 });
