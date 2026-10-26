@@ -35,6 +35,28 @@ test('a running challenge puts its line in the brief, and the gate refuses a dra
  assert.equal(writes,2);assert.ok(store.get('notes',result.record_id).content.endsWith(RUNNING));
 });
 
+// The walk-through of 26 October 2026, with a real model: the plain-words check failed the whole
+// note twice, calling the line "an unexplained internal game/tracking mechanic", while the gate
+// requires it. Both checks are told the line is the person's own and is checked in code.
+test('the brief\'s checks are told the line is the person\'s own, so they never fail the note for it',async()=>{
+ const {store,query}=fixture(true);
+ process.env.GODSPEED_CHARM_NOW='2026-10-30T08:00:00Z';process.env.GODSPEED_NOW='2026-10-30T08:00:00Z';
+ const contracts=[];
+ const provider=async input=>{
+  if(input.kind==='brief-verification'){
+   contracts.push(input.contract);
+   // As the real model judged: the line fails the note unless the check is told what it is.
+   if(input.context.draft.includes(RUNNING)&&!input.contract.includes('"'+RUNNING+'"'))return {passed:false,reason:'An unexplained internal game/tracking mechanic.'};
+   return {passed:true,reason:'Fictional sources checked.'};
+  }
+  return OK+'\n\n'+RUNNING;
+ };
+ const result=await jobExecutor(provider,query)({kind:'morning-brief',id:'brief-charm-checks'},{store,settings:{}});
+ assert.ok(store.get('notes',result.record_id).content.endsWith(RUNNING));
+ assert.equal(contracts.length,2,'one source check and one plain-words check, no rewrite');
+ for(const contract of contracts)assert.match(contract,/the person's own Charm Challenge count/);
+});
+
 test('no challenge: no line, and the gate ignores it',async()=>{
  const {store,query}=fixture(false);
  const provider=async input=>{if(input.kind==='brief-verification')return {passed:true,reason:'Fictional sources checked.'};assert.equal(input.context.charm_line,null);return OK;};
