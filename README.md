@@ -1,12 +1,12 @@
 # Godspeed Mission Control
 
-A personal AI that runs on your own computer or server and works from one folder of plain files you own: your goals, notes, people, deadlines and the routines it runs for you. It thinks with the AI account you already have (ChatGPT or Claude), writes you a briefing every morning, and keeps what it learns in that folder.
+A personal AI that runs on your own computer or server and works from one folder of plain files you own: your goals, notes, people, deadlines and the routines it runs for you, including a briefing every morning. It thinks with your own AI (your ChatGPT plan, or an API key from Claude or another AI company) and keeps what it learns in that folder.
 
 Free and open source. No account with us; you connect your own AI after installing.
 
 - **Windows:** [download GodspeedSetup.exe](https://github.com/MichaelZelbel/godspeed-mission-control/releases/latest/download/GodspeedSetup.exe) and run it.
 - **Mac or Linux:** `curl -fsSL https://godspeedmissioncontrol.com/install | bash` (on a Mac, checked on GitHub's Mac test machines, not yet a whole install on a real Mac)
-- **A Linux server:** `curl -fsSL https://godspeedmissioncontrol.com/server | bash`
+- **A Linux server:** `curl -fsSL https://godspeedmissioncontrol.com/server | bash` (it runs in Docker; [what it does](docker/README.md))
 
 Six months of its maintainer's own use, counted in his own folder on 26 October 2026:
 
@@ -24,7 +24,7 @@ New here and not a reader yet? The first chapters are free: [download the free s
 
 A new release comes out most weeks. I write about what my AI does for me and what I will not let it do in a free newsletter: [subscribe on Substack](https://michaelzelbel.substack.com/subscribe).
 
-Version 2 is the current edition. The lines below install the current public version, which is the branch `beta` of this repository; `main` is where the work goes on, and a change merged into it reaches nobody until the next version is released. The installers set up a new, separate folder. They do not move an existing version 1 Godspeed folder or your Menerio account.
+Version 2 is the current edition. The install lines on this page install the current public version, which is the branch `beta` of this repository; `main` is where the work goes on, and a change merged into it reaches nobody until the next version is released. The installers set up a new, separate folder. They do not move an existing version 1 Godspeed folder or your Menerio account.
 
 ## New in 2.0.0-beta.7
 
